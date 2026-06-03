@@ -28,3 +28,19 @@ export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
 
 export {formatReport, afkLabel} from './format.js';
+
+export type {
+	Category,
+	CategorisedItem,
+	CategorisedGroups,
+	CategorySummary,
+} from './categorise.js';
+export {
+	categoriseAfk,
+	categoriseItem,
+	categoriseItems,
+	sortReadyFirst,
+	summariseGroups,
+	CATEGORY_ORDER,
+	CATEGORY_LABELS,
+} from './categorise.js';
