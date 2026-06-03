@@ -10,6 +10,7 @@ import {scan} from './scan.js';
 import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
+import {runVerify} from './verify.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -85,6 +86,10 @@ interface ClaimFlags {
 	by?: string;
 	retries?: string;
 	dryRun?: boolean;
+}
+
+interface VerifyFlags {
+	config?: string;
 }
 
 export function buildProgram(): Command {
@@ -204,6 +209,21 @@ export function buildProgram(): Command {
 					`Summary: ${result.claimedAndDone} done, ${result.skipped} skipped, ${result.failed} failed.`,
 				);
 			}
+		});
+
+	program
+		.command('verify')
+		.description(
+			"Run the repo's declared acceptance gate (per-repo `verify` config) and exit with its status (0 = pass). Deterministic shell gate; no model. Read-only with respect to work/.",
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.action(async (flags: VerifyFlags) => {
+			const config = loadConfig(flags.config);
+			const result = await runVerify({
+				cwd: process.cwd(),
+				verify: config.verify,
+			});
+			process.exit(result.exitCode);
 		});
 
 	program

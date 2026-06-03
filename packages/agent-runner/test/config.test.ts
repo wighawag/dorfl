@@ -43,6 +43,16 @@ describe('mergeConfig', () => {
 		expect(cfg.agentCmd).toBe('my-agent');
 	});
 
+	it('leaves verify unset by default (distinguishable from empty)', () => {
+		expect(mergeConfig({}).verify).toBeUndefined();
+		expect('verify' in DEFAULT_CONFIG).toBe(false);
+	});
+
+	it('carries over an optional verify key (string or list)', () => {
+		expect(mergeConfig({verify: 'make check'}).verify).toBe('make check');
+		expect(mergeConfig({verify: ['a', 'b']}).verify).toEqual(['a', 'b']);
+	});
+
 	it('overrides individual fields while keeping the rest as defaults', () => {
 		const merged = mergeConfig({allowUnspecifiedGate: true});
 		expect(merged.allowUnspecifiedGate).toBe(true);

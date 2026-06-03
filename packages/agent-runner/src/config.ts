@@ -6,6 +6,12 @@ import {join} from 'node:path';
 export type IntegrationMode = 'pr' | 'merge';
 
 /**
+ * The per-repo acceptance gate: a single shell command, or an ordered list of
+ * commands run in sequence (all must pass). See `verify.ts` / ADR §8.
+ */
+export type VerifyConfig = string | string[];
+
+/**
  * Resolved runner configuration. Increment A (`scan`) consumes the discovery +
  * eligibility fields; increment B (`run --once`) additionally consumes the
  * execution fields (maxParallel, perRepoMax, defaultArbiter, integration,
@@ -38,6 +44,14 @@ export interface Config {
 	 * owns those). Empty string ⇒ no agent configured (run will refuse).
 	 */
 	agentCmd: string;
+	/**
+	 * The per-repo acceptance gate run by `agent-runner verify` (a deterministic
+	 * shell command, or an ordered list of commands). NOT per-slice and NOT model-
+	 * interpreted — it is declared, auditable config (ADR §8). Unset (omitted) ⇒
+	 * a sensible `pnpm -r build && test && format:check` default; the field is
+	 * intentionally optional so "unset" is distinguishable from "empty".
+	 */
+	verify?: VerifyConfig;
 }
 
 /** A partial config, e.g. loaded from a JSON file or built from CLI flags. */
@@ -67,10 +81,12 @@ export function defaultConfigPath(): string {
 /** Merge a partial config over the built-in defaults; arrays are replaced. */
 export function mergeConfig(overrides: PartialConfig): Config {
 	const merged: Config = {...DEFAULT_CONFIG};
-	for (const key of Object.keys(merged) as (keyof Config)[]) {
+	// Iterate the override's own keys (not the defaults') so optional keys like
+	// `verify` (absent from DEFAULT_CONFIG, left unset by design) are carried over.
+	for (const key of Object.keys(overrides) as (keyof Config)[]) {
 		const value = overrides[key];
 		if (value !== undefined) {
-			// Assign through `any`: each key's value type matches by construction.
+			// Assign through `unknown`: each key's value type matches by construction.
 			(merged as Record<keyof Config, unknown>)[key] = value;
 		}
 	}

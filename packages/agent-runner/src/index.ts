@@ -1,4 +1,9 @@
-export type {Config, PartialConfig, IntegrationMode} from './config.js';
+export type {
+	Config,
+	PartialConfig,
+	IntegrationMode,
+	VerifyConfig,
+} from './config.js';
 export {
 	DEFAULT_CONFIG,
 	mergeConfig,
@@ -64,6 +69,13 @@ export type {
 	TestGate,
 } from './run.js';
 export {runOnce} from './run.js';
+
+export type {RunVerifyOptions, RunVerifyResult} from './verify.js';
+export {
+	runVerify,
+	resolveVerifyCommands,
+	DEFAULT_VERIFY_COMMAND,
+} from './verify.js';
 
 export type {
 	Category,
