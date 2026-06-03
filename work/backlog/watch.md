@@ -3,7 +3,7 @@ title: watch — bounded autonomous loop over run --once with safety rails
 slug: watch
 prd: agent-runner
 afk: false
-blocked_by: [run-once]
+blocked_by: [agent-workspaces]
 covers: [11]
 created: 2026-06-03
 claimed_by:
@@ -22,7 +22,10 @@ A thin path on top of `run --once`:
 - **Bound** the session: stop on max-iterations and/or max-duration. `watch` is a
   bounded session, not a long-lived daemon/service.
 - **Surface failures** instead of infinite-retrying: a timeout or red tests on an
-  item must be reported and must not be silently retried forever.
+  item must be reported and must not be silently retried forever. Use the harness
+  liveness + the retained-worktree signal from `agent-workspaces` (ADR §4/§5) to
+  detect hung/failed jobs; a retained (un-deleted) job worktree is itself a
+  "needs attention" marker.
 
 ## Acceptance criteria
 
@@ -33,7 +36,10 @@ A thin path on top of `run --once`:
 
 ## Blocked by
 
-- `run-once` — `watch` is a bounded loop over the `run --once` tick.
+- `agent-workspaces` — `watch` loops the run --once tick once it runs on the real
+  execution substrate (hub mirrors + isolated job worktrees, harness liveness,
+  provably-safe deletion). No point looping over the ad-hoc isolation that
+  `agent-workspaces` replaces.
 
 ## Prompt
 
@@ -44,6 +50,7 @@ A thin path on top of `run --once`:
 > surface it (report/needs-attention) rather than infinite-retrying it.
 >
 > Test (vitest): the loop honours both stop conditions, and a failing item is
-> surfaced rather than retried forever. Reuse the `run --once` machinery; don't
-> reimplement claiming or integration. "Done" = acceptance criteria met, tests
-> pass.
+> surfaced rather than retried forever. Reuse the `run --once` machinery (now on
+> the `agent-workspaces` substrate) and its harness-liveness / retained-worktree
+> signals; don't reimplement claiming, isolation, or integration. "Done" =
+> acceptance criteria met, tests pass.

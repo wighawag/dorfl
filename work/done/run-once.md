@@ -51,9 +51,11 @@ A thin path through every layer, reusing the `scan` core for the queue:
   runner must `mkdir -p work/<status>/` before `git mv`, mirroring what
   `claim.sh` already does for the in-progress move. Do NOT seed status folders
   with `.gitkeep`; the movers own dir creation.
-- **Integrate** per config `integration`: `pr` by default (open a PR for review
-  when the arbiter is GitHub/PR-compatible), or `merge` (direct to main) where
-  explicitly allowed. Never `--force` to main.
+- **Integrate** per config `integration`: `propose` by default (push a branch +
+  request review — e.g. a GitHub PR via the provider seam), or `merge` (direct to
+  main) where explicitly allowed. Never `--force` to main. *(Mode renamed from
+  `pr` to `propose`; see the integration seam in
+  `work/findings/execution-substrate-decisions.md` §6.)*
 
 ## Acceptance criteria
 
@@ -66,8 +68,8 @@ A thin path through every layer, reusing the `scan` core for the queue:
 - [ ] Each agent runs in its own worktree/clone; runs do not share a working tree.
       If worktrees are used, branch names are per-agent unique (no two worktrees
       check out the same branch); separate clones are preferred for high parallelism.
-- [ ] `integration: pr` opens a PR by default; `merge` integrates directly only
-      when configured. Never force-pushes main.
+- [ ] `integration: propose` pushes a branch + requests review by default; `merge`
+      integrates directly only when configured. Never force-pushes main.
 - [ ] An item moves to `work/done/` only on green acceptance tests; otherwise it
       stays in `in-progress`/needs-attention.
 - [ ] The runner `mkdir -p`s the target status dir before `git mv` (works even
@@ -100,8 +102,8 @@ A thin path through every layer, reusing the `scan` core for the queue:
 > `work/<status>/` (it may not exist yet — git doesn't track empty dirs); don't
 > create `.gitkeep` placeholders.
 >
-> Integration is configurable (`integration`): default `pr` (open a PR for human
-> review), or `merge` (direct to main) only where explicitly allowed. NEVER
+> Integration is configurable (`integration`): default `propose` (push a branch +
+> request review), or `merge` (direct to main) only where explicitly allowed. NEVER
 > `--force` to main — the only `--force-with-lease` is the claim micro-commit
 > inside `claim.sh`. An item reaches `work/done/` (via `git mv` in the work
 > branch) only when its acceptance tests pass; otherwise it stays in

@@ -46,8 +46,9 @@ system: it tracks its own work in its own `work/` folder.
    `claim.sh`) and skip any it loses the race for, so that parallel ticks never collide.
 6. As the maintainer, I want each agent to run in its own worktree/clone, so that
    concurrent code changes cannot corrupt shared state.
-7. As the maintainer, I want a finished item to integrate as a PR by default (when the
-   arbiter is GitHub/PR-compatible), so that I review before merge.
+7. As the maintainer, I want a finished item to integrate in `propose` mode by default
+   (push a branch + request review; e.g. a GitHub PR via the provider seam), so that I
+   review before merge.
 8. As the maintainer, I want to optionally configure direct-merge-to-main where allowed,
    so that trusted/low-risk repos can run fully hands-off.
 9. As the maintainer, I want the AFK gate to be configurable: strict by default (claim
@@ -103,8 +104,12 @@ system: it tracks its own work in its own `work/` folder.
   the work-contract (CLAIM-PROTOCOL.md → "The prompt handed to the work agent"); agent-runner
   implements that template. In-band (not via a host `AGENTS.md`) because the runner is portable
   and can't assume any host rule exists.
-- **Integration mode: configurable, default `pr`.** PR when the arbiter is GitHub / a
-  PR-compatible remote; `merge` (direct to main) where explicitly allowed. Never `--force`
+- **Integration mode: configurable, default `propose`.** `propose` = push a `work/<slug>`
+  branch + request review via a provider seam (GitHub PR via `gh`, GitLab MR, etc., or
+  `none` = pushed + open-manually); `merge` (direct to main) where explicitly allowed.
+  *(Renamed from `pr`: "propose" is provider-neutral; "PR" is GitHub jargon — see the
+  integration seam in `work/findings/execution-substrate-decisions.md` §6.)* The universal,
+  safety-bearing action is the `git push`; the review request layers on top. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
 - **AFK gate: a boolean frontmatter field `afk`, configurable + strict by default.** The
   slice's gate is `afk: true` (claimable unattended) / `afk: false` (never — deliberately
@@ -129,7 +134,7 @@ system: it tracks its own work in its own `work/` folder.
   "include": [], "exclude": [],
   "maxParallel": 4, "perRepoMax": 2,
   "defaultArbiter": "origin",
-  "integration": "pr",
+  "integration": "propose",
   "allowUnspecifiedGate": false,
   "agentCmd": "<command to run one agent on a slice prompt>"
 }
@@ -151,7 +156,7 @@ system: it tracks its own work in its own `work/` folder.
 - A GraphQL/HTTP control surface or web UI.
 - Cross-repo dependency graphs (deps are per-repo only — claims never cross repos).
 - A long-lived daemon/service; `watch` is a bounded session, not a system service.
-- Auto-merge as the default (default is PR; direct merge is opt-in).
+- Auto-merge as the default (default is `propose`; direct `merge` is opt-in).
 
 ## Further Notes
 
