@@ -17,7 +17,7 @@ The acceptance **gate** as a first-class, configurable, per-repo command:
 (build + tests + format, etc.) and exits 0 iff the work is acceptable. This is
 the single shared mechanism that both the human `complete` command and the
 autonomous `run-once`/`watch` use — see ADR §8 in
-`work/findings/execution-substrate-decisions.md`.
+`docs/adr/execution-substrate-decisions.md`.
 
 End-to-end:
 
@@ -59,7 +59,7 @@ decide authority.
 
 > Implement `agent-runner verify` in `packages/agent-runner/`: run the repo's
 > declared acceptance gate and exit with its status. READ FIRST: ADR §8 in
-> `work/findings/execution-substrate-decisions.md` (the shared gate seam;
+> `docs/adr/execution-substrate-decisions.md` (the shared gate seam;
 > per-repo not per-slice; authority differs by caller) and the existing config
 > module.
 >

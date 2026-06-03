@@ -112,7 +112,7 @@ in `merge` mode (incl. local-main sync), and the `pr`->`propose` code rename.
 > Implement `agent-runner complete [<slug>] [--skip-verify] [--type <t>]
 > [--message <s>] [--arbiter <remote>]` in `packages/agent-runner/`: the human
 > finish-and-integrate command. READ FIRST: ADR §4/§6/§8/§10 in
-> `work/findings/execution-substrate-decisions.md` (deletion/integration/gate/
+> `docs/adr/execution-substrate-decisions.md` (deletion/integration/gate/
 > conflict), CLAIM-PROTOCOL.md (completed-slice commit message; done-move), and the
 > existing `verify.ts`, `integrate.ts`, and `config.ts`.
 >

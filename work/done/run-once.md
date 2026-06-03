@@ -55,7 +55,7 @@ A thin path through every layer, reusing the `scan` core for the queue:
   request review — e.g. a GitHub PR via the provider seam), or `merge` (direct to
   main) where explicitly allowed. Never `--force` to main. *(Mode renamed from
   `pr` to `propose`; see the integration seam in
-  `work/findings/execution-substrate-decisions.md` §6.)*
+  `docs/adr/execution-substrate-decisions.md` §6.)*
 
 ## Acceptance criteria
 

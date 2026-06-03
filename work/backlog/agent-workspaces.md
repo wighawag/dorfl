@@ -16,7 +16,7 @@ The execution substrate that replaces `run-once`'s ad-hoc "worktree or clone"
 isolation with a real, reusable mechanism: per-repo hub mirrors + per-job
 isolated worktrees, plus the seams (harness, integration) and lifecycle (status,
 provably-safe deletion, gc) the runner needs. See the design ADR at
-`work/findings/execution-substrate-decisions.md` — it is the source of truth for
+`docs/adr/execution-substrate-decisions.md` — it is the source of truth for
 every decision below; this slice implements §2–§6.
 
 End-to-end:
@@ -101,7 +101,7 @@ End-to-end:
 ## Prompt
 
 > Build the execution substrate for `agent-runner` (package `packages/agent-runner/`).
-> READ FIRST: `work/findings/execution-substrate-decisions.md` (the ADR) — it is
+> READ FIRST: `docs/adr/execution-substrate-decisions.md` (the ADR) — it is
 > the authoritative design for everything here (§2 isolation, §3 state-not-cache,
 > §4 deletion predicate, §5 harness seam, §6 integration seam). Also read
 > `work/prd/agent-runner.md` and the existing `run-once` implementation/tests.

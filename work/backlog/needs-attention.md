@@ -15,7 +15,7 @@ claimed_at:
 The single, folder-native mechanism for "couldn't finish, a human must look":
 move a stuck claimed item from `work/in-progress/` to `work/needs-attention/`,
 record why, surface it, and allow a clean return to `backlog/`. See ADR §12 in
-`work/findings/execution-substrate-decisions.md` and the contract's
+`docs/adr/execution-substrate-decisions.md` and the contract's
 `needs-attention/` section in `WORK-CONTRACT.md` (the authoritative spec).
 
 End-to-end:
@@ -64,7 +64,7 @@ This subsumes the previously-parked "needs-attention surfacing" problem.
 ## Prompt
 
 > Implement the `needs-attention` mechanism in `packages/agent-runner/`. READ
-> FIRST: ADR §12 (and §10) in `work/findings/execution-substrate-decisions.md`,
+> FIRST: ADR §12 (and §10) in `docs/adr/execution-substrate-decisions.md`,
 > and the `needs-attention/` section of `WORK-CONTRACT.md` (authoritative). Follow
 > this repo's `AGENTS.md`.
 >

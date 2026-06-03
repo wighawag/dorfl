@@ -13,7 +13,7 @@ claimed_at:
 ## What to build
 
 The concrete **pi** adapter for the harness seam introduced by `agent-workspaces`
-(ADR §5, `work/findings/execution-substrate-decisions.md`). pi is the first real
+(ADR §5, `docs/adr/execution-substrate-decisions.md`). pi is the first real
 agent harness agent-runner drives.
 
 End-to-end:
@@ -50,7 +50,7 @@ Keep pi specifics behind the adapter interface; the core stays harness-agnostic.
 
 > Implement the **pi** harness adapter for `agent-runner`, fulfilling the harness
 > seam created by the `agent-workspaces` slice. READ FIRST: ADR §5 in
-> `work/findings/execution-substrate-decisions.md`, the harness-seam code from
+> `docs/adr/execution-substrate-decisions.md`, the harness-seam code from
 > `agent-workspaces`, and the PRD's decisions on the agentCmd prompt (constant
 > wrapper + slice `## Prompt`) plus CLAIM-PROTOCOL's "prompt handed to the work
 > agent".

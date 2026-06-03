@@ -13,7 +13,7 @@ claimed_at:
 ## What to build
 
 The concrete **GitHub** provider for the integration seam introduced by
-`agent-workspaces` (ADR §6, `work/findings/execution-substrate-decisions.md`):
+`agent-workspaces` (ADR §6, `docs/adr/execution-substrate-decisions.md`):
 the `propose` mode's review-request step, implemented via `gh`.
 
 End-to-end:
@@ -55,7 +55,7 @@ The core never imports `gh`; only this adapter shells out to it.
 
 > Implement the **GitHub** integration provider for `agent-runner`, fulfilling the
 > provider seam created by `agent-workspaces`. READ FIRST: ADR §6 in
-> `work/findings/execution-substrate-decisions.md` (mode × provider; push is the
+> `docs/adr/execution-substrate-decisions.md` (mode × provider; push is the
 > guarantee; `propose` not `pr`), and the integration-seam code from
 > `agent-workspaces` (with its `none` provider).
 >

@@ -14,7 +14,7 @@ claimed_at:
 
 Commands to provision and inspect a **local `--bare` arbiter** — the offline
 source of truth the claim/integration protocols serialize on. Per ADR §7
-(`work/findings/execution-substrate-decisions.md`), an arbiter is precious DATA:
+(`docs/adr/execution-substrate-decisions.md`), an arbiter is precious DATA:
 it must NOT live under `~/.agent-runner/` and defaults under `~/git/`.
 
 End-to-end:
@@ -61,7 +61,7 @@ This is independent setup tooling; it provisions what `claim`/`run-once`/
 
 > Implement `agent-runner arbiter init` and `agent-runner arbiter status` in
 > `packages/agent-runner/`. READ FIRST: ADR §7 in
-> `work/findings/execution-substrate-decisions.md` (arbiters are precious data,
+> `docs/adr/execution-substrate-decisions.md` (arbiters are precious data,
 > default under `~/git/<host>/<org>/<name>.git`, NEVER under `~/.agent-runner/`),
 > and `scripts/CLAIM-PROTOCOL.md` (the offline-arbiter setup it documents — bare
 > by construction; a non-bare repo with main checked out rejects claim pushes).

@@ -108,7 +108,7 @@ system: it tracks its own work in its own `work/` folder.
   branch + request review via a provider seam (GitHub PR via `gh`, GitLab MR, etc., or
   `none` = pushed + open-manually); `merge` (direct to main) where explicitly allowed.
   *(Renamed from `pr`: "propose" is provider-neutral; "PR" is GitHub jargon — see the
-  integration seam in `work/findings/execution-substrate-decisions.md` §6.)* The universal,
+  integration seam in `docs/adr/execution-substrate-decisions.md` §6.)* The universal,
   safety-bearing action is the `git push`; the review request layers on top. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
 - **AFK gate: a boolean frontmatter field `afk`, configurable + strict by default.** The

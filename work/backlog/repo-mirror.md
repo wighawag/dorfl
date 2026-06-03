@@ -15,7 +15,7 @@ claimed_at:
 The **shared hub-mirror primitive** that both the autonomous job runner
 (`agent-workspaces`) and the human `work-on` command build on. Extracted as its
 own slice because it is used by two different consumers (ADR §2 +
-`work/findings/execution-substrate-decisions.md` — the mirror is the foundation
+`docs/adr/execution-substrate-decisions.md` — the mirror is the foundation
 the job/worktree layer sits on).
 
 End-to-end:
@@ -58,7 +58,7 @@ consume it.
 
 > Implement the shared hub-mirror primitive for `agent-runner` in
 > `packages/agent-runner/`. READ FIRST: ADR §2 and §3 in
-> `work/findings/execution-substrate-decisions.md` (isolation foundation;
+> `docs/adr/execution-substrate-decisions.md` (isolation foundation;
 > state-not-cache).
 >
 > Build: the deterministic repo→key encoding (arbiter URL → hierarchical key,

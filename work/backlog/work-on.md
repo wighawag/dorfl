@@ -92,7 +92,7 @@ worktree location differs.
 > Implement `agent-runner work-on` in `packages/agent-runner/` — the HUMAN command
 > to claim a slice and create an isolated worktree in a human-friendly location
 > for parallel work. READ FIRST: ADR §2/§3/§7 in
-> `work/findings/execution-substrate-decisions.md`, and the `repo-mirror`,
+> `docs/adr/execution-substrate-decisions.md`, and the `repo-mirror`,
 > `claim-command`, and `start` slices.
 >
 > Two forms: `work-on <slug>` (infer arbiter from the current repo) and
