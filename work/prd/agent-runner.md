@@ -87,6 +87,12 @@ system: it tracks its own work in its own `work/` folder.
   authoritative (the agent can't merge around it) and the inner agent honest by construction.
   Practical note: the mover must `mkdir -p work/<status>/` before `git mv` (git doesn't track
   empty dirs, so `work/done/` may not exist yet); no `.gitkeep` placeholders.
+- **Completed-slice commit message format:** the commit that completes a slice (work + the
+  `git mv` to `work/done/`, one atomic commit) uses `<type>(<slug>): <summary>; done` — e.g.
+  `feat(scan): cross-repo eligible-work queue (read-only); done`. The trailing `; done`
+  marks the backlog→done transition (mirroring the `claim: <slug>` message for
+  backlog→in-progress). agent-runner authors this deterministically; it is also documented in
+  the work-contract (CLAIM-PROTOCOL.md) for human/other consumers.
 - **Integration mode: configurable, default `pr`.** PR when the arbiter is GitHub / a
   PR-compatible remote; `merge` (direct to main) where explicitly allowed. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
