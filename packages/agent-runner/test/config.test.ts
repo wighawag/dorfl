@@ -24,7 +24,7 @@ describe('mergeConfig', () => {
 		expect(cfg.maxParallel).toBe(4);
 		expect(cfg.perRepoMax).toBe(2);
 		expect(cfg.defaultArbiter).toBe('origin');
-		expect(cfg.integration).toBe('pr');
+		expect(cfg.integration).toBe('propose');
 		expect(cfg.agentCmd).toBe('');
 	});
 

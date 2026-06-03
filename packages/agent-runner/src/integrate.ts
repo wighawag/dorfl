@@ -8,10 +8,10 @@ import {run, git} from './git.js';
  * branch to `main`. NEVER `--force` (the only `--force-with-lease` in the whole
  * system is the claim micro-commit inside claim.sh).
  *
- * `pr` (default): push the work branch to the arbiter under its own ref and open
- * a PR for human review (when the arbiter is GitHub/PR-compatible). For a local
- * `--bare` arbiter there is no PR API — we still push the branch (so the work is
- * preserved for the human) but do NOT touch `main`.
+ * `propose` (default): push the work branch to the arbiter under its own ref and
+ * request review (a PR when the arbiter is GitHub/PR-compatible). For a local
+ * `--bare` arbiter there is no review API — we still push the branch (so the work
+ * is preserved for the human) but do NOT touch `main`.
  */
 export interface IntegrateOptions {
 	cwd: string;
@@ -19,7 +19,7 @@ export interface IntegrateOptions {
 	branch: string;
 	mode: IntegrationMode;
 	env?: NodeJS.ProcessEnv;
-	/** Optional injectable PR opener (e.g. `gh pr create`); used in `pr` mode. */
+	/** Optional injectable PR opener (e.g. `gh pr create`); used in `propose` mode. */
 	openPr?: (opts: {
 		cwd: string;
 		branch: string;
@@ -33,13 +33,13 @@ export interface IntegrateResult {
 	mergedToMain: boolean;
 	/** The ref the work branch was pushed to. */
 	pushedRef: string;
-	/** True when a PR was opened (pr mode, PR-capable arbiter). */
+	/** True when a PR was opened (propose mode, PR-capable arbiter). */
 	prOpened: boolean;
 }
 
 /**
  * Push a branch to the arbiter without ever force-updating `main`. Used by both
- * modes; `merge` targets `main`, `pr` targets the branch's own ref.
+ * modes; `merge` targets `main`, `propose` targets the branch's own ref.
  */
 function pushBranch(
 	opts: IntegrateOptions,
@@ -64,7 +64,7 @@ export function integrate(opts: IntegrateOptions): IntegrateResult {
 		};
 	}
 
-	// pr (default): push the work branch under its own name; never touch main.
+	// propose (default): push the work branch under its own name; never touch main.
 	const refspec = `${opts.branch}:${opts.branch}`;
 	pushBranch(opts, refspec, false);
 	let prOpened = false;
@@ -73,7 +73,7 @@ export function integrate(opts: IntegrateOptions): IntegrateResult {
 		prOpened = true;
 	}
 	return {
-		mode: 'pr',
+		mode: 'propose',
 		mergedToMain: false,
 		pushedRef: opts.branch,
 		prOpened,

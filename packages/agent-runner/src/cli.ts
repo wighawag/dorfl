@@ -11,6 +11,7 @@ import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
+import {performComplete} from './complete.js';
 import {runVerify} from './verify.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -68,7 +69,7 @@ function runFlagOverrides(flags: RunFlags): PartialConfig {
 	if (flags.arbiter !== undefined) {
 		overrides.defaultArbiter = flags.arbiter;
 	}
-	if (flags.integration === 'pr' || flags.integration === 'merge') {
+	if (flags.integration === 'propose' || flags.integration === 'merge') {
 		overrides.integration = flags.integration;
 	}
 	if (flags.agentCmd !== undefined) {
@@ -97,6 +98,15 @@ interface StartFlags {
 	arbiter?: string;
 	by?: string;
 	resume?: boolean;
+}
+
+interface CompleteFlags {
+	config?: string;
+	arbiter?: string;
+	integration?: string;
+	skipVerify?: boolean;
+	type?: string;
+	message?: string;
 }
 
 export function buildProgram(): Command {
@@ -184,7 +194,10 @@ export function buildProgram(): Command {
 		.option('--max-parallel <n>', 'global cap on items claimed+run this tick')
 		.option('--per-repo-max <n>', 'per-repo cap on concurrent claims')
 		.option('--arbiter <remote>', 'name of the arbiter git remote')
-		.option('--integration <mode>', 'integration mode: pr (default) or merge')
+		.option(
+			'--integration <mode>',
+			'integration mode: propose (default) or merge',
+		)
 		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
 		.option('--isolation <mode>', 'isolation: clone (default) or worktree')
 		.option('--workspace <dir>', 'directory for isolated clones/worktrees')
@@ -290,6 +303,57 @@ export function buildProgram(): Command {
 				arbiter: flags.arbiter ?? 'origin',
 				by: flags.by,
 				resume: flags.resume,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			}
+			process.exit(result.exitCode);
+		});
+
+	program
+		.command('complete')
+		.description(
+			'On a work/<slug> branch (slug inferred if omitted): run the gate, mark done (git mv in-progress\u2192done), commit (<type>(<slug>): <summary>; done) the agent\u2019s uncommitted work + the move, rebase onto <arbiter>/main, and integrate (merge\u2192main + local sync, or propose\u2192push branch). Never --force.',
+		)
+		.argument(
+			'[slug]',
+			'the slug to complete (inferred from a work/<slug> branch if omitted)',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: origin)',
+			'origin',
+		)
+		.option(
+			'--integration <mode>',
+			'integration mode: propose (default) or merge (overrides config)',
+		)
+		.option(
+			'--skip-verify',
+			'skip the acceptance gate (human-only escape hatch; the runner never skips)',
+		)
+		.option('--type <type>', 'conventional-commit type for the commit', 'feat')
+		.option(
+			'--message <summary>',
+			'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
+		)
+		.action(async (slug: string | undefined, flags: CompleteFlags) => {
+			const config = loadConfig(flags.config);
+			const integration =
+				flags.integration === 'merge' || flags.integration === 'propose'
+					? flags.integration
+					: config.integration;
+			const result = await performComplete({
+				slug,
+				cwd: process.cwd(),
+				arbiter: flags.arbiter ?? config.defaultArbiter,
+				integration,
+				verify: config.verify,
+				skipVerify: flags.skipVerify,
+				type: flags.type,
+				message: flags.message,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

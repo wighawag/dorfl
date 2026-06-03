@@ -2,8 +2,13 @@ import {readFileSync, existsSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 
-/** How a completed item is integrated back to the arbiter's `main`. */
-export type IntegrationMode = 'pr' | 'merge';
+/**
+ * How a completed item is integrated back to the arbiter's `main`. `merge` lands
+ * it directly on `main` (ff/rebase + push); `propose` pushes a branch + requests
+ * review. (`propose` is provider-neutral; the old `pr` name was GitHub jargon.
+ * See ADR §6.)
+ */
+export type IntegrationMode = 'propose' | 'merge';
 
 /**
  * The per-repo acceptance gate: a single shell command, or an ordered list of
@@ -36,7 +41,7 @@ export interface Config {
 	perRepoMax: number;
 	/** Name of the git remote that serializes claims (the arbiter). */
 	defaultArbiter: string;
-	/** Integration mode for completed items: `pr` (default) or `merge`. */
+	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
 	 * The command the runner shells out to for one slice. The runner appends the
@@ -69,7 +74,7 @@ export const DEFAULT_CONFIG: Config = {
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',
-	integration: 'pr',
+	integration: 'propose',
 	agentCmd: '',
 };
 

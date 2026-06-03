@@ -202,9 +202,9 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 });
 
 describe('runOnce — integration modes', () => {
-	it('integration: pr does NOT push to main; it pushes the work branch + opens a PR', () => {
+	it('integration: propose does NOT push to main; it pushes the work branch + opens a PR', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
-		const config = configFor(scratch.root, {integration: 'pr'});
+		const config = configFor(scratch.root, {integration: 'propose'});
 		let prBranch = '';
 		const result = runOnce({
 			config,
@@ -221,7 +221,7 @@ describe('runOnce — integration modes', () => {
 		});
 		const item = result.items[0];
 		expect(item.status).toBe('claimed-done');
-		expect(item.integration?.mode).toBe('pr');
+		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
 		expect(item.integration?.prOpened).toBe(true);
 		expect(prBranch).toBe('work/feat-agentA');

@@ -62,7 +62,7 @@ export interface RunOnceOptions {
 	agentRunner?: AgentRunner;
 	/** How to run the acceptance tests. Defaults to the repo's `pnpm -r test`. */
 	testGate?: TestGate;
-	/** Optional injectable PR opener for `integration: pr`. */
+	/** Optional injectable PR opener for `integration: propose`. */
 	openPr?: (opts: {
 		cwd: string;
 		branch: string;
@@ -256,7 +256,7 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, handle.dir);
 		commitCompletion(handle.dir, slug, ctx.env);
 
-		// 6. Integrate per config (pr by default; merge where allowed). Never --force.
+		// 6. Integrate per config (propose by default; merge where allowed). Never --force.
 		const integration = integrate({
 			cwd: handle.dir,
 			arbiter: ctx.config.defaultArbiter,

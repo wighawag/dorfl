@@ -54,6 +54,13 @@ export type {StartOutcome, StartOptions, StartResult} from './start.js';
 export {performStart} from './start.js';
 
 export type {
+	CompleteOutcome,
+	CompleteOptions,
+	CompleteResult,
+} from './complete.js';
+export {performComplete} from './complete.js';
+
+export type {
 	IsolationMode,
 	IsolationHandle,
 	IsolateOptions,
