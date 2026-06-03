@@ -6,8 +6,8 @@ afk: true
 blocked_by: [scan]
 covers: [1, 4, 9]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-03T12:14:50Z
 ---
 
 ## What to build
