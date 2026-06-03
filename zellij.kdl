@@ -1,0 +1,14 @@
+layout {
+	pane split_direction="vertical" {
+		
+	}
+	pane split_direction="vertical" {
+		pane name="dev" command="pnpm"  {
+			args "dev"
+		}
+	}
+
+	pane split_direction="vertical" {
+	
+	}
+}

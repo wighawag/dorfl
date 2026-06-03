@@ -1,0 +1,30 @@
+{
+  "name": "agent-runner-monorepo",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "ldenv": "^0.3.16",
+    "zellij-launcher": "^0.0.1"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "preinstall": "npx only-allow pnpm",
+    "cleandep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
+    "---------------------- PUBLISH --------------------": "",
+    "prepublishOnly": "pnpm format:check && pnpm build",
+    "release": "pnpm prepublishOnly && git push --all && pnpm changeset publish && git push --tags",
+    "---------------------- FORMAT ----------------------": "",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
+    "---------------------- TEST ----------------------": "",
+    "test": "pnpm -r test",
+    "---------------------- DEV ----------------------": "",
+    "dev": "ldenv pnpm --filter './packages/*' dev",
+    "build": "ldenv pnpm --filter './packages/*' build",
+    "---------------------- RUN FULL LOCAL SETUP ----------------------": "",
+    "stop": "zellij kill-session $npm_package_name",
+    "start:pnpm": "pnpm -r dev",
+    "start": "zellij-launcher a $npm_package_name || zellij -n zellij.kdl -s $npm_package_name"
+  }
+}
