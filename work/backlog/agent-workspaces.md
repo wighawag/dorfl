@@ -3,7 +3,7 @@ title: agent workspaces — hub mirrors + isolated job worktrees, with seams, gc
 slug: agent-workspaces
 prd: agent-runner
 afk: false
-blocked_by: [run-once]
+blocked_by: [run-once, repo-mirror]
 covers: [5, 6, 10, 12]
 created: 2026-06-03
 claimed_by:
@@ -30,10 +30,13 @@ End-to-end:
     `work/<slug>`.
   - `work/<work-id>/.agent-runner-job.json` — job record: slug, repoKey, branch,
     startedAt, state, and a harness block.
-- **Repo→key encoding** (ADR §2): deterministic function from arbiter URL to the
-  hierarchical hub key and the flat work-id.
-- **Create a job workspace**: ensure the hub mirror (clone --bare / fetch), then
-  `git worktree add work/<work-id> -b work/<slug> <hub>/main`.
+- **Hub mirror via the `repo-mirror` primitive**: this slice does NOT reimplement
+  mirror management — it consumes `repo-mirror` (ensure/locate/fetch + the
+  repo→key encoding). The flat work-id (`<host-...>__<org>__<name>__<slug>`) is
+  derived from the same encoding.
+- **Create a job workspace**: ensure the hub mirror (via `repo-mirror`), then
+  `git worktree add work/<work-id> -b work/<slug> <hub>/main` (branched off the
+  freshly-fetched main).
 - **Harness seam** (ADR §5): a small interface for launching a job's command and
   reporting liveness. Ship a **null adapter** (records PID, runs a configured
   command) so this slice is testable standalone. (The pi adapter is its own
@@ -44,6 +47,13 @@ End-to-end:
   + a **`none` provider** (push branch, print "open a request manually"); the
   `github`/`gh` provider is its own slice. The safety-bearing action is the
   `git push`.
+- **Conflict handling = rebase-or-abort, never auto-resolve** (ADR §10): before
+  integrating, `git fetch` + rebase `work/<slug>` onto the latest
+  `<arbiter>/main`. Clean rebase → proceed. Conflicting rebase → `git rebase
+  --abort`, mark the job **needs-attention**, and surface it (the retained
+  worktree is the signal). The runner NEVER auto-resolves a conflict (semantic
+  merges need judgment); it only attempts the deterministic rebase and stops
+  cleanly when judgment is required.
 - **Provably-safe deletion** (ADR §4): remove a job worktree (via
   `git worktree remove` + prune) iff working tree is clean AND the branch tip is
   reachable on the arbiter (merged-ancestor of `<arbiter>/main`, OR pushed branch
@@ -60,8 +70,11 @@ End-to-end:
 
 ## Acceptance criteria
 
-- [ ] Hub mirror created once per repo and reused (fetch, not re-clone) across
-      jobs; lives under `~/.agent-runner/repos/<host>/<org>/<name>.git`.
+- [ ] Hub mirror is obtained via `repo-mirror` (not reimplemented here); reused
+      across jobs (fetch, not re-clone).
+- [ ] Before integrating, the job branch is rebased onto the latest
+      `<arbiter>/main`; a clean rebase proceeds, a conflicting rebase is aborted
+      and the job is marked needs-attention (never auto-resolved).
 - [ ] Each job runs in its own worktree at `~/.agent-runner/work/<work-id>/` on
       branch `work/<slug>`; two jobs never share a working tree; distinct slugs ⇒
       distinct branches (no same-branch worktree collision).

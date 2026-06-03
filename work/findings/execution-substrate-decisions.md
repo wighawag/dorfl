@@ -183,3 +183,31 @@ as `claim.sh`, with identical exit-code semantics.
   slices): author companion contract docs in the skill repo
   (e.g. `EXECUTION-PROTOCOL.md`, `INTEGRATION-PROTOCOL.md`) once the
   implementation proves them out, so other tools can implement the same protocols.
+
+## 10. Merge conflicts: rebase-or-abort, never auto-resolve
+
+`blocked_by` encodes LOGICAL ordering, not FILE ordering: two independent slices
+can touch the same files and conflict when the second integrates after the first.
+Conflicts between parallel branches are therefore **inherent**, not a bug. We do
+NOT try to prevent them with file reservations / locks (that reintroduces the
+shared-state coordination the `work/` contract bans, and agents can't reliably
+predeclare touched files). Instead:
+
+- **Rarer, by design (slicing guidance):** prefer thin, file-orthogonal slices;
+  when two slices are known to touch the same module, add a `blocked_by` to
+  serialize them. This is the slicer's judgement (documented in the
+  `wighawag-work-slices` skill), not enforced by tooling.
+- **Cheaper + safe, by tooling:** at integration time the runner / `complete`
+  does a **deterministic rebase** of `work/<slug>` onto the latest
+  `<arbiter>/main`. A **clean** rebase proceeds. A **conflicting** rebase is
+  `git rebase --abort`ed, the job is marked **needs-attention**, and it is
+  surfaced (the retained worktree is the signal; dovetails with `watch`'s
+  surface-failures rail).
+- **Never auto-resolve.** agent-runner deterministically *attempts* the rebase
+  and *detects* conflict; it does NOT pick `--ours`/`--theirs` or any heuristic,
+  because a conflict resolution requires SEMANTIC judgement and a wrong-but-
+  compiling merge is the worst outcome (it passes the gate, the code is broken).
+  Resolution is a human task (or a future, explicitly conflict-prompted
+  `resolve`-agent — distinct from the build agent, which still does no git).
+- The build agent is unaffected: it does no git writes (read-only `git log`/`diff`
+  for context is fine). Rebase/integration/conflict-surfacing are the runner's.

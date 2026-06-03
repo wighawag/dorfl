@@ -27,9 +27,13 @@ End-to-end, on a `work/<slug>` branch (slug inferred from the branch if omitted)
 3. **Commit**: one atomic commit (work + the move) with the completed-slice
    message format `<type>(<slug>): <summary>; done` (CLAIM-PROTOCOL "completed-slice
    commit message").
-4. **Integrate** per config `integration`:
-   - **`merge`**: ff/rebase onto `<arbiter>/main`, push to main, return to main.
-     (Provider-agnostic git; in scope now.)
+4. **Rebase-before-integrate** (ADR §10): `git fetch` + rebase `work/<slug>` onto
+   the latest `<arbiter>/main`. Clean → continue. Conflict → `git rebase --abort`
+   and STOP with a clear needs-attention message (the human resolves; `complete`
+   never auto-resolves).
+5. **Integrate** per config `integration`:
+   - **`merge`**: ff onto `<arbiter>/main` (already rebased), push to main, return
+     to main. (Provider-agnostic git; in scope now.)
    - **`propose`**: push the `work/<slug>` branch (the safety-bearing step) +
      request review. The push + a `none`-provider message is in scope now; full
      provider-driven PR/MR creation lands with the integration seam
@@ -47,14 +51,18 @@ human to open the review.
 - [ ] `--skip-verify` skips the gate (human-only); behaviour otherwise identical.
 - [ ] On pass: `git mv` in-progress\u2192done after `mkdir -p work/done`, one atomic
       commit using `<type>(<slug>): <summary>; done`.
-- [ ] `merge` mode: integrates to `<arbiter>/main` (ff/rebase + push) and returns
-      the user to `main`; never `--force`.
+- [ ] Before integrating, rebases `work/<slug>` onto the latest `<arbiter>/main`;
+      a conflicting rebase is aborted and surfaced as needs-attention (never
+      auto-resolved).
+- [ ] `merge` mode: integrates to `<arbiter>/main` (ff after rebase + push) and
+      returns the user to `main`; never `--force`.
 - [ ] `propose` mode: pushes the branch and reports the next step (full
       provider PR creation deferred to the integration seam).
 - [ ] Slug inferred from the current `work/<slug>` branch when omitted.
 - [ ] Tests cover: gate-fail aborts cleanly; gate-pass does done-move+commit;
-      `merge` integrates to main on a local `--bare` arbiter; `--skip-verify`
-      path. Use throwaway repos + a local `--bare` arbiter.
+      `merge` integrates to main on a local `--bare` arbiter; a conflicting
+      rebase aborts + surfaces; `--skip-verify` path. Use throwaway repos + a
+      local `--bare` arbiter.
 
 ## Blocked by
 
