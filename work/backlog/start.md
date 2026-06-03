@@ -16,16 +16,27 @@ A human-convenience command that does the two-step ritual we run every time a
 person starts a slice by hand: claim the item, and — **only if the claim landed**
 — put the human on the work branch ready to start, in their CURRENT checkout.
 
-`agent-runner start <slug> [--arbiter <remote>]`:
+`agent-runner start [<slug>] [--arbiter <remote>] [--resume]`:
 
-1. Run the claim (the `claim-command` CAS — unchanged).
-2. **On exit 0 only**: `git fetch <arbiter>` and `git switch -c work/<slug>
-   <arbiter>/main`, leaving the user on the work branch with
-   `work/in-progress/<slug>.md` present, ready to work.
-3. On exit 2 (lost/not claimable) or 3 (contended): behave exactly like `claim`
-   — leave the user restored where they were, create NO work branch. The failure
-   path must be clean (this is just a sequencer of two existing operations; it
-   never weakens the claim's cheap/restorable guarantee).
+Branch on the item's CURRENT FOLDER on `<arbiter>/main` (never on the advisory
+`claimed_by` field — WORK-CONTRACT rule 6: folder + git history are truth):
+
+1. **In `work/backlog/`** → claim it (the `claim-command` CAS), and **on exit 0
+   only**: `git fetch <arbiter>` + `git switch -c work/<slug> <arbiter>/main`,
+   leaving the user on the work branch with `work/in-progress/<slug>.md` present.
+   On claim exit 2/3 (lost/contended): behave exactly like `claim` — user
+   restored, NO work branch created, exit code propagated.
+2. **In `work/in-progress/`** → it is already claimed (you cannot re-claim; it is
+   not in backlog). **Refuse by default** with a clear message ("already
+   in-progress; advisory claimed_by=<...>; if this is your own resumed work,
+   re-run with --resume"). With **`--resume`**, switch to `work/<slug>` off the
+   arbiter without claiming — the human explicitly asserts ownership; the tool
+   does NOT guess it.
+3. **In `work/done/` or absent** → refuse (nothing to start).
+
+Slug inference: if `<slug>` is omitted and the current branch is `work/<slug>`,
+infer the slug from the branch (so `start` re-onboards / resumes the current
+work item without retyping it).
 
 Scope notes (deliberate):
 
@@ -43,8 +54,15 @@ Scope notes (deliberate):
 
 ## Acceptance criteria
 
-- [ ] `start <slug>` on a winning claim leaves the user on branch `work/<slug>`
-      off the latest arbiter main, with `work/in-progress/<slug>.md` present.
+- [ ] `start <slug>` on a BACKLOG item: winning claim leaves the user on branch
+      `work/<slug>` off the latest arbiter main, with
+      `work/in-progress/<slug>.md` present; losing/contended leaves them
+      untouched (no branch).
+- [ ] `start <slug>` on an IN-PROGRESS item refuses by default; `--resume`
+      switches to its work branch without claiming. Decision is folder-based,
+      never from the advisory `claimed_by` field.
+- [ ] `start` on a DONE/absent item refuses.
+- [ ] With no `<slug>` and on a `work/<slug>` branch, the slug is inferred.
 - [ ] It launches no agent/editor/harness; it only onboards onto the branch.
 - [ ] On a losing/contended claim it matches `claim`'s behaviour exactly: user
       restored, NO work branch created, correct exit code propagated.

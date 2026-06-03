@@ -144,7 +144,30 @@ Three ownership tiers (do not conflate):
 | hub mirrors + job worktrees | execution **state** | conditionally (§4) | `~/.agent-runner/` |
 | arbiters (offline) | **source of truth** | no | `~/git/...` |
 
-## 8. agent-runner is the primary implementation; contract + `claim.sh` are the portable substrate
+## 8. The acceptance gate is a per-repo `verify` seam; authority differs by caller
+
+The gate that decides whether work is acceptable is a **per-repo declared
+command** (`verify` config, e.g. `pnpm -r build && test && format:check`),
+exposed as `agent-runner verify`. NOT per-slice: a per-slice gate would force a
+model to interpret prose to decide what "passing" means — putting an LLM inside
+the trust boundary, which is exactly where we want determinism. Per-repo config
+keeps the gate a dumb, auditable shell command (and means there is nothing to
+"cache" — the gate is known by reading config, no model call).
+
+One mechanism, two callers, different **authority**:
+
+- **Autonomous runner** (`run-once`/`watch`): the gate is the **non-negotiable
+  trust boundary** (PRD story 12 — bad work never reaches `done/`). The agent's
+  own "I'm done / tests pass" is a hint, NEVER a substitute; the runner runs
+  `verify` itself and that is the verdict. No skip.
+- **Human `complete`**: the human is the trusted operator, so `verify` runs as a
+  **default-on safety-net** with `--skip-verify` to opt out ("I already ran it").
+
+A possible later optimization is caching *test results* (skip re-running when the
+git tree is unchanged) — but it must be off-by-default for the authoritative
+autonomous gate (a safety boundary must not trust a cache). Out of scope for now.
+
+## 9. agent-runner is the primary implementation; contract + `claim.sh` are the portable substrate
 
 agent-runner and the `wighawag-work-slices` skill (the `work/` contract,
 `CLAIM-PROTOCOL.md`, `claim.sh`) are **one project / one vision**. agent-runner
