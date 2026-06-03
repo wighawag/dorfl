@@ -24,7 +24,15 @@ A thin path through every layer, reusing the `scan` core for the queue:
   to the arbiter remote). Exit 2 ⇒ lost the race ⇒ skip that item and move on.
   Never claim across repos; claims serialize on each repo's arbiter `main`.
 - **Isolate** each claimed item in its own git worktree or clone so concurrent
-  code changes cannot corrupt shared state.
+  code changes cannot corrupt shared state. Note the worktree caveat: git
+  forbids the same branch being checked out in two worktrees at once, so if
+  worktrees are used, each agent's branches must be uniquely named (e.g.
+  `claim/<slug>-<agentid>`, `work/<slug>-<agentid>`) — otherwise two agents
+  racing the same slug collide locally. **Prefer separate clones** when many
+  agents run in parallel (independent object stores, no shared-branch
+  constraint); the single-checkout `claim.sh` is not safe to run twice in one
+  working copy. (The arbiter's `main`-ref CAS still guarantees exactly one
+  claim winner regardless; this isolation is about avoiding LOCAL collisions.)
 - **Run** the configured `agentCmd` against the item's slice prompt.
 - **Gate on tests** — an item reaches `work/done/` only when its acceptance tests
   pass; otherwise it stays in `work/in-progress/` (or moves to a needs-attention
@@ -42,6 +50,8 @@ A thin path through every layer, reusing the `scan` core for the queue:
 - [ ] A simultaneous two-runner race over the same item shows exactly one winner
       (mirror the `claim.sh` verification approach).
 - [ ] Each agent runs in its own worktree/clone; runs do not share a working tree.
+      If worktrees are used, branch names are per-agent unique (no two worktrees
+      check out the same branch); separate clones are preferred for high parallelism.
 - [ ] `integration: pr` opens a PR by default; `merge` integrates directly only
       when configured. Never force-pushes main.
 - [ ] An item moves to `work/done/` only on green acceptance tests; otherwise it
