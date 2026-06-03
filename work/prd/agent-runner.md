@@ -93,6 +93,16 @@ system: it tracks its own work in its own `work/` folder.
   marks the backlog→done transition (mirroring the `claim: <slug>` message for
   backlog→in-progress). agent-runner authors this deterministically; it is also documented in
   the work-contract (CLAIM-PROTOCOL.md) for human/other consumers.
+- **`agentCmd` prompt = constant wrapper + the slice's `## Prompt`.** agent-runner builds the
+  prompt it hands to `agentCmd` deterministically: a small fixed wrapper (only the `<slug>`
+  varies) around the claimed slice's own `## Prompt`. The wrapper points the agent at
+  `work/in-progress/<slug>.md` as its brief, says "implement to satisfy the Acceptance
+  criteria," and draws the git boundary IN-BAND: the agent does NO git ops on the repo (no
+  commit/push, no moving `work/` files) — though its TESTS may use their own throwaway repos —
+  and stops + reports when build/test/format are green. The canonical wrapper text lives in
+  the work-contract (CLAIM-PROTOCOL.md → "The prompt handed to the work agent"); agent-runner
+  implements that template. In-band (not via a host `AGENTS.md`) because the runner is portable
+  and can't assume any host rule exists.
 - **Integration mode: configurable, default `pr`.** PR when the arbiter is GitHub / a
   PR-compatible remote; `merge` (direct to main) where explicitly allowed. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
