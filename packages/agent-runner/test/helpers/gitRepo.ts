@@ -1,0 +1,148 @@
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join, dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {run, git} from '../../src/git.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+/** Absolute path to the vendored work-contract claim script (repo-root/scripts). */
+export const CLAIM_SCRIPT = resolve(
+	HERE,
+	'..',
+	'..',
+	'..',
+	'..',
+	'scripts',
+	'claim.sh',
+);
+
+/** Deterministic git identity + non-interactive env for throwaway test repos. */
+export function gitEnv(): NodeJS.ProcessEnv {
+	return {
+		...process.env,
+		GIT_AUTHOR_NAME: 'Test Runner',
+		GIT_AUTHOR_EMAIL: 'test@example.com',
+		GIT_COMMITTER_NAME: 'Test Runner',
+		GIT_COMMITTER_EMAIL: 'test@example.com',
+		GIT_TERMINAL_PROMPT: '0',
+	};
+}
+
+/** A scratch workspace that cleans itself up. */
+export interface Scratch {
+	root: string;
+	cleanup(): void;
+}
+
+export function makeScratch(prefix = 'agent-runner-git-'): Scratch {
+	const root = mkdtempSync(join(tmpdir(), prefix));
+	return {
+		root,
+		cleanup() {
+			rmSync(root, {recursive: true, force: true});
+		},
+	};
+}
+
+function gx(args: string[], cwd: string): string {
+	return git(args, cwd, {env: gitEnv()});
+}
+
+/**
+ * Build a throwaway project repo with a `work/backlog/<slug>.md` for each given
+ * slug, plus a sibling local `--bare` arbiter the project pushes its `main` to.
+ * Returns the working-clone path, the arbiter path, and a `clone()` that makes
+ * an additional independent clone of the arbiter (for parallel isolation tests).
+ */
+export interface SeededRepo {
+	repo: string;
+	arbiter: string;
+	clone(label: string): string;
+}
+
+export function seedRepoWithArbiter(
+	root: string,
+	slugs: string[],
+	opts: {afk?: boolean; promptBody?: string} = {},
+): SeededRepo {
+	const repo = join(root, 'project');
+	mkdirSync(repo, {recursive: true});
+	gx(['init', '-q', '-b', 'main'], repo);
+
+	const backlog = join(repo, 'work', 'backlog');
+	mkdirSync(backlog, {recursive: true});
+	for (const slug of slugs) {
+		writeFileSync(join(backlog, `${slug}.md`), sliceFile(slug, opts));
+	}
+	writeFileSync(join(repo, 'README.md'), '# project\n');
+	gx(['add', '-A'], repo);
+	gx(['commit', '-q', '-m', 'seed'], repo);
+
+	// Bare arbiter next to (not inside) the working clone.
+	const arbiter = join(root, 'project-work.git');
+	gx(['clone', '-q', '--bare', repo, arbiter], root);
+	gx(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
+	gx(['fetch', '-q', 'arbiter'], repo);
+
+	let n = 0;
+	return {
+		repo,
+		arbiter,
+		clone(label: string): string {
+			const dest = join(root, `clone-${label}-${n++}`);
+			gx(['clone', '-q', `file://${arbiter}`, dest], root);
+			gx(['remote', 'add', 'arbiter', `file://${arbiter}`], dest);
+			gx(['fetch', '-q', 'arbiter'], dest);
+			return dest;
+		},
+	};
+}
+
+function sliceFile(
+	slug: string,
+	opts: {afk?: boolean; promptBody?: string},
+): string {
+	const afk = opts.afk === false ? 'false' : 'true';
+	const body = opts.promptBody ?? `> Implement ${slug}.`;
+	return [
+		'---',
+		`title: ${slug}`,
+		`slug: ${slug}`,
+		`afk: ${afk}`,
+		'blocked_by: []',
+		'claimed_by:',
+		'claimed_at:',
+		'---',
+		'',
+		'## What to build',
+		'',
+		'thing',
+		'',
+		'## Acceptance criteria',
+		'',
+		'- [ ] works',
+		'',
+		'## Prompt',
+		'',
+		body,
+		'',
+	].join('\n');
+}
+
+/** Does `<arbiter>/main` currently track `work/<status>/<slug>.md`? */
+export function existsOnArbiterMain(
+	cwd: string,
+	status: 'backlog' | 'in-progress' | 'done',
+	slug: string,
+): boolean {
+	run('git', ['fetch', '-q', 'arbiter'], cwd, {env: gitEnv()});
+	const res = run(
+		'git',
+		['cat-file', '-e', `arbiter/main:work/${status}/${slug}.md`],
+		cwd,
+		{env: gitEnv()},
+	);
+	return res.status === 0;
+}
+
+export {gx as gitIn};

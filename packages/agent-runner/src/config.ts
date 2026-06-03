@@ -2,10 +2,14 @@ import {readFileSync, existsSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 
+/** How a completed item is integrated back to the arbiter's `main`. */
+export type IntegrationMode = 'pr' | 'merge';
+
 /**
- * Resolved runner configuration. Increment A (`scan`) only consumes the
- * discovery + eligibility fields; the execution fields (maxParallel, agentCmd,
- * ...) are declared here for forward-compatibility but unused for now.
+ * Resolved runner configuration. Increment A (`scan`) consumes the discovery +
+ * eligibility fields; increment B (`run --once`) additionally consumes the
+ * execution fields (maxParallel, perRepoMax, defaultArbiter, integration,
+ * agentCmd).
  */
 export interface Config {
 	/** Directories to walk looking for participating repos. */
@@ -20,6 +24,20 @@ export interface Config {
 	 * `true` ⇒ items with no `afk` set are also eligible.
 	 */
 	allowUnspecifiedGate: boolean;
+	/** Global cap on how many items the runner claims+runs in one tick. */
+	maxParallel: number;
+	/** Per-repo cap on concurrent claims (≤ maxParallel in effect). */
+	perRepoMax: number;
+	/** Name of the git remote that serializes claims (the arbiter). */
+	defaultArbiter: string;
+	/** Integration mode for completed items: `pr` (default) or `merge`. */
+	integration: IntegrationMode;
+	/**
+	 * The command the runner shells out to for one slice. The runner appends the
+	 * built prompt on stdin; the command does NO git ops on the repo (the runner
+	 * owns those). Empty string ⇒ no agent configured (run will refuse).
+	 */
+	agentCmd: string;
 }
 
 /** A partial config, e.g. loaded from a JSON file or built from CLI flags. */
@@ -34,6 +52,11 @@ export const DEFAULT_CONFIG: Config = {
 	include: [],
 	exclude: [],
 	allowUnspecifiedGate: false,
+	maxParallel: 4,
+	perRepoMax: 2,
+	defaultArbiter: 'origin',
+	integration: 'pr',
+	agentCmd: '',
 };
 
 /** The conventional config location (`~/.config/agent-runner/config.json`). */

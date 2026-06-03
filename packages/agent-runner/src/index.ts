@@ -1,4 +1,4 @@
-export type {Config, PartialConfig} from './config.js';
+export type {Config, PartialConfig, IntegrationMode} from './config.js';
 export {
 	DEFAULT_CONFIG,
 	mergeConfig,
@@ -28,6 +28,34 @@ export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
 
 export {formatReport, afkLabel} from './format.js';
+
+export {extractPromptSection, buildAgentPrompt} from './prompt.js';
+
+export type {Candidate, SelectCaps} from './select.js';
+export {selectCandidates} from './select.js';
+
+export type {ClaimOutcome, ClaimOptions, ClaimResult} from './claim.js';
+export {claimItem, claimItemAsync, defaultClaimScript} from './claim.js';
+
+export type {
+	IsolationMode,
+	IsolationHandle,
+	IsolateOptions,
+} from './isolate.js';
+export {isolate, workBranchName} from './isolate.js';
+
+export type {IntegrateOptions, IntegrateResult} from './integrate.js';
+export {integrate, arbiterMainContains} from './integrate.js';
+
+export type {
+	ItemStatus,
+	ItemResult,
+	RunOnceResult,
+	RunOnceOptions,
+	AgentRunner,
+	TestGate,
+} from './run.js';
+export {runOnce} from './run.js';
 
 export type {
 	Category,

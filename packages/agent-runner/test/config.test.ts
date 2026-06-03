@@ -19,6 +19,30 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).exclude).toEqual([]);
 	});
 
+	it('defaults the execution fields (maxParallel, perRepoMax, arbiter, integration)', () => {
+		const cfg = mergeConfig({});
+		expect(cfg.maxParallel).toBe(4);
+		expect(cfg.perRepoMax).toBe(2);
+		expect(cfg.defaultArbiter).toBe('origin');
+		expect(cfg.integration).toBe('pr');
+		expect(cfg.agentCmd).toBe('');
+	});
+
+	it('overrides execution fields', () => {
+		const cfg = mergeConfig({
+			maxParallel: 8,
+			perRepoMax: 3,
+			defaultArbiter: 'arbiter',
+			integration: 'merge',
+			agentCmd: 'my-agent',
+		});
+		expect(cfg.maxParallel).toBe(8);
+		expect(cfg.perRepoMax).toBe(3);
+		expect(cfg.defaultArbiter).toBe('arbiter');
+		expect(cfg.integration).toBe('merge');
+		expect(cfg.agentCmd).toBe('my-agent');
+	});
+
 	it('overrides individual fields while keeping the rest as defaults', () => {
 		const merged = mergeConfig({allowUnspecifiedGate: true});
 		expect(merged.allowUnspecifiedGate).toBe(true);
