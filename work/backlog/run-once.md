@@ -33,10 +33,24 @@ A thin path through every layer, reusing the `scan` core for the queue:
   constraint); the single-checkout `claim.sh` is not safe to run twice in one
   working copy. (The arbiter's `main`-ref CAS still guarantees exactly one
   claim winner regardless; this isolation is about avoiding LOCAL collisions.)
-- **Run** the configured `agentCmd` against the item's slice prompt.
+- **Run** the configured `agentCmd` against the item's slice prompt. The spawned
+  agent ONLY produces code changes and gets the acceptance tests green — it does
+  NOT stage/commit/push and does NOT move the slice file between `work/` folders.
+  All git-state transitions (the claim, the done-move, the work commit, and
+  integration) are the **runner's** responsibility, exactly as `claim.sh` already
+  owns the claim commit. The prompt the runner hands to `agentCmd` must state
+  this explicitly — do NOT rely on the host's global agent config (e.g. an
+  `AGENTS.md`) to enforce "don't commit"; other users won't have it. The runner
+  owning git also keeps the test-gate authoritative (the agent can't merge
+  around it).
 - **Gate on tests** — an item reaches `work/done/` only when its acceptance tests
   pass; otherwise it stays in `work/in-progress/` (or moves to a needs-attention
   folder) for the human. Bad work never auto-merges.
+- **Move via `git mv`, creating the target dir first** — `work/done/` (and
+  `work/in-progress/`) may not exist yet (git doesn't track empty dirs), so the
+  runner must `mkdir -p work/<status>/` before `git mv`, mirroring what
+  `claim.sh` already does for the in-progress move. Do NOT seed status folders
+  with `.gitkeep`; the movers own dir creation.
 - **Integrate** per config `integration`: `pr` by default (open a PR for review
   when the arbiter is GitHub/PR-compatible), or `merge` (direct to main) where
   explicitly allowed. Never `--force` to main.
@@ -56,6 +70,11 @@ A thin path through every layer, reusing the `scan` core for the queue:
       when configured. Never force-pushes main.
 - [ ] An item moves to `work/done/` only on green acceptance tests; otherwise it
       stays in `in-progress`/needs-attention.
+- [ ] The runner `mkdir -p`s the target status dir before `git mv` (works even
+      when `work/done/` does not exist yet).
+- [ ] All git transitions (claim, done-move, work commit, integration) are done
+      by the runner, not the spawned agent; the `agentCmd` prompt explicitly
+      tells the agent NOT to commit/push or move slice files.
 - [ ] Tests cover claim race, concurrency caps, and the test-gate, against
       throwaway git repos + a local `--bare` arbiter.
 
@@ -71,6 +90,15 @@ A thin path through every layer, reusing the `scan` core for the queue:
 > existing `scripts/claim.sh` (from the `wighawag-work-slices` skill — atomic CAS
 > push to the arbiter remote; exit 0 = claimed, exit 2 = lost the race, skip),
 > run the configured `agentCmd` in an isolated worktree/clone, and integrate.
+>
+> Division of labor: the spawned agent ONLY edits code and makes the acceptance
+> tests pass. The RUNNER owns every git-state transition — the claim, the
+> `git mv` to `work/done/`, the work commit, and integration. The prompt the
+> runner gives `agentCmd` must say this in-band ("do not commit/push; do not move
+> work/ files") rather than relying on any host global agent config, since other
+> users won't have your `AGENTS.md`. Before any `git mv`, `mkdir -p` the target
+> `work/<status>/` (it may not exist yet — git doesn't track empty dirs); don't
+> create `.gitkeep` placeholders.
 >
 > Integration is configurable (`integration`): default `pr` (open a PR for human
 > review), or `merge` (direct to main) only where explicitly allowed. NEVER

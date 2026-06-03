@@ -78,6 +78,15 @@ system: it tracks its own work in its own `work/` folder.
 - **Execution engine = standalone (option C):** agent-runner shells out to `git` and a
   configured agent command ITSELF. It does NOT depend on any specific harness's built-in
   subagent/parallel/worktree mode — for portability.
+- **The runner owns all git-state transitions; the agent only writes code.** The spawned
+  `agentCmd` produces code changes and gets acceptance tests green — nothing more. agent-runner
+  performs the claim (via `claim.sh`), the `git mv` to `work/done/`, the work commit, and
+  integration. The prompt handed to `agentCmd` must state "do not commit/push; do not move
+  `work/` files" **in-band** — we do NOT rely on the host's global agent config (e.g. an
+  `AGENTS.md` no-auto-commit rule), since other users won't have it. This keeps the test-gate
+  authoritative (the agent can't merge around it) and the inner agent honest by construction.
+  Practical note: the mover must `mkdir -p work/<status>/` before `git mv` (git doesn't track
+  empty dirs, so `work/done/` may not exist yet); no `.gitkeep` placeholders.
 - **Integration mode: configurable, default `pr`.** PR when the arbiter is GitHub / a
   PR-compatible remote; `merge` (direct to main) where explicitly allowed. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
