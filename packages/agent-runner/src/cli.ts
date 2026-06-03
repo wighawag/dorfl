@@ -9,6 +9,7 @@ import {
 import {scan} from './scan.js';
 import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
+import {performClaim} from './claim-cas.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -77,6 +78,13 @@ function runFlagOverrides(flags: RunFlags): PartialConfig {
 function formatItemLine(item: ItemResult): string {
 	const extra = item.detail ? ` — ${item.detail}` : '';
 	return `  [${item.status}] ${item.repoPath} :: ${item.slug}${extra}`;
+}
+
+interface ClaimFlags {
+	arbiter?: string;
+	by?: string;
+	retries?: string;
+	dryRun?: boolean;
 }
 
 export function buildProgram(): Command {
@@ -196,6 +204,37 @@ export function buildProgram(): Command {
 					`Summary: ${result.claimedAndDone} done, ${result.skipped} skipped, ${result.failed} failed.`,
 				);
 			}
+		});
+
+	program
+		.command('claim')
+		.description(
+			'Atomically claim a work/backlog/<slug>.md item via a compare-and-swap push to the arbiter (in-process; mirrors scripts/claim.sh).',
+		)
+		.argument('<slug>', 'the slug of the backlog item to claim')
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: origin)',
+			'origin',
+		)
+		.option('--by <who>', 'advisory claimer id (default: git user.name)')
+		.option('--retries <n>', 'cap on push retries when main advances', '3')
+		.option('--dry-run', 'show the intended push without mutating the arbiter')
+		.action(async (slug: string, flags: ClaimFlags) => {
+			const result = await performClaim({
+				slug,
+				cwd: process.cwd(),
+				arbiter: flags.arbiter ?? 'origin',
+				by: flags.by,
+				retries:
+					flags.retries !== undefined ? Number(flags.retries) : undefined,
+				dryRun: flags.dryRun,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			}
+			process.exit(result.exitCode);
 		});
 
 	return program;

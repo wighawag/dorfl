@@ -38,6 +38,14 @@ export type {ClaimOutcome, ClaimOptions, ClaimResult} from './claim.js';
 export {claimItem, claimItemAsync, defaultClaimScript} from './claim.js';
 
 export type {
+	ClaimExitCode,
+	ClaimCasOutcome,
+	ClaimCasOptions,
+	ClaimCasResult,
+} from './claim-cas.js';
+export {performClaim} from './claim-cas.js';
+
+export type {
 	IsolationMode,
 	IsolationHandle,
 	IsolateOptions,
