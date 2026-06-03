@@ -6,8 +6,8 @@ afk: false
 blocked_by: [verify, claim-command]
 covers: [12, 7, 8]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-03T16:25:41Z
 ---
 
 ## What to build
