@@ -236,3 +236,39 @@ blast-radius × a strong `verify` gate make hands-off landing acceptable.
 Integration mode (and `verify`, arbiter) are repo properties, so they live in a
 per-repo config layered over global — letting repo A be `merge` and repo B
 `propose` in the same multi-repo run.
+
+## 12. Stuck items move to `needs-attention/` (folder-native surfacing, not labels)
+
+Every "couldn't finish, a human must look" outcome — a failed acceptance gate, a
+rebase/merge conflict (§10), a slice the agent found too ambiguous to build, a
+timeout, a rejected review — resolves to ONE mechanism: the runner `git mv`s the
+claimed item from `work/in-progress/<slug>.md` to `work/needs-attention/<slug>.md`,
+writing the reason (+ any surfaced agent questions) into the file body. This is
+the folder-native form of "needs-attention surfacing" (which we had parked as an
+open problem): the surface is a folder you can `ls`, read by `scan`/`status` — no
+labels, no status field (honours WORK-CONTRACT rule 3: status = folder).
+
+Why folders, not Matt-Pocock-style labels: a mutable status/label *field* that
+every transition rewrites is a shared conflict point (rules 2–3). Moving a file
+between folders is conflict-safe by construction. So we borrow the *concept* of
+triage/needs-attention states but express them the contract's way — as folders +
+`git mv`.
+
+Decisions:
+
+- **One folder for now: `needs-attention/`** — the *post-claim, attempted-but-
+  stuck* state. We deliberately do NOT add a separate *pre-claim* "not ready to
+  claim" state (a la intake `needs-triage`/`needs-info`): under-specified items
+  simply should not be written into `backlog/` until ready. (Solo-with-agents has
+  no separate "reporter" to wait on, so `needs-info` doesn't map cleanly.) Revisit
+  only if a real intake-triage need appears.
+- **The runner owns the move** (not the build agent — agents do no git). It writes
+  the reason, `git mv` in-progress -> needs-attention, commits/pushes like the
+  done-move.
+- **Not claimable, but surfaced:** `scan`/eligibility skip `needs-attention/` for
+  claiming; `status` lists them with their reason (this folder is the "look here"
+  set; dovetails with the retained-worktree signal).
+- **Return path:** a human resolves the cause and `git mv`s the item back to
+  `backlog/` to be re-claimed (or resumes on its branch). It must not rot.
+- This unifies and subsumes the previously-separate "needs-attention surfacing"
+  concern across the gate, conflict, ambiguity, and timeout outcomes.

@@ -25,7 +25,9 @@ A thin path on top of `run --once`:
   item must be reported and must not be silently retried forever. Use the harness
   liveness + the retained-worktree signal from `agent-workspaces` (ADR §4/§5) to
   detect hung/failed jobs; a retained (un-deleted) job worktree is itself a
-  "needs attention" marker.
+  "needs attention" marker. Route stuck items through the shared `needs-attention`
+  mechanism (ADR §12: `git mv` to `work/needs-attention/` with a reason) — do not
+  reinvent failure-surfacing here.
 
 ## Acceptance criteria
 
