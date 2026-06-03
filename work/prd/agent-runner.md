@@ -1,7 +1,7 @@
 ---
 title: agent-runner — autonomous parallel agents over file-based work/
 slug: agent-runner
-type: HITL
+afk: false
 blocked_by: []
 covers: []
 created: 2026-06-03
@@ -39,8 +39,9 @@ system: it tracks its own work in its own `work/` folder.
    `work/backlog/`, so that there is no separate registry to maintain.
 3. As the maintainer, I want to include/exclude specific repos via config, so that I can
    override detection where needed.
-4. As the maintainer, I want `scan` to show, per item, its repo, slug, type (AFK/HITL),
-   and whether its `blocked_by` deps are satisfied, so that I know what is runnable now.
+4. As the maintainer, I want `scan` to show, per item, its repo, slug, `afk` gate
+   (true/false/unspecified), and whether its `blocked_by` deps are satisfied, so that I
+   know what is runnable now.
 5. As the maintainer, I want `run --once` to claim eligible items atomically (via
    `claim.sh`) and skip any it loses the race for, so that parallel ticks never collide.
 6. As the maintainer, I want each agent to run in its own worktree/clone, so that
@@ -50,7 +51,7 @@ system: it tracks its own work in its own `work/` folder.
 8. As the maintainer, I want to optionally configure direct-merge-to-main where allowed,
    so that trusted/low-risk repos can run fully hands-off.
 9. As the maintainer, I want the AFK gate to be configurable: strict by default (claim
-   only items explicitly marked `type: AFK`), but optionally allow items with no gate
+   only items explicitly marked `afk: true`), but optionally allow items with no gate
    specified, so that I control how much autonomy is granted.
 10. As the maintainer, I want concurrency caps (`maxParallel`, `perRepoMax`), so that the
     runner never fork-bombs my machine or rate-limits a remote.
@@ -65,18 +66,27 @@ system: it tracks its own work in its own `work/` folder.
 
 (Made with the maintainer — do not relitigate.)
 
-- **Repo:** this one, `~/dev/github/wighawag/agent-runner`. TS/Node CLI matching the
-  `skillfinder` house style: `type: module`, `tsc` build, `bin`, node>=18, dev via
-  `node --experimental-strip-types src/cli.ts`. Zero/minimal runtime deps.
+- **Repo:** this one, `~/dev/github/wighawag/agent-runner`. TS/Node CLI scaffolded
+  from `template-typescript-lib` (`~/dev/github/wighawag/template-typescript-lib`):
+  a **pnpm monorepo** (`type: module`, NodeNext, `tsc` build, changesets, prettier
+  with tabs+single-quotes, vitest, `tsx` for dev). The CLI lives in
+  `packages/agent-runner/` (`bin: { "agent-runner": "dist/cli.js" }`, node>=18,
+  dev via `tsx src/cli.ts`); the repo root holds the workspace, changesets, and
+  this `work/` folder. Kept a monorepo so we can extract shared packages later.
+  Minimal runtime deps: **`commander`** for the CLI surface (`scan`/`run`/`watch`
+  + flags); the deterministic core stays dependency-free.
 - **Execution engine = standalone (option C):** agent-runner shells out to `git` and a
   configured agent command ITSELF. It does NOT depend on any specific harness's built-in
   subagent/parallel/worktree mode — for portability.
 - **Integration mode: configurable, default `pr`.** PR when the arbiter is GitHub / a
   PR-compatible remote; `merge` (direct to main) where explicitly allowed. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
-- **AFK gate: configurable, strict by default.** `allowUnspecifiedGate: false` (default) =>
-  claim ONLY `type: AFK` items; HITL or unspecified are skipped. `true` => also claim items
-  with no gate specified.
+- **AFK gate: a boolean frontmatter field `afk`, configurable + strict by default.** The
+  slice's gate is `afk: true` (claimable unattended) / `afk: false` (never — deliberately
+  human-only) / *omitted* (unspecified). The runner resolves: `afk === true` => eligible;
+  `afk === false` => skip; *omitted* => depends on `allowUnspecifiedGate`. `allowUnspecifiedGate:
+  false` (default) => claim ONLY `afk: true` items; `false`/omitted are skipped. `true` => also
+  claim items with no `afk` set. (Replaces the old `type: AFK|HITL` enum; see WORK-CONTRACT.md.)
 - **Detection:** a repo participates iff it has a `work/backlog/` dir with >= 1 `.md`. Scan
   configured `roots`, prune `node_modules`/dotdirs. Config `include`/`exclude` override.
 - **Eligibility (run/watch):** runnable iff (a) passes the AFK gate AND (b) every slug in
