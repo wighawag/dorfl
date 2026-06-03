@@ -10,6 +10,7 @@ import {scan} from './scan.js';
 import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
+import {performStart} from './start.js';
 import {runVerify} from './verify.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -90,6 +91,12 @@ interface ClaimFlags {
 
 interface VerifyFlags {
 	config?: string;
+}
+
+interface StartFlags {
+	arbiter?: string;
+	by?: string;
+	resume?: boolean;
 }
 
 export function buildProgram(): Command {
@@ -249,6 +256,40 @@ export function buildProgram(): Command {
 				retries:
 					flags.retries !== undefined ? Number(flags.retries) : undefined,
 				dryRun: flags.dryRun,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			}
+			process.exit(result.exitCode);
+		});
+
+	program
+		.command('start')
+		.description(
+			'Claim a backlog item (only if needed) and onboard onto its work/<slug> branch in the CURRENT checkout. Decides on the folder on <arbiter>/main, never on claimed_by. Launches no agent/editor.',
+		)
+		.argument(
+			'[slug]',
+			'the slug to start (inferred from a work/<slug> branch if omitted)',
+		)
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: origin)',
+			'origin',
+		)
+		.option('--by <who>', 'advisory claimer id forwarded to the claim CAS')
+		.option(
+			'--resume',
+			'assert ownership of an already in-progress item: switch to its work branch without claiming',
+		)
+		.action(async (slug: string | undefined, flags: StartFlags) => {
+			const result = await performStart({
+				slug,
+				cwd: process.cwd(),
+				arbiter: flags.arbiter ?? 'origin',
+				by: flags.by,
+				resume: flags.resume,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

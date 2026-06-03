@@ -50,6 +50,9 @@ export type {
 } from './claim-cas.js';
 export {performClaim} from './claim-cas.js';
 
+export type {StartOutcome, StartOptions, StartResult} from './start.js';
+export {performStart} from './start.js';
+
 export type {
 	IsolationMode,
 	IsolationHandle,
