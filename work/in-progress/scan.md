@@ -6,8 +6,8 @@ afk: false
 blocked_by: [scaffold]
 covers: [1, 2, 3, 4, 9]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-03T11:53:56Z
 ---
 
 ## What to build
