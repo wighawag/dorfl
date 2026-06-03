@@ -211,3 +211,28 @@ predeclare touched files). Instead:
   `resolve`-agent — distinct from the build agent, which still does no git).
 - The build agent is unaffected: it does no git writes (read-only `git log`/`diff`
   for context is fine). Rebase/integration/conflict-surfacing are the runner's.
+
+## 11. Integration mode is resolved at integrate-time, per-repo, never at start-time
+
+Whether work lands via `merge` (direct to main) or `propose` (push a branch +
+request review) is decided **where it applies — at `complete`/integrate time**,
+NOT at `start` time. Stamping a mode at start would force it into slice
+frontmatter (rejected: that puts non-source-of-truth runtime policy into
+declarative slice content, the same anti-pattern as per-slice gates) or into a
+side-channel the human in-place flow doesn't have. Nothing in the build phase
+depends on the mode, so there is nothing to carry forward.
+
+Resolution precedence (highest first), identical for human and autonomous paths
+except the flag is human-only:
+
+1. `complete --merge` / `--propose` flag (human, per-invocation)
+2. per-repo config override (a committed repo-root `.agent-runner.json`)
+3. global config `integration`
+4. built-in default `propose`
+
+`propose` is the safe default (human reviews before main moves — essential for
+unattended/autonomous work). `merge` is opt-in for repos where trust × low
+blast-radius × a strong `verify` gate make hands-off landing acceptable.
+Integration mode (and `verify`, arbiter) are repo properties, so they live in a
+per-repo config layered over global — letting repo A be `merge` and repo B
+`propose` in the same multi-repo run.
