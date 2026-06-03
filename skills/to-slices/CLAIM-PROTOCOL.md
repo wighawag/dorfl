@@ -92,9 +92,73 @@ WORK (only after the claim landed):
   6. git switch -c work/<slug> <arbiter>/main      # NEW main, includes your claim
      (use a dedicated worktree/clone for isolation when running AFK / in parallel)
   7. do the work; tests green.
-  8. in the same PR/merge: git mv work/in-progress/<slug>.md work/done/<slug>.md
+  8a. SUCCESS path — in the same PR/merge:
+        git mv work/in-progress/<slug>.md work/done/<slug>.md
+      commit it together with the work, using the completed-slice message format
+      (see below).
+  8b. STUCK path — if it could NOT complete (red gate, rebase/merge conflict,
+      slice too ambiguous to build, timeout, rejected review): the runner writes
+      the reason (+ any surfaced questions) into the file body and
+        git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md
+      committing/pushing it like any other transition. A human resolves the cause
+      and `git mv`s it back to work/backlog/ to be re-claimed. (The build agent
+      never does this move — the runner owns git transitions.)
   9. integrate to <arbiter>/main as normal (PR on GitHub, or ff/rebase push offline).
 ```
+
+## The prompt handed to the work agent (the `## Prompt` wrapper)
+
+When a human or an autonomous runner dispatches an agent to do the WORK phase,
+the agent is given a small, constant **wrapper** around the slice's own
+`## Prompt` section. The wrapper is the same every time except the slug; an
+autonomous runner emits it deterministically. The slice file is the brief; the
+wrapper just frames it and draws the line around git.
+
+```
+You are completing one work slice in this repo. It has already been claimed for
+you and lives at work/in-progress/<slug>.md — read that file fully; it is your
+complete brief (What to build, Acceptance criteria, Prompt). Also read its source
+PRD (the slice's `prd:` field, at work/prd/<prd>.md) for context.
+
+Implement it to satisfy every Acceptance criterion. TDD where the slice asks for
+it; match the repo's house style.
+
+Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
+move any files between work/ folders, and do not touch work/in-progress/<slug>.md.
+The runner (or human) owns every git-state transition. (Your TESTS may freely
+create and operate on their OWN throwaway git repos — that is expected.)
+
+When the acceptance criteria are met and the repo's build/test/format checks are
+green, STOP and report what you did. The runner handles the `git mv` to
+work/done/, the completion commit, and integration.
+```
+
+Why the "no git" line is **in-band** in the prompt (not delegated to a host
+config like a global `AGENTS.md`): a portable runner cannot assume the target
+machine has any such rule, so the boundary travels with the prompt. This keeps
+the acceptance-test gate authoritative (the agent can't commit/merge around it)
+and the runner the single owner of git state.
+
+## Completed-slice commit message
+
+The commit that completes a slice (the work + the `git mv` to `work/done/`) uses
+a consistent, greppable format so the lifecycle is visible in `git log` and an
+autonomous runner can author it deterministically:
+
+```
+<type>(<slug>): <slice title or short summary>; done
+```
+
+- `<type>` follows conventional-commits (`feat`, `fix`, `docs`, `chore`, …);
+  use `feat` for a slice that adds behaviour.
+- `<slug>` is the slice slug (its `work/done/<slug>.md` basename).
+- the trailing **`; done`** marks the backlog→done transition landing in this
+  commit (mirrors the `claim: <slug>` message that marks backlog→in-progress).
+
+Example: `feat(scan): cross-repo eligible-work queue (read-only); done`
+
+Keep it ONE commit (work + the `git mv`) so a slice's completion is a single,
+atomic, revertable unit — just as the claim is a single commit.
 
 ## Why this prevents (not merely detects) double-claims
 

@@ -15,7 +15,7 @@ dogfooding itself (it tracks its own work in its own `work/`).
 ## Core domain terms
 
 - **work/ contract** — the on-disk system this consumes (defined in the
-  `wighawag-work-slices` skill): one markdown file per item, **status = the folder
+  `to-slices` skill): one markdown file per item, **status = the folder
   it lives in** (never a field). See that skill's `WORK-CONTRACT.md`.
 - **slice** — one buildable work item: a tracer-bullet vertical slice, a markdown
   file `work/backlog/<slug>.md`. Has frontmatter: `slug`, `prd`, `afk`,

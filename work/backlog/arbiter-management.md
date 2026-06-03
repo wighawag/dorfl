@@ -63,7 +63,7 @@ This is independent setup tooling; it provisions what `claim`/`run-once`/
 > `packages/agent-runner/`. READ FIRST: ADR §7 in
 > `docs/adr/execution-substrate-decisions.md` (arbiters are precious data,
 > default under `~/git/<host>/<org>/<name>.git`, NEVER under `~/.agent-runner/`),
-> and `scripts/CLAIM-PROTOCOL.md` (the offline-arbiter setup it documents — bare
+> and `skills/to-slices/CLAIM-PROTOCOL.md` (the offline-arbiter setup it documents — bare
 > by construction; a non-bare repo with main checked out rejects claim pushes).
 >
 > `arbiter init [<repo>] [--at <path>] [--remote <name>]`: `git clone --bare` an

@@ -14,8 +14,8 @@ claimed_at:
 I have many repos. I want autonomous parallel agents to pick up and complete work
 across all of them — configurable which repos participate, but detectable without a
 hand-maintained registry. The work items already have a home: the file-based `work/`
-contract + atomic claim protocol defined in the `wighawag-work-slices` skill
-(`~/dev/github/wighawag/skills/wighawag-work-slices/` — see WORK-CONTRACT.md and
+contract + atomic claim protocol defined in the `to-slices` skill
+(`~/dev/github/wighawag/skills/to-slices/` — see WORK-CONTRACT.md and
 CLAIM-PROTOCOL.md). What is missing is the thing that discovers, schedules, and runs
 that work.
 
@@ -28,7 +28,7 @@ A small TS/Node CLI, `agent-runner` (this repo), built in three increments:
   isolated worktree/clone, integrate the results, then stop (supervised).
 - **C. `watch`** — loop B on an interval with safety rails (the autonomous endpoint).
 
-agent-runner is also the **first dogfood test** of the `work/` + `wighawag-work-slices`
+agent-runner is also the **first dogfood test** of the `work/` + `to-slices`
 system: it tracks its own work in its own `work/` folder.
 
 ## User Stories
@@ -123,7 +123,7 @@ system: it tracks its own work in its own `work/` folder.
   `blocked_by` is present in that repo's `work/done/`. Claiming is optimistic; the loser of
   a race gets `claim.sh` exit 2 and moves on.
 - **Consumes the existing contract** (status = folder; one file per item; content-slug IDs;
-  `blocked_by`; advisory `claimed_by`) and the verified `scripts/claim.sh` (atomic CAS push
+  `blocked_by`; advisory `claimed_by`) and the verified `skills/to-slices/scripts/claim.sh` (atomic CAS push
   to an arbiter remote — GitHub or local `--bare`).
 
 ### Config sketch (`~/.config/agent-runner/config.json`)
@@ -166,5 +166,5 @@ system: it tracks its own work in its own `work/` folder.
 - Build order: **A (scan) first** — read-only, immediately useful, forces the
   detection/config/eligibility design to be concrete before any agent executes. Then B,
   then C with the rails above.
-- Slice this PRD with `wighawag-work-slices` into `work/backlog/` as the first action of
+- Slice this PRD with `to-slices` into `work/backlog/` as the first action of
   the build session — dogfooding the system agent-runner is meant to run.

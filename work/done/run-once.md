@@ -20,7 +20,7 @@ A thin path through every layer, reusing the `scan` core for the queue:
 
 - **Select** the eligible queue (from the `scan` core), respecting concurrency
   caps `maxParallel` and `perRepoMax`.
-- **Claim optimistically** via the existing `scripts/claim.sh` (atomic CAS push
+- **Claim optimistically** via the existing `skills/to-slices/scripts/claim.sh` (atomic CAS push
   to the arbiter remote). Exit 2 ⇒ lost the race ⇒ skip that item and move on.
   Never claim across repos; claims serialize on each repo's arbiter `main`.
 - **Isolate** each claimed item in its own git worktree or clone so concurrent
@@ -61,7 +61,7 @@ A thin path through every layer, reusing the `scan` core for the queue:
 
 - [ ] `run --once` claims up to `maxParallel` eligible items (≤ `perRepoMax` per
       repo) and then stops.
-- [ ] Claims go through `scripts/claim.sh`; an item that returns exit 2 is skipped
+- [ ] Claims go through `skills/to-slices/scripts/claim.sh`; an item that returns exit 2 is skipped
       cleanly (no false "claimed").
 - [ ] A simultaneous two-runner race over the same item shows exactly one winner
       (mirror the `claim.sh` verification approach).
@@ -89,7 +89,7 @@ A thin path through every layer, reusing the `scan` core for the queue:
 > Build `agent-runner run --once` (increment B). It consumes the `scan` core
 > (config, detection, eligibility) to get the eligible cross-repo queue, then for
 > up to `maxParallel` items (≤ `perRepoMax` per repo): claim atomically via the
-> existing `scripts/claim.sh` (from the `wighawag-work-slices` skill — atomic CAS
+> existing `skills/to-slices/scripts/claim.sh` (from the `to-slices` skill — atomic CAS
 > push to the arbiter remote; exit 0 = claimed, exit 2 = lost the race, skip),
 > run the configured `agentCmd` in an isolated worktree/clone, and integrate.
 >

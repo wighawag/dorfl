@@ -86,7 +86,7 @@ Scope notes (deliberate):
 > <arbiter>/main` so the human is on the work branch in their current checkout.
 > On exit 2/3 (lost/contended) behave exactly like `claim`: restore the user,
 > create no work branch, propagate the exit code. READ FIRST: the `claim-command`
-> slice + `scripts/CLAIM-PROTOCOL.md`, and ADR §1/§8 in
+> slice + `skills/to-slices/CLAIM-PROTOCOL.md`, and ADR §1/§8 in
 > `docs/adr/execution-substrate-decisions.md`.
 >
 > Deliberate scope: this is the human-in-current-checkout path; it does NOT use

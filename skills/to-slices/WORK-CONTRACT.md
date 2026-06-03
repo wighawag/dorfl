@@ -17,14 +17,48 @@ work/
   prd/<slug>.md            # PRDs / design docs (the source material to slice)
   backlog/<slug>.md        # sliced, grabbable items — NOT yet claimed
   in-progress/<slug>.md    # claimed (moved here via `git mv` during claim)
+  needs-attention/<slug>.md # claimed + attempted but STUCK — bounced back for a human
   done/<slug>.md           # completed (moved here in the work PR)
   out-of-scope/<slug>.md   # durable "won't do" records (lightweight ADR)
-  findings/<slug>.md       # review / ground-truth notes (optional, like tasks/findings)
+  findings/<slug>.md       # review / ground-truth investigation notes (optional)
 ```
+
+> **`findings/` vs ADRs.** `work/findings/` is for *investigation / ground-truth
+> notes* tied to work items. **Architectural Decision Records (ADRs) — the durable
+> *why* of technical choices — live in `docs/adr/`** (the conventional location
+> that common engineering skills read), NOT in `work/findings/`. Keep the two
+> distinct: a finding is "what we observed"; an ADR is "what we decided and why".
 
 **Status is the folder a file lives in — never a frontmatter field.** Claiming /
 finishing = moving the file between folders with `git mv`. This is what makes
 concurrent updates safe: two agents moving *different* files never conflict.
+
+### `needs-attention/` — the post-claim "stuck" state
+
+An item that was claimed (`in-progress/`) and *attempted* but could not complete
+is moved to `work/needs-attention/<slug>.md` instead of `done/`. This is the
+single home for every "couldn't finish, a human must look" outcome — a failed
+acceptance gate (red tests), a rebase/merge conflict, a slice the agent found too
+ambiguous to build, a timeout, or a rejected review. It is the folder-native form
+of surfacing: there are no labels and no status field (rule 3) — the item simply
+*moves*, exactly like the done-move.
+
+- **Who moves it:** the runner/human that owns git transitions — NOT the build
+  agent (which does no git). On a stuck job the runner writes the **reason** (and
+  any questions the agent surfaced) into the file body, then
+  `git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md` and commits
+  it like any other transition.
+- **Not claimable:** `needs-attention/` items are NOT eligible (a `scan`/runner
+  skips them for claiming) but ARE surfaced (a human/`status` lists them with
+  their reason — this folder IS the "look here" set).
+- **Return path:** once the human resolves the cause (clarifies the slice,
+  resolves the conflict, fixes the env), the item is `git mv`'d **back to
+  `backlog/`** to be re-claimed (or work resumes on its branch directly). It must
+  not rot in `needs-attention/`.
+- This is a *post-claim* state. (A separate *pre-claim* "not ready to be claimed
+  yet" state is intentionally NOT added for now: under-specified items simply
+  should not be written into `backlog/` until they are ready. Revisit only if a
+  genuine intake-triage need appears.)
 
 ## Conflict-safety rules (non-negotiable)
 

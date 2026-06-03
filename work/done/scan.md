@@ -64,7 +64,7 @@ the config/detection/eligibility design to be concrete before any agent executes
 > participating repos across configured roots and lists which `work/` items are
 > runnable now. It claims and runs nothing.
 >
-> Domain vocabulary (see the `wighawag-work-slices` skill's `WORK-CONTRACT.md`,
+> Domain vocabulary (see the `to-slices` skill's `WORK-CONTRACT.md`,
 > which this consumes): **status is the folder** (`work/backlog|in-progress|done/`),
 > one `.md` file per item, content-derived **slug** IDs, `blocked_by: [slug]`
 > dependencies resolved against the SAME repo's `work/done/`, and the **`afk`**

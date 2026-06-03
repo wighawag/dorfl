@@ -42,17 +42,42 @@ export interface ClaimResult {
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Resolve the vendored claim.sh. At runtime the package lives in
- * `packages/agent-runner/{src,dist}`; the work-contract scripts live at the repo
- * root `scripts/`. We probe a few candidate locations so this works both from
- * `src` (tsx/dev, tests) and `dist` (built). Callers may override via
+ * Resolve the canonical claim.sh. The package lives in
+ * `packages/agent-runner/{src,dist}`; the `to-slices` skill (which owns the
+ * portable claim.sh + the work contract) lives at the monorepo root under
+ * `skills/to-slices/scripts/claim.sh`. We probe candidate locations so this works
+ * both from `src` (tsx/dev, tests) and `dist` (built). Callers may override via
  * `ClaimOptions.claimScript`.
+ *
+ * NOTE: agent-runner has its own in-process claim (`claim-cas.ts`); this
+ * claim.sh wrapper is legacy (still used by `run.ts`) and is slated for removal
+ * by the `unify-claim` slice, after which claim.sh is purely the skill's portable
+ * reference and is no longer executed by agent-runner.
  */
 export function defaultClaimScript(): string {
 	const candidates = [
-		resolve(HERE, '..', '..', '..', 'scripts', 'claim.sh'),
-		resolve(HERE, '..', '..', '..', '..', 'scripts', 'claim.sh'),
-		resolve(HERE, '..', 'scripts', 'claim.sh'),
+		resolve(
+			HERE,
+			'..',
+			'..',
+			'..',
+			'skills',
+			'to-slices',
+			'scripts',
+			'claim.sh',
+		),
+		resolve(
+			HERE,
+			'..',
+			'..',
+			'..',
+			'..',
+			'skills',
+			'to-slices',
+			'scripts',
+			'claim.sh',
+		),
+		resolve(HERE, '..', 'skills', 'to-slices', 'scripts', 'claim.sh'),
 	];
 	for (const candidate of candidates) {
 		if (existsSync(candidate)) {

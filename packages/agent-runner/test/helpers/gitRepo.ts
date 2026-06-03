@@ -5,13 +5,16 @@ import {fileURLToPath} from 'node:url';
 import {run, git} from '../../src/git.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** Absolute path to the vendored work-contract claim script (repo-root/scripts). */
+/** Absolute path to the canonical work-contract claim script (the `to-slices`
+ * skill at the monorepo root: skills/to-slices/scripts/claim.sh). */
 export const CLAIM_SCRIPT = resolve(
 	HERE,
 	'..',
 	'..',
 	'..',
 	'..',
+	'skills',
+	'to-slices',
 	'scripts',
 	'claim.sh',
 );

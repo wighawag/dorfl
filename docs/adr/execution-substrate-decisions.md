@@ -169,7 +169,7 @@ autonomous gate (a safety boundary must not trust a cache). Out of scope for now
 
 ## 9. agent-runner is the primary implementation; contract + `claim.sh` are the portable substrate
 
-agent-runner and the `wighawag-work-slices` skill (the `work/` contract,
+agent-runner and the `to-slices` skill (the `work/` contract,
 `CLAIM-PROTOCOL.md`, `claim.sh`) are **one project / one vision**. agent-runner
 grows a first-class **`claim` command** (TS) that implements the same claim CAS
 as `claim.sh`, with identical exit-code semantics.
@@ -196,7 +196,7 @@ predeclare touched files). Instead:
 - **Rarer, by design (slicing guidance):** prefer thin, file-orthogonal slices;
   when two slices are known to touch the same module, add a `blocked_by` to
   serialize them. This is the slicer's judgement (documented in the
-  `wighawag-work-slices` skill), not enforced by tooling.
+  `to-slices` skill), not enforced by tooling.
 - **Cheaper + safe, by tooling:** at integration time the runner / `complete`
   does a **deterministic rebase** of `work/<slug>` onto the latest
   `<arbiter>/main`. A **clean** rebase proceeds. A **conflicting** rebase is

@@ -14,7 +14,7 @@ claimed_at: 2026-06-03T14:38:02Z
 
 `agent-runner claim <slug>` — a first-class, in-process implementation of the
 atomic compare-and-swap claim, faithful to the existing `CLAIM-PROTOCOL.md` and
-behaviourally equivalent to `scripts/claim.sh`. Per ADR §8
+behaviourally equivalent to `skills/to-slices/scripts/claim.sh`. Per ADR §8
 (`docs/adr/execution-substrate-decisions.md`), agent-runner is the primary
 implementation of the claim protocol; `claim.sh` is retained as the portable,
 zero-dependency bootstrap/reference, not replaced or deleted.
@@ -59,7 +59,7 @@ this in-process claim instead of shelling out to `claim.sh` (not required here).
 
 > Implement `agent-runner claim <slug>` in `packages/agent-runner/` — an
 > in-process TS implementation of the atomic claim compare-and-swap. READ FIRST:
-> `scripts/CLAIM-PROTOCOL.md` (the protocol), `scripts/claim.sh` (the reference
+> `skills/to-slices/CLAIM-PROTOCOL.md` (the protocol), `skills/to-slices/scripts/claim.sh` (the reference
 > implementation you are matching), and ADR §8 in
 > `docs/adr/execution-substrate-decisions.md` (agent-runner is the primary
 > impl; claim.sh stays as the portable bootstrap — do not delete it).
