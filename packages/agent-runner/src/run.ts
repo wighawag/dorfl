@@ -4,6 +4,7 @@ import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {claimItem} from './claim.js';
 import {createJob, updateJobRecord, type Job} from './workspace.js';
+import {reapJob} from './gc.js';
 import {NullHarness, type Harness} from './harness.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {git, gitMv} from './git.js';
@@ -322,9 +323,22 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		updateJobRecord(job.dir, {state: 'done'});
 		return {...base, status: 'claimed-done', integration: outcome.integration};
 	} finally {
-		// The worktree + record are deliberately RETAINED — `gc` (a separate slice)
-		// evaluates the deletion-safety predicate (ADR §4). We do not reap here.
-		void job;
+		// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
+		// predicate and remove the worktree ONLY if it holds (clean tree AND the
+		// branch tip is reachable on the arbiter — merged or pushed). One rule, no
+		// done-vs-failed special-casing: a claimed-done job is on the arbiter →
+		// reaped; a tests-failed / needs-attention / un-pushed job is NOT →
+		// retained (the worktree is the needs-attention signal, and `gc` is the
+		// catch-up for when this auto-reap didn't run). NEVER `--force` here.
+		if (job) {
+			reapJob({
+				dir: job.dir,
+				branch: job.branch,
+				mirrorPath: job.mirror.path,
+				arbiter: job.arbiterRemote,
+				env: ctx.env,
+			});
+		}
 	}
 }
 

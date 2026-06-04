@@ -150,6 +150,27 @@ export {
 } from './verify.js';
 
 export type {
+	RetainReason,
+	ReachableVia,
+	SafetyVerdict,
+	EvaluateSafetyInput,
+	ReapInput,
+	ReapResult,
+	GcJob,
+	ReapedJob,
+	RetainedJob,
+	GcOptions,
+	GcResult,
+} from './gc.js';
+export {
+	RETAIN_REASON_TEXT,
+	evaluateDeletionSafety,
+	reapJob,
+	gc,
+	discoverJobs,
+} from './gc.js';
+
+export type {
 	Category,
 	CategorisedItem,
 	CategorisedGroups,

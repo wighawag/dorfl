@@ -356,11 +356,16 @@ describe('runOnce — agent failure', () => {
 });
 
 describe('runOnce — runs in a substrate job worktree (one isolation path)', () => {
-	it('leaves a per-job worktree + record under the workspace for gc/status to read', () => {
+	it('auto-reaps a provably-safe (merged) finished job worktree at end-of-job (ADR §4)', () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		void repo;
 		const workspacesDir = join(scratch.root, '.agent-runner');
-		const config = configFor(scratch.root, {workspacesDir});
+		// merge integration ⇒ the work lands on arbiter/main ⇒ provably safe ⇒
+		// the end-of-job auto-reap removes the worktree (ADR §4 deletion predicate).
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			integration: 'merge',
+		});
 		const result = runOnce({
 			config,
 			report: scan(config),
@@ -372,14 +377,36 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		});
 		expect(result.items[0].status).toBe('claimed-done');
 
-		// The job worktree lives under <workspacesDir>/work/<work-id>/ (ADR §2/§3)
-		// and is RETAINED (gc, a separate slice, evaluates deletion-safety).
+		// The job's work is on the arbiter (merged), so the worktree was REAPED
+		// (git worktree remove + prune, never rm -rf) — nothing lingers.
+		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
+		expect(existsSync(dir)).toBe(false);
+	});
+
+	it('RETAINS a finished job whose work is not on the arbiter (needs-attention signal)', () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		void repo;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const config = configFor(scratch.root, {workspacesDir});
+		// A red gate ⇒ the work never reaches the arbiter ⇒ NOT provably safe ⇒
+		// the worktree + record are retained for gc/status to read (ADR §4).
+		const result = runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			agentRunner: editingAgent,
+			testGate: redGate,
+			claimScript: CLAIM_SCRIPT,
+			env: gitEnv(),
+		});
+		expect(result.items[0].status).toBe('tests-failed');
+
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
 		expect(existsSync(dir)).toBe(true);
 		const record = readJobRecord(dir);
 		expect(record?.slug).toBe('feat');
 		expect(record?.branch).toBe('work/feat');
-		expect(record?.state).toBe('done');
+		expect(record?.state).toBe('needs-attention');
 		expect(record?.harness).toBeDefined();
 	});
 });
