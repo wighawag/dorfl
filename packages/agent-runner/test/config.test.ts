@@ -28,6 +28,12 @@ describe('mergeConfig', () => {
 		expect(cfg.agentCmd).toBe('');
 	});
 
+	it('defaults workspacesDir under ~/.agent-runner (STATE, never ~/.cache)', () => {
+		const cfg = mergeConfig({});
+		expect(cfg.workspacesDir.endsWith('/.agent-runner')).toBe(true);
+		expect(cfg.workspacesDir).not.toMatch(/\.cache/);
+	});
+
 	it('overrides execution fields', () => {
 		const cfg = mergeConfig({
 			maxParallel: 8,

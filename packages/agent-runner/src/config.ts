@@ -43,6 +43,13 @@ export interface Config {
 	perRepoMax: number;
 	/** Name of the git remote that serializes claims (the arbiter). */
 	defaultArbiter: string;
+	/**
+	 * The execution working area: bare hub mirrors (`<dir>/repos/<key>.git`) and
+	 * job worktrees (`<dir>/work/<work-id>/`). STATE, not cache (ADR §3) — lives
+	 * under a single visible `~/.agent-runner/`, NEVER `~/.cache`. Overridable so
+	 * tests (and unusual setups) can relocate it.
+	 */
+	workspacesDir: string;
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
@@ -77,6 +84,7 @@ export const DEFAULT_CONFIG: Config = {
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',
+	workspacesDir: join(homedir(), '.agent-runner'),
 	integration: 'propose',
 	agentCmd: '',
 };
