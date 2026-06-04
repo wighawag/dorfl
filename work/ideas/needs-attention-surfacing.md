@@ -88,12 +88,22 @@ runner writing `main` on the error path. Reading work branches is the only
 mode-agnostic, protection-compatible mechanism. (This supersedes the cherry-pick /
 move-only-to-main alternatives, which were elegant but only legal in `merge` mode.)
 
-## Depends on a deeper, unresolved decision
+## Subsumed by the accepted two-mode ledger ADR
 
-This surfacing approach is **subsumed by** the proposed ADR
-`docs/adr/claim-ledger-vs-protected-main.md` (status: proposed) — which found that
-the SAME "can't write `main` in propose/protected mode" constraint also breaks the
-**claim** CAS (claiming writes `main` too). Its recommended direction (a dedicated
-claim-ledger ref + completion/needs-attention riding on the PR / work branch, model
-B) is exactly the mechanism this idea needs. So do NOT implement this surfacing
-idea standalone — it should fall out of ratifying that ADR's design session.
+This surfacing approach is **subsumed by** the accepted ADR
+`docs/adr/claim-ledger-vs-protected-main.md` (status: accepted) — which decided
+agent-runner supports **two ledger modes** behind a read/write seam:
+
+- **Mode M (main-writable, the default):** needs-attention is surfaced **on
+  `main`** via the cherry-pick mechanism described above (an easy add).
+- **Mode P (protected `main`):** needs-attention NEVER reaches `main`; it (like
+  in-progress) lives on the `work/<slug>` branch and is read over the **network**
+  via the mode read seam — exactly the "read from work branches" mechanism above.
+
+So needs-attention surfacing is **not a standalone design** — it is a consequence
+of the mode read seam: implement it against that seam (M: cherry-pick to main; P:
+read the work-branch tips). NB the "`scan` stays OFFLINE" claim above is now
+re-scoped by that ADR to **"offline in mode M"** — in mode P `scan` is
+network-bound (it must consult real claim state). The P substrate itself (per-item
+branch-existence vs a dedicated ledger ref) is deferred in that ADR; this idea
+falls out whichever P substrate is later chosen.

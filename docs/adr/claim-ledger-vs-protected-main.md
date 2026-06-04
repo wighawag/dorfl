@@ -1,19 +1,27 @@
 ---
-title: Claim ledger vs protected/propose main — the CAS writes main, which propose mode forbids
-status: proposed
+title: Claim ledger vs protected/propose main — two ledger modes (M default, P deferred)
+status: accepted
 created: 2026-06-04
+decided: 2026-06-04
 supersedes:
 superseded_by:
 ---
 
-# ADR (PROPOSED): the claim CAS writes `main`, contradicting `propose` mode / protected `main`
+# ADR: two ledger modes (M = main-writable, default; P = protected-main, deferred)
 
-> **STATUS: proposed.** This records a VERIFIED architectural contradiction and a
-> recommended resolution DIRECTION — it is NOT yet an accepted decision. It needs a
-> dedicated design session (likely revising the claim model in the `agent-runner`
-> PRD) to flip to `accepted` (with a chosen option) or be superseded. Captured now
-> so the contradiction is not lost. **Not currently blocking** (the maintainer
-> rarely protects `main`), but a valid concern for the many repos that do.
+> **STATUS: accepted — for the SEAM decision.** A design session (2026-06-04)
+> resolved the load-bearing question: agent-runner supports **two ledger modes**
+> behind a mode seam, with **mode M (main-writable) as the default and essentially
+> today's system**, and **mode P (protected-main)** added behind the same seam.
+> The seam (read + write) is decided and shippable now with only M behind it.
+> **Mode P's internal CAS substrate is DELIBERATELY DEFERRED** (recorded broadly
+> in "Mode P — deferred" below) — to be chosen in a future dedicated session. So
+> this ADR is `accepted` for *the two-mode seam*, with P's implementation left
+> open. **Not currently blocking** (the maintainer rarely protects `main`); the
+> default path (M) is unchanged.
+>
+> The sections below first record the VERIFIED contradiction that motivated this
+> (still the *why*), then the decided two-mode design.
 
 ## The contradiction (verified in code)
 
@@ -40,6 +48,10 @@ This is bigger than the needs-attention-surfacing question that surfaced it (see
 `work/ideas/needs-attention-surfacing.md`): it is a flaw in the *claim model*
 itself, not an error-path detail.
 
+On a repo with an UNprotected `main` (mode M), there is no contradiction — the CAS
+works as it does today. The contradiction is specific to protected/propose repos
+(mode P), which is exactly why the resolution is a **mode**, not a global rewrite.
+
 ## Root cause: two roles conflated onto `main`
 
 `main` is being used for two roles with OPPOSITE access requirements:
@@ -52,11 +64,11 @@ itself, not an error-path detail.
 
 Forcing both onto one ref is the bug.
 
-## Considered options
+## Considered options (and why "make it a mode")
 
-1. **Unprotect `main` and accept it.** REJECTED: throws away the entire purpose of
-   `propose` mode (human review before code lands) and is impossible where orgs
-   mandate protection. Solves the contradiction by deleting one side of it.
+1. **Unprotect `main` and accept it.** REJECTED as a *global* answer: throws away
+   the purpose of `propose` mode and is impossible where orgs mandate protection.
+   But it IS a legitimate *per-repo choice* — that is mode M.
 
 2. **Per-folder protection** (`main` writable for `work/**`, protected for
    `src/**`). REJECTED as a general mechanism: git branch protection is per-REF,
@@ -64,54 +76,118 @@ Forcing both onto one ref is the bug.
    host-specific and breaks the "works against any arbiter (incl. a local
    `--bare`)" portability invariant.
 
-3. **Surface/transition via cherry-pick or move-only commits to `main`.** REJECTED
-   for the same reason as (1): any mechanism that writes `main` on the
-   claim/needs-attention path is illegal under propose/protected main.
+3. **One global model that never writes `main`** (a single dedicated ledger ref
+   for everyone). REJECTED as the *default*: it imposes a new ref + its CAS +
+   portability story on the common, unprotected-`main` repo that does not need it.
+   The unprotected repo should keep paying nothing.
 
-4. **Split the refs (RECOMMENDED DIRECTION).** Separate the **claim ledger** from
-   the **code integration target**:
-   - **Claim/ledger transitions** serialize on a DEDICATED agent-writable ref (an
-     unprotected `agent-runner` ledger branch, or per-item `refs/...` claim refs) —
-     never `main`. This is where `backlog → in-progress` (and the eligibility
-     `work/done/` state) is CAS'd.
-   - **`main` carries only reviewed CODE.** Completion rides on the PR (**model
-     B**, below): the agent pushes the work branch (code + the `→ done` move) and
-     opens a PR; when the human MERGES the PR, `main` gets the code AND the done-
-     move together via the *permitted* merge path (protection allows reviewed
-     merges, not direct pushes). So the runner never needs a direct `main` write.
+4. **TWO MODES behind one seam (DECIDED).** The protection question is a
+   per-repo *property of the arbiter*, so make it an explicit per-repo **mode**,
+   not a global rewrite:
+   - **Mode M (`ledgerMode: M`, the DEFAULT) — main-writable.** Essentially
+     today's system: `main` is the source of truth for the whole `work/` tree;
+     claim = the force-with-lease micro-commit to `main`; needs-attention can be
+     surfaced on `main` via the cherry-pick mechanism (see
+     `work/ideas/needs-attention-surfacing.md`, an easy add). No new refs, no
+     network reads. The default path is unchanged.
+   - **Mode P (`ledgerMode: P`) — protected `main`.** Nothing writes `main`
+     directly; anything main-bound lands via a *merged PR*. The agent-driven
+     intermediate states (**in-progress, needs-attention**) never reach `main` in
+     P — they live on `work/<slug>` branches and are read over the network. P's
+     internal CAS substrate is **deferred** (see "Mode P — deferred").
 
-## Recommended direction (to be ratified in the design session)
+## The decided design: one mode seam (read + write), default M
 
-- **Model B for completion:** `done` (and needs-attention surfacing) ride on the
-  PR / work branch — the runner never pushes `main` directly. This is
-  protection-compatible and subsumes the needs-attention-surfacing idea (status is
-  read from work branches, never written to main).
-- **A dedicated claim-ledger ref for the `backlog → in-progress` CAS**, since
-  claiming cannot wait for a PR and must not write `main`.
-- `main` becomes "what has been reviewed-and-merged"; the ledger ref carries the
-  claim serialization.
+The fix is a **mode seam** keyed off an explicit `ledgerMode` config (resolved
+like `integration`: flag > per-repo > global > **default M**; NO auto-detection —
+a protected-`main` rejection must never be inferred silently, or we recreate the
+exact silent failure this ADR names).
 
-## Open questions for the design session (NOT yet decided)
+The seam has two paired halves:
 
-- **Where does `work/` live** — entirely on the ledger ref, on both, or split
-  (`backlog`/`in-progress` on the ledger, `done` arriving on `main` via PR merge)?
-  This is the crux and is unresolved.
-- **`blocked_by` resolves against `work/done/` — on which ref?** Every `work/`-read
-  (`scan`, eligibility, readiness) must target the right ref(s).
-- **How do the ledger timeline and the code-merge timeline reconcile** in propose
-  mode (PR merged vs ledger `done`)? (Same class as the issue→PRD `Fixes #N`
-  loop-closure question.)
-- **Does this break the current "work commit + done-move = ONE atomic commit"
-  invariant** (it would become two writes to two refs)? Acceptable?
-- **Ledger ref portability** across a real remote (GitHub) AND a local `--bare`
-  arbiter — the CAS mechanism must work on both, like the current `main` CAS does.
-- **Does this reshape the `agent-runner` PRD's claim model** (likely yes)?
+- **Write seam — `applyLedgerTransition(kind, from → to, …)`** for the three
+  `work/` transitions: **claim** (`backlog → in-progress`), **complete**
+  (`in-progress → done`, with code), **needs-attention** (`* → needs-attention`).
+  - In **M**: writes `main` directly (claim CAS to main; complete merges/ff to
+    main; needs-attention cherry-picks to main).
+  - In **P**: never writes `main` — claim + intermediates land on `work/<slug>`
+    branches; `done` rides the completion PR merge.
+  - The **claim primitive is part of the write seam** and may differ by mode
+    (M = force-with-lease micro-commit to `main`; P = a `main`-free CAS, substrate
+    deferred). Claiming is **CAS / first-writer-wins in both modes** — atomicity
+    is non-negotiable.
 
-## Consequences if adopted
+- **Read seam — "resolve the live `work/` state for a repo."** Both modes read
+  **`backlog` and `done` from `<arbiter>/main`** (in P these reach `main` via
+  human/auto-slicer PRs and the completion PR merge respectively). The split is
+  only for the agent-driven intermediates:
+  - **M**: in-progress / needs-attention read from `main` (offline).
+  - **P**: in-progress / needs-attention read from the arbiter over the **network**
+    (the `work/*` branch tips), because they never reach `main`.
 
-- The claim protocol works on protected-`main` / `propose` repos (the current
-  silent limitation is lifted).
-- needs-attention surfacing falls out naturally (read work branches; never write
-  main) — `work/ideas/needs-attention-surfacing.md` becomes implementable.
-- A new ref to provision/manage per repo (ledger), with its own CAS + portability
-  story; more moving parts than the single-`main` model.
+Key consequences of this split, decided:
+
+- **`blockedBy` / eligibility / readiness are UNCHANGED.** `done` reaches `main`
+  in BOTH modes (via the PR merge in P), so they keep resolving against
+  `<arbiter>/main:work/done/` exactly as today. (This open question is therefore
+  **resolved**: done-on-main is mode-independent.)
+- **`scan` is as authoritative as the mode allows.** Offline-from-`main` in M;
+  **network-bound in P** — because `scan` exists to feed a *claim* decision, and a
+  `scan` that cannot distinguish claimable-from-claimed in P would mislead at the
+  moment of action. So **"offline `scan`" is a property of mode M, not a global
+  invariant** — the doc text that calls `scan` unconditionally offline must be
+  re-scoped to "offline in M" (incl. `work/ideas/needs-attention-surfacing.md`).
+- **needs-attention surfacing is subsumed.** It is just "read the P intermediate
+  state" (M surfaces it on `main` via cherry-pick). `work/ideas/needs-attention-
+  surfacing.md` becomes "implement against the mode read seam," not a standalone
+  design.
+
+**Shipping plan: seam now, P-strategy later.** Ship the read+write seam with ONLY
+the M strategy behind it (M ≈ current behaviour, wrapped). P becomes a later slice
+that plugs in the second strategy. The seam signatures stay at the SEMANTIC level
+("resolve live state" / "apply this transition") and MUST NOT assume *where* P
+stores anything — so the deferred P substrate choice is not foreclosed.
+
+## Mode P — deferred (recorded broadly, NOT yet decided)
+
+Mode P's internal CAS substrate is **left open** for a future dedicated session.
+The firm boundary it must satisfy: *in P, the claim and the agent-driven
+intermediate states (`in-progress`, `needs-attention`) must be served by a CAS
+substrate that **never writes `main`** and **works on both a real remote (GitHub)
+AND a local `--bare` arbiter**.*
+
+Two candidate substrates were discussed but **not chosen**:
+
+- **P-opt-1: per-item `work/<slug>` branch-existence as the claim.** "Claimed" ⇔
+  the `work/<slug>` branch exists on the arbiter (claim = a create-only push that
+  the server rejects if it already exists). In-progress / needs-attention are read
+  from each `work/*` branch tip's file location. No shared mutable ledger ref.
+- **P-opt-2: a permanent dedicated ledger ref.** One agent-writable ref holding
+  the `work/` folder tree (or just the intermediates), CAS-advanced like `main` is
+  today. "Claimed" ⇔ the move landed on the ledger ref.
+
+Open tensions for the future P session to weigh (broad, not pre-judged):
+
+- **Does branch-existence-as-in-progress (P-opt-1) violate "status = the folder"?**
+  A ledger ref (P-opt-2) keeps status=folder everywhere; branch-existence encodes
+  in-progress as a ref, not a file. (This is the sharpest tension.)
+- **Ledger ↔ code-merge reconciliation/cleanup in P** — the intermediate signal
+  and "done on `main`" live on different refs/timelines; how are they reconciled
+  if a PR merges but the intermediate wasn't cleaned up (or vice-versa)? (Same
+  class as the issue→PRD `Fixes #N` loop-closure question.)
+- **`--bare` portability is a KILL-CRITERION**, not a differentiator — any P
+  candidate that cannot do its CAS on a local `--bare` arbiter is out.
+
+## Consequences
+
+- The common case (unprotected `main`, mode M) keeps paying **nothing**: no new
+  refs, no network reads, behaviour unchanged. The default is the cheap path.
+- Protected-`main` / `propose` repos become **supportable** (mode P) instead of
+  silently broken — once P's deferred substrate is designed and built.
+- The seam adds one explicit `ledgerMode` config and a read/write indirection;
+  the cost is small and is the insurance that P is a later *slice*, not a rewrite
+  of the claim model.
+- `scan`'s offline guarantee is **re-scoped to mode M** (network-bound in P);
+  docs asserting unconditional offline `scan` need that correction.
+- needs-attention surfacing becomes implementable as a consequence of the read
+  seam (M: cherry-pick to main; P: read the work branches).
