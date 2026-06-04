@@ -52,6 +52,10 @@ a horizontal slice of one layer.
   agent may then claim is the *repo's* `allowAgents` policy. Mark `blockedBy` for
   ordering. See [WORK-CONTRACT.md](WORK-CONTRACT.md) for the two-axis semantics,
   the predicate, and the `allowAgents` precedence.
+  - **A slice's `humanOnly` is decided from the nature of BUILDING THAT SLICE —
+    never inherited from the PRD.** Evaluate each slice on its own merits (does
+    *building it* need human judgement/security/secrets?), AS IF the PRD's
+    `humanOnly` field did not exist. (The two flags are disjoint — see §3b.)
 - **Prefer file-orthogonal slices to minimise merge conflicts.** `blockedBy`
   encodes logical ordering, but two independent slices that edit the SAME files
   will conflict when the second integrates after the first. Parallel agents make
@@ -61,11 +65,27 @@ a horizontal slice of one layer.
   rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at
   slice time is the cheap win.
 
-### 3b. Apply the PRD's gate + honour cross-PRD `sliceAfter`
+### 3b. PRD gate vs slice gate are DISJOINT + honour cross-PRD `sliceAfter`
 
-- **Propagate the gate.** If the source PRD is itself `humanOnly`/`needsAnswers`,
-  or its body flags certain stories/areas as a human call (DECIDED) or as having
-  open questions (DISCOVERED), set the matching axis on the covering slices.
+- **`humanOnly` on a PRD and `humanOnly` on a slice are DISJOINT — they gate
+  different verbs and DO NOT flow into each other.**
+  - **PRD `humanOnly`** gates *slicing*: its ONLY effect is that an agent may not
+    **auto-slice** that PRD (even where the repo's `autoSlice` policy is on); a
+    human must drive the decomposition. That is its entire meaning.
+  - **Slice `humanOnly`** gates *building*: it is decided per slice from the
+    nature of building that slice (see §3), independently.
+  - There is **NO inheritance, NO propagation, and NOT EVEN A HINT** from the PRD
+    flag to the slice flags. A `humanOnly: true` PRD can produce entirely
+    agent-buildable slices; an un-flagged PRD can produce some `humanOnly` slices.
+    When setting a slice's gate, ignore the PRD's `humanOnly` entirely.
+  - Likewise **`needsAnswers`**: on a PRD it blocks auto-slicing until the
+    questions are answered; on a slice it blocks auto-building. Set a slice's
+    `needsAnswers` only when *that slice* has unresolved questions (list them in
+    its body) — not because the PRD had open questions (a PRD with open questions
+    should be resolved BEFORE slicing, not slice-inherited).
+  - (A PRD's body may still *describe* which areas are judgement-heavy — use that
+    as ordinary domain input when reasoning about a slice's own build-nature, the
+    same as any other PRD prose; it is not a flag-setting shortcut.)
 - **`sliceAfter` (cross-PRD order).** If this PRD has `sliceAfter: [other-prd]`,
   those PRDs must already be SLICED (their slices exist) before you slice this one
   — so this PRD's slices can reference the real slugs of those PRDs' slices in

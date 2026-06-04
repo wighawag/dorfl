@@ -34,10 +34,11 @@ Cover all aspects of the feature, extensively.
 The PRD now CARRIES the slicing gate (because an agent may auto-slice it with no
 human in the loop). Record, in prose here AND as the frontmatter flags above:
 
-- **`humanOnly` (DECIDED):** which stories/areas need a HUMAN to drive
-  (product/design/security/judgement)? If the *slicing itself* should be a human's
-  call, set `humanOnly: true` on the PRD. This also GUIDES the slicer to set
-  `humanOnly: true` on the covering slices.
+- **`humanOnly` (DECIDED):** set `humanOnly: true` on the PRD ONLY to mean "a
+  human must drive the *slicing* of this PRD" (sole effect: an agent may not
+  auto-slice it). This is DISJOINT from slice `humanOnly` — it does NOT propagate
+  to or guide the slices' gates (a `humanOnly` PRD can yield fully agent-buildable
+  slices). The slicer sets each slice's gate from that slice's own build-nature.
 - **`needsAnswers` (DISCOVERED):** are there open questions the spec has not yet
   resolved? If so, set `needsAnswers: true` and **list the questions in this
   section** — the auto-slicer will refuse to slice until they are answered and the

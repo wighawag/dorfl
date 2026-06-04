@@ -42,10 +42,14 @@ Put a one-line banner at the top of every PRD you write:
 
 3. **Set the two autonomy axes (the PRD now CARRIES the gate).** Because a PRD may
    be AUTO-sliced by an agent with no human in the loop, decide and record both:
-   - **`humanOnly` (DECIDED):** identify which stories/areas need a HUMAN
-     (product/design/security/judgement). If the SLICING itself should be a
-     human's call, set `humanOnly: true` in the PRD frontmatter (and note the
-     areas in prose to guide per-slice gates).
+   - **`humanOnly` (DECIDED):** set `humanOnly: true` on the PRD ONLY to mean
+     "a human must drive the SLICING of this PRD" (its sole effect: an agent may
+     not auto-slice it). This is DISJOINT from any slice's `humanOnly` — it does
+     NOT propagate to or guide the gates of the slices it produces (a `humanOnly`
+     PRD can yield fully agent-buildable slices). Describe judgement-heavy areas in
+     prose as ordinary domain context, but do NOT treat the PRD flag as a way to
+     pre-set slice gates (the slicer decides each slice's gate from that slice's
+     own build-nature — see the `to-slices` skill §3b).
    - **`needsAnswers` (DISCOVERED):** if the conversation did NOT fully resolve the
      spec, set `needsAnswers: true` and **list the open questions in the PRD body**
      — the auto-slicer refuses to slice until they are answered and the flag
