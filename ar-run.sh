@@ -10,7 +10,7 @@
 # (the monorepo whose `packages/agent-runner` implements the commands).
 #
 # Usage:
-#   ./ar-run.sh <slug> [--propose]
+#   ./ar-run.sh <slug> [--propose] [--watch]
 #
 #     <slug>      the backlog item to run (must be eligible / claimable)
 #     --propose   integrate in propose mode (push a branch + open review) instead
@@ -38,11 +38,13 @@ AR_CLI="${AR_CLI:-node $REPO/packages/agent-runner/dist/cli.js}"
 
 slug=""
 integration="merge"
+watch=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--propose) integration="propose"; shift ;;
 		--merge) integration="merge"; shift ;;
-		-h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+		--watch) watch=1; shift ;;
+		-h|--help) sed -n '2,44p' "$0"; exit 0 ;;
 		-*) echo "unknown flag: $1" >&2; exit 1 ;;
 		*) [ -z "$slug" ] && slug="$1" || { echo "unexpected arg: $1" >&2; exit 1; }; shift ;;
 	esac
@@ -61,8 +63,31 @@ fi
 echo ">> [1/4] claim + onboard: $slug"
 $AR_CLI start "$slug" || { echo "error: start/claim failed (lost the race? not eligible?)." >&2; exit 2; }
 
-echo ">> [2/4] run agent on the slice (pi -p; quiet while it works)…"
-$AR_CLI prompt | pi -p || { echo "error: agent run (pi -p) failed." >&2; exit 3; }
+RAWLOG="/tmp/ar-run-${slug}.jsonl"
+if [ "$watch" -eq 1 ]; then
+	command -v jq >/dev/null || { echo "error: --watch needs jq." >&2; exit 1; }
+	echo ">> [2/4] run agent (watching; raw log -> $RAWLOG)…"
+	# json mode streams a live event log: save raw, and surface the high-signal
+	# events (tool calls + assistant messages + lifecycle). PIPESTATUS[1] is pi's
+	# exit code (tee/jq must not mask it).
+	# `set +e` around the pipeline so our explicit PIPESTATUS check runs even when
+	# pi exits non-zero (otherwise `set -e` would abort before we can report).
+	set +e
+	$AR_CLI prompt | pi -p --mode json \
+		| tee "$RAWLOG" \
+		| jq -rc '
+			if .type=="tool_start" then "\u001b[36m▶ " + (.tool // "tool") + "\u001b[0m"
+			elif .type=="message_end" and .message.role=="assistant"
+				then ((.message.content[]? | select(.type=="text") | .text) // empty)
+			elif .type=="agent_end" then "\u001b[32m✓ agent finished\u001b[0m"
+			else empty end' 2>/dev/null
+	rc=${PIPESTATUS[1]}
+	set -e
+	[ "$rc" -eq 0 ] || { echo "error: agent run (pi -p --mode json) failed (rc=$rc)." >&2; exit 3; }
+else
+	echo ">> [2/4] run agent on the slice (pi -p; quiet — use --watch to stream)…"
+	$AR_CLI prompt | pi -p || { echo "error: agent run (pi -p) failed." >&2; exit 3; }
+fi
 
 echo ">> [3/4] gate + integrate ($integration)…"
 # complete runs the acceptance gate; on red it does NOT integrate and leaves the
