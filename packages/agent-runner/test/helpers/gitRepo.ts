@@ -3,7 +3,16 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {run, git} from '../../src/git.js';
 
-/** Deterministic git identity + non-interactive env for throwaway test repos. */
+/**
+ * Deterministic git identity + non-interactive env for throwaway test repos.
+ *
+ * Crucially, it ISOLATES git from the developer's / CI's real global + system
+ * config: `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_SYSTEM=/dev/null` and
+ * `GIT_CONFIG_NOSYSTEM=1` mean every test git invocation sees ONLY the repo-local
+ * config it sets up. Without this, all tests share the real `~/.gitconfig`
+ * (identity, `includeIf`, hooks, `core.*`), which both pollutes results and is a
+ * contention/interference point when many test files run git concurrently.
+ */
 export function gitEnv(): NodeJS.ProcessEnv {
 	return {
 		...process.env,
@@ -12,6 +21,9 @@ export function gitEnv(): NodeJS.ProcessEnv {
 		GIT_COMMITTER_NAME: 'Test Runner',
 		GIT_COMMITTER_EMAIL: 'test@example.com',
 		GIT_TERMINAL_PROMPT: '0',
+		GIT_CONFIG_GLOBAL: '/dev/null',
+		GIT_CONFIG_SYSTEM: '/dev/null',
+		GIT_CONFIG_NOSYSTEM: '1',
 	};
 }
 
