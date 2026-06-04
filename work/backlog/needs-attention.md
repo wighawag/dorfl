@@ -27,10 +27,13 @@ End-to-end:
   body, then `git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md`
   (mkdir -p first), committing the transition like the done-move. The RUNNER does
   this, never the build agent.
-- **Wire the existing stuck outcomes into it:** `complete` (and later
-  `run-once`/`watch`) route their failure paths here instead of just aborting —
-  a red gate or a conflict ends with the item in `needs-attention/`, not left
-  dangling in `in-progress/`.
+- **Ownership:** this slice OWNS the mechanism (the move helper + scan-skip +
+  status-surface + return path). Consumers merely CALL it. New consumers wire it
+  in as they are built: `agent-workspaces` (rebase-conflict path) and `watch`
+  (timeout/failure) call this helper directly. `complete` is already DONE
+  (immutable) and currently just aborts on failure — routing its abort paths
+  through this mechanism is a SEPARATE follow-up slice (`complete-needs-attention`),
+  not an edit to the done `complete` slice.
 - **Surface but don't claim:** `scan`/eligibility must SKIP `needs-attention/`
   items for claiming (they are not eligible), and `status` must LIST them with
   their recorded reason (this folder is the "look here" set).
@@ -44,8 +47,9 @@ This subsumes the previously-parked "needs-attention surfacing" problem.
 
 - [ ] A stuck claimed item is moved `in-progress -> needs-attention` (mkdir -p
       first) with the reason written into the file body, by the runner.
-- [ ] The failure paths of `complete` (red gate, rebase conflict) end with the
-      item in `needs-attention/` rather than dangling in `in-progress/`.
+- [ ] The mechanism is callable by consumers; `agent-workspaces` (rebase
+      conflict) routes through it. (Routing the DONE `complete` command's failure
+      paths is the separate `complete-needs-attention` slice, not this one.)
 - [ ] `scan`/eligibility do NOT treat `needs-attention/` items as claimable.
 - [ ] `status` lists `needs-attention/` items with their reason.
 - [ ] A return step moves an item `needs-attention -> backlog` for re-claiming.
@@ -73,8 +77,10 @@ This subsumes the previously-parked "needs-attention surfacing" problem.
 > review), writes the reason (+ surfaced questions) into the item file and
 > `git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md` (mkdir -p
 > first), committing it like the done-move. The build agent never does this. Wire
-> `complete`'s failure paths (red gate, rebase conflict) to route here instead of
-> dangling in `in-progress/`. Make `scan`/eligibility SKIP `needs-attention/` for
+> new consumers (`agent-workspaces`'s rebase-conflict path; `watch`'s
+> timeout/failure) to route here. (The DONE `complete` command is wired in by a
+> separate follow-up slice, `complete-needs-attention`.) Make `scan`/eligibility
+> SKIP `needs-attention/` for
 > claiming but have `status` LIST these with their reason. Add a return step that
 > `git mv`s an item back to `backlog/` for re-claiming. Introduce NO status/label
 > field — state stays the folder (contract rule 3); the reason is prose in the

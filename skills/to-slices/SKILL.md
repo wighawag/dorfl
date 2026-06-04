@@ -57,12 +57,20 @@ a horizontal slice of one layer.
   rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at
   slice time is the cheap win.
 
+### 3b. Apply the PRD's human-only guidance
+
+If the source PRD flagged certain user stories / areas as **human-only** (a
+product/design/security/judgement call an agent should not make unattended — see
+the `to-prd` skill: it records this as PROSE, not a machine field), set the
+slice's human-only gate on the covering slices. The slice carries the
+authoritative gate; the PRD prose is the input that informed it. (Gate field name
++ semantics: see [WORK-CONTRACT.md](WORK-CONTRACT.md).)
+
 ### 4. Quiz the user
 
-Present the breakdown as a numbered list — Title, `afk` gate (true/false/omit),
-Blocked-by, and (if the source has them) which user stories it covers. Ask:
-granularity right? dependencies right? merge/split any? `afk` gate correct?
-Iterate until approved.
+Present the breakdown as a numbered list — Title, the human-only gate, Blocked-by,
+and (if the source has them) which user stories it covers. Ask: granularity
+right? dependencies right? merge/split any? gate correct? Iterate until approved.
 
 ### 5. Write the slice files
 
@@ -73,8 +81,30 @@ if absent. One file per slice. Use a content-derived slug, never a counter. Fill
 field to the slug of the source `work/prd/<slug>.md` (so `covers` story numbers
 are unambiguous — see [WORK-CONTRACT.md](WORK-CONTRACT.md)).
 
-**Git protocol:** do NOT stage/commit/push — leave the new files unstaged so the
-user can inspect them. Report the exact paths written.
+### 6. Trim the PRD to its durable framing (one-time)
+
+The PRD is a launch snapshot (see the `to-prd` skill). Now that the work is
+sliced, the PRD's **technical detail is redundant** (it lives in the slices) and
+is the part that would otherwise go stale. Do a ONE-TIME trim:
+
+- The slices now own *what to build* (Implementation/Testing detail) — remove
+  those sections from the PRD.
+- Any **durable rationale** worth keeping (the *why* of a decision) is RELOCATED
+  to an ADR (`docs/adr/<slug>.md`), not deleted.
+- The PRD settles to its durable framing: Problem / Solution / User Stories /
+  Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that
+  detail moved to slices/ADRs.
+- **Mark the PRD as sliced** so it's clear it has been incorporated: add a
+  `sliced: <YYYY-MM-DD>` line to its frontmatter (and/or a top banner note "Sliced
+  into work/backlog/ on <date> — detail trimmed to slices/ADRs"). A reader then
+  knows the PRD is a launched-and-sliced snapshot, not a pending plan.
+
+This is a hand-off transition, not ongoing maintenance — after this single trim
+the PRD is stable because the stale-prone part was relocated, not because it is
+kept in sync. (Nothing is lost: detail → slices; rationale → ADR.)
+
+**Git protocol:** do NOT stage/commit/push — leave the new/edited files unstaged
+so the user can inspect them. Report the exact paths written (and the trimmed PRD).
 
 ## The on-disk contract
 
