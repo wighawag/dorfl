@@ -60,6 +60,7 @@ const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
 	integration: {enum: ['propose', 'merge']},
 	provider: {enum: ['none', 'github']},
 	agentCmd: 'string',
+	model: 'string',
 	harness: {enum: ['null', 'pi']},
 	piBin: 'string',
 	verify: 'list',

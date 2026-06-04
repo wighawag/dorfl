@@ -43,7 +43,49 @@ export interface LaunchInput {
 	command: string;
 	/** Optional prompt fed on the command's stdin. */
 	prompt?: string;
+	/**
+	 * The model the agent should run on (the harness-agnostic routing intent, ADR
+	 * §13). `undefined` ⇒ agent-runner forces no model. The ADAPTER decides HOW
+	 * this reaches its tool: the pi adapter passes `--model <model>` natively; the
+	 * null/shell adapter substitutes a `{model}` placeholder in `command` (see
+	 * {@link substituteModel}). auth/keys are NEVER carried here — they stay the
+	 * harness's job.
+	 */
+	model?: string;
 	env?: NodeJS.ProcessEnv;
+}
+
+/** The `{model}` placeholder the null/shell adapter substitutes in `agentCmd`. */
+export const MODEL_PLACEHOLDER = '{model}';
+
+/**
+ * Inject the model ROUTING intent (ADR §13) into a shell `command` for the
+ * null/shell adapter, with three degradation rules so model routing is OFFERED,
+ * never FORCED:
+ *
+ *  1. `{model}` present + `model` set ⇒ substitute every occurrence.
+ *  2. `{model}` present + `model` unset ⇒ a clear config error (we never emit a
+ *     literal `{model}` to the shell — that would silently misroute).
+ *  3. `{model}` absent ⇒ return `command` as-is (a user who bakes the model into
+ *     `agentCmd`, or relies on the harness's own default, is untouched).
+ *
+ * agent-runner only moves the model INTENT; auth/keys stay the harness's job.
+ */
+export function substituteModel(
+	command: string,
+	model: string | undefined,
+): string {
+	if (!command.includes(MODEL_PLACEHOLDER)) {
+		return command; // rule 3: no placeholder ⇒ run as-is.
+	}
+	if (model === undefined || model === '') {
+		throw new Error(
+			`agentCmd contains a ${MODEL_PLACEHOLDER} placeholder but no model is ` +
+				`configured. Set a model (--model, AGENT_RUNNER_MODEL, per-repo, or ` +
+				`global config) or remove ${MODEL_PLACEHOLDER} from agentCmd.`,
+		);
+	}
+	return command.split(MODEL_PLACEHOLDER).join(model); // rule 1: substitute.
 }
 
 export interface LaunchResult {
@@ -80,7 +122,10 @@ export class NullHarness implements Harness {
 	readonly adapter = 'null';
 
 	launch(input: LaunchInput): LaunchResult {
-		const result = spawnSync('bash', ['-c', input.command], {
+		// Inject the model routing intent into the shell command via the `{model}`
+		// placeholder (ADR §13) — offered, never forced (see substituteModel).
+		const command = substituteModel(input.command, input.model);
+		const result = spawnSync('bash', ['-c', command], {
 			cwd: input.dir,
 			encoding: 'utf8',
 			input: input.prompt,
@@ -99,7 +144,7 @@ export class NullHarness implements Harness {
 		const record: HarnessRecord = {
 			adapter: this.adapter,
 			pid: result.pid,
-			command: input.command,
+			command,
 		};
 		const status = result.status ?? -1;
 		return {

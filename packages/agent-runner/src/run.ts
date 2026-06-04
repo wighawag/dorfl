@@ -291,8 +291,15 @@ async function runOneItem(
 		}
 
 		// 4. Run the agent — via the injected runner (tests) or the harness seam
-		//    (null adapter by default), shelling out to the configured agentCmd.
-		const agent = runAgent(ctx, job, prompt, slug, config.agentCmd);
+		//    (null adapter by default), shelling out to the configured agentCmd. The
+		//    resolved per-repo `model` (ADR §13) flows through the seam to the adapter;
+		//    a `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
+		let agent: {ok: boolean; detail?: string};
+		try {
+			agent = runAgent(ctx, job, prompt, slug, config.agentCmd, config.model);
+		} catch (err) {
+			return {...base, status: 'agent-failed', detail: (err as Error).message};
+		}
 		if (!agent.ok) {
 			return {...base, status: 'agent-failed', detail: agent.detail};
 		}
@@ -388,6 +395,7 @@ function runAgent(
 	prompt: string,
 	slug: string,
 	agentCmd: string,
+	model: string | undefined,
 ): {ok: boolean; detail?: string} {
 	if (ctx.agentRunner) {
 		return ctx.agentRunner({cwd: job.dir, prompt, slug, env: ctx.env});
@@ -397,6 +405,9 @@ function runAgent(
 		slug,
 		command: agentCmd,
 		prompt,
+		// The model routing intent (ADR §13) — the adapter decides HOW it reaches
+		// its tool (pi: `--model`; null/shell: `{model}` placeholder).
+		model,
 		env: ctx.env,
 	});
 	updateJobRecord(job.dir, {harness: launched.record});

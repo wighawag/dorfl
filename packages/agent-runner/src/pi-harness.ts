@@ -91,8 +91,11 @@ export interface PiHarnessRecord extends HarnessRecord {
 }
 
 /**
- * The pi adapter. Invocation: `pi --print --session-dir <job>/<session> [extra]`
- * run in the worktree with the work-agent prompt on stdin. Liveness: the PID is
+ * The pi adapter. Invocation: `pi [--model <model>] --print --session-dir
+ * <job>/<session> [extra]` run in the worktree with the work-agent prompt on
+ * stdin. The model is passed NATIVELY as `--model <model>` when set (ADR §13 —
+ * the routing intent agent-runner controls); auth/keys stay pi's job, never
+ * agent-runner's. Liveness: the PID is
  * the authoritative "is it running?" signal; the recorded `session` dir/log is
  * the activity + audit pointer surfaced alongside it. NEVER mtime (ADR §5).
  */
@@ -108,10 +111,23 @@ export class PiHarness implements Harness {
 
 	launch(input: LaunchInput): LaunchResult {
 		const sessionDir = piSessionDir(input.dir);
+		// The model ROUTING intent (ADR §13): when set, pass it NATIVELY as
+		// `--model <model>`. agent-runner only chooses the model; pi owns auth/keys.
+		const modelArgs =
+			input.model !== undefined && input.model !== ''
+				? ['--model', input.model]
+				: [];
 		// Non-interactive (`--print`): pi processes the prompt and exits. We pin the
 		// session dir INTO the job worktree so the recorded pointer is deterministic
-		// and travels with the job (an audit trail), not pi's global default.
-		const args = [...this.extraArgs, '--print', '--session-dir', sessionDir];
+		// and travels with the job (an audit trail), not pi's global default. The
+		// operator's `extraArgs` still layer on (e.g. flags beyond `--model`).
+		const args = [
+			...modelArgs,
+			...this.extraArgs,
+			'--print',
+			'--session-dir',
+			sessionDir,
+		];
 		const result = spawnSync(this.piBin, args, {
 			cwd: input.dir,
 			encoding: 'utf8',

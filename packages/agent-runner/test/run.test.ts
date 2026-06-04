@@ -558,3 +558,96 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 		expect(readFileSync(promptFile, 'utf8')).toContain('Implement feat.');
 	});
 });
+
+describe('runOnce — config.model flows through the seam to both adapters (ADR §13)', () => {
+	/** A pi stub that records its args + edits a file (non-empty commit). */
+	function writePiArgsStub(argsFile: string): string {
+		const bin = join(scratch.root, 'pi-args-stub.sh');
+		const script = [
+			'#!/usr/bin/env bash',
+			`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+			'session_dir=""',
+			'prev=""',
+			'for a in "$@"; do',
+			'  if [ "$prev" = "--session-dir" ]; then session_dir="$a"; fi',
+			'  prev="$a"',
+			'done',
+			'if [ -n "$session_dir" ]; then mkdir -p "$session_dir"; fi',
+			'cat > /dev/null',
+			'printf "pi work\\n" > agent-output.txt',
+			'exit 0',
+		].join('\n');
+		writeFileSync(bin, script + '\n');
+		chmodSync(bin, 0o755);
+		return bin;
+	}
+
+	it('pi adapter: config.model reaches pi as a native --model (verified vs the stub)', async () => {
+		seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const argsFile = join(scratch.root, 'pi-args.txt');
+		const piBin = writePiArgsStub(argsFile);
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			harness: 'pi',
+			piBin,
+			model: 'anthropic/claude-sonnet-4',
+		});
+
+		const result = await runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			testGate: greenGate,
+			env: gitEnv(),
+		});
+		expect(result.items[0].status).toBe('claimed-done');
+
+		const args = readFileSync(argsFile, 'utf8').split('\n');
+		expect(args).toContain('--model');
+		expect(args).toContain('anthropic/claude-sonnet-4');
+	});
+
+	it('null/shell adapter: config.model substitutes {model} in agentCmd', async () => {
+		seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const seen = join(scratch.root, 'seen-model.txt');
+		// agentCmd carries a {model} placeholder + edits a file (non-empty commit).
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			model: 'some/model',
+			agentCmd: `printf '%s' '{model}' > ${JSON.stringify(seen)}; printf 'work\\n' > agent-output.txt`,
+		});
+
+		const result = await runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			// No agentRunner injection ⇒ the real null harness seam runs agentCmd.
+			testGate: greenGate,
+			env: gitEnv(),
+		});
+		expect(result.items[0].status).toBe('claimed-done');
+		expect(readFileSync(seen, 'utf8')).toBe('some/model');
+	});
+
+	it('null/shell adapter: {model} in agentCmd with no model ⇒ agent-failed (clear error)', async () => {
+		seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			// no model set, but agentCmd references {model}
+			agentCmd: 'agent --model {model}',
+		});
+
+		const result = await runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			testGate: greenGate,
+			env: gitEnv(),
+		});
+		expect(result.items[0].status).toBe('agent-failed');
+		expect(result.items[0].detail).toMatch(/\{model\}/);
+	});
+});

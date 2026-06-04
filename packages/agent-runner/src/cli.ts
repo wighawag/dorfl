@@ -134,6 +134,7 @@ interface RunFlags extends ScanFlags {
 	integration?: string;
 	provider?: string;
 	agentCmd?: string;
+	model?: string;
 	harness?: string;
 	piBin?: string;
 	workspace?: string;
@@ -158,6 +159,9 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	}
 	if (flags.agentCmd !== undefined) {
 		overrides.agentCmd = flags.agentCmd;
+	}
+	if (flags.model !== undefined) {
+		overrides.model = flags.model;
 	}
 	if (flags.harness === 'null' || flags.harness === 'pi') {
 		overrides.harness = flags.harness;
@@ -354,6 +358,10 @@ export function buildProgram(): Command {
 			'propose-mode review-request provider: github (gh pr create) or none (push-only). Default: auto-detect from the arbiter URL (a GitHub remote => github, else none).',
 		)
 		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
+		.option(
+			'--model <id>',
+			'model the agent runs on (routing intent; auth/keys stay the harness\u2019s job). pi: passed as --model; null/shell: substitutes a {model} placeholder in agentCmd. Resolved flag > env > per-repo > global > default (unset).',
+		)
 		.option(
 			'--harness <adapter>',
 			'harness adapter that launches the agent + reports liveness: null (default, shells out to agentCmd) or pi (the pi CLI)',

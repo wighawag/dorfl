@@ -52,6 +52,12 @@ export const REPO_ALLOWED_KEYS = [
 	'verify',
 	'defaultArbiter',
 	'allowAgents',
+	// `model` (which model this repo's work runs on) and `harness` (which adapter)
+	// are legitimate repo properties (ADR §13) — model is routing intent, not auth,
+	// and a repo may prefer a given harness. `piBin`/`agentCmd` stay host-only
+	// (machine paths/commands), so they are rejected below.
+	'model',
+	'harness',
 ] as const satisfies readonly (keyof Config)[];
 
 /** A key honoured in a per-repo file. */

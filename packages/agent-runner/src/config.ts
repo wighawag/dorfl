@@ -106,6 +106,18 @@ export interface Config {
 	 */
 	agentCmd: string;
 	/**
+	 * The model a job's agent runs on (harness-agnostic ROUTING intent, ADR §13).
+	 * agent-runner decides WHICH model; it never touches auth/keys (those stay the
+	 * harness's job). Optional with NO default so "unset" is meaningful: unset ⇒
+	 * agent-runner forces no model (the harness's own default / a model baked into
+	 * `agentCmd` is used untouched). Carried through the harness seam
+	 * (`LaunchInput.model`); the ADAPTER decides HOW it reaches its tool — the pi
+	 * adapter passes `--model <model>` natively, the null/shell adapter substitutes
+	 * a `{model}` placeholder in `agentCmd`. Resolved per-repo like `integration`:
+	 * flag (`--model`) > env > per-repo > global > default (unset).
+	 */
+	model?: string;
+	/**
 	 * Which harness adapter launches + reports liveness for a job's agent (the
 	 * harness seam, ADR §5): `null` (default — shells out to `agentCmd`,
 	 * PID-only liveness) or `pi` (invokes the pi CLI with the work-agent prompt;
