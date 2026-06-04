@@ -1,7 +1,7 @@
 ---
 title: <Human Readable Title>
 slug: <url-safe-slug>
-prd: <source-prd-slug>   # REQUIRED: slug of the work/prd/<slug>.md this slice derives from
+prd: <source-prd-slug>   # slug of the work/prd/<slug>.md this slice derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
 # humanOnly: true     # gate axis 1 (DECIDED): a HUMAN must drive the build. OMIT otherwise (most slices).
 # needsAnswers: true  # gate axis 2 (DISCOVERED): open questions block autonomous work. OMIT otherwise. List them in the body.
 blockedBy: []        # slugs that must reach work/done/ first; [] = startable now

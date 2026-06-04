@@ -130,7 +130,7 @@ translation layer). No exceptions.
 ---
 title: Human Readable Title
 slug: historical-store-schema
-prd: historical-store    # REQUIRED: slug of the work/prd/<slug>.md this slice derives from
+prd: historical-store    # slug of the work/prd/<slug>.md this slice derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
 humanOnly: true      # gate axis 1 (DECIDED): a human must drive this. true | omitted. MOST OMIT IT.
 needsAnswers: true   # gate axis 2 (DISCOVERED): open questions block autonomous work. true | omitted.
 blockedBy: []        # list of slugs that must reach done/ first; [] = startable now
@@ -200,15 +200,25 @@ expressed where it belongs, in B's individual slices' `blockedBy` (against `done
 Enforced for the auto-slicer (it skips a PRD whose `sliceAfter` PRDs aren't yet
 sliced); a human may slice anyway.
 
-### The `prd` link (required)
+### The `prd` link (required *when `covers` is set*)
 
 `prd` names the source document this slice was sliced from — the slug of a
-`work/prd/<slug>.md` in the same repo. It is **required** so that `covers`
-(user-story numbers) is never ambiguous when a repo holds more than one PRD:
-`covers: [4]` means nothing without knowing *which* PRD's story 4. A slice that
-spans multiple PRDs names its primary one in `prd` and may reference the others
-in prose. (Ad-hoc slices with no PRD are out of contract — write a short
-`work/prd/<slug>.md` first; that is the source of truth `covers` points into.)
+`work/prd/<slug>.md` in the same repo. Its load-bearing job is to make `covers`
+unambiguous: `covers: [4]` means nothing without knowing *which* PRD's story 4.
+So the requirement tracks that job:
+
+- **`prd` is REQUIRED iff `covers` is non-empty.** Any slice that points into PRD
+  user stories MUST name the PRD those numbers belong to (a slice spanning
+  multiple PRDs names its primary one in `prd` and references the others in prose).
+- **`prd` MAY be omitted for a self-contained slice** — a refactor, chore, build
+  fix, or dependency bump that derives from no PRD and covers no user stories
+  (`covers: []`). Such a slice MUST instead carry a clear, standalone
+  *What to build* + *Prompt* (it is its own source of truth). This is **in
+  contract** — not all work is feature work; only *feature* work flows from a PRD.
+
+(Consequence, by design: a PRD-less chore slice is part of no PRD's completion
+set — the `issue-to-prd` "PRD complete?" query counts only `prd:<slug>` slices —
+which is correct, since a chore is not part of any feature's traceability.)
 
 The body uses [slice-template.md](slice-template.md): What to build (end-to-end),
 Acceptance criteria (checkboxes), Blocked by (prose mirror of frontmatter), and a
