@@ -12,7 +12,8 @@ import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
-import {performComplete} from './complete.js';
+import {performComplete, integrationFromFlags} from './complete.js';
+import {resolveRepoConfig} from './repo-config.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
@@ -127,7 +128,9 @@ interface StartFlags {
 interface CompleteFlags {
 	config?: string;
 	arbiter?: string;
-	integration?: string;
+	merge?: boolean;
+	propose?: boolean;
+	switch?: boolean;
 	skipVerify?: boolean;
 	type?: string;
 	message?: string;
@@ -390,7 +393,7 @@ export function buildProgram(): Command {
 	program
 		.command('complete')
 		.description(
-			'On a work/<slug> branch (slug inferred if omitted): run the gate, mark done (git mv in-progress\u2192done), commit (<type>(<slug>): <summary>; done) the agent\u2019s uncommitted work + the move, rebase onto <arbiter>/main, and integrate (merge\u2192main + local sync, or propose\u2192push branch). Never --force.',
+			'On a work/<slug> branch (slug inferred if omitted): run the gate, mark done (git mv in-progress\u2192done), commit (<type>(<slug>): <summary>; done) the agent\u2019s uncommitted work + the move, rebase onto <arbiter>/main, and integrate. Mode resolved at completion time (--merge/--propose > per-repo > global > default propose): merge\u2192push to main + switch+ff local main; propose\u2192push branch + switch to main (no ff). Then delete the LOCAL work branch iff provably on the arbiter (never the remote); --no-switch stays on the branch and keeps it. Never --force.',
 		)
 		.argument(
 			'[slug]',
@@ -403,8 +406,16 @@ export function buildProgram(): Command {
 			'origin',
 		)
 		.option(
-			'--integration <mode>',
-			'integration mode: propose (default) or merge (overrides config)',
+			'--merge',
+			'integrate in merge mode this invocation (mutually exclusive with --propose; overrides config)',
+		)
+		.option(
+			'--propose',
+			'integrate in propose mode this invocation (mutually exclusive with --merge; overrides config)',
+		)
+		.option(
+			'--no-switch',
+			'stay on the work/<slug> branch (and keep it) instead of switching back to main',
 		)
 		.option(
 			'--skip-verify',
@@ -416,16 +427,28 @@ export function buildProgram(): Command {
 			'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
 		)
 		.action(async (slug: string | undefined, flags: CompleteFlags) => {
-			const config = loadConfig(flags.config);
-			const integration =
-				flags.integration === 'merge' || flags.integration === 'propose'
-					? flags.integration
-					: config.integration;
+			const cwd = process.cwd();
+			const global = loadConfig(flags.config);
+			// Resolve the integration mode at completion time, highest first:
+			//   --merge/--propose flag > per-repo .agent-runner.json > global > default.
+			// The flag sits at the TOP of the same chain the autonomous runner uses
+			// (per-repo > global > default), so human and autonomous paths agree.
+			const flagMode = integrationFromFlags(flags);
+			const resolved = resolveRepoConfig({
+				repoPath: cwd,
+				global,
+				flags: flagMode ? {integration: flagMode} : {},
+			});
+			if (resolved.message) {
+				console.error(`>> ${resolved.message}`);
+			}
+			const config = resolved.config;
 			const result = await performComplete({
 				slug,
-				cwd: process.cwd(),
+				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
-				integration,
+				integration: config.integration,
+				noSwitch: flags.switch === false,
 				verify: config.verify,
 				skipVerify: flags.skipVerify,
 				type: flags.type,

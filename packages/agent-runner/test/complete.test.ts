@@ -7,8 +7,12 @@ import {
 	rmSync,
 } from 'node:fs';
 import {join} from 'node:path';
-import {performComplete} from '../src/complete.js';
+import {
+	performComplete,
+	isLocalBranchProvablyOnArbiter,
+} from '../src/complete.js';
 import {performClaim} from '../src/claim-cas.js';
+import {run} from '../src/git.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -31,6 +35,30 @@ const ARBITER = 'arbiter';
 
 function currentBranch(repo: string): string {
 	return gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim();
+}
+
+/** True iff a LOCAL branch named `branch` exists in `repo`. */
+function localBranchExists(repo: string, branch: string): boolean {
+	return (
+		run('git', ['rev-parse', '--verify', '--quiet', branch], repo, {
+			env: gitEnv(),
+		}).status === 0
+	);
+}
+
+/** True iff `<arbiter>/<branch>` exists on the arbiter remote. */
+function remoteBranchExists(repo: string, branch: string): boolean {
+	run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
+	return (
+		run(
+			'git',
+			['rev-parse', '--verify', '--quiet', `${ARBITER}/${branch}`],
+			repo,
+			{
+				env: gitEnv(),
+			},
+		).status === 0
+	);
 }
 
 /**
@@ -113,11 +141,15 @@ describe('complete — done-move + commit', () => {
 		const {repo} = await claimAndBranch('beta');
 		agentEdits(repo, 'src.txt', 'agent code\n');
 
+		// --no-switch keeps us on the work branch so we can inspect the done-move
+		// + the atomic commit in the tree (the switch-to-main behaviour has its own
+		// dedicated tests below).
 		const result = await performComplete({
 			slug: 'beta',
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
+			noSwitch: true,
 			verify: PASS,
 			env: gitEnv(),
 		});
@@ -146,11 +178,15 @@ describe('complete — done-move + commit', () => {
 		// "move" cannot stage content. We instead test the guard directly by
 		// completing twice: the second run finds nothing in-progress.
 		agentEdits(repo);
+		// --no-switch keeps us on work/empty so the SECOND run still infers the
+		// slug from the branch and hits the "nothing in-progress" refusal (rather
+		// than landing on main where slug inference would fail).
 		const first = await performComplete({
 			slug: 'empty',
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
+			noSwitch: true,
 			verify: PASS,
 			env: gitEnv(),
 		});
@@ -197,10 +233,12 @@ describe('complete — done-move + commit', () => {
 		gitIn(['switch', '-q', '-c', 'work/theslug', `${ARBITER}/main`], repo);
 		agentEdits(repo);
 
-		// Default type+message.
+		// Default type+message. --no-switch keeps HEAD on the work branch so the
+		// completion commit (not main) is HEAD for the log assertion.
 		const result = await performComplete({
 			slug: 'theslug',
 			cwd: repo,
+			noSwitch: true,
 			arbiter: ARBITER,
 			integration: 'propose',
 			verify: PASS,
@@ -413,5 +451,241 @@ describe('complete — slug inference + environment', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/no git remote named 'nope'/);
+	});
+});
+
+describe('complete — switch back to main (both modes)', () => {
+	it('merge: switches to main AND fast-forwards it to the new arbiter main', async () => {
+		const {repo} = await claimAndBranch('m-switch');
+		agentEdits(repo);
+		const result = await performComplete({
+			slug: 'm-switch',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.switchedTo).toBe('main');
+		expect(currentBranch(repo)).toBe('main');
+		// ff'd: local main == arbiter main (the just-pushed merge).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(gitIn(['rev-parse', 'main'], repo).trim()).toBe(
+			gitIn(['rev-parse', `${ARBITER}/main`], repo).trim(),
+		);
+	});
+
+	it('propose: switches to main but does NOT fast-forward (arbiter main unchanged)', async () => {
+		const {repo} = await claimAndBranch('p-switch');
+		agentEdits(repo);
+		// Capture the arbiter main BEFORE completing — propose must not advance it.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const arbiterMainBefore = gitIn(
+			['rev-parse', `${ARBITER}/main`],
+			repo,
+		).trim();
+
+		const result = await performComplete({
+			slug: 'p-switch',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.switchedTo).toBe('main');
+		expect(currentBranch(repo)).toBe('main');
+		// Arbiter main was NOT advanced (the work is on the pushed branch only).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(gitIn(['rev-parse', `${ARBITER}/main`], repo).trim()).toBe(
+			arbiterMainBefore,
+		);
+		// No ff happened: local main must NOT contain the completion commit (the
+		// work lives on the pushed branch, never on main in propose mode).
+		const completionCommit = gitIn(
+			['rev-parse', `${ARBITER}/work/p-switch`],
+			repo,
+		).trim();
+		const containsCompletion =
+			run(
+				'git',
+				['merge-base', '--is-ancestor', completionCommit, 'main'],
+				repo,
+				{env: gitEnv()},
+			).status === 0;
+		expect(containsCompletion).toBe(false);
+	});
+});
+
+describe('complete — local work-branch deletion (provably on arbiter)', () => {
+	it('merge: deletes the LOCAL work branch (tip is on arbiter main), keeps no remote', async () => {
+		const {repo} = await claimAndBranch('m-del');
+		agentEdits(repo);
+		const result = await performComplete({
+			slug: 'm-del',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.deletedLocalBranch).toBe(true);
+		expect(localBranchExists(repo, 'work/m-del')).toBe(false);
+	});
+
+	it('propose: deletes the LOCAL work branch (pushed & up-to-date) but NEVER the remote', async () => {
+		const {repo} = await claimAndBranch('p-del');
+		agentEdits(repo);
+		const result = await performComplete({
+			slug: 'p-del',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.deletedLocalBranch).toBe(true);
+		// Local branch gone…
+		expect(localBranchExists(repo, 'work/p-del')).toBe(false);
+		// …but the REMOTE branch (which a propose PR is built from) survives.
+		expect(remoteBranchExists(repo, 'work/p-del')).toBe(true);
+	});
+
+	it('keeps the LOCAL branch under --no-switch even when provably on arbiter', async () => {
+		const {repo} = await claimAndBranch('keep-noswitch');
+		agentEdits(repo);
+		const result = await performComplete({
+			slug: 'keep-noswitch',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			noSwitch: true,
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.deletedLocalBranch).toBeFalsy();
+		expect(localBranchExists(repo, 'work/keep-noswitch')).toBe(true);
+	});
+});
+
+describe('complete — isLocalBranchProvablyOnArbiter predicate (ADR §4)', () => {
+	it('true when the branch tip is an ancestor of arbiter/main (merged)', async () => {
+		const {repo} = await claimAndBranch('pred-merged');
+		agentEdits(repo);
+		// Commit + push the branch tip onto arbiter main (a merge would do this).
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'work'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/pred-merged:main'], repo);
+		expect(
+			await isLocalBranchProvablyOnArbiter(
+				repo,
+				ARBITER,
+				'work/pred-merged',
+				gitEnv(),
+			),
+		).toBe(true);
+	});
+
+	it('true when arbiter/<branch> exists and its tip == the local tip (pushed)', async () => {
+		const {repo} = await claimAndBranch('pred-pushed');
+		agentEdits(repo);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'work'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/pred-pushed:work/pred-pushed'], repo);
+		expect(
+			await isLocalBranchProvablyOnArbiter(
+				repo,
+				ARBITER,
+				'work/pred-pushed',
+				gitEnv(),
+			),
+		).toBe(true);
+	});
+
+	it('false when work is unmerged AND never pushed (no remote presence)', async () => {
+		const {repo} = await claimAndBranch('pred-unmerged');
+		agentEdits(repo);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'work'], repo);
+		// Never pushed and not on main ⇒ not provable ⇒ keep.
+		expect(
+			await isLocalBranchProvablyOnArbiter(
+				repo,
+				ARBITER,
+				'work/pred-unmerged',
+				gitEnv(),
+			),
+		).toBe(false);
+	});
+
+	it('false when the remote tip differs from the local tip (un-pushed amend)', async () => {
+		const {repo} = await claimAndBranch('pred-diverge');
+		agentEdits(repo);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'work'], repo);
+		// Push the branch (a remote branch now exists)…
+		gitIn(['push', '-q', ARBITER, 'work/pred-diverge:work/pred-diverge'], repo);
+		// …then advance the LOCAL tip WITHOUT pushing (the un-pushed amend).
+		writeFileSync(join(repo, 'more.txt'), 'unpushed\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'unpushed amend'], repo);
+		// remote-tip != local-tip ⇒ not provable ⇒ keep (never lose the amend).
+		expect(
+			await isLocalBranchProvablyOnArbiter(
+				repo,
+				ARBITER,
+				'work/pred-diverge',
+				gitEnv(),
+			),
+		).toBe(false);
+	});
+});
+
+describe('complete — --no-switch opt-out (both modes)', () => {
+	it('merge --no-switch: stays on work branch and keeps it', async () => {
+		const {repo} = await claimAndBranch('m-stay');
+		agentEdits(repo);
+		const result = await performComplete({
+			slug: 'm-stay',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			noSwitch: true,
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.switchedTo).toBe('work/m-stay');
+		expect(currentBranch(repo)).toBe('work/m-stay');
+		expect(result.deletedLocalBranch).toBeFalsy();
+		expect(localBranchExists(repo, 'work/m-stay')).toBe(true);
+		// The work still landed on arbiter main (integration is unaffected).
+		expect(existsOnArbiterMain(repo, 'done', 'm-stay')).toBe(true);
+	});
+
+	it('propose --no-switch: stays on work branch and keeps it', async () => {
+		const {repo} = await claimAndBranch('p-stay');
+		agentEdits(repo);
+		const result = await performComplete({
+			slug: 'p-stay',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			noSwitch: true,
+			verify: PASS,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.switchedTo).toBe('work/p-stay');
+		expect(currentBranch(repo)).toBe('work/p-stay');
+		expect(result.deletedLocalBranch).toBeFalsy();
+		expect(localBranchExists(repo, 'work/p-stay')).toBe(true);
+		// The branch was still pushed for review (integration is unaffected).
+		expect(remoteBranchExists(repo, 'work/p-stay')).toBe(true);
 	});
 });

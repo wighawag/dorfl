@@ -26,6 +26,21 @@ import {runAsync, type RunResult} from './git.js';
  *             the next step. Full provider-driven PR/MR creation lands with the
  *             integration seam; until then `complete` pushes + tells the human.
  *
+ * In BOTH modes `complete` lands the human back on local `main` by default
+ * ("finish, ready for the next thing") — but the move differs because the work's
+ * location differs: `merge` switches to `main` AND fast-forwards it to the just-
+ * pushed `<arbiter>/main` (the work landed there); `propose` ONLY `git switch
+ * main` (arbiter main has not moved, so there is nothing to ff). `--no-switch`
+ * opts out in either mode (stay on `work/<slug>` to keep iterating).
+ *
+ * After landing on `main`, the LOCAL `work/<slug>` branch is deleted iff its work
+ * is provably on the arbiter (the SAME predicate as worktree deletion, ADR §4,
+ * mode-agnostic): its tip is an ancestor of `<arbiter>/main` (merged) OR
+ * `<arbiter>/work/<slug>` exists with its tip == the local tip (pushed & up-to-
+ * date). Otherwise the branch is KEPT (unmerged / unpushed / a diverged un-pushed
+ * amend = not safe). The REMOTE branch is NEVER deleted (a propose PR is built
+ * from it). `--no-switch` keeps the branch too.
+ *
  * Before integrating, the work branch is rebased onto the latest `<arbiter>/main`
  * (ADR §10): a clean rebase continues; a conflicting rebase is `--abort`ed and
  * surfaced as needs-attention — `complete` NEVER auto-resolves. It NEVER
@@ -53,6 +68,12 @@ export interface CompleteOptions {
 	arbiter?: string;
 	/** Integration mode: `propose` (default) or `merge`. */
 	integration?: IntegrationMode;
+	/**
+	 * Leave the human ON the `work/<slug>` branch (and KEEP it) in either mode,
+	 * instead of switching back to `main` + deleting the provably-landed branch.
+	 * For "I'll keep iterating on this branch" (e.g. addressing review feedback).
+	 */
+	noSwitch?: boolean;
 	/** The declared per-repo gate (string | list). Unset ⇒ the default command. */
 	verify?: VerifyConfig;
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
@@ -82,6 +103,10 @@ export interface CompleteResult {
 	commitMessage?: string;
 	/** True when the work landed on the arbiter's `main` (merge mode). */
 	mergedToMain?: boolean;
+	/** The branch HEAD ended on after completing (`main`, or the work branch). */
+	switchedTo?: string;
+	/** True iff the local `work/<slug>` branch was deleted (provably on arbiter). */
+	deletedLocalBranch?: boolean;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -89,6 +114,33 @@ export interface CompleteResult {
 const DEFAULT_ARBITER = 'origin';
 const DEFAULT_TYPE = 'feat';
 const DEFAULT_INTEGRATION: IntegrationMode = 'propose';
+
+/**
+ * Resolve the integration mode the human asked for ON THIS invocation from the
+ * mutually-exclusive `--merge` / `--propose` flags. Returns the explicit mode,
+ * or `undefined` when neither flag was given (per-repo > global > default then
+ * decides). Throws when BOTH are given (they are mutually exclusive). This is
+ * the TOP of the complete-time precedence chain (flag > per-repo > global >
+ * default); the autonomous runner uses no flag and so resolves the same
+ * underlying order.
+ */
+export function integrationFromFlags(flags: {
+	merge?: boolean;
+	propose?: boolean;
+}): IntegrationMode | undefined {
+	if (flags.merge && flags.propose) {
+		throw new Error(
+			'--merge and --propose are mutually exclusive; pass at most one.',
+		);
+	}
+	if (flags.merge) {
+		return 'merge';
+	}
+	if (flags.propose) {
+		return 'propose';
+	}
+	return undefined;
+}
 
 /** Raised for usage/environment errors (exit 1, outcome 'usage-error'). */
 class CompleteUsageError extends Error {}
@@ -241,11 +293,37 @@ async function runComplete(
 	});
 	const result = integrator.integrate({cwd, arbiter, branch, mode, env});
 
+	// Land back on `main` by default in BOTH modes (the move differs per mode),
+	// then delete the local work branch iff its work is provably on the arbiter.
+	// `--no-switch` keeps the human on the work branch AND keeps the branch.
+	let switchedTo = branch;
+	let deletedLocalBranch = false;
+	if (!options.noSwitch) {
+		if (mode === 'merge') {
+			// merge: the work landed on <arbiter>/main, so switch to main AND ff it.
+			await syncLocalMain(cwd, arbiter, env);
+		} else {
+			// propose: the work is on a pushed branch awaiting review, NOT on main,
+			// so JUST switch to main — do NOT ff (arbiter main has not moved).
+			await gitHard(['switch', '--quiet', 'main'], cwd, env);
+		}
+		switchedTo = 'main';
+		// Delete the LOCAL work branch when provably on the arbiter (same predicate
+		// as worktree deletion, ADR §4, mode-agnostic). NEVER delete the remote.
+		deletedLocalBranch = await deleteLocalBranchIfProvablyOnArbiter(
+			cwd,
+			arbiter,
+			branch,
+			env,
+		);
+	}
+
 	if (mode === 'merge') {
-		// The push to <arbiter>/main is authoritative; now sync the LOCAL clone so
-		// the user ends on an up-to-date local main (not a stale one).
-		await syncLocalMain(cwd, arbiter, env);
-		const message = `Completed '${slug}': merged to ${arbiter}/main; local main updated.`;
+		const landed = options.noSwitch
+			? `merged to ${arbiter}/main; left on ${branch} (--no-switch).`
+			: `merged to ${arbiter}/main; local main updated` +
+				`${deletedLocalBranch ? ` and ${branch} deleted` : ''}.`;
+		const message = `Completed '${slug}': ${landed}`;
 		note(message);
 		return {
 			exitCode: 0,
@@ -253,16 +331,24 @@ async function runComplete(
 			branch,
 			commitMessage,
 			mergedToMain: result.mergedToMain,
+			switchedTo,
+			deletedLocalBranch,
 			message,
 		};
 	}
 
 	// propose: the branch is pushed; report the next step.
-	const message = result.requestOpened
-		? `Completed '${slug}': pushed ${branch} and opened a review.`
-		: `Completed '${slug}': pushed ${branch} to ${arbiter}. ` +
+	const next = result.requestOpened
+		? `pushed ${branch} and opened a review`
+		: `pushed ${branch} to ${arbiter}. ` +
 			'Open a PR/MR to land it on main (full provider PR creation comes with ' +
-			'the integration seam).';
+			'the integration seam)';
+	const tail = options.noSwitch
+		? `; left on ${branch} (--no-switch).`
+		: deletedLocalBranch
+			? `; switched to main and deleted ${branch}.`
+			: '; switched to main.';
+	const message = `Completed '${slug}': ${next}${tail}`;
 	note(message);
 	return {
 		exitCode: 0,
@@ -270,6 +356,8 @@ async function runComplete(
 		branch,
 		commitMessage,
 		mergedToMain: false,
+		switchedTo,
+		deletedLocalBranch,
 		message,
 	};
 }
@@ -308,6 +396,90 @@ async function syncLocalMain(
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(['switch', '--quiet', 'main'], cwd, env);
 	await gitHard(['merge', '--ff-only', '--quiet', `${arbiter}/main`], cwd, env);
+}
+
+/**
+ * Delete the LOCAL `work/<slug>` branch iff its work is PROVABLY on the arbiter
+ * — the SAME predicate as worktree deletion (ADR §4), mode-agnostic. Must be
+ * called AFTER we have switched off the branch (you cannot delete the branch you
+ * are on). Returns whether the local branch was deleted.
+ *
+ * Provably-on-arbiter ⇔ EITHER:
+ *   - merged: the branch tip is an ancestor of `<arbiter>/main`, OR
+ *   - pushed & up-to-date: `<arbiter>/<branch>` exists AND its tip == the local
+ *     branch tip (so a later un-pushed amend is NEVER lost — we verify the
+ *     remote tip equals the local tip, not merely that "a branch was pushed").
+ *
+ * Otherwise the branch is KEPT (unmerged / unpushed / diverged = not safe). The
+ * REMOTE branch is NEVER touched (a propose PR is built from it). A `git fetch`
+ * refreshes the remote-tracking refs so reachability is read against the LIVE
+ * arbiter; an unreachable arbiter simply reads as not-provable → keep (safe).
+ */
+async function deleteLocalBranchIfProvablyOnArbiter(
+	cwd: string,
+	arbiter: string,
+	branch: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<boolean> {
+	if (!(await isLocalBranchProvablyOnArbiter(cwd, arbiter, branch, env))) {
+		return false; // not provably on the arbiter → KEEP the local branch
+	}
+	// Provably on the arbiter → delete ONLY the local branch (force-delete: the
+	// `-d` safety check uses the upstream/HEAD, which we have already proven via
+	// the predicate above; `-D` avoids a false "not fully merged" in propose mode).
+	await gitHard(['branch', '-D', branch], cwd, env);
+	return true;
+}
+
+/**
+ * The provably-safe predicate (ADR §4), mode-agnostic, applied to a LOCAL
+ * `branch` in `cwd`: true iff its tip is an ancestor of `<arbiter>/main` (merged)
+ * OR `<arbiter>/<branch>` exists with its tip == the local tip (pushed &
+ * up-to-date). False when the local branch is absent, or its work is unmerged /
+ * unpushed / a diverged un-pushed amend (remote tip != local tip). A `git fetch`
+ * refreshes the remote-tracking refs; an unreachable arbiter reads as not-
+ * provable → false (the safe direction). Exported for direct testing of the
+ * kept-vs-deleted decision in isolation.
+ */
+export async function isLocalBranchProvablyOnArbiter(
+	cwd: string,
+	arbiter: string,
+	branch: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<boolean> {
+	const localTip = (
+		await gitSoft(['rev-parse', '--verify', '--quiet', branch], cwd, env)
+	).stdout.trim();
+	if (localTip === '') {
+		return false; // no such local branch
+	}
+
+	// Refresh remote-tracking refs against the live arbiter (best-effort).
+	await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
+
+	// Merged: tip is an ancestor of <arbiter>/main.
+	const merged =
+		(
+			await gitSoft(
+				['merge-base', '--is-ancestor', localTip, `${arbiter}/main`],
+				cwd,
+				env,
+			)
+		).status === 0;
+	if (merged) {
+		return true;
+	}
+
+	// Pushed & up-to-date: <arbiter>/<branch> exists AND its tip == the local tip
+	// (we verify remote-tip == local-tip so a later un-pushed amend is never lost).
+	const remoteTip = (
+		await gitSoft(
+			['rev-parse', '--verify', '--quiet', `refs/remotes/${arbiter}/${branch}`],
+			cwd,
+			env,
+		)
+	).stdout.trim();
+	return remoteTip !== '' && remoteTip === localTip;
 }
 
 /**
