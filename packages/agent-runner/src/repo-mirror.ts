@@ -162,6 +162,26 @@ function resolveUrl(options: EnsureMirrorOptions): string {
 	);
 }
 
+/**
+ * Fetch ONLY `main` from the arbiter into an existing bare mirror, WITHOUT
+ * `--prune`. Use this when the mirror also holds LOCAL-ONLY branches that must
+ * survive (e.g. the `work/<slug>` branches of live worktrees): the full
+ * mirror-style `+refs/heads/*:refs/heads/*` fetch in {@link ensureMirror} prunes
+ * any local head absent on the arbiter, which would delete (and corrupt) a
+ * checked-out `work/<slug>` worktree branch. This refreshes `main` to the latest
+ * arbiter tip while leaving every other local ref untouched. Returns the fresh
+ * `main` tip.
+ */
+export function fetchMirrorMain(
+	mirrorDir: string,
+	env?: NodeJS.ProcessEnv,
+): string {
+	git(['fetch', 'origin', '+refs/heads/main:refs/heads/main'], mirrorDir, {
+		env,
+	});
+	return mirrorMainSha(mirrorDir, env);
+}
+
 /** The bare mirror's `main` tip (40-hex sha), as freshly fetched. */
 export function mirrorMainSha(
 	mirrorDir: string,

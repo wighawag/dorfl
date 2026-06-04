@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {Command} from 'commander';
 import type {Command as Commander} from 'commander';
+import {createInterface} from 'node:readline';
 import {
 	loadConfig,
 	mergeConfig,
@@ -12,6 +13,11 @@ import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
+import {
+	performWorkOn,
+	loadHumanWorktreesDir,
+	persistHumanWorktreesDir,
+} from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
 import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
@@ -80,6 +86,26 @@ function collect(value: string, previous: string[]): string[] {
 	return previous.concat([value]);
 }
 
+/**
+ * First-use prompt for the human worktree root (`work-on`). Offers `suggestion`
+ * as the default (Enter accepts it); a blank non-interactive answer aborts. The
+ * prompt goes to stderr so `--print-dir`'s stdout stays clean.
+ */
+function promptForWorktreesRoot(suggestion: string): Promise<string> {
+	return new Promise((resolvePrompt) => {
+		const rl = createInterface({input: process.stdin, output: process.stderr});
+		rl.question(
+			'work-on needs a human worktree root (NOT under ~/.agent-runner). ' +
+				`Where should parallel worktrees live? [${suggestion}] `,
+			(answer) => {
+				rl.close();
+				const trimmed = answer.trim();
+				resolvePrompt(trimmed === '' ? suggestion : trimmed);
+			},
+		);
+	});
+}
+
 interface RunFlags extends ScanFlags {
 	once?: boolean;
 	maxParallel?: string;
@@ -134,6 +160,18 @@ interface StartFlags {
 	resume?: boolean;
 	force?: boolean;
 	ignoreNotReady?: boolean;
+}
+
+interface WorkOnFlags {
+	config?: string;
+	arbiter?: string;
+	by?: string;
+	copy?: string;
+	copyFrom?: string;
+	force?: boolean;
+	ignoreNotReady?: boolean;
+	printDir?: boolean;
+	workspace?: string;
 }
 
 interface CompleteFlags {
@@ -417,6 +455,95 @@ export function buildProgram(): Command {
 			}
 			process.exit(result.exitCode);
 		});
+
+	program
+		.command('work-on')
+		.description(
+			'HUMAN command: claim a slice and create an isolated worktree in a human-friendly location (under config humanWorktreesDir, NEVER ~/.agent-runner) for parallel work. Two forms: `work-on <slug>` (infer the arbiter from the current repo) and `work-on <remote> <slug>` (ensure a hub mirror via repo-mirror, creating if absent). BOTH claim, then always fetch + branch work/<slug> off the freshly-fetched <arbiter>/main — same claim, same starting commit; only the worktree LOCATION differs. --copy <patterns> copies named gitignored files (copy, not symlink; --copy-from required in remote mode) with a security notice. A binary cannot cd your shell: it prints the path + a cd hint; --print-dir emits the path only, for `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`.',
+		)
+		.argument(
+			'<remoteOrSlug>',
+			'the slug (in-repo form) OR the remote (when a second slug arg follows)',
+		)
+		.argument(
+			'[slug]',
+			'the slug, when the first argument is a <remote> (remote form)',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote in the current repo (in-repo form; default: origin)',
+			'origin',
+		)
+		.option('--by <who>', 'advisory claimer id forwarded to the claim CAS')
+		.option(
+			'--copy <patterns>',
+			'comma-separated gitignored filenames to COPY into the worktree (e.g. .env.local,.env). In-repo: from the current repo; remote: requires --copy-from. Copy, not symlink.',
+		)
+		.option(
+			'--copy-from <path>',
+			'source dir for --copy in the remote form (required there; there is no implicit current repo)',
+		)
+		.option(
+			'--print-dir',
+			'print ONLY the worktree path to stdout (for a shell wrapper: work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; })',
+		)
+		.option(
+			'--workspace <dir>',
+			'execution working area for hub mirrors (default: workspacesDir / ~/.agent-runner)',
+		)
+		.option(
+			'--force',
+			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
+		)
+		.option(
+			'--ignore-not-ready',
+			'alias of --force for the readiness guard override',
+		)
+		.action(
+			async (
+				remoteOrSlug: string,
+				slug: string | undefined,
+				flags: WorkOnFlags,
+			) => {
+				// Disambiguate the two forms positionally: one arg ⇒ in-repo `<slug>`;
+				// two args ⇒ remote `<remote> <slug>`.
+				const remote = slug !== undefined ? remoteOrSlug : undefined;
+				const theSlug = slug !== undefined ? slug : remoteOrSlug;
+
+				const configPath = flags.config ?? defaultConfigPath();
+				const {dir: configuredRoot, config} = loadHumanWorktreesDir(configPath);
+				const workspace = flags.workspace ?? config.workspacesDir;
+
+				// --print-dir wants a clean stdout, so all human-facing notes go to
+				// stderr; the path is the ONLY thing on stdout (printed below).
+				const printDir = flags.printDir === true;
+				const result = await performWorkOn({
+					slug: theSlug,
+					remote,
+					cwd: process.cwd(),
+					arbiter: flags.arbiter ?? 'origin',
+					by: flags.by,
+					copy: flags.copy,
+					copyFrom: flags.copyFrom,
+					override: flags.force === true || flags.ignoreNotReady === true,
+					workspacesDir: workspace,
+					humanWorktreesDir: configuredRoot,
+					promptForRoot: (suggestion) => promptForWorktreesRoot(suggestion),
+					saveRoot: (chosen) => persistHumanWorktreesDir(chosen, configPath),
+					note: (message) => console.error(`>> ${message}`),
+				});
+				if (result.exitCode !== 0) {
+					console.error(`error: ${result.message}`);
+					process.exit(result.exitCode);
+				}
+				if (printDir) {
+					// Path only on stdout, so `cd "$(... --print-dir)"` works.
+					process.stdout.write(`${result.dir}\n`);
+				}
+				process.exit(0);
+			},
+		);
 
 	program
 		.command('prompt')

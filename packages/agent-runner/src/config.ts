@@ -1,6 +1,6 @@
-import {readFileSync, existsSync} from 'node:fs';
+import {readFileSync, writeFileSync, existsSync, mkdirSync} from 'node:fs';
 import {homedir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 
 /**
  * How a completed item is integrated back to the arbiter's `main`. `merge` lands
@@ -59,6 +59,17 @@ export interface Config {
 	 * relocate it.
 	 */
 	arbitersDir: string;
+	/**
+	 * Where the HUMAN `work-on` command checks out its parallel worktrees:
+	 * `<dir>/<key>/<slug>/` on branch `work/<slug>`. This is a **human-only**,
+	 * editor-facing area — deliberately NOT under `~/.agent-runner/` (the agents'
+	 * execution state, ADR §3), so a `work-on` worktree never carries the human's
+	 * secrets into an agent context. It is intentionally OPTIONAL with **no silent
+	 * default**: `work-on` prompts for it on first use and saves it here (offering a
+	 * sensible suggestion that does NOT share a prefix with the user's code dirs, so
+	 * shell tab-completion never collides). `undefined` ⇒ not yet configured.
+	 */
+	humanWorktreesDir?: string;
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
@@ -117,6 +128,18 @@ export function mergeConfig(overrides: PartialConfig): Config {
 		}
 	}
 	return merged;
+}
+
+/**
+ * Persist `config` to `path` as pretty JSON (creating the parent dir). Used by
+ * `work-on` to SAVE the prompted `humanWorktreesDir` on first use so the human is
+ * never asked again. Only the keys present in `config` are written — we round-trip
+ * whatever the loader produced (defaults + file + the new key), which keeps the
+ * on-disk file explicit and stable.
+ */
+export function saveConfig(config: PartialConfig, path: string): void {
+	mkdirSync(dirname(path), {recursive: true});
+	writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
 }
 
 /**

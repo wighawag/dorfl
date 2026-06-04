@@ -83,6 +83,22 @@ dogfooding itself (it tracks its own work in its own `work/`).
   (the shared `repo-mirror` primitive); cheap shared object store.
 - **worktree** — a job's isolated working tree off the hub mirror, under
   `~/.agent-runner/work/<work-id>/`, on branch `work/<slug>`. (ADR §2.)
+- **human worktree** (`work-on`) — the HUMAN counterpart of a job worktree: an
+  isolated worktree off the hub mirror on `work/<slug>`, but checked out under a
+  **human-friendly** root (`humanWorktreesDir`, e.g. `~/worktrees/<key>/<slug>/`)
+  so a person can edit several slices in parallel. Deliberately NOT under
+  `~/.agent-runner/` (the agents' area) — so it never carries a human's secrets
+  into an agent context. Two forms (`work-on <slug>` in-repo, `work-on <remote>
+  <slug>` anywhere): the ONLY difference is the worktree's LOCATION — both claim
+  the slug and branch off the freshly-fetched `<arbiter>/main` (same claim, same
+  starting commit). `--copy <patterns>` copies named gitignored files (copy, not
+  symlink; `--copy-from` required in the remote form) with a security notice. A
+  binary can't `cd` your shell, so it prints the path + a `cd` hint; `--print-dir`
+  emits the path only, for a shell wrapper:
+  `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`.
+- **humanWorktreesDir** — config root for human worktrees, prompted + saved on
+  first use (sensible suggestion, no silent default; chosen to NOT share a prefix
+  with code dirs so shell tab-completion never collides). Never `~/.agent-runner/`.
 - **work-id** — flat, deterministic key for a job:
   `<host-...>__<org>__<name>__<slug>` (the repo key with `.`→`-`, then the slug).
 - **repo key** — hierarchical `host/org/name` with `.`→`-` per segment
@@ -100,9 +116,13 @@ dogfooding itself (it tracks its own work in its own `work/`).
 
 ## The two faces (commands)
 
-- **Human loop:** `scan` (cross-repo queue) → `start` (claim + onboard) →
-  `prompt` (emit the work-agent prompt) → build → `verify` → `complete` (gate +
-  done-move + commit + integrate). `work-on` for parallel human worktrees.
+- **Human loop:** `scan` (cross-repo queue) → `start` (claim + onboard in the
+  CURRENT checkout) → `prompt` (emit the work-agent prompt) → build → `verify` →
+  `complete` (gate + done-move + commit + integrate). **`work-on`** is the
+  parallel-work variant of `start`: instead of onboarding the current checkout it
+  claims + creates an isolated **human worktree** in a human-friendly location
+  (so several slices can be open at once); in-repo and remote forms differ only in
+  where that worktree lives.
 - **Autonomous:** `run --once` (claim N eligible, run agents in isolation,
   integrate, stop) and `watch` (bounded loop over `run --once` with safety rails).
 

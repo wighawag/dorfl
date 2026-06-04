@@ -8,6 +8,7 @@ export {
 	DEFAULT_CONFIG,
 	mergeConfig,
 	loadConfig,
+	saveConfig,
 	defaultConfigPath,
 } from './config.js';
 
@@ -77,6 +78,14 @@ export {performClaim} from './claim-cas.js';
 export type {StartOutcome, StartOptions, StartResult} from './start.js';
 export {performStart} from './start.js';
 
+export type {WorkOnOutcome, WorkOnOptions, WorkOnResult} from './work-on.js';
+export {
+	performWorkOn,
+	suggestHumanWorktreesDir,
+	loadHumanWorktreesDir,
+	persistHumanWorktreesDir,
+} from './work-on.js';
+
 export type {ReadinessVerdict, ResolveReadinessOptions} from './readiness.js';
 export {resolveReadiness} from './readiness.js';
 
@@ -92,6 +101,7 @@ export {
 	encodeRepoKey,
 	mirrorPath,
 	ensureMirror,
+	fetchMirrorMain,
 	mirrorMainSha,
 } from './repo-mirror.js';
 
