@@ -3,6 +3,7 @@ export type {
 	PartialConfig,
 	IntegrationMode,
 	HarnessAdapter,
+	ReviewProviderName,
 	VerifyConfig,
 } from './config.js';
 export {
@@ -157,6 +158,18 @@ export {
 	rebaseOntoArbiterMain,
 	arbiterMainContains,
 } from './integrator.js';
+
+export type {
+	ProviderName,
+	SelectProviderOptions,
+	GitHubProviderOptions,
+} from './github.js';
+export {
+	GitHubProvider,
+	isGitHubArbiterUrl,
+	selectProvider,
+	DEFAULT_GH_BIN,
+} from './github.js';
 
 export type {
 	ItemStatus,

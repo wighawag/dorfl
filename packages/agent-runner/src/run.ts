@@ -12,10 +12,10 @@ import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {git, gitMv} from './git.js';
 import {
 	Integrator,
-	NoneProvider,
 	type ReviewProvider,
 	type IntegrateResult,
 } from './integrator.js';
+import {selectProvider} from './github.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -151,8 +151,10 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	const harness =
 		options.harness ??
 		createHarness({harness: config.harness, piBin: config.piBin});
-	const provider = options.provider ?? new NoneProvider();
-	const integrator = new Integrator({provider});
+	// An explicitly-injected provider (tests / embedding) wins over per-item
+	// auto-detection; otherwise each item selects its own provider from its
+	// arbiter URL + the resolved per-repo `provider` override (see runOneItem).
+	const provider = options.provider;
 	const workspace = options.workspace ?? config.workspacesDir;
 	const env = options.env;
 
@@ -165,7 +167,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 				agentRunner: options.agentRunner,
 				harness,
 				testGate,
-				integrator,
+				provider,
 				openPr: options.openPr,
 				env,
 				onWarn: options.onWarn,
@@ -199,7 +201,8 @@ interface OneItemContext {
 	agentRunner?: AgentRunner;
 	harness: Harness;
 	testGate: TestGate;
-	integrator: Integrator;
+	/** An explicitly-injected provider that overrides per-item auto-detection. */
+	provider?: ReviewProvider;
 	openPr?: (opts: {
 		cwd: string;
 		branch: string;
@@ -314,10 +317,22 @@ async function runOneItem(
 		// 7. Rebase-before-integrate (ADR §10) then integrate per mode. A
 		//    conflicting rebase is aborted + routed to needs-attention (never
 		//    auto-resolved); integration never --forces.
-		const provider = ctx.openPr ? bridgeProvider(ctx.openPr) : undefined;
-		const integratorForItem = provider
-			? new Integrator({provider})
-			: ctx.integrator;
+		//
+		// Provider selection (ADR §6, `propose` mode): an injected `openPr` wins
+		// (the legacy test bridge); otherwise pick by the per-repo `provider`
+		// override LAYERED OVER auto-detection from the ARBITER URL (a GitHub
+		// remote ⇒ the `gh` provider). We key detection off the mirror's resolved
+		// arbiter URL (`job.mirror.url`), not the in-worktree remote NAME. If `gh`
+		// is absent/unauthenticated the GitHub provider degrades to push-only at
+		// runtime — never a hard failure (the branch is already pushed).
+		const provider = ctx.openPr
+			? bridgeProvider(ctx.openPr)
+			: (ctx.provider ??
+				selectProvider({
+					arbiterUrl: job.mirror.url,
+					provider: config.provider,
+				}));
+		const integratorForItem = new Integrator({provider});
 		const outcome = integratorForItem.integrateWithRebase({
 			cwd: job.dir,
 			// Inside the job worktree the arbiter is the mirror's clone remote
@@ -337,7 +352,10 @@ async function runOneItem(
 			return {...base, status: 'needs-attention', detail: outcome.reason};
 		}
 
-		updateJobRecord(job.dir, {state: 'done'});
+		// Record the PR/MR URL on the job (surfaced by `status`) when a provider
+		// opened one (propose + a real provider that reported a URL).
+		const prUrl = outcome.integration?.url;
+		updateJobRecord(job.dir, {state: 'done', prUrl});
 		return {...base, status: 'claimed-done', integration: outcome.integration};
 	} finally {
 		// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion

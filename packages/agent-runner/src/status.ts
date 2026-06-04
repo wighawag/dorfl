@@ -59,6 +59,12 @@ export interface JobStatus {
 	 * reason; absent otherwise.
 	 */
 	reason?: string;
+	/**
+	 * The review-request URL (e.g. a GitHub PR) opened for this job, when a
+	 * `propose`-mode provider opened one (ADR §6). Surfaced so the human can jump
+	 * straight to the PR. Absent otherwise.
+	 */
+	prUrl?: string;
 	/** Absolute path to the job worktree (for the human to look). */
 	dir: string;
 }
@@ -175,6 +181,7 @@ function toJobStatus(job: GcJob, forced: Harness | undefined): JobStatus {
 		state: record?.state ?? 'running',
 		alive,
 		reason: record?.reason,
+		prUrl: record?.prUrl,
 		dir: job.dir,
 	};
 }
@@ -249,10 +256,14 @@ export function formatStatus(report: StatusReport): string {
 function formatJobLine(job: JobStatus): string {
 	const marker = jobMarker(job);
 	const head = `  ${job.slug}   ${job.repo}   ${job.branch}   started ${job.startedAt}${marker}`;
+	const extra: string[] = [];
 	if (job.reason !== undefined && job.reason !== '') {
-		return `${head}\n      reason: ${job.reason}`;
+		extra.push(`      reason: ${job.reason}`);
 	}
-	return head;
+	if (job.prUrl !== undefined && job.prUrl !== '') {
+		extra.push(`      PR: ${job.prUrl}`);
+	}
+	return extra.length > 0 ? [head, ...extra].join('\n') : head;
 }
 
 /**

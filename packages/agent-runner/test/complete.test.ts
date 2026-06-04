@@ -4,6 +4,7 @@ import {
 	writeFileSync,
 	readFileSync,
 	existsSync,
+	chmodSync,
 	rmSync,
 } from 'node:fs';
 import {join} from 'node:path';
@@ -335,6 +336,40 @@ describe('complete — merge integration', () => {
 });
 
 describe('complete — propose integration', () => {
+	it('provider: github degrades to push-only (exit 0) when gh is unauthenticated', async () => {
+		const {repo} = await claimAndBranch('gh-degrade');
+		agentEdits(repo);
+		// Simulate an unauthenticated `gh`: prepend a stub `gh` that exits non-zero
+		// onto PATH (keeping the real git etc. available). The GitHub provider must
+		// degrade (never hard-fail) — the branch is still pushed, so the human path
+		// stays safe.
+		const stubBin = join(scratch.root, 'gh-stub-bin');
+		mkdirSync(stubBin, {recursive: true});
+		const ghStub = join(stubBin, 'gh');
+		writeFileSync(ghStub, '#!/usr/bin/env bash\nexit 1\n');
+		chmodSync(ghStub, 0o755);
+		const result = await performComplete({
+			slug: 'gh-degrade',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github', // explicit override → GitHubProvider selected
+			verify: PASS,
+			env: {...gitEnv(), PATH: `${stubBin}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		expect(result.prUrl).toBeUndefined();
+		// Deletion-safety is unaffected: the branch was pushed to the arbiter.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const pushed = gitIn(
+			['rev-parse', '--verify', `${ARBITER}/work/gh-degrade`],
+			repo,
+		).trim();
+		expect(pushed).not.toBe('');
+		expect(existsOnArbiterMain(repo, 'done', 'gh-degrade')).toBe(false);
+	});
+
 	it('pushes the work branch (not main) and reports the next step', async () => {
 		const {repo} = await claimAndBranch('zeta');
 		agentEdits(repo);

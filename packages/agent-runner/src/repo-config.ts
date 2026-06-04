@@ -38,6 +38,7 @@ export const REPO_CONFIG_FILENAME = '.agent-runner.json';
  */
 export const REPO_ALLOWED_KEYS = [
 	'integration',
+	'provider',
 	'verify',
 	'defaultArbiter',
 	'allowAgents',

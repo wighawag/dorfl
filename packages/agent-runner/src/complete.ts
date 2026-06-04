@@ -3,7 +3,8 @@ import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
 import {Integrator} from './integrator.js';
 import type {ReviewProvider} from './integrator.js';
-import type {IntegrationMode} from './config.js';
+import {selectProvider} from './github.js';
+import type {IntegrationMode, ReviewProviderName} from './config.js';
 import {runAsync, type RunResult} from './git.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
 import {routeToNeedsAttention} from './needs-attention.js';
@@ -100,6 +101,13 @@ export interface CompleteOptions {
 		branch: string;
 		env?: NodeJS.ProcessEnv;
 	}) => void;
+	/**
+	 * The review-request provider override (config `provider`, ADR §6). Unset ⇒
+	 * auto-detect from the arbiter URL (a GitHub remote ⇒ `gh pr create`, else
+	 * push-only `none`); an explicit value forces a provider. Ignored when
+	 * `openPr` is injected (the legacy bridge wins). `merge` mode ignores it.
+	 */
+	provider?: ReviewProviderName;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -139,6 +147,12 @@ export interface CompleteResult {
 	switchedTo?: string;
 	/** True iff the local `work/<slug>` branch was deleted (provably on arbiter). */
 	deletedLocalBranch?: boolean;
+	/**
+	 * The review-request URL (e.g. a GitHub PR) opened in `propose` mode, when a
+	 * provider opened one and reported it (ADR §6). Absent in merge mode and on
+	 * the push-only / degraded path.
+	 */
+	prUrl?: string;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -341,11 +355,18 @@ async function runComplete(
 
 	// 5. Integrate per mode via the integration seam (ADR §6). The rebase above
 	//    already brought the branch up to date, so we use `integrate` (not
-	//    `integrateWithRebase`). It never --forces. The legacy `openPr` callback
-	//    is bridged to a ReviewProvider so a real provider can be slotted later.
-	const integrator = new Integrator({
-		provider: options.openPr ? bridgeProvider(options.openPr) : undefined,
-	});
+	//    `integrateWithRebase`). It never --forces. Provider selection: an injected
+	//    `openPr` wins (legacy bridge); otherwise pick by the `provider` override
+	//    LAYERED OVER auto-detection from the arbiter's remote URL (a GitHub remote
+	//    ⇒ `gh pr create`, else push-only `none`). A missing/unauthenticated `gh`
+	//    degrades to push-only at runtime — never a hard failure.
+	const provider = options.openPr
+		? bridgeProvider(options.openPr)
+		: selectProvider({
+				arbiterUrl: await arbiterUrl(cwd, arbiter, env),
+				provider: options.provider,
+			});
+	const integrator = new Integrator({provider});
 	const result = integrator.integrate({cwd, arbiter, branch, mode, env});
 
 	// Land back on `main` by default in BOTH modes (the move differs per mode),
@@ -407,10 +428,10 @@ async function runComplete(
 		}),
 	);
 	const next = result.requestOpened
-		? `pushed ${branch} and opened a review`
-		: `pushed ${branch} to ${arbiter}. ` +
-			'Open a PR/MR to land it on main (full provider PR creation comes with ' +
-			'the integration seam)';
+		? result.url
+			? `pushed ${branch} and opened a review (${result.url})`
+			: `pushed ${branch} and opened a review`
+		: `pushed ${branch} to ${arbiter}. ` + 'Open a PR/MR to land it on main';
 	const tail = options.noSwitch
 		? `; left on ${branch} (--no-switch).`
 		: deletedLocalBranch
@@ -426,8 +447,26 @@ async function runComplete(
 		mergedToMain: false,
 		switchedTo,
 		deletedLocalBranch,
+		prUrl: result.url,
 		message,
 	};
+}
+
+/**
+ * The arbiter's remote URL for `arbiter` in `cwd` (for provider auto-detection),
+ * or `undefined` when it cannot be resolved. Read-only; soft (never throws).
+ */
+async function arbiterUrl(
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string | undefined> {
+	const res = await gitSoft(['remote', 'get-url', arbiter], cwd, env);
+	if (res.status !== 0) {
+		return undefined;
+	}
+	const url = res.stdout.trim();
+	return url === '' ? undefined : url;
 }
 
 /** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */

@@ -44,6 +44,13 @@ export interface JobRecord {
 	 * Absent for `running`/`done` jobs.
 	 */
 	reason?: string;
+	/**
+	 * The URL of the review request opened for this job (e.g. a GitHub PR), when
+	 * `propose` mode + a real provider (ADR §6) opened one. Recorded so `status`
+	 * can surface it. Absent for merge mode, the push-only `none`/degraded path,
+	 * and jobs that have not integrated yet.
+	 */
+	prUrl?: string;
 	/** The harness block: how this job is launched + its liveness pointer. */
 	harness: HarnessRecord;
 }

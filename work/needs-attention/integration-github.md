@@ -69,3 +69,7 @@ The core never imports `gh`; only this adapter shells out to it.
 > selection, the expected `gh` invocation, and graceful degradation when `gh` is
 > absent. Match house style. "Done" = acceptance criteria met and `pnpm -r build
 > && pnpm -r test && pnpm -r format:check` green.
+
+## Needs attention
+
+acceptance gate failed (exit 1)

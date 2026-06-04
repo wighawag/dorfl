@@ -112,6 +112,7 @@ interface RunFlags extends ScanFlags {
 	perRepoMax?: string;
 	arbiter?: string;
 	integration?: string;
+	provider?: string;
 	agentCmd?: string;
 	harness?: string;
 	piBin?: string;
@@ -131,6 +132,9 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	}
 	if (flags.integration === 'propose' || flags.integration === 'merge') {
 		overrides.integration = flags.integration;
+	}
+	if (flags.provider === 'github' || flags.provider === 'none') {
+		overrides.provider = flags.provider;
 	}
 	if (flags.agentCmd !== undefined) {
 		overrides.agentCmd = flags.agentCmd;
@@ -324,6 +328,10 @@ export function buildProgram(): Command {
 		.option(
 			'--integration <mode>',
 			'integration mode: propose (default) or merge',
+		)
+		.option(
+			'--provider <name>',
+			'propose-mode review-request provider: github (gh pr create) or none (push-only). Default: auto-detect from the arbiter URL (a GitHub remote => github, else none).',
 		)
 		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
 		.option(
@@ -635,6 +643,7 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: config.integration,
+				provider: config.provider,
 				noSwitch: flags.switch === false,
 				verify: config.verify,
 				skipVerify: flags.skipVerify,

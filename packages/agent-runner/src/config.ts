@@ -18,6 +18,15 @@ export type IntegrationMode = 'propose' | 'merge';
 export type HarnessAdapter = 'null' | 'pi';
 
 /**
+ * The `propose`-mode review-request provider (ADR §6): `github` (`gh pr
+ * create`) or `none` (push-only + manual instructions). Normally LEFT UNSET so
+ * it auto-detects from the arbiter URL (a GitHub remote ⇒ `github`, else
+ * `none`); set it to force a provider (override detection). `merge` mode is
+ * provider-agnostic and ignores this.
+ */
+export type ReviewProviderName = 'none' | 'github';
+
+/**
  * The per-repo acceptance gate: a single shell command, or an ordered list of
  * commands run in sequence (all must pass). See `verify.ts` / ADR §8.
  */
@@ -79,6 +88,15 @@ export interface Config {
 	humanWorktreesDir?: string;
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
+	/**
+	 * The `propose`-mode review-request provider (ADR §6). Optional with NO
+	 * default so "unset" is distinguishable from an explicit value: unset ⇒
+	 * auto-detect from the arbiter URL (GitHub remote ⇒ `github`, else `none`);
+	 * an explicit `github`/`none` OVERRIDES detection. `merge` mode ignores it
+	 * (provider-agnostic git). The core never imports `gh`; only the GitHub
+	 * adapter shells out to it.
+	 */
+	provider?: ReviewProviderName;
 	/**
 	 * The command the runner shells out to for one slice. The runner appends the
 	 * built prompt on stdin; the command does NO git ops on the repo (the runner

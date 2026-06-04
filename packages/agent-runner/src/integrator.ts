@@ -47,6 +47,11 @@ export interface OpenRequestResult {
 	opened: boolean;
 	/** Human-readable next step / confirmation. */
 	instruction: string;
+	/**
+	 * The URL of the opened review request (e.g. a GitHub PR), when a provider
+	 * created one and could report it. Absent for push-only / degraded paths.
+	 */
+	url?: string;
 }
 
 /**
@@ -90,6 +95,12 @@ export interface IntegrateResult {
 	requestOpened: boolean;
 	/** Human-readable next step (propose mode). */
 	instruction?: string;
+	/**
+	 * The URL of the opened review request (e.g. a GitHub PR), when a provider
+	 * created one and reported it. Recorded in the job record / surfaced by
+	 * `status`. Absent in merge mode and on the push-only / degraded path.
+	 */
+	url?: string;
 }
 
 /** Outcome of the full rebase-then-integrate flow. */
@@ -147,6 +158,7 @@ export class Integrator {
 			provider: this.provider.name,
 			requestOpened: review.opened,
 			instruction: review.instruction,
+			url: review.url,
 		};
 	}
 
