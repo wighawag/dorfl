@@ -16,6 +16,7 @@ import {performComplete} from './complete.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
+import {status, formatStatus} from './status.js';
 
 interface ScanFlags {
 	config?: string;
@@ -135,6 +136,12 @@ interface GcFlags {
 	workspace?: string;
 	force?: boolean;
 	yes?: boolean;
+	json?: boolean;
+}
+
+interface StatusFlags {
+	config?: string;
+	workspace?: string;
 	json?: boolean;
 }
 
@@ -484,6 +491,28 @@ export function buildProgram(): Command {
 			console.log(
 				`Summary: ${result.reaped.length} reaped, ${result.retained.length} retained.`,
 			);
+		});
+
+	program
+		.command('status')
+		.description(
+			'Read-only operational dashboard of JOBS (distinct from scan’s backlog queue): list every job under workspacesDir/work/* from its .agent-runner-job.json record + worktree state, grouped active (running + alive) vs failed/retained (needs-attention with its reason, a crashed running-but-dead job, or a done-but-un-reaped one). Liveness comes from the harness seam (PID/session), NOT mtime. Never claims/runs/moves/deletes (deletion is gc).',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--workspace <dir>',
+			'execution working area to inspect (default: workspacesDir / ~/.agent-runner)',
+		)
+		.option('--json', 'output the raw report as JSON')
+		.action((flags: StatusFlags) => {
+			const config = loadConfig(flags.config);
+			const workspacesDir = flags.workspace ?? config.workspacesDir;
+			const report = status({workspacesDir});
+			if (flags.json) {
+				console.log(JSON.stringify(report, null, 2));
+			} else {
+				console.log(formatStatus(report));
+			}
 		});
 
 	return program;

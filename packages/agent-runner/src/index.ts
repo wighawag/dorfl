@@ -170,6 +170,9 @@ export {
 	discoverJobs,
 } from './gc.js';
 
+export type {JobStatus, StatusReport, StatusOptions} from './status.js';
+export {status, formatStatus} from './status.js';
+
 export type {
 	Category,
 	CategorisedItem,

@@ -291,7 +291,10 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		//    needs-attention (it never auto-merges; the worktree is the signal).
 		const gate = ctx.testGate({cwd: job.dir, slug, env: ctx.env});
 		if (!gate.green) {
-			updateJobRecord(job.dir, {state: 'needs-attention'});
+			updateJobRecord(job.dir, {
+				state: 'needs-attention',
+				reason: gate.detail ?? 'acceptance gate failed',
+			});
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
@@ -316,7 +319,10 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 			env: ctx.env,
 		});
 		if (outcome.outcome === 'needs-attention') {
-			updateJobRecord(job.dir, {state: 'needs-attention'});
+			updateJobRecord(job.dir, {
+				state: 'needs-attention',
+				reason: outcome.reason ?? 'needs attention',
+			});
 			return {...base, status: 'needs-attention', detail: outcome.reason};
 		}
 

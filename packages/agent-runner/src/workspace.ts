@@ -37,6 +37,13 @@ export interface JobRecord {
 	startedAt: string;
 	/** Lifecycle state; `gc`/`status` read this alongside the worktree's existence. */
 	state: JobState;
+	/**
+	 * Why the job is stuck, when `state` is `needs-attention` (ADR §12). The
+	 * runner records the reason it routed the job to needs-attention (a red gate,
+	 * a rebase conflict, …) so `status` can surface it without re-deriving it.
+	 * Absent for `running`/`done` jobs.
+	 */
+	reason?: string;
 	/** The harness block: how this job is launched + its liveness pointer. */
 	harness: HarnessRecord;
 }
