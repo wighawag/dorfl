@@ -19,11 +19,15 @@ import {ledgerRead} from './ledger-read.js';
  * never a source-of-truth frontmatter field.
  *
  * Ownership: this module OWNS the mechanism (the move helper + the surface
- * reader + the return path). Consumers (`agent-workspaces`'s rebase-conflict
- * path, `watch`'s timeout/failure) merely CALL `routeToNeedsAttention`. The
- * build agent NEVER does this — agents do no git (ADR §12). The DONE `complete`
- * command's abort paths are wired in by a SEPARATE follow-up slice
- * (`complete-needs-attention`), not here.
+ * reader + the return path). Consumers (`complete.ts`'s gate-failed/rebase-
+ * conflict abort paths, the runner's stuck routing in `run.ts`, the human
+ * `return` command) drive these through the ledger write seam's NEEDS-ATTENTION
+ * transition (`ledgerWrite.applyNeedsAttentionTransition` /
+ * `applyReturnToBacklogTransition` in `ledger-write.ts`), whose sole strategy
+ * delegates to `routeToNeedsAttention` / `returnToBacklog` here UNCHANGED — so
+ * the later cherry-pick-to-`main` surfacing is built AGAINST the seam, not
+ * bolted onto this move code. The build agent NEVER does this — agents do no git
+ * (ADR §12).
  */
 
 /** Marker that opens the appended reason block in a needs-attention item body. */

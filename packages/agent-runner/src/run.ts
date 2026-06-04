@@ -4,7 +4,7 @@ import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {performClaim} from './claim-cas.js';
 import {createJob, updateJobRecord, type Job} from './workspace.js';
-import {routeToNeedsAttention} from './needs-attention.js';
+import {ledgerWrite} from './ledger-write.js';
 import {reapJob} from './gc.js';
 import {NullHarness, type Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
@@ -312,8 +312,14 @@ async function runOneItem(
 			updateJobRecord(job.dir, {state: 'needs-attention', reason});
 			// Folder-native surfacing (ADR §12): bounce the work item itself from
 			// in-progress/ to needs-attention/ with the reason in its body, committed
-			// on the work branch. The runner owns this move (the agent does no git).
-			routeToNeedsAttention({cwd: job.dir, slug, reason, env: ctx.env});
+			// on the work branch, THROUGH the ledger write seam's needs-attention
+			// transition. The runner owns this move (the agent does no git).
+			ledgerWrite.applyNeedsAttentionTransition({
+				cwd: job.dir,
+				slug,
+				reason,
+				env: ctx.env,
+			});
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
@@ -354,8 +360,14 @@ async function runOneItem(
 			updateJobRecord(job.dir, {state: 'needs-attention', reason});
 			// Rebase conflict at integrate time (ADR §10): the item was already
 			// done-moved + committed at step 6, so route it from done/ to
-			// needs-attention/ — the same folder-native surfacing helper.
-			routeToNeedsAttention({cwd: job.dir, slug, reason, env: ctx.env});
+			// needs-attention/ — the same folder-native surfacing, dispatched through
+			// the ledger write seam's needs-attention transition.
+			ledgerWrite.applyNeedsAttentionTransition({
+				cwd: job.dir,
+				slug,
+				reason,
+				env: ctx.env,
+			});
 			return {...base, status: 'needs-attention', detail: outcome.reason};
 		}
 

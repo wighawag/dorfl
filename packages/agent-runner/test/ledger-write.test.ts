@@ -9,7 +9,8 @@ import {
 import * as ledgerWriteModule from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performComplete} from '../src/complete.js';
-import {writeFileSync} from 'node:fs';
+import {readNeedsAttentionItems} from '../src/needs-attention.js';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -44,6 +45,8 @@ describe('ledger-write seam — shape', () => {
 		expect(Object.keys(strategy)).toEqual([
 			'applyTransition',
 			'applyCompleteTransition',
+			'applyNeedsAttentionTransition',
+			'applyReturnToBacklogTransition',
 		]);
 	});
 });
@@ -177,5 +180,107 @@ describe('ledger-write seam — complete is dispatched THROUGH it', () => {
 		expect(result.mergedToMain).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(false);
+	});
+});
+
+describe('ledger-write seam — shape (needs-attention transition)', () => {
+	it('exposes the needs-attention + return-to-backlog transitions on the SAME strategy', () => {
+		expect(typeof currentLedgerWrite.applyNeedsAttentionTransition).toBe(
+			'function',
+		);
+		expect(typeof currentLedgerWrite.applyReturnToBacklogTransition).toBe(
+			'function',
+		);
+		expect(ledgerWrite).toBe(currentLedgerWrite);
+	});
+});
+
+describe('ledger-write seam — needs-attention is dispatched THROUGH it', () => {
+	/** Claim a slice, onboard onto its work branch, then leave uncommitted work. */
+	async function claimBranchAndEdit(slug: string): Promise<string> {
+		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
+		const claim = await performClaim({
+			slug,
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(claim.exitCode).toBe(0);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', '-c', `work/${slug}`, 'arbiter/main'], repo);
+		writeFileSync(`${repo}/feature.txt`, 'the work\n');
+		return repo;
+	}
+
+	it("complete's gate-failed abort routes needs-attention via the seam", async () => {
+		const repo = await claimBranchAndEdit('alpha');
+		const spy = vi.spyOn(
+			ledgerWriteModule.ledgerWrite,
+			'applyNeedsAttentionTransition',
+		);
+
+		const result = await performComplete({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			integration: 'propose',
+			// A RED gate so complete's abort path routes to needs-attention.
+			verify: 'exit 1',
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('gate-failed');
+		expect(result.routedToNeedsAttention).toBe(true);
+		expect(spy).toHaveBeenCalledTimes(1);
+		// The transition input is the storage-agnostic needs-attention shape — slug +
+		// reason prose, NOT a `main`/folder destination (the strategy owns that).
+		const input = spy.mock.calls[0][0];
+		expect(input.slug).toBe('alpha');
+		expect(input.reason).toMatch(/acceptance gate failed/);
+		expect(JSON.stringify(Object.keys(input))).not.toMatch(/main/i);
+	});
+
+	it('the strategy bounces the item to needs-attention (behaviour-identical)', async () => {
+		const repo = await claimBranchAndEdit('beta');
+		const res = ledgerWrite.applyNeedsAttentionTransition({
+			cwd: repo,
+			slug: 'beta',
+			reason: 'a stuck reason',
+			env: gitEnv(),
+		});
+		expect(res.moved).toBe(true);
+		expect(existsSync(`${repo}/work/in-progress/beta.md`)).toBe(false);
+		const dest = `${repo}/work/needs-attention/beta.md`;
+		expect(existsSync(dest)).toBe(true);
+		// Reason recorded as body PROSE (never a frontmatter field).
+		expect(readFileSync(dest, 'utf8')).toMatch(/a stuck reason/);
+		// surface (status) still reads the reason via readNeedsAttentionItems.
+		const items = readNeedsAttentionItems(repo);
+		expect(items.find((i) => i.slug === 'beta')?.reason).toMatch(
+			/a stuck reason/,
+		);
+	});
+
+	it('the return-to-backlog re-queue is dispatched via the seam', async () => {
+		const repo = await claimBranchAndEdit('gamma');
+		ledgerWrite.applyNeedsAttentionTransition({
+			cwd: repo,
+			slug: 'gamma',
+			reason: 'resolved later',
+			env: gitEnv(),
+		});
+		const spy = vi.spyOn(
+			ledgerWriteModule.ledgerWrite,
+			'applyReturnToBacklogTransition',
+		);
+		const res = ledgerWrite.applyReturnToBacklogTransition({
+			cwd: repo,
+			slug: 'gamma',
+			env: gitEnv(),
+		});
+		expect(res.moved).toBe(true);
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(existsSync(`${repo}/work/needs-attention/gamma.md`)).toBe(false);
+		expect(existsSync(`${repo}/work/backlog/gamma.md`)).toBe(true);
 	});
 });

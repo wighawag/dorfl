@@ -5,6 +5,14 @@ import {
 	type ReviewProvider,
 } from './integrator.js';
 import type {IntegrationMode} from './config.js';
+import {
+	routeToNeedsAttention,
+	returnToBacklog,
+	type RouteToNeedsAttentionOptions,
+	type RouteToNeedsAttentionResult,
+	type ReturnToBacklogOptions,
+	type ReturnToBacklogResult,
+} from './needs-attention.js';
 
 /**
  * The **write half** of the ledger-transition seam (ADR
@@ -30,6 +38,18 @@ import type {IntegrationMode} from './config.js';
  * This slice routes the CLAIM transition through the seam (see `claim-cas.ts`).
  * The `complete` and `needs-attention` kinds are named here so the companion
  * slices route through the SAME entry point; they are not yet wired.
+ *
+ * The NEEDS-ATTENTION transition is wired here too: the abort paths in
+ * `complete.ts` (red gate, rebase conflict), the runner's stuck routing in
+ * `run.ts`, and the human `return` command all drive the
+ * `* → needs-attention` move (and its `needs-attention → backlog` re-queue)
+ * through this SAME seam rather than calling the move helpers directly. The
+ * sole strategy delegates to the folder-native mechanism in
+ * `needs-attention.ts` UNCHANGED (reason-in-the-body — WORK-CONTRACT rule 3,
+ * bounce from in-progress OR done, ONE atomic commit, optional branch push); the
+ * seam only relocates WHERE the "apply the needs-attention transition" call is
+ * expressed, so the later cherry-pick-to-`main` surfacing is built AGAINST the
+ * seam, not bolted onto the move code.
  */
 
 /** The three `work/` lifecycle transitions the write seam can apply. */
@@ -67,6 +87,36 @@ export interface ApplyCompleteTransitionInput {
  * "apply the complete transition" call is expressed.
  */
 export type ApplyCompleteTransitionResult = IntegrateResult;
+
+/**
+ * A *prepared* NEEDS-ATTENTION transition the caller asks the seam to apply: a
+ * stuck claimed item to bounce to `work/needs-attention/` with its reason. Like
+ * the other inputs it is storage-agnostic — it names the slug, the reason prose,
+ * any surfaced questions, and an OPTIONAL arbiter to also push the branch to,
+ * NOT *where* the move commits/publishes (the sole strategy decides that: a
+ * `git mv` from whichever of in-progress/ or done/ holds the item, the
+ * reason-in-the-body, the ONE atomic commit, the optional branch push). This
+ * mirrors {@link RouteToNeedsAttentionOptions} so the move mechanism is unchanged.
+ */
+export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
+
+/**
+ * The outcome of asking the seam to apply a NEEDS-ATTENTION transition — exactly
+ * the move result the folder-native mechanism produces. The seam adds NO
+ * interpretation; it only relocates WHERE the call is expressed.
+ */
+export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
+
+/**
+ * A *prepared* RETURN-TO-BACKLOG transition: re-queue a resolved
+ * needs-attention item so it can be re-claimed (the `needs-attention → backlog`
+ * re-queue half of the needs-attention mechanism). Storage-agnostic, mirroring
+ * {@link ReturnToBacklogOptions}.
+ */
+export type ApplyReturnToBacklogTransitionInput = ReturnToBacklogOptions;
+
+/** The outcome of asking the seam to apply a RETURN-TO-BACKLOG transition. */
+export type ApplyReturnToBacklogTransitionResult = ReturnToBacklogResult;
 
 /**
  * A *prepared* transition the caller asks the seam to publish. Storage-agnostic:
@@ -128,6 +178,24 @@ export interface LedgerWriteStrategy {
 	applyCompleteTransition(
 		input: ApplyCompleteTransitionInput,
 	): ApplyCompleteTransitionResult;
+	/**
+	 * Apply a NEEDS-ATTENTION transition: bounce a stuck claimed item to
+	 * `work/needs-attention/` with its reason recorded in the body. The sole
+	 * strategy delegates to the folder-native move mechanism unchanged; a future
+	 * strategy could surface the stuck item elsewhere (e.g. the cherry-pick-to-
+	 * `main` follow-on) without `complete.ts`/`run.ts` changing.
+	 */
+	applyNeedsAttentionTransition(
+		input: ApplyNeedsAttentionTransitionInput,
+	): ApplyNeedsAttentionTransitionResult;
+	/**
+	 * Apply a RETURN-TO-BACKLOG transition: re-queue a resolved needs-attention
+	 * item for re-claiming. The re-queue half of the needs-attention mechanism,
+	 * routed through the SAME seam.
+	 */
+	applyReturnToBacklogTransition(
+		input: ApplyReturnToBacklogTransitionInput,
+	): ApplyReturnToBacklogTransitionResult;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -233,6 +301,34 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	}): ApplyCompleteTransitionResult {
 		const integrator = new Integrator({provider});
 		return integrator.integrate({cwd, arbiter, branch, mode, env});
+	},
+
+	/**
+	 * The needs-attention transition under the SAME strategy: bounce the stuck
+	 * item to `work/needs-attention/` exactly as before — it delegates to
+	 * {@link routeToNeedsAttention}, which appends the reason as body prose (never
+	 * a frontmatter field — WORK-CONTRACT rule 3), `git mv`s the item from
+	 * whichever of in-progress/ or done/ holds it, commits the move (+ any
+	 * uncommitted agent work) as ONE atomic transition, and OPTIONALLY pushes the
+	 * work branch. Where the move commits/publishes is an implementation detail of
+	 * THIS strategy; the public input never names it.
+	 */
+	applyNeedsAttentionTransition(
+		input: ApplyNeedsAttentionTransitionInput,
+	): ApplyNeedsAttentionTransitionResult {
+		return routeToNeedsAttention(input);
+	},
+
+	/**
+	 * The return-to-backlog transition under the SAME strategy: re-queue the
+	 * resolved item exactly as before by delegating to {@link returnToBacklog}
+	 * (`git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md`, commit,
+	 * optional push).
+	 */
+	applyReturnToBacklogTransition(
+		input: ApplyReturnToBacklogTransitionInput,
+	): ApplyReturnToBacklogTransitionResult {
+		return returnToBacklog(input);
 	},
 };
 

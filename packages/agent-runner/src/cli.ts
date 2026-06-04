@@ -28,7 +28,7 @@ import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {status, formatStatus} from './status.js';
 import {detectRepos} from './detect.js';
-import {returnToBacklog} from './needs-attention.js';
+import {ledgerWrite} from './ledger-write.js';
 import {
 	arbiterInit,
 	arbiterStatus,
@@ -799,7 +799,9 @@ export function buildProgram(): Command {
 		)
 		.action((slug: string, flags: ReturnFlags) => {
 			const cwd = flags.cwd ?? process.cwd();
-			const result = returnToBacklog({
+			// Route the return-to-backlog re-queue THROUGH the ledger write seam's
+			// transition (same seam the needs-attention move uses), not the helper.
+			const result = ledgerWrite.applyReturnToBacklogTransition({
 				cwd,
 				slug,
 				arbiter: flags.arbiter,

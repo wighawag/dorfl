@@ -68,6 +68,10 @@ export type {
 	ApplyTransitionResult,
 	ApplyCompleteTransitionInput,
 	ApplyCompleteTransitionResult,
+	ApplyNeedsAttentionTransitionInput,
+	ApplyNeedsAttentionTransitionResult,
+	ApplyReturnToBacklogTransitionInput,
+	ApplyReturnToBacklogTransitionResult,
 	LedgerWriteStrategy,
 } from './ledger-write.js';
 export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
