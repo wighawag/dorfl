@@ -36,6 +36,14 @@ decision-rich part and note it came from a prototype.
 > State the goal, the relevant domain vocabulary, where to look in the codebase
 > (by module/concept, not brittle paths), the seams to test at, and what "done"
 > means. Reference any `work/findings/*.md` or ADRs that constrain the work.
+>
+> FIRST, check this slice against current reality (it is a launch snapshot and may
+> have DRIFTED): does it still match the code in `done/`, the relevant ADRs, and
+> the slices it depends on? If a dependency landed differently than this slice
+> assumes, or an ADR superseded an assumption here, do NOT build on the stale
+> premise — route the slice to `needs-attention/` with the discrepancy as the
+> reason (WORK-CONTRACT.md “Drift is a needs-attention signal”). Building on a
+> stale slice produces wrong-but-compiling work.
 
 ---
 

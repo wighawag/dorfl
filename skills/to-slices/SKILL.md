@@ -36,6 +36,14 @@ project repo** (versioned with its code), like the existing `tasks/` convention.
 Slice titles and descriptions use the project's domain glossary. Respect ADRs /
 findings in the area you're touching.
 
+**Check the PRD against reality first (drift = a needs-attention signal).** A PRD
+is a launch snapshot and may have DRIFTED from what has since landed (`done/`,
+ADRs, sibling slices). Before slicing, verify its assumptions still hold. If it
+has drifted such that slicing it as-is would emit slices built on a false premise,
+do NOT slice it: set `needsAnswers: true` on the PRD with the discrepancy in its
+body (or fix a small certain factual error first). See WORK-CONTRACT.md “Drift is
+a needs-attention signal”. Never emit slices from a stale spec.
+
 ### 3. Draft vertical slices
 
 Each slice is a **tracer bullet** — a thin path through ALL layers end-to-end, not

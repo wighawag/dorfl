@@ -91,6 +91,38 @@ of surfacing: there are no labels and no status field (rule 3) — the item simp
   should not be written into `backlog/` until they are ready. Revisit only if a
   genuine intake-triage need appears.)
 
+### Drift is a needs-attention signal (check the doc against reality first)
+
+A PRD and a slice are **launch snapshots** — they capture intent at creation and
+are deliberately NOT kept in sync (current truth lives in `docs/adr/` + the code
+in `done/`). So by the time you act on one, it MAY have **drifted**: a dependency
+landed differently than the doc assumed, an ADR superseded a decision the doc
+relies on, a sibling slice changed the seam it builds against. (Real example: the
+`watch` slice predated the ledger-transition seam and still described the old
+direct-`main` failure-surfacing.)
+
+**Discipline (applies whenever you investigate / slice / claim / build):** before
+acting, **check the doc against reality** — the code in `done/`, the relevant
+ADRs, and sibling slices it depends on. If you find a discrepancy that would make
+you build/slice against a false premise, that is a **needs-attention candidate —
+do NOT silently proceed on the stale spec.** Route it per the item's kind:
+
+- **A SLICE that contradicts current reality** → route to `needs-attention/` with
+  the discrepancy as the reason (the same mechanism as a red gate), rather than
+  building on a stale assumption. A human reconciles the slice, then returns it to
+  `backlog/`. (Building on a stale slice produces wrong-but-compiling work — the
+  worst outcome.)
+- **A PRD that has drifted** (before slicing) → do NOT slice it as-is. Set
+  `needsAnswers: true` on the PRD with the discrepancy in its body (or, if it is a
+  small factual correction you are certain of, fix the PRD first), so the slicer
+  never emits slices from a stale spec. A human reconciles, clears the flag, then
+  it is sliced.
+
+The rule is symmetric: *a discrepancy between a doc and reality is not something
+to paper over — it is exactly the "a human must look" signal `needs-attention`
+(slices) / `needsAnswers` (PRDs) exists to carry.* Cheap to honour, and it stops
+drift from silently propagating into built work.
+
 ## Conflict-safety rules (non-negotiable)
 
 1. **One file per item.** Never put two work items in one file. Disjoint files
