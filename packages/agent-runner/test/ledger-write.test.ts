@@ -8,6 +8,8 @@ import {
 } from '../src/ledger-write.js';
 import * as ledgerWriteModule from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {performComplete} from '../src/complete.js';
+import {writeFileSync} from 'node:fs';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -39,7 +41,10 @@ describe('ledger-write seam — shape', () => {
 		// strategy is just an object implementing the interface — `main` is an
 		// implementation detail of the strategy, never part of what callers pass.
 		const strategy: LedgerWriteStrategy = currentLedgerWrite;
-		expect(Object.keys(strategy)).toEqual(['applyTransition']);
+		expect(Object.keys(strategy)).toEqual([
+			'applyTransition',
+			'applyCompleteTransition',
+		]);
 	});
 });
 
@@ -104,5 +109,73 @@ describe('ledger-write seam — claim is dispatched THROUGH it', () => {
 		expect(res.kind).toBe('rejected');
 		// Nothing landed.
 		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(false);
+	});
+});
+
+describe('ledger-write seam — shape (complete transition)', () => {
+	it('exposes the complete transition on the SAME strategy', () => {
+		expect(typeof currentLedgerWrite.applyCompleteTransition).toBe('function');
+		expect(ledgerWrite).toBe(currentLedgerWrite);
+	});
+});
+
+describe('ledger-write seam — complete is dispatched THROUGH it', () => {
+	/** Claim a slice, then onboard onto its work branch (the pre-complete state). */
+	async function claimAndBranch(slug: string): Promise<string> {
+		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
+		const claim = await performClaim({
+			slug,
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(claim.exitCode).toBe(0);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', '-c', `work/${slug}`, 'arbiter/main'], repo);
+		return repo;
+	}
+
+	it('performComplete routes the complete transition via ledgerWrite.applyCompleteTransition', async () => {
+		const repo = await claimAndBranch('alpha');
+		writeFileSync(`${repo}/feature.txt`, 'the work\n');
+		const spy = vi.spyOn(
+			ledgerWriteModule.ledgerWrite,
+			'applyCompleteTransition',
+		);
+
+		const result = await performComplete({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			integration: 'propose',
+			verify: 'exit 0',
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(spy).toHaveBeenCalledTimes(1);
+		// The complete transition carried the work branch + mode + provider, and the
+		// public input is storage-agnostic (it does NOT name `main`).
+		const input = spy.mock.calls[0][0];
+		expect(input.branch).toBe('work/alpha');
+		expect(input.mode).toBe('propose');
+		expect(JSON.stringify(Object.keys(input))).not.toMatch(/main/i);
+	});
+
+	it('the strategy integrates the work so merge lands it on the arbiter ledger', async () => {
+		const repo = await claimAndBranch('beta');
+		writeFileSync(`${repo}/feature.txt`, 'merged work\n');
+		const result = await performComplete({
+			slug: 'beta',
+			cwd: repo,
+			arbiter: 'arbiter',
+			integration: 'merge',
+			verify: 'exit 0',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.mergedToMain).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(false);
 	});
 });

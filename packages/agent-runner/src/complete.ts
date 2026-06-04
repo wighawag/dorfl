@@ -1,8 +1,8 @@
 import {existsSync, mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
-import {Integrator} from './integrator.js';
 import type {ReviewProvider} from './integrator.js';
+import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import {runAsync, type RunResult} from './git.js';
@@ -353,21 +353,30 @@ async function runComplete(
 		};
 	}
 
-	// 5. Integrate per mode via the integration seam (ADR §6). The rebase above
-	//    already brought the branch up to date, so we use `integrate` (not
-	//    `integrateWithRebase`). It never --forces. Provider selection: an injected
-	//    `openPr` wins (legacy bridge); otherwise pick by the `provider` override
-	//    LAYERED OVER auto-detection from the arbiter's remote URL (a GitHub remote
-	//    ⇒ `gh pr create`, else push-only `none`). A missing/unauthenticated `gh`
-	//    degrades to push-only at runtime — never a hard failure.
+	// 5. Integrate per mode through the ledger write seam's COMPLETE transition
+	//    (ADR §6 + `docs/adr/claim-ledger-vs-protected-main.md`). The rebase above
+	//    already brought the branch up to date, so the seam's sole strategy uses
+	//    `integrate` (not `integrateWithRebase`) and never --forces. Provider
+	//    selection: an injected `openPr` wins (legacy bridge); otherwise pick by
+	//    the `provider` override LAYERED OVER auto-detection from the arbiter's
+	//    remote URL (a GitHub remote ⇒ `gh pr create`, else push-only `none`). A
+	//    missing/unauthenticated `gh` degrades to push-only at runtime — never a
+	//    hard failure. The seam is storage-agnostic: we hand it the work branch,
+	//    the integration mode, and the provider — `main` lives only in the strategy.
 	const provider = options.openPr
 		? bridgeProvider(options.openPr)
 		: selectProvider({
 				arbiterUrl: await arbiterUrl(cwd, arbiter, env),
 				provider: options.provider,
 			});
-	const integrator = new Integrator({provider});
-	const result = integrator.integrate({cwd, arbiter, branch, mode, env});
+	const result = ledgerWrite.applyCompleteTransition({
+		arbiter,
+		branch,
+		mode,
+		provider,
+		cwd,
+		env,
+	});
 
 	// Land back on `main` by default in BOTH modes (the move differs per mode),
 	// then delete the local work branch iff its work is provably on the arbiter.

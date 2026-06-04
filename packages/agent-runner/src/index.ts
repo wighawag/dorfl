@@ -66,6 +66,8 @@ export type {
 	LedgerTransitionKind,
 	ApplyTransitionInput,
 	ApplyTransitionResult,
+	ApplyCompleteTransitionInput,
+	ApplyCompleteTransitionResult,
 	LedgerWriteStrategy,
 } from './ledger-write.js';
 export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';

@@ -1,4 +1,10 @@
 import {runAsync, type RunResult} from './git.js';
+import {
+	Integrator,
+	type IntegrateResult,
+	type ReviewProvider,
+} from './integrator.js';
+import type {IntegrationMode} from './config.js';
 
 /**
  * The **write half** of the ledger-transition seam (ADR
@@ -28,6 +34,39 @@ import {runAsync, type RunResult} from './git.js';
 
 /** The three `work/` lifecycle transitions the write seam can apply. */
 export type LedgerTransitionKind = 'claim' | 'complete' | 'needs-attention';
+
+/**
+ * A *prepared* COMPLETE transition the caller asks the seam to publish: a
+ * finished work branch whose code should be integrated back to the arbiter. Like
+ * {@link ApplyTransitionInput} it is storage-agnostic — it names the work branch
+ * + the integration MODE + the review provider, NOT *where* the integration
+ * lands (the sole strategy decides that; today `merge` ff's to the arbiter's
+ * `main`, `propose` pushes the branch + requests review). The caller has already
+ * done the gate / done-move / commit / rebase-onto-arbiter — the seam only
+ * APPLIES the integration of that prepared branch.
+ */
+export interface ApplyCompleteTransitionInput {
+	/** Name of the arbiter git remote the integration is published to. */
+	arbiter: string;
+	/** The prepared (gated, committed, rebased) work branch to integrate. */
+	branch: string;
+	/** Integration mode: `merge` (ff to the ledger) or `propose` (push + review). */
+	mode: IntegrationMode;
+	/** The review-request provider (propose mode); push-only `none` otherwise. */
+	provider: ReviewProvider;
+	/** Working clone/worktree the integration runs in. */
+	cwd: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The outcome of asking the seam to apply (publish) a prepared COMPLETE
+ * transition. It is exactly the integration result the {@link Integrator}
+ * produces — the seam adds NO interpretation, it only relocates WHERE the
+ * "apply the complete transition" call is expressed.
+ */
+export type ApplyCompleteTransitionResult = IntegrateResult;
 
 /**
  * A *prepared* transition the caller asks the seam to publish. Storage-agnostic:
@@ -80,6 +119,15 @@ export interface ApplyTransitionResult {
  */
 export interface LedgerWriteStrategy {
 	applyTransition(input: ApplyTransitionInput): Promise<ApplyTransitionResult>;
+	/**
+	 * Apply (publish) a prepared COMPLETE transition: integrate a finished work
+	 * branch back to the arbiter per its mode. The sole strategy delegates to the
+	 * integration mechanism unchanged; a future strategy could integrate elsewhere
+	 * without `complete.ts` changing.
+	 */
+	applyCompleteTransition(
+		input: ApplyCompleteTransitionInput,
+	): ApplyCompleteTransitionResult;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -163,6 +211,28 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			);
 		}
 		return {kind: 'rejected', message: 'push rejected / lease failed'};
+	},
+
+	/**
+	 * The complete transition under the SAME strategy: integrate the prepared work
+	 * branch back to the arbiter exactly as `complete.ts` did before — it builds
+	 * the {@link Integrator} with the chosen provider and calls `integrate` (the
+	 * branch was already rebased onto the latest arbiter ledger by the caller, so
+	 * this is the non-rebasing `integrate`, never `--force`). `merge` ff's the
+	 * branch to the arbiter's `main`; `propose` pushes the branch + asks the
+	 * provider to request review. That `merge` targets `main` is an implementation
+	 * detail of THIS strategy — the public input never names it.
+	 */
+	applyCompleteTransition({
+		arbiter,
+		branch,
+		mode,
+		provider,
+		cwd,
+		env,
+	}): ApplyCompleteTransitionResult {
+		const integrator = new Integrator({provider});
+		return integrator.integrate({cwd, arbiter, branch, mode, env});
 	},
 };
 
