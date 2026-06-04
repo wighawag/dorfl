@@ -1,11 +1,7 @@
 ---
 title: runner-in-ci — run the existing engine headless in GitHub Actions (no issues)
 slug: runner-in-ci
-blocked_by: []
-covers: []
-created: 2026-06-04
-claimed_by:
-claimed_at:
+humanOnly: true
 ---
 
 > **Launch snapshot, not maintained.** This PRD is the source material for slicing
@@ -102,6 +98,17 @@ and provide an `install-ci` command (per-capability) that scaffolds it:
   same output as the interactive one.
 - The engine itself is already covered by the existing `run --once` tests; this
   slice does not re-test the engine, only the CI packaging.
+
+## Autonomy notes (the gate axes)
+
+- **`humanOnly: true` (PRD-level, DECIDED):** this is CI/auth/secrets plumbing
+  that lands GitHub Actions workflows and sets repository secrets — a
+  security-sensitive, infrastructure-shaping change a human should drive. So the
+  slicing of this PRD is human-led, and most covering slices should also be
+  `humanOnly` (especially anything that writes workflows or touches secrets).
+- **`needsAnswers`:** none at launch — the auth modes and trigger shape are
+  decided (mirror whitesmith). If a slice surfaces an open infra question, flag it
+  then.
 
 ## Out of Scope
 

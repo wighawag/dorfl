@@ -74,8 +74,8 @@ CLAIM (fast, collision-detecting):
   1. git fetch <arbiter>
   2. git switch -c claim/<slug> <arbiter>/main        # branch off the latest main
   3. git mv work/backlog/<slug>.md work/in-progress/<slug>.md
-     (optionally stamp advisory claimed_by / claimed_at in frontmatter)
-  4. git commit -m "claim: <slug>"
+  4. git commit -m "claim: <slug> (by <who>)"
+     # who/when is recorded by THIS commit, not a frontmatter field (no claimed_by/claimed_at)
   5. git push <arbiter> claim/<slug>:main --force-with-lease    # ATOMIC CAS
         # (a plain ff-only push works too; NEVER --force)
      ├─ ACCEPTED  -> the claim is atomically yours.

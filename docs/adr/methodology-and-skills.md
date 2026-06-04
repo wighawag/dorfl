@@ -58,30 +58,47 @@ is expected. We do NOT fight staleness with ongoing maintenance. Instead:
   to an ADR. The PRD settles to durable framing (Problem/Solution/Stories/Scope)
   and is then stable *because* the stale-prone part was relocated, not maintained.
 
-## 4. The autonomy gate: a slice `humanOnly` field + a per-repo `allowAgents` policy
+## 4. The autonomy gate: TWO orthogonal axes (`humanOnly` × `needsAnswers`) + the per-repo `allowAgents` policy
 
-Replaces the old three-state `afk: true|false|omitted` + `allowUnspecifiedGate`.
+Supersedes the single-`humanOnly` gate (which replaced the three-state `afk` +
+`allowUnspecifiedGate`). The gate is now TWO orthogonal binary fields, present on
+BOTH slices and PRDs (default omitted = false), because "an agent must not run on
+this" has two genuinely different *reasons*, and Matt's single HITL/AFK binary
+conflated them:
 
-- **Slice field `humanOnly: true`** (or undefined) \u2014 the slice declares itself
-  human-only (a product/design/security/judgement call; never auto-claim). Most
-  slices omit it. This is the ONLY autonomy field on a slice, and it is
-  authoritative.
-- **Repo policy `allowAgents`** (per-repo config) \u2014 may agents claim *undeclared*
-  (not `humanOnly`) slices in this repo? Resolves like `integration`:
-  **CLI flag (`--allow-agents` / `--no-allow-agents`) > per-repo > global >
-  default (false)**.
-- **Resolution:** agent-claimable iff `humanOnly` is not true AND `allowAgents`
-  is true. `humanOnly: true` is never agent-claimable regardless.
-- **The PRD informs but does not carry the gate:** the `to-prd` conversation
-  surfaces which stories/areas are human-only and records it as PROSE; `to-slices`
-  uses that to set `humanOnly` on the covering slices. The PRD never has a
-  machine gate field (it is a snapshot; a machine gate there would go stale).
-- Runtime safety net: an agent that can't responsibly build an undeclared slice
-  bounces it to `needs-attention/` (so the gate need not pre-catch everything).
+- **`humanOnly: true` — the DECIDED axis.** A human must drive this, *regardless
+  of how complete the spec is* (product/design/security/judgement, or an
+  `AGENTS.md`-type rule). Driven by a decision — in the PRD conversation, or the
+  slicer's own judgement. On a PRD: a human must drive the slicing. On a slice: a
+  human must drive the build.
+- **`needsAnswers: true` — the DISCOVERED axis.** Unresolved questions block
+  autonomous progress; the spec is incomplete. The **open questions live in the
+  body**. Once answered the flag clears and an agent may proceed. This is what
+  makes the doc *honest about its own completeness* instead of forcing a
+  completeness bar (no ADR-rigor gate, no confidence heuristic — just flag it).
+- They are **orthogonal**: four honest states (e.g. fully-specified-but-human-owns
+  vs anyone-once-answered). Keeping both is more expressive than one flag.
+- **Repo policy `allowAgents`** (per-repo config) — may agents claim *undeclared*
+  items here? Resolves like `integration`: **CLI flag
+  (`--allow-agents`/`--no-allow-agents`) > per-repo > global > default (false)**.
+- **Predicate (same shape at both levels):** auto-eligible iff `needsAnswers` is
+  not true AND `humanOnly` is not true AND `allowAgents` is true. A human is never
+  bound by it (the gate binds the agent, like the runner-vs-human stance on
+  `verify`).
+- **The PRD now CARRIES the gate (it did not before).** With auto-slicing, the
+  human checkpoint that `to-slices` step 4 ("quiz the user") used to provide is
+  removed for the agent path. So whatever that quiz would have extracted must
+  either be pre-committed OR the doc must say it isn't: `to-prd` sets `humanOnly`
+  (decided) and/or `needsAnswers` + body questions (discovered); the auto-slicer
+  refuses to slice a PRD with either flag. This is symmetric, not new machinery.
+- Runtime safety net unchanged: an agent that can't responsibly proceed bounces
+  the item to `needs-attention/` (so the gate need not pre-catch everything).
 
-This rename/restructure touches the contract + done code (`scan`, eligibility,
-the human dashboard, `run-once`) and is implemented by the `humanonly-gate` slice
-(not an inline change).
+Field-naming: all frontmatter/config keys are **camelCase** (matches the JSON
+config + the TS parser; 1:1 property mapping). The `humanOnly`+`allowAgents` gate
+is already shipped (camelCase); `needsAnswers`, plus the `blocked_by`→`blockedBy`
+rename and `sliceAfter`, are wired into the same eligibility path by a tracked
+migration slice (not an inline change), keeping the build/test gate green.
 
 ## 5. ADRs live in `docs/adr/`, CONTEXT.md at root (conform to convention)
 

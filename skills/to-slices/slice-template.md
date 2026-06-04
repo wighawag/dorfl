@@ -2,13 +2,10 @@
 title: <Human Readable Title>
 slug: <url-safe-slug>
 prd: <source-prd-slug>   # REQUIRED: slug of the work/prd/<slug>.md this slice derives from
-# humanOnly: true    # autonomy gate: set true ONLY for human-only slices (product/design/security/judgement). OMIT otherwise (most slices).
-blocked_by: []       # slugs that must reach work/done/ first; [] = startable now
+# humanOnly: true     # gate axis 1 (DECIDED): a HUMAN must drive the build. OMIT otherwise (most slices).
+# needsAnswers: true  # gate axis 2 (DISCOVERED): open questions block autonomous work. OMIT otherwise. List them in the body.
+blockedBy: []        # slugs that must reach work/done/ first; [] = startable now
 covers: []           # optional: user-story numbers within `prd` this slice covers
-created: <YYYY-MM-DD>
-# advisory only — NOT the source of truth for claim state (folder + git history are):
-claimed_by:
-claimed_at:
 ---
 
 ## What to build
@@ -30,7 +27,7 @@ decision-rich part and note it came from a prototype.
 ## Blocked by
 
 - None — can start immediately.
-  (or: list the blocking slugs, mirroring `blocked_by` in the frontmatter.)
+  (or: list the blocking slugs, mirroring `blockedBy` in the frontmatter.)
 
 ## Prompt
 
@@ -46,7 +43,7 @@ decision-rich part and note it came from a prototype.
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-scripts/claim.sh <slug> --arbiter <remote>        # default --arbiter origin
+agent-runner claim <slug> --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/<slug> <remote>/main
 # on completion, in the work branch's PR/merge:

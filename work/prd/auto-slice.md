@@ -1,11 +1,7 @@
 ---
 title: auto-slice — slice a PRD file into backlog items as a work/-native capability
 slug: auto-slice
-blocked_by: []
-covers: []
-created: 2026-06-04
-claimed_by:
-claimed_at:
+humanOnly: true
 ---
 
 > **Launch snapshot, not maintained.** Source material for slicing; once sliced,
@@ -30,22 +26,29 @@ One of three decoupled capabilities (`runner-in-ci`, `auto-slice`,
 
 A new command, `agent-runner slice <prd-slug>`, that drives the slicing of a PRD
 into `work/backlog/` items, with an autonomy gate mirroring the existing
-`humanOnly` / `allowAgents` pair, and a claim-CAS lock so concurrent slicers never
-collide.
+two-axis gate (`humanOnly` × `needsAnswers`) + the `allowAgents` precedent, and a
+claim-CAS lock so concurrent slicers never collide.
 
 - **The command** delegates the actual slicing to the agent harness using the
   `to-slices` methodology (the slicer skill), then the runner — owning all
   git-state transitions, as everywhere — commits the produced slices + the PRD
   transition. The agent only produces slice files; it does not commit/push/move.
-- **Autonomy gate (mirrors the existing one):**
-  - PRD frontmatter **`humanSliceOnly: true`** — this PRD must be sliced by a
-    human (a judgement call). Omitted ⇒ undeclared. Set by `to-prd` during the
-    conversation that produced the PRD.
+- **Autonomy gate (the two axes, at the PRD level):**
+  - PRD frontmatter **`humanOnly: true`** (DECIDED) — a human must drive the
+    slicing of this PRD (a judgement call). Omitted ⇒ undeclared. Set by `to-prd`.
+  - PRD frontmatter **`needsAnswers: true`** (DISCOVERED) — the PRD has unresolved
+    questions (in its body); the auto-slicer refuses to slice until answered.
   - Per-repo policy **`autoSlice`** — may an agent auto-slice undeclared PRDs in
     this repo? Default `false`; resolved like `allowAgents` and `integration`:
     flag > per-repo `.agent-runner.json` > global > default `false`.
-  - Agent-sliceable iff `humanSliceOnly !== true && autoSlice`. **Slicing is
+  - Agent-sliceable iff `needsAnswers !== true && humanOnly !== true && autoSlice`
+    (the same predicate the build gate uses, one level up). **Slicing is
     human-first by default.**
+  - **`sliceAfter` (cross-PRD order):** a PRD's `sliceAfter: [other-prd]` lists
+    PRDs that must already be SLICED (resolved against the `sliced:` marker, NOT
+    `done/`) before the auto-slicer may slice it — so this PRD's emitted slices
+    can reference the real slugs of those PRDs' slices in `blockedBy`. Enforced
+    for the agent; a human may override.
 - **Concurrency lock via the existing claim CAS (status = folder):** the
   auto-slicer atomically races a `git mv work/prd/<slug>.md →
   work/slicing/<slug>.md` micro-commit to the arbiter (the same compare-and-swap
@@ -59,9 +62,15 @@ collide.
   no contention, so they may slice on `main` directly (lock optional for the
   human, mandatory for the agent) — exactly parallel to "the runner never skips
   verify; the human may." The lock exists to serialise *concurrent* slicers.
-- **Skill updates:** `to-prd` learns to set `humanSliceOnly` from the conversation;
-  the `work/` contract (`WORK-CONTRACT.md`) documents the `humanSliceOnly` PRD
-  field, the `autoSlice` repo policy, and the `work/slicing/` lock folder.
+- **Confidence behaviour (no human present):** when auto-slicing, if any of
+  {granularity, dependency order, a gate, a seam} is genuinely unresolved, the
+  slicer does NOT emit a guessed slice — it sets `needsAnswers` on the specific
+  uncertain slice (questions in the body) or routes the whole PRD to
+  `needs-attention/` with the questions. Never a wrongly-cut slice.
+- **Skill updates (done in this docs pass):** `to-prd` sets `humanOnly` /
+  `needsAnswers` / `sliceAfter` from the conversation; `WORK-CONTRACT.md`
+  documents the two-axis PRD gate, the `autoSlice` repo policy, `sliceAfter`, and
+  the `work/slicing/` lock folder.
 
 ## User Stories
 
@@ -70,8 +79,9 @@ collide.
 2. As the maintainer, I want slicing to be human-first by default and only
    auto-run when I opt in per repo (`autoSlice`), so that I keep control over when
    agents decompose work.
-3. As the maintainer, I want a PRD to be markable `humanSliceOnly: true`, so that
-   judgement-heavy PRDs are never auto-sliced even where `autoSlice` is on.
+3. As the maintainer, I want a PRD markable `humanOnly: true` (judgement) or
+   `needsAnswers: true` (open questions), so that such PRDs are never auto-sliced
+   even where `autoSlice` is on — and so the reason an agent skipped it is honest.
 4. As the maintainer, I want concurrent slicers (two CI runs, or human + CI) to be
    serialised by the existing claim CAS, so that a PRD is never double-sliced.
 5. As the maintainer, I want a human with no agent running to slice on `main`
@@ -87,9 +97,10 @@ collide.
 - **Auto-slice is a capability, not a CI feature.** The command exists for local
   use; CI is one caller (wired by `install-ci` in its own slice, but the
   capability does not depend on CI).
-- **Gate names mirror the existing pair:** PRD `humanSliceOnly` (binary,
-  authoritative) + repo `autoSlice` (policy, default false, flag > per-repo >
-  global > default). Eligible iff `humanSliceOnly !== true && autoSlice`.
+- **Gate mirrors the build gate, one level up:** PRD `humanOnly` (DECIDED) +
+  `needsAnswers` (DISCOVERED) + repo `autoSlice` (policy, default false, flag >
+  per-repo > global > default). Agent-sliceable iff `needsAnswers !== true &&
+  humanOnly !== true && autoSlice`.
 - **Lock = the existing claim CAS, different branch name, `work/slicing/` folder.**
   Reuse `claim-cas`/the proven `git mv` micro-commit racing `main`; do NOT invent
   a new lock. The branch name must not collide with the `work/<slug>` build
@@ -97,13 +108,16 @@ collide.
 - **Runner owns git-state; agent only produces slice files** — same in-band
   boundary as the build agent. The agent runs the `to-slices` methodology; the
   runner commits the slices + the PRD transition.
-- **`to-prd` sets `humanSliceOnly` during the conversation** (skill update);
-  `WORK-CONTRACT.md` documents the new field, policy, and folder.
+- **`to-prd` sets `humanOnly`/`needsAnswers`/`sliceAfter` during the
+  conversation** (skill updated in this docs pass); `WORK-CONTRACT.md` documents
+  the two-axis PRD gate, the `autoSlice` policy, `sliceAfter`, and the
+  `work/slicing/` folder.
 
 ## Testing Decisions
 
-- TDD the **gate resolution** (humanSliceOnly × autoSlice, flag > per-repo >
-  global > default) and the **eligibility** decision as pure functions.
+- TDD the **gate resolution** (humanOnly × needsAnswers × autoSlice, flag >
+  per-repo > global > default) and the **eligibility** decision as pure
+  functions; plus `sliceAfter` resolution against the `sliced:` marker.
 - Test the **lock** against throwaway git repos + a local `--bare` arbiter (the
   established `claim.sh` pattern): a simultaneous two-slicer race shows exactly one
   winner; the loser gets exit 2; the winner's transition lands `work/slicing/` then
@@ -111,13 +125,25 @@ collide.
 - Stub the agent harness (no real model) — assert it is invoked with the slicing
   brief and that the runner, not the agent, performs the commits/moves.
 
+## Autonomy notes (the gate axes)
+
+- **`humanOnly: true` (this PRD, DECIDED):** auto-slice changes the autonomy
+  model itself (a new gate axis, a lock that races the arbiter, the human-vs-agent
+  slicing boundary). That is judgement-heavy substrate a human should drive, so
+  the slicing of THIS PRD is human-led. Per-slice gates: the pure gate-resolution
+  + `sliceAfter`-resolution functions are ordinary agent-buildable slices; the
+  lock/CAS-integration and the confidence/needs-attention routing lean `humanOnly`.
+- **`needsAnswers`:** none open at launch — the gate names, predicate, lock
+  mechanism, and `sliceAfter` semantics are decided in this conversation +
+  WORK-CONTRACT.md.
+
 ## Out of Scope
 
 - GitHub issue awareness (that is `issue-to-prd`; this command takes a PRD slug).
 - The CI trigger/workflow wiring (covered by `install-ci`; this slice ships the
   capability + lock, not the workflow).
 - Rewriting `to-slices` itself — reuse the existing methodology; only add the
-  `humanSliceOnly` plumbing.
+  two-axis gate + `sliceAfter` plumbing.
 
 ## Further Notes
 

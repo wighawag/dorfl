@@ -1,7 +1,10 @@
 ---
 title: <Human Readable Title>
 slug: <url-safe-slug>
-created: <YYYY-MM-DD>
+# issue: 123          # optional: the issue this PRD was spawned from (the surviving thread)
+# humanOnly: true     # optional: a HUMAN must drive the slicing of this PRD (a decision). OMIT otherwise.
+# needsAnswers: true  # optional: open questions block AUTO-slicing (spec incomplete). OMIT otherwise. List the questions in the body.
+# sliceAfter: []      # optional: PRD slugs that must be SLICED first (so this PRD's slices can reference their slugs in blockedBy).
 ---
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth:
@@ -26,13 +29,21 @@ A LONG, numbered list — the heart of the PRD. Format:
 
 Cover all aspects of the feature, extensively.
 
-### Human-only considerations (prose guidance, not a machine field)
+### Autonomy notes (the two gate axes — set the frontmatter flags accordingly)
 
-Which user stories / areas will likely need a HUMAN (a product, design, security,
-or judgement call) rather than an unattended agent? Note them here in prose. This
-GUIDES the slicer to set `humanOnly: true` on the covering slices — the
-authoritative flag lives on the slice, never as a parsed field here. (Omit this
-subsection if everything is straightforwardly agent-buildable.)
+The PRD now CARRIES the slicing gate (because an agent may auto-slice it with no
+human in the loop). Record, in prose here AND as the frontmatter flags above:
+
+- **`humanOnly` (DECIDED):** which stories/areas need a HUMAN to drive
+  (product/design/security/judgement)? If the *slicing itself* should be a human's
+  call, set `humanOnly: true` on the PRD. This also GUIDES the slicer to set
+  `humanOnly: true` on the covering slices.
+- **`needsAnswers` (DISCOVERED):** are there open questions the spec has not yet
+  resolved? If so, set `needsAnswers: true` and **list the questions in this
+  section** — the auto-slicer will refuse to slice until they are answered and the
+  flag cleared. Be HONEST: a flagged-incomplete PRD is correct; a falsely-complete
+  one produces wrongly-cut slices. (Omit both flags if everything is resolved and
+  straightforwardly agent-sliceable.)
 
 ## Implementation Decisions
 

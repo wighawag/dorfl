@@ -75,55 +75,99 @@ of surfacing: there are no labels and no status field (rule 3) — the item simp
    integer IDs — two agents would both grab "next = 43". A short hash or date
    prefix is fine if disambiguation is needed (`historical-store-schema` or
    `2026-06-03-historical-store-schema`).
-5. **Dependencies by slug, read-only.** `blocked_by: [other-slug]` references
+5. **Dependencies by slug, read-only.** `blockedBy: [other-slug]` references
    other items; an item never writes another item's file. The blocker owns its own
    status (its folder).
-6. **`claimed_by` / `claimed_at` are ADVISORY only.** They may be stamped into
-   frontmatter during a claim for human readability, but they are NEVER the source
-   of truth for whether something is claimed — the folder + git history are. Two
-   agents must never rely on reading/writing this field to coordinate.
+6. **Claim state is the folder + git history, never a frontmatter field.** Who
+   claimed an item and when is recorded authoritatively by the `git mv` into
+   `in-progress/` and its commit (`claim: <slug> (by <who>)`). There is NO
+   `claimed_by` / `claimed_at` frontmatter — it would only duplicate what git
+   already holds and tempt agents to coordinate on a non-authoritative field.
+
+## Field-naming convention
+
+All frontmatter and config field names are **camelCase** (`humanOnly`,
+`needsAnswers`, `blockedBy`, `sliceAfter`, `allowAgents`) — matching the JSON
+config and the TypeScript that parses them (1:1 property mapping, no snake↔camel
+translation layer). No exceptions.
 
 ## Frontmatter (YAML)
+
+### Slice frontmatter
 
 ```yaml
 ---
 title: Human Readable Title
 slug: historical-store-schema
 prd: historical-store    # REQUIRED: slug of the work/prd/<slug>.md this slice derives from
-humanOnly: true      # autonomy gate (see below). true | omitted. MOST SLICES OMIT IT.
-blocked_by: []       # list of slugs that must reach done/ first; [] = startable now
+humanOnly: true      # gate axis 1 (DECIDED): a human must drive this. true | omitted. MOST OMIT IT.
+needsAnswers: true   # gate axis 2 (DISCOVERED): open questions block autonomous work. true | omitted.
+blockedBy: []        # list of slugs that must reach done/ first; [] = startable now
 covers: []           # optional: user-story numbers (within `prd`) this slice covers
-created: 2026-06-03  # date the slice was written
-# advisory only — NOT the source of truth for claim state:
-claimed_by:          # e.g. agent id / name, set during claim
-claimed_at:          # timestamp, set during claim
 ---
 ```
 
-### The `humanOnly` gate (binary, omittable) + the repo's `allowAgents` policy
+### PRD frontmatter
 
-The autonomy gate is split across TWO places (see `docs/adr/methodology-and-skills.md`
-§4, authoritative):
+```yaml
+---
+title: Human Readable Title
+slug: historical-store
+issue: 123           # optional: the issue this PRD was spawned from (the surviving thread)
+humanOnly: true      # optional: a human must drive the SLICING of this PRD. true | omitted.
+needsAnswers: true   # optional: open questions block AUTO-slicing this PRD. true | omitted.
+sliceAfter: []       # optional: PRD slugs that must be SLICED first (see below). [] = sliceable now.
+sliced: 2026-06-03   # set by to-slices after the one-time trim; marks the PRD launched-and-sliced.
+---
+```
 
-- **Slice field `humanOnly: true`** answers ONE question the *slice* owns: *is
-  this a human-only item — a product/design/security/judgement call that an agent
-  must never auto-claim?* It is binary: `humanOnly: true` or **omitted**. MOST
-  SLICES OMIT IT — an omitted gate means "undeclared", NOT "forbidden". It is the
-  ONLY autonomy field on a slice and it is authoritative.
+### The two autonomy axes: `humanOnly` (decided) × `needsAnswers` (discovered)
+
+The autonomy gate is TWO orthogonal binary fields (both default to omitted =
+false), present on BOTH slices and PRDs, plus the repo's `allowAgents` policy
+(see `docs/adr/methodology-and-skills.md` §4, authoritative):
+
+- **`humanOnly: true` — the DECIDED axis.** *Should a human drive this,
+  regardless of how complete the spec is?* A product/design/security/judgement
+  call, or an `AGENTS.md`-type rule. Driven by a decision (in the PRD conversation,
+  or the slicer's own judgement). On a PRD it means "a human must drive the
+  slicing"; on a slice it means "a human must drive the build".
+- **`needsAnswers: true` — the DISCOVERED axis.** *Are there unresolved questions
+  blocking autonomous progress?* The spec is incomplete; **the open questions live
+  in the body**. Once answered, the flag is cleared and an agent may proceed.
+- They are **orthogonal** — four honest states. e.g. `humanOnly:true,
+  needsAnswers:false` = fully specified but a human must own it; `humanOnly:false,
+  needsAnswers:true` = anyone can do it once the questions are answered.
 - **Repo policy `allowAgents`** answers the question the *repo* owns: *may agents
-  claim undeclared (not `humanOnly`) slices here?* It is a per-repo config key
-  (`.agent-runner.json`), resolved like `integration`: **CLI flag
-  (`--allow-agents` / `--no-allow-agents`) > per-repo config > global config >
-  built-in default (`false`)**.
+  claim undeclared items here?* Per-repo config key (`.agent-runner.json`),
+  resolved like `integration`: **CLI flag (`--allow-agents` / `--no-allow-agents`)
+  > per-repo config > global config > built-in default (`false`)**.
 
-A consuming runner resolves eligibility as: **agent-claimable iff `humanOnly` is
-not `true` AND `allowAgents` is `true`**. `humanOnly: true` is never agent-
-claimable regardless of policy. A strict-by-default repo (no `allowAgents`) lets
-agents claim nothing automatically; a repo that opts in via `allowAgents: true`
-lets agents claim any slice that is not `humanOnly: true`.
+**Predicate (same shape at both levels):** an item is **auto-eligible** iff
+`needsAnswers` is not `true` AND `humanOnly` is not `true` AND `allowAgents` is
+`true`. A human is never bound by it (a human may slice/build a flagged item — the
+gate binds the agent, like the runner-vs-human stance on `verify`).
 
-(This replaces the older three-state `afk: true|false|omitted` field + the
-`allowUnspecifiedGate` runner policy.)
+(This supersedes the older single `humanOnly`-only gate, which itself replaced the
+three-state `afk` field + `allowUnspecifiedGate`.)
+
+### `sliceAfter` — PRD slicing-order (enforced against `sliced:`, NOT `done/`)
+
+`sliceAfter: [other-prd]` on a PRD is **distinct from** slice `blockedBy`, and
+deliberately named differently because it gates a different verb against a
+different signal:
+
+- **slice `blockedBy`** gates **building** a slice, resolved against `done/`.
+- **PRD `sliceAfter`** gates **slicing** a PRD, resolved against the `sliced:`
+  marker (i.e. the listed PRDs must already be sliced — so this PRD's emitted
+  slices can reference the real slugs of those PRDs' slices in their `blockedBy`).
+
+It waits on **`sliced:`, not `done/`** on purpose: the reason B waits for A is that
+B's slices need A's slugs to *exist*, which happens the moment A is sliced — not
+when A is fully built. Build-ordering between A's and B's actual work is then
+expressed where it belongs, in B's individual slices' `blockedBy` (against `done/`).
+Enforced for the auto-slicer (it skips a PRD whose `sliceAfter` PRDs aren't yet
+sliced); a human may slice anyway.
 
 ### The `prd` link (required)
 

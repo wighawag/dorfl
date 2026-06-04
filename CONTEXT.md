@@ -19,9 +19,12 @@ dogfooding itself (it tracks its own work in its own `work/`).
   it lives in** (never a field). See that skill's `WORK-CONTRACT.md`.
 - **slice** — one buildable work item: a tracer-bullet vertical slice, a markdown
   file `work/backlog/<slug>.md`. Has frontmatter: `slug`, `prd`, `humanOnly`
-  (usually omitted), `blocked_by`, `covers`.
+  (usually omitted), `needsAnswers` (usually omitted), `blockedBy`, `covers`.
+  (All field names are camelCase — see WORK-CONTRACT.md.)
 - **PRD** — a north-star doc in `work/prd/<slug>.md` a slice's `prd:` field points
-  at. (The launch/framing doc; may be a hand-off snapshot.)
+  at. (The launch/framing doc; may be a hand-off snapshot.) Frontmatter: `slug`,
+  `issue` (optional), `humanOnly`/`needsAnswers` (the slicing gate), `sliceAfter`
+  (PRD slicing-order), `sliced`.
 - **ADR / finding** — a decision record in `docs/adr/<slug>.md` (the *why* of a
   technical choice; durable). The substrate decisions are in
   `docs/adr/execution-substrate-decisions.md` (§1–§12).
@@ -29,19 +32,25 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **status (lifecycle)** — the folder: `backlog/` (claimable) → `in-progress/`
   (claimed) → `done/` (completed), or → `needs-attention/` (stuck) or
   `out-of-scope/`. Transitions are `git mv`.
-- **humanOnly gate** (`humanOnly` field) — *is this a human-only slice (a
-  product/design/security/judgement call an agent must never auto-claim)?*
-  Binary + authoritative: `humanOnly: true` = never auto-claim; *omitted* =
-  undeclared (most slices). Orthogonal to lifecycle status. (Replaces the old
-  three-state `afk` field.)
+- **autonomy gate (two axes)** — TWO orthogonal binary fields on slices AND PRDs
+  (both default omitted = false): **`humanOnly`** (the DECIDED axis — *a human
+  must drive this regardless of spec completeness*) and **`needsAnswers`** (the
+  DISCOVERED axis — *unresolved questions block autonomous progress; the
+  questions live in the body*). Orthogonal to lifecycle status. On a PRD they gate
+  *slicing*; on a slice they gate *building*. (Supersedes the single-`humanOnly`
+  gate, which replaced the three-state `afk` field.)
 - **allowAgents policy** (`allowAgents`, per-repo) — *may agents claim undeclared
-  (not `humanOnly`) slices in this repo?* Default `false`; resolved like
-  `integration`: flag (`--allow-agents`/`--no-allow-agents`) > per-repo > global
-  > default. (Replaces the old `allowUnspecifiedGate`.)
-- **blocked_by / eligibility** — an item is **agent-claimable** iff `humanOnly`
-  is not `true` AND `allowAgents` is `true`; it is **eligible now** iff also
-  every `blocked_by` slug is present in the SAME repo's `work/done/`. Deps never
-  cross repos.
+  items in this repo?* Default `false`; resolved like `integration`: flag
+  (`--allow-agents`/`--no-allow-agents`) > per-repo > global > default.
+- **blockedBy / eligibility** — an item is **agent-claimable** iff `needsAnswers`
+  is not `true` AND `humanOnly` is not `true` AND `allowAgents` is `true`; it is
+  **eligible now** iff also every `blockedBy` slug is present in the SAME repo's
+  `work/done/`. Deps never cross repos.
+- **sliceAfter** (`sliceAfter`, PRD-only) — PRD slugs that must already be
+  **sliced** (resolved against the `sliced:` marker, NOT `done/`) before the
+  auto-slicer may slice this PRD — so its emitted slices can reference the real
+  slugs of those PRDs' slices in `blockedBy`. Distinct verb/signal from slice
+  `blockedBy` (which gates *building*, against `done/`).
 - **needs-attention** — the post-claim **stuck** state (`work/needs-attention/`):
   a claimed item that couldn't finish (red gate, conflict, ambiguity, timeout,
   rejected review). The runner `git mv`s it here with a reason; a human resolves

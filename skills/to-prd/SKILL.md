@@ -40,14 +40,22 @@ Put a one-line banner at the top of every PRD you write:
    seams; use the highest seam possible. Confirm the seams match the user's
    expectations.
 
-3. **Surface human-only considerations.** As part of the conversation, identify
-   which user stories / areas will likely need a HUMAN (a product, design,
-   security, or judgement call an agent should not make unattended) versus which
-   are agent-buildable. Capture this **as prose** in the PRD (a short note on the
-   relevant user stories, or a "Human-only considerations" subsection). It is
-   GUIDANCE for the slicer, NOT a machine field: the authoritative `humanOnly`
-   flag lives on the *slice* (set by `to-slices` using this guidance), never as a
-   parsed field on the PRD.
+3. **Set the two autonomy axes (the PRD now CARRIES the gate).** Because a PRD may
+   be AUTO-sliced by an agent with no human in the loop, decide and record both:
+   - **`humanOnly` (DECIDED):** identify which stories/areas need a HUMAN
+     (product/design/security/judgement). If the SLICING itself should be a
+     human's call, set `humanOnly: true` in the PRD frontmatter (and note the
+     areas in prose to guide per-slice gates).
+   - **`needsAnswers` (DISCOVERED):** if the conversation did NOT fully resolve the
+     spec, set `needsAnswers: true` and **list the open questions in the PRD body**
+     — the auto-slicer refuses to slice until they are answered and the flag
+     cleared. Be honest: flag an incomplete PRD rather than let it produce
+     wrongly-cut slices. Omit both flags when everything is resolved and
+     agent-sliceable.
+   - If this PRD's slices will depend on another PRD's slices, set
+     `sliceAfter: [other-prd]` so it is sliced in the right order.
+   This is the checkpoint that `to-slices` step 4 ("quiz the user") used to
+   provide; with auto-slicing it must be pre-recorded here OR honestly flagged.
 
 4. **Write** the PRD to `work/prd/<slug>.md` using
    [prd-template.md](prd-template.md), content-derived slug. Create `work/prd/`

@@ -44,43 +44,58 @@ a horizontal slice of one layer.
 - Each slice delivers a narrow but COMPLETE path (schema → logic → API/UI → tests).
 - A completed slice is demoable/verifiable on its own.
 - Prefer many thin slices over few thick ones.
-- Set the **`humanOnly` gate** ONLY where it applies: `humanOnly: true` marks a
-  slice an agent must never auto-claim (a product/design/security/judgement
-  call). **OMIT it on most slices** — omitted means "undeclared", and whether an
-  agent may claim an undeclared slice is the *repo's* `allowAgents` policy, not
-  the slice's. Mark `blocked_by` for ordering. See
-  [WORK-CONTRACT.md](WORK-CONTRACT.md) for the gate semantics + the `allowAgents`
-  precedence.
-- **Prefer file-orthogonal slices to minimise merge conflicts.** `blocked_by`
+- Set the **two gate axes** ONLY where they apply (both default to OMITTED on
+  most slices): **`humanOnly: true`** = a HUMAN must drive the build
+  (product/design/security/judgement — the DECIDED axis); **`needsAnswers: true`**
+  = unresolved questions block autonomous work (the DISCOVERED axis — list the
+  questions in the slice body). Omitted on either means "undeclared"; whether an
+  agent may then claim is the *repo's* `allowAgents` policy. Mark `blockedBy` for
+  ordering. See [WORK-CONTRACT.md](WORK-CONTRACT.md) for the two-axis semantics,
+  the predicate, and the `allowAgents` precedence.
+- **Prefer file-orthogonal slices to minimise merge conflicts.** `blockedBy`
   encodes logical ordering, but two independent slices that edit the SAME files
   will conflict when the second integrates after the first. Parallel agents make
   this real. So: slice along file/module boundaries where you can; and when two
-  slices are known to touch the same module, add a `blocked_by` to **serialize**
+  slices are known to touch the same module, add a `blockedBy` to **serialize**
   them even if there's no strict logical dependency. The runner only
   rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at
   slice time is the cheap win.
 
-### 3b. Apply the PRD's human-only guidance
+### 3b. Apply the PRD's gate + honour cross-PRD `sliceAfter`
 
-If the source PRD flagged certain user stories / areas as **human-only** (a
-product/design/security/judgement call an agent should not make unattended — see
-the `to-prd` skill: it records this as PROSE, not a machine field), set the
-slice's human-only gate on the covering slices. The slice carries the
-authoritative gate; the PRD prose is the input that informed it. (Gate field name
-+ semantics: see [WORK-CONTRACT.md](WORK-CONTRACT.md).)
+- **Propagate the gate.** If the source PRD is itself `humanOnly`/`needsAnswers`,
+  or its body flags certain stories/areas as a human call (DECIDED) or as having
+  open questions (DISCOVERED), set the matching axis on the covering slices.
+- **`sliceAfter` (cross-PRD order).** If this PRD has `sliceAfter: [other-prd]`,
+  those PRDs must already be SLICED (their slices exist) before you slice this one
+  — so this PRD's slices can reference the real slugs of those PRDs' slices in
+  `blockedBy`. (The auto-slicer enforces this; a human may slice anyway but must
+  then know the blocker slugs.) If a needed blocker PRD is not yet sliced, slice
+  it first or record the dependency and stop.
 
-### 4. Quiz the user
+### 4. Quiz the user — OR (no human present) do a confidence check
 
-Present the breakdown as a numbered list — Title, the human-only gate, Blocked-by,
-and (if the source has them) which user stories it covers. Ask: granularity
-right? dependencies right? merge/split any? gate correct? Iterate until approved.
+**If a human is present** (the normal interactive path): present the breakdown as
+a numbered list — Title, the two gate axes, Blocked-by, and (if the source has
+them) which user stories it covers. Ask: granularity right? dependencies right?
+merge/split any? gates correct? Iterate until approved.
+
+**If NO human is present** (an agent auto-slicing in CI): step 4 is replaced by a
+**confidence check**, because there is no one to quiz. Do NOT emit guessed slices.
+The source PRD should already be clear (the auto-slicer only runs on a PRD that is
+not `humanOnly` and not `needsAnswers`). If, while slicing, ANY of {granularity,
+dependency order, a gate, a seam} is genuinely unresolved by the PRD/ADR, do not
+guess: either set `needsAnswers: true` (with the open questions in the body) on
+the specific uncertain slice, or — if the whole decomposition is unclear — stop
+and route the PRD to `needs-attention/` with the questions, rather than emitting a
+wrongly-cut slice. Only emit slices you would have gotten the human to approve.
 
 ### 5. Write the slice files
 
 For each approved slice, write `work/backlog/<slug>.md` using
 [slice-template.md](slice-template.md). Create `work/` and `work/backlog/` lazily
 if absent. One file per slice. Use a content-derived slug, never a counter. Fill
-`blocked_by` with the slugs of blocking slices, and set the **required `prd`**
+`blockedBy` with the slugs of blocking slices, and set the **required `prd`**
 field to the slug of the source `work/prd/<slug>.md` (so `covers` story numbers
 are unambiguous — see [WORK-CONTRACT.md](WORK-CONTRACT.md)).
 

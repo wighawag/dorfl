@@ -1,11 +1,8 @@
 ---
 title: issue-to-prd — turn a GitHub issue conversation into a committed PRD
 slug: issue-to-prd
-blocked_by: []
-covers: []
-created: 2026-06-04
-claimed_by:
-claimed_at:
+humanOnly: true
+sliceAfter: [auto-slice, runner-in-ci]
 ---
 
 > **Launch snapshot, not maintained.** Source material for slicing; once sliced,
@@ -64,8 +61,9 @@ ends by committing a PRD.
   **`issue: <N>`** in its frontmatter (the single surviving thread linking PRD →
   issue). The PRD is committed to `work/prd/<slug>.md`. The runner owns the commit;
   the agent only drafts the PRD content (same in-band git boundary). During the
-  conversation the agent also surfaces whether the PRD should be `humanSliceOnly`
-  (consumed by `auto-slice`).
+  conversation the agent also surfaces the two PRD gate axes — `humanOnly`
+  (a human should drive slicing) and/or `needsAnswers` (open questions remain) —
+  which `auto-slice` consumes.
 - **Loop closure — option (iii), as CI glue, NOT agent-runner core:**
   - PR bodies use **`Refs #N`** (traceability, does NOT auto-close), never
     `Fixes #N` — because one issue→PRD fans out to N slices = N PRs, and a naive
@@ -121,8 +119,8 @@ ends by committing a PRD.
   read-only "PRD complete?" query (all `prd:<slug>` slices in `work/done/`); a
   merge-to-main CI job closes the issue via the seam. Provider-portable; no labels;
   no lifecycle in core.
-- **`humanSliceOnly`** is surfaced in the conversation and written to the PRD (the
-  `auto-slice` capability consumes it).
+- **`humanOnly` / `needsAnswers`** are surfaced in the conversation and written to
+  the PRD (the `auto-slice` capability consumes them as its slicing gate).
 
 ## Testing Decisions
 
@@ -137,11 +135,24 @@ ends by committing a PRD.
   the seam's `closeIssue` exactly once at completion.
 - Assert PR bodies carry `Refs #N`, never `Fixes #N`.
 
+## Autonomy notes (the gate axes)
+
+- **`humanOnly: true` (this PRD, DECIDED):** this is the only issue-aware,
+  externally-triggered subsystem — it reads untrusted issues, posts comments under
+  the project's identity, and closes issues. The author-authorization logic, the
+  trigger policy, and the loop-closure CI glue are security-sensitive and a human
+  should drive their slicing. Per-slice gates: the pure event-classification /
+  trigger-policy / "PRD complete?" functions are agent-buildable; the issue-seam
+  adapter (shells out under repo identity), the authorization check, and the
+  merge-to-main close-glue lean `humanOnly`.
+- **`needsAnswers`:** none open at launch — trigger spectrum, the unified
+  conversation rule, slug/`issue:` handling, and option-(iii) closure are decided.
+
 ## Out of Scope
 
 - Runner-in-CI packaging (that is `runner-in-ci`).
 - The slicing capability + lock (that is `auto-slice`; this capability may emit a
-  PRD that is `humanSliceOnly` or leave it for auto-slice).
+  PRD flagged `humanOnly`/`needsAnswers`, or leave it cleanly auto-sliceable).
 - Per-slice child issues / GitHub sub-issues (rejected: reintroduces coupling and
   is not provider-portable; option (iii) closure is used instead).
 - Any issue-label state-machine or issue lifecycle inside agent-runner core
@@ -159,6 +170,8 @@ ends by committing a PRD.
   already provided more strongly by agent-runner's job/worktree isolation — so
   there is deliberately NO 1-PRD-1-PR mode; 1-PR-per-slice is the only model (a
   PRD that slices to exactly one slice naturally yields one PR).
-- Depends conceptually on `auto-slice` (for the `humanSliceOnly` field + the
-  PRD→backlog step) and `runner-in-ci` (for the `install-ci`/auth substrate), but
-  is sliceable independently; the slicer should set `blocked_by` accordingly.
+- Sliced AFTER `auto-slice` and `runner-in-ci` (frontmatter `sliceAfter`): it
+  builds on their `install-ci`/auth substrate and the two-axis PRD gate +
+  PRD→backlog step, so its slices need their slugs to exist to reference them in
+  `blockedBy`. (`sliceAfter` resolves against the `sliced:` marker — those PRDs
+  must be SLICED first, not necessarily fully built.)
