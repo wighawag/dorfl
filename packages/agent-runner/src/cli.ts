@@ -113,6 +113,8 @@ interface RunFlags extends ScanFlags {
 	arbiter?: string;
 	integration?: string;
 	agentCmd?: string;
+	harness?: string;
+	piBin?: string;
 	workspace?: string;
 }
 
@@ -132,6 +134,12 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	}
 	if (flags.agentCmd !== undefined) {
 		overrides.agentCmd = flags.agentCmd;
+	}
+	if (flags.harness === 'null' || flags.harness === 'pi') {
+		overrides.harness = flags.harness;
+	}
+	if (flags.piBin !== undefined) {
+		overrides.piBin = flags.piBin;
 	}
 	return overrides;
 }
@@ -319,6 +327,14 @@ export function buildProgram(): Command {
 		)
 		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
 		.option(
+			'--harness <adapter>',
+			'harness adapter that launches the agent + reports liveness: null (default, shells out to agentCmd) or pi (the pi CLI)',
+		)
+		.option(
+			'--pi-bin <path>',
+			'pi CLI binary the pi harness invokes (default: pi on PATH)',
+		)
+		.option(
 			'--workspace <dir>',
 			'execution working area for hub mirrors + job worktrees (default: workspacesDir / ~/.agent-runner)',
 		)
@@ -334,7 +350,9 @@ export function buildProgram(): Command {
 				...fileConfig,
 				...runFlagOverrides(flags, command),
 			});
-			if (config.agentCmd.trim() === '') {
+			// The null adapter shells out to agentCmd, so it is required there; the
+			// pi adapter invokes the pi CLI directly and does not consume agentCmd.
+			if (config.harness !== 'pi' && config.agentCmd.trim() === '') {
 				throw new Error(
 					'no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
 				);

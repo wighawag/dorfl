@@ -115,6 +115,35 @@ export class NullHarness implements Harness {
 }
 
 /**
+ * Resolve the harness adapter that OWNS a given job record, keyed off the
+ * record's `adapter` field. The core (`status`, `watch`, `gc`) reads liveness
+ * for a heterogeneous set of jobs (some null, some pi) from their persisted
+ * records, so it must ask the RIGHT adapter per job — a pi job's liveness is the
+ * pi adapter's responsibility (PID + session pointer), not the null adapter's.
+ *
+ * Adapters register here lazily via {@link registerHarness}; an unknown adapter
+ * falls back to the null adapter (PID-only liveness — never mtime), which is a
+ * safe superset for any PID-anchored record.
+ */
+export function resolveHarness(record: HarnessRecord): Harness {
+	return HARNESS_REGISTRY.get(record.adapter) ?? FALLBACK_HARNESS;
+}
+
+/**
+ * Register a harness adapter under its `adapter` name so {@link resolveHarness}
+ * can dispatch liveness to it. Idempotent (last registration wins). The pi
+ * adapter registers itself on import; tests may register stubs.
+ */
+export function registerHarness(harness: Harness): void {
+	HARNESS_REGISTRY.set(harness.adapter, harness);
+}
+
+const FALLBACK_HARNESS = new NullHarness();
+const HARNESS_REGISTRY = new Map<string, Harness>([
+	[FALLBACK_HARNESS.adapter, FALLBACK_HARNESS],
+]);
+
+/**
  * Is `pid` a live process? Uses signal 0 (`process.kill(pid, 0)`), which checks
  * for existence/permission WITHOUT delivering a signal — the OS process table,
  * never a filesystem mtime. Unknown/undefined PID ⇒ not alive.

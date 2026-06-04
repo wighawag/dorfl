@@ -11,6 +11,13 @@ import {dirname, join} from 'node:path';
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
+ * Which harness adapter (ADR §5) launches a job's agent and reports its
+ * liveness: `null` (shell out to `agentCmd`) or `pi` (the pi CLI). Selected via
+ * the `harness` config field; defaults to `null`.
+ */
+export type HarnessAdapter = 'null' | 'pi';
+
+/**
  * The per-repo acceptance gate: a single shell command, or an ordered list of
  * commands run in sequence (all must pass). See `verify.ts` / ADR §8.
  */
@@ -75,9 +82,25 @@ export interface Config {
 	/**
 	 * The command the runner shells out to for one slice. The runner appends the
 	 * built prompt on stdin; the command does NO git ops on the repo (the runner
-	 * owns those). Empty string ⇒ no agent configured (run will refuse).
+	 * owns those). Empty string ⇒ no agent configured (run will refuse). Consumed
+	 * by the **null** harness adapter (it shells out to this verbatim); the **pi**
+	 * adapter ignores it (it invokes the pi CLI directly — see `harness`).
 	 */
 	agentCmd: string;
+	/**
+	 * Which harness adapter launches + reports liveness for a job's agent (the
+	 * harness seam, ADR §5): `null` (default — shells out to `agentCmd`,
+	 * PID-only liveness) or `pi` (invokes the pi CLI with the work-agent prompt;
+	 * liveness from PID + the pi session dir/log, never mtime). pi specifics stay
+	 * behind the adapter; the core only sees the `Harness` interface.
+	 */
+	harness?: HarnessAdapter;
+	/**
+	 * The pi CLI binary the `pi` harness invokes (default `pi` on `PATH`).
+	 * Overridable so an operator can pin a path; tests stub it. Ignored unless
+	 * `harness` is `pi`.
+	 */
+	piBin?: string;
 	/**
 	 * The per-repo acceptance gate run by `agent-runner verify` (a deterministic
 	 * shell command, or an ordered list of commands). NOT per-slice and NOT model-

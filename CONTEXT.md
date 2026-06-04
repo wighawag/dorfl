@@ -108,8 +108,11 @@ dogfooding itself (it tracks its own work in its own `work/`).
   arbiter); otherwise retained (a retained worktree is a needs-attention signal).
   `gc` re-applies it. (ADR §4.)
 - **harness seam** — pluggable interface for launching a job's agent and reporting
-  liveness (null adapter; pi adapter is its own slice). Liveness from the harness,
-  never filesystem mtime. (ADR §5.)
+  liveness. Adapters: `null` (shells out to `agentCmd`, PID-only liveness) and
+  **`pi`** (invokes the pi CLI with the work-agent prompt; liveness from PID + a
+  pointer to the pi session dir/log). Selected via the `harness` config; jobs'
+  liveness is resolved per-record to the owning adapter (`resolveHarness`).
+  Liveness from the harness, **never filesystem mtime**. (ADR §5.)
 - **integration seam** — `Integrator` with modes (`merge`/`propose`) × providers
   (`github` via `gh`, `none` = push + open-manually). Push is the safety-bearing
   action. (ADR §6.)

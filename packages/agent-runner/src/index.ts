@@ -2,6 +2,7 @@ export type {
 	Config,
 	PartialConfig,
 	IntegrationMode,
+	HarnessAdapter,
 	VerifyConfig,
 } from './config.js';
 export {
@@ -122,7 +123,22 @@ export type {
 	LaunchResult,
 	Harness,
 } from './harness.js';
-export {NullHarness, pidAlive} from './harness.js';
+export {
+	NullHarness,
+	pidAlive,
+	resolveHarness,
+	registerHarness,
+} from './harness.js';
+
+export type {PiHarnessOptions, PiHarnessRecord} from './pi-harness.js';
+export {
+	PiHarness,
+	createHarness,
+	piSessionDir,
+	piSessionExists,
+	DEFAULT_PI_BIN,
+	PI_SESSION_DIRNAME,
+} from './pi-harness.js';
 
 export type {
 	ReviewProvider,

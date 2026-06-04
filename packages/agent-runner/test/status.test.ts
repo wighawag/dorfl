@@ -233,6 +233,40 @@ describe('status — grouping active vs failed/retained', () => {
 	});
 });
 
+describe('status — pi job liveness via the adapter (no injected harness)', () => {
+	it('a pi job is ACTIVE when its PID is alive (resolved via the pi adapter)', () => {
+		// No `harness` injected ⇒ status resolves each record to the adapter that
+		// owns it. A pi record with our own (live) PID must read as active, proving
+		// pi liveness flows through the pi adapter (PID), never mtime.
+		seedJob(
+			'github-com__wighawag__agent-runner__pi-live',
+			record({
+				slug: 'pi-live',
+				state: 'running',
+				harness: {adapter: 'pi', pid: process.pid, session: '/some/session'},
+			}),
+		);
+		const report = status({workspacesDir: workspacesDir()});
+		expect(report.active.map((j) => j.slug)).toEqual(['pi-live']);
+		expect(report.active[0].alive).toBe(true);
+	});
+
+	it('a hung/dead pi job is FAILED/RETAINED so watch rails can act', () => {
+		seedJob(
+			'github-com__wighawag__agent-runner__pi-dead',
+			record({
+				slug: 'pi-dead',
+				state: 'running',
+				harness: {adapter: 'pi', pid: 2 ** 31 - 1, session: '/gone'},
+			}),
+		);
+		const report = status({workspacesDir: workspacesDir()});
+		expect(report.active).toHaveLength(0);
+		expect(report.attention.map((j) => j.slug)).toEqual(['pi-dead']);
+		expect(report.attention[0].alive).toBe(false);
+	});
+});
+
 describe('status — read-only', () => {
 	it('does not move/delete the job worktree dir or its record', () => {
 		const dir = seedJob(

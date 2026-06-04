@@ -7,6 +7,7 @@ import {createJob, updateJobRecord, type Job} from './workspace.js';
 import {routeToNeedsAttention} from './needs-attention.js';
 import {reapJob} from './gc.js';
 import {NullHarness, type Harness} from './harness.js';
+import {createHarness} from './pi-harness.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {git, gitMv} from './git.js';
 import {
@@ -144,7 +145,12 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	});
 
 	const testGate = options.testGate ?? defaultTestGate();
-	const harness = options.harness ?? new NullHarness();
+	// The launch harness: an explicit injection wins (tests); otherwise build the
+	// adapter the config selects (`harness: 'pi'` ⇒ the pi CLI; default ⇒ null,
+	// shelling out to `agentCmd`). pi specifics stay behind the seam.
+	const harness =
+		options.harness ??
+		createHarness({harness: config.harness, piBin: config.piBin});
 	const provider = options.provider ?? new NoneProvider();
 	const integrator = new Integrator({provider});
 	const workspace = options.workspace ?? config.workspacesDir;

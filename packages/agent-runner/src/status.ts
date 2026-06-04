@@ -1,5 +1,8 @@
 import {discoverJobs, type GcJob} from './gc.js';
-import {NullHarness, type Harness} from './harness.js';
+import {resolveHarness, type Harness} from './harness.js';
+// Import for the registration side-effect: ensures the `pi` adapter is in the
+// harness registry so `resolveHarness` dispatches pi jobs' liveness to it.
+import './pi-harness.js';
 import {type JobState} from './workspace.js';
 import {
 	readNeedsAttentionItems,
@@ -89,8 +92,12 @@ export interface StatusOptions {
 	/** The execution working area to inspect (config `workspacesDir`). */
 	workspacesDir: string;
 	/**
-	 * The harness used to answer liveness (PID/session — never mtime). Defaults
-	 * to the null adapter; the `pi` adapter (and tests' stubs) plug in here.
+	 * The harness used to answer liveness (PID/session — never mtime). When given,
+	 * it answers liveness for EVERY job (tests inject a stub here). When omitted,
+	 * each job's liveness is answered by the adapter that OWNS its record
+	 * (`resolveHarness` keyed off the record's `adapter`) — so a `pi` job reports
+	 * via the pi adapter (PID + session pointer) and a `null` job via the null
+	 * adapter, never mtime.
 	 */
 	harness?: Harness;
 	/**
@@ -110,12 +117,11 @@ export interface StatusOptions {
  * no claim/run/move/delete.
  */
 export function status(options: StatusOptions): StatusReport {
-	const harness = options.harness ?? new NullHarness();
 	const active: JobStatus[] = [];
 	const attention: JobStatus[] = [];
 
 	for (const job of discoverJobs(options.workspacesDir)) {
-		const view = toJobStatus(job, harness);
+		const view = toJobStatus(job, options.harness);
 		// Active iff the runner believes the job is in flight (`running`) AND the
 		// harness confirms it is still alive. Everything else is "look here":
 		//   - needs-attention: the runner flagged it (gate red, conflict, …)
@@ -147,10 +153,20 @@ function bySlug(a: JobStatus, b: JobStatus): number {
 	return a.slug.localeCompare(b.slug);
 }
 
-/** Project a discovered job + its harness liveness into a `JobStatus`. */
-function toJobStatus(job: GcJob, harness: Harness): JobStatus {
+/**
+ * Project a discovered job + its harness liveness into a `JobStatus`. When no
+ * harness is forced (the normal case), each record's liveness is answered by the
+ * adapter that OWNS it (`resolveHarness`) — a pi job via the pi adapter (PID +
+ * session), never mtime.
+ */
+function toJobStatus(job: GcJob, forced: Harness | undefined): JobStatus {
 	const record = job.record;
-	const alive = record !== undefined ? harness.isAlive(record.harness) : false;
+	const harness =
+		forced ?? (record ? resolveHarness(record.harness) : undefined);
+	const alive =
+		record !== undefined && harness !== undefined
+			? harness.isAlive(record.harness)
+			: false;
 	return {
 		slug: job.slug,
 		repo: record?.repoKey ?? '(unknown)',

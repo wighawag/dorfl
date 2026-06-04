@@ -1,11 +1,12 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {writeFileSync, existsSync} from 'node:fs';
+import {writeFileSync, existsSync, readFileSync, chmodSync} from 'node:fs';
 import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
 import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
 import {scan} from '../src/scan.js';
 import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
+import {piSessionDir} from '../src/pi-harness.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -459,5 +460,101 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		const mainShared = gitIn(['show', 'arbiter/main:shared.txt'], repo);
 		expect(mainShared).toBe('main version\n');
+	});
+});
+
+describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)', () => {
+	/**
+	 * Write a stubbed `pi` CLI that edits a file in its cwd (so the work commit is
+	 * non-empty), records the prompt it received on stdin, honours `--session-dir`,
+	 * and exits 0 — standing in for a real pi run (impractical in CI).
+	 */
+	function writePiStub(promptFile: string): string {
+		const bin = join(scratch.root, 'pi-stub.sh');
+		const script = [
+			'#!/usr/bin/env bash',
+			`cat > ${JSON.stringify(promptFile)}`,
+			'session_dir=""',
+			'prev=""',
+			'for a in "$@"; do',
+			'  if [ "$prev" = "--session-dir" ]; then session_dir="$a"; fi',
+			'  prev="$a"',
+			'done',
+			'if [ -n "$session_dir" ]; then mkdir -p "$session_dir"; fi',
+			'printf "pi work\\n" > agent-output.txt',
+			'exit 0',
+		].join('\n');
+		writeFileSync(bin, script + '\n');
+		chmodSync(bin, 0o755);
+		return bin;
+	}
+
+	it('launches pi (not agentCmd) with the work-agent prompt and records the pi harness block', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		void repo;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const promptFile = join(scratch.root, 'seen-prompt.txt');
+		const piBin = writePiStub(promptFile);
+		// harness: pi, and a deliberately bogus agentCmd to prove the null path is
+		// NOT taken (the pi adapter invokes the pi CLI directly).
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			harness: 'pi',
+			piBin,
+			agentCmd: 'exit 99',
+		});
+
+		const result = await runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			// No agentRunner injection ⇒ the real harness seam (pi adapter) runs.
+			testGate: greenGate,
+			env: gitEnv(),
+		});
+
+		expect(result.items[0].status).toBe('claimed-done');
+
+		// pi received the standard work-agent prompt on stdin (wrapper + ## Prompt),
+		// proving the pi adapter — not the bogus agentCmd — launched the agent.
+		const seenPrompt = readFileSync(promptFile, 'utf8');
+		expect(seenPrompt).toContain('Implement feat.');
+
+		// The item went green → done (the pi-edited file made a non-empty commit
+		// that passed the gate + integrated), and its worktree was reaped on
+		// success — confirming the pi launch fed the pipeline end-to-end.
+		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
+		expect(existsSync(dir)).toBe(false);
+	});
+
+	it('a red gate retains the pi job with a pi harness record (PID + session pointer)', async () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const promptFile = join(scratch.root, 'seen-prompt-2.txt');
+		const piBin = writePiStub(promptFile);
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			harness: 'pi',
+			piBin,
+			agentCmd: '',
+		});
+
+		const result = await runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			testGate: redGate, // keeps the worktree retained so we can read the record
+			env: gitEnv(),
+		});
+		expect(result.items[0].status).toBe('tests-failed');
+
+		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
+		const record = readJobRecord(dir);
+		// Liveness is anchored on PID + the pi session pointer — NOT mtime (ADR §5).
+		expect(record?.harness.adapter).toBe('pi');
+		expect(typeof record?.harness.pid).toBe('number');
+		expect(record?.harness.session).toBe(piSessionDir(dir));
+		// pi got the work-agent prompt, not the (empty) agentCmd path.
+		expect(readFileSync(promptFile, 'utf8')).toContain('Implement feat.');
 	});
 });
