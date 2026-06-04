@@ -34,6 +34,12 @@ describe('mergeConfig', () => {
 		expect(cfg.workspacesDir).not.toMatch(/\.cache/);
 	});
 
+	it('defaults arbitersDir under ~/git (precious DATA, NEVER ~/.agent-runner — ADR §7)', () => {
+		const cfg = mergeConfig({});
+		expect(cfg.arbitersDir.endsWith('/git')).toBe(true);
+		expect(cfg.arbitersDir).not.toMatch(/\.agent-runner/);
+	});
+
 	it('overrides execution fields', () => {
 		const cfg = mergeConfig({
 			maxParallel: 8,

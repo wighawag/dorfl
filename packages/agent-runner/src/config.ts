@@ -50,6 +50,15 @@ export interface Config {
 	 * tests (and unusual setups) can relocate it.
 	 */
 	workspacesDir: string;
+	/**
+	 * Where local `--bare` arbiters (offline source of truth) are provisioned:
+	 * `<dir>/<host>/<org>/<name>.git` (hierarchical, reusing the repo→key
+	 * encoding). Arbiters are precious DATA, not state/cache (ADR §7): they live
+	 * under a visible `~/git/` and MUST NEVER be placed under `~/.agent-runner/`
+	 * (a `gc`/cleanup mishap could nuke the only copy). Overridable so tests can
+	 * relocate it.
+	 */
+	arbitersDir: string;
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
@@ -85,6 +94,7 @@ export const DEFAULT_CONFIG: Config = {
 	perRepoMax: 2,
 	defaultArbiter: 'origin',
 	workspacesDir: join(homedir(), '.agent-runner'),
+	arbitersDir: join(homedir(), 'git'),
 	integration: 'propose',
 	agentCmd: '',
 };

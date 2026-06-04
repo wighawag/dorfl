@@ -179,6 +179,21 @@ export type {
 export {status, formatStatus} from './status.js';
 
 export type {
+	ArbiterInitOptions,
+	ArbiterInitResult,
+	ArbiterStatusOptions,
+	ArbiterStatusReport,
+} from './arbiter.js';
+export {
+	DEFAULT_ARBITER_REMOTE,
+	ArbiterError,
+	arbiterPath,
+	arbiterInit,
+	arbiterStatus,
+	formatArbiterStatus,
+} from './arbiter.js';
+
+export type {
 	RouteToNeedsAttentionOptions,
 	RouteToNeedsAttentionResult,
 	ReturnToBacklogOptions,

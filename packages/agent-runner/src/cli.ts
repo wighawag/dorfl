@@ -21,6 +21,12 @@ import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {status, formatStatus} from './status.js';
 import {detectRepos} from './detect.js';
 import {returnToBacklog} from './needs-attention.js';
+import {
+	arbiterInit,
+	arbiterStatus,
+	formatArbiterStatus,
+	DEFAULT_ARBITER_REMOTE,
+} from './arbiter.js';
 
 interface ScanFlags {
 	config?: string;
@@ -159,6 +165,18 @@ interface ReturnFlags {
 	config?: string;
 	cwd?: string;
 	arbiter?: string;
+}
+
+interface ArbiterInitFlags {
+	config?: string;
+	at?: string;
+	remote?: string;
+}
+
+interface ArbiterStatusFlags {
+	config?: string;
+	remote?: string;
+	json?: boolean;
 }
 
 export function buildProgram(): Command {
@@ -610,6 +628,68 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			console.log(`Returned '${slug}' to backlog for re-claiming.`);
+		});
+
+	const arbiter = program
+		.command('arbiter')
+		.description(
+			'Provision/inspect a local --bare arbiter (the offline source of truth the claim/integration protocols serialize on). Arbiters are precious DATA (ADR §7): they live under ~/git (config arbitersDir), hierarchical, NEVER under ~/.agent-runner.',
+		);
+
+	arbiter
+		.command('init')
+		.description(
+			'Derive a bare arbiter from an existing working repo: git clone --bare it to the resolved ~/git/<host>/<org>/<name>.git path (or --at), then wire the repo’s arbiter remote to it. Idempotent (an existing arbiter is detected, not clobbered). Refuses the unsafe non-bare-with-main case (which would reject claim pushes).',
+		)
+		.argument('[repo]', 'the working repo to derive from (default: cwd)')
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--at <path>',
+			'explicit arbiter location (overrides the resolved ~/git default)',
+		)
+		.option(
+			'--remote <name>',
+			`name of the arbiter remote to wire in the repo (default: ${DEFAULT_ARBITER_REMOTE})`,
+		)
+		.action((repo: string | undefined, flags: ArbiterInitFlags) => {
+			const config = loadConfig(flags.config);
+			const result = arbiterInit({
+				repo,
+				cwd: process.cwd(),
+				at: flags.at,
+				arbitersDir: config.arbitersDir,
+				remote: flags.remote ?? DEFAULT_ARBITER_REMOTE,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.created) {
+				console.log(`Provisioned bare arbiter at ${result.path}`);
+			} else {
+				console.log(`Arbiter already exists at ${result.path} (not clobbered)`);
+			}
+			console.log(`Wired remote '${result.remote}' -> ${result.url}`);
+		});
+
+	arbiter
+		.command('status')
+		.description(
+			'Read-only report of the current repo’s arbiter: which remote it is, its URL/path, whether it exists and is bare, and whether main is reachable. Flags the unsafe non-bare-with-main case. Mutates nothing.',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--remote <name>',
+			`the arbiter remote name to report on (default: ${DEFAULT_ARBITER_REMOTE})`,
+		)
+		.option('--json', 'output the raw report as JSON')
+		.action((flags: ArbiterStatusFlags) => {
+			const report = arbiterStatus({
+				cwd: process.cwd(),
+				remote: flags.remote ?? DEFAULT_ARBITER_REMOTE,
+			});
+			if (flags.json) {
+				console.log(JSON.stringify(report, null, 2));
+			} else {
+				console.log(formatArbiterStatus(report));
+			}
 		});
 
 	return program;
