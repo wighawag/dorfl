@@ -93,7 +93,7 @@ echo ">> [3/4] gate + integrate ($integration)…"
 # complete runs the acceptance gate; on red it does NOT integrate and leaves the
 # item for you (eventually -> needs-attention). It also deletes the local work
 # branch when the work is provably on the arbiter.
-$AR_CLI complete --integration "$integration" || {
+$AR_CLI complete "--$integration" || {
 	echo "error: complete failed (red gate? rebase conflict?). The slice was NOT" >&2
 	echo "       integrated; resolve it (it stays in work/in-progress/)." >&2
 	exit 4
