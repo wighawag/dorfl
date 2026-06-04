@@ -6,8 +6,8 @@ humanOnly: true
 blocked_by: [agent-workspaces]
 covers: [11]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-04T07:51:20Z
 ---
 
 ## What to build
