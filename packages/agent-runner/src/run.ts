@@ -1,21 +1,29 @@
-import {randomBytes} from 'node:crypto';
 import type {Config} from './config.js';
 import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {claimItem} from './claim.js';
-import {isolate, type IsolationMode, type IsolationHandle} from './isolate.js';
+import {createJob, updateJobRecord, type Job} from './workspace.js';
+import {NullHarness, type Harness} from './harness.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
-import {run as runCmd, git, gitMv} from './git.js';
-import {integrate, type IntegrateResult} from './integrate.js';
+import {git, gitMv} from './git.js';
+import {
+	Integrator,
+	NoneProvider,
+	type ReviewProvider,
+	type IntegrateResult,
+} from './integrator.js';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 /** What happened to one selected item across the whole pipeline. */
 export type ItemStatus =
-	| 'claimed-done' // tests green → moved to work/done/ + integrated
+	| 'claimed-done' // tests green + rebased clean → integrated (pushed/merged)
 	| 'lost-race' // claim.sh exit 2 — skipped cleanly
 	| 'claim-contended' // claim.sh exit 3
 	| 'claim-error' // claim.sh exit 1 / unexpected
-	| 'tests-failed' // claimed + ran, but gate red → left in-progress / needs-attention
+	| 'tests-failed' // claimed + ran, but gate red → routed to needs-attention
+	| 'needs-attention' // rebase conflict at integrate time (ADR §10) — human must look
 	| 'agent-failed'; // agentCmd itself errored before the gate
 
 export interface ItemResult {
@@ -31,6 +39,8 @@ export interface RunOnceResult {
 	claimedAndDone: number;
 	skipped: number;
 	failed: number;
+	/** Items routed to needs-attention (rebase conflict, red gate). */
+	needsAttention: number;
 	items: ItemResult[];
 }
 
@@ -53,15 +63,24 @@ export interface RunOnceOptions {
 	config: Config;
 	/** Pre-computed scan report; if omitted, the scan core is run from config. */
 	report?: ScanReport;
-	/** Workspace root for isolated clones/worktrees. */
-	workspace: string;
-	/** Isolation strategy; clones are preferred for parallelism. */
-	isolation?: IsolationMode;
-	/** How to invoke the configured agent. Defaults to shelling out to agentCmd. */
+	/**
+	 * The execution working area (bare hub mirrors + per-job worktrees). Defaults
+	 * to `config.workspacesDir`. STATE, not cache (ADR §3).
+	 */
+	workspace?: string;
+	/**
+	 * How to invoke the configured agent. When omitted, the work runs through the
+	 * harness seam (null adapter by default) shelling out to `config.agentCmd`.
+	 * Tests inject this to edit files directly without a real agent.
+	 */
 	agentRunner?: AgentRunner;
+	/** The harness seam (ADR §5); defaults to the null adapter. */
+	harness?: Harness;
 	/** How to run the acceptance tests. Defaults to the repo's `pnpm -r test`. */
 	testGate?: TestGate;
-	/** Optional injectable PR opener for `integration: propose`. */
+	/** Review-request provider for `propose` mode (ADR §6); default `none`. */
+	provider?: ReviewProvider;
+	/** Optional injectable PR opener for `integration: propose` (legacy bridge). */
 	openPr?: (opts: {
 		cwd: string;
 		branch: string;
@@ -71,7 +90,7 @@ export interface RunOnceOptions {
 	env?: NodeJS.ProcessEnv;
 	/** Path to claim.sh (defaults to the vendored copy). */
 	claimScript?: string;
-	/** Override agent-id generation (tests). */
+	/** Override agent-id generation (tests). Retained for API compat; unused for branch naming. */
 	agentId?: () => string;
 	/**
 	 * Sink for non-fatal warnings (e.g. a repo's `.agent-runner.json` naming
@@ -81,54 +100,40 @@ export interface RunOnceOptions {
 	onWarn?: (message: string) => void;
 }
 
-/** Default agent runner: shell out to `config.agentCmd`, prompt on stdin. */
-function defaultAgentRunner(agentCmd: string): AgentRunner {
-	return ({cwd, prompt, env}) => {
-		const result = runCmd('bash', ['-c', agentCmd], cwd, {input: prompt, env});
-		return {
-			ok: result.status === 0,
-			detail: result.status === 0 ? undefined : result.stderr.trim(),
-		};
-	};
-}
-
 /** Default test gate: run the repo's acceptance tests via `pnpm -r test`. */
 function defaultTestGate(): TestGate {
 	return ({cwd, env}) => {
-		const result = runCmd('pnpm', ['-r', 'test'], cwd, {env});
+		const result = runPnpmTest(cwd, env);
 		return {
-			green: result.status === 0,
-			detail: result.status === 0 ? undefined : result.stderr.trim(),
+			green: result.green,
+			detail: result.green ? undefined : result.detail,
 		};
 	};
 }
 
-function shortId(): string {
-	return randomBytes(3).toString('hex');
-}
-
-/**
- * Commit the completed work + the done-move as ONE atomic commit, using the
- * work-contract message format `<type>(<slug>): <summary>; done`. The runner
- * authors this deterministically (the agent never commits).
- */
-function commitCompletion(
-	dir: string,
-	slug: string,
+function runPnpmTest(
+	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): void {
-	git(['add', '-A'], dir, {env});
-	const message = `feat(${slug}): complete work slice; done`;
-	git(['commit', '-q', '-m', message], dir, {env});
+): {green: boolean; detail?: string} {
+	const harness = new NullHarness();
+	const out = harness.launch({
+		dir: cwd,
+		slug: '',
+		command: 'pnpm -r test',
+		env,
+	});
+	return {green: out.ok, detail: out.detail};
 }
 
 /**
- * Run one supervised tick (increment B): claim up to `maxParallel` eligible
- * items (≤ `perRepoMax` per repo), run the agent on each in isolation, gate on
- * acceptance tests, and integrate the green ones. The runner owns EVERY
- * git-state transition (claim, done-move, completion commit, integration); the
- * agent only edits code. A lost race (claim exit 2) is skipped cleanly; failing
- * work never reaches `work/done/`.
+ * Run one supervised tick: claim up to `maxParallel` eligible items
+ * (≤ `perRepoMax` per repo), run the agent on each in an isolated **job
+ * worktree** (the shared execution substrate — hub mirror + worktree + seams),
+ * gate on acceptance tests, rebase onto the latest arbiter main, and integrate
+ * the green ones. The runner owns EVERY git-state transition (claim, done-move,
+ * completion commit, integration); the agent only edits code. A lost race (claim
+ * exit 2) is skipped cleanly; failing work never reaches `work/done/`; a rebase
+ * conflict is aborted and routed to needs-attention (ADR §10).
  */
 export function runOnce(options: RunOnceOptions): RunOnceResult {
 	const config = options.config;
@@ -138,10 +143,11 @@ export function runOnce(options: RunOnceOptions): RunOnceResult {
 		perRepoMax: config.perRepoMax,
 	});
 
-	const agentRunner =
-		options.agentRunner ?? defaultAgentRunner(config.agentCmd);
 	const testGate = options.testGate ?? defaultTestGate();
-	const newId = options.agentId ?? shortId;
+	const harness = options.harness ?? new NullHarness();
+	const provider = options.provider ?? new NoneProvider();
+	const integrator = new Integrator({provider});
+	const workspace = options.workspace ?? config.workspacesDir;
 	const env = options.env;
 
 	const items: ItemResult[] = [];
@@ -149,14 +155,14 @@ export function runOnce(options: RunOnceOptions): RunOnceResult {
 		items.push(
 			runOneItem(candidate, {
 				config,
-				workspace: options.workspace,
-				isolation: options.isolation ?? 'clone',
-				agentRunner,
+				workspace,
+				agentRunner: options.agentRunner,
+				harness,
 				testGate,
+				integrator,
 				openPr: options.openPr,
 				env,
 				claimScript: options.claimScript,
-				agentId: newId(),
 				onWarn: options.onWarn,
 			}),
 		);
@@ -168,22 +174,27 @@ export function runOnce(options: RunOnceOptions): RunOnceResult {
 	const skipped = items.filter(
 		(i) => i.status === 'lost-race' || i.status === 'claim-contended',
 	).length;
+	const needsAttention = items.filter(
+		(i) => i.status === 'tests-failed' || i.status === 'needs-attention',
+	).length;
 	const failed = items.filter(
 		(i) =>
 			i.status === 'tests-failed' ||
+			i.status === 'needs-attention' ||
 			i.status === 'agent-failed' ||
 			i.status === 'claim-error',
 	).length;
 
-	return {claimedAndDone, skipped, failed, items};
+	return {claimedAndDone, skipped, failed, needsAttention, items};
 }
 
 interface OneItemContext {
 	config: Config;
 	workspace: string;
-	isolation: IsolationMode;
-	agentRunner: AgentRunner;
+	agentRunner?: AgentRunner;
+	harness: Harness;
 	testGate: TestGate;
+	integrator: Integrator;
 	openPr?: (opts: {
 		cwd: string;
 		branch: string;
@@ -191,8 +202,22 @@ interface OneItemContext {
 	}) => void;
 	env?: NodeJS.ProcessEnv;
 	claimScript?: string;
-	agentId: string;
 	onWarn?: (message: string) => void;
+}
+
+/**
+ * Commit the completed work + the done-move as ONE atomic commit, using the
+ * work-contract message format. The runner authors this deterministically (the
+ * agent never commits).
+ */
+function commitCompletion(
+	dir: string,
+	slug: string,
+	env: NodeJS.ProcessEnv | undefined,
+): void {
+	git(['add', '-A'], dir, {env});
+	const message = `feat(${slug}): complete work slice; done`;
+	git(['commit', '-q', '-m', message], dir, {env});
 }
 
 function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
@@ -200,14 +225,10 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 	const base: ItemResult = {repoPath, slug, status: 'lost-race'};
 
 	// Resolve THIS repo's effective config against its own `.agent-runner.json`
-	// layered over the global config (flag > per-repo > global > default). This is
-	// what makes a run multi-repo aware: each repo gets its own integration mode /
-	// arbiter, so repo A can be `merge` while repo B is `propose` in one tick. A
-	// repo with no file resolves to exactly the global config (unchanged behaviour).
-	const resolved = resolveRepoConfig({
-		repoPath,
-		global: ctx.config,
-	});
+	// layered over the global config (flag > per-repo > global > default). Each
+	// repo gets its own integration mode / arbiter, so repo A can be `merge`
+	// while repo B is `propose` in one tick.
+	const resolved = resolveRepoConfig({repoPath, global: ctx.config});
 	const config = resolved.config;
 	if (resolved.message) {
 		ctx.onWarn?.(resolved.message);
@@ -231,24 +252,25 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		return {...base, status: 'claim-error', detail: claim.stderr.trim()};
 	}
 
-	// 2. Isolate in its own clone/worktree cut from the freshly-claimed main.
-	let handle: IsolationHandle | undefined;
+	// 2. Isolate in a per-job worktree cut from the freshly-fetched hub mirror
+	//    main (the SINGLE isolation path — ADR §1/§2). The mirror is keyed off
+	//    the arbiter URL resolved from this repo, so jobs reuse it (fetch, not
+	//    re-clone) across the run.
+	let job: Job | undefined;
 	try {
-		handle = isolate({
-			sourceRepo: repoPath,
+		job = createJob({
+			fromRepo: repoPath,
 			arbiter: config.defaultArbiter,
 			slug,
-			agentId: ctx.agentId,
-			workspace: ctx.workspace,
-			mode: ctx.isolation,
+			workspacesDir: ctx.workspace,
 			env: ctx.env,
 		});
 
 		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
-		// emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
+		//    emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
 		let prompt: string;
 		try {
-			const slice = resolveSlice(handle.dir, slug);
+			const slice = resolveSlice(job.dir, slug);
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
 		} catch (err) {
 			if (err instanceof PromptError) {
@@ -256,39 +278,103 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 			}
 			throw err;
 		}
-		const agent = ctx.agentRunner({
-			cwd: handle.dir,
-			prompt,
-			slug,
-			env: ctx.env,
-		});
+
+		// 4. Run the agent — via the injected runner (tests) or the harness seam
+		//    (null adapter by default), shelling out to the configured agentCmd.
+		const agent = runAgent(ctx, job, prompt, slug, config.agentCmd);
 		if (!agent.ok) {
 			return {...base, status: 'agent-failed', detail: agent.detail};
 		}
 
-		// 4. Test-gate: only green work proceeds to done + integration.
-		const gate = ctx.testGate({cwd: handle.dir, slug, env: ctx.env});
+		// 5. Test-gate: only green work proceeds. Bad work is routed to
+		//    needs-attention (it never auto-merges; the worktree is the signal).
+		const gate = ctx.testGate({cwd: job.dir, slug, env: ctx.env});
 		if (!gate.green) {
-			// Bad work never auto-merges; it stays in work/in-progress/ for the human.
+			updateJobRecord(job.dir, {state: 'needs-attention'});
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
-		// 5. Done-move (mkdir -p then git mv) + completion commit — runner-owned.
-		gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, handle.dir);
-		commitCompletion(handle.dir, slug, ctx.env);
+		// 6. Done-move (mkdir -p then git mv) + completion commit — runner-owned.
+		gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, job.dir);
+		commitCompletion(job.dir, slug, ctx.env);
 
-		// 6. Integrate per config (propose by default; merge where allowed). Never --force.
-		const integration = integrate({
-			cwd: handle.dir,
-			arbiter: config.defaultArbiter,
-			branch: handle.branch,
+		// 7. Rebase-before-integrate (ADR §10) then integrate per mode. A
+		//    conflicting rebase is aborted + routed to needs-attention (never
+		//    auto-resolved); integration never --forces.
+		const provider = ctx.openPr ? bridgeProvider(ctx.openPr) : undefined;
+		const integratorForItem = provider
+			? new Integrator({provider})
+			: ctx.integrator;
+		const outcome = integratorForItem.integrateWithRebase({
+			cwd: job.dir,
+			// Inside the job worktree the arbiter is the mirror's clone remote
+			// (`origin`), NOT the source repo's `defaultArbiter` name.
+			arbiter: job.arbiterRemote,
+			branch: job.branch,
 			mode: config.integration,
 			env: ctx.env,
-			openPr: ctx.openPr,
 		});
+		if (outcome.outcome === 'needs-attention') {
+			updateJobRecord(job.dir, {state: 'needs-attention'});
+			return {...base, status: 'needs-attention', detail: outcome.reason};
+		}
 
-		return {...base, status: 'claimed-done', integration};
+		updateJobRecord(job.dir, {state: 'done'});
+		return {...base, status: 'claimed-done', integration: outcome.integration};
 	} finally {
-		handle?.dispose();
+		// The worktree + record are deliberately RETAINED — `gc` (a separate slice)
+		// evaluates the deletion-safety predicate (ADR §4). We do not reap here.
+		void job;
 	}
+}
+
+/**
+ * Run the agent against the job worktree. Prefers the injected `agentRunner`
+ * (tests / custom embeddings); otherwise launches `agentCmd` through the harness
+ * seam (recording the PID in the job's harness block).
+ */
+function runAgent(
+	ctx: OneItemContext,
+	job: Job,
+	prompt: string,
+	slug: string,
+	agentCmd: string,
+): {ok: boolean; detail?: string} {
+	if (ctx.agentRunner) {
+		return ctx.agentRunner({cwd: job.dir, prompt, slug, env: ctx.env});
+	}
+	const launched = ctx.harness.launch({
+		dir: job.dir,
+		slug,
+		command: agentCmd,
+		prompt,
+		env: ctx.env,
+	});
+	updateJobRecord(job.dir, {harness: launched.record});
+	return {ok: launched.ok, detail: launched.detail};
+}
+
+/** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */
+function bridgeProvider(
+	openPr: (opts: {
+		cwd: string;
+		branch: string;
+		env?: NodeJS.ProcessEnv;
+	}) => void,
+): ReviewProvider {
+	return {
+		name: 'none',
+		openRequest(input) {
+			openPr({cwd: input.cwd, branch: input.branch, env: input.env});
+			return {
+				opened: true,
+				instruction: `Opened a review for ${input.branch}.`,
+			};
+		},
+	};
+}
+
+/** A throwaway default workspace under the OS temp dir (CLI convenience). */
+export function defaultRunWorkspace(): string {
+	return join(tmpdir(), 'agent-runner-workspace');
 }

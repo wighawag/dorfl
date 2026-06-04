@@ -1,15 +1,17 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {writeFileSync} from 'node:fs';
+import {writeFileSync, existsSync} from 'node:fs';
 import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
 import {claimItem} from '../src/claim.js';
 import {mergeConfig} from '../src/config.js';
 import {scan} from '../src/scan.js';
+import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	gitEnv,
+	gitIn,
 	CLAIM_SCRIPT,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -227,8 +229,8 @@ describe('runOnce — integration modes', () => {
 		expect(item.status).toBe('claimed-done');
 		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
-		expect(item.integration?.prOpened).toBe(true);
-		expect(prBranch).toBe('work/feat-agentA');
+		expect(item.integration?.requestOpened).toBe(true);
+		expect(prBranch).toBe('work/feat');
 		// PR mode never moves done/ onto main; the slice stays in-progress on main.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
@@ -281,7 +283,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		// per-repo `propose` won over global `merge`.
 		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
-		expect(prBranch).toBe('work/feat-agentA');
+		expect(prBranch).toBe('work/feat');
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
@@ -327,7 +329,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		// Repo B: own file propose → pushed branch, NOT on main.
 		expect(itemB?.integration?.mode).toBe('propose');
 		expect(itemB?.integration?.mergedToMain).toBe(false);
-		expect(bBranch).toBe('work/fb-agentZ');
+		expect(bBranch).toBe('work/fb');
 		expect(existsOnArbiterMain(b.repo, 'done', 'fb')).toBe(false);
 	});
 });
@@ -350,5 +352,87 @@ describe('runOnce — agent failure', () => {
 		expect(result.items[0].status).toBe('agent-failed');
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+	});
+});
+
+describe('runOnce — runs in a substrate job worktree (one isolation path)', () => {
+	it('leaves a per-job worktree + record under the workspace for gc/status to read', () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		void repo;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const config = configFor(scratch.root, {workspacesDir});
+		const result = runOnce({
+			config,
+			report: scan(config),
+			workspace: workspacesDir,
+			agentRunner: editingAgent,
+			testGate: greenGate,
+			claimScript: CLAIM_SCRIPT,
+			env: gitEnv(),
+		});
+		expect(result.items[0].status).toBe('claimed-done');
+
+		// The job worktree lives under <workspacesDir>/work/<work-id>/ (ADR §2/§3)
+		// and is RETAINED (gc, a separate slice, evaluates deletion-safety).
+		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
+		expect(existsSync(dir)).toBe(true);
+		const record = readJobRecord(dir);
+		expect(record?.slug).toBe('feat');
+		expect(record?.branch).toBe('work/feat');
+		expect(record?.state).toBe('done');
+		expect(record?.harness).toBeDefined();
+	});
+});
+
+describe('runOnce — rebase-before-integrate (ADR §10)', () => {
+	it('routes a rebase conflict to needs-attention without auto-resolving or moving main', () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['feat']);
+		const {repo, arbiter} = seeded;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		// Global merge so a clean run WOULD land on main; the conflict must stop it.
+		const config = configFor(scratch.root, {
+			workspacesDir,
+			integration: 'merge',
+		});
+
+		const report = scan(config);
+
+		// The agent edits shared.txt one way. WHILE it "works" (i.e. after the job
+		// worktree was cut from the then-current main), a parallel branch lands a
+		// CONFLICTING edit to the same file on the arbiter's main. So at integrate
+		// time the rebase onto the advanced main conflicts (ADR §10).
+		const conflictingAgent: AgentRunner = ({cwd}) => {
+			writeFileSync(join(cwd, 'shared.txt'), 'agent version\n');
+			const other = seeded.clone('other');
+			writeFileSync(join(other, 'shared.txt'), 'main version\n');
+			gitIn(['add', '-A'], other);
+			gitIn(['commit', '-q', '-m', 'main edits shared'], other);
+			gitIn(['push', '-q', 'arbiter', 'HEAD:main'], other);
+			return {ok: true};
+		};
+
+		const result = runOnce({
+			config,
+			report,
+			workspace: workspacesDir,
+			agentRunner: conflictingAgent,
+			testGate: greenGate,
+			claimScript: CLAIM_SCRIPT,
+			env: gitEnv(),
+		});
+
+		expect(result.items[0].status).toBe('needs-attention');
+		expect(result.needsAttention).toBe(1);
+		expect(result.claimedAndDone).toBe(0);
+		expect(result.items[0].detail).toMatch(/conflict/i);
+
+		// The job record reflects needs-attention; the worktree is retained.
+		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
+		expect(readJobRecord(dir)?.state).toBe('needs-attention');
+
+		// main was NOT advanced to the agent's version (never auto-resolved).
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const mainShared = gitIn(['show', 'arbiter/main:shared.txt'], repo);
+		expect(mainShared).toBe('main version\n');
 	});
 });

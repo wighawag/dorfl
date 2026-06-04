@@ -15,8 +15,6 @@ import {performStart} from './start.js';
 import {performComplete} from './complete.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 
 interface ScanFlags {
 	config?: string;
@@ -77,7 +75,6 @@ interface RunFlags extends ScanFlags {
 	arbiter?: string;
 	integration?: string;
 	agentCmd?: string;
-	isolation?: string;
 	workspace?: string;
 }
 
@@ -233,8 +230,10 @@ export function buildProgram(): Command {
 			'integration mode: propose (default) or merge',
 		)
 		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
-		.option('--isolation <mode>', 'isolation: clone (default) or worktree')
-		.option('--workspace <dir>', 'directory for isolated clones/worktrees')
+		.option(
+			'--workspace <dir>',
+			'execution working area for hub mirrors + job worktrees (default: workspacesDir / ~/.agent-runner)',
+		)
 		.option('--json', 'output the raw result as JSON')
 		.action((flags: RunFlags, command: Commander) => {
 			if (!flags.once) {
@@ -252,13 +251,10 @@ export function buildProgram(): Command {
 					'no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
 				);
 			}
-			const isolation = flags.isolation === 'worktree' ? 'worktree' : 'clone';
-			const workspace =
-				flags.workspace ?? join(tmpdir(), 'agent-runner-workspace');
+			const workspace = flags.workspace ?? config.workspacesDir;
 			const result = runOnce({
 				config,
 				workspace,
-				isolation,
 				onWarn: (message) => console.error(`>> ${message}`),
 			});
 			if (flags.json) {

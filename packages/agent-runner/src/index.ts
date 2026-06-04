@@ -87,13 +87,6 @@ export type {
 } from './complete.js';
 export {performComplete} from './complete.js';
 
-export type {
-	IsolationMode,
-	IsolationHandle,
-	IsolateOptions,
-} from './isolate.js';
-export {isolate, workBranchName} from './isolate.js';
-
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {
 	encodeRepoKey,
@@ -102,8 +95,42 @@ export {
 	mirrorMainSha,
 } from './repo-mirror.js';
 
-export type {IntegrateOptions, IntegrateResult} from './integrate.js';
-export {integrate, arbiterMainContains} from './integrate.js';
+export type {JobRecord, JobState, CreateJobOptions, Job} from './workspace.js';
+export {
+	JOB_RECORD_FILENAME,
+	encodeWorkId,
+	jobWorktreePath,
+	createJob,
+	writeJobRecord,
+	readJobRecord,
+	updateJobRecord,
+} from './workspace.js';
+
+export type {
+	HarnessRecord,
+	LaunchInput,
+	LaunchResult,
+	Harness,
+} from './harness.js';
+export {NullHarness, pidAlive} from './harness.js';
+
+export type {
+	ReviewProvider,
+	OpenRequestInput,
+	OpenRequestResult,
+	IntegrateInput,
+	IntegrateResult,
+	IntegrateWithRebaseResult,
+	IntegratorOptions,
+	RebaseInput,
+	RebaseResult,
+} from './integrator.js';
+export {
+	Integrator,
+	NoneProvider,
+	rebaseOntoArbiterMain,
+	arbiterMainContains,
+} from './integrator.js';
 
 export type {
 	ItemStatus,
@@ -113,7 +140,7 @@ export type {
 	AgentRunner,
 	TestGate,
 } from './run.js';
-export {runOnce} from './run.js';
+export {runOnce, defaultRunWorkspace} from './run.js';
 
 export type {RunVerifyOptions, RunVerifyResult} from './verify.js';
 export {

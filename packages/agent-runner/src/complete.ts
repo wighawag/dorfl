@@ -1,7 +1,8 @@
 import {existsSync, mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
-import {integrate} from './integrate.js';
+import {Integrator} from './integrator.js';
+import type {ReviewProvider} from './integrator.js';
 import type {IntegrationMode} from './config.js';
 import {runAsync, type RunResult} from './git.js';
 
@@ -231,15 +232,14 @@ async function runComplete(
 		};
 	}
 
-	// 5. Integrate per mode. integrate() never --forces.
-	const result = integrate({
-		cwd,
-		arbiter,
-		branch,
-		mode,
-		env,
-		openPr: options.openPr,
+	// 5. Integrate per mode via the integration seam (ADR §6). The rebase above
+	//    already brought the branch up to date, so we use `integrate` (not
+	//    `integrateWithRebase`). It never --forces. The legacy `openPr` callback
+	//    is bridged to a ReviewProvider so a real provider can be slotted later.
+	const integrator = new Integrator({
+		provider: options.openPr ? bridgeProvider(options.openPr) : undefined,
 	});
+	const result = integrator.integrate({cwd, arbiter, branch, mode, env});
 
 	if (mode === 'merge') {
 		// The push to <arbiter>/main is authoritative; now sync the LOCAL clone so
@@ -258,7 +258,7 @@ async function runComplete(
 	}
 
 	// propose: the branch is pushed; report the next step.
-	const message = result.prOpened
+	const message = result.requestOpened
 		? `Completed '${slug}': pushed ${branch} and opened a review.`
 		: `Completed '${slug}': pushed ${branch} to ${arbiter}. ` +
 			'Open a PR/MR to land it on main (full provider PR creation comes with ' +
@@ -271,6 +271,26 @@ async function runComplete(
 		commitMessage,
 		mergedToMain: false,
 		message,
+	};
+}
+
+/** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */
+function bridgeProvider(
+	openPr: (opts: {
+		cwd: string;
+		branch: string;
+		env?: NodeJS.ProcessEnv;
+	}) => void,
+): ReviewProvider {
+	return {
+		name: 'none',
+		openRequest(input) {
+			openPr({cwd: input.cwd, branch: input.branch, env: input.env});
+			return {
+				opened: true,
+				instruction: `Opened a review for ${input.branch}.`,
+			};
+		},
 	};
 }
 
