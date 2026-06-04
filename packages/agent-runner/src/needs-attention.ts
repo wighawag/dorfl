@@ -1,13 +1,7 @@
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	writeFileSync,
-} from 'node:fs';
-import {basename, join} from 'node:path';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {run} from './git.js';
-import {parseFrontmatter} from './frontmatter.js';
+import {ledgerRead} from './ledger-read.js';
 
 /**
  * The folder-native **needs-attention mechanism** (ADR §12; WORK-CONTRACT
@@ -231,26 +225,15 @@ export function returnToBacklog(
 export function readNeedsAttentionItems(
 	repoPath: string,
 ): NeedsAttentionItem[] {
-	const dir = join(repoPath, 'work', 'needs-attention');
-	let entries: string[];
-	try {
-		entries = readdirSync(dir);
-	} catch {
-		return [];
-	}
-	const items: NeedsAttentionItem[] = [];
-	for (const file of entries
-		.filter((name) => name.toLowerCase().endsWith('.md'))
-		.sort()) {
-		const content = readFileSync(join(dir, file), 'utf8');
-		const fm = parseFrontmatter(content);
-		items.push({
-			file,
-			slug: fm.slug ?? basename(file, '.md'),
-			reason: extractReason(content),
-		});
-	}
-	return items;
+	// Resolve the needs-attention surface THROUGH the read seam's local-tree
+	// method (offline). The seam returns each item's raw `content`; we extract the
+	// reason prose here, exactly as the inline read did.
+	const {needsAttention} = ledgerRead.resolveLocalState({repoPath});
+	return needsAttention.map((item) => ({
+		file: item.file,
+		slug: item.slug,
+		reason: extractReason(item.content),
+	}));
 }
 
 /**

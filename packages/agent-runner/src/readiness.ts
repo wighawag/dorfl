@@ -1,6 +1,6 @@
 import {parseFrontmatter} from './frontmatter.js';
 import {resolveBlockedBy} from './eligibility.js';
-import {runAsync, type RunResult} from './git.js';
+import {ledgerRead} from './ledger-read.js';
 
 /**
  * The pre-claim readiness guard for the HUMAN `start` / `claim` path. Today the
@@ -74,11 +74,19 @@ export async function resolveReadiness(
 ): Promise<ReadinessVerdict> {
 	const {slug, cwd, arbiter, override, env} = options;
 
-	const content = await readSliceOnArbiter(slug, arbiter, cwd, env);
-	const fm = parseFrontmatter(content ?? '');
+	// Resolve the slice + `work/done/` from `<arbiter>/main` THROUGH the read
+	// seam's arbiter method — the single insertion point. Same source of truth the
+	// folder check uses; behaviour is byte-identical to the inline reads it
+	// replaced (slice from `backlog/` or `in-progress/`, done slugs from the tree).
+	const {slice, doneSlugs} = await ledgerRead.resolveArbiterState({
+		slug,
+		cwd,
+		arbiter,
+		env,
+	});
+	const fm = parseFrontmatter(slice ?? '');
 	const needsAnswers = fm.needsAnswers === true;
 
-	const doneSlugs = await readDoneSlugsOnArbiter(arbiter, cwd, env);
 	const {missing} = resolveBlockedBy(fm.blockedBy, doneSlugs);
 
 	return {
@@ -87,65 +95,4 @@ export async function resolveReadiness(
 		needsAnswers,
 		overridden: override,
 	};
-}
-
-/**
- * Read the slice file's contents from `<arbiter>/main`. It may live in `backlog/`
- * (the normal claim case) or `in-progress/` (start --resume); we read whichever
- * exists. Returns `undefined` when the slice is not found there.
- */
-async function readSliceOnArbiter(
-	slug: string,
-	arbiter: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string | undefined> {
-	for (const folder of ['backlog', 'in-progress'] as const) {
-		const object = `${arbiter}/main:work/${folder}/${slug}.md`;
-		const show = await gitSoft(['show', object], cwd, env);
-		if (show.status === 0) {
-			return show.stdout;
-		}
-	}
-	return undefined;
-}
-
-/**
- * Collect the set of slugs present in `work/done/` on `<arbiter>/main`. Resolves
- * `blockedBy` per-repo, exactly like {@link readDoneSlugs} does on disk — but
- * read from the committed arbiter tree (the source of truth the human path uses),
- * not the local work tree. The slug is the filename minus `.md` (matching how
- * claim/done moves name the file after its slug).
- */
-async function readDoneSlugsOnArbiter(
-	arbiter: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<Set<string>> {
-	const slugs = new Set<string>();
-	const tree = await gitSoft(
-		['ls-tree', '--name-only', `${arbiter}/main:work/done`],
-		cwd,
-		env,
-	);
-	if (tree.status !== 0) {
-		// No `work/done/` on the arbiter yet — nothing is done.
-		return slugs;
-	}
-	for (const name of tree.stdout.split('\n')) {
-		const file = name.trim();
-		if (file.toLowerCase().endsWith('.md')) {
-			slugs.add(file.slice(0, -'.md'.length));
-		}
-	}
-	return slugs;
-}
-
-/** Run git, returning the raw result (no throw) — for soft checks. */
-function gitSoft(
-	args: string[],
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<RunResult> {
-	return runAsync('git', args, cwd, {env});
 }

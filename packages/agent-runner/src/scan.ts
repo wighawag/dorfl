@@ -1,24 +1,15 @@
-import {readdirSync, readFileSync} from 'node:fs';
-import {join, basename} from 'node:path';
 import type {Config} from './config.js';
 import {detectRepos} from './detect.js';
-import {parseFrontmatter} from './frontmatter.js';
 import {resolveEligibility, type EligibilityResult} from './eligibility.js';
+import {ledgerRead, type LedgerBacklogItem} from './ledger-read.js';
 import {resolveRepoConfig} from './repo-config.js';
 
-/** A backlog item with its parsed gate/deps, before eligibility resolution. */
-export interface BacklogItem {
-	/** Filename within `work/backlog/` (e.g. `scan.md`). */
-	file: string;
-	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
-	slug: string;
-	/** Autonomy axis 1 (DECIDED): `true` (human-only) | `undefined` (undeclared). */
-	humanOnly: boolean | undefined;
-	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
-	needsAnswers: boolean | undefined;
-	/** Slugs this item is blocked by. */
-	blockedBy: string[];
-}
+/**
+ * A backlog item with its parsed gate/deps, before eligibility resolution. This
+ * IS the read seam's resolved backlog shape ({@link LedgerBacklogItem}) — scan
+ * keeps the historical name as its public type.
+ */
+export type BacklogItem = LedgerBacklogItem;
 
 /** A backlog item plus its resolved eligibility verdict. */
 export interface ScannedItem extends BacklogItem {
@@ -38,52 +29,22 @@ export interface ScanReport {
 	totalEligible: number;
 }
 
-function listMarkdown(dir: string): string[] {
-	let entries: string[];
-	try {
-		entries = readdirSync(dir);
-	} catch {
-		return [];
-	}
-	return entries.filter((name) => name.toLowerCase().endsWith('.md')).sort();
-}
-
-function slugForFile(dir: string, file: string): string {
-	const content = readFileSync(join(dir, file), 'utf8');
-	const fm = parseFrontmatter(content);
-	return fm.slug ?? basename(file, '.md');
-}
-
 /**
  * Collect the set of slugs present in a repo's `work/done/`. Used to resolve
  * `blockedBy` (per-repo only). Falls back to the filename when an item has no
- * `slug` frontmatter.
+ * `slug` frontmatter. Resolves THROUGH the read seam's local-tree method
+ * ({@link ledgerRead}) — the single insertion point for the `work/` state read.
  */
 export function readDoneSlugs(repoPath: string): Set<string> {
-	const dir = join(repoPath, 'work', 'done');
-	const slugs = new Set<string>();
-	for (const file of listMarkdown(dir)) {
-		slugs.add(slugForFile(dir, file));
-	}
-	return slugs;
+	return ledgerRead.resolveLocalState({repoPath}).doneSlugs;
 }
 
-/** Read and parse every `work/backlog/*.md` for a repo, sorted by slug. */
+/**
+ * Read and parse every `work/backlog/*.md` for a repo, sorted by slug. Resolves
+ * THROUGH the read seam's local-tree method ({@link ledgerRead}).
+ */
 export function readBacklogItems(repoPath: string): BacklogItem[] {
-	const dir = join(repoPath, 'work', 'backlog');
-	const items: BacklogItem[] = [];
-	for (const file of listMarkdown(dir)) {
-		const content = readFileSync(join(dir, file), 'utf8');
-		const fm = parseFrontmatter(content);
-		items.push({
-			file,
-			slug: fm.slug ?? basename(file, '.md'),
-			humanOnly: fm.humanOnly,
-			needsAnswers: fm.needsAnswers,
-			blockedBy: fm.blockedBy,
-		});
-	}
-	return items.sort((a, b) => a.slug.localeCompare(b.slug));
+	return ledgerRead.resolveLocalState({repoPath}).backlog;
 }
 
 /**
@@ -107,10 +68,14 @@ export function scan(config: Config): ScanReport {
 	let totalEligible = 0;
 
 	for (const path of repoPaths) {
-		const doneSlugs = readDoneSlugs(path);
+		// ONE local-tree resolve per repo through the read seam (offline): backlog +
+		// done slugs come from the same resolved `work/` state.
+		const {backlog, doneSlugs} = ledgerRead.resolveLocalState({
+			repoPath: path,
+		});
 		const allowAgents = resolveRepoConfig({repoPath: path, global: config})
 			.config.allowAgents;
-		const items: ScannedItem[] = readBacklogItems(path).map((item) => {
+		const items: ScannedItem[] = backlog.map((item) => {
 			const eligibility = resolveEligibility({
 				humanOnly: item.humanOnly,
 				needsAnswers: item.needsAnswers,

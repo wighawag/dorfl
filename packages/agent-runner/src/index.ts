@@ -51,6 +51,17 @@ export {
 	resolveEligibility,
 } from './eligibility.js';
 
+export type {
+	LedgerBacklogItem,
+	LedgerNeedsAttentionItem,
+	LocalLedgerState,
+	ArbiterLedgerState,
+	ResolveLocalStateInput,
+	ResolveArbiterStateInput,
+	LedgerReadStrategy,
+} from './ledger-read.js';
+export {currentLedgerRead, ledgerRead} from './ledger-read.js';
+
 export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
 
