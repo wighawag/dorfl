@@ -53,10 +53,24 @@ describe('performClaim — happy path', () => {
 		expect(content).not.toMatch(/^claimed_at:/m);
 	});
 
-	it('stamps legacy advisory claimed_by / claimed_at lines only when already present', async () => {
-		// The advisory-stamp mechanism is vestigial: it acts ONLY on a file that
-		// still carries the legacy lines (none are written by the contract today).
-		// A repo carrying such a legacy file still gets a consistent stamp.
+	it('records the claimer in the claim COMMIT message, not in frontmatter', async () => {
+		// Source of truth for who/when: the commit `claim: <slug> (by <who>)`.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['who']);
+		await performClaim({
+			slug: 'who',
+			cwd: repo,
+			arbiter: 'arbiter',
+			by: 'alice',
+			env: gitEnv(),
+		});
+		const subject = gitIn(['log', '-1', '--format=%s', 'arbiter/main'], repo);
+		expect(subject.trim()).toBe('claim: who (by alice)');
+	});
+
+	it('leaves legacy claimed_by / claimed_at lines untouched (no longer stamped)', async () => {
+		// The advisory-stamp mechanism was removed: a file still carrying legacy
+		// lines is claimed normally and the lines are left exactly as-is (not
+		// updated, not deleted) — the contract simply ignores them.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['legacy']);
 		const backlogFile = join(repo, 'work', 'backlog', 'legacy.md');
 		const legacy = readFileSync(backlogFile, 'utf8').replace(
@@ -78,8 +92,9 @@ describe('performClaim — happy path', () => {
 			['show', 'arbiter/main:work/in-progress/legacy.md'],
 			repo,
 		);
-		expect(content).toMatch(/^claimed_by: alice$/m);
-		expect(content).toMatch(/^claimed_at: \d{4}-\d{2}-\d{2}T/m);
+		// Untouched: still the empty legacy lines, NOT stamped with 'alice'.
+		expect(content).toMatch(/^claimed_by:\s*$/m);
+		expect(content).not.toMatch(/^claimed_by: alice$/m);
 	});
 
 	it('restores the original branch and cleans up the claim branch', async () => {

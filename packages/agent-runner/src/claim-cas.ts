@@ -1,4 +1,4 @@
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 
@@ -220,9 +220,9 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		);
 	}
 
-	// Advisory only (NOT the source of truth — folder + history are). Stamp if present.
-	await stampAdvisory(inProgressAbs, ctx.by, cwd, env);
-
+	// Who/when is recorded authoritatively by THIS commit (folder + git history
+	// are the source of truth — there is no advisory claimed_by frontmatter field;
+	// see WORK-CONTRACT rule 6).
 	await gitHard(
 		['commit', '--quiet', '-m', `claim: ${slug} (by ${ctx.by})`],
 		cwd,
@@ -283,30 +283,6 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		);
 	}
 	return {kind: 'rejected', message: 'push rejected / lease failed'};
-}
-
-/** Stamp advisory `claimed_by` / `claimed_at` lines if they already exist. */
-async function stampAdvisory(
-	inProgressAbs: string,
-	by: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<void> {
-	let content: string;
-	try {
-		content = readFileSync(inProgressAbs, 'utf8');
-	} catch {
-		return;
-	}
-	if (!/^claimed_by:/m.test(content)) {
-		return;
-	}
-	const ts = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-	const stamped = content
-		.replace(/^claimed_by:.*$/m, `claimed_by: ${by}`)
-		.replace(/^claimed_at:.*$/m, `claimed_at: ${ts}`);
-	writeFileSync(inProgressAbs, stamped);
-	await gitHard(['add', inProgressAbs], cwd, env);
 }
 
 /** The branch (or detached HEAD sha) we should return to afterward. */

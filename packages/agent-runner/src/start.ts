@@ -211,11 +211,13 @@ async function startFromInProgress(params: {
 	const {slug, arbiter, cwd, env, resume, note} = params;
 
 	if (!resume) {
-		// Advisory only — surfaced for the human, NEVER used to decide.
-		const claimedBy = await advisoryClaimedBy(slug, arbiter, cwd, env);
-		const who = claimedBy ? claimedBy : '(unset)';
+		// Surfaced for the human, NEVER used to decide (the folder already drove the
+		// decision). Who claimed comes from the claim COMMIT (the source of truth),
+		// not a frontmatter field (there is none — WORK-CONTRACT rule 6).
+		const claimedBy = await claimedByFromCommit(slug, arbiter, cwd, env);
+		const who = claimedBy ? claimedBy : '(see git log)';
 		throw new StartRefusal(
-			`'${slug}' is already in-progress; advisory claimed_by=${who}; ` +
+			`'${slug}' is already in-progress; claimed ${who}; ` +
 				'if this is your own resumed work, re-run with --resume.',
 		);
 	}
@@ -302,23 +304,29 @@ async function folderOnArbiterMain(
 }
 
 /**
- * Read the ADVISORY `claimed_by` from the in-progress file on `<arbiter>/main`,
- * purely to make the refusal message helpful. This value is NEVER used to decide
- * behaviour (WORK-CONTRACT rule 6) — the folder already drove that decision.
+ * Derive who claimed the slice from the claim COMMIT that introduced it to
+ * `work/in-progress/` (the message is `claim: <slug> (by <who>)`), purely to make
+ * the refusal message helpful. This is the source of truth for who/when (there is
+ * no advisory `claimed_by` frontmatter field — WORK-CONTRACT rule 6); the folder
+ * already drove the start decision, so this value is NEVER used to decide.
  */
-async function advisoryClaimedBy(
+async function claimedByFromCommit(
 	slug: string,
 	arbiter: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string> {
-	const object = `${arbiter}/main:work/in-progress/${slug}.md`;
-	const show = await gitSoft(['show', object], cwd, env);
-	if (show.status !== 0) {
+	const path = `work/in-progress/${slug}.md`;
+	const log = await gitSoft(
+		['log', '-1', '--format=%s', `${arbiter}/main`, '--', path],
+		cwd,
+		env,
+	);
+	if (log.status !== 0) {
 		return '';
 	}
-	const match = /^claimed_by:[ \t]*(.*)$/m.exec(show.stdout);
-	return match ? match[1].trim() : '';
+	const match = /\(by (.+)\)\s*$/.exec(log.stdout.trim());
+	return match ? `by ${match[1].trim()}` : '';
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */

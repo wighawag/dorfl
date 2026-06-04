@@ -2,7 +2,6 @@
 title: humanOnly gate — replace the afk field + allowUnspecifiedGate with humanOnly + allowAgents
 slug: humanonly-gate
 prd: agent-runner
-afk: false
 blockedBy: [scan, scan-human-dashboard, per-repo-config]
 covers: [9]
 ---

@@ -345,7 +345,7 @@ export function buildProgram(): Command {
 	program
 		.command('start')
 		.description(
-			'Claim a backlog item (only if needed) and onboard onto its work/<slug> branch in the CURRENT checkout. Decides on the folder on <arbiter>/main, never on claimed_by. Launches no agent/editor.',
+			'Claim a backlog item (only if needed) and onboard onto its work/<slug> branch in the CURRENT checkout. Decides on the folder on <arbiter>/main, never on a frontmatter field. Launches no agent/editor.',
 		)
 		.argument(
 			'[slug]',

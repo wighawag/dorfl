@@ -146,7 +146,7 @@ describe('start — backlog item, losing/contended claim', () => {
 });
 
 describe('start — in-progress item', () => {
-	it('refuses by default with a folder-based message (never from claimed_by)', async () => {
+	it('refuses by default with a folder-based message (claimer from the commit)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
 		const repo = seeded.repo;
 		// Claim it from a separate clone so it is in-progress on the arbiter.
@@ -170,10 +170,10 @@ describe('start — in-progress item', () => {
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/already in-progress/);
 		expect(result.message).toMatch(/--resume/);
-		// The decision is folder-based. claimed_by is no longer part of the
-		// contract (WORK-CONTRACT rule 6), so the advisory is always (unset) — the
-		// refusal stands purely on the folder, which is the whole point.
-		expect(result.message).toMatch(/claimed_by=\(unset\)/);
+		// The decision is folder-based (WORK-CONTRACT rule 6 — no claimed_by field).
+		// The helper "who" is derived from the claim COMMIT (`claim: <slug> (by X)`),
+		// the source of truth, purely to make the refusal message useful.
+		expect(result.message).toMatch(/by someone-else/);
 		// User untouched; no work branch.
 		expect(currentBranch(repo)).toBe(before);
 		expect(localBranchExists(repo, 'work/beta')).toBe(false);
