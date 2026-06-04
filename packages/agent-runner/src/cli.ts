@@ -259,7 +259,7 @@ export function buildProgram(): Command {
 			'execution working area for hub mirrors + job worktrees (default: workspacesDir / ~/.agent-runner)',
 		)
 		.option('--json', 'output the raw result as JSON')
-		.action((flags: RunFlags, command: Commander) => {
+		.action(async (flags: RunFlags, command: Commander) => {
 			if (!flags.once) {
 				throw new Error(
 					'only `run --once` is implemented (increment B). Pass --once.',
@@ -276,7 +276,7 @@ export function buildProgram(): Command {
 				);
 			}
 			const workspace = flags.workspace ?? config.workspacesDir;
-			const result = runOnce({
+			const result = await runOnce({
 				config,
 				workspace,
 				onWarn: (message) => console.error(`>> ${message}`),

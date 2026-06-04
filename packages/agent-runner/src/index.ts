@@ -66,9 +66,6 @@ export {
 export type {Candidate, SelectCaps} from './select.js';
 export {selectCandidates} from './select.js';
 
-export type {ClaimOutcome, ClaimOptions, ClaimResult} from './claim.js';
-export {claimItem, claimItemAsync, defaultClaimScript} from './claim.js';
-
 export type {
 	ClaimExitCode,
 	ClaimCasOutcome,

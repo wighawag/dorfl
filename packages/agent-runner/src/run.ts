@@ -2,7 +2,7 @@ import type {Config} from './config.js';
 import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
-import {claimItem} from './claim.js';
+import {performClaim} from './claim-cas.js';
 import {createJob, updateJobRecord, type Job} from './workspace.js';
 import {routeToNeedsAttention} from './needs-attention.js';
 import {reapJob} from './gc.js';
@@ -21,9 +21,9 @@ import {join} from 'node:path';
 /** What happened to one selected item across the whole pipeline. */
 export type ItemStatus =
 	| 'claimed-done' // tests green + rebased clean → integrated (pushed/merged)
-	| 'lost-race' // claim.sh exit 2 — skipped cleanly
-	| 'claim-contended' // claim.sh exit 3
-	| 'claim-error' // claim.sh exit 1 / unexpected
+	| 'lost-race' // claim exit 2 — skipped cleanly
+	| 'claim-contended' // claim exit 3
+	| 'claim-error' // claim exit 1 / unexpected
 	| 'tests-failed' // claimed + ran, but gate red → routed to needs-attention
 	| 'needs-attention' // rebase conflict at integrate time (ADR §10) — human must look
 	| 'agent-failed'; // agentCmd itself errored before the gate
@@ -90,8 +90,6 @@ export interface RunOnceOptions {
 	}) => void;
 	/** Environment for git/agent child processes. */
 	env?: NodeJS.ProcessEnv;
-	/** Path to claim.sh (defaults to the vendored copy). */
-	claimScript?: string;
 	/** Override agent-id generation (tests). Retained for API compat; unused for branch naming. */
 	agentId?: () => string;
 	/**
@@ -137,7 +135,7 @@ function runPnpmTest(
  * exit 2) is skipped cleanly; failing work never reaches `work/done/`; a rebase
  * conflict is aborted and routed to needs-attention (ADR §10).
  */
-export function runOnce(options: RunOnceOptions): RunOnceResult {
+export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	const config = options.config;
 	const report = options.report ?? scan(config);
 	const candidates = selectCandidates(report, {
@@ -155,7 +153,7 @@ export function runOnce(options: RunOnceOptions): RunOnceResult {
 	const items: ItemResult[] = [];
 	for (const candidate of candidates) {
 		items.push(
-			runOneItem(candidate, {
+			await runOneItem(candidate, {
 				config,
 				workspace,
 				agentRunner: options.agentRunner,
@@ -164,7 +162,6 @@ export function runOnce(options: RunOnceOptions): RunOnceResult {
 				integrator,
 				openPr: options.openPr,
 				env,
-				claimScript: options.claimScript,
 				onWarn: options.onWarn,
 			}),
 		);
@@ -203,7 +200,6 @@ interface OneItemContext {
 		env?: NodeJS.ProcessEnv;
 	}) => void;
 	env?: NodeJS.ProcessEnv;
-	claimScript?: string;
 	onWarn?: (message: string) => void;
 }
 
@@ -222,7 +218,10 @@ function commitCompletion(
 	git(['commit', '-q', '-m', message], dir, {env});
 }
 
-function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
+async function runOneItem(
+	candidate: Candidate,
+	ctx: OneItemContext,
+): Promise<ItemResult> {
 	const {slug, repoPath} = candidate;
 	const base: ItemResult = {repoPath, slug, status: 'lost-race'};
 
@@ -236,12 +235,13 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		ctx.onWarn?.(resolved.message);
 	}
 
-	// 1. Claim (the runner's first git-state transition) via claim.sh.
-	const claim = claimItem({
+	// 1. Claim (the runner's first git-state transition) via the in-process CAS.
+	//    `performClaim` is async, so two awaited runners over the same slug
+	//    genuinely race — the arbiter's ref-CAS (not ordering) picks one winner.
+	const claim = await performClaim({
 		slug,
 		cwd: repoPath,
 		arbiter: config.defaultArbiter,
-		claimScript: ctx.claimScript,
 		env: ctx.env,
 	});
 	if (claim.outcome === 'lost') {
@@ -250,8 +250,8 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 	if (claim.outcome === 'contended') {
 		return {...base, status: 'claim-contended'};
 	}
-	if (claim.outcome === 'error') {
-		return {...base, status: 'claim-error', detail: claim.stderr.trim()};
+	if (claim.outcome === 'usage-error') {
+		return {...base, status: 'claim-error', detail: claim.message};
 	}
 
 	// 2. Isolate in a per-job worktree cut from the freshly-fetched hub mirror

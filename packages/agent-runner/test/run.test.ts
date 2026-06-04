@@ -2,7 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {writeFileSync, existsSync} from 'node:fs';
 import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
-import {claimItem} from '../src/claim.js';
+import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
 import {scan} from '../src/scan.js';
 import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
@@ -12,7 +12,6 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
-	CLAIM_SCRIPT,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -51,16 +50,15 @@ function configFor(root: string, overrides = {}) {
 }
 
 describe('runOnce — happy path (green gate)', () => {
-	it('claims an eligible item, runs the agent, and moves it to done on green tests', () => {
+	it('claims an eligible item, runs the agent, and moves it to done on green tests', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor(scratch.root);
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -74,17 +72,16 @@ describe('runOnce — happy path (green gate)', () => {
 });
 
 describe('runOnce — test gate keeps failing work out of done/', () => {
-	it('leaves a red item in in-progress, never moving it to done', () => {
+	it('leaves a red item in in-progress, never moving it to done', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, 'ws');
 		const config = configFor(scratch.root);
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: redGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -105,16 +102,15 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 });
 
 describe('runOnce — concurrency caps', () => {
-	it('claims at most maxParallel items then stops', () => {
+	it('claims at most maxParallel items then stops', async () => {
 		seedRepoWithArbiter(scratch.root, ['a', 'b', 'c', 'd', 'e']);
 		const config = configFor(scratch.root, {maxParallel: 2, perRepoMax: 10});
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -122,16 +118,15 @@ describe('runOnce — concurrency caps', () => {
 		expect(result.claimedAndDone).toBe(2);
 	});
 
-	it('claims at most perRepoMax items from one repo', () => {
+	it('claims at most perRepoMax items from one repo', async () => {
 		seedRepoWithArbiter(scratch.root, ['a', 'b', 'c', 'd']);
 		const config = configFor(scratch.root, {maxParallel: 10, perRepoMax: 1});
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -140,28 +135,26 @@ describe('runOnce — concurrency caps', () => {
 });
 
 describe('runOnce — lost race is skipped cleanly', () => {
-	it('skips an item already claimed by someone else (claim exit 2)', () => {
+	it('skips an item already claimed by someone else (claim exit 2)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
 		// Pre-claim `solo` from an independent clone so the runner loses the race.
 		const other = seeded.clone('other');
-		const pre = claimItem({
+		const pre = await performClaim({
 			slug: 'solo',
 			cwd: other,
 			arbiter: 'arbiter',
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 		});
 		expect(pre.outcome).toBe('claimed');
 
 		const config = configFor(scratch.root);
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			// scan the still-stale working clone (its backlog still lists solo)
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -197,16 +190,14 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 				workspace: join(scratch.root, `ws-${agentId}`),
 				agentRunner: editingAgent,
 				testGate: greenGate,
-				claimScript: CLAIM_SCRIPT,
 				env: gitEnv(),
 				agentId: () => agentId,
 			});
 		};
 
-		const [ra, rb] = await Promise.all([
-			Promise.resolve().then(() => runFrom(a, 'A')),
-			Promise.resolve().then(() => runFrom(b, 'B')),
-		]);
+		// Genuinely concurrent: both in-process claims race over the same item, so
+		// the arbiter's ref-CAS (not test ordering) is what picks the single winner.
+		const [ra, rb] = await Promise.all([runFrom(a, 'A'), runFrom(b, 'B')]);
 
 		const statuses = [ra.items[0]?.status, rb.items[0]?.status];
 		const winners = statuses.filter((s) => s === 'claimed-done');
@@ -217,17 +208,16 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 });
 
 describe('runOnce — integration modes', () => {
-	it('integration: propose does NOT push to main; it pushes the work branch + opens a PR', () => {
+	it('integration: propose does NOT push to main; it pushes the work branch + opens a PR', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor(scratch.root, {integration: 'propose'});
 		let prBranch = '';
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 			openPr: ({branch}) => {
@@ -245,16 +235,15 @@ describe('runOnce — integration modes', () => {
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
 	});
 
-	it('integration: merge lands the done-move directly on the arbiter main', () => {
+	it('integration: merge lands the done-move directly on the arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor(scratch.root, {integration: 'merge'});
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -264,7 +253,7 @@ describe('runOnce — integration modes', () => {
 });
 
 describe('runOnce — per-repo config (multi-repo aware)', () => {
-	it('honours a repo-local .agent-runner.json integration over the global', () => {
+	it('honours a repo-local .agent-runner.json integration over the global', async () => {
 		// Global says `merge`, but the repo commits `propose` in its own file →
 		// the run must integrate THIS repo as propose (per-repo > global).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
@@ -274,13 +263,12 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		);
 		const config = configFor(scratch.root, {integration: 'merge'});
 		let prBranch = '';
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 			openPr: ({branch}) => {
@@ -296,7 +284,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
-	it('resolves each repo against ITS OWN file in one run (A merge, B propose)', () => {
+	it('resolves each repo against ITS OWN file in one run (A merge, B propose)', async () => {
 		// Two independent repos+arbiters under one root. Global = merge. Repo B
 		// commits propose; repo A has no file. One run → A merges, B proposes.
 		const a = seedRepoWithArbiter(join(scratch.root, 'a'), ['fa']);
@@ -315,13 +303,12 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			allowAgents: true,
 		});
 		let bBranch = '';
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentZ',
 			openPr: ({branch}) => {
@@ -344,17 +331,16 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 });
 
 describe('runOnce — agent failure', () => {
-	it('does not move to done when the agent itself fails', () => {
+	it('does not move to done when the agent itself fails', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor(scratch.root);
 		const failingAgent: AgentRunner = () => ({ok: false, detail: 'boom'});
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: failingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -365,7 +351,7 @@ describe('runOnce — agent failure', () => {
 });
 
 describe('runOnce — runs in a substrate job worktree (one isolation path)', () => {
-	it('auto-reaps a provably-safe (merged) finished job worktree at end-of-job (ADR §4)', () => {
+	it('auto-reaps a provably-safe (merged) finished job worktree at end-of-job (ADR §4)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		void repo;
 		const workspacesDir = join(scratch.root, '.agent-runner');
@@ -375,13 +361,12 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 			workspacesDir,
 			integration: 'merge',
 		});
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('claimed-done');
@@ -392,20 +377,19 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		expect(existsSync(dir)).toBe(false);
 	});
 
-	it('RETAINS a finished job whose work is not on the arbiter (needs-attention signal)', () => {
+	it('RETAINS a finished job whose work is not on the arbiter (needs-attention signal)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		void repo;
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const config = configFor(scratch.root, {workspacesDir});
 		// A red gate ⇒ the work never reaches the arbiter ⇒ NOT provably safe ⇒
 		// the worktree + record are retained for gc/status to read (ADR §4).
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report: scan(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: redGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('tests-failed');
@@ -421,7 +405,7 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 });
 
 describe('runOnce — rebase-before-integrate (ADR §10)', () => {
-	it('routes a rebase conflict to needs-attention without auto-resolving or moving main', () => {
+	it('routes a rebase conflict to needs-attention without auto-resolving or moving main', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feat']);
 		const {repo, arbiter} = seeded;
 		const workspacesDir = join(scratch.root, '.agent-runner');
@@ -447,13 +431,12 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 			return {ok: true};
 		};
 
-		const result = runOnce({
+		const result = await runOnce({
 			config,
 			report,
 			workspace: workspacesDir,
 			agentRunner: conflictingAgent,
 			testGate: greenGate,
-			claimScript: CLAIM_SCRIPT,
 			env: gitEnv(),
 		});
 

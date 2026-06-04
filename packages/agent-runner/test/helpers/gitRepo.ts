@@ -1,23 +1,7 @@
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join, dirname, resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {join} from 'node:path';
 import {run, git} from '../../src/git.js';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-/** Absolute path to the canonical work-contract claim script (the `to-slices`
- * skill at the monorepo root: skills/to-slices/scripts/claim.sh). */
-export const CLAIM_SCRIPT = resolve(
-	HERE,
-	'..',
-	'..',
-	'..',
-	'..',
-	'skills',
-	'to-slices',
-	'scripts',
-	'claim.sh',
-);
 
 /** Deterministic git identity + non-interactive env for throwaway test repos. */
 export function gitEnv(): NodeJS.ProcessEnv {

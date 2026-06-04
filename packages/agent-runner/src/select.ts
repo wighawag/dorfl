@@ -22,7 +22,7 @@ export interface SelectCaps {
  * the scan core.
  *
  * NOTE: this is optimistic selection only — actual ownership is decided by the
- * arbiter when `claim.sh` runs. A candidate that loses the race is dropped then.
+ * arbiter when the claim CAS runs. A candidate that loses the race is dropped then.
  */
 export function selectCandidates(
 	report: ScanReport,
