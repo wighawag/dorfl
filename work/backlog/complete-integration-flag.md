@@ -1,5 +1,5 @@
 ---
-title: complete integration flag — choose merge/propose per invocation; switch to main on both
+title: complete integration flag — merge/propose per invocation; switch to main + delete merged branch (both modes)
 slug: complete-integration-flag
 prd: agent-runner
 afk: false
@@ -42,12 +42,19 @@ for a consistent "land back on main, ready for the next thing" finish — but th
 behaviour differs per mode (the work's location differs):
 
 - **merge:** switch to `main` AND fast-forward it to the just-pushed `<arbiter>/main`
-  (the work landed there) — unchanged.
+  (the work landed there).
 - **propose:** the work is on a pushed branch awaiting review, NOT on main, so
-  **just `git switch main`** — do NOT ff (arbiter main hasn't moved; nothing to
-  ff) and do NOT delete the `work/<slug>` branch (the PR is built from it; keep it
-  local + remote intact, merely switch off it).
-- **`--no-switch`** opt-out (both modes): leave the human on `work/<slug>` (for
+  **just `git switch main`** — do NOT ff (arbiter main hasn't moved; nothing to ff).
+- **Delete the LOCAL `work/<slug>` branch when its work is provably on the
+  arbiter** (same predicate as worktree deletion, ADR §4; mode-agnostic): delete
+  iff EITHER its tip is an ancestor of `<arbiter>/main` (merged — the merge case)
+  OR `<arbiter>/work/<slug>` exists and its tip == the local tip (pushed &
+  up-to-date — the propose case). Otherwise KEEP it (unmerged / unpushed /
+  diverged = not safe). NEVER delete the *remote* branch (a propose PR is built
+  from it) — only the local branch. Verify remote-tip == local-tip (not merely
+  "a branch was pushed") so a later un-pushed amend is never lost.
+- **`--no-switch`** opt-out (both modes): leave the human on `work/<slug>` AND do
+  not delete it (they chose to stay / keep iterating). For
   "I'll keep iterating on this branch, e.g. address review feedback").
 
 ## Acceptance criteria
@@ -62,10 +69,16 @@ behaviour differs per mode (the work's location differs):
       same per-repo > global > default order.
 - [ ] `complete` switches the human back to local `main` in BOTH modes by
       default: merge = switch + ff to the new main; propose = `git switch main`
-      only (no ff, and the `work/<slug>` branch is kept intact local + remote).
-- [ ] `--no-switch` leaves the human on `work/<slug>` in either mode.
+      only (no ff).
+- [ ] The LOCAL `work/<slug>` branch is deleted (both modes) iff its work is
+      provably on the arbiter — tip is ancestor of `<arbiter>/main` (merged) OR
+      `<arbiter>/work/<slug>` tip == local tip (pushed & up-to-date); otherwise
+      kept. The REMOTE branch is never deleted. Not deleted under `--no-switch`.
+- [ ] `--no-switch` leaves the human on `work/<slug>` (and keeps the branch) in
+      either mode.
 - [ ] Tests cover each precedence level, the mutually-exclusive error, the
-      switch-to-main behaviour in both modes, and `--no-switch`.
+      switch-to-main behaviour in both modes, branch-deletion-when-provably-on-
+      arbiter (merged AND pushed cases) vs kept-when-not, and `--no-switch`.
 
 ## Blocked by
 
@@ -85,11 +98,14 @@ behaviour differs per mode (the work's location differs):
 > global > default order so human and autonomous paths agree.
 >
 > ALSO fold in this fix: `complete` must switch the human back to local `main` in
-> BOTH modes (today it only does in merge). merge = switch + ff to the new main
-> (unchanged); propose = `git switch main` ONLY (the work is on a pushed branch
-> awaiting review, not on main — do not ff, and keep the `work/<slug>` branch
-> intact local + remote). Add `--no-switch` to leave the human on the work branch
-> in either mode.
+> BOTH modes (today it only does in merge). merge = switch + ff to the new main;
+> propose = `git switch main` ONLY (no ff). Then DELETE the local `work/<slug>`
+> branch when its work is provably on the arbiter — same predicate as worktree
+> deletion (ADR §4), mode-agnostic: tip is ancestor of `<arbiter>/main` (merged)
+> OR `<arbiter>/work/<slug>` tip == local tip (pushed & up-to-date); else keep it.
+> NEVER delete the remote branch (propose PR needs it); verify remote-tip ==
+> local-tip so an un-pushed amend is never lost. Add `--no-switch` to leave the
+> human on the work branch (and keep it) in either mode.
 >
 > TDD with vitest: each precedence level; the mutually-exclusive flag error; the
 > autonomous config-only path; switch-to-main in both modes; `--no-switch`. Follow
