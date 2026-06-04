@@ -17,6 +17,8 @@ import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {status, formatStatus} from './status.js';
+import {detectRepos} from './detect.js';
+import {returnToBacklog} from './needs-attention.js';
 
 interface ScanFlags {
 	config?: string;
@@ -143,6 +145,12 @@ interface StatusFlags {
 	config?: string;
 	workspace?: string;
 	json?: boolean;
+}
+
+interface ReturnFlags {
+	config?: string;
+	cwd?: string;
+	arbiter?: string;
 }
 
 export function buildProgram(): Command {
@@ -507,12 +515,48 @@ export function buildProgram(): Command {
 		.action((flags: StatusFlags) => {
 			const config = loadConfig(flags.config);
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
-			const report = status({workspacesDir});
+			// Also surface the folder-native needs-attention set (ADR §12): the
+			// `work/needs-attention/` folders of every participating repo.
+			const repoRoots = detectRepos({
+				roots: config.roots,
+				include: config.include,
+				exclude: config.exclude,
+			});
+			const report = status({workspacesDir, repoRoots});
 			if (flags.json) {
 				console.log(JSON.stringify(report, null, 2));
 			} else {
 				console.log(formatStatus(report));
 			}
+		});
+
+	program
+		.command('return <slug>')
+		.description(
+			'Return a resolved needs-attention item to the backlog for re-claiming (ADR §12): git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md and commit it. The clean re-queue once a human has resolved the cause, so items do not rot. The recorded reason stays in the body as a durable note.',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--cwd <dir>',
+			'the repo/working clone whose work/ tree holds the item (default: cwd)',
+		)
+		.option(
+			'--arbiter <remote>',
+			'also push the transition to this arbiter remote (like the done-move)',
+		)
+		.action((slug: string, flags: ReturnFlags) => {
+			const cwd = flags.cwd ?? process.cwd();
+			const result = returnToBacklog({
+				cwd,
+				slug,
+				arbiter: flags.arbiter,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (!result.moved) {
+				console.error(`error: ${result.reasonNotMoved}`);
+				process.exit(1);
+			}
+			console.log(`Returned '${slug}' to backlog for re-claiming.`);
 		});
 
 	return program;

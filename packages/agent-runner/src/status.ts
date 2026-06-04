@@ -1,6 +1,10 @@
 import {discoverJobs, type GcJob} from './gc.js';
 import {NullHarness, type Harness} from './harness.js';
 import {type JobState} from './workspace.js';
+import {
+	readNeedsAttentionItems,
+	type NeedsAttentionItem,
+} from './needs-attention.js';
 
 /**
  * `agent-runner status` — the **operational dashboard of jobs** (ADR §4/§5/§12
@@ -56,12 +60,29 @@ export interface JobStatus {
 	dir: string;
 }
 
-/** The two operational groups `status` reports. */
+/** One repo's `work/needs-attention/` folder, surfaced for the dashboard. */
+export interface RepoNeedsAttention {
+	/** The repo path whose `work/needs-attention/` was read. */
+	repoPath: string;
+	/** The stuck items (slug + recorded reason) in that folder. */
+	items: NeedsAttentionItem[];
+}
+
+/** The operational groups `status` reports. */
 export interface StatusReport {
 	/** Running jobs the harness reports still alive. */
 	active: JobStatus[];
 	/** Stuck (needs-attention), crashed (running-but-dead), or un-reaped (done) jobs. */
 	attention: JobStatus[];
+	/**
+	 * The folder-native needs-attention surface (ADR §12): each participating
+	 * repo's `work/needs-attention/<slug>.md` items with their recorded reason.
+	 * This is the durable "look here" set in the repo's `work/` tree (distinct from
+	 * the transient job worktrees above). Empty when no `repoRoots` were given.
+	 * Optional in the type so the older job-only literals stay valid; `status()`
+	 * always populates it (possibly empty).
+	 */
+	needsAttention?: RepoNeedsAttention[];
 }
 
 export interface StatusOptions {
@@ -72,6 +93,12 @@ export interface StatusOptions {
 	 * to the null adapter; the `pi` adapter (and tests' stubs) plug in here.
 	 */
 	harness?: Harness;
+	/**
+	 * Participating repo paths whose `work/needs-attention/` folders to surface
+	 * (ADR §12). The CLI wires these from `detectRepos(config)`. Omitted ⇒ the
+	 * folder-native surface is skipped (only the job worktrees are reported).
+	 */
+	repoRoots?: string[];
 }
 
 /**
@@ -103,7 +130,17 @@ export function status(options: StatusOptions): StatusReport {
 
 	active.sort(bySlug);
 	attention.sort(bySlug);
-	return {active, attention};
+
+	const needsAttention: RepoNeedsAttention[] = [];
+	for (const repoPath of options.repoRoots ?? []) {
+		const items = readNeedsAttentionItems(repoPath);
+		if (items.length > 0) {
+			needsAttention.push({repoPath, items});
+		}
+	}
+	needsAttention.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
+
+	return {active, attention, needsAttention};
 }
 
 function bySlug(a: JobStatus, b: JobStatus): number {
@@ -138,7 +175,13 @@ function toJobStatus(job: GcJob, harness: Harness): JobStatus {
 export function formatStatus(report: StatusReport): string {
 	const lines: string[] = [];
 
-	if (report.active.length === 0 && report.attention.length === 0) {
+	const needsAttention = report.needsAttention ?? [];
+	const naCount = needsAttention.reduce((sum, r) => sum + r.items.length, 0);
+	if (
+		report.active.length === 0 &&
+		report.attention.length === 0 &&
+		naCount === 0
+	) {
 		return 'No jobs running or retained (the work area is empty).';
 	}
 
@@ -161,9 +204,26 @@ export function formatStatus(report: StatusReport): string {
 		}
 	}
 
+	// The folder-native needs-attention surface (ADR §12): items the runner
+	// bounced from in-progress/done to work/needs-attention/, each with its reason.
+	if (naCount > 0) {
+		lines.push('');
+		lines.push('Needs attention (work/needs-attention/ — a human must look):');
+		for (const repo of needsAttention) {
+			lines.push(`  ${repo.repoPath}`);
+			for (const item of repo.items) {
+				const reason =
+					item.reason !== '' ? item.reason : '(no reason recorded)';
+				lines.push(`    ${item.slug}`);
+				lines.push(`      reason: ${reason}`);
+			}
+		}
+	}
+
 	lines.push('');
 	lines.push(
-		`Summary: ${report.active.length} active, ${report.attention.length} failed/retained job(s).`,
+		`Summary: ${report.active.length} active, ${report.attention.length} failed/retained job(s)` +
+			(naCount > 0 ? `, ${naCount} needs-attention item(s).` : '.'),
 	);
 
 	return lines.join('\n');

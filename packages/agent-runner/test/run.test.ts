@@ -75,12 +75,13 @@ describe('runOnce — happy path (green gate)', () => {
 
 describe('runOnce — test gate keeps failing work out of done/', () => {
 	it('leaves a red item in in-progress, never moving it to done', () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, 'ws');
 		const config = configFor(scratch.root);
 		const result = runOnce({
 			config,
 			report: scan(config),
-			workspace: join(scratch.root, 'ws'),
+			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: redGate,
 			claimScript: CLAIM_SCRIPT,
@@ -92,6 +93,14 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		// claim landed (in-progress on main), but it NEVER reached done.
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+		// Folder-native surfacing (ADR §12): the runner bounced the work item from
+		// in-progress/ to needs-attention/ IN THE WORKTREE, with the reason in its
+		// body. (It is not pushed — the worktree/branch is the signal, ADR §4.)
+		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
+		expect(existsSync(join(dir, 'work', 'needs-attention', 'feat.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(dir, 'work', 'in-progress', 'feat.md'))).toBe(false);
 	});
 });
 
@@ -456,6 +465,12 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		// The job record reflects needs-attention; the worktree is retained.
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
 		expect(readJobRecord(dir)?.state).toBe('needs-attention');
+		// Folder-native surfacing (ADR §12): the item was already done-moved before
+		// the rebase, so the runner bounces it from done/ to needs-attention/.
+		expect(existsSync(join(dir, 'work', 'needs-attention', 'feat.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(dir, 'work', 'done', 'feat.md'))).toBe(false);
 
 		// main was NOT advanced to the agent's version (never auto-resolved).
 		gitIn(['fetch', '-q', 'arbiter'], repo);

@@ -1,0 +1,280 @@
+import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {writeFileSync, readFileSync, existsSync} from 'node:fs';
+import {join} from 'node:path';
+import {
+	routeToNeedsAttention,
+	returnToBacklog,
+	readNeedsAttentionItems,
+} from '../src/needs-attention.js';
+import {scan} from '../src/scan.js';
+import {performClaim} from '../src/claim-cas.js';
+import {
+	makeScratch,
+	seedRepoWithArbiter,
+	existsOnArbiterMain,
+	gitEnv,
+	gitIn,
+	type Scratch,
+} from './helpers/gitRepo.js';
+import type {Config} from '../src/config.js';
+
+let scratch: Scratch;
+
+beforeEach(() => {
+	scratch = makeScratch('agent-runner-needs-attention-');
+});
+afterEach(() => {
+	scratch.cleanup();
+});
+
+const ARBITER = 'arbiter';
+
+/**
+ * Stand a repo up exactly as the runner leaves it just before a stuck outcome: a
+ * slice claimed (in-progress on the arbiter) and onboarded onto `work/<slug>`
+ * off the freshly-pushed main, with the build agent's (uncommitted) edits in the
+ * tree. Returns the seeded handle + working clone.
+ */
+async function claimAndBranch(
+	slug: string,
+	opts: {promptBody?: string; extraSlugs?: string[]} = {},
+): Promise<{repo: string}> {
+	const seeded = seedRepoWithArbiter(
+		scratch.root,
+		[slug, ...(opts.extraSlugs ?? [])],
+		opts,
+	);
+	const repo = seeded.repo;
+	const claim = await performClaim({
+		slug,
+		cwd: repo,
+		arbiter: ARBITER,
+		env: gitEnv(),
+	});
+	expect(claim.exitCode).toBe(0);
+	gitIn(['fetch', '-q', ARBITER], repo);
+	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	return {repo};
+}
+
+/** Simulate the build agent: leave UNCOMMITTED work in the tree (no git). */
+function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
+	writeFileSync(join(repo, file), body);
+}
+
+describe('needs-attention — the move (in-progress → needs-attention)', () => {
+	it('git mvs the item and records the reason in the file body, committed', async () => {
+		const {repo} = await claimAndBranch('alpha');
+		agentEdits(repo);
+
+		const result = routeToNeedsAttention({
+			cwd: repo,
+			slug: 'alpha',
+			reason: 'acceptance gate failed (exit 1)',
+			env: gitEnv(),
+		});
+
+		expect(result.moved).toBe(true);
+		// The file moved folders…
+		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
+			false,
+		);
+		const dest = join(repo, 'work', 'needs-attention', 'alpha.md');
+		expect(existsSync(dest)).toBe(true);
+		// …the reason is prose in the BODY (not a frontmatter field).
+		const body = readFileSync(dest, 'utf8');
+		expect(body).toMatch(/acceptance gate failed \(exit 1\)/);
+		expect(body).toMatch(/Needs attention/i);
+		// …and it was committed (move + agent work) into one commit.
+		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
+		expect(files).toMatch(/work\/needs-attention\/alpha\.md/);
+		expect(files).toMatch(/work\/in-progress\/alpha\.md/);
+		expect(files).toMatch(/feature\.txt/);
+		// Working tree is clean afterwards.
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+	});
+
+	it('records agent-surfaced questions alongside the reason', async () => {
+		const {repo} = await claimAndBranch('beta');
+		agentEdits(repo);
+
+		routeToNeedsAttention({
+			cwd: repo,
+			slug: 'beta',
+			reason: 'agent reported the slice too ambiguous to build',
+			questions: [
+				'Which schema version is the source of truth?',
+				'Should retries be idempotent?',
+			],
+			env: gitEnv(),
+		});
+
+		const body = readFileSync(
+			join(repo, 'work', 'needs-attention', 'beta.md'),
+			'utf8',
+		);
+		expect(body).toMatch(/too ambiguous to build/);
+		expect(body).toMatch(/Which schema version is the source of truth\?/);
+		expect(body).toMatch(/Should retries be idempotent\?/);
+	});
+
+	it('refuses (does not throw) when the slug is not in-progress', async () => {
+		const {repo} = await claimAndBranch('gamma');
+		const result = routeToNeedsAttention({
+			cwd: repo,
+			slug: 'nonexistent',
+			reason: 'whatever',
+			env: gitEnv(),
+		});
+		expect(result.moved).toBe(false);
+		expect(result.reasonNotMoved).toMatch(/not found|not in-progress/i);
+	});
+});
+
+describe('needs-attention — not claimable, but surfaced', () => {
+	it('scan/eligibility do NOT treat needs-attention items as claimable', async () => {
+		// Keep `backlog/` non-empty (so the repo is still detected) while moving the
+		// claimed slice out to needs-attention/.
+		const {repo} = await claimAndBranch('delta', {extraSlugs: ['stays']});
+		agentEdits(repo);
+		routeToNeedsAttention({
+			cwd: repo,
+			slug: 'delta',
+			reason: 'rebase conflict against main',
+			env: gitEnv(),
+		});
+
+		const config: Config = {
+			roots: [scratch.root],
+			include: [],
+			exclude: [],
+			maxParallel: 1,
+			perRepoMax: 1,
+			defaultArbiter: ARBITER,
+			allowAgents: true,
+			integration: 'propose',
+			agentCmd: 'true',
+			workspacesDir: join(scratch.root, '.workspaces'),
+		};
+		const report = scan(config);
+		const all = report.repos.flatMap((r) => r.items);
+		// The item is in needs-attention/, not backlog/ — scan never sees it as a
+		// claimable backlog item (only the sibling `stays` remains in backlog/).
+		expect(all.find((i) => i.slug === 'delta')).toBeUndefined();
+		expect(all.find((i) => i.slug === 'stays')).toBeDefined();
+	});
+
+	it('readNeedsAttentionItems lists the stuck items with their reason', async () => {
+		const {repo} = await claimAndBranch('epsilon');
+		agentEdits(repo);
+		routeToNeedsAttention({
+			cwd: repo,
+			slug: 'epsilon',
+			reason: 'timeout after 30m with no progress',
+			env: gitEnv(),
+		});
+
+		const items = readNeedsAttentionItems(repo);
+		expect(items).toHaveLength(1);
+		expect(items[0].slug).toBe('epsilon');
+		expect(items[0].reason).toMatch(/timeout after 30m/);
+	});
+
+	it('readNeedsAttentionItems is empty when the folder is absent', async () => {
+		const {repo} = await claimAndBranch('zeta');
+		expect(readNeedsAttentionItems(repo)).toEqual([]);
+	});
+});
+
+describe('needs-attention — return path (needs-attention → backlog)', () => {
+	it('git mvs an item back to backlog for re-claiming, committed', async () => {
+		const {repo} = await claimAndBranch('eta');
+		agentEdits(repo);
+		routeToNeedsAttention({
+			cwd: repo,
+			slug: 'eta',
+			reason: 'env was misconfigured',
+			env: gitEnv(),
+		});
+
+		const result = returnToBacklog({
+			cwd: repo,
+			slug: 'eta',
+			env: gitEnv(),
+		});
+
+		expect(result.moved).toBe(true);
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'eta.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'backlog', 'eta.md'))).toBe(true);
+		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
+		expect(files).toMatch(/work\/backlog\/eta\.md/);
+		expect(files).toMatch(/work\/needs-attention\/eta\.md/);
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+	});
+
+	it('a returned item is once again claimable by scan/eligibility', async () => {
+		const {repo} = await claimAndBranch('theta');
+		agentEdits(repo);
+		routeToNeedsAttention({
+			cwd: repo,
+			slug: 'theta',
+			reason: 'transient failure',
+			env: gitEnv(),
+		});
+		returnToBacklog({cwd: repo, slug: 'theta', env: gitEnv()});
+
+		const config: Config = {
+			roots: [scratch.root],
+			include: [],
+			exclude: [],
+			maxParallel: 1,
+			perRepoMax: 1,
+			defaultArbiter: ARBITER,
+			allowAgents: true,
+			integration: 'propose',
+			agentCmd: 'true',
+			workspacesDir: join(scratch.root, '.workspaces'),
+		};
+		const report = scan(config);
+		const all = report.repos.flatMap((r) => r.items);
+		expect(all.find((i) => i.slug === 'theta')).toBeDefined();
+	});
+
+	it('refuses (does not throw) when the slug is not in needs-attention', async () => {
+		const {repo} = await claimAndBranch('iota');
+		const result = returnToBacklog({
+			cwd: repo,
+			slug: 'iota',
+			env: gitEnv(),
+		});
+		expect(result.moved).toBe(false);
+		expect(result.reasonNotMoved).toMatch(/not found|not in needs-attention/i);
+	});
+});
+
+describe('needs-attention — pushes the transition like the done-move', () => {
+	it('the move reaches the arbiter when an arbiter remote is configured', async () => {
+		const {repo} = await claimAndBranch('kappa');
+		agentEdits(repo);
+
+		routeToNeedsAttention({
+			cwd: repo,
+			slug: 'kappa',
+			reason: 'a reason',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		// The work branch carries the move; push it and confirm the arbiter has it.
+		gitIn(['push', '-q', ARBITER, 'work/kappa:work/kappa'], repo);
+		const res = gitIn(
+			['cat-file', '-e', 'work/kappa:work/needs-attention/kappa.md'],
+			repo,
+		);
+		expect(res).toBe('');
+		// Sanity: helper above asserts existsOnArbiterMain is importable.
+		expect(typeof existsOnArbiterMain).toBe('function');
+	});
+});

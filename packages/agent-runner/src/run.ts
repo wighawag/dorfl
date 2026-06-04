@@ -4,6 +4,7 @@ import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {claimItem} from './claim.js';
 import {createJob, updateJobRecord, type Job} from './workspace.js';
+import {routeToNeedsAttention} from './needs-attention.js';
 import {reapJob} from './gc.js';
 import {NullHarness, type Harness} from './harness.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
@@ -291,10 +292,12 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		//    needs-attention (it never auto-merges; the worktree is the signal).
 		const gate = ctx.testGate({cwd: job.dir, slug, env: ctx.env});
 		if (!gate.green) {
-			updateJobRecord(job.dir, {
-				state: 'needs-attention',
-				reason: gate.detail ?? 'acceptance gate failed',
-			});
+			const reason = gate.detail ?? 'acceptance gate failed';
+			updateJobRecord(job.dir, {state: 'needs-attention', reason});
+			// Folder-native surfacing (ADR §12): bounce the work item itself from
+			// in-progress/ to needs-attention/ with the reason in its body, committed
+			// on the work branch. The runner owns this move (the agent does no git).
+			routeToNeedsAttention({cwd: job.dir, slug, reason, env: ctx.env});
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
@@ -319,10 +322,12 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 			env: ctx.env,
 		});
 		if (outcome.outcome === 'needs-attention') {
-			updateJobRecord(job.dir, {
-				state: 'needs-attention',
-				reason: outcome.reason ?? 'needs attention',
-			});
+			const reason = outcome.reason ?? 'needs attention';
+			updateJobRecord(job.dir, {state: 'needs-attention', reason});
+			// Rebase conflict at integrate time (ADR §10): the item was already
+			// done-moved + committed at step 6, so route it from done/ to
+			// needs-attention/ — the same folder-native surfacing helper.
+			routeToNeedsAttention({cwd: job.dir, slug, reason, env: ctx.env});
 			return {...base, status: 'needs-attention', detail: outcome.reason};
 		}
 

@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {existsSync, mkdirSync} from 'node:fs';
+import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	JOB_RECORD_FILENAME,
@@ -307,5 +307,64 @@ describe('formatStatus — rendering', () => {
 		expect(out).toMatch(/crashed/);
 		// A running-but-dead job is flagged as not alive / crashed.
 		expect(out.toLowerCase()).toMatch(/dead|crashed|not alive|no longer/);
+	});
+});
+
+/**
+ * Seed a participating repo's `work/needs-attention/<slug>.md` with a reason
+ * block in the body (the shape `routeToNeedsAttention` produces).
+ */
+function seedNeedsAttention(slug: string, reason: string): string {
+	const repo = join(scratch.root, 'project');
+	const dir = join(repo, 'work', 'needs-attention');
+	mkdirSync(dir, {recursive: true});
+	writeFileSync(
+		join(dir, `${slug}.md`),
+		[
+			'---',
+			`title: ${slug}`,
+			`slug: ${slug}`,
+			'---',
+			'',
+			'## What to build',
+			'',
+			'thing',
+			'',
+			'## Needs attention',
+			'',
+			reason,
+			'',
+		].join('\n'),
+	);
+	return repo;
+}
+
+describe('status — folder-native needs-attention surface (ADR §12)', () => {
+	it('lists work/needs-attention/ items with their reason', () => {
+		const repo = seedNeedsAttention(
+			'stuck-slice',
+			'rebase conflict against main',
+		);
+		const report = status({
+			workspacesDir: workspacesDir(),
+			repoRoots: [repo],
+		});
+		expect(report.needsAttention).toHaveLength(1);
+		expect(report.needsAttention?.[0].repoPath).toBe(repo);
+		expect(report.needsAttention?.[0].items[0].slug).toBe('stuck-slice');
+		expect(report.needsAttention?.[0].items[0].reason).toMatch(
+			/rebase conflict against main/,
+		);
+
+		const out = formatStatus(report);
+		expect(out.toLowerCase()).toContain('needs attention');
+		expect(out).toMatch(/stuck-slice/);
+		expect(out).toMatch(/rebase conflict against main/);
+	});
+
+	it('omits the surface entirely when no repoRoots are given', () => {
+		seedNeedsAttention('ignored', 'should not appear');
+		const report = status({workspacesDir: workspacesDir()});
+		expect(report.needsAttention).toEqual([]);
 	});
 });

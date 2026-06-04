@@ -170,8 +170,26 @@ export {
 	discoverJobs,
 } from './gc.js';
 
-export type {JobStatus, StatusReport, StatusOptions} from './status.js';
+export type {
+	JobStatus,
+	RepoNeedsAttention,
+	StatusReport,
+	StatusOptions,
+} from './status.js';
 export {status, formatStatus} from './status.js';
+
+export type {
+	RouteToNeedsAttentionOptions,
+	RouteToNeedsAttentionResult,
+	ReturnToBacklogOptions,
+	ReturnToBacklogResult,
+	NeedsAttentionItem,
+} from './needs-attention.js';
+export {
+	routeToNeedsAttention,
+	returnToBacklog,
+	readNeedsAttentionItems,
+} from './needs-attention.js';
 
 export type {
 	Category,
