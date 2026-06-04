@@ -62,6 +62,14 @@ export type {
 } from './ledger-read.js';
 export {currentLedgerRead, ledgerRead} from './ledger-read.js';
 
+export type {
+	LedgerTransitionKind,
+	ApplyTransitionInput,
+	ApplyTransitionResult,
+	LedgerWriteStrategy,
+} from './ledger-write.js';
+export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
+
 export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
 

@@ -1,6 +1,7 @@
 import {mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
+import {ledgerWrite} from './ledger-write.js';
 import {resolveReadiness} from './readiness.js';
 
 /**
@@ -327,39 +328,46 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		);
 	}
 
+	// Publish the prepared claim micro-commit THROUGH the write seam. The seam's
+	// sole strategy is exactly today's behaviour — the `:main` push, the
+	// `--force-with-lease=main:<base>` lease, and the post-push verify all live
+	// inside the strategy (claim-cas no longer hard-wires the `main` push). The
+	// seam is storage-agnostic: we hand it the transition KIND, the prepared local
+	// branch, the CAS lease base, and the commit we expect to land.
 	if (ctx.dryRun) {
-		const message = `[dry-run] would: git push ${arbiter} ${claimBranch}:main --force-with-lease=main:${base}`;
-		note(message);
-		return {kind: 'claimed', message};
+		const result = await ledgerWrite.applyTransition({
+			kind: 'claim',
+			arbiter,
+			localBranch: claimBranch,
+			expectedBase: base,
+			head,
+			cwd,
+			dryRun: true,
+			env,
+			note,
+		});
+		return {kind: 'claimed', message: result.message};
 	}
 
-	// The atomic compare-and-swap. --force-with-lease=main:<base> asserts the
-	// arbiter's main is STILL <base> (unchanged since our fetch); the push then
-	// fast-forwards main to our claim. If main moved, the lease fails → rejected.
-	const push = await gitSoft(
-		['push', arbiter, `${claimBranch}:main`, `--force-with-lease=main:${base}`],
+	const result = await ledgerWrite.applyTransition({
+		kind: 'claim',
+		arbiter,
+		localBranch: claimBranch,
+		expectedBase: base,
+		head,
 		cwd,
 		env,
-	);
-	if (push.status === 0) {
-		// Verify the arbiter main now points at OUR claim (not merely "up-to-date").
-		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-		const arbiterHead = (
-			await gitHard(['rev-parse', `${arbiter}/main`], cwd, env)
-		).stdout.trim();
-		if (arbiterHead === head) {
-			const message = `CLAIMED '${slug}' -> work/in-progress/ on ${arbiter}/main.`;
-			note(message);
-			note(
-				`Start work:  git fetch ${arbiter} && git switch -c work/${slug} ${arbiter}/main`,
-			);
-			return {kind: 'claimed', message};
-		}
+		note,
+	});
+	if (result.kind === 'published') {
+		const message = `CLAIMED '${slug}' -> work/in-progress/ on ${arbiter}/main.`;
+		note(message);
 		note(
-			`push reported success but ${arbiter}/main is not our claim — treating as rejected.`,
+			`Start work:  git fetch ${arbiter} && git switch -c work/${slug} ${arbiter}/main`,
 		);
+		return {kind: 'claimed', message};
 	}
-	return {kind: 'rejected', message: 'push rejected / lease failed'};
+	return {kind: 'rejected', message: result.message};
 }
 
 /** The branch (or detached HEAD sha) we should return to afterward. */
