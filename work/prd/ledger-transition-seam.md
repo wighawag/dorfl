@@ -1,13 +1,14 @@
 ---
 title: Ledger-transition seam — route the three work/ transitions through a read+write seam (pure refactor)
 slug: ledger-transition-seam
+sliced: 2026-06-04
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth:
-> `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices.
-> (The technical-detail sections below are trimmed by `to-slices` once the work
-> is sliced — they move into slices/ADRs and this PRD settles to its durable
-> framing: Problem / Solution / User Stories / Out of Scope.)
+> **Sliced into `work/backlog/` on 2026-06-04** — detail trimmed to the slices +
+> the ADR. Launch snapshot, NOT maintained. Current truth: `docs/adr/`
+> (decisions) + the code; remaining work: the `work/backlog/ledger-*-seam*`
+> slices. Slices emitted: `ledger-write-seam` (claim), `ledger-write-seam-complete`,
+> `ledger-write-seam-needs-attention`, `ledger-read-seam`.
 
 ## Problem Statement
 
@@ -105,43 +106,8 @@ as part of this work (per the ADR).
   questions remain for THIS refactor — every open question lives in the *future*
   protected-`main` strategy, which is explicitly out of scope here.
 
-## Implementation Decisions
-
-(From the accepted ADR `claim-ledger-vs-protected-main.md` — do not relitigate.)
-
-- **Two seams, paired:** a write seam (`applyLedgerTransition`-style, one method
-  per transition or one tagged entry) and a read seam ("resolve live `work/`
-  state"). Both keyed to a single internal strategy = current behaviour.
-- **No mode, no config, no `ledgerMode`.** Nothing selectable; nothing observable
-  changes. This is enforced as an explicit non-goal.
-- **Claim primitive moves behind the write seam** but is unchanged (force-with-
-  lease micro-commit to `main`, identical exit-code semantics to `claim.sh`).
-- **Readers refactored to one entry point:** `scan`, `eligibility`, `readiness`,
-  `gc` resolve `work/` state via the read seam; the sole strategy reads
-  `<arbiter>/main` exactly as today (offline). `blockedBy`/eligibility/readiness
-  semantics UNCHANGED.
-- **Signatures storage-agnostic:** the seam must not encode "main" into its public
-  shape; "main" is an implementation detail of the one strategy.
-- **`scripts/claim.sh` is untouched** (it remains the portable bootstrap; the seam
-  is an in-process agent-runner concern, ADR §9).
-
-## Testing Decisions
-
-- **The headline acceptance test is "nothing changed":** the existing suite —
-  including the claim-CAS race tests against throwaway repos + a local `--bare`
-  arbiter, and the complete/integrate tests — passes UNCHANGED. The refactor is
-  wrong if any existing behavioural test needs editing (other than mechanical
-  import/call-site moves).
-- **Add seam-level tests** asserting each transition (claim/complete/needs-
-  attention) is dispatched through the write seam, and each reader goes through the
-  read seam — so the indirection is real and a future strategy has a single
-  insertion point. Stub/observe the strategy to prove dispatch without changing
-  outcomes.
-- **Race/concurrency tests stay in the non-parallel vitest project** (do not
-  reintroduce file-parallelism flakiness; do not mask with retry) — the claim CAS
-  moving behind the seam must keep its genuine two-claimer race test.
-- Keep `claim.sh` parity intact (the in-process claim still matches the shell
-  reference's exit codes).
+> Implementation & testing detail moved to the slices (what to build) and the ADR
+> `docs/adr/claim-ledger-vs-protected-main.md` (the durable *why* of the seam).
 
 ## Out of Scope
 
