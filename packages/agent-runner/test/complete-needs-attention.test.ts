@@ -101,7 +101,7 @@ describe('complete — failed gate routes to needs-attention', () => {
 		);
 	});
 
-	it('no partial state: the move + agent work land in ONE commit, clean tree', async () => {
+	it('no partial state: aborted work saved (wip) + move-only tip, clean tree', async () => {
 		const {repo} = await claimAndBranch('beta');
 		agentEdits(repo);
 
@@ -114,13 +114,17 @@ describe('complete — failed gate routes to needs-attention', () => {
 		});
 		expect(result.routedToNeedsAttention).toBe(true);
 
-		// Working tree is clean (everything was staged + committed).
+		// Working tree is clean (everything was staged + committed). No partial state.
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
-		// ONE commit carries the move AND the agent's previously-uncommitted file.
-		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
-		expect(files).toMatch(/work\/needs-attention\/beta\.md/);
-		expect(files).toMatch(/work\/in-progress\/beta\.md/);
-		expect(files).toMatch(/feature\.txt/);
+		// TWO commits (needs-attention-surface-on-main): the MOVE-ONLY tip is purely
+		// the git mv (no agent file), and the wip commit below it saves the aborted
+		// work — so a surfacing strategy can publish the tip without leaking the wip.
+		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
+		expect(tip).toMatch(/work\/needs-attention\/beta\.md/);
+		expect(tip).toMatch(/work\/in-progress\/beta\.md/);
+		expect(tip).not.toMatch(/feature\.txt/);
+		const wip = gitIn(['show', '--name-status', '--format=', 'HEAD~1'], repo);
+		expect(wip).toMatch(/feature\.txt/);
 		// Not mid-rebase, not detached.
 		expect(currentBranch(repo)).toBe('work/beta');
 	});

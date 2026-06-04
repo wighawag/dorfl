@@ -73,7 +73,7 @@ describe('runOnce — happy path (green gate)', () => {
 });
 
 describe('runOnce — test gate keeps failing work out of done/', () => {
-	it('leaves a red item in in-progress, never moving it to done', async () => {
+	it('surfaces a red item as needs-attention on main, never moving it to done', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, 'ws');
 		const config = configFor(scratch.root);
@@ -88,12 +88,18 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		});
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
-		// claim landed (in-progress on main), but it NEVER reached done.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+		// It NEVER reached done. The stuck state is now SURFACED on main
+		// (needs-attention-surface-on-main, mode M): the move-only commit was
+		// cherry-picked to main, so main shows needs-attention/feat.md (not
+		// in-progress/), letting scan/status/a fresh checkout tell stuck from
+		// actively-in-progress.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
 		// Folder-native surfacing (ADR §12): the runner bounced the work item from
-		// in-progress/ to needs-attention/ IN THE WORKTREE, with the reason in its
-		// body. (It is not pushed — the worktree/branch is the signal, ADR §4.)
+		// in-progress/ to needs-attention/ IN THE WORKTREE too, with the reason in
+		// its body. (The work branch itself is not pushed — the retained worktree is
+		// the never-lose-work signal, ADR §4.)
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
 		expect(existsSync(join(dir, 'work', 'needs-attention', 'feat.md'))).toBe(
 			true,

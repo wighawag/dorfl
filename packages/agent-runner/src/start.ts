@@ -1,4 +1,5 @@
 import {performClaim} from './claim-cas.js';
+import {ledgerWrite} from './ledger-write.js';
 import {runAsync, type RunResult} from './git.js';
 
 /**
@@ -20,6 +21,13 @@ import {runAsync, type RunResult} from './git.js';
  *                                message; with --resume, switch to work/<slug>
  *                                off the arbiter WITHOUT claiming (the human
  *                                explicitly asserts ownership).
+ *   work/needs-attention/<slug>.md → stuck (a runner bounced it). Print the
+ *                                recorded reason, transition it back to
+ *                                in-progress THROUGH the write seam (which in
+ *                                mode M clears the `main` surface via the reverse
+ *                                move), then switch onto work/<slug>. UNGUARDED
+ *                                (no --resume): a stuck item is up-for-grabs, so a
+ *                                human can just pick it up with no manual move.
  *   work/done/<slug>.md or absent → refuse (nothing to start).
  *
  * It is harness-agnostic: it lands the human on the work branch and gets out of
@@ -36,6 +44,7 @@ import {runAsync, type RunResult} from './git.js';
 export type StartOutcome =
 	| 'started' // claimed a backlog item and switched to its work branch
 	| 'resumed' // switched to an in-progress item's work branch (--resume)
+	| 'resolved' // picked up a stuck needs-attention item (surface cleared)
 	| 'refused' // refused (in-progress without --resume, done/absent, or not-ready)
 	| 'lost' // claim lost the race (propagated from claim)
 	| 'contended' // claim push kept being rejected (propagated from claim)
@@ -86,7 +95,7 @@ class StartUsageError extends Error {}
 class StartRefusal extends Error {}
 
 /** The folder a work item currently lives in on the arbiter's main. */
-type Folder = 'backlog' | 'in-progress' | 'done' | 'absent';
+type Folder = 'backlog' | 'in-progress' | 'needs-attention' | 'done' | 'absent';
 
 /**
  * Run the start ritual. Never throws for the expected lost/contended/refused
@@ -161,6 +170,8 @@ async function runStart(
 				resume: options.resume ?? false,
 				note,
 			});
+		case 'needs-attention':
+			return startFromNeedsAttention({slug, arbiter, cwd, env, note});
 		case 'done':
 			throw new StartUsageError(
 				`'${slug}' is already done on ${arbiter}/main — nothing to start.`,
@@ -223,6 +234,76 @@ async function startFromBacklog(params: {
 	const message = `Started '${slug}': claimed and switched to ${branch}.`;
 	note(message);
 	return {exitCode: 0, outcome: 'started', branch, message};
+}
+
+/**
+ * needs-attention → a runner bounced this stuck item. Picking it up is
+ * UNGUARDED (a stuck item is explicitly up-for-grabs — no --resume): print the
+ * recorded reason, transition it back to in-progress THROUGH the write seam
+ * (mode M clears the `main` surface via the reverse move), then switch onto
+ * work/<slug>. NO manual file move — the seam owns the transition.
+ */
+async function startFromNeedsAttention(params: {
+	slug: string;
+	arbiter: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<StartResult> {
+	const {slug, arbiter, cwd, env, note} = params;
+
+	// Surface the recorded reason for the human, read from the stuck file on the
+	// arbiter's main (the body prose under `## Needs attention`).
+	const reason = await reasonOnArbiterMain(slug, arbiter, cwd, env);
+	if (reason) {
+		note(`'${slug}' is stuck (needs-attention): ${reason}`);
+	} else {
+		note(`'${slug}' is stuck (needs-attention) — picking it up.`);
+	}
+
+	// To transition the surface on main, work in a checkout that has the stuck file
+	// in its tree. Cut a temporary branch off the arbiter's needs-attention surface
+	// (the human's current branch may be anything), apply the reverse move THROUGH
+	// the write seam (which clears the main surface in mode M), then onboard onto
+	// work/<slug>. No manual file move escapes — the seam owns it.
+	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+	const startRef =
+		(
+			await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
+		).stdout.trim() ||
+		(await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
+	const resolveBranch = `agent-runner/resolve-${slug}`;
+	await gitHard(
+		['switch', '--quiet', '-C', resolveBranch, `${arbiter}/main`],
+		cwd,
+		env,
+	);
+	try {
+		const resolved = ledgerWrite.applyResolveNeedsAttentionTransition({
+			cwd,
+			slug,
+			arbiter,
+			env,
+			note,
+		});
+		if (!resolved.moved) {
+			throw new StartUsageError(
+				resolved.reasonNotMoved ??
+					`could not resolve '${slug}' from needs-attention.`,
+			);
+		}
+	} finally {
+		// Leave no scratch resolve branch behind: switch back, then drop it.
+		await gitSoft(['switch', '--quiet', startRef], cwd, env);
+		await gitSoft(['branch', '-D', resolveBranch], cwd, env);
+	}
+
+	// The surface is cleared on main (item back in in-progress). Onboard onto the
+	// work branch cut from that NEW main.
+	const branch = await switchToWorkBranch({slug, arbiter, cwd, env, note});
+	const message = `Started '${slug}': resolved from needs-attention and switched to ${branch}.`;
+	note(message);
+	return {exitCode: 0, outcome: 'resolved', branch, message};
 }
 
 /**
@@ -323,6 +404,7 @@ async function folderOnArbiterMain(
 	const folders: Exclude<Folder, 'absent'>[] = [
 		'backlog',
 		'in-progress',
+		'needs-attention',
 		'done',
 	];
 	for (const folder of folders) {
@@ -358,6 +440,48 @@ async function claimedByFromCommit(
 	}
 	const match = /\(by (.+)\)\s*$/.exec(log.stdout.trim());
 	return match ? `by ${match[1].trim()}` : '';
+}
+
+/**
+ * Read the recorded needs-attention reason for `slug` from `<arbiter>/main`: the
+ * prose under the `## Needs attention` heading in
+ * `work/needs-attention/<slug>.md`. Returns '' when absent/unreadable (the human
+ * is told it is stuck regardless). Read-only.
+ */
+async function reasonOnArbiterMain(
+	slug: string,
+	arbiter: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string> {
+	const show = await gitSoft(
+		['show', `${arbiter}/main:work/needs-attention/${slug}.md`],
+		cwd,
+		env,
+	);
+	if (show.status !== 0) {
+		return '';
+	}
+	const lines = show.stdout.replace(/\r\n/g, '\n').split('\n');
+	const start = lines.findIndex((l) => l.trim() === '## Needs attention');
+	if (start === -1) {
+		return '';
+	}
+	const collected: string[] = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		const line = lines[i];
+		if (/^##\s/.test(line) || /^###\s/.test(line)) {
+			break;
+		}
+		if (line.trim() === '') {
+			if (collected.length > 0) {
+				break;
+			}
+			continue;
+		}
+		collected.push(line.trim());
+	}
+	return collected.join(' ').trim();
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */

@@ -1,4 +1,7 @@
-import {runAsync, type RunResult} from './git.js';
+import {rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {run, runAsync, type RunResult} from './git.js';
 import {
 	Integrator,
 	type IntegrateResult,
@@ -8,10 +11,13 @@ import type {IntegrationMode} from './config.js';
 import {
 	routeToNeedsAttention,
 	returnToBacklog,
+	resolveFromNeedsAttention,
 	type RouteToNeedsAttentionOptions,
 	type RouteToNeedsAttentionResult,
 	type ReturnToBacklogOptions,
 	type ReturnToBacklogResult,
+	type ResolveFromNeedsAttentionOptions,
+	type ResolveFromNeedsAttentionResult,
 } from './needs-attention.js';
 
 /**
@@ -119,6 +125,30 @@ export type ApplyReturnToBacklogTransitionInput = ReturnToBacklogOptions;
 export type ApplyReturnToBacklogTransitionResult = ReturnToBacklogResult;
 
 /**
+ * A *prepared* RESOLVE-NEEDS-ATTENTION transition: a human is picking up a stuck
+ * item, so the seam must **clear the stuck surface** and restore the item to
+ * `in-progress`. Storage-agnostic, mirroring {@link
+ * ResolveFromNeedsAttentionOptions} — it names the slug + the working clone (and
+ * an OPTIONAL arbiter to clear the surface on), NOT *where* the surface lives.
+ * The mode-M strategy implements "clear the surface" by reverse-moving
+ * needs-attention → in-progress on the arbiter's `main`; a future strategy could
+ * clear it elsewhere without `start.ts` learning a new mechanism.
+ */
+export type ApplyResolveNeedsAttentionTransitionInput =
+	ResolveFromNeedsAttentionOptions & {
+		/**
+		 * The arbiter remote whose ledger surface to CLEAR (mode M: the reverse move
+		 * is published to its `main`). Omitted ⇒ the local move only (no surface to
+		 * clear). Storage-agnostic: it names the remote, not `main`.
+		 */
+		arbiter?: string;
+	};
+
+/** The outcome of asking the seam to apply a RESOLVE-NEEDS-ATTENTION transition. */
+export type ApplyResolveNeedsAttentionTransitionResult =
+	ResolveFromNeedsAttentionResult;
+
+/**
  * A *prepared* transition the caller asks the seam to publish. Storage-agnostic:
  * it describes the transition semantically (a kind + a prepared local commit +
  * the CAS lease), NOT *where* it should be published. The sole strategy decides
@@ -196,6 +226,17 @@ export interface LedgerWriteStrategy {
 	applyReturnToBacklogTransition(
 		input: ApplyReturnToBacklogTransitionInput,
 	): ApplyReturnToBacklogTransitionResult;
+	/**
+	 * Apply a RESOLVE-NEEDS-ATTENTION transition: a human is picking up a stuck
+	 * item, so **clear the stuck surface** and restore it to `in-progress`. The
+	 * seam carries only that INTENT — "clear the surface" — NOT *how*; the sole
+	 * (mode-M) strategy clears it by reverse-moving needs-attention → in-progress
+	 * on the arbiter's `main`, but a future strategy could clear it differently
+	 * without `start.ts` changing.
+	 */
+	applyResolveNeedsAttentionTransition(
+		input: ApplyResolveNeedsAttentionTransitionInput,
+	): ApplyResolveNeedsAttentionTransitionResult;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -304,19 +345,47 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	},
 
 	/**
-	 * The needs-attention transition under the SAME strategy: bounce the stuck
-	 * item to `work/needs-attention/` exactly as before — it delegates to
-	 * {@link routeToNeedsAttention}, which appends the reason as body prose (never
-	 * a frontmatter field — WORK-CONTRACT rule 3), `git mv`s the item from
-	 * whichever of in-progress/ or done/ holds it, commits the move (+ any
-	 * uncommitted agent work) as ONE atomic transition, and OPTIONALLY pushes the
-	 * work branch. Where the move commits/publishes is an implementation detail of
-	 * THIS strategy; the public input never names it.
+	 * The needs-attention transition under the SAME strategy — satisfying the
+	 * INTENT "record stuck + save work + make the stuck state OBSERVABLE." It
+	 * delegates to {@link routeToNeedsAttention}, which appends the reason as body
+	 * prose (never a frontmatter field — WORK-CONTRACT rule 3), saves the aborted
+	 * agent work as a **wip** commit, then `git mv`s the item to
+	 * `work/needs-attention/` as a **move-only** commit (the tip). Then — the
+	 * surfacing this mode-M strategy adds — when an `arbiter` is given it
+	 * CHERRY-PICKS the move-only commit onto the arbiter's `main`, so the stuck
+	 * state is observable to `scan`/`status`/a fresh checkout/another machine (the
+	 * wip never reaches `main`). That "cherry-pick to `main`" is an implementation
+	 * detail of THIS strategy — the seam's contract is only the intent "make the
+	 * stuck state observable," which a future mode-P strategy could satisfy by
+	 * reading work-branch tips instead. The surface is published ALL-OR-NOTHING (a
+	 * half-applied cherry-pick is undone), and `main` is never `--force`d.
+	 *
+	 * The work branch itself is NOT pushed here — the retained job worktree (with
+	 * the wip + move committed on its local `work/<slug>`) IS the never-lose-work
+	 * signal (ADR §4); the main surface is what travels cross-machine. The arbiter
+	 * is used ONLY to publish the surface, not to push the branch.
 	 */
 	applyNeedsAttentionTransition(
 		input: ApplyNeedsAttentionTransitionInput,
 	): ApplyNeedsAttentionTransitionResult {
-		return routeToNeedsAttention(input);
+		// Route WITHOUT a branch push (drop `arbiter` from the move): the worktree is
+		// the work-saving signal. The arbiter is reserved for surfacing on main.
+		const {arbiter, ...move} = input;
+		const result = routeToNeedsAttention(move);
+		if (result.moved && result.moveCommit && arbiter) {
+			// Make the stuck state observable on the ledger (mode M): publish ONLY the
+			// move-only commit (the reason + the git mv) to the arbiter's main, so the
+			// half-finished wip below it never lands there.
+			publishSurfaceCommit({
+				cwd: input.cwd,
+				arbiter,
+				slug: input.slug,
+				moveCommit: result.moveCommit,
+				env: input.env,
+				note: input.note,
+			});
+		}
+		return result;
 	},
 
 	/**
@@ -330,7 +399,216 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	): ApplyReturnToBacklogTransitionResult {
 		return returnToBacklog(input);
 	},
+
+	/**
+	 * The resolve-needs-attention transition under the SAME strategy — satisfying
+	 * the INTENT "clear the stuck surface + restore in-progress." It delegates to
+	 * {@link resolveFromNeedsAttention} (reverse `git mv` needs-attention →
+	 * in-progress, committed) and, when an `arbiter` is given, publishes that
+	 * reverse move-only commit to the arbiter's `main` — CLEARING the stuck surface
+	 * there (the item is back in in-progress on the ledger). Same all-or-nothing,
+	 * never-`--force` publish. "Reverse-move on `main`" is a detail of THIS
+	 * strategy; the seam's contract is only the intent "clear the surface."
+	 */
+	applyResolveNeedsAttentionTransition(
+		input: ApplyResolveNeedsAttentionTransitionInput,
+	): ApplyResolveNeedsAttentionTransitionResult {
+		const result = resolveFromNeedsAttention(input);
+		if (result.moved && result.moveCommit && input.arbiter) {
+			publishSurfaceCommit({
+				cwd: input.cwd,
+				arbiter: input.arbiter,
+				slug: input.slug,
+				moveCommit: result.moveCommit,
+				env: input.env,
+				note: input.note,
+			});
+		}
+		return result;
+	},
 };
+
+/** The `work/` folders a slug's ledger file can live in, on `main`. */
+const WORK_FOLDERS = ['backlog', 'in-progress', 'done', 'needs-attention'];
+
+/**
+ * Publish the EFFECT of a single MOVE-ONLY commit (a `work/` ledger move — a
+ * route-to-needs-attention or its reverse) onto the arbiter's `main`, so the
+ * stuck state is observable there (mode M). It reproduces the move-only commit's
+ * placement of the slug's ledger file (which `work/<folder>/<slug>.md` it lands
+ * in, with what body — including the recorded reason) ON TOP of the freshly-
+ * fetched `<arbiter>/main`, and fast-forward pushes it. ONLY that one ledger file
+ * is touched, so the half-finished wip / the conflicting code never reach `main`.
+ *
+ * It is built with plumbing on a SCRATCH INDEX (`git read-tree` + `update-index`
+ * + `commit-tree`), so it NEVER touches the caller's working tree or HEAD — safe
+ * to call from a job worktree mid-flight or from the human's checkout. It is
+ * ALL-OR-NOTHING: it computes the full surface commit before pushing, and on any
+ * failure pushes nothing (no half-surfaced state). A concurrent advance of `main`
+ * is retried a few times (refetch + rebuild against the new base). The push uses
+ * `--force-with-lease=main:<base>` (a true fast-forward of the fresh surface
+ * commit; the lease guards the CAS) — NEVER a plain `--force` to `main`.
+ *
+ * Reproducing the move from `main`'s OWN state (not literally cherry-picking the
+ * commit) is what makes it robust across both stuck paths: the gate-failed path's
+ * commit moves `in-progress → needs-attention` while the rebase-conflict path's
+ * moves `done → needs-attention`, but on `main` the item is always in
+ * `in-progress/` (the done-move never reached `main`), so we always relocate from
+ * wherever it actually is on `main` to the target folder the move-only commit
+ * chose.
+ *
+ * This is the mode-M MECHANISM, deliberately living inside the strategy — NOT in
+ * the seam's public contract: a future mode-P strategy would make the same stuck
+ * state observable WITHOUT writing `main` (e.g. reading work-branch tips).
+ */
+function publishSurfaceCommit(params: {
+	cwd: string;
+	arbiter: string;
+	slug: string;
+	moveCommit: string;
+	env?: NodeJS.ProcessEnv;
+	note?: (message: string) => void;
+}): void {
+	const {cwd, arbiter, slug, moveCommit, env} = params;
+	const emit = params.note ?? (() => {});
+	const gx = (args: string[], input?: string): RunResult =>
+		run('git', args, cwd, {env, input});
+	const gxHard = (args: string[], input?: string): RunResult => {
+		const r = gx(args, input);
+		if (r.status !== 0) {
+			throw new Error(
+				`git ${args.join(' ')} failed (exit ${r.status}): ${r.stderr.trim()}`,
+			);
+		}
+		return r;
+	};
+
+	// Where the slug's ledger file lands AFTER the move (per the move-only commit's
+	// tree) — the placement we mirror onto main. Exactly one of WORK_FOLDERS holds
+	// it; we read its path + content from the commit's tree (plumbing, no checkout).
+	const target = readLedgerPlacement(gx, moveCommit, slug);
+	if (!target) {
+		emit('could not resolve the surfaced ledger file from the move commit.');
+		return;
+	}
+
+	// A scratch index so update-index/write-tree never disturb the caller's index.
+	const scratchIndex = join(
+		tmpdir(),
+		`agent-runner-surface-${process.pid}-${Date.now()}.index`,
+	);
+	const withIndex: NodeJS.ProcessEnv = {
+		...(env ?? process.env),
+		GIT_INDEX_FILE: scratchIndex,
+	};
+	const sx = (args: string[], input?: string): RunResult =>
+		run('git', args, cwd, {env: withIndex, input});
+	const sxHard = (args: string[], input?: string): RunResult => {
+		const r = sx(args, input);
+		if (r.status !== 0) {
+			throw new Error(
+				`git ${args.join(' ')} failed (exit ${r.status}): ${r.stderr.trim()}`,
+			);
+		}
+		return r;
+	};
+
+	const attempts = 5;
+	try {
+		for (let i = 0; i < attempts; i++) {
+			gxHard([
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+refs/heads/main:refs/remotes/${arbiter}/main`,
+			]);
+			const base = gxHard(['rev-parse', `${arbiter}/main`]).stdout.trim();
+
+			// Load main's tree into the scratch index, then relocate ONLY this slug's
+			// ledger file to the target folder (remove it from every other work folder,
+			// write the move commit's blob at the target path). One file changes.
+			rmSync(scratchIndex, {force: true});
+			sxHard(['read-tree', base]);
+			for (const folder of WORK_FOLDERS) {
+				const path = `work/${folder}/${slug}.md`;
+				if (path !== target.path) {
+					// Remove if present (force-remove tolerates an absent path).
+					sx(['update-index', '--force-remove', path]);
+				}
+			}
+			sxHard([
+				'update-index',
+				'--add',
+				'--cacheinfo',
+				`100644,${target.blob},${target.path}`,
+			]);
+			const tree = sxHard(['write-tree']).stdout.trim();
+			const commit = gxHard([
+				'commit-tree',
+				tree,
+				'-p',
+				base,
+				'-m',
+				target.message,
+			]).stdout.trim();
+
+			// Fast-forward push the surface commit to main (the lease guards the CAS).
+			// NEVER a plain --force.
+			const push = gx([
+				'push',
+				arbiter,
+				`${commit}:main`,
+				`--force-with-lease=main:${base}`,
+			]);
+			if (push.status === 0) {
+				emit(`Surfaced the stuck state on ${arbiter}/main.`);
+				return;
+			}
+			// Contended: someone advanced main. Loop to refetch + rebuild against it.
+		}
+		emit(
+			`could not surface the stuck state on ${arbiter}/main after ${attempts} ` +
+				'attempts (main kept moving) — left unsurfaced.',
+		);
+	} finally {
+		rmSync(scratchIndex, {force: true});
+	}
+}
+
+/**
+ * Read, from a move-only commit's tree, WHICH `work/<folder>/<slug>.md` the slug
+ * lands in, plus that file's blob sha + a surface commit message. Returns
+ * `undefined` if the slug's ledger file is not found (nothing to surface). The
+ * move commit's tree has exactly one such file for the slug.
+ */
+function readLedgerPlacement(
+	gx: (args: string[]) => RunResult,
+	moveCommit: string,
+	slug: string,
+): {path: string; blob: string; message: string} | undefined {
+	// Find THIS slug's ledger file in the move commit's tree (the post-move
+	// placement). Probe each work folder for `work/<folder>/<slug>.md` and read its
+	// blob sha; exactly one holds it after the move.
+	for (const folder of WORK_FOLDERS) {
+		const path = `work/${folder}/${slug}.md`;
+		const ls = gx(['ls-tree', moveCommit, path]);
+		if (ls.status !== 0 || ls.stdout.trim() === '') {
+			continue;
+		}
+		// `<mode> blob <sha>\t<path>`
+		const match = /^\d+ blob ([0-9a-f]+)\t/.exec(ls.stdout.trim());
+		if (!match) {
+			continue;
+		}
+		const blob = match[1];
+		const message =
+			folder === 'needs-attention'
+				? `chore(${slug}): surface needs-attention on main`
+				: `chore(${slug}): clear needs-attention surface on main (${folder})`;
+		return {path, blob, message};
+	}
+	return undefined;
+}
 
 /**
  * The active ledger-write strategy. There is exactly one (current behaviour);

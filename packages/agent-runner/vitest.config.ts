@@ -23,6 +23,10 @@ const RACE_SENSITIVE = [
 	'test/start.test.ts',
 	'test/work-on.test.ts',
 	'test/run.test.ts',
+	// Drives real git against a --bare arbiter AND writes main (surface-on-main
+	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
+	// the main-CAS pushes stay deterministic.
+	'test/needs-attention-surface-on-main.test.ts',
 ];
 
 export default defineConfig({

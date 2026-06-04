@@ -311,13 +311,20 @@ async function runOneItem(
 			const reason = gate.detail ?? 'acceptance gate failed';
 			updateJobRecord(job.dir, {state: 'needs-attention', reason});
 			// Folder-native surfacing (ADR §12): bounce the work item itself from
-			// in-progress/ to needs-attention/ with the reason in its body, committed
-			// on the work branch, THROUGH the ledger write seam's needs-attention
-			// transition. The runner owns this move (the agent does no git).
+			// in-progress/ to needs-attention/ (saving the aborted work as a wip
+			// commit + the move-only commit on the work branch) THROUGH the ledger
+			// write seam's needs-attention transition, and SURFACE the stuck state on
+			// the arbiter's main (the mode-M strategy cherry-picks the move-only commit
+			// there). Passing the arbiter both pushes the work branch (saving the wip
+			// cross-machine) and makes the stuck state observable to scan/status/a
+			// fresh checkout/another machine. This is a LEDGER write, so it happens in
+			// both merge and propose (the integration axis governs CODE only). The
+			// runner owns this move (the agent does no git).
 			ledgerWrite.applyNeedsAttentionTransition({
 				cwd: job.dir,
 				slug,
 				reason,
+				arbiter: job.arbiterRemote,
 				env: ctx.env,
 			});
 			return {...base, status: 'tests-failed', detail: gate.detail};
@@ -361,11 +368,14 @@ async function runOneItem(
 			// Rebase conflict at integrate time (ADR §10): the item was already
 			// done-moved + committed at step 6, so route it from done/ to
 			// needs-attention/ — the same folder-native surfacing, dispatched through
-			// the ledger write seam's needs-attention transition.
+			// the ledger write seam's needs-attention transition, surfacing the stuck
+			// state on the arbiter's main (mode M). Only the MOVE-ONLY commit is
+			// cherry-picked to main, so the conflicting code never lands there.
 			ledgerWrite.applyNeedsAttentionTransition({
 				cwd: job.dir,
 				slug,
 				reason,
+				arbiter: job.arbiterRemote,
 				env: ctx.env,
 			});
 			return {...base, status: 'needs-attention', detail: outcome.reason};

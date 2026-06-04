@@ -57,8 +57,16 @@ export interface RouteToNeedsAttentionOptions {
 export interface RouteToNeedsAttentionResult {
 	/** True iff the item was moved + committed. */
 	moved: boolean;
-	/** When `moved`, the committed transition message. */
+	/** When `moved`, the committed transition message (of the MOVE-ONLY commit). */
 	commitMessage?: string;
+	/**
+	 * When `moved`, the sha of the **move-only** commit — the tip of `work/<slug>`
+	 * that carries PURELY the `git mv → needs-attention/` + the reason (the wip
+	 * commit holding the aborted agent work sits BELOW it). A surfacing strategy
+	 * cherry-picks THIS commit to make the stuck state observable, so the wip never
+	 * reaches the ledger.
+	 */
+	moveCommit?: string;
 	/** When NOT moved, why (e.g. the slug was not in-progress). */
 	reasonNotMoved?: string;
 }
@@ -81,6 +89,28 @@ export interface ReturnToBacklogResult {
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
 	commitMessage?: string;
+	/** When NOT moved, why (e.g. the slug was not in needs-attention). */
+	reasonNotMoved?: string;
+}
+
+export interface ResolveFromNeedsAttentionOptions {
+	/** The working clone the `work/` tree lives in. */
+	cwd: string;
+	/** The slug of the needs-attention item to resolve back to in-progress. */
+	slug: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+	/** Sink for human-readable progress notes. */
+	note?: (message: string) => void;
+}
+
+export interface ResolveFromNeedsAttentionResult {
+	/** True iff the item was moved back to in-progress + committed. */
+	moved: boolean;
+	/** When `moved`, the committed transition message. */
+	commitMessage?: string;
+	/** When `moved`, the sha of the reverse move-only commit (the new tip). */
+	moveCommit?: string;
 	/** When NOT moved, why (e.g. the slug was not in needs-attention). */
 	reasonNotMoved?: string;
 }
@@ -116,17 +146,26 @@ export interface NeedsAttentionItem {
 
 /**
  * Route a stuck claimed item to `needs-attention/` (ADR §12). The RUNNER calls
- * this; the build agent never does. It:
+ * this; the build agent never does. It always **saves the aborted work** and
+ * produces TWO commits on `work/<slug>` (never-lose-work; PRD
+ * `needs-attention-cherry-pick`):
  *
- *   1. Appends the reason (+ any surfaced questions) to the item's file BODY
- *      (prose, NOT a frontmatter field — WORK-CONTRACT rule 3).
- *   2. `git mv work/<src>/<slug>.md work/needs-attention/<slug>.md` (mkdir -p
- *      the destination first — git tracks no empty dirs). The source is whichever
- *      of `in-progress/` (the test-gate path, before the done-move) or `done/`
- *      (the rebase-conflict path, after it) the item currently sits in.
- *   3. `git add -A` (the move + any uncommitted agent work) and commits it as
- *      ONE atomic transition, exactly like the done-move.
- *   4. Optionally pushes the work branch to the arbiter (when `arbiter` given).
+ *   1. A **wip** commit holding the aborted agent work (`git add -A` of whatever
+ *      the agent left uncommitted in the tree). This is committed FIRST and
+ *      stays BELOW the tip, so a surfacing strategy that publishes only the tip
+ *      never leaks the half-finished work onto the ledger. When the tree is
+ *      already clean (nothing uncommitted) no wip commit is made — there is no
+ *      aborted work to save.
+ *   2. A **move-only** commit on top (the tip): the reason appended to the file
+ *      BODY (prose, NOT a frontmatter field — WORK-CONTRACT rule 3) +
+ *      `git mv work/<src>/<slug>.md work/needs-attention/<slug>.md` (mkdir -p the
+ *      destination first — git tracks no empty dirs). The source is whichever of
+ *      `in-progress/` (the test-gate path, before the done-move) or `done/` (the
+ *      rebase-conflict path, after it) the item currently sits in. This commit is
+ *      PURELY the move + reason — it is the one a surfacing strategy cherry-picks.
+ *
+ * Optionally pushes the work branch to the arbiter (when `arbiter` given) so the
+ * saved wip + the move travel cross-machine.
  *
  * NEVER throws for the expected "not in-progress/done" case — it returns
  * `{moved: false, reasonNotMoved}` so consumers can branch cleanly. Genuine git
@@ -151,30 +190,41 @@ export function routeToNeedsAttention(
 		};
 	}
 
-	// 1. Record the reason as PROSE in the body (never a frontmatter field).
-	appendReasonBlock(source.abs, options.reason, options.questions);
+	// 1. WIP commit: save whatever the agent left uncommitted FIRST, so it sits
+	//    BELOW the move-only tip and a tip-only surface never carries it. Skip when
+	//    the tree is clean (no aborted work to save).
+	gitHard(['add', '-A'], cwd, env);
+	if (!nothingStaged(cwd, env)) {
+		gitHard(
+			['commit', '-q', '-m', `chore(${slug}): save aborted work (wip)`],
+			cwd,
+			env,
+		);
+	}
 
-	// 2. Move folders (mkdir -p first; git tracks no empty dirs — no .gitkeep).
+	// 2. Record the reason as PROSE in the body (never a frontmatter field), then
+	//    move folders (mkdir -p first; git tracks no empty dirs — no .gitkeep), and
+	//    commit the MOVE-ONLY transition (reason + the git mv, nothing else) as the
+	//    tip. This is the commit a surfacing strategy cherry-picks.
+	appendReasonBlock(source.abs, options.reason, options.questions);
 	const destDir = join(cwd, 'work', 'needs-attention');
 	mkdirSync(destDir, {recursive: true});
 	const destRel = join('work', 'needs-attention', `${slug}.md`);
 	gitHard(['mv', source.rel, destRel], cwd, env);
-
-	// 3. Commit the transition (move + any uncommitted agent work) as ONE commit,
-	//    using the work-contract message format (mirrors the done-move).
 	gitHard(['add', '-A'], cwd, env);
 	const commitMessage = `chore(${slug}): route to needs-attention; ${options.reason}`;
 	gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
+	const moveCommit = revParseHead(cwd, env);
 	note(`Routed '${slug}' to needs-attention: ${options.reason}`);
 
-	// 4. Optionally push the branch (the done-move pushes; the runner's flow may
+	// Optionally push the branch (the done-move pushes; the runner's flow may
 	//    instead push as part of integration — so this is opt-in).
 	if (options.arbiter) {
 		const branch = `work/${slug}`;
 		gitHard(['push', options.arbiter, `${branch}:${branch}`], cwd, env);
 	}
 
-	return {moved: true, commitMessage};
+	return {moved: true, commitMessage, moveCommit};
 }
 
 /**
@@ -218,6 +268,50 @@ export function returnToBacklog(
 	}
 
 	return {moved: true, commitMessage};
+}
+
+/**
+ * Resolve a stuck item back to `in-progress/` (the reverse of the
+ * needs-attention move) so a human can pick it up again. The clean-up half of
+ * the surfacing design (PRD `needs-attention-cherry-pick`): once a human starts
+ * a stuck slice, the needs-attention surface must be CLEARED and the item
+ * restored to in-progress. It `git mv work/needs-attention/<slug>.md →
+ * work/in-progress/<slug>.md` and commits the MOVE-ONLY transition (the recorded
+ * reason stays in the body as a durable note). Returns the move commit sha so a
+ * surfacing strategy can publish the reverse move to clear the ledger surface.
+ *
+ * Like the other moves, NEVER throws for the expected "not in needs-attention"
+ * case — it returns `{moved: false, reasonNotMoved}`.
+ */
+export function resolveFromNeedsAttention(
+	options: ResolveFromNeedsAttentionOptions,
+): ResolveFromNeedsAttentionResult {
+	const note = options.note ?? (() => {});
+	const {cwd, slug, env} = options;
+
+	const naRel = join('work', 'needs-attention', `${slug}.md`);
+	const naAbs = join(cwd, naRel);
+	if (!existsSync(naAbs)) {
+		return {
+			moved: false,
+			reasonNotMoved:
+				`work/needs-attention/${slug}.md not found — nothing to resolve back ` +
+				'to in-progress (wrong slug, or not in needs-attention?).',
+		};
+	}
+
+	const destDir = join(cwd, 'work', 'in-progress');
+	mkdirSync(destDir, {recursive: true});
+	const destRel = join('work', 'in-progress', `${slug}.md`);
+	gitHard(['mv', naRel, destRel], cwd, env);
+
+	gitHard(['add', '-A'], cwd, env);
+	const commitMessage = `chore(${slug}): resolve needs-attention; return to in-progress`;
+	gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
+	const moveCommit = revParseHead(cwd, env);
+	note(`Resolved '${slug}' from needs-attention back to in-progress.`);
+
+	return {moved: true, commitMessage, moveCommit};
 }
 
 /**
@@ -318,4 +412,24 @@ function gitHard(
 			`git ${args.join(' ')} failed (exit ${result.status}): ${result.stderr.trim()}`,
 		);
 	}
+}
+
+/** True when the index has no staged changes against HEAD (nothing to commit). */
+function nothingStaged(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	// `diff --cached --quiet` exits 0 when NOTHING is staged, 1 when there is.
+	return run('git', ['diff', '--cached', '--quiet'], cwd, {env}).status === 0;
+}
+
+/** The current HEAD commit sha (the just-made commit's tip). */
+function revParseHead(cwd: string, env: NodeJS.ProcessEnv | undefined): string {
+	const result = run('git', ['rev-parse', 'HEAD'], cwd, {env});
+	if (result.status !== 0) {
+		throw new Error(
+			`git rev-parse HEAD failed (exit ${result.status}): ${result.stderr.trim()}`,
+		);
+	}
+	return result.stdout.trim();
 }

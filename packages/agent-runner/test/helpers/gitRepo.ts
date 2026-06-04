@@ -166,7 +166,7 @@ export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
 /** Does `<arbiter>/main` currently track `work/<status>/<slug>.md`? */
 export function existsOnArbiterMain(
 	cwd: string,
-	status: 'backlog' | 'in-progress' | 'done',
+	status: 'backlog' | 'in-progress' | 'needs-attention' | 'done',
 	slug: string,
 ): boolean {
 	run('git', ['fetch', '-q', 'arbiter'], cwd, {env: gitEnv()});

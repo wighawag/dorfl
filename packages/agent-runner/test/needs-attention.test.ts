@@ -85,11 +85,18 @@ describe('needs-attention — the move (in-progress → needs-attention)', () =>
 		const body = readFileSync(dest, 'utf8');
 		expect(body).toMatch(/acceptance gate failed \(exit 1\)/);
 		expect(body).toMatch(/Needs attention/i);
-		// …and it was committed (move + agent work) into one commit.
-		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
-		expect(files).toMatch(/work\/needs-attention\/alpha\.md/);
-		expect(files).toMatch(/work\/in-progress\/alpha\.md/);
-		expect(files).toMatch(/feature\.txt/);
+		// Routing now produces TWO commits (needs-attention-surface-on-main): a wip
+		// commit saving the aborted agent work, then a MOVE-ONLY commit (the tip) that
+		// is PURELY the reason + the git mv — so a surfacing strategy can cherry-pick
+		// the tip without leaking the wip onto main.
+		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
+		expect(tip).toMatch(/work\/needs-attention\/alpha\.md/);
+		expect(tip).toMatch(/work\/in-progress\/alpha\.md/);
+		expect(tip).not.toMatch(/feature\.txt/); // the wip is NOT in the move-only tip
+		expect(result.moveCommit).toBe(gitIn(['rev-parse', 'HEAD'], repo).trim());
+		// The wip commit below the tip carries the agent's aborted work.
+		const wip = gitIn(['show', '--name-status', '--format=', 'HEAD~1'], repo);
+		expect(wip).toMatch(/feature\.txt/);
 		// Working tree is clean afterwards.
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
 	});
