@@ -2,7 +2,7 @@
 title: watch — bounded autonomous loop over run --once with safety rails
 slug: watch
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [agent-workspaces]
 covers: [11]
 created: 2026-06-03

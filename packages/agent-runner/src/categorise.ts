@@ -1,52 +1,39 @@
 /**
- * Pure categorisation of backlog items into the three "who can take it" groups
- * used by the human decision dashboard. This is deliberately INDEPENDENT of the
- * runner's `allowUnspecifiedGate` policy: a human always sees the full picture
- * (all three groups), and the flag only changes the eligibility *verdict* /
- * summary counts elsewhere — never which group an item lands in.
+ * Pure categorisation of backlog items into the "who can take it" groups used by
+ * the human decision dashboard. Grouping is deliberately INDEPENDENT of the
+ * repo's `allowAgents` policy: a human always sees the full picture, and the
+ * policy only changes the eligibility *verdict* / summary counts elsewhere —
+ * never which group an item lands in.
  */
 
 import type {ScannedItem} from './scan.js';
 
 /**
- * Which group an item belongs to, derived solely from its `afk` gate:
- *   - `runner-eligible` — `afk: true`: an autonomous runner can claim it (now,
- *     if its deps are also satisfied).
- *   - `if-allowed` — gate unspecified (no `afk`): a runner would claim it only
- *     under `allowUnspecifiedGate` / `--allow-unspecified-gate`.
- *   - `human-only` — `afk: false`: a human decides/builds it; a runner never
- *     claims it.
+ * Which group an item belongs to, derived from its `humanOnly` gate and its
+ * dependency readiness (NOT the runner's `allowAgents` policy):
+ *   - `agent-claimable` — not `humanOnly` AND deps satisfied: an agent can claim
+ *     it now (provided this repo's `allowAgents` policy is on).
+ *   - `human-only` — `humanOnly: true`: a human decides/builds it; an agent never
+ *     claims it, regardless of policy or deps.
+ *   - `blocked` — not `humanOnly` but deps unsatisfied: would be agent-claimable
+ *     once its blockers reach `work/done/`.
  */
-export type Category = 'runner-eligible' | 'if-allowed' | 'human-only';
+export type Category = 'agent-claimable' | 'human-only' | 'blocked';
 
 /** Stable display order for the three groups. */
 export const CATEGORY_ORDER: Category[] = [
-	'runner-eligible',
-	'if-allowed',
+	'agent-claimable',
 	'human-only',
+	'blocked',
 ];
 
 /** Human-facing section headings for each group. */
 export const CATEGORY_LABELS: Record<Category, string> = {
-	'runner-eligible': 'Runner-eligible now (autonomous can claim)',
-	'if-allowed':
-		'Claimable if allowed (unspecified gate; needs --allow-unspecified-gate)',
-	'human-only': 'Human-only (afk:false — a human decides/builds)',
+	'agent-claimable':
+		'Agent-claimable now (not human-only, deps satisfied; needs --allow-agents)',
+	'human-only': 'Human-only (humanOnly: true — a human decides/builds)',
+	blocked: 'Blocked (not human-only, waiting on deps)',
 };
-
-/**
- * Map an `afk` gate to its dashboard category. Flag-independent by design:
- * the category reflects the gate the author wrote, not the runner's policy.
- */
-export function categoriseAfk(afk: boolean | undefined): Category {
-	if (afk === true) {
-		return 'runner-eligible';
-	}
-	if (afk === false) {
-		return 'human-only';
-	}
-	return 'if-allowed';
-}
 
 /** A scanned item, classified for the dashboard. */
 export interface CategorisedItem {
@@ -56,27 +43,32 @@ export interface CategorisedItem {
 	ready: boolean;
 }
 
+/**
+ * Map an item's `humanOnly` gate + dependency readiness to its dashboard
+ * category. Policy-independent by design: the category reflects what the author
+ * declared and whether its deps are met, not the runner's `allowAgents` policy.
+ */
+export function categoriseItem(item: ScannedItem): CategorisedItem {
+	const ready = item.eligibility.blockedBy.satisfied;
+	let category: Category;
+	if (item.humanOnly === true) {
+		category = 'human-only';
+	} else if (ready) {
+		category = 'agent-claimable';
+	} else {
+		category = 'blocked';
+	}
+	return {item, category, ready};
+}
+
 /** The items of one repo, bucketed by category and sorted ready-first. */
 export type CategorisedGroups = Record<Category, CategorisedItem[]>;
 
 function emptyGroups(): CategorisedGroups {
 	return {
-		'runner-eligible': [],
-		'if-allowed': [],
+		'agent-claimable': [],
 		'human-only': [],
-	};
-}
-
-/**
- * Classify a single scanned item: its category (from the gate) and whether its
- * deps are satisfied. Readiness is gate-independent — a `human-only` item can be
- * "ready" too (deps satisfied), it just won't be auto-claimed.
- */
-export function categoriseItem(item: ScannedItem): CategorisedItem {
-	return {
-		item,
-		category: categoriseAfk(item.afk),
-		ready: item.eligibility.blockedBy.satisfied,
+		blocked: [],
 	};
 }
 
@@ -112,11 +104,10 @@ export function sortReadyFirst(items: CategorisedItem[]): CategorisedItem[] {
 
 /** Per-category and readiness tallies for the dashboard summary. */
 export interface CategorySummary {
-	runnerEligible: number;
-	ifAllowed: number;
+	agentClaimable: number;
 	humanOnly: number;
-	ready: number;
 	blocked: number;
+	ready: number;
 }
 
 /** Aggregate counts across every repo's groups for the summary line. */
@@ -124,22 +115,19 @@ export function summariseGroups(
 	allGroups: CategorisedGroups[],
 ): CategorySummary {
 	const summary: CategorySummary = {
-		runnerEligible: 0,
-		ifAllowed: 0,
+		agentClaimable: 0,
 		humanOnly: 0,
-		ready: 0,
 		blocked: 0,
+		ready: 0,
 	};
 	for (const groups of allGroups) {
-		summary.runnerEligible += groups['runner-eligible'].length;
-		summary.ifAllowed += groups['if-allowed'].length;
+		summary.agentClaimable += groups['agent-claimable'].length;
 		summary.humanOnly += groups['human-only'].length;
+		summary.blocked += groups['blocked'].length;
 		for (const category of CATEGORY_ORDER) {
 			for (const entry of groups[category]) {
 				if (entry.ready) {
 					summary.ready++;
-				} else {
-					summary.blocked++;
 				}
 			}
 		}

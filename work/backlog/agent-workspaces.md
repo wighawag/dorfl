@@ -2,7 +2,7 @@
 title: agent workspaces — hub mirrors + isolated job worktrees + seams (core)
 slug: agent-workspaces
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [run-once, repo-mirror]
 covers: [5, 6, 10, 12]
 created: 2026-06-03

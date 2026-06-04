@@ -2,7 +2,7 @@
 title: needs-attention — route stuck items to a folder, surface them, allow return
 slug: needs-attention
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [verify]
 covers: [11, 12]
 created: 2026-06-03

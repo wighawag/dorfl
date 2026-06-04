@@ -30,11 +30,13 @@ export interface Config {
 	/** Repo paths to exclude even if detection would find them. */
 	exclude: string[];
 	/**
-	 * Runner policy for items with an unspecified (omitted) `afk` gate.
-	 * `false` (default, strict) ⇒ only `afk: true` items are eligible.
-	 * `true` ⇒ items with no `afk` set are also eligible.
+	 * Per-repo policy: may agents claim *undeclared* (not `humanOnly`) slices in
+	 * this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
+	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
+	 * like `integration`: flag (`--allow-agents`/`--no-allow-agents`) > per-repo >
+	 * global > default.
 	 */
-	allowUnspecifiedGate: boolean;
+	allowAgents: boolean;
 	/** Global cap on how many items the runner claims+runs in one tick. */
 	maxParallel: number;
 	/** Per-repo cap on concurrent claims (≤ maxParallel in effect). */
@@ -64,13 +66,14 @@ export type PartialConfig = Partial<Config>;
 
 /**
  * Built-in defaults. Chosen so that zero-config is useful: scan the current
- * working directory and stay strict about the AFK gate.
+ * working directory and stay strict about the autonomy gate (agents claim
+ * nothing unless a repo opts in via `allowAgents`).
  */
 export const DEFAULT_CONFIG: Config = {
 	roots: [process.cwd()],
 	include: [],
 	exclude: [],
-	allowUnspecifiedGate: false,
+	allowAgents: false,
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',

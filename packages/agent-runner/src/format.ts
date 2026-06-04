@@ -8,15 +8,9 @@ import {
 	type CategorisedGroups,
 } from './categorise.js';
 
-/** Human label for the three-state AFK gate. */
-export function afkLabel(afk: boolean | undefined): string {
-	if (afk === true) {
-		return 'true';
-	}
-	if (afk === false) {
-		return 'false';
-	}
-	return 'unspecified';
+/** Human label for the binary autonomy gate. */
+export function gateLabel(humanOnly: boolean | undefined): string {
+	return humanOnly === true ? 'human-only' : 'undeclared';
 }
 
 /** A short description of the `blocked_by` readiness for one item. */
@@ -65,13 +59,13 @@ function pluralRepos(n: number): string {
 
 /**
  * Render the cross-repo queue as a human decision dashboard: under each repo,
- * every backlog item is grouped by who-can-take-it (Runner-eligible now /
- * Claimable if allowed / Human-only), with empty groups shown as `(none)`.
- * Within a group, ready (deps-satisfied) items sort above blocked ones.
+ * every backlog item is grouped by who-can-take-it (Agent-claimable now /
+ * Human-only / Blocked), with empty groups shown as `(none)`. Within a group,
+ * ready (deps-satisfied) items sort above blocked ones.
  *
- * The set of groups shown is INDEPENDENT of `allowUnspecifiedGate`; only the
- * eligibility *verdict* line reflects the flag (`report.totalEligible` already
- * counts "claimable if allowed" items only when the flag is on).
+ * The set of groups shown is INDEPENDENT of `allowAgents`; only the eligibility
+ * *verdict* line reflects the policy (`report.totalEligible` counts an
+ * agent-claimable item only when `allowAgents` is on).
  */
 export function formatReport(report: ScanReport): string {
 	const lines: string[] = [];
@@ -95,12 +89,12 @@ export function formatReport(report: ScanReport): string {
 	const repoCount = report.repos.length;
 	lines.push(
 		`Summary: ${report.totalItems} item(s) across ${repoCount} ${pluralRepos(repoCount)} — ` +
-			`${s.runnerEligible} runner-eligible, ${s.ifAllowed} if-allowed, ${s.humanOnly} human-only ` +
-			`(${s.ready} ready, ${s.blocked} blocked).`,
+			`${s.agentClaimable} agent-claimable, ${s.humanOnly} human-only, ${s.blocked} blocked ` +
+			`(${s.ready} ready).`,
 	);
 	lines.push(
 		`Runner verdict: ${report.totalEligible}/${report.totalItems} item(s) eligible now ` +
-			`(under the current --allow-unspecified-gate policy).`,
+			`(under the current --allow-agents policy).`,
 	);
 
 	return lines.join('\n');

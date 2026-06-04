@@ -2,7 +2,7 @@
  * Minimal, dependency-free parser for the small slice of YAML frontmatter the
  * `work/` contract uses: top-level scalar keys and string lists (inline `[a, b]`
  * or block `- a` form). It deliberately does NOT implement general YAML — only
- * what `work/` slice frontmatter needs (slug, afk, blocked_by, ...).
+ * what `work/` slice frontmatter needs (slug, humanOnly, blocked_by, ...).
  */
 
 export interface Frontmatter {
@@ -11,10 +11,11 @@ export interface Frontmatter {
 	/** Source PRD slug (frontmatter `prd:`); the PRD lives at `work/prd/<prd>.md`. */
 	prd: string | undefined;
 	/**
-	 * The AFK gate. `true` / `false` when explicit, `undefined` when omitted
-	 * (unspecified — runner policy decides).
+	 * The autonomy gate. `true` when the slice declares itself human-only (never
+	 * auto-claim); `undefined` when omitted (undeclared — most slices). This is the
+	 * ONLY autonomy field on a slice and it is authoritative.
 	 */
-	afk: boolean | undefined;
+	humanOnly: boolean | undefined;
 	/** Slugs this item is blocked by; `[]` when omitted or empty. */
 	blockedBy: string[];
 }
@@ -78,7 +79,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 	const result: Frontmatter = {
 		slug: undefined,
 		prd: undefined,
-		afk: undefined,
+		humanOnly: undefined,
 		blockedBy: [],
 	};
 	if (block === undefined) {
@@ -104,8 +105,8 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'prd') {
 			result.prd = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'afk') {
-			result.afk = rawValue === '' ? undefined : toBoolean(rawValue);
+		} else if (key === 'humanOnly') {
+			result.humanOnly = rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'blocked_by') {
 			if (rawValue.startsWith('[')) {
 				result.blockedBy = parseInlineList(rawValue);

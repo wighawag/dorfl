@@ -2,7 +2,7 @@
 title: complete integration flag — merge/propose per invocation; switch to main + delete merged branch (both modes)
 slug: complete-integration-flag
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [complete]
 covers: [7, 8]
 created: 2026-06-03

@@ -2,7 +2,7 @@
 title: unify-claim — retire the claim.sh wrapper; use the in-process claim everywhere
 slug: unify-claim
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [run-once, claim-command]
 covers: [5]
 created: 2026-06-03

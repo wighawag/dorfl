@@ -2,7 +2,7 @@
 title: verify — run the per-repo acceptance gate (the shared test boundary)
 slug: verify
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scan]
 covers: [12]
 created: 2026-06-03

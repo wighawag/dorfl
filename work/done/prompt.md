@@ -2,7 +2,7 @@
 title: prompt — emit the work-agent prompt for a slice (wrapper + slice Prompt)
 slug: prompt
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scan]
 covers: []
 created: 2026-06-03

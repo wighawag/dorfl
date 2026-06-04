@@ -1,6 +1,5 @@
 import {describe, it, expect} from 'vitest';
 import {
-	categoriseAfk,
 	categoriseItem,
 	categoriseItems,
 	sortReadyFirst,
@@ -14,84 +13,57 @@ import {resolveEligibility} from '../src/eligibility.js';
 /** Build a ScannedItem with a real (pure) eligibility resolution. */
 function item(
 	slug: string,
-	afk: boolean | undefined,
+	humanOnly: boolean | undefined,
 	blockedBy: string[],
 	doneSlugs: Set<string>,
-	allowUnspecifiedGate = false,
+	allowAgents = false,
 ): ScannedItem {
 	return {
 		file: `${slug}.md`,
 		slug,
-		afk,
+		humanOnly,
 		blockedBy,
 		eligibility: resolveEligibility({
-			afk,
+			humanOnly,
 			blockedBy,
 			doneSlugs,
-			allowUnspecifiedGate,
+			allowAgents,
 		}),
 	};
 }
 
-describe('categoriseAfk', () => {
-	it('maps afk:true to runner-eligible', () => {
-		expect(categoriseAfk(true)).toBe('runner-eligible');
-	});
-	it('maps afk:false to human-only', () => {
-		expect(categoriseAfk(false)).toBe('human-only');
-	});
-	it('maps unspecified gate to if-allowed', () => {
-		expect(categoriseAfk(undefined)).toBe('if-allowed');
-	});
-});
-
-describe('categoriseItem — every afk×deps combination', () => {
-	// 3 gates × 2 dep states = 6 combinations. Category depends only on the
-	// gate; readiness only on deps.
+describe('categoriseItem — every humanOnly×deps combination', () => {
+	// Grouping is gate + readiness, INDEPENDENT of allowAgents.
 	const cases: Array<{
-		afk: boolean | undefined;
+		humanOnly: boolean | undefined;
 		deps: string[];
 		done: Set<string>;
 		category: Category;
 		ready: boolean;
 	}> = [
 		{
-			afk: true,
+			humanOnly: undefined,
 			deps: [],
 			done: new Set(),
-			category: 'runner-eligible',
+			category: 'agent-claimable',
 			ready: true,
 		},
 		{
-			afk: true,
+			humanOnly: undefined,
 			deps: ['dep'],
 			done: new Set(),
-			category: 'runner-eligible',
+			category: 'blocked',
 			ready: false,
 		},
 		{
-			afk: undefined,
-			deps: [],
-			done: new Set(),
-			category: 'if-allowed',
-			ready: true,
-		},
-		{
-			afk: undefined,
-			deps: ['dep'],
-			done: new Set(),
-			category: 'if-allowed',
-			ready: false,
-		},
-		{
-			afk: false,
+			humanOnly: true,
 			deps: [],
 			done: new Set(),
 			category: 'human-only',
 			ready: true,
 		},
 		{
-			afk: false,
+			humanOnly: true,
 			deps: ['dep'],
 			done: new Set(),
 			category: 'human-only',
@@ -100,42 +72,43 @@ describe('categoriseItem — every afk×deps combination', () => {
 	];
 
 	for (const c of cases) {
-		it(`afk=${String(c.afk)} deps=${c.deps.length ? 'blocked' : 'satisfied'} → ${c.category}/${c.ready ? 'ready' : 'blocked'}`, () => {
-			const result = categoriseItem(item('x', c.afk, c.deps, c.done));
+		it(`humanOnly=${String(c.humanOnly)} deps=${c.deps.length ? 'blocked' : 'satisfied'} → ${c.category}/${c.ready ? 'ready' : 'blocked'}`, () => {
+			const result = categoriseItem(item('x', c.humanOnly, c.deps, c.done));
 			expect(result.category).toBe(c.category);
 			expect(result.ready).toBe(c.ready);
 		});
 	}
 
-	it('readiness is flag-independent: deps satisfied via work/done/', () => {
-		const result = categoriseItem(item('b', true, ['a'], new Set(['a'])));
+	it('readiness is policy-independent: deps satisfied via work/done/', () => {
+		const result = categoriseItem(item('b', undefined, ['a'], new Set(['a'])));
 		expect(result.ready).toBe(true);
+		expect(result.category).toBe('agent-claimable');
 	});
 });
 
 describe('categoriseItems', () => {
-	it('buckets items into the three groups by gate', () => {
+	it('buckets items into the three groups by gate + readiness', () => {
 		const groups = categoriseItems([
-			item('runner', true, [], new Set()),
-			item('maybe', undefined, [], new Set()),
-			item('human', false, [], new Set()),
+			item('claimable', undefined, [], new Set()),
+			item('human', true, [], new Set()),
+			item('blocked', undefined, ['dep'], new Set()),
 		]);
-		expect(groups['runner-eligible'].map((g) => g.item.slug)).toEqual([
-			'runner',
+		expect(groups['agent-claimable'].map((g) => g.item.slug)).toEqual([
+			'claimable',
 		]);
-		expect(groups['if-allowed'].map((g) => g.item.slug)).toEqual(['maybe']);
 		expect(groups['human-only'].map((g) => g.item.slug)).toEqual(['human']);
+		expect(groups['blocked'].map((g) => g.item.slug)).toEqual(['blocked']);
 	});
 
-	it('is independent of allowUnspecifiedGate (groups identical either way)', () => {
+	it('is independent of allowAgents (groups identical either way)', () => {
 		const items = [
-			item('runner', true, [], new Set()),
-			item('maybe', undefined, [], new Set()),
-			item('human', false, [], new Set()),
+			item('claimable', undefined, [], new Set()),
+			item('human', true, [], new Set()),
+			item('blocked', undefined, ['dep'], new Set()),
 		];
 		const strict = categoriseItems(items);
 		const permissive = categoriseItems(
-			items.map((i) => item(i.slug, i.afk, i.blockedBy, new Set(), true)),
+			items.map((i) => item(i.slug, i.humanOnly, i.blockedBy, new Set(), true)),
 		);
 		for (const category of CATEGORY_ORDER) {
 			expect(permissive[category].map((g) => g.item.slug)).toEqual(
@@ -144,51 +117,50 @@ describe('categoriseItems', () => {
 		}
 	});
 
-	it('sorts ready items above blocked ones within each group', () => {
+	it('sorts ready items above blocked ones within a group', () => {
+		// human-only items can be ready or blocked but stay in the same group.
 		const groups = categoriseItems([
 			item('blocked', true, ['dep'], new Set()),
 			item('ready', true, [], new Set()),
 		]);
-		expect(groups['runner-eligible'].map((g) => g.item.slug)).toEqual([
+		expect(groups['human-only'].map((g) => g.item.slug)).toEqual([
 			'ready',
 			'blocked',
 		]);
 	});
 
 	it('keeps every group present even when empty', () => {
-		const groups = categoriseItems([item('only', true, [], new Set())]);
-		expect(groups['if-allowed']).toEqual([]);
+		const groups = categoriseItems([item('only', undefined, [], new Set())]);
 		expect(groups['human-only']).toEqual([]);
+		expect(groups['blocked']).toEqual([]);
 	});
 });
 
 describe('sortReadyFirst', () => {
 	it('is a stable sort preserving order among equally-ready items', () => {
-		const a = categoriseItem(item('a', true, [], new Set()));
-		const b = categoriseItem(item('b', true, [], new Set()));
-		const c = categoriseItem(item('c', true, ['x'], new Set()));
+		const a = categoriseItem(item('a', undefined, [], new Set()));
+		const b = categoriseItem(item('b', undefined, [], new Set()));
+		const c = categoriseItem(item('c', undefined, ['x'], new Set()));
 		const sorted = sortReadyFirst([c, a, b]);
-		// ready a,b keep their incoming relative order; blocked c last.
 		expect(sorted.map((s) => s.item.slug)).toEqual(['a', 'b', 'c']);
 	});
 });
 
 describe('summariseGroups', () => {
-	it('tallies per-category and ready/blocked counts across repos', () => {
+	it('tallies per-category and ready counts across repos', () => {
 		const repoA = categoriseItems([
-			item('r1', true, [], new Set()),
-			item('r2', true, ['dep'], new Set()),
-			item('m1', undefined, [], new Set()),
+			item('c1', undefined, [], new Set()),
+			item('b1', undefined, ['dep'], new Set()),
+			item('m1', true, [], new Set()),
 		]);
 		const repoB = categoriseItems([
-			item('h1', false, [], new Set()),
-			item('h2', false, ['dep'], new Set()),
+			item('h1', true, [], new Set()),
+			item('h2', true, ['dep'], new Set()),
 		]);
 		const summary = summariseGroups([repoA, repoB]);
-		expect(summary.runnerEligible).toBe(2);
-		expect(summary.ifAllowed).toBe(1);
-		expect(summary.humanOnly).toBe(2);
-		expect(summary.ready).toBe(3); // r1, m1, h1
-		expect(summary.blocked).toBe(2); // r2, h2
+		expect(summary.agentClaimable).toBe(1); // c1
+		expect(summary.humanOnly).toBe(3); // m1, h1, h2
+		expect(summary.blocked).toBe(1); // b1
+		expect(summary.ready).toBe(3); // c1, m1, h1
 	});
 });

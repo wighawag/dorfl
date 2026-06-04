@@ -90,7 +90,7 @@ of surfacing: there are no labels and no status field (rule 3) — the item simp
 title: Human Readable Title
 slug: historical-store-schema
 prd: historical-store    # REQUIRED: slug of the work/prd/<slug>.md this slice derives from
-afk: true            # AFK gate (see below). true | false | omitted
+humanOnly: true      # autonomy gate (see below). true | omitted. MOST SLICES OMIT IT.
 blocked_by: []       # list of slugs that must reach done/ first; [] = startable now
 covers: []           # optional: user-story numbers (within `prd`) this slice covers
 created: 2026-06-03  # date the slice was written
@@ -100,22 +100,30 @@ claimed_at:          # timestamp, set during claim
 ---
 ```
 
-### The `afk` gate (boolean, omittable)
+### The `humanOnly` gate (binary, omittable) + the repo's `allowAgents` policy
 
-`afk` answers ONE question: *may an autonomous runner claim and complete this item
-unattended?* It is deliberately a boolean, not an enum, and it may be omitted:
+The autonomy gate is split across TWO places (see `docs/adr/methodology-and-skills.md`
+§4, authoritative):
 
-- `afk: true` — explicitly safe to build + integrate unattended.
-- `afk: false` — explicitly needs a human (a decision, a review, a judgement
-  call). An autonomous runner must NEVER claim it.
-- *omitted* — unspecified. Whether a runner may claim it is the **runner's**
-  policy decision, not the slice's. A strict-by-default runner skips it; a
-  permissive runner may claim it.
+- **Slice field `humanOnly: true`** answers ONE question the *slice* owns: *is
+  this a human-only item — a product/design/security/judgement call that an agent
+  must never auto-claim?* It is binary: `humanOnly: true` or **omitted**. MOST
+  SLICES OMIT IT — an omitted gate means "undeclared", NOT "forbidden". It is the
+  ONLY autonomy field on a slice and it is authoritative.
+- **Repo policy `allowAgents`** answers the question the *repo* owns: *may agents
+  claim undeclared (not `humanOnly`) slices here?* It is a per-repo config key
+  (`.agent-runner.json`), resolved like `integration`: **CLI flag
+  (`--allow-agents` / `--no-allow-agents`) > per-repo config > global config >
+  built-in default (`false`)**.
 
-This three-state design lets `afk: false` mean "deliberately human-only" (stronger
-than silence), distinct from *omitted* meaning "nobody decided — ask the runner".
-A consuming runner resolves eligibility as: `afk === true` ⇒ eligible; `afk ===
-false` ⇒ never; *omitted* ⇒ depends on the runner's `allowUnspecifiedGate` policy.
+A consuming runner resolves eligibility as: **agent-claimable iff `humanOnly` is
+not `true` AND `allowAgents` is `true`**. `humanOnly: true` is never agent-
+claimable regardless of policy. A strict-by-default repo (no `allowAgents`) lets
+agents claim nothing automatically; a repo that opts in via `allowAgents: true`
+lets agents claim any slice that is not `humanOnly: true`.
+
+(This replaces the older three-state `afk: true|false|omitted` field + the
+`allowUnspecifiedGate` runner policy.)
 
 ### The `prd` link (required)
 

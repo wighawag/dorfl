@@ -2,7 +2,7 @@
 title: harness adapter — pi (liveness + invocation)
 slug: harness-pi
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [agent-workspaces]
 covers: [6, 11]
 created: 2026-06-03

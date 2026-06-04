@@ -1,11 +1,14 @@
 /**
- * Pure eligibility resolution. No I/O — callers pass in the `afk` value, the
- * item's `blocked_by` slugs, and the set of slugs present in the same repo's
+ * Pure eligibility resolution. No I/O — callers pass in the `humanOnly` value,
+ * the item's `blocked_by` slugs, and the set of slugs present in the same repo's
  * `work/done/`. Dependencies are per-repo only and never cross repos.
  */
 
-/** Three-state representation of the `afk` gate. `true` | `false` | `undefined`. */
-export type AfkGate = boolean | undefined;
+/**
+ * The slice autonomy gate. `true` ⇒ the slice declares itself human-only (never
+ * auto-claim); `undefined` ⇒ undeclared (most slices). Authoritative + binary.
+ */
+export type HumanOnlyGate = boolean | undefined;
 
 export interface BlockedByResult {
 	/** True when every blocker is present in `work/done/`. */
@@ -15,36 +18,35 @@ export interface BlockedByResult {
 }
 
 export interface EligibilityInput {
-	afk: AfkGate;
+	humanOnly: HumanOnlyGate;
 	blockedBy: string[];
 	/** Slugs present in this repo's `work/done/`. */
 	doneSlugs: Set<string>;
-	allowUnspecifiedGate: boolean;
+	/** Per-repo policy: may agents claim *undeclared* (not human-only) slices? */
+	allowAgents: boolean;
 }
 
 export interface EligibilityResult {
-	/** Eligible now = AFK gate passes AND all blockers satisfied. */
+	/** Eligible now = gate passes AND all blockers satisfied. */
 	eligible: boolean;
-	/** Whether the AFK gate alone passes. */
-	afkPass: boolean;
+	/** Whether the autonomy gate alone passes (agent-claimable). */
+	gatePass: boolean;
 	blockedBy: BlockedByResult;
 }
 
 /**
- * Resolve the AFK gate: `true` ⇒ eligible; `false` ⇒ never; omitted ⇒ depends on
- * the runner's `allowUnspecifiedGate` policy.
+ * Resolve the autonomy gate: agent-claimable iff `humanOnly` is not `true` AND
+ * the repo's `allowAgents` policy is on. `humanOnly: true` is never claimable
+ * regardless of policy.
  */
-export function resolveAfkGate(
-	afk: AfkGate,
-	allowUnspecifiedGate: boolean,
+export function resolveGate(
+	humanOnly: HumanOnlyGate,
+	allowAgents: boolean,
 ): boolean {
-	if (afk === true) {
-		return true;
-	}
-	if (afk === false) {
+	if (humanOnly === true) {
 		return false;
 	}
-	return allowUnspecifiedGate;
+	return allowAgents;
 }
 
 /** Resolve `blocked_by` against the slugs present in `work/done/`. */
@@ -56,13 +58,13 @@ export function resolveBlockedBy(
 	return {satisfied: missing.length === 0, missing};
 }
 
-/** Combine the AFK gate and `blocked_by` resolution into an eligibility verdict. */
+/** Combine the autonomy gate and `blocked_by` resolution into a verdict. */
 export function resolveEligibility(input: EligibilityInput): EligibilityResult {
-	const afkPass = resolveAfkGate(input.afk, input.allowUnspecifiedGate);
+	const gatePass = resolveGate(input.humanOnly, input.allowAgents);
 	const blockedBy = resolveBlockedBy(input.blockedBy, input.doneSlugs);
 	return {
-		eligible: afkPass && blockedBy.satisfied,
-		afkPass,
+		eligible: gatePass && blockedBy.satisfied,
+		gatePass,
 		blockedBy,
 	};
 }

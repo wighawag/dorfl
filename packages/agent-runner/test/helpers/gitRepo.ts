@@ -66,7 +66,7 @@ export interface SeededRepo {
 export function seedRepoWithArbiter(
 	root: string,
 	slugs: string[],
-	opts: {afk?: boolean; promptBody?: string} = {},
+	opts: {humanOnly?: boolean; promptBody?: string} = {},
 ): SeededRepo {
 	const repo = join(root, 'project');
 	mkdirSync(repo, {recursive: true});
@@ -103,15 +103,15 @@ export function seedRepoWithArbiter(
 
 function sliceFile(
 	slug: string,
-	opts: {afk?: boolean; promptBody?: string},
+	opts: {humanOnly?: boolean; promptBody?: string},
 ): string {
-	const afk = opts.afk === false ? 'false' : 'true';
 	const body = opts.promptBody ?? `> Implement ${slug}.`;
+	const gateLine = opts.humanOnly === true ? ['humanOnly: true'] : [];
 	return [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`afk: ${afk}`,
+		...gateLine,
 		'blocked_by: []',
 		'claimed_by:',
 		'claimed_at:',

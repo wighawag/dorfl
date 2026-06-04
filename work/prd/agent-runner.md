@@ -1,7 +1,6 @@
 ---
 title: agent-runner — autonomous parallel agents over file-based work/
 slug: agent-runner
-afk: false
 blocked_by: []
 covers: []
 created: 2026-06-03
@@ -39,8 +38,8 @@ system: it tracks its own work in its own `work/` folder.
    `work/backlog/`, so that there is no separate registry to maintain.
 3. As the maintainer, I want to include/exclude specific repos via config, so that I can
    override detection where needed.
-4. As the maintainer, I want `scan` to show, per item, its repo, slug, `afk` gate
-   (true/false/unspecified), and whether its `blocked_by` deps are satisfied, so that I
+4. As the maintainer, I want `scan` to show, per item, its repo, slug, autonomy gate
+   (`humanOnly` / undeclared), and whether its `blocked_by` deps are satisfied, so that I
    know what is runnable now.
 5. As the maintainer, I want `run --once` to claim eligible items atomically (via
    `claim.sh`) and skip any it loses the race for, so that parallel ticks never collide.
@@ -51,9 +50,10 @@ system: it tracks its own work in its own `work/` folder.
    review before merge.
 8. As the maintainer, I want to optionally configure direct-merge-to-main where allowed,
    so that trusted/low-risk repos can run fully hands-off.
-9. As the maintainer, I want the AFK gate to be configurable: strict by default (claim
-   only items explicitly marked `afk: true`), but optionally allow items with no gate
-   specified, so that I control how much autonomy is granted.
+9. As the maintainer, I want the autonomy gate to be configurable per repo: strict by
+   default (agents claim nothing automatically), but optionally `allowAgents` so agents may
+   claim any slice not marked `humanOnly: true`, so that I control how much autonomy is
+   granted.
 10. As the maintainer, I want concurrency caps (`maxParallel`, `perRepoMax`), so that the
     runner never fork-bombs my machine or rate-limits a remote.
 11. As the maintainer, I want `watch` to stop on max-iterations/duration and surface
@@ -111,17 +111,20 @@ system: it tracks its own work in its own `work/` folder.
   integration seam in `docs/adr/execution-substrate-decisions.md` §6.)* The universal,
   safety-bearing action is the `git push`; the review request layers on top. Never `--force`
   to main; the only `--force-with-lease` is the claim micro-commit (in `claim.sh`).
-- **AFK gate: a boolean frontmatter field `afk`, configurable + strict by default.** The
-  slice's gate is `afk: true` (claimable unattended) / `afk: false` (never — deliberately
-  human-only) / *omitted* (unspecified). The runner resolves: `afk === true` => eligible;
-  `afk === false` => skip; *omitted* => depends on `allowUnspecifiedGate`. `allowUnspecifiedGate:
-  false` (default) => claim ONLY `afk: true` items; `false`/omitted are skipped. `true` => also
-  claim items with no `afk` set. (Replaces the old `type: AFK|HITL` enum; see WORK-CONTRACT.md.)
+- **Autonomy gate: a binary slice field `humanOnly` + a per-repo `allowAgents` policy,
+  strict by default.** The slice declares `humanOnly: true` (never auto-claim — deliberately
+  human-only) or omits it (undeclared; most slices). The repo policy `allowAgents` decides
+  whether agents may claim undeclared slices, resolved like `integration` (flag
+  `--allow-agents`/`--no-allow-agents` > per-repo `.agent-runner.json` > global > default
+  `false`). The runner resolves: agent-claimable iff `humanOnly` !== true AND `allowAgents`.
+  (Replaces the old three-state `afk` field + `allowUnspecifiedGate`; see WORK-CONTRACT.md +
+  `docs/adr/methodology-and-skills.md` §4.)
 - **Detection:** a repo participates iff it has a `work/backlog/` dir with >= 1 `.md`. Scan
   configured `roots`, prune `node_modules`/dotdirs. Config `include`/`exclude` override.
-- **Eligibility (run/watch):** runnable iff (a) passes the AFK gate AND (b) every slug in
-  `blocked_by` is present in that repo's `work/done/`. Claiming is optimistic; the loser of
-  a race gets `claim.sh` exit 2 and moves on.
+- **Eligibility (run/watch):** runnable iff (a) passes the autonomy gate (not `humanOnly`
+  AND the repo's `allowAgents` is on) AND (b) every slug in `blocked_by` is present in that
+  repo's `work/done/`. Claiming is optimistic; the loser of a race gets `claim.sh` exit 2
+  and moves on.
 - **Consumes the existing contract** (status = folder; one file per item; content-slug IDs;
   `blocked_by`; advisory `claimed_by`) and the verified `skills/to-slices/scripts/claim.sh` (atomic CAS push
   to an arbiter remote — GitHub or local `--bare`).
@@ -135,7 +138,7 @@ system: it tracks its own work in its own `work/` folder.
   "maxParallel": 4, "perRepoMax": 2,
   "defaultArbiter": "origin",
   "integration": "propose",
-  "allowUnspecifiedGate": false,
+  "allowAgents": false,
   "agentCmd": "<command to run one agent on a slice prompt>"
 }
 ```
@@ -143,7 +146,7 @@ system: it tracks its own work in its own `work/` folder.
 ## Testing Decisions
 
 - Good tests check **external behaviour**, not internals. The deterministic core —
-  config-merge, repo detection, eligibility (AFK gate + `blocked_by` resolution), slug/
+  config-merge, repo detection, eligibility (autonomy gate + `blocked_by` resolution), slug/
   frontmatter parsing — is highly testable and should be tested first (TDD).
 - Use **vitest** (repo convention across wighawag projects). Test detection + eligibility
   against fixture directory trees; test the claim integration against throwaway git repos +

@@ -2,7 +2,7 @@
 title: agent status — operational view of live / failed / retained jobs
 slug: agent-status
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [agent-workspaces]
 covers: [11]
 created: 2026-06-03

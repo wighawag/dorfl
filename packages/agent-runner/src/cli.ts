@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {Command} from 'commander';
+import type {Command as Commander} from 'commander';
 import {
 	loadConfig,
 	mergeConfig,
@@ -22,12 +23,32 @@ interface ScanFlags {
 	root?: string[];
 	include?: string[];
 	exclude?: string[];
-	allowUnspecifiedGate?: boolean;
+	allowAgents?: boolean;
 	json?: boolean;
 }
 
+/**
+ * Whether `--allow-agents` / `--no-allow-agents` was explicitly passed on the
+ * command line. Commander gives a negatable boolean option a default of `true`,
+ * so we must check the value SOURCE to distinguish "user set it" from "default";
+ * only an explicit flag becomes a config override (so config/defaults still win
+ * otherwise).
+ */
+function allowAgentsFromCli(
+	command: Commander | undefined,
+): boolean | undefined {
+	if (!command) {
+		return undefined;
+	}
+	const source = command.getOptionValueSource('allowAgents');
+	if (source !== 'cli') {
+		return undefined;
+	}
+	return command.getOptionValue('allowAgents') as boolean;
+}
+
 /** Build the overrides a user supplied via CLI flags. */
-function flagOverrides(flags: ScanFlags): PartialConfig {
+function flagOverrides(flags: ScanFlags, command?: Commander): PartialConfig {
 	const overrides: PartialConfig = {};
 	if (flags.root && flags.root.length > 0) {
 		overrides.roots = flags.root;
@@ -38,8 +59,9 @@ function flagOverrides(flags: ScanFlags): PartialConfig {
 	if (flags.exclude && flags.exclude.length > 0) {
 		overrides.exclude = flags.exclude;
 	}
-	if (flags.allowUnspecifiedGate !== undefined) {
-		overrides.allowUnspecifiedGate = flags.allowUnspecifiedGate;
+	const allowAgents = allowAgentsFromCli(command);
+	if (allowAgents !== undefined) {
+		overrides.allowAgents = allowAgents;
 	}
 	return overrides;
 }
@@ -59,8 +81,8 @@ interface RunFlags extends ScanFlags {
 	workspace?: string;
 }
 
-function runFlagOverrides(flags: RunFlags): PartialConfig {
-	const overrides = flagOverrides(flags);
+function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
+	const overrides = flagOverrides(flags, command);
 	if (flags.maxParallel !== undefined) {
 		overrides.maxParallel = Number(flags.maxParallel);
 	}
@@ -142,13 +164,20 @@ export function buildProgram(): Command {
 			[],
 		)
 		.option(
-			'--allow-unspecified-gate',
-			'treat items with no afk gate as eligible',
+			'--allow-agents',
+			'allow agents to claim undeclared (not humanOnly) slices',
+		)
+		.option(
+			'--no-allow-agents',
+			'forbid agents from claiming undeclared slices (default)',
 		)
 		.option('--json', 'output the raw report as JSON')
-		.action((flags: ScanFlags) => {
+		.action((flags: ScanFlags, command: Commander) => {
 			const fileConfig = loadConfig(flags.config);
-			const config = mergeConfig({...fileConfig, ...flagOverrides(flags)});
+			const config = mergeConfig({
+				...fileConfig,
+				...flagOverrides(flags, command),
+			});
 			const report = scan(config);
 			if (flags.json) {
 				console.log(
@@ -189,8 +218,12 @@ export function buildProgram(): Command {
 			[],
 		)
 		.option(
-			'--allow-unspecified-gate',
-			'treat items with no afk gate as eligible',
+			'--allow-agents',
+			'allow agents to claim undeclared (not humanOnly) slices',
+		)
+		.option(
+			'--no-allow-agents',
+			'forbid agents from claiming undeclared slices (default)',
 		)
 		.option('--max-parallel <n>', 'global cap on items claimed+run this tick')
 		.option('--per-repo-max <n>', 'per-repo cap on concurrent claims')
@@ -203,14 +236,17 @@ export function buildProgram(): Command {
 		.option('--isolation <mode>', 'isolation: clone (default) or worktree')
 		.option('--workspace <dir>', 'directory for isolated clones/worktrees')
 		.option('--json', 'output the raw result as JSON')
-		.action((flags: RunFlags) => {
+		.action((flags: RunFlags, command: Commander) => {
 			if (!flags.once) {
 				throw new Error(
 					'only `run --once` is implemented (increment B). Pass --once.',
 				);
 			}
 			const fileConfig = loadConfig(flags.config);
-			const config = mergeConfig({...fileConfig, ...runFlagOverrides(flags)});
+			const config = mergeConfig({
+				...fileConfig,
+				...runFlagOverrides(flags, command),
+			});
 			if (config.agentCmd.trim() === '') {
 				throw new Error(
 					'no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',

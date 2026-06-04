@@ -54,24 +54,30 @@ describe('readDoneSlugs', () => {
 });
 
 describe('readBacklogItems', () => {
-	it('reads slug/afk/blockedBy for each backlog markdown', () => {
+	it('reads slug/humanOnly/blockedBy for each backlog markdown', () => {
 		writeItem('repo', 'backlog', 'a.md', {
 			slug: 'a',
-			afk: 'true',
+			humanOnly: 'true',
 			blocked_by: '[]',
 		});
 		const items = readBacklogItems(join(root, 'repo'));
 		expect(items).toHaveLength(1);
 		expect(items[0].slug).toBe('a');
-		expect(items[0].afk).toBe(true);
+		expect(items[0].humanOnly).toBe(true);
 		expect(items[0].blockedBy).toEqual([]);
 		expect(items[0].file).toBe('a.md');
+	});
+
+	it('reads undeclared items (no humanOnly) as undefined', () => {
+		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blocked_by: '[]'});
+		const items = readBacklogItems(join(root, 'repo'));
+		expect(items[0].humanOnly).toBeUndefined();
 	});
 
 	it('falls back to filename when slug frontmatter is absent', () => {
 		const dir = join(root, 'repo', 'work', 'backlog');
 		mkdirSync(dir, {recursive: true});
-		writeFileSync(join(dir, 'fallback.md'), '---\nafk: true\n---');
+		writeFileSync(join(dir, 'fallback.md'), '---\nhumanOnly: true\n---');
 		const items = readBacklogItems(join(root, 'repo'));
 		expect(items[0].slug).toBe('fallback');
 	});
@@ -86,9 +92,12 @@ describe('readBacklogItems', () => {
 
 describe('scan', () => {
 	it('produces a per-repo queue with resolved eligibility', () => {
-		writeItem('repo-a', 'backlog', 'ready.md', {slug: 'ready', afk: 'true'});
-		writeItem('repo-a', 'backlog', 'human.md', {slug: 'human', afk: 'false'});
-		const config = mergeConfig({roots: [root]});
+		writeItem('repo-a', 'backlog', 'ready.md', {slug: 'ready'});
+		writeItem('repo-a', 'backlog', 'human.md', {
+			slug: 'human',
+			humanOnly: 'true',
+		});
+		const config = mergeConfig({roots: [root], allowAgents: true});
 
 		const report = scan(config);
 		expect(report.repos).toHaveLength(1);
@@ -100,24 +109,23 @@ describe('scan', () => {
 
 		const human = repo.items.find((i) => i.slug === 'human')!;
 		expect(human.eligibility.eligible).toBe(false);
-		expect(human.eligibility.afkPass).toBe(false);
+		expect(human.eligibility.gatePass).toBe(false);
 	});
 
 	it('resolves blocked_by against the same repo work/done/', () => {
 		writeItem('repo', 'backlog', 'b.md', {
 			slug: 'b',
-			afk: 'true',
 			blocked_by: '[a]',
 		});
 		// dependency not yet done
-		let report = scan(mergeConfig({roots: [root]}));
+		let report = scan(mergeConfig({roots: [root], allowAgents: true}));
 		let b = report.repos[0].items[0];
 		expect(b.eligibility.blockedBy.satisfied).toBe(false);
 		expect(b.eligibility.eligible).toBe(false);
 
 		// now satisfy the dependency
 		writeItem('repo', 'done', 'a.md', {slug: 'a'});
-		report = scan(mergeConfig({roots: [root]}));
+		report = scan(mergeConfig({roots: [root], allowAgents: true}));
 		b = report.repos[0].items[0];
 		expect(b.eligibility.blockedBy.satisfied).toBe(true);
 		expect(b.eligibility.eligible).toBe(true);
@@ -127,10 +135,9 @@ describe('scan', () => {
 		writeItem('repo-a', 'done', 'dep.md', {slug: 'dep'});
 		writeItem('repo-b', 'backlog', 'needs.md', {
 			slug: 'needs',
-			afk: 'true',
 			blocked_by: '[dep]',
 		});
-		const report = scan(mergeConfig({roots: [root]}));
+		const report = scan(mergeConfig({roots: [root], allowAgents: true}));
 		const repoB = report.repos.find((r) => r.path === join(root, 'repo-b'))!;
 		const needs = repoB.items[0];
 		// dep is done in repo-a but NOT in repo-b → still blocked
@@ -138,18 +145,25 @@ describe('scan', () => {
 		expect(needs.eligibility.eligible).toBe(false);
 	});
 
-	it('honours allowUnspecifiedGate for omitted afk', () => {
+	it('honours allowAgents for undeclared (no humanOnly) items', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blocked_by: '[]'});
 
-		const strict = scan(
-			mergeConfig({roots: [root], allowUnspecifiedGate: false}),
-		);
+		const strict = scan(mergeConfig({roots: [root], allowAgents: false}));
 		expect(strict.repos[0].items[0].eligibility.eligible).toBe(false);
 
-		const permissive = scan(
-			mergeConfig({roots: [root], allowUnspecifiedGate: true}),
-		);
+		const permissive = scan(mergeConfig({roots: [root], allowAgents: true}));
 		expect(permissive.repos[0].items[0].eligibility.eligible).toBe(true);
+	});
+
+	it('honours a per-repo .agent-runner.json allowAgents (resolved like integration)', () => {
+		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blocked_by: '[]'});
+		writeFileSync(
+			join(root, 'repo', '.agent-runner.json'),
+			JSON.stringify({allowAgents: true}),
+		);
+		// Global is strict, but the per-repo file opts in ⇒ eligible.
+		const report = scan(mergeConfig({roots: [root], allowAgents: false}));
+		expect(report.repos[0].items[0].eligibility.eligible).toBe(true);
 	});
 
 	it('returns repos sorted and an empty list when nothing participates', () => {
@@ -159,10 +173,10 @@ describe('scan', () => {
 	});
 
 	it('counts eligible items in the report summary', () => {
-		writeItem('repo', 'backlog', 'a.md', {slug: 'a', afk: 'true'});
-		writeItem('repo', 'backlog', 'b.md', {slug: 'b', afk: 'false'});
-		writeItem('repo', 'backlog', 'c.md', {slug: 'c', afk: 'true'});
-		const report = scan(mergeConfig({roots: [root]}));
+		writeItem('repo', 'backlog', 'a.md', {slug: 'a'});
+		writeItem('repo', 'backlog', 'b.md', {slug: 'b', humanOnly: 'true'});
+		writeItem('repo', 'backlog', 'c.md', {slug: 'c'});
+		const report = scan(mergeConfig({roots: [root], allowAgents: true}));
 		expect(report.totalItems).toBe(3);
 		expect(report.totalEligible).toBe(2);
 	});

@@ -2,7 +2,7 @@
 title: <Human Readable Title>
 slug: <url-safe-slug>
 prd: <source-prd-slug>   # REQUIRED: slug of the work/prd/<slug>.md this slice derives from
-afk: true            # AFK gate: true = build+merge unattended | false = needs a human | omit = runner decides
+# humanOnly: true    # autonomy gate: set true ONLY for human-only slices (product/design/security/judgement). OMIT otherwise (most slices).
 blocked_by: []       # slugs that must reach work/done/ first; [] = startable now
 covers: []           # optional: user-story numbers within `prd` this slice covers
 created: <YYYY-MM-DD>

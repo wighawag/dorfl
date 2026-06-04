@@ -2,7 +2,7 @@
 title: integration provider — GitHub (gh) propose/PR adapter
 slug: integration-github
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [agent-workspaces]
 covers: [7, 8]
 created: 2026-06-03

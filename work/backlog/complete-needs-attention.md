@@ -2,7 +2,7 @@
 title: complete → needs-attention — route complete's failure paths to the stuck folder
 slug: complete-needs-attention
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [needs-attention]
 covers: [12]
 created: 2026-06-03

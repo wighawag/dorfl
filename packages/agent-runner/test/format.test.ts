@@ -1,25 +1,25 @@
 import {describe, it, expect} from 'vitest';
-import {formatReport, afkLabel} from '../src/format.js';
+import {formatReport, gateLabel} from '../src/format.js';
 import type {ScanReport, ScannedItem} from '../src/scan.js';
 import {resolveEligibility} from '../src/eligibility.js';
 
 function item(
 	slug: string,
-	afk: boolean | undefined,
+	humanOnly: boolean | undefined,
 	blockedBy: string[],
 	doneSlugs: Set<string>,
-	allowUnspecifiedGate: boolean,
+	allowAgents: boolean,
 ): ScannedItem {
 	return {
 		file: `${slug}.md`,
 		slug,
-		afk,
+		humanOnly,
 		blockedBy,
 		eligibility: resolveEligibility({
-			afk,
+			humanOnly,
 			blockedBy,
 			doneSlugs,
-			allowUnspecifiedGate,
+			allowAgents,
 		}),
 	};
 }
@@ -33,81 +33,82 @@ function reportOf(items: ScannedItem[], path = '/repos/alpha'): ScanReport {
 	};
 }
 
-describe('afkLabel', () => {
-	it('labels the three gate states', () => {
-		expect(afkLabel(true)).toBe('true');
-		expect(afkLabel(false)).toBe('false');
-		expect(afkLabel(undefined)).toBe('unspecified');
+describe('gateLabel', () => {
+	it('labels the binary autonomy gate', () => {
+		expect(gateLabel(true)).toBe('human-only');
+		expect(gateLabel(undefined)).toBe('undeclared');
+		expect(gateLabel(false)).toBe('undeclared');
 	});
 });
 
 describe('formatReport — grouped dashboard', () => {
 	it('shows all three group labels under each repo', () => {
-		const out = formatReport(reportOf([item('a', true, [], new Set(), false)]));
+		const out = formatReport(
+			reportOf([item('a', undefined, [], new Set(), true)]),
+		);
 		expect(out).toContain('/repos/alpha');
-		expect(out).toContain('Runner-eligible now');
-		expect(out).toContain('Claimable if allowed');
+		expect(out).toContain('Agent-claimable now');
 		expect(out).toContain('Human-only');
+		expect(out).toContain('Blocked');
 	});
 
 	it('renders empty groups as (none)', () => {
-		// only a runner-eligible item → if-allowed and human-only are empty.
-		const out = formatReport(reportOf([item('a', true, [], new Set(), false)]));
+		const out = formatReport(
+			reportOf([item('a', undefined, [], new Set(), true)]),
+		);
 		expect(out).toContain('(none)');
 	});
 
-	it('places afk:false items under Human-only', () => {
+	it('places humanOnly items under Human-only', () => {
 		const out = formatReport(
-			reportOf([item('human', false, [], new Set(), false)]),
+			reportOf([item('judge-call', true, [], new Set(), false)]),
 		);
 		const humanIdx = out.indexOf('Human-only');
-		const slugIdx = out.indexOf('human');
+		const slugIdx = out.indexOf('judge-call');
 		expect(humanIdx).toBeGreaterThanOrEqual(0);
 		expect(slugIdx).toBeGreaterThan(humanIdx);
 	});
 
-	it('places unspecified-gate items under Claimable if allowed with a flag hint', () => {
+	it('places undeclared deps-satisfied items under Agent-claimable with a flag hint', () => {
 		const out = formatReport(
 			reportOf([item('maybe', undefined, [], new Set(), false)]),
 		);
-		expect(out).toContain('Claimable if allowed');
-		expect(out).toContain('--allow-unspecified-gate');
+		expect(out).toContain('Agent-claimable now');
+		expect(out).toContain('--allow-agents');
+	});
+
+	it('places undeclared blocked items under Blocked', () => {
+		const out = formatReport(
+			reportOf([item('waiting', undefined, ['dep'], new Set(), true)]),
+		);
+		const blockedIdx = out.indexOf('Blocked (');
+		const slugIdx = out.indexOf('waiting');
+		expect(blockedIdx).toBeGreaterThanOrEqual(0);
+		expect(slugIdx).toBeGreaterThan(blockedIdx);
 	});
 
 	it('shows readiness per item: satisfied vs waiting on', () => {
 		const out = formatReport(
 			reportOf([
-				item('ready', true, [], new Set(), false),
-				item('blocked', true, ['dep'], new Set(), false),
+				item('ready', undefined, [], new Set(), true),
+				item('blocked', undefined, ['dep'], new Set(), true),
 			]),
 		);
 		expect(out).toContain('deps: satisfied');
 		expect(out).toContain('waiting on dep');
 	});
 
-	it('sorts ready items above blocked ones within a group', () => {
-		const out = formatReport(
-			reportOf([
-				item('blocked', true, ['dep'], new Set(), false),
-				item('ready', true, [], new Set(), false),
-			]),
-		);
-		expect(out.indexOf('ready')).toBeLessThan(out.indexOf('blocked'));
-	});
-
-	it('shows the SAME groups regardless of --allow-unspecified-gate', () => {
+	it('shows the SAME groups regardless of --allow-agents', () => {
 		const items = [
-			item('runner', true, [], new Set(), false),
-			item('maybe', undefined, [], new Set(), false),
-			item('human', false, [], new Set(), false),
+			item('claimable', undefined, [], new Set(), false),
+			item('human', true, [], new Set(), false),
+			item('blocked', undefined, ['dep'], new Set(), false),
 		];
 		const permissiveItems = [
-			item('runner', true, [], new Set(), true),
-			item('maybe', undefined, [], new Set(), true),
-			item('human', false, [], new Set(), true),
+			item('claimable', undefined, [], new Set(), true),
+			item('human', true, [], new Set(), true),
+			item('blocked', undefined, ['dep'], new Set(), true),
 		];
-		// Strip the verdict line (which legitimately changes with the flag) and
-		// compare the rest (the grouped sections).
 		const groupsOnly = (out: string) =>
 			out
 				.split('\n')
@@ -118,25 +119,22 @@ describe('formatReport — grouped dashboard', () => {
 		expect(permissive).toBe(strict);
 	});
 
-	it('summary reports per-category totals and ready/blocked counts', () => {
+	it('summary reports per-category totals and ready counts', () => {
 		const out = formatReport(
 			reportOf([
-				item('r1', true, [], new Set(), false),
-				item('r2', true, ['dep'], new Set(), false),
-				item('m1', undefined, [], new Set(), false),
-				item('h1', false, [], new Set(), false),
+				item('c1', undefined, [], new Set(), true),
+				item('b1', undefined, ['dep'], new Set(), true),
+				item('m1', true, [], new Set(), true),
 			]),
 		);
-		expect(out).toContain('4 item(s) across 1 repo');
-		expect(out).toContain('2 runner-eligible');
-		expect(out).toContain('1 if-allowed');
+		expect(out).toContain('3 item(s) across 1 repo');
+		expect(out).toContain('1 agent-claimable');
 		expect(out).toContain('1 human-only');
-		expect(out).toContain('3 ready');
 		expect(out).toContain('1 blocked');
+		expect(out).toContain('2 ready');
 	});
 
-	it('verdict count reflects the flag for unspecified-gate items', () => {
-		// One unspecified-gate, deps satisfied. Strict ⇒ 0 eligible; permissive ⇒ 1.
+	it('verdict count reflects the allowAgents policy for undeclared items', () => {
 		const strict = formatReport(
 			reportOf([item('maybe', undefined, [], new Set(), false)]),
 		);

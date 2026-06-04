@@ -22,10 +22,11 @@ describe('repo-config constants', () => {
 		expect(REPO_CONFIG_FILENAME).toBe('.agent-runner.json');
 	});
 
-	it('treats integration, verify, defaultArbiter as repo-appropriate keys', () => {
+	it('treats integration, verify, defaultArbiter, allowAgents as repo-appropriate keys', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('integration');
 		expect(REPO_ALLOWED_KEYS).toContain('verify');
 		expect(REPO_ALLOWED_KEYS).toContain('defaultArbiter');
+		expect(REPO_ALLOWED_KEYS).toContain('allowAgents');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
@@ -163,6 +164,23 @@ describe('resolveRepoConfig — per-key layering', () => {
 		const global = mergeConfig({verify: 'pnpm test'});
 		const resolved = resolveRepoConfig({repoPath: repo, global});
 		expect(resolved.config.verify).toBe('make test');
+	});
+
+	it('per-repo file overrides the global for `allowAgents` (flag > per-repo > global > default)', () => {
+		// default false; global false; per-repo opts in ⇒ per-repo wins.
+		writeRepoConfig(repo, {allowAgents: true});
+		const global = mergeConfig({allowAgents: false});
+		expect(resolveRepoConfig({repoPath: repo, global}).config.allowAgents).toBe(
+			true,
+		);
+		// a flag beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				flags: {allowAgents: false},
+			}).config.allowAgents,
+		).toBe(false);
 	});
 
 	it('keeps runner/host-only keys from the GLOBAL (per-repo cannot touch them)', () => {

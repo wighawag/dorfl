@@ -18,8 +18,8 @@ dogfooding itself (it tracks its own work in its own `work/`).
   `to-slices` skill): one markdown file per item, **status = the folder
   it lives in** (never a field). See that skill's `WORK-CONTRACT.md`.
 - **slice** — one buildable work item: a tracer-bullet vertical slice, a markdown
-  file `work/backlog/<slug>.md`. Has frontmatter: `slug`, `prd`, `afk`,
-  `blocked_by`, `covers`.
+  file `work/backlog/<slug>.md`. Has frontmatter: `slug`, `prd`, `humanOnly`
+  (usually omitted), `blocked_by`, `covers`.
 - **PRD** — a north-star doc in `work/prd/<slug>.md` a slice's `prd:` field points
   at. (The launch/framing doc; may be a hand-off snapshot.)
 - **ADR / finding** — a decision record in `docs/adr/<slug>.md` (the *why* of a
@@ -29,12 +29,19 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **status (lifecycle)** — the folder: `backlog/` (claimable) → `in-progress/`
   (claimed) → `done/` (completed), or → `needs-attention/` (stuck) or
   `out-of-scope/`. Transitions are `git mv`.
-- **afk gate** (`afk` field) — *may an autonomous runner claim this unattended?*
-  `true` = yes; `false` = human-only; *omitted* = decided by
-  `allowUnspecifiedGate`. Orthogonal to lifecycle status.
-- **blocked_by / eligibility** — an item is **eligible** iff its afk gate passes
-  AND every `blocked_by` slug is present in the SAME repo's `work/done/`. Deps
-  never cross repos.
+- **humanOnly gate** (`humanOnly` field) — *is this a human-only slice (a
+  product/design/security/judgement call an agent must never auto-claim)?*
+  Binary + authoritative: `humanOnly: true` = never auto-claim; *omitted* =
+  undeclared (most slices). Orthogonal to lifecycle status. (Replaces the old
+  three-state `afk` field.)
+- **allowAgents policy** (`allowAgents`, per-repo) — *may agents claim undeclared
+  (not `humanOnly`) slices in this repo?* Default `false`; resolved like
+  `integration`: flag (`--allow-agents`/`--no-allow-agents`) > per-repo > global
+  > default. (Replaces the old `allowUnspecifiedGate`.)
+- **blocked_by / eligibility** — an item is **agent-claimable** iff `humanOnly`
+  is not `true` AND `allowAgents` is `true`; it is **eligible now** iff also
+  every `blocked_by` slug is present in the SAME repo's `work/done/`. Deps never
+  cross repos.
 - **needs-attention** — the post-claim **stuck** state (`work/needs-attention/`):
   a claimed item that couldn't finish (red gate, conflict, ambiguity, timeout,
   rejected review). The runner `git mv`s it here with a reason; a human resolves

@@ -40,7 +40,7 @@ function currentBranch(repo: string): string {
  */
 async function claimAndBranch(
 	slug: string,
-	opts: {afk?: boolean; promptBody?: string} = {},
+	opts: {humanOnly?: boolean; promptBody?: string} = {},
 ) {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug], opts);
 	const repo = seeded.repo;

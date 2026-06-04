@@ -34,13 +34,13 @@ export type {DetectOptions} from './detect.js';
 export {detectRepos, isParticipatingRepo} from './detect.js';
 
 export type {
-	AfkGate,
+	HumanOnlyGate,
 	BlockedByResult,
 	EligibilityInput,
 	EligibilityResult,
 } from './eligibility.js';
 export {
-	resolveAfkGate,
+	resolveGate,
 	resolveBlockedBy,
 	resolveEligibility,
 } from './eligibility.js';
@@ -48,7 +48,7 @@ export {
 export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
 
-export {formatReport, afkLabel} from './format.js';
+export {formatReport, gateLabel} from './format.js';
 
 export type {SliceFolder, ResolvedSlice, PromptOptions} from './prompt.js';
 export {
@@ -121,7 +121,6 @@ export type {
 	CategorySummary,
 } from './categorise.js';
 export {
-	categoriseAfk,
 	categoriseItem,
 	categoriseItems,
 	sortReadyFirst,

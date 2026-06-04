@@ -2,7 +2,7 @@
 title: gc — provably-safe deletion of job worktrees
 slug: gc
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [agent-workspaces]
 covers: [12]
 created: 2026-06-03

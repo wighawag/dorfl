@@ -6,11 +6,11 @@ function item(slug: string, eligible: boolean): ScannedItem {
 	return {
 		file: `${slug}.md`,
 		slug,
-		afk: eligible ? true : false,
+		humanOnly: eligible ? undefined : true,
 		blockedBy: [],
 		eligibility: {
 			eligible,
-			afkPass: eligible,
+			gatePass: eligible,
 			blockedBy: {satisfied: true, missing: []},
 		},
 	};

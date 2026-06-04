@@ -2,7 +2,7 @@
 title: run --once — claim N eligible items, run an agent in isolation, integrate
 slug: run-once
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scan]
 covers: [5, 6, 7, 8, 10, 12]
 created: 2026-06-03

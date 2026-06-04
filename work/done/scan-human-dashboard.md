@@ -2,7 +2,6 @@
 title: scan human dashboard — group items by who-can-take-it
 slug: scan-human-dashboard
 prd: agent-runner
-afk: true
 blocked_by: [scan]
 covers: [1, 4, 9]
 created: 2026-06-03

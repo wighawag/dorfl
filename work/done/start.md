@@ -2,7 +2,7 @@
 title: start — claim then onboard the human onto the work branch
 slug: start
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [claim-command]
 covers: [5]
 created: 2026-06-03

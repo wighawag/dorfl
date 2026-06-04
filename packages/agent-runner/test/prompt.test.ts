@@ -31,7 +31,6 @@ const SLICE = `---
 title: Example slice
 slug: example
 prd: my-prd
-afk: true
 blocked_by: []
 ---
 
@@ -65,7 +64,6 @@ function seedSlice(
 		`title: ${slug}`,
 		`slug: ${slug}`,
 		`prd: ${prd}`,
-		'afk: true',
 		'blocked_by: []',
 		'---',
 		'',

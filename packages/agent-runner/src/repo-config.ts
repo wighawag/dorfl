@@ -40,6 +40,7 @@ export const REPO_ALLOWED_KEYS = [
 	'integration',
 	'verify',
 	'defaultArbiter',
+	'allowAgents',
 ] as const satisfies readonly (keyof Config)[];
 
 /** A key honoured in a per-repo file. */
@@ -56,7 +57,6 @@ export const REPO_REJECTED_KEYS = [
 	'exclude',
 	'maxParallel',
 	'perRepoMax',
-	'allowUnspecifiedGate',
 	'agentCmd',
 	// Reserved/future host-only keys callers may name; rejected proactively so a
 	// typo or a copy-pasted global config never silently leaks host policy into a

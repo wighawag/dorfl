@@ -9,9 +9,9 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({})).toEqual(DEFAULT_CONFIG);
 	});
 
-	it('defaults allowUnspecifiedGate to false (strict)', () => {
-		expect(DEFAULT_CONFIG.allowUnspecifiedGate).toBe(false);
-		expect(mergeConfig({}).allowUnspecifiedGate).toBe(false);
+	it('defaults allowAgents to false (strict)', () => {
+		expect(DEFAULT_CONFIG.allowAgents).toBe(false);
+		expect(mergeConfig({}).allowAgents).toBe(false);
 	});
 
 	it('defaults include and exclude to empty arrays', () => {
@@ -54,8 +54,8 @@ describe('mergeConfig', () => {
 	});
 
 	it('overrides individual fields while keeping the rest as defaults', () => {
-		const merged = mergeConfig({allowUnspecifiedGate: true});
-		expect(merged.allowUnspecifiedGate).toBe(true);
+		const merged = mergeConfig({allowAgents: true});
+		expect(merged.allowAgents).toBe(true);
 		expect(merged.include).toEqual([]);
 	});
 
@@ -71,10 +71,10 @@ describe('mergeConfig', () => {
 	it('ignores undefined override values', () => {
 		const merged = mergeConfig({
 			roots: undefined,
-			allowUnspecifiedGate: true,
+			allowAgents: true,
 		});
 		expect(merged.roots).toEqual(DEFAULT_CONFIG.roots);
-		expect(merged.allowUnspecifiedGate).toBe(true);
+		expect(merged.allowAgents).toBe(true);
 	});
 });
 
@@ -96,13 +96,10 @@ describe('loadConfig', () => {
 
 	it('loads and merges a config file over the defaults', () => {
 		const path = join(dir, 'config.json');
-		writeFileSync(
-			path,
-			JSON.stringify({roots: ['/x'], allowUnspecifiedGate: true}),
-		);
+		writeFileSync(path, JSON.stringify({roots: ['/x'], allowAgents: true}));
 		const cfg = loadConfig(path);
 		expect(cfg.roots).toEqual(['/x']);
-		expect(cfg.allowUnspecifiedGate).toBe(true);
+		expect(cfg.allowAgents).toBe(true);
 		expect(cfg.include).toEqual([]);
 	});
 

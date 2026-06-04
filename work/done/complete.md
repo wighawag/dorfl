@@ -2,7 +2,7 @@
 title: complete — gate, mark done, commit, and integrate a work item
 slug: complete
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [verify, claim-command]
 covers: [12, 7, 8]
 created: 2026-06-03

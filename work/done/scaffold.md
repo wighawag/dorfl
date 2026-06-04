@@ -2,7 +2,6 @@
 title: scaffold — monorepo from template-typescript-lib + vendored claim.sh
 slug: scaffold
 prd: agent-runner
-afk: true
 blocked_by: []
 covers: []
 created: 2026-06-03

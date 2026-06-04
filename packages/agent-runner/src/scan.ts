@@ -4,6 +4,7 @@ import type {Config} from './config.js';
 import {detectRepos} from './detect.js';
 import {parseFrontmatter} from './frontmatter.js';
 import {resolveEligibility, type EligibilityResult} from './eligibility.js';
+import {resolveRepoConfig} from './repo-config.js';
 
 /** A backlog item with its parsed gate/deps, before eligibility resolution. */
 export interface BacklogItem {
@@ -11,8 +12,8 @@ export interface BacklogItem {
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
 	slug: string;
-	/** The AFK gate: true | false | undefined (omitted). */
-	afk: boolean | undefined;
+	/** The autonomy gate: `true` (human-only) | `undefined` (undeclared). */
+	humanOnly: boolean | undefined;
 	/** Slugs this item is blocked by. */
 	blockedBy: string[];
 }
@@ -75,7 +76,7 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
 		items.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
-			afk: fm.afk,
+			humanOnly: fm.humanOnly,
 			blockedBy: fm.blockedBy,
 		});
 	}
@@ -84,8 +85,12 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
 
 /**
  * Read-only end-to-end scan: detect participating repos, parse their backlog
- * frontmatter, and resolve eligibility per item (AFK gate + per-repo
+ * frontmatter, and resolve eligibility per item (autonomy gate + per-repo
  * `blocked_by`). Claims and runs nothing.
+ *
+ * The autonomy gate's `allowAgents` policy is resolved PER REPO (flag > per-repo
+ * `.agent-runner.json` > global > default), exactly like `integration` — so a
+ * permissive repo and a strict repo can coexist in one scan.
  */
 export function scan(config: Config): ScanReport {
 	const repoPaths = detectRepos({
@@ -100,12 +105,14 @@ export function scan(config: Config): ScanReport {
 
 	for (const path of repoPaths) {
 		const doneSlugs = readDoneSlugs(path);
+		const allowAgents = resolveRepoConfig({repoPath: path, global: config})
+			.config.allowAgents;
 		const items: ScannedItem[] = readBacklogItems(path).map((item) => {
 			const eligibility = resolveEligibility({
-				afk: item.afk,
+				humanOnly: item.humanOnly,
 				blockedBy: item.blockedBy,
 				doneSlugs,
-				allowUnspecifiedGate: config.allowUnspecifiedGate,
+				allowAgents,
 			});
 			totalItems++;
 			if (eligibility.eligible) {

@@ -2,7 +2,7 @@
 title: per-repo config — a committed repo-level config layered over global
 slug: per-repo-config
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scan]
 covers: [3, 8]
 created: 2026-06-03

@@ -44,10 +44,13 @@ a horizontal slice of one layer.
 - Each slice delivers a narrow but COMPLETE path (schema → logic → API/UI → tests).
 - A completed slice is demoable/verifiable on its own.
 - Prefer many thin slices over few thick ones.
-- Set the **`afk` gate** on each: `afk: true` (can be built and merged
-  unattended), `afk: false` (needs a human decision/review), or omit it (leave the
-  claim decision to the runner's policy). Prefer `afk: true`; mark `blocked_by`
-  for ordering. See [WORK-CONTRACT.md](WORK-CONTRACT.md) for the gate semantics.
+- Set the **`humanOnly` gate** ONLY where it applies: `humanOnly: true` marks a
+  slice an agent must never auto-claim (a product/design/security/judgement
+  call). **OMIT it on most slices** — omitted means "undeclared", and whether an
+  agent may claim an undeclared slice is the *repo's* `allowAgents` policy, not
+  the slice's. Mark `blocked_by` for ordering. See
+  [WORK-CONTRACT.md](WORK-CONTRACT.md) for the gate semantics + the `allowAgents`
+  precedence.
 - **Prefer file-orthogonal slices to minimise merge conflicts.** `blocked_by`
   encodes logical ordering, but two independent slices that edit the SAME files
   will conflict when the second integrates after the first. Parallel agents make

@@ -2,7 +2,7 @@
 title: repo-mirror — the shared bare hub mirror primitive (ensure/locate/fetch)
 slug: repo-mirror
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scan]
 covers: [6]
 created: 2026-06-03

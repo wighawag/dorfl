@@ -2,7 +2,7 @@
 title: scan — cross-repo eligible-work queue (read-only)
 slug: scan
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scaffold]
 covers: [1, 2, 3, 4, 9]
 created: 2026-06-03

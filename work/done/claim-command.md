@@ -2,7 +2,7 @@
 title: claim command — agent-runner claim, a TS reimplementation of the claim CAS
 slug: claim-command
 prd: agent-runner
-afk: false
+humanOnly: true
 blocked_by: [scan]
 covers: [5]
 created: 2026-06-03

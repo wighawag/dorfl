@@ -41,6 +41,9 @@ function configFor(root: string, overrides = {}) {
 		perRepoMax: 2,
 		integration: 'merge',
 		agentCmd: 'true',
+		// Seeded slices are undeclared (not humanOnly) — agents may claim them only
+		// when this per-repo/global policy is on.
+		allowAgents: true,
 		...overrides,
 	});
 }
@@ -172,6 +175,7 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 				perRepoMax: 2,
 				integration: 'merge',
 				agentCmd: 'true',
+				allowAgents: true,
 			});
 
 		const runFrom = (clone: string, agentId: string) => {
@@ -297,6 +301,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			perRepoMax: 2,
 			integration: 'merge',
 			agentCmd: 'true',
+			allowAgents: true,
 		});
 		let bBranch = '';
 		const result = runOnce({
