@@ -2,7 +2,7 @@
 title: agent model config — first-class model through the harness seam (per-repo)
 slug: agent-model-config
 prd: agent-runner
-blockedBy: []
+blockedBy: [config-env-layer]
 covers: []
 ---
 
@@ -59,8 +59,11 @@ NOT in scope: per-ROLE models (build/slice/review) — staged per future capabil
 
 ## Blocked by
 
-- None — `harness-pi` (the selector + pi adapter + extraArgs) and the per-repo
-  config chain already exist on `main`.
+- `config-env-layer` — lands the `AGENT_RUNNER_*` env layer FIRST, so `model`
+  (and the host-only `piBin`/`agentCmd`) get env support uniformly through the
+  shared resolution chain, rather than this slice special-casing env for `model`.
+  (`harness-pi`'s selector + pi adapter + `extraArgs`, and the per-repo config
+  chain, already exist on `main`.)
 
 ## Prompt
 
