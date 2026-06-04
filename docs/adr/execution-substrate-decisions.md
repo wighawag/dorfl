@@ -272,3 +272,45 @@ Decisions:
   `backlog/` to be re-claimed (or resumes on its branch). It must not rot.
 - This unifies and subsumes the previously-separate "needs-attention surfacing"
   concern across the gate, conflict, ambiguity, and timeout outcomes.
+
+## 13. Model selection is agent-runner's (via the harness seam); auth/keys are the harness's
+
+The runner decides **which model** a job runs on; it never touches **credentials**.
+This is the clean boundary: model = routing intent agent-runner controls; API keys,
+OAuth, provider base URLs = the agent harness's job, out of scope for agent-runner
+(the harness — `pi`, or whatever `agentCmd` wraps — already does auth well, and a
+portable runner must not duplicate per-provider secret handling).
+
+Decisions:
+
+- **`model` is a first-class, harness-agnostic field** carried through the harness
+  seam (`LaunchInput.model`). The CORE passes the *intent* (a model id); the
+  ADAPTER decides how that reaches its tool:
+  - the **pi** adapter passes it natively (`--model <model>`);
+  - the **null/shell** adapter substitutes a `{model}` placeholder in `agentCmd`
+    (degradation rules: placeholder + no model ⇒ a clear config error; no
+    placeholder ⇒ run the command as-is — agent-runner offers model routing but
+    never forces it, so a user who bakes the model into `agentCmd` or relies on the
+    harness's own default is untouched).
+  This mirrors §6's seam discipline: one declared intent, adapter-specific
+  realization; the core stays tool-agnostic.
+
+- **`model` resolves per-repo, like `integration`/`verify`:** flag (`--model`) >
+  per-repo `.agent-runner.json` > global > default (unset). So `model` joins
+  `REPO_ALLOWED_KEYS` — choosing the model for *this repo's* work is a legitimate
+  repo property. `harness` (which adapter) is likewise repo-appropriate and
+  allowed per-repo; `piBin` and `agentCmd` stay **host-only** (rejected per-repo)
+  because they are machine paths/commands, not repo policy.
+
+- **Auth stays in the harness, always.** agent-runner sets no API keys, writes no
+  `auth.json`/`models.json`, and reads no secrets. (The CI `install-ci` work —
+  separate PRD — wires harness auth as a harness concern, mirroring whitesmith.)
+
+- **Per-ROLE model (build vs slice vs review vs grilling) is STAGED, not built
+  now.** A single `model` covers the build path today. Each future capability
+  brings its own role override *as it becomes real* (e.g. `auto-slice` adds a
+  `slice` model; review adds a `review` model) — resolved as role-override > base
+  `model`, then through the per-repo chain. We do NOT spec the role map up front
+  (it would be config for capabilities that don't exist yet — speculative
+  generality that goes stale). The `model` field is shaped so a later `perRole`
+  map layers on without breaking it.
