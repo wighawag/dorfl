@@ -6,8 +6,8 @@ humanOnly: true
 blocked_by: [run-once, repo-mirror]
 covers: [5, 6, 10, 12]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-04T06:56:18Z
 ---
 
 > Scope note: this is the **core** substrate. Two lifecycle concerns were split
