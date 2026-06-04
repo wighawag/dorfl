@@ -6,8 +6,8 @@ humanOnly: true
 blocked_by: [run-once, claim-command]
 covers: [5]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-04T08:03:25Z
 ---
 
 ## What to build
