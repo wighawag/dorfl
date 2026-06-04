@@ -6,8 +6,8 @@ humanOnly: true
 blocked_by: [complete]
 covers: [7, 8]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-04T08:08:01Z
 ---
 
 ## What to build
