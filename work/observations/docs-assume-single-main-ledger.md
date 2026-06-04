@@ -1,53 +1,48 @@
 ---
-title: Docs still describe a single-main claim ledger + unconditional offline scan (pre two-mode ADR)
+title: Docs hard-wire the claim CAS to main; re-point at the seam when the ledger-transition refactor lands
 type: observation
 status: spotted
 spotted: 2026-06-04
 ---
 
-# Docs assume the OLD single-`main` claim model (re-scope when the ledger seam lands)
+# Docs describe the claim CAS as a direct `main`-write (pre ledger-transition seam)
 
 > **Spotted, not yet actioned.** The accepted ADR
 > `docs/adr/claim-ledger-vs-protected-main.md` (status: accepted, 2026-06-04)
-> decided agent-runner has **two ledger modes** behind a read/write seam
-> (**M = main-writable, the default**, ≈ today; **P = protected-main**, deferred).
-> Several existing docs still describe the system as if `main` is *unconditionally*
-> the claim ledger and `scan` is *unconditionally* offline. Those statements are
-> now true only of **mode M**. They are not wrong today (M is the default and the
-> only built mode) — but they will drift the moment the seam / mode P is built.
-> Recording so the implementation slice re-scopes them rather than leaving a
-> contradicting invariant in the source-of-truth docs.
+> decided to introduce a **ledger-transition seam** \u2014 a pure, behaviour-identical
+> refactor that routes the three `work/` transitions (claim / complete /
+> needs-attention) through a read seam + a write seam, with the current
+> behaviour as the only strategy. **No mode, no config, nothing observable
+> changes.**
+>
+> Several docs describe the claim/complete transitions as *directly* writing
+> `main` (which is still TRUE \u2014 that is what the one strategy does). They are not
+> wrong. But when the seam refactor lands, the prose should mention that these
+> transitions now route *through* the seam (so a future strategy could differ),
+> rather than implying the `main`-write is hard-wired. Light touch \u2014 this is a
+> "add a sentence / cross-reference" pass, not a rewrite.
 
-## Concrete references to re-scope (when the seam slice is built)
+## Concrete references to touch (when the seam slice is built)
 
 - **`CONTEXT.md`**
-  - L74 `arbiter` — "the single git remote whose **`main` ref serialises claims**"
-    → true in M; in P the claim serialises off `main` (substrate deferred).
-  - L76–77 `claim (CAS)` — "pushing a micro-commit to the arbiter's **`main`** with
-    `--force-with-lease`" → that is the **mode-M** primitive; P's primitive differs
-    (and is part of the write seam).
-  - The **Invariants** / house section asserting status=folder-on-main and the
-    general framing should gain a "in mode M; mode P reads intermediates off the
-    work branches" qualifier once P exists.
+  - L74 `arbiter` ("the single git remote whose `main` ref serialises claims")
+    and L76\u201377 `claim (CAS)` ("pushing a micro-commit to the arbiter's `main`
+    with `--force-with-lease`") \u2014 still accurate; add a note that this is the
+    *current (only) strategy* behind the ledger-transition seam, cross-ref the ADR.
 
-- **`work/ideas/needs-attention-surfacing.md`** — already partly updated (the
-  "Subsumed by…" section now points at the accepted ADR), BUT the earlier body
-  still says **"`scan` stays a fast, OFFLINE claim-ledger view"** as if
-  unconditional. That sentence needs the "offline **in mode M**" qualifier (it is
-  network-bound in P). Left as-is for now; fix alongside the seam.
-
-- **`docs/adr/execution-substrate-decisions.md`** — describes the claim CAS / the
-  `scan` reader against `main` throughout (e.g. §9 the claim-command parity with
-  `claim.sh`, the needs-attention § on `scan`/`status` reading folders). These
-  describe **mode M** behaviour. When the seam lands, add a cross-reference to the
-  two-mode ADR so the substrate ADR isn't read as asserting a single global model.
-  (NB: the "offline" hits at L130/L145 there are about the `--bare` *arbiter* being
-  offline-capable, NOT about `scan` — those are unrelated and fine.)
+- **`docs/adr/execution-substrate-decisions.md`**
+  - The claim-command / `scan` descriptions against `main` (e.g. \u00a79 claim parity
+    with `claim.sh`, the needs-attention \u00a7 on `scan`/`status`) describe the same
+    single strategy \u2014 add a cross-reference to the ledger-transition-seam ADR so
+    the substrate ADR isn't read as asserting the `main`-write can never be
+    indirected. (NB: the "offline" hits at L130/L145 are about the `--bare`
+    *arbiter* being offline-capable, NOT about `scan`; leave them alone. And
+    `scan` genuinely STAYS offline \u2014 the seam does not change that.)
 
 ## Why an observation, not a work item
 
 This is a documentation-consistency signal that becomes actionable **only when the
-ledger seam / mode P is actually implemented** — re-scoping the prose before the
-code exists would describe behaviour that isn't there yet. So it rides WITH that
-future slice. Captured here (append-only bucket) so it is not lost; delete this
-note when the seam slice has re-scoped the references above.
+ledger-transition seam refactor is actually implemented** \u2014 the prose is correct
+until then. So it rides WITH that slice (the `ledger-transition-seam` PRD).
+Captured here so it is not lost; delete this note once that slice has added the
+seam cross-references above.

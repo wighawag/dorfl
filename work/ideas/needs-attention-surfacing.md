@@ -88,22 +88,19 @@ runner writing `main` on the error path. Reading work branches is the only
 mode-agnostic, protection-compatible mechanism. (This supersedes the cherry-pick /
 move-only-to-main alternatives, which were elegant but only legal in `merge` mode.)
 
-## Subsumed by the accepted two-mode ledger ADR
+## Built against the ledger-transition seam (accepted ADR)
 
-This surfacing approach is **subsumed by** the accepted ADR
-`docs/adr/claim-ledger-vs-protected-main.md` (status: accepted) — which decided
-agent-runner supports **two ledger modes** behind a read/write seam:
+The accepted ADR `docs/adr/claim-ledger-vs-protected-main.md` (status: accepted)
+introduces a **ledger-transition seam** (a read seam + a write seam) with the
+current behaviour as the only strategy — **no mode, no config.** This surfacing
+idea is the natural **follow-on built against that write seam**: surface
+needs-attention **on `main`** via the cherry-pick mechanism described above (the
+"easy add"). It is a separate slice from introducing the seam (the seam is a pure
+behaviour-identical refactor; this adds behaviour on top of it).
 
-- **Mode M (main-writable, the default):** needs-attention is surfaced **on
-  `main`** via the cherry-pick mechanism described above (an easy add).
-- **Mode P (protected `main`):** needs-attention NEVER reaches `main`; it (like
-  in-progress) lives on the `work/<slug>` branch and is read over the **network**
-  via the mode read seam — exactly the "read from work branches" mechanism above.
-
-So needs-attention surfacing is **not a standalone design** — it is a consequence
-of the mode read seam: implement it against that seam (M: cherry-pick to main; P:
-read the work-branch tips). NB the "`scan` stays OFFLINE" claim above is now
-re-scoped by that ADR to **"offline in mode M"** — in mode P `scan` is
-network-bound (it must consult real claim state). The P substrate itself (per-item
-branch-existence vs a dedicated ledger ref) is deferred in that ADR; this idea
-falls out whichever P substrate is later chosen.
+The seam keeps `scan` OFFLINE (reads `main`) — so the "`scan` stays OFFLINE"
+framing above is correct as-is for today's system. (A *future* protected-`main`
+strategy behind the seam, if ever built, would read needs-attention from the
+work-branch tips over the network instead of `main` — but that strategy does not
+exist and is not part of this idea; see the ADR's "future protected-`main`
+strategy" analysis section.)
