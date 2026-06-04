@@ -6,8 +6,8 @@ afk: false
 blocked_by: [scan, scan-human-dashboard, per-repo-config]
 covers: [9]
 created: 2026-06-03
-claimed_by:
-claimed_at:
+claimed_by: wighawag
+claimed_at: 2026-06-04T06:37:45Z
 ---
 
 > Note: this slice's own frontmatter still uses `afk: false` because it is
