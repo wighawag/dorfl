@@ -6,6 +6,7 @@ import type {ReviewProvider} from './integrator.js';
 import type {IntegrationMode} from './config.js';
 import {runAsync, type RunResult} from './git.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
+import {routeToNeedsAttention} from './needs-attention.js';
 
 /**
  * `agent-runner complete [<slug>] [--skip-verify] [--type <t>] [--message <s>]
@@ -51,6 +52,16 @@ import {formatProposeNextStep, shouldUseColor} from './output.js';
  *   0  completed (done-move + commit + integrate succeeded)
  *   1  usage/environment error, or a refusal (gate failed, nothing to commit,
  *      not on a work branch, rebase conflict needs the human)
+ *
+ * On the two FAILURE paths the human can't paper over — a red gate (without
+ * `--skip-verify`) and a rebase conflict (ADR §10) — `complete` no longer leaves
+ * the item dangling. Instead it routes the item through the shared
+ * `needs-attention` mechanism (ADR §12): record the reason and
+ * `git mv work/in-progress|done/<slug>.md → work/needs-attention/<slug>.md`, so
+ * the stuck item is surfaced by `status` and returnable to `backlog/`. The
+ * success and `--skip-verify` paths are unchanged. The exit code stays 1 (the
+ * work did NOT complete); the outcome still names WHY (gate-failed /
+ * rebase-conflict) and `routedToNeedsAttention` records that the move happened.
  */
 
 export type CompleteOutcome =
@@ -111,6 +122,13 @@ export interface CompleteOptions {
 export interface CompleteResult {
 	exitCode: 0 | 1;
 	outcome: CompleteOutcome;
+	/**
+	 * True iff a FAILURE outcome (gate-failed / rebase-conflict) was routed to
+	 * `work/needs-attention/` via the shared mechanism (ADR §12), rather than left
+	 * dangling. Undefined/false on the success, `--skip-verify`, refused, and
+	 * usage-error paths (none of which move the item to needs-attention).
+	 */
+	routedToNeedsAttention?: boolean;
 	/** The work branch that was completed, when one was resolved. */
 	branch?: string;
 	/** The completion commit message that was authored, on success. */
@@ -241,13 +259,24 @@ async function runComplete(
 		note('Running the acceptance gate (verify)…');
 		const gate = await runVerify({cwd, verify: options.verify, env});
 		if (!gate.passed) {
+			// Don't leave the item dangling in in-progress/: route it to
+			// needs-attention/ with the reason (ADR §12). The item has NOT been
+			// committed/moved yet, so routeToNeedsAttention bounces it straight from
+			// in-progress/ — recording the reason + committing the move (with the
+			// agent's uncommitted work) as ONE atomic transition. No partial state.
+			const reason = `acceptance gate failed (exit ${gate.exitCode})`;
+			const routed = routeToNeedsAttention({cwd, slug, reason, env, note});
 			return {
 				exitCode: 1,
 				outcome: 'gate-failed',
+				routedToNeedsAttention: routed.moved,
 				branch,
-				message:
-					`Acceptance gate failed (exit ${gate.exitCode}); not completing ` +
-					`'${slug}'. Fix the work, or use --skip-verify to override.`,
+				message: routed.moved
+					? `Acceptance gate failed (exit ${gate.exitCode}); routed '${slug}' ` +
+						'to work/needs-attention/ (surfaced by status; return to backlog/ ' +
+						'once resolved). Fix the work, or use --skip-verify to override.'
+					: `Acceptance gate failed (exit ${gate.exitCode}); not completing ` +
+						`'${slug}'. Fix the work, or use --skip-verify to override.`,
 			};
 		}
 	}
@@ -284,17 +313,29 @@ async function runComplete(
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
 	if (rebase.status !== 0) {
-		// NEVER auto-resolve: abort and hand the conflict back to the human.
+		// NEVER auto-resolve: abort the rebase (back to a clean work-branch tip).
 		await gitSoft(['rebase', '--abort'], cwd, env);
+		// Then route the item to needs-attention/ with the conflict reason (ADR
+		// §12) rather than leaving it dangling in done/. The done-move was already
+		// committed above, so the item sits in work/done/; routeToNeedsAttention
+		// bounces it from there and commits the in-progress→needs-attention move
+		// (here done→needs-attention) as ONE transition. No partial state.
+		const reason = `rebase onto ${arbiter}/main conflicted (aborted, never auto-resolved)`;
+		const routed = routeToNeedsAttention({cwd, slug, reason, env, note});
 		return {
 			exitCode: 1,
 			outcome: 'rebase-conflict',
+			routedToNeedsAttention: routed.moved,
 			branch,
 			commitMessage,
-			message:
-				`Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-				'aborted (never auto-resolved). Resolve against the latest main, then ' +
-				're-run complete.',
+			message: routed.moved
+				? `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
+					`aborted (never auto-resolved) and '${slug}' was routed to ` +
+					'work/needs-attention/ (surfaced by status). Resolve against the ' +
+					'latest main, then return it to backlog/ and re-run.'
+				: `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
+					'aborted (never auto-resolved). Resolve against the latest main, ' +
+					'then re-run complete.',
 		};
 	}
 

@@ -94,10 +94,9 @@ const PASS = 'exit 0';
 const FAIL = 'exit 1';
 
 describe('complete — gate', () => {
-	it('aborts cleanly (no move, no commit) when the gate fails', async () => {
+	it('routes to needs-attention (not done) when the gate fails (ADR §12)', async () => {
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
-		const headBefore = gitIn(['rev-parse', 'HEAD'], repo).trim();
 
 		const result = await performComplete({
 			slug: 'alpha',
@@ -109,12 +108,17 @@ describe('complete — gate', () => {
 
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('gate-failed');
-		// Nothing moved, nothing committed.
+		expect(result.routedToNeedsAttention).toBe(true);
+		// The item is NOT left dangling in in-progress/, and never reaches done/ —
+		// it is bounced to needs-attention/ for the human (detailed assertions in
+		// complete-needs-attention.test.ts).
 		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			true,
+			false,
 		);
 		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(false);
-		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(headBefore);
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
+			true,
+		);
 	});
 
 	it('--skip-verify skips the gate and completes anyway', async () => {
@@ -434,12 +438,17 @@ describe('complete — rebase conflict (ADR §10)', () => {
 		expect(result.outcome).toBe('rebase-conflict');
 		expect(result.message).toMatch(/conflict/i);
 		expect(result.message).toMatch(/aborted/i);
+		expect(result.routedToNeedsAttention).toBe(true);
 		// The rebase was aborted: we are back on the work branch, not mid-rebase.
 		expect(currentBranch(repo)).toBe('work/theta');
 		expect(existsSync(join(repo, '.git', 'rebase-merge'))).toBe(false);
 		expect(existsSync(join(repo, '.git', 'rebase-apply'))).toBe(false);
-		// Nothing landed on arbiter main.
+		// Nothing landed on arbiter main — and the item is routed to
+		// needs-attention/ rather than left dangling (ADR §12).
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'theta.md'))).toBe(
+			true,
+		);
 	});
 });
 
