@@ -296,11 +296,36 @@ Decisions:
   realization; the core stays tool-agnostic.
 
 - **`model` resolves per-repo, like `integration`/`verify`:** flag (`--model`) >
-  per-repo `.agent-runner.json` > global > default (unset). So `model` joins
-  `REPO_ALLOWED_KEYS` — choosing the model for *this repo's* work is a legitimate
-  repo property. `harness` (which adapter) is likewise repo-appropriate and
-  allowed per-repo; `piBin` and `agentCmd` stay **host-only** (rejected per-repo)
-  because they are machine paths/commands, not repo policy.
+  **env (`AGENT_RUNNER_*`)** > per-repo `.agent-runner.json` > global > default
+  (unset). So `model` joins `REPO_ALLOWED_KEYS` — choosing the model for *this
+  repo's* work is a legitimate repo property. `harness` (which adapter) is
+  likewise repo-appropriate and allowed per-repo; `piBin` and `agentCmd` stay
+  **host-only** (rejected per-repo) because they are machine paths/commands, not
+  repo policy.
+
+- **Host-only keys come from a PER-MACHINE source — never the committed repo
+  file.** This is the sharpened principle: a host-only key (`piBin`, `agentCmd`,
+  `roots`, `maxParallel`, …) must be supplied by a *per-machine* source — a CLI
+  flag, an **`AGENT_RUNNER_*` environment variable**, or the global
+  `~/.config/agent-runner/config.json` — and is rejected (ignored + reported) if
+  it appears in the committed `.agent-runner.json`. The per-repo allow/reject
+  split (`REPO_ALLOWED_KEYS`/`REPO_REJECTED_KEYS`) governs ONLY the committed repo
+  file; it does **not** constrain env. Env is a legitimate per-machine source
+  (exactly like a flag or the global file), so it may set **any** `Config` key,
+  host-only included — it is simply the per-machine source a CI job actually has
+  without writing a file. This de-risks per-job CI config and lets every future
+  key (e.g. `model`) inherit env support uniformly.
+
+- **The env layer: `AGENT_RUNNER_<SCREAMING_SNAKE(key)>`, typed + loud.** Env
+  vars are named by mechanically uppercasing the camelCase `Config` key
+  (`agentCmd` → `AGENT_RUNNER_AGENT_CMD`, `perRepoMax` →
+  `AGENT_RUNNER_PER_REPO_MAX`). Each is coerced per the key's type and an invalid
+  value **fails loudly** (naming the offending variable), never silently ignored:
+  booleans accept only `true`/`false`; numbers reject NaN; enums validate against
+  their union; list keys split on comma (cross-platform); strings pass verbatim.
+  Absent env leaves built-in floors/defaults untouched; the global `.config` file
+  keeps working (env is additive). Full chain (highest wins):
+  `flag > ENV (AGENT_RUNNER_*) > per-repo > global > built-in default`.
 
 - **Auth stays in the harness, always.** agent-runner sets no API keys, writes no
   `auth.json`/`models.json`, and reads no secrets. (The CI `install-ci` work —

@@ -1,0 +1,175 @@
+import {describe, it, expect} from 'vitest';
+import {ENV_PREFIX, envVarName, envOverrides} from '../src/env-config.js';
+
+describe('envVarName', () => {
+	it('prefixes AGENT_RUNNER_ and SCREAMING_SNAKEs the key', () => {
+		expect(ENV_PREFIX).toBe('AGENT_RUNNER_');
+		expect(envVarName('agentCmd')).toBe('AGENT_RUNNER_AGENT_CMD');
+		expect(envVarName('piBin')).toBe('AGENT_RUNNER_PI_BIN');
+		expect(envVarName('perRepoMax')).toBe('AGENT_RUNNER_PER_REPO_MAX');
+		expect(envVarName('defaultArbiter')).toBe('AGENT_RUNNER_DEFAULT_ARBITER');
+		// A single-word key stays a single SCREAMING word.
+		expect(envVarName('roots')).toBe('AGENT_RUNNER_ROOTS');
+	});
+});
+
+describe('envOverrides — no env (regression)', () => {
+	it('returns an empty object when no AGENT_RUNNER_* vars are set', () => {
+		expect(envOverrides({})).toEqual({});
+	});
+
+	it('ignores unrelated env vars (no accidental key bleed)', () => {
+		expect(envOverrides({PATH: '/usr/bin', HOME: '/home/x'})).toEqual({});
+	});
+
+	it('treats an absent var as unset, not as a value', () => {
+		// `undefined` entries (as process.env yields for missing keys) are skipped.
+		expect(envOverrides({AGENT_RUNNER_AGENT_CMD: undefined})).toEqual({});
+	});
+});
+
+describe('envOverrides — string coercion', () => {
+	it('passes string keys through verbatim', () => {
+		expect(
+			envOverrides({
+				AGENT_RUNNER_AGENT_CMD: 'my-agent --flag',
+				AGENT_RUNNER_PI_BIN: '/usr/local/bin/pi',
+				AGENT_RUNNER_DEFAULT_ARBITER: 'arbiter',
+			}),
+		).toEqual({
+			agentCmd: 'my-agent --flag',
+			piBin: '/usr/local/bin/pi',
+			defaultArbiter: 'arbiter',
+		});
+	});
+
+	it('keeps an empty string for a string key (not coerced away)', () => {
+		expect(envOverrides({AGENT_RUNNER_AGENT_CMD: ''})).toEqual({agentCmd: ''});
+	});
+});
+
+describe('envOverrides — boolean coercion', () => {
+	it('accepts true and false', () => {
+		expect(envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'true'})).toEqual({
+			allowAgents: true,
+		});
+		expect(envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'false'})).toEqual({
+			allowAgents: false,
+		});
+	});
+
+	it('rejects anything else LOUDLY, naming the variable', () => {
+		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'yes'})).toThrow(
+			/AGENT_RUNNER_ALLOW_AGENTS/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'yes'})).toThrow(
+			/true.*false/i,
+		);
+		// Case matters: `True`/`1` are NOT accepted (avoids silent ambiguity).
+		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'True'})).toThrow(
+			/AGENT_RUNNER_ALLOW_AGENTS/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: '1'})).toThrow(
+			/AGENT_RUNNER_ALLOW_AGENTS/,
+		);
+	});
+});
+
+describe('envOverrides — number coercion', () => {
+	it('parses numeric values', () => {
+		expect(envOverrides({AGENT_RUNNER_MAX_PARALLEL: '8'})).toEqual({
+			maxParallel: 8,
+		});
+		expect(envOverrides({AGENT_RUNNER_PER_REPO_MAX: '3'})).toEqual({
+			perRepoMax: 3,
+		});
+	});
+
+	it('rejects NaN / non-numeric / empty LOUDLY, naming the variable', () => {
+		expect(() => envOverrides({AGENT_RUNNER_MAX_PARALLEL: 'lots'})).toThrow(
+			/AGENT_RUNNER_MAX_PARALLEL/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_MAX_PARALLEL: 'lots'})).toThrow(
+			/number/i,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_PER_REPO_MAX: ''})).toThrow(
+			/AGENT_RUNNER_PER_REPO_MAX/,
+		);
+	});
+});
+
+describe('envOverrides — enum coercion', () => {
+	it('accepts a valid enum member', () => {
+		expect(envOverrides({AGENT_RUNNER_INTEGRATION: 'merge'})).toEqual({
+			integration: 'merge',
+		});
+		expect(envOverrides({AGENT_RUNNER_INTEGRATION: 'propose'})).toEqual({
+			integration: 'propose',
+		});
+		expect(envOverrides({AGENT_RUNNER_HARNESS: 'pi'})).toEqual({harness: 'pi'});
+		expect(envOverrides({AGENT_RUNNER_PROVIDER: 'github'})).toEqual({
+			provider: 'github',
+		});
+	});
+
+	it('rejects a value outside the union LOUDLY, naming the variable + options', () => {
+		expect(() => envOverrides({AGENT_RUNNER_INTEGRATION: 'rebase'})).toThrow(
+			/AGENT_RUNNER_INTEGRATION/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_INTEGRATION: 'rebase'})).toThrow(
+			/propose.*merge|merge.*propose/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_HARNESS: 'docker'})).toThrow(
+			/AGENT_RUNNER_HARNESS/,
+		);
+	});
+});
+
+describe('envOverrides — list coercion', () => {
+	it('splits comma-separated list keys (cross-platform, not `:`)', () => {
+		expect(envOverrides({AGENT_RUNNER_ROOTS: '/a,/b,/c'})).toEqual({
+			roots: ['/a', '/b', '/c'],
+		});
+		expect(envOverrides({AGENT_RUNNER_EXCLUDE: 'skip-me'})).toEqual({
+			exclude: ['skip-me'],
+		});
+	});
+
+	it('trims whitespace and drops empty entries', () => {
+		expect(envOverrides({AGENT_RUNNER_ROOTS: ' /a , /b ,'})).toEqual({
+			roots: ['/a', '/b'],
+		});
+	});
+
+	it('an empty list var clears the list (explicit empty)', () => {
+		expect(envOverrides({AGENT_RUNNER_INCLUDE: ''})).toEqual({include: []});
+	});
+
+	it('treats verify as a list key (env carries a multi-command gate)', () => {
+		expect(envOverrides({AGENT_RUNNER_VERIFY: 'build,test'})).toEqual({
+			verify: ['build', 'test'],
+		});
+	});
+});
+
+describe('envOverrides — host-only keys are allowed (per-machine source)', () => {
+	it('sets host-only keys env (piBin, agentCmd, roots, maxParallel)', () => {
+		expect(
+			envOverrides({
+				AGENT_RUNNER_PI_BIN: '/opt/pi',
+				AGENT_RUNNER_AGENT_CMD: 'agent',
+				AGENT_RUNNER_ROOTS: '/r',
+				AGENT_RUNNER_MAX_PARALLEL: '2',
+				AGENT_RUNNER_WORKSPACES_DIR: '/tmp/ws',
+				AGENT_RUNNER_ARBITERS_DIR: '/tmp/arb',
+			}),
+		).toEqual({
+			piBin: '/opt/pi',
+			agentCmd: 'agent',
+			roots: ['/r'],
+			maxParallel: 2,
+			workspacesDir: '/tmp/ws',
+			arbitersDir: '/tmp/arb',
+		});
+	});
+});

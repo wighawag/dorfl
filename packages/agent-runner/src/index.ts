@@ -30,6 +30,9 @@ export {
 	resolveRepoConfig,
 } from './repo-config.js';
 
+export type {EnvMap} from './env-config.js';
+export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
+
 export type {Frontmatter} from './frontmatter.js';
 export {parseFrontmatter} from './frontmatter.js';
 

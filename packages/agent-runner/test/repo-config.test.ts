@@ -302,3 +302,105 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 		expect(resolved.config.integration).toBe('merge');
 	});
 });
+
+describe('resolveRepoConfig — AGENT_RUNNER_* env layer', () => {
+	let repo: string;
+
+	beforeEach(() => {
+		repo = mkdtempSync(join(tmpdir(), 'agent-runner-env-'));
+	});
+
+	afterEach(() => {
+		rmSync(repo, {recursive: true, force: true});
+	});
+
+	it('env sits ABOVE per-repo + global but BELOW a flag (chain position)', () => {
+		// global = propose; per-repo = propose; env = merge; flag = propose
+		writeRepoConfig(repo, {integration: 'propose'});
+		const global = mergeConfig({integration: 'propose'});
+		const env = {AGENT_RUNNER_INTEGRATION: 'merge'};
+		// env beats per-repo + global
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env}).config.integration,
+		).toBe('merge');
+		// a flag still beats env
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env,
+				flags: {integration: 'propose'},
+			}).config.integration,
+		).toBe('propose');
+	});
+
+	it('env overrides the GLOBAL when there is no per-repo file', () => {
+		const global = mergeConfig({integration: 'propose'});
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global,
+			env: {AGENT_RUNNER_INTEGRATION: 'merge'},
+		});
+		expect(resolved.config.integration).toBe('merge');
+	});
+
+	it('env sets host-only keys the per-repo file rejects (per-machine source)', () => {
+		// The per-repo file tries (and fails) to set host-only keys; env sets them.
+		writeRepoConfig(repo, {piBin: '/ignored', maxParallel: 99, roots: ['/no']});
+		const global = mergeConfig({});
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global,
+			env: {
+				AGENT_RUNNER_PI_BIN: '/opt/pi',
+				AGENT_RUNNER_AGENT_CMD: 'agent',
+				AGENT_RUNNER_ROOTS: '/r1,/r2',
+				AGENT_RUNNER_MAX_PARALLEL: '8',
+			},
+		});
+		// env wins for the host-only keys; the per-repo file's attempts are rejected.
+		expect(resolved.config.piBin).toBe('/opt/pi');
+		expect(resolved.config.agentCmd).toBe('agent');
+		expect(resolved.config.roots).toEqual(['/r1', '/r2']);
+		expect(resolved.config.maxParallel).toBe(8);
+		// the per-repo file STILL reports the rejected host-only keys
+		expect(resolved.rejected).toContain('piBin');
+		expect(resolved.rejected).toContain('maxParallel');
+		expect(resolved.rejected).toContain('roots');
+	});
+
+	it('no env ⇒ built-in floors/defaults are unchanged (regression)', () => {
+		// A bare global + empty env must leave piBin unset (floor `pi` applies later)
+		// and every default intact.
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global: mergeConfig({}),
+			env: {},
+		});
+		expect(resolved.config).toEqual(DEFAULT_CONFIG);
+		expect(resolved.config.piBin).toBeUndefined();
+	});
+
+	it('the global .config file still works alongside env (env is additive)', () => {
+		// global file set maxParallel; env sets a DIFFERENT key ⇒ both apply.
+		const global = mergeConfig({maxParallel: 6, defaultArbiter: 'origin'});
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global,
+			env: {AGENT_RUNNER_AGENT_CMD: 'agent'},
+		});
+		expect(resolved.config.maxParallel).toBe(6); // from the global file
+		expect(resolved.config.defaultArbiter).toBe('origin'); // from the global file
+		expect(resolved.config.agentCmd).toBe('agent'); // additive from env
+	});
+
+	it('rejects an invalid env value LOUDLY (naming the var)', () => {
+		expect(() =>
+			resolveRepoConfig({
+				repoPath: repo,
+				global: mergeConfig({}),
+				env: {AGENT_RUNNER_MAX_PARALLEL: 'lots'},
+			}),
+		).toThrow(/AGENT_RUNNER_MAX_PARALLEL/);
+	});
+});

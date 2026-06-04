@@ -6,8 +6,10 @@ import {
 	loadConfig,
 	mergeConfig,
 	defaultConfigPath,
+	type Config,
 	type PartialConfig,
 } from './config.js';
+import {envOverrides} from './env-config.js';
 import {scan} from './scan.js';
 import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
@@ -84,6 +86,24 @@ function flagOverrides(flags: ScanFlags, command?: Commander): PartialConfig {
 
 function collect(value: string, previous: string[]): string[] {
 	return previous.concat([value]);
+}
+
+/**
+ * Resolve the global (non-per-repo) config along the chain
+ *
+ *   flag > ENV (AGENT_RUNNER_*) > global file > built-in default
+ *
+ * by layering the file config, then the `AGENT_RUNNER_*` env layer, then the
+ * flag overrides on top. Env is a per-machine source (like a flag or the global
+ * file) and may set ANY key, host-only included. Used by the commands that build
+ * a single global config (`scan`, `run`); per-repo commands fold env in via
+ * `resolveRepoConfig` instead.
+ */
+function resolveGlobalConfig(
+	fileConfig: PartialConfig,
+	flags: PartialConfig,
+): Config {
+	return mergeConfig({...fileConfig, ...envOverrides(), ...flags});
 }
 
 /**
@@ -271,10 +291,10 @@ export function buildProgram(): Command {
 		.option('--json', 'output the raw report as JSON')
 		.action((flags: ScanFlags, command: Commander) => {
 			const fileConfig = loadConfig(flags.config);
-			const config = mergeConfig({
-				...fileConfig,
-				...flagOverrides(flags, command),
-			});
+			const config = resolveGlobalConfig(
+				fileConfig,
+				flagOverrides(flags, command),
+			);
 			const report = scan(config);
 			if (flags.json) {
 				console.log(
@@ -354,10 +374,10 @@ export function buildProgram(): Command {
 				);
 			}
 			const fileConfig = loadConfig(flags.config);
-			const config = mergeConfig({
-				...fileConfig,
-				...runFlagOverrides(flags, command),
-			});
+			const config = resolveGlobalConfig(
+				fileConfig,
+				runFlagOverrides(flags, command),
+			);
 			// The null adapter shells out to agentCmd, so it is required there; the
 			// pi adapter invokes the pi CLI directly and does not consume agentCmd.
 			if (config.harness !== 'pi' && config.agentCmd.trim() === '') {
@@ -390,7 +410,7 @@ export function buildProgram(): Command {
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.action(async (flags: VerifyFlags) => {
-			const config = loadConfig(flags.config);
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const result = await runVerify({
 				cwd: process.cwd(),
 				verify: config.verify,
@@ -680,7 +700,7 @@ export function buildProgram(): Command {
 		.option('--yes', 'confirm a destructive --force sweep non-interactively')
 		.option('--json', 'output the raw result as JSON')
 		.action((flags: GcFlags) => {
-			const config = loadConfig(flags.config);
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 
 			// `--force` discards un-saved work, so it is gated behind an explicit
@@ -738,7 +758,7 @@ export function buildProgram(): Command {
 		)
 		.option('--json', 'output the raw report as JSON')
 		.action((flags: StatusFlags) => {
-			const config = loadConfig(flags.config);
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 			// Also surface the folder-native needs-attention set (ADR §12): the
 			// `work/needs-attention/` folders of every participating repo.
@@ -806,7 +826,7 @@ export function buildProgram(): Command {
 			`name of the arbiter remote to wire in the repo (default: ${DEFAULT_ARBITER_REMOTE})`,
 		)
 		.action((repo: string | undefined, flags: ArbiterInitFlags) => {
-			const config = loadConfig(flags.config);
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const result = arbiterInit({
 				repo,
 				cwd: process.cwd(),

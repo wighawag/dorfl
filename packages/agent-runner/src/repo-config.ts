@@ -1,6 +1,7 @@
 import {readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {mergeConfig, type Config, type PartialConfig} from './config.js';
+import {envOverrides, type EnvMap} from './env-config.js';
 
 /**
  * The per-repo config layer.
@@ -13,16 +14,25 @@ import {mergeConfig, type Config, type PartialConfig} from './config.js';
  *
  * Resolution is per-key, highest wins:
  *
- *   flag (where a command offers one) > per-repo file > global > built-in default
+ *   flag (where a command offers one) > ENV (AGENT_RUNNER_*) > per-repo file >
+ *   global > built-in default
  *
  * The mechanism is multi-repo aware: each repo resolves against its OWN
  * `.agent-runner.json`, so repo A can be `merge` while repo B is `propose` in the
  * SAME run (see {@link resolveRepoConfig}).
  *
- * Only keys that are genuinely repo properties are honoured here. Runner/host-only
- * keys (`roots`, `maxParallel`, …) describe the runner or the host machine, NOT a
- * single repo; if present in a per-repo file they are ignored and reported with a
- * clear message ({@link loadRepoConfig}).
+ * Only keys that are genuinely repo properties are honoured in the COMMITTED
+ * per-repo file. Runner/host-only keys (`piBin`, `agentCmd`, `roots`,
+ * `maxParallel`, …) describe the runner or the host machine, NOT a single repo;
+ * if present in a per-repo file they are ignored and reported with a clear
+ * message ({@link loadRepoConfig}).
+ *
+ * The sharpened host-only principle (ADR §13): **host-only keys must come from a
+ * per-machine source — a CLI flag, an `AGENT_RUNNER_*` env var, or the global
+ * config file — NEVER the committed repo file.** The allow/reject split below
+ * therefore governs ONLY the committed repo file; env (a per-machine source like
+ * the global file / a flag) may set ANY key, host-only included (see
+ * {@link envOverrides}).
  *
  * A repo with no `.agent-runner.json` resolves to exactly the global config —
  * behaviour is unchanged from before this layer existed.
@@ -59,6 +69,12 @@ export const REPO_REJECTED_KEYS = [
 	'maxParallel',
 	'perRepoMax',
 	'agentCmd',
+	// `piBin` is a machine PATH/command, not repo policy, so it is host-only and
+	// rejected per-repo (ADR §13). It must come from a per-machine source — a
+	// flag, an `AGENT_RUNNER_PI_BIN` env var, or the global file — never a
+	// committed repo file. (`harness`, by contrast, is repo-appropriate and so is
+	// deliberately NOT rejected.)
+	'piBin',
 	// Reserved/future host-only keys callers may name; rejected proactively so a
 	// typo or a copy-pasted global config never silently leaks host policy into a
 	// repo. (`humanWorktreesDir` is a planned host-only path.)
@@ -167,10 +183,18 @@ export interface ResolveRepoConfigOptions {
 	global: Config;
 	/**
 	 * Command-level flag overrides (where a command offers one). These sit at the
-	 * TOP of the precedence chain: flag > per-repo > global > default. Only keys a
-	 * command actually exposes need appear here.
+	 * TOP of the precedence chain: flag > env > per-repo > global > default. Only
+	 * keys a command actually exposes need appear here.
 	 */
 	flags?: PartialConfig;
+	/**
+	 * The raw environment map the `AGENT_RUNNER_*` layer is read from (defaults to
+	 * `process.env`). Env sits ABOVE the per-repo file and BELOW a flag, and — as
+	 * a per-machine source — may set ANY key, host-only included (it is NOT subject
+	 * to the per-repo allow/reject split). Injectable so tests need not mutate the
+	 * real `process.env`.
+	 */
+	env?: EnvMap;
 }
 
 /** The effective config for one repo, plus any rejected-key diagnostics. */
@@ -186,25 +210,34 @@ export interface ResolvedRepoConfig {
 /**
  * Resolve the effective config for ONE repo by layering, per key:
  *
- *   flag > per-repo `.agent-runner.json` > global > built-in default
+ *   flag > ENV (AGENT_RUNNER_*) > per-repo `.agent-runner.json` > global >
+ *   built-in default
  *
  * The `global` argument already carries the global + default layers (it is the
  * output of `loadConfig`/`mergeConfig`). We layer the repo's honoured keys over
- * it, then any flags over that. The shared `global` object is never mutated, so
- * calling this once per repo in a multi-repo run yields INDEPENDENT results —
- * repo A can be `merge` while repo B is `propose` in the same run.
+ * it, then the `AGENT_RUNNER_*` env layer over that (env may set host-only keys
+ * the per-repo file rejected — it is a per-machine source), then any flags on
+ * top. The shared `global` object is never mutated, so calling this once per repo
+ * in a multi-repo run yields INDEPENDENT results — repo A can be `merge` while
+ * repo B is `propose` in the same run.
  *
- * A repo with no `.agent-runner.json` resolves to exactly `global` (unchanged
- * behaviour).
+ * A repo with no `.agent-runner.json` (and no env) resolves to exactly `global`
+ * (unchanged behaviour).
  */
 export function resolveRepoConfig(
 	options: ResolveRepoConfigOptions,
 ): ResolvedRepoConfig {
-	const {repoPath, global, flags} = options;
+	const {repoPath, global, flags, env} = options;
 	const repo = loadRepoConfig(repoPath);
 	// mergeConfig copies `global` (spreads DEFAULT_CONFIG then assigns) so the
-	// shared global object is never mutated. Layer per-repo then flags on top.
-	const config = mergeConfig({...global, ...repo.config, ...(flags ?? {})});
+	// shared global object is never mutated. Layer per-repo, then env (a
+	// per-machine source — may set host-only keys), then flags on top.
+	const config = mergeConfig({
+		...global,
+		...repo.config,
+		...envOverrides(env),
+		...(flags ?? {}),
+	});
 	return {
 		config,
 		rejected: repo.rejected,
