@@ -25,9 +25,17 @@ dogfooding itself (it tracks its own work in its own `work/`).
   at. (The launch/framing doc; may be a hand-off snapshot.) Frontmatter: `slug`,
   `issue` (optional), `humanOnly`/`needsAnswers` (the slicing gate), `sliceAfter`
   (PRD slicing-order), `sliced`.
-- **ADR / finding** — a decision record in `docs/adr/<slug>.md` (the *why* of a
-  technical choice; durable). The substrate decisions are in
+- **ADR** — a decision record in `docs/adr/<slug>.md` (the *why* of OUR technical
+  choices; durable). The substrate decisions are in
   `docs/adr/execution-substrate-decisions.md` (§1–§12).
+- **capture buckets** — the THREE note-types under `work/` that are NOT work items
+  and are **exempt from status=folder** (they don't flow/move; the folder is the
+  inbox; they leave only by deletion): **`ideas/`** (proposed, pre-PRD;
+  *editable*), **`observations/`** (spotted, unverified signals; *append-only*),
+  **`findings/`** (*verified external/domain* ground truth — e.g. a
+  reverse-engineered protocol; durable). Distinct from an ADR (what WE decided)
+  and from an observation (internal “spotted, unverified” — NOT a finding). See
+  WORK-CONTRACT.md.
 - **slug** — content-derived, URL-safe id of an item (never a counter).
 - **status (lifecycle)** — the folder: `backlog/` (claimable) → `in-progress/`
   (claimed) → `done/` (completed), or → `needs-attention/` (stuck) or

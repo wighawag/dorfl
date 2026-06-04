@@ -123,6 +123,14 @@ PRD (the slice's `prd:` field, at work/prd/<prd>.md) for context.
 Implement it to satisfy every Acceptance criterion. TDD where the slice asks for
 it; match the repo's house style.
 
+If you NOTICE a problem OUTSIDE this slice's scope (a flaky test, a latent bug, a
+suspicious behaviour), do NOT fix it and do NOT expand your scope. Instead drop a
+short, dated note in work/observations/<short-slug>.md (one or two sentences is
+enough — what you saw and where) so the signal is captured, then carry on with
+your slice. (work/observations/ is an append-only capture bucket; anyone, you
+included, may add to it. Writing such a NOTE is the one exception to the "no file
+changes outside your slice" rule below — it is a note, not work.)
+
 Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
 move any files between work/ folders, and do not touch work/in-progress/<slug>.md.
 The runner (or human) owns every git-state transition. (Your TESTS may freely

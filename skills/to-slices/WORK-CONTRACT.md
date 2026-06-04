@@ -10,28 +10,59 @@ AFK agents**. Every rule below exists to avoid merge conflicts and lost updates.
 (the same place the `tasks/` convention uses today). Slices reference that repo's
 code; AFK work happens in clones/worktrees of that repo.
 
-## Layout — status IS the folder
+## Layout — two categories: WORK ITEMS (status = folder) + CAPTURE BUCKETS (notes)
 
 ```
 work/
+  # ---- WORK ITEMS: status IS the folder; they FLOW via `git mv` ----
   prd/<slug>.md            # PRDs / design docs (the source material to slice)
   backlog/<slug>.md        # sliced, grabbable items — NOT yet claimed
   in-progress/<slug>.md    # claimed (moved here via `git mv` during claim)
   needs-attention/<slug>.md # claimed + attempted but STUCK — bounced back for a human
   done/<slug>.md           # completed (moved here in the work PR)
   out-of-scope/<slug>.md   # durable "won't do" records (lightweight ADR)
-  findings/<slug>.md       # review / ground-truth investigation notes (optional)
+
+  # ---- CAPTURE BUCKETS: NOT status-governed; they do NOT flow/move ----
+  ideas/<slug>.md          # proposed, pre-PRD ideas — EDITABLE, deletable
+  observations/<slug>.md   # spotted, unverified signals — APPEND-ONLY, deletable
+  findings/<slug>.md       # VERIFIED external/domain ground truth — durable
 ```
 
-> **`findings/` vs ADRs.** `work/findings/` is for *investigation / ground-truth
-> notes* tied to work items. **Architectural Decision Records (ADRs) — the durable
-> *why* of technical choices — live in `docs/adr/`** (the conventional location
-> that common engineering skills read), NOT in `work/findings/`. Keep the two
-> distinct: a finding is "what we observed"; an ADR is "what we decided and why".
+### Two governance regimes (this is the key distinction)
 
-**Status is the folder a file lives in — never a frontmatter field.** Claiming /
-finishing = moving the file between folders with `git mv`. This is what makes
-concurrent updates safe: two agents moving *different* files never conflict.
+- **Work items** (`prd`/`backlog`/`in-progress`/`needs-attention`/`done`/
+  `out-of-scope`) are the lifecycle: **status = the folder**, transitions are
+  `git mv`, each has one destiny. This is the conflict-safe core.
+- **Capture buckets** (`ideas`/`observations`/`findings`) are **NOT work items**
+  and are **exempt from status = folder** — they are *notes*, not units of work.
+  They do not move through statuses; they sit in their bucket, and the folder is
+  the inbox (`ls work/observations/` = the live signal list). They leave only by
+  **deletion** (git history is the archive). A note may *spawn* work (a slice, an
+  idea, an ADR) created independently — the note does not "become" or `git mv`
+  into that work; it is simply deleted once it is no longer a useful signal.
+
+### The three capture buckets (different by polarity + mutability)
+
+| Bucket | What | Mutability | Leaves by |
+|---|---|---|---|
+| `ideas/` | a *proposed*, pre-PRD opportunity ("we might want to build this") | **editable** (refine the proposal in place) | deletion (when built/abandoned) |
+| `observations/` | an *observed, unverified* signal ("I noticed something maybe wrong") | **append-only** (add `## Update` notes; don't rewrite what was seen) | deletion (when no longer a useful signal) |
+| `findings/` | *verified external/domain* ground truth (a reverse-engineered protocol, an external API's real behaviour) | accumulates; durable | rarely — it is reference knowledge |
+
+> **`findings/` is for EXTERNAL/DOMAIN ground truth, NOT internal post-mortems.**
+> A finding is durable knowledge about a *world the software integrates with*
+> (e.g. a Bluetooth/hardware protocol we reverse-engineered, a third-party API's
+> undocumented behaviour) — it accumulates, it does not "resolve". An *internal*
+> investigation (why a test flakes, a perf regression) is NOT a finding: it is a
+> transient `observations/` signal that drives a fix slice and/or an ADR.
+> **ADRs — the durable *why* of OUR technical decisions — live in `docs/adr/`**,
+> never in `work/findings/`. So: observation = "spotted, unverified"; finding =
+> "verified external ground truth"; ADR = "what WE decided and why".
+
+**For work items, status is the folder a file lives in — never a frontmatter
+field.** Claiming / finishing = moving the file between folders with `git mv`.
+This is what makes concurrent updates safe: two agents moving *different* files
+never conflict. (Capture buckets are exempt — see above.)
 
 ### `needs-attention/` — the post-claim "stuck" state
 
