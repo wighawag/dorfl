@@ -39,8 +39,11 @@ claim-CAS lock so concurrent slicers never collide.
   - PRD frontmatter **`needsAnswers: true`** (DISCOVERED) — the PRD has unresolved
     questions (in its body); the auto-slicer refuses to slice until answered.
   - Per-repo policy **`autoSlice`** — may an agent auto-slice undeclared PRDs in
-    this repo? Default `false`; resolved like `allowAgents` and `integration`:
-    flag > per-repo `.agent-runner.json` > global > default `false`.
+    this repo? Default `false`; resolved like `allowAgents` and `integration` —
+    and that chain now includes the ENV layer that has since landed
+    (`config-env-layer`, in `done/`): **flag > `AGENT_RUNNER_*` env > per-repo
+    `.agent-runner.json` > global > default `false`** (so `autoSlice` gets env
+    support for free, e.g. in CI).
   - Agent-sliceable iff `needsAnswers !== true && humanOnly !== true && autoSlice`
     (the same predicate the build gate uses, one level up). **Slicing is
     human-first by default.**
@@ -53,7 +56,12 @@ claim-CAS lock so concurrent slicers never collide.
   auto-slicer atomically races a `git mv work/prd/<slug>.md →
   work/slicing/<slug>.md` micro-commit to the arbiter (the same compare-and-swap
   the build-claim uses), on a **different branch name** so it never collides with
-  build-work claims. The winner slices; on success it moves the PRD back to
+  build-work claims. NOTE (drift since launch): the claim CAS now lives BEHIND the
+  **ledger-transition write seam** (`docs/adr/claim-ledger-vs-protected-main.md`;
+  slices in `done/`). Reuse it THROUGH that seam's transition machinery (a new
+  `slicing` transition kind, or the claim primitive the seam exposes) — do NOT
+  call the raw `claim-cas` / push `main` directly, or you reintroduce the exact
+  direct-`main` coupling the seam removed. The winner slices; on success it moves the PRD back to
   `work/prd/<slug>.md` and drops the new slices into `work/backlog/` in the
   completing transition. A loser gets the claim's exit-2 and backs off.
   `work/slicing/` is the in-progress folder for the slicing operation
@@ -99,11 +107,14 @@ claim-CAS lock so concurrent slicers never collide.
   capability does not depend on CI).
 - **Gate mirrors the build gate, one level up:** PRD `humanOnly` (DECIDED) +
   `needsAnswers` (DISCOVERED) + repo `autoSlice` (policy, default false, flag >
-  per-repo > global > default). Agent-sliceable iff `needsAnswers !== true &&
+  `AGENT_RUNNER_*` env > per-repo > global > default — the env layer landed in
+  `config-env-layer`). Agent-sliceable iff `needsAnswers !== true &&
   humanOnly !== true && autoSlice`.
-- **Lock = the existing claim CAS, different branch name, `work/slicing/` folder.**
-  Reuse `claim-cas`/the proven `git mv` micro-commit racing `main`; do NOT invent
-  a new lock. The branch name must not collide with the `work/<slug>` build
+- **Lock = the existing claim CAS, different branch name, `work/slicing/` folder —
+  reached THROUGH the ledger-transition write seam** (the claim CAS now lives
+  behind that seam; reuse its transition machinery, do NOT call raw `claim-cas` /
+  push `main` directly). Reuse the proven `git mv` micro-commit mechanism; do NOT
+  invent a new lock. The branch name must not collide with the `work/<slug>` build
   branches.
 - **Runner owns git-state; agent only produces slice files** — same in-band
   boundary as the build agent. The agent runs the `to-slices` methodology; the
