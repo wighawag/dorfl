@@ -1,6 +1,7 @@
 import {mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
+import {resolveReadiness} from './readiness.js';
 
 /**
  * In-process TypeScript implementation of the atomic compare-and-swap claim from
@@ -16,16 +17,27 @@ import {runAsync, type RunResult} from './git.js';
  *
  * Exit codes (identical to claim.sh / CLAIM-PROTOCOL.md):
  *   0  claim landed (work/in-progress/<slug>.md now on the arbiter's main)
- *   1  usage / environment error
+ *   1  usage / environment error, or a readiness REFUSAL (unmet blockedBy)
  *   2  item not claimable (not in backlog, or lost the race to someone else)
  *   3  push kept failing after retries (transient/contended — try again later)
+ *
+ * Before the CAS runs, the HUMAN path's readiness guard (resolveReadiness) is
+ * applied: a slice with an unmet `blockedBy` is REFUSED (exit 1, outcome
+ * 'not-ready') unless overridden; a `needsAnswers: true` slice is WARNED about
+ * but still claimed. The autonomous runner does NOT pass `humanPath`, so its
+ * behaviour is unchanged (eligibility already filters those items upstream).
  */
 
 /** Maps onto the four claim.sh exit codes. */
 export type ClaimExitCode = 0 | 1 | 2 | 3;
 
 /** A semantic label for each exit code (for callers/tests, never the verdict). */
-export type ClaimCasOutcome = 'claimed' | 'usage-error' | 'lost' | 'contended';
+export type ClaimCasOutcome =
+	| 'claimed'
+	| 'usage-error'
+	| 'lost'
+	| 'contended'
+	| 'not-ready';
 
 export interface ClaimCasOptions {
 	/** The slug to claim (`work/backlog/<slug>.md`). */
@@ -40,6 +52,19 @@ export interface ClaimCasOptions {
 	retries?: number;
 	/** Show the intended push without mutating the arbiter (`--dry-run`). */
 	dryRun?: boolean;
+	/**
+	 * Apply the human-path readiness guard before the CAS: refuse an unmet
+	 * `blockedBy`, warn on `needsAnswers`. The HUMAN `claim`/`start` path sets
+	 * this; the autonomous runner leaves it off (it filters upstream via
+	 * eligibility and must NOT change behaviour here).
+	 */
+	humanPath?: boolean;
+	/**
+	 * Override flag (`--force` / `--ignore-not-ready`): bypass the readiness
+	 * refusal and silence the `needsAnswers` warning, printing a loud notice that
+	 * the guard was overridden. Only meaningful with `humanPath`.
+	 */
+	override?: boolean;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes (claim.sh writes these to stderr). */
@@ -55,6 +80,13 @@ export interface ClaimCasResult {
 
 /** Raised for usage/environment errors (exit 1). */
 class ClaimUsageError extends Error {}
+
+/**
+ * Raised for a deliberate readiness REFUSAL (exit 1, outcome 'not-ready') —
+ * distinct from a usage/environment error. The slice has an unmet `blockedBy`
+ * and the override was not supplied, so nothing is claimed.
+ */
+class ClaimNotReady extends Error {}
 
 /** Internal: the result of a single claim attempt. */
 type AttemptResult =
@@ -79,6 +111,9 @@ export async function performClaim(
 	try {
 		return await runClaim(options, note);
 	} catch (err) {
+		if (err instanceof ClaimNotReady) {
+			return {exitCode: 1, outcome: 'not-ready', message: err.message};
+		}
 		if (err instanceof ClaimUsageError) {
 			return {exitCode: 1, outcome: 'usage-error', message: err.message};
 		}
@@ -124,6 +159,48 @@ async function runClaim(
 		throw new ClaimUsageError(
 			'working tree has uncommitted changes; commit/stash them before claiming',
 		);
+	}
+
+	// HUMAN-path readiness guard (run BEFORE the CAS so a not-ready slice is never
+	// claimed). Reads the slice frontmatter + `work/done/` from `<arbiter>/main`
+	// (the same source of truth the folder check uses) and resolves `blockedBy`
+	// via the shared resolveBlockedBy. Skipped entirely for the autonomous runner
+	// (no `humanPath`), whose eligibility filter already handles these upstream.
+	if (options.humanPath) {
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+		const readiness = await resolveReadiness({
+			slug,
+			cwd,
+			arbiter,
+			override: options.override === true,
+			env,
+		});
+		if (readiness.refuse) {
+			const missing = readiness.missing.join(', ');
+			const message =
+				`'${slug}' is not ready: blocked by unmet dependencies not yet in ` +
+				`work/done/ on ${arbiter}/main: ${missing}. ` +
+				'Re-run with --force (or --ignore-not-ready) to claim it anyway.';
+			note(message);
+			throw new ClaimNotReady(message);
+		}
+		if (readiness.overridden && readiness.missing.length > 0) {
+			note(
+				`!! readiness guard OVERRIDDEN: claiming '${slug}' despite unmet ` +
+					`blockedBy: ${readiness.missing.join(', ')} (not yet in work/done/).`,
+			);
+		}
+		if (readiness.needsAnswers && !readiness.overridden) {
+			note(
+				`!! WARNING: '${slug}' is flagged needsAnswers: true — it has open ` +
+					'questions (see the slice body). Claiming it anyway (human path); ' +
+					'resolve the questions before/while building.',
+			);
+		} else if (readiness.needsAnswers && readiness.overridden) {
+			note(
+				`!! readiness guard OVERRIDDEN: silencing the needsAnswers warning for '${slug}'.`,
+			);
+		}
 	}
 
 	const backlog = `work/backlog/${slug}.md`;

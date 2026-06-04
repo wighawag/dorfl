@@ -50,7 +50,12 @@ export interface SeededRepo {
 export function seedRepoWithArbiter(
 	root: string,
 	slugs: string[],
-	opts: {humanOnly?: boolean; needsAnswers?: boolean; promptBody?: string} = {},
+	opts: {
+		humanOnly?: boolean;
+		needsAnswers?: boolean;
+		blockedBy?: string[];
+		promptBody?: string;
+	} = {},
 ): SeededRepo {
 	const repo = join(root, 'project');
 	mkdirSync(repo, {recursive: true});
@@ -87,19 +92,28 @@ export function seedRepoWithArbiter(
 
 function sliceFile(
 	slug: string,
-	opts: {humanOnly?: boolean; needsAnswers?: boolean; promptBody?: string},
+	opts: {
+		humanOnly?: boolean;
+		needsAnswers?: boolean;
+		blockedBy?: string[];
+		promptBody?: string;
+	},
 ): string {
 	const body = opts.promptBody ?? `> Implement ${slug}.`;
 	const gateLines = [
 		...(opts.humanOnly === true ? ['humanOnly: true'] : []),
 		...(opts.needsAnswers === true ? ['needsAnswers: true'] : []),
 	];
+	const blockedBy =
+		opts.blockedBy && opts.blockedBy.length > 0
+			? `blockedBy: [${opts.blockedBy.join(', ')}]`
+			: 'blockedBy: []';
 	return [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
 		...gateLines,
-		'blockedBy: []',
+		blockedBy,
 		'---',
 		'',
 		'## What to build',
@@ -115,6 +129,26 @@ function sliceFile(
 		body,
 		'',
 	].join('\n');
+}
+
+/**
+ * Seed a `work/done/<slug>.md` directly onto `<arbiter>/main` (simulating a
+ * completed dependency), via a throwaway clone so the checkout under test is
+ * left untouched. Used to satisfy a slice's `blockedBy` for readiness tests.
+ */
+export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
+	const dest = join(seeded.repo, '..', `seed-done-${slug}`);
+	gx(['clone', '-q', `file://${seeded.arbiter}`, dest], seeded.repo);
+	gx(['remote', 'add', 'arbiter', `file://${seeded.arbiter}`], dest);
+	gx(['fetch', '-q', 'arbiter'], dest);
+	gx(['checkout', '-q', '-B', `seed-done/${slug}`, 'arbiter/main'], dest);
+	const doneDir = join(dest, 'work', 'done');
+	mkdirSync(doneDir, {recursive: true});
+	writeFileSync(join(doneDir, `${slug}.md`), sliceFile(slug, {}));
+	gx(['add', '-A'], dest);
+	gx(['commit', '-q', '-m', `done: ${slug}`], dest);
+	gx(['push', '-q', 'arbiter', `seed-done/${slug}:main`], dest);
+	rmSync(dest, {recursive: true, force: true});
 }
 
 /** Does `<arbiter>/main` currently track `work/<status>/<slug>.md`? */

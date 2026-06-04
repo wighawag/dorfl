@@ -36,7 +36,7 @@ import {runAsync, type RunResult} from './git.js';
 export type StartOutcome =
 	| 'started' // claimed a backlog item and switched to its work branch
 	| 'resumed' // switched to an in-progress item's work branch (--resume)
-	| 'refused' // refused (in-progress without --resume, or done/absent)
+	| 'refused' // refused (in-progress without --resume, done/absent, or not-ready)
 	| 'lost' // claim lost the race (propagated from claim)
 	| 'contended' // claim push kept being rejected (propagated from claim)
 	| 'usage-error'; // usage / environment problem
@@ -50,6 +50,12 @@ export interface StartOptions {
 	arbiter?: string;
 	/** Assert ownership of an already-in-progress item (switch without claiming). */
 	resume?: boolean;
+	/**
+	 * Override the readiness guard (`--force` / `--ignore-not-ready`): claim a slice
+	 * with an unmet `blockedBy` anyway, and silence the `needsAnswers` warning —
+	 * loudly. Forwarded to the claim CAS's human-path guard.
+	 */
+	override?: boolean;
 	/** Advisory claimer id forwarded to the claim CAS. */
 	by?: string;
 	/** Environment for child git processes (identity etc.). */
@@ -137,7 +143,15 @@ async function runStart(
 
 	switch (folder) {
 		case 'backlog':
-			return startFromBacklog({slug, arbiter, cwd, env, by: options.by, note});
+			return startFromBacklog({
+				slug,
+				arbiter,
+				cwd,
+				env,
+				by: options.by,
+				override: options.override ?? false,
+				note,
+			});
 		case 'in-progress':
 			return startFromInProgress({
 				slug,
@@ -169,20 +183,37 @@ async function startFromBacklog(params: {
 	cwd: string;
 	env: NodeJS.ProcessEnv | undefined;
 	by: string | undefined;
+	override: boolean;
 	note: (m: string) => void;
 }): Promise<StartResult> {
-	const {slug, arbiter, cwd, env, by, note} = params;
+	const {slug, arbiter, cwd, env, by, override, note} = params;
 
-	const claim = await performClaim({slug, cwd, arbiter, by, env, note});
+	// The human-path readiness guard lives in the claim CAS (so both `claim` and
+	// `start` inherit it): an unmet `blockedBy` is refused (exit 1, 'not-ready')
+	// unless overridden; a `needsAnswers` slice warns but still claims.
+	const claim = await performClaim({
+		slug,
+		cwd,
+		arbiter,
+		by,
+		env,
+		humanPath: true,
+		override,
+		note,
+	});
 	if (claim.exitCode !== 0) {
-		// Lost (2) / contended (3) / usage (1): behave exactly like `claim`. Create
-		// no work branch; propagate the claim's exit code and outcome.
+		// not-ready (1) / lost (2) / contended (3) / usage (1): behave exactly like
+		// `claim`. Create no work branch; propagate the exit code and outcome. A
+		// readiness refusal surfaces as 'refused' (a deliberate decline), distinct
+		// from a usage/environment error.
 		const outcome: StartOutcome =
-			claim.exitCode === 2
-				? 'lost'
-				: claim.exitCode === 3
-					? 'contended'
-					: 'usage-error';
+			claim.outcome === 'not-ready'
+				? 'refused'
+				: claim.exitCode === 2
+					? 'lost'
+					: claim.exitCode === 3
+						? 'contended'
+						: 'usage-error';
 		return {exitCode: claim.exitCode, outcome, message: claim.message};
 	}
 

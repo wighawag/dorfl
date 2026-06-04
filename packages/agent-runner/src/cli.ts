@@ -113,6 +113,8 @@ interface ClaimFlags {
 	by?: string;
 	retries?: string;
 	dryRun?: boolean;
+	force?: boolean;
+	ignoreNotReady?: boolean;
 }
 
 interface VerifyFlags {
@@ -123,6 +125,8 @@ interface StartFlags {
 	arbiter?: string;
 	by?: string;
 	resume?: boolean;
+	force?: boolean;
+	ignoreNotReady?: boolean;
 }
 
 interface CompleteFlags {
@@ -325,6 +329,14 @@ export function buildProgram(): Command {
 		.option('--by <who>', 'advisory claimer id (default: git user.name)')
 		.option('--retries <n>', 'cap on push retries when main advances', '3')
 		.option('--dry-run', 'show the intended push without mutating the arbiter')
+		.option(
+			'--force',
+			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
+		)
+		.option(
+			'--ignore-not-ready',
+			'alias of --force for the readiness guard override',
+		)
 		.action(async (slug: string, flags: ClaimFlags) => {
 			const result = await performClaim({
 				slug,
@@ -334,6 +346,8 @@ export function buildProgram(): Command {
 				retries:
 					flags.retries !== undefined ? Number(flags.retries) : undefined,
 				dryRun: flags.dryRun,
+				humanPath: true,
+				override: flags.force === true || flags.ignoreNotReady === true,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {
@@ -361,6 +375,14 @@ export function buildProgram(): Command {
 			'--resume',
 			'assert ownership of an already in-progress item: switch to its work branch without claiming',
 		)
+		.option(
+			'--force',
+			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
+		)
+		.option(
+			'--ignore-not-ready',
+			'alias of --force for the readiness guard override',
+		)
 		.action(async (slug: string | undefined, flags: StartFlags) => {
 			const result = await performStart({
 				slug,
@@ -368,6 +390,7 @@ export function buildProgram(): Command {
 				arbiter: flags.arbiter ?? 'origin',
 				by: flags.by,
 				resume: flags.resume,
+				override: flags.force === true || flags.ignoreNotReady === true,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

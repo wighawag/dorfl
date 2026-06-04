@@ -77,6 +77,9 @@ export {performClaim} from './claim-cas.js';
 export type {StartOutcome, StartOptions, StartResult} from './start.js';
 export {performStart} from './start.js';
 
+export type {ReadinessVerdict, ResolveReadinessOptions} from './readiness.js';
+export {resolveReadiness} from './readiness.js';
+
 export type {
 	CompleteOutcome,
 	CompleteOptions,
