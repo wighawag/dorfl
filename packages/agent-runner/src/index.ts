@@ -34,7 +34,18 @@ export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
 
 export {formatReport, afkLabel} from './format.js';
 
-export {extractPromptSection, buildAgentPrompt} from './prompt.js';
+export type {SliceFolder, ResolvedSlice, PromptOptions} from './prompt.js';
+export {
+	extractPromptSection,
+	extractCanonicalWrapperTemplate,
+	resolveClaimProtocolPath,
+	wrapper,
+	buildAgentPrompt,
+	resolveSlice,
+	inferSlugFromBranch,
+	renderPrompt,
+	PromptError,
+} from './prompt.js';
 
 export type {Candidate, SelectCaps} from './select.js';
 export {selectCandidates} from './select.js';

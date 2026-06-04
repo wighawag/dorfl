@@ -8,6 +8,8 @@
 export interface Frontmatter {
 	/** Content-derived slug id (frontmatter `slug:`). */
 	slug: string | undefined;
+	/** Source PRD slug (frontmatter `prd:`); the PRD lives at `work/prd/<prd>.md`. */
+	prd: string | undefined;
 	/**
 	 * The AFK gate. `true` / `false` when explicit, `undefined` when omitted
 	 * (unspecified — runner policy decides).
@@ -73,7 +75,12 @@ function toBoolean(value: string): boolean | undefined {
 
 export function parseFrontmatter(content: string): Frontmatter {
 	const block = extractBlock(content);
-	const result: Frontmatter = {slug: undefined, afk: undefined, blockedBy: []};
+	const result: Frontmatter = {
+		slug: undefined,
+		prd: undefined,
+		afk: undefined,
+		blockedBy: [],
+	};
 	if (block === undefined) {
 		return result;
 	}
@@ -95,6 +102,8 @@ export function parseFrontmatter(content: string): Frontmatter {
 
 		if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
+		} else if (key === 'prd') {
+			result.prd = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'afk') {
 			result.afk = rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'blocked_by') {

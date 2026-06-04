@@ -1,12 +1,10 @@
 import {randomBytes} from 'node:crypto';
-import {readFileSync, existsSync} from 'node:fs';
-import {join} from 'node:path';
 import type {Config} from './config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {claimItem} from './claim.js';
 import {isolate, type IsolationMode, type IsolationHandle} from './isolate.js';
-import {extractPromptSection, buildAgentPrompt} from './prompt.js';
+import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {run as runCmd, git, gitMv} from './git.js';
 import {integrate, type IntegrateResult} from './integrate.js';
 
@@ -100,15 +98,6 @@ function defaultTestGate(): TestGate {
 
 function shortId(): string {
 	return randomBytes(3).toString('hex');
-}
-
-/** Read the slice's `## Prompt` body from `work/in-progress/<slug>.md` in `dir`. */
-function readSlicePrompt(dir: string, slug: string): string | undefined {
-	const path = join(dir, 'work', 'in-progress', `${slug}.md`);
-	if (!existsSync(path)) {
-		return undefined;
-	}
-	return extractPromptSection(readFileSync(path, 'utf8'));
 }
 
 /**
@@ -232,9 +221,18 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 			env: ctx.env,
 		});
 
-		// 3. Build the prompt (constant wrapper + slice ## Prompt) and run the agent.
-		const slicePrompt = readSlicePrompt(handle.dir, slug) ?? '';
-		const prompt = buildAgentPrompt(slug, slicePrompt);
+		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
+		// emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
+		let prompt: string;
+		try {
+			const slice = resolveSlice(handle.dir, slug);
+			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
+		} catch (err) {
+			if (err instanceof PromptError) {
+				return {...base, status: 'agent-failed', detail: err.message};
+			}
+			throw err;
+		}
 		const agent = ctx.agentRunner({
 			cwd: handle.dir,
 			prompt,

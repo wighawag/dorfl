@@ -13,6 +13,7 @@ import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
 import {performComplete} from './complete.js';
 import {runVerify} from './verify.js';
+import {renderPrompt} from './prompt.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -309,6 +310,20 @@ export function buildProgram(): Command {
 				console.error(`error: ${result.message}`);
 			}
 			process.exit(result.exitCode);
+		});
+
+	program
+		.command('prompt')
+		.description(
+			"Print to stdout the work-agent prompt for a slice: the canonical CLAIM-PROTOCOL wrapper + the slice's own ## Prompt (with <slug> and source PRD substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
+		)
+		.argument(
+			'[slug]',
+			'the slug to render (inferred from a work/<slug> branch if omitted)',
+		)
+		.action((slug: string | undefined) => {
+			const output = renderPrompt({slug, cwd: process.cwd()});
+			process.stdout.write(output);
 		});
 
 	program
