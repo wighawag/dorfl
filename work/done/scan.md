@@ -3,11 +3,8 @@ title: scan — cross-repo eligible-work queue (read-only)
 slug: scan
 prd: agent-runner
 humanOnly: true
-blocked_by: [scaffold]
+blockedBy: [scaffold]
 covers: [1, 2, 3, 4, 9]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-03T11:53:56Z
 ---
 
 ## What to build

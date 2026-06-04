@@ -3,11 +3,8 @@ title: harness adapter — pi (liveness + invocation)
 slug: harness-pi
 prd: agent-runner
 humanOnly: true
-blocked_by: [agent-workspaces]
+blockedBy: [agent-workspaces]
 covers: [6, 11]
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## What to build

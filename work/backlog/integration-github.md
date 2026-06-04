@@ -3,11 +3,8 @@ title: integration provider — GitHub (gh) propose/PR adapter
 slug: integration-github
 prd: agent-runner
 humanOnly: true
-blocked_by: [agent-workspaces]
+blockedBy: [agent-workspaces]
 covers: [7, 8]
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## What to build

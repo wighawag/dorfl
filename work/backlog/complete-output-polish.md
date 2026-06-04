@@ -2,11 +2,8 @@
 title: complete output polish — make the propose-mode next-step stand out
 slug: complete-output-polish
 prd: agent-runner
-blocked_by: [complete-integration-flag]
+blockedBy: [complete-integration-flag]
 covers: [7]
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## What to build

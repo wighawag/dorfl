@@ -3,11 +3,8 @@ title: agent workspaces — hub mirrors + isolated job worktrees + seams (core)
 slug: agent-workspaces
 prd: agent-runner
 humanOnly: true
-blocked_by: [run-once, repo-mirror]
+blockedBy: [run-once, repo-mirror]
 covers: [5, 6, 10, 12]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-04T06:56:18Z
 ---
 
 > Scope note: this is the **core** substrate. Two lifecycle concerns were split

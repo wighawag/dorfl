@@ -3,11 +3,8 @@ title: prompt — emit the work-agent prompt for a slice (wrapper + slice Prompt
 slug: prompt
 prd: agent-runner
 humanOnly: true
-blocked_by: [scan]
+blockedBy: [scan]
 covers: []
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-04T06:05:37Z
 ---
 
 ## What to build

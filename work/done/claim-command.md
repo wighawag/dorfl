@@ -3,11 +3,8 @@ title: claim command — agent-runner claim, a TS reimplementation of the claim 
 slug: claim-command
 prd: agent-runner
 humanOnly: true
-blocked_by: [scan]
+blockedBy: [scan]
 covers: [5]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-03T14:38:02Z
 ---
 
 ## What to build

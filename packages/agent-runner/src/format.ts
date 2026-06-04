@@ -8,12 +8,25 @@ import {
 	type CategorisedGroups,
 } from './categorise.js';
 
-/** Human label for the binary autonomy gate. */
-export function gateLabel(humanOnly: boolean | undefined): string {
-	return humanOnly === true ? 'human-only' : 'undeclared';
+/**
+ * Human label for the two autonomy axes. `humanOnly` is reported first when both
+ * are set, so the REASON an agent is gated is always visible and distinct from
+ * `needsAnswers`.
+ */
+export function gateLabel(
+	humanOnly: boolean | undefined,
+	needsAnswers?: boolean | undefined,
+): string {
+	if (humanOnly === true) {
+		return 'human-only';
+	}
+	if (needsAnswers === true) {
+		return 'needs-answers';
+	}
+	return 'undeclared';
 }
 
-/** A short description of the `blocked_by` readiness for one item. */
+/** A short description of the `blockedBy` readiness for one item. */
 function readinessLabel(item: ScannedItem): string {
 	if (item.blockedBy.length === 0) {
 		return 'deps: satisfied (none)';
@@ -89,7 +102,8 @@ export function formatReport(report: ScanReport): string {
 	const repoCount = report.repos.length;
 	lines.push(
 		`Summary: ${report.totalItems} item(s) across ${repoCount} ${pluralRepos(repoCount)} — ` +
-			`${s.agentClaimable} agent-claimable, ${s.humanOnly} human-only, ${s.blocked} blocked ` +
+			`${s.agentClaimable} agent-claimable, ${s.humanOnly} human-only, ` +
+			`${s.needsAnswers} needs-answers, ${s.blocked} blocked ` +
 			`(${s.ready} ready).`,
 	);
 	lines.push(

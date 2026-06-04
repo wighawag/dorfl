@@ -3,11 +3,8 @@ title: arbiter management — provision/locate a local bare arbiter from a repo
 slug: arbiter-management
 prd: agent-runner
 humanOnly: true
-blocked_by: [scaffold]
+blockedBy: [scaffold]
 covers: []
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## What to build

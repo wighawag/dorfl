@@ -170,8 +170,10 @@ describe('start — in-progress item', () => {
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/already in-progress/);
 		expect(result.message).toMatch(/--resume/);
-		// Surfaces the advisory value, but the decision was folder-based.
-		expect(result.message).toMatch(/claimed_by=someone-else/);
+		// The decision is folder-based. claimed_by is no longer part of the
+		// contract (WORK-CONTRACT rule 6), so the advisory is always (unset) — the
+		// refusal stands purely on the folder, which is the whole point.
+		expect(result.message).toMatch(/claimed_by=\(unset\)/);
 		// User untouched; no work branch.
 		expect(currentBranch(repo)).toBe(before);
 		expect(localBranchExists(repo, 'work/beta')).toBe(false);

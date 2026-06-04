@@ -1,12 +1,14 @@
 /**
- * Pure eligibility resolution. No I/O — callers pass in the `humanOnly` value,
- * the item's `blocked_by` slugs, and the set of slugs present in the same repo's
- * `work/done/`. Dependencies are per-repo only and never cross repos.
+ * Pure eligibility resolution. No I/O — callers pass in the two autonomy axes
+ * (`humanOnly`, `needsAnswers`), the item's `blockedBy` slugs, and the set of
+ * slugs present in the same repo's `work/done/`. Dependencies are per-repo only
+ * and never cross repos.
  */
 
 /**
- * The slice autonomy gate. `true` ⇒ the slice declares itself human-only (never
- * auto-claim); `undefined` ⇒ undeclared (most slices). Authoritative + binary.
+ * An autonomy gate axis. `true` ⇒ the item is gated on this axis (never
+ * auto-claim); `undefined`/`false` ⇒ not gated on it. Both `humanOnly` (DECIDED)
+ * and `needsAnswers` (DISCOVERED) share this shape and block orthogonally.
  */
 export type HumanOnlyGate = boolean | undefined;
 
@@ -19,6 +21,7 @@ export interface BlockedByResult {
 
 export interface EligibilityInput {
 	humanOnly: HumanOnlyGate;
+	needsAnswers: HumanOnlyGate;
 	blockedBy: string[];
 	/** Slugs present in this repo's `work/done/`. */
 	doneSlugs: Set<string>;
@@ -35,21 +38,23 @@ export interface EligibilityResult {
 }
 
 /**
- * Resolve the autonomy gate: agent-claimable iff `humanOnly` is not `true` AND
- * the repo's `allowAgents` policy is on. `humanOnly: true` is never claimable
- * regardless of policy.
+ * Resolve the autonomy gate: agent-claimable iff `needsAnswers` is not `true`
+ * AND `humanOnly` is not `true` AND the repo's `allowAgents` policy is on. Both
+ * axes block orthogonally and are never claimable by an agent regardless of
+ * policy; a human is never bound by either.
  */
 export function resolveGate(
 	humanOnly: HumanOnlyGate,
+	needsAnswers: HumanOnlyGate,
 	allowAgents: boolean,
 ): boolean {
-	if (humanOnly === true) {
+	if (needsAnswers === true || humanOnly === true) {
 		return false;
 	}
 	return allowAgents;
 }
 
-/** Resolve `blocked_by` against the slugs present in `work/done/`. */
+/** Resolve `blockedBy` against the slugs present in `work/done/`. */
 export function resolveBlockedBy(
 	blockedBy: string[],
 	doneSlugs: Set<string>,
@@ -58,9 +63,13 @@ export function resolveBlockedBy(
 	return {satisfied: missing.length === 0, missing};
 }
 
-/** Combine the autonomy gate and `blocked_by` resolution into a verdict. */
+/** Combine the autonomy gate and `blockedBy` resolution into a verdict. */
 export function resolveEligibility(input: EligibilityInput): EligibilityResult {
-	const gatePass = resolveGate(input.humanOnly, input.allowAgents);
+	const gatePass = resolveGate(
+		input.humanOnly,
+		input.needsAnswers,
+		input.allowAgents,
+	);
 	const blockedBy = resolveBlockedBy(input.blockedBy, input.doneSlugs);
 	return {
 		eligible: gatePass && blockedBy.satisfied,

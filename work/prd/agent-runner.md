@@ -1,11 +1,8 @@
 ---
 title: agent-runner — autonomous parallel agents over file-based work/
 slug: agent-runner
-blocked_by: []
+blockedBy: []
 covers: []
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## Problem Statement

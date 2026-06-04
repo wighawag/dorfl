@@ -35,7 +35,8 @@ describe('performClaim — happy path', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
 	});
 
-	it('stamps advisory claimed_by / claimed_at when present', async () => {
+	it('does NOT introduce claimed_by / claimed_at (WORK-CONTRACT rule 6)', async () => {
+		// Contract: claim state is the folder + git history, never frontmatter.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await performClaim({
 			slug: 'alpha',
@@ -44,9 +45,37 @@ describe('performClaim — happy path', () => {
 			by: 'alice',
 			env: gitEnv(),
 		});
-		// Read the file as it landed on the arbiter's main.
 		const content = gitIn(
 			['show', 'arbiter/main:work/in-progress/alpha.md'],
+			repo,
+		);
+		expect(content).not.toMatch(/^claimed_by:/m);
+		expect(content).not.toMatch(/^claimed_at:/m);
+	});
+
+	it('stamps legacy advisory claimed_by / claimed_at lines only when already present', async () => {
+		// The advisory-stamp mechanism is vestigial: it acts ONLY on a file that
+		// still carries the legacy lines (none are written by the contract today).
+		// A repo carrying such a legacy file still gets a consistent stamp.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['legacy']);
+		const backlogFile = join(repo, 'work', 'backlog', 'legacy.md');
+		const legacy = readFileSync(backlogFile, 'utf8').replace(
+			/^blockedBy: \[\]$/m,
+			'blockedBy: []\nclaimed_by:\nclaimed_at:',
+		);
+		writeFileSync(backlogFile, legacy);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'add legacy advisory lines'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], repo);
+		await performClaim({
+			slug: 'legacy',
+			cwd: repo,
+			arbiter: 'arbiter',
+			by: 'alice',
+			env: gitEnv(),
+		});
+		const content = gitIn(
+			['show', 'arbiter/main:work/in-progress/legacy.md'],
 			repo,
 		);
 		expect(content).toMatch(/^claimed_by: alice$/m);

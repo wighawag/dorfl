@@ -2,15 +2,15 @@ import {describe, it, expect} from 'vitest';
 import {parseFrontmatter} from '../src/frontmatter.js';
 
 describe('parseFrontmatter', () => {
-	it('extracts slug, humanOnly and blocked_by from a full frontmatter block', () => {
+	it('extracts slug, humanOnly, needsAnswers and blockedBy from a full frontmatter block', () => {
 		const md = [
 			'---',
 			'title: Some Title',
 			'slug: my-slice',
 			'prd: my-prd',
 			'humanOnly: true',
-			'blocked_by: [foo, bar]',
-			'created: 2026-06-03',
+			'needsAnswers: true',
+			'blockedBy: [foo, bar]',
 			'---',
 			'',
 			'## What to build',
@@ -18,7 +18,9 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('my-slice');
+		expect(fm.prd).toBe('my-prd');
 		expect(fm.humanOnly).toBe(true);
+		expect(fm.needsAnswers).toBe(true);
 		expect(fm.blockedBy).toEqual(['foo', 'bar']);
 	});
 
@@ -28,30 +30,106 @@ describe('parseFrontmatter', () => {
 	});
 
 	it('treats omitted humanOnly as undefined (undeclared)', () => {
-		const md = ['---', 'slug: a', 'blocked_by: []', '---'].join('\n');
+		const md = ['---', 'slug: a', 'blockedBy: []', '---'].join('\n');
 		expect(parseFrontmatter(md).humanOnly).toBeUndefined();
 	});
 
-	it('returns empty blockedBy when blocked_by is omitted', () => {
+	it('parses needsAnswers: true as the discovered axis', () => {
+		const md = ['---', 'slug: a', 'needsAnswers: true', '---'].join('\n');
+		expect(parseFrontmatter(md).needsAnswers).toBe(true);
+	});
+
+	it('treats omitted needsAnswers as undefined (undeclared)', () => {
+		const md = ['---', 'slug: a', '---'].join('\n');
+		expect(parseFrontmatter(md).needsAnswers).toBeUndefined();
+	});
+
+	it('parses needsAnswers: false as false (not gated)', () => {
+		const md = ['---', 'slug: a', 'needsAnswers: false', '---'].join('\n');
+		expect(parseFrontmatter(md).needsAnswers).toBe(false);
+	});
+
+	it('returns empty blockedBy when blockedBy is omitted', () => {
 		const md = ['---', 'slug: a', '---'].join('\n');
 		expect(parseFrontmatter(md).blockedBy).toEqual([]);
 	});
 
 	it('returns empty blockedBy for an empty inline list', () => {
-		const md = ['---', 'slug: a', 'blocked_by: []', '---'].join('\n');
+		const md = ['---', 'slug: a', 'blockedBy: []', '---'].join('\n');
 		expect(parseFrontmatter(md).blockedBy).toEqual([]);
 	});
 
-	it('parses a block-style (multi-line) blocked_by list', () => {
+	it('parses a block-style (multi-line) blockedBy list', () => {
 		const md = [
 			'---',
 			'slug: a',
-			'blocked_by:',
+			'blockedBy:',
 			'  - foo',
 			'  - bar',
 			'---',
 		].join('\n');
 		expect(parseFrontmatter(md).blockedBy).toEqual(['foo', 'bar']);
+	});
+
+	it('does NOT match the legacy snake_case blocked_by key', () => {
+		const md = ['---', 'slug: a', 'blocked_by: [foo, bar]', '---'].join('\n');
+		expect(parseFrontmatter(md).blockedBy).toEqual([]);
+	});
+
+	it('parses PRD-level sliceAfter (inline list)', () => {
+		const md = [
+			'---',
+			'slug: my-prd',
+			'sliceAfter: [other-prd, third-prd]',
+			'---',
+		].join('\n');
+		expect(parseFrontmatter(md).sliceAfter).toEqual(['other-prd', 'third-prd']);
+	});
+
+	it('parses a block-style sliceAfter list', () => {
+		const md = [
+			'---',
+			'slug: my-prd',
+			'sliceAfter:',
+			'  - other-prd',
+			'  - third-prd',
+			'---',
+		].join('\n');
+		expect(parseFrontmatter(md).sliceAfter).toEqual(['other-prd', 'third-prd']);
+	});
+
+	it('returns empty sliceAfter when omitted', () => {
+		const md = ['---', 'slug: my-prd', '---'].join('\n');
+		expect(parseFrontmatter(md).sliceAfter).toEqual([]);
+	});
+
+	it('parses the PRD sliced: marker', () => {
+		const md = ['---', 'slug: my-prd', 'sliced: 2026-06-03', '---'].join('\n');
+		expect(parseFrontmatter(md).sliced).toBe('2026-06-03');
+	});
+
+	it('returns undefined sliced when omitted', () => {
+		const md = ['---', 'slug: my-prd', '---'].join('\n');
+		expect(parseFrontmatter(md).sliced).toBeUndefined();
+	});
+
+	it('reads a full PRD frontmatter block (humanOnly/needsAnswers/sliceAfter/sliced)', () => {
+		const md = [
+			'---',
+			'title: Historical Store',
+			'slug: historical-store',
+			'humanOnly: true',
+			'needsAnswers: true',
+			'sliceAfter: [foundations]',
+			'sliced: 2026-06-03',
+			'---',
+		].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.slug).toBe('historical-store');
+		expect(fm.humanOnly).toBe(true);
+		expect(fm.needsAnswers).toBe(true);
+		expect(fm.sliceAfter).toEqual(['foundations']);
+		expect(fm.sliced).toBe('2026-06-03');
 	});
 
 	it('strips quotes from quoted scalar values', () => {
@@ -64,7 +142,7 @@ describe('parseFrontmatter', () => {
 	});
 
 	it('strips quotes from items in inline lists', () => {
-		const md = ['---', 'slug: a', 'blocked_by: [\'foo\', "bar"]', '---'].join(
+		const md = ['---', 'slug: a', 'blockedBy: [\'foo\', "bar"]', '---'].join(
 			'\n',
 		);
 		expect(parseFrontmatter(md).blockedBy).toEqual(['foo', 'bar']);
@@ -75,7 +153,10 @@ describe('parseFrontmatter', () => {
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBeUndefined();
 		expect(fm.humanOnly).toBeUndefined();
+		expect(fm.needsAnswers).toBeUndefined();
 		expect(fm.blockedBy).toEqual([]);
+		expect(fm.sliceAfter).toEqual([]);
+		expect(fm.sliced).toBeUndefined();
 	});
 
 	it('ignores keys appearing after the frontmatter block', () => {
@@ -85,7 +166,7 @@ describe('parseFrontmatter', () => {
 			'---',
 			'',
 			'humanOnly: true',
-			'blocked_by: [should-be-ignored]',
+			'blockedBy: [should-be-ignored]',
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.humanOnly).toBeUndefined();

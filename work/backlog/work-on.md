@@ -3,11 +3,8 @@ title: work-on — create a human worktree (parallel work) from current main
 slug: work-on
 prd: agent-runner
 humanOnly: true
-blocked_by: [repo-mirror, claim-command]
+blockedBy: [repo-mirror, claim-command]
 covers: [5, 6]
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## What to build

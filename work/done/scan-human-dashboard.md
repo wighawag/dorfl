@@ -2,11 +2,8 @@
 title: scan human dashboard — group items by who-can-take-it
 slug: scan-human-dashboard
 prd: agent-runner
-blocked_by: [scan]
+blockedBy: [scan]
 covers: [1, 4, 9]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-03T12:14:50Z
 ---
 
 ## What to build

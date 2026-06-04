@@ -9,50 +9,68 @@
 import type {ScannedItem} from './scan.js';
 
 /**
- * Which group an item belongs to, derived from its `humanOnly` gate and its
- * dependency readiness (NOT the runner's `allowAgents` policy):
- *   - `agent-claimable` — not `humanOnly` AND deps satisfied: an agent can claim
- *     it now (provided this repo's `allowAgents` policy is on).
+ * Which group an item belongs to, derived from its two autonomy axes
+ * (`humanOnly`, `needsAnswers`) and its dependency readiness (NOT the runner's
+ * `allowAgents` policy):
+ *   - `agent-claimable` — neither axis gated AND deps satisfied: an agent can
+ *     claim it now (provided this repo's `allowAgents` policy is on).
  *   - `human-only` — `humanOnly: true`: a human decides/builds it; an agent never
  *     claims it, regardless of policy or deps.
- *   - `blocked` — not `humanOnly` but deps unsatisfied: would be agent-claimable
- *     once its blockers reach `work/done/`.
+ *   - `needs-answers` — not `humanOnly` but `needsAnswers: true`: open questions
+ *     block autonomous work until they are answered (the questions live in the
+ *     body); an agent never claims it.
+ *   - `blocked` — neither axis gated but deps unsatisfied: would be
+ *     agent-claimable once its blockers reach `work/done/`.
+ *
+ * `humanOnly` takes precedence over `needsAnswers` for display grouping (a single
+ * group per item), but BOTH gate the agent identically in `eligibility`.
  */
-export type Category = 'agent-claimable' | 'human-only' | 'blocked';
+export type Category =
+	| 'agent-claimable'
+	| 'human-only'
+	| 'needs-answers'
+	| 'blocked';
 
-/** Stable display order for the three groups. */
+/** Stable display order for the four groups. */
 export const CATEGORY_ORDER: Category[] = [
 	'agent-claimable',
 	'human-only',
+	'needs-answers',
 	'blocked',
 ];
 
 /** Human-facing section headings for each group. */
 export const CATEGORY_LABELS: Record<Category, string> = {
 	'agent-claimable':
-		'Agent-claimable now (not human-only, deps satisfied; needs --allow-agents)',
+		'Agent-claimable now (not human-only, no open questions, deps satisfied; needs --allow-agents)',
 	'human-only': 'Human-only (humanOnly: true — a human decides/builds)',
-	blocked: 'Blocked (not human-only, waiting on deps)',
+	'needs-answers':
+		'Needs answers (needsAnswers: true — open questions block autonomous work)',
+	blocked: 'Blocked (not gated, waiting on deps)',
 };
 
 /** A scanned item, classified for the dashboard. */
 export interface CategorisedItem {
 	item: ScannedItem;
 	category: Category;
-	/** Whether its `blocked_by` deps are all satisfied (ready to be picked up). */
+	/** Whether its `blockedBy` deps are all satisfied (ready to be picked up). */
 	ready: boolean;
 }
 
 /**
- * Map an item's `humanOnly` gate + dependency readiness to its dashboard
- * category. Policy-independent by design: the category reflects what the author
- * declared and whether its deps are met, not the runner's `allowAgents` policy.
+ * Map an item's autonomy axes (`humanOnly`, `needsAnswers`) + dependency
+ * readiness to its dashboard category. Policy-independent by design: the
+ * category reflects what the author declared and whether its deps are met, not
+ * the runner's `allowAgents` policy. `humanOnly` is shown before `needsAnswers`
+ * when both are set, so the REASON is always visible.
  */
 export function categoriseItem(item: ScannedItem): CategorisedItem {
 	const ready = item.eligibility.blockedBy.satisfied;
 	let category: Category;
 	if (item.humanOnly === true) {
 		category = 'human-only';
+	} else if (item.needsAnswers === true) {
+		category = 'needs-answers';
 	} else if (ready) {
 		category = 'agent-claimable';
 	} else {
@@ -68,6 +86,7 @@ function emptyGroups(): CategorisedGroups {
 	return {
 		'agent-claimable': [],
 		'human-only': [],
+		'needs-answers': [],
 		blocked: [],
 	};
 }
@@ -106,6 +125,7 @@ export function sortReadyFirst(items: CategorisedItem[]): CategorisedItem[] {
 export interface CategorySummary {
 	agentClaimable: number;
 	humanOnly: number;
+	needsAnswers: number;
 	blocked: number;
 	ready: number;
 }
@@ -117,12 +137,14 @@ export function summariseGroups(
 	const summary: CategorySummary = {
 		agentClaimable: 0,
 		humanOnly: 0,
+		needsAnswers: 0,
 		blocked: 0,
 		ready: 0,
 	};
 	for (const groups of allGroups) {
 		summary.agentClaimable += groups['agent-claimable'].length;
 		summary.humanOnly += groups['human-only'].length;
+		summary.needsAnswers += groups['needs-answers'].length;
 		summary.blocked += groups['blocked'].length;
 		for (const category of CATEGORY_ORDER) {
 			for (const entry of groups[category]) {

@@ -3,11 +3,8 @@ title: agent status — operational view of live / failed / retained jobs
 slug: agent-status
 prd: agent-runner
 humanOnly: true
-blocked_by: [agent-workspaces]
+blockedBy: [agent-workspaces]
 covers: [11]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-04T07:51:20Z
 ---
 
 ## What to build

@@ -50,7 +50,7 @@ export interface SeededRepo {
 export function seedRepoWithArbiter(
 	root: string,
 	slugs: string[],
-	opts: {humanOnly?: boolean; promptBody?: string} = {},
+	opts: {humanOnly?: boolean; needsAnswers?: boolean; promptBody?: string} = {},
 ): SeededRepo {
 	const repo = join(root, 'project');
 	mkdirSync(repo, {recursive: true});
@@ -87,18 +87,19 @@ export function seedRepoWithArbiter(
 
 function sliceFile(
 	slug: string,
-	opts: {humanOnly?: boolean; promptBody?: string},
+	opts: {humanOnly?: boolean; needsAnswers?: boolean; promptBody?: string},
 ): string {
 	const body = opts.promptBody ?? `> Implement ${slug}.`;
-	const gateLine = opts.humanOnly === true ? ['humanOnly: true'] : [];
+	const gateLines = [
+		...(opts.humanOnly === true ? ['humanOnly: true'] : []),
+		...(opts.needsAnswers === true ? ['needsAnswers: true'] : []),
+	];
 	return [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		...gateLine,
-		'blocked_by: []',
-		'claimed_by:',
-		'claimed_at:',
+		...gateLines,
+		'blockedBy: []',
 		'---',
 		'',
 		'## What to build',

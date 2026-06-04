@@ -3,11 +3,8 @@ title: repo-mirror — the shared bare hub mirror primitive (ensure/locate/fetch
 slug: repo-mirror
 prd: agent-runner
 humanOnly: true
-blocked_by: [scan]
+blockedBy: [scan]
 covers: [6]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-04T06:51:56Z
 ---
 
 ## What to build

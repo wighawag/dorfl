@@ -12,8 +12,10 @@ export interface BacklogItem {
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
 	slug: string;
-	/** The autonomy gate: `true` (human-only) | `undefined` (undeclared). */
+	/** Autonomy axis 1 (DECIDED): `true` (human-only) | `undefined` (undeclared). */
 	humanOnly: boolean | undefined;
+	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
+	needsAnswers: boolean | undefined;
 	/** Slugs this item is blocked by. */
 	blockedBy: string[];
 }
@@ -54,7 +56,7 @@ function slugForFile(dir: string, file: string): string {
 
 /**
  * Collect the set of slugs present in a repo's `work/done/`. Used to resolve
- * `blocked_by` (per-repo only). Falls back to the filename when an item has no
+ * `blockedBy` (per-repo only). Falls back to the filename when an item has no
  * `slug` frontmatter.
  */
 export function readDoneSlugs(repoPath: string): Set<string> {
@@ -77,6 +79,7 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
+			needsAnswers: fm.needsAnswers,
 			blockedBy: fm.blockedBy,
 		});
 	}
@@ -86,7 +89,7 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
 /**
  * Read-only end-to-end scan: detect participating repos, parse their backlog
  * frontmatter, and resolve eligibility per item (autonomy gate + per-repo
- * `blocked_by`). Claims and runs nothing.
+ * `blockedBy`). Claims and runs nothing.
  *
  * The autonomy gate's `allowAgents` policy is resolved PER REPO (flag > per-repo
  * `.agent-runner.json` > global > default), exactly like `integration` — so a
@@ -110,6 +113,7 @@ export function scan(config: Config): ScanReport {
 		const items: ScannedItem[] = readBacklogItems(path).map((item) => {
 			const eligibility = resolveEligibility({
 				humanOnly: item.humanOnly,
+				needsAnswers: item.needsAnswers,
 				blockedBy: item.blockedBy,
 				doneSlugs,
 				allowAgents,

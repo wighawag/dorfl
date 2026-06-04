@@ -3,11 +3,8 @@ title: complete → needs-attention — route complete's failure paths to the st
 slug: complete-needs-attention
 prd: agent-runner
 humanOnly: true
-blocked_by: [needs-attention]
+blockedBy: [needs-attention]
 covers: [12]
-created: 2026-06-03
-claimed_by:
-claimed_at:
 ---
 
 ## What to build

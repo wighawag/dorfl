@@ -3,7 +3,6 @@ title: Web dashboard over the CLI (read-only first)
 slug: web-dashboard
 type: idea
 status: incubating
-created: 2026-06-03
 ---
 
 # Web dashboard (pre-PRD / incubating idea)

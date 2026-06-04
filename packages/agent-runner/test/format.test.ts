@@ -9,19 +9,32 @@ function item(
 	blockedBy: string[],
 	doneSlugs: Set<string>,
 	allowAgents: boolean,
+	needsAnswers: boolean | undefined = undefined,
 ): ScannedItem {
 	return {
 		file: `${slug}.md`,
 		slug,
 		humanOnly,
+		needsAnswers,
 		blockedBy,
 		eligibility: resolveEligibility({
 			humanOnly,
+			needsAnswers,
 			blockedBy,
 			doneSlugs,
 			allowAgents,
 		}),
 	};
+}
+
+/** Build a needsAnswers (discovered axis) ScannedItem. */
+function needsAnswersItem(
+	slug: string,
+	blockedBy: string[],
+	doneSlugs: Set<string>,
+	allowAgents: boolean,
+): ScannedItem {
+	return item(slug, undefined, blockedBy, doneSlugs, allowAgents, true);
 }
 
 /** Build a one-repo report, computing eligibility totals like scan() does. */
@@ -34,22 +47,39 @@ function reportOf(items: ScannedItem[], path = '/repos/alpha'): ScanReport {
 }
 
 describe('gateLabel', () => {
-	it('labels the binary autonomy gate', () => {
+	it('labels the two autonomy axes with distinct reasons', () => {
 		expect(gateLabel(true)).toBe('human-only');
 		expect(gateLabel(undefined)).toBe('undeclared');
 		expect(gateLabel(false)).toBe('undeclared');
+		expect(gateLabel(undefined, true)).toBe('needs-answers');
+		expect(gateLabel(false, true)).toBe('needs-answers');
+		// humanOnly takes precedence so the decided reason is shown first.
+		expect(gateLabel(true, true)).toBe('human-only');
 	});
 });
 
 describe('formatReport — grouped dashboard', () => {
-	it('shows all three group labels under each repo', () => {
+	it('shows all four group labels under each repo', () => {
 		const out = formatReport(
 			reportOf([item('a', undefined, [], new Set(), true)]),
 		);
 		expect(out).toContain('/repos/alpha');
 		expect(out).toContain('Agent-claimable now');
 		expect(out).toContain('Human-only');
+		expect(out).toContain('Needs answers');
 		expect(out).toContain('Blocked');
+	});
+
+	it('places needsAnswers items under Needs answers (distinct from Human-only)', () => {
+		const out = formatReport(
+			reportOf([needsAnswersItem('open-q', [], new Set(), false)]),
+		);
+		const naIdx = out.indexOf('Needs answers');
+		const slugIdx = out.indexOf('open-q');
+		expect(naIdx).toBeGreaterThanOrEqual(0);
+		expect(slugIdx).toBeGreaterThan(naIdx);
+		// gated like human-only: never eligible regardless of policy.
+		expect(out).toContain('0/1 item(s) eligible now');
 	});
 
 	it('renders empty groups as (none)', () => {
@@ -125,13 +155,15 @@ describe('formatReport — grouped dashboard', () => {
 				item('c1', undefined, [], new Set(), true),
 				item('b1', undefined, ['dep'], new Set(), true),
 				item('m1', true, [], new Set(), true),
+				needsAnswersItem('na1', [], new Set(), true),
 			]),
 		);
-		expect(out).toContain('3 item(s) across 1 repo');
+		expect(out).toContain('4 item(s) across 1 repo');
 		expect(out).toContain('1 agent-claimable');
 		expect(out).toContain('1 human-only');
+		expect(out).toContain('1 needs-answers');
 		expect(out).toContain('1 blocked');
-		expect(out).toContain('2 ready');
+		expect(out).toContain('3 ready');
 	});
 
 	it('verdict count reflects the allowAgents policy for undeclared items', () => {

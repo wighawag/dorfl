@@ -3,11 +3,8 @@ title: complete integration flag — merge/propose per invocation; switch to mai
 slug: complete-integration-flag
 prd: agent-runner
 humanOnly: true
-blocked_by: [complete]
+blockedBy: [complete]
 covers: [7, 8]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-04T08:08:01Z
 ---
 
 ## What to build

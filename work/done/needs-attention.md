@@ -3,11 +3,8 @@ title: needs-attention — route stuck items to a folder, surface them, allow re
 slug: needs-attention
 prd: agent-runner
 humanOnly: true
-blocked_by: [verify]
+blockedBy: [verify]
 covers: [11, 12]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-04T07:55:18Z
 ---
 
 ## What to build

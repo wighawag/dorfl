@@ -3,11 +3,8 @@ title: run --once — claim N eligible items, run an agent in isolation, integra
 slug: run-once
 prd: agent-runner
 humanOnly: true
-blocked_by: [scan]
+blockedBy: [scan]
 covers: [5, 6, 7, 8, 10, 12]
-created: 2026-06-03
-claimed_by: wighawag
-claimed_at: 2026-06-03T12:27:40Z
 ---
 
 ## What to build
