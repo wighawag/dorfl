@@ -2,13 +2,14 @@
 title: needs-attention surfacing on main via cherry-pick (built against the ledger-transition seam)
 slug: needs-attention-cherry-pick
 sliceAfter: [ledger-transition-seam]
+sliced: 2026-06-04
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth:
-> `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices.
-> (The technical-detail sections below are trimmed by `to-slices` once the work
-> is sliced — they move into slices/ADRs and this PRD settles to its durable
-> framing: Problem / Solution / User Stories / Out of Scope.)
+> **Sliced into `work/backlog/` on 2026-06-04** — detail trimmed to the slice +
+> the ADR. Launch snapshot, NOT maintained. Current truth: `docs/adr/`
+> (decisions) + the code; remaining work: `work/backlog/needs-attention-surface-
+> on-main.md` (one slice). The resolved design lives in Solution below; the ADR
+> `docs/adr/claim-ledger-vs-protected-main.md` holds the durable seam rationale.
 
 ## Problem Statement
 
@@ -32,22 +33,37 @@ as a transition strategy concern, not bolted onto the move code.
 
 ## Solution
 
-Make the needs-attention transition **also surface on `main`** by cherry-picking
-the move commit to `main`, via the ledger-transition write seam's
-needs-attention path. After this, the operational surface (`scan`, `status`,
-a fresh checkout, another machine) sees a stuck slice as
-`work/needs-attention/<slug>.md` on `main`, with its recorded reason.
+Make the needs-attention transition **also surface on `main`** so the operational
+surface (`scan`, `status`, a fresh checkout, another machine) sees a stuck slice
+as `work/needs-attention/<slug>.md` on `main`, with its recorded reason. Design
+decisions (resolved in the design session — do not relitigate):
 
-- The needs-attention move is committed on the `work/<slug>` branch as today (so
-  the aborted/partial work is SAVED with the move — never-lose-work), AND its move
-  commit is cherry-picked onto `main` so `main` shows the stuck state.
-- Cherry-picking to `main` is legal here because this targets the **unprotected-
-  `main` world the current single strategy already serves** (the same world where
-  the claim CAS writes `main`). It is NOT a protected-`main` mechanism — a
-  protected-`main` strategy is explicitly out of scope (and recorded only as
-  analysis in the seam ADR).
-- Resolving a needs-attention item back to `backlog/` (or completing it) updates
-  `main` accordingly, so `main` never accretes a stale `needs-attention/` entry.
+- **Always save the aborted work (fixed invariant, never-lose-work).** Routing a
+  stuck slice produces **TWO commits** on `work/<slug>`: (i) a **wip** commit
+  holding the aborted agent work, then (ii) a **move-only** commit on top —
+  purely the `git mv → needs-attention/` + the reason in the body. The move-only
+  commit is the tip. ("Non-atomic" is moot: the runner owns and completes the
+  whole transition; no partial state escapes to a human.)
+- **Surface on `main` by cherry-picking the MOVE-ONLY commit to `main`** (not the
+  wip — the aborted work never reaches `main`). Visible + cross-machine for free.
+- **The surfacing axis is NOT the integration axis.** `--merge`/`--propose` govern
+  CODE integration only; `--propose` simply tells the runner to open a PR for the
+  code instead of merging it — it does NOT forbid writing `main`. The
+  needs-attention cherry-pick is an OPERATIONAL/ledger write, not code, so it
+  happens in BOTH `--merge` and `--propose` (mode M). The thing that would forbid
+  it is branch *protection* (a future mode P), never `--propose`.
+- **The write seam carries INTENT, not mechanism.** The needs-attention
+  transition means "record stuck + save work + make stuck-state OBSERVABLE." The
+  mode-M strategy implements that by cherry-picking the move to `main`; a future
+  mode-P (protected-main) strategy would satisfy the SAME intent by reading
+  work-branch tips. "Cherry-pick to main" MUST NOT be baked into the seam's public
+  contract — that is the (cost-free) design-for-mode-P requirement.
+- **The human resolves via `start` (and `work-on`) — NO new command, NO manual
+  file moves.** `start`'s folder-dispatcher gains a `needs-attention/` row: it
+  prints the recorded reason, transitions the item `needs-attention → in-progress`
+  THROUGH the write seam (mode M clears the `main` surface via the reverse move),
+  then switches the human onto `work/<slug>`. It is **unguarded** (no `--resume`):
+  a stuck item is explicitly up-for-grabs.
 
 ## User Stories
 
@@ -81,35 +97,9 @@ a fresh checkout, another machine) sees a stuck slice as
   `sliceAfter: [ledger-transition-seam]` (this PRD is sliced only after the seam,
   so its slices can `blockedBy` the real seam slugs).
 
-## Implementation Decisions
-
-- **Build against the write seam, not the raw move.** The needs-attention
-  transition behind the seam gains the cherry-pick-to-`main` surfacing; call sites
-  (`complete.ts` failure paths, the runner's stuck routing in `run.ts`,
-  `needs-attention.ts`) drive it through the seam.
-- **Two effects, one logical transition:** (a) commit the move (+ saved aborted
-  work) on `work/<slug>`; (b) cherry-pick that move commit onto `main`. Keep them
-  consistent (a cherry-pick failure must not leave a half-surfaced state — surface
-  or don't, never partially).
-- **Unprotected-`main` only.** This is the current single strategy's world; do NOT
-  add a protected-`main`/mode branch here. (Protected-`main` surfacing is analysis
-  only in the seam ADR.)
-- **Cleanup on resolve:** returning to `backlog/` or completing removes the
-  `needs-attention/` entry from `main` (the resolve transition, through the seam,
-  keeps `main` truthful).
-
-## Testing Decisions
-
-- Against throwaway git repos + a local `--bare` arbiter (the established
-  pattern): drive a slice to needs-attention, assert `main` now shows
-  `work/needs-attention/<slug>.md` AND the `work/<slug>` branch retains the saved
-  aborted work + the move.
-- Assert `scan`/`status` (offline, reading `main`) now distinguish a stuck slice
-  from an in-progress one, with the reason reported by `status`.
-- Assert resolve (back-to-backlog / complete) clears the `needs-attention/` entry
-  from `main` (no stale surface).
-- Assert claim/complete success paths are UNCHANGED (surfacing touches only the
-  needs-attention path). Keep race tests in the non-parallel vitest project.
+> Implementation & testing detail moved to the slice (what to build) and the ADR
+> `docs/adr/claim-ledger-vs-protected-main.md` (the durable *why*). The resolved
+> design is summarised in Solution above.
 
 ## Out of Scope
 
