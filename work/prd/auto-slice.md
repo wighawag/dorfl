@@ -2,10 +2,15 @@
 title: auto-slice — slice a PRD file into backlog items as a work/-native capability
 slug: auto-slice
 humanOnly: true
+sliced: 2026-06-04
 ---
 
-> **Launch snapshot, not maintained.** Source material for slicing; once sliced,
-> technical detail moves into the slices and durable rationale into `docs/adr/`.
+> **Sliced into `work/backlog/` on 2026-06-04** — detail trimmed to the slices.
+> Launch snapshot, NOT maintained. Current truth: `docs/adr/` + the code; remaining
+> work: `work/backlog/autoslice-{gate,lock,command,confidence}.md`. (`humanOnly:
+> true` here meant only that a human drove THIS PRD's slicing — disjoint from the
+> slices' own gates; all four emitted slices are auto-eligible on their own
+> build-merits.)
 
 ## Problem Statement
 
@@ -98,55 +103,21 @@ claim-CAS lock so concurrent slicers never collide.
    and the PRD folder transitions, so that the git boundary stays identical to the
    rest of the system.
 
-## Implementation Decisions
-
-(Made with the maintainer — do not relitigate.)
-
-- **Auto-slice is a capability, not a CI feature.** The command exists for local
-  use; CI is one caller (wired by `install-ci` in its own slice, but the
-  capability does not depend on CI).
-- **Gate mirrors the build gate, one level up:** PRD `humanOnly` (DECIDED) +
-  `needsAnswers` (DISCOVERED) + repo `autoSlice` (policy, default false, flag >
-  `AGENT_RUNNER_*` env > per-repo > global > default — the env layer landed in
-  `config-env-layer`). Agent-sliceable iff `needsAnswers !== true &&
-  humanOnly !== true && autoSlice`.
-- **Lock = the existing claim CAS, different branch name, `work/slicing/` folder —
-  reached THROUGH the ledger-transition write seam** (the claim CAS now lives
-  behind that seam; reuse its transition machinery, do NOT call raw `claim-cas` /
-  push `main` directly). Reuse the proven `git mv` micro-commit mechanism; do NOT
-  invent a new lock. The branch name must not collide with the `work/<slug>` build
-  branches.
-- **Runner owns git-state; agent only produces slice files** — same in-band
-  boundary as the build agent. The agent runs the `to-slices` methodology; the
-  runner commits the slices + the PRD transition.
-- **`to-prd` sets `humanOnly`/`needsAnswers`/`sliceAfter` during the
-  conversation** (skill updated in this docs pass); `WORK-CONTRACT.md` documents
-  the two-axis PRD gate, the `autoSlice` policy, `sliceAfter`, and the
-  `work/slicing/` folder.
-
-## Testing Decisions
-
-- TDD the **gate resolution** (humanOnly × needsAnswers × autoSlice, flag >
-  per-repo > global > default) and the **eligibility** decision as pure
-  functions; plus `sliceAfter` resolution against the `sliced:` marker.
-- Test the **lock** against throwaway git repos + a local `--bare` arbiter (the
-  established `claim.sh` pattern): a simultaneous two-slicer race shows exactly one
-  winner; the loser gets exit 2; the winner's transition lands `work/slicing/` then
-  `work/prd/` + `work/backlog/`.
-- Stub the agent harness (no real model) — assert it is invoked with the slicing
-  brief and that the runner, not the agent, performs the commits/moves.
+> Implementation & testing detail moved to the slices (`autoslice-gate`,
+> `autoslice-lock`, `autoslice-command`, `autoslice-confidence`); durable rationale
+> for the seam the lock rides on is in `docs/adr/claim-ledger-vs-protected-main.md`.
 
 ## Autonomy notes (the gate axes)
 
-- **`humanOnly: true` (this PRD, DECIDED):** auto-slice changes the autonomy
-  model itself (a new gate axis, a lock that races the arbiter, the human-vs-agent
-  slicing boundary). That is judgement-heavy substrate a human should drive, so
-  the slicing of THIS PRD is human-led. Per-slice gates: the pure gate-resolution
-  + `sliceAfter`-resolution functions are ordinary agent-buildable slices; the
-  lock/CAS-integration and the confidence/needs-attention routing lean `humanOnly`.
-- **`needsAnswers`:** none open at launch — the gate names, predicate, lock
-  mechanism, and `sliceAfter` semantics are decided in this conversation +
-  WORK-CONTRACT.md.
+- **`humanOnly: true` (this PRD, DECIDED):** meant ONLY that a human drives the
+  *slicing* of this PRD (an agent may not auto-slice it) — because auto-slice
+  reshapes the autonomy model and warranted a human cutting it. This is **disjoint**
+  from the emitted slices' gates (WORK-CONTRACT.md §3b): all four slices were judged
+  on their OWN build-nature and are **auto-eligible** (pure predicates, a mechanical
+  seam-CAS lock, well-specified orchestration, and confidence-routing — none needs
+  a human to build).
+- **`needsAnswers`:** none open — gate names, predicate, lock mechanism (now via
+  the ledger seam), and `sliceAfter` semantics are decided.
 
 ## Out of Scope
 

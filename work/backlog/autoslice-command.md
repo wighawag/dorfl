@@ -1,0 +1,93 @@
+---
+title: autoslice-command — agent-runner slice <prd> orchestration (harness + runner-owns-git)
+slug: autoslice-command
+prd: auto-slice
+blockedBy: [autoslice-gate, autoslice-lock]
+covers: [1, 6]
+---
+
+## What to build
+
+The `agent-runner slice <prd-slug>` command itself — the orchestration that ties
+the gate (autoslice-gate) and the lock (autoslice-lock) together and drives the
+actual slicing, with the runner owning every git-state transition.
+
+End-to-end flow:
+
+1. **Resolve the gate** (autoslice-gate): for the AGENT path, refuse to slice a
+   PRD that is `humanOnly`/`needsAnswers`, or where `autoSlice` is off, or whose
+   `sliceAfter` PRDs aren't yet sliced. The HUMAN path is not bound by the gate.
+2. **Acquire the lock** (autoslice-lock, via the seam CAS) for the AGENT path
+   (concurrency serialisation). The HUMAN path with no contention may slice on
+   `main` directly without the lock.
+3. **Invoke the agent harness** with the `to-slices` brief for that PRD — the
+   agent runs the slicer methodology and **produces slice files only**; it does
+   NOT commit/push/move (same in-band boundary as the build agent).
+4. **The runner commits the transition**: drop the produced `work/backlog/<slug>.md`
+   slices in AND move the PRD back `work/slicing/ → work/prd/` (releasing the lock)
+   + mark the PRD `sliced:` — as the runner-owned git transition. The agent never
+   does git.
+
+Reuse the existing harness seam + the runner-owns-git pattern from `run.ts`; do
+NOT reimplement claiming/isolation. The confidence / needs-attention behaviour
+when no human is present is a SEPARATE later slice (autoslice-confidence).
+
+## Acceptance criteria
+
+- [ ] `agent-runner slice <prd>` exists and, for the agent path, slices only when
+      the gate passes (gate refusal is honest: names why it skipped).
+- [ ] It acquires the lock (agent path) before slicing and releases it
+      (`work/slicing/ → work/prd/`) as part of the completing transition; the
+      human path may slice on `main` without the lock.
+- [ ] The agent harness is invoked with the slicing brief and produces slice files
+      ONLY; the RUNNER performs all commits/moves (agent does no git).
+- [ ] On success the produced `work/backlog/` slices are committed AND the PRD is
+      marked `sliced:` in one runner-owned transition.
+- [ ] Tests stub the harness (no real model) and assert: gate-refusal paths, the
+      lock is taken/released, slice files land in `work/backlog/`, the PRD is
+      marked `sliced:`, and the runner (not the agent) authored the commits/moves.
+- [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+
+## Blocked by
+
+- `autoslice-gate` — the slicing-eligibility/`sliceAfter`/`autoSlice` resolution
+  the command enforces.
+- `autoslice-lock` — the lock acquire/release the command drives (agent path).
+
+## Prompt
+
+> Build `agent-runner slice <prd-slug>` — the orchestration tying the gate
+> (autoslice-gate) and lock (autoslice-lock) together to slice a PRD, with the
+> runner owning all git. Read the done files for BOTH dependency slices + their
+> modules FIRST.
+>
+> READ FIRST: `work/prd/auto-slice.md` (the flow + runner-vs-agent git boundary),
+> `src/run.ts` (the harness-seam invocation + runner-owns-every-git-transition
+> pattern to mirror — the agent edits, the runner commits/moves), `src/harness.ts`
+> (the harness seam), the `to-slices` skill (the slicing methodology the harness
+> runs), and the autoslice-gate/autoslice-lock modules.
+>
+> Implement the flow: resolve gate (agent path refuses humanOnly/needsAnswers/
+> autoSlice-off/unsliced-sliceAfter; human path unbound) → acquire lock (agent
+> path; human-no-contention may slice on main lock-free) → invoke the harness with
+> the to-slices brief (agent produces slice FILES only, no git) → RUNNER commits
+> the produced backlog slices + releases the lock (work/slicing/ → work/prd/) +
+> marks the PRD sliced:, as ONE runner-owned transition. Do NOT build the
+> no-human confidence/needs-attention routing here (that is autoslice-confidence).
+>
+> TDD with vitest, stubbing the harness (no real model): gate-refusal paths, lock
+> taken/released, slices land in work/backlog/, PRD marked sliced:, runner (not
+> agent) authored the git. "Done" = acceptance criteria met and the gate green.
+
+---
+
+### Claiming this slice
+
+```sh
+# atomically claim it (works with a GitHub remote OR a local --bare remote):
+agent-runner claim autoslice-command --arbiter <remote>      # default --arbiter origin
+# then start work on the updated main:
+git fetch <remote> && git switch -c work/autoslice-command <remote>/main
+# on completion, in the work branch's PR/merge:
+git mv work/in-progress/autoslice-command.md work/done/autoslice-command.md
+```
