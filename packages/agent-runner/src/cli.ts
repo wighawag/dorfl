@@ -13,6 +13,7 @@ import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
 import {performComplete, integrationFromFlags} from './complete.js';
+import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
@@ -476,7 +477,13 @@ export function buildProgram(): Command {
 				skipVerify: flags.skipVerify,
 				type: flags.type,
 				message: flags.message,
+				// Color the propose-mode next-step block only on an interactive
+				// stdout TTY (and not under NO_COLOR); plain when piped/redirected.
+				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
+				// The propose next-step block is printed verbatim (no `>> ` prefix)
+				// so its blank lines + heading stand out as the human call-to-action.
+				noteBlock: (message) => console.error(message),
 			});
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);

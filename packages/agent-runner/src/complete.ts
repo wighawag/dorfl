@@ -5,6 +5,7 @@ import {Integrator} from './integrator.js';
 import type {ReviewProvider} from './integrator.js';
 import type {IntegrationMode} from './config.js';
 import {runAsync, type RunResult} from './git.js';
+import {formatProposeNextStep, shouldUseColor} from './output.js';
 
 /**
  * `agent-runner complete [<slug>] [--skip-verify] [--type <t>] [--message <s>]
@@ -92,6 +93,19 @@ export interface CompleteOptions {
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
+	/**
+	 * Sink for a pre-formatted block printed VERBATIM (no `>> ` prefix), used for
+	 * the visually-distinct propose-mode next-step block so its blank lines and
+	 * heading stand out cleanly. Defaults to `note` when not supplied.
+	 */
+	noteBlock?: (message: string) => void;
+	/**
+	 * Emit ANSI color in the (cosmetic) propose-mode next-step block. Defaults
+	 * to the TTY/`NO_COLOR` rule against `process.stdout`; injectable so tests
+	 * can simulate a TTY (color) vs. a pipe / `NO_COLOR` (plain) without a real
+	 * terminal. Color-only — it changes no gate/done-move/commit/integrate logic.
+	 */
+	color?: boolean;
 }
 
 export interface CompleteResult {
@@ -337,7 +351,20 @@ async function runComplete(
 		};
 	}
 
-	// propose: the branch is pushed; report the next step.
+	// propose: the branch is pushed; report the next step. The next step is the
+	// ONE thing the human must act on, so it is emitted as a visually-distinct
+	// block (blank lines + heading + TTY-aware color) ON TOP of the plain summary
+	// note below — cosmetic only; the structured result is unchanged.
+	const color = options.color ?? shouldUseColor(process.stdout);
+	const noteBlock = options.noteBlock ?? note;
+	noteBlock(
+		formatProposeNextStep({
+			branch,
+			arbiter,
+			requestOpened: result.requestOpened,
+			color,
+		}),
+	);
 	const next = result.requestOpened
 		? `pushed ${branch} and opened a review`
 		: `pushed ${branch} to ${arbiter}. ` +

@@ -359,6 +359,52 @@ describe('complete — propose integration', () => {
 		expect(existsOnArbiterMain(repo, 'in-progress', 'zeta')).toBe(true);
 		expect(result.message).toMatch(/Open a PR\/MR|opened a review/);
 	});
+
+	it('prints a visually-distinct next-step block with color on a (simulated) TTY', async () => {
+		const {repo} = await claimAndBranch('zeta-tty');
+		agentEdits(repo);
+		const blocks: string[] = [];
+		const result = await performComplete({
+			slug: 'zeta-tty',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			verify: PASS,
+			color: true, // simulate stdout being a TTY
+			noteBlock: (m) => blocks.push(m),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		const block = blocks.join('\n');
+		// Surrounded by blank lines, names the pushed branch, and carries ANSI color.
+		expect(block).toContain('work/zeta-tty');
+		expect(block).toContain(`${ARBITER}/work/zeta-tty`);
+		expect(block).toContain('\u001b['); // ANSI escape ⇒ color present
+	});
+
+	it('prints a PLAIN next-step block when not a TTY / NO_COLOR', async () => {
+		const {repo} = await claimAndBranch('zeta-plain');
+		agentEdits(repo);
+		const blocks: string[] = [];
+		const result = await performComplete({
+			slug: 'zeta-plain',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			verify: PASS,
+			color: false, // simulate piped/redirected or NO_COLOR
+			noteBlock: (m) => blocks.push(m),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		const block = blocks.join('\n');
+		expect(block).toContain('work/zeta-plain');
+		expect(block).not.toContain('\u001b['); // no ANSI escapes when plain
+		// Still surrounded by blank lines (stands out without color too).
+		const lines = block.split('\n');
+		expect(lines[0]).toBe('');
+		expect(lines[lines.length - 1]).toBe('');
+	});
 });
 
 describe('complete — rebase conflict (ADR §10)', () => {
