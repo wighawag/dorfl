@@ -11,6 +11,22 @@ export {
 	defaultConfigPath,
 } from './config.js';
 
+export type {
+	RepoAllowedKey,
+	RepoRejectedKey,
+	LoadedRepoConfig,
+	ResolveRepoConfigOptions,
+	ResolvedRepoConfig,
+} from './repo-config.js';
+export {
+	REPO_CONFIG_FILENAME,
+	REPO_ALLOWED_KEYS,
+	REPO_REJECTED_KEYS,
+	repoConfigPath,
+	loadRepoConfig,
+	resolveRepoConfig,
+} from './repo-config.js';
+
 export type {Frontmatter} from './frontmatter.js';
 export {parseFrontmatter} from './frontmatter.js';
 

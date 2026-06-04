@@ -1,5 +1,6 @@
 import {randomBytes} from 'node:crypto';
 import type {Config} from './config.js';
+import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {claimItem} from './claim.js';
@@ -72,6 +73,12 @@ export interface RunOnceOptions {
 	claimScript?: string;
 	/** Override agent-id generation (tests). */
 	agentId?: () => string;
+	/**
+	 * Sink for non-fatal warnings (e.g. a repo's `.agent-runner.json` naming
+	 * runner/host-only keys that were ignored). Defaults to a no-op so the core
+	 * stays pure; the CLI wires this to stderr.
+	 */
+	onWarn?: (message: string) => void;
 }
 
 /** Default agent runner: shell out to `config.agentCmd`, prompt on stdin. */
@@ -150,6 +157,7 @@ export function runOnce(options: RunOnceOptions): RunOnceResult {
 				env,
 				claimScript: options.claimScript,
 				agentId: newId(),
+				onWarn: options.onWarn,
 			}),
 		);
 	}
@@ -184,17 +192,32 @@ interface OneItemContext {
 	env?: NodeJS.ProcessEnv;
 	claimScript?: string;
 	agentId: string;
+	onWarn?: (message: string) => void;
 }
 
 function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 	const {slug, repoPath} = candidate;
 	const base: ItemResult = {repoPath, slug, status: 'lost-race'};
 
+	// Resolve THIS repo's effective config against its own `.agent-runner.json`
+	// layered over the global config (flag > per-repo > global > default). This is
+	// what makes a run multi-repo aware: each repo gets its own integration mode /
+	// arbiter, so repo A can be `merge` while repo B is `propose` in one tick. A
+	// repo with no file resolves to exactly the global config (unchanged behaviour).
+	const resolved = resolveRepoConfig({
+		repoPath,
+		global: ctx.config,
+	});
+	const config = resolved.config;
+	if (resolved.message) {
+		ctx.onWarn?.(resolved.message);
+	}
+
 	// 1. Claim (the runner's first git-state transition) via claim.sh.
 	const claim = claimItem({
 		slug,
 		cwd: repoPath,
-		arbiter: ctx.config.defaultArbiter,
+		arbiter: config.defaultArbiter,
 		claimScript: ctx.claimScript,
 		env: ctx.env,
 	});
@@ -213,7 +236,7 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 	try {
 		handle = isolate({
 			sourceRepo: repoPath,
-			arbiter: ctx.config.defaultArbiter,
+			arbiter: config.defaultArbiter,
 			slug,
 			agentId: ctx.agentId,
 			workspace: ctx.workspace,
@@ -257,9 +280,9 @@ function runOneItem(candidate: Candidate, ctx: OneItemContext): ItemResult {
 		// 6. Integrate per config (propose by default; merge where allowed). Never --force.
 		const integration = integrate({
 			cwd: handle.dir,
-			arbiter: ctx.config.defaultArbiter,
+			arbiter: config.defaultArbiter,
 			branch: handle.branch,
-			mode: ctx.config.integration,
+			mode: config.integration,
 			env: ctx.env,
 			openPr: ctx.openPr,
 		});

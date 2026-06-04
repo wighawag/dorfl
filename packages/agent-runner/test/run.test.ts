@@ -248,6 +248,85 @@ describe('runOnce — integration modes', () => {
 	});
 });
 
+describe('runOnce — per-repo config (multi-repo aware)', () => {
+	it('honours a repo-local .agent-runner.json integration over the global', () => {
+		// Global says `merge`, but the repo commits `propose` in its own file →
+		// the run must integrate THIS repo as propose (per-repo > global).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify({integration: 'propose'}),
+		);
+		const config = configFor(scratch.root, {integration: 'merge'});
+		let prBranch = '';
+		const result = runOnce({
+			config,
+			report: scan(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			testGate: greenGate,
+			claimScript: CLAIM_SCRIPT,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+			openPr: ({branch}) => {
+				prBranch = branch;
+			},
+		});
+		const item = result.items[0];
+		expect(item.status).toBe('claimed-done');
+		// per-repo `propose` won over global `merge`.
+		expect(item.integration?.mode).toBe('propose');
+		expect(item.integration?.mergedToMain).toBe(false);
+		expect(prBranch).toBe('work/feat-agentA');
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+	});
+
+	it('resolves each repo against ITS OWN file in one run (A merge, B propose)', () => {
+		// Two independent repos+arbiters under one root. Global = merge. Repo B
+		// commits propose; repo A has no file. One run → A merges, B proposes.
+		const a = seedRepoWithArbiter(join(scratch.root, 'a'), ['fa']);
+		const b = seedRepoWithArbiter(join(scratch.root, 'b'), ['fb']);
+		writeFileSync(
+			join(b.repo, '.agent-runner.json'),
+			JSON.stringify({integration: 'propose'}),
+		);
+		const config = mergeConfig({
+			roots: [a.repo, b.repo],
+			defaultArbiter: 'arbiter',
+			maxParallel: 4,
+			perRepoMax: 2,
+			integration: 'merge',
+			agentCmd: 'true',
+		});
+		let bBranch = '';
+		const result = runOnce({
+			config,
+			report: scan(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			testGate: greenGate,
+			claimScript: CLAIM_SCRIPT,
+			env: gitEnv(),
+			agentId: () => 'agentZ',
+			openPr: ({branch}) => {
+				bBranch = branch;
+			},
+		});
+		const byRepo = new Map(result.items.map((i) => [i.repoPath, i]));
+		const itemA = byRepo.get(a.repo);
+		const itemB = byRepo.get(b.repo);
+		// Repo A: no file → global merge → landed on main.
+		expect(itemA?.integration?.mode).toBe('merge');
+		expect(itemA?.integration?.mergedToMain).toBe(true);
+		expect(existsOnArbiterMain(a.repo, 'done', 'fa')).toBe(true);
+		// Repo B: own file propose → pushed branch, NOT on main.
+		expect(itemB?.integration?.mode).toBe('propose');
+		expect(itemB?.integration?.mergedToMain).toBe(false);
+		expect(bBranch).toBe('work/fb-agentZ');
+		expect(existsOnArbiterMain(b.repo, 'done', 'fb')).toBe(false);
+	});
+});
+
 describe('runOnce — agent failure', () => {
 	it('does not move to done when the agent itself fails', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);

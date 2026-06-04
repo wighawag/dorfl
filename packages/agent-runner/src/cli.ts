@@ -219,7 +219,12 @@ export function buildProgram(): Command {
 			const isolation = flags.isolation === 'worktree' ? 'worktree' : 'clone';
 			const workspace =
 				flags.workspace ?? join(tmpdir(), 'agent-runner-workspace');
-			const result = runOnce({config, workspace, isolation});
+			const result = runOnce({
+				config,
+				workspace,
+				isolation,
+				onWarn: (message) => console.error(`>> ${message}`),
+			});
 			if (flags.json) {
 				console.log(JSON.stringify(result, null, 2));
 			} else {
