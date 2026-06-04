@@ -27,7 +27,12 @@ dogfooding itself (it tracks its own work in its own `work/`).
   (PRD slicing-order), `sliced`.
 - **ADR** — a decision record in `docs/adr/<slug>.md` (the *why* of OUR technical
   choices; durable). The substrate decisions are in
-  `docs/adr/execution-substrate-decisions.md` (§1–§12).
+  `docs/adr/execution-substrate-decisions.md` (§1–§12). Carries a **`status:`**
+  frontmatter (`proposed | accepted | superseded`): a **`proposed`** ADR captures
+  the *deciding* stage — a VERIFIED problem + options, not yet decided (the step
+  between an unverified `observations/` note and an `accepted` decision). Slug-
+  named + sectioned (a deliberate house deviation from Matt's sequential
+  numbering; see `docs/adr/methodology-and-skills.md` §5a/§5b).
 - **capture buckets** — the THREE note-types under `work/` that are NOT work items
   and are **exempt from status=folder** (they don't flow/move; the folder is the
   inbox; they leave only by deletion): **`ideas/`** (proposed, pre-PRD;

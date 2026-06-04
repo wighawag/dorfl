@@ -103,7 +103,40 @@ migration slice (not an inline change), keeping the build/test gate green.
 ## 5. ADRs live in `docs/adr/`, CONTEXT.md at root (conform to convention)
 
 ADRs (the durable *why* of decisions) live in `docs/adr/`; the domain glossary is
-`CONTEXT.md` at the repo root \u2014 the conventional locations Matt's domain-aware
+`CONTEXT.md` at the repo root — the conventional locations Matt's domain-aware
 skills (`diagnose`/`tdd`/`improve-codebase-architecture`/`zoom-out`) read. We
 conform to these defaults so those skills work with NO setup. `work/findings/`
 remains for investigation/ground-truth notes (distinct from ADRs).
+
+### 5a. ADR `status:` lifecycle (the "deciding" stage has a home)
+
+ADRs carry a **`status:`** frontmatter field — `proposed | accepted | superseded`
+— which is the OPTIONAL-but-blessed field of the canonical ADR format
+(`grill-with-docs/ADR-FORMAT.md`: *"Status frontmatter … useful when decisions are
+revisited"*). This fills a real gap in the lifecycle: between an **observation**
+(spotted, unverified) and an **accepted ADR** (decided) sits the *deciding* stage
+— a VERIFIED problem with candidate options, not yet resolved. That stage is a
+**`status: proposed` ADR**: it states the contradiction/forces + the considered
+options + a recommended direction, explicitly NOT yet accepted. A later design
+session flips it to `accepted` (recording the chosen option) or writes a
+superseding ADR. So the decision pipeline is:
+
+> observation (`work/observations/`, unverified) → **proposed ADR** (verified
+> problem + options, undecided) → **accepted ADR** (decided) → slices (build).
+
+Use a proposed ADR (not an `idea`) when it is a *problem/decision* (backward-
+looking, "the current model contradicts itself"), not a forward-looking
+opportunity (those stay `work/ideas/`).
+
+### 5b. Deliberate deviation from Matt's ADR numbering (recorded so it is not "fixed")
+
+Matt's `ADR-FORMAT.md` prescribes **sequential, one-decision-per-file**
+(`0001-slug.md`, …, thin, often a paragraph). **We deliberately deviate:** our
+ADRs are **slug-named** (`execution-substrate-decisions.md`,
+`claim-ledger-vs-protected-main.md`) and may be **fat + sectioned** (one file
+gathering related decisions as `§1–§N`). This is intentional house style, not an
+oversight — recorded here per Matt's own rule ("deliberate deviations from the
+obvious path… stop the next engineer from ‘fixing’ something that was
+deliberate"). The domain-aware skills read ADRs for *context* (and to not
+re-litigate); they do not hard-parse the sequential number, so this degrades
+gracefully — a cross-reference is by slug/section rather than `ADR-NNNN`.
