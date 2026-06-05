@@ -136,6 +136,14 @@ move any files between work/ folders, and do not touch work/in-progress/<slug>.m
 The runner (or human) owns every git-state transition. (Your TESTS may freely
 create and operate on their OWN throwaway git repos — that is expected.)
 
+Leave a CLEAN working tree — only the changes this slice intends. The runner
+commits everything untracked (`git add -A`), so any scratch, debug, or
+runtime-artifact file you or your tools created would otherwise be swept into the
+commit. Before you stop, delete such stray untracked files, or add them to
+.gitignore if they legitimately belong ignored. This is NOT git work: deleting an
+untracked file or editing .gitignore is producing clean WORK, like writing source
+— the "no git" rule above (no stage/commit/push/move) still holds.
+
 When the acceptance criteria are met and the repo's build/test/format checks are
 green, STOP and report what you did. The runner handles the `git mv` to
 work/done/, the completion commit, and integration.
