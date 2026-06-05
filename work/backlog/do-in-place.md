@@ -56,6 +56,29 @@ in-place worker that claims + builds + gates + integrates in ONE repo, then exit
   composing `start`+`complete` is the correct primary — say so in the code and keep
   the agent invocation (autonomous, via the harness seam) as the only new middle
   step. Do NOT silently fork a third pipeline.
+- **CRITICAL — `do` is AUTONOMOUS, so it needs `run`'s failure-surfacing, NOT
+  `complete`'s. Composing `performComplete` as-is gives the WRONG semantics.** This
+  is a real, verified divergence between the two paths, not a nuance to gloss:
+  - On a red gate / rebase conflict, BOTH `performComplete` and `runOneItem` route
+    the item to `needs-attention/` via the SAME seam call
+    (`ledgerWrite.applyNeedsAttentionTransition`). BUT `performComplete` calls it
+    **without an `arbiter`** (the HUMAN path: a human is right there, no
+    cross-machine surfacing needed), whereas `runOneItem` calls it **WITH
+    `arbiter: job.arbiterRemote`**. That arbiter argument is what triggers the
+    on-`main` surfacing (the cherry-pick) AND pushes the work branch — i.e. makes
+    the stuck state visible cross-machine / to `scan`/`status`. `do` runs
+    UNATTENDED (it is the CI command; no human watching), so it MUST get the
+    autonomous, arbiter-passed surfacing like `run` — a stuck CI `do` that only
+    routes locally is invisible.
+  - So composing `performComplete` verbatim is INSUFFICIENT for `do`'s failure path.
+    Resolve it ONE of two ways: (a) extend `performComplete` with an option to pass
+    the arbiter into its `applyNeedsAttentionTransition` calls (so the autonomous
+    caller gets on-`main` surfacing while the human `complete` keeps today's
+    local-only behaviour), or (b) have `do` use `run`'s integrate+surface routing
+    for that step. Do NOT ship a `do` whose stuck items fail to surface on the
+    arbiter. The success path (gate green → done-move → rebase → integrate) can
+    still reuse `complete`'s machinery; it is specifically the NEEDS-ATTENTION
+    routing that must be the autonomous (arbiter-passed) variant.
 - **`do prd:<slug>` routing:** this slice wires the resolver so `do` ACCEPTS all
   three forms and dispatches `prd:` toward the slicing path. The actual slicing
   orchestration is the reshaped `autoslice-command` slice (blocked on this one);
@@ -70,6 +93,19 @@ in-place worker that claims + builds + gates + integrates in ONE repo, then exit
 The auto-pick / multi-arg / `-n` forms and the slices-first priority are the
 `do-autopick` slice; `do --remote` is the `do-remote` slice. THIS slice is the
 single-named-item, in-place, exits path + the resolver wiring.
+
+**Define `do`'s argument grammar to be EXTENSIBLE — the other two `do-*` slices grow
+the SAME command definition.** All three (`do-in-place`, `do-remote`, `do-autopick`)
+edit the one `.command('do')` block in `cli.ts`: this slice creates it (single
+named item, in-place); `do-remote` adds the `--remote <r>` option; `do-autopick`
+makes the arg VARIADIC (`do <a> <b>…`), allows zero args (auto-pick), and adds
+`-n <x>`. So do NOT lock the argument as a single REQUIRED positional that the
+later slices must tear up — shape it so it naturally widens to variadic/optional
+(e.g. a variadic positional that this slice happens to use with exactly one arg,
+or a structure that `do-autopick` extends rather than rewrites). The slices are
+serialised (`do-in-place` → `do-remote` → `do-autopick`) precisely so this one
+command block is never co-edited in parallel; leave it in a state the next slice
+extends cleanly.
 
 ## Acceptance criteria
 

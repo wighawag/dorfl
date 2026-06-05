@@ -219,7 +219,7 @@ deps + `cli.ts`-hot-file serialisation, ADR §10):
 | `slug-namespace-resolution` | — | 7 |
 | `do-in-place` (KEYSTONE) | isolation-strategy-seam, slug-namespace-resolution | 8, 11 |
 | `do-remote` | registry-remote, do-in-place | 9 |
-| `do-autopick` | do-in-place, autoslice-gate | 10 |
+| `do-autopick` | do-in-place, do-remote, autoslice-gate | 10 |
 | `run-daemon-reframe` (retires watch) | registry-remote | 12 |
 | `human-face-verbs` | slug-namespace-resolution | 13, 15 |
 | `agent-interactive-launch` (`needsAnswers`) | human-face-verbs | 14 |
@@ -228,11 +228,13 @@ deps + `cli.ts`-hot-file serialisation, ADR §10):
 
 The spine: `registry-remote` is the foundation (and serialises the other `cli.ts`
 edits after it); `isolation-strategy-seam` + `slug-namespace-resolution` →
-`do-in-place` → (`do-remote`, `do-autopick`); `do-autopick` also needs
-`autoslice-gate` (the PRD slicing-eligibility predicate for its PRDs-to-slice
-pool); `slug-namespace-resolution` → `human-face-verbs` →
-`agent-interactive-launch` (the last `needsAnswers`-gated, so not agent-claimable
-until the seam question is answered).
+`do-in-place` → `do-remote` → `do-autopick` (the three `do-*` slices are a SERIAL
+chain, not a fan-out: all three edit the one `.command('do')` block in `cli.ts`
+— its argument grammar — so they must not be co-edited in parallel; `do-autopick`
+also needs `autoslice-gate` for the PRD slicing-eligibility predicate);
+`slug-namespace-resolution` → `human-face-verbs` → `agent-interactive-launch`
+(the last `needsAnswers`-gated, so not agent-claimable until the seam question is
+answered).
 
 ### Implementation realities surfaced during slicing (read before building)
 
@@ -246,6 +248,13 @@ the slices encode these, but they are recorded here as durable warnings:
 - **The scan/candidate model is slice-only.** `selectCandidates`/eligibility know
   nothing of PRDs. `do-autopick`'s "slices-first then PRDs-to-slice" is TWO pools:
   the existing slice pool + a NEW PRD pool (PRD reader + `autoslice-gate` predicate).
+- **The three `do-*` slices share ONE command grammar + `do` is AUTONOMOUS.** All
+  of `do-in-place`/`do-remote`/`do-autopick` edit the single `.command('do')` block
+  (args: `<slug>` → `--remote` → variadic + `-n`), so they are a SERIAL chain, not
+  parallel. AND because `do` runs unattended (the CI command), its needs-attention
+  routing must be the AUTONOMOUS, arbiter-passed surfacing like `run` — composing
+  `performComplete` (the human path, no arbiter → no on-`main` surfacing) verbatim
+  is insufficient for `do`'s failure path; pass the arbiter or use `run`'s routing.
 - **Hub mirrors are BARE — `scan`/`status` must read `work/` from a REF, not a
   working tree.** Today `scan` reads a local CHECKOUT via
   `resolveLocalState`'s `readdirSync`. A mirror has no working tree, so

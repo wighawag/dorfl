@@ -2,7 +2,7 @@
 title: do-autopick — `do` auto-pick, multi-arg, `-n x`, slices-first priority (per-repo toggle)
 slug: do-autopick
 prd: command-surface-phase-2
-blockedBy: [do-in-place, autoslice-gate]
+blockedBy: [do-in-place, do-remote, autoslice-gate]
 covers: [10]
 ---
 
@@ -72,6 +72,12 @@ two-pool slices-first priority), not a new slice-eligibility model.
 
 - `do-in-place` — the per-item pipeline each selected item runs; the selection
   layer sits on top of it. Must exist first.
+- `do-remote` — NOT a logical dependency but a **conflict serialiser**: `do-remote`,
+  `do-autopick`, and `do-in-place` all edit the SAME `do` command definition in
+  `cli.ts` (its argument grammar). Serialise this after `do-remote` so the two are
+  never built in parallel against the same command block (per ADR §10 / the
+  file-orthogonality rule). `do-autopick` extends the grammar last (variadic args +
+  `-n`), building on whatever `do-remote` added (`--remote`).
 - `autoslice-gate` — supplies the pure PRD slicing-eligibility predicate +
   `sliceAfter` resolution the PRDs-to-slice pool is filtered by (the scan/candidate
   model is slice-only; PRD eligibility comes from the gate, not reinvented here).
