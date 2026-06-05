@@ -1,9 +1,9 @@
 ---
-name: wighawag-work-slices
+name: to-slices
 description: "Break a PRD, plan, or design doc into independently-grabbable, file-based work slices stored as markdown in a repo's work/ folder, using tracer-bullet vertical slices. Use when the user wants to turn a plan into work items, create implementation tickets as files (not an issue tracker), slice a design into AFK-grabbable units, or set up file-based work tracking for parallel agents."
 ---
 
-# wighawag-work-slices
+# to-slices
 
 Turn a plan/PRD/design doc into **tracer-bullet vertical slices**, written as one
 markdown file per slice into a repo's `work/backlog/` folder. This is the
