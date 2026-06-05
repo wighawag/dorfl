@@ -31,6 +31,7 @@ import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
+import {resolveSliceOnlyArg, SlugResolutionError} from './slug-namespace.js';
 
 interface ScanFlags {
 	config?: string;
@@ -248,6 +249,33 @@ interface RemoteFindFlags {
 	yes?: boolean;
 }
 
+/**
+ * Resolve a slice-only command's slug argument through the §3a namespace guard
+ * (`resolveSliceOnlyArg`): accept bare (= slice) + `slice:` (explicit alias),
+ * REJECT `prd:` with a clear "operates on slices, not PRDs" error. On rejection
+ * it prints the error to stderr and exits 1 (the slice-only commands never act
+ * on a PRD). An OMITTED slug (`start`/`complete`/`prompt` infer it from the
+ * branch) passes through untouched.
+ *
+ * `do` is the ONE command that spans both namespaces; it consumes the full
+ * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`
+ * slice. This guard is the slice-only half of ADR §3a.
+ */
+function resolveSliceOnlySlug(slug: string | undefined): string | undefined {
+	if (slug === undefined) {
+		return undefined;
+	}
+	try {
+		return resolveSliceOnlyArg(slug);
+	} catch (err) {
+		if (err instanceof SlugResolutionError) {
+			console.error(`error: ${err.message}`);
+			process.exit(1);
+		}
+		throw err;
+	}
+}
+
 export function buildProgram(): Command {
 	const program = new Command();
 
@@ -407,7 +435,9 @@ export function buildProgram(): Command {
 			'--ignore-not-ready',
 			'alias of --force for the readiness guard override',
 		)
-		.action(async (slug: string, flags: ClaimFlags) => {
+		.action(async (rawSlug: string, flags: ClaimFlags) => {
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+			const slug = resolveSliceOnlySlug(rawSlug) as string;
 			const result = await performClaim({
 				slug,
 				cwd: process.cwd(),
@@ -453,7 +483,9 @@ export function buildProgram(): Command {
 			'--ignore-not-ready',
 			'alias of --force for the readiness guard override',
 		)
-		.action(async (slug: string | undefined, flags: StartFlags) => {
+		.action(async (rawSlug: string | undefined, flags: StartFlags) => {
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+			const slug = resolveSliceOnlySlug(rawSlug);
 			const result = await performStart({
 				slug,
 				cwd: process.cwd(),
@@ -522,7 +554,9 @@ export function buildProgram(): Command {
 				// Disambiguate the two forms positionally: one arg ⇒ in-repo `<slug>`;
 				// two args ⇒ remote `<remote> <slug>`.
 				const remote = slug !== undefined ? remoteOrSlug : undefined;
-				const theSlug = slug !== undefined ? slug : remoteOrSlug;
+				const rawSlug = slug !== undefined ? slug : remoteOrSlug;
+				// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+				const theSlug = resolveSliceOnlySlug(rawSlug) as string;
 
 				const configPath = flags.config ?? defaultConfigPath();
 				const {dir: configuredRoot, config} = loadHumanWorktreesDir(configPath);
@@ -567,7 +601,9 @@ export function buildProgram(): Command {
 			'[slug]',
 			'the slug to render (inferred from a work/<slug> branch if omitted)',
 		)
-		.action((slug: string | undefined) => {
+		.action((rawSlug: string | undefined) => {
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+			const slug = resolveSliceOnlySlug(rawSlug);
 			const output = renderPrompt({slug, cwd: process.cwd()});
 			process.stdout.write(output);
 		});
@@ -608,7 +644,9 @@ export function buildProgram(): Command {
 			'--message <summary>',
 			'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
 		)
-		.action(async (slug: string | undefined, flags: CompleteFlags) => {
+		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+			const slug = resolveSliceOnlySlug(rawSlug);
 			const cwd = process.cwd();
 			const global = loadConfig(flags.config);
 			// Resolve the integration mode at completion time, highest first:
@@ -767,7 +805,11 @@ export function buildProgram(): Command {
 			'--arbiter <remote>',
 			'also push the transition to this arbiter remote (like the done-move)',
 		)
-		.action((slug: string, flags: ReturnFlags) => {
+		.action((rawSlug: string, flags: ReturnFlags) => {
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`. (This is
+			// the `return` verb today; the `flag-cleanup-renames` sibling slice renames
+			// it to `requeue` — the guard wiring carries over unchanged.)
+			const slug = resolveSliceOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
 			// Route the return-to-backlog re-queue THROUGH the ledger write seam's
 			// transition (same seam the needs-attention move uses), not the helper.

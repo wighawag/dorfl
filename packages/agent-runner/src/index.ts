@@ -53,9 +53,11 @@ export {
 export type {
 	LedgerBacklogItem,
 	LedgerNeedsAttentionItem,
+	PrdExistence,
 	LocalLedgerState,
 	ArbiterLedgerState,
 	ResolveLocalStateInput,
+	ResolvePrdExistenceInput,
 	ResolveArbiterStateInput,
 	ResolveMirrorStateInput,
 	LedgerReadStrategy,
@@ -78,6 +80,19 @@ export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
 
 export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, scanRepoPaths, readBacklogItems, readDoneSlugs} from './scan.js';
+
+export type {
+	SlugNamespace,
+	ParsedSlugArg,
+	ResolvedSlug,
+	ResolveSlugInput,
+} from './slug-namespace.js';
+export {
+	SlugResolutionError,
+	parseSlugArg,
+	resolveSlug,
+	resolveSliceOnlyArg,
+} from './slug-namespace.js';
 
 export type {
 	RegisteredMirror,

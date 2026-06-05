@@ -54,6 +54,22 @@ export interface LedgerBacklogItem {
 	blockedBy: string[];
 }
 
+/**
+ * The result of a PRD-existence read (ADR §3a): does a PRD named `<slug>` exist,
+ * and where. A PRD lives at `work/prd/<slug>.md`; once sliced its slicing record
+ * lives at `work/slicing/<slug>.md`. Both are consulted (either is enough). The
+ * slug is resolved from frontmatter `slug:`, falling back to the filename — the
+ * SAME shape the slice readers use.
+ */
+export interface PrdExistence {
+	/** Whether a PRD named `<slug>` exists in `work/prd/` and/or `work/slicing/`. */
+	exists: boolean;
+	/** The PRD source file, when present (`work/prd/<slug>.md`). */
+	prdFile: string | undefined;
+	/** The slicing record, when present (`work/slicing/<slug>.md`). */
+	slicingFile: string | undefined;
+}
+
 /** One needs-attention item's surface fields, as resolved from the live state. */
 export interface LedgerNeedsAttentionItem {
 	/** Filename within `work/needs-attention/` (e.g. `alpha.md`). */
@@ -93,6 +109,14 @@ export interface ArbiterLedgerState {
 export interface ResolveLocalStateInput {
 	/** The repo working-tree root whose `work/` state to resolve. */
 	repoPath: string;
+}
+
+/** What the PRD-existence resolve method needs: which repo + which slug. */
+export interface ResolvePrdExistenceInput {
+	/** The repo working-tree root whose `work/prd/`+`work/slicing/` to read. */
+	repoPath: string;
+	/** The slug to look up (matched against frontmatter `slug:`, then filename). */
+	slug: string;
 }
 
 /**
@@ -145,6 +169,19 @@ export interface LedgerReadStrategy {
 	 * mechanism the arbiter method uses for `done/`, widened to the full set).
 	 */
 	resolveMirrorState(input: ResolveMirrorStateInput): Promise<LocalLedgerState>;
+	/**
+	 * Resolve whether a PRD named `<slug>` exists in the LOCAL working tree's
+	 * `work/prd/` (the PRD source) and/or `work/slicing/` (its post-slice record).
+	 * The slug is resolved from each candidate file's frontmatter `slug:`, falling
+	 * back to the filename — the SAME shape the slice readers use.
+	 *
+	 * This is the FIRST PRD read path in the seam: `ledger-read.ts`/`scan.ts` read
+	 * only `backlog`/`done`/`needs-attention`, NEVER `work/prd/`. It is added here
+	 * so the §3a slug-namespace resolver, and later the autoslice / `do prd:` work,
+	 * share ONE PRD read path rather than each growing a bespoke scan. Synchronous
+	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
+	 */
+	resolvePrdExistence(input: ResolvePrdExistenceInput): PrdExistence;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -207,6 +244,27 @@ function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
 		});
 	}
 	return items;
+}
+
+/**
+ * Does a PRD named `slug` exist in `<repoPath>/work/<folder>/`? A PRD source file
+ * is `work/prd/*.md`; its post-slice record is `work/slicing/*.md`. We match the
+ * slug against each file's frontmatter `slug:` (falling back to the filename) —
+ * the SAME shape the slice readers use — so a renamed file whose frontmatter slug
+ * matches still resolves. Returns the matching filename, or `undefined`.
+ */
+function findPrdFileBySlug(
+	repoPath: string,
+	folder: 'prd' | 'slicing',
+	slug: string,
+): string | undefined {
+	const dir = join(repoPath, 'work', folder);
+	for (const file of listMarkdown(dir)) {
+		if (slugForFile(dir, file) === slug) {
+			return file;
+		}
+	}
+	return undefined;
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
@@ -364,6 +422,15 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		const slice = await readSliceOnArbiter(slug, arbiter, cwd, env);
 		const doneSlugs = await readDoneSlugsOnArbiter(arbiter, cwd, env);
 		return {slice, doneSlugs};
+	},
+	resolvePrdExistence({repoPath, slug}) {
+		const prdFile = findPrdFileBySlug(repoPath, 'prd', slug);
+		const slicingFile = findPrdFileBySlug(repoPath, 'slicing', slug);
+		return {
+			exists: prdFile !== undefined || slicingFile !== undefined,
+			prdFile,
+			slicingFile,
+		};
 	},
 	async resolveMirrorState({mirrorPath, ref = 'main', env}) {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed
