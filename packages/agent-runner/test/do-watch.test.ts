@@ -45,8 +45,12 @@ const ARBITER = 'arbiter';
 /**
  * An executable pi-CLI stub for the watch path. Honours `--session-dir`: it
  * EDITS a file in the worktree (so the completion commit is non-empty) and
- * writes a small session `.jsonl` event log (tool_start + assistant message_end
- * + agent_end) into the session dir — exactly what the tailer surfaces.
+ * writes a small REAL SESSION-LOG-shaped `.jsonl` into the session dir — the
+ * `{type:"message", message:{role, content[]}}` records pi's `--session-dir`
+ * persistence log actually carries (NOT the `--mode json` stream the watcher
+ * used to — wrongly — expect). A preamble record + a user turn + a toolResult
+ * are interleaved so the test proves the watcher SKIPS them and surfaces only
+ * the assistant text + tool starts. "Finished" is emitted on process exit.
  */
 function writeWatchPiStub(): string {
 	const bin = join(scratch.root, 'pi-watch-stub.sh');
@@ -65,9 +69,10 @@ function writeWatchPiStub(): string {
 		'if [ -n "$session_dir" ]; then',
 		'  mkdir -p "$session_dir"',
 		'  log="$session_dir/session.jsonl"',
-		`  printf '%s\\n' '{"type":"tool_start","tool":"edit"}' >> "$log"`,
-		`  printf '%s\\n' '{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"all set"}]}}' >> "$log"`,
-		`  printf '%s\\n' '{"type":"agent_end"}' >> "$log"`,
+		`  printf '%s\\n' '{"type":"session","id":"abc","cwd":"."}' >> "$log"`,
+		`  printf '%s\\n' '{"type":"message","message":{"role":"user","content":[{"type":"text","text":"the prompt"}]}}' >> "$log"`,
+		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"all set"},{"type":"toolCall","name":"edit","arguments":{}}]}}' >> "$log"`,
+		`  printf '%s\\n' '{"type":"message","message":{"role":"toolResult","toolName":"edit","content":[{"type":"text","text":"ok"}]}}' >> "$log"`,
 		'fi',
 		'exit 0',
 	].join('\n');

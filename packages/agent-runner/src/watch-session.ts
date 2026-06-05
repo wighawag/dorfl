@@ -3,26 +3,39 @@ import {open, type FileHandle} from 'node:fs/promises';
 import {join} from 'node:path';
 
 /**
- * The **`do --watch` observer** (slice `do-watch`, option (a)) — a READ-ONLY
- * concurrent tail of the pi session `.jsonl` event log, restoring for `do` the
- * live agent-conversation view `ar-run.sh --watch` gave.
+ * The **`do --watch` observer** (slices `do-watch` + `do-watch-session-log-format`)
+ * — a READ-ONLY concurrent tail of the pi session `.jsonl` event log, restoring
+ * for `do` the live agent-conversation view `ar-run.sh --watch` gave.
  *
  * `ar-run.sh --watch` piped `pi -p --mode json | jq` to surface the high-signal
  * events; `do` runs the agent CAPTURED through the harness seam, so that live
- * view was lost. The pi adapter already writes a session `.jsonl` event log to
- * its `--session-dir` (`piSessionDir(dir)`). This module tails THAT growing log
- * and pretty-prints the same events the `jq` filter surfaced — parity:
+ * view was lost. The pi adapter already writes a session `.jsonl` to its
+ * `--session-dir` (`piSessionDir(dir)`) — but that is pi's SESSION-PERSISTENCE
+ * log, a DIFFERENT format from the `--mode json` STREAM `ar-run.sh` piped.
  *
- *   - `tool_start`                                  → `▶ <tool>`        (cyan)
- *   - `message_end` where `message.role=="assistant"` → the assistant text
- *   - `agent_end`                                   → `✓ agent finished` (green)
- *   - everything else                               → skipped.
+ * A session-log record is `{"type":"message", "message":{role, content[]}}` (or a
+ * `session`/`model_change`/`thinking_level_change` preamble record). The earlier
+ * classifier matched the STREAM vocabulary (`tool_start`/`message_end`/`agent_end`),
+ * none of which occur in the session log — so every line fell through to skip and
+ * `do --watch` was silently a no-op. This module tails the growing session log and
+ * surfaces the same high-signal level `ar-run.sh --watch` gave, read off the
+ * SESSION-LOG shape:
  *
- * The JSONL is parsed in TS (NO `jq` — that bash dependency is part of what `do`
- * replaces). It is a PURE OBSERVER: it only READS the log; it never changes the
- * run's outcome, gate, integration, git, or exit code. Colour is honoured ONLY
- * on a TTY / when `NO_COLOR` is unset (the same rule as `output.ts`), threaded
- * in by the caller as a boolean.
+ *   - an `assistant` `message` → its `content[]` `text` parts, then `▶ <name>`
+ *     (cyan) per `content[]` `toolCall` part;
+ *   - `✓ agent finished` (green) on PROCESS EXIT — the session log has no
+ *     `agent_end` event, so the tailer emits it once on `stop()`;
+ *   - everything else (`session`/`model_change`/user messages/tool results/…) →
+ *     skipped.
+ *
+ * The classifier mirrors pi-remote's `session-pool.ts` reference parser (`type` →
+ * `role` → `content[]` block walk over `thinking`/`text`/`toolCall`, incl.
+ * `tc.name||tc.toolName` and content-as-string). The JSONL is parsed in TS (NO
+ * `jq` — that bash dependency is part of what `do` replaces). It is a PURE
+ * OBSERVER: it only READS the log; it never changes the run's outcome, gate,
+ * integration, git, or exit code. Colour is honoured ONLY on a TTY / when
+ * `NO_COLOR` is unset (the same rule as `output.ts`), threaded in by the caller
+ * as a boolean.
  */
 
 // The same conventional ANSI codes `ar-run.sh`'s jq filter emitted (cyan tool
@@ -38,85 +51,111 @@ function paint(text: string, color: boolean, code: string): string {
 }
 
 /**
- * Parse ONE pi session `.jsonl` line and format it into the high-signal line to
- * surface — or `undefined` to SKIP it (the `else empty` arm of the `jq`
- * filter). This is the pure, unit-testable core of the parity:
+ * A structural view of the pi SESSION-LOG records we classify. It mirrors the
+ * `@earendil-works/pi-coding-agent` `SessionEntry` / `SessionMessageEntry`
+ * shapes (`type:"message"` with a nested `message.role` + `message.content`) but
+ * is declared locally so the observer needs no runtime dependency on that
+ * package's (heavy) type tree — agent-runner does not otherwise depend on it.
+ * The content blocks are read defensively (like pi-remote's reference parser,
+ * which casts them via `as any`): a content part may be a `text`, a `thinking`,
+ * or a `toolCall` (whose name is `name` OR `toolName`), or the whole content may
+ * be a plain string.
+ */
+interface SessionLogRecord {
+	type?: unknown;
+	message?: {
+		role?: unknown;
+		content?: unknown;
+	};
+}
+
+/** The green `✓ agent finished` line, emitted on PROCESS EXIT (not a log event). */
+export function finishedLine(color: boolean): string {
+	return paint('✓ agent finished', color, GREEN);
+}
+
+/**
+ * Parse ONE pi SESSION-LOG `.jsonl` line and return the high-signal lines to
+ * surface — or `[]` to SKIP it. This is the pure, unit-testable classifier,
+ * mirroring pi-remote's `session-pool.ts` block walk:
  *
- *   - `tool_start`                       → `▶ <tool>` (cyan; `tool` defaults to
- *                                          `tool` when absent, like `.tool // "tool"`)
- *   - `message_end` + assistant role     → the assistant text (concatenated text
- *                                          parts, like the `jq` `.content[]` select)
- *   - `agent_end`                        → `✓ agent finished` (green)
- *   - anything else / blank / malformed  → `undefined` (skipped — never throws).
+ *   - a `{type:"message", message:{role:"assistant", content}}` record → for each
+ *     `content[]` part: a `text` part yields its text (parts concatenated into
+ *     ONE line, like the old `jq` `.content[]` select); a `toolCall` part yields
+ *     `▶ <name>` (cyan; `name` OR `toolName`, defaulting to `tool`); a `thinking`
+ *     part (and anything else) is skipped. A plain-string `content` yields one
+ *     text line.
+ *   - everything else (`session`/`model_change`/`thinking_level_change`, user
+ *     messages, tool results, blank/malformed lines) → `[]` (skipped).
+ *
+ * "Finished" is NOT a record here — the session log has no `agent_end`; the
+ * tailer emits {@link finishedLine} on process exit instead.
  *
  * Malformed JSON is skipped (not thrown): a partially-written trailing line in a
  * growing log must not crash the observer.
  */
-export function formatWatchEvent(
-	line: string,
-	color: boolean,
-): string | undefined {
+export function formatWatchEvent(line: string, color: boolean): string[] {
 	const trimmed = line.trim();
 	if (trimmed === '') {
-		return undefined;
+		return [];
 	}
 	let event: unknown;
 	try {
 		event = JSON.parse(trimmed);
 	} catch {
 		// A half-written trailing line in a growing log — skip, never throw.
-		return undefined;
+		return [];
 	}
 	if (typeof event !== 'object' || event === null) {
-		return undefined;
+		return [];
 	}
-	const e = event as Record<string, unknown>;
-	switch (e.type) {
-		case 'tool_start': {
-			const tool =
-				typeof e.tool === 'string' && e.tool !== '' ? e.tool : 'tool';
-			return paint(`▶ ${tool}`, color, CYAN);
-		}
-		case 'message_end': {
-			const message = e.message as Record<string, unknown> | undefined;
-			if (!message || message.role !== 'assistant') {
-				return undefined;
-			}
-			const text = assistantText(message.content);
-			return text === '' ? undefined : text;
-		}
-		case 'agent_end':
-			return paint('✓ agent finished', color, GREEN);
-		default:
-			return undefined;
+	const record = event as SessionLogRecord;
+	if (record.type !== 'message') {
+		return [];
 	}
+	const message = record.message;
+	if (!message || message.role !== 'assistant') {
+		// Skip user turns, tool results, and any non-assistant message.
+		return [];
+	}
+	return assistantLines(message.content, color);
 }
 
 /**
- * Extract the assistant text from a `message_end` `message.content`, mirroring
- * the `jq` `(.message.content[]? | select(.type=="text") | .text)` projection:
- * concatenate the `text` of every `{type:"text"}` part. Tolerates a plain-string
- * content (some shapes carry the text directly) and non-array/absent content.
+ * Walk an assistant `message.content` into the lines to surface, mirroring
+ * pi-remote's `session-pool.ts` reference parser. The `text` parts are
+ * concatenated into a SINGLE leading line (so a multi-part assistant turn reads
+ * as one sentence, as `ar-run.sh --watch` showed it); each `toolCall` part adds a
+ * `▶ <name>` line after it. A plain-string content yields the single text line.
+ * `thinking` parts and any other block type are skipped.
  */
-function assistantText(content: unknown): string {
+function assistantLines(content: unknown, color: boolean): string[] {
 	if (typeof content === 'string') {
-		return content;
+		return content === '' ? [] : [content];
 	}
 	if (!Array.isArray(content)) {
-		return '';
+		return [];
 	}
-	const parts: string[] = [];
+	const lines: string[] = [];
+	const textParts: string[] = [];
 	for (const part of content) {
-		if (
-			typeof part === 'object' &&
-			part !== null &&
-			(part as Record<string, unknown>).type === 'text' &&
-			typeof (part as Record<string, unknown>).text === 'string'
-		) {
-			parts.push((part as Record<string, unknown>).text as string);
+		if (typeof part !== 'object' || part === null) {
+			continue;
 		}
+		const p = part as Record<string, unknown>;
+		if (p.type === 'text' && typeof p.text === 'string') {
+			textParts.push(p.text);
+		} else if (p.type === 'toolCall') {
+			const name =
+				(typeof p.name === 'string' && p.name !== '' && p.name) ||
+				(typeof p.toolName === 'string' && p.toolName !== '' && p.toolName) ||
+				'tool';
+			lines.push(paint(`▶ ${name}`, color, CYAN));
+		}
+		// `thinking` and any other block type are skipped.
 	}
-	return parts.join('');
+	const text = textParts.join('');
+	return text === '' ? lines : [text, ...lines];
 }
 
 /** The session `.jsonl` file extension pi writes its event log under. */
@@ -173,8 +212,11 @@ const DEFAULT_POLL_INTERVAL_MS = 100;
  *
  * It is a pure observer: nothing it does feeds back into the run. `start()`
  * begins polling; `stop()` performs one final drain (to catch events written
- * just before the agent exited) and releases the file handle. Created and driven
- * by `do --watch` ALONGSIDE the (async) agent launch.
+ * just before the agent exited), emits the `✓ agent finished` line ONCE (the
+ * session log has no `agent_end` — process exit IS the finish signal), and
+ * releases the file handle. Created and driven by `do --watch` ALONGSIDE the
+ * (async) agent launch; `stop()` runs when that launch returns (i.e. the agent
+ * process exited).
  */
 export class SessionTailer {
 	private readonly sessionDir: string;
@@ -188,6 +230,7 @@ export class SessionTailer {
 	private timer: NodeJS.Timeout | undefined;
 	private polling = false;
 	private stopped = false;
+	private finishedEmitted = false;
 
 	constructor(options: SessionTailerOptions) {
 		this.sessionDir = options.sessionDir;
@@ -210,18 +253,27 @@ export class SessionTailer {
 
 	/**
 	 * Stop tailing: one final drain (events written right before the agent exited
-	 * must still be surfaced), then release the handle. Idempotent.
+	 * must still be surfaced), emit the `✓ agent finished` line ONCE (process exit
+	 * is the finish signal — the session log carries no `agent_end`), then release
+	 * the handle. Idempotent: a second `stop()` re-emits nothing.
 	 */
 	async stop(): Promise<void> {
+		const wasStopped = this.stopped;
 		this.stopped = true;
 		if (this.timer !== undefined) {
 			clearInterval(this.timer);
 			this.timer = undefined;
 		}
-		await this.drain();
+		if (!wasStopped) {
+			await this.drain();
+		}
 		if (this.handle !== undefined) {
 			await this.handle.close();
 			this.handle = undefined;
+		}
+		if (!this.finishedEmitted) {
+			this.finishedEmitted = true;
+			this.sink(finishedLine(this.color));
 		}
 	}
 
@@ -267,8 +319,9 @@ export class SessionTailer {
 		while (newlineIndex !== -1) {
 			const line = this.pending.slice(0, newlineIndex);
 			this.pending = this.pending.slice(newlineIndex + 1);
-			const formatted = formatWatchEvent(line, this.color);
-			if (formatted !== undefined) {
+			// A single record may surface MULTIPLE lines (assistant text + each of
+			// its tool starts), or none (skipped record types).
+			for (const formatted of formatWatchEvent(line, this.color)) {
 				this.sink(formatted);
 			}
 			newlineIndex = this.pending.indexOf('\n');
