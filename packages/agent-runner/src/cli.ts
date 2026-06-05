@@ -23,6 +23,8 @@ import {
 	persistHumanWorktreesDir,
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
+import {performDo} from './do.js';
+import {createHarness} from './pi-harness.js';
 import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
 import {runVerify} from './verify.js';
@@ -204,6 +206,17 @@ interface CompleteFlags {
 	skipVerify?: boolean;
 	type?: string;
 	message?: string;
+}
+
+interface DoFlags {
+	config?: string;
+	arbiter?: string;
+	merge?: boolean;
+	propose?: boolean;
+	agentCmd?: string;
+	model?: string;
+	harness?: string;
+	piBin?: string;
 }
 
 interface GcFlags {
@@ -680,6 +693,109 @@ export function buildProgram(): Command {
 				note: (message) => console.error(`>> ${message}`),
 				// The propose next-step block is printed verbatim (no `>> ` prefix)
 				// so its blank lines + heading stand out as the human call-to-action.
+				noteBlock: (message) => console.error(message),
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			}
+			process.exit(result.exitCode);
+		});
+
+	program
+		.command('do')
+		.description(
+			'The per-repo, in-place WORKER (the CI command): in the CURRENT checkout, refuse on a dirty tree, then claim + onboard onto work/<slug>, run the agent, gate, integrate in-place, and exit. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path, not yet wired). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh. (do --remote is the do-remote slice; auto-pick / -n is do-autopick.)',
+		)
+		// EXTENSIBLE argument grammar (the three do-* slices grow this one block): a
+		// single named item here, optional so do-autopick can widen it to variadic /
+		// auto-pick without tearing it up. This slice uses EXACTLY one arg.
+		.argument(
+			'[slug]',
+			'the item to do: bare (= the slice), slice:<slug>, or prd:<slug> (slice the PRD)',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
+		)
+		.option(
+			'--merge',
+			'integrate in merge mode this invocation (mutually exclusive with --propose; overrides config)',
+		)
+		.option(
+			'--propose',
+			'integrate in propose mode this invocation (default; mutually exclusive with --merge; overrides config)',
+		)
+		.option('--agent-cmd <cmd>', 'command to run the agent on the slice prompt')
+		.option(
+			'--model <id>',
+			'model the agent runs on (routing intent; resolved flag > env > per-repo > global > default)',
+		)
+		.option(
+			'--harness <adapter>',
+			'harness adapter that launches the agent: null (default, shells out to agentCmd) or pi (the pi CLI)',
+		)
+		.option(
+			'--pi-bin <path>',
+			'pi CLI binary the pi harness invokes (default: pi on PATH)',
+		)
+		.action(async (rawSlug: string | undefined, flags: DoFlags) => {
+			if (rawSlug === undefined) {
+				// Auto-pick (no arg) is the do-autopick slice; this slice is the
+				// single-named-item, in-place path only.
+				console.error(
+					'error: `do` needs an item to do (a <slug>). Auto-pick (no arg) ' +
+						'is not yet wired (the do-autopick slice).',
+				);
+				process.exit(1);
+			}
+			const cwd = process.cwd();
+			const global = loadConfig(flags.config);
+			// Resolve the integration mode at integrate-time, highest first:
+			//   --merge/--propose flag > per-repo .agent-runner.json > global > default.
+			// (Same chain `complete` uses — `do` is the autonomous twin.)
+			let flagMode;
+			try {
+				flagMode = integrationFromFlags(flags);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
+			const resolved = resolveRepoConfig({
+				repoPath: cwd,
+				global,
+				flags: flagMode ? {integration: flagMode} : {},
+			});
+			if (resolved.message) {
+				console.error(`>> ${resolved.message}`);
+			}
+			const config = resolved.config;
+			// The null adapter shells out to agentCmd, so it is required there; the
+			// pi adapter invokes the pi CLI directly and does not consume agentCmd.
+			if (config.harness !== 'pi' && config.agentCmd.trim() === '') {
+				console.error(
+					'error: no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
+				);
+				process.exit(1);
+			}
+			const harness = createHarness({
+				harness: config.harness,
+				piBin: config.piBin,
+			});
+			const result = await performDo({
+				arg: rawSlug,
+				cwd,
+				arbiter: flags.arbiter ?? config.defaultArbiter,
+				integration: config.integration,
+				verify: config.verify,
+				provider: config.provider,
+				harness,
+				agentCmd: config.agentCmd,
+				model: config.model,
+				color: shouldUseColor(process.stdout),
+				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),
 			});
 			if (result.exitCode !== 0) {

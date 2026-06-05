@@ -5,7 +5,20 @@
 #   claim+onboard (start) -> generate prompt -> run agent (pi -p) -> gate+integrate
 #   (complete) -> tidy the local work branch.
 #
-# This is the MANUAL equivalent of what `agent-runner run --once` will automate
+# SUPERSEDED BY `agent-runner do <slug>` (the in-place worker — THE CI COMMAND).
+# As of the `do-in-place` slice, `do <slug>` IS this script, in code: it refuses
+# on a dirty tree, then composes start -> (autonomous prompt-fed harness run) ->
+# complete IN THE CURRENT CHECKOUT, then exits. `do --propose` (the default) is
+# the documented equivalent of `./ar-run.sh <slug> --propose`; `do --merge`
+# matches `--merge`. (`do` additionally surfaces a stuck run ON THE ARBITER main,
+# which this script does not — a strict improvement for unattended/CI use.)
+#
+# This script is KEPT (not deleted) as the maintainer's live, battle-tested
+# manual driver while `do` proves out and the rest of phase 2 lands; removing it
+# is a maintainer-owned follow-up cleanup, not an automatic side-effect. Prefer
+# `agent-runner do <slug>` for new use.
+#
+# This is the MANUAL equivalent of what `agent-runner do <slug>` now automates
 # (claim -> isolated agent -> acceptance gate -> integrate). It runs in this repo
 # (the monorepo whose `packages/agent-runner` implements the commands).
 #

@@ -23,6 +23,11 @@ const RACE_SENSITIVE = [
 	'test/start.test.ts',
 	'test/work-on.test.ts',
 	'test/run.test.ts',
+	// `do <slug>` drives real git against a --bare arbiter, runs in-process
+	// two-doer races, AND writes main (the autonomous needs-attention surfacing);
+	// keep it out of file-parallel pressure so the claim/main-CAS stays
+	// deterministic (same reasoning as start/run/needs-attention-surface).
+	'test/do.test.ts',
 	// Drives real git against a --bare arbiter AND writes main (surface-on-main
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.

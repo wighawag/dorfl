@@ -159,6 +159,9 @@ export type {
 } from './complete.js';
 export {performComplete} from './complete.js';
 
+export type {DoOutcome, DoResult, DoAgentRunner, DoOptions} from './do.js';
+export {performDo} from './do.js';
+
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {
 	encodeRepoKey,

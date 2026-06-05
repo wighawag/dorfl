@@ -107,6 +107,21 @@ export interface CompleteOptions {
 	 * `openPr` is injected (the legacy bridge wins). `merge` mode ignores it.
 	 */
 	provider?: ReviewProviderName;
+	/**
+	 * Surface a needs-attention bounce ON THE ARBITER (the AUTONOMOUS variant of
+	 * the failure path). When set, the two FAILURE routings (`gate-failed` /
+	 * `rebase-conflict`) pass this arbiter remote into the ledger write seam's
+	 * `applyNeedsAttentionTransition`, which (mode M) cherry-picks the move-only
+	 * commit onto the arbiter's `main` — making the stuck state observable to
+	 * `scan`/`status`/another machine. This is exactly what `run`'s `runOneItem`
+	 * does (it passes `arbiter: job.arbiterRemote`).
+	 *
+	 * Unset (the default) keeps `complete`'s HUMAN behaviour: route LOCALLY only
+	 * (no on-`main` surfacing) — a human is right there, so no cross-machine
+	 * surfacing is needed. The unattended `do` worker (the CI command) sets this
+	 * so a stuck CI run is NOT invisible.
+	 */
+	surfaceArbiter?: string;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -283,6 +298,10 @@ async function runComplete(
 				cwd,
 				slug,
 				reason,
+				// Autonomous caller (`do`) passes the arbiter so the stuck state
+				// surfaces on `main` (cross-machine visible); the human `complete`
+				// leaves it unset → local-only routing.
+				arbiter: options.surfaceArbiter,
 				env,
 				note,
 			});
@@ -346,6 +365,10 @@ async function runComplete(
 			cwd,
 			slug,
 			reason,
+			// Autonomous caller (`do`) passes the arbiter so the conflict surfaces
+			// on `main` (cross-machine visible); the human `complete` leaves it
+			// unset → local-only routing.
+			arbiter: options.surfaceArbiter,
 			env,
 			note,
 		});
