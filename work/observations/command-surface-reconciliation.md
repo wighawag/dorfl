@@ -19,9 +19,20 @@ spotted: 2026-06-05
 
 1. **Reconcile-the-docs** (the ADR + CONTEXT rewrite are done; the PRD reshapes
    below are NOT yet) — make the spec coherent BEFORE building.
-2. **Build the new system** — slices implementing the new surface.
+2. **Build the new system** — slices implementing the new surface. **The "Current
+   CODE that drifts" list below IS the phase-2 build inventory** (it doubles as
+   phase-3's drift checklist). Phase 2 = write a PRD from
+   `docs/adr/command-surface-and-journeys.md` and slice it.
 3. **Reconcile-the-code** — drift-check existing slices/code against the new code,
    then resume feature work.
+
+**Sequencing constraint for phase 2 (important):** the backlog slices
+`autoslice-command` and `autoslice-confidence` are reshaped to build against the
+**`do`** command — which does NOT exist until phase 2 builds it. So they are
+effectively blocked on the `do` slice; do NOT claim them before `do` lands.
+`autoslice-gate` + `autoslice-lock` are unaffected (pure logic / the seam CAS) and
+buildable independently. The `watch` backlog slice references the deleted `watch`
+verb (folds into `run`) and must be reshaped/retired in phase 2 too.
 
 ## Current CODE that drifts (phase 3 — after build)
 
