@@ -130,17 +130,40 @@ dogfooding itself (it tracks its own work in its own `work/`).
   (`github` via `gh`, `none` = push + open-manually). Push is the safety-bearing
   action. (ADR §6.)
 
-## The two faces (commands)
+## The faces (commands) — see `docs/adr/command-surface-and-journeys.md`
 
-- **Human loop:** `scan` (cross-repo queue) → `start` (claim + onboard in the
-  CURRENT checkout) → `prompt` (emit the work-agent prompt) → build → `verify` →
-  `complete` (gate + done-move + commit + integrate). **`work-on`** is the
-  parallel-work variant of `start`: instead of onboarding the current checkout it
-  claims + creates an isolated **human worktree** in a human-friendly location
-  (so several slices can be open at once); in-repo and remote forms differ only in
-  where that worktree lives.
-- **Autonomous:** `run --once` (claim N eligible, run agents in isolation,
-  integrate, stop) and `watch` (bounded loop over `run --once` with safety rails).
+Organised by two axes: **target** (the registry / one repo) × **doer** (agent /
+human). The full model + rationale is the ADR; this is the glossary view.
+
+- **Registry (what gets watched):** **`remote add <url> [--local]`** (register a
+  target → create its hub mirror; `--local` = a `--bare` arbiter), `remote rm`,
+  `remote ls`, **`remote find <folder>`** (discover `work/`-participating repos,
+  toggle-add). The registered set IS the set of hub mirrors — there is no `roots`
+  or `remotes` config field. Key = `host/org/name`; `remote add` guards against
+  registering one project under two transports.
+- **Autonomous — agent does it:**
+  - **`run`** — the cross-repo, **parallel** daemon: scan the registry, claim up
+    to `maxParallel`, run agents concurrently in job worktrees, integrate, loop
+    forever (future service). **`run --once`** = one tick (debug/test the daemon;
+    NOT the CI path).
+  - **`do`** — the per-repo, in-place **worker**: claim+build+integrate in ONE
+    repo, then exit. `do <slug>` / `do <prd>` (slice it) / `do` (auto-pick) /
+    `do <slug>…` / `do -n <x>`; `--propose` (default) / `--merge`. **This is the
+    CI command.** In a checkout it works in-place; `do --remote <r>` materialises a
+    hub mirror + job worktree in the agents' area.
+- **Human — do work yourself (optionally with your AI):**
+  - **In-place** (takes over the current checkout, for when you need its real
+    `.env`): **`start <slug>`** (claim + switch; `--agent` launches the harness)
+    → build → **`complete`** (gate + done-move + integrate). **`resume <slug>`**
+    re-engages an in-progress item. `claim`/`prompt` are low-level.
+  - **Parallel** (isolated worktree, doesn't touch your clone): **`work-on
+    <slug>` / `work-on --remote <r> <slug>`** — claim + worktree in the **human
+    area**, `cd`s you in; `--copy` brings gitignored files (e.g. `.env`),
+    `--agent` launches the harness. The human counterpart to `do`.
+- **Ops:** **`scan`** (cross-repo queue — fetches the truth, warns+falls back
+  offline), **`status`** (running/stuck/cleanup dashboard), **`requeue <slug>`**
+  (needs-attention → backlog; the defer-don't-finish verb), **`gc`** (reap job
+  worktrees, never mirrors), **`verify`** (run the gate standalone).
 
 ## Invariants (do not relitigate — see ADRs)
 
@@ -149,6 +172,17 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **Status = folder, never a field** (conflict-safety). One file per item; no
   shared index; content slugs, never counters.
 - Conflicts: **rebase-or-abort, never auto-resolve** → needs-attention. (ADR §10.)
+- **Storage areas map onto the doer axis:** agent execution → agents' area
+  (`~/.agent-runner/`, hub mirrors + job worktrees); a human doing the work →
+  human area (`humanWorktreesDir`, never under `~/.agent-runner/`). The
+  secrets-isolation boundary. (`command-surface-and-journeys` §2.)
+- **adopt = skill, execute = command:** adopting the contract (setup, migrate,
+  the slicing/PRD methodology) is protocol-layer (a SKILL, runner-agnostic);
+  executing work (claim, `run`, `do`, integration) is implementation-layer (a
+  command). Reinforces ADR §9. (`command-surface-and-journeys` §8.)
+- **`scan`'s offline guarantee is RETIRED:** in the registry model the remote is
+  the source of truth, so `scan`/`status` fetch-first (warn + fall back offline).
+  (Supersedes the older roots-local "scan is always offline" framing.)
 
 ## House style
 

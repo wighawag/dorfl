@@ -1,0 +1,238 @@
+---
+title: Command surface & user journeys — the coherent two-face model (registry, run/do, human face, adopt=skill/execute=command)
+status: accepted
+created: 2026-06-05
+decided: 2026-06-05
+supersedes:
+superseded_by:
+---
+
+# ADR: command surface & user journeys
+
+> **STATUS: accepted.** A full journey-model design pass (2026-06-05) reconciled a
+> command surface that had grown slice-by-slice into an incoherent set. This ADR
+> is the durable source of truth for the command model; CONTEXT.md "The faces
+> (commands)" is the short glossary view. It **mandates a reconciliation** of the
+> existing command code + the `runner-in-ci` / `auto-slice` PRDs/slices to this
+> model (see "Reconciliation cadence"); those `work/observations/` notes track the
+> drift this ADR deliberately introduces.
+
+## The model in one sentence
+
+Agents claim from file/folder backlogs across many **registered** repos and build
+them in isolation while a human does other things; a human can also do the same
+work themselves (in-place, or in parallel worktrees) — host-agnostic,
+offline-capable, never disturbing a human's working clone.
+
+## Two organizing axes (everything hangs off these)
+
+- **Target:** *the registry* (all hub mirrors, cross-repo) **vs** *one repo* (the
+  current checkout, or one `--remote`).
+- **Doer:** *agent* (the full pipeline runs unattended) **vs** *human* (you build,
+  optionally with your own AI).
+
+These two axes map cleanly onto the storage areas (below) and the command set.
+
+## 1. The registry = the set of hub-mirror folders (no config list)
+
+There is **no `roots` and no `remotes` config field.** The registered set of
+targets IS the set of hub mirrors on disk under `<workspacesDir>/repos/`.
+
+- **`remote add <url> [--local]`** — register a target → create its hub mirror.
+  `--local` registers a local `--bare` arbiter (offline). The hub mirror's
+  `origin` URL is its self-description (scheme gives transport: `git@`/`https`/
+  `ssh` ⇒ remote host; `file://` ⇒ local-bare) — **no separate stamp needed.**
+- **`remote rm <key|url>`** — delete the mirror. The **only** mirror deleter;
+  `gc` NEVER reaps mirrors (mirrors are precious-ish registry, reconstructible
+  from their origin but not garbage-collected).
+- **`remote ls`** — enumerate mirrors + each origin URL/transport.
+- **`remote find <folder>`** — discover **`work/`-participating** repos in a
+  folder (reuse `isParticipatingRepo`; only repos with a populated `work/backlog/`),
+  find-skills-style multi-select toggle, `remote add` each chosen.
+
+**Key = `host/org/name`** (today's `encodeRepoKey`, unchanged): collapses
+ssh/https/scp for one repo onto one mirror (correct), keeps different hosts/projects
+distinct (no cross-project corruption). **`remote add` guards on the full
+host/org/name identity:** adding the same project under a *different transport*
+(e.g. a `--local` arbiter for a repo already registered remotely) → **error naming
+the existing transport** (read from the existing mirror's origin URL), unless
+`--force`. This implements the anti-stranding guard from
+`work/observations/hub-mirror-key-ignores-transport.md`.
+
+**Replaces/deletes:** `roots` field, `remotes` field, `arbiter init` (→ `remote
+add --local`), `arbiter status` (→ `status`).
+
+## 2. Storage areas map onto the doer axis (the safety line)
+
+- **Agents' area `~/.agent-runner/`** (config `workspacesDir`) — hub mirrors +
+  **job worktrees**. Used by every AGENT execution (`run`, and `do --remote`).
+- **Human area `humanWorktreesDir`** (NEVER under `~/.agent-runner/`) — human
+  worktrees. Used ONLY by `work-on` (the human doing the work). This is the
+  secrets-isolation boundary: a human's `--copy`'d `.env` never lands in an agent
+  context.
+
+**The mapping is exact: human-does-it → human area; agent-does-it → agents' area
+or in-place.** This is why `do` (agent) never uses the human area.
+
+## 3. The autonomous face — `run` (daemon) and `do` (worker)
+
+A sharp boundary, NOT two flavours of one thing:
+
+- **`run`** — the **cross-repo, parallel daemon**. Scans the whole registry,
+  claims up to `maxParallel` (`perRepoMax` per repo), runs agents **concurrently**
+  in job worktrees (mirror + N worktrees), integrates, **loops forever** (the
+  future system service). Its reason to exist is *cross-repo discovery +
+  concurrency* — nothing else provides those.
+  - **`run --once`** — one tick then stop. A **debug/test affordance** on the
+    daemon (NOT the CI path). Only meaningful because of cross-repo + parallelism;
+    on a single repo with `maxParallel: 1` it degenerates toward `do`.
+- **`do`** — the **per-repo, in-place worker**. Claims + builds + gates +
+  integrates in ONE repo, then **exits**. Sequential. This is **the CI command**
+  (CI has a checkout, is one repo, is one triggered invocation, exits) AND a local
+  one-off worker.
+  - `do <slug>` — that one named slice. `do <prd>` — slice that PRD (slicing is
+    work too). `do` (no arg) — auto-pick one eligible thing. `do <slug> <slug> …`
+    — those, in sequence. `do -n <x>` — x eligible things, in sequence.
+  - **`--propose` (default) / `--merge`.** Propose (PR) is the CI norm.
+  - **Isolation strategy by form:** `do <slug>` in a checkout works **in-place**
+    (the checkout / CI container IS the isolation — no mirror). `do --remote <r>`
+    (no checkout) materialises a **hub mirror + job worktree in the agents' area**
+    — the SAME isolation `run` uses (agent execution → agents' area, never the
+    human area).
+  - **Auto-slice priority within a tick:** eligible **slices first, then PRDs to
+    slice** (drain ready work before creating more), with a per-repo toggle to
+    flip it.
+
+CI uses **`do`** (wired by the future `install-ci`), never `run --once`.
+
+## 4. The human face — do work yourself (optionally with your AI)
+
+Two sub-modes, by where the work happens:
+
+- **In-place (takes over the current checkout)** — for when you need the repo's
+  real `.env`/keys to test:
+  - **`start <slug>`** — claim (if needed) + switch the current checkout to
+    `work/<slug>`. **`--agent`** also launches the configured harness interactively
+    on the prompt (you still `complete`). The headline "begin work here".
+  - **`resume <slug>`** — its own verb: re-engage an already-in-progress item in
+    the current checkout. (`start --resume` kept as a hidden alias for muscle
+    memory; the documented surface is `start` = begin, `resume` = continue.)
+  - **`complete [<slug>]`** — gate + done-move + commit + rebase + integrate.
+    `--merge`/`--propose`, `--no-switch`; advanced: `--skip-verify` (human-only
+    escape hatch, loud), `--type`, `--message`.
+  - **`claim <slug>`** — low-level CAS only (no onboarding). Advanced/plumbing.
+  - **`prompt <slug>`** — emit the agent prompt. Advanced/plumbing.
+- **Parallel (isolated worktree, doesn't touch your clone):**
+  - **`work-on <slug>` / `work-on --remote <r> <slug>`** — claim + create a
+    worktree in the **human area**, and `cd` you in by default (via the shell
+    wrapper; `--print-dir` is that wrapper's plumbing). Auto-`remote add`s an
+    unregistered `--remote`. `--copy <patterns>` copies named gitignored files
+    (e.g. `.env`) into the worktree (copy, not symlink; `--copy-from` in the remote
+    form). **`--agent`** launches the harness. The human counterpart to `do`.
+
+**Symmetry (the coherence test, and it holds):**
+
+| | one slice/repo | whole registry |
+| --- | --- | --- |
+| agent does it | `do` (in-place / `--remote` job worktree) | `run` / `run --once` |
+| human does it (parallel) | `work-on` | — |
+| human does it (in-place) | `start` (+`--agent`) / `resume` | — |
+
+`do` ↔ `work-on` read as "it does it / I work on it", same target resolution
+(bare = current repo; `--remote` = anywhere). The human has no cross-repo verb (a
+human works one thing at a time; the runner is the parallel one). Correct.
+
+## 5. Ops / lifecycle
+
+- **`scan`** — cross-repo backlog queue. **Fetches the truth** (the remote is the
+  source of truth in the registry model); on a failed fetch it falls back to
+  last-known and **warns**. (This DROPS the old "scan is always offline"
+  invariant — that was the roots-local model; superseded here.)
+- **`status`** — operational dashboard (running/stuck/cleanup). Fetches. Folds in
+  the old `arbiter status`.
+- **`requeue <slug>`** (renamed from `return`) — move `needs-attention/ → backlog/`
+  to retry later. The **defer-don't-finish** verb; its pair is `complete` (fixed
+  it → finish) vs `requeue` (giving up/deferring → back to the queue).
+- **`gc`** — reap job WORKTREES via the provable predicate (never mirrors).
+  `--force` (requires `--yes`) discards un-saved work — the one genuinely
+  destructive `--force` in the CLI.
+- **`verify`** — run the per-repo acceptance gate standalone.
+
+## 6. Mirror freshness (settled)
+
+Mirrors sync **lazily, on every operation that fetches** — there is no
+push-triggered or background sync (git has no push notification; a webhook would
+be host-specific, breaking host-agnosticism). Crucially, **every worktree (agent
+job, human `work-on`, in-place `start`) is cut from a freshly-fetched `main`** —
+the fetch is baked into worktree creation, so a worktree is never on stale code.
+`scan`/`status` fetch-first. Freshness = "as of the last command that fetched";
+the claim CAS is the truth for contention at the moment of action.
+
+(The two fetch refspecs are load-bearing and must NOT be "simplified" away:
+`ensureMirror` does a pruning mirror-fetch on first creation; `fetchMirrorMain`
+does a main-only fetch on reuse, so it never deletes live worktrees' `work/<slug>`
+branches.)
+
+## 7. Cleanup deltas (flag/name hygiene applied in this pass)
+
+- **`--by` removed** (claim/start/work-on): the `claimed_by` frontmatter field was
+  removed (git history is the claim ledger); the claimer already shows in the
+  claim commit + git committer identity. Reinstate only if `claimed_by` returns.
+- **Readiness override = `--ignore-not-ready` only.** Drop the `--force` *spelling*
+  on claim/start/work-on (it merely overrides a readiness warning). **`--force` is
+  reserved for the genuinely destructive `gc --force`** — different danger levels
+  must not share a flag name.
+- **`return` → `requeue`** (clearer; names the defer action).
+- **`resume`** is its own verb; `start --resume` a hidden alias.
+- **Advanced/plumbing tier** (kept, de-emphasised in help): `claim`, `prompt`,
+  `verify`, `gc`, `remote rm`, and the flags `--skip-verify`/`--type`/`--message`/
+  `--copy`/`--print-dir`. **Headline tier:** `run`, `do`, `work-on`, `start`,
+  `complete`, `scan`, `status`, `remote add`/`ls`/`find`.
+
+## 8. The deep principle: adopt = skill, execute = command
+
+A clean line the whole surface is checked against, and a reinforcement of ADR §9
+(the `work/` contract + claim protocol is a **runner-agnostic protocol**;
+`agent-runner` is ONE implementation):
+
+- **Adopting the contract** (set up a repo, migrate from another system, the
+  slicing/PRD methodology) is **protocol-layer → a SKILL** (tool-agnostic; anyone
+  can follow it with zero `agent-runner` installed). This is why `to-slices`,
+  `to-prd`, and the future `setup`/`migrate` are SKILLS.
+- **Executing work** (claim CAS, the `run` loop, `do`, isolation, integration) is
+  **implementation-layer → a COMMAND.**
+
+Corollary for any future *checking/diagnostic* tooling (e.g. a possible `doctor`):
+the **core check must stay harness-agnostic** (the contract surface: `work/`
+folders, `CONTEXT.md`+name, valid config, a registered arbiter, a runnable gate).
+**Skill *location/discoverability* is harness-specific** (pi reads
+`~/.agents/skills/`; another harness reads elsewhere) → it must be **delegated to
+the harness adapter via the §5 seam**, never hardcoded. The harness seam is the
+boundary for ALL harness-specific knowledge, not just agent invocation. (A
+`doctor` command is NOT decided — see the future-items note; until/unless we add
+it, clear docs listing required vs recommended skills suffice.)
+
+## Reconciliation cadence (mandated by accepting this ADR)
+
+This ADR deliberately makes the current code + some PRDs/slices drift. Resolve in
+THREE phases, in order:
+
+1. **Reconcile-the-docs (this pass):** this ADR + the CONTEXT rewrite + reshape the
+   affected PRDs/slices to this model — so the spec is coherent BEFORE building.
+2. **Build the new system:** slices implementing the new surface (registry/`remote`,
+   `run`/`do` split, renames, in-place isolation strategy, the deltas).
+3. **Reconcile-the-code:** apply the drift check (WORK-CONTRACT "Drift is a
+   needs-attention signal") to confirm existing slices/code match the new code,
+   then resume feature work.
+
+## Consequences
+
+- The surface becomes coherent: one registration model, consistent target
+  resolution (`<slug>` = current repo; `--remote` = anywhere), clean agent/human
+  symmetry, `ar-run.sh` dies into `do`, a single deletion sweep.
+- It **invalidates assumptions** in `runner-in-ci` (which assumed CI calls `run
+  --once` against a registered remote — wrong; CI = `do`) and `auto-slice` (the
+  `slice <prd>` command is subsumed by `do <prd>` + the `run`/`do` auto-slice
+  step). These need the phase-1 reshape (tracked as observations).
+- Future protocol-layer items (`setup`, `migrate` skills) and the uncertain
+  `doctor` command are captured separately, NOT built in this pass.
