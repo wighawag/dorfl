@@ -28,6 +28,11 @@ const RACE_SENSITIVE = [
 	// keep it out of file-parallel pressure so the claim/main-CAS stays
 	// deterministic (same reasoning as start/run/needs-attention-surface).
 	'test/do.test.ts',
+	// `do --watch` drives real git against a --bare arbiter, writes main, AND
+	// launches a stubbed pi (async spawn) whose session .jsonl is tailed
+	// concurrently; keep it out of file-parallel pressure for the same reason as
+	// do.test.ts (deterministic claim/main-CAS).
+	'test/do-watch.test.ts',
 	// Drives real git against a --bare arbiter AND writes main (surface-on-main
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
