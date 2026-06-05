@@ -164,11 +164,12 @@ protocol-adoption concern (those stay skills).
 16. As the maintainer, I want `return` renamed to `requeue`, so that the
     defer-don't-finish verb names its action (its pair: `complete` = fixed it,
     `requeue` = deferring back to the queue).
-17. As the maintainer, I want `--by` removed from claim/start/work-on (and the
-    `(by ...)` suffix dropped from the claim commit subject), so that the claimer
-    is recorded by git identity (where it belongs) rather than stuffed into the
-    commit message header; the readback (`claimedByFromCommit`) reads the commit's
-    git identity instead.
+17. As the maintainer, I want `--by` AND the whole `claimedBy` concept removed from
+    claim/start/work-on (the flag, the `(by ...)` claim-commit-subject suffix, and
+    the `claimedByFromCommit` readback), so that the claimer lives in git history
+    (read with `git log`) rather than in our commit-message header or a bespoke
+    `claimedBy` abstraction; the in-progress refusal message just points at
+    `git log`.
 18. As the maintainer, I want the readiness override spelled ONLY
     `--ignore-not-ready` (dropping the `--force` spelling on claim/start/work-on),
     so that `--force` is reserved for the genuinely destructive `gc --force` —
@@ -252,11 +253,14 @@ the slices encode these, but they are recorded here as durable warnings:
   done + needs-attention) from the mirror's `main` ref via `git ls-tree`/`show`
   (proven against a real bare mirror; read the mirror-LOCAL `main:`, not
   `origin/main:`). `scan-status-fetch-first` only adds the fetch before that read.
-- **`--by` is removed ENTIRELY (flag + the `(by ...)` commit-subject suffix).** It
-  was never dead — it fed the claim commit subject, parsed back by
-  `claimedByFromCommit`. The claimer belongs in git identity, not the message
-  header: `flag-cleanup-renames` drops the flag + the suffix (→ `claim: <slug>`) and
-  re-points `claimedByFromCommit` to read `git log -1 --format=%an`.
+- **`--by` and the whole `claimedBy` concept are removed ENTIRELY.** `--by` was
+  never dead — it fed the claim commit subject `(by ...)`, parsed back by
+  `claimedByFromCommit` for one refusal message. The claimer belongs in git
+  history, not our commit header or a bespoke abstraction: `flag-cleanup-renames`
+  drops the flag, the `(by ...)` suffix (→ `claim: <slug>`), AND deletes
+  `claimedByFromCommit` + its var/comments (not renamed/re-pointed). The
+  in-progress refusal message points at `git log`. (A richer "who holds it"
+  readback, if ever wanted, is a separate future pass.)
 - **In-place `do` ≈ `start` + (autonomous harness run) + `complete`.** `ar-run.sh`
   (the script `do` absorbs) is exactly that, with a DIRTY-TREE REFUSAL. `do-in-place`
   composes the existing human verbs rather than re-deriving `runOneItem`; the

@@ -15,27 +15,33 @@ The flag/name hygiene of ADR §7 (a pure CLI-surface cleanup):
   action; its pair is `complete` (fixed it → finish) vs `requeue` (deferring → back
   to the queue). The underlying transition (the ledger write seam's
   return-to-backlog) is unchanged — only the verb name.
-- **Remove `--by` ENTIRELY — flag AND the `(by ...)` commit-message suffix.** This
-  is a deliberate behaviour change, not dead-code removal (so do it carefully).
-  Today `--by` is LIVE: it feeds the claim COMMIT MESSAGE (`claim-cas.ts`:
+- **Remove `--by` AND the whole `claimedBy` CONCEPT — entirely.** This is a
+  deliberate behaviour change, not dead-code removal (so do it carefully). Today
+  `--by` is LIVE: it feeds the claim COMMIT MESSAGE (`claim-cas.ts`:
   `claim: ${slug} (by ${by})`, `by` defaulting to git user.name/$USER), and
-  `start.ts`'s `claimedByFromCommit` PARSES that `(by ...)` suffix back out (via
-  `git log -1 --format=%s` + a `/\(by (.+)\)$/` regex) to report who holds an
-  in-progress item. The DECISION (maintainer): the claimer does not belong in the
-  commit-message header — git already records identity. So:
+  `start.ts`'s `claimedByFromCommit` parses that `(by ...)` suffix back out (via
+  `git log -1 --format=%s` + a `/\(by (.+)\)$/` regex) purely to enrich ONE refusal
+  message. The DECISION (maintainer): the claimer does not belong in the
+  commit-message header AND we are dropping the `claimedBy` concept altogether (git
+  history is the ledger; if a richer "who holds it" readback is ever wanted, that is
+  a separate future pass). So:
   1. Remove the `--by` option from `claim`/`start`/`work-on` + its
      `flags.by`→`performClaim/Start/WorkOn({by})` plumbing AND the `by`/`resolveBy`
      handling in `claim-cas.ts`.
   2. Drop the `(by <by>)` SUFFIX from the claim commit subject — the message
      becomes plain `claim: <slug>`.
-  3. Re-point `claimedByFromCommit` to derive the claimer from the commit's GIT
-     IDENTITY instead of parsing the (now-gone) subject suffix — e.g.
-     `git log -1 --format=%an` (author name) on the claim commit, NOT `%s` + regex.
-     It stays advisory (folder is the source of truth; this only enriches the
-     refusal message), so a best-effort identity read is fine.
-  Per ADR §7 this is exactly the intent: "the claimer already shows in the claim
-  commit + git committer identity." Do NOT leave `claimedByFromCommit` parsing a
-  suffix you removed (it would silently always return empty).
+  3. **DELETE `claimedByFromCommit` entirely** (the function, the `const claimedBy`
+     variable, and the `claimedBy`-framing comments in `start.ts`). Do NOT rename it
+     or re-point it to `%an` — the concept goes away. The in-progress refusal
+     message simply points at git: e.g. *"'<slug>' is already in-progress; see `git
+     log` for who claimed it; if it is your own work, re-run with --resume."* (The
+     folder is already the source of truth for the decision; the message never
+     needed to name the claimer.)
+  Per ADR §7 this is the intent: "the claimer already shows in the claim commit +
+  git committer identity" — so the human reads it with git, and the codebase keeps
+  no `claimedBy` abstraction. Leave NO `claimedBy`/`claimed_by` concept in the
+  touched code (incidental phrasing like "the claimed item" is fine; a `claimedBy`
+  helper/var/named-concept is not).
 - **Readiness override = `--ignore-not-ready` ONLY** — drop the `--force` spelling
   on `claim`/`start`/`work-on` (it merely overrides a readiness warning).
   **`--force` is reserved for the genuinely destructive `gc --force`** — different
@@ -52,10 +58,10 @@ The flag/name hygiene of ADR §7 (a pure CLI-surface cleanup):
   the headline set reads as the surface; do not hand-roll a help renderer.
 
 Mostly CLI-surface changes — the one genuine behaviour change is `--by` (above):
-the flag AND the `(by ...)` commit-subject suffix are removed, and
-`claimedByFromCommit` is re-pointed to read the commit's git identity (`%an`)
-instead of parsing the suffix. The claimer lives in git identity, not the message
-header.
+the flag, the `(by ...)` commit-subject suffix, AND the `claimedBy` concept
+(`claimedByFromCommit` + its var/comments) are all removed. The refusal message
+points at `git log`; the claimer lives in git history, with no `claimedBy`
+abstraction in our code.
 
 ## Acceptance criteria
 
@@ -63,11 +69,12 @@ header.
       seam); `return` is removed (or kept only as a hidden alias if trivial — prefer
       removal per the ADR's "rename").
 - [ ] `--by` is removed (flag + plumbing + `claim-cas.ts` `by`/`resolveBy`); the
-      claim commit subject is plain `claim: <slug>` (no `(by ...)` suffix); and
-      `start.ts`'s `claimedByFromCommit` derives the claimer from the commit's git
-      identity (`git log -1 --format=%an`), NOT from parsing the removed suffix.
-      Tests: the claim subject has no `(by ...)`; `claimedByFromCommit` still
-      reports a sensible claimer (from git identity) for the refusal message.
+      claim commit subject is plain `claim: <slug>` (no `(by ...)` suffix);
+      `claimedByFromCommit` and the `claimedBy` var/concept are DELETED from
+      `start.ts` (not renamed/re-pointed); the in-progress refusal message points
+      at `git log` instead of naming the claimer. Tests: the claim subject has no
+      `(by ...)`; the in-progress refusal still fires (with the git-log pointer);
+      no `claimedBy` symbol remains in the touched code.
 - [ ] The `--force` readiness-override spelling is removed from
       `claim`/`start`/`work-on`; `--ignore-not-ready` is the only override there.
       `gc --force` (with `--yes`) is unchanged and still works.
@@ -111,17 +118,19 @@ header.
 > verb name changes).
 >
 > NOTE: `--by` is LIVE, not dead — it is in the claim commit subject + read back by
-> `claimedByFromCommit`. The DECISION is to remove it ENTIRELY (the claimer belongs
-> in git identity, not the message header): drop the flag, drop the `(by ...)`
-> subject suffix (→ `claim: <slug>`), and re-point `claimedByFromCommit` to read
-> `git log -1 --format=%an`. Do NOT leave it parsing a suffix you deleted.
+> `claimedByFromCommit`. The DECISION is to remove it AND the `claimedBy` concept
+> ENTIRELY (git history is the ledger): drop the flag, drop the `(by ...)` subject
+> suffix (→ `claim: <slug>`), and DELETE `claimedByFromCommit` + its var/comments —
+> do NOT rename or re-point it. The in-progress refusal message points at `git log`.
+> A richer "who holds it" readback, if ever wanted, is a separate future pass.
 >
-> Implement: `return`→`requeue`; remove `--by` ENTIRELY (flag + plumbing +
-> `claim-cas.ts` `by`/`resolveBy` + the `(by ...)` commit-subject suffix → plain
-> `claim: <slug>`) and re-point `start.ts`'s `claimedByFromCommit` to read the
-> commit git identity (`git log -1 --format=%an`) instead of parsing the gone
-> suffix; remove the `--force` readiness spelling (keep `--ignore-not-ready`); keep
-> `gc --force --yes`; help tiering. Use a commander help affordance for the tiering.
+> Implement: `return`→`requeue`; remove `--by` AND the `claimedBy` CONCEPT ENTIRELY
+> (flag + plumbing + `claim-cas.ts` `by`/`resolveBy` + the `(by ...)` commit-subject
+> suffix → plain `claim: <slug>`, AND DELETE `start.ts`'s `claimedByFromCommit` +
+> its `claimedBy` var/comments — do NOT rename or re-point it; the in-progress
+> refusal message just points at `git log`); remove the `--force` readiness spelling
+> (keep `--ignore-not-ready`); keep `gc --force --yes`; help tiering. Use a
+> commander help affordance for the tiering.
 >
 > TDD with vitest, house style: `requeue` == old `return`; `--by` gone; `--force` on
 > claim/start/work-on absent while `--ignore-not-ready` works; `gc --force --yes`
