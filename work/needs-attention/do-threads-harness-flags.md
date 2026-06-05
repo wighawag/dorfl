@@ -101,3 +101,7 @@ git fetch <remote> && git switch -c work/do-threads-harness-flags <remote>/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/do-threads-harness-flags.md work/done/do-threads-harness-flags.md
 ```
+
+## Needs attention
+
+acceptance gate failed (exit 1)
