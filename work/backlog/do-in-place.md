@@ -85,10 +85,20 @@ in-place worker that claims + builds + gates + integrates in ONE repo, then exit
   here, `do prd:<slug>` must at minimum resolve correctly and reach the
   slicing-path entry point (even if that entry is a clear "not yet wired" until
   autoslice-command lands) — do NOT reimplement slicing here.
-- **Absorbs `ar-run.sh`** (the bash test-driver at the REPO ROOT, not `scripts/`)
-  — the ad-hoc driver retires; `do`
-  (in-place, `--propose`) is what CI runs. Confirm the equivalence (CI's needs are
-  met by `do --propose`); remove/retire the script.
+- **Supersedes `ar-run.sh`** (the bash test-driver at the REPO ROOT, not
+  `scripts/`) — `do` (in-place, `--propose`) does what that manual driver does
+  (claim+onboard → run agent → gate+integrate). Confirm the equivalence (CI's needs
+  are met by `do --propose`) and document `do` as its replacement.
+  - **Do NOT delete `ar-run.sh` in THIS slice.** It is the maintainer's LIVE manual
+    tool for running slices in this very repo — and phase-2 has MORE slices to build
+    after `do-in-place` (do-remote, do-autopick, run-daemon-reframe, …), some of
+    which may still be driven by hand. Deleting the proven driver in the same slice
+    that introduces its brand-new, not-yet-battle-tested replacement strands the
+    maintainer if `do` has rough edges. Removing `ar-run.sh` is a follow-up cleanup
+    once `do` is proven in practice — and a destructive change that is the
+    MAINTAINER's call, not an automatic side-effect of an AFK-claimable slice. So:
+    make `do` the equivalent + documented replacement here; leave the actual
+    `git rm` of `ar-run.sh` to the maintainer / a later cleanup slice.
 
 The auto-pick / multi-arg / `-n` forms and the slices-first priority are the
 `do-autopick` slice; `do --remote` is the `do-remote` slice. THIS slice is the
@@ -123,8 +133,10 @@ extends cleanly.
 - [ ] `do slice:<slug>` / `do prd:<slug>` resolve via `slug-namespace-resolution`;
       `do prd:<slug>` reaches the slicing-path entry point (full slicing is
       `autoslice-command`, not built here); a bare-slug slice/PRD collision errors.
-- [ ] `ar-run.sh` (repo root) is retired; `do --propose` is documented as the CI
-      command that replaces it (equivalence confirmed).
+- [ ] `do --propose` is the documented, equivalence-confirmed replacement for
+      `ar-run.sh` (repo root) — but `ar-run.sh` is NOT deleted in this slice (its
+      `git rm` is a maintainer-owned follow-up once `do` is proven; this slice only
+      supersedes it).
 - [ ] Tests (throwaway checkout + local `--bare` arbiter, stubbed harness): in-place
       claim→build→gate→integrate→exit happy path; lost-race skip; red-gate →
       needs-attention via the seam; `--merge`/`--propose` resolution; slug
@@ -186,7 +198,10 @@ extends cleanly.
 > that is DRIFT — route to needs-attention rather than forcing the in-place case
 > through a job-worktree-shaped pipeline. Wire the resolver so `do` accepts bare/`slice:`/
 > `prd:`; `prd:` reaches the slicing-path entry (clear "not yet wired" stub until
-> autoslice-command). Retire `ar-run.sh`.
+> autoslice-command). SUPERSEDE `ar-run.sh` (make `do` its documented equivalent +
+> replacement) but do NOT `git rm` it in this slice — it is the maintainer's live
+> driver and `do` is brand-new; deleting it is a maintainer-owned follow-up cleanup
+> once `do` is proven, not an AFK side-effect.
 >
 > TDD with vitest, house style (throwaway checkout + local `--bare` arbiter, stubbed
 > harness): in-place happy path → exit; lost-race skip; red-gate → needs-attention

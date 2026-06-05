@@ -44,6 +44,16 @@ daemon** — and absorb the deleted `watch` verb's behaviour so nothing is lost.
   both be genuinely concurrent.
 - **`run --once`** — one tick then stop. A debug/test affordance on the daemon (NOT
   the CI path — CI is `do`). The existing `runOnce` IS this tick; keep it.
+- **SCOPE: `run`'s tick stays SLICE-ONLY here; PRD-auto-slicing in `run` is a noted
+  follow-up.** The ADR §3 intends `run`/`do` to do "slices-first, then PRDs to
+  slice." But the two-pool (slices + sliceable-PRDs) priority helper is built by
+  `do-autopick` (which depends on `autoslice-gate` + the PRD reader — deps THIS
+  slice does not have). `run-daemon-reframe` likely lands BEFORE `do-autopick`, so
+  do NOT build PRD-slicing selection here — `run`'s tick selects ELIGIBLE SLICES
+  (today's `selectCandidates`), now run concurrently + looped. Wiring `run`'s tick
+  to also auto-slice eligible PRDs (adopting `do-autopick`'s shared slices-first
+  helper) is a small FOLLOW-UP integration once both this and `do-autopick` are in
+  `done/`. Noted here so it is not lost; do not overclaim PRD-slicing in `run` now.
 - **Absorb the retired `watch` verb** (its slice `work/backlog/watch.md` is being
   retired by this slice): `watch` was "loop `run --once` with bounded-session +
   surface-failures rails". Fold that into `run`:

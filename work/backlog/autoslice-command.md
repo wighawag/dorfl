@@ -20,6 +20,16 @@ The **`do prd:<slug>`** slicing path — the orchestration that ties the gate
 slicing of a PRD, with the runner owning every git-state transition. (NOT a
 standalone `slice` command — it is the PRD branch of `do`.)
 
+**You are FILLING a stub, not adding a new command.** `do-in-place` (a dependency,
+in `done/`) already built `do`'s argument grammar + the `slug-namespace-resolution`
+wiring so `do` ACCEPTS `prd:<slug>` and dispatches it to a slicing-path entry
+point — left as a deliberate "not yet wired" stub for THIS slice to fill. So:
+find that existing entry point in the `do` command and implement the
+orchestration BEHIND it; do NOT add a second/parallel `do prd:` parsing or a
+separate dispatch (that would conflict with what `do-in-place` wired). The slug
+resolution (`prd:` → PRD, bare → slice, collision → error) already exists — reuse
+it, don't re-derive it.
+
 End-to-end flow:
 
 1. **Resolve the gate** (autoslice-gate): for the AGENT path, refuse to slice a
@@ -70,9 +80,10 @@ prefix. The auto-pick / `run` tick reaches this path for eligible PRDs
   the command enforces.
 - `autoslice-lock` — the lock acquire/release the command drives (agent path).
 - `do-in-place` — this path IS the `do prd:<slug>` branch of the `do` worker; the
-  `do` command + its slug-resolution must exist first (phase-2 keystone, ADR
+  `do` command, its slug-resolution, AND the not-yet-wired `do prd:` ENTRY-POINT
+  STUB this slice fills must exist first (phase-2 keystone, ADR
   `command-surface-and-journeys` §3/§3a). Do NOT claim this before `do-in-place`
-  is in `done/`.
+  is in `done/`. You FILL its stub — you do not add a parallel `do prd:` path.
 
 ## Prompt
 

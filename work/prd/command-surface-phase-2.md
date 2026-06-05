@@ -255,6 +255,18 @@ the slices encode these, but they are recorded here as durable warnings:
   routing must be the AUTONOMOUS, arbiter-passed surfacing like `run` — composing
   `performComplete` (the human path, no arbiter → no on-`main` surfacing) verbatim
   is insufficient for `do`'s failure path; pass the arbiter or use `run`'s routing.
+- **The slices-first/PRD priority helper is owned by `do-autopick`; `run`'s
+  adoption is a FOLLOW-UP.** ADR §3 wants both `run` and `do` to do "slices-first,
+  then PRDs to slice," but the two-pool helper needs `autoslice-gate` + the PRD
+  reader (deps `do-autopick` has, `run-daemon-reframe` does not). Since
+  `run-daemon-reframe` lands earlier, `run`'s tick ships SLICE-ONLY (concurrent +
+  looped); wiring `run` to adopt `do-autopick`'s shared slices-first helper (so
+  `run` also auto-slices eligible PRDs) is a small **follow-up integration** once
+  both are in `done/`. Neither slice silently overclaims the other's work.
+- **`do` SUPERSEDES `ar-run.sh` but does NOT delete it.** `ar-run.sh` (repo root)
+  is the maintainer's live manual slice-driver; `do-in-place` makes `do` its
+  documented equivalent but leaves the `git rm` as a maintainer-owned cleanup once
+  `do` is proven (an AFK slice must not delete the human's working tooling).
 - **Hub mirrors are BARE — `scan`/`status` must read `work/` from a REF, not a
   working tree.** Today `scan` reads a local CHECKOUT via
   `resolveLocalState`'s `readdirSync`. A mirror has no working tree, so

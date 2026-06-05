@@ -16,9 +16,19 @@ pipeline from `do-in-place`:
 - **`do -n <x>`** — do x eligible things, in sequence.
 - **Auto-slice priority within a selection:** eligible **slices first, then PRDs to
   slice** (drain ready work before creating more), with a **per-repo toggle** to
-  flip the order. This is the same priority the `run` tick + the autoslice path
-  consume, so factor it as a shared, pure selection helper (not duplicated in `run`
-  and `do`).
+  flip the order. Build this as a **shared, pure selection helper** so it is not
+  duplicated when `run`'s tick later adopts the same priority (per ADR §3: "the
+  `run`/`do` auto-slice step").
+  - **Ownership / sequencing (do not overclaim):** THIS slice OWNS and builds the
+    two-pool slices-first helper. It does NOT retro-wire `run` to use it. At
+    `do-autopick` time `run` may not even exist yet, OR (`run-daemon-reframe` only
+    depends on `registry-remote`, so it likely lands EARLIER) `run`'s tick is
+    slice-only. So: build the helper as a standalone pure function `run` CAN adopt
+    later; do NOT assume `run` already calls it, and do NOT edit `run` to call it
+    here unless `run-daemon-reframe` is already in `done/` and the wiring is clean.
+    `run`'s adoption of the PRD-slicing priority is a follow-up (a small
+    integration once both this and `run-daemon-reframe` are in `done/`), noted so
+    it is not lost.
 
 All forms run the existing `do` pipeline (`do-in-place`) per selected item, in
 sequence (`do` is sequential — parallelism is `run`'s job).
@@ -56,7 +66,8 @@ two-pool slices-first priority), not a new slice-eligibility model.
       the PRD reader + `autoslice-gate`'s slicing-eligibility predicate; the
       scan/candidate model is slice-only today) — prioritising slices first, then
       PRDs-to-slice, with a per-repo toggle that flips the order; the priority logic
-      is a SHARED pure helper reused by `run`'s tick (not duplicated).
+      is a SHARED pure helper (a standalone function `run` CAN adopt later — this
+      slice does NOT retro-wire `run`; that adoption is a noted follow-up).
 - [ ] PRD eligibility is `autoslice-gate`'s predicate (not reinvented); a selected
       PRD dispatches to the `do prd:` path (slicing itself is `autoslice-command`,
       not built here).
@@ -89,7 +100,9 @@ two-pool slices-first priority), not a new slice-eligibility model.
 > `do -n <x>` (x eligible, in sequence), with **slices-first then PRDs-to-slice**
 > priority and a per-repo toggle. Build on the single-item `do` pipeline from
 > `do-in-place` (do NOT reimplement it). Factor the slices-first priority as a
-> SHARED pure helper that `run`'s tick also uses — do not duplicate it.
+> SHARED pure helper `run`'s tick CAN adopt later — but do NOT retro-wire `run`
+> here (it may not exist yet, or its tick is slice-only; `run`'s adoption is a
+> noted follow-up). Build the helper standalone; do not assume `run` calls it.
 >
 > FIRST run the drift check: confirm `do-in-place` (in `done/`) exposes a per-item
 > pipeline to loop; confirm `scan`/`selectCandidates`/eligibility still provide the
