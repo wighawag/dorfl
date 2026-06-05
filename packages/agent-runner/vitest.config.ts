@@ -33,6 +33,10 @@ const RACE_SENSITIVE = [
 	// concurrently; keep it out of file-parallel pressure for the same reason as
 	// do.test.ts (deterministic claim/main-CAS).
 	'test/do-watch.test.ts',
+	// `do` session-path tests drive real git against a --bare arbiter AND write
+	// main (integration in merge mode); keep them out of file-parallel pressure
+	// for the same reason as do.test.ts (deterministic claim/main-CAS).
+	'test/do-session-path.test.ts',
 	// Drives real git against a --bare arbiter AND writes main (surface-on-main
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.

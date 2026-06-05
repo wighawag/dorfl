@@ -33,17 +33,19 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 		expect(overrides.harness).toBe('pi');
 	});
 
-	it('maps --agent-cmd / --pi-bin / --model', () => {
+	it('maps --agent-cmd / --pi-bin / --model / --sessions-dir', () => {
 		const overrides = doFlagOverrides({
 			harness: 'null',
 			agentCmd: 'run-agent --slug',
 			piBin: '/opt/pi',
 			model: 'anthropic/x',
+			sessionsDir: '/var/fleet/sessions',
 		});
 		expect(overrides.harness).toBe('null');
 		expect(overrides.agentCmd).toBe('run-agent --slug');
 		expect(overrides.piBin).toBe('/opt/pi');
 		expect(overrides.model).toBe('anthropic/x');
+		expect(overrides.sessionsDir).toBe('/var/fleet/sessions');
 	});
 
 	it('folds the integrate-time mode in (so {integration} is NOT lost)', () => {
@@ -59,6 +61,7 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 		expect(overrides.agentCmd).toBeUndefined();
 		expect(overrides.piBin).toBeUndefined();
 		expect(overrides.model).toBeUndefined();
+		expect(overrides.sessionsDir).toBeUndefined();
 		expect(overrides.integration).toBeUndefined();
 	});
 });

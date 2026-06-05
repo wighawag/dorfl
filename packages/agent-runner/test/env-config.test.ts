@@ -10,6 +10,7 @@ describe('envVarName', () => {
 		expect(envVarName('defaultArbiter')).toBe('AGENT_RUNNER_DEFAULT_ARBITER');
 		// A single-word key stays a single SCREAMING word.
 		expect(envVarName('model')).toBe('AGENT_RUNNER_MODEL');
+		expect(envVarName('sessionsDir')).toBe('AGENT_RUNNER_SESSIONS_DIR');
 	});
 });
 
@@ -41,6 +42,12 @@ describe('envOverrides — string coercion', () => {
 			piBin: '/usr/local/bin/pi',
 			defaultArbiter: 'arbiter',
 		});
+	});
+
+	it('reads the host-only sessionsDir from AGENT_RUNNER_SESSIONS_DIR', () => {
+		expect(
+			envOverrides({AGENT_RUNNER_SESSIONS_DIR: '/tmp/fleet-sessions'}),
+		).toEqual({sessionsDir: '/tmp/fleet-sessions'});
 	});
 
 	it('keeps an empty string for a string key (not coerced away)', () => {

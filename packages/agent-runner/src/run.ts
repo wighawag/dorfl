@@ -3,7 +3,7 @@ import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {performClaim} from './claim-cas.js';
-import {updateJobRecord} from './workspace.js';
+import {encodeWorkId, updateJobRecord} from './workspace.js';
 import {ledgerWrite} from './ledger-write.js';
 import {
 	jobWorktreeStrategy,
@@ -12,6 +12,7 @@ import {
 } from './isolation.js';
 import {NullHarness, type Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
+import {generateSessionPath} from './session-path.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {git, gitMv} from './git.js';
 import {
@@ -311,9 +312,29 @@ async function runOneItem(
 		//    (null adapter by default), shelling out to the configured agentCmd. The
 		//    resolved per-repo `model` (ADR §13) flows through the seam to the adapter;
 		//    a `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
+		// Generate the FULL pi session FILE path ONCE for this launch under the
+		// resolved HOST-ONLY `sessionsDir` (unset ⇒ pi's default per-cwd dir). The id
+		// MAY use the work-id (job-worktree form) made unique by the generator's
+		// suffix; the path is passed verbatim into the harness via `LaunchInput.session`
+		// and recorded in the pi record (the liveness anchor). The session is spawned
+		// with `cwd: tree.dir`, so its header cwd groups correctly regardless of folder.
+		const session = generateSessionPath({
+			cwd: tree.dir,
+			id: encodeWorkId(tree.arbiterUrl, slug),
+			sessionsDir: config.sessionsDir,
+		});
+
 		let agent: {ok: boolean; detail?: string};
 		try {
-			agent = runAgent(ctx, tree, prompt, slug, config.agentCmd, config.model);
+			agent = runAgent(
+				ctx,
+				tree,
+				prompt,
+				slug,
+				config.agentCmd,
+				config.model,
+				session,
+			);
 		} catch (err) {
 			return {...base, status: 'agent-failed', detail: (err as Error).message};
 		}
@@ -431,6 +452,7 @@ function runAgent(
 	slug: string,
 	agentCmd: string,
 	model: string | undefined,
+	session: string | undefined,
 ): {ok: boolean; detail?: string} {
 	if (ctx.agentRunner) {
 		return ctx.agentRunner({cwd: tree.dir, prompt, slug, env: ctx.env});
@@ -443,6 +465,8 @@ function runAgent(
 		// The model routing intent (ADR §13) — the adapter decides HOW it reaches
 		// its tool (pi: `--model`; null/shell: `{model}` placeholder).
 		model,
+		// The caller-generated full session FILE path (pi: `--session <path>`).
+		session,
 		env: ctx.env,
 	});
 	updateJobRecord(tree.dir, {harness: launched.record});

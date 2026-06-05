@@ -2,17 +2,13 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync, appendFileSync, readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {
-	formatWatchEvent,
-	findSessionLog,
-	SessionTailer,
-} from '../src/watch-session.js';
+import {formatWatchEvent, SessionTailer} from '../src/watch-session.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
 /**
  * `do --watch` observer tests (slices `do-watch` + `do-watch-session-log-format`).
  *
- * The watcher tails the pi `--session-dir` SESSION-PERSISTENCE log, whose records
+ * The watcher tails the pi `--session <path>` SESSION-PERSISTENCE log, whose records
  * are `{"type":"message", "message":{role, content[]}}` — NOT pi's `--mode json`
  * STREAM events (`tool_start`/`message_end`/`agent_end`). The earlier classifier
  * matched the stream vocabulary, so every session-log line fell through to skip
@@ -205,25 +201,45 @@ async function waitFor(
 	}
 }
 
-describe('findSessionLog — locate the .jsonl in a pi session dir', () => {
-	it('returns undefined for a missing dir / a dir with no .jsonl', () => {
-		expect(findSessionLog(join(scratch.root, 'nope'))).toBeUndefined();
-		const empty = join(scratch.root, 'empty');
-		mkdirSync(empty, {recursive: true});
-		writeFileSync(join(empty, 'notes.txt'), 'x');
-		expect(findSessionLog(empty)).toBeUndefined();
-	});
-
-	it('finds the .jsonl log when present', () => {
+describe('SessionTailer — concurrent tail of a GROWING session .jsonl at a KNOWN path', () => {
+	it('tails the EXACT known path, NOT a pre-existing stale sibling (race gone)', async () => {
 		const dir = join(scratch.root, 'session');
 		mkdirSync(dir, {recursive: true});
-		const log = join(dir, 'session-abc.jsonl');
-		writeFileSync(log, '');
-		expect(findSessionLog(dir)).toBe(log);
-	});
-});
+		// A STALE prior-run sibling sits in the same dir, NEWER on disk. The old
+		// newest-by-mtime selection would have latched onto it; the known-path
+		// tailer must ignore it and tail only the path it was given.
+		const stale = join(dir, 'stale-old-run.jsonl');
+		writeFileSync(
+			stale,
+			JSON.stringify({
+				type: 'message',
+				message: {role: 'assistant', content: 'STALE — must not surface'},
+			}) + '\n',
+		);
+		const known = join(dir, 'this-run.jsonl');
+		writeFileSync(known, '');
 
-describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => {
+		const surfaced: string[] = [];
+		const tailer = new SessionTailer({
+			sessionFile: known,
+			color: false,
+			sink: (line) => surfaced.push(line),
+			pollIntervalMs: 10,
+		});
+		tailer.start();
+		appendFileSync(
+			known,
+			JSON.stringify({
+				type: 'message',
+				message: {role: 'assistant', content: 'fresh run'},
+			}) + '\n',
+		);
+		await waitFor(() => surfaced.length >= 1);
+		await tailer.stop();
+		expect(surfaced).toEqual(['fresh run', '✓ agent finished']);
+		expect(surfaced).not.toContain('STALE — must not surface');
+	});
+
 	it('surfaces assistant text + tool starts as the file grows; skips the rest', async () => {
 		const dir = join(scratch.root, 'session');
 		mkdirSync(dir, {recursive: true});
@@ -232,7 +248,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -284,7 +300,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -306,7 +322,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -335,7 +351,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -364,7 +380,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 1000, // long poll → only the stop() drain will catch it.

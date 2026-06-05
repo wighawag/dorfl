@@ -1,12 +1,11 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {join} from 'node:path';
+import {join, isAbsolute} from 'node:path';
 import {writeFileSync, existsSync, readFileSync, chmodSync} from 'node:fs';
 import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
 import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
-import {piSessionDir} from '../src/pi-harness.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -480,7 +479,7 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)', () => {
 	/**
 	 * Write a stubbed `pi` CLI that edits a file in its cwd (so the work commit is
-	 * non-empty), records the prompt it received on stdin, honours `--session-dir`,
+	 * non-empty), records the prompt it received on stdin, honours `--session <path>`,
 	 * and exits 0 — standing in for a real pi run (impractical in CI).
 	 */
 	function writePiStub(promptFile: string): string {
@@ -488,13 +487,13 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 		const script = [
 			'#!/usr/bin/env bash',
 			`cat > ${JSON.stringify(promptFile)}`,
-			'session_dir=""',
+			'session_file=""',
 			'prev=""',
 			'for a in "$@"; do',
-			'  if [ "$prev" = "--session-dir" ]; then session_dir="$a"; fi',
+			'  if [ "$prev" = "--session" ]; then session_file="$a"; fi',
 			'  prev="$a"',
 			'done',
-			'if [ -n "$session_dir" ]; then mkdir -p "$session_dir"; fi',
+			'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
 			'printf "pi work\\n" > agent-output.txt',
 			'exit 0',
 		].join('\n');
@@ -567,7 +566,11 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 		// Liveness is anchored on PID + the pi session pointer — NOT mtime (ADR §5).
 		expect(record?.harness.adapter).toBe('pi');
 		expect(typeof record?.harness.pid).toBe('number');
-		expect(record?.harness.session).toBe(piSessionDir(dir));
+		// The session pointer is the generated FULL `--session` path: absolute and
+		// ending `.jsonl` (no longer a dir pinned into the worktree).
+		const session = record?.harness.session ?? '';
+		expect(isAbsolute(session)).toBe(true);
+		expect(session.endsWith('.jsonl')).toBe(true);
 		// pi got the work-agent prompt, not the (empty) agentCmd path.
 		expect(readFileSync(promptFile, 'utf8')).toContain('Implement feat.');
 	});
@@ -580,13 +583,13 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 		const script = [
 			'#!/usr/bin/env bash',
 			`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
-			'session_dir=""',
+			'session_file=""',
 			'prev=""',
 			'for a in "$@"; do',
-			'  if [ "$prev" = "--session-dir" ]; then session_dir="$a"; fi',
+			'  if [ "$prev" = "--session" ]; then session_file="$a"; fi',
 			'  prev="$a"',
 			'done',
-			'if [ -n "$session_dir" ]; then mkdir -p "$session_dir"; fi',
+			'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
 			'cat > /dev/null',
 			'printf "pi work\\n" > agent-output.txt',
 			'exit 0',

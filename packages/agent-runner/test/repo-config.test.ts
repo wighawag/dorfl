@@ -33,6 +33,9 @@ describe('repo-config constants', () => {
 		expect(REPO_REJECTED_KEYS).toContain('piBin');
 		expect(REPO_REJECTED_KEYS).toContain('maxParallel');
 		expect(REPO_REJECTED_KEYS).toContain('humanWorktreesDir');
+		// `sessionsDir` is a HOST-ONLY machine path (where the host writes pi session
+		// logs), not repo policy — rejected like `piBin`.
+		expect(REPO_REJECTED_KEYS).toContain('sessionsDir');
 	});
 
 	it('keeps allowed and rejected key sets disjoint', () => {
@@ -106,6 +109,20 @@ describe('loadRepoConfig', () => {
 		expect(loaded.message).toMatch(/piBin/);
 		expect(loaded.message).toMatch(/maxParallel/);
 		expect(loaded.message).toMatch(/\.agent-runner\.json/);
+	});
+
+	it('rejects a committed sessionsDir (host-only) and reports it, like piBin', () => {
+		writeRepoConfig(repo, {
+			integration: 'merge',
+			sessionsDir: '/tmp/some-fleet-sessions',
+		});
+		const loaded = loadRepoConfig(repo);
+		// The committed sessionsDir is NOT honoured (it would redirect where the
+		// host writes session logs) — only the repo-appropriate key survives.
+		expect(loaded.config).toEqual({integration: 'merge'});
+		expect(loaded.config).not.toHaveProperty('sessionsDir');
+		expect(loaded.rejected).toContain('sessionsDir');
+		expect(loaded.message).toMatch(/sessionsDir/);
 	});
 
 	it('has no message when nothing was rejected', () => {

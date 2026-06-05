@@ -1,13 +1,9 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, chmodSync} from 'node:fs';
+import {writeFileSync, chmodSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performDo} from '../src/do.js';
 import {NullHarness} from '../src/harness.js';
-import {
-	PiHarness,
-	piSessionDir,
-	PI_SESSION_DIRNAME,
-} from '../src/pi-harness.js';
+import {PiHarness} from '../src/pi-harness.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -43,9 +39,9 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * An executable pi-CLI stub for the watch path. Honours `--session-dir`: it
+ * An executable pi-CLI stub for the watch path. Honours `--session <path>`: it
  * EDITS a file in the worktree (so the completion commit is non-empty) and
- * writes a small REAL SESSION-LOG-shaped `.jsonl` into the session dir — the
+ * writes a small REAL SESSION-LOG-shaped `.jsonl` at that path — the
  * `{type:"message", message:{role, content[]}}` records pi's `--session-dir`
  * persistence log actually carries (NOT the `--mode json` stream the watcher
  * used to — wrongly — expect). A preamble record + a user turn + a toolResult
@@ -57,18 +53,18 @@ function writeWatchPiStub(): string {
 	const script = [
 		'#!/usr/bin/env bash',
 		'cat > /dev/null', // consume the prompt on stdin.
-		'session_dir=""',
+		'session_file=""',
 		'prev=""',
 		'for a in "$@"; do',
-		'  if [ "$prev" = "--session-dir" ]; then session_dir="$a"; fi',
+		'  if [ "$prev" = "--session" ]; then session_file="$a"; fi',
 		'  prev="$a"',
 		'done',
 		// Edit a file so the runner has something to commit.
 		"printf 'work done\\n' > agent-output.txt",
-		// Write the session .jsonl the observer tails.
-		'if [ -n "$session_dir" ]; then',
-		'  mkdir -p "$session_dir"',
-		'  log="$session_dir/session.jsonl"',
+		// Write the session .jsonl the observer tails, at the EXACT --session path.
+		'if [ -n "$session_file" ]; then',
+		'  mkdir -p "$(dirname "$session_file")"',
+		'  log="$session_file"',
 		`  printf '%s\\n' '{"type":"session","id":"abc","cwd":"."}' >> "$log"`,
 		`  printf '%s\\n' '{"type":"message","message":{"role":"user","content":[{"type":"text","text":"the prompt"}]}}' >> "$log"`,
 		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"all set"},{"type":"toolCall","name":"edit","arguments":{}}]}}' >> "$log"`,
@@ -163,7 +159,7 @@ describe('do --watch — READ-ONLY observer (outcome unchanged, events surfaced)
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
 		// No --watch ⇒ no tailer ⇒ nothing surfaced (byte-identical behaviour).
 		expect(surfaced).toEqual([]);
-		// The session dir still exists (pi wrote it) — but it was NOT tailed.
-		expect(piSessionDir(repo)).toContain(PI_SESSION_DIRNAME);
+		// In-place `do` wrote NOTHING into the checkout (no session-dir pollution).
+		expect(existsSync(join(repo, '.agent-runner-pi-session'))).toBe(false);
 	});
 });

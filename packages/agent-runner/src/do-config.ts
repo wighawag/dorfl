@@ -13,6 +13,7 @@ export interface HarnessFlags {
 	model?: string;
 	harness?: string;
 	piBin?: string;
+	sessionsDir?: string;
 }
 
 /**
@@ -35,6 +36,9 @@ export function harnessFlagOverrides(flags: HarnessFlags): PartialConfig {
 	}
 	if (flags.piBin !== undefined) {
 		overrides.piBin = flags.piBin;
+	}
+	if (flags.sessionsDir !== undefined) {
+		overrides.sessionsDir = flags.sessionsDir;
 	}
 	return overrides;
 }

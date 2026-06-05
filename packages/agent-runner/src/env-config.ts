@@ -60,6 +60,7 @@ const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
 	model: 'string',
 	harness: {enum: ['null', 'pi']},
 	piBin: 'string',
+	sessionsDir: 'string',
 	verify: 'list',
 };
 

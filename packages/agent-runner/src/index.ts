@@ -199,18 +199,19 @@ export type {PiHarnessOptions, PiHarnessRecord} from './pi-harness.js';
 export {
 	PiHarness,
 	createHarness,
-	piSessionDir,
 	piSessionExists,
 	DEFAULT_PI_BIN,
-	PI_SESSION_DIRNAME,
 } from './pi-harness.js';
 
-export type {SessionTailerOptions} from './watch-session.js';
 export {
-	formatWatchEvent,
-	findSessionLog,
-	SessionTailer,
-} from './watch-session.js';
+	piSessionsRoot,
+	piDefaultSessionsDir,
+	sessionFileName,
+	generateSessionPath,
+} from './session-path.js';
+
+export type {SessionTailerOptions} from './watch-session.js';
+export {formatWatchEvent, SessionTailer} from './watch-session.js';
 
 export type {
 	ReviewProvider,

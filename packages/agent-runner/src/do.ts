@@ -3,8 +3,9 @@ import {performComplete} from './complete.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
-import {PiHarness, piSessionDir} from './pi-harness.js';
+import {PiHarness} from './pi-harness.js';
 import {SessionTailer} from './watch-session.js';
+import {generateSessionPath} from './session-path.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
@@ -111,6 +112,15 @@ export interface DoOptions {
 	agentCmd?: string;
 	/** The model routing intent forwarded to the harness (ADR §13). */
 	model?: string;
+	/**
+	 * The HOST-ONLY sessions ROOT under which the pi session FILE is generated
+	 * (flag > env > global > default). Threaded from the resolved `config.sessionsDir`
+	 * (the `cli.ts` bridge), exactly like `model`/`agentCmd`. Unset ⇒ the path
+	 * generator falls back to pi's default per-cwd dir (so `do` "just works" with
+	 * the dashboard). NEVER a per-repo property (a committed file must not redirect
+	 * where the host writes session logs).
+	 */
+	sessionsDir?: string;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/** Override the resolver's repo path (slug-namespace existence reads). Defaults to `cwd`. */
@@ -349,12 +359,25 @@ async function runDoAgent(
 	}
 	const harness = options.harness ?? new NullHarness();
 
-	// `--watch` (pi only): launch async + tail the session .jsonl concurrently.
-	// (The non-pi case is already rejected as a usage error before any git
-	// transition, so reaching here with watch ⇒ a PiHarness.)
+	// Generate the FULL session FILE path ONCE, here (AFTER the injected-runner
+	// early-return — injected runners do no pi launch and need no path), so the
+	// adapter and the `--watch` tailer cannot disagree and the watcher knows the
+	// path BEFORE the launch starts. In-place `do` has NO work-id (that is a
+	// job-worktree concept), so the id is the slug + a unique suffix. Threaded into
+	// BOTH launch branches: the `--watch` branch AND the COMMON non-watch branch
+	// (CI), so neither pollutes the checkout nor hides from the dashboard.
+	const session = generateSessionPath({
+		cwd,
+		id: slug,
+		sessionsDir: options.sessionsDir,
+	});
+
+	// `--watch` (pi only): launch async + tail the KNOWN session .jsonl path
+	// concurrently. (The non-pi case is already rejected as a usage error before
+	// any git transition, so reaching here with watch ⇒ a PiHarness.)
 	if (options.watch === true && harness instanceof PiHarness) {
 		const tailer = new SessionTailer({
-			sessionDir: piSessionDir(cwd),
+			sessionFile: session,
 			color: options.color ?? false,
 			sink: options.watchSink,
 		});
@@ -366,6 +389,7 @@ async function runDoAgent(
 				command: options.agentCmd ?? '',
 				prompt,
 				model: options.model,
+				session,
 				env: options.env,
 			});
 			return {ok: launched.ok, detail: launched.detail};
@@ -382,6 +406,7 @@ async function runDoAgent(
 		command: options.agentCmd ?? '',
 		prompt,
 		model: options.model,
+		session,
 		env: options.env,
 	});
 	return {ok: launched.ok, detail: launched.detail};
