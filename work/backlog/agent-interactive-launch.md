@@ -23,15 +23,19 @@ does not exist yet**, and the exact shape of that capability is an open question
 
 ### Why this is not a trivial flag
 
-The existing harness seam does NOT support interactive launch. Today
-`Harness.launch` (`src/harness.ts`) runs the command **synchronously to completion
-via `spawnSync`**, **pipes a prepared prompt on stdin**, and **captures output** —
-purpose-built for the autonomous path. An interactive launch is the opposite:
-**inherit the human's stdio** (`stdio: 'inherit'`), run in the **foreground**, feed
-**no prepared prompt**, and return control when the human exits the session. So
-`--agent` is NOT `harness.launch(...)` with a flag — shoehorning it into the
-captured `launch` produces a launch that looks wired but is wrong (captured stdio,
-instant return, no human interaction).
+The existing harness seam does NOT support interactive launch — verified in code.
+Both adapters use `spawnSync` + non-interactive: `NullHarness.launch`
+(`src/harness.ts`) runs the command **synchronously via `spawnSync`**, **pipes a
+prepared prompt on stdin**, and **captures output**; the **pi adapter**
+(`src/pi-harness.ts`) explicitly runs pi **non-interactively** (`pi --print`,
+prompt on stdin, output captured — see its own "running non-interactively"
+comment). Both are purpose-built for the autonomous path. An interactive launch is
+the opposite: **inherit the human's stdio** (`stdio: 'inherit'`), run in the
+**foreground**, feed **no prepared prompt** (no `--print` for pi — a real
+interactive session), and return control when the human exits. So `--agent` is NOT
+`harness.launch(...)` with a flag — shoehorning it into the captured `launch`
+produces a launch that looks wired but is wrong (captured stdio, instant return,
+no human interaction).
 
 ## Open questions (resolve before building — clear `needsAnswers` when done)
 

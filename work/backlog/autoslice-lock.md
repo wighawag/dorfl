@@ -65,7 +65,7 @@ release back to `work/prd/`); the orchestrating command is a later slice.
 > the done file for `ledger-write-seam` + the write-seam module it added (you
 > acquire/release the lock THROUGH the seam's transition machinery — a `slicing`
 > transition kind or the claim primitive it exposes; do NOT call raw `claim-cas`
-> or push `main` directly), and `src/claim-cas.ts` / `scripts/claim.sh` to
+> or push `main` directly), and `src/claim-cas.ts` / `skills/to-slices/scripts/claim.sh` (NOT `scripts/claim.sh` — the script lives under the vendored skill) to
 > understand the CAS semantics + exit codes you are reusing.
 >
 > Implement: acquire = race a `git mv work/prd/<slug>.md → work/slicing/<slug>.md`

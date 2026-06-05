@@ -30,6 +30,16 @@ mirror is freshly fetched before that read, then warn + use last-known if the fe
 fails. Use the existing mirror-fetch primitives (`fetchMirrorMain`/`ensureMirror`);
 do NOT introduce a `ledgerMode`/new ref/network-ledger.
 
+**Builds on the mirror-ref READ from `registry-remote` (depends on it).** This
+slice does NOT change WHAT `scan`/`status` read or HOW they read it — by the time
+this lands, `registry-remote` has already moved `scan`/`status` to read `work/`
+from each hub mirror's `main` ref (mirrors are bare; the read-seam capability
+`registry-remote` added does `git ls-tree`/`show` against `<mirror>/main:work/...`).
+THIS slice adds only the **fetch step before that read**: refresh each mirror's
+`main` (via `fetchMirrorMain`/`ensureMirror`) so the ref the read seam reads is
+current, with warn + fall-back-to-last-known on a failed fetch. So it is a thin
+fetch-then-read layer on the read `registry-remote` built — not a new read.
+
 ## Acceptance criteria
 
 - [ ] `scan` fetches the registry's mirrors before computing the queue; on a fetch
@@ -46,9 +56,10 @@ do NOT introduce a `ledgerMode`/new ref/network-ledger.
 
 ## Blocked by
 
-- `registry-remote` — `scan`/`status` now read the REGISTRY (hub-mirror set) and
-  fetch its mirrors; the registry must exist first (and this serialises the cli.ts/
-  scan/status edits after the foundation).
+- `registry-remote` — it moves `scan`/`status` to read `work/` from each hub
+  mirror's `main` REF (mirrors are bare) via the read seam; THIS slice only adds the
+  FETCH before that read. The mirror-ref read must exist first (and this serialises
+  the cli.ts/scan/status edits after the foundation).
 
 ## Prompt
 

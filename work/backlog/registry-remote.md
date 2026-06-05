@@ -38,12 +38,52 @@ there is **no `roots` config field and no `remotes` field**.
 - **Fold `arbiter status` into `status`** — the `status` dashboard reports the
   current repo's arbiter (remote, URL/path, exists/bare, main reachable, the unsafe
   non-bare-with-main flag); the standalone `arbiter` command group is removed.
-- **Remove the config `roots` field** (and `--root`/`include`/`exclude` insofar as
-  they fed the roots-walk discovery): discovery is now "the registered hub-mirror
-  set", not a roots walk. Never add a `remotes` field.
+- **Remove the config `roots` field and rewire discovery to the hub-mirror set.**
+  This is the load-bearing part of this slice, not a one-line field deletion. TODAY
+  `roots` is woven through `config.ts`, `detect.ts` (`detectRepos`), `cli.ts`
+  (`--root`/`--include`/`--exclude` flags + `flagOverrides`), `scan.ts` (`scan` calls
+  `detectRepos({roots, include, exclude})` to find repos), `status.ts` (its
+  `repoRoots` come from `detectRepos`), `env-config.ts`, and `repo-config.ts`.
+  Removing `roots` means **discovery becomes "enumerate the registered hub mirrors"**
+  — so `scan`/`status` (and `run`, reframed in a later slice) must resolve their repo
+  set from the hub-mirror set under `<workspacesDir>/repos/`, NOT from a roots walk.
+  Provide a single "list registered mirrors" primitive (the registry enumeration
+  `remote ls` also uses) and point `scan`/`status` at it.
+  - `detectRepos`/`isParticipatingRepo` are NOT deleted — `isParticipatingRepo` is
+    reused by `remote find`, and the walk logic moves to serving `remote find
+    <folder>`. What goes away is config-`roots`-driven *implicit* discovery.
+  - `--root`/`--include`/`--exclude` flags: drop `--root` (the roots model is gone).
+    `--include`/`--exclude` are out of scope to redesign here — if they have no
+    meaning without `roots`, remove them; if they map onto "add/skip specific
+    mirrors", that is a later concern. Decide minimally and note it; do NOT invent a
+    new include/exclude-over-mirrors model in this slice.
+  - Never add a `remotes` config field.
+- **CRITICAL — mirrors are BARE; `scan`/`status` must read `work/` from a REF, not a
+  working tree. This is a NEW read-seam capability and the deepest part of the
+  slice.** Today `scan`/`status` read `work/` from a LOCAL CHECKOUT: `scan` calls
+  `ledgerRead.resolveLocalState({repoPath})`, which `readdirSync`/`readFileSync`s
+  `<repoPath>/work/backlog|done|needs-attention` — a real working tree. A hub mirror
+  is a **`--bare` repo with NO working tree**, so `resolveLocalState` **cannot read
+  it**. The read seam's ARBITER method (`resolveArbiterState`, `git show`/`ls-tree`
+  against `<arbiter>/main`) reads only `work/done/` + a SINGLE named slice — NOT the
+  full backlog, NOT needs-attention. So ADD a read-seam capability: **resolve the
+  full live `work/` lifecycle (backlog + done + needs-attention) of a repo from its
+  hub mirror's `main` ref** (`git ls-tree`/`git show` against `<mirror>/main:work/...`,
+  extending the arbiter method's existing `done/` read to the full set). Route
+  `scan`/`status` through THAT for their per-repo `work/` read instead of
+  `resolveLocalState`. Keep it behind the read seam (its whole purpose is that
+  readers don't learn a new mechanism) — do NOT scatter raw `git ls-tree` across
+  `scan`/`status`. (FETCHING each mirror before this read is the
+  `scan-status-fetch-first` slice; THIS slice provides the mirror-ref READ that
+  fetch-first keeps fresh.)
 
 Key = `host/org/name` (today's `encodeRepoKey`, unchanged) — collapses
 ssh/https/scp for one repo onto one mirror, keeps different hosts/projects distinct.
+NOTE on module homes (so you don't chase ghosts): `encodeRepoKey` + `ensureMirror`
++ `createJob` live in `src/workspace.ts` / `src/repo-mirror.ts` (not a single
+`repo-mirror.ts`); `arbiterInit`/`arbiterStatus`/`assertBare` are in `src/arbiter.ts`;
+`isParticipatingRepo`/`detectRepos` are in `src/detect.ts`; the read seam is
+`src/ledger-read.ts`. Tests live in `packages/agent-runner/test/`, not co-located.
 
 ## Acceptance criteria
 
@@ -57,12 +97,20 @@ ssh/https/scp for one repo onto one mirror, keeps different hosts/projects disti
       deletes a mirror by key or URL and is the only command that does so.
 - [ ] `remote find <folder>` discovers `work/`-participating repos (via
       `isParticipatingRepo`) and toggle-adds the chosen ones.
-- [ ] The config `roots` field is gone; no `remotes` field exists; discovery is the
-      registered hub-mirror set. The standalone `arbiter` command group is removed
-      (`arbiter init` → `remote add --local`; `arbiter status` → `status`).
+- [ ] The config `roots` field is gone; no `remotes` field exists; **`scan` and
+      `status` discover their repo set by enumerating the registered hub mirrors**
+      (not `detectRepos(roots)`), via a shared "list mirrors" primitive. The
+      standalone `arbiter` command group is removed (`arbiter init` → `remote add
+      --local`; `arbiter status` → `status`). `isParticipatingRepo` is retained
+      (reused by `remote find`).
+- [ ] A read-seam capability resolves the full `work/` lifecycle (backlog + done +
+      needs-attention) from a hub mirror's `main` REF (mirrors are bare —
+      `resolveLocalState`'s working-tree read cannot be used); `scan`/`status`
+      consume it through the seam (no raw `git ls-tree` scattered in scan/status).
 - [ ] Tests (throwaway repos + a local `--bare` arbiter): add/ls/rm round-trip, the
-      transport guard error + `--force` override, `remote find` discovery, and that
-      `status` now reports arbiter state.
+      transport guard error + `--force` override, `remote find` discovery, `status`
+      reporting arbiter state, AND reading backlog/done/needs-attention from a bare
+      mirror's `main` ref.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -97,12 +145,24 @@ ssh/https/scp for one repo onto one mirror, keeps different hosts/projects disti
 > (the `arbiter` group + the `--root`/`--include`/`--exclude` flags + `flagOverrides`,
 > and where `remote` lands).
 >
-> CRITICAL: removing `roots` is NOT a field deletion — it is rewiring `scan`/`status`
-> discovery from a roots walk to enumerating the registered hub-mirror set. Provide
-> one "list registered mirrors" primitive (shared with `remote ls`) and point
-> `scan`/`status` at it. Keep `isParticipatingRepo` (it serves `remote find`). Do
-> NOT invent a new include/exclude-over-mirrors model — drop `--root`; if
-> `--include`/`--exclude` are meaningless without `roots`, remove them and note it.
+> CRITICAL #1: removing `roots` is NOT a field deletion — it is rewiring
+> `scan`/`status` discovery from a roots walk to enumerating the registered
+> hub-mirror set. Provide one "list registered mirrors" primitive (shared with
+> `remote ls`) and point `scan`/`status` at it. Keep `isParticipatingRepo` (it
+> serves `remote find`). Do NOT invent a new include/exclude-over-mirrors model —
+> drop `--root`; if `--include`/`--exclude` are meaningless without `roots`, remove
+> them and note it.
+>
+> CRITICAL #2 (deepest): hub mirrors are BARE — no working tree. `scan`/`status`
+> today read `work/` via `ledgerRead.resolveLocalState({repoPath})`, which
+> `readdirSync`/`readFileSync`s a LOCAL CHECKOUT — that CANNOT read a bare mirror.
+> The read seam's arbiter method reads only `done/` + one slice. So ADD a read-seam
+> capability "resolve full `work/` (backlog + done + needs-attention) from a
+> mirror's `main` ref" (git ls-tree/show against `<mirror>/main:work/...`, extending
+> the arbiter method's existing `done/` read) and route `scan`/`status` through it.
+> Keep it behind the read seam — do not scatter raw git calls. (Fetching the mirror
+> before the read is the `scan-status-fetch-first` slice; here you build the
+> mirror-ref READ.)
 >
 > Implement `remote add <url> [--local]` (create mirror; `--local` provisions a
 > bare arbiter + mirror, absorbing `arbiter init`; transport guard), `remote rm`

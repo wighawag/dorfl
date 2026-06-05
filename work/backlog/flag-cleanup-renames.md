@@ -15,9 +15,20 @@ The flag/name hygiene of ADR §7 (a pure CLI-surface cleanup):
   action; its pair is `complete` (fixed it → finish) vs `requeue` (deferring → back
   to the queue). The underlying transition (the ledger write seam's
   return-to-backlog) is unchanged — only the verb name.
-- **Remove `--by`** from `claim`/`start`/`work-on` — the `claimed_by` frontmatter
-  field is gone (git history is the claim ledger), so the advisory `--by` is dead.
-  Remove the option + its plumbing.
+- **Remove `--by`** from `claim`/`start`/`work-on`. NOTE — `--by` is NOT dead code:
+  the `claimed_by` *frontmatter field* is gone (WORK-CONTRACT rule 6; git history is
+  the ledger), but `--by` is still LIVE — it feeds the claim COMMIT MESSAGE
+  (`claim-cas.ts`: `claim: ${slug} (by ${by})`, where `by` defaults to git
+  user.name/$USER), and `start.ts`'s `claimedByFromCommit` PARSES that `(by ...)`
+  back out to report who holds an in-progress item. So removing `--by` is a small
+  behaviour change, not a no-op: the recorded claimer becomes the resolved git
+  identity (no per-invocation override). Per ADR §7 that is the intent ("the claimer
+  already shows in the claim commit + git committer identity"). DECIDE + keep
+  consistent: either keep the commit message's `(by <resolved-git-identity>)`
+  suffix (so `claimedByFromCommit` keeps working unchanged) or drop the suffix and
+  have `claimedByFromCommit` fall back to the committer identity — do NOT leave
+  `claimedByFromCommit` parsing a suffix you removed. Remove the `--by` OPTION +
+  its `flags.by`→`performClaim/Start/WorkOn({by})` plumbing.
 - **Readiness override = `--ignore-not-ready` ONLY** — drop the `--force` spelling
   on `claim`/`start`/`work-on` (it merely overrides a readiness warning).
   **`--force` is reserved for the genuinely destructive `gc --force`** — different
@@ -27,17 +38,25 @@ The flag/name hygiene of ADR §7 (a pure CLI-surface cleanup):
   plumbing verbs+flags: `claim`, `prompt`, `verify`, `gc`, `remote rm`, and
   `--skip-verify`/`--type`/`--message`/`--copy`/`--print-dir`. Headline tier: `run`,
   `do`, `work-on`, `start`, `complete`, `scan`, `status`, `remote add`/`ls`/`find`.
-  Use whatever commander affordance fits (help grouping / ordering / a short note);
-  the goal is the headline set reads as the surface.
+  The repo uses **commander `^14`** and has NO existing help customization yet, so
+  this is greenfield: use a commander-v14 affordance that fits (e.g.
+  `command.helpGroup(...)` / `program.configureHelp(...)` / `addHelpText('after',
+  ...)` listing the advanced tier under a heading). Keep it minimal — the goal is
+  the headline set reads as the surface; do not hand-roll a help renderer.
 
-Pure CLI-surface changes — no behaviour change beyond the renames/removals.
+Mostly CLI-surface changes — the only non-cosmetic one is `--by` (above): the
+claim commit's recorded claimer becomes the git identity rather than an overridable
+flag; keep `claimedByFromCommit` consistent with the chosen commit-message form.
 
 ## Acceptance criteria
 
 - [ ] `requeue <slug>` does what `return` did (return-to-backlog via the ledger
       seam); `return` is removed (or kept only as a hidden alias if trivial — prefer
       removal per the ADR's "rename").
-- [ ] `--by` is removed from `claim`/`start`/`work-on` (option + plumbing gone).
+- [ ] `--by` is removed from `claim`/`start`/`work-on` (option + plumbing gone); the
+      claim commit records the resolved git identity as claimer, and
+      `start.ts`'s `claimedByFromCommit` still resolves the claimer consistently
+      with the chosen commit-message form (no parsing of a removed suffix).
 - [ ] The `--force` readiness-override spelling is removed from
       `claim`/`start`/`work-on`; `--ignore-not-ready` is the only override there.
       `gc --force` (with `--yes`) is unchanged and still works.
@@ -71,10 +90,18 @@ Pure CLI-surface changes — no behaviour change beyond the renames/removals.
 >
 > READ FIRST: ADR `command-surface-and-journeys` §7 (the exact deltas + the
 > headline/advanced tiers + the "different danger levels must not share a flag"
-> rationale), `src/cli.ts` (the `return` command, the `--by`/`--force`/
+> rationale + the `--by` rationale: claimer shows in the claim commit + git
+> identity), `src/cli.ts` (the `return` command, the `--by`/`--force`/
 > `--ignore-not-ready` options on claim/start/work-on, the `gc --force --yes`
-> guard), and `src/ledger-write.ts` (`applyReturnToBacklogTransition` — unchanged;
-> only the verb name changes).
+> guard), `src/claim-cas.ts` (the claim commit message `claim: <slug> (by <by>)`
+> that `--by` feeds), `src/start.ts` (`claimedByFromCommit` — it parses `(by ...)`
+> back out; keep it consistent with whatever commit-message form you choose), and
+> `src/ledger-write.ts` (`applyReturnToBacklogTransition` — unchanged; only the
+> verb name changes).
+>
+> NOTE: `--by` is LIVE, not dead — it is in the claim commit message + read back by
+> `claimedByFromCommit`. Removing it makes the recorded claimer the resolved git
+> identity; keep the commit format and `claimedByFromCommit` consistent.
 >
 > Implement: `return`→`requeue`; remove `--by`; remove the `--force` readiness
 > spelling (keep `--ignore-not-ready`); keep `gc --force --yes`; help tiering. Use a
