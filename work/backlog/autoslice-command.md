@@ -2,7 +2,7 @@
 title: autoslice-command — the `do prd:<slug>` slicing path (harness + runner-owns-git)
 slug: autoslice-command
 prd: auto-slice
-blockedBy: [autoslice-gate, autoslice-lock]
+blockedBy: [autoslice-gate, autoslice-lock, do-in-place]
 covers: [1, 6]
 ---
 
@@ -69,6 +69,10 @@ prefix. The auto-pick / `run` tick reaches this path for eligible PRDs
 - `autoslice-gate` — the slicing-eligibility/`sliceAfter`/`autoSlice` resolution
   the command enforces.
 - `autoslice-lock` — the lock acquire/release the command drives (agent path).
+- `do-in-place` — this path IS the `do prd:<slug>` branch of the `do` worker; the
+  `do` command + its slug-resolution must exist first (phase-2 keystone, ADR
+  `command-surface-and-journeys` §3/§3a). Do NOT claim this before `do-in-place`
+  is in `done/`.
 
 ## Prompt
 

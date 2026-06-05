@@ -2,14 +2,16 @@
 title: Command surface phase 2 — build the new surface (registry, run/do split, human face, cleanup)
 slug: command-surface-phase-2
 sliceAfter: []
+sliced: 2026-06-05
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth:
-> `docs/adr/command-surface-and-journeys.md` (the model) + `docs/adr/` + the code;
-> remaining work: `work/backlog/` slices. (The technical-detail sections below are
-> trimmed by `to-slices` once the work is sliced — they move into slices/ADRs and
-> this PRD settles to its durable framing: Problem / Solution / User Stories /
-> Out of Scope.)
+> **Sliced into `work/backlog/` on 2026-06-05** — technical detail trimmed to the
+> 11 slices (`registry-remote`, `isolation-strategy-seam`, `slug-namespace-
+> resolution`, `do-in-place`, `do-remote`, `do-autopick`, `run-daemon-reframe`,
+> `human-face-verbs`, `agent-interactive-launch` [`needsAnswers`-gated],
+> `flag-cleanup-renames`, `scan-status-fetch-first`). Launch snapshot, NOT
+> maintained. Current truth: `docs/adr/command-surface-and-journeys.md` (the model)
+> + `docs/adr/` + the code; remaining work: those `work/backlog/` slices.
 >
 > **This PRD is phase 2 of the 3-phase reconciliation mandated by
 > `docs/adr/command-surface-and-journeys.md`.** Phase 1 (reconcile-the-docs) is
@@ -32,7 +34,7 @@ running code still embodies the old, drifted model:
   into `remote add --local` / `status`;
 - there is **no `do`** — the per-repo, in-place worker that CI needs; `run` exists
   but *throws unless `--once`*, and the CI path is an ad-hoc bash driver
-  (`scripts/ar-run.sh`);
+  (`ar-run.sh`);
 - the human face is missing `resume` and `--agent`, and `work-on` does not `cd`
   you in by default;
 - flags are inconsistent (`return` vs the clearer `requeue`; a dead `--by`;
@@ -64,7 +66,7 @@ phase-2 build inventory in `work/observations/command-surface-reconciliation.md`
   run concurrently in job worktrees, integrate, loop forever); `run --once` = one
   debug tick (NOT the CI path). `do` = the per-repo, in-place worker (claim +
   build + gate + integrate in ONE repo, then exit) — **the CI command**, and it
-  absorbs `scripts/ar-run.sh`. `do <slug>` / `do prd:<slug>` (slice it) / `do`
+  absorbs `ar-run.sh`. `do <slug>` / `do prd:<slug>` (slice it) / `do`
   (auto-pick) / `do <a> <b>…` / `do -n <x>`; `--propose` (default) / `--merge`.
   Isolation by form: `do <slug>` in a checkout works **in-place** (the checkout is
   the isolation); `do --remote <r>` materialises a hub mirror + job worktree in
@@ -76,12 +78,16 @@ phase-2 build inventory in `work/observations/command-surface-reconciliation.md`
   prefixes.
 
 - **The human face (ADR §4).** Add a `resume` verb (re-engage an in-progress item
-  in the current checkout; `start --resume` becomes a hidden alias). Add `--agent`
-  to `start`/`work-on` — launch the configured harness **interactively** (the human
-  starts chatting with an agent; the launch is foreground and waits for the human's
-  message — distinct from the autonomous, prompt-fed, unattended harness launch in
-  `run`/`do`). `work-on` `cd`s you in by default (via the shell wrapper;
-  `--print-dir` is that wrapper's plumbing).
+  in the current checkout; `start --resume` becomes a hidden alias) and make
+  `work-on` `cd` you in by default (via the shell wrapper; `--print-dir` is that
+  wrapper's plumbing). **`--agent`** (launch the configured harness *interactively*
+  on `start`/`work-on` — the human starts chatting with an agent, foreground,
+  awaiting their first message, distinct from the autonomous prompt-fed launch) is
+  ALSO ADR §4 but is **split into its own `needsAnswers`-gated slice**
+  (`agent-interactive-launch`): it needs a NEW harness-seam capability (the current
+  seam only does captured, prompt-fed, run-to-completion launches), and the shape of
+  that capability is an open question — so it is captured as known-but-blocked work,
+  not built in the first pass.
 
 - **Renames / flag cleanup (ADR §7).** `return` → `requeue`; remove `--by`;
   readiness override = `--ignore-not-ready` ONLY (free `--force` for the genuinely
@@ -125,7 +131,7 @@ protocol-adoption concern (those stay skills).
 8. As the maintainer, I want `do <slug>` to claim + build + gate + integrate in
    the CURRENT checkout in-place, then exit, with `--propose` (default) /
    `--merge`, so that I have a one-shot worker AND the exact command CI runs — and
-   so the ad-hoc `scripts/ar-run.sh` driver dies into it.
+   so the ad-hoc `ar-run.sh` driver dies into it.
 9. As the maintainer, I want `do --remote <r>` to materialise a hub mirror + job
    worktree in the agents' area (sharing `run`'s isolation), so that I can run the
    worker against any registered repo without a checkout, never touching the human
@@ -180,81 +186,83 @@ protocol-adoption concern (those stay skills).
   straightforwardly agent-sliceable. **Per WORK-CONTRACT.md §3b this is disjoint
   from the slices' gates:** the slicer sets each slice's gate from that slice's own
   build-nature, NOT from this PRD. (All planned slices below are judged
-  agent-buildable on their own merits — see the slicing plan; `--agent` is
-  agent-buildable because it is wiring an interactive harness launch behind a flag,
-  testable with a stubbed/asserted launch, even though the feature itself is
-  human-facing.)
+  agent-buildable on their own merits — see the slicing plan. One slice carries an
+  honest `needsAnswers: true`: `agent-interactive-launch` (the `--agent` flag) is
+  blocked on an open harness-seam design question (the current seam does not support
+  interactive launch), so it is captured as known-but-blocked rather than built
+  blind. The other ten are agent-buildable now.)
 - **`needsAnswers`:** NONE OPEN. The ADR settles every decision this PRD builds
   (the registry model, the run/do split, slug resolution, the human-face verbs,
   the flag cleanup, fetch-first). Omitted.
 
-## Implementation Decisions
+## The slicing plan (file-orthogonal; `do-in-place` is the keystone)
 
-> Trimmed at slice-time: this detail moves into the slices (what to build) and,
-> where it is durable rationale, it ALREADY lives in
-> `docs/adr/command-surface-and-journeys.md` + the substrate ADRs. It is here only
-> to seed the slicing.
+> What-to-build detail now lives in the 10 slices; durable rationale is in
+> `docs/adr/command-surface-and-journeys.md` + the substrate ADRs. This section is
+> kept as the durable MAP of the phase-2 build (the slice set + its dependency
+> spine), since the slicing structure itself is part of this PRD's framing.
 
-### The slicing plan (file-orthogonal; `do-in-place` is the keystone)
+Eleven slices. Ten are agent-buildable now (each is wiring/logic testable with
+throwaway repos + a local `--bare` arbiter + stubbed harness — the house pattern);
+one (`agent-interactive-launch`, the `--agent` flag) is honestly `needsAnswers:
+true`, blocked on an open harness-seam design question. Dependency spine (logical
+deps + `cli.ts`-hot-file serialisation, ADR §10):
 
-Ten slices. Gates: all agent-buildable (none needs human judgement/secrets to
-BUILD — each is wiring/logic testable with throwaway repos + a local `--bare`
-arbiter + stubbed harness, the established house pattern). `blockedBy` is set both
-for true logical deps AND to serialise slices that touch the same files (cli.ts is
-the shared hot file — see the conflict note below).
+| slice | blockedBy | covers |
+| --- | --- | --- |
+| `registry-remote` | — | 1–5 |
+| `isolation-strategy-seam` | — | 6 |
+| `slug-namespace-resolution` | — | 7 |
+| `do-in-place` (KEYSTONE) | isolation-strategy-seam, slug-namespace-resolution | 8, 11 |
+| `do-remote` | registry-remote, do-in-place | 9 |
+| `do-autopick` | do-in-place, autoslice-gate | 10 |
+| `run-daemon-reframe` (retires watch) | registry-remote | 12 |
+| `human-face-verbs` | slug-namespace-resolution | 13, 15 |
+| `agent-interactive-launch` (`needsAnswers`) | human-face-verbs | 14 |
+| `flag-cleanup-renames` | registry-remote | 16–19 |
+| `scan-status-fetch-first` | registry-remote | 20 |
 
-1. **`registry-remote`** — `remote add/rm/ls/find`; `remote add --local` absorbs
-   `arbiterInit`; `arbiter status` folds into `status`; remove the config `roots`
-   field (never add `remotes`); the transport guard; `remote find` reuses
-   `isParticipatingRepo`. Touches `cli.ts`, `config.ts`, `arbiter.ts`, a new
-   `remote.ts`, `repo-mirror.ts`, `detect.ts`. `blockedBy: []`.
-2. **`isolation-strategy-seam`** — the in-place vs job-worktree isolation seam
-   `do` selects on (in-place when there is a checkout; mirror + job worktree for
-   `do --remote`, sharing `run`'s `createJob` path). Pure seam extraction from
-   `run.ts`/`workspace.ts`; no command yet. `blockedBy: []`.
-3. **`slug-namespace-resolution`** — the §3a resolver: bare = slice (cross-namespace
-   existence check; ERROR on collision), `slice:` / `prd:` explicit; slice-only
-   commands reject `prd:`. Pure logic + its consumers' call sites. `blockedBy: []`.
-4. **`do-in-place`** (KEYSTONE) — `do <slug>` (and `do slice:<slug>`/`do prd:<slug>`
-   routing via slice 3) in a checkout: claim + build + gate + integrate in-place
-   (via slice 2's in-place strategy), `--propose`/`--merge`, then exit. Absorbs
-   `scripts/ar-run.sh`. `blockedBy: [isolation-strategy-seam,
-   slug-namespace-resolution]`.
-5. **`do-remote`** — `do --remote <r>`: materialise a mirror + job worktree in the
-   agents' area (slice 2's job-worktree strategy, sharing `run`'s isolation);
-   auto-`remote add` an unregistered remote. `blockedBy: [registry-remote,
-   do-in-place]`.
-6. **`do-autopick`** — `do` (no arg) auto-pick one eligible thing; `do <a> <b>…`
-   in sequence; `do -n <x>`; the **slices-first then PRDs-to-slice** priority with
-   the per-repo toggle (the same priority `run`'s tick + the autoslice path
-   consume). `blockedBy: [do-in-place]`.
-7. **`run-daemon-reframe`** — `run` = the forever-looping parallel daemon (loop the
-   tick over the registry; `run --once` = one tick, no longer throwing); absorb the
-   deleted `watch` verb's bounded-session + surface-failures concerns (route stuck
-   items through the existing ledger needs-attention seam, surfaced on `main`).
-   Retire `work/backlog/watch.md`. `blockedBy: [registry-remote]`.
-8. **`human-face-verbs`** — add the `resume` verb (+ `start --resume` hidden alias);
-   `--agent` interactive harness launch on `start`/`work-on`; `work-on` `cd`-by-
-   default (with `--print-dir` the wrapper plumbing). `blockedBy:
-   [slug-namespace-resolution]`.
-9. **`flag-cleanup-renames`** — `return` → `requeue`; remove `--by`;
-   `--ignore-not-ready` only (drop the `--force` readiness spelling); demote the
-   advanced tier in help. `blockedBy: []` (but touches cli.ts — see conflict note).
-10. **`scan-status-fetch-first`** — `scan`/`status` fetch-first (warn + fall back
-    offline); retire the offline-scan invariant in docs/comments.
-    `blockedBy: [registry-remote]`.
+The spine: `registry-remote` is the foundation (and serialises the other `cli.ts`
+edits after it); `isolation-strategy-seam` + `slug-namespace-resolution` →
+`do-in-place` → (`do-remote`, `do-autopick`); `do-autopick` also needs
+`autoslice-gate` (the PRD slicing-eligibility predicate for its PRDs-to-slice
+pool); `slug-namespace-resolution` → `human-face-verbs` →
+`agent-interactive-launch` (the last `needsAnswers`-gated, so not agent-claimable
+until the seam question is answered).
 
-**Merge-conflict serialisation (cli.ts is the hot file).** Almost every slice
-edits `cli.ts`. Logical deps already serialise most of them; for the remaining
-independent-but-co-editing pairs the slicer should add `blockedBy` to serialise
-against `cli.ts` rather than let them race (per ADR §10 / the to-slices
-file-orthogonality rule). The slicer decides the exact chain at slice-write time,
-but the spine is: `registry-remote` → (`run-daemon-reframe`, `scan-status-fetch-
-first`, `do-remote`); `isolation-strategy-seam` + `slug-namespace-resolution` →
-`do-in-place` → (`do-remote`, `do-autopick`); `slug-namespace-resolution` →
-`human-face-verbs`; `flag-cleanup-renames` slotted into the cli.ts chain.
+### Implementation realities surfaced during slicing (read before building)
 
-### Sequencing constraint (carried from the reconciliation note)
+A code-grounded review found several places where the obvious framing is wrong;
+the slices encode these, but they are recorded here as durable warnings:
+
+- **There is no PRD reader today.** The read seam (`ledger-read.ts`) + `scan.ts`
+  read only `backlog`/`done`/`needs-attention`, NEVER `work/prd/`. `slug-namespace-
+  resolution` ADDS the PRD-existence reader; `do-autopick` (PRDs-to-slice pool) and
+  the autoslice slices reuse it. Do not assume an existing reader covers PRDs.
+- **The scan/candidate model is slice-only.** `selectCandidates`/eligibility know
+  nothing of PRDs. `do-autopick`'s "slices-first then PRDs-to-slice" is TWO pools:
+  the existing slice pool + a NEW PRD pool (PRD reader + `autoslice-gate` predicate).
+- **In-place `do` ≈ `start` + (autonomous harness run) + `complete`.** `ar-run.sh`
+  (the script `do` absorbs) is exactly that, with a DIRTY-TREE REFUSAL. `do-in-place`
+  composes the existing human verbs rather than re-deriving `runOneItem`; the
+  `isolation-strategy-seam` handle removes the `Job`-shape coupling so the shared
+  post-claim steps serve both in-place and job-worktree.
+- **`run`'s concurrency is REQUIRED but currently UNBUILT.** Concurrency is the
+  whole point of `run` (multiple agents in parallel on non-interacting slices). But
+  `runOnce` is SEQUENTIAL today (`for (const candidate) { await runOneItem }`) — it
+  selects up to `maxParallel` but runs them one at a time. `run-daemon-reframe` MUST
+  make the tick genuinely concurrent (up to `maxParallel` in flight, `perRepoMax`
+  per repo); the substrate (distinct-slug worktrees, arbiter-CAS claim) is already
+  parallel-ready, so it is execution wiring + the concurrency hazards (claim-race,
+  worktree isolation, independent rebase-or-abort integration), not a model change.
+- **Interactive `--agent` is a NEW harness-seam capability** (the current `launch`
+  is `spawnSync`+captured+prompt-fed) — hence its own `needsAnswers`-gated slice.
+- **`work-on` migrates positional `<remote> <slug>` → the `--remote` flag** (ADR §4;
+  consistent with `do --remote`) in `human-face-verbs`.
+- **`remote ls` reads each origin URL from the mirror** (`git remote get-url`), not
+  from the LOSSY key (which drops scheme/transport).
+
+## Sequencing constraint (carried from the reconciliation note)
 
 The backlog slices `autoslice-command` + `autoslice-confidence` are reshaped to
 build against `do prd:<slug>` (slug resolution from slice 3 + the `do` path from
@@ -262,36 +270,6 @@ slice 4). They are **blocked on the `do` keystone** and MUST NOT be claimed befo
 `do-in-place` (and slug-namespace-resolution) land. `autoslice-gate` +
 `autoslice-lock` + `brand-identity-single-source` are independent of phase 2 and
 buildable now. The `watch` backlog slice is retired by `run-daemon-reframe`.
-
-## Testing Decisions
-
-> Also trimmed at slice-time (moves into slices' acceptance criteria). The durable
-> testing discipline is the house pattern already in CONTEXT.md / AGENTS.md.
-
-- **House pattern:** vitest; throwaway git repos + a local `--bare` arbiter (the
-  claim-CAS verification pattern); a stubbed harness for any agent-launch path (no
-  real model). Race/concurrency tests live in the NON-PARALLEL vitest project.
-- **Registry:** `remote add` creates a mirror; the transport guard errors naming
-  the existing transport; `remote ls` enumerates origin URLs; `remote find`
-  discovers participating repos. Removing `roots` is proven by config tests that
-  no longer reference it (and the registry-as-mirrors discovery path).
-- **`do`:** in-place form claims+builds+gates+integrates+exits in a throwaway
-  checkout against a `--bare` arbiter; `--remote` form materialises a mirror+job
-  worktree in a temp agents' area; auto-pick/`-n`/multi-arg select the right items
-  in the right (slices-first) order; slug resolution errors on a seeded
-  slice/PRD collision.
-- **`run`:** `run --once` runs one tick without throwing; the daemon loop honours
-  its stop discipline; a failing item routes through the seam needs-attention path
-  (assert the seam, not a bespoke reporter — the retired `watch` slice's
-  acceptance criterion, preserved).
-- **Human face:** `resume` switches to an in-progress branch without claiming;
-  `--agent` invokes the (stubbed) harness in interactive mode and is asserted via
-  the stub; `work-on --print-dir` still emits only the path.
-- **Cleanup:** `requeue` behaves as `return` did; `--by` is gone; `--force` on
-  claim/start/work-on is gone while `gc --force` still works; `--ignore-not-ready`
-  overrides readiness.
-- **fetch-first:** `scan`/`status` fetch and, on a simulated fetch failure, warn +
-  fall back to last-known (proving the invariant retirement).
 
 ## Out of Scope
 
@@ -320,5 +298,5 @@ Exactly the ADR's already-deferred items — nothing more:
   `work/observations/command-surface-reconciliation.md`; it is the authoritative
   per-module change list and doubles as the phase-3 drift checklist. Do not delete
   that observation until all three phases are complete.
-- `do` absorbing `scripts/ar-run.sh` retires the bash test-driver; the `do-in-place`
+- `do` absorbing `ar-run.sh` retires the bash test-driver; the `do-in-place`
   slice should confirm the equivalence (CI's needs are met by `do --propose`).
