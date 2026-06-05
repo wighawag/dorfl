@@ -4,7 +4,7 @@ import {writeFileSync, existsSync, readFileSync, chmodSync} from 'node:fs';
 import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
 import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
-import {scan} from '../src/scan.js';
+import {scanRepoPaths} from '../src/scan.js';
 import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
 import {piSessionDir} from '../src/pi-harness.js';
 import {
@@ -33,11 +33,21 @@ const editingAgent: AgentRunner = ({cwd}) => {
 const greenGate: TestGate = () => ({green: true});
 const redGate: TestGate = () => ({green: false, detail: 'tests failed'});
 
+/**
+ * Build the injected scan report for `run` from the seeded `project` working
+ * checkout (working-tree read). `run` claims + cuts job worktrees from real
+ * checkouts, so its discovery is the working-tree scan, not the registry's bare
+ * mirrors (that wiring is the `run-daemon-reframe` slice).
+ */
+function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
+	return scanRepoPaths([join(scratch.root, 'project')], config);
+}
+
 function configFor(root: string, overrides = {}) {
-	// Scan only the seeded `project` repo. Throwaway clones/arbiter live as
-	// siblings under `root`; pointing roots at the project keeps them out of scan.
+	void root;
+	// `run` operates on working CHECKOUTS; the report is injected from an explicit
+	// working-tree scan ({@link scanProject}) over the seeded `project` repo.
 	return mergeConfig({
-		roots: [join(root, 'project')],
 		defaultArbiter: 'arbiter',
 		maxParallel: 4,
 		perRepoMax: 2,
@@ -56,7 +66,7 @@ describe('runOnce — happy path (green gate)', () => {
 		const config = configFor(scratch.root);
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -79,7 +89,7 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		const config = configFor(scratch.root);
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: redGate,
@@ -114,7 +124,7 @@ describe('runOnce — concurrency caps', () => {
 		const config = configFor(scratch.root, {maxParallel: 2, perRepoMax: 10});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -130,7 +140,7 @@ describe('runOnce — concurrency caps', () => {
 		const config = configFor(scratch.root, {maxParallel: 10, perRepoMax: 1});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -158,7 +168,7 @@ describe('runOnce — lost race is skipped cleanly', () => {
 		const result = await runOnce({
 			config,
 			// scan the still-stale working clone (its backlog still lists solo)
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -178,9 +188,8 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 		const a = seeded.clone('a');
 		const b = seeded.clone('b');
 
-		const configFrom = (clone: string) =>
+		const configFrom = () =>
 			mergeConfig({
-				roots: [clone],
 				defaultArbiter: 'arbiter',
 				maxParallel: 4,
 				perRepoMax: 2,
@@ -190,10 +199,10 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 			});
 
 		const runFrom = (clone: string, agentId: string) => {
-			const config = configFrom(clone);
+			const config = configFrom();
 			return runOnce({
 				config,
-				report: scan(config),
+				report: scanRepoPaths([clone], config),
 				workspace: join(scratch.root, `ws-${agentId}`),
 				agentRunner: editingAgent,
 				testGate: greenGate,
@@ -221,7 +230,7 @@ describe('runOnce — integration modes', () => {
 		let prBranch = '';
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -247,7 +256,7 @@ describe('runOnce — integration modes', () => {
 		const config = configFor(scratch.root, {integration: 'merge'});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -272,7 +281,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		let prBranch = '';
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -301,7 +310,6 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			JSON.stringify({integration: 'propose'}),
 		);
 		const config = mergeConfig({
-			roots: [a.repo, b.repo],
 			defaultArbiter: 'arbiter',
 			maxParallel: 4,
 			perRepoMax: 2,
@@ -312,7 +320,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		let bBranch = '';
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanRepoPaths([a.repo, b.repo], config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -344,7 +352,7 @@ describe('runOnce — agent failure', () => {
 		const failingAgent: AgentRunner = () => ({ok: false, detail: 'boom'});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: failingAgent,
 			testGate: greenGate,
@@ -370,7 +378,7 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -393,7 +401,7 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		// the worktree + record are retained for gc/status to read (ADR §4).
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: redGate,
@@ -422,7 +430,7 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 			integration: 'merge',
 		});
 
-		const report = scan(config);
+		const report = scanProject(config);
 
 		// The agent edits shared.txt one way. WHILE it "works" (i.e. after the job
 		// worktree was cut from the then-current main), a parallel branch lands a
@@ -512,7 +520,7 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			// No agentRunner injection ⇒ the real harness seam (pi adapter) runs.
 			testGate: greenGate,
@@ -547,7 +555,7 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			testGate: redGate, // keeps the worktree retained so we can read the record
 			env: gitEnv(),
@@ -602,7 +610,7 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			testGate: greenGate,
 			env: gitEnv(),
@@ -627,7 +635,7 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			// No agentRunner injection ⇒ the real null harness seam runs agentCmd.
 			testGate: greenGate,
@@ -648,7 +656,7 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			testGate: greenGate,
 			env: gitEnv(),

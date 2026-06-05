@@ -371,7 +371,7 @@ function appendReasonBlock(
  * `status` surfaces. Returns the first non-empty line(s) of the block as a
  * single line (stops at the next `## ` heading); '' when no block is present.
  */
-function extractReason(content: string): string {
+export function extractReason(content: string): string {
 	const normalized = content.replace(/\r\n/g, '\n');
 	const lines = normalized.split('\n');
 	const start = lines.findIndex((l) => l.trim() === REASON_HEADING);

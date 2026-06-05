@@ -33,18 +33,14 @@ export type ReviewProviderName = 'none' | 'github';
 export type VerifyConfig = string | string[];
 
 /**
- * Resolved runner configuration. Increment A (`scan`) consumes the discovery +
- * eligibility fields; increment B (`run --once`) additionally consumes the
+ * Resolved runner configuration. There is NO `roots`/`remotes` field: discovery
+ * is the registered hub-mirror set under `<workspacesDir>/repos/` (the registry,
+ * ADR `command-surface-and-journeys` §1), NOT a config roots walk. `scan` reads
+ * the eligibility fields per repo; `run --once` additionally consumes the
  * execution fields (maxParallel, perRepoMax, defaultArbiter, integration,
  * agentCmd).
  */
 export interface Config {
-	/** Directories to walk looking for participating repos. */
-	roots: string[];
-	/** Explicit repo paths to include even if detection would skip them. */
-	include: string[];
-	/** Repo paths to exclude even if detection would find them. */
-	exclude: string[];
 	/**
 	 * Per-repo policy: may agents claim *undeclared* (not `humanOnly`) slices in
 	 * this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
@@ -145,14 +141,12 @@ export interface Config {
 export type PartialConfig = Partial<Config>;
 
 /**
- * Built-in defaults. Chosen so that zero-config is useful: scan the current
- * working directory and stay strict about the autonomy gate (agents claim
- * nothing unless a repo opts in via `allowAgents`).
+ * Built-in defaults. Chosen so that zero-config is useful: stay strict about the
+ * autonomy gate (agents claim nothing unless a repo opts in via `allowAgents`).
+ * Discovery has no default `roots` — it is the registered hub-mirror set (empty
+ * until `remote add`/`remote find` registers a target).
  */
 export const DEFAULT_CONFIG: Config = {
-	roots: [process.cwd()],
-	include: [],
-	exclude: [],
 	allowAgents: false,
 	maxParallel: 4,
 	perRepoMax: 2,

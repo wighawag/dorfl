@@ -14,9 +14,8 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).allowAgents).toBe(false);
 	});
 
-	it('defaults include and exclude to empty arrays', () => {
-		expect(mergeConfig({}).include).toEqual([]);
-		expect(mergeConfig({}).exclude).toEqual([]);
+	it('defaults the autonomy gate to strict (allowAgents false)', () => {
+		expect(mergeConfig({}).allowAgents).toBe(false);
 	});
 
 	it('defaults the execution fields (maxParallel, perRepoMax, arbiter, integration)', () => {
@@ -68,24 +67,22 @@ describe('mergeConfig', () => {
 	it('overrides individual fields while keeping the rest as defaults', () => {
 		const merged = mergeConfig({allowAgents: true});
 		expect(merged.allowAgents).toBe(true);
-		expect(merged.include).toEqual([]);
+		expect(merged.maxParallel).toBe(DEFAULT_CONFIG.maxParallel);
 	});
 
-	it('replaces array fields rather than concatenating them', () => {
+	it('replaces list fields rather than concatenating them', () => {
 		const merged = mergeConfig({
-			roots: ['/a', '/b'],
-			exclude: ['skip-me'],
+			verify: ['a', 'b'],
 		});
-		expect(merged.roots).toEqual(['/a', '/b']);
-		expect(merged.exclude).toEqual(['skip-me']);
+		expect(merged.verify).toEqual(['a', 'b']);
 	});
 
 	it('ignores undefined override values', () => {
 		const merged = mergeConfig({
-			roots: undefined,
+			maxParallel: undefined,
 			allowAgents: true,
 		});
-		expect(merged.roots).toEqual(DEFAULT_CONFIG.roots);
+		expect(merged.maxParallel).toEqual(DEFAULT_CONFIG.maxParallel);
 		expect(merged.allowAgents).toBe(true);
 	});
 });
@@ -108,11 +105,11 @@ describe('loadConfig', () => {
 
 	it('loads and merges a config file over the defaults', () => {
 		const path = join(dir, 'config.json');
-		writeFileSync(path, JSON.stringify({roots: ['/x'], allowAgents: true}));
+		writeFileSync(path, JSON.stringify({maxParallel: 7, allowAgents: true}));
 		const cfg = loadConfig(path);
-		expect(cfg.roots).toEqual(['/x']);
+		expect(cfg.maxParallel).toEqual(7);
 		expect(cfg.allowAgents).toBe(true);
-		expect(cfg.include).toEqual([]);
+		expect(cfg.perRepoMax).toEqual(DEFAULT_CONFIG.perRepoMax);
 	});
 
 	it('throws a helpful error on invalid JSON', () => {

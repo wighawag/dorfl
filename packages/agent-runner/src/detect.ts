@@ -1,16 +1,19 @@
 import {readdirSync, existsSync, statSync} from 'node:fs';
-import {join, basename, resolve} from 'node:path';
+import {join} from 'node:path';
 
-/** The subset of config that detection needs. */
-export interface DetectOptions {
-	roots: string[];
-	include: string[];
-	exclude: string[];
-}
+/**
+ * Discovery of `work/`-participating repos in a FOLDER. In the registry model
+ * (ADR `command-surface-and-journeys` §1) the registered set IS the hub-mirror
+ * set on disk — there is NO config `roots`/`remotes` walk. This module is no
+ * longer implicit discovery; its sole remaining job is to serve
+ * **`remote find <folder>`** (ADR §1): walk ONE folder, find the participating
+ * repos, and let the user toggle-add them. `isParticipatingRepo` is the same
+ * predicate `remote find` filters on.
+ */
 
 /**
  * A repo participates iff it has a `work/backlog/` directory containing at least
- * one `.md` file.
+ * one `.md` file. This is the predicate `remote find` (ADR §1) filters on.
  */
 export function isParticipatingRepo(repoPath: string): boolean {
 	const backlog = join(repoPath, 'work', 'backlog');
@@ -28,29 +31,12 @@ function shouldPrune(name: string): boolean {
 }
 
 /**
- * Does `path` match any of the given selectors? A selector matches either by
- * resolved full path or by the repo's basename (convenience for config).
+ * Walk a single folder, collecting participating repo paths. Prunes
+ * `node_modules` and dotdirs, and does not descend into a repo once it is found
+ * to participate (a participating repo's own subtree yields no more repos).
  */
-function matchesSelector(path: string, selectors: string[]): boolean {
-	if (selectors.length === 0) {
-		return false;
-	}
-	const resolvedPath = resolve(path);
-	const base = basename(path);
-	for (const selector of selectors) {
-		if (selector === base || resolve(selector) === resolvedPath) {
-			return true;
-		}
-	}
-	return false;
-}
-
-/**
- * Walk a single root, collecting participating repo paths. Prunes `node_modules`
- * and dotdirs, and does not descend into a repo once it is found to participate.
- */
-function walkRoot(root: string, found: Set<string>): void {
-	let stack: string[] = [root];
+function walkFolder(folder: string, found: Set<string>): void {
+	const stack: string[] = [folder];
 	while (stack.length > 0) {
 		const dir = stack.pop()!;
 		if (isParticipatingRepo(dir)) {
@@ -77,34 +63,25 @@ function walkRoot(root: string, found: Set<string>): void {
 }
 
 /**
- * Detect participating repos across the configured roots. `include` adds paths
- * regardless of detection; `exclude` removes them (exclude wins over include and
- * over detection). The returned list is deduplicated and sorted.
+ * Find every `work/`-participating repo under `folder` (recursively), pruning
+ * `node_modules`/dotdirs and not descending into a participating repo. The
+ * returned list is deduplicated and sorted (deterministic). This is the
+ * discovery primitive behind `remote find <folder>` (ADR §1): the caller filters
+ * on {@link isParticipatingRepo} and toggle-adds the chosen ones via `remote
+ * add`. A non-existent / non-directory `folder` yields `[]` (never throws).
  */
-export function detectRepos(options: DetectOptions): string[] {
+export function findParticipatingRepos(folder: string): string[] {
 	const found = new Set<string>();
-
-	for (const root of options.roots) {
-		if (!existsSync(root)) {
-			continue;
-		}
-		try {
-			if (!statSync(root).isDirectory()) {
-				continue;
-			}
-		} catch {
-			continue;
-		}
-		walkRoot(root, found);
+	if (!existsSync(folder)) {
+		return [];
 	}
-
-	for (const inc of options.include) {
-		found.add(resolve(inc));
+	try {
+		if (!statSync(folder).isDirectory()) {
+			return [];
+		}
+	} catch {
+		return [];
 	}
-
-	const result = [...found].filter(
-		(repo) => !matchesSelector(repo, options.exclude),
-	);
-
-	return result.sort();
+	walkFolder(folder, found);
+	return [...found].sort();
 }

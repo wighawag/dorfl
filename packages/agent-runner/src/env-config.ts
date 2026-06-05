@@ -5,8 +5,8 @@ import type {Config, PartialConfig} from './config.js';
  *
  * A per-machine context (a CI job, a developer's shell) can set ANY {@link Config}
  * key via an `AGENT_RUNNER_*` environment variable WITHOUT committing a file —
- * including the host-only keys (`piBin`, `agentCmd`, `roots`, …) that the
- * per-repo `.agent-runner.json` deliberately rejects.
+ * including the host-only keys (`piBin`, `agentCmd`, …) that the per-repo
+ * `.agent-runner.json` deliberately rejects.
  *
  * Env is a legitimate *per-machine source* — exactly like a CLI flag or the
  * global `~/.config/agent-runner/config.json` — so it is NOT subject to the
@@ -23,7 +23,7 @@ import type {Config, PartialConfig} from './config.js';
  * Naming: `AGENT_RUNNER_<SCREAMING_SNAKE(key)>` (mechanical camelCase →
  * SCREAMING_SNAKE, prefixed with `AGENT_RUNNER_` to match the binary). E.g.
  * `AGENT_RUNNER_AGENT_CMD`, `AGENT_RUNNER_PI_BIN`, `AGENT_RUNNER_DEFAULT_ARBITER`,
- * `AGENT_RUNNER_EXCLUDE`, `AGENT_RUNNER_PER_REPO_MAX`.
+ * `AGENT_RUNNER_PER_REPO_MAX`.
  *
  * Each value is coerced per the key's type and a typo/invalid value FAILS LOUDLY
  * (never silently ignored) with a message naming the offending variable.
@@ -47,9 +47,6 @@ type Coercion =
  * is off-limits. Keys not listed have no env var.
  */
 const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
-	roots: 'list',
-	include: 'list',
-	exclude: 'list',
 	allowAgents: 'boolean',
 	maxParallel: 'number',
 	perRepoMax: 'number',

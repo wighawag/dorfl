@@ -36,8 +36,7 @@ export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 export type {Frontmatter} from './frontmatter.js';
 export {parseFrontmatter} from './frontmatter.js';
 
-export type {DetectOptions} from './detect.js';
-export {detectRepos, isParticipatingRepo} from './detect.js';
+export {isParticipatingRepo, findParticipatingRepos} from './detect.js';
 
 export type {
 	HumanOnlyGate,
@@ -58,6 +57,7 @@ export type {
 	ArbiterLedgerState,
 	ResolveLocalStateInput,
 	ResolveArbiterStateInput,
+	ResolveMirrorStateInput,
 	LedgerReadStrategy,
 } from './ledger-read.js';
 export {currentLedgerRead, ledgerRead} from './ledger-read.js';
@@ -77,7 +77,25 @@ export type {
 export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
 
 export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
-export {scan, readBacklogItems, readDoneSlugs} from './scan.js';
+export {scan, scanRepoPaths, readBacklogItems, readDoneSlugs} from './scan.js';
+
+export type {
+	RegisteredMirror,
+	Transport,
+	RegistryOptions,
+	RemoteAddResult,
+	RemoteAddOptions,
+	RemoteRmResult,
+	RemoteRmOptions,
+} from './registry.js';
+export {
+	RegistryError,
+	listMirrors,
+	remoteAdd,
+	remoteRm,
+	transportForUrl,
+	projectIdFromKey,
+} from './registry.js';
 
 export {formatReport, gateLabel} from './format.js';
 
@@ -271,6 +289,7 @@ export {
 	routeToNeedsAttention,
 	returnToBacklog,
 	readNeedsAttentionItems,
+	extractReason,
 } from './needs-attention.js';
 
 export type {

@@ -10,7 +10,7 @@ import {
 import {NoneProvider} from '../src/integrator.js';
 import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
 import {mergeConfig} from '../src/config.js';
-import {scan} from '../src/scan.js';
+import {scanRepoPaths} from '../src/scan.js';
 import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
 import {
 	makeScratch,
@@ -202,9 +202,14 @@ const editingAgent: AgentRunner = ({cwd}) => {
 };
 const greenGate: TestGate = () => ({green: true});
 
+/** The injected working-tree scan report for `run` over the seeded `project`. */
+function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
+	return scanRepoPaths([join(scratch.root, 'project')], config);
+}
+
 function configFor(root: string, overrides = {}) {
+	void root;
 	return mergeConfig({
-		roots: [join(root, 'project')],
 		defaultArbiter: 'arbiter',
 		maxParallel: 4,
 		perRepoMax: 2,
@@ -223,7 +228,7 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 		const workspacesDir = join(scratch.root, 'ws');
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -260,7 +265,7 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 		const config = configFor(scratch.root, {integration: 'propose'});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -284,7 +289,7 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 		const config = configFor(scratch.root, {integration: 'merge'});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,
@@ -305,7 +310,7 @@ describe('runOnce — provider auto-selection via config + URL (no gh)', () => {
 		const config = configFor(scratch.root, {integration: 'propose'});
 		const result = await runOnce({
 			config,
-			report: scan(config),
+			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
 			testGate: greenGate,

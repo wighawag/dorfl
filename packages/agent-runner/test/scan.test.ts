@@ -2,10 +2,31 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {scan, readDoneSlugs, readBacklogItems} from '../src/scan.js';
+import {
+	scan,
+	scanRepoPaths,
+	readDoneSlugs,
+	readBacklogItems,
+} from '../src/scan.js';
 import {mergeConfig} from '../src/config.js';
+import {registerMirrorWithWork} from './helpers/gitRepo.js';
 
 let root: string;
+
+/** A minimal slice markdown body with the given frontmatter fields. */
+function slice(frontmatter: Record<string, string>): string {
+	const lines = ['---'];
+	for (const [k, v] of Object.entries(frontmatter)) {
+		lines.push(`${k}: ${v}`);
+	}
+	lines.push('---', '', 'body');
+	return lines.join('\n');
+}
+
+/** The workspacesDir whose `repos/` we seed with bare mirror fixtures. */
+function workspacesDir(): string {
+	return join(root, '.agent-runner');
+}
 
 function writeItem(
 	repo: string,
@@ -93,19 +114,24 @@ describe('readBacklogItems', () => {
 	});
 });
 
-describe('scan', () => {
-	it('produces a per-repo queue with resolved eligibility', () => {
-		writeItem('repo-a', 'backlog', 'ready.md', {slug: 'ready'});
-		writeItem('repo-a', 'backlog', 'human.md', {
-			slug: 'human',
-			humanOnly: 'true',
+describe("scan (registry: reads each hub mirror's bare main ref)", () => {
+	it('produces a per-repo queue with resolved eligibility', async () => {
+		const m = registerMirrorWithWork(workspacesDir(), 'repo-a', {
+			backlog: {
+				'ready.md': slice({slug: 'ready'}),
+				'human.md': slice({slug: 'human', humanOnly: 'true'}),
+			},
 		});
-		const config = mergeConfig({roots: [root], allowAgents: true});
+		const config = mergeConfig({
+			workspacesDir: workspacesDir(),
+			allowAgents: true,
+		});
 
-		const report = scan(config);
+		const report = await scan(config);
 		expect(report.repos).toHaveLength(1);
 		const repo = report.repos[0];
-		expect(repo.path).toBe(join(root, 'repo-a'));
+		// The repo identity is the hub-mirror PATH (registry model).
+		expect(repo.path).toBe(m.mirrorPath);
 
 		const ready = repo.items.find((i) => i.slug === 'ready')!;
 		expect(ready.eligibility.eligible).toBe(true);
@@ -115,13 +141,16 @@ describe('scan', () => {
 		expect(human.eligibility.gatePass).toBe(false);
 	});
 
-	it('gates needsAnswers: true items independently of humanOnly', () => {
-		writeItem('repo-na', 'backlog', 'ready.md', {slug: 'ready'});
-		writeItem('repo-na', 'backlog', 'answers.md', {
-			slug: 'answers',
-			needsAnswers: 'true',
+	it('gates needsAnswers: true items independently of humanOnly', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo-na', {
+			backlog: {
+				'ready.md': slice({slug: 'ready'}),
+				'answers.md': slice({slug: 'answers', needsAnswers: 'true'}),
+			},
 		});
-		const report = scan(mergeConfig({roots: [root], allowAgents: true}));
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+		);
 		const repo = report.repos[0];
 
 		const ready = repo.items.find((i) => i.slug === 'ready')!;
@@ -132,72 +161,101 @@ describe('scan', () => {
 		expect(answers.eligibility.gatePass).toBe(false);
 	});
 
-	it('resolves blockedBy against the same repo work/done/', () => {
-		writeItem('repo', 'backlog', 'b.md', {
-			slug: 'b',
-			blockedBy: '[a]',
-		});
+	it('resolves blockedBy against the same mirror work/done/', async () => {
 		// dependency not yet done
-		let report = scan(mergeConfig({roots: [root], allowAgents: true}));
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
+		});
+		const config = mergeConfig({
+			workspacesDir: workspacesDir(),
+			allowAgents: true,
+		});
+		let report = await scan(config);
 		let b = report.repos[0].items[0];
 		expect(b.eligibility.blockedBy.satisfied).toBe(false);
 		expect(b.eligibility.eligible).toBe(false);
 
-		// now satisfy the dependency
-		writeItem('repo', 'done', 'a.md', {slug: 'a'});
-		report = scan(mergeConfig({roots: [root], allowAgents: true}));
+		// now satisfy the dependency: a fresh fixture with a done/ alongside backlog/.
+		rmSync(workspacesDir(), {recursive: true, force: true});
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
+			done: {'a.md': slice({slug: 'a'})},
+		});
+		report = await scan(config);
 		b = report.repos[0].items[0];
 		expect(b.eligibility.blockedBy.satisfied).toBe(true);
 		expect(b.eligibility.eligible).toBe(true);
 	});
 
-	it('does NOT resolve blockedBy across repos', () => {
-		writeItem('repo-a', 'done', 'dep.md', {slug: 'dep'});
-		writeItem('repo-b', 'backlog', 'needs.md', {
-			slug: 'needs',
-			blockedBy: '[dep]',
+	it('does NOT resolve blockedBy across mirrors', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo-a', {
+			done: {'dep.md': slice({slug: 'dep'})},
 		});
-		const report = scan(mergeConfig({roots: [root], allowAgents: true}));
-		const repoB = report.repos.find((r) => r.path === join(root, 'repo-b'))!;
-		const needs = repoB.items[0];
+		registerMirrorWithWork(workspacesDir(), 'repo-b', {
+			backlog: {'needs.md': slice({slug: 'needs', blockedBy: '[dep]'})},
+		});
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+		);
+		const needs = report.repos
+			.flatMap((r) => r.items)
+			.find((i) => i.slug === 'needs')!;
 		// dep is done in repo-a but NOT in repo-b → still blocked
 		expect(needs.eligibility.blockedBy.satisfied).toBe(false);
 		expect(needs.eligibility.eligible).toBe(false);
 	});
 
-	it('honours allowAgents for undeclared (no humanOnly) items', () => {
-		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
+	it('honours allowAgents for undeclared (no humanOnly) items', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'u.md': slice({slug: 'u', blockedBy: '[]'})},
+		});
 
-		const strict = scan(mergeConfig({roots: [root], allowAgents: false}));
+		const strict = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: false}),
+		);
 		expect(strict.repos[0].items[0].eligibility.eligible).toBe(false);
 
-		const permissive = scan(mergeConfig({roots: [root], allowAgents: true}));
+		const permissive = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+		);
 		expect(permissive.repos[0].items[0].eligibility.eligible).toBe(true);
 	});
 
-	it('honours a per-repo .agent-runner.json allowAgents (resolved like integration)', () => {
+	it('returns an empty list when no mirrors are registered', async () => {
+		mkdirSync(workspacesDir(), {recursive: true});
+		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
+		expect(report.repos).toEqual([]);
+	});
+
+	it('counts eligible items in the report summary', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {
+				'a.md': slice({slug: 'a'}),
+				'b.md': slice({slug: 'b', humanOnly: 'true'}),
+				'c.md': slice({slug: 'c'}),
+			},
+		});
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+		);
+		expect(report.totalItems).toBe(3);
+		expect(report.totalEligible).toBe(2);
+	});
+});
+
+describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
+	it('reads eligibility from a working checkout and honours per-repo allowAgents', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
 		writeFileSync(
 			join(root, 'repo', '.agent-runner.json'),
 			JSON.stringify({allowAgents: true}),
 		);
-		// Global is strict, but the per-repo file opts in ⇒ eligible.
-		const report = scan(mergeConfig({roots: [root], allowAgents: false}));
+		// Global is strict, but the per-repo file opts in ⇒ eligible (the working-tree
+		// scan CAN read a checked-out .agent-runner.json; the mirror scan cannot).
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({allowAgents: false}),
+		);
 		expect(report.repos[0].items[0].eligibility.eligible).toBe(true);
-	});
-
-	it('returns repos sorted and an empty list when nothing participates', () => {
-		mkdirSync(join(root, 'not-a-repo'), {recursive: true});
-		const report = scan(mergeConfig({roots: [root]}));
-		expect(report.repos).toEqual([]);
-	});
-
-	it('counts eligible items in the report summary', () => {
-		writeItem('repo', 'backlog', 'a.md', {slug: 'a'});
-		writeItem('repo', 'backlog', 'b.md', {slug: 'b', humanOnly: 'true'});
-		writeItem('repo', 'backlog', 'c.md', {slug: 'c'});
-		const report = scan(mergeConfig({roots: [root], allowAgents: true}));
-		expect(report.totalItems).toBe(3);
-		expect(report.totalEligible).toBe(2);
 	});
 });

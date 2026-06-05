@@ -30,7 +30,7 @@ describe('repo-config constants', () => {
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
-		expect(REPO_REJECTED_KEYS).toContain('roots');
+		expect(REPO_REJECTED_KEYS).toContain('piBin');
 		expect(REPO_REJECTED_KEYS).toContain('maxParallel');
 		expect(REPO_REJECTED_KEYS).toContain('humanWorktreesDir');
 	});
@@ -88,22 +88,22 @@ describe('loadRepoConfig', () => {
 	it('rejects runner/host-only keys and reports them (does not honour them)', () => {
 		writeRepoConfig(repo, {
 			integration: 'merge',
-			roots: ['/x'],
+			piBin: '/x',
 			maxParallel: 9,
 		});
 		const loaded = loadRepoConfig(repo);
 		expect(loaded.config).toEqual({integration: 'merge'});
-		expect(loaded.config).not.toHaveProperty('roots');
+		expect(loaded.config).not.toHaveProperty('piBin');
 		expect(loaded.config).not.toHaveProperty('maxParallel');
-		expect(loaded.rejected).toContain('roots');
+		expect(loaded.rejected).toContain('piBin');
 		expect(loaded.rejected).toContain('maxParallel');
 	});
 
 	it('exposes a clear message naming the rejected keys and the file', () => {
-		writeRepoConfig(repo, {roots: ['/x'], maxParallel: 9});
+		writeRepoConfig(repo, {piBin: '/x', maxParallel: 9});
 		const loaded = loadRepoConfig(repo);
 		expect(loaded.message).toBeDefined();
-		expect(loaded.message).toMatch(/roots/);
+		expect(loaded.message).toMatch(/piBin/);
 		expect(loaded.message).toMatch(/maxParallel/);
 		expect(loaded.message).toMatch(/\.agent-runner\.json/);
 	});
@@ -346,7 +346,7 @@ describe('resolveRepoConfig — AGENT_RUNNER_* env layer', () => {
 
 	it('env sets host-only keys the per-repo file rejects (per-machine source)', () => {
 		// The per-repo file tries (and fails) to set host-only keys; env sets them.
-		writeRepoConfig(repo, {piBin: '/ignored', maxParallel: 99, roots: ['/no']});
+		writeRepoConfig(repo, {piBin: '/ignored', maxParallel: 99});
 		const global = mergeConfig({});
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
@@ -354,19 +354,16 @@ describe('resolveRepoConfig — AGENT_RUNNER_* env layer', () => {
 			env: {
 				AGENT_RUNNER_PI_BIN: '/opt/pi',
 				AGENT_RUNNER_AGENT_CMD: 'agent',
-				AGENT_RUNNER_ROOTS: '/r1,/r2',
 				AGENT_RUNNER_MAX_PARALLEL: '8',
 			},
 		});
 		// env wins for the host-only keys; the per-repo file's attempts are rejected.
 		expect(resolved.config.piBin).toBe('/opt/pi');
 		expect(resolved.config.agentCmd).toBe('agent');
-		expect(resolved.config.roots).toEqual(['/r1', '/r2']);
 		expect(resolved.config.maxParallel).toBe(8);
 		// the per-repo file STILL reports the rejected host-only keys
 		expect(resolved.rejected).toContain('piBin');
 		expect(resolved.rejected).toContain('maxParallel');
-		expect(resolved.rejected).toContain('roots');
 	});
 
 	it('no env ⇒ built-in floors/defaults are unchanged (regression)', () => {
