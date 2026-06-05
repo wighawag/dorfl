@@ -20,6 +20,19 @@ import {formatProposeNextStep, shouldUseColor} from './output.js';
  * human-driven and so allows a `--skip-verify` escape hatch the autonomous
  * runner never uses (ADR §8).
  *
+ * The item's SOURCE folder is normally `work/in-progress/` (a freshly-built
+ * slice). As a RUNNER-OWNED RECOVERY path it ALSO accepts an item in
+ * `work/needs-attention/` (a SPURIOUSLY-failed slice — an env-polluted gate, a
+ * transient flake, or a since-fixed cause): when `in-progress/` is absent it
+ * falls back to `needs-attention/`, RE-RUNS the gate (authoritative — only a
+ * GREEN re-gate completes; a still-red item simply stays in needs-attention/),
+ * and on green does the `needs-attention → done` move + commit + rebase +
+ * integrate — the SAME machinery, just a different source folder, so a
+ * good-but-stuck item is finishable with NO manual git. That recovery rebase
+ * also RECONCILES the cherry-picked on-`main` needs-attention surfacing (the
+ * done-move supersedes it) so the human never hits a rebase conflict against the
+ * surfacing commit. `--skip-verify` stays the only, human-only, loud override.
+ *
  * The integration step is split by mode (config `integration`, ADR §6):
  *   merge   — push the rebased branch to `<arbiter>/main`, then sync the LOCAL
  *             clone to that new main (the push is authoritative; the local sync
@@ -270,14 +283,28 @@ async function runComplete(
 		);
 	}
 
-	// The slice must be in-progress in the working tree (it is what we move).
+	// The slice must be in-progress in the working tree (the normal path), OR —
+	// the runner-owned recovery path — in needs-attention/ (a SPURIOUSLY-failed
+	// item the human/runner is finishing: the gate failure was env-pollution / a
+	// transient flake / a since-fixed cause). We prefer in-progress/; we fall back
+	// to needs-attention/ ONLY when in-progress/ is absent. Refuse only when
+	// NEITHER folder holds it. From needs-attention/ the gate is RE-RUN and must be
+	// GREEN to complete (recovery never trusts the human blindly — the existing
+	// human-only --skip-verify stays the loud override); the surfaced on-`main`
+	// needs-attention state is reconciled by the done-move (it supersedes it).
 	const inProgress = join(cwd, 'work', 'in-progress', `${slug}.md`);
-	if (!existsSync(inProgress)) {
+	const needsAttention = join(cwd, 'work', 'needs-attention', `${slug}.md`);
+	const source: 'in-progress' | 'needs-attention' = existsSync(inProgress)
+		? 'in-progress'
+		: 'needs-attention';
+	const sourcePath = source === 'in-progress' ? inProgress : needsAttention;
+	if (!existsSync(sourcePath)) {
 		throw new CompleteRefusal(
-			`work/in-progress/${slug}.md not found — nothing to complete ` +
-				'(already done, or wrong slug?).',
+			`work/in-progress/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
+				'nothing to complete (already done, or wrong slug?).',
 		);
 	}
+	const recovering = source === 'needs-attention';
 
 	// 1. Gate: bad work never proceeds to done. Default-on; --skip-verify is a
 	//    human-only escape hatch (the autonomous runner never skips — ADR §8).
@@ -286,6 +313,25 @@ async function runComplete(
 	} else {
 		note('Running the acceptance gate (verify)…');
 		const gate = await runVerify({cwd, verify: options.verify, env});
+		if (!gate.passed && recovering) {
+			// RECOVERY path, RED re-gate: the item is ALREADY in needs-attention/ (this
+			// is a finish-the-stuck-item attempt, not a fresh in-progress completion).
+			// The gate stays authoritative — a still-red item is NOT completed; it
+			// simply STAYS in needs-attention/ (no re-route, no re-surface, no double
+			// reason block). --skip-verify remains the only, human-only, loud override.
+			const message =
+				`Acceptance gate still failed (exit ${gate.exitCode}); '${slug}' stays in ` +
+				'work/needs-attention/ (the cause is not actually fixed). Fix the work, ' +
+				'or use --skip-verify to override.';
+			note(message);
+			return {
+				exitCode: 1,
+				outcome: 'gate-failed',
+				routedToNeedsAttention: false,
+				branch,
+				message,
+			};
+		}
 		if (!gate.passed) {
 			// Don't leave the item dangling in in-progress/: route it to
 			// needs-attention/ with the reason (ADR §12) THROUGH the ledger write
@@ -321,13 +367,14 @@ async function runComplete(
 	}
 
 	// Read the title now, BEFORE the move, for the default commit summary (the
-	// in-progress file is about to be git-mv'd away).
-	const defaultMessage = defaultSummary(inProgress, slug);
+	// source file is about to be git-mv'd away).
+	const defaultMessage = defaultSummary(sourcePath, slug);
 
-	// 2. Mark done: mkdir -p work/done, then git mv in-progress → done.
+	// 2. Mark done: mkdir -p work/done, then git mv <source> → done. The source is
+	//    in-progress/ on the normal path, or needs-attention/ on the recovery path.
 	mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
 	await gitHard(
-		['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`],
+		['mv', `work/${source}/${slug}.md`, `work/done/${slug}.md`],
 		cwd,
 		env,
 	);
@@ -349,8 +396,21 @@ async function runComplete(
 
 	// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
 	//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
+	//
+	//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
+	//    branch's history still carries the original `in-progress → needs-attention`
+	//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
+	//    (the item is in needs-attention/ on main). Replaying that historical move
+	//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
+	//    rebase conflict the human hit doing this by hand. So we DROP that move-only
+	//    commit during the rebase: the replay becomes `wip + (needs-attention →
+	//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
+	//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
+	//    leftover/conflicting on-`main` surface for the human to resolve.
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+	const rebase = recovering
+		? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
+		: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
 	if (rebase.status !== 0) {
 		// NEVER auto-resolve: abort the rebase (back to a clean work-branch tip).
 		await gitSoft(['rebase', '--abort'], cwd, env);
@@ -720,6 +780,88 @@ async function nothingStaged(
 	// `diff --cached --quiet` exits 0 when there is NOTHING staged, 1 when there is.
 	const res = await gitSoft(['diff', '--cached', '--quiet'], cwd, env);
 	return res.status === 0;
+}
+
+/**
+ * The RECOVERY rebase: rebase the work branch onto `<arbiter>/main` while
+ * DROPPING the historical `in-progress → needs-attention` move-only commit, so
+ * the replay does not conflict with the surfaced needs-attention state already
+ * on `main`.
+ *
+ * The work branch (as the autonomous `do`/`run` path left it) carries, ABOVE the
+ * claim-time main: a `wip` commit (the aborted agent work), the route-to-
+ * needs-attention `chore(<slug>): route to needs-attention; …` MOVE-ONLY commit,
+ * and (just committed by `complete`) the `needs-attention → done` done-move. The
+ * arbiter's `main` was surfaced to ALSO hold the item in needs-attention/, so a
+ * plain rebase replays the historical move-only commit (in-progress → needs-
+ * attention) onto a main that has no in-progress/<slug>.md → conflict.
+ *
+ * We rebase the whole range `(merge-base, HEAD]` `--onto <arbiter>/main` and use
+ * a `GIT_SEQUENCE_EDITOR` that DELETES the move-only commit's line from the todo
+ * list (matched by its message). The remaining `wip + (needs-attention → done)`
+ * replays cleanly: wip touches only the agent's files, and the done-move's
+ * `git mv work/needs-attention/<slug>.md → work/done/<slug>.md` applies because
+ * the surfaced main HAS the item in needs-attention/. Result: the done-move
+ * supersedes the surfaced state, and the human never sees a conflict.
+ *
+ * When the branch carries NO such move-only commit (e.g. a needs-attention item
+ * placed by hand, never autonomously surfaced), the editor deletes nothing and
+ * this degrades to a normal rebase. The seam returns the rebase RunResult so the
+ * caller's existing conflict-abort path handles a genuine (non-surface) conflict
+ * unchanged.
+ */
+async function rebaseDroppingNeedsAttentionSurface(
+	cwd: string,
+	arbiter: string,
+	slug: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<RunResult> {
+	// The branch we are ON (the work branch). Rebasing must UPDATE this ref — so
+	// we pass the branch NAME to `git rebase` (passing the literal `HEAD` would
+	// rebase in DETACHED mode and leave the branch ref behind).
+	const onBranch = (
+		await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
+	).stdout.trim();
+	const base = (
+		await gitSoft(['merge-base', 'HEAD', `${arbiter}/main`], cwd, env)
+	).stdout.trim();
+	if (base === '') {
+		// No common ancestor (shouldn't happen for a branch cut from main): fall
+		// back to a plain rebase so the caller's conflict path still governs.
+		return gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+	}
+	// A sequence editor that strips the route-to-needs-attention move-only commit
+	// from the interactive todo list. `routeToNeedsAttention` authors it as
+	// `chore(<slug>): route to needs-attention; <reason>` — match that prefix and
+	// delete those `pick` lines, leaving the wip + the done-move to replay.
+	const rebaseEnv: NodeJS.ProcessEnv = {
+		...(env ?? process.env),
+		GIT_SEQUENCE_EDITOR: dropMoveOnlySequenceEditor(slug),
+		// Keep the rebase non-interactive for the commit-message editor too.
+		GIT_EDITOR: 'true',
+	};
+	return gitSoft(
+		onBranch === ''
+			? ['rebase', '-i', '--onto', `${arbiter}/main`, base]
+			: ['rebase', '-i', '--onto', `${arbiter}/main`, base, onBranch],
+		cwd,
+		rebaseEnv,
+	);
+}
+
+/**
+ * Build a one-shot `GIT_SEQUENCE_EDITOR` command (a `sed` invocation) that
+ * deletes, from the rebase todo file (passed as `$1`), every `pick` line whose
+ * subject is the route-to-needs-attention move-only commit for `slug`
+ * (`chore(<slug>): route to needs-attention`). Deleting a `pick` line drops that
+ * commit from the rebase — the mechanism for skipping the move that conflicts
+ * with the surfaced main. Anchored to the slug so no unrelated commit is dropped.
+ */
+function dropMoveOnlySequenceEditor(slug: string): string {
+	// The todo line looks like: `pick <sha> chore(<slug>): route to needs-attention; …`
+	// Escape any sed-special characters in the slug before embedding it.
+	const escaped = slug.replace(/[\\/&.[\]*^$]/g, '\\$&');
+	return `sed -i -e '/^pick [0-9a-f]* chore(${escaped}): route to needs-attention/d'`;
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
