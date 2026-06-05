@@ -6,7 +6,7 @@ import {
 	returnToBacklog,
 	readNeedsAttentionItems,
 } from '../src/needs-attention.js';
-import {scan} from '../src/scan.js';
+import {scanRepoPaths} from '../src/scan.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
 	makeScratch,
@@ -152,9 +152,6 @@ describe('needs-attention — not claimable, but surfaced', () => {
 		});
 
 		const config: Config = {
-			roots: [scratch.root],
-			include: [],
-			exclude: [],
 			maxParallel: 1,
 			perRepoMax: 1,
 			defaultArbiter: ARBITER,
@@ -163,7 +160,7 @@ describe('needs-attention — not claimable, but surfaced', () => {
 			agentCmd: 'true',
 			workspacesDir: join(scratch.root, '.workspaces'),
 		};
-		const report = scan(config);
+		const report = scanRepoPaths([repo], config);
 		const all = report.repos.flatMap((r) => r.items);
 		// The item is in needs-attention/, not backlog/ — scan never sees it as a
 		// claimable backlog item (only the sibling `stays` remains in backlog/).
@@ -233,9 +230,6 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 		returnToBacklog({cwd: repo, slug: 'theta', env: gitEnv()});
 
 		const config: Config = {
-			roots: [scratch.root],
-			include: [],
-			exclude: [],
 			maxParallel: 1,
 			perRepoMax: 1,
 			defaultArbiter: ARBITER,
@@ -244,7 +238,7 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			agentCmd: 'true',
 			workspacesDir: join(scratch.root, '.workspaces'),
 		};
-		const report = scan(config);
+		const report = scanRepoPaths([repo], config);
 		const all = report.repos.flatMap((r) => r.items);
 		expect(all.find((i) => i.slug === 'theta')).toBeDefined();
 	});

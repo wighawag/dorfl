@@ -64,7 +64,11 @@ export type TestGate = (input: {
 
 export interface RunOnceOptions {
 	config: Config;
-	/** Pre-computed scan report; if omitted, the scan core is run from config. */
+	/**
+	 * Pre-computed scan report; if omitted, the working-tree scan is run over the
+	 * detected repos (this in-place/roots-based discovery is `run`'s until the
+	 * `run-daemon-reframe` slice switches it to the registry's mirror set).
+	 */
 	report?: ScanReport;
 	/**
 	 * The execution working area (bare hub mirrors + per-job worktrees). Defaults
@@ -138,7 +142,12 @@ function runPnpmTest(
  */
 export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	const config = options.config;
-	const report = options.report ?? scan(config);
+	// Default discovery is the REGISTRY (the hub-mirror set, ADR §1). `run` today
+	// operates on WORKING CHECKOUTS, so the CLI / its tests inject an explicit
+	// `report` built from working-tree paths ({@link scanRepoPaths}); wiring `run`'s
+	// own tick to the mirror set is the `run-daemon-reframe` slice. Without an
+	// injected report we fall back to the registry scan (async).
+	const report = options.report ?? (await scan(config));
 	const candidates = selectCandidates(report, {
 		maxParallel: config.maxParallel,
 		perRepoMax: config.perRepoMax,

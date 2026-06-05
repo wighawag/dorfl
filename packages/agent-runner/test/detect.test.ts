@@ -2,7 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {detectRepos, isParticipatingRepo} from '../src/detect.js';
+import {findParticipatingRepos, isParticipatingRepo} from '../src/detect.js';
 
 let root: string;
 
@@ -43,13 +43,13 @@ describe('isParticipatingRepo', () => {
 	});
 });
 
-describe('detectRepos', () => {
-	it('detects a repo with a non-empty work/backlog/ and skips one without', () => {
+describe('findParticipatingRepos (remote find discovery)', () => {
+	it('finds a repo with a non-empty work/backlog/ and skips one without', () => {
 		makeRepo('alpha', ['a.md']);
 		const beta = join(root, 'beta');
 		mkdirSync(beta, {recursive: true});
 
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		expect(repos).toContain(join(root, 'alpha'));
 		expect(repos).not.toContain(beta);
 	});
@@ -59,7 +59,7 @@ describe('detectRepos', () => {
 		mkdirSync(join(empty, 'work', 'backlog'), {recursive: true});
 		writeFileSync(join(empty, 'work', 'backlog', 'README.txt'), 'no md');
 
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		expect(repos).not.toContain(empty);
 	});
 
@@ -68,7 +68,7 @@ describe('detectRepos', () => {
 		makeRepo(join('node_modules', 'pkg'), ['a.md']);
 		makeRepo('real', ['a.md']);
 
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		expect(repos).toContain(join(root, 'real'));
 		expect(repos.some((r) => r.includes('node_modules'))).toBe(false);
 	});
@@ -77,14 +77,14 @@ describe('detectRepos', () => {
 		makeRepo(join('.cache', 'pkg'), ['a.md']);
 		makeRepo('real', ['a.md']);
 
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		expect(repos).toContain(join(root, 'real'));
 		expect(repos.some((r) => r.includes('.cache'))).toBe(false);
 	});
 
 	it('finds repos nested several levels deep', () => {
 		makeRepo(join('group', 'sub', 'deep'), ['a.md']);
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		expect(repos).toContain(join(root, 'group', 'sub', 'deep'));
 	});
 
@@ -93,76 +93,21 @@ describe('detectRepos', () => {
 		// yield more repos; but a sibling outside still should.
 		makeRepo('outer', ['a.md']);
 		makeRepo('sibling', ['a.md']);
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		expect(repos).toContain(join(root, 'outer'));
 		expect(repos).toContain(join(root, 'sibling'));
-	});
-
-	it('deduplicates across overlapping roots', () => {
-		makeRepo('alpha', ['a.md']);
-		const repos = detectRepos({roots: [root, root], include: [], exclude: []});
-		const alpha = join(root, 'alpha');
-		expect(repos.filter((r) => r === alpha)).toHaveLength(1);
-	});
-
-	it('excludes a detected repo when its path is in exclude', () => {
-		makeRepo('alpha', ['a.md']);
-		makeRepo('beta', ['a.md']);
-		const repos = detectRepos({
-			roots: [root],
-			include: [],
-			exclude: [join(root, 'beta')],
-		});
-		expect(repos).toContain(join(root, 'alpha'));
-		expect(repos).not.toContain(join(root, 'beta'));
-	});
-
-	it('excludes by repo basename too', () => {
-		makeRepo('alpha', ['a.md']);
-		makeRepo('beta', ['a.md']);
-		const repos = detectRepos({roots: [root], include: [], exclude: ['beta']});
-		expect(repos).not.toContain(join(root, 'beta'));
-		expect(repos).toContain(join(root, 'alpha'));
-	});
-
-	it('includes a path that detection would have skipped', () => {
-		// `manual` participates by config even though it has no backlog markdown.
-		const manual = join(root, 'manual');
-		mkdirSync(manual, {recursive: true});
-		const repos = detectRepos({
-			roots: [root],
-			include: [manual],
-			exclude: [],
-		});
-		expect(repos).toContain(manual);
-	});
-
-	it('exclude wins over include', () => {
-		const repo = makeRepo('alpha', ['a.md']);
-		const repos = detectRepos({
-			roots: [root],
-			include: [repo],
-			exclude: [repo],
-		});
-		expect(repos).not.toContain(repo);
 	});
 
 	it('returns a sorted list for deterministic output', () => {
 		makeRepo('charlie', ['a.md']);
 		makeRepo('alpha', ['a.md']);
 		makeRepo('bravo', ['a.md']);
-		const repos = detectRepos({roots: [root], include: [], exclude: []});
+		const repos = findParticipatingRepos(root);
 		const sorted = [...repos].sort();
 		expect(repos).toEqual(sorted);
 	});
 
-	it('tolerates a non-existent root without throwing', () => {
-		makeRepo('alpha', ['a.md']);
-		const repos = detectRepos({
-			roots: [root, join(root, 'does-not-exist')],
-			include: [],
-			exclude: [],
-		});
-		expect(repos).toContain(join(root, 'alpha'));
+	it('tolerates a non-existent folder without throwing', () => {
+		expect(findParticipatingRepos(join(root, 'does-not-exist'))).toEqual([]);
 	});
 });

@@ -18,13 +18,19 @@ import {runAsync, type RunResult} from './git.js';
  * via `git show`/`ls-tree`. No mode, no config, no `ledgerMode`, no new ref, no
  * new network read.
  *
- * The seam is honest about the TWO real read sources rather than pretending they
- * are one (per the ADR — do not collapse them):
+ * The seam is honest about the real read sources rather than pretending they are
+ * one (per the ADR — do not collapse them):
  *
- *   - **local working tree** — `scan` reads `work/backlog|done|needs-attention`
- *     from the local checkout. OFFLINE. This is the fast cross-repo queue.
+ *   - **local working tree** — a working clone reads `work/backlog|done|
+ *     needs-attention` from its checkout. OFFLINE. (Pre-registry `scan`/`status`
+ *     used this; `run`'s in-place checkouts still do.)
  *   - **arbiter `main`** — the human claim guard (`readiness`) and the claim CAS
  *     read the slice + `work/done/` from `<arbiter>/main`.
+ *   - **hub mirror `main`** — `scan`/`status` (registry model, ADR §1) read the
+ *     full `work/` lifecycle from each BARE hub mirror's `main` ref. A mirror has
+ *     no working tree, so this reads the committed tree via `git ls-tree`/`git
+ *     show` (the SAME mechanism the arbiter `done/` read uses, widened to the
+ *     full backlog + needs-attention set).
  *
  * The signatures stay at the SEMANTIC level ("resolve live state") and storage-
  * agnostic: the ONLY public distinction is local-vs-arbiter (no `main`/path is
@@ -89,6 +95,23 @@ export interface ResolveLocalStateInput {
 	repoPath: string;
 }
 
+/**
+ * What the MIRROR-ref resolve method needs to read the full `work/` lifecycle
+ * from a BARE hub mirror's committed tree.
+ */
+export interface ResolveMirrorStateInput {
+	/** The bare hub mirror directory (`<workspacesDir>/repos/<key>.git`). */
+	mirrorPath: string;
+	/**
+	 * The mirror-LOCAL ref whose `work/` tree to read (default `main`). A hub
+	 * mirror is bare, so `main` is a LOCAL branch — read `main:work/...`, NOT
+	 * `origin/main:work/...`.
+	 */
+	ref?: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+}
+
 /** What the ARBITER resolve method needs to read committed `work/` state. */
 export interface ResolveArbiterStateInput {
 	/** The slug whose slice file to resolve (`work/{backlog,in-progress}/<slug>.md`). */
@@ -102,10 +125,10 @@ export interface ResolveArbiterStateInput {
 }
 
 /**
- * The read-seam interface: ONE entry with TWO resolve-methods. The local method
- * is synchronous and OFFLINE; the arbiter method is async (it shells out to git).
- * A future strategy implements this same interface to resolve some states
- * elsewhere — without any reader changing.
+ * The read-seam interface: ONE entry with THREE resolve-methods. The local
+ * method is synchronous and OFFLINE; the arbiter and mirror methods are async
+ * (they shell out to git). A future strategy implements this same interface to
+ * resolve some states elsewhere — without any reader changing.
  */
 export interface LedgerReadStrategy {
 	/** Resolve a repo's live `work/` state from its LOCAL working tree (offline). */
@@ -114,6 +137,14 @@ export interface LedgerReadStrategy {
 	resolveArbiterState(
 		input: ResolveArbiterStateInput,
 	): Promise<ArbiterLedgerState>;
+	/**
+	 * Resolve the FULL live `work/` lifecycle (backlog + done + needs-attention)
+	 * of a repo from its BARE hub mirror's `main` ref. Mirrors have no working
+	 * tree, so `resolveLocalState`'s `readdirSync`/`readFileSync` cannot read them
+	 * — this reads the committed tree via `git ls-tree`/`git show` (the same
+	 * mechanism the arbiter method uses for `done/`, widened to the full set).
+	 */
+	resolveMirrorState(input: ResolveMirrorStateInput): Promise<LocalLedgerState>;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -218,23 +249,101 @@ async function readDoneSlugsOnArbiter(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<Set<string>> {
-	const slugs = new Set<string>();
-	const tree = await gitSoft(
-		['ls-tree', '--name-only', `${arbiter}/main:work/done`],
-		cwd,
-		env,
-	);
+	return readDoneSlugsFromTree(`${arbiter}/main`, cwd, env);
+}
+
+// --- Reading a committed `work/` tree (ref-based; bare-mirror or arbiter) ----
+//
+// These helpers read `work/{backlog,done,needs-attention}` from a git REF via
+// `git ls-tree`/`git show` — the ONLY mechanism that works against a BARE repo
+// (no working tree). `treeBase` is the `<ref>:work/<folder>` prefix; `cwd` is
+// the repo the `git -C <cwd>` commands run in (the mirror itself for the mirror
+// method, a working clone for the arbiter method).
+
+/** `git ls-tree --name-only <base>` → the `.md` filenames (sorted), or `[]`. */
+async function listMarkdownInTree(
+	base: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string[]> {
+	const tree = await gitSoft(['ls-tree', '--name-only', base], cwd, env);
 	if (tree.status !== 0) {
-		// No `work/done/` on the arbiter yet — nothing is done.
-		return slugs;
+		// The folder does not exist on this ref — nothing there.
+		return [];
 	}
-	for (const name of tree.stdout.split('\n')) {
-		const file = name.trim();
-		if (file.toLowerCase().endsWith('.md')) {
-			slugs.add(file.slice(0, -'.md'.length));
-		}
+	return tree.stdout
+		.split('\n')
+		.map((s) => s.trim())
+		.filter((name) => name.toLowerCase().endsWith('.md'))
+		.sort();
+}
+
+/** `git show <base>/<file>` → the file's raw contents, or `undefined`. */
+async function showInTree(
+	base: string,
+	file: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string | undefined> {
+	const show = await gitSoft(['show', `${base}/${file}`], cwd, env);
+	return show.status === 0 ? show.stdout : undefined;
+}
+
+/** Collect the slugs in `<ref>:work/done` (filename minus `.md`). */
+async function readDoneSlugsFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<Set<string>> {
+	const slugs = new Set<string>();
+	for (const file of await listMarkdownInTree(`${ref}:work/done`, cwd, env)) {
+		slugs.add(file.slice(0, -'.md'.length));
 	}
 	return slugs;
+}
+
+/** Parse `<ref>:work/backlog/*.md` into backlog items, sorted by slug. */
+async function readBacklogFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerBacklogItem[]> {
+	const base = `${ref}:work/backlog`;
+	const items: LedgerBacklogItem[] = [];
+	for (const file of await listMarkdownInTree(base, cwd, env)) {
+		const content = await showInTree(base, file, cwd, env);
+		if (content === undefined) {
+			continue;
+		}
+		const fm = parseFrontmatter(content);
+		items.push({
+			file,
+			slug: fm.slug ?? basename(file, '.md'),
+			humanOnly: fm.humanOnly,
+			needsAnswers: fm.needsAnswers,
+			blockedBy: fm.blockedBy,
+		});
+	}
+	return items.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/** Parse `<ref>:work/needs-attention/*.md` into items, sorted by filename. */
+async function readNeedsAttentionFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerNeedsAttentionItem[]> {
+	const base = `${ref}:work/needs-attention`;
+	const items: LedgerNeedsAttentionItem[] = [];
+	for (const file of await listMarkdownInTree(base, cwd, env)) {
+		const content = await showInTree(base, file, cwd, env);
+		if (content === undefined) {
+			continue;
+		}
+		const fm = parseFrontmatter(content);
+		items.push({file, slug: fm.slug ?? basename(file, '.md'), content});
+	}
+	return items;
 }
 
 /**
@@ -255,6 +364,17 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		const slice = await readSliceOnArbiter(slug, arbiter, cwd, env);
 		const doneSlugs = await readDoneSlugsOnArbiter(arbiter, cwd, env);
 		return {slice, doneSlugs};
+	},
+	async resolveMirrorState({mirrorPath, ref = 'main', env}) {
+		// A hub mirror is BARE — read the full `work/` lifecycle from its committed
+		// `<ref>:work/...` tree, running git INSIDE the mirror (`git -C <mirror>`).
+		// The ref is mirror-LOCAL (`main`), never `origin/main`.
+		const [backlog, doneSlugs, needsAttention] = await Promise.all([
+			readBacklogFromTree(ref, mirrorPath, env),
+			readDoneSlugsFromTree(ref, mirrorPath, env),
+			readNeedsAttentionFromTree(ref, mirrorPath, env),
+		]);
+		return {backlog, doneSlugs, needsAttention};
 	},
 };
 

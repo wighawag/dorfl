@@ -9,7 +9,7 @@ describe('envVarName', () => {
 		expect(envVarName('perRepoMax')).toBe('AGENT_RUNNER_PER_REPO_MAX');
 		expect(envVarName('defaultArbiter')).toBe('AGENT_RUNNER_DEFAULT_ARBITER');
 		// A single-word key stays a single SCREAMING word.
-		expect(envVarName('roots')).toBe('AGENT_RUNNER_ROOTS');
+		expect(envVarName('model')).toBe('AGENT_RUNNER_MODEL');
 	});
 });
 
@@ -127,38 +127,34 @@ describe('envOverrides — enum coercion', () => {
 
 describe('envOverrides — list coercion', () => {
 	it('splits comma-separated list keys (cross-platform, not `:`)', () => {
-		expect(envOverrides({AGENT_RUNNER_ROOTS: '/a,/b,/c'})).toEqual({
-			roots: ['/a', '/b', '/c'],
-		});
-		expect(envOverrides({AGENT_RUNNER_EXCLUDE: 'skip-me'})).toEqual({
-			exclude: ['skip-me'],
+		expect(envOverrides({AGENT_RUNNER_VERIFY: 'build,test,format'})).toEqual({
+			verify: ['build', 'test', 'format'],
 		});
 	});
 
 	it('trims whitespace and drops empty entries', () => {
-		expect(envOverrides({AGENT_RUNNER_ROOTS: ' /a , /b ,'})).toEqual({
-			roots: ['/a', '/b'],
+		expect(envOverrides({AGENT_RUNNER_VERIFY: ' build , test ,'})).toEqual({
+			verify: ['build', 'test'],
 		});
 	});
 
 	it('an empty list var clears the list (explicit empty)', () => {
-		expect(envOverrides({AGENT_RUNNER_INCLUDE: ''})).toEqual({include: []});
+		expect(envOverrides({AGENT_RUNNER_VERIFY: ''})).toEqual({verify: []});
 	});
 
-	it('treats verify as a list key (env carries a multi-command gate)', () => {
-		expect(envOverrides({AGENT_RUNNER_VERIFY: 'build,test'})).toEqual({
-			verify: ['build', 'test'],
-		});
+	it('ignores a removed list key env var (roots is gone)', () => {
+		// `roots`/`include`/`exclude` no longer exist (registry model): an env var
+		// named for one of them contributes nothing.
+		expect(envOverrides({AGENT_RUNNER_ROOTS: '/a,/b'})).toEqual({});
 	});
 });
 
 describe('envOverrides — host-only keys are allowed (per-machine source)', () => {
-	it('sets host-only keys env (piBin, agentCmd, roots, maxParallel)', () => {
+	it('sets host-only keys env (piBin, agentCmd, maxParallel)', () => {
 		expect(
 			envOverrides({
 				AGENT_RUNNER_PI_BIN: '/opt/pi',
 				AGENT_RUNNER_AGENT_CMD: 'agent',
-				AGENT_RUNNER_ROOTS: '/r',
 				AGENT_RUNNER_MAX_PARALLEL: '2',
 				AGENT_RUNNER_WORKSPACES_DIR: '/tmp/ws',
 				AGENT_RUNNER_ARBITERS_DIR: '/tmp/arb',
@@ -166,7 +162,6 @@ describe('envOverrides — host-only keys are allowed (per-machine source)', () 
 		).toEqual({
 			piBin: '/opt/pi',
 			agentCmd: 'agent',
-			roots: ['/r'],
 			maxParallel: 2,
 			workspacesDir: '/tmp/ws',
 			arbitersDir: '/tmp/arb',

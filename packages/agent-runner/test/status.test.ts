@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	JOB_RECORD_FILENAME,
@@ -8,7 +8,11 @@ import {
 } from '../src/workspace.js';
 import {status, formatStatus} from '../src/status.js';
 import type {Harness, HarnessRecord} from '../src/harness.js';
-import {makeScratch, type Scratch} from './helpers/gitRepo.js';
+import {
+	makeScratch,
+	registerMirrorWithWork,
+	type Scratch,
+} from './helpers/gitRepo.js';
 
 let scratch: Scratch;
 beforeEach(() => {
@@ -61,7 +65,7 @@ function stubHarness(alivePids: number[]): Harness {
 }
 
 describe('status — grouping active vs failed/retained', () => {
-	it('a running job whose harness reports alive is ACTIVE', () => {
+	it('a running job whose harness reports alive is ACTIVE', async () => {
 		seedJob(
 			'github-com__wighawag__agent-runner__feat',
 			record({
@@ -70,7 +74,7 @@ describe('status — grouping active vs failed/retained', () => {
 				harness: {adapter: 'stub', pid: 7},
 			}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([7]),
 		});
@@ -79,7 +83,7 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(report.active[0].alive).toBe(true);
 	});
 
-	it('a running job whose harness reports dead is FAILED/RETAINED (crashed)', () => {
+	it('a running job whose harness reports dead is FAILED/RETAINED (crashed)', async () => {
 		seedJob(
 			'github-com__wighawag__agent-runner__feat',
 			record({
@@ -88,7 +92,7 @@ describe('status — grouping active vs failed/retained', () => {
 				harness: {adapter: 'stub', pid: 7},
 			}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([]), // 7 is not alive
 		});
@@ -97,7 +101,7 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(report.attention[0].alive).toBe(false);
 	});
 
-	it('a needs-attention job is FAILED/RETAINED and carries its reason', () => {
+	it('a needs-attention job is FAILED/RETAINED and carries its reason', async () => {
 		seedJob(
 			'github-com__wighawag__agent-runner__stuck',
 			record({
@@ -107,7 +111,7 @@ describe('status — grouping active vs failed/retained', () => {
 				harness: {adapter: 'stub', pid: 99},
 			}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([]),
 		});
@@ -118,12 +122,12 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(job.reason).toBe('acceptance gate failed: build red');
 	});
 
-	it('a done-but-un-reaped job is FAILED/RETAINED (awaiting cleanup)', () => {
+	it('a done-but-un-reaped job is FAILED/RETAINED (awaiting cleanup)', async () => {
 		seedJob(
 			'github-com__wighawag__agent-runner__landed',
 			record({slug: 'landed', state: 'done', harness: {adapter: 'stub'}}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([]),
 		});
@@ -131,7 +135,7 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(report.attention.map((j) => j.slug)).toEqual(['landed']);
 	});
 
-	it('renders each job with slug, repo, branch and started-at', () => {
+	it('renders each job with slug, repo, branch and started-at', async () => {
 		seedJob(
 			'github-com__wighawag__agent-runner__feat',
 			record({
@@ -143,7 +147,7 @@ describe('status — grouping active vs failed/retained', () => {
 				harness: {adapter: 'stub', pid: 7},
 			}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([7]),
 		});
@@ -154,7 +158,7 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(job.startedAt).toBe('2026-06-04T07:00:00.000Z');
 	});
 
-	it('groups a mix of jobs correctly and sorts within group by slug', () => {
+	it('groups a mix of jobs correctly and sorts within group by slug', async () => {
 		seedJob(
 			'r__a',
 			record({
@@ -188,7 +192,7 @@ describe('status — grouping active vs failed/retained', () => {
 				harness: {adapter: 'stub', pid: 4},
 			}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([1, 2]), // crashed (pid 4) is dead
 		});
@@ -196,8 +200,8 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(report.attention.map((j) => j.slug)).toEqual(['crashed', 'stuck-z']);
 	});
 
-	it('returns empty groups when no jobs exist', () => {
-		const report = status({
+	it('returns empty groups when no jobs exist', async () => {
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([]),
 		});
@@ -205,7 +209,7 @@ describe('status — grouping active vs failed/retained', () => {
 		expect(report.attention).toEqual([]);
 	});
 
-	it('liveness comes from the harness seam, NOT filesystem mtime', () => {
+	it('liveness comes from the harness seam, NOT filesystem mtime', async () => {
 		// Two running jobs with identical fresh records; only the harness allow-list
 		// distinguishes them — proving mtime plays no part.
 		seedJob(
@@ -224,7 +228,7 @@ describe('status — grouping active vs failed/retained', () => {
 				harness: {adapter: 'stub', pid: 20},
 			}),
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
 			harness: stubHarness([10]),
 		});
@@ -234,7 +238,7 @@ describe('status — grouping active vs failed/retained', () => {
 });
 
 describe('status — pi job liveness via the adapter (no injected harness)', () => {
-	it('a pi job is ACTIVE when its PID is alive (resolved via the pi adapter)', () => {
+	it('a pi job is ACTIVE when its PID is alive (resolved via the pi adapter)', async () => {
 		// No `harness` injected ⇒ status resolves each record to the adapter that
 		// owns it. A pi record with our own (live) PID must read as active, proving
 		// pi liveness flows through the pi adapter (PID), never mtime.
@@ -246,12 +250,12 @@ describe('status — pi job liveness via the adapter (no injected harness)', () 
 				harness: {adapter: 'pi', pid: process.pid, session: '/some/session'},
 			}),
 		);
-		const report = status({workspacesDir: workspacesDir()});
+		const report = await status({workspacesDir: workspacesDir()});
 		expect(report.active.map((j) => j.slug)).toEqual(['pi-live']);
 		expect(report.active[0].alive).toBe(true);
 	});
 
-	it('a hung/dead pi job is FAILED/RETAINED so watch rails can act', () => {
+	it('a hung/dead pi job is FAILED/RETAINED so watch rails can act', async () => {
 		seedJob(
 			'github-com__wighawag__agent-runner__pi-dead',
 			record({
@@ -260,7 +264,7 @@ describe('status — pi job liveness via the adapter (no injected harness)', () 
 				harness: {adapter: 'pi', pid: 2 ** 31 - 1, session: '/gone'},
 			}),
 		);
-		const report = status({workspacesDir: workspacesDir()});
+		const report = await status({workspacesDir: workspacesDir()});
 		expect(report.active).toHaveLength(0);
 		expect(report.attention.map((j) => j.slug)).toEqual(['pi-dead']);
 		expect(report.attention[0].alive).toBe(false);
@@ -268,12 +272,12 @@ describe('status — pi job liveness via the adapter (no injected harness)', () 
 });
 
 describe('status — read-only', () => {
-	it('does not move/delete the job worktree dir or its record', () => {
+	it('does not move/delete the job worktree dir or its record', async () => {
 		const dir = seedJob(
 			'github-com__wighawag__agent-runner__feat',
 			record({slug: 'feat', state: 'needs-attention', reason: 'x'}),
 		);
-		status({workspacesDir: workspacesDir(), harness: stubHarness([])});
+		await status({workspacesDir: workspacesDir(), harness: stubHarness([])});
 		// The record + dir are untouched (no claim/run/move/delete side effect).
 		expect(existsSync(dir)).toBe(true);
 		expect(existsSync(join(dir, JOB_RECORD_FILENAME))).toBe(true);
@@ -281,7 +285,7 @@ describe('status — read-only', () => {
 });
 
 describe('formatStatus — rendering', () => {
-	it('renders an active and a failed/retained section, distinct from scan', () => {
+	it('renders an active and a failed/retained section, distinct from scan', async () => {
 		const out = formatStatus({
 			active: [
 				{
@@ -317,13 +321,13 @@ describe('formatStatus — rendering', () => {
 		expect(out.toLowerCase()).not.toContain('backlog');
 	});
 
-	it('shows a friendly empty message when there are no jobs', () => {
+	it('shows a friendly empty message when there are no jobs', async () => {
 		const out = formatStatus({active: [], attention: []});
 		expect(out.toLowerCase()).toContain('no');
 		expect(out.toLowerCase()).toContain('job');
 	});
 
-	it('marks a crashed (dead, running) job distinctly from a live one', () => {
+	it('marks a crashed (dead, running) job distinctly from a live one', async () => {
 		const out = formatStatus({
 			active: [],
 			attention: [
@@ -345,46 +349,44 @@ describe('formatStatus — rendering', () => {
 });
 
 /**
- * Seed a participating repo's `work/needs-attention/<slug>.md` with a reason
- * block in the body (the shape `routeToNeedsAttention` produces).
+ * Register a BARE hub mirror whose `main` ref carries a
+ * `work/needs-attention/<slug>.md` with a reason block in the body (the shape
+ * `routeToNeedsAttention` produces). `status` reads it from the mirror's bare
+ * `main` ref through the read seam (mirrors have no working tree).
  */
-function seedNeedsAttention(slug: string, reason: string): string {
-	const repo = join(scratch.root, 'project');
-	const dir = join(repo, 'work', 'needs-attention');
-	mkdirSync(dir, {recursive: true});
-	writeFileSync(
-		join(dir, `${slug}.md`),
-		[
-			'---',
-			`title: ${slug}`,
-			`slug: ${slug}`,
-			'---',
-			'',
-			'## What to build',
-			'',
-			'thing',
-			'',
-			'## Needs attention',
-			'',
-			reason,
-			'',
-		].join('\n'),
-	);
-	return repo;
+function seedNeedsAttentionMirror(slug: string, reason: string): string {
+	const content = [
+		'---',
+		`title: ${slug}`,
+		`slug: ${slug}`,
+		'---',
+		'',
+		'## What to build',
+		'',
+		'thing',
+		'',
+		'## Needs attention',
+		'',
+		reason,
+		'',
+	].join('\n');
+	return registerMirrorWithWork(workspacesDir(), 'project', {
+		needsAttention: {[`${slug}.md`]: content},
+	}).mirrorPath;
 }
 
 describe('status — folder-native needs-attention surface (ADR §12)', () => {
-	it('lists work/needs-attention/ items with their reason', () => {
-		const repo = seedNeedsAttention(
+	it("lists each mirror's work/needs-attention/ items (from the bare main ref) with their reason", async () => {
+		const mirror = seedNeedsAttentionMirror(
 			'stuck-slice',
 			'rebase conflict against main',
 		);
-		const report = status({
+		const report = await status({
 			workspacesDir: workspacesDir(),
-			repoRoots: [repo],
+			mirrorPaths: [mirror],
 		});
 		expect(report.needsAttention).toHaveLength(1);
-		expect(report.needsAttention?.[0].repoPath).toBe(repo);
+		expect(report.needsAttention?.[0].repoPath).toBe(mirror);
 		expect(report.needsAttention?.[0].items[0].slug).toBe('stuck-slice');
 		expect(report.needsAttention?.[0].items[0].reason).toMatch(
 			/rebase conflict against main/,
@@ -396,9 +398,48 @@ describe('status — folder-native needs-attention surface (ADR §12)', () => {
 		expect(out).toMatch(/rebase conflict against main/);
 	});
 
-	it('omits the surface entirely when no repoRoots are given', () => {
-		seedNeedsAttention('ignored', 'should not appear');
-		const report = status({workspacesDir: workspacesDir()});
+	it('omits the surface entirely when no mirrorPaths are given', async () => {
+		seedNeedsAttentionMirror('ignored', 'should not appear');
+		const report = await status({workspacesDir: workspacesDir()});
 		expect(report.needsAttention).toEqual([]);
+	});
+});
+
+describe('status — arbiter fold-in (the old `arbiter status`, ADR §1/§7)', () => {
+	it('renders the folded-in arbiter section when an arbiter report is given', async () => {
+		const report = await status({
+			workspacesDir: workspacesDir(),
+			arbiter: {
+				remote: 'arbiter',
+				configured: true,
+				url: 'file:///srv/git/o/r.git',
+				path: '/srv/git/o/r.git',
+				exists: true,
+				bare: true,
+				mainReachable: true,
+				unsafe: false,
+			},
+		});
+		expect(report.arbiter?.remote).toBe('arbiter');
+		const out = formatStatus(report);
+		expect(out).toMatch(/Arbiter remote: arbiter/);
+		expect(out).toMatch(/file:\/\/\/srv\/git\/o\/r\.git/);
+	});
+
+	it('flags the unsafe non-bare-with-main arbiter in the dashboard', async () => {
+		const report = await status({
+			workspacesDir: workspacesDir(),
+			arbiter: {
+				remote: 'arbiter',
+				configured: true,
+				url: 'file:///srv/git/o/r',
+				path: '/srv/git/o/r',
+				exists: true,
+				bare: false,
+				mainReachable: true,
+				unsafe: true,
+			},
+		});
+		expect(formatStatus(report).toLowerCase()).toMatch(/unsafe|non-bare/);
 	});
 });

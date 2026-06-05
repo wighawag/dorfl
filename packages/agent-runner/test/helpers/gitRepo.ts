@@ -1,7 +1,8 @@
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 import {run, git} from '../../src/git.js';
+import {mirrorPath} from '../../src/repo-mirror.js';
 
 /**
  * Deterministic git identity + non-interactive env for throwaway test repos.
@@ -177,6 +178,63 @@ export function existsOnArbiterMain(
 		{env: gitEnv()},
 	);
 	return res.status === 0;
+}
+
+/**
+ * Register a BARE hub mirror under `<workspacesDir>/repos/<key>.git` whose
+ * `main` ref carries the given `work/` content — the registry-model fixture for
+ * `scan`/`status` (which read each mirror's bare `main` ref, NOT a working tree).
+ *
+ * It builds a throwaway WORKING repo with the `work/` files committed on `main`,
+ * then `git clone --bare`s it into the mirror location (so `origin` points at
+ * the source repo — a `file://` URL, transport `local-bare`). The mirror is keyed
+ * off that origin URL via `mirrorPath`, exactly as `remote add`/`ensureMirror`
+ * key it. Returns the mirror path + its origin URL.
+ */
+export interface RegisteredMirrorFixture {
+	mirrorPath: string;
+	originUrl: string;
+}
+
+export function registerMirrorWithWork(
+	workspacesDir: string,
+	name: string,
+	work: {
+		backlog?: Record<string, string>;
+		done?: Record<string, string>;
+		needsAttention?: Record<string, string>;
+	},
+): RegisteredMirrorFixture {
+	// 1. A throwaway working repo (the would-be arbiter source) with the work/ tree.
+	const src = join(workspacesDir, '..', `mirror-src-${name}`);
+	mkdirSync(src, {recursive: true});
+	gx(['init', '-q', '-b', 'main'], src);
+	const writeAll = (
+		folder: string,
+		files: Record<string, string> | undefined,
+	) => {
+		if (!files) {
+			return;
+		}
+		const dir = join(src, 'work', folder);
+		mkdirSync(dir, {recursive: true});
+		for (const [file, content] of Object.entries(files)) {
+			writeFileSync(join(dir, file), content);
+		}
+	};
+	writeAll('backlog', work.backlog);
+	writeAll('done', work.done);
+	writeAll('needs-attention', work.needsAttention);
+	writeFileSync(join(src, 'README.md'), `# ${name}\n`);
+	gx(['add', '-A'], src);
+	gx(['commit', '-q', '-m', 'seed work tree'], src);
+
+	// 2. The bare hub mirror, keyed off the source's file:// URL (as ensureMirror).
+	const originUrl = `file://${src}`;
+	const dest = mirrorPath(workspacesDir, originUrl);
+	mkdirSync(dirname(dest), {recursive: true});
+	gx(['clone', '--quiet', '--bare', originUrl, dest], dirname(dest));
+	return {mirrorPath: dest, originUrl};
 }
 
 export {gx as gitIn};

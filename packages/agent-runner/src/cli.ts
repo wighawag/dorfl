@@ -11,6 +11,8 @@ import {
 } from './config.js';
 import {envOverrides} from './env-config.js';
 import {scan} from './scan.js';
+import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
+import {findParticipatingRepos} from './detect.js';
 import {formatReport} from './format.js';
 import {runOnce, type ItemResult} from './run.js';
 import {performClaim} from './claim-cas.js';
@@ -27,20 +29,11 @@ import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {status, formatStatus} from './status.js';
-import {detectRepos} from './detect.js';
 import {ledgerWrite} from './ledger-write.js';
-import {
-	arbiterInit,
-	arbiterStatus,
-	formatArbiterStatus,
-	DEFAULT_ARBITER_REMOTE,
-} from './arbiter.js';
+import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 
 interface ScanFlags {
 	config?: string;
-	root?: string[];
-	include?: string[];
-	exclude?: string[];
 	allowAgents?: boolean;
 	json?: boolean;
 }
@@ -65,27 +58,18 @@ function allowAgentsFromCli(
 	return command.getOptionValue('allowAgents') as boolean;
 }
 
-/** Build the overrides a user supplied via CLI flags. */
+/**
+ * Build the overrides a user supplied via CLI flags. Discovery is the registry
+ * (the hub-mirror set, ADR §1), so there are no `--root`/`--include`/`--exclude`
+ * flags any more — only the autonomy-gate `--allow-agents` toggle.
+ */
 function flagOverrides(flags: ScanFlags, command?: Commander): PartialConfig {
 	const overrides: PartialConfig = {};
-	if (flags.root && flags.root.length > 0) {
-		overrides.roots = flags.root;
-	}
-	if (flags.include && flags.include.length > 0) {
-		overrides.include = flags.include;
-	}
-	if (flags.exclude && flags.exclude.length > 0) {
-		overrides.exclude = flags.exclude;
-	}
 	const allowAgents = allowAgentsFromCli(command);
 	if (allowAgents !== undefined) {
 		overrides.allowAgents = allowAgents;
 	}
 	return overrides;
-}
-
-function collect(value: string, previous: string[]): string[] {
-	return previous.concat([value]);
 }
 
 /**
@@ -232,6 +216,8 @@ interface GcFlags {
 interface StatusFlags {
 	config?: string;
 	workspace?: string;
+	arbiterRemote?: string;
+	noArbiter?: boolean;
 	json?: boolean;
 }
 
@@ -241,16 +227,25 @@ interface ReturnFlags {
 	arbiter?: string;
 }
 
-interface ArbiterInitFlags {
+interface RemoteAddFlags {
 	config?: string;
-	at?: string;
-	remote?: string;
+	local?: boolean;
+	arbiterRemote?: string;
+	force?: boolean;
 }
 
-interface ArbiterStatusFlags {
+interface RemoteRmFlags {
 	config?: string;
-	remote?: string;
+}
+
+interface RemoteLsFlags {
+	config?: string;
 	json?: boolean;
+}
+
+interface RemoteFindFlags {
+	config?: string;
+	yes?: boolean;
 }
 
 export function buildProgram(): Command {
@@ -263,27 +258,9 @@ export function buildProgram(): Command {
 	program
 		.command('scan')
 		.description(
-			'Read-only: list the cross-repo queue of work items and whether each is runnable now.',
+			'Read-only: list the cross-repo queue of work items (across the registered hub mirrors) and whether each is runnable now. Discovery is the registry — the hub-mirror set under workspacesDir/repos/ (no --root/roots).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
-		.option(
-			'-r, --root <path>',
-			'root directory to scan (repeatable, overrides config roots)',
-			collect,
-			[],
-		)
-		.option(
-			'--include <path>',
-			'force-include a repo path (repeatable)',
-			collect,
-			[],
-		)
-		.option(
-			'--exclude <path>',
-			'exclude a repo path or basename (repeatable)',
-			collect,
-			[],
-		)
 		.option(
 			'--allow-agents',
 			'allow agents to claim undeclared (not humanOnly) slices',
@@ -293,13 +270,13 @@ export function buildProgram(): Command {
 			'forbid agents from claiming undeclared slices (default)',
 		)
 		.option('--json', 'output the raw report as JSON')
-		.action((flags: ScanFlags, command: Commander) => {
+		.action(async (flags: ScanFlags, command: Commander) => {
 			const fileConfig = loadConfig(flags.config);
 			const config = resolveGlobalConfig(
 				fileConfig,
 				flagOverrides(flags, command),
 			);
-			const report = scan(config);
+			const report = await scan(config);
 			if (flags.json) {
 				console.log(
 					JSON.stringify(
@@ -320,24 +297,6 @@ export function buildProgram(): Command {
 		)
 		.option('--once', 'run a single supervised tick then stop (increment B)')
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
-		.option(
-			'-r, --root <path>',
-			'root directory to scan (repeatable, overrides config roots)',
-			collect,
-			[],
-		)
-		.option(
-			'--include <path>',
-			'force-include a repo path (repeatable)',
-			collect,
-			[],
-		)
-		.option(
-			'--exclude <path>',
-			'exclude a repo path or basename (repeatable)',
-			collect,
-			[],
-		)
 		.option(
 			'--allow-agents',
 			'allow agents to claim undeclared (not humanOnly) slices',
@@ -764,18 +723,29 @@ export function buildProgram(): Command {
 			'--workspace <dir>',
 			'execution working area to inspect (default: workspacesDir / ~/.agent-runner)',
 		)
+		.option(
+			'--arbiter-remote <name>',
+			`the current repo's arbiter remote to report on (folds in the old \`arbiter status\`; default: ${DEFAULT_ARBITER_REMOTE})`,
+		)
+		.option('--no-arbiter', "skip the current repo's arbiter section")
 		.option('--json', 'output the raw report as JSON')
-		.action((flags: StatusFlags) => {
+		.action(async (flags: StatusFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
-			// Also surface the folder-native needs-attention set (ADR §12): the
-			// `work/needs-attention/` folders of every participating repo.
-			const repoRoots = detectRepos({
-				roots: config.roots,
-				include: config.include,
-				exclude: config.exclude,
-			});
-			const report = status({workspacesDir, repoRoots});
+			// Surface the folder-native needs-attention set (ADR §12) from each
+			// REGISTERED HUB MIRROR (the registry), read from its bare `main` ref
+			// through the read seam (mirrors have no working tree).
+			const mirrorPaths = listMirrors({workspacesDir}).map((m) => m.path);
+			// Fold in the current repo's arbiter state (the old `arbiter status`, ADR
+			// §1/§7) unless --no-arbiter. Read-only; tolerates not being in a repo.
+			const arbiter =
+				flags.noArbiter === true
+					? undefined
+					: arbiterStatus({
+							cwd: process.cwd(),
+							remote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+						});
+			const report = await status({workspacesDir, mirrorPaths, arbiter});
 			if (flags.json) {
 				console.log(JSON.stringify(report, null, 2));
 			} else {
@@ -814,69 +784,198 @@ export function buildProgram(): Command {
 			console.log(`Returned '${slug}' to backlog for re-claiming.`);
 		});
 
-	const arbiter = program
-		.command('arbiter')
+	// The REGISTRY command group (ADR §1): the registered set of targets IS the
+	// hub-mirror set on disk. `remote add --local` absorbs the old `arbiter init`;
+	// `arbiter status` is folded into `status`. There is no standalone `arbiter`
+	// command group, and no `roots`/`remotes` config field.
+	const remote = program
+		.command('remote')
 		.description(
-			'Provision/inspect a local --bare arbiter (the offline source of truth the claim/integration protocols serialize on). Arbiters are precious DATA (ADR §7): they live under ~/git (config arbitersDir), hierarchical, NEVER under ~/.agent-runner.',
+			'The registry: the registered set of targets IS the hub mirrors on disk under workspacesDir/repos/ (no roots/remotes config). add/rm/ls/find manage that set. `remote add --local` provisions a bare arbiter (absorbing `arbiter init`); `arbiter status` is folded into `status`.',
 		);
 
-	arbiter
-		.command('init')
+	remote
+		.command('add <target>')
 		.description(
-			'Derive a bare arbiter from an existing working repo: git clone --bare it to the resolved ~/git/<host>/<org>/<name>.git path (or --at), then wire the repo’s arbiter remote to it. Idempotent (an existing arbiter is detected, not clobbered). Refuses the unsafe non-bare-with-main case (which would reject claim pushes).',
+			'Register a target by creating its hub mirror (idempotent). <target> is the arbiter URL; with --local it is a WORKING REPO whose bare arbiter is provisioned under arbitersDir (~/git, precious DATA, NEVER ~/.agent-runner) and THAT arbiter is registered (absorbing `arbiter init`). The transport guard refuses registering one project (same host/org/name) under a second transport unless --force.',
 		)
-		.argument('[repo]', 'the working repo to derive from (default: cwd)')
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
-			'--at <path>',
-			'explicit arbiter location (overrides the resolved ~/git default)',
+			'--local',
+			'provision a local --bare arbiter from <target> (a working repo) and register it (absorbs `arbiter init`)',
 		)
 		.option(
-			'--remote <name>',
-			`name of the arbiter remote to wire in the repo (default: ${DEFAULT_ARBITER_REMOTE})`,
+			'--arbiter-remote <name>',
+			`name of the arbiter remote to wire in the working repo on --local (default: ${DEFAULT_ARBITER_REMOTE})`,
 		)
-		.action((repo: string | undefined, flags: ArbiterInitFlags) => {
+		.option(
+			'--force',
+			'register even though the same project is already registered under a different transport (anti-stranding guard override)',
+		)
+		.action((target: string, flags: RemoteAddFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
-			const result = arbiterInit({
-				repo,
-				cwd: process.cwd(),
-				at: flags.at,
-				arbitersDir: config.arbitersDir,
-				remote: flags.remote ?? DEFAULT_ARBITER_REMOTE,
-				note: (message) => console.error(`>> ${message}`),
-			});
-			if (result.created) {
-				console.log(`Provisioned bare arbiter at ${result.path}`);
-			} else {
-				console.log(`Arbiter already exists at ${result.path} (not clobbered)`);
+			try {
+				const result = remoteAdd({
+					target,
+					local: flags.local,
+					workspacesDir: config.workspacesDir,
+					arbitersDir: config.arbitersDir,
+					arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+					force: flags.force,
+					note: (message) => console.error(`>> ${message}`),
+				});
+				if (result.arbiter) {
+					const a = result.arbiter;
+					console.log(
+						a.created
+							? `Provisioned bare arbiter at ${a.path}`
+							: `Arbiter already exists at ${a.path} (not clobbered)`,
+					);
+					console.log(`Wired remote '${a.remote}' -> ${a.url}`);
+				}
+				console.log(
+					result.created
+						? `Registered '${result.key}' (${result.transport}) — hub mirror at ${result.mirrorPath}`
+						: `'${result.key}' already registered (mirror at ${result.mirrorPath})`,
+				);
+			} catch (err) {
+				if (err instanceof RegistryError) {
+					console.error(`error: ${err.message}`);
+					process.exit(1);
+				}
+				throw err;
 			}
-			console.log(`Wired remote '${result.remote}' -> ${result.url}`);
 		});
 
-	arbiter
-		.command('status')
+	remote
+		.command('rm <target>')
 		.description(
-			'Read-only report of the current repo’s arbiter: which remote it is, its URL/path, whether it exists and is bare, and whether main is reachable. Flags the unsafe non-bare-with-main case. Mutates nothing.',
+			'Delete a hub mirror by key (host/org/name) or origin URL. The ONLY mirror deleter — `gc` NEVER reaps mirrors. Plumbing tier.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
-		.option(
-			'--remote <name>',
-			`the arbiter remote name to report on (default: ${DEFAULT_ARBITER_REMOTE})`,
+		.action((target: string, flags: RemoteRmFlags) => {
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
+			const result = remoteRm({target, workspacesDir: config.workspacesDir});
+			if (!result.removed) {
+				console.error(`error: no registered mirror matches '${target}'.`);
+				process.exit(1);
+			}
+			console.log(`Removed mirror '${result.key}' (${result.path}).`);
+		});
+
+	remote
+		.command('ls')
+		.description(
+			'List every registered hub mirror with its origin URL + transport. The origin URL is read from each mirror (the key encoding is lossy — it drops scheme/transport), so it is authoritative, not reconstructed from the key.',
 		)
-		.option('--json', 'output the raw report as JSON')
-		.action((flags: ArbiterStatusFlags) => {
-			const report = arbiterStatus({
-				cwd: process.cwd(),
-				remote: flags.remote ?? DEFAULT_ARBITER_REMOTE,
-			});
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option('--json', 'output the raw list as JSON')
+		.action((flags: RemoteLsFlags) => {
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
+			const mirrors = listMirrors({workspacesDir: config.workspacesDir});
 			if (flags.json) {
-				console.log(JSON.stringify(report, null, 2));
-			} else {
-				console.log(formatArbiterStatus(report));
+				console.log(JSON.stringify(mirrors, null, 2));
+				return;
+			}
+			if (mirrors.length === 0) {
+				console.log(
+					'No registered mirrors. Use `remote add <url>` or `remote find <folder>`.',
+				);
+				return;
+			}
+			for (const m of mirrors) {
+				console.log(
+					`${m.key}   ${m.transport}   ${m.originUrl ?? '(no origin)'}`,
+				);
+			}
+		});
+
+	remote
+		.command('find <folder>')
+		.description(
+			'Discover work/-participating repos under <folder> (a populated work/backlog/), then toggle-add the chosen ones via `remote add`. Interactive multi-select by default; --yes adds ALL discovered repos non-interactively.',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option('--yes', 'add all discovered participating repos (no prompt)')
+		.action(async (folder: string, flags: RemoteFindFlags) => {
+			const config = resolveGlobalConfig(loadConfig(flags.config), {});
+			const repos = findParticipatingRepos(folder);
+			if (repos.length === 0) {
+				console.log(`No work/-participating repos found under ${folder}.`);
+				return;
+			}
+			const chosen = flags.yes ? repos : await promptMultiSelect(repos);
+			if (chosen.length === 0) {
+				console.log('Nothing selected; no mirrors added.');
+				return;
+			}
+			for (const repoPath of chosen) {
+				// Each discovered repo is registered as a LOCAL bare arbiter (it is a
+				// working checkout on disk, not a remote URL) — the same path
+				// `remote add --local` takes. The transport guard still applies.
+				try {
+					const result = remoteAdd({
+						target: repoPath,
+						local: true,
+						workspacesDir: config.workspacesDir,
+						arbitersDir: config.arbitersDir,
+						arbiterRemote: DEFAULT_ARBITER_REMOTE,
+						note: (message) => console.error(`>> ${message}`),
+					});
+					console.log(
+						`${result.created ? 'Registered' : 'Already registered'} '${result.key}' (${repoPath}).`,
+					);
+				} catch (err) {
+					if (err instanceof RegistryError) {
+						console.error(`skipped ${repoPath}: ${err.message}`);
+						continue;
+					}
+					throw err;
+				}
 			}
 		});
 
 	return program;
+}
+
+/**
+ * A minimal interactive multi-select toggle for `remote find`: list the
+ * discovered repos numbered, let the user type the numbers to add (space/comma
+ * separated; `all` for everything; blank for none). A non-interactive (no TTY)
+ * invocation selects nothing — use `--yes` to add all without a prompt.
+ */
+function promptMultiSelect(repos: string[]): Promise<string[]> {
+	return new Promise((resolvePrompt) => {
+		if (!process.stdin.isTTY) {
+			resolvePrompt([]);
+			return;
+		}
+		const rl = createInterface({input: process.stdin, output: process.stderr});
+		process.stderr.write('Discovered work/-participating repos:\n');
+		repos.forEach((repo, i) => {
+			process.stderr.write(`  [${i + 1}] ${repo}\n`);
+		});
+		rl.question('Add which? (numbers, `all`, or blank for none) ', (answer) => {
+			rl.close();
+			const trimmed = answer.trim().toLowerCase();
+			if (trimmed === '') {
+				resolvePrompt([]);
+				return;
+			}
+			if (trimmed === 'all') {
+				resolvePrompt([...repos]);
+				return;
+			}
+			const picks = new Set<string>();
+			for (const token of trimmed.split(/[\s,]+/)) {
+				const n = Number(token);
+				if (Number.isInteger(n) && n >= 1 && n <= repos.length) {
+					picks.add(repos[n - 1]);
+				}
+			}
+			resolvePrompt([...picks]);
+		});
+	});
 }
 
 const program = buildProgram();

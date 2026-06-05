@@ -4,10 +4,10 @@ import {resolveHarness, type Harness} from './harness.js';
 // harness registry so `resolveHarness` dispatches pi jobs' liveness to it.
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
-import {
-	readNeedsAttentionItems,
-	type NeedsAttentionItem,
-} from './needs-attention.js';
+import {ledgerRead} from './ledger-read.js';
+import {extractReason} from './needs-attention.js';
+import {type NeedsAttentionItem} from './needs-attention.js';
+import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 
 /**
  * `agent-runner status` — the **operational dashboard of jobs** (ADR §4/§5/§12
@@ -71,7 +71,7 @@ export interface JobStatus {
 
 /** One repo's `work/needs-attention/` folder, surfaced for the dashboard. */
 export interface RepoNeedsAttention {
-	/** The repo path whose `work/needs-attention/` was read. */
+	/** The repo path whose `work/needs-attention/` was read (a hub-mirror path). */
 	repoPath: string;
 	/** The stuck items (slug + recorded reason) in that folder. */
 	items: NeedsAttentionItem[];
@@ -84,14 +84,21 @@ export interface StatusReport {
 	/** Stuck (needs-attention), crashed (running-but-dead), or un-reaped (done) jobs. */
 	attention: JobStatus[];
 	/**
-	 * The folder-native needs-attention surface (ADR §12): each participating
-	 * repo's `work/needs-attention/<slug>.md` items with their recorded reason.
-	 * This is the durable "look here" set in the repo's `work/` tree (distinct from
-	 * the transient job worktrees above). Empty when no `repoRoots` were given.
-	 * Optional in the type so the older job-only literals stay valid; `status()`
-	 * always populates it (possibly empty).
+	 * The folder-native needs-attention surface (ADR §12): each registered hub
+	 * mirror's `work/needs-attention/<slug>.md` items (read from the mirror's `main`
+	 * ref) with their recorded reason. This is the durable "look here" set in the
+	 * repo's `work/` tree (distinct from the transient job worktrees above). Empty
+	 * when no `mirrorPaths` were given. Optional in the type so the older job-only
+	 * literals stay valid; `status()` always populates it (possibly empty).
 	 */
 	needsAttention?: RepoNeedsAttention[];
+	/**
+	 * The current repo's arbiter state (folded in from the old `arbiter status`,
+	 * ADR §1/§7): which remote, URL/path, exists/bare, main reachable, and the
+	 * unsafe non-bare-with-main flag. Present only when the CLI resolved one (it is
+	 * a current-checkout concern); absent for the pure job-area dashboard.
+	 */
+	arbiter?: ArbiterStatusReport;
 }
 
 export interface StatusOptions {
@@ -107,11 +114,20 @@ export interface StatusOptions {
 	 */
 	harness?: Harness;
 	/**
-	 * Participating repo paths whose `work/needs-attention/` folders to surface
-	 * (ADR §12). The CLI wires these from `detectRepos(config)`. Omitted ⇒ the
-	 * folder-native surface is skipped (only the job worktrees are reported).
+	 * Hub-mirror PATHS whose `work/needs-attention/` to surface (ADR §12), read
+	 * from each mirror's BARE `main` ref THROUGH the read seam (mirrors have no
+	 * working tree). The CLI wires these from the registry's {@link listMirrors}.
+	 * Omitted ⇒ the folder-native surface is skipped (only the job worktrees are
+	 * reported).
 	 */
-	repoRoots?: string[];
+	mirrorPaths?: string[];
+	/**
+	 * The current repo's arbiter state to fold into the dashboard (the old `arbiter
+	 * status`, ADR §1). The CLI resolves it via `arbiterStatus` for the current
+	 * checkout; omitted ⇒ no arbiter section.
+	 */
+	arbiter?: ArbiterStatusReport;
+	env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -122,7 +138,7 @@ export interface StatusOptions {
  * crashed running-but-dead job, or a done-but-un-reaped one). Mutates nothing —
  * no claim/run/move/delete.
  */
-export function status(options: StatusOptions): StatusReport {
+export async function status(options: StatusOptions): Promise<StatusReport> {
 	const active: JobStatus[] = [];
 	const attention: JobStatus[] = [];
 
@@ -143,16 +159,31 @@ export function status(options: StatusOptions): StatusReport {
 	active.sort(bySlug);
 	attention.sort(bySlug);
 
+	// The folder-native needs-attention surface (ADR §12), read from each hub
+	// mirror's BARE `main` ref THROUGH the read seam (mirrors have no working tree).
 	const needsAttention: RepoNeedsAttention[] = [];
-	for (const repoPath of options.repoRoots ?? []) {
-		const items = readNeedsAttentionItems(repoPath);
+	for (const mirrorPath of options.mirrorPaths ?? []) {
+		const state = await ledgerRead.resolveMirrorState({
+			mirrorPath,
+			env: options.env,
+		});
+		const items: NeedsAttentionItem[] = state.needsAttention.map((item) => ({
+			file: item.file,
+			slug: item.slug,
+			reason: extractReason(item.content),
+		}));
 		if (items.length > 0) {
-			needsAttention.push({repoPath, items});
+			needsAttention.push({repoPath: mirrorPath, items});
 		}
 	}
 	needsAttention.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 
-	return {active, attention, needsAttention};
+	return {
+		active,
+		attention,
+		needsAttention,
+		...(options.arbiter ? {arbiter: options.arbiter} : {}),
+	};
 }
 
 function bySlug(a: JobStatus, b: JobStatus): number {
@@ -203,7 +234,8 @@ export function formatStatus(report: StatusReport): string {
 	if (
 		report.active.length === 0 &&
 		report.attention.length === 0 &&
-		naCount === 0
+		naCount === 0 &&
+		report.arbiter === undefined
 	) {
 		return 'No jobs running or retained (the work area is empty).';
 	}
@@ -248,6 +280,12 @@ export function formatStatus(report: StatusReport): string {
 		`Summary: ${report.active.length} active, ${report.attention.length} failed/retained job(s)` +
 			(naCount > 0 ? `, ${naCount} needs-attention item(s).` : '.'),
 	);
+
+	// The folded-in arbiter state (ADR §1/§7, the old `arbiter status`).
+	if (report.arbiter !== undefined) {
+		lines.push('');
+		lines.push(formatArbiterStatus(report.arbiter));
+	}
 
 	return lines.join('\n');
 }

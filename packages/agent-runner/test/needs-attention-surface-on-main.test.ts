@@ -6,7 +6,7 @@ import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
 import {performStart} from '../src/start.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performComplete} from '../src/complete.js';
-import {scan} from '../src/scan.js';
+import {scanRepoPaths} from '../src/scan.js';
 import {status} from '../src/status.js';
 import {readNeedsAttentionItems} from '../src/needs-attention.js';
 import {mergeConfig} from '../src/config.js';
@@ -165,9 +165,14 @@ const editingAgent: AgentRunner = ({cwd}) => {
 };
 const redGate: TestGate = () => ({green: false, detail: 'tests failed'});
 
+/** The injected working-tree scan report for `run` over the seeded `project`. */
+function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
+	return scanRepoPaths([join(scratch.root, 'project')], config);
+}
+
 function configFor(root: string, overrides = {}) {
+	void root;
 	return mergeConfig({
-		roots: [join(root, 'project')],
 		defaultArbiter: 'arbiter',
 		maxParallel: 4,
 		perRepoMax: 2,
@@ -186,7 +191,7 @@ describe('needs-attention surface-on-main — surfaces in BOTH merge and propose
 			const config = configFor(scratch.root, {integration});
 			const result = await runOnce({
 				config,
-				report: scan(config),
+				report: scanProject(config),
 				workspace: workspacesDir,
 				agentRunner: editingAgent,
 				testGate: redGate,
@@ -226,7 +231,7 @@ describe('needs-attention surface-on-main — scan/status read main', () => {
 
 		// scan reads work/backlog/ only — `delta` is in needs-attention/, not seen;
 		// the sibling `stays` remains claimable.
-		const config = configFor(scratch.root, {roots: [scratch.root]});
+		const config = configFor(scratch.root);
 		void config;
 		expect(existsSync(join(fresh, 'work', 'needs-attention', 'delta.md'))).toBe(
 			true,
@@ -237,10 +242,12 @@ describe('needs-attention surface-on-main — scan/status read main', () => {
 		const items = readNeedsAttentionItems(fresh);
 		expect(items.find((i) => i.slug === 'delta')?.reason).toMatch(/timeout/i);
 
-		// status, given the fresh checkout as a repo root, surfaces the reason.
-		const report = status({
+		// status, given the fresh checkout's `main` ref as a mirror path, surfaces the
+		// reason (the read seam's ref read works against a non-bare clone too).
+		const report = await status({
 			workspacesDir: join(scratch.root, 'no-jobs'),
-			repoRoots: [fresh],
+			mirrorPaths: [fresh],
+			env: gitEnv(),
 		});
 		const surfaced = (report.needsAttention ?? []).flatMap((r) => r.items);
 		expect(surfaced.find((i) => i.slug === 'delta')?.reason).toMatch(

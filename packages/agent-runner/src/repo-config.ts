@@ -22,8 +22,8 @@ import {envOverrides, type EnvMap} from './env-config.js';
  * SAME run (see {@link resolveRepoConfig}).
  *
  * Only keys that are genuinely repo properties are honoured in the COMMITTED
- * per-repo file. Runner/host-only keys (`piBin`, `agentCmd`, `roots`,
- * `maxParallel`, …) describe the runner or the host machine, NOT a single repo;
+ * per-repo file. Runner/host-only keys (`piBin`, `agentCmd`, `maxParallel`, …)
+ * describe the runner or the host machine, NOT a single repo;
  * if present in a per-repo file they are ignored and reported with a clear
  * message ({@link loadRepoConfig}).
  *
@@ -69,9 +69,6 @@ export type RepoAllowedKey = (typeof REPO_ALLOWED_KEYS)[number];
  * domain of the global config / CLI flags.
  */
 export const REPO_REJECTED_KEYS = [
-	'roots',
-	'include',
-	'exclude',
 	'maxParallel',
 	'perRepoMax',
 	'agentCmd',
