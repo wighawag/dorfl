@@ -27,6 +27,11 @@ import {performDo} from './do.js';
 import {createHarness} from './pi-harness.js';
 import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
+import {
+	harnessFlagOverrides,
+	doFlagOverrides,
+	doNeedsAgentCmd,
+} from './do-config.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
@@ -144,18 +149,10 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	if (flags.provider === 'github' || flags.provider === 'none') {
 		overrides.provider = flags.provider;
 	}
-	if (flags.agentCmd !== undefined) {
-		overrides.agentCmd = flags.agentCmd;
-	}
-	if (flags.model !== undefined) {
-		overrides.model = flags.model;
-	}
-	if (flags.harness === 'null' || flags.harness === 'pi') {
-		overrides.harness = flags.harness;
-	}
-	if (flags.piBin !== undefined) {
-		overrides.piBin = flags.piBin;
-	}
+	// The harness/adapter flags (--agent-cmd/--model/--harness/--pi-bin) map via
+	// the SHARED per-key mapping `do` also reuses (do-config.harnessFlagOverrides),
+	// so there is exactly ONE override path for them.
+	Object.assign(overrides, harnessFlagOverrides(flags));
 	return overrides;
 }
 
@@ -768,10 +765,16 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+			// Thread the `do` CLI flags (--harness/--agent-cmd/--pi-bin/--model)
+			// AND the integrate-time mode into the resolved config — the SAME flag
+			// override path `run` uses (do-config.doFlagOverrides reuses
+			// harnessFlagOverrides). Passing only `{integration}` here silently
+			// DROPPED --harness pi etc.; now flag > env > per-repo > global > default
+			// holds for `do` as for `run`.
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
-				flags: flagMode ? {integration: flagMode} : {},
+				flags: doFlagOverrides(flags, flagMode),
 			});
 			if (resolved.message) {
 				console.error(`>> ${resolved.message}`);
@@ -779,7 +782,7 @@ export function buildProgram(): Command {
 			const config = resolved.config;
 			// The null adapter shells out to agentCmd, so it is required there; the
 			// pi adapter invokes the pi CLI directly and does not consume agentCmd.
-			if (config.harness !== 'pi' && config.agentCmd.trim() === '') {
+			if (doNeedsAgentCmd(config)) {
 				console.error(
 					'error: no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
 				);
