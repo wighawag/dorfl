@@ -68,14 +68,23 @@ there is **no `roots` config field and no `remotes` field**.
   against `<arbiter>/main`) reads only `work/done/` + a SINGLE named slice — NOT the
   full backlog, NOT needs-attention. So ADD a read-seam capability: **resolve the
   full live `work/` lifecycle (backlog + done + needs-attention) of a repo from its
-  hub mirror's `main` ref** (`git ls-tree`/`git show` against `<mirror>/main:work/...`,
-  extending the arbiter method's existing `done/` read to the full set). Route
-  `scan`/`status` through THAT for their per-repo `work/` read instead of
-  `resolveLocalState`. Keep it behind the read seam (its whole purpose is that
-  readers don't learn a new mechanism) — do NOT scatter raw `git ls-tree` across
-  `scan`/`status`. (FETCHING each mirror before this read is the
-  `scan-status-fetch-first` slice; THIS slice provides the mirror-ref READ that
-  fetch-first keeps fresh.)
+  hub mirror's `main` ref** (`git ls-tree`/`git show`, extending the arbiter
+  method's existing `done/` read to the full set). Route `scan`/`status` through
+  THAT for their per-repo `work/` read instead of `resolveLocalState`. Keep it
+  behind the read seam (its whole purpose is that readers don't learn a new
+  mechanism) — do NOT scatter raw `git ls-tree` across `scan`/`status`.
+  - **This is PROVEN sound** (verified against a real bare mirror): `git -C
+    <mirror> ls-tree --name-only <ref>:work/backlog` enumerates the files and `git
+    -C <mirror> show <ref>:work/backlog/<x>.md` returns the full content (frontmatter
+    included) that `parseFrontmatter` needs — the same mechanism
+    `readDoneSlugsOnArbiter`/`readSliceOnArbiter` already use, just widened to
+    backlog + needs-attention.
+  - **REF SPELLING nuance:** the existing arbiter read targets `<arbiter>/main:...`
+    (a remote-tracking ref in a working CLONE). A hub mirror is bare, where `main`
+    is a LOCAL branch — read `main:work/...` (or `HEAD:work/...`), NOT
+    `origin/main:work/...`. Use the mirror-local ref, run with `git -C <mirrorPath>`.
+  - (FETCHING each mirror before this read is the `scan-status-fetch-first` slice;
+    THIS slice provides the mirror-ref READ that fetch-first keeps fresh.)
 
 Key = `host/org/name` (today's `encodeRepoKey`, unchanged) — collapses
 ssh/https/scp for one repo onto one mirror, keeps different hosts/projects distinct.

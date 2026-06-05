@@ -37,7 +37,8 @@ running code still embodies the old, drifted model:
   (`ar-run.sh`);
 - the human face is missing `resume` and `--agent`, and `work-on` does not `cd`
   you in by default;
-- flags are inconsistent (`return` vs the clearer `requeue`; a dead `--by`;
+- flags are inconsistent (`return` vs the clearer `requeue`; `--by`, which records
+  the claimer in the claim commit's MESSAGE HEADER where it does not belong;
   `--force` overloaded for both a harmless readiness override AND the genuinely
   destructive `gc`);
 - `scan`/`status` still assume the retired "scan is always offline" invariant.
@@ -163,9 +164,11 @@ protocol-adoption concern (those stay skills).
 16. As the maintainer, I want `return` renamed to `requeue`, so that the
     defer-don't-finish verb names its action (its pair: `complete` = fixed it,
     `requeue` = deferring back to the queue).
-17. As the maintainer, I want `--by` removed from claim/start/work-on, so that a
-    dead flag (the `claimed_by` field is gone; git history is the claim ledger) is
-    not part of the surface.
+17. As the maintainer, I want `--by` removed from claim/start/work-on (and the
+    `(by ...)` suffix dropped from the claim commit subject), so that the claimer
+    is recorded by git identity (where it belongs) rather than stuffed into the
+    commit message header; the readback (`claimedByFromCommit`) reads the commit's
+    git identity instead.
 18. As the maintainer, I want the readiness override spelled ONLY
     `--ignore-not-ready` (dropping the `--force` spelling on claim/start/work-on),
     so that `--force` is reserved for the genuinely destructive `gc --force` —
@@ -242,6 +245,18 @@ the slices encode these, but they are recorded here as durable warnings:
 - **The scan/candidate model is slice-only.** `selectCandidates`/eligibility know
   nothing of PRDs. `do-autopick`'s "slices-first then PRDs-to-slice" is TWO pools:
   the existing slice pool + a NEW PRD pool (PRD reader + `autoslice-gate` predicate).
+- **Hub mirrors are BARE — `scan`/`status` must read `work/` from a REF, not a
+  working tree.** Today `scan` reads a local CHECKOUT via
+  `resolveLocalState`'s `readdirSync`. A mirror has no working tree, so
+  `registry-remote` ADDS a read-seam capability to resolve full `work/` (backlog +
+  done + needs-attention) from the mirror's `main` ref via `git ls-tree`/`show`
+  (proven against a real bare mirror; read the mirror-LOCAL `main:`, not
+  `origin/main:`). `scan-status-fetch-first` only adds the fetch before that read.
+- **`--by` is removed ENTIRELY (flag + the `(by ...)` commit-subject suffix).** It
+  was never dead — it fed the claim commit subject, parsed back by
+  `claimedByFromCommit`. The claimer belongs in git identity, not the message
+  header: `flag-cleanup-renames` drops the flag + the suffix (→ `claim: <slug>`) and
+  re-points `claimedByFromCommit` to read `git log -1 --format=%an`.
 - **In-place `do` ≈ `start` + (autonomous harness run) + `complete`.** `ar-run.sh`
   (the script `do` absorbs) is exactly that, with a DIRTY-TREE REFUSAL. `do-in-place`
   composes the existing human verbs rather than re-deriving `runOneItem`; the
