@@ -3,6 +3,8 @@ import {performComplete} from './complete.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
+import {PiHarness, piSessionDir} from './pi-harness.js';
+import {SessionTailer} from './watch-session.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
@@ -97,6 +99,14 @@ export interface DoOptions {
 	agentRunner?: DoAgentRunner;
 	/** The harness seam used when `agentRunner` is omitted; defaults to the null adapter. */
 	harness?: Harness;
+	/**
+	 * `do --watch`: stream the agent's high-signal events live by tailing the pi
+	 * session `.jsonl` (slice `do-watch`, option (a)). A READ-ONLY observer — it
+	 * NEVER changes the run's outcome, gate, integration, git, or exit code; only a
+	 * concurrent log-tail is added. REQUIRES the pi harness (the null adapter has
+	 * no session log to tail) — passing it with a non-pi harness is a usage error.
+	 */
+	watch?: boolean;
 	/** The configured agent command the harness shells out to (null adapter). */
 	agentCmd?: string;
 	/** The model routing intent forwarded to the harness (ADR §13). */
@@ -116,6 +126,11 @@ export interface DoOptions {
 	noteBlock?: (message: string) => void;
 	/** Emit ANSI color in `complete`'s (cosmetic) propose next-step block. */
 	color?: boolean;
+	/**
+	 * Where `--watch`'s tailed events are written (defaults to stderr). Tests inject
+	 * a sink to assert the surfaced lines without a real terminal.
+	 */
+	watchSink?: (line: string) => void;
 }
 
 const DEFAULT_ARBITER = 'origin';
@@ -131,6 +146,26 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	const cwd = options.cwd;
 	const env = options.env;
+
+	// 0. `--watch` REQUIRES the pi harness (slice `do-watch`): only the pi adapter
+	//    writes a session `.jsonl` event log to tail. The null/shell adapter has no
+	//    session log / event taxonomy, so there is nothing to observe — ERROR
+	//    CLEARLY here, BEFORE any git transition (no claim, no branch), rather than
+	//    silently running without the view. The injected `agentRunner` (tests /
+	//    custom embeddings) is its own launch path and is exempt.
+	if (
+		options.watch === true &&
+		options.agentRunner === undefined &&
+		!(options.harness instanceof PiHarness)
+	) {
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message:
+				'`do --watch` requires the pi harness; configure `harness: pi` or drop ' +
+				'`--watch`.',
+		};
+	}
 
 	// 1. Resolve the slug across BOTH namespaces — `do` is the ONE command that
 	//    spans them (ADR §3a): bare → slice (after a no-PRD-collision check;
@@ -230,7 +265,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	let agent: {ok: boolean; detail?: string};
 	try {
-		agent = runDoAgent(options, cwd, prompt, slug);
+		agent = await runDoAgent(options, cwd, prompt, slug);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		return {exitCode: 1, outcome: 'agent-failed', slug, branch, message};
@@ -295,17 +330,52 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
  * Run the agent against the checkout. Prefers the injected `agentRunner` (tests
  * / custom embeddings); otherwise launches `agentCmd` through the harness seam
  * (the null adapter by default), forwarding the model routing intent.
+ *
+ * With `--watch` (pi harness only, validated earlier), the agent is launched
+ * NON-BLOCKING (`PiHarness.launchAsync` — `spawn`, not `spawnSync`) so a
+ * {@link SessionTailer} can READ the growing session `.jsonl` concurrently and
+ * surface the high-signal events live. The tailer is a pure observer: the
+ * launch result returned here is IDENTICAL to the non-watch path, so outcome /
+ * gate / git / exit code are unchanged — only a concurrent log-tail is added.
  */
-function runDoAgent(
+async function runDoAgent(
 	options: DoOptions,
 	cwd: string,
 	prompt: string,
 	slug: string,
-): {ok: boolean; detail?: string} {
+): Promise<{ok: boolean; detail?: string}> {
 	if (options.agentRunner) {
 		return options.agentRunner({cwd, prompt, slug, env: options.env});
 	}
 	const harness = options.harness ?? new NullHarness();
+
+	// `--watch` (pi only): launch async + tail the session .jsonl concurrently.
+	// (The non-pi case is already rejected as a usage error before any git
+	// transition, so reaching here with watch ⇒ a PiHarness.)
+	if (options.watch === true && harness instanceof PiHarness) {
+		const tailer = new SessionTailer({
+			sessionDir: piSessionDir(cwd),
+			color: options.color ?? false,
+			sink: options.watchSink,
+		});
+		tailer.start();
+		try {
+			const launched = await harness.launchAsync({
+				dir: cwd,
+				slug,
+				command: options.agentCmd ?? '',
+				prompt,
+				model: options.model,
+				env: options.env,
+			});
+			return {ok: launched.ok, detail: launched.detail};
+		} finally {
+			// Always release the tailer (one final drain) — even on a launch error —
+			// so the observer never outlives the run or leaks a handle.
+			await tailer.stop();
+		}
+	}
+
 	const launched = harness.launch({
 		dir: cwd,
 		slug,

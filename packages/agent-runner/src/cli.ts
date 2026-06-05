@@ -217,6 +217,7 @@ interface DoFlags {
 	model?: string;
 	harness?: string;
 	piBin?: string;
+	watch?: boolean;
 }
 
 interface GcFlags {
@@ -739,6 +740,10 @@ export function buildProgram(): Command {
 			'--pi-bin <path>',
 			'pi CLI binary the pi harness invokes (default: pi on PATH)',
 		)
+		.option(
+			'--watch',
+			"stream the agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git)",
+		)
 		.action(async (rawSlug: string | undefined, flags: DoFlags) => {
 			if (rawSlug === undefined) {
 				// Auto-pick (no arg) is the do-autopick slice; this slice is the
@@ -794,6 +799,9 @@ export function buildProgram(): Command {
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
+				// `--watch`: tail the pi session log live (pi harness only; the
+				// performDo guard errors clearly on any other adapter). READ-ONLY.
+				watch: flags.watch === true,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),

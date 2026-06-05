@@ -205,6 +205,13 @@ export {
 	PI_SESSION_DIRNAME,
 } from './pi-harness.js';
 
+export type {SessionTailerOptions} from './watch-session.js';
+export {
+	formatWatchEvent,
+	findSessionLog,
+	SessionTailer,
+} from './watch-session.js';
+
 export type {
 	ReviewProvider,
 	OpenRequestInput,

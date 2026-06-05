@@ -1,4 +1,4 @@
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {
@@ -163,6 +163,71 @@ export class PiHarness implements Harness {
 	 * authoritative signal. NEVER filesystem mtime. The recorded session dir/log
 	 * is the audit/activity pointer surfaced alongside (see {@link sessionPointer}).
 	 */
+	/**
+	 * The ASYNC twin of {@link launch} — IDENTICAL semantics (same `--print
+	 * --session-dir` invocation, same prompt on stdin, output still CAPTURED, same
+	 * `LaunchResult` shape: PID anchor + session pointer + ok/detail), but launched
+	 * NON-BLOCKING with `spawn` instead of the synchronous `spawnSync`. This is the
+	 * one structural carve-out the `do --watch` observer needs (slice `do-watch`):
+	 * `spawnSync` blocks the event loop until pi exits, so NOTHING could tail the
+	 * growing session `.jsonl` concurrently. `launchAsync` runs pi alongside the
+	 * tailer; the WHOLE launch delta is `spawnSync` → `spawn`. It is NOT a switch
+	 * to inherited-stdio piping (that is the separate future `--agent` seam) — the
+	 * prompt is still fed on stdin and stdout/stderr are still captured; we read
+	 * the `.jsonl` LOG, never piped stdout. With or without `--watch` the run's
+	 * outcome/gate/git/exit are identical.
+	 */
+	launchAsync(input: LaunchInput): Promise<LaunchResult> {
+		const sessionDir = piSessionDir(input.dir);
+		const modelArgs =
+			input.model !== undefined && input.model !== ''
+				? ['--model', input.model]
+				: [];
+		const args = [
+			...modelArgs,
+			...this.extraArgs,
+			'--print',
+			'--session-dir',
+			sessionDir,
+		];
+		const record: PiHarnessRecord = {
+			adapter: 'pi',
+			command: [this.piBin, ...args].join(' '),
+			session: sessionDir,
+		};
+		return new Promise<LaunchResult>((resolve, reject) => {
+			const child = spawn(this.piBin, args, {
+				cwd: input.dir,
+				env: input.env ?? process.env,
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			record.pid = child.pid; // the liveness anchor, recorded like spawnSync.
+			let stderr = '';
+			child.stderr?.on('data', (chunk: Buffer) => {
+				stderr += chunk.toString('utf8');
+			});
+			// Output is CAPTURED (not piped through) — `--watch` reads the .jsonl log,
+			// not stdout. We drain stdout so the pipe never fills and stalls pi.
+			child.stdout?.on('data', () => {});
+			child.on('error', (err) => {
+				reject(new Error(`failed to spawn pi (${this.piBin}): ${err.message}`));
+			});
+			child.on('close', (code) => {
+				const status = code ?? -1;
+				resolve({
+					ok: status === 0,
+					record,
+					detail: status === 0 ? undefined : stderr.trim(),
+				});
+			});
+			// Feed the same prepared prompt on stdin, then close it (pi reads to EOF).
+			if (input.prompt !== undefined) {
+				child.stdin?.write(input.prompt);
+			}
+			child.stdin?.end();
+		});
+	}
+
 	isAlive(record: HarnessRecord): boolean {
 		return pidAlive(record.pid);
 	}
