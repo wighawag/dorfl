@@ -37,6 +37,34 @@ interactive session), and return control when the human exits. So `--agent` is N
 produces a launch that looks wired but is wrong (captured stdio, instant return,
 no human interaction).
 
+## Update (2026-06-05) — sharpenings from building `do-watch`
+
+While building `do --watch` (option (a): tail the pi session log, launch untouched
+beyond `spawnSync`→`spawn`), several things about `--agent` got concrete — fold
+these in when resolving the open questions below:
+
+- **`--agent` is option (b) in the `do-watch` lineage.** `do-watch` proved you can
+  go async (`spawnSync`→`spawn`) WITHOUT touching the agent's stdio contract
+  (prompt still fed on stdin, output still captured). `--agent` is precisely the
+  slice that DOES change the stdio contract — inherit/pipe stdio, no prepared
+  prompt, foreground. See `do-watch`'s "Lineage" section: (a) observe vs (b)
+  interact. `--agent` owns the streaming/interactive seam `--watch` deliberately
+  did not open.
+- **Partial answer to Q2 (pi adapter):** the pi adapter's interactive form is
+  `pi` **WITHOUT `--print`** — a real foreground session the human types into
+  (the current non-interactive launch is `pi --print --session-dir <dir>`, prompt
+  on stdin, captured; see `src/pi-harness.ts`). So interactive = drop `--print`,
+  inherit stdio, no piped prompt. (Still open: exact flags, and whether the
+  `--session-dir` pointer still applies.)
+- **Partial answer to Q2 (null adapter):** likely `--agent` is **pi-only with a
+  clear error** on the null adapter (its `agentCmd` is shaped for the captured
+  autonomous path; "interactive" has no clean meaning there) — mirror `do-watch`'s
+  fail-on-null-harness decision.
+- **Plumbing reuse:** if `--agent` lands AFTER `do-watch`, it can share the
+  async-`spawn` launch plumbing `do-watch` introduces (both need a non-blocking
+  launch; `--agent` additionally inherits stdio). Check whether `do-watch`'s launch
+  refactor already exposes the seam to build on.
+
 ## Open questions (resolve before building — clear `needsAnswers` when done)
 
 1. **Seam shape.** Is interactive launch a new method on the `Harness` interface
