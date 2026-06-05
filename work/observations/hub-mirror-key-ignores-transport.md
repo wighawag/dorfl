@@ -59,3 +59,64 @@ otherwise know they're related:
 Precedent for "refuse the unsafe thing with a clear message" already exists in
 `src/arbiter.ts` (`assertBare`); a guard here fits that safety philosophy. No
 action taken yet — captured for slicing.
+
+## Update (2026-06-05) — cheap guard LANDED; corrections; strong-version decided
+
+**Corrections to the above (maintainer):**
+
+- **Key is `host/org/name` OR `host/path`**, not just `org/name`. `encodeRepoKey`
+  drops scheme/user and keys on **host + path segments**; the project-identity tail
+  is the path part under the host (commonly `org/name`, but it is the path, not
+  necessarily two segments). Guard on that path-tail-under-host, not literally
+  "`org/name`".
+- **Drop the `doctor` framing.** `doctor` is NOT planned (the command-surface ADR
+  leaves it explicitly undecided). Ignore the `doctor` mention above.
+
+**The cheap guard landed** in `registry-remote` (PR #1, in `done/`): `remote add`
+refuses registering one project (same host/path identity, via `projectIdFromKey`)
+under a second TRANSPORT unless `--force`, reading the existing mirror's origin via
+`git remote get-url`. So the transport-mismatch case is now guarded at
+registration time.
+
+**Strong version — DECIDED design (future slice):**
+
+- **Block on an existing mirror for the same project regardless of un-pushed work**
+  (i.e. `remote add` of a second arbiter for an already-registered project refuses
+  by default — not only on transport mismatch but on project-identity collision).
+- **`--force` allows REPLACING a mirror** — so you can re-link a project's mirror
+  from a remote to a `--bare` arbiter (or vice-versa) deliberately.
+- **BUT `--force` must STILL FAIL if un-pushed work is detectable** on the mirror
+  being replaced — we never silently lose work. (Force overrides the *policy*
+  block, never the *data-loss* block.)
+
+**Feasibility — un-pushed work IS detectable, but NOT from the mirror's refs alone
+(important correction).** Two KINDS of un-pushed work, with different homes:
+
+- **Committed-but-unpushed:** a job worktree's commits + its `work/<slug>` branch
+  ref ARE in the bare mirror's object store (the worktree shares the mirror's
+  objects; the local `work/*` ref moves as the worktree commits). Detectable from
+  the mirror: a local `work/*` tip NEITHER merged into `origin/main` NOR equal to
+  `origin/<branch>` tip.
+- **Uncommitted (DIRTY working tree):** lives ONLY in the worktree's files on disk
+  — it is no git object, no ref, NOT in the mirror. **A mirror-refs-only check
+  CANNOT see it.** (This is the crash/abort case the original "stranded work"
+  worry centres on.)
+
+This is exactly why the existing **§4 deletion-safety predicate** (`src/gc.ts`) has
+TWO conditions: (1) the **working tree is clean** — checked by `git status` INSIDE
+the worktree, not on the mirror — AND (2) the branch tip is **reachable on the
+arbiter** (`merge-base --is-ancestor` OR `origin/<branch>` tip == local tip), the
+mirror-side check. So the strong guard must apply the FULL per-worktree predicate,
+not a mirror-refs-only check.
+
+The system CAN enumerate a mirror's worktrees to do this: `discoverJobs(
+workspacesDir)` walks `<workspacesDir>/work/*` for `.agent-runner-job.json`
+records, each carrying the mirror KEY — so it maps mirror → its job worktrees and
+can run the clean/reachable predicate in each. (`git worktree list` in the mirror
+is the other half.) So: the strong guard REUSES `gc.ts`'s per-worktree predicate
+across the replaced mirror's worktrees; `--force` proceeds only when every
+worktree is provably safe (clean AND reachable) — a dirty worktree blocks `--force`
+even though the mirror's refs look fine.
+
+Still a future slice (not phase-2). The cheap guard suffices for now; this records
+the decided shape so the strong version is buildable when wanted.

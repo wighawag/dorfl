@@ -76,7 +76,12 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **claim (CAS)** — atomically moving an item `backlog → in-progress` by pushing a
   micro-commit to the arbiter's `main` with `--force-with-lease`; the first push
   wins, losers get exit 2 and pick another item. Implemented by `claim.sh`
-  (portable bootstrap) and `agent-runner claim` (the in-process version).
+  (portable bootstrap) and `agent-runner claim` (the in-process version). This
+  direct-`main` write is the **current (only) strategy behind the
+  ledger-transition seam** (`docs/adr/claim-ledger-vs-protected-main.md`): the
+  three `work/` transitions (claim / complete / needs-attention) route through the
+  write seam, so a future strategy *could* differ — but today there is one, and it
+  writes `main` exactly as described.
 - **work branch** — `work/<slug>`, branched off the latest arbiter `main`, where a
   slice is built.
 - **integration mode** — how finished work lands: **`propose`** (push a branch +

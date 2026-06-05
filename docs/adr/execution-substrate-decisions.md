@@ -174,6 +174,14 @@ agent-runner and the `to-slices` skill (the `work/` contract,
 grows a first-class **`claim` command** (TS) that implements the same claim CAS
 as `claim.sh`, with identical exit-code semantics.
 
+> **Note (ledger-transition seam):** the claim CAS's direct write to `main`
+> described throughout this ADR is the **current (only) strategy** behind the
+> ledger-transition seam (`docs/adr/claim-ledger-vs-protected-main.md`, accepted).
+> The three `work/` transitions now route through that read+write seam; behaviour
+> is byte-identical (one strategy, `main`-writing), but the `main`-write is no
+> longer hard-wired — a future strategy could differ. This ADR's `main`-write
+> descriptions remain accurate for today's single strategy.
+
 - The **contract docs stay tool-agnostic and primary** (the stable interface).
 - **`claim.sh` is retained** as the zero-dependency, portable bootstrap / reference
   implementation (it is how the very first slice gets claimed before agent-runner
