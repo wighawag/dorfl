@@ -3,9 +3,13 @@ import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {performClaim} from './claim-cas.js';
-import {createJob, updateJobRecord, type Job} from './workspace.js';
+import {updateJobRecord} from './workspace.js';
 import {ledgerWrite} from './ledger-write.js';
-import {reapJob} from './gc.js';
+import {
+	jobWorktreeStrategy,
+	type IsolatedTree,
+	type IsolationStrategy,
+} from './isolation.js';
 import {NullHarness, type Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
@@ -272,25 +276,29 @@ async function runOneItem(
 		return {...base, status: 'claim-error', detail: claim.message};
 	}
 
-	// 2. Isolate in a per-job worktree cut from the freshly-fetched hub mirror
-	//    main (the SINGLE isolation path — ADR §1/§2). The mirror is keyed off
+	// 2. Isolate via the isolation-strategy seam (ADR §3). `run` always selects
+	//    the JOB-WORKTREE strategy: materialise the hub mirror + cut a per-job
+	//    worktree off the freshly-fetched `<hub>/main` in the agents' area
+	//    (ADR §1/§2). The seam yields a UNIFORM HANDLE (dir/branch/arbiterRemote/
+	//    arbiterUrl + a strategy-appropriate teardown) that the post-claim pipeline
+	//    below reads from — never a concrete `Job` — so the SAME steps serve the
+	//    in-place strategy too (wired by `do-in-place`). The mirror is keyed off
 	//    the arbiter URL resolved from this repo, so jobs reuse it (fetch, not
 	//    re-clone) across the run.
-	let job: Job | undefined;
+	const strategy: IsolationStrategy = jobWorktreeStrategy({
+		fromRepo: repoPath,
+		arbiter: config.defaultArbiter,
+		workspacesDir: ctx.workspace,
+	});
+	let tree: IsolatedTree | undefined;
 	try {
-		job = createJob({
-			fromRepo: repoPath,
-			arbiter: config.defaultArbiter,
-			slug,
-			workspacesDir: ctx.workspace,
-			env: ctx.env,
-		});
+		tree = strategy.prepare({slug, env: ctx.env});
 
 		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
 		//    emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
 		let prompt: string;
 		try {
-			const slice = resolveSlice(job.dir, slug);
+			const slice = resolveSlice(tree.dir, slug);
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
 		} catch (err) {
 			if (err instanceof PromptError) {
@@ -305,7 +313,7 @@ async function runOneItem(
 		//    a `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
 		let agent: {ok: boolean; detail?: string};
 		try {
-			agent = runAgent(ctx, job, prompt, slug, config.agentCmd, config.model);
+			agent = runAgent(ctx, tree, prompt, slug, config.agentCmd, config.model);
 		} catch (err) {
 			return {...base, status: 'agent-failed', detail: (err as Error).message};
 		}
@@ -315,10 +323,10 @@ async function runOneItem(
 
 		// 5. Test-gate: only green work proceeds. Bad work is routed to
 		//    needs-attention (it never auto-merges; the worktree is the signal).
-		const gate = ctx.testGate({cwd: job.dir, slug, env: ctx.env});
+		const gate = ctx.testGate({cwd: tree.dir, slug, env: ctx.env});
 		if (!gate.green) {
 			const reason = gate.detail ?? 'acceptance gate failed';
-			updateJobRecord(job.dir, {state: 'needs-attention', reason});
+			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
 			// Folder-native surfacing (ADR §12): bounce the work item itself from
 			// in-progress/ to needs-attention/ (saving the aborted work as a wip
 			// commit + the move-only commit on the work branch) THROUGH the ledger
@@ -330,18 +338,18 @@ async function runOneItem(
 			// both merge and propose (the integration axis governs CODE only). The
 			// runner owns this move (the agent does no git).
 			ledgerWrite.applyNeedsAttentionTransition({
-				cwd: job.dir,
+				cwd: tree.dir,
 				slug,
 				reason,
-				arbiter: job.arbiterRemote,
+				arbiter: tree.arbiterRemote,
 				env: ctx.env,
 			});
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
 		// 6. Done-move (mkdir -p then git mv) + completion commit — runner-owned.
-		gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, job.dir);
-		commitCompletion(job.dir, slug, ctx.env);
+		gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, tree.dir);
+		commitCompletion(tree.dir, slug, ctx.env);
 
 		// 7. Rebase-before-integrate (ADR §10) then integrate per mode. A
 		//    conflicting rebase is aborted + routed to needs-attention (never
@@ -350,30 +358,32 @@ async function runOneItem(
 		// Provider selection (ADR §6, `propose` mode): an injected `openPr` wins
 		// (the legacy test bridge); otherwise pick by the per-repo `provider`
 		// override LAYERED OVER auto-detection from the ARBITER URL (a GitHub
-		// remote ⇒ the `gh` provider). We key detection off the mirror's resolved
-		// arbiter URL (`job.mirror.url`), not the in-worktree remote NAME. If `gh`
-		// is absent/unauthenticated the GitHub provider degrades to push-only at
+		// remote ⇒ the `gh` provider). We key detection off the handle's resolved
+		// arbiter URL (`tree.arbiterUrl` — the mirror's arbiter URL for the
+		// job-worktree strategy), not the in-worktree remote NAME. If `gh` is
+		// absent/unauthenticated the GitHub provider degrades to push-only at
 		// runtime — never a hard failure (the branch is already pushed).
 		const provider = ctx.openPr
 			? bridgeProvider(ctx.openPr)
 			: (ctx.provider ??
 				selectProvider({
-					arbiterUrl: job.mirror.url,
+					arbiterUrl: tree.arbiterUrl,
 					provider: config.provider,
 				}));
 		const integratorForItem = new Integrator({provider});
 		const outcome = integratorForItem.integrateWithRebase({
-			cwd: job.dir,
-			// Inside the job worktree the arbiter is the mirror's clone remote
-			// (`origin`), NOT the source repo's `defaultArbiter` name.
-			arbiter: job.arbiterRemote,
-			branch: job.branch,
+			cwd: tree.dir,
+			// The arbiter remote name valid inside the isolated tree (job-worktree:
+			// the mirror's clone remote `origin`; in-place: the checkout's arbiter
+			// remote), NOT the source repo's `defaultArbiter` name.
+			arbiter: tree.arbiterRemote,
+			branch: tree.branch,
 			mode: config.integration,
 			env: ctx.env,
 		});
 		if (outcome.outcome === 'needs-attention') {
 			const reason = outcome.reason ?? 'needs attention';
-			updateJobRecord(job.dir, {state: 'needs-attention', reason});
+			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
 			// Rebase conflict at integrate time (ADR §10): the item was already
 			// done-moved + committed at step 6, so route it from done/ to
 			// needs-attention/ — the same folder-native surfacing, dispatched through
@@ -381,10 +391,10 @@ async function runOneItem(
 			// state on the arbiter's main (mode M). Only the MOVE-ONLY commit is
 			// cherry-picked to main, so the conflicting code never lands there.
 			ledgerWrite.applyNeedsAttentionTransition({
-				cwd: job.dir,
+				cwd: tree.dir,
 				slug,
 				reason,
-				arbiter: job.arbiterRemote,
+				arbiter: tree.arbiterRemote,
 				env: ctx.env,
 			});
 			return {...base, status: 'needs-attention', detail: outcome.reason};
@@ -393,46 +403,40 @@ async function runOneItem(
 		// Record the PR/MR URL on the job (surfaced by `status`) when a provider
 		// opened one (propose + a real provider that reported a URL).
 		const prUrl = outcome.integration?.url;
-		updateJobRecord(job.dir, {state: 'done', prUrl});
+		updateJobRecord(tree.dir, {state: 'done', prUrl});
 		return {...base, status: 'claimed-done', integration: outcome.integration};
 	} finally {
-		// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
-		// predicate and remove the worktree ONLY if it holds (clean tree AND the
-		// branch tip is reachable on the arbiter — merged or pushed). One rule, no
-		// done-vs-failed special-casing: a claimed-done job is on the arbiter →
-		// reaped; a tests-failed / needs-attention / un-pushed job is NOT →
-		// retained (the worktree is the needs-attention signal, and `gc` is the
-		// catch-up for when this auto-reap didn't run). NEVER `--force` here.
-		if (job) {
-			reapJob({
-				dir: job.dir,
-				branch: job.branch,
-				mirrorPath: job.mirror.path,
-				arbiter: job.arbiterRemote,
-				env: ctx.env,
-			});
+		// Strategy-appropriate teardown via the uniform handle (ADR §4). Job-worktree:
+		// re-apply the provably-safe deletion predicate and remove the worktree ONLY
+		// if it holds (clean tree AND the branch tip reachable on the arbiter — merged
+		// or pushed). One rule, no done-vs-failed special-casing: a claimed-done job
+		// is on the arbiter → reaped; a tests-failed / needs-attention / un-pushed job
+		// is NOT → retained (the worktree is the needs-attention signal; `gc` catches
+		// up). In-place: a NO-OP (the checkout is never reaped). NEVER `--force` here.
+		if (tree) {
+			tree.teardown();
 		}
 	}
 }
 
 /**
- * Run the agent against the job worktree. Prefers the injected `agentRunner`
+ * Run the agent against the isolated tree. Prefers the injected `agentRunner`
  * (tests / custom embeddings); otherwise launches `agentCmd` through the harness
- * seam (recording the PID in the job's harness block).
+ * seam (recording the PID in the job's harness block, when there is one).
  */
 function runAgent(
 	ctx: OneItemContext,
-	job: Job,
+	tree: IsolatedTree,
 	prompt: string,
 	slug: string,
 	agentCmd: string,
 	model: string | undefined,
 ): {ok: boolean; detail?: string} {
 	if (ctx.agentRunner) {
-		return ctx.agentRunner({cwd: job.dir, prompt, slug, env: ctx.env});
+		return ctx.agentRunner({cwd: tree.dir, prompt, slug, env: ctx.env});
 	}
 	const launched = ctx.harness.launch({
-		dir: job.dir,
+		dir: tree.dir,
 		slug,
 		command: agentCmd,
 		prompt,
@@ -441,7 +445,7 @@ function runAgent(
 		model,
 		env: ctx.env,
 	});
-	updateJobRecord(job.dir, {harness: launched.record});
+	updateJobRecord(tree.dir, {harness: launched.record});
 	return {ok: launched.ok, detail: launched.detail};
 }
 

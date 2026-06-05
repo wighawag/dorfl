@@ -218,6 +218,19 @@ export {
 } from './github.js';
 
 export type {
+	IsolatedTree,
+	PrepareInput,
+	IsolationStrategy,
+	SelectIsolationInput,
+} from './isolation.js';
+export {
+	jobWorktreeStrategy,
+	jobWorktreeHandle,
+	inPlaceStrategy,
+	selectIsolationStrategy,
+} from './isolation.js';
+
+export type {
 	ItemStatus,
 	ItemResult,
 	RunOnceResult,
