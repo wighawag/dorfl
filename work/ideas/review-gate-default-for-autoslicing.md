@@ -59,14 +59,71 @@ should get a review gate by default.**
 ## Why we believe multiple/independent review passes are worth it
 
 Direct evidence from the conversation that produced this note: re-grilling the
-phase-2 slices across **four separate passes** found ~23 real defects \u2014 a missing
+phase-2 slices across **five separate passes** found ~25 real defects \u2014 a missing
 PRD reader, a bare-mirror read gap, a lost-edit, a half-removed `claimedBy`
 concept, an autonomous-vs-human failure-surfacing divergence, a parallel-claim
 conflict on one command's grammar. A SINGLE "review it" pass would have shipped
 most of them. Independent, adversarial, repeated review demonstrably catches what
-one pass (and especially self-review-in-context) misses. The review gate should
-encode that: separate context, adversarial framing, and the option to run it more
-than once.
+one pass (and especially self-review-in-context) misses.
+
+**The crucial empirical findings about the PROTOCOL (not just "review more"):**
+
+1. **Each pass must take a DIFFERENT ANGLE, or it stops finding things.** The
+   defect count tapered (5 / 8 / 8 / 2 / 0-defects-but-verified) precisely because
+   later passes deliberately changed the lens; re-running the SAME lens converges
+   fast on nothing. The angles that each found a distinct class of defect:
+   - **per-claim verification** — every concrete claim (symbol, path, function
+     signature, "reuse X") checked against the ACTUAL code (caught ghost paths,
+     wrong module homes, "reuse X" where X is private / wrongly-shaped).
+   - **"cleanup or behaviour?"** — anything framed as dead-code removal checked for
+     hidden live behaviour (caught `--by` feeding the claim commit + read back).
+   - **cross-slice composition** — do the slices COMPOSE? handoffs (one slice ships
+     a stub another fills), shared helpers with no owner, two siblings editing one
+     command's grammar in parallel, one slice deleting another's live tooling.
+   - **destination completeness** — the final move below.
+2. **A SECOND identical error/finding is a SIGNAL, not noise.** (Meta, this very
+   session: the reviewer repeatedly mis-emitted a tool call and normalised it
+   instead of stopping — see
+   `work/observations/agent-skipped-edit-skill-repeated-stray-key.md`.) Treat "I've
+   seen this shape before" as a trigger to generalise the fix, not patch instances.
+3. **Re-read what actually LANDED after each edit — do not trust intent.** One pass
+   found an earlier pass's edit had silently failed to apply (a botched retry),
+   leaving a slice internally contradictory. Verify against the committed artifact,
+   not memory of what you changed.
+
+So the gate encodes: separate context, adversarial framing, a SEQUENCE of distinct
+angles, and re-reading the artifact between rounds — not merely "run it N times."
+
+## The review PROTOCOL — a sequence of angles ENDING in the destination check
+
+The review STEP should run ordered adversarial lenses (each its own framing; stop
+when a full pass finds nothing NEW) and — critically — **finish with a destination
+check**:
+
+1. **Claim-vs-code** — verify every concrete reference against real code.
+2. **Cleanup-vs-behaviour** — check anything framed as removal/no-op for hidden
+   live behaviour.
+3. **Cross-slice composition** — handoffs, shared-helper ownership, parallel-edit
+   conflicts on shared files/commands, cross-slice side-effects.
+4. **THE FINAL MOVE — destination / PRD-goal achievement:** *"if every slice is
+   built exactly as written, do we END UP WITH the system the PRD/ADR describes?"*
+   Distinct from per-slice correctness, and the highest-value final check. Done by:
+   - taking the PRD/ADR end-state surface as the spec and **mapping every promised
+     element to a delivering slice** (a hole = an element no slice delivers);
+   - confirming **coverage is complete + non-duplicated** (every user story covered
+     once);
+   - auditing the **deletion sweep** — a new system also means the OLD surface is
+     GONE; every removal owned by exactly one slice, none unowned/double-owned;
+   - checking for **orphans** (a slice delivering something the end-state doesn't
+     need) and that assumed-pre-existing foundations actually exist;
+   - confirming **deliberate non-deliveries are flagged** as named follow-ups, not
+     silently missing.
+   In this session this final pass found ZERO new defects but *verified* the slices
+   compose into the ADR end-state — which is the gate's most important output:
+   **"approve" must mean "provably reaches the PRD goal," not just "each piece looks
+   fine."** For an auto-slicer with no human, this destination check is the
+   strongest signal a decomposition is trustworthy — or, if it finds a hole, the
+   most important thing to route to `needs-attention`.
 
 ## Open questions (for the PRD)
 
