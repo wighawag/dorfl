@@ -89,3 +89,60 @@ Decided in conversation; a clean future slice (config key + default-to-pi-defaul
 record-the-actual-path + the opt-in override). Best built ALONGSIDE or AFTER `run`
 (`run-daemon-reframe`), since the configurable-fleet-folder case is `run`'s. Captured
 so it is not lost. Delete once the configurable session location lands.
+
+## Update (2026-06-05) — ALSO breaks `--watch` (a SECOND bug, same root) + verified fix mechanism
+
+### `--watch` latches onto a STALE session file (the shared-dir race)
+
+Spotted live: `do --watch` dumped an OLD completed session instantly, then went
+silent (never showed the current run). Root cause: `findSessionLog`
+(`src/watch-session.ts`) picks the **newest `.jsonl` by mtime** in the shared
+`<repo>/.agent-runner-pi-session/` dir, ONCE at launch — but pi creates the new
+run's file ASYNCHRONOUSLY a moment after spawn. So at selection time the dir holds
+only PRIOR runs' logs (all runs in this checkout share the one `--session-dir`), and
+the watcher latches onto a stale sibling and tails it forever. So this `--session-dir`
+decision causes TWO bugs, one root: (1) dashboard blindness, (2) the `--watch`
+stale-file race. The fix below kills both.
+
+### Verified fix mechanism: `--session <full-path>` (tested against pi + its source)
+
+pi supports **`--session <path|id>`** (not just `--session-dir <dir>`). Verified by
+live test: `pi --print --session /abs/new-path.jsonl` with a NON-EXISTENT path
+CREATES + writes the session there (does NOT fall back to default). `--session` is
+a literal path and takes PRECEDENCE over `--session-dir`. So agent-runner should
+generate a **deterministic full session-file path** and pass `--session <that>`:
+
+- **Watcher tails that EXACT known path** (generated before pi starts) — no
+  `findSessionLog` "newest" guessing, race ELIMINATED.
+- **`gc`/`status` liveness records the same generated path** — trivial.
+- **No checkout pollution** (path is under the chosen root, not the repo tree).
+
+### What is / isn't load-bearing about the path (from pi source, `session-manager.ts`)
+
+- **Filename is FREE** — pi uses `uuidv7()` but NOTHING parses the filename;
+  agent-runner may use the work-id / any deterministic name.
+- **cwd is read from the FILE HEADER** (`{"type":"session", "cwd":...}`), NOT the
+  filename or folder. So grouping-by-repo is driven by `header.cwd`, which is always
+  correct regardless of where the file sits.
+- **Folder only needs to be a subdir under `~/.pi/agent/sessions/`** for the
+  dashboard's default `SessionManager.listAll()` to scan it (it reads ALL subdirs of
+  the sessions root, groups by `header.cwd`). The exact cwd-slug folder is NOT
+  required. The slug encoding, if you want the exact folder, is
+  `--${cwd.replace(/^[/\\]/,'').replace(/[/\\:]/g,'-')}--` — or import
+  `getDefaultSessionDir(cwd)` from the pi package (exported) to avoid drift.
+- **Display ORDER is purely time-based** (`listAll` sorts by `modified` =
+  `header.timestamp`); the FOLDER does NOT affect ordering. So a DISTINCT subfolder
+  (e.g. `~/.pi/agent/sessions/agent-runner-fleet/`) gives FREE "runner-driven vs
+  manual" distinguishability with correct cwd-grouping AND undisturbed chronological
+  order — the differentiation idea, for free.
+- **`listAll(customDir)`** accepts an explicit dir — so the pi-remote "watch multiple
+  folders" idea is natively supported by the pi API.
+
+### Decided route
+
+Generate `--session <full-path-under-~/.pi/agent/sessions/<folder>/<deterministic-id>.jsonl>`;
+DEFAULT folder = the cwd-slug (groups exactly like manual pi work) via the exported
+`getDefaultSessionDir`; for the `run` FLEET, optionally a distinct subfolder (free
+differentiation) or a configurable root. Tail the known path; record it for
+liveness. (Sub-routes — exact fleet-folder naming, whether to import vs replicate
+the slug — settle at slice time.)
