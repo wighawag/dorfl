@@ -49,7 +49,7 @@ substrate the command (a later slice) consumes.
 
 ## Prompt
 
-> Add the pure decision layer for auto-slicing (the `agent-runner slice` command
+> Add the pure decision layer for auto-slicing (the `do prd:<slug>` slicing path
 > is a LATER slice — this one is config + pure predicates only; do NOT build the
 > command or the lock here).
 >

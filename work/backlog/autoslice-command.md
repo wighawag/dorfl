@@ -1,16 +1,24 @@
 ---
-title: autoslice-command — agent-runner slice <prd> orchestration (harness + runner-owns-git)
+title: autoslice-command — the `do prd:<slug>` slicing path (harness + runner-owns-git)
 slug: autoslice-command
 prd: auto-slice
 blockedBy: [autoslice-gate, autoslice-lock]
 covers: [1, 6]
 ---
 
+> **RESHAPED 2026-06-05** (`docs/adr/command-surface-and-journeys.md` §3/§3a):
+> there is **no standalone `slice <prd>` command**. Slicing a PRD is the
+> **`do prd:<slug>`** path of the in-place worker. This slice builds that path
+> (the orchestration below), NOT a separate `slice` verb. `do` resolves
+> `prd:<slug>` to a PRD (bare `<slug>` = a slice, erroring on collision; CI uses
+> the explicit `prd:` prefix). Everything else here is unchanged.
+
 ## What to build
 
-The `agent-runner slice <prd-slug>` command itself — the orchestration that ties
-the gate (autoslice-gate) and the lock (autoslice-lock) together and drives the
-actual slicing, with the runner owning every git-state transition.
+The **`do prd:<slug>`** slicing path — the orchestration that ties the gate
+(autoslice-gate) and the lock (autoslice-lock) together and drives the actual
+slicing of a PRD, with the runner owning every git-state transition. (NOT a
+standalone `slice` command — it is the PRD branch of `do`.)
 
 End-to-end flow:
 
@@ -28,14 +36,22 @@ End-to-end flow:
    + mark the PRD `sliced:` — as the runner-owned git transition. The agent never
    does git.
 
-Reuse the existing harness seam + the runner-owns-git pattern from `run.ts`; do
+Reuse the existing harness seam + the runner-owns-git pattern from `do`/`run`; do
 NOT reimplement claiming/isolation. The confidence / needs-attention behaviour
 when no human is present is a SEPARATE later slice (autoslice-confidence).
 
+**Slug resolution (ADR §3a):** this path is reached via `do prd:<slug>`. `do`
+must resolve `prd:<slug>` to the PRD, bare `<slug>` to a slice (error if both
+exist), and `slice:<slug>` to a slice. CI/automation uses the explicit `prd:`
+prefix. The auto-pick / `run` tick reaches this path for eligible PRDs
+(slices-first, per-repo toggle).
+
 ## Acceptance criteria
 
-- [ ] `agent-runner slice <prd>` exists and, for the agent path, slices only when
-      the gate passes (gate refusal is honest: names why it skipped).
+- [ ] `agent-runner do prd:<slug>` slices that PRD; for the agent path it slices
+      only when the gate passes (gate refusal is honest: names why it skipped).
+      Bare `<slug>` resolves to a SLICE (errors on a slice/PRD collision);
+      `slice:`/`prd:` are explicit. No standalone `slice` verb is added.
 - [ ] It acquires the lock (agent path) before slicing and releases it
       (`work/slicing/ → work/prd/`) as part of the completing transition; the
       human path may slice on `main` without the lock.
@@ -56,10 +72,13 @@ when no human is present is a SEPARATE later slice (autoslice-confidence).
 
 ## Prompt
 
-> Build `agent-runner slice <prd-slug>` — the orchestration tying the gate
+> Build the **`do prd:<slug>` slicing path** — the orchestration tying the gate
 > (autoslice-gate) and lock (autoslice-lock) together to slice a PRD, with the
-> runner owning all git. Read the done files for BOTH dependency slices + their
-> modules FIRST.
+> runner owning all git. This is the PRD branch of the `do` worker, NOT a separate
+> `slice` command (ADR `command-surface-and-journeys` §3/§3a). Implement the slug
+> resolution: `prd:<slug>` → PRD, bare → slice (error on collision), `slice:` →
+> slice. Read the done files for BOTH dependency slices + their modules, AND the
+> command-surface ADR §3/§3a FIRST.
 >
 > READ FIRST: `work/prd/auto-slice.md` (the flow + runner-vs-agent git boundary),
 > `src/run.ts` (the harness-seam invocation + runner-owns-every-git-transition

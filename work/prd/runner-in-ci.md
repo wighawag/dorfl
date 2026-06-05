@@ -7,16 +7,29 @@ humanOnly: true
 > **Launch snapshot, not maintained.** This PRD is the source material for slicing
 > (`to-slices`); once sliced, technical detail moves into the slices and durable
 > rationale into `docs/adr/`. Expect this to be outrun by the work — that is fine.
+>
+> **RESHAPED 2026-06-05** to `docs/adr/command-surface-and-journeys.md`: **CI is
+> the `do` command, NOT `run --once`.** `run` is the cross-repo, parallel laptop
+> daemon (registry + hub mirrors); CI is one repo, one triggered invocation that
+> exits — exactly `do` (per-repo, in-place worker). The auth/secrets/`install-ci`/
+> trigger design below is unchanged; only the engine it invokes changed from
+> `run --once` to `do`.
 
 ## Problem Statement
 
-Today the autonomous runner (`run --once` / `watch`) executes on a local machine:
-it needs my laptop awake, my git/agent auth in place, and me to start it. I want
-the **back of the funnel** — claim eligible `work/backlog/` items, build them in
-isolation, verify, integrate — to run **fully headless in CI** (GitHub Actions
-first), so no local machine is needed. This is purely a packaging/execution-location
-concern: it reuses the existing engine unchanged and **knows nothing about GitHub
-issues**. It reads `work/backlog/` exactly as the local runner does.
+Today autonomous execution is laptop-shaped: the `run` daemon needs my laptop
+awake, my git/agent auth in place, and me to start it. I want the **back of the
+funnel** — claim eligible `work/backlog/` items, build them in isolation, verify,
+integrate — to run **fully headless in CI** (GitHub Actions first), so no local
+machine is needed. This is purely a packaging/execution-location concern: it
+reuses the existing pipeline and **knows nothing about GitHub issues**.
+
+**CI uses `do`, not `run`.** `run` is the cross-repo, parallel daemon (it scans a
+registry of hub mirrors). CI is the opposite shape: ONE repo (the workflow's
+repo), ONE triggered invocation that EXITS, with a checkout already present. That
+is exactly `do` — the per-repo, in-place worker (claim + build in the checkout +
+integrate + exit). So CI never needs the registry/hub-mirror machinery; the CI
+checkout IS the isolation.
 
 This is one of three decoupled capabilities split out of a single discussion
 (`runner-in-ci`, `auto-slice`, `issue-to-prd`); this one is the simplest and
@@ -24,28 +37,32 @@ highest-leverage because it reuses everything that already exists.
 
 ## Solution
 
-Make the existing `run --once` engine runnable inside a GitHub Actions workflow,
-and provide an `install-ci` command (per-capability) that scaffolds it:
+Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide an
+`install-ci` command (per-capability) that scaffolds it:
 
 - **`install-ci` (runner capability)** — generates a GitHub Actions workflow + a
   shared setup step that: installs Node + `agent-runner` + the configured agent
   harness, configures git identity, configures AI-provider auth, and runs
-  `agent-runner run --once` against this repo's `work/backlog/`. Per-capability:
-  flags select which capabilities' workflows are installed (here: the runner);
-  it must be possible to adopt runner-in-CI without ever touching issue→PRD.
+  **`agent-runner do`** (in-place, in the checkout) against this repo's
+  `work/backlog/`. `do` with no slug auto-picks eligible work; `do -n <x>` drains
+  up to x in sequence; `do <slug>` / `do <prd>` target a specific item (CI can be
+  parametrised with a slug/PRD). Per-capability: flags select which capabilities'
+  workflows are installed (here: the runner); adopt runner-in-CI without ever
+  touching issue→PRD.
 - **Auth** — mirror whitesmith's proven approach: a default **`models.json`** mode
   (one GitHub secret per provider API key, config generated inline) and an
   **`auth.json`** mode (a single `PI_AUTH_JSON` secret, plus a `GH_PAT` for OAuth
   token refresh). The setup is interactive (a wizard) with a non-interactive
   config-file path for re-use.
-- **Trigger** — at minimum a manual `workflow_dispatch` (catch-up / debugging) and
-  a scheduled/`workflow_dispatch` tick that runs `run --once`. The runner already
-  bounds itself (claims up to `maxParallel`, then stops); CI concurrency groups
-  prevent overlapping ticks.
-- **Integration in CI** — the existing integration seam does the landing
-  (`propose` default → opens a PR via the `github` provider; `merge` where the
-  repo opts in). The CI job is just another caller of the same engine; the runner
-  still owns all git-state transitions in-band.
+- **Trigger** — at minimum a manual `workflow_dispatch` (catch-up / debugging,
+  optionally with a slug/PRD input) and a scheduled/`workflow_dispatch` tick that
+  runs `do` (auto-pick, or `-n x`). `do` bounds itself (it does its work and
+  EXITS — it is not a loop); CI concurrency groups prevent overlapping ticks. The
+  claim CAS is the real serialiser across runs.
+- **Integration in CI** — `do --propose` (the default) opens a PR via the `github`
+  provider; `--merge` where the repo opts in. `do` (the in-place worker) owns all
+  git-state transitions in-band, exactly like the laptop paths. Note `do` works
+  IN-PLACE in the CI checkout (no hub mirror) — the container is the isolation.
 - **Required repo settings + secrets** — document and (where possible) set them:
   "Allow GitHub Actions to create and approve pull requests", and the provider
   secrets, set automatically by the wizard.
@@ -53,8 +70,8 @@ and provide an `install-ci` command (per-capability) that scaffolds it:
 ## User Stories
 
 1. As the maintainer, I want `agent-runner install-ci` to scaffold a GitHub
-   Actions workflow that runs `run --once` headless, so that the autonomous runner
-   needs no local machine.
+   Actions workflow that runs **`agent-runner do`** (the in-place worker) headless,
+   so that autonomous building needs no local machine.
 2. As the maintainer, I want provider auth configured via GitHub secrets (a
    `models.json` mode by default, an `auth.json` mode as an option), so that the
    CI job can authenticate the agent harness without my laptop.
@@ -63,8 +80,8 @@ and provide an `install-ci` command (per-capability) that scaffolds it:
    unattended but I can also force a run.
 4. As the maintainer, I want CI concurrency guards so overlapping ticks never
    collide, relying on the existing atomic claim to serialise across runs.
-5. As the maintainer, I want completed work to integrate via the existing seam
-   (propose by default), so that CI runs land work exactly like the local runner.
+5. As the maintainer, I want completed work to integrate via `do --propose` (the
+   default), so that CI runs land work as PRs exactly like the human propose path.
 6. As the maintainer, I want `install-ci` to be per-capability (flag-selected), so
    that I can enable runner-in-CI without enabling issue→PRD.
 
@@ -73,8 +90,15 @@ and provide an `install-ci` command (per-capability) that scaffolds it:
 (Made with the maintainer — do not relitigate.)
 
 - **This is execution-location, not new engine behaviour.** The CI job calls
-  `run --once` (and later optionally `watch`); the engine, claim CAS, isolation,
-  verify gate, and integration seam are reused unchanged. No issue awareness.
+  **`do`** (the per-repo in-place worker); the claim CAS, the verify gate, and the
+  integration seam are reused unchanged. No issue awareness. NOT `run` — `run` is
+  the cross-repo parallel daemon; CI is one repo, one invocation, exits (= `do`).
+- **`do` works in-place in CI (no hub mirror).** The CI checkout IS the isolation
+  (the in-place isolation strategy, `command-surface-and-journeys` §3); the
+  registry/hub-mirror machinery is laptop-only and unused here.
+- **Auto-slice in the CI tick:** `do` slices eligible PRDs too (`do <prd>`, or the
+  auto-pick step), slices-first then PRDs (per-repo toggle) — so CI can both build
+  slices and decompose ready PRDs in one invocation.
 - **`install-ci` uses the seams, never `gh` directly.** Workflow generation +
   secret-setting may shell out to `gh` *as the GitHub adapter of a CI seam*, but
   the command is structured per-capability and provider-pluggable (GitHub first),
@@ -82,9 +106,9 @@ and provide an `install-ci` command (per-capability) that scaffolds it:
 - **Auth modes mirror whitesmith.** `models.json` (default, per-provider secret)
   and `auth.json` (single `PI_AUTH_JSON` + `GH_PAT`). This keeps parity with a
   proven setup and lets users move between the two tools' conventions.
-- **The runner bounds itself; CI adds concurrency groups.** No long-lived daemon
-  in CI — each tick is a bounded `run --once`. Per-repo or global concurrency
-  groups prevent overlap; the claim CAS is the real serialiser.
+- **`do` bounds itself; CI adds concurrency groups.** No long-lived daemon in CI —
+  each invocation is a bounded `do` (it does its work and exits). Per-repo or
+  global concurrency groups prevent overlap; the claim CAS is the real serialiser.
 - **Secrets/settings are documented and wizard-set where possible**, including the
   "create and approve pull requests" repo setting required for PR creation.
 
@@ -96,8 +120,9 @@ and provide an `install-ci` command (per-capability) that scaffolds it:
 - Stub `gh` for any secret-setting / repo-detection path (no network, no real
   GitHub). Verify the wizard's non-interactive config-file path reproduces the
   same output as the interactive one.
-- The engine itself is already covered by the existing `run --once` tests; this
-  slice does not re-test the engine, only the CI packaging.
+- The build pipeline (claim/gate/integrate) is already covered by the existing
+  `do`/run tests; this slice does not re-test the pipeline, only the CI packaging
+  (the generated workflow + the `do` invocation it wires).
 
 ## Autonomy notes (the gate axes)
 

@@ -90,9 +90,9 @@ A sharp boundary, NOT two flavours of one thing:
   integrates in ONE repo, then **exits**. Sequential. This is **the CI command**
   (CI has a checkout, is one repo, is one triggered invocation, exits) AND a local
   one-off worker.
-  - `do <slug>` — that one named slice. `do <prd>` — slice that PRD (slicing is
-    work too). `do` (no arg) — auto-pick one eligible thing. `do <slug> <slug> …`
-    — those, in sequence. `do -n <x>` — x eligible things, in sequence.
+  - `do <arg>` — that one named item (see §3a for slug resolution). `do` (no arg)
+    — auto-pick one eligible thing. `do <arg> <arg> …` — those, in sequence.
+    `do -n <x>` — x eligible things, in sequence.
   - **`--propose` (default) / `--merge`.** Propose (PR) is the CI norm.
   - **Isolation strategy by form:** `do <slug>` in a checkout works **in-place**
     (the checkout / CI container IS the isolation — no mirror). `do --remote <r>`
@@ -104,6 +104,36 @@ A sharp boundary, NOT two flavours of one thing:
     flip it.
 
 CI uses **`do`** (wired by the future `install-ci`), never `run --once`.
+
+## 3a. Slug-namespace resolution: a PRD and a slice may share a slug
+
+A PRD and a slice **can have the same slug** (e.g. PRD `auto-slice`). `do` spans
+both namespaces (build a slice OR slice a PRD), so a bare slug is ambiguous. The
+rule:
+
+| input | resolves to | on collision (both a slice AND a PRD named `<slug>`) |
+| --- | --- | --- |
+| `<slug>` (bare) | the **slice** | **ERROR** — "ambiguous; use `slice:<slug>` or `prd:<slug>`" |
+| `slice:<slug>` | the slice | always unambiguous |
+| `prd:<slug>` | the PRD (slice it) | always unambiguous |
+
+- **Bare `<slug>` is HUMAN CONVENIENCE ONLY.** It resolves to the slice, but ONLY
+  after confirming no PRD shares the slug; on a collision it **errors** (loud,
+  immediate, human-resolvable) — it never silently guesses. (So even the bare path
+  does a cheap cross-namespace existence check.)
+- **CI / automation / `install-ci`-generated workflows MUST use explicit prefixes**
+  (`do slice:foo` / `do prd:foo`), NEVER bare — because (a) in CI an ambiguity
+  error halts the job, and (b) a bare slug that works today would silently break
+  when a same-named PRD/slice appears later. Explicit prefixes are collision-proof
+  across time.
+- **`do`** accepts all three. **Slice-only commands** (`claim`, `start`, `resume`,
+  `complete`, `prompt`, `requeue`, `work-on`) accept bare (= slice) and `slice:`
+  (explicit alias), and **reject `prd:`** with a clear "operates on slices, not
+  PRDs" error.
+- This mirrors a distinction the contract ALREADY makes by field: slice
+  `blockedBy` resolves against slices (`work/done/`), PRD `sliceAfter` against PRDs
+  (the `sliced:` marker). The `slice:`/`prd:` prefixes are the command-line form of
+  that same namespace split — one coherent rule, not two.
 
 ## 4. The human face — do work yourself (optionally with your AI)
 

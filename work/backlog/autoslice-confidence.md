@@ -6,12 +6,17 @@ blockedBy: [autoslice-command]
 covers: [3]
 ---
 
+> **RESHAPED 2026-06-05:** "the `agent-runner slice` command" is now the
+> **`do prd:<slug>` slicing path** (`autoslice-command`, reshaped; ADR
+> `command-surface-and-journeys` §3/§3a). This slice's substance is unchanged —
+> it adds the no-human confidence routing on top of that path.
+
 ## What to build
 
 The safety behaviour when slicing with NO human present (an agent auto-slicing):
 the slicer must never emit a guessed, wrongly-cut slice. This slice adds the
-confidence check + the two honest fallbacks on top of the `agent-runner slice`
-command (autoslice-command).
+confidence check + the two honest fallbacks on top of the **`do prd:<slug>`**
+slicing path (autoslice-command).
 
 When auto-slicing, if ANY of {granularity, dependency order, a gate, a seam} is
 genuinely unresolved by the PRD/ADRs, the slicer does NOT guess. Instead it does
@@ -57,7 +62,7 @@ guesses the model.
 
 ## Prompt
 
-> Add the no-human CONFIDENCE behaviour to `agent-runner slice` (built on
+> Add the no-human CONFIDENCE behaviour to the `do prd:<slug>` slicing path (built on
 > autoslice-command — read its done file + module first). PURE addition to the
 > slicing path: when no human is present, never emit a guessed slice.
 >

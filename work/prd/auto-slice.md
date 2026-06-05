@@ -11,6 +11,17 @@ sliced: 2026-06-04
 > true` here meant only that a human drove THIS PRD's slicing — disjoint from the
 > slices' own gates; all four emitted slices are auto-eligible on their own
 > build-merits.)
+>
+> **RESHAPED 2026-06-05** to `docs/adr/command-surface-and-journeys.md`: there is
+> **no standalone `slice <prd>` command** — slicing a PRD is **`do prd:<slug>`**
+> (slicing is "work to do" in the in-place worker; `do` spans the build-a-slice and
+> slice-a-PRD namespaces, disambiguated by the `slice:`/`prd:` prefixes, ADR §3a).
+> The GATE and LOCK (`autoslice-gate`, `autoslice-lock`) are unchanged — they are
+> needed regardless of the entry verb. The `autoslice-command` slice is re-scoped
+> from "the `slice <prd>` command" to "**the `do prd:<slug>` slicing path**"; CI
+> drives it via `install-ci`-generated `do prd:<slug>` (explicit prefix, never
+> bare). `run`/`do`'s tick auto-slices eligible PRDs (slices-first, per-repo
+> toggle). Re-run the drift check on the slices before claiming them.
 
 ## Problem Statement
 
@@ -29,8 +40,9 @@ One of three decoupled capabilities (`runner-in-ci`, `auto-slice`,
 
 ## Solution
 
-A new command, `agent-runner slice <prd-slug>`, that drives the slicing of a PRD
-into `work/backlog/` items, with an autonomy gate mirroring the existing
+The **`do prd:<slug>`** slicing path (NOT a standalone `slice` command — see the
+reshape banner; ADR `command-surface-and-journeys` §3/§3a) drives the slicing of a
+PRD into `work/backlog/` items, with an autonomy gate mirroring the existing
 two-axis gate (`humanOnly` × `needsAnswers`) + the `allowAgents` precedent, and a
 claim-CAS lock so concurrent slicers never collide.
 
@@ -87,8 +99,9 @@ claim-CAS lock so concurrent slicers never collide.
 
 ## User Stories
 
-1. As the maintainer, I want `agent-runner slice <prd>` to turn a PRD file into
-   `work/backlog/` slices, so that slicing is a real command, not a manual ritual.
+1. As the maintainer, I want `agent-runner do prd:<slug>` to turn a PRD file into
+   `work/backlog/` slices, so that slicing is a real capability (the `do` worker's
+   PRD branch), not a manual ritual.
 2. As the maintainer, I want slicing to be human-first by default and only
    auto-run when I opt in per repo (`autoSlice`), so that I keep control over when
    agents decompose work.

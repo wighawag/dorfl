@@ -58,7 +58,7 @@ release back to `work/prd/`); the orchestrating command is a later slice.
 
 ## Prompt
 
-> Build the slicing concurrency LOCK (the `agent-runner slice` command is a LATER
+> Build the slicing concurrency LOCK (the `do prd:<slug>` slicing path is a LATER
 > slice — provide the lock + release primitives only).
 >
 > READ FIRST: `work/prd/auto-slice.md` (the lock design + `work/slicing/` folder),
