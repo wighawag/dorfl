@@ -73,6 +73,35 @@ Corrective taken: load + follow `edit-best-practices`; treat a SECOND identical
 tool-validation error as a stop-and-load-the-skill trigger; after any failed edit
 batch, re-read the file to confirm what actually landed (not what was intended).
 
+## Update (2026-06-05) — sharper ROOT CAUSE; the fix is mine, not pi's
+
+Disabling `edit-best-practices` did NOT stop it (it recurred AFTER the skill was
+disabled, e.g. `newText_strip`), so the skill was not the cause. Better diagnosis:
+
+- **It is a GENERATION artifact, not a decision.** I never intend the extra key.
+  The stray keys are always near-duplicates of a real key with a throwaway suffix
+  (`newText_strip`, `newText_x`, `newText_2`, `newText_unused`, `id_skip`,
+  `id_unused`) closed with the cheapest value (`""`). After emitting one very long
+  multi-line `newText` string, token generation "wants" another `key: value` pair
+  (objects usually have >1 key) and grabs a plausible-looking filler name. It is a
+  **structural-completion error under the load of a long string value.**
+- **It clusters on LARGE, SINGLE-edit calls.** Small edits and multi-edit arrays
+  (where the `},{` rhythm reinforces "object complete") trip far less. The
+  workaround that empirically WORKED this session was switching to small, surgical
+  edits — which is exactly the `edit-best-practices` discipline (minimal `oldText`,
+  split large edits).
+- **The fix is BEHAVIOURAL and mine:** keep edits small / split large ones; do not
+  emit filler keys. pi's strict schema rejecting the key is arguably CORRECT — the
+  failure is that I produced malformed input, not that pi refused it. (There IS a
+  secondary, optional pi robustness improvement — its runtime handlers are written
+  to TOLERATE extra keys while its schema rejects them, an intent/enforcement
+  mismatch — but that is defense-in-depth for noisy/weak models, NOT the fix for
+  this. Captured as a separate pi-improvements proposal.)
+
+Net: the original "meta-signal" framing (skill-not-loaded) was only half right; the
+load-bearing cause is a structural-completion tic on large single edits. Mitigation
+= small/split edits + no filler keys.
+
 ## Why an observation, not a work item
 
 It is not actionable as agent-runner code. It is a conduct/harness signal worth
