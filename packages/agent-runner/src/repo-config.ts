@@ -78,6 +78,12 @@ export const REPO_REJECTED_KEYS = [
 	// committed repo file. (`harness`, by contrast, is repo-appropriate and so is
 	// deliberately NOT rejected.)
 	'piBin',
+	// `sessionsDir` is a machine PATH (where the host writes pi session logs), not
+	// repo policy, so it is host-only and rejected per-repo: a committed repo file
+	// must NOT redirect where the host writes sessions. It must come from a per-
+	// machine source — a flag (`--sessions-dir`), `AGENT_RUNNER_SESSIONS_DIR`, or
+	// the global file (exactly like `piBin`).
+	'sessionsDir',
 	// Reserved/future host-only keys callers may name; rejected proactively so a
 	// typo or a copy-pasted global config never silently leaks host policy into a
 	// repo. (`humanWorktreesDir` is a planned host-only path.)

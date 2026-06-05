@@ -3,7 +3,7 @@ import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {performClaim} from './claim-cas.js';
-import {updateJobRecord} from './workspace.js';
+import {updateJobRecord, encodeWorkId} from './workspace.js';
 import {ledgerWrite} from './ledger-write.js';
 import {
 	jobWorktreeStrategy,
@@ -12,6 +12,7 @@ import {
 } from './isolation.js';
 import {NullHarness, type Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
+import {generateSessionPath} from './session-path.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {git, gitMv} from './git.js';
 import {
@@ -313,7 +314,15 @@ async function runOneItem(
 		//    a `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
 		let agent: {ok: boolean; detail?: string};
 		try {
-			agent = runAgent(ctx, tree, prompt, slug, config.agentCmd, config.model);
+			agent = runAgent(
+				ctx,
+				tree,
+				prompt,
+				slug,
+				config.agentCmd,
+				config.model,
+				config.sessionsDir,
+			);
 		} catch (err) {
 			return {...base, status: 'agent-failed', detail: (err as Error).message};
 		}
@@ -431,10 +440,21 @@ function runAgent(
 	slug: string,
 	agentCmd: string,
 	model: string | undefined,
+	sessionsDir: string | undefined,
 ): {ok: boolean; detail?: string} {
 	if (ctx.agentRunner) {
 		return ctx.agentRunner({cwd: tree.dir, prompt, slug, env: ctx.env});
 	}
+	// Generate the full pi session-FILE path (slice `session-path-pi-default`):
+	// `<sessionsDir>/<work-id>-<unique>.jsonl`, or pi's per-cwd default folder when
+	// `sessionsDir` is unset. The work-id (arbiter URL + slug) is `run`'s natural
+	// unique-per-claim id. Threaded through the seam so the pi adapter passes
+	// `--session <path>` (never `--session-dir` into the worktree).
+	const session = generateSessionPath({
+		sessionsDir,
+		cwd: tree.dir,
+		id: encodeWorkId(tree.arbiterUrl, slug),
+	});
 	const launched = ctx.harness.launch({
 		dir: tree.dir,
 		slug,
@@ -443,6 +463,7 @@ function runAgent(
 		// The model routing intent (ADR §13) — the adapter decides HOW it reaches
 		// its tool (pi: `--model`; null/shell: `{model}` placeholder).
 		model,
+		session,
 		env: ctx.env,
 	});
 	updateJobRecord(tree.dir, {harness: launched.record});

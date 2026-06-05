@@ -1,6 +1,5 @@
 import {spawn, spawnSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
-import {join} from 'node:path';
 import {
 	NullHarness,
 	pidAlive,
@@ -10,6 +9,7 @@ import {
 	type LaunchInput,
 	type LaunchResult,
 } from './harness.js';
+import {generateSessionPath} from './session-path.js';
 import type {HarnessAdapter} from './config.js';
 
 /**
@@ -24,14 +24,27 @@ import type {HarnessAdapter} from './config.js';
  *     the slice's `## Prompt`, assembled by `./prompt.ts`) fed to the pi CLI on
  *     stdin, running non-interactively (`--print`) inside the job worktree.
  *  2. **Liveness** is reported from the **PID** (process alive?) PLUS a pointer
- *     to the pi **session dir/log** (real activity + an audit trail) — explicitly
+ *     to the pi **session file** (real activity + an audit trail) — explicitly
  *     **NOT filesystem mtime**: a live agent can think for minutes without
  *     writing any files, so mtime would mistake a thinking agent for a dead one.
  *
- * pi specifics stay BEHIND this adapter; the core (`run`, `status`, `watch`)
- * talks only to the `Harness` interface. Where running real pi in CI is
- * impractical, the pi CLI is stubbed (see `pi-harness.test.ts`) via the
- * injectable `piBin`.
+ * ## Session location: `--session <full-path>` (slice `session-path-pi-default`)
+ *
+ * The adapter passes a **deterministic FULL session-FILE path** as `--session
+ * <path>` (NOT `--session-dir <dir>`). The caller GENERATES that path once
+ * (before launch, so `do --watch` can tail the known path) via {@link
+ * generateSessionPath} and threads it in as `LaunchInput.session`; when omitted,
+ * the adapter generates a default for its own cwd. pi creates+writes the session
+ * at exactly that path (it CREATES a non-existent `--session` file) and
+ * `--session` takes precedence over `--session-dir` (verified vs pinned pi
+ * source). The default lands under pi's per-cwd sessions folder, so the
+ * pi-remote dashboard sees the session and the in-place checkout stays clean.
+ * The arg is ABSOLUTE and ends `.jsonl` — required, else pi treats it as a
+ * session-ID lookup and exits 1 (see {@link generateSessionPath}).
+ *
+ * pi specifics stay BEHIND this adapter; the core (`run`, `status`, `do`) talks
+ * only to the `Harness` interface. Where running real pi in CI is impractical,
+ * the pi CLI is stubbed (see `pi-harness.test.ts`) via the injectable `piBin`.
  *
  * ## Seam contract (what an adapter promises the core)
  *
@@ -39,30 +52,15 @@ import type {HarnessAdapter} from './config.js';
  *    (the worktree), feeding `input.prompt` to the agent. It returns
  *    `{ok, record, detail?}`: `ok` iff the agent completed successfully, and a
  *    `record` to persist in `.agent-runner-job.json` carrying the **liveness
- *    anchor** (`pid`) plus an adapter-specific `session` pointer. The core treats
- *    the call as blocking (it runs the test gate immediately after) — like the
- *    null adapter, pi runs to completion here, so by the time `launch` returns
- *    the agent is done and `isAlive` correctly reads it as not-alive.
+ *    anchor** (`pid`) plus the pi `session` FILE path. The core treats the call
+ *    as blocking (it runs the test gate immediately after).
  *  - `isAlive(record)` answers liveness FROM THE RECORD'S ANCHOR (PID/session),
- *    never mtime, so a separate `status`/`watch` process can re-derive liveness
+ *    never mtime, so a separate `status`/`do` process can re-derive liveness
  *    from a fresh process WITHOUT re-launching the agent.
  */
 
 /** The default pi CLI binary name (resolved on `PATH`). */
 export const DEFAULT_PI_BIN = 'pi';
-
-/**
- * The subdirectory (inside a job worktree) where pi stores its session files /
- * log. We point pi at this dir (`--session-dir`) so the session pointer we
- * record is deterministic and lives WITH the job (an audit trail `status`/`gc`
- * can find), rather than wherever pi's global default would land it.
- */
-export const PI_SESSION_DIRNAME = '.agent-runner-pi-session';
-
-/** Compute the pi session dir for a job worktree at `dir`. */
-export function piSessionDir(dir: string): string {
-	return join(dir, PI_SESSION_DIRNAME);
-}
 
 export interface PiHarnessOptions {
 	/**
@@ -72,8 +70,8 @@ export interface PiHarnessOptions {
 	piBin?: string;
 	/**
 	 * Extra arguments inserted before the `--print` invocation (e.g. a pinned
-	 * `--model`). The adapter always supplies `--print` + `--session-dir`; these
-	 * layer on top for operator control.
+	 * `--model`). The adapter always supplies `--print` + `--session <path>`;
+	 * these layer on top for operator control.
 	 */
 	extraArgs?: string[];
 }
@@ -81,23 +79,23 @@ export interface PiHarnessOptions {
 /**
  * The pi harness block persisted in a job record. It extends the base
  * {@link HarnessRecord} with pi's concrete liveness pointer — the **session
- * dir** — alongside the PID. `gc`/`status` re-derive liveness from these without
+ * file** — alongside the PID. `gc`/`status` re-derive liveness from these without
  * re-launching pi.
  */
 export interface PiHarnessRecord extends HarnessRecord {
 	adapter: 'pi';
-	/** Absolute path to the pi session dir/log (the activity + audit pointer). */
+	/** Absolute path to the pi session `.jsonl` file (the activity + audit pointer). */
 	session?: string;
 }
 
 /**
- * The pi adapter. Invocation: `pi [--model <model>] --print --session-dir
- * <job>/<session> [extra]` run in the worktree with the work-agent prompt on
+ * The pi adapter. Invocation: `pi [--model <model>] --print --session
+ * <full-path>.jsonl [extra]` run in the worktree with the work-agent prompt on
  * stdin. The model is passed NATIVELY as `--model <model>` when set (ADR §13 —
  * the routing intent agent-runner controls); auth/keys stay pi's job, never
- * agent-runner's. Liveness: the PID is
- * the authoritative "is it running?" signal; the recorded `session` dir/log is
- * the activity + audit pointer surfaced alongside it. NEVER mtime (ADR §5).
+ * agent-runner's. Liveness: the PID is the authoritative "is it running?"
+ * signal; the recorded `session` file is the activity + audit pointer surfaced
+ * alongside it. NEVER mtime (ADR §5).
  */
 export class PiHarness implements Harness {
 	readonly adapter = 'pi';
@@ -109,26 +107,47 @@ export class PiHarness implements Harness {
 		this.extraArgs = options.extraArgs ?? [];
 	}
 
-	launch(input: LaunchInput): LaunchResult {
-		const sessionDir = piSessionDir(input.dir);
+	/**
+	 * Resolve the full session-FILE path for a launch. The CALLER normally
+	 * generates this (via {@link generateSessionPath}) and passes it in
+	 * `input.session` so the watcher knows it BEFORE launch; when omitted (e.g. a
+	 * direct adapter call), generate a default under pi's per-cwd folder from the
+	 * launch dir. Either way the result is absolute and ends `.jsonl`.
+	 */
+	private resolveSessionFile(input: LaunchInput): string {
+		return (
+			input.session ?? generateSessionPath({cwd: input.dir, id: input.slug})
+		);
+	}
+
+	/** Build the pi argv: `[--model m] [extra] --print --session <file>`. */
+	private buildArgs(input: LaunchInput, sessionFile: string): string[] {
 		// The model ROUTING intent (ADR §13): when set, pass it NATIVELY as
 		// `--model <model>`. agent-runner only chooses the model; pi owns auth/keys.
 		const modelArgs =
 			input.model !== undefined && input.model !== ''
 				? ['--model', input.model]
 				: [];
-		// Non-interactive (`--print`): pi processes the prompt and exits. We pin the
-		// session dir INTO the job worktree so the recorded pointer is deterministic
-		// and travels with the job (an audit trail), not pi's global default. The
-		// operator's `extraArgs` still layer on (e.g. flags beyond `--model`).
-		const args = [
+		// Non-interactive (`--print`): pi processes the prompt and exits. We pass
+		// the FULL session FILE path (`--session`, never `--session-dir`): pi
+		// creates+writes it there, it is visible to the dashboard, and nothing
+		// lands in the checkout. The operator's `extraArgs` still layer on.
+		return [
 			...modelArgs,
 			...this.extraArgs,
 			'--print',
-			'--session-dir',
-			sessionDir,
+			'--session',
+			sessionFile,
 		];
+	}
+
+	launch(input: LaunchInput): LaunchResult {
+		const sessionFile = this.resolveSessionFile(input);
+		const args = this.buildArgs(input, sessionFile);
 		const result = spawnSync(this.piBin, args, {
+			// Spawn pi with cwd = the repo/worktree dir so the NEW session's header
+			// `cwd` groups it correctly in the dashboard (invariant #3) — the folder
+			// does NOT imply the repo.
 			cwd: input.dir,
 			encoding: 'utf8',
 			input: input.prompt,
@@ -140,14 +159,14 @@ export class PiHarness implements Harness {
 				`failed to spawn pi (${this.piBin}): ${result.error.message}`,
 			);
 		}
-		// Record the pi child's PID (the liveness anchor) + the session dir/log
-		// pointer (the pi-native activity + audit trail). Liveness later reads these
-		// — NOT a filesystem mtime (ADR §5).
+		// Record the pi child's PID (the liveness anchor) + the exact session FILE
+		// path pi used (the pi-native activity + audit trail). Liveness later reads
+		// these — NOT a filesystem mtime (ADR §5).
 		const record: PiHarnessRecord = {
 			adapter: 'pi',
 			pid: result.pid,
 			command: [this.piBin, ...args].join(' '),
-			session: sessionDir,
+			session: sessionFile,
 		};
 		const status = result.status ?? -1;
 		return {
@@ -158,45 +177,29 @@ export class PiHarness implements Harness {
 	}
 
 	/**
-	 * Liveness from pi-native signals (ADR §5): the PID (`process.kill(pid, 0)`,
-	 * the OS process table) answers "is the agent process running?" — the
-	 * authoritative signal. NEVER filesystem mtime. The recorded session dir/log
-	 * is the audit/activity pointer surfaced alongside (see {@link sessionPointer}).
-	 */
-	/**
 	 * The ASYNC twin of {@link launch} — IDENTICAL semantics (same `--print
-	 * --session-dir` invocation, same prompt on stdin, output still CAPTURED, same
-	 * `LaunchResult` shape: PID anchor + session pointer + ok/detail), but launched
-	 * NON-BLOCKING with `spawn` instead of the synchronous `spawnSync`. This is the
-	 * one structural carve-out the `do --watch` observer needs (slice `do-watch`):
-	 * `spawnSync` blocks the event loop until pi exits, so NOTHING could tail the
-	 * growing session `.jsonl` concurrently. `launchAsync` runs pi alongside the
-	 * tailer; the WHOLE launch delta is `spawnSync` → `spawn`. It is NOT a switch
-	 * to inherited-stdio piping (that is the separate future `--agent` seam) — the
+	 * --session <file>` invocation, same prompt on stdin, output still CAPTURED,
+	 * same `LaunchResult` shape: PID anchor + session pointer + ok/detail), but
+	 * launched NON-BLOCKING with `spawn` instead of the synchronous `spawnSync`.
+	 * This is the one structural carve-out the `do --watch` observer needs (slice
+	 * `do-watch`): `spawnSync` blocks the event loop until pi exits, so NOTHING
+	 * could tail the growing session `.jsonl` concurrently. `launchAsync` runs pi
+	 * alongside the tailer; the WHOLE launch delta is `spawnSync` → `spawn`. The
 	 * prompt is still fed on stdin and stdout/stderr are still captured; we read
-	 * the `.jsonl` LOG, never piped stdout. With or without `--watch` the run's
-	 * outcome/gate/git/exit are identical.
+	 * the `.jsonl` LOG, never piped stdout.
 	 */
 	launchAsync(input: LaunchInput): Promise<LaunchResult> {
-		const sessionDir = piSessionDir(input.dir);
-		const modelArgs =
-			input.model !== undefined && input.model !== ''
-				? ['--model', input.model]
-				: [];
-		const args = [
-			...modelArgs,
-			...this.extraArgs,
-			'--print',
-			'--session-dir',
-			sessionDir,
-		];
+		const sessionFile = this.resolveSessionFile(input);
+		const args = this.buildArgs(input, sessionFile);
 		const record: PiHarnessRecord = {
 			adapter: 'pi',
 			command: [this.piBin, ...args].join(' '),
-			session: sessionDir,
+			session: sessionFile,
 		};
 		return new Promise<LaunchResult>((resolve, reject) => {
 			const child = spawn(this.piBin, args, {
+				// Same as `launch`: spawn in the repo/worktree dir so the session
+				// header `cwd` groups the dashboard correctly (invariant #3).
 				cwd: input.dir,
 				env: input.env ?? process.env,
 				stdio: ['pipe', 'pipe', 'pipe'],
@@ -233,7 +236,7 @@ export class PiHarness implements Harness {
 	}
 
 	/**
-	 * The recorded pi session dir/log pointer for a job — the pi-native activity +
+	 * The recorded pi session-FILE pointer for a job — the pi-native activity +
 	 * audit trail surfaced alongside PID liveness. `undefined` when the record has
 	 * no session pointer (e.g. a non-pi or legacy record). Existence on disk is
 	 * reported separately so callers can distinguish "recorded but gone" from
@@ -245,19 +248,19 @@ export class PiHarness implements Harness {
 }
 
 /**
- * Does a job record carry a live pi session dir/log on disk? Combines the
- * recorded pointer with an `existsSync` check. This is the pi-native "is there
- * an audit trail to look at?" signal — distinct from PID liveness, and STILL not
- * mtime (we check existence, never modification time).
+ * Does a job record carry a live pi session file on disk? Combines the recorded
+ * pointer with an `existsSync` check. This is the pi-native "is there an audit
+ * trail to look at?" signal — distinct from PID liveness, and STILL not mtime
+ * (we check existence, never modification time).
  */
 export function piSessionExists(record: HarnessRecord): boolean {
 	return record.session !== undefined && existsSync(record.session);
 }
 
-// Register the pi adapter so `status`/`watch`/`gc` resolve liveness for `pi`
-// jobs to THIS adapter (PID + session pointer) rather than the null fallback.
-// A default-configured instance is sufficient for liveness (the binary/extra
-// args only matter for `launch`, which the core does via an explicit instance).
+// Register the pi adapter so `status`/`do`/`gc` resolve liveness for `pi` jobs
+// to THIS adapter (PID + session pointer) rather than the null fallback. A
+// default-configured instance is sufficient for liveness (the binary/extra args
+// only matter for `launch`, which the core does via an explicit instance).
 registerHarness(new PiHarness());
 
 /**

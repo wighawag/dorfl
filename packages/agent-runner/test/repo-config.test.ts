@@ -33,6 +33,9 @@ describe('repo-config constants', () => {
 		expect(REPO_REJECTED_KEYS).toContain('piBin');
 		expect(REPO_REJECTED_KEYS).toContain('maxParallel');
 		expect(REPO_REJECTED_KEYS).toContain('humanWorktreesDir');
+		// `sessionsDir` is a HOST-ONLY machine path (where session logs are written),
+		// rejected per-repo exactly like `piBin` (a committed file must not redirect it).
+		expect(REPO_REJECTED_KEYS).toContain('sessionsDir');
 	});
 
 	it('keeps allowed and rejected key sets disjoint', () => {
@@ -97,6 +100,20 @@ describe('loadRepoConfig', () => {
 		expect(loaded.config).not.toHaveProperty('maxParallel');
 		expect(loaded.rejected).toContain('piBin');
 		expect(loaded.rejected).toContain('maxParallel');
+	});
+
+	it('rejects a committed sessionsDir (host-only) and reports it, like piBin', () => {
+		writeRepoConfig(repo, {
+			integration: 'merge',
+			sessionsDir: '/tmp/evil-sessions',
+		});
+		const loaded = loadRepoConfig(repo);
+		// The committed sessionsDir is NOT honoured (a repo file must not redirect
+		// where the host writes session logs) — it is rejected + reported.
+		expect(loaded.config).toEqual({integration: 'merge'});
+		expect(loaded.config).not.toHaveProperty('sessionsDir');
+		expect(loaded.rejected).toContain('sessionsDir');
+		expect(loaded.message).toMatch(/sessionsDir/);
 	});
 
 	it('exposes a clear message naming the rejected keys and the file', () => {

@@ -129,6 +129,7 @@ interface RunFlags extends ScanFlags {
 	model?: string;
 	harness?: string;
 	piBin?: string;
+	sessionsDir?: string;
 	workspace?: string;
 }
 
@@ -214,6 +215,7 @@ interface DoFlags {
 	model?: string;
 	harness?: string;
 	piBin?: string;
+	sessionsDir?: string;
 	watch?: boolean;
 }
 
@@ -367,6 +369,10 @@ export function buildProgram(): Command {
 		.option(
 			'--pi-bin <path>',
 			'pi CLI binary the pi harness invokes (default: pi on PATH)',
+		)
+		.option(
+			'--sessions-dir <dir>',
+			'HOST-ONLY root folder under which pi session files are generated (--session <dir>/<id>.jsonl). Default: pi per-cwd folder under ~/.pi/agent/sessions. Resolved flag > env > global > default (no per-repo).',
 		)
 		.option(
 			'--workspace <dir>',
@@ -738,6 +744,10 @@ export function buildProgram(): Command {
 			'pi CLI binary the pi harness invokes (default: pi on PATH)',
 		)
 		.option(
+			'--sessions-dir <dir>',
+			'HOST-ONLY root folder under which the pi session file is generated (--session <dir>/<id>.jsonl). Default: pi per-cwd folder under ~/.pi/agent/sessions. Resolved flag > env > global > default (no per-repo).',
+		)
+		.option(
 			'--watch',
 			"stream the agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git)",
 		)
@@ -802,6 +812,11 @@ export function buildProgram(): Command {
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
+				// The HOST-ONLY sessions root (resolved Config → DoOptions bridge, like
+				// model/agentCmd): the path generator turns it into
+				// `<sessionsDir>/<id>.jsonl` for `--session`. Without this map the key
+				// resolves but never reaches the launch (a silent no-op).
+				sessionsDir: config.sessionsDir,
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
 				watch: flags.watch === true,

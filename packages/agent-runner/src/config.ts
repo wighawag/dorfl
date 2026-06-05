@@ -128,6 +128,20 @@ export interface Config {
 	 */
 	piBin?: string;
 	/**
+	 * The ROOT folder under which the runner generates a job's pi session FILE —
+	 * the adapter passes `--session <sessionsDir>/<unique-id>.jsonl` (a literal
+	 * file path pi creates + writes; never `--session-dir`). A **HOST-ONLY machine
+	 * path** (same class as `piBin`/`workspacesDir`): resolved flag (`--sessions-
+	 * dir`) > env (`AGENT_RUNNER_SESSIONS_DIR`) > global > default — there is NO
+	 * per-repo layer (a committed repo file must not redirect where the host writes
+	 * session logs), so it is in `REPO_REJECTED_KEYS`. Optional with a DYNAMIC
+	 * default (NOT a `DEFAULT_CONFIG` entry): unset ⇒ the path generator derives
+	 * pi's default per-cwd sessions folder at launch from the job cwd (a direct
+	 * child of `~/.pi/agent/sessions/`, so the dashboard's non-recursive `listAll`
+	 * scans it). Set ⇒ any folder (e.g. a dedicated `run` fleet folder).
+	 */
+	sessionsDir?: string;
+	/**
 	 * The per-repo acceptance gate run by `agent-runner verify` (a deterministic
 	 * shell command, or an ordered list of commands). NOT per-slice and NOT model-
 	 * interpreted — it is declared, auditable config (ADR §8). Unset (omitted) ⇒

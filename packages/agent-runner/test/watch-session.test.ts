@@ -2,11 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync, appendFileSync, readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {
-	formatWatchEvent,
-	findSessionLog,
-	SessionTailer,
-} from '../src/watch-session.js';
+import {formatWatchEvent, SessionTailer} from '../src/watch-session.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
 /**
@@ -205,21 +201,44 @@ async function waitFor(
 	}
 }
 
-describe('findSessionLog — locate the .jsonl in a pi session dir', () => {
-	it('returns undefined for a missing dir / a dir with no .jsonl', () => {
-		expect(findSessionLog(join(scratch.root, 'nope'))).toBeUndefined();
-		const empty = join(scratch.root, 'empty');
-		mkdirSync(empty, {recursive: true});
-		writeFileSync(join(empty, 'notes.txt'), 'x');
-		expect(findSessionLog(empty)).toBeUndefined();
-	});
-
-	it('finds the .jsonl log when present', () => {
+describe('SessionTailer — tails the KNOWN session-file path (no stale-sibling race)', () => {
+	it('tails the EXACT given file, ignoring a pre-existing newer sibling in the same dir', async () => {
+		// The stale-sibling race the fix eliminates: a PRIOR run's log sits in the
+		// same dir (newer mtime). The tailer must read the KNOWN path, NOT the
+		// newest sibling.
 		const dir = join(scratch.root, 'session');
 		mkdirSync(dir, {recursive: true});
-		const log = join(dir, 'session-abc.jsonl');
-		writeFileSync(log, '');
-		expect(findSessionLog(dir)).toBe(log);
+		const stale = join(dir, 'prior-run.jsonl');
+		writeFileSync(
+			stale,
+			JSON.stringify({
+				type: 'message',
+				message: {role: 'assistant', content: 'STALE prior run'},
+			}) + '\n',
+		);
+		const known = join(dir, 'this-run.jsonl');
+
+		const surfaced: string[] = [];
+		const tailer = new SessionTailer({
+			sessionFile: known,
+			color: false,
+			sink: (line) => surfaced.push(line),
+			pollIntervalMs: 10,
+		});
+		tailer.start();
+		// pi writes the KNOWN file a moment after launch.
+		await new Promise((r) => setTimeout(r, 30));
+		writeFileSync(
+			known,
+			JSON.stringify({
+				type: 'message',
+				message: {role: 'assistant', content: 'THIS run'},
+			}) + '\n',
+		);
+		await waitFor(() => surfaced.length >= 1);
+		await tailer.stop();
+		// Only the KNOWN file's content is surfaced; the stale sibling is never read.
+		expect(surfaced).toEqual(['THIS run', '✓ agent finished']);
 	});
 });
 
@@ -232,7 +251,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -284,7 +303,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -306,7 +325,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -335,7 +354,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 10,
@@ -364,7 +383,7 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 
 		const surfaced: string[] = [];
 		const tailer = new SessionTailer({
-			sessionDir: dir,
+			sessionFile: log,
 			color: false,
 			sink: (line) => surfaced.push(line),
 			pollIntervalMs: 1000, // long poll → only the stop() drain will catch it.

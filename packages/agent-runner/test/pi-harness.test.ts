@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {join} from 'node:path';
+import {isAbsolute, join} from 'node:path';
 import {
 	existsSync,
 	mkdirSync,
@@ -10,11 +10,10 @@ import {
 import {
 	PiHarness,
 	createHarness,
-	piSessionDir,
 	piSessionExists,
-	PI_SESSION_DIRNAME,
 	DEFAULT_PI_BIN,
 } from '../src/pi-harness.js';
+import {generateSessionPath} from '../src/session-path.js';
 import {NullHarness, resolveHarness} from '../src/harness.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
@@ -49,19 +48,26 @@ function writePiStub(opts: {exitCode?: number} = {}): {
 		`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
 		`pwd > ${JSON.stringify(cwdFile)}`,
 		`cat > ${JSON.stringify(stdinFile)}`,
-		// Honour --session-dir by creating it (real pi writes session files there).
-		'session_dir=""',
+		// Honour --session <file> by creating it (real pi creates+writes the file).
+		'session_file=""',
 		'prev=""',
 		'for a in "$@"; do',
-		'  if [ "$prev" = "--session-dir" ]; then session_dir="$a"; fi',
+		'  if [ "$prev" = "--session" ]; then session_file="$a"; fi',
 		'  prev="$a"',
 		'done',
-		'if [ -n "$session_dir" ]; then mkdir -p "$session_dir"; fi',
+		'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
 		`exit ${exit}`,
 	].join('\n');
 	writeFileSync(bin, script + '\n');
 	chmodSync(bin, 0o755);
 	return {bin, argsFile, cwdFile, stdinFile};
+}
+
+/** Read back the `--session <path>` arg the stub recorded. */
+function recordedSessionArg(argsFile: string): string | undefined {
+	const args = readFileSync(argsFile, 'utf8').split('\n');
+	const i = args.indexOf('--session');
+	return i >= 0 ? args[i + 1] : undefined;
 }
 
 describe('PiHarness — invocation (stubbed pi CLI)', () => {
@@ -87,7 +93,31 @@ describe('PiHarness — invocation (stubbed pi CLI)', () => {
 		);
 	});
 
-	it('invokes pi non-interactively (--print) with a session dir under the worktree', () => {
+	it('invokes pi non-interactively (--print) with --session <abs .jsonl path>, NOT --session-dir', () => {
+		const stub = writePiStub();
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+
+		// The caller generates the full session FILE path and threads it in.
+		const session = generateSessionPath({cwd: dir, id: 'feat'});
+		harness.launch({dir, slug: 'feat', command: '', prompt: 'p', session});
+
+		const args = readFileSync(stub.argsFile, 'utf8').split('\n');
+		expect(args).toContain('--print');
+		// `--session <full-path>` is passed; `--session-dir` is GONE (it was
+		// overridden + misleading; the fix removes it).
+		expect(args).toContain('--session');
+		expect(args).not.toContain('--session-dir');
+		// The path-shape invariant: absolute + ends `.jsonl` (a bare id would make
+		// pi treat it as a session-ID lookup and exit 1).
+		const arg = recordedSessionArg(stub.argsFile);
+		expect(arg).toBe(session);
+		expect(isAbsolute(arg!)).toBe(true);
+		expect(arg!.endsWith('.jsonl')).toBe(true);
+	});
+
+	it('generates a default session path (absolute, .jsonl) when the caller passes none', () => {
 		const stub = writePiStub();
 		const harness = new PiHarness({piBin: stub.bin});
 		const dir = join(scratch.root, 'worktree');
@@ -95,31 +125,33 @@ describe('PiHarness — invocation (stubbed pi CLI)', () => {
 
 		harness.launch({dir, slug: 'feat', command: '', prompt: 'p'});
 
-		const args = readFileSync(stub.argsFile, 'utf8').split('\n');
-		expect(args).toContain('--print');
-		expect(args).toContain('--session-dir');
-		expect(args).toContain(piSessionDir(dir));
+		const arg = recordedSessionArg(stub.argsFile);
+		expect(arg).toBeDefined();
+		expect(isAbsolute(arg!)).toBe(true);
+		expect(arg!.endsWith('.jsonl')).toBe(true);
 	});
 
-	it('records adapter=pi, the PID, the command, and the session pointer', () => {
+	it('records adapter=pi, the PID, the command, and the EXACT session file path', () => {
 		const stub = writePiStub();
 		const harness = new PiHarness({piBin: stub.bin});
 		const dir = join(scratch.root, 'worktree');
 		mkdirSync(dir, {recursive: true});
 
+		const session = generateSessionPath({cwd: dir, id: 'feat'});
 		const result = harness.launch({
 			dir,
 			slug: 'feat',
 			command: '',
 			prompt: 'p',
+			session,
 		});
 
 		expect(result.record.adapter).toBe('pi');
 		expect(typeof result.record.pid).toBe('number');
 		expect(result.record.command).toContain(stub.bin);
 		expect(result.record.command).toContain('--print');
-		// The session pointer (pi-native audit trail) is recorded, NOT an mtime.
-		expect(result.record.session).toBe(piSessionDir(dir));
+		// The session pointer (pi-native audit trail) records the EXACT path pi used.
+		expect(result.record.session).toBe(session);
 	});
 
 	it('passes operator extraArgs (e.g. a pinned model) through to pi', () => {
@@ -155,21 +187,33 @@ describe('PiHarness — invocation (stubbed pi CLI)', () => {
 		expect(result.detail).toBeDefined();
 	});
 
-	it('creates the pi session dir/log under the worktree (the audit trail)', () => {
+	it('records a session file that pi created at the exact path (the audit trail), NOT in the checkout', () => {
 		const stub = writePiStub();
 		const harness = new PiHarness({piBin: stub.bin});
 		const dir = join(scratch.root, 'worktree');
 		mkdirSync(dir, {recursive: true});
 
+		// Generate the session path OUTSIDE the worktree (the default behaviour).
+		const sessionsRoot = join(scratch.root, 'sessions-root');
+		const session = generateSessionPath({
+			sessionsDir: sessionsRoot,
+			cwd: dir,
+			id: 'feat',
+		});
 		const result = harness.launch({
 			dir,
 			slug: 'feat',
 			command: '',
 			prompt: 'p',
+			session,
 		});
 
-		expect(existsSync(piSessionDir(dir))).toBe(true);
+		// pi created the session file at the exact recorded path.
+		expect(result.record.session).toBe(session);
+		expect(existsSync(session)).toBe(true);
 		expect(piSessionExists(result.record)).toBe(true);
+		// Nothing was written INTO the worktree (no checkout pollution).
+		expect(existsSync(join(dir, '.agent-runner-pi-session'))).toBe(false);
 	});
 });
 
@@ -257,6 +301,5 @@ describe('createHarness — config selects the launch adapter', () => {
 
 	it('exposes stable seam constants', () => {
 		expect(DEFAULT_PI_BIN).toBe('pi');
-		expect(PI_SESSION_DIRNAME).toContain('pi');
 	});
 });

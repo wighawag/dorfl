@@ -6,6 +6,7 @@ describe('envVarName', () => {
 		expect(ENV_PREFIX).toBe('AGENT_RUNNER_');
 		expect(envVarName('agentCmd')).toBe('AGENT_RUNNER_AGENT_CMD');
 		expect(envVarName('piBin')).toBe('AGENT_RUNNER_PI_BIN');
+		expect(envVarName('sessionsDir')).toBe('AGENT_RUNNER_SESSIONS_DIR');
 		expect(envVarName('perRepoMax')).toBe('AGENT_RUNNER_PER_REPO_MAX');
 		expect(envVarName('defaultArbiter')).toBe('AGENT_RUNNER_DEFAULT_ARBITER');
 		// A single-word key stays a single SCREAMING word.
@@ -34,11 +35,13 @@ describe('envOverrides — string coercion', () => {
 			envOverrides({
 				AGENT_RUNNER_AGENT_CMD: 'my-agent --flag',
 				AGENT_RUNNER_PI_BIN: '/usr/local/bin/pi',
+				AGENT_RUNNER_SESSIONS_DIR: '/srv/fleet-sessions',
 				AGENT_RUNNER_DEFAULT_ARBITER: 'arbiter',
 			}),
 		).toEqual({
 			agentCmd: 'my-agent --flag',
 			piBin: '/usr/local/bin/pi',
+			sessionsDir: '/srv/fleet-sessions',
 			defaultArbiter: 'arbiter',
 		});
 	});

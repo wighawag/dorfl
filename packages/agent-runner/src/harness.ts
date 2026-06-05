@@ -52,6 +52,15 @@ export interface LaunchInput {
 	 * harness's job.
 	 */
 	model?: string;
+	/**
+	 * The full pi session-FILE path the adapter passes as `--session <path>` (the
+	 * caller generates it ONCE — before launch, so the `do --watch` tailer can tail
+	 * the KNOWN path — via {@link generateSessionPath} from the resolved
+	 * `sessionsDir` + cwd). Adapter-agnostic: the pi adapter uses it verbatim and
+	 * records it in `PiHarnessRecord.session`; the null/shell adapter ignores it.
+	 * `undefined` ⇒ the pi adapter falls back to a generated default for its cwd.
+	 */
+	session?: string;
 	env?: NodeJS.ProcessEnv;
 }
 

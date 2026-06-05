@@ -3,8 +3,9 @@ import {performComplete} from './complete.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
-import {PiHarness, piSessionDir} from './pi-harness.js';
+import {PiHarness} from './pi-harness.js';
 import {SessionTailer} from './watch-session.js';
+import {generateSessionPath} from './session-path.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
@@ -111,6 +112,14 @@ export interface DoOptions {
 	agentCmd?: string;
 	/** The model routing intent forwarded to the harness (ADR §13). */
 	model?: string;
+	/**
+	 * The HOST-ONLY root folder under which this run's pi session FILE is generated
+	 * (resolved `config.sessionsDir`; flag > env > global > default). `undefined`
+	 * ⇒ pi's default per-cwd folder. Mapped from `Config` in `cli.ts`'s `do`
+	 * action (the bridge from resolved config to the launch — without it the key
+	 * resolves but never reaches pi).
+	 */
+	sessionsDir?: string;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/** Override the resolver's repo path (slug-namespace existence reads). Defaults to `cwd`. */
@@ -349,12 +358,26 @@ async function runDoAgent(
 	}
 	const harness = options.harness ?? new NullHarness();
 
-	// `--watch` (pi only): launch async + tail the session .jsonl concurrently.
-	// (The non-pi case is already rejected as a usage error before any git
-	// transition, so reaching here with watch ⇒ a PiHarness.)
+	// Generate the full pi session-FILE path ONCE here (caller-generates) so the
+	// adapter and the `--watch` tailer cannot disagree, and so the tailer knows it
+	// BEFORE pi starts (slice `session-path-pi-default`). In-place `do` has NO
+	// work-id, so the unique id is the slug (+ a per-launch suffix inside the
+	// generator). `sessionsDir` unset ⇒ pi's per-cwd default folder. The non-pi
+	// null adapter ignores `session`, but generating it unconditionally keeps ONE
+	// path for BOTH the watch and non-watch branches (the non-watch branch is the
+	// COMMON/CI case — it must not be left polluting the checkout / dashboard-blind).
+	const session = generateSessionPath({
+		sessionsDir: options.sessionsDir,
+		cwd,
+		id: slug,
+	});
+
+	// `--watch` (pi only): launch async + tail the KNOWN session .jsonl path
+	// concurrently. (The non-pi case is already rejected as a usage error before
+	// any git transition, so reaching here with watch ⇒ a PiHarness.)
 	if (options.watch === true && harness instanceof PiHarness) {
 		const tailer = new SessionTailer({
-			sessionDir: piSessionDir(cwd),
+			sessionFile: session,
 			color: options.color ?? false,
 			sink: options.watchSink,
 		});
@@ -366,6 +389,7 @@ async function runDoAgent(
 				command: options.agentCmd ?? '',
 				prompt,
 				model: options.model,
+				session,
 				env: options.env,
 			});
 			return {ok: launched.ok, detail: launched.detail};
@@ -382,6 +406,7 @@ async function runDoAgent(
 		command: options.agentCmd ?? '',
 		prompt,
 		model: options.model,
+		session,
 		env: options.env,
 	});
 	return {ok: launched.ok, detail: launched.detail};
