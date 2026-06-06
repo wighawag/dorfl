@@ -119,9 +119,10 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		}
 	});
 
-	it('a bare slug ERRORS on collision even when the PRD exists only via its slicing record', () => {
-		// A PRD that has been sliced lives at work/slicing/<slug>.md; the PRD
-		// namespace still claims the slug, so a bare slug is still ambiguous.
+	it('a bare slug ERRORS on collision even when the PRD is mid-slice (held in work/slicing/)', () => {
+		// A PRD currently being sliced is held under the lock at work/slicing/<slug>.md
+		// (transient, not a "sliced" resting state); the PRD namespace still claims the
+		// slug, so a bare slug is still ambiguous.
 		writeItem('backlog', 'shared.md', {slug: 'shared'});
 		writeItem('slicing', 'shared.md', {slug: 'shared'});
 
@@ -235,7 +236,7 @@ describe('ledger-read seam — resolvePrdExistence (the NEW PRD read path)', () 
 		expect(r.slicingFile).toBeUndefined();
 	});
 
-	it('reports a PRD present only via its work/slicing/ record', () => {
+	it('reports a PRD present only via its work/slicing/ lock file (mid-slice)', () => {
 		writeItem('slicing', 's.md', {slug: 's'});
 		const r = currentLedgerRead.resolvePrdExistence({
 			repoPath: repoPath(),

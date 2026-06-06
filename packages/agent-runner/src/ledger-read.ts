@@ -56,17 +56,28 @@ export interface LedgerBacklogItem {
 
 /**
  * The result of a PRD-existence read (ADR §3a): does a PRD named `<slug>` exist,
- * and where. A PRD lives at `work/prd/<slug>.md`; once sliced its slicing record
- * lives at `work/slicing/<slug>.md`. Both are consulted (either is enough). The
- * slug is resolved from frontmatter `slug:`, falling back to the filename — the
- * SAME shape the slice readers use.
+ * and where. A PRD lives at `work/prd/<slug>.md`; WHILE IT IS BEING SLICED it is
+ * moved under the slicing lock to `work/slicing/<slug>.md` (a transient held lock,
+ * NOT a "sliced" resting state — the lock returns the PRD to `work/prd/`; sliced-
+ * ness is the PRD's `sliced:` marker). Both folders are consulted (either is
+ * enough): a PRD mid-slice still occupies its slug, so collision detection must
+ * see it. The slug is resolved from frontmatter `slug:`, falling back to the
+ * filename — the SAME shape the slice readers use.
  */
 export interface PrdExistence {
-	/** Whether a PRD named `<slug>` exists in `work/prd/` and/or `work/slicing/`. */
+	/**
+	 * Whether a PRD named `<slug>` exists in `work/prd/` and/or `work/slicing/`
+	 * (the latter = a slice currently in flight under the lock; it still claims
+	 * the slug).
+	 */
 	exists: boolean;
 	/** The PRD source file, when present (`work/prd/<slug>.md`). */
 	prdFile: string | undefined;
-	/** The slicing record, when present (`work/slicing/<slug>.md`). */
+	/**
+	 * The slicing-lock file, when present (`work/slicing/<slug>.md`) — i.e. the PRD
+	 * is CURRENTLY being sliced (lock held), not "has been sliced". After a
+	 * successful slice the PRD is back in `work/prd/` and this is `undefined`.
+	 */
 	slicingFile: string | undefined;
 }
 
@@ -248,7 +259,8 @@ function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
 
 /**
  * Does a PRD named `slug` exist in `<repoPath>/work/<folder>/`? A PRD source file
- * is `work/prd/*.md`; its post-slice record is `work/slicing/*.md`. We match the
+ * is `work/prd/*.md`; a PRD currently held under the slicing lock is
+ * `work/slicing/*.md` (in flight, not "sliced"). We match the
  * slug against each file's frontmatter `slug:` (falling back to the filename) —
  * the SAME shape the slice readers use — so a renamed file whose frontmatter slug
  * matches still resolves. Returns the matching filename, or `undefined`.
