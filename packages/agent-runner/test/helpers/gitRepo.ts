@@ -44,6 +44,31 @@ export function makeScratch(prefix = 'agent-runner-git-'): Scratch {
 	};
 }
 
+/**
+ * Isolate pi's session storage for a test that exercises the DEFAULT session path
+ * (`generateSessionPath`/`piDefaultSessionDir`, which resolve to
+ * `~/.pi/agent/sessions/` unless `PI_CODING_AGENT_DIR` is set). Without this, a
+ * test that launches the (stubbed) pi adapter writes its session `.jsonl` into the
+ * developer's REAL `~/.pi/agent/sessions/`, leaking dirs there and (with a
+ * malformed fixture header) crashing any tool that lists sessions (e.g. the
+ * pi-remote dashboard). Points `PI_CODING_AGENT_DIR` at a scratch dir for the
+ * duration; call the returned fn in `afterEach` to restore. (`generateSessionPath`
+ * runs IN-PROCESS, so we must set the test process's own `process.env`, not just an
+ * env passed to a child.)
+ */
+export function isolatePiAgentDir(scratchRoot: string): () => void {
+	const KEY = 'PI_CODING_AGENT_DIR';
+	const prev = process.env[KEY];
+	process.env[KEY] = join(scratchRoot, '.pi-agent');
+	return () => {
+		if (prev === undefined) {
+			delete process.env[KEY];
+		} else {
+			process.env[KEY] = prev;
+		}
+	};
+}
+
 function gx(args: string[], cwd: string): string {
 	return git(args, cwd, {env: gitEnv()});
 }

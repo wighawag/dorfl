@@ -1,6 +1,4 @@
-import {existsSync, readdirSync, statSync} from 'node:fs';
 import {open, type FileHandle} from 'node:fs/promises';
-import {join} from 'node:path';
 
 /**
  * The **`do --watch` observer** (slices `do-watch` + `do-watch-session-log-format`)
@@ -9,9 +7,11 @@ import {join} from 'node:path';
  *
  * `ar-run.sh --watch` piped `pi -p --mode json | jq` to surface the high-signal
  * events; `do` runs the agent CAPTURED through the harness seam, so that live
- * view was lost. The pi adapter already writes a session `.jsonl` to its
- * `--session-dir` (`piSessionDir(dir)`) — but that is pi's SESSION-PERSISTENCE
- * log, a DIFFERENT format from the `--mode json` STREAM `ar-run.sh` piped.
+ * view was lost. The pi adapter writes a session `.jsonl` at the KNOWN file path
+ * the caller generated (`--session <path>`, slice `session-path-pi-default`) —
+ * but that is pi's SESSION-PERSISTENCE log, a DIFFERENT format from the
+ * `--mode json` STREAM `ar-run.sh` piped. The tailer is pointed at that EXACT
+ * path (no newest-by-mtime dir guessing), so the stale-sibling race is gone.
  *
  * A session-log record is `{"type":"message", "message":{role, content[]}}` (or a
  * `session`/`model_change`/`thinking_level_change` preamble record). The earlier
@@ -158,41 +158,16 @@ function assistantLines(content: unknown, color: boolean): string[] {
 	return text === '' ? lines : [text, ...lines];
 }
 
-/** The session `.jsonl` file extension pi writes its event log under. */
-const SESSION_LOG_EXT = '.jsonl';
-
-/**
- * Find the session `.jsonl` event log inside a pi `--session-dir`, or
- * `undefined` if none exists yet. pi writes a single session file there; when
- * more than one is present (a reused dir) the most-recently-modified is chosen,
- * so a fresh run's log is tailed rather than a stale one.
- */
-export function findSessionLog(sessionDir: string): string | undefined {
-	if (!existsSync(sessionDir)) {
-		return undefined;
-	}
-	let newest: {path: string; mtimeMs: number} | undefined;
-	for (const name of readdirSync(sessionDir)) {
-		if (!name.endsWith(SESSION_LOG_EXT)) {
-			continue;
-		}
-		const path = join(sessionDir, name);
-		let mtimeMs: number;
-		try {
-			mtimeMs = statSync(path).mtimeMs;
-		} catch {
-			continue;
-		}
-		if (newest === undefined || mtimeMs >= newest.mtimeMs) {
-			newest = {path, mtimeMs};
-		}
-	}
-	return newest?.path;
-}
-
 export interface SessionTailerOptions {
-	/** The pi session dir to tail the `.jsonl` event log from. */
-	sessionDir: string;
+	/**
+	 * The EXACT pi session `.jsonl` file path to tail. The caller generated this
+	 * BEFORE pi launched (`--session <path>`, slice `session-path-pi-default`) and
+	 * passed the SAME path to the adapter, so the tailer reads the run's own log
+	 * — no newest-by-mtime dir guessing, no stale-sibling race. The file does NOT
+	 * yet exist when the tailer starts (pi creates it asynchronously after spawn);
+	 * the tailer polls until it appears (ENOENT is tolerated as "not yet").
+	 */
+	sessionFile: string;
 	/** Emit ANSI colour (the caller's TTY/`NO_COLOR` decision). */
 	color: boolean;
 	/** Where formatted high-signal lines are written (defaults to stderr). */
@@ -204,11 +179,12 @@ export interface SessionTailerOptions {
 const DEFAULT_POLL_INTERVAL_MS = 100;
 
 /**
- * A concurrent, READ-ONLY tail of the pi session `.jsonl`. It polls the session
- * dir for the log (which the pi adapter creates only once pi starts), then reads
- * newly-appended bytes, splits them into complete lines, and surfaces each via
- * {@link formatWatchEvent}. A partial trailing line is buffered until its
- * newline arrives, so an event split across two reads is never mis-parsed.
+ * A concurrent, READ-ONLY tail of the pi session `.jsonl`. It polls the KNOWN
+ * session-file path (which the pi adapter creates only once pi starts) until it
+ * appears, then reads newly-appended bytes, splits them into complete lines, and
+ * surfaces each via {@link formatWatchEvent}. A partial trailing line is
+ * buffered until its newline arrives, so an event split across two reads is
+ * never mis-parsed.
  *
  * It is a pure observer: nothing it does feeds back into the run. `start()`
  * begins polling; `stop()` performs one final drain (to catch events written
@@ -219,7 +195,7 @@ const DEFAULT_POLL_INTERVAL_MS = 100;
  * process exited).
  */
 export class SessionTailer {
-	private readonly sessionDir: string;
+	private readonly sessionFile: string;
 	private readonly color: boolean;
 	private readonly sink: (line: string) => void;
 	private readonly pollIntervalMs: number;
@@ -233,13 +209,13 @@ export class SessionTailer {
 	private finishedEmitted = false;
 
 	constructor(options: SessionTailerOptions) {
-		this.sessionDir = options.sessionDir;
+		this.sessionFile = options.sessionFile;
 		this.color = options.color;
 		this.sink = options.sink ?? ((line) => process.stderr.write(`${line}\n`));
 		this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 	}
 
-	/** Begin polling the session dir for the log and tailing its new bytes. */
+	/** Begin polling for the known session file and tailing its new bytes. */
 	start(): void {
 		if (this.timer !== undefined || this.stopped) {
 			return;
@@ -295,11 +271,17 @@ export class SessionTailer {
 	/** Open the log if not yet open, read appended bytes, surface whole lines. */
 	private async drain(): Promise<void> {
 		if (this.handle === undefined) {
-			const logPath = findSessionLog(this.sessionDir);
-			if (logPath === undefined) {
-				return; // log not written yet — wait for it.
+			// Open the KNOWN path. pi creates it ASYNCHRONOUSLY after spawn, so until
+			// it exists `open` throws ENOENT — treat that as "not yet" and retry next
+			// tick (NEVER open once at start(), which would race the file into being).
+			try {
+				this.handle = await open(this.sessionFile, 'r');
+			} catch (err) {
+				if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+					return; // file not written yet — wait for it.
+				}
+				throw err; // a real error — bubble to poll's try/catch (next-tick retry).
 			}
-			this.handle = await open(logPath, 'r');
 		}
 		const stats = await this.handle.stat();
 		if (stats.size <= this.offset) {
