@@ -156,7 +156,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 
 	it('a repo with no file resolves to the global config (unchanged behaviour)', () => {
 		const global = mergeConfig({integration: 'merge', maxParallel: 7});
-		const resolved = resolveRepoConfig({repoPath: repo, global});
+		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(resolved.config).toEqual(global);
 		expect(resolved.rejected).toEqual([]);
 	});
@@ -165,6 +165,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
 			global: mergeConfig({}),
+			env: {},
 		});
 		expect(resolved.config).toEqual(DEFAULT_CONFIG);
 	});
@@ -172,14 +173,14 @@ describe('resolveRepoConfig — per-key layering', () => {
 	it('per-repo file overrides the global for `integration`', () => {
 		writeRepoConfig(repo, {integration: 'merge'});
 		const global = mergeConfig({integration: 'propose'});
-		const resolved = resolveRepoConfig({repoPath: repo, global});
+		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(resolved.config.integration).toBe('merge');
 	});
 
 	it('per-repo file overrides the global for `verify` too', () => {
 		writeRepoConfig(repo, {verify: 'make test'});
 		const global = mergeConfig({verify: 'pnpm test'});
-		const resolved = resolveRepoConfig({repoPath: repo, global});
+		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(resolved.config.verify).toBe('make test');
 	});
 
@@ -187,14 +188,15 @@ describe('resolveRepoConfig — per-key layering', () => {
 		// default false; global false; per-repo opts in ⇒ per-repo wins.
 		writeRepoConfig(repo, {allowAgents: true});
 		const global = mergeConfig({allowAgents: false});
-		expect(resolveRepoConfig({repoPath: repo, global}).config.allowAgents).toBe(
-			true,
-		);
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.allowAgents,
+		).toBe(true);
 		// a flag beats the per-repo file.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
+				env: {},
 				flags: {allowAgents: false},
 			}).config.allowAgents,
 		).toBe(false);
@@ -203,7 +205,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 	it('keeps runner/host-only keys from the GLOBAL (per-repo cannot touch them)', () => {
 		writeRepoConfig(repo, {integration: 'merge', maxParallel: 9});
 		const global = mergeConfig({integration: 'propose', maxParallel: 4});
-		const resolved = resolveRepoConfig({repoPath: repo, global});
+		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(resolved.config.integration).toBe('merge'); // per-repo wins
 		expect(resolved.config.maxParallel).toBe(4); // global-only, untouched
 		expect(resolved.rejected).toContain('maxParallel');
@@ -215,6 +217,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
 			global,
+			env: {},
 			flags: {integration: 'propose'},
 		});
 		expect(resolved.config.integration).toBe('propose');
@@ -225,14 +228,15 @@ describe('resolveRepoConfig — per-key layering', () => {
 		writeRepoConfig(repo, {integration: 'propose'});
 		const global = mergeConfig({integration: 'merge'});
 		// no flag ⇒ per-repo wins over global
-		expect(resolveRepoConfig({repoPath: repo, global}).config.integration).toBe(
-			'propose',
-		);
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.integration,
+		).toBe('propose');
 		// flag ⇒ flag wins over everything
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
+				env: {},
 				flags: {integration: 'merge'},
 			}).config.integration,
 		).toBe('merge');
@@ -243,6 +247,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
 			global: mergeConfig({}),
+			env: {},
 		});
 		expect(resolved.config.integration).toBe(DEFAULT_CONFIG.integration);
 	});
@@ -267,8 +272,8 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 		writeRepoConfig(repoB, {integration: 'propose'});
 		const global = mergeConfig({integration: 'propose'});
 
-		const a = resolveRepoConfig({repoPath: repoA, global});
-		const b = resolveRepoConfig({repoPath: repoB, global});
+		const a = resolveRepoConfig({repoPath: repoA, global, env: {}});
+		const b = resolveRepoConfig({repoPath: repoB, global, env: {}});
 
 		expect(a.config.integration).toBe('merge');
 		expect(b.config.integration).toBe('propose');
@@ -279,8 +284,8 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 		// repoB has no file
 		const global = mergeConfig({integration: 'propose'});
 
-		const a = resolveRepoConfig({repoPath: repoA, global});
-		const b = resolveRepoConfig({repoPath: repoB, global});
+		const a = resolveRepoConfig({repoPath: repoA, global, env: {}});
+		const b = resolveRepoConfig({repoPath: repoB, global, env: {}});
 
 		expect(a.config.integration).toBe('merge'); // own file
 		expect(b.config.integration).toBe('propose'); // global
@@ -291,8 +296,8 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 		writeRepoConfig(repoB, {verify: ['x', 'y'], defaultArbiter: 'b-remote'});
 		const global = mergeConfig({});
 
-		const a = resolveRepoConfig({repoPath: repoA, global});
-		const b = resolveRepoConfig({repoPath: repoB, global});
+		const a = resolveRepoConfig({repoPath: repoA, global, env: {}});
+		const b = resolveRepoConfig({repoPath: repoB, global, env: {}});
 
 		expect(a.config.verify).toBe('make a');
 		expect(a.config.defaultArbiter).toBe('a-remote');
@@ -304,7 +309,7 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 		writeRepoConfig(repoA, {integration: 'merge'});
 		const global = mergeConfig({integration: 'propose'});
 		const snapshot = {...global};
-		resolveRepoConfig({repoPath: repoA, global});
+		resolveRepoConfig({repoPath: repoA, global, env: {}});
 		expect(global).toEqual(snapshot);
 	});
 
@@ -315,6 +320,7 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 		const resolved = resolveRepoConfig({
 			repoPath: nested,
 			global: mergeConfig({integration: 'propose'}),
+			env: {},
 		});
 		expect(resolved.config.integration).toBe('merge');
 	});
