@@ -45,6 +45,23 @@ const redGate: TestGate = () => ({green: false, detail: 'tests failed'});
  * checkouts, so its discovery is the working-tree scan, not the registry's bare
  * mirrors (that wiring is the `run-daemon-reframe` slice).
  */
+/**
+ * True iff the BARE arbiter has the given branch — read DIRECTLY via `ls-remote`
+ * (provider-agnostic; independent of any clone's fetch refspec / remote-tracking
+ * refs). `cwd` is just a repo to run git in.
+ */
+function arbiterHasBranch(
+	arbiter: string,
+	cwd: string,
+	branch: string,
+): boolean {
+	const out = gitIn(
+		['ls-remote', `file://${arbiter}`, `refs/heads/${branch}`],
+		cwd,
+	);
+	return out.trim() !== '';
+}
+
 function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
 	return scanRepoPaths([join(scratch.root, 'project')], config);
 }
@@ -113,14 +130,50 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
 		// Folder-native surfacing (ADR §12): the runner bounced the work item from
-		// in-progress/ to needs-attention/ IN THE WORKTREE too, with the reason in
-		// its body. (The work branch itself is not pushed — the retained worktree is
-		// the never-lose-work signal, ADR §4.)
-		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
-		expect(existsSync(join(dir, 'work', 'needs-attention', 'feat.md'))).toBe(
-			true,
-		);
-		expect(existsSync(join(dir, 'work', 'in-progress', 'feat.md'))).toBe(false);
+		// in-progress/ to needs-attention/ on the work branch, with the reason in
+		// its body, and PUSHED the branch to the arbiter (so the saved wip is
+		// cross-machine recoverable — see the dedicated push test below). The
+		// move-only commit's effect (needs-attention/feat.md) is on the pushed
+		// branch; main shows it via the mode-M surface (asserted above). Because the
+		// branch is now provably on the arbiter (pushed), the worktree is REAPED at
+		// teardown (ADR §4: provable safety, not "success") — recovery rides on the
+		// pushed branch, not the local worktree.
+		void arbiter;
+	});
+
+	it('PUSHES the work/<slug> branch on the red-gate bounce (saving the wip cross-machine)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, 'ws');
+		const config = configFor(scratch.root);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: workspacesDir,
+			agentRunner: editingAgent,
+			testGate: redGate,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('tests-failed');
+
+		// THE FIX: the seam surfaces only the LEDGER on main; the runner now ALSO
+		// pushes the work branch, so a requeue-continue on a different machine has a
+		// branch to continue from (continue-detection reads <arbiter>/work/<slug>).
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				repo,
+			).trim(),
+		).not.toBe('');
+		// The agent's aborted wip is on the pushed branch (not dropped)…
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/feat:agent-output.txt'], repo),
+		).toBe('');
+		// …but it never reached main (no auto-merge of failing work).
+		expect(
+			gitIn(['ls-tree', 'arbiter/main', 'agent-output.txt'], repo).trim(),
+		).toBe('');
 	});
 });
 
@@ -398,13 +451,16 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		expect(existsSync(dir)).toBe(false);
 	});
 
-	it('RETAINS a finished job whose work is not on the arbiter (needs-attention signal)', async () => {
+	it('REAPS a red-gate job once its work branch is pushed to the arbiter (ADR §4: provable safety)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
-		void repo;
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const config = configFor(scratch.root, {workspacesDir});
-		// A red gate ⇒ the work never reaches the arbiter ⇒ NOT provably safe ⇒
-		// the worktree + record are retained for gc/status to read (ADR §4).
+		// A red gate bounces the item to needs-attention AND pushes the work branch
+		// (the gate-fail-pushes-work-branch fix) so the wip is cross-machine
+		// recoverable. The branch is now provably on the arbiter (pushed), so the
+		// worktree is REAPED at teardown — ADR §4: "the trigger is provable safety,
+		// not 'success'; a job whose commits are on the arbiter is reaped." Recovery
+		// rides on the pushed branch, not the local worktree.
 		const result = await runOnce({
 			config,
 			report: scanProject(config),
@@ -416,12 +472,18 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		expect(result.items[0].status).toBe('tests-failed');
 
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
-		expect(existsSync(dir)).toBe(true);
-		const record = readJobRecord(dir);
-		expect(record?.slug).toBe('feat');
-		expect(record?.branch).toBe('work/feat');
-		expect(record?.state).toBe('needs-attention');
-		expect(record?.harness).toBeDefined();
+		expect(existsSync(dir)).toBe(false);
+		// The work branch + the aborted wip are on the arbiter (the durable artifact).
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				repo,
+			).trim(),
+		).not.toBe('');
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/feat:agent-output.txt'], repo),
+		).toBe('');
 	});
 });
 
@@ -466,15 +528,22 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		expect(result.claimedAndDone).toBe(0);
 		expect(result.items[0].detail).toMatch(/conflict/i);
 
-		// The job record reflects needs-attention; the worktree is retained.
+		// The integrate-time rebase-conflict bounce now PUSHES the work branch (the
+		// un-rebased tip — the rebase was aborted, ADR §10) so the saved work is
+		// cross-machine recoverable via requeue-continue. Because the branch is now
+		// provably on the arbiter, the worktree is REAPED at teardown (ADR §4:
+		// provable safety, not 'success') — recovery rides on the pushed branch, not
+		// the local worktree (parity with the red-gate bounce).
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
-		expect(readJobRecord(dir)?.state).toBe('needs-attention');
-		// Folder-native surfacing (ADR §12): the item was already done-moved before
-		// the rebase, so the runner bounces it from done/ to needs-attention/.
-		expect(existsSync(join(dir, 'work', 'needs-attention', 'feat.md'))).toBe(
-			true,
-		);
-		expect(existsSync(join(dir, 'work', 'done', 'feat.md'))).toBe(false);
+		expect(existsSync(dir)).toBe(false);
+		// The work branch + the agent's (un-rebased) work are on the arbiter. Read the
+		// bare arbiter DIRECTLY via ls-remote (provider-agnostic; does not depend on a
+		// fetch refspec populating a remote-tracking ref).
+		expect(arbiterHasBranch(arbiter, repo, 'work/feat')).toBe(true);
+		// The needs-attention surface is on the arbiter's main (mode-M), where it is
+		// observable to scan/status/another machine.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 
 		// main was NOT advanced to the agent's version (never auto-resolved).
 		gitIn(['fetch', '-q', 'arbiter'], repo);
@@ -504,6 +573,35 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 			'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
 			'printf "pi work\\n" > agent-output.txt',
 			'exit 0',
+		].join('\n');
+		writeFileSync(bin, script + '\n');
+		chmodSync(bin, 0o755);
+		return bin;
+	}
+
+	/**
+	 * A pi stub that records the prompt + honours `--session <file>` (so the pi
+	 * harness record's PID + session pointer are written), edits a file, then EXITS
+	 * NON-ZERO (agent failure). In `run`, an agent failure bare-returns
+	 * `agent-failed` without pushing the work branch, so the job worktree is
+	 * RETAINED — letting this test read the harness record after teardown. (See the
+	 * note at the call site: this rides on the run-agent-fail-does-not-save gap; when
+	 * that is fixed, move to another retained path.)
+	 */
+	function writeFailingPiStub(promptFile: string): string {
+		const bin = join(scratch.root, 'pi-fail-stub.sh');
+		const script = [
+			'#!/usr/bin/env bash',
+			`cat > ${JSON.stringify(promptFile)}`,
+			'session_file=""',
+			'prev=""',
+			'for a in "$@"; do',
+			'  if [ "$prev" = "--session" ]; then session_file="$a"; fi',
+			'  prev="$a"',
+			'done',
+			'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
+			'printf "pi work\\n" > agent-output.txt',
+			'exit 1',
 		].join('\n');
 		writeFileSync(bin, script + '\n');
 		chmodSync(bin, 0o755);
@@ -548,11 +646,22 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 		expect(existsSync(dir)).toBe(false);
 	});
 
-	it('a red gate retains the pi job with a pi harness record (PID + session pointer)', async () => {
+	it('an agent-failed pi job retains the pi harness record (PID + session pointer)', async () => {
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const promptFile = join(scratch.root, 'seen-prompt-2.txt');
-		const piBin = writePiStub(promptFile);
+		// We need a RETAINED worktree to read its harness record after teardown. Every
+		// needs-attention bounce that PUSHES the work branch (red gate; integrate-time
+		// rebase-conflict — the gate-fail-pushes-work-branch fix) is now REAPED at
+		// teardown (ADR §4: provably-on-arbiter ⇒ reaped). The remaining RETAINED path
+		// in `run` is an AGENT FAILURE: run.ts bare-returns `agent-failed` WITHOUT
+		// saving/pushing the work (the gap captured in
+		// work/observations/run-agent-failure-does-not-save-work.md — the `do.ts`
+		// equivalent was fixed by `agent-fail-saves-work`/PR #8 but `run.ts` was not),
+		// so its worktree is retained and the record survives. NOTE: when that gap is
+		// fixed (run-agent-fail also pushes), this test must move to another retained
+		// path (e.g. the §14 continue-rebase-conflict path).
+		const piBin = writeFailingPiStub(promptFile);
 		const config = configFor(scratch.root, {
 			workspacesDir,
 			harness: 'pi',
@@ -564,10 +673,10 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 			config,
 			report: scanProject(config),
 			workspace: workspacesDir,
-			testGate: redGate, // keeps the worktree retained so we can read the record
+			testGate: greenGate,
 			env: gitEnv(),
 		});
-		expect(result.items[0].status).toBe('tests-failed');
+		expect(result.items[0].status).toBe('agent-failed');
 
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
 		const record = readJobRecord(dir);

@@ -503,6 +503,139 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 	});
 });
 
+describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push the work branch)', () => {
+	/** A stubbed agent that EDITS a file (partial work) then succeeds — so the run
+	 * reaches the GATE, which is red (the work is committed as the wip, then the
+	 * gate-fail bounces it to needs-attention). */
+	const editsThenPasses: DoAgentRunner = ({cwd}) => {
+		writeFileSync(join(cwd, 'partial.txt'), 'gate-fail work\n');
+		return {ok: true};
+	};
+
+	it('a red gate pushes the work/<slug> branch to the arbiter (mirrors the agent-fail path)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: FAIL,
+			agentRunner: editsThenPasses,
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('needs-attention');
+
+		// The LEDGER is surfaced on main (mode-M), as before.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+
+		// THE FIX: the work/<slug> branch is now PUSHED to the arbiter, carrying the
+		// agent's partial work (the wip commit) — the durable artifact a requeue
+		// continues from (parity with the agent-fail path).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				repo,
+			).trim(),
+		).not.toBe('');
+		// The partial edit is on the pushed branch (not dropped).
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], repo),
+		).toBe('');
+		// But it never reached main (no auto-merge of failing work).
+		expect(gitIn(['ls-tree', 'arbiter/main', 'partial.txt'], repo).trim()).toBe(
+			'',
+		);
+	});
+
+	it('the SAVED gate-fail work is recoverable: requeue (continue) from a FRESH clone lands on the branch WITH the aborted wip', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const repo = seeded.repo;
+
+		// The gate fails after the agent edited; `do` saves + surfaces + pushes.
+		const failed = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: FAIL,
+			agentRunner: editsThenPasses,
+			env: gitEnv(),
+		});
+		expect(failed.outcome).toBe('needs-attention');
+
+		// A human resolves the cause and requeues (default = keep + continue): the
+		// ledger file moves needs-attention → backlog; the pushed work branch stays.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		const requeued = returnToBacklog({
+			cwd: repo,
+			slug: 'alpha',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(requeued.moved).toBe(true);
+
+		// A DIFFERENT machine (a fresh clone) re-claims via start: it must CONTINUE
+		// from the kept branch (which exists ONLY because the gate-fail pushed it),
+		// so the agent's aborted wip is present.
+		const fresh = seeded.clone('gate-continuer');
+		const restarted = await performStart({
+			slug: 'alpha',
+			cwd: fresh,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(restarted.exitCode).toBe(0);
+		expect(restarted.branch).toBe('work/alpha');
+		// The partial work the gate-failed run left is present on the continued branch.
+		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
+	});
+
+	it('CONTRAST: the HUMAN `complete` gate-fail (no surfaceArbiter) does NOT push the work branch', async () => {
+		// Locks the autonomous-vs-human divergence for the BRANCH PUSH (the do tests
+		// already lock it for the on-main surface): a human is right there, so the
+		// work stays local — no <arbiter>/work/<slug>.
+		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
+		const repo = seeded.repo;
+		const claim = await performClaim({
+			slug: 'beta',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(claim.exitCode).toBe(0);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['switch', '-q', '-c', 'work/beta', `${ARBITER}/main`], repo);
+		writeFileSync(join(repo, 'partial.txt'), 'work\n');
+
+		const result = await performComplete({
+			slug: 'beta',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: FAIL,
+			// NB: NO surfaceArbiter — the human path.
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('gate-failed');
+		// Local bounce happened, but the work branch was NOT pushed.
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'beta.md'))).toBe(
+			true,
+		);
+		// No `<arbiter>/work/beta` ref exists (the human path never pushes it).
+		// `git ls-remote` is a soft check: it lists nothing for an absent ref.
+		const remoteRefs = gitIn(
+			['ls-remote', '--heads', ARBITER, 'work/beta'],
+			repo,
+		).trim();
+		expect(remoteRefs).toBe('');
+	});
+});
+
 describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 	it('--merge lands the work ON the arbiter main (done/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
