@@ -56,6 +56,15 @@ These are *why* this beats a single "looks fine" pass — apply them throughout:
 6. **Flag, don't guess.** When something is genuinely unresolved, that is a
    `block`/`needsAnswers` finding — not a guess dressed as approval. A false "looks
    fine" ships wrong-but-compiling work; a flagged question costs one human glance.
+7. **Weight findings by REAL impact — do not cargo-cult the lenses.** A finding is
+   only worth raising if acting on it changes an outcome someone would actually
+   hit. A technically-true nit that no reader/builder/runtime will ever be bitten
+   by is NOT a `block` (often not even worth recording). Running a lens as a
+   checklist and reporting conformance misses ("this optional field is empty", "a
+   list could be renumbered") as blocking is the failure mode this rule exists to
+   stop: it buries the findings that matter under bookkeeping noise. Ask of each
+   finding: *who hits this, and what breaks?* No answer → drop it. The lenses find
+   candidates; impact decides severity.
 
 ## The lenses — apply IN ORDER, ending in the destination check
 

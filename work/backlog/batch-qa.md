@@ -3,7 +3,7 @@ title: batch-qa — author skills/batch-qa/ (the one-file, one-step human-batchi
 slug: batch-qa
 prd: batch-qa
 blockedBy: [review-skill]
-covers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+covers: []   # one slice delivers the whole PRD — story-index bookkeeping adds no signal here
 ---
 
 ## What to build
