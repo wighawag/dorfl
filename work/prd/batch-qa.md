@@ -2,13 +2,15 @@
 title: batch-qa — gather every open question across work/ into ONE file, answer in one sitting, apply + iterate
 slug: batch-qa
 sliceAfter: [review-skill]
+sliced: 2026-06-06
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth:
-> `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices.
-> (The technical-detail sections below are trimmed by `to-slices` once the work
-> is sliced — they move into slices/ADRs and this PRD settles to its durable
-> framing: Problem / Solution / User Stories / Out of Scope.)
+> **Sliced into `work/backlog/` on 2026-06-06** — detail trimmed to the slice
+> (`work/backlog/batch-qa.md`). Launch snapshot, NOT maintained. Current truth:
+> `docs/adr/` + the code; remaining work: that slice. The durable framing
+> (Problem / Solution / the one-step invariant / gate-mismatch / Stories / Out of
+> Scope) is kept below; the Implementation/Testing detail moved into the slice.
+> `batch-qa` is a pure-prose methodology skill (like `review`) — one file, no code.
 
 ## Problem Statement
 
@@ -288,49 +290,13 @@ work/questions/<date>-batch.md
   one-file/no-parallelism, soft-floor stop, one-step invariant, the `to-slices`
   composition, per-scope question kinds) was already decided.
 
-## Implementation Decisions
-
-- **A SKILL, single-context first.** One skill, reads the targeted items into one
-  context, runs review + gather + apply. The mechanical bits (list folders, parse
-  frontmatter, find `needsAnswers`/`## Open questions`) reuse the existing readers
-  (`frontmatter.ts`, the ledger-read seam) where a thin command later helps, but
-  the core is methodology → skill.
-- **Compose with `review`, do not reimplement.** Use `review`'s four adversarial
-  lenses (claim-vs-code, cleanup-vs-behaviour, cross-slice composition, the
-  destination check) for the slice/PRD question generation, and route resolution
-  through the SAME `needsAnswers` seam. `batch-qa` adds only the **observation-
-  triage** pass and the **one-file human-batching** layer on top.
-- **Self-bounding batches, NOT fan-out.** The human describes the set at
-  invocation; the skill derives the still-unresolved candidates, narrows to that
-  description, self-limits to a context-sized chunk, and records the studied set
-  in the batch-file header. Scaling = run again on the next subset. No orchestrator,
-  no parallel-merge. (Rejected alternative — see Out of Scope.)
-- **Output contract = the batch file** (`work/questions/<date>-batch.md`),
-  a HEADER listing the studied items, per-item sections, inline context, suggested
-  defaults, READINESS footer. Ephemeral (deletable after APPLY).
-- **APPLY is scope-dispatched + obeys the one-step invariant:** slice/PRD → merge
-  answer + clear `needsAnswers` when fully resolved (advance one step, do NOT
-  build/slice); observation → draft a NEW `backlog/` slice (or `docs/adr/` stub)
-  with `needsAnswers` set HONESTLY (true unless the answer fully specified it),
-  then STOP — a later run advances that stub. The promotion humility-check mirrors
-  the auto-slicer's: NEVER emit an under-specified slice as if it were ready.
-  Never auto-commit/delete/move.
-- **Stop rule = soft floor:** halt when no BLOCKING questions remain (non-blocking
-  nits are written but do not keep the loop alive); the human may opt to continue.
-
-## Testing Decisions
-
-- Test the **gather→file** and **file→apply** halves at the file seam: given
-  fixture items with known `needsAnswers`/`## Open questions`, assert the batch
-  file contains the expected per-scope sections + inline context; given an
-  answered fixture batch file, assert APPLY merges answers, clears `needsAnswers`
-  only where fully resolved, and (for a promoted observation) drafts the expected
-  slice/ADR file — and that nothing is committed/deleted/moved.
-- Stub the `review` skill's verdict (as the autoslice slices stub the harness) to
-  test the BLOCKING vs non-blocking split and the soft-floor stop rule
-  deterministically.
-- Isolate any shared/global writes per the slice-template shared-location rule;
-  all fixtures in temp dirs; assert the real `work/` is untouched.
+> Implementation & testing detail moved to the slice (`work/backlog/batch-qa.md`).
+> Note: `batch-qa` is a pure-prose METHODOLOGY skill (like `review`) — there is NO
+> code, NO runner command, and NO test harness; its acceptance is doc-shaped (the
+> discipline + the no-write / one-step / soft-floor / compose-review-and-to-slices
+> rules are stated clearly enough to follow). An optional thin `agent-runner`
+> convenience command could mechanise the scan LATER (Out of Scope) — that is where
+> any code/tests would live, not in this skill.
 
 ## Out of Scope
 
