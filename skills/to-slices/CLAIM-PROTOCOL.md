@@ -131,6 +131,16 @@ your slice. (work/observations/ is an append-only capture bucket; anyone, you
 included, may add to it. Writing such a NOTE is the one exception to the "no file
 changes outside your slice" rule below — it is a note, not work.)
 
+If the SLICE ITSELF is the problem — it is ambiguous, under-specified, rests on a
+premise that no longer matches the code/ADRs (it has DRIFTED), or hides an
+unresolved design decision — do NOT guess and build on it. STOP and report
+specifically what is unclear or contradicted (and where), so a human can resolve it
+(the runner routes the item to needs-attention). Do not be shy about this: a
+confident build on a wrong/ambiguous premise produces wrong-but-compiling work that
+is far more expensive than a question. Building exactly what a flawed slice says is
+NOT success. A genuinely small, certain factual gap you can resolve from the code
+itself, resolve and proceed; a real ambiguity or stale premise, surface it.
+
 Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
 move any files between work/ folders, and do not touch work/in-progress/<slug>.md.
 The runner (or human) owns every git-state transition. (Your TESTS may freely

@@ -64,6 +64,15 @@ a horizontal slice of one layer.
     never inherited from the PRD.** Evaluate each slice on its own merits (does
     *building it* need human judgement/security/secrets?), AS IF the PRD's
     `humanOnly` field did not exist. (The two flags are disjoint — see §3b.)
+  - **Do NOT be shy about `needsAnswers` — when genuinely unsure, FLAG, don't
+    guess.** `needsAnswers` is cheap (a human clears it in seconds) and a
+    confidently-underspecified slice is expensive (an agent builds the wrong thing,
+    convincingly). Empirically, defects concentrate in SLICING far more than in
+    implementation: an ambiguous premise, an unresolved design fork, a "reuse X"
+    where X's shape is unverified, or a seam you *assume* exists — each is a
+    `needsAnswers` with the open question written in the body, NOT a guess dressed
+    as a spec. The asymmetry is the whole point: a false `needsAnswers` costs one
+    human glance; a false confidence ships wrong-but-compiling work.
 - **Prefer file-orthogonal slices to minimise merge conflicts.** `blockedBy`
   encodes logical ordering, but two independent slices that edit the SAME files
   will conflict when the second integrates after the first. Parallel agents make

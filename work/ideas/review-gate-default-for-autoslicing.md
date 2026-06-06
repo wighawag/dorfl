@@ -153,3 +153,58 @@ check**:
   review is the INDEPENDENT second opinion the confidence-check cannot be.
 - **NOT part of** the phase-2 command-surface build (`command-surface-phase-2`);
   this is its own future PRD.
+
+## Update (2026-06-06) — a SECOND session confirms it; sharper framing + new config axes
+
+A second long build/dogfood session (session-path-pi-default + do-remote planning)
+independently reproduced the core finding — strengthening the case (and, per this
+file's own rule #2, "a second instance is a signal, not noise" → promote-to-PRD
+when autonomy paths are close).
+
+New/sharper points from that session:
+
+1. **Defects concentrate in SLICING, not implementation (the sharper
+   justification).** Original motivation: "auto-slicing has no `verify` floor."
+   Stronger, observed: across the session, the bugs were overwhelmingly in the
+   SLICES/SPECS, not the agents' code — the session-path slice took FOUR review
+   passes and STILL missed test-isolation + a `PI_CODING_AGENT_DIR` product gap; the
+   do-remote slice rested on a stale central premise ("`do` already routes through
+   the isolation seam" — it doesn't). The agents BUILT what they were told,
+   correctly. So review's highest ROI is on the slice/spec, not the diff — which
+   argues for raising the review gate's priority.
+
+2. **`needsAnswers` is the UNIFYING lever (producer + reviewer, one signal).** The
+   review gate's verdict-routing ("blocking finding → `needsAnswers`/needs-attention
+   → human") is the SAME signal a humble producer raises up front. So: (a) a
+   producer-side NUDGE — slicer/agent should reach for `needsAnswers` liberally when
+   unsure, not guess (shipped now as a prompt-protocol change: `to-slices` SKILL +
+   `CLAIM-PROTOCOL.md` wrapper); (b) the review gate is the ENFORCED, adversarial
+   version of the same valve. Cheap humility up front + adversarial review after,
+   both raising "not autonomous-safe yet." The nudge is the cultural version,
+   buildable immediately; the gate is the enforced version (this PRD).
+
+3. **Context isolation resolves to TWO ORTHOGONAL, CONFIGURABLE AXES (not a binary).**
+   The open question was "fresh context vs same-context multi-pass." Resolution:
+   BOTH, composable as an **M × N** grid —
+   - **N = passes within one review (SAME context):** angle-switching passes that
+     ACCUMULATE (each sees prior findings + self-reflects). De-correlation by ANGLE.
+     (How this session worked; the angle-switch is what finds new defects, not a
+     fresh context.)
+   - **M = independent reviews (FRESH context each):** separate review sessions,
+     each running its own N-pass sweep. De-correlation by CONTEXT (a fresh reviewer
+     can't rubber-stamp work it never produced).
+   - Degenerate cases recover the simple modes (`M=1` = one multi-pass reviewer;
+     `N=1,M=k` = k independent single-pass reviews). The powerful middle (`M>1,N>1`)
+     gets BOTH de-correlations. The grid is the config surface — cheap repo
+     `M=1,N=2`; high-stakes human-less auto-slice `M=3,N=until-clean`.
+
+4. **Termination = "until no blocking issues" capped by a hard max (both,
+   configurable).** Resolves the "iteration bound" open question: stop early when a
+   pass finds no NEW blocking issue (the natural terminator — passes taper to zero,
+   as observed), with a `reviewMaxRounds` ceiling so it can never loop forever; on
+   hitting the cap with unresolved blockers → `needsAnswers` (human). Applies per
+   axis (N within a review; M reviews overall).
+
+These refine the eventual PRD; they do not change that this stays a FUTURE PRD
+(promote when run/auto-slice autonomy is close). The producer-side `needsAnswers`
+nudge (point 2a) is shipped separately now as the cheap, immediate down-payment.
