@@ -345,40 +345,49 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	},
 
 	/**
-	 * The needs-attention transition under the SAME strategy — satisfying the
-	 * INTENT "record stuck + save work + make the stuck state OBSERVABLE." It
-	 * delegates to {@link routeToNeedsAttention}, which appends the reason as body
-	 * prose (never a frontmatter field — WORK-CONTRACT rule 3), saves the aborted
-	 * agent work as a **wip** commit, then `git mv`s the item to
-	 * `work/needs-attention/` as a **move-only** commit (the tip). Then — the
-	 * surfacing this mode-M strategy adds — when an `arbiter` is given it
-	 * CHERRY-PICKS the move-only commit onto the arbiter's `main`, so the stuck
-	 * state is observable to `scan`/`status`/a fresh checkout/another machine (the
-	 * wip never reaches `main`). That "cherry-pick to `main`" is an implementation
-	 * detail of THIS strategy — the seam's contract is only the intent "make the
-	 * stuck state observable," which a future mode-P strategy could satisfy by
-	 * reading work-branch tips instead. The surface is published ALL-OR-NOTHING (a
-	 * half-applied cherry-pick is undone), and `main` is never `--force`d.
+	 * The needs-attention transition under the SAME strategy. The seam's contract
+	 * is transition-kind-agnostic: durably record a stuck job =
 	 *
-	 * The work branch itself is NOT pushed here — the retained job worktree (with
-	 * the wip + move committed on its local `work/<slug>`) IS the never-lose-work
-	 * signal (ADR §4); the main surface is what travels cross-machine. The arbiter
-	 * is used ONLY to publish the surface, not to push the branch.
+	 *   - **OBSERVABLE** — publish the stuck state to the ledger surface so
+	 *     `scan`/`status`/a fresh checkout/another machine can see it. (THIS mode-M
+	 *     strategy does that by CHERRY-PICKING the move-only commit — the reason +
+	 *     the `git mv` — onto the arbiter's `main`, all-or-nothing, never `--force`d,
+	 *     so the half-finished wip below it never lands there. A future mode-P
+	 *     strategy could make it observable WITHOUT writing `main`, e.g. by reading
+	 *     work-branch tips.)
+	 *   - **RECOVERABLE** — push the work branch (when there IS one), so the saved
+	 *     work travels cross-machine and a requeue continues from its tip. (Mode M
+	 *     does that by `git push`ing the branch; the WHICH branch is the caller's,
+	 *     not assumed `work/<slug>` — a build bounce pushes `work/<slug>`, a slicing
+	 *     bounce its `work/slicing/<slug>`, a temp-branch caller pushes NOTHING.)
+	 *
+	 * Both halves are ONE operation done in ONE place: it delegates to {@link
+	 * routeToNeedsAttention}, which appends the reason as body prose (never a
+	 * frontmatter field — WORK-CONTRACT rule 3), saves the aborted work as a
+	 * **wip** commit, `git mv`s the item to `work/needs-attention/` as the
+	 * **move-only** commit (the tip), and — when an `arbiter` is given — pushes the
+	 * work branch (best-effort, branch-parameterised, emptiness-guarded; SURFACE-
+	 * ONLY when `pushBranch: false`). The seam does NOT strip the arbiter: the same
+	 * arbiter both publishes the surface (here) AND drives the helper's branch push,
+	 * so "record stuck" and "save the work" can never drift apart. The human-vs-
+	 * autonomous gate rides on whether an `arbiter` is given at all (human
+	 * `complete` passes none → no surface, no push, local-only; autonomous `do`/`run`
+	 * pass it → both).
 	 */
 	applyNeedsAttentionTransition(
 		input: ApplyNeedsAttentionTransitionInput,
 	): ApplyNeedsAttentionTransitionResult {
-		// Route WITHOUT a branch push (drop `arbiter` from the move): the worktree is
-		// the work-saving signal. The arbiter is reserved for surfacing on main.
-		const {arbiter, ...move} = input;
-		const result = routeToNeedsAttention(move);
-		if (result.moved && result.moveCommit && arbiter) {
+		// Route WITH the arbiter intact so the helper's (best-effort, branch-
+		// parameterised, emptiness-guarded) RECOVERABLE push fires — the one home for
+		// the push. The OBSERVABLE surface is published below from the same arbiter.
+		const result = routeToNeedsAttention(input);
+		if (result.moved && result.moveCommit && input.arbiter) {
 			// Make the stuck state observable on the ledger (mode M): publish ONLY the
 			// move-only commit (the reason + the git mv) to the arbiter's main, so the
 			// half-finished wip below it never lands there.
 			publishSurfaceCommit({
 				cwd: input.cwd,
-				arbiter,
+				arbiter: input.arbiter,
 				slug: input.slug,
 				moveCommit: result.moveCommit,
 				env: input.env,

@@ -14,7 +14,7 @@ import {NullHarness, type Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
-import {git, gitMv, runAsync} from './git.js';
+import {git, gitMv} from './git.js';
 import {
 	Integrator,
 	type ReviewProvider,
@@ -298,9 +298,15 @@ async function runOneItem(
 		// 2a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a
 		//     `work/<slug>` whose commits did not replay cleanly onto the current
 		//     main at onboard-time (aborted, never auto-resolved). Route the item to
-		//     needs-attention (surfaced on the arbiter's main, cross-machine visible)
-		//     instead of running the agent on a stale/conflicted base. The retained
-		//     worktree (on the un-rebased kept branch) is the never-lose-work signal.
+		//     needs-attention through the seam, which (with the arbiter) surfaces the
+		//     stuck state on main AND pushes the work branch — here a no-op/ff: the
+		//     rebase was ABORTED, so this worktree's `work/<slug>` tip == the arbiter
+		//     tip (the kept branch, unchanged). The DURABLE artifact is that branch on
+		//     the arbiter + the main surface (ADR §14: the job worktree is a disposable
+		//     cache; recovery flows through the branch + folder-native surfaces, NOT by
+		//     editing the worktree). Because the branch is provably on the arbiter, the
+		//     §4 reap predicate now HOLDS and this worktree is reaped (not specially
+		//     retained) — more §14-aligned, not a regression.
 		if (tree.continueRebaseConflict) {
 			const reason =
 				`continuing the kept work/${slug}: rebase onto the latest main ` +
@@ -325,7 +331,7 @@ async function runOneItem(
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
 		} catch (err) {
 			if (err instanceof PromptError) {
-				return {...base, status: 'agent-failed', detail: err.message};
+				return saveAgentFailure(base, tree, slug, err.message, ctx.env);
 			}
 			throw err;
 		}
@@ -346,10 +352,22 @@ async function runOneItem(
 				config.sessionsDir,
 			);
 		} catch (err) {
-			return {...base, status: 'agent-failed', detail: (err as Error).message};
+			return saveAgentFailure(
+				base,
+				tree,
+				slug,
+				(err as Error).message,
+				ctx.env,
+			);
 		}
 		if (!agent.ok) {
-			return {...base, status: 'agent-failed', detail: agent.detail};
+			return saveAgentFailure(
+				base,
+				tree,
+				slug,
+				agent.detail ?? `the agent failed to build '${slug}'.`,
+				ctx.env,
+			);
 		}
 
 		// 5. Test-gate: only green work proceeds. Bad work is routed to
@@ -361,15 +379,15 @@ async function runOneItem(
 			// Folder-native surfacing (ADR §12): bounce the work item itself from
 			// in-progress/ to needs-attention/ (saving the aborted work as a wip
 			// commit + the move-only commit on the work branch) THROUGH the ledger
-			// write seam's needs-attention transition. Passing the arbiter SURFACES the
-			// stuck state's LEDGER on the arbiter's main (the mode-M strategy
-			// cherry-picks the move-only commit there) — making it observable to
-			// scan/status/a fresh checkout/another machine. The seam does NOT push the
-			// work branch; the explicit push below saves the wip cross-machine (so a
-			// requeue-continue on a different machine has a branch to continue from —
-			// continue-detection reads <arbiter>/work/<slug>). This is a LEDGER write,
-			// so it happens in both merge and propose (the integration axis governs
-			// CODE only). The runner owns this move (the agent does no git).
+			// write seam's needs-attention transition. Passing the arbiter both
+			// SURFACES the stuck state's LEDGER on the arbiter's main (OBSERVABLE —
+			// the mode-M cherry-pick) AND pushes the `work/<slug>` branch (RECOVERABLE
+			// — the saved wip + move travel cross-machine so a requeue-continue on a
+			// different machine has a branch to continue from; continue-detection reads
+			// <arbiter>/work/<slug>). One operation in one place; the asymmetry that
+			// once needed a bolted-on push cannot recur. This is a LEDGER write, so it
+			// happens in both merge and propose (the integration axis governs CODE
+			// only). The runner owns this move (the agent does no git).
 			ledgerWrite.applyNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
@@ -377,12 +395,6 @@ async function runOneItem(
 				arbiter: tree.arbiterRemote,
 				env: ctx.env,
 			});
-			// Push the work/<slug> branch to the arbiter so the SAVED partial commits
-			// (the wip + the move) travel cross-machine and a requeue (continue) can
-			// land the next agent on this tip (mirrors saveAgentFailure in do.ts).
-			// Best-effort: an unreachable arbiter leaves the retained worktree + the
-			// main surface standing.
-			await pushWorkBranch(tree.dir, tree.arbiterRemote, slug, ctx.env);
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
@@ -426,9 +438,18 @@ async function runOneItem(
 			// Rebase conflict at integrate time (ADR §10): the item was already
 			// done-moved + committed at step 6, so route it from done/ to
 			// needs-attention/ — the same folder-native surfacing, dispatched through
-			// the ledger write seam's needs-attention transition, surfacing the stuck
-			// state on the arbiter's main (mode M). Only the MOVE-ONLY commit is
-			// cherry-picked to main, so the conflicting code never lands there.
+			// the ledger write seam's needs-attention transition. Passing the arbiter
+			// both surfaces the stuck state on main (OBSERVABLE — only the MOVE-ONLY
+			// commit is cherry-picked, so the conflicting code never lands there) AND
+			// pushes the `work/<slug>` branch (RECOVERABLE — so the SAVED work travels
+			// cross-machine and a requeue-continue can recover it; continue-detection
+			// reads <arbiter>/work/<slug> ahead of main). The conflicting rebase was
+			// ABORTED (ADR §10), so the branch is at its pre-rebase tip (the agent's
+			// work as left, un-rebased); the next claim's onboard-time rebase re-attempts
+			// it and re-routes here if it still conflicts. Without the push, a `run`
+			// integrate-time conflict on a multi-machine fleet would strand the
+			// (green-but-unrebased) work on this machine's worktree — the very loss
+			// §14's branch-is-the-durable-artifact model exists to prevent.
 			ledgerWrite.applyNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
@@ -436,19 +457,6 @@ async function runOneItem(
 				arbiter: tree.arbiterRemote,
 				env: ctx.env,
 			});
-			// Push the work/<slug> branch so the SAVED work travels cross-machine and a
-			// requeue (continue) can recover it (continue-detection reads
-			// <arbiter>/work/<slug> ahead of main) — parity with the red-gate bounce
-			// above and `saveAgentFailure` in do.ts. The conflicting rebase was ABORTED
-			// (ADR §10), so the branch is at its pre-rebase tip (the agent's work as
-			// left, un-rebased); the next claim's onboard-time rebase re-attempts it and
-			// re-routes here if it still conflicts. Without this, a `run` integrate-time
-			// conflict on a multi-machine fleet strands the (green-but-unrebased) work
-			// on this machine's retained worktree — unreachable cross-machine, the very
-			// loss §14's branch-is-the-durable-artifact model exists to prevent.
-			// Best-effort: an unreachable arbiter leaves the retained worktree + the
-			// main surface standing.
-			await pushWorkBranch(tree.dir, tree.arbiterRemote, slug, ctx.env);
 			return {...base, status: 'needs-attention', detail: outcome.reason};
 		}
 
@@ -514,23 +522,47 @@ function runAgent(
 }
 
 /**
- * Push the `work/<slug>` branch to the arbiter so a needs-attention bounce's
- * SAVED commits (the wip + the move-only commit) travel cross-machine — the
- * durable artifact a requeue (continue) lands the next agent on (continue-
- * detection reads `<arbiter>/work/<slug>` ahead of main). The needs-attention
- * seam surfaces only the LEDGER on `main`; it does NOT push the branch, so the
- * autonomous gate-fail bounce must push it explicitly (mirrors `saveAgentFailure`
- * in `do.ts`). Best-effort: an unreachable arbiter leaves the local branch +
- * the main surface standing (the same degradation as the agent-fail path).
+ * SAVE the partial work of a FAILED agent instead of dropping it (closing the
+ * fifth-and-last instance of the recurring asymmetry —
+ * `work/observations/run-agent-failure-does-not-save-work.md`). `run`'s
+ * agent-failure return points (prompt-assembly fail / `runAgent` throw /
+ * `agent.ok === false`) used to BARE-RETURN `agent-failed`, leaving whatever the
+ * agent edited only on the LOCAL work branch in the (disposable, possibly remote)
+ * job worktree — not on the arbiter, so a requeue-continue on a DIFFERENT machine
+ * (or after a `gc` reap) re-cut fresh off main and orphaned it.
+ *
+ * This mirrors `do.ts`'s `saveAgentFailure`: route the failure through the SAME
+ * ledger write seam's needs-attention transition the gate-fail / integrate-
+ * conflict bounces use — which (with the arbiter) saves the agent's work as a wip
+ * commit, `git mv`s the item to needs-attention/ with the failure detail recorded
+ * as the reason, surfaces the move-only commit on the arbiter's `main`
+ * (OBSERVABLE), AND pushes the `work/<slug>` branch (RECOVERABLE — the durable
+ * artifact a requeue-continue lands the next agent on; continue-detection reads
+ * <arbiter>/work/<slug> ahead of main). The push is best-effort — an unreachable
+ * arbiter leaves the retained worktree + the local commits standing (the genuinely
+ * un-pushed case). The status stays `agent-failed`; only the work-preserving
+ * side-effect now matches the gate-fail path.
  */
-async function pushWorkBranch(
-	cwd: string,
-	arbiter: string,
+function saveAgentFailure(
+	base: ItemResult,
+	tree: IsolatedTree,
 	slug: string,
+	detail: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<void> {
-	const branch = `work/${slug}`;
-	await runAsync('git', ['push', arbiter, `${branch}:${branch}`], cwd, {env});
+): ItemResult {
+	const reason = `agent failed: ${detail}`;
+	updateJobRecord(tree.dir, {state: 'needs-attention', reason});
+	ledgerWrite.applyNeedsAttentionTransition({
+		cwd: tree.dir,
+		slug,
+		reason,
+		// Autonomous (`run`): surface on the arbiter's main AND push the work branch
+		// (the seam does both now), so the fleet's failed-agent work is cross-machine
+		// recoverable via requeue-continue.
+		arbiter: tree.arbiterRemote,
+		env,
+	});
+	return {...base, status: 'agent-failed', detail};
 }
 
 /** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */

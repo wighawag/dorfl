@@ -37,6 +37,9 @@ const RACE_SENSITIVE = [
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
 	'test/needs-attention-surface-on-main.test.ts',
+	// Drives real git against a --bare arbiter AND writes main (the consolidated
+	// bounce push + on-main surface); same determinism reasoning as above.
+	'test/centralise-bounce-branch-push.test.ts',
 ];
 
 export default defineConfig({

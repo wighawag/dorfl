@@ -517,6 +517,15 @@ async function continueFromKeptBranch(params: {
  * needs-attention transition through the SAME seam every bounce uses — recording
  * the reason and surfacing it on the arbiter's main — then return to a clean
  * state. Mirrors `startFromNeedsAttention`'s temp-branch pattern.
+ *
+ * SURFACE-ONLY (`pushBranch: false`): HEAD here is the throwaway temp branch off
+ * main, NOT `work/<slug>` — and the REAL continued `work/<slug>` is already on the
+ * arbiter from the prior requeue, untouched (the onboard rebase was ABORTED). If
+ * the seam default-pushed `work/<slug>` it would push a ref HEAD is not on (a
+ * stale/local one), a latent wrong-branch push. So we surface only the ledger on
+ * main and push NOTHING — the recoverable artifact (the kept branch on the
+ * arbiter) is already there. Contrast `run.ts`'s onboard-time continue-conflict,
+ * which IS on `work/<slug>` and so default-pushes correctly.
  */
 async function routeContinueConflict(params: {
 	slug: string;
@@ -548,8 +557,11 @@ async function routeContinueConflict(params: {
 			cwd,
 			slug,
 			reason,
-			// Surface on the arbiter's main (cross-machine visible), the §10 path.
+			// Surface on the arbiter's main (OBSERVABLE, cross-machine visible), the
+			// §10 path — but SURFACE-ONLY: push NO branch (HEAD is the temp branch off
+			// main, not work/<slug>; the kept work/<slug> is already on the arbiter).
 			arbiter,
+			pushBranch: false,
 			env,
 			note,
 		});
