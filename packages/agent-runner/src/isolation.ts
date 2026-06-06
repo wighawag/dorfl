@@ -1,6 +1,10 @@
-import {git} from './git.js';
+import {git, run} from './git.js';
 import {createJob, type Job} from './workspace.js';
 import {reapJob} from './gc.js';
+import {
+	branchAheadOf,
+	rebaseContinuedBranchOntoMain,
+} from './continue-branch.js';
 
 /**
  * The **isolation-strategy seam** (`docs/adr/command-surface-and-journeys.md`
@@ -55,6 +59,14 @@ export interface IsolatedTree {
 	 * (`job.mirror.url` today). In-place: the checkout's arbiter remote URL.
 	 */
 	arbiterUrl: string;
+	/**
+	 * True iff a CONTINUE rebase onto fresh main CONFLICTED at onboard-time
+	 * (a requeue kept a `work/<slug>` whose commits did not replay onto the
+	 * current main; aborted, never auto-resolved). The pipeline routes the item
+	 * to needs-attention (the §10 path) instead of running the agent. Absent /
+	 * false on a fresh cut and on a clean continue.
+	 */
+	continueRebaseConflict?: boolean;
 	/**
 	 * Tear the isolated tree down per the strategy. Job-worktree: re-apply the §4
 	 * deletion-safety predicate and `git worktree remove`/prune the worktree ONLY
@@ -138,6 +150,7 @@ export function jobWorktreeHandle(
 		branch: job.branch,
 		arbiterRemote: job.arbiterRemote,
 		arbiterUrl: job.mirror.url,
+		continueRebaseConflict: job.continueRebaseConflict,
 		teardown(): void {
 			// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
 			// predicate and remove the worktree ONLY if it holds (clean tree AND the
@@ -185,18 +198,61 @@ export function inPlaceStrategy(options: {
 				env,
 			}).trim();
 
-			// Fetch the arbiter, then put the checkout on `work/<slug>` cut from the
-			// freshly-fetched `<arbiter>/main` (the same fresh-main guarantee as the
-			// job worktree). If the branch already exists locally (resume / re-run),
-			// switch to it instead of re-creating.
 			git(['fetch', '--quiet', arbiter], checkout, {env});
-			const created = gitSoftSwitch(
-				['switch', '--quiet', '-c', branch, `${arbiter}/main`],
-				checkout,
-				env,
-			);
-			if (!created) {
-				git(['switch', '--quiet', branch], checkout, {env});
+
+			// CONTINUE-detection (shared with the job-worktree path, ADR §14 keystone):
+			// does the arbiter have a `work/<slug>` ref AHEAD of main (a requeue kept
+			// it)? In a normal clone the refs are the remote-tracking
+			// `<arbiter>/work/<slug>` and `<arbiter>/main`.
+			let continueRebaseConflict = false;
+			if (
+				branchAheadOf(checkout, `${arbiter}/${branch}`, `${arbiter}/main`, env)
+			) {
+				// CONTINUE: land on the kept arbiter tip (force-reset a stale local copy
+				// so we continue the SAME single branch), then REBASE onto fresh main at
+				// onboard-time (ADR §10: rebase, not merge). A CLEAN rebase updates the
+				// already-pushed tip with --force-with-lease on the WORK branch ONLY
+				// (a requeued item is unshared) — NEVER --force, NEVER to main (§11). A
+				// CONFLICT is aborted (never auto-resolved) + flagged for the caller to
+				// route to needs-attention.
+				git(
+					['switch', '--quiet', '-C', branch, `${arbiter}/${branch}`],
+					checkout,
+					{env},
+				);
+				const rebase = rebaseContinuedBranchOntoMain(
+					checkout,
+					`${arbiter}/main`,
+					env,
+				);
+				if (rebase.kind === 'conflict') {
+					continueRebaseConflict = true;
+				} else {
+					run(
+						'git',
+						[
+							'push',
+							arbiter,
+							`${branch}:${branch}`,
+							`--force-with-lease=${branch}`,
+						],
+						checkout,
+						{env},
+					);
+				}
+			} else {
+				// FRESH: put the checkout on `work/<slug>` cut from the freshly-fetched
+				// `<arbiter>/main` (the same fresh-main guarantee as the job worktree).
+				// If the branch already exists locally (resume / re-run), switch to it
+				// instead of re-creating.
+				const created = gitSoftSwitch(
+					['switch', '--quiet', '-c', branch, `${arbiter}/main`],
+					checkout,
+					env,
+				);
+				if (!created) {
+					git(['switch', '--quiet', branch], checkout, {env});
+				}
 			}
 
 			return {
@@ -204,6 +260,7 @@ export function inPlaceStrategy(options: {
 				branch,
 				arbiterRemote: arbiter,
 				arbiterUrl,
+				continueRebaseConflict,
 				// NO-OP teardown: the checkout is the human's / CI's tree — left on
 				// `work/<slug>` in a defined state, NEVER reaped (ADR §2/§4). The
 				// human's `complete` (or the runner) owns the branch lifecycle.

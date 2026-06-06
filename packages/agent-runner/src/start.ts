@@ -1,5 +1,9 @@
 import {performClaim} from './claim-cas.js';
 import {ledgerWrite} from './ledger-write.js';
+import {
+	branchAheadOf,
+	rebaseContinuedBranchOntoMain,
+} from './continue-branch.js';
 import {runAsync, type RunResult} from './git.js';
 
 /**
@@ -45,6 +49,7 @@ export type StartOutcome =
 	| 'started' // claimed a backlog item and switched to its work branch
 	| 'resumed' // switched to an in-progress item's work branch (--resume)
 	| 'resolved' // picked up a stuck needs-attention item (surface cleared)
+	| 'needs-attention' // continued branch's rebase onto main conflicted → routed (§10)
 	| 'refused' // refused (in-progress without --resume, done/absent, or not-ready)
 	| 'lost' // claim lost the race (propagated from claim)
 	| 'contended' // claim push kept being rejected (propagated from claim)
@@ -229,11 +234,44 @@ async function startFromBacklog(params: {
 	}
 
 	// The claim landed — the item is now in-progress on the arbiter. Onboard the
-	// human onto the work branch cut from that NEW main (which includes the claim).
-	const branch = await switchToWorkBranch({slug, arbiter, cwd, env, note});
-	const message = `Started '${slug}': claimed and switched to ${branch}.`;
+	// human onto the work branch: CONTINUE from a kept arbiter work/<slug> when one
+	// exists ahead of main (a requeue), else cut fresh off the NEW main (which
+	// includes the claim).
+	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
+	if (switched.rebaseConflict) {
+		return continueConflictResult({slug, arbiter, cwd, env, note});
+	}
+	const branch = switched.branch;
+	const message = switched.continued
+		? `Started '${slug}': claimed and continued ${branch} from the kept branch.`
+		: `Started '${slug}': claimed and switched to ${branch}.`;
 	note(message);
 	return {exitCode: 0, outcome: 'started', branch, message};
+}
+
+/**
+ * Build the terminal StartResult for a CONTINUE rebase conflict: route the item
+ * to needs-attention (the §10 path) and return the 'needs-attention' outcome.
+ */
+async function continueConflictResult(params: {
+	slug: string;
+	arbiter: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<StartResult> {
+	await routeContinueConflict(params);
+	const message =
+		`Could not continue '${params.slug}': the kept work branch did not rebase ` +
+		`cleanly onto ${params.arbiter}/main; routed to work/needs-attention/ ` +
+		'(surfaced by status). Resolve against the latest main, or `requeue --reset` ' +
+		'to discard and start fresh.';
+	return {
+		exitCode: 1,
+		outcome: 'needs-attention',
+		branch: `work/${params.slug}`,
+		message,
+	};
 }
 
 /**
@@ -299,8 +337,13 @@ async function startFromNeedsAttention(params: {
 	}
 
 	// The surface is cleared on main (item back in in-progress). Onboard onto the
-	// work branch cut from that NEW main.
-	const branch = await switchToWorkBranch({slug, arbiter, cwd, env, note});
+	// work branch: CONTINUE from a kept arbiter work/<slug> when present, else
+	// fresh off the NEW main.
+	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
+	if (switched.rebaseConflict) {
+		return continueConflictResult({slug, arbiter, cwd, env, note});
+	}
+	const branch = switched.branch;
 	const message = `Started '${slug}': resolved from needs-attention and switched to ${branch}.`;
 	note(message);
 	return {exitCode: 0, outcome: 'resolved', branch, message};
@@ -334,16 +377,47 @@ async function startFromInProgress(params: {
 		);
 	}
 
-	const branch = await switchToWorkBranch({slug, arbiter, cwd, env, note});
+	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
+	if (switched.rebaseConflict) {
+		return continueConflictResult({slug, arbiter, cwd, env, note});
+	}
+	const branch = switched.branch;
 	const message = `Resumed '${slug}': switched to ${branch} (no claim).`;
 	note(message);
 	return {exitCode: 0, outcome: 'resumed', branch, message};
 }
 
 /**
- * `git fetch <arbiter>` + `git switch -c work/<slug> <arbiter>/main`, landing the
- * user on the work branch in their current checkout. If the branch already
- * exists locally (e.g. a re-run / resume), switch to it instead of failing.
+/** The outcome of onboarding the checkout onto `work/<slug>`. */
+interface SwitchResult {
+	/** The work branch landed on (`work/<slug>`). */
+	branch: string;
+	/** True iff we CONTINUED from a kept arbiter `work/<slug>` (not a fresh cut). */
+	continued: boolean;
+	/**
+	 * True iff a CONTINUE rebase onto fresh main CONFLICTED (and was aborted,
+	 * never auto-resolved). The caller routes the item to needs-attention (§10).
+	 */
+	rebaseConflict: boolean;
+}
+
+/**
+ * Onboard the checkout onto `work/<slug>`, CONTINUE-AWARE (the keystone of the
+ * `requeue-continue-and-reset` slice). `git fetch <arbiter>`, then:
+ *
+ *   - **CONTINUE** when the arbiter has a `work/<slug>` ref AHEAD of main (a
+ *     `requeue` kept it): switch onto that kept branch (a local tracking branch
+ *     off `<arbiter>/work/<slug>`) and REBASE it onto the freshly-fetched
+ *     `<arbiter>/main` at onboard-time, so the agent builds on a CURRENT base
+ *     (ADR §10: rebase, not merge). A CLEAN rebase continues; a CONFLICTING
+ *     rebase is aborted (never auto-resolved) and reported so the caller routes
+ *     to needs-attention. The rebased tip is published to the already-pushed
+ *     work branch with `--force-with-lease` on the WORK branch only (a requeued
+ *     item is unshared) — NEVER `--force` to main (§11).
+ *   - **FRESH** otherwise (no kept branch — a first attempt, or a
+ *     `requeue --reset` deleted it): `git switch -c work/<slug> <arbiter>/main`
+ *     (today's behaviour). If the branch already exists LOCALLY (a re-run /
+ *     resume) plain-switch to it.
  */
 async function switchToWorkBranch(params: {
 	slug: string;
@@ -351,29 +425,138 @@ async function switchToWorkBranch(params: {
 	cwd: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
-}): Promise<string> {
-	const {slug, arbiter, cwd, env} = params;
+}): Promise<SwitchResult> {
+	const {slug, arbiter, cwd, env, note} = params;
 	const branch = `work/${slug}`;
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 
-	// Prefer creating the branch off the latest arbiter main (it includes the
-	// claim move). If it already exists locally, plain-switch to it.
+	// CONTINUE-detection (shared with the job-worktree path): does the arbiter
+	// have a `work/<slug>` ref AHEAD of main? In a normal clone the refs are the
+	// remote-tracking `<arbiter>/work/<slug>` and `<arbiter>/main`.
+	const ahead = branchAheadOf(
+		cwd,
+		`${arbiter}/${branch}`,
+		`${arbiter}/main`,
+		env,
+	);
+	if (ahead) {
+		return continueFromKeptBranch({slug, arbiter, cwd, env, note});
+	}
+
+	// FRESH cut: prefer creating the branch off the latest arbiter main (it
+	// includes the claim move). If it already exists locally, plain-switch to it.
 	const created = await gitSoft(
 		['switch', '--quiet', '-c', branch, `${arbiter}/main`],
 		cwd,
 		env,
 	);
 	if (created.status === 0) {
-		return branch;
+		return {branch, continued: false, rebaseConflict: false};
 	}
 	const switched = await gitSoft(['switch', '--quiet', branch], cwd, env);
 	if (switched.status === 0) {
-		return branch;
+		return {branch, continued: false, rebaseConflict: false};
 	}
 	throw new StartUsageError(
 		`failed to switch to ${branch}: ${created.stderr.trim() || switched.stderr.trim()}`,
 	);
+}
+
+/**
+ * CONTINUE onto a kept arbiter `work/<slug>`: switch onto it (resetting any
+ * stale local branch to the arbiter tip), rebase onto the freshly-fetched
+ * `<arbiter>/main`, and — on a CLEAN rebase — update the already-pushed work
+ * branch with `--force-with-lease` on the WORK branch only (never main, §11). A
+ * CONFLICTING rebase is aborted and reported (`rebaseConflict: true`).
+ */
+async function continueFromKeptBranch(params: {
+	slug: string;
+	arbiter: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<SwitchResult> {
+	const {slug, arbiter, cwd, env, note} = params;
+	const branch = `work/${slug}`;
+	note(`Continuing '${slug}' from the kept ${arbiter}/${branch} (requeue).`);
+
+	// Land the local work branch ON the kept arbiter tip (force-reset a stale
+	// local branch so we continue the SAME single branch, not a divergent copy).
+	await gitHard(
+		['switch', '--quiet', '-C', branch, `${arbiter}/${branch}`],
+		cwd,
+		env,
+	);
+
+	// REBASE onto the freshly-fetched main at onboard-time (§10: rebase, not
+	// merge) so the agent builds on a CURRENT base. Conflict → aborted + reported.
+	const rebase = rebaseContinuedBranchOntoMain(cwd, `${arbiter}/main`, env);
+	if (rebase.kind === 'conflict') {
+		return {branch, continued: true, rebaseConflict: true};
+	}
+
+	// The rebase may have rewritten SHAs vs the already-pushed tip, so updating it
+	// is a non-fast-forward. Reconcile with --force-with-lease on the WORK branch
+	// ONLY (a requeued item is unshared) — NEVER --force, and NEVER to main (§11).
+	// Best-effort: an unreachable arbiter leaves the local rebased branch (the
+	// agent still works on a current base; complete's push handles it later).
+	await gitSoft(
+		['push', arbiter, `${branch}:${branch}`, `--force-with-lease=${branch}`],
+		cwd,
+		env,
+	);
+	return {branch, continued: true, rebaseConflict: false};
+}
+
+/**
+ * Route a CONTINUE rebase conflict to needs-attention (the §10 path): the kept
+ * branch's commits did not replay cleanly onto the current main, so a human must
+ * resolve (or `requeue --reset`). We cut a temp branch off `<arbiter>/main`
+ * (which holds the item in `in-progress/` after the claim) and drive the
+ * needs-attention transition through the SAME seam every bounce uses — recording
+ * the reason and surfacing it on the arbiter's main — then return to a clean
+ * state. Mirrors `startFromNeedsAttention`'s temp-branch pattern.
+ */
+async function routeContinueConflict(params: {
+	slug: string;
+	arbiter: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<void> {
+	const {slug, arbiter, cwd, env, note} = params;
+	const reason =
+		`continuing the kept ${arbiter}/work/${slug}: rebase onto ${arbiter}/main ` +
+		'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
+		'main, or `requeue --reset` to discard and start fresh';
+	note(reason);
+	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+	const startRef =
+		(
+			await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
+		).stdout.trim() ||
+		(await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
+	const tempBranch = `agent-runner/continue-conflict-${slug}`;
+	await gitHard(
+		['switch', '--quiet', '-C', tempBranch, `${arbiter}/main`],
+		cwd,
+		env,
+	);
+	try {
+		ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			// Surface on the arbiter's main (cross-machine visible), the §10 path.
+			arbiter,
+			env,
+			note,
+		});
+	} finally {
+		await gitSoft(['switch', '--quiet', startRef], cwd, env);
+		await gitSoft(['branch', '-D', tempBranch], cwd, env);
+	}
 }
 
 /** If HEAD is a `work/<slug>` branch, return `<slug>`; else ''. */

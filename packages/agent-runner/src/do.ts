@@ -240,6 +240,18 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	if (started.outcome === 'contended') {
 		return {exitCode: 3, outcome: 'contended', slug, message: started.message};
 	}
+	if (started.outcome === 'needs-attention') {
+		// A CONTINUE rebase conflict (kept branch did not replay onto the current
+		// main) was routed to needs-attention by `start` (the §10 path). Surface it
+		// verbatim — the work did NOT onboard; the runner owns the bounce.
+		return {
+			exitCode: 1,
+			outcome: 'needs-attention',
+			slug,
+			branch: started.branch,
+			message: started.message,
+		};
+	}
 	if (started.exitCode !== 0) {
 		// refused (in-progress without --resume, done/absent, not-ready) or a
 		// usage/environment error: surface verbatim. `do` does not force-resume an

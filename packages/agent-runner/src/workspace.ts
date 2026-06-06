@@ -1,11 +1,15 @@
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {git} from './git.js';
+import {git, run} from './git.js';
 import {
 	encodeRepoKey,
 	ensureMirror,
 	type EnsureMirrorResult,
 } from './repo-mirror.js';
+import {
+	branchAheadOf,
+	rebaseContinuedBranchOntoMain,
+} from './continue-branch.js';
 import {type HarnessRecord} from './harness.js';
 
 /**
@@ -137,6 +141,19 @@ export interface Job {
 	/** The hub-mirror result this job was cut from. */
 	mirror: EnsureMirrorResult;
 	/**
+	 * True iff this job CONTINUED a kept arbiter `work/<slug>` branch (a requeue)
+	 * rather than cutting fresh off main — the worktree was cut from that branch
+	 * and rebased onto the freshly-fetched main at onboard-time (ADR §10).
+	 */
+	continued: boolean;
+	/**
+	 * True iff a CONTINUE rebase onto fresh main CONFLICTED (aborted, never
+	 * auto-resolved). The caller (`run`'s pipeline / `do --remote`) routes the
+	 * item to needs-attention via the §10 path; the worktree is left on the
+	 * un-rebased kept branch as the never-lose-work signal.
+	 */
+	continueRebaseConflict: boolean;
+	/**
 	 * Remove the job's worktree + work branch from the hub (`git worktree remove`
 	 * + prune; never a bare `rm -rf`, ADR §4). NOTE: the SAFE-to-delete predicate
 	 * (ADR §4) is owned by the `gc` slice — this is only the mechanical teardown
@@ -171,14 +188,55 @@ export function createJob(options: CreateJobOptions): Job {
 	const branch = `work/${slug}`;
 	const dir = jobWorktreePath(options.workspacesDir, mirror.url, slug);
 
-	// Clear any stale registration for this work-id (idempotent re-create): a
-	// leftover worktree dir or branch from a prior crashed run would block the
-	// `worktree add`. We use git's own removal, never a bare rm -rf (ADR §4).
-	clearStale(mirror.path, dir, branch, env);
+	// CONTINUE-detection (shared with the in-place path, ADR §14 keystone): after
+	// `ensureMirror`'s mirror-style fetch (`+refs/heads/*:refs/heads/*`), a kept
+	// arbiter `work/<slug>` lands as a LOCAL head `work/<slug>` in the bare mirror.
+	// If it is AHEAD of `main` (a requeue kept it), CONTINUE from it; otherwise cut
+	// FRESH off main (the common case — a first attempt, or `requeue --reset` deleted
+	// it).
+	const continueFromKept = branchAheadOf(mirror.path, branch, 'main', env);
+	let continued = false;
+	let continueRebaseConflict = false;
 
-	// Cut the worktree OUTSIDE the hub, on a fresh per-slug branch off the
-	// freshly-fetched mirror main. `--force` is not used: the branch is unique.
-	git(['worktree', 'add', '-b', branch, dir, 'main'], mirror.path, {env});
+	if (continueFromKept) {
+		// Clear ONLY a stale worktree DIR (never the branch we are continuing), then
+		// cut the worktree FROM the kept branch (not fresh off main).
+		clearStaleWorktreeOnly(mirror.path, dir, env);
+		git(['worktree', 'add', dir, branch], mirror.path, {env});
+		continued = true;
+
+		// REBASE the continued branch onto the freshly-fetched mirror main at
+		// onboard-time (ADR §10: rebase, not merge) so the agent builds on a CURRENT
+		// base. A CLEAN rebase → update the already-pushed arbiter tip with
+		// --force-with-lease on the WORK branch ONLY (a requeued item is unshared) —
+		// NEVER --force, NEVER to main (§11). A CONFLICT → aborted (never
+		// auto-resolved) + flagged so the caller routes to needs-attention.
+		const rebase = rebaseContinuedBranchOntoMain(dir, 'main', env);
+		if (rebase.kind === 'conflict') {
+			continueRebaseConflict = true;
+		} else {
+			run(
+				'git',
+				[
+					'push',
+					'origin',
+					`${branch}:${branch}`,
+					`--force-with-lease=${branch}`,
+				],
+				dir,
+				{env},
+			);
+		}
+	} else {
+		// Clear any stale registration for this work-id (idempotent re-create): a
+		// leftover worktree dir or branch from a prior crashed run would block the
+		// `worktree add`. We use git's own removal, never a bare rm -rf (ADR §4).
+		clearStale(mirror.path, dir, branch, env);
+
+		// Cut the worktree OUTSIDE the hub, on a fresh per-slug branch off the
+		// freshly-fetched mirror main. `--force` is not used: the branch is unique.
+		git(['worktree', 'add', '-b', branch, dir, 'main'], mirror.path, {env});
+	}
 
 	const record: JobRecord = {
 		slug,
@@ -199,6 +257,8 @@ export function createJob(options: CreateJobOptions): Job {
 		recordPath,
 		record,
 		mirror,
+		continued,
+		continueRebaseConflict,
 		dispose() {
 			git(['worktree', 'remove', '--force', dir], mirror.path, {env});
 			pruneAndDropBranch(mirror.path, branch, env);
@@ -261,6 +321,31 @@ function clearStale(
 		}
 	}
 	pruneAndDropBranch(mirrorPath, branch, env);
+}
+
+/**
+ * Clear ONLY a stale worktree DIR (and prune dangling registrations) — WITHOUT
+ * dropping the branch. Used on the CONTINUE path so the kept `work/<slug>`
+ * branch (the durable requeue artifact) is NEVER nuked while a leftover worktree
+ * dir from a prior crashed attempt is still cleared so `worktree add` succeeds.
+ */
+function clearStaleWorktreeOnly(
+	mirrorPath: string,
+	dir: string,
+	env: NodeJS.ProcessEnv | undefined,
+): void {
+	if (existsSync(dir)) {
+		try {
+			git(['worktree', 'remove', '--force', dir], mirrorPath, {env});
+		} catch {
+			// fall through to prune below
+		}
+	}
+	try {
+		git(['worktree', 'prune'], mirrorPath, {env});
+	} catch {
+		// best-effort
+	}
 }
 
 /** Prune dangling worktree registrations + delete the work branch if present. */
