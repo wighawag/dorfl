@@ -7,6 +7,17 @@ sliceAfter: [auto-slice, runner-in-ci]
 
 > **Launch snapshot, not maintained.** Source material for slicing; once sliced,
 > technical detail moves into the slices and durable rationale into `docs/adr/`.
+>
+> **SUBSUMED by `issue-intake` (2026-06-06) — do NOT slice standalone.** A
+> maintainer discussion concluded CI cannot know upfront whether an issue should
+> become a PRD or slices, so the front-door is ONE agent-decided entry point
+> (`work/prd/issue-intake.md`) of which a committed PRD is just ONE of two outcomes.
+> This PRD is now a **building block** that `issue-intake` consumes (the issue
+> seam, trigger/auth policy, the unified conversation rule, and `Refs #N` +
+> folder-native loop-closure all originate here and are reused verbatim). Slice it
+> only THROUGH `issue-intake` (which is `sliceAfter` this one), not on its own —
+> whether it is fully absorbed or kept as a referenced foundation is an open
+> question resolved when slicing `issue-intake`.
 
 ## Problem Statement
 
