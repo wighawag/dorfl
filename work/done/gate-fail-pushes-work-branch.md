@@ -66,6 +66,13 @@ Two changes:
       arbiter has `work/<slug>` after a gate-fail and that `requeue`-continue from a
       FRESH clone lands on the branch with the aborted wip present (mirrors PR #8's
       agent-fail recovery test, for the gate-fail case).
+- [ ] (Folded in) The autonomous INTEGRATE-TIME REBASE-CONFLICT bounce in `run`
+      (`Integrator.integrateWithRebase` → needs-attention) ALSO pushes the work
+      branch (the aborted, pre-rebase tip), same as the gate-fail bounce — so a
+      `run`-driven conflict on a multi-machine fleet is cross-machine recoverable
+      too. A test proves the branch is on the arbiter after the conflict (and the
+      worktree is reaped, ADR §4). (`do`/`complete`'s rebase-conflict path is
+      covered alongside its gate-fail path.)
 - [ ] The HUMAN `complete` path (no `surfaceArbiter`) is UNCHANGED — local-only, no
       branch push (the existing autonomous-vs-human divergence test still passes).
 - [ ] The false `src/run.ts` comment (≈L366) is corrected: the seam surfaces the

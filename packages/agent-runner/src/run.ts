@@ -436,6 +436,19 @@ async function runOneItem(
 				arbiter: tree.arbiterRemote,
 				env: ctx.env,
 			});
+			// Push the work/<slug> branch so the SAVED work travels cross-machine and a
+			// requeue (continue) can recover it (continue-detection reads
+			// <arbiter>/work/<slug> ahead of main) — parity with the red-gate bounce
+			// above and `saveAgentFailure` in do.ts. The conflicting rebase was ABORTED
+			// (ADR §10), so the branch is at its pre-rebase tip (the agent's work as
+			// left, un-rebased); the next claim's onboard-time rebase re-attempts it and
+			// re-routes here if it still conflicts. Without this, a `run` integrate-time
+			// conflict on a multi-machine fleet strands the (green-but-unrebased) work
+			// on this machine's retained worktree — unreachable cross-machine, the very
+			// loss §14's branch-is-the-durable-artifact model exists to prevent.
+			// Best-effort: an unreachable arbiter leaves the retained worktree + the
+			// main surface standing.
+			await pushWorkBranch(tree.dir, tree.arbiterRemote, slug, ctx.env);
 			return {...base, status: 'needs-attention', detail: outcome.reason};
 		}
 
