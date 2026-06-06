@@ -243,8 +243,19 @@ multiple independent passes live in the idea file; do not duplicate here.)
 The Gate-2 slice has been emitted: **`work/backlog/review-gate-pr.md`** (the
 PR/code review gate on the `do`/`complete` pipeline — run review after `verify`,
 approve→integrate, block→needs-attention, per-repo `reviewPr`/`autoMerge`/
-`reviewModel`/`reviewMaxRounds`). This PRD is **deliberately NOT marked `sliced:`**
-because two scopes remain to be sliced as named follow-ups:
+`reviewModel`/`reviewMaxRounds`). A supporting slice was also emitted:
+**`work/backlog/harness-agent-output.md`** — the harness seam had no channel for an
+agent invocation's OUTPUT (only `ok`/liveness/`stderr`), so Gate 2 could not read
+the review verdict live. Resolved as **Option C** (2026-06-06, after a pi-vs-opencode
+research pass): each adapter extracts the final assistant message at launch and
+returns it in `LaunchResult.output` (pi from its `.jsonl`, opencode from its
+stdout-stream). `review-gate-pr` FUNCTIONS live (real `reviewPr: on`) only once
+`harness-agent-output` lands — though it does not formally `blockedBy` it (the gate
+is correct in isolation; the output-read is the activation). See also
+`work/observations/pi-harness-jsonl-reliance.md` (the `.jsonl`-scraping debt).
+
+This PRD is **deliberately NOT marked `sliced:`** because two scopes remain to be
+sliced as named follow-ups:
   - **`review-gate-spec` (Gate 1)** — spec/slice review after auto-slicing (guards
     the `autoslice-*` chain). Slice when that chain is being built.
   - **`review-gate-pr-comment`** — post the Gate-2 verdict AS a GitHub PR
