@@ -238,6 +238,22 @@ multiple independent passes live in the idea file; do not duplicate here.)
   review after auto-slicing) is DEFERRED** — it guards the `autoslice-*` chain,
   not the build-backlog drain, so it is a later slice.
 
+### PARTIALLY SLICED 2026-06-06 (NOT fully sliced — no `sliced:` marker yet)
+
+The Gate-2 slice has been emitted: **`work/backlog/review-gate-pr.md`** (the
+PR/code review gate on the `do`/`complete` pipeline — run review after `verify`,
+approve→integrate, block→needs-attention, per-repo `reviewPr`/`autoMerge`/
+`reviewModel`/`reviewMaxRounds`). This PRD is **deliberately NOT marked `sliced:`**
+because two scopes remain to be sliced as named follow-ups:
+  - **`review-gate-spec` (Gate 1)** — spec/slice review after auto-slicing (guards
+    the `autoslice-*` chain). Slice when that chain is being built.
+  - **`review-gate-pr-comment`** — post the Gate-2 verdict AS a GitHub PR
+    review/comment via a provider seam (the "more visible" property). Blocked on a
+    provider/PR-comment seam, which does NOT exist in `src/` today. Slice once that
+    seam lands.
+Add the `sliced:` marker (and do the one-time PRD trim) only once all three are
+sliced. Until then this PRD stays the source for the remaining two.
+
 ## Out of Scope
 
 - The auto-slicer itself (that is `auto-slice`; this PRD adds the review STEP that
