@@ -24,9 +24,37 @@ NOT a new lock mechanism.
   `claim-cas` or push `main` directly (that reintroduces the direct-`main`
   coupling the seam removed).
 - **`work/slicing/`** is the in-progress folder for the slicing operation
-  (status = folder, consistent with the contract). Releasing the lock = moving the
-  PRD back to `work/prd/<slug>.md` (the command does this on success/failure; this
-  slice provides the lock + release primitives).
+  (status = folder, consistent with the contract). It is a **transient HELD LOCK**,
+  NOT a resting/post-slice state: releasing the lock = moving the PRD back to
+  `work/prd/<slug>.md` (the command does this on success/failure; this slice
+  provides the lock + release primitives). After a successful slice the PRD is
+  back in `work/prd/` and `slicing/` is empty — sliced-ness is recorded by the
+  PRD's `sliced:` frontmatter marker, never by residence in `slicing/`.
+  > **DRIFT to reconcile (spotted 2026-06-06):** `src/ledger-read.ts`
+  > (`PrdExistence`) currently comments `work/slicing/<slug>.md` as the PRD's
+  > *"slicing record"* that exists *"once sliced"* — i.e. it reads `slicing/` as a
+  > resting post-slice state. That contradicts this lock-only semantic (the PRD
+  > returns to `prd/`, so nothing rests in `slicing/`). Reconcile when building:
+  > `slicing/` means "a slice is IN FLIGHT (lock held)," not "has been sliced."
+  > Fix the `ledger-read` comment/`slicingFile` doc accordingly (the field stays —
+  > it just means "a lock is currently held," which the slug-namespace resolver
+  > may still want to detect).
+- **Read-stability / concurrent PRD EDITS (the real gap, not just double-slicing):**
+  the lock serialises two *slicers*, but a human (or another agent) can EDIT the
+  PRD body while a slice is in flight, producing backlog slices derived from stale
+  content — a SILENT drift. Two defences, both via the existing CAS/seam (no new
+  mechanism), per `work/observations/slicing-lock-does-not-stabilise-prd-content.md`:
+  - **(A) `slicing/`-absence-from-`prd/` is the hands-off signal.** While locked
+    the PRD lives at `work/slicing/<slug>.md`, not `work/prd/`; document that a PRD
+    in `slicing/` is held — edit it after it returns to `prd/` (same folder-as-
+    signal as a claimed slice leaving `backlog/`).
+  - **(B) Release must REBASE against current arbiter `main`, not force-restore.**
+    If a concurrent edit landed, the `slicing → prd` release conflicts → the
+    slicing is stale → fail loud (re-slice or route the PRD to
+    `needs-attention/`). NEVER silently overwrite the edit or emit stale slices.
+  - The `needsAnswers`-flip is the human's edit-handshake (the gate is
+    `needsAnswers !== true`); a thin command for it is a separate idea
+    (`work/ideas/folder-taxonomy-and-prd-edit-handshake.md`) — out of scope here.
 - **Human path needs no lock:** a human slicing locally with no agent running has
   no contention and may slice on `main` directly — the lock is mandatory for the
   agent, optional for the human (parallel to "the runner never skips verify; the
@@ -45,7 +73,15 @@ release back to `work/prd/`); the orchestrating command is a later slice.
       the established claim-CAS race pattern.)
 - [ ] The lock goes THROUGH the ledger-transition write seam (no raw `claim-cas` /
       direct `main` push).
-- [ ] Release moves the PRD back `work/slicing/ → work/prd/`.
+- [ ] Release moves the PRD back `work/slicing/ → work/prd/` by REBASING against
+      current arbiter `main` (NOT a force-restore): a concurrent PRD edit makes the
+      release CONFLICT → the slicing is treated as stale and FAILS LOUD (re-slice
+      or route to `needs-attention/`); it never silently overwrites the edit or
+      emits stale slices. (Tested: a slicer holds the lock, a second writer pushes
+      a PRD-body edit, the release detects it and does not produce stale slices.)
+- [ ] `slicing/` is documented + treated as a transient HELD LOCK, not a resting
+      state: after success the PRD is back in `prd/`, `slicing/` is empty, and the
+      `ledger-read` "slicing record" drift (above) is reconciled.
 - [ ] Race/concurrency tests live in the NON-PARALLEL vitest project (no
       file-parallelism flakiness; no retry-masking).
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
@@ -62,6 +98,10 @@ release back to `work/prd/`); the orchestrating command is a later slice.
 > slice — provide the lock + release primitives only).
 >
 > READ FIRST: `work/prd/auto-slice.md` (the lock design + `work/slicing/` folder),
+> `work/observations/slicing-lock-does-not-stabilise-prd-content.md` (the
+> read-stability gap this slice must close: lock serialises slicing, NOT PRD
+> editing — release-by-rebase + fail-loud + `slicing/`-as-hands-off, and the
+> `ledger-read` "slicing record" drift to reconcile),
 > the done file for `ledger-write-seam` + the write-seam module it added (you
 > acquire/release the lock THROUGH the seam's transition machinery — a `slicing`
 > transition kind or the claim primitive it exposes; do NOT call raw `claim-cas`
@@ -71,14 +111,21 @@ release back to `work/prd/`); the orchestrating command is a later slice.
 > Implement: acquire = race a `git mv work/prd/<slug>.md → work/slicing/<slug>.md`
 > micro-commit via the seam CAS, on a branch name that cannot collide with
 > `work/<slug>` build claims; winner holds the lock, loser gets exit-2 + backs off.
-> release = move the PRD back `work/slicing/ → work/prd/`. The human path may slice
-> on `main` without the lock (the command wires that choice; here just don't make
-> the lock mandatory for a no-contention human).
+> release = move the PRD back `work/slicing/ → work/prd/` by REBASING against
+> current `main` (NOT force-restore) so a concurrent PRD edit makes release CONFLICT
+> → fail loud (stale slicing → re-slice / `needs-attention/`), never silent stale
+> slices. `slicing/` is a transient HELD lock, not a resting state (PRD returns to
+> `prd/`; sliced-ness = the `sliced:` marker) — reconcile the `ledger-read`
+> "slicing record" comment accordingly. The human path may slice on `main` without
+> the lock (the command wires that choice; here just don't make the lock mandatory
+> for a no-contention human).
 >
 > TDD with vitest against throwaway repos + a local `--bare` arbiter (the claim
-> race pattern): a simultaneous two-slicer race shows exactly one winner; the loser
-> gets exit-2. Race tests in the NON-PARALLEL project. "Done" = acceptance criteria
-> met and the gate green.
+> race pattern): (1) a simultaneous two-slicer race shows exactly one winner, the
+> loser gets exit-2; (2) a slicer holds the lock, a second writer pushes a PRD-body
+> edit, and release detects the conflict → fails loud, emits no stale slices. Race
+> tests in the NON-PARALLEL project. "Done" = acceptance criteria met and the gate
+> green.
 
 ---
 
