@@ -2,6 +2,7 @@
 title: issue-intake — the issue front-door, slices-first: 1 ask → 1 slice; needs >1 slice → a PRD (in-thread conversation, stop there); unrelated → split into N issues
 slug: issue-intake
 humanOnly: true
+needsAnswers: true
 sliceAfter: [auto-slice, runner-in-ci, issue-to-prd]
 ---
 
@@ -189,12 +190,37 @@ built as a separate mode (recorded here so it is not relitigated).
   the slicing of. Per-slice: the pure outcome-branch + author-trust resolver +
   "emit via seam" wiring is agent-buildable; the auth/seam adapter and the
   auto-accept policy lean `humanOnly`.
-- **`needsAnswers`: none open at launch.** The earlier decide/execute-shape
-  question (one agent vs two-step) dissolved: with slices-first + a sharp
-  count-based PRD trigger + CI stopping at the PRD, the conversation agent simply
-  resolves to one of three outcomes and the runner branches on the verdict (the
-  same shape `issue-to-prd` already uses). If a slice surfaces an open question,
-  flag it then.
+- **`needsAnswers`: true — ONE open question (raised 2026-06-06, batch-qa).** The
+  earlier decide/execute-shape question (one agent vs two-step) dissolved (see
+  below). What remains OPEN is the **author-trust resolver's shape + ownership**
+  (it ties to `review` Q4, also open):
+  - **OPEN — author-trust resolver.** The resolver is declared SHARED with
+    `review`'s `autoMerge`-on-approve ("define it once, consumed by both"), but it
+    is currently UNOWNED across two un-sliced PRDs. Maintainer steer (2026-06-06):
+    the trust is fundamentally about the **issue author**, BUT issue-intake must
+    also be processable when a **repo owner / maintainer issues a `/command` in an
+    issue comment** — i.e. the authorizing actor (the trigger-comment author) can
+    differ from and override the issue opener. So the resolver's inputs are at
+    least *(issue-author association) × (trigger-comment author association) ×
+    (request channel: command vs every-issue) × (repo policy)*. STILL TO DECIDE:
+    the exact resolver signature, and **who BUILDS it** — a single foundational
+    slice both `issue-intake` and `review` `blockedBy`, or one owns it and the
+    other consumes. Resolve this TOGETHER with `review` Q4 (same primitive, the
+    two answers must agree on one owner) before slicing this PRD.
+  - *(Resolved/closed:)* the decide/execute-shape question — with slices-first + a
+    sharp count-based PRD trigger + CI stopping at the PRD, the conversation agent
+    resolves to one of three outcomes and the runner branches on the verdict (the
+    same shape `issue-to-prd` already uses).
+
+### Slice-readiness notes (resolved 2026-06-06, batch-qa)
+
+- **Slice ORDER: issue-intake is sliced LAST of the chain** — after BOTH
+  `runner-in-ci` and `issue-to-prd` are sliced (its `sliceAfter` names both, plus
+  the already-sliced `auto-slice`). Not this cycle. It reuses `issue-to-prd`'s
+  seam/conversation slugs and needs `runner-in-ci`'s `install-ci` slugs.
+- **Blocked from slicing by the open author-trust question above** (not just by
+  order): the resolver is a core deliverable this PRD's slices reference, so its
+  shape + owner must be pinned (jointly with `review` Q4) first.
 
 ## Out of Scope
 

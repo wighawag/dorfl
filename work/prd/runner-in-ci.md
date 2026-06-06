@@ -128,12 +128,39 @@ Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide 
 
 - **`humanOnly: true` (PRD-level, DECIDED):** this is CI/auth/secrets plumbing
   that lands GitHub Actions workflows and sets repository secrets — a
-  security-sensitive, infrastructure-shaping change a human should drive. So the
-  slicing of this PRD is human-led, and most covering slices should also be
-  `humanOnly` (especially anything that writes workflows or touches secrets).
+  security-sensitive, infrastructure-shaping change a human should drive. **The
+  PRD-level `humanOnly` does NOT propagate to the slices** (resolved 2026-06-06,
+  batch-qa): it means only that a human drove the SLICING of this PRD. Each
+  slice's own `humanOnly` is decided by `to-slices` from building that slice —
+  NOT inherited wholesale from this PRD. (A pure deterministic generator with a
+  `--fake`-snapshot test may well be agent-buildable; a workflow-writing /
+  secret-touching slice will lean `humanOnly` — but that is `to-slices`' call,
+  per-slice.)
 - **`needsAnswers`:** none at launch — the auth modes and trigger shape are
   decided (mirror whitesmith). If a slice surfaces an open infra question, flag it
   then.
+
+### Slice-readiness notes (resolved 2026-06-06, batch-qa)
+
+- **The `do` engine surface is only PARTIALLY landed — slices must `blockedBy`
+  the missing pieces.** Verified against the code: `do <slug>` (in-place worker,
+  `--propose`/`--merge` resolved at integrate-time) IS landed and stable in
+  `work/done/` (`do-in-place`). But the shapes this PRD leans on for the CI tick
+  are **NOT yet wired**: auto-pick (`do` with no arg) and `do -n <x>` are the
+  `do-autopick` slice (still in `work/backlog/`); `do prd:<slug>` (the slicing
+  path) is marked "not yet wired" in `cli.ts`; `do --remote` is the `do-remote`
+  slice (still `work/backlog/`). **CI uses the IN-PLACE form only** (the checkout
+  IS the isolation), so `do-remote` is irrelevant here — but a `runner-in-ci`
+  slice whose workflow invokes auto-pick / `-n` / PRD-slicing MUST carry a
+  `blockedBy` on `do-autopick` (and, for the PRD-slicing-in-CI tick, on the
+  relevant `auto-slice` slug). A slice that only wires `do <slug>` needs no such
+  block.
+- **Auto-slice-in-CI is OUT OF SCOPE for `runner-in-ci` slices** (defer). These
+  slices own only the workflow scaffold + auth + the `do` invocation. "`do` also
+  slices ready PRDs" is `auto-slice`/`do` behaviour owned elsewhere — a
+  `runner-in-ci` slice does not BUILD it, it only (optionally) invokes it, gated
+  by the `blockedBy` above. (Consistent with the existing Out-of-Scope line
+  "Auto-slicing of PRDs (that is `auto-slice`)".)
 
 ## Out of Scope
 

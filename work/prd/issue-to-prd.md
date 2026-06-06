@@ -162,6 +162,20 @@ ends by committing a PRD.
 - **`needsAnswers`:** none open at launch — trigger spectrum, the unified
   conversation rule, slug/`issue:` handling, and option-(iii) closure are decided.
 
+### Slice-readiness notes (resolved 2026-06-06, batch-qa)
+
+- **Slice ORDER (respect `sliceAfter`): `runner-in-ci` is sliced FIRST, then this
+  PRD.** `auto-slice` is already sliced; `runner-in-ci` is NOT yet sliced, so this
+  PRD is not slice-ready this cycle (its slices need runner-in-ci's
+  `install-ci`/auth slugs to exist to reference in `blockedBy`). Do not relax
+  `sliceAfter` to slice against planned slugs — order it.
+- **The "is this PRD complete?" query is a DELIVERABLE of this PRD's slices** (it
+  does not exist in the codebase today — verified 2026-06-06: no PRD-complete
+  predicate in `packages/agent-runner/src`). It is a pure read-only `work/`-folder
+  function (all `prd:<slug>` slices in `work/done/`, ≥1) that the merge-to-main
+  close-glue consumes; agent-buildable. When slicing, re-check `work/done/` first
+  in case a later slice already landed it; otherwise cut it as its own slice.
+
 ## Out of Scope
 
 - Runner-in-CI packaging (that is `runner-in-ci`).

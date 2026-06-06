@@ -2,6 +2,7 @@
 title: review — a model-driven review role, as TWO complementary gates (spec review + PR/code review), each independently on/off, with per-repo auto-merge-on-approve
 slug: review
 humanOnly: true
+needsAnswers: true
 sliceAfter: [auto-slice, runner-in-ci, review-skill]
 ---
 
@@ -192,16 +193,37 @@ multiple independent passes live in the idea file; do not duplicate here.)
   gates: the pure verdict-routing + toggle-resolution + "post via seam" wiring is
   agent-buildable; anything that decides auto-merge policy or touches the §8
   determinism boundary leans `humanOnly`.
-- **`needsAnswers` (open questions for the slicer to resolve, from the idea file):**
-  - **Context isolation** — how separate must the reviewer's context be from the
-    producer's to avoid rubber-stamping (fresh subagent? different model? hard
-    adversarial reframe)? The cheapest thing that actually de-correlates.
-  - **Role vs grilling** — is "grilling" a distinct role from "review", or the same
-    step with an adversarial prompt? (§13 staged both.)
-  - **Iteration bound** — exact `reviewMaxRounds` shape + where exhaustion routes.
-  - **Auto-merge trust model** — does `autoMerge` key only on repo policy, or also
-    on the work's AUTHOR / how it was requested (ties into the `issue-to-slices`
-    author-trust policy)? Decide whether the two share one trust primitive.
+- **`needsAnswers`: true — THREE resolved 2026-06-06 (batch-qa), ONE still open:**
+  - **Context isolation — RESOLVED.** A **fresh-context** reviewer is the floor
+    (a cold read; the `review` skill already insists on this) — enough for now.
+    No different model is MANDATED by default, BUT the `review` step's model is
+    **configurable specifically for reviews** (a per-repo `review` model override,
+    already staged in `execution-substrate-decisions.md` §13) for opt-in stronger
+    de-correlation. So: fresh context + adversarial reframe always; review-model
+    override available per repo.
+  - **Role vs grilling — RESOLVED: SAME STEP.** One `review` role/skill; "grilling"
+    is review with the adversarial reframe dialed up, NOT a second role/seam.
+  - **Iteration bound — RESOLVED.** `reviewMaxRounds` per-repo (resolved flag >
+    per-repo > global > built-in default); on exhaustion **ERROR OUT** and force
+    `needs-attention/` (never silently merge or loop) — matches the Testing
+    Decisions `reviewMaxRounds` bullet.
+  - **Auto-merge trust model — STILL OPEN (the one blocking question).** Maintainer
+    (2026-06-06): an `autoMerge` config alone initially seemed enough, but the
+    shared-primitive point lands — needs more thought on the USER STORIES before
+    deciding. The question: does `autoMerge` key ONLY on repo policy, or also on
+    the work's AUTHOR / how it was requested (the SAME author-trust resolver
+    `issue-intake` uses)? **This is the SAME open primitive as `issue-intake`'s
+    `needsAnswers` (the author-trust resolver + its owner) — resolve the two
+    TOGETHER, with one owning slice both PRDs `blockedBy`.** Until then `review` is
+    not slice-ready on this axis.
+
+### Slice-readiness notes (resolved 2026-06-06, batch-qa)
+
+- **Slice ORDER: `review` is sliced only AFTER `runner-in-ci` is sliced AND the
+  auto-merge-trust question above is resolved.** `auto-slice` ✓ and `review-skill`
+  ✓ are sliced; `runner-in-ci` is NOT yet sliced. So `review` is the most
+  genuinely-blocked PRD in this batch — not this cycle, and likely needs its own
+  later run even after `runner-in-ci` is sliced, to settle the trust primitive.
 
 ## Out of Scope
 
