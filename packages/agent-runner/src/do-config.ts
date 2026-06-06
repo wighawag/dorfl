@@ -60,12 +60,63 @@ export function harnessFlagOverrides(flags: HarnessFlags): PartialConfig {
  * default).
  */
 export function doFlagOverrides(
-	flags: HarnessFlags,
+	flags: HarnessFlags & ReviewFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
-	const overrides = harnessFlagOverrides(flags);
+	const overrides = {
+		...harnessFlagOverrides(flags),
+		// Gate 2 (PR/code review) flags ride the SAME flag-override path so
+		// `--review-pr`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
+		// flag > env > per-repo > global > default, exactly like the harness flags.
+		...reviewFlagOverrides(flags),
+	};
 	if (integration !== undefined) {
 		overrides.integration = integration;
+	}
+	return overrides;
+}
+
+/**
+ * The Gate-2 (PR/code review) CLI flags, offered by `do` AND `complete`
+ * (`--review-pr`/`--no-review-pr`, `--auto-merge`/`--no-auto-merge`,
+ * `--review-model`, `--review-max-rounds`). Both commands resolve them through
+ * the SAME `flag > env > per-repo > global > default` chain as `integration`, so
+ * the mapping lives in ONE place (not a parallel copy per command).
+ */
+export interface ReviewFlags {
+	/** `--review-pr` ⇒ true, `--no-review-pr` ⇒ false, absent ⇒ undefined. */
+	reviewPr?: boolean;
+	/** `--auto-merge` ⇒ true, `--no-auto-merge` ⇒ false, absent ⇒ undefined. */
+	autoMerge?: boolean;
+	/** `--review-model <id>` — the de-correlated review model (routing intent). */
+	reviewModel?: string;
+	/** `--review-max-rounds <n>` — the revise↔review loop bound (parsed to a number). */
+	reviewMaxRounds?: string;
+}
+
+/**
+ * Map the Gate-2 review flags into a {@link PartialConfig} of overrides — the
+ * per-key mapping `do` and `complete` both reuse. Only flags actually present
+ * contribute (absent flag ⇒ absent key), so the override layer never clobbers a
+ * lower-precedence source with `undefined`. `--review-max-rounds` is parsed to a
+ * number; a non-numeric value is dropped (the lower layer / default decides).
+ */
+export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.reviewPr !== undefined) {
+		overrides.reviewPr = flags.reviewPr;
+	}
+	if (flags.autoMerge !== undefined) {
+		overrides.autoMerge = flags.autoMerge;
+	}
+	if (flags.reviewModel !== undefined) {
+		overrides.reviewModel = flags.reviewModel;
+	}
+	if (flags.reviewMaxRounds !== undefined) {
+		const n = Number(flags.reviewMaxRounds);
+		if (flags.reviewMaxRounds.trim() !== '' && !Number.isNaN(n)) {
+			overrides.reviewMaxRounds = n;
+		}
 	}
 	return overrides;
 }

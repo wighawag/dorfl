@@ -10,6 +10,7 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {ledgerWrite} from './ledger-write.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
+import type {ReviewGate} from './review-gate.js';
 import {runAsync} from './git.js';
 
 /**
@@ -55,7 +56,7 @@ export type DoOutcome =
 	| 'completed' // claimed/onboarded → agent → gate green → integrated → exited
 	| 'lost' // claim lost the race — skipped cleanly
 	| 'contended' // claim push kept being rejected
-	| 'needs-attention' // red gate / rebase conflict → surfaced (autonomous)
+	| 'needs-attention' // red gate / rebase conflict / review-block → surfaced (autonomous)
 	| 'agent-failed' // the agent invocation itself errored before the gate — work SAVED + surfaced
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
@@ -100,6 +101,20 @@ export interface DoOptions {
 	verify?: VerifyConfig;
 	/** Review-request provider override (propose mode); auto-detect when unset. */
 	provider?: ReviewProviderName;
+	/**
+	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`):
+	 * threaded VERBATIM into `performComplete` (the gate rides inside the shared
+	 * `do`/`complete` pipeline, so CI inherits it for free). When `reviewPr` is on,
+	 * the `review` SKILL runs as a fresh-context agent AFTER the green `verify` and
+	 * BEFORE the done-move; a `block` maps to the `needs-attention` outcome the same
+	 * way `gate-failed` does (exit 1). `autoMerge`/`reviewModel`/`reviewMaxRounds`
+	 * tune it; `reviewGate` is the injectable seam (production: harness-backed).
+	 */
+	reviewPr?: boolean;
+	autoMerge?: boolean;
+	reviewModel?: string;
+	reviewMaxRounds?: number;
+	reviewGate?: ReviewGate;
 	/**
 	 * The autonomous agent invocation. Tests inject this to edit files directly;
 	 * production wires the harness seam (the prompt-fed, run-to-completion launch
@@ -335,6 +350,15 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		integration: options.integration,
 		verify: options.verify,
 		provider: options.provider,
+		// Gate 2 (PR/code review) rides INSIDE `complete`: run the `review` SKILL as a
+		// fresh-context agent after the green `verify` (the non-skippable floor) and
+		// before the done-move. A `block` re-uses the same needs-attention surfacing
+		// (`surfaceArbiter`) the red gate does; mapped to `needs-attention` below.
+		reviewPr: options.reviewPr,
+		autoMerge: options.autoMerge,
+		reviewModel: options.reviewModel,
+		reviewMaxRounds: options.reviewMaxRounds,
+		reviewGate: options.reviewGate,
 		// The autonomous failure-surfacing: route stuck items to the arbiter's
 		// main (the `run` semantics), NOT local-only (the human `complete`).
 		surfaceArbiter: arbiter,
@@ -355,10 +379,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	}
 	if (
 		completed.outcome === 'gate-failed' ||
+		completed.outcome === 'review-blocked' ||
 		completed.outcome === 'rebase-conflict'
 	) {
-		// Red gate / rebase conflict — routed to needs-attention (surfaced on the
-		// arbiter). The work did NOT complete; the runner owns the bounce.
+		// Red gate / Gate-2 review block / rebase conflict — routed to needs-attention
+		// (surfaced on the arbiter). A `review-blocked` is mapped HERE the SAME way
+		// `gate-failed` is (the slice's "add a review-blocked terminal the same way /
+		// fold into the existing needs-attention mapping"). The work did NOT complete;
+		// the runner owns the bounce.
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',

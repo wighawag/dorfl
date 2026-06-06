@@ -270,6 +270,22 @@ export {
 } from './verify.js';
 
 export type {
+	ReviewFinding,
+	ReviewVerdict,
+	ReviewGateInput,
+	ReviewGate,
+	HarnessReviewGateOptions,
+} from './review-gate.js';
+export {
+	ReviewParseError,
+	parseReviewVerdict,
+	buildReviewPrompt,
+	harnessReviewGate,
+	formatBlockReason,
+	reviewRoundsExhaustedReason,
+} from './review-gate.js';
+
+export type {
 	RetainReason,
 	ReachableVia,
 	SafetyVerdict,

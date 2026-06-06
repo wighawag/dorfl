@@ -58,6 +58,16 @@ export const REPO_ALLOWED_KEYS = [
 	// (machine paths/commands), so they are rejected below.
 	'model',
 	'harness',
+	// Gate 2 (PR/code review) policy is a genuine repo property (GATES PRD
+	// `work/prd/review.md`), resolved per-repo like `integration`/`allowAgents`:
+	// whether this repo runs Gate 2 (`reviewPr`), whether an approve may auto-merge
+	// (`autoMerge`), which model the review agent runs on (`reviewModel`), and the
+	// revise↔review loop bound (`reviewMaxRounds`). `reviewModel` is routing intent
+	// (not auth), so — like `model` — it is repo-appropriate, not host-only.
+	'reviewPr',
+	'autoMerge',
+	'reviewModel',
+	'reviewMaxRounds',
 ] as const satisfies readonly (keyof Config)[];
 
 /** A key honoured in a per-repo file. */

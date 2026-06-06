@@ -31,7 +31,9 @@ import {
 	harnessFlagOverrides,
 	doFlagOverrides,
 	doNeedsAgentCmd,
+	reviewFlagOverrides,
 } from './do-config.js';
+import {harnessReviewGate} from './review-gate.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
@@ -204,6 +206,10 @@ interface CompleteFlags {
 	skipVerify?: boolean;
 	type?: string;
 	message?: string;
+	reviewPr?: boolean;
+	autoMerge?: boolean;
+	reviewModel?: string;
+	reviewMaxRounds?: string;
 }
 
 interface DoFlags {
@@ -217,6 +223,10 @@ interface DoFlags {
 	piBin?: string;
 	sessionsDir?: string;
 	watch?: boolean;
+	reviewPr?: boolean;
+	autoMerge?: boolean;
+	reviewModel?: string;
+	reviewMaxRounds?: string;
 }
 
 interface GcFlags {
@@ -663,6 +673,30 @@ export function buildProgram(): Command {
 			'--message <summary>',
 			'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
 		)
+		.option(
+			'--review-pr',
+			'run Gate 2 (PR/code review) after verify, before the done-move (overrides config). Resolved flag > per-repo > global > default off.',
+		)
+		.option(
+			'--no-review-pr',
+			'do NOT run Gate 2 this invocation (overrides config)',
+		)
+		.option(
+			'--auto-merge',
+			'on a Gate-2 approve, let a resolved merge proceed autonomously (overrides config; repo policy only). Default off.',
+		)
+		.option(
+			'--no-auto-merge',
+			'do NOT auto-merge on approve (a human merges; --propose semantics)',
+		)
+		.option(
+			'--review-model <id>',
+			'model the Gate-2 review agent runs on (de-correlated from the builder; routing intent). Resolved flag > env > per-repo > global > default.',
+		)
+		.option(
+			'--review-max-rounds <n>',
+			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
+		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug);
@@ -676,7 +710,12 @@ export function buildProgram(): Command {
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
-				flags: flagMode ? {integration: flagMode} : {},
+				// The integrate-time mode AND the Gate-2 review flags ride the SAME
+				// flag > env > per-repo > global > default chain.
+				flags: {
+					...(flagMode ? {integration: flagMode} : {}),
+					...reviewFlagOverrides(flags),
+				},
 			});
 			if (resolved.message) {
 				console.error(`>> ${resolved.message}`);
@@ -691,6 +730,15 @@ export function buildProgram(): Command {
 				noSwitch: flags.switch === false,
 				verify: config.verify,
 				skipVerify: flags.skipVerify,
+				// Gate 2 (PR/code review): when `reviewPr` resolves on, run the `review`
+				// SKILL as a fresh-context agent (the production harness-backed gate)
+				// AFTER the green verify and BEFORE the done-move. The `reviewModel`
+				// override flows to the launch through the existing harness seam.
+				reviewPr: config.reviewPr,
+				autoMerge: config.autoMerge,
+				reviewModel: config.reviewModel,
+				reviewMaxRounds: config.reviewMaxRounds,
+				reviewGate: config.reviewPr ? harnessReviewGate() : undefined,
 				type: flags.type,
 				message: flags.message,
 				// Color the propose-mode next-step block only on an interactive
@@ -752,6 +800,30 @@ export function buildProgram(): Command {
 		.option(
 			'--watch',
 			"stream the agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git)",
+		)
+		.option(
+			'--review-pr',
+			'run Gate 2 (PR/code review) after verify, before the done-move (overrides config). Resolved flag > env > per-repo > global > default off.',
+		)
+		.option(
+			'--no-review-pr',
+			'do NOT run Gate 2 this invocation (overrides config)',
+		)
+		.option(
+			'--auto-merge',
+			'on a Gate-2 approve, let a resolved merge proceed autonomously (overrides config; repo policy only). Default off.',
+		)
+		.option(
+			'--no-auto-merge',
+			'do NOT auto-merge on approve (a human merges; --propose semantics)',
+		)
+		.option(
+			'--review-model <id>',
+			'model the Gate-2 review agent runs on (de-correlated from the builder; routing intent). Resolved flag > env > per-repo > global > default.',
+		)
+		.option(
+			'--review-max-rounds <n>',
+			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
 		)
 		.action(async (rawSlug: string | undefined, flags: DoFlags) => {
 			if (rawSlug === undefined) {
@@ -819,6 +891,18 @@ export function buildProgram(): Command {
 				// `<sessionsDir>/<id>.jsonl` for `--session`. Without this map the key
 				// resolves but never reaches the launch (a silent no-op).
 				sessionsDir: config.sessionsDir,
+				// Gate 2 (PR/code review) rides inside `complete` (so CI inherits it for
+				// free): when `reviewPr` resolves on, run the `review` SKILL as a
+				// fresh-context agent (its OWN harness launch — same adapter + agentCmd,
+				// `reviewModel` via the existing model-routing seam) after the green
+				// verify, before the done-move. A block routes to needs-attention.
+				reviewPr: config.reviewPr,
+				autoMerge: config.autoMerge,
+				reviewModel: config.reviewModel,
+				reviewMaxRounds: config.reviewMaxRounds,
+				reviewGate: config.reviewPr
+					? harnessReviewGate({harness, agentCmd: config.agentCmd})
+					: undefined,
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
 				watch: flags.watch === true,

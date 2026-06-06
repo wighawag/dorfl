@@ -1,6 +1,11 @@
 import {existsSync, mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
+import {
+	type ReviewGate,
+	formatBlockReason,
+	reviewRoundsExhaustedReason,
+} from './review-gate.js';
 import type {ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
@@ -80,6 +85,7 @@ import {formatProposeNextStep, shouldUseColor} from './output.js';
 export type CompleteOutcome =
 	| 'completed' // gated, moved, committed, integrated
 	| 'gate-failed' // the acceptance gate was red (and not skipped)
+	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
 	| 'refused' // nothing to complete (nothing to commit, wrong folder, …)
 	| 'usage-error'; // usage / environment problem
@@ -103,6 +109,42 @@ export interface CompleteOptions {
 	verify?: VerifyConfig;
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
+	/**
+	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`). When
+	 * `true`, after the green `verify` and BEFORE the done-move, run the `review`
+	 * SKILL as a FRESH-CONTEXT agent (its own harness launch) and route its verdict:
+	 * `approve` → proceed to done-move/commit/integrate; `block` → route to
+	 * needs-attention (NEVER merge). `verify` is the non-skippable floor; review is
+	 * a JUDGEMENT gate ON TOP (ADR §8), never a replacement. Default OFF.
+	 */
+	reviewPr?: boolean;
+	/**
+	 * On a Gate-2 `approve`, allow a resolved `merge` integration to proceed
+	 * AUTONOMOUSLY. Repo policy only. Default OFF. A non-`approve` verdict NEVER
+	 * auto-merges. With `reviewPr` on but `autoMerge` off, review still gates but
+	 * the resolved `merge` is DOWNGRADED to `propose` (a human does the merge —
+	 * `--propose` semantics). Ignored unless `reviewPr` is on.
+	 */
+	autoMerge?: boolean;
+	/**
+	 * The model the REVIEW agent runs on (de-correlation from the builder). Flows
+	 * to the review-agent launch through the EXISTING harness seam
+	 * (`LaunchInput.model` / `substituteModel`). Unset ⇒ no forced review model.
+	 */
+	reviewModel?: string;
+	/**
+	 * Bound the revise↔review loop (Gate 2). On exhaustion the gate ERRORS OUT and
+	 * forces needs-attention (never silently merges or loops). Defaults to 2.
+	 */
+	reviewMaxRounds?: number;
+	/**
+	 * The review-gate SEAM (injectable, like `do`'s `agentRunner`): a fresh-context
+	 * review that returns a parsed `{verdict, findings}`. Tests inject a canned
+	 * verdict (no real model); production wires the harness-backed gate
+	 * (`harnessReviewGate`). Required when `reviewPr` is on (a missing gate with
+	 * `reviewPr` on is a usage error — the floor must not be silently skipped).
+	 */
+	reviewGate?: ReviewGate;
 	/** Conventional-commit type for the completion commit. Defaults to `feat`. */
 	type?: string;
 	/** Commit summary. Defaults to the slice `title` minus a leading `slug — `. */
@@ -251,7 +293,9 @@ async function runComplete(
 	const cwd = options.cwd;
 	const env = options.env;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	const mode = options.integration ?? DEFAULT_INTEGRATION;
+	// `let` (not `const`): Gate 2's `autoMerge`-off policy may DOWNGRADE a resolved
+	// `merge` to `propose` on an approve (review gates, a human merges) below.
+	let mode = options.integration ?? DEFAULT_INTEGRATION;
 
 	if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
 		throw new CompleteUsageError('not inside a git repository');
@@ -368,6 +412,101 @@ async function runComplete(
 					: `Acceptance gate failed (exit ${gate.exitCode}); not completing ` +
 						`'${slug}'. Fix the work, or use --skip-verify to override.`,
 			};
+		}
+	}
+
+	// 1b. Gate 2 — the PR/code REVIEW gate (GATES PRD `work/prd/review.md`),
+	//     INSERTED BETWEEN the green `verify` and the done-move. It is a JUDGEMENT
+	//     gate layered ON TOP of the deterministic `verify` floor (ADR §8) — NEVER a
+	//     replacement: `verify` already ran (and is non-skippable), and only on its
+	//     GREEN does control reach here. Runs ONLY when `reviewPr` resolves on.
+	//
+	//     The `review` SKILL runs as a FRESH-CONTEXT agent (its own harness launch,
+	//     the injectable `reviewGate` seam), returning `{verdict, findings}`:
+	//       approve → fall through to the done-move/commit/integrate unchanged;
+	//       block   → route to needs-attention via the SAME machinery the red gate
+	//                 uses (`applyNeedsAttentionTransition`, surfaced on
+	//                 `surfaceArbiter` for the autonomous `do` path), with the
+	//                 blocking findings recorded as the reason, no integrate, exit 1.
+	//     `reviewMaxRounds` bounds the revise↔review loop: the gate is invoked per
+	//     round; a persistent `block` exhausts the rounds and ERRORS OUT to
+	//     needs-attention (never silently merges or loops).
+	if (options.reviewPr) {
+		const reviewGate = options.reviewGate;
+		if (!reviewGate) {
+			// `reviewPr` on with no gate wired is a usage error — the floor must never
+			// be silently skipped. (Production always wires `harnessReviewGate`.)
+			throw new CompleteUsageError(
+				`reviewPr is on but no review gate is configured — cannot run Gate 2 ` +
+					`for '${slug}' (this is a wiring bug; the gate must not be skipped).`,
+			);
+		}
+		const maxRounds = Math.max(1, options.reviewMaxRounds ?? 2);
+		note('Running the PR/code review gate (Gate 2)…');
+		let approved = false;
+		let lastVerdict;
+		for (let round = 1; round <= maxRounds; round++) {
+			const verdict = await reviewGate({
+				slug,
+				cwd,
+				reviewModel: options.reviewModel,
+				round,
+				env,
+			});
+			lastVerdict = verdict;
+			if (verdict.verdict === 'approve') {
+				approved = true;
+				break;
+			}
+			// A `block`: re-review up to `reviewMaxRounds` (a future builder-revise
+			// step plugs in here). A persistent block exhausts the loop → routed below.
+		}
+		if (!approved) {
+			// NON-approve verdict: route to needs-attention via the SAME seam the red
+			// gate uses, NEVER integrate. The reason records the blocking findings AND
+			// (since the loop ran every allowed round without an approve) notes the
+			// `reviewMaxRounds` bound was hit — a single block IS exhaustion when
+			// maxRounds=1, satisfying both "block → findings" and "exhaustion → forced
+			// needs-attention" criteria with one route.
+			const reason =
+				(lastVerdict ? formatBlockReason(lastVerdict) + '\n' : '') +
+				reviewRoundsExhaustedReason(maxRounds);
+			const routed = ledgerWrite.applyNeedsAttentionTransition({
+				cwd,
+				slug,
+				reason,
+				// Same autonomous-vs-human gate as the red-gate path: `do` passes the
+				// arbiter (surface on main + push the branch), the human `complete`
+				// leaves it unset (local-only).
+				arbiter: options.surfaceArbiter,
+				env,
+				note,
+			});
+			const message = routed.moved
+				? `PR/code review (Gate 2) blocked '${slug}'; routed it to ` +
+					'work/needs-attention/ (surfaced by status; the blocking findings are ' +
+					'recorded in the item body). NOT integrated.'
+				: `PR/code review (Gate 2) blocked '${slug}'; NOT integrating.`;
+			note(message);
+			return {
+				exitCode: 1,
+				outcome: 'review-blocked',
+				routedToNeedsAttention: routed.moved,
+				branch,
+				message,
+			};
+		}
+		note(`PR/code review (Gate 2) approved '${slug}'.`);
+		// approve + `autoMerge` OFF → DOWNGRADE a resolved `merge` to `propose`: review
+		// gated (approve), but the autonomous merge is opt-in repo policy, so a human
+		// does the merge (`--propose` semantics). With `autoMerge` ON, the resolved
+		// `merge` proceeds autonomously below. A non-approve never reaches here.
+		if (mode === 'merge' && !options.autoMerge) {
+			note(
+				`autoMerge is off — leaving the merge to a human (proposing '${slug}' ` +
+					'instead of auto-merging an approved review).',
+			);
+			mode = 'propose';
 		}
 	}
 
