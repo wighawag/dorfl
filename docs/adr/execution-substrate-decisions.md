@@ -347,3 +347,56 @@ Decisions:
   (it would be config for capabilities that don't exist yet — speculative
   generality that goes stale). The `model` field is shaped so a later `perRole`
   map layers on without breaking it.
+
+## 14. Recovery model: the branch is the durable artifact; requeue continues by default
+
+A claimed item's **`work/<slug>` branch is the durable artifact**; the job
+worktree (agents' area) is a disposable cache. Recovery of stuck/failed/interrupted
+work flows through the branch + the folder-native surfaces (§4, §12), NOT by a
+human editing the agents'-area worktree. Decisions:
+
+- **One branch per slug, content-named, no versioning.** `work/<slug>` is stable
+  and 1:1 with the slug (the slug-not-counter principle, applied to branches). We
+  do NOT version attempts (`work/<slug>/attempt-2`) — that reintroduces a counter
+  and forces every consumer (claim, integrate, gc, work-on) to learn "which attempt
+  is current". The single branch accumulates across attempts.
+
+- **`requeue` (default) = keep + continue.** Requeue moves the ledger
+  `needs-attention/ → backlog/` and KEEPS the branch; the next claim **continues
+  from the existing `work/<slug>` tip on the arbiter** (not a fresh cut off main).
+  Cross-machine continue works because stuck items push the branch to the arbiter
+  (§12 / `routeToNeedsAttention`). `requeue -m "<note>"` appends a dated human
+  handoff note to the item body, threaded into the continuing agent's prompt
+  (alongside the prior diff + the needs-attention reason). The build agent's prompt
+  gains a CONTINUE block ONLY when continuing (fresh-start path unchanged).
+
+- **`requeue --reset` = discard + fresh.** Deletes the remote branch
+  (`git push <arbiter> --delete work/<slug>` — plain provider-agnostic git, works
+  on a `--bare` arbiter; the ONE deliberate, guarded exception to "never delete the
+  remote branch") and starts the next attempt clean off main. Plain delete (revisit
+  a rename-aside-to-`discarded/` only if a real "undo my reset" need appears).
+
+- **Agent failure SAVES work.** A non-zero agent exit commits + pushes the partial
+  work + routes to `needs-attention` (parity with a gate failure), recoverable via
+  requeue-continue — never a silent drop.
+
+- **No periodic auto-commit/push.** We do NOT periodically commit the agent's
+  working tree to checkpoint against mid-work interruption: a timer-driven
+  `git add -A` would sweep untracked/incomplete artifacts (the precise bug the
+  tree-cleanliness wrapper rule fixed). Work is saved at deliberate transitions
+  (done-move, needs-attention routing), never on a blind timer. A HARD mid-work
+  interruption (kill -9 / machine shutdown with uncommitted edits) is accepted as
+  inherently lossy.
+
+- **Salvage policy (a + permissive-c; b deferred).** The clean recovery path is
+  needs-attention → `requeue` (continue) / `work-on` in the HUMAN area — the
+  agents'-area worktree is never the human's edit surface (the secrets-isolation
+  line, §2/§3). (a) Because stuck/failed runs push the branch, the work is almost
+  always already on the arbiter, so `work-on`/requeue recover it without touching
+  the agents' area — this is the default and covers nearly all cases. (b) A
+  dedicated `salvage` verb (lift an un-pushed retained worktree's branch to the
+  arbiter) is NOT built — the residual gap (committed-but-unpushed work stranded on
+  a vanished machine) is narrow; revisit if it bites. (c) We do NOT forbid a human
+  `cd`-ing into a retained job worktree as a last resort — the goal is that a human
+  NEVER NEEDS to, not that they mustn't; if they do, it works (just keep secrets
+  out of it). Permissive, not prohibitive.
