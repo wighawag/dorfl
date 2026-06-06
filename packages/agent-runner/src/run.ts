@@ -295,6 +295,28 @@ async function runOneItem(
 	try {
 		tree = strategy.prepare({slug, env: ctx.env});
 
+		// 2a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a
+		//     `work/<slug>` whose commits did not replay cleanly onto the current
+		//     main at onboard-time (aborted, never auto-resolved). Route the item to
+		//     needs-attention (surfaced on the arbiter's main, cross-machine visible)
+		//     instead of running the agent on a stale/conflicted base. The retained
+		//     worktree (on the un-rebased kept branch) is the never-lose-work signal.
+		if (tree.continueRebaseConflict) {
+			const reason =
+				`continuing the kept work/${slug}: rebase onto the latest main ` +
+				'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
+				'main, or `requeue --reset` to discard and start fresh';
+			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
+			ledgerWrite.applyNeedsAttentionTransition({
+				cwd: tree.dir,
+				slug,
+				reason,
+				arbiter: tree.arbiterRemote,
+				env: ctx.env,
+			});
+			return {...base, status: 'needs-attention', detail: reason};
+		}
+
 		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
 		//    emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
 		let prompt: string;

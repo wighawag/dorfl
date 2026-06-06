@@ -239,6 +239,8 @@ interface ReturnFlags {
 	config?: string;
 	cwd?: string;
 	arbiter?: string;
+	reset?: boolean;
+	message?: string;
 }
 
 interface RemoteAddFlags {
@@ -936,7 +938,7 @@ export function buildProgram(): Command {
 	program
 		.command('return <slug>')
 		.description(
-			'Return a resolved needs-attention item to the backlog for re-claiming (ADR §12): git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md and commit it. The clean re-queue once a human has resolved the cause, so items do not rot. The recorded reason stays in the body as a durable note.',
+			'Requeue a needs-attention item to the backlog for re-claiming (ADR §12/§14). DEFAULT = keep + continue: git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md and commit it, leaving the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time). --reset = discard + fresh: delete the remote work/<slug> branch FIRST (then the move) so the next claim starts fresh (guarded; never the default). -m/--message appends a dated handoff note to the item body (both modes; append-only). The recorded reason stays in the body as a durable note.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -945,7 +947,15 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--arbiter <remote>',
-			'also push the transition to this arbiter remote (like the done-move)',
+			'also push the transition to this arbiter remote (like the done-move); REQUIRED with --reset (the branch to delete lives there)',
+		)
+		.option(
+			'--reset',
+			'DISCARD the kept work: delete the remote work/<slug> branch FIRST, then move to backlog so the next claim starts FRESH (guarded; a deliberate departure from the never-delete-the-remote-branch invariant). Never the default.',
+		)
+		.option(
+			'-m, --message <note>',
+			'append a dated handoff note to the item body for the next agent (append-only; applies to both default and --reset)',
 		)
 		.action((rawSlug: string, flags: ReturnFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`. (This is
@@ -953,19 +963,25 @@ export function buildProgram(): Command {
 			// it to `requeue` — the guard wiring carries over unchanged.)
 			const slug = resolveSliceOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
-			// Route the return-to-backlog re-queue THROUGH the ledger write seam's
-			// transition (same seam the needs-attention move uses), not the helper.
+			// Route the requeue (default keep+continue / --reset discard / -m handoff)
+			// THROUGH the ledger write seam's transition (same seam the needs-attention
+			// move uses), not the helper.
 			const result = ledgerWrite.applyReturnToBacklogTransition({
 				cwd,
 				slug,
 				arbiter: flags.arbiter,
+				reset: flags.reset,
+				message: flags.message,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (!result.moved) {
 				console.error(`error: ${result.reasonNotMoved}`);
 				process.exit(1);
 			}
-			console.log(`Returned '${slug}' to backlog for re-claiming.`);
+			const how = result.deletedRemoteBranch
+				? ` (--reset: deleted the remote work/${slug} branch; next claim starts fresh)`
+				: ' (kept the work branch; next claim continues from its tip)';
+			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});
 
 	// The REGISTRY command group (ADR §1): the registered set of targets IS the

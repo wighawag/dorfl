@@ -78,6 +78,30 @@ export interface ReturnToBacklogOptions {
 	slug: string;
 	/** The arbiter remote to push the transition to. Optional (see above). */
 	arbiter?: string;
+	/**
+	 * `requeue --reset` (the destructive opt-out): DISCARD the kept work, so the
+	 * NEXT claim starts FRESH. At requeue-time — BEFORE the backlog move — delete
+	 * the remote `work/<slug>` branch on `arbiter`
+	 * (`git push <arbiter> --delete work/<slug>`, plain provider-agnostic git that
+	 * works against a local `--bare` arbiter) and drop any stale LOCAL `work/<slug>`.
+	 * Delete-before-move closes the claim-race window (no backlog item exists while
+	 * the to-be-discarded branch still does). A FAILED delete ABORTS the requeue
+	 * (no backlog move) — the item stays in needs-attention rather than become
+	 * claimable while continuing from a branch you meant to throw away. Requires
+	 * `arbiter`. Explicit/guarded — a deliberate departure from the loud "never
+	 * delete the remote branch" invariant; never on the default (keep+continue)
+	 * path.
+	 */
+	reset?: boolean;
+	/**
+	 * `requeue -m "<note>"` (the handoff note): an optional human steer for the
+	 * NEXT agent. APPENDED (never overwritten) as a dated `## Requeue YYYY-MM-DD`
+	 * section to the item BODY before the move — the ledger file is the durable,
+	 * conflict-safe, cross-machine home (same place the needs-attention reason
+	 * lives). Repeated requeues ACCUMULATE a handoff log. Applies to BOTH modes
+	 * (a steer is relevant even on `--reset`).
+	 */
+	message?: string;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -89,7 +113,9 @@ export interface ReturnToBacklogResult {
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
 	commitMessage?: string;
-	/** When NOT moved, why (e.g. the slug was not in needs-attention). */
+	/** True iff `--reset` deleted the remote `work/<slug>` branch on the arbiter. */
+	deletedRemoteBranch?: boolean;
+	/** When NOT moved, why (e.g. the slug was not in needs-attention, or a failed --reset delete). */
 	reasonNotMoved?: string;
 }
 
@@ -234,6 +260,22 @@ export function routeToNeedsAttention(
  * not rot in needs-attention). The recorded reason block stays in the body as a
  * durable note of what happened; the resolution itself is the human's.
  *
+ * The `requeue` verb's THREE behaviours (ADR §14 / slice
+ * `requeue-continue-and-reset`) are realised here:
+ *   - **default = KEEP + CONTINUE.** The `work/<slug>` branch is left UNTOUCHED;
+ *     it is the durable artifact the next claim CONTINUES from (the continue-
+ *     detection in `continue-branch.ts` feeds both onboarding paths). This
+ *     function only does the ledger move.
+ *   - **`--reset` = DISCARD + FRESH.** When `reset` is set, DELETE the remote
+ *     `work/<slug>` branch on `arbiter` FIRST (+ drop any stale local branch),
+ *     THEN the backlog move. Delete-before-move closes the claim-race window; a
+ *     FAILED delete ABORTS (no backlog move) so the item stays in
+ *     needs-attention. The next claim then finds NO arbiter branch and cuts
+ *     fresh — no special claim-time logic.
+ *   - **`-m "<note>"` = HANDOFF NOTE.** When `message` is set, APPEND a dated
+ *     `## Requeue YYYY-MM-DD` section to the item BODY (append-only; accumulates
+ *     over repeated requeues) for the next agent. Applies to BOTH modes.
+ *
  * Like the move, NEVER throws for the expected "not in needs-attention" case.
  */
 export function returnToBacklog(
@@ -253,6 +295,59 @@ export function returnToBacklog(
 		};
 	}
 
+	// `--reset`: DELETE the remote work branch FIRST (before the backlog move).
+	// Delete-before-move closes the claim-race window. A FAILED delete ABORTS the
+	// requeue (no backlog move) — the item stays in needs-attention rather than
+	// become claimable while continuing from a branch we meant to discard.
+	let deletedRemoteBranch = false;
+	if (options.reset) {
+		if (!options.arbiter) {
+			return {
+				moved: false,
+				reasonNotMoved:
+					`requeue --reset for '${slug}' needs an --arbiter to delete the remote ` +
+					'work branch from; nothing deleted, item left in needs-attention.',
+			};
+		}
+		const branch = `work/${slug}`;
+		// Plain provider-agnostic delete — works against a local `--bare` arbiter.
+		// Explicit/guarded departure from the "never delete the remote branch"
+		// invariant; only on the `--reset` path, never the default.
+		const del = gitSoftRun(
+			['push', options.arbiter, '--delete', branch],
+			cwd,
+			env,
+		);
+		if (del.status !== 0) {
+			const stderr = del.stderr.trim();
+			// Tolerate "remote ref does not exist" (already gone): treat as deleted.
+			const alreadyGone = /remote ref does not exist|unable to delete/i.test(
+				stderr,
+			);
+			if (!alreadyGone) {
+				const message =
+					`requeue --reset for '${slug}': failed to delete the remote branch ` +
+					`${branch} on ${options.arbiter} (${stderr || 'unknown error'}); ` +
+					'aborting the requeue — item left in needs-attention (no backlog move).';
+				note(message);
+				return {moved: false, reasonNotMoved: message};
+			}
+		}
+		deletedRemoteBranch = true;
+		note(
+			`Deleted the remote branch ${branch} on ${options.arbiter} (--reset).`,
+		);
+		// Drop any stale LOCAL work branch too (best-effort — it may not exist here).
+		gitSoftRun(['branch', '-D', branch], cwd, env);
+	}
+
+	// `-m "<note>"`: APPEND a dated handoff section to the item body (append-only;
+	// accumulates across requeues). Done BEFORE the move so it is committed as part
+	// of the same transition. Applies to BOTH modes.
+	if (options.message && options.message.trim() !== '') {
+		appendRequeueNote(naAbs, options.message.trim());
+	}
+
 	const destDir = join(cwd, 'work', 'backlog');
 	mkdirSync(destDir, {recursive: true});
 	const destRel = join('work', 'backlog', `${slug}.md`);
@@ -267,7 +362,31 @@ export function returnToBacklog(
 		gitHard(['push', options.arbiter, 'HEAD'], cwd, env);
 	}
 
-	return {moved: true, commitMessage};
+	return {moved: true, commitMessage, deletedRemoteBranch};
+}
+
+/** The heading that opens an appended requeue handoff note in the item body. */
+const REQUEUE_HEADING_PREFIX = '## Requeue';
+
+/**
+ * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item file's BODY
+ * (append-only — never overwrites; repeated requeues accumulate a handoff log).
+ * Body prose only (never a frontmatter field — WORK-CONTRACT rule 3). The date is
+ * UTC `YYYY-MM-DD`; multiple notes on the same day are distinct appended blocks.
+ */
+function appendRequeueNote(path: string, message: string): void {
+	const current = readFileSync(path, 'utf8');
+	const date = new Date().toISOString().slice(0, 10);
+	const base = current.replace(/\s*$/, '');
+	const block = [
+		base,
+		'',
+		`${REQUEUE_HEADING_PREFIX} ${date}`,
+		'',
+		message,
+		'',
+	].join('\n');
+	writeFileSync(path, block);
 }
 
 /**
@@ -412,6 +531,19 @@ function gitHard(
 			`git ${args.join(' ')} failed (exit ${result.status}): ${result.stderr.trim()}`,
 		);
 	}
+}
+
+/**
+ * Run git, returning the raw result (no throw) — for soft checks like the
+ * `--reset` remote-branch delete, whose non-zero exit is a meaningful outcome
+ * (the requeue aborts) rather than an unexpected plumbing failure.
+ */
+function gitSoftRun(
+	args: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): {status: number; stdout: string; stderr: string} {
+	return run('git', args, cwd, {env});
 }
 
 /** True when the index has no staged changes against HEAD (nothing to commit). */
