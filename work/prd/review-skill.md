@@ -1,46 +1,62 @@
 ---
-title: review-skill — the review PROTOCOL as a pure, runner-agnostic skill that EMITS verdicts (callers route them)
+title: review-skill — a standalone, protocol-native review discipline (thorough + easy review of slices/PRDs/code/notes); emits verdicts, callers route
 slug: review-skill
+sliced: 2026-06-06
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth:
-> `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices.
+> **Sliced into `work/backlog/` on 2026-06-06** — detail trimmed to the slice
+> (`work/backlog/review-skill.md`). Launch snapshot, NOT maintained. Current truth:
+> `docs/adr/` + the code; remaining work: that slice. The durable framing
+> (Problem / Solution / Stories / Out of Scope) is kept below; the
+> Implementation/Testing detail moved into the slice.
 
 ## Problem Statement
 
-The review **protocol** (the ordered adversarial lenses ending in a destination
-check) is needed by **two unrelated consumers**:
+Reviewing protocol artifacts — slices, PRDs, code, observations/findings/ADRs —
+well is HARD and easy to do shallowly. An agent (or human) needs a **standalone,
+reliable discipline** that makes reviewing such artifacts **more thorough and
+easier**, grounded in THIS protocol's own rules (the `work/` contract + its
+design) so it catches real, protocol-specific defects rather than offering a
+generic checklist.
 
-- the **review GATES** (`work/prd/review.md`) — slice-time (Gate 1) and PR/code
-  (Gate 2), with toggles, a `--propose` PR arbiter, auto-merge, model overrides,
-  the §13 role, and the shared trust resolver; and
-- **`batch-qa`** (`work/prd/batch-qa.md`) — the human-batching loop that gathers
-  review questions into one file for bulk answering.
-
-Today the protocol is described only *inside* the `review` gate PRD, entangled
-with the heavy, runner-coupled gate machinery. That makes it impossible for
-`batch-qa` to reuse "just the review pass" without dragging in the gates — and it
-blocks `batch-qa` behind the entire gate effort. The protocol is **methodology,
-not execution** (ADR `command-surface-and-journeys` §8: adopt = skill); it should
-be its OWN small, runner-agnostic skill that both consumers compose.
+That discipline does not exist as its own thing. The review lenses are described
+only *inside* the `review` GATE PRD (`work/prd/review.md`), entangled with the
+heavy runner-coupled gate machinery (toggles, PR arbiter, auto-merge, model
+overrides, the §13 role, the trust resolver). So nobody can simply "do a thorough
+protocol review" without dragging in the gates — and `batch-qa` is blocked behind
+the entire gate effort. The discipline is **methodology, not execution** (ADR
+`command-surface-and-journeys` §8: adopt = skill); it should be its OWN skill that
+stands alone.
 
 ## Solution
 
-Extract the review protocol into a standalone **`review` skill** (tool-agnostic,
-like `to-slices`/`to-prd`), built FIRST, as the single source of the protocol that
-both the gates and `batch-qa` consume.
+A **standalone, protocol-native `review` skill** (tool-agnostic, like
+`to-slices`/`to-prd`) whose PURPOSE is to make an agent's review of protocol
+artifacts more thorough and easier. It stands on its own — a human or agent reaches
+for it directly to review better; the review GATES and `batch-qa` are simply two
+CALLERS, not its reason for being. Built FIRST (the prerequisite both depend on).
 
-### The protocol (verbatim from review.md — do NOT re-derive)
+It is **protocol-NATIVE and may assume it:** intended for a repo that uses the
+`work/` contract, it KNOWS the protocol's peculiarities and reviews an artifact
+AGAINST the contract + its design (status=folder, the gate axes, bucket polarity,
+the shared-write isolation rule, drift=needs-attention, …). That assumption is what
+makes it efficient here — it is deliberately NOT a generic reviewer.
 
-Ordered adversarial lenses ENDING in a destination check: (1) claim-vs-code,
-(2) cleanup-vs-behaviour, (3) cross-slice composition, (4) **the destination
-check** ("if built/sliced exactly as written, do we reach the PRD/ADR goal?").
-The empirical case for multiple independent passes lives in
+### The discipline: four lenses as thinking tools, grounded in the protocol
+
+Ordered lenses ENDING in a destination check, each grounded in concrete `work/`
+standards: (1) claim-vs-reality, (2) cleanup-vs-behaviour (incl. acceptance
+criteria + the shared-write isolation rule), (3) cross-artifact composition
+(contract conformance: slugs, camelCase, gate axes honest, bucket polarity,
+file-orthogonality), (4) **the destination check** ("if built/sliced/merged
+exactly as written, do we reach the `prd:`/ADR goal?"). The empirical case for
+multiple independent passes lives in
 `work/ideas/review-gate-default-for-autoslicing.md`; do not duplicate it here.
 
-### The load-bearing boundary: the skill EMITS verdicts; the CALLER routes them
+### Output boundary (a consequence of standing alone, not the headline): the skill EMITS verdicts; the CALLER routes them
 
-This is the whole reason the skill is reusable by both consumers. The skill is
+Because it stands alone, it does not presume how its output is used — which is also
+what lets programmatic callers (gates, batch-qa) reuse it. The skill is
 **pure assessment**: it READS items (slices / PRDs / code) and RETURNS findings.
 It does **NOT** write `needsAnswers`, does **NOT** `git mv` to `needs-attention/`,
 does **NOT** edit any file. Routing the verdict is the **caller's** job, because
@@ -73,14 +89,15 @@ same split `batch-qa`'s soft-floor stop rule relies on.
 
 ## User Stories
 
-1. As a consumer (gate or batch-qa), I want a single `review` skill that runs the
-   four-lens protocol over given items and RETURNS structured verdicts, so the
-   protocol lives in exactly one place.
-2. As a consumer, I want the skill to be **pure** (read-only; emits findings,
-   writes nothing), so I can route the verdict to wherever I need (frontmatter,
-   needs-attention, or a batch file) without the skill presuming my destination.
-3. As a consumer, I want each finding tagged **blocking vs non-blocking**, so I
-   can implement a soft floor / a gate threshold consistently.
+1. As an agent (or human) reviewing a protocol artifact, I want a standalone
+   `review` skill I can reach for directly, so my review of a slice/PRD/code/note
+   is MORE THOROUGH and EASIER — not dependent on any gate or caller.
+2. As a reviewer, I want the lenses GROUNDED in this protocol's rules (the `work/`
+   contract + ADRs), so the skill catches real protocol-specific defects (a
+   dishonest gate axis, a wrong bucket, a missing isolation test, drift) rather
+   than offering a generic checklist.
+3. As a reviewer, I want each finding tagged **blocking vs non-blocking**, so a
+   soft floor / a gate threshold can be applied consistently.
 4. As the `batch-qa` author, I want to compose this skill for my B (question-
    generation) pass without dragging in any gate machinery, so batch-qa is not
    blocked behind the gate effort.
@@ -98,26 +115,12 @@ same split `batch-qa`'s soft-floor stop rule relies on.
   the idea file), and the emit-vs-route boundary + output contract are decided
   (maintainer-confirmed 2026-06-06).
 
-## Implementation Decisions
-
-- **A SKILL** (`skills/review/`), runner-agnostic, alongside `to-slices`/`to-prd`.
-  It is the single source of the review protocol.
-- **Pure assessor, structured output** (the contract above). No file I/O beyond
-  reading the items it reviews; emits verdicts/findings only.
-- **Severity model** (blocking / non-blocking) is part of the contract — both the
-  gate threshold and batch-qa's soft floor are built on it.
-- **Does NOT include** the §13 role wiring, model overrides, toggles, the PR
-  arbiter, auto-merge, or the trust resolver — those are the GATES (`review.md`).
-
-## Testing Decisions
-
-- Test the skill as a pure function of its inputs: given fixture items with known
-  defects (a claim the code doesn't meet; an acceptance gap; a cross-slice
-  conflict; a slice that misses its PRD goal), assert the emitted verdict +
-  findings + severities. Stub any model call (as the autoslice/review slices do)
-  so the protocol's STRUCTURE is tested deterministically, not a model's prose.
-- Assert the skill writes NOTHING (no frontmatter edits, no moves) — purity is a
-  testable property and the boundary that makes it reusable.
+> Implementation & testing detail moved to the slice
+> (`work/backlog/review-skill.md`). Note: `review-skill` is a METHODOLOGY skill
+> (prose, like `to-slices`/`to-prd`) — there is NO code, NO model-invocation seam,
+> and NO unit-test harness; its "acceptance" is doc-shaped (the protocol +
+> emit-vs-route contract are completely and clearly stated). The model seam /
+> toggles / PR machinery belong to the GATES (`review.md`), not here.
 
 ## Out of Scope
 
