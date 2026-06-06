@@ -351,6 +351,15 @@ async function runComplete(
 				env,
 				note,
 			});
+			// AUTONOMOUS (`do`) only: the seam surfaces the LEDGER on `main` but does
+			// NOT push the work branch, so the SAVED wip would not be cross-machine
+			// recoverable (a requeue-continue on another machine, reading
+			// <arbiter>/work/<slug>, would re-cut fresh off main). Push it explicitly
+			// (mirrors saveAgentFailure in do.ts). The HUMAN `complete` (no
+			// surfaceArbiter) stays local-only — a human is right there.
+			if (routed.moved && options.surfaceArbiter) {
+				await pushWorkBranch(cwd, options.surfaceArbiter, branch, env);
+			}
 			return {
 				exitCode: 1,
 				outcome: 'gate-failed',
@@ -432,6 +441,12 @@ async function runComplete(
 			env,
 			note,
 		});
+		// AUTONOMOUS (`do`) only: push the work branch so the SAVED commits are
+		// cross-machine recoverable (the seam surfaces only the LEDGER on `main`).
+		// The HUMAN `complete` (no surfaceArbiter) stays local-only.
+		if (routed.moved && options.surfaceArbiter) {
+			await pushWorkBranch(cwd, options.surfaceArbiter, branch, env);
+		}
 		return {
 			exitCode: 1,
 			outcome: 'rebase-conflict',
@@ -862,6 +877,26 @@ function dropMoveOnlySequenceEditor(slug: string): string {
 	// Escape any sed-special characters in the slug before embedding it.
 	const escaped = slug.replace(/[\\/&.[\]*^$]/g, '\\$&');
 	return `sed -i -e '/^pick [0-9a-f]* chore(${escaped}): route to needs-attention/d'`;
+}
+
+/**
+ * Push the work branch to the arbiter so an AUTONOMOUS needs-attention bounce's
+ * SAVED commits (the wip + the move-only commit) travel cross-machine — the
+ * durable artifact a requeue (continue) lands the next agent on (continue-
+ * detection reads `<arbiter>/work/<slug>` ahead of main). The needs-attention
+ * seam surfaces only the LEDGER on `main`; it does NOT push the branch, so the
+ * autonomous (`do`/`surfaceArbiter`) gate-fail / rebase-conflict bounce must push
+ * it explicitly (mirrors `saveAgentFailure` in `do.ts`). Best-effort: an
+ * unreachable arbiter leaves the local branch + the main surface standing. The
+ * HUMAN `complete` (no `surfaceArbiter`) never calls this — it stays local-only.
+ */
+async function pushWorkBranch(
+	cwd: string,
+	arbiter: string,
+	branch: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+	await runAsync('git', ['push', arbiter, `${branch}:${branch}`], cwd, {env});
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */

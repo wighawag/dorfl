@@ -14,7 +14,7 @@ import {NullHarness, type Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
-import {git, gitMv} from './git.js';
+import {git, gitMv, runAsync} from './git.js';
 import {
 	Integrator,
 	type ReviewProvider,
@@ -361,13 +361,15 @@ async function runOneItem(
 			// Folder-native surfacing (ADR §12): bounce the work item itself from
 			// in-progress/ to needs-attention/ (saving the aborted work as a wip
 			// commit + the move-only commit on the work branch) THROUGH the ledger
-			// write seam's needs-attention transition, and SURFACE the stuck state on
-			// the arbiter's main (the mode-M strategy cherry-picks the move-only commit
-			// there). Passing the arbiter both pushes the work branch (saving the wip
-			// cross-machine) and makes the stuck state observable to scan/status/a
-			// fresh checkout/another machine. This is a LEDGER write, so it happens in
-			// both merge and propose (the integration axis governs CODE only). The
-			// runner owns this move (the agent does no git).
+			// write seam's needs-attention transition. Passing the arbiter SURFACES the
+			// stuck state's LEDGER on the arbiter's main (the mode-M strategy
+			// cherry-picks the move-only commit there) — making it observable to
+			// scan/status/a fresh checkout/another machine. The seam does NOT push the
+			// work branch; the explicit push below saves the wip cross-machine (so a
+			// requeue-continue on a different machine has a branch to continue from —
+			// continue-detection reads <arbiter>/work/<slug>). This is a LEDGER write,
+			// so it happens in both merge and propose (the integration axis governs
+			// CODE only). The runner owns this move (the agent does no git).
 			ledgerWrite.applyNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
@@ -375,6 +377,12 @@ async function runOneItem(
 				arbiter: tree.arbiterRemote,
 				env: ctx.env,
 			});
+			// Push the work/<slug> branch to the arbiter so the SAVED partial commits
+			// (the wip + the move) travel cross-machine and a requeue (continue) can
+			// land the next agent on this tip (mirrors saveAgentFailure in do.ts).
+			// Best-effort: an unreachable arbiter leaves the retained worktree + the
+			// main surface standing.
+			await pushWorkBranch(tree.dir, tree.arbiterRemote, slug, ctx.env);
 			return {...base, status: 'tests-failed', detail: gate.detail};
 		}
 
@@ -490,6 +498,26 @@ function runAgent(
 	});
 	updateJobRecord(tree.dir, {harness: launched.record});
 	return {ok: launched.ok, detail: launched.detail};
+}
+
+/**
+ * Push the `work/<slug>` branch to the arbiter so a needs-attention bounce's
+ * SAVED commits (the wip + the move-only commit) travel cross-machine — the
+ * durable artifact a requeue (continue) lands the next agent on (continue-
+ * detection reads `<arbiter>/work/<slug>` ahead of main). The needs-attention
+ * seam surfaces only the LEDGER on `main`; it does NOT push the branch, so the
+ * autonomous gate-fail bounce must push it explicitly (mirrors `saveAgentFailure`
+ * in `do.ts`). Best-effort: an unreachable arbiter leaves the local branch +
+ * the main surface standing (the same degradation as the agent-fail path).
+ */
+async function pushWorkBranch(
+	cwd: string,
+	arbiter: string,
+	slug: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+	const branch = `work/${slug}`;
+	await runAsync('git', ['push', arbiter, `${branch}:${branch}`], cwd, {env});
 }
 
 /** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */
