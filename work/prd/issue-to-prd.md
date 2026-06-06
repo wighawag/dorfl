@@ -8,16 +8,19 @@ sliceAfter: [auto-slice, runner-in-ci]
 > **Launch snapshot, not maintained.** Source material for slicing; once sliced,
 > technical detail moves into the slices and durable rationale into `docs/adr/`.
 >
-> **SUBSUMED by `issue-intake` (2026-06-06) — do NOT slice standalone.** A
-> maintainer discussion concluded CI cannot know upfront whether an issue should
-> become a PRD or slices, so the front-door is ONE agent-decided entry point
-> (`work/prd/issue-intake.md`) of which a committed PRD is just ONE of two outcomes.
-> This PRD is now a **building block** that `issue-intake` consumes (the issue
-> seam, trigger/auth policy, the unified conversation rule, and `Refs #N` +
-> folder-native loop-closure all originate here and are reused verbatim). Slice it
-> only THROUGH `issue-intake` (which is `sliceAfter` this one), not on its own —
-> whether it is fully absorbed or kept as a referenced foundation is an open
-> question resolved when slicing `issue-intake`.
+> **ROLE CLARIFIED (2026-06-06): this is the in-thread PRD CONVERSATION, reached
+> only when an issue needs MORE THAN ONE slice.** A maintainer discussion made the
+> front-door **slices-first** (`work/prd/issue-intake.md`): most issues → ONE slice,
+> NO PRD. A PRD is produced ONLY when a coherent ask cannot be done in one slice —
+> because >1 slice means there is a shared vision worth recording. THIS PRD is that
+> PRD path: the human-driven, in-issue-thread conversation that ends by committing
+> `work/prd/<slug>.md` (with `issue: N`), after which CI STOPS (the clean cut;
+> slicing is a separate gated step). It is NOT dropped and NOT a thin stub — a
+> >1-slice issue has real cross-slice content. `issue-intake` routes to it and
+> reuses its issue seam, trigger/auth policy, the unified conversation rule, and the
+> PRD loop-closure (`Refs #N` + the folder-native "PRD complete?" query). It is the
+> PRD-OUTCOME building block; `issue-intake` is the slices-first front-door. Slice
+> the two together (`issue-intake` is `sliceAfter` this one).
 
 ## Problem Statement
 

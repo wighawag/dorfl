@@ -1,8 +1,7 @@
 ---
-title: issue-intake — one issue front-door whose outcome is AGENT-DECIDED (a PRD, or slices directly); agent-authored slices land as a review-PR by default
+title: issue-intake — the issue front-door, slices-first: 1 ask → 1 slice; needs >1 slice → a PRD (in-thread conversation, stop there); unrelated → split into N issues
 slug: issue-intake
 humanOnly: true
-needsAnswers: true
 sliceAfter: [auto-slice, runner-in-ci, issue-to-prd]
 ---
 
@@ -10,179 +9,217 @@ sliceAfter: [auto-slice, runner-in-ci, issue-to-prd]
 > once sliced, technical detail moves into the slices and durable rationale into
 > `docs/adr/`. Expect this to be outrun by the work — that is fine.
 >
-> **Provenance.** Maintainer discussion (2026-06-06). Generalises the planned
-> `issue-to-prd` capability: in MOST real cases a filed issue wants **a slice (or a
-> few)**, not a full PRD — but **CI cannot know which upfront**. So the front-door
-> is ONE entry point whose OUTCOME is agent-decided. This PRD also fixes a safety
-> asymmetry the discussion surfaced (a slice is immediately claimable; a PRD is
-> not). `needsAnswers: true` — the decide/execute shape is the load-bearing open
-> question (below). **Supersedes the standalone framing of `issue-to-prd`:** that
-> PRD's committed-PRD output becomes ONE of this front-door's two outcomes.
+> **Provenance.** Maintainer discussion (2026-06-06), refined over several passes.
+> The original `issue-to-prd` capability assumed every issue → a PRD. Observed
+> reality: MOST issues are a bug fix / small improvement that wants **one slice, no
+> PRD** (in-contract: a `covers:[]` slice is its own source of truth, per
+> WORK-CONTRACT — `propose-pr-body` is exactly such a slice). So the front-door is
+> **slices-first**. A PRD is produced ONLY when the work genuinely needs MORE THAN
+> ONE slice — because that is precisely when there is a shared vision worth
+> recording (and a PRD is never a thin grouping stub; a >1-slice issue has real
+> cross-slice content). `issue-to-prd` is NOT dropped — it is the in-thread PRD
+> CONVERSATION this front-door routes to for the >1-slice case (and that PRD is
+> human-driven via the issue thread, the same way `to-prd` is human-driven at a
+> desk).
 
 ## Problem Statement
 
-agent-runner's planned front-of-funnel (`issue-to-prd`) assumes every issue
-becomes a **PRD**. But observed reality (including this very repo's dogfooding):
-when we notice a bug or a small improvement, we write **a slice directly, no PRD**
-— which is fully in-contract (WORK-CONTRACT: a self-contained chore/refactor omits
-`prd:` and is its own source of truth; `propose-pr-body` is exactly such a slice).
-PRDs are the LESS likely outcome for everyday issues; the more common need is
-**issue → slice(s)**, which has NO capability today.
+agent-runner's front-of-funnel was designed as `issue-to-prd` (every issue → a
+committed PRD, then `auto-slice`). But most filed issues — a bug, a small
+improvement, a refactor — do not need a PRD at all; they want **a single slice**.
+There is no capability for that today, and forcing a PRD on every issue is
+ceremony the common case does not warrant.
 
-Crucially (the maintainer's sharpening): **you cannot know before reading an issue
-whether it should be a PRD or a set of slices.** A fuzzy/large issue → a PRD (grill
-it, then `auto-slice`); a crisp small bug → one or a few slices directly. So from
-CI's point of view there is **ONE thing** (an issue arrived) that can produce
-**different outcomes** — the decision is part of the work, made by an agent that
-has read the thread, not a pre-routed config.
+The clean rule the discussion arrived at (a sharp trigger, not a fuzzy heuristic):
 
-And a **safety asymmetry** the discussion surfaced: a **PRD** committed to `main`
-is safe (it builds nothing; with auto-slice off it just sits there). A **slice**
-landing in `work/backlog/` is **immediately claimable** — an agent-authored slice
-on `main` could be auto-built before any human sees it. So the slice outcome needs
-a gate the PRD outcome does not: **agent-authored slices land as a review-PR (not a
-direct backlog write) by default**, with an opt-in to let trusted authors'
-slices auto-accept.
+- **One ask that fits in ONE slice → emit one slice, NO PRD.** The common case.
+- **One ask that needs MORE THAN ONE slice → a PRD.** If a single coherent ask
+  cannot be done in one slice (it splits for scope or architectural reasons), then
+  the thing tying those slices together IS a shared vision — and that vision is
+  exactly what a PRD records. So >1 slice ⟺ shared vision ⟺ PRD. The PRD here is
+  not thin: it carries *why it splits, how the pieces relate, and their order* —
+  real content each slice needs.
+- **Multiple UNRELATED slices in one issue → invalid; reply "file separate
+  issues."** If the agent cannot articulate a shared vision for a would-be
+  multi-slice set, the slices are unrelated work wearing one issue — bounce it.
+  (Reserved for genuinely unrelated concerns, NOT a legitimately-coupled pair that
+  is simply small: a coupled-but-light pair still gets a light PRD, not a bounce.)
+
+This makes **"needs a PRD" decidable by COUNT, not vibe**: can this be one slice?
+If not, it needs a PRD. And it eliminates the only case that would have required a
+new slice-grouping mechanism (multiple unrelated slices per issue) — by policy, not
+machinery.
 
 ## Solution
 
-One CI-installed **issue-intake** pipeline (behind the SAME issue seam
-`issue-to-prd` defines) that conducts the clarifying conversation and ends by
-emitting whichever outcome the agent judges right — a committed PRD OR one/more
-slices — landing each outcome through the correct safety gate.
+A CI-installed **issue-intake** pipeline (behind the SAME issue seam `issue-to-prd`
+defines: trigger policy, authorization, the unified conversation loop). It conducts
+the clarifying conversation in the issue comments and resolves to ONE of three
+outcomes.
 
-### One front-door, agent-decided outcome
+### The three outcomes
 
-- Same trigger policy + authorization + conversation loop as `issue-to-prd`
-  (`command` default / `every-issue`; `maintainer` default / `anyone`; any
-  spec-change re-evaluates → advance or ask). REUSE that machinery; this PRD adds
-  the **outcome branch**, not a second pipeline.
-- The conversation ends by the agent **classifying** the clarified requirement:
-  - **PRD outcome** — fuzzy/large/multi-story → draft + commit `work/prd/<slug>.md`
-    (exactly `issue-to-prd`'s output, with `issue: N`). Safe to land on `main`.
-  - **Slices outcome** — crisp/small/self-contained → emit one or more
-    `work/backlog/<slug>.md` (each `covers: []`, no `prd:` link, its own source of
-    truth, per WORK-CONTRACT).
+1. **Single slice (default, common).** The clarified ask fits one slice → emit one
+   `work/backlog/<slug>.md` (`covers:[]`, no `prd:`, its own source of truth),
+   carrying `Fixes #N` so its merge closes the issue (a lone slice = one PR = clean
+   `Fixes`).
+2. **A PRD (needs >1 slice).** The ask is coherent but cannot be one slice → the
+   conversation continues IN-THREAD until a PRD emerges (this is exactly the
+   `issue-to-prd` conversation). Commit `work/prd/<slug>.md` with `issue: N`, then
+   **STOP** — CI does NOT also emit the slices. Slicing is a separate, gated step
+   (`auto-slice` or a human via `to-slices`); the clean cut at the committed PRD is
+   `issue-to-prd`'s existing contract.
+3. **Bounce (unrelated work).** The agent cannot find a shared vision for a
+   multi-slice set → post a comment asking the user to file separate issues, leave
+   the issue open. (Distinct from #2: #2 is coupled work with a vision; #3 is
+   unrelated work.)
 
-### The slice-outcome safety gate (the asymmetry fix)
+### Tracking / loop-closure needs NOTHING new — `prd:` presence is the switch
 
-- **Agent-authored slices DEFAULT to a review-PR, NOT a direct `backlog/` write on
-  `main`.** A human reviews the slice (its spec) before it becomes claimable —
-  closing the "auto-built before anyone looked" hole. (A PRD outcome needs no such
-  gate: it is inert on `main`.)
-- **Opt-in auto-accept by AUTHOR TRUST.** A per-repo policy may let a TRUSTED
-  author's slices auto-accept (land directly in `backlog/`, claimable immediately).
-  The trust inputs the discussion named: **who the author is** (issue author /
-  trigger author, via the seam's author-association check — generalising
-  `issue-to-prd`'s `maintainer | anyone`), **whether it was requested via a command
-  / by whom**, and the repo's policy. Generalises today's binary `allowAgents`.
-- **This is the SAME trust primitive `review`'s PR auto-merge needs.** Resolve it
-  ONCE (a shared author/trust resolver), consumed by both this PRD's slice
-  auto-accept and `review`'s `autoMerge`-on-approve.
+The discriminator is already in the contract: **a slice with no `prd:` is alone;
+a PRD groups its slices.** So:
+
+- **Single-slice outcome** → the slice's PR carries `Fixes #N` → merge closes the
+  issue directly. (Safe: exactly one PR, no fan-out, so `Fixes` is correct here.)
+- **PRD outcome** → reuses `issue-to-prd`'s loop-closure UNCHANGED: PRs use
+  `Refs #N` (never `Fixes #N` — the PRD fans out to N slices = N PRs); the
+  folder-native "PRD complete?" query (all `prd:<slug>` slices in `done/`, ≥1)
+  closes `issue: N` via the seam at the merge that completes the set.
+- **No slice-level `issue:` field is introduced** — there is no vision-less
+  multi-slice case to group (outcome #3 bounces it), so the only multi-slice case
+  is the PRD case, which the existing `prd:` mechanism already tracks.
+
+### The slice-emission safety gate (single-slice outcome)
+
+A slice landing in `work/backlog/` is **immediately claimable** (unlike a PRD,
+which is inert on `main`). So the single-slice outcome lands through a trust gate:
+
+- **DEFAULT: a review-PR**, not a direct `backlog/` write on `main` — a human
+  reviews the slice spec before it becomes claimable.
+- **OPT-IN: direct to `backlog/` (auto-accept) when the AUTHORIZING ACTOR is
+  trusted** — e.g. the repo owner filed the issue, OR a maintainer issued the
+  trigger command. Keyed on the **authorizing actor** (the trigger comment's
+  author, who may differ from the issue opener — so a maintainer can bless a
+  stranger's issue into a direct slice).
+- This **author-trust resolver** generalises today's binary `allowAgents` (inputs:
+  author association × request channel × repo policy) and is the **SAME primitive
+  `review`'s PR `autoMerge`-on-approve uses** — define it ONCE, consumed by both.
+- (The PRD outcome needs no such gate — a committed PRD is inert; its slicing is
+  separately gated.)
+
+### Emission mode: CI emits the artifact (mode a), gated by review-PR
+
+CI emits the actual slice file (single-slice outcome) on a branch → review-PR (or
+direct, per trust) — NOT a triage-only comment a human then turns into files. A
+considered alternative ("triage-only": the agent posts a slice OUTLINE as a
+comment, a human runs `to-slices`) was folded out: review-PR already delivers the
+same safety (a human approves before claimable) with less human work, so it is not
+built as a separate mode (recorded here so it is not relitigated).
 
 ## User Stories
 
-1. As a user, I want to file ONE issue and have the agent decide — after grilling
-   me — whether it becomes a PRD or slices, so I do not have to know upfront which
-   shape my request is.
-2. As the maintainer, I want a crisp small issue to become **slices directly** (no
-   PRD), because most everyday work is a fix/small improvement that needs no PRD.
-3. As the maintainer, I want a fuzzy/large issue to become a **PRD** (then
-   `auto-slice` handles it), reusing the `issue-to-prd` output.
-4. As the maintainer, I want **agent-authored slices to land as a review-PR by
-   default**, NOT directly claimable on `main`, so that bad/over-eager slices can
-   never be auto-built before a human reviews the spec.
-5. As the maintainer, I want a per-repo **auto-accept** policy keyed on author
-   trust (and how the work was requested), so that a TRUSTED author's slices can
-   land directly in `backlog/` while everyone else's wait in a review-PR.
-6. As the maintainer, I want the front-door to share the `issue-to-prd` seam +
-   trigger/auth machinery and add only the outcome branch, so we do not maintain
-   two issue pipelines.
-7. As the maintainer, I want the slice-auto-accept trust primitive to be the SAME
-   one `review`'s PR auto-merge uses, so trust is defined once.
+1. As a user, I want to file an issue describing a bug or small improvement and get
+   **one slice** (no PRD), because most work does not need a design doc.
+2. As the maintainer, I want an issue that genuinely needs MORE THAN ONE slice to
+   produce a **PRD** (via the in-thread conversation), because >1 slice means there
+   is a shared vision worth recording — and CI then STOPS at the committed PRD.
+3. As the maintainer, I want an issue whose would-be slices are UNRELATED to be
+   bounced with a "file separate issues" comment, so unrelated work is not smuggled
+   under one issue.
+4. As the maintainer, I want a single-slice outcome to land as a **review-PR by
+   default**, NOT directly claimable, so a bad slice can never be auto-built before
+   a human reviews the spec.
+5. As the maintainer, I want **auto-accept (direct to backlog)** when the
+   authorizing actor is trusted (owner-filed issue, or a maintainer command), keyed
+   on the authorizing actor, so my own crisp issues do not need a PR round-trip.
+6. As the maintainer, I want issue closure to need NO new mechanism: a lone slice
+   closes via `Fixes #N`; a PRD closes via the existing folder-native "all slices
+   done" query — distinguished by whether the slice has a `prd:`.
+7. As the maintainer, I want the trust resolver to be the SAME one `review`'s PR
+   auto-merge uses, so trust is defined once.
 
 ## Implementation Decisions
 
 (From the 2026-06-06 discussion — do not relitigate.)
 
-- **One front-door, agent-decided outcome.** CI cannot pre-route; the agent reads
-  the thread and decides PRD-vs-slices. NOT two separate triggers.
-- **PRD outcome = `issue-to-prd`'s output** (committed PRD, `issue: N`, inert on
-  `main`). This PRD subsumes `issue-to-prd` as one of two outcomes — reconcile that
-  PRD's standalone framing when slicing (it may become this PRD's PRD-branch, or
-  stay a building block this consumes).
-- **Slice outcome = one or more `covers: []` backlog slices**, each its own source
-  of truth (in-contract per WORK-CONTRACT), carrying a `Refs #N` link.
-- **Agent slices default to a review-PR, never a direct `backlog/` write.** The
-  safety asymmetry (claimable slice vs inert PRD) is the reason. Auto-accept is
-  opt-in.
-- **Author-trust auto-accept policy** generalises `allowAgents` (inputs: author
-  association, request channel, repo policy) and is the SAME primitive `review`'s
-  `autoMerge`-on-approve uses — resolve once.
-- **Reuse the `issue-to-prd` issue seam + trigger/auth/conversation machinery.**
-  Core never imports `gh`; only the adapter shells out. No labels, no issue
-  lifecycle in core (ADR §12); loop-closure stays `Refs #N` + the folder-native
-  "PRD/slice complete?" query.
+- **Slices-first; PRD only when >1 slice is needed.** Sharp trigger by COUNT: one
+  ask that fits one slice → slice (no PRD); needs splitting → PRD.
+- **>1 slice ⟺ shared vision ⟺ PRD** (not a thin grouping stub; the PRD carries why
+  it splits + how the pieces relate + order).
+- **Multiple UNRELATED slices → bounce** ("file separate issues"). Reserved for
+  unrelated concerns; a coupled-but-light pair gets a light PRD, not a bounce.
+- **PRD outcome = `issue-to-prd`'s in-thread conversation; CI STOPS at the
+  committed PRD** (the existing clean cut). CI does not also emit the slices.
+- **No slice-level `issue:` field.** The only multi-slice case is the PRD case
+  (the vision-less multi case is bounced), so `prd:` presence is the tracking
+  discriminator; nothing new is added to the contract.
+- **Closure:** lone slice → `Fixes #N`; PRD → `Refs #N` + the existing
+  "PRD complete?" query closes `issue: N`. Provider-portable, no labels (ADR §12).
+- **Single-slice safety gate:** review-PR by default; direct-to-backlog auto-accept
+  when the AUTHORIZING ACTOR is trusted. Trust resolver generalises `allowAgents`
+  and is SHARED with `review`'s `autoMerge`.
+- **Emission mode (a)** (CI emits the file, review-PR gated); triage-only folded
+  out (review-PR subsumes it).
+- **Reuse the `issue-to-prd` seam + trigger/auth/conversation machinery.** Core
+  never imports `gh`; only the adapter shells out.
 
 ## Testing Decisions
 
 - **Stub the issue seam + the agent verdict** (no network, no real GitHub/model).
-  Test the OUTCOME BRANCH as pure logic: given a stubbed "PRD" verdict the runner
-  commits a PRD; given a stubbed "slices" verdict it emits the backlog slice(s).
-- Test the **safety gate**: an agent "slices" outcome by an UNTRUSTED author lands
-  as a review-PR (NOT a direct `backlog/` write on `main`); a TRUSTED author with
-  auto-accept on lands directly in `backlog/`. The runner does the git; the agent
-  drafts only.
+  Test the OUTCOME BRANCH as pure logic: a "single-slice" verdict emits one
+  backlog slice (no `prd:`); a "needs-PRD" verdict commits a PRD (`issue: N`) and
+  STOPS (emits no slices); an "unrelated" verdict posts the split-issues comment and
+  emits nothing.
+- Test the **safety gate**: a single-slice outcome by an UNTRUSTED actor lands as a
+  review-PR (not a direct `backlog/` write); a TRUSTED authorizing actor
+  (owner-filed / maintainer command) with auto-accept on lands directly in
+  `backlog/`. The runner does the git; the agent drafts only.
 - Test the **author-trust resolver** in isolation (author association × request
-  channel × repo policy → accept/review-PR) and that `review` consumes the SAME
+  channel × repo policy → review-PR vs direct) and that `review` consumes the SAME
   resolver for `autoMerge` (no duplicated trust logic).
-- Test `Refs #N` (never `Fixes #N`) on emitted PRs and clean degradation on a
-  non-GitHub arbiter.
+- Test **closure**: a lone slice's PR carries `Fixes #N`; a PRD's PRs carry
+  `Refs #N` and the existing "PRD complete?" query closes `issue: N` at set
+  completion. Clean degradation on a non-GitHub arbiter (no close, no breakage).
 
 ## Autonomy notes (the gate axes)
 
 - **`humanOnly: true` (PRD-level, DECIDED):** reads untrusted issues, posts under
-  the project's identity, and (critically) can make work CLAIMABLE — plus it
-  defines an author-trust auto-accept policy. Security-sensitive front-door a human
-  must drive the slicing of. Per-slice: the pure outcome-branch + author-trust
-  resolver + "emit via seam" wiring is agent-buildable; the auth/seam adapter and
-  the auto-accept policy lean `humanOnly`.
-- **`needsAnswers: true` (PRD-level — the load-bearing open question):**
-  - **Decide/execute shape.** HOW does the agent decide-then-act? Options the
-    discussion floated: **(i) one agent** that decides AND emits the chosen outcome
-    in one step (it has the thread context; on decision it invokes the right
-    tool/writes the right artifact); **(ii) two steps** — a classifier agent
-    decides PRD-vs-slices, then a dedicated executor (the existing `to-prd`-style
-    PRD drafter, or a slice emitter) runs. Trade-off: (i) is simpler + keeps
-    context; (ii) de-correlates the decision from the emission and lets each step
-    use a fit-for-purpose role/model (and dovetails with `review`/§13 roles). DECIDE
-    THIS before slicing — it shapes the seam (does the agent need a "tool to invoke
-    an outcome", or does the runner branch on a returned verdict?).
-  - **Multi-slice emission.** When the outcome is "a few slices", does the agent
-    emit them with `blockedBy` between them (it knows the decomposition), and do
-    they go in ONE review-PR or one-PR-each? (Lean: one review-PR for the set, since
-    a human reviews the decomposition as a whole.)
-  - **Relationship to `issue-to-prd`.** Does this PRD REPLACE `issue-to-prd`
-    (subsume it as the PRD-branch) or BUILD ON it (consume its PRD-drafting as the
-    PRD outcome)? Resolve when slicing to avoid two overlapping pipelines.
+  the project's identity, and can make work CLAIMABLE — plus it defines an
+  author-trust auto-accept policy. Security-sensitive front-door a human must drive
+  the slicing of. Per-slice: the pure outcome-branch + author-trust resolver +
+  "emit via seam" wiring is agent-buildable; the auth/seam adapter and the
+  auto-accept policy lean `humanOnly`.
+- **`needsAnswers`: none open at launch.** The earlier decide/execute-shape
+  question (one agent vs two-step) dissolved: with slices-first + a sharp
+  count-based PRD trigger + CI stopping at the PRD, the conversation agent simply
+  resolves to one of three outcomes and the runner branches on the verdict (the
+  same shape `issue-to-prd` already uses). If a slice surfaces an open question,
+  flag it then.
 
 ## Out of Scope
 
 - The PR/code review gate + its auto-merge (that is `review`; this PRD SHARES the
   author-trust primitive but specs the issue front-door, not the review gate).
 - Runner-in-CI packaging / `install-ci` (that is `runner-in-ci`).
-- The slicer itself (`auto-slice`); the PRD outcome hands off to it as today.
+- The slicer itself (`auto-slice`); the PRD outcome hands off to it (CI stops at
+  the committed PRD).
+- Emitting the slices in CI for the PRD outcome (CI stops at the PRD — slicing is a
+  separate gated step).
+- A slice-level `issue:` grouping field (not needed — no vision-less multi-slice
+  case to group; outcome #3 bounces it).
 - Non-GitHub issue providers (GitHub adapter first; the seam allows others later).
 - Any issue-label state-machine / issue lifecycle in core (ADR §12).
 
 ## Further Notes
 
-- `issue-to-prd` (`work/prd/issue-to-prd.md`) is the source for the issue seam
-  shape, trigger/authorization policy, the unified conversation rule, and
-  loop-closure (`Refs #N` + folder-native "complete?" query). REUSE all of it; this
-  PRD adds the outcome branch + the slice safety gate on top.
+- `issue-to-prd` (`work/prd/issue-to-prd.md`) is NOT dropped: it IS the in-thread
+  PRD conversation outcome #2 routes to (and the source for the issue seam shape,
+  trigger/authorization policy, the unified conversation rule, and the PRD
+  loop-closure `Refs #N` + "PRD complete?" query). This PRD adds the slices-first
+  default + the single-slice safety gate + the bounce; `issue-to-prd` provides the
+  PRD path. `sliceAfter` it so this PRD's slices can reference its slugs.
 - whitesmith (`~/dev/github/wighawag/whitesmith`) is the reference for the issue
   provider/seam, author-association checks, and the slash-command/event workflow.
   Do NOT reuse its label state-machine or 1-PR-per-issue model.
-- The author-trust auto-accept primitive is deliberately shared with `review`'s
+- The author-trust resolver is deliberately shared with `review`'s
   `autoMerge`-on-approve — define it once, consumed by both.
