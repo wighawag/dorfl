@@ -122,6 +122,17 @@ INSIDE the seam, transition-kind-agnostic.**
   - **`run.ts` onboard-time continue-conflict** (`run.ts:310`) is checked out ON
     `work/<slug>` (the worktree was cut from the kept branch). Default-push
     `work/<slug>` is CORRECT here — it pushes the branch HEAD is actually on.
+    **INTENDED behavioural change to call out:** the rebase was ABORTED, so the
+    branch tip == the arbiter tip (the kept branch, unchanged) — i.e. ALREADY on
+    the arbiter. The push is a no-op/ff, but it makes the §4 reap predicate (clean
+    + branch-on-arbiter) hold, so this worktree — RETAINED today — becomes REAPED.
+    That is MORE §14-aligned, not a regression: §14 says "the job worktree is a
+    disposable cache; recovery flows through the branch + folder-native surfaces,
+    NOT by editing the worktree." So UPDATE the now-stale `run.ts:310` comment
+    ("the retained worktree is the never-lose-work signal") to match (the branch on
+    the arbiter + the main surface are the signal) — the same off-model framing PR
+    #9 corrected for gate-fail. Do NOT special-case to preserve retention (that
+    re-introduces the asymmetry).
   - **`start.ts` `routeContinueConflict`** (`start.ts:547`) is the SURFACE-ONLY
     case: HEAD is on a throwaway temp branch off main, NOT `work/<slug>`. If the
     seam default-pushes `work/<slug>` here it would push a ref HEAD is NOT on (a
@@ -176,6 +187,13 @@ code rather than re-discovering the asymmetry a sixth time.
       passes no arbiter → the seam's (now-firing) push does not fire; autonomous `do`
       passes the arbiter → it does. A test asserts human `complete` (no
       surfaceArbiter) pushes nothing (the existing divergence test, still green).
+- [ ] (INTENDED change) `run`'s §14 continue-conflict (`run.ts:310`) worktree, which
+      RETAINS today, now REAPS — its branch is already on the arbiter (aborted
+      rebase ⇒ tip unchanged), so the push is a no-op/ff that makes the §4 predicate
+      hold (§14-aligned: the worktree is a disposable cache; the branch + surface
+      are the signal). A test asserts it reaps + the branch is on the arbiter; the
+      stale `run.ts:310` "retained worktree is the signal" comment is updated. Do
+      NOT special-case to preserve retention.
 - [ ] `run`'s agent-failure now routes through the seam (saves + surfaces + pushes),
       cross-machine recoverable via requeue-continue — proven by a test from a FRESH
       clone (mirrors PR #8's `do` agent-fail recovery test). NOTE the run.test.ts
