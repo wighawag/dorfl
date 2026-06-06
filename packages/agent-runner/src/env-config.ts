@@ -62,6 +62,10 @@ const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
 	piBin: 'string',
 	sessionsDir: 'string',
 	verify: 'list',
+	reviewPr: 'boolean',
+	autoMerge: 'boolean',
+	reviewModel: 'string',
+	reviewMaxRounds: 'number',
 };
 
 /** camelCase config key → SCREAMING_SNAKE (`perRepoMax` → `PER_REPO_MAX`). */

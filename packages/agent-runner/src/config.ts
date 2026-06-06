@@ -149,6 +149,43 @@ export interface Config {
 	 * intentionally optional so "unset" is distinguishable from "empty".
 	 */
 	verify?: VerifyConfig;
+	/**
+	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`): run the
+	 * `review` SKILL as a fresh-context judgement gate ON TOP of the deterministic
+	 * `verify` floor, AFTER `verify` passes and BEFORE the done-move, on the
+	 * `do`/`complete` path. Default **OFF** (it puts a model on the merge path —
+	 * opt-in, ADR §8). Resolved per-repo like `integration`: flag
+	 * (`--review-pr`/`--no-review-pr`) > env > per-repo > global > default false.
+	 * `verify` is never replaced — review is layered, never a substitute.
+	 */
+	reviewPr: boolean;
+	/**
+	 * On a Gate-2 `approve`, allow the resolved `merge` integration to proceed
+	 * AUTONOMOUSLY. Default **OFF**. **Repo policy only** (the `do`-path author is
+	 * the operator who ran the command — no author-trust resolver here; that is the
+	 * `issue-intake` concern, decoupled). A non-`approve` verdict NEVER auto-merges
+	 * regardless. With `reviewPr` on but `autoMerge` off, review still gates
+	 * (block/approve) but a human does the merge (`--propose` semantics). Resolved
+	 * like `integration`: flag (`--auto-merge`/`--no-auto-merge`) > env > per-repo >
+	 * global > default false.
+	 */
+	autoMerge: boolean;
+	/**
+	 * The model the REVIEW agent runs on (de-correlation from the builder's
+	 * `model`). Optional with NO default so "unset" means "no forced review model"
+	 * (the harness's own default). Carried to the review-agent launch through the
+	 * EXISTING harness seam (`LaunchInput.model` / `substituteModel`) — NOT a new
+	 * mechanism. Resolved like `model`: flag (`--review-model`) > env > per-repo >
+	 * global > default (unset). Distinct from the builder's `model`.
+	 */
+	reviewModel?: string;
+	/**
+	 * Bound the revise↔review loop (Gate 2). On exhaustion the gate ERRORS OUT and
+	 * forces `needs-attention/` (never silently merges or loops), per the maintainer
+	 * decision. Default a small N (2). Resolved like `integration`: flag
+	 * (`--review-max-rounds`) > env > per-repo > global > default.
+	 */
+	reviewMaxRounds: number;
 }
 
 /** A partial config, e.g. loaded from a JSON file or built from CLI flags. */
@@ -169,6 +206,12 @@ export const DEFAULT_CONFIG: Config = {
 	arbitersDir: join(homedir(), 'git'),
 	integration: 'propose',
 	agentCmd: '',
+	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
+	// it is opt-in (ADR §8); its auto-merge sub-policy is OFF too. The loop bound is
+	// a small N so an unattended revise↔review can never run forever.
+	reviewPr: false,
+	autoMerge: false,
+	reviewMaxRounds: 2,
 };
 
 /** The conventional config location (`~/.config/agent-runner/config.json`). */
