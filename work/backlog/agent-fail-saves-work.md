@@ -40,6 +40,19 @@ choice.
   broken/dirty tree. Committing + surfacing it (with the failure reason) is still
   better than dropping it — the human chooses continue vs `--reset`. Do NOT try to
   validate or "fix" the partial work; just preserve + surface it.
+- **Covers BOTH `do` forms:** the save+push path must work for in-place `do` AND
+  `do --remote`/`run` (job-worktree cwd). `routeToNeedsAttention` pushes the branch
+  only when given an arbiter — confirm the agent-fail path passes `surfaceArbiter`
+  in BOTH cases (in-place `do` and `do --remote` already pass it for the gate-fail
+  path; reuse the same), so a failed agent's work is pushed regardless of isolation
+  form. A test should cover the job-worktree case, not only in-place.
+- **Composition with the recovery model:** the saved branch + the failure reason
+  become the CONTINUE starting point — a re-`requeue` (continue) lands the next agent
+  on this (possibly broken) tip, and the `agent-prompt-continue-context` slice
+  surfaces the failure reason + prior diff so the next agent knows what stalled.
+  This slice WRITES that recovery state; those two slices CONSUME it. They are
+  complementary and ideally land together (both already `blockedBy`
+  requeue-continue-and-reset).
 - **NOT in scope:** mid-work HARD interruption (kill -9 / machine shutdown) — there
   is no graceful exit to hook, and uncommitted work is inherently lossy. That case
   is accepted (no periodic auto-commit — it would sweep untracked artifacts, the

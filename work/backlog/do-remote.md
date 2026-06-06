@@ -65,10 +65,14 @@ artifact is the **`work/<slug>` branch**, not the worktree. On a stuck/failed ru
 the item is routed to `needs-attention` and its branch is PUSHED (the existing
 `routeToNeedsAttention(arbiter)` path — `src/needs-attention.ts`). A human recovers
 NOT by editing the agents'-area worktree but via the human face: `requeue <slug>`
-(→ backlog, branch kept) then a re-claim CONTINUES from the branch (per the
-`requeue-continue-and-reset` slice), or `work-on <slug>` in the human area. The
-agents'-area worktree is never the human's edit surface (hand-fixing there works as
-a last resort but is undocumented-by-design — no secrets belong in it).
+(→ backlog, branch kept) and a re-claim, or `work-on <slug>` in the human area.
+(NOTE: whether the re-claim CONTINUES from the kept branch or retries fresh depends
+on the SEPARATE `requeue-continue-and-reset` slice — which is NOT a dependency of
+this one. Until it lands, a re-claim retries from a fresh main; the branch is still
+preserved on the arbiter for manual recovery either way. Do NOT assume continue-mode
+exists when building this slice.) The agents'-area worktree is never the human's
+edit surface (hand-fixing there works as a last resort but is undocumented-by-design
+— no secrets belong in it).
 
 ## Acceptance criteria
 

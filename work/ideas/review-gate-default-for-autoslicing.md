@@ -198,6 +198,13 @@ New/sharper points from that session:
      gets BOTH de-correlations. The grid is the config surface — cheap repo
      `M=1,N=2`; high-stakes human-less auto-slice `M=3,N=until-clean`.
 
+4a. **The destination/goal-check is itself CONFIGURABLE (like the M×N axes).** The
+   final "if every slice is built as written, do we reach the PRD/ADR goal?" pass
+   (see "THE FINAL MOVE" below) need not be all-or-nothing: default-ON and
+   non-skippable for AUTO-SLICING (no human downstream — it is the strongest
+   trust signal there), but for CODE (where a human reviews the PR) it could be
+   opt-in or lighter. Same one-mechanism-two-defaults shape as the gate itself.
+
 4. **Termination = "until no blocking issues" capped by a hard max (both,
    configurable).** Resolves the "iteration bound" open question: stop early when a
    pass finds no NEW blocking issue (the natural terminator — passes taper to zero,
