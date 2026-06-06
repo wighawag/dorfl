@@ -2,8 +2,20 @@
 title: review — a model-driven review role, as TWO complementary gates (spec review + PR/code review), each independently on/off, with per-repo auto-merge-on-approve
 slug: review
 humanOnly: true
-sliceAfter: [auto-slice, runner-in-ci]
+sliceAfter: [auto-slice, runner-in-ci, review-skill]
 ---
+
+> **SCOPE NARROWED 2026-06-06 — the review PROTOCOL was extracted to its own PRD
+> (`work/prd/review-skill.md`).** This PRD is now ONLY the review **GATES** (the
+> runner machinery): Gate 1 (slice-time), Gate 2 (PR/code), the per-repo toggles,
+> the `--propose` PR arbiter, auto-merge-on-approve, the model override, the §13
+> role, and the shared trust resolver. The protocol itself — the four adversarial
+> lenses + destination check, realised as a runner-agnostic `review` SKILL that
+> EMITS verdicts (callers route them) — is `review-skill` and must be built FIRST
+> (hence the added `sliceAfter`). Where this PRD's text below describes "the
+> shared protocol (a SKILL)", that content now LIVES in `review-skill.md`; both
+> gates here CONSUME that skill and ROUTE its verdict to `needsAnswers` /
+> `needs-attention` / auto-merge.
 
 > **Launch snapshot, not maintained.** Source material for slicing (`to-slices`);
 > once sliced, technical detail moves into the slices and durable rationale into
