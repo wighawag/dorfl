@@ -23,6 +23,11 @@ decision-rich part and note it came from a prototype.
 - [ ] Criterion 1 (verifiable / demoable on its own)
 - [ ] Criterion 2
 - [ ] Tests cover the new behaviour (mirror the repo's existing test style)
+- [ ] **If this slice makes code write to a SHARED / GLOBAL location** (a real
+      home/config dir, a system path, a shared service, an external tool's managed
+      store): tests ISOLATE that location (point it at a temp/scratch dir via the
+      relevant env/config) AND assert the real one is UNTOUCHED after the run. Omit
+      only if the slice writes nothing outside its own temp fixtures.
 
 ## Blocked by
 

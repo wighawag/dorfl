@@ -147,6 +147,29 @@ drift from silently propagating into built work.
    `claimed_by` / `claimed_at` frontmatter — it would only duplicate what git
    already holds and tempt agents to coordinate on a non-authoritative field.
 
+## Slice quality rule — tests must not touch the real environment
+
+A slice that makes code **write to a SHARED / GLOBAL location** — a real
+home/config dir, a system path, a shared service, or an **external tool's managed
+store** (e.g. another agent's session directory) — MUST, as an acceptance
+criterion, have its **tests ISOLATE that location** (point it at a temp/scratch
+dir via the relevant env var or config knob) **AND assert the real one is
+UNTOUCHED after the run**. State the *mechanism*, not just the outcome: name the
+env/config lever and note WHERE the path is resolved (in-process vs in a child),
+because that determines whether overriding a child's env is enough or the test
+process's own `process.env` must be set.
+
+This is the generalisation of the git-config isolation tests already do
+(`GIT_CONFIG_GLOBAL=/dev/null`): the same discipline for ANY shared write target.
+It exists because a slice that *moves* a write into a shared location (e.g.
+“write sessions to the tool's default dir instead of the worktree”) silently
+turns previously-isolated tests into ones that pollute — and a malformed fixture
+in a shared store can crash unrelated tools that read it. (Real incident:
+session-log test fixtures leaked into a real `~/.pi/agent/sessions/` and crashed a
+dashboard; see that repo's `work/findings/pi-session-contract.md`.) Corollary: a
+synthetic fixture written into any store an external tool reads MUST be VALID per
+that tool's contract (capture the contract as a `findings/` doc).
+
 ## Field-naming convention
 
 All frontmatter and config field names are **camelCase** (`humanOnly`,
