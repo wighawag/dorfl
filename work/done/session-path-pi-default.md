@@ -398,3 +398,36 @@ git fetch <remote> && git switch -c work/session-path-pi-default <remote>/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/session-path-pi-default.md work/done/session-path-pi-default.md
 ```
+
+---
+
+### Slice note (2026-06-06) — `PI_CODING_AGENT_DIR` honoured + test isolation
+
+A follow-up landed on this PR before merge, after dogfooding surfaced a real
+defect the original slice missed:
+
+- **Latent product bug fixed:** `session-path.ts`'s replica of pi's default-dir
+  resolution hard-coded `~/.pi/agent`, ignoring pi's actual env override
+  `PI_CODING_AGENT_DIR` (verified in pi source `config.ts` `getAgentDir()`:
+  `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`, with tilde expansion). A user/CI
+  pointing pi at a custom agent dir would have had agent-runner write sessions to
+  `~/.pi/agent/sessions` while pi read the custom dir → sessions invisible to pi
+  AND pi-remote (the very breakage this slice fixes). `piAgentDir()` now honours
+  `PI_CODING_AGENT_DIR` (else `~/.pi/agent`), read per-call. We honour ONLY the
+  agent-dir var, not pi's separate `PI_CODING_AGENT_SESSION_DIR` — agent-runner's
+  own `sessionsDir` override already plays that role.
+
+- **Test-hygiene bug fixed:** the `do-watch`/`pi-harness`/`run` tests launch the
+  (stubbed) pi adapter on the DEFAULT session path, which (since this slice moved
+  the default OUT of the worktree) resolved to the developer's REAL
+  `~/.pi/agent/sessions/` — leaking ~one dir per test run there, and (with a
+  fixture header missing `version`/`timestamp`) CRASHING the pi-remote dashboard's
+  `listAll()` via `new Date(undefined).toISOString()`. Fixed by a shared
+  `isolatePiAgentDir(scratchRoot)` test helper that points `PI_CODING_AGENT_DIR` at
+  a scratch dir for the test's duration (generation runs in-process, so it sets the
+  test process's own `process.env`), plus a well-formed fixture header. Verified:
+  the real sessions dir count is unchanged across a full test run (no leak).
+
+  (Reported cross-team by pi-remote, which also added a defensive guard so a
+  malformed `created` can't crash its `listSessions()` — a band-aid for a
+  malformed-data source that this fix removes at the root.)

@@ -2,6 +2,31 @@ import {homedir} from 'node:os';
 import {join, resolve} from 'node:path';
 
 /**
+ * pi's env override for its agent dir. Real pi reads
+ * `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR` (i.e. `PI_CODING_AGENT_DIR`) in its
+ * `getAgentDir()` (verified vs pinned source `config.ts`); when set, ALL of pi's
+ * default session paths move under it. agent-runner's replica MUST honour the same
+ * var, or a user/CI that points pi at a custom agent dir would have agent-runner
+ * write sessions to `~/.pi/agent/sessions` while pi reads the custom dir — sessions
+ * then invisible to pi AND pi-remote (the very breakage this slice fixes). Also the
+ * clean lever for test isolation (point it at a scratch dir). NOTE: we honour only
+ * the agent-dir var, not pi's separate `PI_CODING_AGENT_SESSION_DIR` — agent-runner
+ * already has its own `sessionsDir` override for that role.
+ */
+const PI_AGENT_DIR_ENV = 'PI_CODING_AGENT_DIR';
+
+/** Expand a leading `~`/`~/` to the home dir (pi's `expandTildePath` behaviour). */
+function expandTilde(p: string): string {
+	if (p === '~') {
+		return homedir();
+	}
+	if (p.startsWith('~/') || p.startsWith('~\\')) {
+		return join(homedir(), p.slice(2));
+	}
+	return p;
+}
+
+/**
  * Generate the **full pi session-file path** the harness passes as `--session
  * <path>` (slice `session-path-pi-default`). This is the single source of the
  * session path: the caller generates it ONCE (before pi launches, so the
@@ -54,8 +79,16 @@ import {join, resolve} from 'node:path';
  * wanted, swapping this for the import is a one-line change.
  */
 
-/** pi's default agent dir (`~/.pi/agent`) — the parent of `sessions/`. */
+/**
+ * pi's agent dir — the parent of `sessions/`. Honours `PI_CODING_AGENT_DIR`
+ * (matching real pi's `getAgentDir()`), else `~/.pi/agent`. Read at call time (not
+ * cached) so a test setting `process.env.PI_CODING_AGENT_DIR` is respected.
+ */
 function piAgentDir(): string {
+	const override = process.env[PI_AGENT_DIR_ENV];
+	if (override !== undefined && override !== '') {
+		return expandTilde(override);
+	}
 	return join(homedir(), '.pi', 'agent');
 }
 

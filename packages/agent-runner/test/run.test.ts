@@ -9,6 +9,7 @@ import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
 import {isAbsolute} from 'node:path';
 import {
 	makeScratch,
+	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	gitEnv,
@@ -17,10 +18,15 @@ import {
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
+let restorePiAgentDir: () => void;
 beforeEach(() => {
 	scratch = makeScratch('agent-runner-run-');
+	// Isolate pi's session storage to a scratch dir (see do-watch.test.ts) so the
+	// default-path job launches do not pollute the real ~/.pi/agent/sessions/.
+	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
+	restorePiAgentDir();
 	scratch.cleanup();
 });
 

@@ -7,6 +7,7 @@ import {NullHarness} from '../src/harness.js';
 import {PiHarness} from '../src/pi-harness.js';
 import {
 	makeScratch,
+	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	gitEnv,
@@ -30,10 +31,16 @@ import {
  */
 
 let scratch: Scratch;
+let restorePiAgentDir: () => void;
 beforeEach(() => {
 	scratch = makeScratch('agent-runner-do-watch-');
+	// Isolate pi's session storage to a scratch dir so the default-path tests do
+	// NOT write into the developer's real ~/.pi/agent/sessions/ (which leaks dirs
+	// + crashed the pi-remote dashboard on the malformed fixture header).
+	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
+	restorePiAgentDir();
 	scratch.cleanup();
 });
 
@@ -67,7 +74,11 @@ function writeWatchPiStub(): string {
 		'if [ -n "$session_file" ]; then',
 		'  mkdir -p "$(dirname "$session_file")"',
 		'  log="$session_file"',
-		`  printf '%s\\n' '{"type":"session","id":"abc","cwd":"."}' >> "$log"`,
+		// A WELL-FORMED session header (version + ISO timestamp, like real pi). A
+		// header missing `timestamp` makes any SessionManager.listAll() consumer
+		// (e.g. the pi-remote dashboard) call new Date(undefined).toISOString() and
+		// throw RangeError. Keep the fixture valid even now tests are isolated.
+		`  printf '%s\\n' '{"type":"session","version":3,"id":"abc","timestamp":"2026-06-05T18:21:30.000Z","cwd":"."}' >> "$log"`,
 		`  printf '%s\\n' '{"type":"message","message":{"role":"user","content":[{"type":"text","text":"the prompt"}]}}' >> "$log"`,
 		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"all set"},{"type":"toolCall","name":"edit","arguments":{}}]}}' >> "$log"`,
 		`  printf '%s\\n' '{"type":"message","message":{"role":"toolResult","toolName":"edit","content":[{"type":"text","text":"ok"}]}}' >> "$log"`,
