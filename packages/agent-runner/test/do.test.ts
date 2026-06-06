@@ -3,6 +3,8 @@ import {writeFileSync, mkdirSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performDo, type DoAgentRunner} from '../src/do.js';
 import {performComplete} from '../src/complete.js';
+import {performStart} from '../src/start.js';
+import {returnToBacklog} from '../src/needs-attention.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
 	makeScratch,
@@ -319,6 +321,185 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 		expect(result.message).toMatch(/exploded/);
 		// Claimed + onboarded, but never integrated → not done on the arbiter.
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+	});
+});
+
+describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + surface)', () => {
+	/** A stubbed agent that EDITS a file (partial work) then returns ok:false. */
+	const editsThenFails: DoAgentRunner = ({cwd}) => {
+		writeFileSync(join(cwd, 'partial.txt'), 'half-finished work\n');
+		return {ok: false, detail: 'agent exploded mid-build'};
+	};
+
+	it('saves the agent work + surfaces on the arbiter main + pushes the work branch (NOT a bare drop)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: editsThenFails,
+			env: gitEnv(),
+		});
+
+		// The exit CONTRACT stays coherent: it is still an agent failure (distinct
+		// from a clean success and from a red gate's `needs-attention`), exit 1, with
+		// the failure detail in the message.
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.message).toMatch(/exploded mid-build/);
+		expect(result.routedToNeedsAttention).toBe(true);
+
+		// The work-preserving side-effect now MATCHES the gate-failure path:
+		// (a) surfaced ON THE ARBITER main (mode-M), cross-machine visible.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+
+		// (b) the failure reason is recorded in the item body.
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
+			true,
+		);
+
+		// (c) the work/<slug> branch is PUSHED to the arbiter, carrying the agent's
+		// partial work (a wip commit) — the durable artifact a requeue continues from.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				repo,
+			).trim(),
+		).not.toBe('');
+		// The agent's partial edit is on that pushed branch (not dropped).
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], repo),
+		).toBe('');
+		// But it never reached main (no auto-merge of a failed build).
+		expect(gitIn(['ls-tree', 'arbiter/main', 'partial.txt'], repo).trim()).toBe(
+			'',
+		);
+	});
+
+	it('the SAVED work is recoverable: requeue (continue) lands a re-claim on the branch WITH the partial commits', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const repo = seeded.repo;
+
+		// The agent fails after editing; `do` saves + surfaces + pushes the branch.
+		const failed = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: editsThenFails,
+			env: gitEnv(),
+		});
+		expect(failed.outcome).toBe('agent-failed');
+		expect(failed.routedToNeedsAttention).toBe(true);
+
+		// A human resolves the cause and requeues (default = keep + continue): the
+		// ledger file moves needs-attention → backlog; the pushed work branch stays.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		const requeued = returnToBacklog({
+			cwd: repo,
+			slug: 'alpha',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(requeued.moved).toBe(true);
+
+		// A DIFFERENT machine (a fresh clone) re-claims via start: it must CONTINUE
+		// from the kept branch, so the agent's partial commit is present.
+		const fresh = seeded.clone('continuer');
+		const restarted = await performStart({
+			slug: 'alpha',
+			cwd: fresh,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(restarted.exitCode).toBe(0);
+		expect(restarted.branch).toBe('work/alpha');
+		// The partial work the failed agent left is present on the continued branch.
+		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
+	});
+
+	it('an EMPTY failure (the agent made NO changes) is handled without crashing on an empty commit', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// The agent makes NO edits and fails (nothing to wip-commit).
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: () => ({ok: false, detail: 'agent did nothing'}),
+			env: gitEnv(),
+		});
+		// No crash; still an agent failure, and the reason is STILL surfaced (the
+		// move-only commit is non-empty even when there is no wip to save).
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.routedToNeedsAttention).toBe(true);
+		expect(result.message).toMatch(/did nothing/);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
+			true,
+		);
+	});
+
+	it('a THROWN agent error is saved the same way (commit + push + surface)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: ({cwd}) => {
+				writeFileSync(join(cwd, 'partial.txt'), 'work before throw\n');
+				throw new Error('agent crashed hard');
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.message).toMatch(/crashed hard/);
+		expect(result.routedToNeedsAttention).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], repo),
+		).toBe('');
+	});
+
+	it('the JOB-WORKTREE case is covered too (a non-cwd checkout still saves + pushes)', async () => {
+		// `do` in-place and `do --remote`/`run` differ only in WHERE the checkout is;
+		// the save+push path reads `cwd` + the arbiter remote, so it works regardless
+		// of isolation form. Simulate the job-worktree form: run `do` against a
+		// SEPARATE clone (not the seed repo), as a job worktree is a separate checkout
+		// pointing at the same arbiter.
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const job = seeded.clone('job');
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: job,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: editsThenFails,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.routedToNeedsAttention).toBe(true);
+		// Surfaced on the arbiter main + the branch pushed, from the job checkout.
+		expect(existsOnArbiterMain(job, 'needs-attention', 'alpha')).toBe(true);
+		gitIn(['fetch', '-q', ARBITER], job);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				job,
+			).trim(),
+		).not.toBe('');
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], job),
+		).toBe('');
 	});
 });
 

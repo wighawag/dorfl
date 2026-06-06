@@ -7,6 +7,7 @@ import {PiHarness} from './pi-harness.js';
 import {SessionTailer} from './watch-session.js';
 import {generateSessionPath} from './session-path.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
+import {ledgerWrite} from './ledger-write.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import {runAsync} from './git.js';
@@ -55,7 +56,7 @@ export type DoOutcome =
 	| 'lost' // claim lost the race — skipped cleanly
 	| 'contended' // claim push kept being rejected
 	| 'needs-attention' // red gate / rebase conflict → surfaced (autonomous)
-	| 'agent-failed' // the agent invocation itself errored before the gate
+	| 'agent-failed' // the agent invocation itself errored before the gate — work SAVED + surfaced
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
 	| 'prd-not-wired'; // `do prd:<slug>` — the slicing path is not built yet
@@ -67,6 +68,13 @@ export interface DoResult {
 	slug?: string;
 	/** The work branch the run operated on, when one was created/switched-to. */
 	branch?: string;
+	/**
+	 * True iff a FAILURE (agent-failed) SAVED + surfaced the partial work via the
+	 * needs-attention mechanism (committed the agent's work, pushed the
+	 * `work/<slug>` branch, surfaced on the arbiter's main) rather than dropping it.
+	 * Undefined/false on the success, lost/contended/refused, and usage-error paths.
+	 */
+	routedToNeedsAttention?: boolean;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -273,13 +281,15 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
 	} catch (err) {
 		if (err instanceof PromptError) {
-			return {
-				exitCode: 1,
-				outcome: 'agent-failed',
+			return await saveAgentFailure({
 				slug,
 				branch,
-				message: err.message,
-			};
+				cwd,
+				arbiter,
+				detail: err.message,
+				env,
+				note,
+			});
 		}
 		throw err;
 	}
@@ -289,11 +299,27 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		agent = await runDoAgent(options, cwd, prompt, slug);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		return {exitCode: 1, outcome: 'agent-failed', slug, branch, message};
+		return await saveAgentFailure({
+			slug,
+			branch,
+			cwd,
+			arbiter,
+			detail: message,
+			env,
+			note,
+		});
 	}
 	if (!agent.ok) {
-		const message = agent.detail ?? `the agent failed to build '${slug}'.`;
-		return {exitCode: 1, outcome: 'agent-failed', slug, branch, message};
+		const detail = agent.detail ?? `the agent failed to build '${slug}'.`;
+		return await saveAgentFailure({
+			slug,
+			branch,
+			cwd,
+			arbiter,
+			detail,
+			env,
+			note,
+		});
 	}
 
 	// 6. Gate + done-move + commit + rebase + integrate + branch-tidy LIKE
@@ -345,6 +371,98 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	const outcome: DoOutcome =
 		completed.outcome === 'refused' ? 'refused' : 'usage-error';
 	return {exitCode: 1, outcome, slug, branch, message: completed.message};
+}
+
+/**
+ * SAVE the partial work of a FAILED agent instead of dropping it (the keystone of
+ * the `agent-fail-saves-work` slice). An agent failure (`runDoAgent` returned
+ * `ok:false`, threw, or the prompt could not be assembled) used to BARE-RETURN
+ * `agent-failed`, leaving whatever the agent edited only on the local work branch
+ * in the (disposable, possibly remote) job worktree — silently lost.
+ *
+ * This routes it through the SAME work-preserving machinery a RED GATE uses: the
+ * ledger write seam's needs-attention transition (`git add -A` + a wip commit
+ * capturing the agent's work + the `git mv → needs-attention/` move-only commit
+ * with the failure detail recorded as the reason in the body), surfaced on the
+ * arbiter's `main` (the autonomous, cross-machine-visible mode-M surfacing `do`
+ * already uses for the gate-fail path) so `scan`/`status`/another machine see it.
+ *
+ * It ALSO pushes the `work/<slug>` branch to the arbiter so the saved partial
+ * commits travel cross-machine and the item is RECOVERABLE via `requeue`
+ * (continue): the continue-detection in `continue-branch.ts` looks for an arbiter
+ * `work/<slug>` ahead of main, which only exists if the branch is pushed (the
+ * needs-attention seam surfaces the LEDGER on main but does NOT push the branch —
+ * see `work/observations/needs-attention-seam-does-not-push-work-branch.md`).
+ *
+ * The EMPTY-failure case (the agent made NO commits / no changes) is handled
+ * without crashing on an empty commit: `routeToNeedsAttention` (under the seam)
+ * skips the wip commit when the tree is clean, and the move-only commit (reason +
+ * the `git mv`) is always non-empty, so the failure reason is still surfaced.
+ *
+ * The OUTCOME stays `agent-failed` (distinct from a clean success and from a red
+ * `gate-failed`/`needs-attention` for reporting / exit-code purposes — `do`'s
+ * exit contract stays coherent); only the WORK-PRESERVING side-effect now matches
+ * the gate-failure path. We do NOT validate or "fix" the partial work — a broken
+ * tree committed + surfaced (with the reason) is recoverable; the human chooses
+ * `requeue` (continue) vs `requeue --reset` (discard).
+ */
+async function saveAgentFailure(params: {
+	slug: string;
+	branch: string | undefined;
+	cwd: string;
+	arbiter: string;
+	detail: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<DoResult> {
+	const {slug, cwd, arbiter, detail, env, note} = params;
+	// The work branch is always `work/<slug>` (the onboarding switched the checkout
+	// to it before the agent ran); derive it from the slug so the push target is
+	// always defined even when the caller's `branch` was not narrowed.
+	const branch = params.branch ?? `work/${slug}`;
+	const reason = `agent failed: ${detail}`;
+
+	// Route through the SAME seam the gate-fail path uses: save the agent's work as
+	// a wip commit (skipped when the tree is clean — the empty-failure case),
+	// `git mv` the item to needs-attention/ with the reason in the body, and surface
+	// the move-only commit on the arbiter's main (mode-M, cross-machine visible).
+	const routed = ledgerWrite.applyNeedsAttentionTransition({
+		cwd,
+		slug,
+		reason,
+		// The autonomous surfacing (like `do`'s gate-fail path): publish the stuck
+		// state on the arbiter's main so scan/status/another machine can see it.
+		arbiter,
+		env,
+		note,
+	});
+
+	// Push the work/<slug> branch to the arbiter so the SAVED partial commits
+	// travel cross-machine and `requeue` (continue) can land the next agent on this
+	// tip (the continue-detection reads <arbiter>/work/<slug> ahead of main). The
+	// seam surfaces the LEDGER on main but does NOT push the branch, so we push it
+	// here. Best-effort: an unreachable arbiter leaves the local branch (still on
+	// disk in this checkout/worktree) — the surface + the local commits stand.
+	if (routed.moved) {
+		await runAsync('git', ['push', arbiter, `${branch}:${branch}`], cwd, {env});
+	}
+
+	const message = routed.moved
+		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +
+			`routed it to work/needs-attention/ (surfaced on ${arbiter}/main; pushed ` +
+			`${branch}). Recover via \`requeue\` (continue) or \`requeue --reset\` to ` +
+			'discard.'
+		: `Agent failed building '${slug}' (${detail}); could not route to ` +
+			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
+	note(message);
+	return {
+		exitCode: 1,
+		outcome: 'agent-failed',
+		slug,
+		branch,
+		routedToNeedsAttention: routed.moved,
+		message,
+	};
 }
 
 /**
