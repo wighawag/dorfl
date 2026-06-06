@@ -161,6 +161,15 @@ Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide 
   `runner-in-ci` slice does not BUILD it, it only (optionally) invokes it, gated
   by the `blockedBy` above. (Consistent with the existing Out-of-Scope line
   "Auto-slicing of PRDs (that is `auto-slice`)".)
+- **CI DEPENDS ON the review gate, not the reverse** (dependency direction fixed
+  2026-06-06, batch-qa round 2). The review gate is a property of **`do`** (the
+  per-repo worker runs `verify` then the review step). CI is merely a CALLER of
+  `do`, so it INHERITS the review gate by invoking `do` — it does not provide it.
+  Therefore `review` must NOT `sliceAfter`/`blockedBy` `runner-in-ci` (that stale
+  arrow has been dropped from `review.md`); instead, **when `runner-in-ci` is
+  sliced, a slice that wants review-gated CI runs should `blockedBy` the
+  review-gate slice.** For a repo configured `reviewPr: on` + `autoMerge: on`, the
+  CI tick is simply `do -n <N> --merge` and the gate rides along inside `do`.
 
 ## Out of Scope
 

@@ -103,8 +103,11 @@ which is inert on `main`). So the single-slice outcome lands through a trust gat
   author, who may differ from the issue opener — so a maintainer can bless a
   stranger's issue into a direct slice).
 - This **author-trust resolver** generalises today's binary `allowAgents` (inputs:
-  author association × request channel × repo policy) and is the **SAME primitive
-  `review`'s PR `autoMerge`-on-approve uses** — define it ONCE, consumed by both.
+  author association × request channel × repo policy). **It is a CI /
+  issue-front-door concern — NOT shared with `review`'s `autoMerge`** (decoupled
+  2026-06-06; see Autonomy notes): `review`'s merge keys on per-repo policy only
+  because the `do`-path author is the operator. Author-trust matters here solely
+  because an *untrusted issue author* can trigger work.
 - (The PRD outcome needs no such gate — a committed PRD is inert; its slicing is
   separately gated.)
 
@@ -157,8 +160,9 @@ built as a separate mode (recorded here so it is not relitigated).
 - **Closure:** lone slice → `Fixes #N`; PRD → `Refs #N` + the existing
   "PRD complete?" query closes `issue: N`. Provider-portable, no labels (ADR §12).
 - **Single-slice safety gate:** review-PR by default; direct-to-backlog auto-accept
-  when the AUTHORIZING ACTOR is trusted. Trust resolver generalises `allowAgents`
-  and is SHARED with `review`'s `autoMerge`.
+  when the AUTHORIZING ACTOR is trusted. Trust resolver generalises `allowAgents`;
+  it is a CI / issue-front-door concern, **NOT shared with `review`'s `autoMerge`**
+  (decoupled 2026-06-06).
 - **Emission mode (a)** (CI emits the file, review-PR gated); triage-only folded
   out (review-PR subsumes it).
 - **Reuse the `issue-to-prd` seam + trigger/auth/conversation machinery.** Core
@@ -194,19 +198,25 @@ built as a separate mode (recorded here so it is not relitigated).
   earlier decide/execute-shape question (one agent vs two-step) dissolved (see
   below). What remains OPEN is the **author-trust resolver's shape + ownership**
   (it ties to `review` Q4, also open):
-  - **OPEN — author-trust resolver.** The resolver is declared SHARED with
-    `review`'s `autoMerge`-on-approve ("define it once, consumed by both"), but it
-    is currently UNOWNED across two un-sliced PRDs. Maintainer steer (2026-06-06):
-    the trust is fundamentally about the **issue author**, BUT issue-intake must
-    also be processable when a **repo owner / maintainer issues a `/command` in an
-    issue comment** — i.e. the authorizing actor (the trigger-comment author) can
-    differ from and override the issue opener. So the resolver's inputs are at
-    least *(issue-author association) × (trigger-comment author association) ×
-    (request channel: command vs every-issue) × (repo policy)*. STILL TO DECIDE:
-    the exact resolver signature, and **who BUILDS it** — a single foundational
-    slice both `issue-intake` and `review` `blockedBy`, or one owns it and the
-    other consumes. Resolve this TOGETHER with `review` Q4 (same primitive, the
-    two answers must agree on one owner) before slicing this PRD.
+  - **OPEN — author-trust resolver (a CI / issue-front-door concern, now
+    DECOUPLED from `review`).** Maintainer steer (2026-06-06): the trust is
+    fundamentally about the **issue author**, BUT issue-intake must also be
+    processable when a **repo owner / maintainer issues a `/command` in an issue
+    comment** — i.e. the authorizing actor (the trigger-comment author) can differ
+    from and override the issue opener. So the resolver's inputs are at least
+    *(issue-author association) × (trigger-comment author association) × (request
+    channel: command vs every-issue) × (repo policy)*. STILL TO DECIDE: the exact
+    resolver signature, and where it lives in the issue-front-door wiring.
+    **DECOUPLING (2026-06-06, batch-qa round 2):** the earlier "SAME primitive as
+    `review`'s `autoMerge`, define once, consumed by both" is **WITHDRAWN**.
+    Author-trust matters ONLY because an *untrusted issue author* can trigger work
+    — it is purely a CI / issue-front-door concern. `review`'s `autoMerge` keys on
+    per-repo policy only (on the `do` path the author IS the operator who ran the
+    command — no untrusted author to gate). So this resolver is OWNED HERE
+    (issue-intake / CI), is NOT shared with the `do`/review gate, and does not
+    block `review` from slicing. It remains genuinely open *for this PRD* — but as
+    an issue-front-door question, settled when this PRD (or `runner-in-ci`) is
+    sliced, NOT as a cross-PRD shared primitive.
   - *(Resolved/closed:)* the decide/execute-shape question — with slices-first + a
     sharp count-based PRD trigger + CI stopping at the PRD, the conversation agent
     resolves to one of three outcomes and the runner branches on the verdict (the
@@ -247,5 +257,8 @@ built as a separate mode (recorded here so it is not relitigated).
 - whitesmith (`~/dev/github/wighawag/whitesmith`) is the reference for the issue
   provider/seam, author-association checks, and the slash-command/event workflow.
   Do NOT reuse its label state-machine or 1-PR-per-issue model.
-- The author-trust resolver is deliberately shared with `review`'s
-  `autoMerge`-on-approve — define it once, consumed by both.
+- The author-trust resolver is a CI / issue-front-door concern, **NOT shared with
+  `review`'s `autoMerge`** (decoupled 2026-06-06). `review`'s merge gate keys on
+  per-repo policy only — the `do`-path author is the operator who ran the command,
+  so there is no untrusted author to resolve. Author-trust matters only where an
+  untrusted *issue author* can trigger work; it is owned here.

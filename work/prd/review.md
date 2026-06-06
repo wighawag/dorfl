@@ -2,8 +2,7 @@
 title: review — a model-driven review role, as TWO complementary gates (spec review + PR/code review), each independently on/off, with per-repo auto-merge-on-approve
 slug: review
 humanOnly: true
-needsAnswers: true
-sliceAfter: [auto-slice, runner-in-ci, review-skill]
+sliceAfter: [auto-slice, review-skill]
 ---
 
 > **SCOPE NARROWED 2026-06-06 — the review PROTOCOL was extracted to its own PRD
@@ -193,7 +192,7 @@ multiple independent passes live in the idea file; do not duplicate here.)
   gates: the pure verdict-routing + toggle-resolution + "post via seam" wiring is
   agent-buildable; anything that decides auto-merge policy or touches the §8
   determinism boundary leans `humanOnly`.
-- **`needsAnswers`: true — THREE resolved 2026-06-06 (batch-qa), ONE still open:**
+- **`needsAnswers`: CLEARED 2026-06-06 (batch-qa round 2) — all four resolved:**
   - **Context isolation — RESOLVED.** A **fresh-context** reviewer is the floor
     (a cold read; the `review` skill already insists on this) — enough for now.
     No different model is MANDATED by default, BUT the `review` step's model is
@@ -207,23 +206,37 @@ multiple independent passes live in the idea file; do not duplicate here.)
     per-repo > global > built-in default); on exhaustion **ERROR OUT** and force
     `needs-attention/` (never silently merge or loop) — matches the Testing
     Decisions `reviewMaxRounds` bullet.
-  - **Auto-merge trust model — STILL OPEN (the one blocking question).** Maintainer
-    (2026-06-06): an `autoMerge` config alone initially seemed enough, but the
-    shared-primitive point lands — needs more thought on the USER STORIES before
-    deciding. The question: does `autoMerge` key ONLY on repo policy, or also on
-    the work's AUTHOR / how it was requested (the SAME author-trust resolver
-    `issue-intake` uses)? **This is the SAME open primitive as `issue-intake`'s
-    `needsAnswers` (the author-trust resolver + its owner) — resolve the two
-    TOGETHER, with one owning slice both PRDs `blockedBy`.** Until then `review` is
-    not slice-ready on this axis.
+  - **Auto-merge trust model — RESOLVED (round 2): `autoMerge` keys on PER-REPO
+    POLICY ONLY.** A repo opts in (`reviewPr: on` + `autoMerge: on`, resolved
+    flag > per-repo > global > default-off); on an `approve` verdict the work
+    merges; any other verdict never does. **Author-trust is OUT OF SCOPE for the
+    `do`/review gate** — on the `do` path the author IS the operator who ran the
+    command, so there is no untrusted author to gate on. The author-association /
+    request-channel trust resolver is a **CI / issue-front-door concern only**
+    (it exists because an untrusted *issue author* can trigger work) and stays
+    specced in `issue-intake`, NOT here. The earlier "SAME shared primitive as
+    issue-intake" coupling is **withdrawn** (2026-06-06): they are different
+    concerns — `review`'s merge = repo policy; `issue-intake`'s author-trust = how
+    CI surfaces an untrusted trigger. Decoupled.
 
-### Slice-readiness notes (resolved 2026-06-06, batch-qa)
+### Slice-readiness notes (resolved 2026-06-06, batch-qa round 2)
 
-- **Slice ORDER: `review` is sliced only AFTER `runner-in-ci` is sliced AND the
-  auto-merge-trust question above is resolved.** `auto-slice` ✓ and `review-skill`
-  ✓ are sliced; `runner-in-ci` is NOT yet sliced. So `review` is the most
-  genuinely-blocked PRD in this batch — not this cycle, and likely needs its own
-  later run even after `runner-in-ci` is sliced, to settle the trust primitive.
+- **DEPENDENCY DIRECTION CORRECTED — `review` does NOT depend on `runner-in-ci`;
+  CI depends on `review`.** The review GATE lives on **`do`** (the per-repo
+  in-place worker, which exists and runs on the laptop today): `do` runs `verify`
+  then the review step, and routes a `block` through the SAME needs-attention
+  surface seam the gate-fail path already uses. **CI is merely a CALLER of `do`**
+  (`runner-in-ci` wires `do` into GitHub Actions), so CI INHERITS the review gate
+  by invoking `do` — review must NOT wait on CI. The stale `sliceAfter:
+  runner-in-ci` (which implied the reverse) has been **dropped**; `runner-in-ci`,
+  when sliced, should `blockedBy` the review-gate slice, not the other way round.
+- **`review` is slice-ready NOW** (its `sliceAfter` deps `auto-slice` ✓ and
+  `review-skill` ✓ are both sliced; the `review` skill itself is built).
+- **Scope for the FIRST slice = Gate 2 (PR/code review) on the local `do`
+  `--propose`/`--merge` path** — that is the gate guarding `--merge`, the unlock
+  for `do -n <N> --merge` on a `reviewPr`-configured repo. **Gate 1 (spec/slice
+  review after auto-slicing) is DEFERRED** — it guards the `autoslice-*` chain,
+  not the build-backlog drain, so it is a later slice.
 
 ## Out of Scope
 
@@ -232,8 +245,11 @@ multiple independent passes live in the idea file; do not duplicate here.)
 - The CI packaging that runs these gates headless (that is `runner-in-ci`'s
   `install-ci`; this PRD defines the gate, not its CI wiring).
 - Replacing `verify` (never — review is ON TOP of the deterministic floor, §8).
-- Issue-front-door author-trust policy (that is `issue-to-slices`; the two SHARE a
-  trust primitive — see the open question — but it is specced there).
+- Issue-front-door author-trust policy (that is `issue-intake`). **DECOUPLED
+  2026-06-06:** the earlier "the two SHARE a trust primitive" is WITHDRAWN —
+  `review`'s `autoMerge` keys on per-repo policy only; author-association /
+  request-channel trust is a CI / issue-front-door concern, specced in
+  `issue-intake`, not shared with the `do`/review gate.
 - Non-GitHub review providers (GitHub adapter first; the seam allows others later).
 
 ## Further Notes
@@ -245,6 +261,8 @@ multiple independent passes live in the idea file; do not duplicate here.)
   `review` skill verbatim; do not re-derive it here.
 - Complements `autoslice-confidence` (the slicer's SELF-confidence check): review
   is the INDEPENDENT second opinion a self-check cannot be.
-- The PR-review/auto-merge author-trust question is deliberately shared with
-  `issue-to-slices` (an agent-authored slice landing as a review-PR by default).
-  Resolve the trust primitive ONCE, consumed by both.
+- ~~The PR-review/auto-merge author-trust question is deliberately shared with
+  `issue-to-slices`~~ — **WITHDRAWN 2026-06-06.** On the `do` path the author is
+  the operator who ran the command (no untrusted author), so `autoMerge` is
+  repo-policy-only. Author-trust matters solely where an untrusted issue author
+  can trigger work — a CI/`issue-intake` concern, decoupled from this gate.
