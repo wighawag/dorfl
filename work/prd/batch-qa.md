@@ -1,7 +1,6 @@
 ---
 title: batch-qa — gather every open question across work/ into ONE file, answer in one sitting, apply + iterate
 slug: batch-qa
-humanOnly: true
 sliceAfter: [review-skill]
 ---
 
@@ -38,12 +37,18 @@ not an `agent-runner` command, per `docs/adr/methodology-and-skills.md` §8 and 
    below), narrows by the human's description, and self-limits to a context-sized
    chunk if the set is still large. The batch file's HEADER records exactly which
    items are in THIS batch ("the items being studied").
-1. **GATHER pass (B→A).** Read the targeted items, run the **`review`** protocol
-   (compose — do NOT reimplement; see `work/prd/review.md`) to *surface* latent
-   questions, AND collect the *pre-existing* ones (`needsAnswers: true` items +
-   their `## Open questions` blocks). Write them all into **one** human-fillable
-   file, `work/questions/<date>-batch.md`, with **full inline context + a
-   suggested default per question**, so the human never has to open the item.
+1. **GATHER pass (B→A).** Read the targeted items and produce questions, by scope:
+   - **slices / PRDs / code** → run the **`review` skill** (`skills/review/`;
+     compose, do NOT reimplement) and map its emitted `findings` → batch-file
+     questions; ALSO collect the *pre-existing* ones (`needsAnswers: true` items +
+     their `## Open questions` blocks).
+   - **observations** → the triage question is **batch-qa-NATIVE**, NOT a `review`
+     verdict: `review` reviews artifacts against the contract, but an observation
+     has no gate to review — its question ("promote / keep / delete?") is generated
+     by batch-qa itself. (`review` runs only on the slice/PRD/code scopes.)
+   Write all questions into **one** human-fillable file,
+   `work/questions/<date>-batch.md`, with **full inline context + a suggested
+   default per question**, so the human never has to open the item.
 2. *(the human fills in every answer in that one file — the core win)*
 3. **APPLY pass (one step per item).** Read the answered file and, **per scope**,
    advance each item exactly ONE rung (see the one-step invariant below): slice/PRD
@@ -132,22 +137,21 @@ the new items re-enter the stateless candidate pool and later runs advance them.
 Convergence is the same self-bounding mechanism — no special-casing, and every item
 moves exactly one rung per run.
 
-### Composition: batch-qa is glue over the slicer + the review protocol
+### Composition: batch-qa is glue over the slicer + the review skill
 
-`batch-qa` builds almost no heavy logic itself — it COMPOSES the slicer + the
-review protocol and adds only the batch-file + the human loop + the one-step
-dispatch. (Caveat: only `to-slices` exists today; `review` does not — see the open
-dependency question.)
+`batch-qa` builds almost no heavy logic itself — it COMPOSES two EXISTING skills
+and adds only the batch-file + the human loop + the one-step dispatch:
 
-- **`to-slices`** (an EXISTING skill in `skills/`) performs the PRD→slices step.
-  `batch-qa` does NOT reimplement slicing — this composition is real and available.
-- **`review` SKILL** generates the slice/PRD questions (the B pass). This skill is
-  `work/prd/review-skill.md` — the review PROTOCOL extracted as a pure,
-  runner-agnostic skill that EMITS verdicts (`{approve|block, findings[]}`) and
-  writes nothing. `batch-qa` composes it and ROUTES blocking findings into its
-  batch file (the skill's emit-vs-route boundary is what makes it reusable here
-  AND by the review gates). `batch-qa` `sliceAfter: [review-skill]` — it depends
-  ONLY on the small skill, NOT on the heavy review GATES (`review.md`).
+- **`to-slices`** (`skills/to-slices/`) performs the PRD→slices step. `batch-qa`
+  does NOT reimplement slicing.
+- **`review`** (`skills/review/`) generates the slice/PRD/code questions (the B
+  pass). It is the review PROTOCOL as a pure, runner-agnostic skill that EMITS
+  verdicts (`{approve|block, findings[]}`) and writes nothing; `batch-qa` composes
+  it and ROUTES blocking findings into its batch file (the skill's emit-vs-route
+  boundary is what makes it reusable here AND by the review gates). `batch-qa`
+  `sliceAfter: [review-skill]` — it depends ONLY on the skill, NOT on the heavy
+  review GATES (`review.md`). NOTE: `review` does NOT cover the observation scope
+  (triage is batch-qa-native — see the GATHER pass).
 
 The PRD-slice step is a mini-pipeline of those two: `to-slices` (produce) →
 `review` (assess) → blocking findings go into the batch file (batch-qa's terminal
@@ -183,7 +187,7 @@ current gate design (observations have no gate); the slice/PRD passes simply reu
 `review` + the `needsAnswers` seam. (Captured as an architectural note in §Further
 Notes — a future reader must not mistake this tool for a gate.)
 
-### The batch-file shape (fan-out-friendly by construction)
+### The batch-file shape
 
 ```
 work/questions/<date>-batch.md
@@ -191,7 +195,7 @@ work/questions/<date>-batch.md
 # BATCH <date> — studying: <slug>, <slug>, <slug>, …   (the items in THIS batch)
 #   (ephemeral: delete after APPLY merges answers into the items)
 
-## OBSERVATIONS (triage: promote-to-slice / promote-to-ADR / keep / delete)
+## OBSERVATIONS (triage: promote-to-slice / promote-to-ADR / keep / delete — batch-qa-native, not review)
 ### <slug>  [observation]
   context: <the spotted signal, inline>
   Q: still real? disposition? → [promote-slice | promote-adr | keep | delete]
@@ -223,9 +227,10 @@ work/questions/<date>-batch.md
    instead of one item at a time across many sessions.
 2. As the maintainer, I want each question to carry **enough inline context + a
    suggested default**, so that I can answer without opening the source item.
-3. As the maintainer, I want the gather pass to **run the `review` protocol** so it
-   *surfaces latent* questions (B), not only collect the ones already written (A) —
-   the full B→A pipeline.
+3. As the maintainer, I want the gather pass to **run the `review` skill** on
+   slices/PRDs/code so it *surfaces latent* questions (B), not only collect the
+   ones already written (A) — the full B→A pipeline. (Observation-triage questions
+   are batch-qa-native, not from `review`.)
 4. As the maintainer, I want an **APPLY pass** that writes my answers back into the
    item bodies and clears `needsAnswers` where fully resolved, so I never hand-edit
    each file.
@@ -250,10 +255,9 @@ work/questions/<date>-batch.md
 9. As the maintainer, I want the skill to **never auto-commit, delete, or move**
    files — it leaves drafts/edits in the working tree for me to review and commit
    (repo git etiquette).
-10. As the maintainer, I want the design to **compose the review protocol** (its
-    lenses + the `needsAnswers`/needs-attention routing seam), not fork a second
-    reviewer — once it exists as a skill (today `review` is an unbuilt PRD; see the
-    open dependency question).
+10. As the maintainer, I want the design to **compose the `review` skill**
+    (`skills/review/`: its lenses + the `needsAnswers`/needs-attention routing
+    seam), not fork a second reviewer.
 10a. As the maintainer, for a PRD that is ALREADY `needsAnswers: false` at run
      start, I want batch-qa to **slice it by composing `to-slices` then `review`**
      (emitting new `needsAnswers`-flagged slices), so slicing is part of the batch
@@ -269,11 +273,12 @@ work/questions/<date>-batch.md
 
 ### Autonomy notes (the two gate axes)
 
-- **`humanOnly: true` (this PRD, DECIDED):** a human must drive the *slicing* of
-  this PRD. It reshapes the human-in-the-loop workflow and deliberately blends a
-  new triage notion with the existing gate model — judgement-heavy, so a human
-  cuts the slices. (Disjoint from the emitted slices' own gates; a slice like
-  "parse frontmatter + collect `needsAnswers` items" is plainly agent-buildable.)
+- **`humanOnly`: OMITTED (DECIDED 2026-06-06).** Originally set, then dropped on
+  review: the design is fully decided and the `review` dependency closed, so this
+  PRD is cleanly auto-sliceable — there is no judgement left that requires a human
+  to drive the slicing. (The emitted slices are gated on their own build-nature;
+  a slice like "parse frontmatter + collect `needsAnswers` items" is plainly
+  agent-buildable.)
 - **`needsAnswers`:** none open. The earlier open dependency question — how
   `batch-qa` obtains its review (B) pass when no `review` skill existed — is
   RESOLVED (2026-06-06): the review PROTOCOL was split out of `review.md` into its
@@ -321,8 +326,9 @@ work/questions/<date>-batch.md
   answered fixture batch file, assert APPLY merges answers, clears `needsAnswers`
   only where fully resolved, and (for a promoted observation) drafts the expected
   slice/ADR file — and that nothing is committed/deleted/moved.
-- Stub the harness/`review` verdict (as the autoslice/review slices do) to test
-  the BLOCKING vs non-blocking split and the soft-floor stop rule deterministically.
+- Stub the `review` skill's verdict (as the autoslice slices stub the harness) to
+  test the BLOCKING vs non-blocking split and the soft-floor stop rule
+  deterministically.
 - Isolate any shared/global writes per the slice-template shared-location rule;
   all fixtures in temp dirs; assert the real `work/` is untouched.
 
@@ -346,9 +352,13 @@ work/questions/<date>-batch.md
 - **Advancing an item MORE than one step in a single pass** — out by the one-step
   invariant. A promoted observation becomes a `needsAnswers: true` stub and STOPS;
   a PRD answered THIS run lands `needsAnswers: false` and STOPS (sliced on the
-  next run); fleshing things out is always a SEPARATE later run, not deferred work
-  owed by this slice. (This is why no follow-up slices are owed — each one-step
-  output IS complete for that rung.)
+  next run); fleshing things out is always a SEPARATE later run.
+  - **Scope of "no follow-up owed":** this refers to the **batch-qa BUILD** — the
+    batch-qa slices owe no follow-up to each other (each one-step output is
+    complete for that rung). It does NOT mean the STUBS batch-qa emits need no
+    work: an emitted `needsAnswers: true` stub genuinely needs a future run/human
+    to advance it — that is the design (the loop eats its own output), not debt
+    owed by this PRD's slices.
 - **Baking review INTO `to-slices` — REJECTED.** Review composes on-top at the
   trigger layer (so by-hand / autonomous callers aren't forced into it and the
   `review` skill stays the single source). `to-slices` stays a pure producer.
@@ -358,17 +368,16 @@ work/questions/<date>-batch.md
 
 ## Further Notes
 
-- **Architectural note to preserve (the gate-model mismatch):** the existing gate
-  model is **per-item, binary, autonomous-runner-facing** (let the agent proceed
-  without a human); `batch-qa` is **cross-scope, human-batching-facing** (let the
-  human clear judgement in bulk). They **compose** — `batch-qa` FEEDS the gates —
-  and `batch-qa` is NOT itself a gate. The observation-triage pass is the only
-  genuinely-new mechanism (observations have no gate today). This framing must
-  survive into the slices/ADR so no future reader mistakes the tool for a gate.
-- **Composes with `work/prd/review.md`** (reviewer lenses + `needsAnswers` seam)
-  and reuses the `needsAnswers` / `## Open questions` convention already in
-  `slice-template.md` and live slices (`agent-interactive-launch`,
-  `propose-pr-body`).
+- **Architectural note to preserve (the gate-model mismatch):** see
+  §"Relationship to the existing gate model" above — batch-qa FEEDS the per-item
+  gates and is NOT itself a gate; the observation-triage pass is the only
+  genuinely-new mechanism. This framing MUST survive into the slices/ADR so no
+  future reader mistakes the tool for a gate. (Stated once above; not repeated
+  here to avoid drift between two copies.)
+- **Reuses existing conventions:** the `review` skill (`skills/review/`) for the B
+  pass, `to-slices` for the PRD→slices step, and the `needsAnswers` / `## Open
+  questions` convention already in `slice-template.md` and live slices
+  (`agent-interactive-launch`, `propose-pr-body`).
 - **Git etiquette:** the skill writes the batch file + applies edits/drafts into
   the working tree and REPORTS paths; it never stages/commits/pushes/deletes/moves
   — the maintainer reviews and commits (consistent with `to-prd`/`to-slices`).
