@@ -306,10 +306,12 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 			launch(input) {
 				seenModel = input.model;
 				seenPrompt = input.prompt ?? '';
+				// The verdict rides the ANSWER channel (`output`), NOT `detail` (which is
+				// the failure channel, empty on success) — slice `harness-agent-output`.
 				return {
 					ok: true,
 					record: {adapter: 'spy'},
-					detail: '{"verdict":"approve","findings":[]}',
+					output: '{"verdict":"approve","findings":[]}',
 				};
 			},
 			isAlive: () => false,
@@ -349,6 +351,41 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 			round: 1,
 		});
 		expect(v.verdict).toBe('approve');
+	});
+
+	it('reads the verdict from launched.output (the ANSWER channel), not detail', async () => {
+		// A successful launch carries the verdict in `output`; `detail` is empty on
+		// success. The gate must read `output` (slice `harness-agent-output`).
+		const outputHarness: Harness = {
+			adapter: 'out',
+			launch: () => ({
+				ok: true,
+				record: {adapter: 'out'},
+				output:
+					'Verdict below.\n{"verdict":"block","findings":[{"severity":"blocking","question":"misses it"}]}',
+				detail: undefined,
+			}),
+			isAlive: () => false,
+		};
+		const gate = harnessReviewGate({harness: outputHarness});
+		const v = await gate({slug: 'feat', cwd: '/tmp', round: 1});
+		expect(v.verdict).toBe('block');
+		expect(v.findings[0].question).toBe('misses it');
+	});
+
+	it('an empty/absent output is the ReviewParseError→needs-attention path (no silent approve)', async () => {
+		// A successful launch with NO assistant text (output undefined) must NOT be
+		// read as approve — it parses to nothing and errors (the live gap this slice
+		// closes: detail was empty on success, so this used to fire every run).
+		const emptyOutput: Harness = {
+			adapter: 'empty',
+			launch: () => ({ok: true, record: {adapter: 'empty'}, output: undefined}),
+			isAlive: () => false,
+		};
+		const gate = harnessReviewGate({harness: emptyOutput});
+		await expect(
+			gate({slug: 'feat', cwd: '/tmp', round: 1}),
+		).rejects.toBeInstanceOf(ReviewParseError);
 	});
 
 	it('errors (ReviewParseError) when the launch fails — never a silent approve', async () => {

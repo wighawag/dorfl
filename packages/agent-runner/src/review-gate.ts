@@ -213,13 +213,14 @@ export interface HarnessReviewGateOptions {
 	/** The agent command the null/shell adapter shells out to (`{model}`-aware). */
 	agentCmd?: string;
 	/**
-	 * Capture the review agent's textual output for parsing. The harness `launch`
-	 * returns only `{ok, record, detail}`, so the production wiring reads the
-	 * agent's emitted verdict from `detail` (or a harness-specific capture). For
-	 * the seam's contract we accept an optional reader injected by the caller; when
-	 * absent we fall back to the launch `detail`.
+	 * Read the review agent's textual output for parsing. The harness now surfaces
+	 * the agent's final assistant message in `LaunchResult.output` (slice
+	 * `harness-agent-output`, Option C) — the ANSWER channel, distinct from
+	 * `detail` (the failure/`stderr` channel). Production reads `launched.output`;
+	 * tests inject `readOutput` to stub a canned verdict string. The reader is
+	 * passed the launch's `output` and returns the text to parse.
 	 */
-	readOutput?: (detail: string | undefined) => string;
+	readOutput?: (output: string | undefined) => string;
 }
 
 /**
@@ -238,7 +239,7 @@ export function harnessReviewGate(
 	options: HarnessReviewGateOptions = {},
 ): ReviewGate {
 	const harness = options.harness ?? new NullHarness();
-	const readOutput = options.readOutput ?? ((detail) => detail ?? '');
+	const readOutput = options.readOutput ?? ((output) => output ?? '');
 	return async (input: ReviewGateInput): Promise<ReviewVerdict> => {
 		const launched = harness.launch({
 			dir: input.cwd,
@@ -254,7 +255,10 @@ export function harnessReviewGate(
 				`review agent launch failed${launched.detail ? `: ${launched.detail}` : ''}`,
 			);
 		}
-		return parseReviewVerdict(readOutput(launched.detail));
+		// Read the verdict from the agent's ANSWER channel (`output`), NOT `detail`
+		// (which is empty on success). An empty/absent output → parseReviewVerdict
+		// throws ReviewParseError → needs-attention (never a silent approve).
+		return parseReviewVerdict(readOutput(launched.output));
 	};
 }
 
