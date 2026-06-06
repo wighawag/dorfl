@@ -108,3 +108,17 @@ It is not actionable as agent-runner code. It is a conduct/harness signal worth
 remembering (it cost real turns + caused a lost edit). If a pattern of
 "documented-skill-not-loaded-on-repeated-error" shows up elsewhere, this is prior
 art. Delete once it stops being a useful reminder.
+
+## Update (2026-06-06) — recurred again across a second multi-day session
+
+The stray-key edit failure (`newText_strip` / extra keys on an edit) recurred
+several MORE times in a later long session (session-path + recovery-cluster
+planning) — caught each time by the tool's validation ("must not have additional
+properties"), resent clean, no lost work, but it still cost turns. The maintainer's
+tool-side robustness work (`~/dev/github/wighawag/pi` branch
+`fix/edit-tolerate-extraneous-keys`) remains the right fix: disabling the
+edit-best-practices skill + the global AGENTS.md rule did NOT prevent recurrence,
+confirming this is a tool-tolerance problem, not a prompt problem. Two independent
+multi-session occurrences = a stable pattern (per this note's own "second instance
+is a signal" logic). Still not actionable as agent-runner CODE; left as the durable
+conduct/harness reminder until the tool-side fix lands.
