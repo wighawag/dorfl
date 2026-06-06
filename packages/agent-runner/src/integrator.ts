@@ -128,7 +128,7 @@ export class Integrator {
 	 * Integrate WITHOUT rebasing (assumes the caller already rebased, or the
 	 * branch is known up-to-date). `merge` pushes the branch to `main` (plain,
 	 * non-force push); `propose` pushes the branch under its own ref + asks the
-	 * provider to request review. NEVER `--force`.
+	 * provider to request review. NEVER `--force` (and NEVER force-touches main).
 	 */
 	integrate(input: IntegrateInput): IntegrateResult {
 		if (input.mode === 'merge') {
@@ -143,8 +143,20 @@ export class Integrator {
 		}
 
 		// propose: push the branch under its own name (the safety-bearing step),
-		// THEN ask the provider to request review.
-		pushBranch(input, `${input.branch}:${input.branch}`);
+		// THEN ask the provider to request review. Reconcile with --force-with-lease
+		// on the WORK BRANCH ONLY (§11: a work branch is unshared) so a RECOVERY
+		// complete — which rebases dropping the historical needs-attention move-only
+		// commit (`rebaseDroppingNeedsAttentionSurface`) and so REWRITES the tip vs an
+		// already-pushed `work/<slug>` (the bounce now pushes it via the seam) — lands
+		// cleanly instead of failing non-fast-forward. The lease guards the CAS; this
+		// is NEVER a plain `--force`, and NEVER touches main. For a first-time propose
+		// (no remote ref yet) the lease against the absent remote-tracking ref allows
+		// the new-branch push, so the normal path is unchanged.
+		pushBranch(
+			input,
+			`${input.branch}:${input.branch}`,
+			`--force-with-lease=${input.branch}`,
+		);
 		const review = this.provider.openRequest({
 			cwd: input.cwd,
 			branch: input.branch,
@@ -243,13 +255,21 @@ export function rebaseOntoArbiterMain(input: RebaseInput): RebaseResult {
 }
 
 /**
- * Push a branch to the arbiter without ever force-updating anything. Used by
- * both modes; `merge` targets `main`, `propose` targets the branch's own ref.
- * There is NO `--force` here (the only force in the whole system is the claim
- * micro-commit's `--force-with-lease` inside claim.sh).
+ * Push a branch to the arbiter. Used by both modes; `merge` targets `main`
+ * (plain, never forced), `propose` targets the branch's own ref. The caller may
+ * pass extra git args (e.g. `--force-with-lease=<work-branch>` on the propose
+ * path, to reconcile a recovery-rewritten WORK branch — §11, unshared, lease-
+ * guarded). There is NEVER a plain `--force`, and `main` is NEVER forced; the
+ * only leases in the system are this work-branch one + the claim micro-commit's.
  */
-function pushBranch(input: IntegrateInput, refspec: string): void {
-	git(['push', input.arbiter, refspec], input.cwd, {env: input.env});
+function pushBranch(
+	input: IntegrateInput,
+	refspec: string,
+	...extraArgs: string[]
+): void {
+	git(['push', input.arbiter, refspec, ...extraArgs], input.cwd, {
+		env: input.env,
+	});
 }
 
 /** True if the arbiter's `main` currently contains `commitish` (work landed). */

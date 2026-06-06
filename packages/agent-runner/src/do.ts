@@ -390,9 +390,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
  * It ALSO pushes the `work/<slug>` branch to the arbiter so the saved partial
  * commits travel cross-machine and the item is RECOVERABLE via `requeue`
  * (continue): the continue-detection in `continue-branch.ts` looks for an arbiter
- * `work/<slug>` ahead of main, which only exists if the branch is pushed (the
- * needs-attention seam surfaces the LEDGER on main but does NOT push the branch —
- * see `work/observations/needs-attention-seam-does-not-push-work-branch.md`).
+ * `work/<slug>` ahead of main. That push now lives IN the ledger write seam (the
+ * RECOVERABLE half of the needs-attention transition — fired when an `arbiter` is
+ * given, best-effort, emptiness-guarded), consolidated there by
+ * `centralise-bounce-branch-push` so it cannot drift from the OBSERVABLE surface;
+ * this function no longer pushes separately.
  *
  * The EMPTY-failure case (the agent made NO commits / no changes) is handled
  * without crashing on an empty commit: `routeToNeedsAttention` (under the seam)
@@ -424,28 +426,19 @@ async function saveAgentFailure(params: {
 
 	// Route through the SAME seam the gate-fail path uses: save the agent's work as
 	// a wip commit (skipped when the tree is clean — the empty-failure case),
-	// `git mv` the item to needs-attention/ with the reason in the body, and surface
-	// the move-only commit on the arbiter's main (mode-M, cross-machine visible).
+	// `git mv` the item to needs-attention/ with the reason in the body, surface the
+	// move-only commit on the arbiter's main (OBSERVABLE, mode-M, cross-machine
+	// visible) AND push the `work/<slug>` branch (RECOVERABLE — so a requeue-continue
+	// reading <arbiter>/work/<slug> lands on the saved wip). Both halves fire from
+	// the single `arbiter` here; no separate push to forget.
 	const routed = ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
 		slug,
 		reason,
-		// The autonomous surfacing (like `do`'s gate-fail path): publish the stuck
-		// state on the arbiter's main so scan/status/another machine can see it.
 		arbiter,
 		env,
 		note,
 	});
-
-	// Push the work/<slug> branch to the arbiter so the SAVED partial commits
-	// travel cross-machine and `requeue` (continue) can land the next agent on this
-	// tip (the continue-detection reads <arbiter>/work/<slug> ahead of main). The
-	// seam surfaces the LEDGER on main but does NOT push the branch, so we push it
-	// here. Best-effort: an unreachable arbiter leaves the local branch (still on
-	// disk in this checkout/worktree) — the surface + the local commits stand.
-	if (routed.moved) {
-		await runAsync('git', ['push', arbiter, `${branch}:${branch}`], cwd, {env});
-	}
 
 	const message = routed.moved
 		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +

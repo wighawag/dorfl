@@ -405,10 +405,14 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 });
 
 describe('runOnce — agent failure', () => {
-	it('does not move to done when the agent itself fails', async () => {
+	it('does not move to done when the agent itself fails; SAVES + surfaces the work', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor(scratch.root);
-		const failingAgent: AgentRunner = () => ({ok: false, detail: 'boom'});
+		const failingAgent: AgentRunner = ({cwd}) => {
+			// Leave partial work in the tree so the seam saves a non-empty wip commit.
+			writeFileSync(join(cwd, 'partial.txt'), 'half-built\n');
+			return {ok: false, detail: 'boom'};
+		};
 		const result = await runOnce({
 			config,
 			report: scanProject(config),
@@ -420,7 +424,21 @@ describe('runOnce — agent failure', () => {
 		});
 		expect(result.items[0].status).toBe('agent-failed');
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+		// `run`'s agent-failure now routes through the seam (not a bare-return): the
+		// stuck state is SURFACED on main (needs-attention, not the in-progress claim)
+		// and the work branch is PUSHED — cross-machine recoverable.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				repo,
+			).trim(),
+		).not.toBe('');
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/work/feat:partial.txt'], repo),
+		).toBe('');
 	});
 });
 
@@ -581,12 +599,20 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 
 	/**
 	 * A pi stub that records the prompt + honours `--session <file>` (so the pi
-	 * harness record's PID + session pointer are written), edits a file, then EXITS
-	 * NON-ZERO (agent failure). In `run`, an agent failure bare-returns
-	 * `agent-failed` without pushing the work branch, so the job worktree is
-	 * RETAINED — letting this test read the harness record after teardown. (See the
-	 * note at the call site: this rides on the run-agent-fail-does-not-save gap; when
-	 * that is fixed, move to another retained path.)
+	 * harness record's PID + session pointer are written), edits a file, makes the
+	 * arbiter REJECT `work/*` branch pushes (a pre-receive hook on the bare mirror —
+	 * the work-branch push FAILS while the on-main surface still lands), then EXITS
+	 * NON-ZERO (agent failure). In `run`, an agent failure now routes through the
+	 * seam (save + surface + push the work branch — `centralise-bounce-branch-push`)
+	 * — normally the pushed branch is provably-on-arbiter ⇒ the worktree is REAPED.
+	 * By making the seam's BEST-EFFORT branch push fail, the branch does NOT reach
+	 * the arbiter, so the §4 predicate keeps the worktree RETAINED — the genuinely-
+	 * un-pushed case (a failed/offline push) — letting this test read the harness
+	 * record after teardown. (Repointed from the old "agent-fail bare-returns, never
+	 * pushes" gap, now closed by `centralise-bounce-branch-push`; see
+	 * `work/observations/run-agent-failure-does-not-save-work.md`.) Only `work/*` is
+	 * rejected, so the OBSERVABLE on-main surface still publishes — isolating the
+	 * RECOVERABLE-push failure.
 	 */
 	function writeFailingPiStub(promptFile: string): string {
 		const bin = join(scratch.root, 'pi-fail-stub.sh');
@@ -600,6 +626,23 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 			'  prev="$a"',
 			'done',
 			'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
+			// Make the arbiter REJECT the work-branch push (still accept the main
+			// surface): install a pre-receive hook on the bare mirror (origin) declining
+			// any refs/heads/work/ ref. The seam's best-effort branch push in
+			// saveAgentFailure then fails (swallowed) => the branch never reaches the
+			// arbiter => the worktree is RETAINED and its harness record survives.
+			'origin_dir="$(git remote get-url origin)"',
+			'origin_dir="${origin_dir#file://}"',
+			'mkdir -p "$origin_dir/hooks"',
+			'hook="$origin_dir/hooks/pre-receive"',
+			'cat > "$hook" <<\'HOOK\'',
+			'#!/usr/bin/env bash',
+			'while read -r _o _n ref; do',
+			'  case "$ref" in refs/heads/work/*) exit 1;; esac',
+			'done',
+			'exit 0',
+			'HOOK',
+			'chmod +x "$hook"',
 			'printf "pi work\\n" > agent-output.txt',
 			'exit 1',
 		].join('\n');
@@ -650,17 +693,14 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const promptFile = join(scratch.root, 'seen-prompt-2.txt');
-		// We need a RETAINED worktree to read its harness record after teardown. Every
-		// needs-attention bounce that PUSHES the work branch (red gate; integrate-time
-		// rebase-conflict — the gate-fail-pushes-work-branch fix) is now REAPED at
-		// teardown (ADR §4: provably-on-arbiter ⇒ reaped). The remaining RETAINED path
-		// in `run` is an AGENT FAILURE: run.ts bare-returns `agent-failed` WITHOUT
-		// saving/pushing the work (the gap captured in
-		// work/observations/run-agent-failure-does-not-save-work.md — the `do.ts`
-		// equivalent was fixed by `agent-fail-saves-work`/PR #8 but `run.ts` was not),
-		// so its worktree is retained and the record survives. NOTE: when that gap is
-		// fixed (run-agent-fail also pushes), this test must move to another retained
-		// path (e.g. the §14 continue-rebase-conflict path).
+		// We need a RETAINED worktree to read its harness record after teardown. Now
+		// that `run`'s agent-failure routes through the seam (save + surface + PUSH the
+		// work branch — `centralise-bounce-branch-push`), a reachable-arbiter bounce is
+		// REAPED (ADR §4: provably-on-arbiter ⇒ reaped), exactly like the red-gate /
+		// integrate-conflict bounces. The remaining genuinely-RETAINED case is a bounce
+		// whose best-effort push FAILED — an OFFLINE arbiter. `writeFailingPiStub` breaks
+		// the worktree's origin before exiting non-zero, so the branch never reaches the
+		// arbiter and the worktree is retained — its harness record survives.
 		const piBin = writeFailingPiStub(promptFile);
 		const config = configFor(scratch.root, {
 			workspacesDir,

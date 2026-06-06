@@ -1,6 +1,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {run} from './git.js';
+import {branchAheadOf} from './continue-branch.js';
 import {ledgerRead} from './ledger-read.js';
 
 /**
@@ -48,6 +49,26 @@ export interface RouteToNeedsAttentionOptions {
 	 * part of its own flow, e.g. the runner's integration step).
 	 */
 	arbiter?: string;
+	/**
+	 * The work branch to push to the arbiter (the RECOVERABLE half — see the seam
+	 * docstring). DEFAULT `work/<slug>`: the build-bounce branch the wip/move
+	 * commits landed on. A slicing bounce passes its own branch (`work/slicing/
+	 * <slug>`). The supplied branch MUST be the one HEAD is on (the branch the
+	 * wip/move commits landed on) — NEVER a default that differs from HEAD; a
+	 * caller NOT checked out on the work branch (e.g. a temp branch off main) must
+	 * be SURFACE-ONLY ({@link pushBranch} `false`) so no wrong-branch ref is
+	 * pushed. Only consulted when {@link arbiter} is given and {@link pushBranch}
+	 * is not `false`.
+	 */
+	branch?: string;
+	/**
+	 * SURFACE-ONLY when `false`: publish the ledger surface (when an `arbiter` is
+	 * given) but push NO work branch. For a caller that is NOT checked out on the
+	 * work branch (a throwaway temp branch off main — e.g. `start.ts`'s
+	 * `routeContinueConflict`, whose real `work/<slug>` is already on the arbiter
+	 * from the prior requeue). Defaults to pushing (the build-bounce common case).
+	 */
+	pushBranch?: boolean;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -190,8 +211,14 @@ export interface NeedsAttentionItem {
  *      rebase-conflict path, after it) the item currently sits in. This commit is
  *      PURELY the move + reason — it is the one a surfacing strategy cherry-picks.
  *
- * Optionally pushes the work branch to the arbiter (when `arbiter` given) so the
- * saved wip + the move travel cross-machine.
+ * Optionally pushes the work branch to the arbiter (the RECOVERABLE half) so the
+ * saved wip + the move travel cross-machine, when an `arbiter` is given. The
+ * push is BEST-EFFORT (an unreachable arbiter leaves the local branch + the
+ * ledger surface standing — recovery degrades, never crashes the bounce),
+ * BRANCH-PARAMETERISED (default `work/<slug>`; an explicit `branch` overrides;
+ * `pushBranch: false` ⇒ push NOTHING), and EMPTINESS-GUARDED (a branch with no
+ * commits beyond main, or an absent branch, is skipped — a couldn't-even-start
+ * bounce has nothing to push). The branch MUST be the one HEAD is on.
  *
  * NEVER throws for the expected "not in-progress/done" case — it returns
  * `{moved: false, reasonNotMoved}` so consumers can branch cleanly. Genuine git
@@ -243,11 +270,24 @@ export function routeToNeedsAttention(
 	const moveCommit = revParseHead(cwd, env);
 	note(`Routed '${slug}' to needs-attention: ${options.reason}`);
 
-	// Optionally push the branch (the done-move pushes; the runner's flow may
-	//    instead push as part of integration — so this is opt-in).
-	if (options.arbiter) {
-		const branch = `work/${slug}`;
-		gitHard(['push', options.arbiter, `${branch}:${branch}`], cwd, env);
+	// Optionally push the work branch to the arbiter — the RECOVERABLE half of the
+	//    bounce (so the saved wip + the move travel cross-machine and a requeue can
+	//    continue from the branch tip). Three behaviours: SURFACE-ONLY (no push)
+	//    when `pushBranch === false`; an explicit `branch` target; else the default
+	//    `work/<slug>`. BEST-EFFORT (no throw on a failed/unreachable push — parity
+	//    with the bolted-on copies this consolidates), and EMPTINESS-GUARDED (a
+	//    branch with no work beyond main / an absent branch is skipped — a
+	//    couldn't-even-start bounce has nothing to push).
+	if (options.arbiter && options.pushBranch !== false) {
+		const branch = options.branch ?? `work/${slug}`;
+		if (branchAheadOf(cwd, branch, 'main', env)) {
+			gitSoftRun(['push', options.arbiter, `${branch}:${branch}`], cwd, env);
+		} else {
+			note(
+				`Skipped pushing ${branch} (no work beyond main / branch absent) — ` +
+					'nothing to recover.',
+			);
+		}
 	}
 
 	return {moved: true, commitMessage, moveCommit};

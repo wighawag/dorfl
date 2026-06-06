@@ -400,3 +400,22 @@ human editing the agents'-area worktree. Decisions:
   `cd`-ing into a retained job worktree as a last resort — the goal is that a human
   NEVER NEEDS to, not that they mustn't; if they do, it works (just keep secrets
   out of it). Permissive, not prohibitive.
+
+- **Recovery is artifact-AGNOSTIC — it covers the SLICING branch too**
+  (`centralise-bounce-branch-push`). The "push the work branch on a bounce so a
+  requeue continues from its tip" mechanism is consolidated INTO the
+  needs-attention seam (`ledgerWrite.applyNeedsAttentionTransition`): one operation
+  done in one place — OBSERVABLE (the ledger surface on `main`, the mode-M
+  cherry-pick) + RECOVERABLE (push the work branch, when there is one) — fired
+  whenever an `arbiter` is given, best-effort, emptiness-guarded, and
+  branch-PARAMETERISED (default `work/<slug>`; an explicit branch overrides;
+  surface-only pushes nothing). "The branch is the durable artifact" is
+  transition-kind-agnostic: a build bounce keeps `work/<slug>`, and a **slicing**
+  attempt keeps its `work/slicing/<slug>` branch the same way. A slice attempt that
+  PRODUCED slice files then failed a review (a Gate-1 spec rejection) must NOT
+  discard them — the written slices are a valuable durable artifact (re-deriving the
+  decomposition loses the reviewer's context); a requeue continues from the written
+  slices, exactly as a build continues from the code wip. So `auto-slice` (the
+  `do prd:<slug>` slicing path, currently `prd-not-wired`) REUSES this seam — it
+  passes its `work/slicing/<slug>` as the seam's `branch` rather than re-inventing
+  the push (and so never re-discovers the bolt-on asymmetry a sixth time).
