@@ -120,8 +120,10 @@ unstructured residue; the JSON is structured).
 
 ## Disposition
 
-- **PRD-/slice-READY (all open questions resolved 2026-06-07).** Capture-only for
-  now per the maintainer; ready to turn into a slice when sequenced. The design is
+- **SLICED 2026-06-07 → `work/backlog/review-comment-prose-field.md`** (all open
+  questions resolved; decisions 1–5 above are baked into the slice). The design is
+  settled: the `review`-field-in-the-JSON approach.
+- **PRD-/slice-READY (all open questions resolved 2026-06-07).** The design is
   settled: the `review`-field-in-the-JSON approach, decisions 1–5 above.
 - **The slice (when built):**
   - `buildReviewPrompt` (`review-gate.ts`): require a `review` PROSE field IN the
