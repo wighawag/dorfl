@@ -295,6 +295,19 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 		// Fresh-context reviewer that EDITS nothing.
 		expect(p).toMatch(/EMIT a verdict only|Do NOT edit/i);
 	});
+
+	it('tells the reviewer Gate 1 (build+tests+format) already passed → assume green, do NOT re-run the suite', () => {
+		const p = buildReviewPrompt('my-slice');
+		// The acceptance gate is already green; the reviewer must assume it and
+		// not re-run build/tests/format (Gate 1 is the settled deterministic floor).
+		expect(p).toMatch(/already passed|already.*green|assume.*green/i);
+		expect(p).toMatch(/not re-?run|do NOT re-?run/i);
+		// Sits alongside the existing edit-nothing/EMIT-only constraint.
+		expect(p).toMatch(/EMIT a verdict only/);
+		// NUANCE: it forbids RE-RUNNING the suite, NOT reading/reasoning about
+		// tests — no "ignore tests" wording.
+		expect(p).not.toMatch(/ignore tests/i);
+	});
 });
 
 describe('harnessReviewGate — reviewModel reaches the launch via the existing seam', () => {
