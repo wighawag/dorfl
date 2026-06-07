@@ -167,6 +167,16 @@ export interface CompleteOptions {
 	type?: string;
 	/** Commit summary. Defaults to the slice `title` minus a leading `slug — `. */
 	message?: string;
+	/**
+	 * Optional review-request BODY (propose mode) — the PR/MR DESCRIPTION, DISTINCT
+	 * from {@link message} (which is the COMMIT summary). Advisory prose that gates
+	 * nothing. The autonomous `do` path passes the build agent's final summary
+	 * (`LaunchResult.output`); a human `complete --propose` may pass one via a NEW
+	 * `--body` flag (NOT `--message`). The runner scaffolds a deterministic header
+	 * (a pointer to `work/done/<slug>.md`) above it. Absent ⇒ today's `gh pr create
+	 * --fill` empty/commit-derived body (no regression). Ignored in `merge` mode.
+	 */
+	body?: string;
 	/** Optional injectable PR opener (e.g. `gh pr create`); used in `propose` mode. */
 	openPr?: (opts: {
 		cwd: string;
@@ -536,9 +546,18 @@ async function runComplete(
 		}
 	}
 
-	// Read the title now, BEFORE the move, for the default commit summary (the
-	// source file is about to be git-mv'd away).
+	// Read the title now, BEFORE the move, for the default commit summary AND the
+	// synthesised propose-mode PR TITLE (the source file is about to be git-mv'd
+	// away). The PR title is a SINGLE, capped line built runner-side from the
+	// slice's `title:` frontmatter + the slug (`<type>(<slug>): <title>`) so it can
+	// never be the multi-line commit-subject run-on `--fill` would derive.
 	const defaultMessage = defaultSummary(sourcePath, slug);
+	const sliceTitle = readSliceTitle(sourcePath);
+	const prTitle = synthesiseProposeTitle({
+		type: (options.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE,
+		slug,
+		title: sliceTitle,
+	});
 
 	// 2. Mark done: mkdir -p work/done, then git mv <source> → done. The source is
 	//    in-progress/ on the normal path, or needs-attention/ on the recovery path.
@@ -642,6 +661,14 @@ async function runComplete(
 		branch,
 		mode,
 		provider,
+		// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
+		// derives a run-on title from the commit subject via `--fill`.
+		title: prTitle,
+		// Half B: the propose-mode PR body — the agent's summary under a deterministic
+		// runner header (slice pointer). Undefined when no body was supplied (the
+		// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
+		// regression). Ignored in merge mode by the provider/integrator.
+		body: composeProposeBody({slug, body: options.body}),
 		cwd,
 		env,
 	});
@@ -885,6 +912,81 @@ function defaultSummary(inProgressPath: string, slug: string): string {
 	// Strip a leading "slug" followed by an em-dash / en-dash / hyphen separator.
 	const prefix = new RegExp(`^${escapeRegExp(slug)}\\s*[—–-]\\s*`, 'i');
 	return title.replace(prefix, '').trim() || title;
+}
+
+/**
+ * The sane single-line cap for a synthesised PR title (Half A). GitHub itself
+ * accepts long titles, but a PR list/notification truncates ugly past ~72 chars;
+ * we cap to keep the title scannable and guarantee it is never a run-on. Beyond
+ * the cap we truncate and append an ellipsis (counted within the cap).
+ */
+export const PR_TITLE_MAX = 72;
+
+/**
+ * The slice's raw `title:` frontmatter (NOT the commit-summary-stripped form),
+ * or undefined when missing/unreadable. Used as the human-authored source for
+ * the synthesised PR title.
+ */
+function readSliceTitle(slicePath: string): string | undefined {
+	try {
+		return readTitle(readFileSync(slicePath, 'utf8'));
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Synthesise the propose-mode PR TITLE runner-side (Half A) from data the runner
+ * already has — NO agent text: `<type>(<slug>): <title>`, reusing `complete`'s
+ * `--type` convention (default `feat`). It is FORCED to a single line (newlines
+ * → spaces, runs of whitespace collapsed) and CAPPED to {@link PR_TITLE_MAX}
+ * (truncating with a trailing `…`), so it can NEVER be the multi-line run-on
+ * `gh ... --fill` derives from the commit subject. When the slice `title:` is
+ * missing it falls back to the slug alone (`<type>(<slug>)`). Exported for unit
+ * tests of the single-line + cap guarantee.
+ */
+export function synthesiseProposeTitle(input: {
+	type: string;
+	slug: string;
+	title?: string;
+}): string {
+	const type = input.type.trim() || DEFAULT_TYPE;
+	// Strip a leading `slug — ` / `slug -` prefix (some slice titles repeat the
+	// slug; the `<slug>` scope already carries it) and flatten to one line.
+	const prefix = new RegExp(`^${escapeRegExp(input.slug)}\\s*[—–-]\\s*`, 'i');
+	const cleanTitle = (input.title ?? '')
+		.replace(prefix, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+	const composed =
+		cleanTitle === ''
+			? `${type}(${input.slug})`
+			: `${type}(${input.slug}): ${cleanTitle}`;
+	if (composed.length <= PR_TITLE_MAX) {
+		return composed;
+	}
+	// Cap, reserving one char for the ellipsis (counted within the cap).
+	return composed.slice(0, PR_TITLE_MAX - 1).trimEnd() + '…';
+}
+
+/**
+ * Compose the propose-mode PR BODY (Half B): the supplied advisory prose (the
+ * build agent's final summary, or a human `--body`) UNDER a deterministic runner
+ * header that points a reviewer back to the slice file. Returns `undefined` when
+ * no body was supplied — so the provider degrades to today's `gh ... --fill` (no
+ * regression); the header is ONLY scaffolded when there IS prose to carry.
+ * Exported for unit tests of the header + pointer.
+ */
+export function composeProposeBody(input: {
+	slug: string;
+	body?: string;
+}): string | undefined {
+	const prose = input.body?.trim();
+	if (!prose) {
+		return undefined;
+	}
+	const header = `Slice: \`work/done/${input.slug}.md\``;
+	return `${header}\n\n${prose}`;
 }
 
 /** Read the `title:` scalar from a slice's frontmatter block, or undefined. */

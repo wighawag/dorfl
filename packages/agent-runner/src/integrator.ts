@@ -39,6 +39,24 @@ export interface OpenRequestInput {
 	branch: string;
 	/** The arbiter remote the branch was pushed to. */
 	arbiter: string;
+	/**
+	 * Optional explicit, single-line review-request TITLE. When present a provider
+	 * passes it verbatim (e.g. `gh pr create --title`) instead of deriving the
+	 * title from the commit subject (`--fill`), which can be a multi-line run-on.
+	 * Synthesised runner-side from the slice frontmatter (`<type>(<slug>): <title>`,
+	 * capped to one line). Absent ⇒ today's `--fill`-derived title (no regression).
+	 */
+	title?: string;
+	/**
+	 * Optional review-request BODY/description (advisory prose — it gates nothing).
+	 * When present a provider passes it verbatim (e.g. `gh pr create --body`)
+	 * instead of `--fill`'s empty/commit-derived description. Typically the build
+	 * agent's final summary, optionally under a runner-scaffolded header (a pointer
+	 * to `work/done/<slug>.md` + the PRD/ADR it serves). Absent ⇒ today's `--fill`
+	 * (no regression). This is the BODY-AT-OPEN surface; a follow-up PR COMMENT is
+	 * a separate provider method.
+	 */
+	body?: string;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -67,7 +85,8 @@ export class NoneProvider implements ReviewProvider {
 			opened: false,
 			instruction:
 				`Pushed ${input.branch} to ${input.arbiter}. Open a review request ` +
-				'manually to land it on main (no review provider configured).',
+				'manually to land it on main (no review provider configured).' +
+				manualRequestText(input),
 		};
 	}
 }
@@ -80,6 +99,17 @@ export interface IntegrateInput {
 	branch: string;
 	/** Integration mode (`propose` default, or `merge`). */
 	mode: IntegrationMode;
+	/**
+	 * Optional single-line review-request TITLE threaded to the provider (propose
+	 * mode). Absent ⇒ the provider's `--fill` default. Ignored in `merge` mode
+	 * (no review request is opened).
+	 */
+	title?: string;
+	/**
+	 * Optional review-request BODY threaded to the provider (propose mode). Absent
+	 * ⇒ the provider's `--fill` default. Ignored in `merge` mode.
+	 */
+	body?: string;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -161,6 +191,8 @@ export class Integrator {
 			cwd: input.cwd,
 			branch: input.branch,
 			arbiter: input.arbiter,
+			title: input.title,
+			body: input.body,
 			env: input.env,
 		});
 		return {
@@ -270,6 +302,28 @@ function pushBranch(
 	git(['push', input.arbiter, refspec, ...extraArgs], input.cwd, {
 		env: input.env,
 	});
+}
+
+/**
+ * Render the runner-synthesised TITLE + BODY into a human's MANUAL review-request
+ * instructions (the `none` provider, and the GitHub provider's degraded path),
+ * so a human opening the request by hand reuses the SAME title/body the
+ * autonomous path would have set. Returns '' when neither is present (today's
+ * bare instruction — no regression). Surfaced as a trailing block so the
+ * leading instruction line stays clean.
+ */
+export function manualRequestText(input: {
+	title?: string;
+	body?: string;
+}): string {
+	const parts: string[] = [];
+	if (input.title) {
+		parts.push(`\nSuggested title: ${input.title}`);
+	}
+	if (input.body) {
+		parts.push(`\nSuggested body:\n${input.body}`);
+	}
+	return parts.join('');
 }
 
 /** True if the arbiter's `main` currently contains `commitish` (work landed). */
