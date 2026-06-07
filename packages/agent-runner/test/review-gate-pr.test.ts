@@ -31,7 +31,7 @@ import {
 
 let scratch: Scratch;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-review-pr-');
+	scratch = makeScratch('agent-runner-review-');
 });
 afterEach(() => {
 	scratch.cleanup();
@@ -90,7 +90,7 @@ const BLOCK: ReviewVerdict = {
 };
 
 describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)', () => {
-	it('reviewPr on + APPROVE + autoMerge on + merge ⇒ work merges autonomously', async () => {
+	it('review on + APPROVE + autoMerge on + merge ⇒ work merges autonomously', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(APPROVE);
 		const result = await performDo({
@@ -99,7 +99,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -118,7 +118,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 		expect(currentBranch(repo)).toBe('main');
 	});
 
-	it('reviewPr on + APPROVE + autoMerge OFF + merge ⇒ review gates, the merge is DOWNGRADED to propose (a human merges)', async () => {
+	it('review on + APPROVE + autoMerge OFF + merge ⇒ review gates, the merge is DOWNGRADED to propose (a human merges)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(APPROVE);
 		const result = await performDo({
@@ -127,7 +127,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: false, // the merge must NOT happen autonomously
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -153,7 +153,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 		).not.toBe('');
 	});
 
-	it('reviewPr on + APPROVE + propose integration ⇒ proposes unchanged (no auto-merge regardless)', async () => {
+	it('review on + APPROVE + propose integration ⇒ proposes unchanged (no auto-merge regardless)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(APPROVE);
 		const result = await performDo({
@@ -162,7 +162,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 			arbiter: ARBITER,
 			integration: 'propose',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true, // even with autoMerge on, propose stays propose
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -175,7 +175,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 });
 
 describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
-	it('reviewPr on + BLOCK + autoMerge on + merge ⇒ needs-attention, NOT merged, exit 1, findings in the body', async () => {
+	it('review on + BLOCK + autoMerge on + merge ⇒ needs-attention, NOT merged, exit 1, findings in the body', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(BLOCK);
 		const result = await performDo({
@@ -184,7 +184,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true, // a BLOCK never auto-merges regardless of autoMerge
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -222,7 +222,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -253,7 +253,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			reviewGate: stubGate(BLOCK),
 			// NB: no surfaceArbiter — the human path.
 			env: gitEnv(),
@@ -280,7 +280,7 @@ describe('Gate 2 — verify is the non-skippable floor, review is ON TOP', () =>
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: FAIL, // the deterministic floor is RED
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -313,7 +313,7 @@ describe('Gate 2 — verify is the non-skippable floor, review is ON TOP', () =>
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: 'touch verify-ran.marker',
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewGate: gate,
 			agentRunner: editingAgent,
@@ -323,7 +323,7 @@ describe('Gate 2 — verify is the non-skippable floor, review is ON TOP', () =>
 		expect(verifyRanBeforeReview).toBe(true);
 	});
 
-	it('reviewPr OFF ⇒ the review gate is NEVER invoked (default behaviour unchanged)', async () => {
+	it('review OFF ⇒ the review gate is NEVER invoked (default behaviour unchanged)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(BLOCK); // would block — but must never run
 		const result = await performDo({
@@ -332,7 +332,7 @@ describe('Gate 2 — verify is the non-skippable floor, review is ON TOP', () =>
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: false, // Gate 2 off
+			review: false, // Gate 2 off
 			reviewGate: gate,
 			agentRunner: editingAgent,
 			env: gitEnv(),
@@ -353,7 +353,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewModel: 'review/override',
 			reviewGate: gate,
@@ -372,7 +372,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewMaxRounds: 3,
 			reviewGate: gate,
@@ -404,7 +404,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			reviewGate: gate,
 			agentRunner: editingAgent,
 			env: gitEnv(),
@@ -414,7 +414,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 	});
 });
 
-describe('Gate 2 — reviewPr on with no gate wired is a loud usage error', () => {
+describe('Gate 2 — review on with no gate wired is a loud usage error', () => {
 	it('errors clearly (the floor must not be silently skipped)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['gamma']);
 		const repo = seeded.repo;
@@ -434,7 +434,7 @@ describe('Gate 2 — reviewPr on with no gate wired is a loud usage error', () =
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			// reviewGate intentionally omitted.
 			env: gitEnv(),
 		});
@@ -458,7 +458,7 @@ describe('Gate 2 — test isolation (real shared dirs untouched)', () => {
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewGate: stubGate(APPROVE),
 			agentRunner: editingAgent,

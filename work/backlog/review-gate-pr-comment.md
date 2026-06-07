@@ -38,7 +38,7 @@ discipline), do NOT build two parallel posting mechanisms:
   throw — ADR §6, like `openRequest`).
 - **PR identity — and the CORRECT wiring LAYER (verified against the code, review
   finding 2026-06-06):** the review VERDICT is produced in `src/complete.ts`
-  (`performComplete`'s `reviewPr` block, as `lastVerdict`). `openRequest` is NOT
+  (`performComplete`'s `review` block, as `lastVerdict`). `openRequest` is NOT
   called there — it is called DEEP inside the integrator (`src/integrator.ts`
   `integrateWithRebase`'s propose branch), TWO LAYERS DOWN, where the verdict is
   NOT in scope. **Do NOT post the comment "after `openRequest`" in the
@@ -54,7 +54,7 @@ discipline), do NOT build two parallel posting mechanisms:
 ### Where it wires in (verified: in `complete.ts`, post-integrate — NOT the integrator)
 
 The Gate-2 verdict (`lastVerdict`) is produced in `performComplete`
-(`src/complete.ts`, the `reviewPr` block). The propose integrate call returns the
+(`src/complete.ts`, the `review` block). The propose integrate call returns the
 opened PR `url` (`result.url` / `prUrl`) back into `complete.ts` — THAT is the
 wiring point: after a successful propose integrate, if a verdict exists and
 `result.url` is present, `postComment` the formatted verdict to that PR.
@@ -82,7 +82,7 @@ nothing (the gate already decided); it is pure visibility.
 - [ ] `ReviewProvider` gains `postComment(input)`; the GitHub provider posts via
       `gh pr comment` (or `gh api`) to the opened PR; the `none` provider degrades
       (surfaces the verdict in run output, never throws).
-- [ ] On a `--propose` run with `reviewPr` on and an APPROVE verdict, the verdict
+- [ ] On a `--propose` run with `review` on and an APPROVE verdict, the verdict
       (approve + any non-blocking findings) is posted as a comment on the PR that
       `openRequest` opened. PR identity comes from `openRequest`'s returned url/number.
 - [ ] If `openRequest` degraded (no PR opened), `postComment` is a clean no-op (the
@@ -119,7 +119,7 @@ nothing (the gate already decided); it is pure visibility.
 > FIRST run the drift check: confirm `src/integrator.ts` `ReviewProvider` has
 > `openRequest` returning `OpenRequestResult.url` (the PR identity you thread into
 > the comment); confirm `src/github.ts` opens the PR via `gh pr create` (you add a
-> sibling `gh pr comment`); confirm `src/complete.ts`'s `reviewPr` block produces
+> sibling `gh pr comment`); confirm `src/complete.ts`'s `review` block produces
 > `lastVerdict`; confirm the propose integrate call RETURNS the PR `url` back into
 > `complete.ts` as `result.url`/`prUrl` (the integrator's `openRequest` is two
 > layers down — do NOT wire there); confirm `propose-pr-body`
@@ -140,7 +140,7 @@ nothing (the gate already decided); it is pure visibility.
 > READ FIRST: `work/prd/review.md` RESOLVED DESIGN (Gate 2 "more visible — posted as
 > a PR comment"); `src/integrator.ts` (`ReviewProvider`, `OpenRequestResult.url`);
 > `src/github.ts` (`gh pr create` → add `gh pr comment`); `src/complete.ts` (the
-> `reviewPr` verdict + the propose `openRequest` call site); `src/review-gate.ts`
+> `review` verdict + the propose `openRequest` call site); `src/review-gate.ts`
 > (`ReviewVerdict`/`formatBlockReason` to reuse); `work/backlog/propose-pr-body.md`
 > (the shared seam — body-at-open; keep consistent); ADR §6 (provider seam +
 > graceful degradation).

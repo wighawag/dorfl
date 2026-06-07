@@ -17,7 +17,7 @@ status: open
 - `do`/`complete` run the gate + integrate through `performComplete`
   (`src/complete.ts`), which is where the **review gate** (PR #11/#12) was inserted.
 
-**Consequence:** the review gate (`reviewPr`/`autoMerge`/`reviewModel` + the
+**Consequence:** the review gate (`review`/`autoMerge`/`reviewModel` + the
 verdict→needs-attention routing) lives in `performComplete` and is therefore
 inherited by `do` (and CI, which calls `do`) — but **`run` does NOT get it.** The
 maintainer's assumption that "run reuses the do code path" does NOT hold for the

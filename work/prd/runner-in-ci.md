@@ -168,7 +168,7 @@ Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide 
   Therefore `review` must NOT `sliceAfter`/`blockedBy` `runner-in-ci` (that stale
   arrow has been dropped from `review.md`); instead, **when `runner-in-ci` is
   sliced, a slice that wants review-gated CI runs should `blockedBy` the
-  review-gate slice.** For a repo configured `reviewPr: on` + `autoMerge: on`, the
+  review-gate slice.** For a repo configured `review: on` + `autoMerge: on`, the
   CI tick is simply `do -n <N> --merge` and the gate rides along inside `do`.
 
 ## Out of Scope

@@ -15,7 +15,7 @@ the **`review` skill** (`skills/review/SKILL.md`, already built — `done/review
 as a **fresh-context** agent, parses its verdict, and:
 
 - **`approve`** → proceed to the existing done-move + commit + integrate exactly as
-  today. On a repo configured `reviewPr: on` + `autoMerge: on` with
+  today. On a repo configured `review: on` + `autoMerge: on` with
   `--merge`/`integration: merge`, this is what makes an autonomous merge
   trustworthy — verify (builds+tests+formats) **plus** an independent judgement
   verdict (does the diff reach the slice's goal).
@@ -25,14 +25,14 @@ as a **fresh-context** agent, parses its verdict, and:
   the review's blocking findings recorded as the reason in the item body. Never merge.
 
 This is the unlock for a trustworthy `do <slug> --merge` (and, once `do-autopick`
-lands, `do -n <N> --merge`) on a `reviewPr`-configured repo: the gate rides INSIDE
+lands, `do -n <N> --merge`) on a `review`-configured repo: the gate rides INSIDE
 `do`, so CI (a caller of `do`) inherits it for free.
 
 ### Scope fence — Gate 2 ONLY (this slice)
 
 - **IN:** the PR/code review gate on the `do`/`complete` path — invocation after
   `verify`, verdict parsing, approve→integrate / block→needs-attention routing,
-  the per-repo `reviewPr` toggle, the per-repo `review` MODEL OVERRIDE, the
+  the per-repo `review` toggle, the per-repo `review` MODEL OVERRIDE, the
   `reviewMaxRounds` iteration bound, and the `autoMerge`-on-approve gate (repo
   policy only).
 - **OUT (deliberate, named follow-ups — do NOT build here):**
@@ -71,13 +71,13 @@ session.
 Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` +
 `ResolvedRepoConfig`, alongside `integration`/`allowAgents`/`model`):
 
-- **`reviewPr`** (bool, default **OFF**) — run Gate 2 on `do`/`complete`. Resolved
-  **flag (`--review-pr`/`--no-review-pr`) > per-repo `.agent-runner.json` > global >
+- **`review`** (bool, default **OFF**) — run Gate 2 on `do`/`complete`. Resolved
+  **flag (`--review`/`--no-review`) > per-repo `.agent-runner.json` > global >
   default false** — the SAME chain `integration`/`allowAgents` use.
 - **`autoMerge`** (bool, default **OFF**) — on an `approve`, allow the resolved
   `merge` integration to proceed autonomously. Same precedence chain. **Repo policy
   only.** A non-`approve` verdict NEVER auto-merges regardless. (If `autoMerge` is
-  off but `reviewPr` is on, review still runs and blocks/approves, but a human does
+  off but `review` is on, review still runs and blocks/approves, but a human does
   the merge — i.e. review is advisory-but-blocking; `--propose` still applies.)
 - **`reviewModel`** (string, optional) — the model the REVIEW agent runs on
   (de-correlation from the builder). Resolved like `model` (flag > env > per-repo >
@@ -89,11 +89,11 @@ Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` +
 `verify` stays the **non-skippable deterministic floor** — review is ON TOP, never
 replaces it. `--skip-verify` remains the only (human-only) gate override and does
 NOT skip review unless a symmetrical, deliberately-named human override is added
-(out of scope; default is review-runs-when-`reviewPr`-on).
+(out of scope; default is review-runs-when-`review`-on).
 
 ## Acceptance criteria
 
-- [ ] With `reviewPr: on`, `do <slug>` (and `complete`) runs the `review` skill as
+- [ ] With `review: on`, `do <slug>` (and `complete`) runs the `review` skill as
       a fresh-context agent AFTER `verify` passes and BEFORE the done-move.
 - [ ] An `approve` verdict proceeds to the existing done-move + commit + integrate
       unchanged. With `autoMerge: on` + `merge` integration, the work merges
@@ -106,9 +106,9 @@ NOT skip review unless a symmetrical, deliberately-named human override is added
       `needs-attention` outcome + exit 1, exactly like `gate-failed`.
 - [ ] `verify` is STILL run and is NEVER replaced by the model review for code
       (assert the deterministic floor is intact — both run, in order).
-- [ ] `reviewPr` / `autoMerge` / `reviewModel` / `reviewMaxRounds` resolve via the
+- [ ] `review` / `autoMerge` / `reviewModel` / `reviewMaxRounds` resolve via the
       `integration`/`allowAgents` precedence (flag > per-repo > global > default),
-      with `reviewPr`/`autoMerge` defaulting OFF.
+      with `review`/`autoMerge` defaulting OFF.
 - [ ] `reviewMaxRounds` is enforced: a revise↔review loop cannot run forever; on
       exhaustion it errors out and forces `needs-attention` (a test drives the loop
       to exhaustion and asserts the route + non-zero exit).
@@ -156,7 +156,7 @@ NOT skip review unless a symmetrical, deliberately-named human override is added
 >     the existing needs-attention mapping).
 >   - Confirm the per-repo config seam: `src/repo-config.ts` `REPO_CONFIG_KEYS` +
 >     `ResolvedRepoConfig` carry `integration`/`allowAgents`/`model` resolved
->     "flag > per-repo > global > default" — add `reviewPr`/`autoMerge`/`reviewModel`/
+>     "flag > per-repo > global > default" — add `review`/`autoMerge`/`reviewModel`/
 >     `reviewMaxRounds` the SAME way (`src/config.ts` documents the precedence).
 >   - Confirm the harness seam: `src/harness.ts` `LaunchInput {command, prompt,
 >     model}` + `substituteModel` is how an agent is launched and how the model
@@ -165,7 +165,7 @@ NOT skip review unless a symmetrical, deliberately-named human override is added
 > Route the slice to `needs-attention/` on any real discrepancy (WORK-CONTRACT
 > "Drift is a needs-attention signal").
 >
-> Then implement: after the green `verify`, if `reviewPr` resolves on, launch the
+> Then implement: after the green `verify`, if `review` resolves on, launch the
 > `review` skill as a FRESH-CONTEXT agent (its own harness launch, `reviewModel`
 > via `model`/`substituteModel`), parse a `{verdict: approve|block, findings[…]}`
 > result. approve → existing done-move/commit/integrate (autonomous merge only when
