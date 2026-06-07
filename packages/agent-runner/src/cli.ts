@@ -16,7 +16,7 @@ import {scan} from './scan.js';
 import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
 import {findParticipatingRepos} from './detect.js';
 import {formatReport} from './format.js';
-import {runOnce, type ItemResult} from './run.js';
+import {runOnce, runLoop, type ItemResult, type RunOnceResult} from './run.js';
 import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
 import {
@@ -124,6 +124,9 @@ function promptForWorktreesRoot(suggestion: string): Promise<string> {
 
 interface RunFlags extends ScanFlags {
 	once?: boolean;
+	maxIterations?: string;
+	maxDuration?: string;
+	interval?: string;
 	maxParallel?: string;
 	perRepoMax?: string;
 	arbiter?: string;
@@ -393,9 +396,24 @@ export function buildProgram(): Command {
 	program
 		.command('run')
 		.description(
-			'Claim up to maxParallel eligible items, run the agent on each in isolation, integrate, then stop.',
+			'The cross-repo, parallel daemon: loop the supervised tick over the registry — each tick claims up to maxParallel eligible items (perRepoMax per repo), runs the agents CONCURRENTLY in isolation, integrates, then loops (forever, or until a stop bound). Stuck items surface via the needs-attention seam (on main). `run --once` = one debug tick (NOT the CI path — CI is `do`).',
 		)
-		.option('--once', 'run a single supervised tick then stop (increment B)')
+		.option(
+			'--once',
+			'run a SINGLE supervised tick then stop — the debug/test affordance on the daemon (NOT the CI path; CI uses `do`)',
+		)
+		.option(
+			'--max-iterations <n>',
+			'stop after N ticks (a bounded session; default: loop forever)',
+		)
+		.option(
+			'--max-duration <seconds>',
+			'stop after this many seconds of wall-clock (a bounded session; default: no bound)',
+		)
+		.option(
+			'--interval <seconds>',
+			'pause this many seconds between ticks (default: 0, back-to-back)',
+		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--allow-agents',
@@ -460,11 +478,6 @@ export function buildProgram(): Command {
 		)
 		.option('--json', 'output the raw result as JSON')
 		.action(async (flags: RunFlags, command: Commander) => {
-			if (!flags.once) {
-				throw new Error(
-					'only `run --once` is implemented (increment B). Pass --once.',
-				);
-			}
 			const fileConfig = loadConfig(flags.config);
 			const config = resolveGlobalConfig(
 				fileConfig,
@@ -478,26 +491,90 @@ export function buildProgram(): Command {
 				);
 			}
 			const workspace = flags.workspace ?? config.workspacesDir;
-			const result = await runOnce({
-				config,
-				workspace,
-				// Gate 2 (PR/code review): wire the PRODUCTION harness-backed gate ONLY
-				// when `config.review` resolves on (mirror the `do`/`complete` commands).
-				// The per-repo `review`/`autoMerge`/`reviewModel`/`reviewMaxRounds` are
-				// resolved per-item from each repo's config inside `runOneItem`; only the
-				// gate SEAM is threaded here. Off ⇒ undefined ⇒ no review (the default).
-				reviewGate: config.review ? harnessReviewGate() : undefined,
-				onWarn: (message) => console.error(`>> ${message}`),
-			});
-			if (flags.json) {
-				console.log(JSON.stringify(result, null, 2));
-			} else {
+			// Gate 2 (PR/code review): wire the PRODUCTION harness-backed gate ONLY when
+			// `config.review` resolves on (mirror the `do`/`complete` commands). The
+			// per-repo review flags are resolved per-item inside `runOneItem`; only the
+			// gate SEAM is threaded here. Off ⇒ undefined ⇒ no review (the default).
+			const reviewGate = config.review ? harnessReviewGate() : undefined;
+			const onWarn = (message: string) => console.error(`>> ${message}`);
+
+			const printTick = (result: RunOnceResult): void => {
+				if (flags.json) {
+					console.log(JSON.stringify(result, null, 2));
+					return;
+				}
 				for (const item of result.items) {
 					console.log(formatItemLine(item));
 				}
 				console.log(
 					`Summary: ${result.claimedAndDone} done, ${result.skipped} skipped, ${result.failed} failed.`,
 				);
+			};
+
+			// `run --once` = ONE debug tick (NOT the CI path; CI is `do`). The existing
+			// `runOnce` IS this tick.
+			if (flags.once) {
+				const result = await runOnce({
+					config,
+					workspace,
+					reviewGate,
+					onWarn,
+				});
+				printTick(result);
+				return;
+			}
+
+			// `run` (no flag) = the cross-repo, parallel, forever-looping DAEMON: loop
+			// the concurrent tick over the registry until a stop bound (--max-iterations
+			// / --max-duration) or a SIGINT/SIGTERM (graceful shutdown after the current
+			// tick). Stuck items surface via the existing needs-attention seam inside the
+			// tick — the loop never infinite-retries and adds no bespoke reporting.
+			let stopRequested = false;
+			const requestStop = (): void => {
+				if (!stopRequested) {
+					stopRequested = true;
+					console.error(
+						'>> stop requested — finishing the current tick, then exiting.',
+					);
+				}
+			};
+			process.on('SIGINT', requestStop);
+			process.on('SIGTERM', requestStop);
+			try {
+				const summary = await runLoop({
+					config,
+					workspace,
+					reviewGate,
+					onWarn,
+					maxIterations:
+						flags.maxIterations !== undefined
+							? Number(flags.maxIterations)
+							: undefined,
+					maxDurationMs:
+						flags.maxDuration !== undefined
+							? Number(flags.maxDuration) * 1000
+							: undefined,
+					intervalMs:
+						flags.interval !== undefined ? Number(flags.interval) * 1000 : 0,
+					stop: () => stopRequested,
+					onTick: (result, iteration) => {
+						if (!flags.json) {
+							console.error(`>> tick ${iteration}:`);
+						}
+						printTick(result);
+					},
+				});
+				if (!flags.json) {
+					console.log(
+						`Loop ended (${summary.stoppedBy}) after ${summary.iterations} tick(s): ` +
+							`${summary.claimedAndDone} done, ${summary.skipped} skipped, ${summary.failed} failed.`,
+					);
+				} else {
+					console.log(JSON.stringify(summary, null, 2));
+				}
+			} finally {
+				process.off('SIGINT', requestStop);
+				process.off('SIGTERM', requestStop);
 			}
 		});
 

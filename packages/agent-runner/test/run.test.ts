@@ -214,6 +214,136 @@ describe('runOnce — concurrency caps', () => {
 	});
 });
 
+describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () => {
+	// The bounded-concurrency EXECUTOR this tick runs on is proven to keep multiple
+	// workers in flight at once (peak = N under a shared gate) in
+	// `test/concurrency.test.ts`. These tests prove the SAFETY properties the slice
+	// requires hold when `runOnce` drives the real pipeline through it: distinct
+	// repos progress together, a lost claim is dropped without sinking the batch, and
+	// a conflicting rebase routes ONLY its own job to needs-attention.
+
+	it('a concurrent tick completes work across DIFFERENT repos in one pass', async () => {
+		// Two independent repos+arbiters, maxParallel 2: both items integrate in one
+		// tick. A sequential loop would still complete both, but this pins the
+		// multi-repo concurrent path (the executor admits both jobs in flight).
+		const a = seedRepoWithArbiter(join(scratch.root, 'a'), ['fa']);
+		const b = seedRepoWithArbiter(join(scratch.root, 'b'), ['fb']);
+		const config = mergeConfig({
+			defaultArbiter: 'arbiter',
+			maxParallel: 2,
+			perRepoMax: 2,
+			integration: 'merge',
+			agentCmd: 'true',
+			verify: PASS,
+			allowAgents: true,
+		});
+		const result = await runOnce({
+			config,
+			report: scanRepoPaths([a.repo, b.repo], config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.claimedAndDone).toBe(2);
+		expect(existsOnArbiterMain(a.repo, 'done', 'fa')).toBe(true);
+		expect(existsOnArbiterMain(b.repo, 'done', 'fb')).toBe(true);
+	});
+
+	it('two same-repo jobs both integrate under the merge path (claim + integration safe under concurrency)', async () => {
+		// maxParallel 2, perRepoMax 2, MERGE integration: two same-repo jobs run
+		// concurrently. This is the case that exposed the concurrency hazards — the
+		// shared-checkout claim race (serialised per repo) AND the claim retry when a
+		// sibling's merge advances main. Both must reach done with NO claim-error.
+		seedRepoWithArbiter(scratch.root, ['a', 'b', 'c']);
+		const config = configFor(scratch.root, {
+			maxParallel: 2,
+			perRepoMax: 10,
+			integration: 'merge',
+		});
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.items).toHaveLength(2);
+		expect(result.claimedAndDone).toBe(2);
+		// No job fell over on the shared-checkout claim race / retry hazard.
+		expect(result.items.every((i) => i.status === 'claimed-done')).toBe(true);
+	});
+
+	it('under concurrency a LOST claim is dropped while the winner proceeds', async () => {
+		// Pre-claim one of two slugs from an independent clone so the concurrent tick
+		// loses that race (claim exit 2 → dropped) but still completes the other — one
+		// job's lost race does NOT abort the other (failure isolation).
+		const seeded = seedRepoWithArbiter(scratch.root, ['win', 'taken']);
+		const other = seeded.clone('other');
+		const pre = await performClaim({
+			slug: 'taken',
+			cwd: other,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(pre.outcome).toBe('claimed');
+
+		const config = configFor(scratch.root, {maxParallel: 2, perRepoMax: 2});
+		const result = await runOnce({
+			config,
+			// the stale working clone still lists both in backlog
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		const byStatus = new Map(result.items.map((i) => [i.slug, i.status]));
+		expect(byStatus.get('taken')).toBe('lost-race');
+		expect(byStatus.get('win')).toBe('claimed-done');
+	});
+
+	it('a conflicting rebase routes ONLY its own job to needs-attention; the sibling still integrates', async () => {
+		// Two same-repo jobs, MERGE. Job for `clash` edits shared.txt and, mid-run,
+		// lands a CONFLICTING edit on the arbiter main (so its integrate-time rebase
+		// conflicts, ADR §10). Job for `clean` edits its own file. Under concurrency the
+		// conflict must route ONLY `clash` to needs-attention; `clean` still completes.
+		const seeded = seedRepoWithArbiter(scratch.root, ['clash', 'clean']);
+		const config = configFor(scratch.root, {
+			maxParallel: 2,
+			perRepoMax: 10,
+			integration: 'merge',
+		});
+		const report = scanProject(config);
+		const clashAgent: AgentRunner = ({cwd, slug}) => {
+			if (slug === 'clash') {
+				writeFileSync(join(cwd, 'shared.txt'), 'agent version\n');
+				const other = seeded.clone('other-clash');
+				writeFileSync(join(other, 'shared.txt'), 'main version\n');
+				gitIn(['add', '-A'], other);
+				gitIn(['commit', '-q', '-m', 'main edits shared'], other);
+				gitIn(['push', '-q', 'arbiter', 'HEAD:main'], other);
+			} else {
+				writeFileSync(join(cwd, `${slug}.txt`), 'clean work\n');
+			}
+			return {ok: true};
+		};
+		const result = await runOnce({
+			config,
+			report,
+			workspace: join(scratch.root, '.agent-runner'),
+			agentRunner: clashAgent,
+			env: gitEnv(),
+		});
+		const byStatus = new Map(result.items.map((i) => [i.slug, i.status]));
+		expect(byStatus.get('clash')).toBe('needs-attention');
+		// The conflict is isolated: the sibling clean job still integrated.
+		expect(byStatus.get('clean')).toBe('claimed-done');
+		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'clash')).toBe(
+			true,
+		);
+		expect(existsOnArbiterMain(seeded.repo, 'done', 'clean')).toBe(true);
+	});
+});
+
 describe('runOnce — lost race is skipped cleanly', () => {
 	it('skips an item already claimed by someone else (claim exit 2)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);

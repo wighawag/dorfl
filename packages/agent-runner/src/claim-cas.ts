@@ -279,7 +279,19 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		return {kind: 'lost', message};
 	}
 
-	// Fresh claim branch off the latest arbiter main.
+	// Fresh claim branch off the latest arbiter main. DETACH onto `arbiter/main`
+	// first so the throwaway claim branch can always be deleted: on a RETRY (the
+	// push was rejected because main advanced) HEAD is still ON `claimBranch` from
+	// the prior attempt, and `git branch -D <current-branch>` refuses — leaving a
+	// stale branch that makes the re-`checkout -b` fail with "already exists".
+	// Detaching first makes the delete + recreate idempotent across attempts. (This
+	// retry path is hit far more often once `run` claims CONCURRENTLY — a sibling
+	// job's integration advancing main is exactly what triggers the rejection.)
+	await gitHard(
+		['checkout', '--quiet', '--detach', `${arbiter}/main`],
+		cwd,
+		env,
+	);
 	await gitSoft(['branch', '-D', claimBranch], cwd, env);
 	await gitHard(
 		['checkout', '--quiet', '-b', claimBranch, `${arbiter}/main`],

@@ -2,14 +2,18 @@ import type {Config} from './config.js';
 import {resolveRepoConfig} from './repo-config.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
-import {performClaim} from './claim-cas.js';
+import {performClaim, type ClaimCasResult} from './claim-cas.js';
 import {updateJobRecord, encodeWorkId} from './workspace.js';
+import {encodeRepoKey} from './repo-mirror.js';
+import {run as runProcess} from './git.js';
+import {mkdirSync, rmSync} from 'node:fs';
 import {ledgerWrite} from './ledger-write.js';
 import {
 	jobWorktreeStrategy,
 	type IsolatedTree,
 	type IsolationStrategy,
 } from './isolation.js';
+import {runConcurrent, createKeyedLock} from './concurrency.js';
 import type {Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
@@ -18,7 +22,110 @@ import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {performIntegration} from './integration-core.js';
 import type {ReviewGate} from './review-gate.js';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, dirname} from 'node:path';
+
+/** Is `repoPath` a BARE git repository (a registry hub mirror has no work tree)? */
+function isBareRepo(
+	repoPath: string,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	const result = runProcess(
+		'git',
+		['rev-parse', '--is-bare-repository'],
+		repoPath,
+		{env},
+	);
+	return result.status === 0 && result.stdout.trim() === 'true';
+}
+
+/**
+ * The outcome of {@link claimAgainstRepo}: the claim result PLUS the path the
+ * job-worktree strategy should resolve its mirror/arbiter URL from (`fromRepo`).
+ * For an in-place checkout that is the checkout itself; for a bare registry
+ * mirror it is the throwaway claim CLONE (whose `origin` IS the arbiter URL).
+ */
+interface RepoClaim {
+	claim: ClaimCasResult;
+	/** Pass as `jobWorktreeStrategy({fromRepo})` (kept alive until AFTER prepare). */
+	fromRepo: string;
+	/** Arbiter remote NAME valid inside `fromRepo` (in-place: configured; bare: `origin`). */
+	strategyArbiter: string;
+	/**
+	 * Remove the throwaway claim clone (no-op for the in-place path). MUST be called
+	 * only AFTER `strategy.prepare()` — the strategy resolves the mirror URL off
+	 * `fromRepo`, so the clone must still exist at prepare time.
+	 */
+	cleanup(): void;
+}
+
+/**
+ * Claim a slug against a repo that may be EITHER a working checkout (the in-place
+ * test/`do` path) OR a BARE registry hub mirror (`run`'s production discovery).
+ *
+ * The claim CAS needs a NON-bare checkout with an `origin/main` tracking ref and
+ * a work tree to commit in (a bare mirror cannot `git mv`/`git commit`). So for a
+ * bare mirror we clone it into a throwaway claim dir under `workspace` and claim
+ * THERE against `origin` (the mirror URL) — the EXACT pattern `do --remote` uses
+ * (`do.ts` §2–3). For a non-bare checkout we claim in place against the configured
+ * arbiter remote, unchanged. The returned `fromRepo` is what the job-worktree
+ * strategy then resolves the mirror off (the claim clone, or the checkout).
+ */
+async function claimAgainstRepo(opts: {
+	slug: string;
+	repoPath: string;
+	workspace: string;
+	arbiter: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<RepoClaim> {
+	const {slug, repoPath, workspace, arbiter, env} = opts;
+	if (!isBareRepo(repoPath, env)) {
+		// In-place checkout: claim directly against the configured arbiter remote.
+		const claim = await performClaim({slug, cwd: repoPath, arbiter, env});
+		return {
+			claim,
+			fromRepo: repoPath,
+			strategyArbiter: arbiter,
+			cleanup: () => {},
+		};
+	}
+
+	// Bare hub mirror (the registry): clone it into a throwaway claim dir and claim
+	// there against `origin` (the mirror URL = the arbiter). Keyed per slug so two
+	// in-flight jobs in the same mirror get DISTINCT claim clones (worktree
+	// isolation — no shared mutable state across in-flight jobs).
+	const mirrorUrl = runProcess(
+		'git',
+		['remote', 'get-url', 'origin'],
+		repoPath,
+		{
+			env,
+		},
+	).stdout.trim();
+	const url = mirrorUrl !== '' ? mirrorUrl : `file://${repoPath}`;
+	const claimDir = join(
+		workspace,
+		'claim',
+		`${encodeRepoKey(url).split('/').join('__')}__${slug}`,
+	);
+	rmSync(claimDir, {recursive: true, force: true});
+	mkdirSync(dirname(claimDir), {recursive: true});
+	runProcess('git', ['clone', '--quiet', url, claimDir], dirname(claimDir), {
+		env,
+	});
+	const claim = await performClaim({
+		slug,
+		cwd: claimDir,
+		arbiter: 'origin',
+		env,
+	});
+	return {
+		claim,
+		fromRepo: claimDir,
+		// Inside the clone the arbiter is `origin` (the mirror URL).
+		strategyArbiter: 'origin',
+		cleanup: () => rmSync(claimDir, {recursive: true, force: true}),
+	};
+}
 
 /** What happened to one selected item across the whole pipeline. */
 export type ItemStatus =
@@ -157,10 +264,32 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	const workspace = options.workspace ?? config.workspacesDir;
 	const env = options.env;
 
-	const items: ItemResult[] = [];
-	for (const candidate of candidates) {
-		items.push(
-			await runOneItem(candidate, {
+	// The per-repo claim serialiser: the ONLY shared-working-tree step in the
+	// otherwise-concurrent tick is the claim (it prepares its micro-commit in the
+	// repo's checkout/mirror). Two concurrent claims in ONE repo would corrupt each
+	// other's HEAD/index, so we serialise the CLAIM per repo (cheap — mv + commit +
+	// CAS push) while the agent run + the rebase-or-abort integration stay fully
+	// concurrent in each job's OWN worktree. Distinct repos claim in parallel.
+	const claimLock = createKeyedLock();
+
+	// GENUINELY CONCURRENT (ADR §3 — the whole point of `run`): run up to
+	// `maxParallel` `runOneItem`s IN FLIGHT at once, capped at `perRepoMax`
+	// concurrently per repo. The caps now bound ACTUAL in-flight execution, not just
+	// selection (this replaced the old `for (const c) { await runOneItem }` loop
+	// that ran selected candidates one-at-a-time). The substrate is parallel-ready —
+	// each slug → a distinct `work/<slug>` branch → a distinct job worktree, and the
+	// arbiter CAS serialises claims (a loser gets dropped) — so the only shared state
+	// across in-flight jobs is read-only config; each job owns its own worktree.
+	// Integration ordering is independent per job: each rebases-or-aborts onto a
+	// moving `<arbiter>/main` on its own, and a conflict routes only THAT job to
+	// needs-attention (the executor never lets one job's failure abort the others).
+	const settled = await runConcurrent({
+		items: candidates,
+		maxInFlight: config.maxParallel,
+		keyFor: (candidate) => candidate.repoPath,
+		perKeyMax: config.perRepoMax,
+		worker: (candidate) =>
+			runOneItem(candidate, {
 				config,
 				workspace,
 				agentRunner: options.agentRunner,
@@ -170,9 +299,22 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 				openPr: options.openPr,
 				env,
 				onWarn: options.onWarn,
+				claimLock,
 			}),
-		);
-	}
+	});
+	// `runOneItem` is total (it maps every failure to an `ItemResult` and never
+	// throws), so a captured `{error}` slot is a defensive last resort — surface it
+	// as a claim-error item rather than crashing the whole tick.
+	const items: ItemResult[] = settled.map((slot, i) =>
+		'ok' in slot
+			? slot.ok
+			: {
+					repoPath: candidates[i].repoPath,
+					slug: candidates[i].slug,
+					status: 'claim-error' as const,
+					detail: (slot.error as Error)?.message ?? String(slot.error),
+				},
+	);
 
 	const claimedAndDone = items.filter(
 		(i) => i.status === 'claimed-done',
@@ -210,6 +352,14 @@ interface OneItemContext {
 	}) => void;
 	env?: NodeJS.ProcessEnv;
 	onWarn?: (message: string) => void;
+	/**
+	 * Per-repo claim serialiser (shared across the tick's in-flight jobs). The claim
+	 * step mutates the repo's shared working tree, so it is serialised per repo;
+	 * everything after the claim runs in this job's own worktree and stays
+	 * concurrent. Optional so a direct `runOneItem` caller (none today) degrades to
+	 * an un-contended lock.
+	 */
+	claimLock?: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
 }
 
 async function runOneItem(
@@ -230,21 +380,40 @@ async function runOneItem(
 	}
 
 	// 1. Claim (the runner's first git-state transition) via the in-process CAS.
-	//    `performClaim` is async, so two awaited runners over the same slug
-	//    genuinely race — the arbiter's ref-CAS (not ordering) picks one winner.
-	const claim = await performClaim({
-		slug,
-		cwd: repoPath,
-		arbiter: config.defaultArbiter,
-		env: ctx.env,
-	});
+	//    `claimAgainstRepo` handles BOTH discovery shapes: a working CHECKOUT (the
+	//    in-place test/`do` path — claim directly) and a BARE registry hub mirror
+	//    (`run`'s production discovery — claim in a throwaway clone, since a bare
+	//    repo cannot `git mv`/`git commit`; the SAME pattern `do --remote` uses). It
+	//    returns the `fromRepo`/`strategyArbiter` the worktree strategy resolves its
+	//    mirror off (kept alive until AFTER prepare). `performClaim` is async, so two
+	//    awaited claims over one slug genuinely race — the arbiter ref-CAS picks the
+	//    winner.
+	const doClaim = () =>
+		claimAgainstRepo({
+			slug,
+			repoPath,
+			workspace: ctx.workspace,
+			arbiter: config.defaultArbiter,
+			env: ctx.env,
+		});
+	// Serialise the claim PER REPO (it prepares its micro-commit in a checkout/clone
+	// of the repo) so two in-flight jobs in the same repo do not stomp on each
+	// other; the arbiter CAS then picks the winner across machines. Different repos
+	// (and everything AFTER the claim) run concurrently.
+	const repoClaim = ctx.claimLock
+		? await ctx.claimLock(repoPath, doClaim)
+		: await doClaim();
+	const claim = repoClaim.claim;
 	if (claim.outcome === 'lost') {
+		repoClaim.cleanup();
 		return {...base, status: 'lost-race'};
 	}
 	if (claim.outcome === 'contended') {
+		repoClaim.cleanup();
 		return {...base, status: 'claim-contended'};
 	}
 	if (claim.outcome === 'usage-error') {
+		repoClaim.cleanup();
 		return {...base, status: 'claim-error', detail: claim.message};
 	}
 
@@ -258,13 +427,18 @@ async function runOneItem(
 	//    the arbiter URL resolved from this repo, so jobs reuse it (fetch, not
 	//    re-clone) across the run.
 	const strategy: IsolationStrategy = jobWorktreeStrategy({
-		fromRepo: repoPath,
-		arbiter: config.defaultArbiter,
+		// In-place: the checkout. Bare-mirror: the throwaway claim CLONE (still alive)
+		// — the strategy resolves the mirror URL off it at prepare time, then we drop it.
+		fromRepo: repoClaim.fromRepo,
+		arbiter: repoClaim.strategyArbiter,
 		workspacesDir: ctx.workspace,
 	});
 	let tree: IsolatedTree | undefined;
 	try {
 		tree = strategy.prepare({slug, env: ctx.env});
+		// The claim clone (bare-mirror path) has done its job: the mirror is
+		// materialised + the worktree cut. Drop it (no-op for the in-place path).
+		repoClaim.cleanup();
 
 		// 2a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a
 		//     `work/<slug>` whose commits did not replay cleanly onto the current
@@ -548,4 +722,175 @@ function saveAgentFailure(
 /** A throwaway default workspace under the OS temp dir (CLI convenience). */
 export function defaultRunWorkspace(): string {
 	return join(tmpdir(), 'agent-runner-workspace');
+}
+
+/**
+ * One supervised TICK over the registry, as a swappable unit. Today the tick IS
+ * `runOnce` (claim+build+integrate a concurrent batch of eligible SLICES). The
+ * loop ({@link runLoop}) is deliberately written against this signature — NOT
+ * against `runOnce` directly — so the advance-loop PRD can later swap the tick
+ * (build / slice / triage / surface / apply) WITHOUT re-architecting the loop
+ * (the forward-pointer: the loop owns concurrency/scheduling, the tick owns one
+ * item's work). The loop never reaches inside a tick.
+ */
+export type RunTick = (options: RunOnceOptions) => Promise<RunOnceResult>;
+
+export interface RunLoopOptions extends RunOnceOptions {
+	/**
+	 * Stop after this many ticks. Unset ⇒ no iteration bound (the forever daemon,
+	 * the future system service). A bounded session (an operator's stop discipline,
+	 * absorbing the retired `watch` verb) sets this and/or `maxDurationMs`.
+	 */
+	maxIterations?: number;
+	/**
+	 * Stop once this many ms of wall-clock have elapsed (checked before each tick
+	 * AND before each inter-tick sleep). Unset ⇒ no duration bound.
+	 */
+	maxDurationMs?: number;
+	/**
+	 * Pause between ticks (ms). Default 0 (back-to-back). The loop sleeps via the
+	 * injectable {@link RunLoopOptions.sleep} so tests need not wait real time.
+	 */
+	intervalMs?: number;
+	/** The tick to loop. Defaults to {@link runOnce}; tests/advance-loop inject. */
+	tick?: RunTick;
+	/** Clock seam (tests). Defaults to `Date.now`. */
+	now?: () => number;
+	/** Sleep seam (tests). Defaults to a real `setTimeout`. */
+	sleep?: (ms: number) => Promise<void>;
+	/**
+	 * Cooperative stop signal, polled before each tick. When it returns true the
+	 * loop ends cleanly after the current tick. The CLI wires this to a SIGINT/
+	 * SIGTERM flag so the long-running daemon shuts down gracefully; tests use it to
+	 * end an otherwise-forever loop deterministically.
+	 */
+	stop?: () => boolean;
+	/** Called once per completed tick with its result + 1-based index (CLI logging). */
+	onTick?: (result: RunOnceResult, iteration: number) => void;
+}
+
+/** Aggregate outcome of a {@link runLoop} session. */
+export interface RunLoopResult {
+	/** Number of ticks actually executed. */
+	iterations: number;
+	/** Why the loop ended. */
+	stoppedBy: 'max-iterations' | 'max-duration' | 'signal';
+	/** Sum of `claimedAndDone` across all ticks. */
+	claimedAndDone: number;
+	/** Sum of `skipped` across all ticks. */
+	skipped: number;
+	/** Sum of `failed` across all ticks. */
+	failed: number;
+	/** Sum of `needsAttention` across all ticks. */
+	needsAttention: number;
+	/** Each tick's result, in order. */
+	ticks: RunOnceResult[];
+}
+
+const realSleep = (ms: number): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * `run` (no flag) — the cross-repo, parallel, **forever-looping daemon** (ADR §3):
+ * loop the supervised concurrent tick over the registry until a stop bound
+ * (max-iterations / max-duration / a stop signal) or forever (the future system
+ * service). Each tick claims + runs a CONCURRENT batch ({@link runOnce}’s
+ * `maxParallel`/`perRepoMax` in-flight execution), integrates, then the loop
+ * continues. This absorbs the retired `watch` verb’s bounded-session + surface-
+ * failures behaviour: a stuck item (timeout / red gate / rebase conflict) is
+ * routed through the EXISTING ledger needs-attention seam INSIDE the tick
+ * (`runOneItem` → `applyNeedsAttentionTransition`, surfaced on `main`) — the loop
+ * does NOT infinite-retry it and adds NO bespoke failure reporting; it just keeps
+ * ticking. `run --once` is exactly ONE tick (call {@link runOnce} directly, the
+ * debug/test affordance — NOT the CI path; CI is `do`).
+ *
+ * The loop owns ONLY scheduling (when/whether to tick); the TICK owns one batch’s
+ * work — kept separable so advance-loop can swap the tick later (see {@link
+ * RunTick}).
+ */
+export async function runLoop(options: RunLoopOptions): Promise<RunLoopResult> {
+	const tick = options.tick ?? runOnce;
+	const now = options.now ?? Date.now;
+	const sleep = options.sleep ?? realSleep;
+	const intervalMs = options.intervalMs ?? 0;
+	const start = now();
+	const deadline =
+		options.maxDurationMs !== undefined
+			? start + options.maxDurationMs
+			: undefined;
+
+	// The per-tick options are the RunOnceOptions subset of RunLoopOptions; the
+	// loop-only knobs (bounds / seams / callbacks) are not forwarded to the tick.
+	const tickOptions: RunOnceOptions = {
+		config: options.config,
+		report: options.report,
+		workspace: options.workspace,
+		agentRunner: options.agentRunner,
+		harness: options.harness,
+		reviewGate: options.reviewGate,
+		provider: options.provider,
+		openPr: options.openPr,
+		env: options.env,
+		agentId: options.agentId,
+		onWarn: options.onWarn,
+	};
+
+	const ticks: RunOnceResult[] = [];
+	let stoppedBy: RunLoopResult['stoppedBy'] = 'max-iterations';
+
+	// eslint-disable-next-line no-constant-condition
+	while (true) {
+		// Stop-condition checks BEFORE running a tick (so a zero-iteration / already-
+		// expired / pre-signalled session does no work).
+		if (options.stop?.()) {
+			stoppedBy = 'signal';
+			break;
+		}
+		if (
+			options.maxIterations !== undefined &&
+			ticks.length >= options.maxIterations
+		) {
+			stoppedBy = 'max-iterations';
+			break;
+		}
+		if (deadline !== undefined && now() >= deadline) {
+			stoppedBy = 'max-duration';
+			break;
+		}
+
+		const result = await tick(tickOptions);
+		ticks.push(result);
+		options.onTick?.(result, ticks.length);
+
+		// Re-check the bounds AFTER the tick so we never sleep past a stop condition.
+		if (
+			options.maxIterations !== undefined &&
+			ticks.length >= options.maxIterations
+		) {
+			stoppedBy = 'max-iterations';
+			break;
+		}
+		if (deadline !== undefined && now() >= deadline) {
+			stoppedBy = 'max-duration';
+			break;
+		}
+		if (options.stop?.()) {
+			stoppedBy = 'signal';
+			break;
+		}
+
+		if (intervalMs > 0) {
+			await sleep(intervalMs);
+		}
+	}
+
+	return {
+		iterations: ticks.length,
+		stoppedBy,
+		claimedAndDone: ticks.reduce((n, t) => n + t.claimedAndDone, 0),
+		skipped: ticks.reduce((n, t) => n + t.skipped, 0),
+		failed: ticks.reduce((n, t) => n + t.failed, 0),
+		needsAttention: ticks.reduce((n, t) => n + t.needsAttention, 0),
+		ticks,
+	};
 }
