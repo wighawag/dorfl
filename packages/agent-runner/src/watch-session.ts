@@ -137,6 +137,39 @@ function assistantLines(content: unknown, color: boolean): string[] {
 		return [];
 	}
 	const lines: string[] = [];
+	const text = assistantContentText(content);
+	for (const part of content) {
+		if (typeof part !== 'object' || part === null) {
+			continue;
+		}
+		const p = part as Record<string, unknown>;
+		if (p.type === 'toolCall') {
+			const name =
+				(typeof p.name === 'string' && p.name !== '' && p.name) ||
+				(typeof p.toolName === 'string' && p.toolName !== '' && p.toolName) ||
+				'tool';
+			lines.push(paint(`▶ ${name}`, color, CYAN));
+		}
+		// `text` is collected by assistantContentText; `thinking` and any other
+		// block type are skipped.
+	}
+	return text === '' ? lines : [text, ...lines];
+}
+
+/**
+ * Concatenate the `text` parts of ONE assistant `message.content` (the answer
+ * text, with tool/thinking blocks dropped) — the single source of truth for
+ * "what did the assistant SAY" shared by the {@link assistantLines} watch view
+ * and the {@link lastAssistantText} output reader (slice `harness-agent-output`).
+ * A plain-string content is itself the text. Returns `''` when there is no text.
+ */
+function assistantContentText(content: unknown): string {
+	if (typeof content === 'string') {
+		return content;
+	}
+	if (!Array.isArray(content)) {
+		return '';
+	}
 	const textParts: string[] = [];
 	for (const part of content) {
 		if (typeof part !== 'object' || part === null) {
@@ -145,17 +178,57 @@ function assistantLines(content: unknown, color: boolean): string[] {
 		const p = part as Record<string, unknown>;
 		if (p.type === 'text' && typeof p.text === 'string') {
 			textParts.push(p.text);
-		} else if (p.type === 'toolCall') {
-			const name =
-				(typeof p.name === 'string' && p.name !== '' && p.name) ||
-				(typeof p.toolName === 'string' && p.toolName !== '' && p.toolName) ||
-				'tool';
-			lines.push(paint(`▶ ${name}`, color, CYAN));
 		}
-		// `thinking` and any other block type are skipped.
 	}
-	const text = textParts.join('');
-	return text === '' ? lines : [text, ...lines];
+	return textParts.join('');
+}
+
+/**
+ * Extract the **last assistant message's text** from a pi session `.jsonl`
+ * (slice `harness-agent-output`) — the agent's final ANSWER, surfaced through
+ * the harness seam as `LaunchResult.output`. It REUSES this module's session-log
+ * shape walk (one parser, not two): it scans the `{type:"message",
+ * message:{role:"assistant", content[]}}` records, takes the LAST one carrying
+ * non-empty `text`, and returns its concatenated text.
+ *
+ * Returns `undefined` when the log has no assistant text at all — an absent log,
+ * a malformed/short log, or a run whose only assistant turn was tool-calls (no
+ * `text` part). A tool-only assistant turn is NOT a final answer, so a LATER
+ * text turn (if any) wins; with no text turn anywhere the result is `undefined`.
+ *
+ * Malformed/blank lines are skipped (never thrown): a partially-written trailing
+ * line in a just-closed log must not crash the reader.
+ */
+export function lastAssistantText(jsonl: string): string | undefined {
+	let last: string | undefined;
+	for (const line of jsonl.split('\n')) {
+		const trimmed = line.trim();
+		if (trimmed === '') {
+			continue;
+		}
+		let event: unknown;
+		try {
+			event = JSON.parse(trimmed);
+		} catch {
+			continue; // a half-written / malformed line — skip, never throw.
+		}
+		if (typeof event !== 'object' || event === null) {
+			continue;
+		}
+		const record = event as SessionLogRecord;
+		if (record.type !== 'message') {
+			continue;
+		}
+		const message = record.message;
+		if (!message || message.role !== 'assistant') {
+			continue;
+		}
+		const text = assistantContentText(message.content);
+		if (text !== '') {
+			last = text; // a later text turn supersedes an earlier one.
+		}
+	}
+	return last;
 }
 
 export interface SessionTailerOptions {

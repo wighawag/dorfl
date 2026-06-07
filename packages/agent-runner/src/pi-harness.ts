@@ -1,5 +1,5 @@
 import {spawn, spawnSync} from 'node:child_process';
-import {existsSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {
 	NullHarness,
 	pidAlive,
@@ -10,6 +10,7 @@ import {
 	type LaunchResult,
 } from './harness.js';
 import {generateSessionPath} from './session-path.js';
+import {lastAssistantText} from './watch-session.js';
 import type {HarnessAdapter} from './config.js';
 
 /**
@@ -173,6 +174,10 @@ export class PiHarness implements Harness {
 			ok: status === 0,
 			record,
 			detail: status === 0 ? undefined : (result.stderr ?? '').trim(),
+			// The agent's ANSWER (slice `harness-agent-output`): the LAST assistant
+			// turn's text read from the session `.jsonl` pi just wrote — NOT piped
+			// stdout (which is drained). Shares `watch-session.ts`'s reader.
+			output: readLastAssistantText(sessionFile),
 		};
 	}
 
@@ -221,6 +226,10 @@ export class PiHarness implements Harness {
 					ok: status === 0,
 					record,
 					detail: status === 0 ? undefined : stderr.trim(),
+					// Read the agent's ANSWER from the `.jsonl` at `close` — the same
+					// last-assistant-text read `launch` does at return (slice
+					// `harness-agent-output`); the process has exited so the log is final.
+					output: readLastAssistantText(sessionFile),
 				});
 			});
 			// Feed the same prepared prompt on stdin, then close it (pi reads to EOF).
@@ -255,6 +264,26 @@ export class PiHarness implements Harness {
  */
 export function piSessionExists(record: HarnessRecord): boolean {
 	return record.session !== undefined && existsSync(record.session);
+}
+
+/**
+ * Read the LAST assistant message's text from the pi session `.jsonl` at
+ * `sessionFile` — the agent's final ANSWER, surfaced as `LaunchResult.output`
+ * (slice `harness-agent-output`). Called by BOTH `launch` (at return) and
+ * `launchAsync` (at `close`), AFTER pi has exited so the log is complete.
+ *
+ * It REUSES `watch-session.ts`'s {@link lastAssistantText} (one `.jsonl` parser,
+ * not two). An absent file (pi never wrote it) yields `undefined`, as does a log
+ * with no assistant text — a read error is never thrown back into the launch.
+ */
+function readLastAssistantText(sessionFile: string): string | undefined {
+	let jsonl: string;
+	try {
+		jsonl = readFileSync(sessionFile, 'utf8');
+	} catch {
+		return undefined; // no session log on disk — no answer to surface.
+	}
+	return lastAssistantText(jsonl);
 }
 
 // Register the pi adapter so `status`/`do`/`gc` resolve liveness for `pi` jobs

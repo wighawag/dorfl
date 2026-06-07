@@ -49,6 +49,30 @@ describe('NullHarness — launch', () => {
 		});
 		expect(result.record.command).toBe('true');
 	});
+
+	it('populates output from the captured command stdout (trimmed)', () => {
+		// For the null/shell adapter the command's stdout IS its answer (slice
+		// `harness-agent-output`). A synchronous spawn captures it; we return it
+		// trimmed as `output`.
+		const harness = new NullHarness();
+		const result = harness.launch({
+			dir: scratch.root,
+			slug: 'feat',
+			command: `printf '  the answer  \\n'`,
+		});
+		expect(result.ok).toBe(true);
+		expect(result.output).toBe('the answer');
+	});
+
+	it('output is undefined when the command writes no stdout', () => {
+		const harness = new NullHarness();
+		const result = harness.launch({
+			dir: scratch.root,
+			slug: 'feat',
+			command: 'true',
+		});
+		expect(result.output).toBeUndefined();
+	});
 });
 
 describe('NullHarness — liveness (from the harness, NOT mtime)', () => {

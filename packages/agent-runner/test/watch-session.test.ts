@@ -2,7 +2,11 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync, appendFileSync, readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {formatWatchEvent, SessionTailer} from '../src/watch-session.js';
+import {
+	formatWatchEvent,
+	lastAssistantText,
+	SessionTailer,
+} from '../src/watch-session.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
 /**
@@ -176,6 +180,105 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 			'▶ edit',
 			'All done — the build is green.',
 		]);
+	});
+});
+
+describe('lastAssistantText — the shared last-assistant-text reader (one parser)', () => {
+	/** Join records into a `.jsonl` body (one JSON object per line). */
+	function jsonl(records: unknown[]): string {
+		return records.map((r) => JSON.stringify(r)).join('\n') + '\n';
+	}
+
+	it('returns the LAST assistant turn, concatenating its multi-part text', () => {
+		const log = jsonl([
+			{type: 'session', id: 'a'},
+			{
+				type: 'message',
+				message: {role: 'user', content: [{type: 'text', text: 'the prompt'}]},
+			},
+			{
+				type: 'message',
+				message: {
+					role: 'assistant',
+					content: [{type: 'text', text: 'an EARLIER turn'}],
+				},
+			},
+			{
+				type: 'message',
+				message: {
+					role: 'assistant',
+					content: [
+						{type: 'thinking', thinking: 'IGNORED'},
+						{type: 'text', text: 'My final '},
+						{type: 'text', text: 'answer.'},
+					],
+				},
+			},
+		]);
+		expect(lastAssistantText(log)).toBe('My final answer.');
+	});
+
+	it('takes a plain-string assistant content as the text', () => {
+		const log = jsonl([
+			{type: 'message', message: {role: 'assistant', content: 'All done.'}},
+		]);
+		expect(lastAssistantText(log)).toBe('All done.');
+	});
+
+	it('skips a tool-call-only assistant turn (no text), using the last TEXT turn', () => {
+		const log = jsonl([
+			{
+				type: 'message',
+				message: {
+					role: 'assistant',
+					content: [{type: 'text', text: 'verdict'}],
+				},
+			},
+			{
+				type: 'message',
+				message: {
+					role: 'assistant',
+					content: [{type: 'toolCall', name: 'read'}],
+				},
+			},
+		]);
+		// The tool-only turn is not an answer; the earlier text turn is the answer.
+		expect(lastAssistantText(log)).toBe('verdict');
+	});
+
+	it('returns undefined when the only assistant turn is tool-calls (no text)', () => {
+		const log = jsonl([
+			{
+				type: 'message',
+				message: {
+					role: 'assistant',
+					content: [{type: 'toolCall', name: 'bash'}],
+				},
+			},
+		]);
+		expect(lastAssistantText(log)).toBeUndefined();
+	});
+
+	it('returns undefined for an empty / assistant-text-less log', () => {
+		expect(lastAssistantText('')).toBeUndefined();
+		expect(
+			lastAssistantText(
+				jsonl([
+					{type: 'session', id: 'a'},
+					{type: 'message', message: {role: 'user', content: 'hi'}},
+				]),
+			),
+		).toBeUndefined();
+	});
+
+	it('skips malformed / half-written trailing lines without throwing', () => {
+		const log =
+			JSON.stringify({
+				type: 'message',
+				message: {role: 'assistant', content: 'kept'},
+			}) + '\n{"type":"message","message":{"role":"assi';
+		expect(() => lastAssistantText(log)).not.toThrow();
+		expect(lastAssistantText(log)).toBe('kept');
 	});
 });
 

@@ -1,8 +1,10 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {isAbsolute, join} from 'node:path';
+import {homedir} from 'node:os';
 import {
 	existsSync,
 	mkdirSync,
+	readdirSync,
 	readFileSync,
 	writeFileSync,
 	chmodSync,
@@ -41,7 +43,7 @@ afterEach(() => {
  * the test can assert the adapter invoked pi correctly. `exitCode` lets a test
  * simulate a failed agent run.
  */
-function writePiStub(opts: {exitCode?: number} = {}): {
+function writePiStub(opts: {exitCode?: number; sessionBody?: string} = {}): {
 	bin: string;
 	argsFile: string;
 	cwdFile: string;
@@ -52,6 +54,11 @@ function writePiStub(opts: {exitCode?: number} = {}): {
 	const cwdFile = join(scratch.root, 'pi-cwd.txt');
 	const stdinFile = join(scratch.root, 'pi-stdin.txt');
 	const exit = opts.exitCode ?? 0;
+	// What the stub writes INTO the `--session` .jsonl (real pi writes the session
+	// log there). Default: empty (legacy behaviour). A test supplies records to
+	// exercise the last-assistant-text output read.
+	const sessionBodyFile = join(scratch.root, 'pi-session-body.jsonl');
+	writeFileSync(sessionBodyFile, opts.sessionBody ?? '');
 	const script = [
 		'#!/usr/bin/env bash',
 		`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
@@ -64,12 +71,30 @@ function writePiStub(opts: {exitCode?: number} = {}): {
 		'  if [ "$prev" = "--session" ]; then session_file="$a"; fi',
 		'  prev="$a"',
 		'done',
-		'if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; : > "$session_file"; fi',
+		`if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; cp ${JSON.stringify(
+			sessionBodyFile,
+		)} "$session_file"; fi`,
 		`exit ${exit}`,
 	].join('\n');
 	writeFileSync(bin, script + '\n');
 	chmodSync(bin, 0o755);
 	return {bin, argsFile, cwdFile, stdinFile};
+}
+
+/** A pi session-log body: one assistant turn with the given multi-part text. */
+function assistantSessionLog(...textParts: string[]): string {
+	return (
+		JSON.stringify({type: 'session', id: 's'}) +
+		'\n' +
+		JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: textParts.map((text) => ({type: 'text', text})),
+			},
+		}) +
+		'\n'
+	);
 }
 
 /** Read back the `--session <path>` arg the stub recorded. */
@@ -223,6 +248,113 @@ describe('PiHarness — invocation (stubbed pi CLI)', () => {
 		expect(piSessionExists(result.record)).toBe(true);
 		// Nothing was written INTO the worktree (no checkout pollution).
 		expect(existsSync(join(dir, '.agent-runner-pi-session'))).toBe(false);
+	});
+});
+
+describe('PiHarness — output (last assistant text from the session .jsonl)', () => {
+	it('launch populates output with the LAST assistant turn (multi-part text concatenated)', () => {
+		const stub = writePiStub({
+			sessionBody: assistantSessionLog('My final ', 'answer.'),
+		});
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+
+		const result = harness.launch({
+			dir,
+			slug: 'feat',
+			command: '',
+			prompt: 'p',
+		});
+		expect(result.output).toBe('My final answer.');
+	});
+
+	it('output is undefined when the session log has no assistant text (tool-only turn)', () => {
+		const toolOnly =
+			JSON.stringify({
+				type: 'message',
+				message: {
+					role: 'assistant',
+					content: [{type: 'toolCall', name: 'read'}],
+				},
+			}) + '\n';
+		const stub = writePiStub({sessionBody: toolOnly});
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+
+		const result = harness.launch({
+			dir,
+			slug: 'feat',
+			command: '',
+			prompt: 'p',
+		});
+		expect(result.output).toBeUndefined();
+	});
+
+	it('output is undefined when the session log is empty / absent', () => {
+		const stub = writePiStub({sessionBody: ''});
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+
+		const result = harness.launch({
+			dir,
+			slug: 'feat',
+			command: '',
+			prompt: 'p',
+		});
+		expect(result.output).toBeUndefined();
+	});
+
+	it('launchAsync populates output the SAME way (read at close, after pi exits)', async () => {
+		const stub = writePiStub({
+			sessionBody: assistantSessionLog('async ', 'answer'),
+		});
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+
+		const result = await harness.launchAsync({
+			dir,
+			slug: 'feat',
+			command: '',
+			prompt: 'p',
+		});
+		expect(result.ok).toBe(true);
+		expect(result.output).toBe('async answer');
+	});
+
+	it('writes the .jsonl under the isolated scratch dir — the real ~/.pi/agent/sessions is UNTOUCHED', () => {
+		// isolatePiAgentDir points PI_CODING_AGENT_DIR at the scratch dir (set in
+		// beforeEach), so a DEFAULT-path launch lands under scratch, never the real
+		// ~/.pi/agent/sessions (WORK-CONTRACT shared-write-location rule).
+		const realSessions = join(homedir(), '.pi', 'agent', 'sessions');
+		const before = existsSync(realSessions)
+			? readdirSync(realSessions).length
+			: -1;
+		const stub = writePiStub({
+			sessionBody: assistantSessionLog('isolated answer'),
+		});
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+
+		// No `session` passed ⇒ the adapter generates the DEFAULT path (resolved from
+		// PI_CODING_AGENT_DIR, which the helper isolated to scratch).
+		const result = harness.launch({
+			dir,
+			slug: 'feat',
+			command: '',
+			prompt: 'p',
+		});
+		expect(result.output).toBe('isolated answer');
+		// The session file lives under the scratch agent dir, not the real one.
+		expect(result.record.session!.startsWith(scratch.root)).toBe(true);
+		const after = existsSync(realSessions)
+			? readdirSync(realSessions).length
+			: -1;
+		expect(after).toBe(before); // real sessions dir entry count unchanged.
 	});
 });
 

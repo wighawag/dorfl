@@ -102,8 +102,23 @@ export interface LaunchResult {
 	ok: boolean;
 	/** The harness block to persist in the job record (PID, command, …). */
 	record: HarnessRecord;
-	/** Failure detail when `ok` is false. */
+	/** Failure detail when `ok` is false (the stderr/failure channel). */
 	detail?: string;
+	/**
+	 * The agent's final ANSWER (slice `harness-agent-output`): the concatenated
+	 * `text` of the LAST assistant turn the invocation produced. This is the
+	 * channel for the agent's OUTPUT on success — DISTINCT from {@link detail},
+	 * which is the failure/`stderr` channel. `undefined` when the invocation
+	 * produced no parseable assistant text.
+	 *
+	 * Per-adapter EXTRACTION from each tool's native channel (Option C, decided
+	 * 2026-06-06): pi reads the last assistant message from the session `.jsonl`
+	 * it wrote (via `watch-session.ts`'s shared reader); the null/shell adapter
+	 * returns its captured (synchronous) command stdout. The forward-contract for
+	 * an opencode adapter (not built yet) is to take the last assistant `text`
+	 * part from its `--format json` stream — the SAME `output` field.
+	 */
+	output?: string;
 }
 
 /**
@@ -156,10 +171,15 @@ export class NullHarness implements Harness {
 			command,
 		};
 		const status = result.status ?? -1;
+		// The null/shell adapter's OUTPUT is its captured stdout (trimmed): a
+		// synchronous spawn, so there is no stream-fragility caveat — the command's
+		// stdout IS its answer. `undefined` when empty (no answer to surface).
+		const stdout = (result.stdout ?? '').trim();
 		return {
 			ok: status === 0,
 			record,
 			detail: status === 0 ? undefined : (result.stderr ?? '').trim(),
+			output: stdout === '' ? undefined : stdout,
 		};
 	}
 
