@@ -3,15 +3,15 @@ title: run/do integrate-path convergence — one shared gate→integrate back-ha
 slug: run-do-integrate-convergence
 humanOnly: true
 sliceAfter: []
+sliced: 2026-06-07
 ---
 
-> **Launch snapshot, not maintained.** Source material for slicing (`to-slices`);
-> once sliced, technical detail moves into the slices and durable rationale into
-> `docs/adr/`. Expect this to be outrun by the work — that is fine.
->
-> **Design RESOLVED in the 2026-06-07 grilling pass.** This PRD records the ratified
-> head/core/tail decomposition and the two-slice plan. Source finding:
-> `work/findings/run-and-do-have-separate-integrate-paths.md`.
+> **Sliced into `work/backlog/` on 2026-06-07** — Implementation/Testing/Slices
+> detail trimmed to the two slices (`extract-integration-core`,
+> `run-through-integration-core`); durable framing (Problem / Solution / User
+> Stories / Out of Scope) kept here. Source finding:
+> `work/findings/run-and-do-have-separate-integrate-paths.md`. A launched-and-sliced
+> snapshot, not a pending plan.
 
 ## Problem Statement
 
@@ -120,69 +120,17 @@ job records) stay in the tails — they are different WORK, not duplicated logic
    human `do`/`complete` path (Slice 1 is a pure refactor), so it is low-risk to
    review and ship.
 
-## Implementation Decisions
-
-- **The core owns the needs-attention routing.** Both callers already route via the
-  same `applyNeedsAttentionTransition` seam parameterised by the arbiter; putting it
-  in the core writes the subtle failure-handling once. The tails NEVER call the
-  routing seam themselves.
-- **The core owns the effective-integration-mode decision**, including today's
-  `autoMerge`-off `merge`→`propose` downgrade — preserved VERBATIM. The result
-  carries the EFFECTIVE mode; both tails read it from the result, never the requested
-  mode.
-- **The gate is UNIFIED on `runVerify(config.verify)`** — `defaultTestGate` and the
-  `TestGate` type are DELETED. This is a protocol-conformance fix (drift #3): `run`
-  starts honouring the per-repo, language-agnostic gate it currently ignores. State
-  it as an intended behaviour change (ADR note); it upgrades `run`'s gate from
-  test-only to the full configured floor.
-- **`integration-core.ts` is a NEW file** (not folded into `complete.ts`): a neutral
-  home makes the head/core/tail decomposition legible and avoids `run.ts` importing
-  from a file whose name/doc are about the human `complete` command. Mirrors the
-  `ledger-write.ts` precedent.
-- **`do.ts`'s build-agent `output`** already flows into `performComplete` as `body`
-  (PR #15); the core just carries it. `run.ts`'s `runAgent` currently DROPS
-  `launched.output` — Slice 2 must surface it (mirror `do`'s `runDoAgent`) so fleet
-  PRs get a real body too.
-- **OUT OF SCOPE — the `autoMerge` concept-collision is FENCED OFF.** The core
-  preserves CURRENT behaviour verbatim and takes NO position on the
-  merge-vs-propose `autoMerge` ambiguity. Reconciliation is a SEPARATE later effort
-  — see `work/findings/automerge-concept-collision-merge-vs-propose.md`.
-
-## Testing Decisions
-
-- **Slice 1 = zero behaviour change.** All existing `do`/`complete` tests stay green
-  unchanged (they assert on `outcome`, `routedToNeedsAttention`, message substrings,
-  the propose block, and `gh` args — all preserved by the thin wrapper). The proof
-  of Slice 1 is "nothing observable changed."
-- **Slice 2 acceptance proofs (the drift symptoms become tests):**
-  - a `run` item is review-gated (stub a `block` verdict → the item routes to
-    needs-attention; `do` already has this test to mirror);
-  - a `run` propose PR carries title + body (stub provider records the `gh` args);
-  - a repo with a CUSTOM `verify` has THAT command run by `run` (not `pnpm -r test`);
-  - a format-only failure (build+test green, format red) routes a `run` item to
-    needs-attention (proving the full floor, not test-only).
-- **Gate-stub re-pointing:** `run`'s ~15 `testGate: greenGate/redGate` injections
-  become `verify: 'exit 0'` / `verify: 'exit 1'` (the same string-command stubs
-  `do`'s tests already use — `PASS`/`FAIL`). Mechanical; assertions unchanged.
-- House style: vitest, temp work trees, `isolatePiAgentDir`, stubbed provider/agent,
-  no real model/network/GitHub.
-
-## Slices
-
-> Two slices. Slice 2 `blockedBy: [slice-1]`. BOTH land BEFORE `run-daemon-reframe`
-> (concurrency must wrap ONE converged back-half, not the fork).
-
-1. **`extract-integration-core`** — extract `src/integration-core.ts`
-   (`performIntegration` with the contract above, INCLUDING the routing + effective-
-   mode decision). `performComplete` becomes HEAD + core-call + TAIL. ONLY
-   `do`/`complete` use it. Zero behaviour change; all existing tests green. (`run`
-   untouched.)
-2. **`run-through-integration-core`** (`blockedBy: [extract-integration-core]`) —
-   route `runOneItem`'s steps 5–7 through `performIntegration`; surface
-   `launched.output` from `run`'s `runAgent` so the body flows; DELETE
-   `defaultTestGate`/`TestGate` and re-point the gate stubs (gate unification, option
-   a). Map `IntegrationCoreResult` → `updateJobRecord` + `ItemStatus`. Acceptance =
-   the four Slice-2 proofs above.
+> **Sliced** — the ratified decisions (core owns routing + effective-mode incl. the
+> verbatim `autoMerge` downgrade; gate unified on `runVerify(config.verify)` as a
+> protocol-conformance fix; `integration-core.ts` as a NEW neutral file; surface
+> `run`'s agent `output`), the testing decisions (Slice 1 = zero behaviour change /
+> existing suite green unchanged; Slice 2's four acceptance proofs; the gate-stub
+> re-pointing), and the two-slice plan now live in the slices:
+> `work/backlog/extract-integration-core.md` and
+> `work/backlog/run-through-integration-core.md`. Slice 2 `blockedBy:
+> [extract-integration-core]`; BOTH land BEFORE `run-daemon-reframe` (concurrency
+> wraps ONE converged back-half, not the fork). The `autoMerge` concept-collision is
+> fenced OUT (`work/findings/automerge-concept-collision-merge-vs-propose.md`).
 
 ## Out of Scope
 
