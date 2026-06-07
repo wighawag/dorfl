@@ -11,6 +11,8 @@ describe('envVarName', () => {
 		expect(envVarName('defaultArbiter')).toBe('AGENT_RUNNER_DEFAULT_ARBITER');
 		// A single-word key stays a single SCREAMING word.
 		expect(envVarName('model')).toBe('AGENT_RUNNER_MODEL');
+		// `autoSlice` gets its env var for free off the mechanical mapping.
+		expect(envVarName('autoSlice')).toBe('AGENT_RUNNER_AUTO_SLICE');
 	});
 });
 
@@ -59,6 +61,22 @@ describe('envOverrides — boolean coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'false'})).toEqual({
 			allowAgents: false,
 		});
+		// `autoSlice` coerces as a boolean exactly like `allowAgents`.
+		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'true'})).toEqual({
+			autoSlice: true,
+		});
+		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'false'})).toEqual({
+			autoSlice: false,
+		});
+	});
+
+	it('rejects an invalid autoSlice value LOUDLY, naming the variable', () => {
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_SLICE: 'yes'})).toThrow(
+			/AGENT_RUNNER_AUTO_SLICE/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_SLICE: 'yes'})).toThrow(
+			/true.*false/i,
+		);
 	});
 
 	it('rejects anything else LOUDLY, naming the variable', () => {

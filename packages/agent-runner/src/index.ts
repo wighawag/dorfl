@@ -51,6 +51,17 @@ export {
 } from './eligibility.js';
 
 export type {
+	SliceAfterResult,
+	SlicingEligibilityInput,
+	SlicingEligibilityResult,
+} from './slicing-eligibility.js';
+export {
+	resolveSliceGate,
+	resolveSliceAfter,
+	resolveSlicingEligibility,
+} from './slicing-eligibility.js';
+
+export type {
 	LedgerBacklogItem,
 	LedgerNeedsAttentionItem,
 	PrdExistence,
