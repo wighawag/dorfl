@@ -74,9 +74,11 @@ review"). Two reasons the `-pr` suffix is wrong now:
       approve→integrate, block→needs-attention; autoMerge downgrade intact.
 - [ ] Tests updated to the new names; the existing review-gate test coverage
       (`review-gate-pr.test.ts`, `review-gate.test.ts`) passes under the new flag
-      (rename the references; keep the assertions). Consider renaming the test file
-      `review-gate-pr.test.ts` → `review-gate.test.ts`-adjacent if it reduces
-      confusion (optional; not required).
+      (rename the references; keep the assertions). **Do NOT rename the test FILE
+      `review-gate-pr.test.ts` — `review-gate.test.ts` ALREADY EXISTS (verified
+      2026-06-06); renaming would collide/overwrite it.** Leave both test filenames
+      as-is; only rename the IDENTIFIERS inside them. (An earlier draft floated a
+      file rename — it is a trap; this criterion supersedes it.)
 - [ ] In-tree specs/docs naming the old key are updated (list above).
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
@@ -104,7 +106,9 @@ review"). Two reasons the `-pr` suffix is wrong now:
 > `do-config.ts` (`ReviewFlags`/`reviewFlagOverrides`), `env-config.ts`
 > (`reviewPr: 'boolean'`, env `AGENT_RUNNER_REVIEW_PR`), `do.ts`/`complete.ts`
 > (`reviewPr?` option + the `reviewPr` gate-on check), `review-gate.ts` (any
-> reference). ~86 occurrences across 8 src + 2 test files. Route to needs-attention
+> reference). ~100 token occurrences across the 8 src + 2 test files (verified
+> 2026-06-06; the count is illustrative — the bar is "grep finds no `reviewPr`").
+> Route to needs-attention
 > if the shape differs.
 >
 > Rename ALL of them to `review` / `--review` / `AGENT_RUNNER_REVIEW`. Leave
