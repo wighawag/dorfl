@@ -1,8 +1,9 @@
-import {existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
 import {
 	type ReviewGate,
+	type ReviewFinding,
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
 } from './review-gate.js';
@@ -374,6 +375,25 @@ export async function performIntegration(
 			};
 		}
 		note(`PR/code review (Gate 2) approved '${slug}'.`);
+		// APPROVE-with-non-blocking-findings: give the reviewer's NITS a durable,
+		// contract-native home (GATES PRD `work/prd/review.md`;
+		// `work/findings/review-nonblocking-findings-disposition.md`). On a BLOCK the
+		// blocking findings already land in needs-attention/; on an APPROVE the parsed
+		// non-blocking findings would otherwise EVAPORATE (terminal/session log only).
+		// So — post-decision, the verdict/routing UNCHANGED — the RUNNER (not the
+		// write-free review agent) writes ONE per-run observation of this run's
+		// non-blocking findings. It is written to disk HERE, BEFORE the done-move
+		// (step 2) + the atomic `git add -A` commit (step 3), so it is swept into that
+		// SAME done-commit on EVERY path (merge / propose / CI, `do` AND `run`) — NO
+		// separate commit/move/surface (that is the BLOCK path's heavier
+		// `applyNeedsAttentionTransition`, the WRONG model here). Zero non-blocking
+		// findings ⇒ nothing is written (no empty-file spam).
+		writeReviewNitsObservation({
+			cwd,
+			slug,
+			findings: lastVerdict?.findings ?? [],
+			note,
+		});
 		// approve + `autoMerge` OFF → DOWNGRADE a resolved `merge` to `propose`: review
 		// gated (approve), but the autonomous merge is opt-in repo policy, so a human
 		// does the merge (`--propose` semantics). With `autoMerge` ON, the resolved
@@ -682,6 +702,92 @@ export function composeProposeBody(input: {
 	}
 	const header = `Slice: \`work/done/${input.slug}.md\``;
 	return `${header}\n\n${prose}`;
+}
+
+/**
+ * On a review APPROVE that carries ≥1 NON-BLOCKING finding, write ONE per-run
+ * observation `work/observations/review-nits-<slug>-<YYYY-MM-DD>.md` capturing all
+ * of this run's non-blocking nits, so they get a durable, contract-native home
+ * instead of evaporating (the block path already routes BLOCKING findings to
+ * needs-attention/; the approve path dropped non-blocking ones — see
+ * `work/findings/review-nonblocking-findings-disposition.md`).
+ *
+ * The RUNNER writes it (the review agent stays write-free). It is a PLAIN
+ * pre-commit disk write — NOT the heavier `applyNeedsAttentionTransition`
+ * move/commit/surface — so `performIntegration`'s subsequent done-move + atomic
+ * `git add -A` commit sweeps it into the SAME done-commit on every path
+ * (merge / propose / CI, `do` AND `run`); it is never left dangling/uncommitted.
+ *
+ * ZERO non-blocking findings ⇒ writes NOTHING (no empty-file spam). The file is
+ * ONE-per-RUN (a content-derived, dated name), never an append to a shared ledger
+ * — the dated `<slug>-<date>` name makes a later-abandoned run's nit-observation
+ * trivially findable + deletable (lifecycle hygiene). Frontmatter mirrors the
+ * `work/observations/*.md` convention (`title` / `date` / `status: open`) plus a
+ * pointer to the slug it came from, so batch-qa triages it like any observation.
+ */
+function writeReviewNitsObservation(params: {
+	cwd: string;
+	slug: string;
+	findings: ReviewFinding[];
+	note: (message: string) => void;
+}): void {
+	const nits = params.findings.filter((f) => f.severity === 'non-blocking');
+	// No empty observations: an approve with zero non-blocking findings writes none.
+	if (nits.length === 0) {
+		return;
+	}
+	const date = observationDate();
+	const obsDir = join(params.cwd, 'work', 'observations');
+	mkdirSync(obsDir, {recursive: true});
+	const filename = `review-nits-${params.slug}-${date}.md`;
+	writeFileSync(
+		join(obsDir, filename),
+		renderReviewNitsObservation({slug: params.slug, date, nits}),
+	);
+	params.note(
+		`Recorded ${nits.length} non-blocking review nit(s) for '${params.slug}' ` +
+			`in work/observations/${filename}.`,
+	);
+}
+
+/** Today's date as `YYYY-MM-DD` (UTC), for the dated observation filename. */
+function observationDate(): string {
+	return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Render the per-run review-nits observation file body — `observations/`-convention
+ * frontmatter (`title` / `date` / `status: open`) plus a `slug:` pointer to the run
+ * it came from, then each non-blocking finding (its `question` + optional
+ * `context`), and a one-line note that these are review-gate nits for batch-qa
+ * triage (promote-to-slice / keep / delete). Exported-free pure string builder.
+ */
+function renderReviewNitsObservation(input: {
+	slug: string;
+	date: string;
+	nits: ReviewFinding[];
+}): string {
+	const findingBlocks = input.nits.map((f) => {
+		const ctx = f.context ? `\n  (${f.context})` : '';
+		return `- ${f.question}${ctx}`;
+	});
+	return [
+		'---',
+		`title: review-gate non-blocking nits for '${input.slug}' (Gate 2 approve)`,
+		`date: ${input.date}`,
+		'status: open',
+		`slug: ${input.slug}`,
+		'---',
+		'',
+		'## Non-blocking review findings',
+		'',
+		`The PR/code review gate (Gate 2) APPROVED '${input.slug}' but raised the`,
+		'following non-blocking findings (nits). They do not block integration; this',
+		'is their durable home for batch-qa triage (promote-to-slice / keep / delete).',
+		'',
+		...findingBlocks,
+		'',
+	].join('\n');
 }
 
 /** Read the `title:` scalar from a slice's frontmatter block, or undefined. */
