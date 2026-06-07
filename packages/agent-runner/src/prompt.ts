@@ -22,6 +22,8 @@ import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseFrontmatter} from './frontmatter.js';
 import {run, type RunResult} from './git.js';
+import {branchAheadOf} from './continue-branch.js';
+import {extractReason} from './needs-attention.js';
 
 /**
  * Extract the body of the `## Prompt` section from a slice's markdown. Returns
@@ -174,16 +176,165 @@ export function wrapper(
 }
 
 /**
+ * The CONTINUE context that turns the fresh-start assembly into a continue-mode
+ * one (the `agent-prompt-continue-context` slice). It is OPT-IN state inherited
+ * from a PRIOR attempt: present iff the arbiter holds a `work/<slug>` branch
+ * AHEAD of main (the `requeue` default kept it) — the SAME condition the
+ * `requeue-continue-and-reset` onboarding paths detect via {@link branchAheadOf}.
+ * When absent, the assembly stays byte-identical to the fresh-start wrapper.
+ */
+export interface ContinueContext {
+	/**
+	 * The arbiter remote name the prior `work/<slug>` lives on (e.g. `origin` /
+	 * `arbiter`). Used only to point the agent at the right diff base
+	 * (`<arbiter>/main`) — the block is prose, not a git op.
+	 */
+	arbiter: string;
+	/**
+	 * The needs-attention reason (runner-written: WHY the prior attempt stalled),
+	 * read from the item BODY. Empty string when none was recorded.
+	 */
+	reason: string;
+	/**
+	 * The requeue handoff note(s) (human-written via `requeue -m`: what to do
+	 * about it), read from the item BODY — the accumulated `## Requeue YYYY-MM-DD`
+	 * sections, newest last. Empty array when none were threaded.
+	 */
+	requeueNotes: string[];
+}
+
+/** The heading prefix the requeue handoff notes are appended under. */
+const REQUEUE_HEADING_PREFIX = '## Requeue';
+
+/**
+ * Extract the accumulated requeue handoff notes from an item's BODY: the prose
+ * under each `## Requeue YYYY-MM-DD` heading (append-only; written by
+ * `requeue -m "<note>"` in `needs-attention.ts`). Returns one trimmed string per
+ * section in file order (oldest first, newest last); `[]` when none are present.
+ */
+export function extractRequeueNotes(content: string): string[] {
+	const normalized = content.replace(/\r\n/g, '\n');
+	const lines = normalized.split('\n');
+	const notes: string[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		if (!lines[i].startsWith(REQUEUE_HEADING_PREFIX)) {
+			continue;
+		}
+		// Collect the prose under this heading until the next `## ` heading or EOF.
+		const collected: string[] = [];
+		for (let j = i + 1; j < lines.length; j++) {
+			if (/^##\s/.test(lines[j])) {
+				break;
+			}
+			collected.push(lines[j]);
+		}
+		const note = collected.join('\n').trim();
+		if (note !== '') {
+			notes.push(note);
+		}
+	}
+	return notes;
+}
+
+/**
+ * Resolve the CONTINUE context for `slug`, runner-side, REUSING the SAME
+ * continue-detection the `requeue-continue-and-reset` claim/start path uses
+ * ({@link branchAheadOf}) — never a parallel re-derivation. Returns a
+ * {@link ContinueContext} iff the arbiter holds a `work/<slug>` ref AHEAD of
+ * main (the prior attempt's kept work); otherwise `undefined` (fresh-start: the
+ * common case, a first attempt or a `requeue --reset` that deleted the branch).
+ *
+ * The reason + handoff note(s) are read from the item BODY (the ledger file the
+ * caller already resolved), so they survive the requeue → backlog → claim gap
+ * and cross machines. The ref names match the two onboarding paths:
+ *   - in-place clone:  branchRef=`<arbiter>/work/<slug>`, mainRef=`<arbiter>/main`
+ *   - bare hub mirror: branchRef=`work/<slug>`,           mainRef=`main`
+ */
+export function resolveContinueContext(options: {
+	/** The repo/worktree/mirror the branch refs live in. */
+	cwd: string;
+	/** The slug being onboarded. */
+	slug: string;
+	/** The arbiter remote name (for the diff-base pointer in the block). */
+	arbiter: string;
+	/** The `work/<slug>` ref to test (in-place: `<arbiter>/work/<slug>`). */
+	branchRef: string;
+	/** The main ref to compare against (in-place: `<arbiter>/main`). */
+	mainRef: string;
+	/** The resolved slice file content (the item body the notes live in). */
+	content: string;
+	/** Environment for the read-only git child. */
+	env?: NodeJS.ProcessEnv;
+}): ContinueContext | undefined {
+	if (
+		!branchAheadOf(options.cwd, options.branchRef, options.mainRef, options.env)
+	) {
+		return undefined;
+	}
+	return {
+		arbiter: options.arbiter,
+		reason: extractReason(options.content),
+		requeueNotes: extractRequeueNotes(options.content),
+	};
+}
+
+/**
+ * Build the CONTINUE block injected ahead of the slice prompt in continue-mode.
+ * Pure text: a "you are continuing" framing + a pointer to review the prior diff
+ * vs `<arbiter>/main` + the needs-attention reason + the requeue handoff note(s)
+ * (read from the item body). Never emitted in fresh-start mode.
+ */
+export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
+	const lines: string[] = [];
+	lines.push('## You are CONTINUING prior work on this slice');
+	lines.push('');
+	lines.push(
+		`This is NOT a fresh start. A prior attempt at '${slug}' was requeued, and ` +
+			`you have landed on its \`work/${slug}\` branch — it ALREADY carries that ` +
+			'work. Before you implement anything, REVIEW what the prior attempt did ' +
+			`(\`git diff ${ctx.arbiter}/main...work/${slug}\`) and BUILD ON what is ` +
+			'good — do NOT blindly restart or undo it.',
+	);
+	if (ctx.reason.trim() !== '') {
+		lines.push('');
+		lines.push('### Why the prior attempt stalled (needs-attention reason)');
+		lines.push('');
+		lines.push(ctx.reason.trim());
+	}
+	if (ctx.requeueNotes.length > 0) {
+		lines.push('');
+		lines.push('### Handoff note(s) from the requeue');
+		lines.push('');
+		for (const note of ctx.requeueNotes) {
+			lines.push(note.trim());
+			lines.push('');
+		}
+	}
+	return lines.join('\n').trim();
+}
+
+/**
  * Build the full prompt: the canonical wrapper for `slug` (with its source PRD
  * substituted) followed by the slice's own `## Prompt` body, appended verbatim.
+ *
+ * In CONTINUE-mode (a {@link ContinueContext} is supplied), a CONTINUE block is
+ * injected between the wrapper and the slice prompt — telling the agent it is
+ * continuing, where to find the prior diff, why it stalled, and the human's
+ * handoff note(s). In FRESH-START mode (no context, the common case) the output
+ * is BYTE-IDENTICAL to the canonical wrapper + slice prompt — no CONTINUE block.
  */
 export function buildAgentPrompt(
 	slug: string,
 	prd: string | undefined,
 	slicePrompt: string,
-	options: {protocolPath?: string} = {},
+	options: {protocolPath?: string; continueContext?: ContinueContext} = {},
 ): string {
-	return `${wrapper(slug, prd, options)}\n\n${slicePrompt}\n`;
+	const head = wrapper(slug, prd, options);
+	if (options.continueContext) {
+		const block = buildContinueBlock(slug, options.continueContext);
+		return `${head}\n\n${block}\n\n${slicePrompt}\n`;
+	}
+	return `${head}\n\n${slicePrompt}\n`;
 }
 
 /** Which work/ folder a slice file was resolved from. */

@@ -6,7 +6,7 @@ import {performClaim, type ClaimCasResult} from './claim-cas.js';
 import {updateJobRecord, encodeWorkId} from './workspace.js';
 import {encodeRepoKey} from './repo-mirror.js';
 import {run as runProcess} from './git.js';
-import {mkdirSync, rmSync} from 'node:fs';
+import {mkdirSync, readFileSync, rmSync} from 'node:fs';
 import {ledgerWrite} from './ledger-write.js';
 import {
 	jobWorktreeStrategy,
@@ -17,7 +17,12 @@ import {runConcurrent, createKeyedLock} from './concurrency.js';
 import type {Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
-import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
+import {
+	resolveSlice,
+	buildAgentPrompt,
+	resolveContinueContext,
+	PromptError,
+} from './prompt.js';
 import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {performIntegration} from './integration-core.js';
 import type {ReviewGate} from './review-gate.js';
@@ -473,7 +478,25 @@ async function runOneItem(
 		let prompt: string;
 		try {
 			const slice = resolveSlice(tree.dir, slug);
-			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
+			// CONTINUE-mode (the `agent-prompt-continue-context` slice): when the job
+			// CONTINUED a kept arbiter `work/<slug>` (a requeue), inject the continue
+			// block (prior diff + reason + handoff note). REUSE the SAME continue-
+			// detection — in a bare hub mirror's worktree the refs are the LOCAL heads
+			// `work/<slug>` and `main` (after `ensureMirror`'s mirror-style fetch).
+			const continueContext = tree.continued
+				? resolveContinueContext({
+						cwd: tree.dir,
+						slug,
+						arbiter: tree.arbiterRemote,
+						branchRef: `work/${slug}`,
+						mainRef: 'main',
+						content: readFileSync(slice.path, 'utf8'),
+						env: ctx.env,
+					})
+				: undefined;
+			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+				continueContext,
+			});
 		} catch (err) {
 			if (err instanceof PromptError) {
 				return saveAgentFailure(base, tree, slug, err.message, ctx.env);

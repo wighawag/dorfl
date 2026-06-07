@@ -125,13 +125,21 @@ export {
 
 export {formatReport, gateLabel} from './format.js';
 
-export type {SliceFolder, ResolvedSlice, PromptOptions} from './prompt.js';
+export type {
+	SliceFolder,
+	ResolvedSlice,
+	PromptOptions,
+	ContinueContext,
+} from './prompt.js';
 export {
 	extractPromptSection,
 	extractCanonicalWrapperTemplate,
 	resolveClaimProtocolPath,
 	wrapper,
 	buildAgentPrompt,
+	buildContinueBlock,
+	extractRequeueNotes,
+	resolveContinueContext,
 	resolveSlice,
 	inferSlugFromBranch,
 	renderPrompt,

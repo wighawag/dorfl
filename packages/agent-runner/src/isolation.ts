@@ -60,6 +60,13 @@ export interface IsolatedTree {
 	 */
 	arbiterUrl: string;
 	/**
+	 * True iff this tree CONTINUED a kept arbiter `work/<slug>` branch (a requeue)
+	 * rather than cutting fresh off main — the SAME continue-detection both
+	 * onboarding paths use. The prompt assembly injects a CONTINUE block when set
+	 * (the `agent-prompt-continue-context` slice). Absent / false on a fresh cut.
+	 */
+	continued?: boolean;
+	/**
 	 * True iff a CONTINUE rebase onto fresh main CONFLICTED at onboard-time
 	 * (a requeue kept a `work/<slug>` whose commits did not replay onto the
 	 * current main; aborted, never auto-resolved). The pipeline routes the item
@@ -150,6 +157,7 @@ export function jobWorktreeHandle(
 		branch: job.branch,
 		arbiterRemote: job.arbiterRemote,
 		arbiterUrl: job.mirror.url,
+		continued: job.continued,
 		continueRebaseConflict: job.continueRebaseConflict,
 		teardown(): void {
 			// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
@@ -204,10 +212,12 @@ export function inPlaceStrategy(options: {
 			// does the arbiter have a `work/<slug>` ref AHEAD of main (a requeue kept
 			// it)? In a normal clone the refs are the remote-tracking
 			// `<arbiter>/work/<slug>` and `<arbiter>/main`.
+			let continued = false;
 			let continueRebaseConflict = false;
 			if (
 				branchAheadOf(checkout, `${arbiter}/${branch}`, `${arbiter}/main`, env)
 			) {
+				continued = true;
 				// CONTINUE: land on the kept arbiter tip (force-reset a stale local copy
 				// so we continue the SAME single branch), then REBASE onto fresh main at
 				// onboard-time (ADR §10: rebase, not merge). A CLEAN rebase updates the
@@ -260,6 +270,7 @@ export function inPlaceStrategy(options: {
 				branch,
 				arbiterRemote: arbiter,
 				arbiterUrl,
+				continued,
 				continueRebaseConflict,
 				// NO-OP teardown: the checkout is the human's / CI's tree — left on
 				// `work/<slug>` in a defined state, NEVER reaped (ADR §2/§4). The
