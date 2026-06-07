@@ -85,6 +85,46 @@ export interface PrdExistence {
 	slicingFile: string | undefined;
 }
 
+/**
+ * One PRD enumerated for the AUTO-SLICE selection pool (ADR §3 — the
+ * "slices-first then PRDs to slice" priority). A PRD is NOT in the slice
+ * scan/candidate model, so the auto-pick pool is built HERE from `work/prd/`
+ * through this single shared PRD read path (the same path
+ * {@link PrdExistence} uses, widened from existence to the gate axes the slicing
+ * predicate needs). The slicing-eligibility predicate (`autoslice-gate`'s
+ * `resolveSlicingEligibility`) is applied to these by the selection layer; this
+ * reader does NOT itself decide eligibility (it just surfaces the inputs).
+ */
+export interface LedgerPrdItem {
+	/** Filename within `work/prd/` (e.g. `auto-slice.md`). */
+	file: string;
+	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
+	slug: string;
+	/** Autonomy axis 1 (DECIDED): `true` (human-only) | `undefined`. */
+	humanOnly: boolean | undefined;
+	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
+	needsAnswers: boolean | undefined;
+	/** PRD-only cross-PRD order: PRD slugs that must already be SLICED first. */
+	sliceAfter: string[];
+	/** The `sliced:` marker (a date), or `undefined` when not yet sliced. */
+	sliced: string | undefined;
+}
+
+/**
+ * The PRD pool of ONE repo, resolved from `work/prd/` (the auto-slice candidate
+ * source). Carries every PRD's gate axes PLUS the set of already-SLICED slugs so
+ * the selection layer can resolve each PRD's `sliceAfter` against the `sliced:`
+ * markers (the auto-slicer never reaches into folders for sliced-ness — the
+ * marker is the truth). Built through the SAME PRD read path as
+ * {@link PrdExistence}; there is no second PRD reader.
+ */
+export interface LedgerPrdPool {
+	/** Every PRD in `work/prd/`, sorted by slug. */
+	prds: LedgerPrdItem[];
+	/** Slugs whose PRD carries a `sliced:` marker (resolves `sliceAfter`). */
+	slicedSlugs: Set<string>;
+}
+
 /** One needs-attention item's surface fields, as resolved from the live state. */
 export interface LedgerNeedsAttentionItem {
 	/** Filename within `work/needs-attention/` (e.g. `alpha.md`). */
@@ -132,6 +172,12 @@ export interface ResolvePrdExistenceInput {
 	repoPath: string;
 	/** The slug to look up (matched against frontmatter `slug:`, then filename). */
 	slug: string;
+}
+
+/** What the PRD-pool resolve method needs: which repo's `work/prd/` to enumerate. */
+export interface ResolvePrdPoolInput {
+	/** The repo working-tree root whose `work/prd/` (+`work/slicing/`) to read. */
+	repoPath: string;
 }
 
 /**
@@ -198,6 +244,18 @@ export interface LedgerReadStrategy {
 	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
 	 */
 	resolvePrdExistence(input: ResolvePrdExistenceInput): PrdExistence;
+	/**
+	 * Enumerate the repo's PRD pool from `work/prd/` (the auto-slice candidate
+	 * source for the `do`/`run` "slices-first then PRDs to slice" priority, ADR
+	 * §3). Returns every PRD's gate axes (`humanOnly`/`needsAnswers`/`sliceAfter`)
+	 * PLUS the set of already-SLICED slugs so the selection layer can resolve
+	 * `sliceAfter` against the `sliced:` markers and apply `autoslice-gate`'s
+	 * predicate. This is the SAME PRD read path {@link resolvePrdExistence} uses,
+	 * widened from a single-slug existence check to a full enumeration — NOT a
+	 * second PRD reader. Synchronous and OFFLINE (a working-tree read), like
+	 * {@link resolveLocalState}.
+	 */
+	resolvePrdPool(input: ResolvePrdPoolInput): LedgerPrdPool;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -283,6 +341,54 @@ function findPrdFileBySlug(
 	}
 	return undefined;
 }
+
+/**
+ * Enumerate `work/prd/*.md` into the auto-slice PRD pool (the slices-first/PRD
+ * priority's PRD source) — the SAME PRD read path {@link findPrdFileBySlug} uses,
+ * widened from a single-slug existence check to a full enumeration. Each PRD's
+ * slug is resolved from frontmatter `slug:` (falling back to the filename) and
+ * its gate axes (`humanOnly`/`needsAnswers`/`sliceAfter`/`sliced`) parsed. The
+ * already-SLICED set is collected across BOTH `work/prd/` and `work/slicing/` (a
+ * PRD mid-slice still carries its `sliced:` marker if it was previously sliced),
+ * matching `slicing.ts`'s `readSlicedSlugs`, so `sliceAfter` resolves against the
+ * marker (never folder residence). Missing folders read as empty.
+ */
+function readLocalPrdPool(repoPath: string): LocalPrdPool {
+	const dir = join(repoPath, 'work', 'prd');
+	const prds: LedgerPrdItem[] = [];
+	for (const file of listMarkdown(dir)) {
+		const content = readFileSync(join(dir, file), 'utf8');
+		const fm = parseFrontmatter(content);
+		prds.push({
+			file,
+			slug: fm.slug ?? basename(file, '.md'),
+			humanOnly: fm.humanOnly,
+			needsAnswers: fm.needsAnswers,
+			sliceAfter: fm.sliceAfter,
+			sliced: fm.sliced,
+		});
+	}
+	prds.sort((a, b) => a.slug.localeCompare(b.slug));
+
+	// Sliced-ness is the `sliced:` MARKER, not folder residence — read it across
+	// both `work/prd/` and `work/slicing/` (a PRD in flight under the lock still
+	// carries any prior marker), mirroring slicing.ts's readSlicedSlugs.
+	const slicedSlugs = new Set<string>();
+	for (const folder of ['prd', 'slicing'] as const) {
+		const folderDir = join(repoPath, 'work', folder);
+		for (const file of listMarkdown(folderDir)) {
+			const content = readFileSync(join(folderDir, file), 'utf8');
+			const fm = parseFrontmatter(content);
+			if (fm.sliced !== undefined) {
+				slicedSlugs.add(fm.slug ?? basename(file, '.md'));
+			}
+		}
+	}
+	return {prds, slicedSlugs};
+}
+
+/** Internal alias for {@link LedgerPrdPool} (kept local to the reader). */
+type LocalPrdPool = LedgerPrdPool;
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
 function gitSoft(
@@ -448,6 +554,9 @@ export const currentLedgerRead: LedgerReadStrategy = {
 			prdFile,
 			slicingFile,
 		};
+	},
+	resolvePrdPool({repoPath}) {
+		return readLocalPrdPool(repoPath);
 	},
 	async resolveMirrorState({mirrorPath, ref = 'main', env}) {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed

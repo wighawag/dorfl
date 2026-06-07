@@ -68,6 +68,10 @@ describe('envOverrides — boolean coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'false'})).toEqual({
 			autoSlice: false,
 		});
+		// `prdsFirst` (the slices-first toggle) coerces as a boolean too.
+		expect(envOverrides({AGENT_RUNNER_PRDS_FIRST: 'true'})).toEqual({
+			prdsFirst: true,
+		});
 	});
 
 	it('rejects an invalid autoSlice value LOUDLY, naming the variable', () => {

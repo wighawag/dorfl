@@ -30,6 +30,9 @@ describe('repo-config constants', () => {
 		// `autoSlice` is the slicing-autonomy mirror of `allowAgents` — a genuine
 		// repo property, resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoSlice');
+		// `prdsFirst` (the slices-first/PRD priority toggle, ADR §3) is a per-repo
+		// property resolved through the same chain.
+		expect(REPO_ALLOWED_KEYS).toContain('prdsFirst');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {

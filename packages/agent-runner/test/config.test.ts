@@ -19,6 +19,12 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).autoSlice).toBe(false);
 	});
 
+	it('defaults prdsFirst to false (slices-first priority, ADR §3)', () => {
+		expect(DEFAULT_CONFIG.prdsFirst).toBe(false);
+		expect(mergeConfig({}).prdsFirst).toBe(false);
+		expect(mergeConfig({prdsFirst: true}).prdsFirst).toBe(true);
+	});
+
 	it('defaults the autonomy gate to strict (allowAgents false)', () => {
 		expect(mergeConfig({}).allowAgents).toBe(false);
 	});
