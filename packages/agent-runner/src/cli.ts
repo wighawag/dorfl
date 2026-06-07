@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import {Command} from 'commander';
+import {Command, Option} from 'commander';
 import type {Command as Commander} from 'commander';
 import {createInterface} from 'node:readline';
+import {fileURLToPath} from 'node:url';
+import {realpathSync} from 'node:fs';
 import {
 	loadConfig,
 	mergeConfig,
@@ -198,6 +200,7 @@ interface WorkOnFlags {
 	config?: string;
 	arbiter?: string;
 	by?: string;
+	remote?: string;
 	copy?: string;
 	copyFrom?: string;
 	force?: boolean;
@@ -309,6 +312,38 @@ function resolveSliceOnlySlug(slug: string | undefined): string | undefined {
 		}
 		throw err;
 	}
+}
+
+/**
+ * The shared `start`/`resume` action body. `start` and `resume` are the two
+ * human in-place verbs of ADR §4: `start` BEGINS work here (claim if needed +
+ * switch); `resume` CONTINUES here (re-engage an already-in-progress item by
+ * switching to its `work/<slug>` branch WITHOUT claiming). The runtime
+ * difference is exactly the `resume` flag — `resume` forces it on (its only mode
+ * is to re-engage), while `start` honours the (now hidden) `--resume` alias.
+ * Both are slice-only (§3a: accept bare + `slice:`, reject `prd:`).
+ */
+async function runStartAction(
+	rawSlug: string | undefined,
+	flags: StartFlags,
+	resume: boolean,
+): Promise<void> {
+	// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+	const slug = resolveSliceOnlySlug(rawSlug);
+	const result = await performStart({
+		slug,
+		cwd: process.cwd(),
+		arbiter: flags.arbiter ?? 'origin',
+		by: flags.by,
+		// `resume` (the verb) always asserts ownership; `start` honours --resume.
+		resume: resume || flags.resume === true,
+		override: flags.force === true || flags.ignoreNotReady === true,
+		note: (message) => console.error(`>> ${message}`),
+	});
+	if (result.exitCode !== 0) {
+		console.error(`error: ${result.message}`);
+	}
+	process.exit(result.exitCode);
 }
 
 export function buildProgram(): Command {
@@ -537,9 +572,14 @@ export function buildProgram(): Command {
 			'origin',
 		)
 		.option('--by <who>', 'advisory claimer id forwarded to the claim CAS')
-		.option(
-			'--resume',
-			'assert ownership of an already in-progress item: switch to its work branch without claiming',
+		// `--resume` is now the HIDDEN alias of the `resume` verb (ADR §4/§7): the
+		// documented surface is `start` = begin here, `resume` = continue here. Kept
+		// (hidden) for muscle memory; addHelpText below points at the verb.
+		.addOption(
+			new Option(
+				'--resume',
+				'(hidden alias of the `resume` verb) assert ownership of an already in-progress item: switch to its work branch without claiming',
+			).hideHelp(),
 		)
 		.option(
 			'--force',
@@ -549,38 +589,42 @@ export function buildProgram(): Command {
 			'--ignore-not-ready',
 			'alias of --force for the readiness guard override',
 		)
-		.action(async (rawSlug: string | undefined, flags: StartFlags) => {
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug);
-			const result = await performStart({
-				slug,
-				cwd: process.cwd(),
-				arbiter: flags.arbiter ?? 'origin',
-				by: flags.by,
-				resume: flags.resume,
-				override: flags.force === true || flags.ignoreNotReady === true,
-				note: (message) => console.error(`>> ${message}`),
-			});
-			if (result.exitCode !== 0) {
-				console.error(`error: ${result.message}`);
-			}
-			process.exit(result.exitCode);
-		});
+		.action((rawSlug: string | undefined, flags: StartFlags) =>
+			runStartAction(rawSlug, flags, false),
+		);
+
+	program
+		.command('resume')
+		.description(
+			'Re-engage an already in-progress item in the CURRENT checkout: switch to its work/<slug> branch WITHOUT claiming (the item is already in-progress; you assert ownership). The human “continue here” verb — the counterpart to `start` (“begin here”). Decides on the folder on <arbiter>/main, never on a frontmatter field. Launches no agent/editor.',
+		)
+		.argument(
+			'[slug]',
+			'the slug to resume (inferred from a work/<slug> branch if omitted)',
+		)
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: origin)',
+			'origin',
+		)
+		.action((rawSlug: string | undefined, flags: StartFlags) =>
+			runStartAction(rawSlug, flags, true),
+		);
 
 	program
 		.command('work-on')
 		.description(
-			'HUMAN command: claim a slice and create an isolated worktree in a human-friendly location (under config humanWorktreesDir, NEVER ~/.agent-runner) for parallel work. Two forms: `work-on <slug>` (infer the arbiter from the current repo) and `work-on <remote> <slug>` (ensure a hub mirror via repo-mirror, creating if absent). BOTH claim, then always fetch + branch work/<slug> off the freshly-fetched <arbiter>/main — same claim, same starting commit; only the worktree LOCATION differs. --copy <patterns> copies named gitignored files (copy, not symlink; --copy-from required in remote mode) with a security notice. A binary cannot cd your shell: it prints the path + a cd hint; --print-dir emits the path only, for `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`.',
+			'HUMAN command: claim a slice and create an isolated worktree in a human-friendly location (under config humanWorktreesDir, NEVER ~/.agent-runner) for parallel work, and cd you in by default (via the shell wrapper). Two forms: `work-on <slug>` (in-repo: infer the arbiter from the current repo) and `work-on --remote <r> <slug>` (ensure a hub mirror via repo-mirror, creating if absent) — consistent with `do --remote` (bare = current repo; --remote = anywhere). BOTH claim, then always fetch + branch work/<slug> off the freshly-fetched <arbiter>/main — same claim, same starting commit; only the worktree LOCATION differs. --copy <patterns> copies named gitignored files (copy, not symlink; --copy-from required in remote mode) with a security notice. A binary cannot cd your shell, so install the wrapper `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`; --print-dir is that wrapper’s plumbing (emits ONLY the path).',
 		)
 		.argument(
-			'<remoteOrSlug>',
-			'the slug (in-repo form) OR the remote (when a second slug arg follows)',
-		)
-		.argument(
-			'[slug]',
-			'the slug, when the first argument is a <remote> (remote form)',
+			'<slug>',
+			'the slug to work on (bare = the slice; the target repo is the current one, or --remote <r>)',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--remote <r>',
+			'work on a REGISTERED repo with NO checkout: ensure a hub mirror via repo-mirror (creating if absent) and claim against it (consistent with `do --remote`). Omit for the in-repo form (the arbiter is inferred from the current repo).',
+		)
 		.option(
 			'--arbiter <remote>',
 			'name of the arbiter git remote in the current repo (in-repo form; default: origin)',
@@ -611,52 +655,49 @@ export function buildProgram(): Command {
 			'--ignore-not-ready',
 			'alias of --force for the readiness guard override',
 		)
-		.action(
-			async (
-				remoteOrSlug: string,
-				slug: string | undefined,
-				flags: WorkOnFlags,
-			) => {
-				// Disambiguate the two forms positionally: one arg ⇒ in-repo `<slug>`;
-				// two args ⇒ remote `<remote> <slug>`.
-				const remote = slug !== undefined ? remoteOrSlug : undefined;
-				const rawSlug = slug !== undefined ? slug : remoteOrSlug;
-				// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-				const theSlug = resolveSliceOnlySlug(rawSlug) as string;
+		.action(async (rawSlug: string, flags: WorkOnFlags) => {
+			// The two forms are now distinguished by the `--remote` FLAG (ADR §4,
+			// consistent with `do --remote`), not a positional <remote>: bare =
+			// the current repo, `--remote <r>` = any registered repo.
+			const remote =
+				flags.remote !== undefined && flags.remote.trim() !== ''
+					? flags.remote
+					: undefined;
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
+			const theSlug = resolveSliceOnlySlug(rawSlug) as string;
 
-				const configPath = flags.config ?? defaultConfigPath();
-				const {dir: configuredRoot, config} = loadHumanWorktreesDir(configPath);
-				const workspace = flags.workspace ?? config.workspacesDir;
+			const configPath = flags.config ?? defaultConfigPath();
+			const {dir: configuredRoot, config} = loadHumanWorktreesDir(configPath);
+			const workspace = flags.workspace ?? config.workspacesDir;
 
-				// --print-dir wants a clean stdout, so all human-facing notes go to
-				// stderr; the path is the ONLY thing on stdout (printed below).
-				const printDir = flags.printDir === true;
-				const result = await performWorkOn({
-					slug: theSlug,
-					remote,
-					cwd: process.cwd(),
-					arbiter: flags.arbiter ?? 'origin',
-					by: flags.by,
-					copy: flags.copy,
-					copyFrom: flags.copyFrom,
-					override: flags.force === true || flags.ignoreNotReady === true,
-					workspacesDir: workspace,
-					humanWorktreesDir: configuredRoot,
-					promptForRoot: (suggestion) => promptForWorktreesRoot(suggestion),
-					saveRoot: (chosen) => persistHumanWorktreesDir(chosen, configPath),
-					note: (message) => console.error(`>> ${message}`),
-				});
-				if (result.exitCode !== 0) {
-					console.error(`error: ${result.message}`);
-					process.exit(result.exitCode);
-				}
-				if (printDir) {
-					// Path only on stdout, so `cd "$(... --print-dir)"` works.
-					process.stdout.write(`${result.dir}\n`);
-				}
-				process.exit(0);
-			},
-		);
+			// --print-dir wants a clean stdout, so all human-facing notes go to
+			// stderr; the path is the ONLY thing on stdout (printed below).
+			const printDir = flags.printDir === true;
+			const result = await performWorkOn({
+				slug: theSlug,
+				remote,
+				cwd: process.cwd(),
+				arbiter: flags.arbiter ?? 'origin',
+				by: flags.by,
+				copy: flags.copy,
+				copyFrom: flags.copyFrom,
+				override: flags.force === true || flags.ignoreNotReady === true,
+				workspacesDir: workspace,
+				humanWorktreesDir: configuredRoot,
+				promptForRoot: (suggestion) => promptForWorktreesRoot(suggestion),
+				saveRoot: (chosen) => persistHumanWorktreesDir(chosen, configPath),
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+				process.exit(result.exitCode);
+			}
+			if (printDir) {
+				// Path only on stdout, so `cd "$(... --print-dir)"` works.
+				process.stdout.write(`${result.dir}\n`);
+			}
+			process.exit(0);
+		});
 
 	program
 		.command('prompt')
@@ -1357,8 +1398,43 @@ function promptMultiSelect(repos: string[]): Promise<string[]> {
 	});
 }
 
-const program = buildProgram();
-program.parseAsync(process.argv).catch((err: unknown) => {
-	console.error(err instanceof Error ? err.message : String(err));
-	process.exit(1);
-});
+/**
+ * Run the CLI: build the program and parse argv. Split from {@link buildProgram}
+ * so tests can build + introspect/parse the program WITHOUT triggering a real
+ * argv parse + `process.exit` on import (the module-level bootstrap below only
+ * fires when this file is the process entry point).
+ */
+export async function runCli(argv: string[] = process.argv): Promise<void> {
+	const program = buildProgram();
+	try {
+		await program.parseAsync(argv);
+	} catch (err: unknown) {
+		console.error(err instanceof Error ? err.message : String(err));
+		process.exit(1);
+	}
+}
+
+// Only bootstrap when invoked as the entry point (the installed `bin`), never on
+// import (so `buildProgram`/`runCli` are import-safe for tests).
+if (isCliEntryPoint()) {
+	void runCli();
+}
+
+/**
+ * True iff this module is the process entry point (the `agent-runner` bin).
+ * Resolves both sides through `realpathSync` so a bin SYMLINK (npm/pnpm install
+ * a `node_modules/.bin/agent-runner` link to `dist/cli.js`) still matches.
+ */
+function isCliEntryPoint(): boolean {
+	const entry = process.argv[1];
+	if (!entry) {
+		return false;
+	}
+	try {
+		const entryReal = realpathSync(entry);
+		const selfReal = realpathSync(fileURLToPath(import.meta.url));
+		return entryReal === selfReal;
+	} catch {
+		return false;
+	}
+}
