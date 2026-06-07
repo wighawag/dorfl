@@ -60,6 +60,18 @@ export interface Config {
 	 * from the build gate's `allowAgents`.
 	 */
 	autoSlice: boolean;
+	/**
+	 * Per-repo toggle: when an auto-pick / `-n` / multi-item selection draws from
+	 * BOTH pools (eligible slices + sliceable PRDs), which pool comes FIRST?
+	 * `false` (default) ⇒ **slices first, then PRDs to slice** — drain ready work
+	 * before creating more (ADR `command-surface-and-journeys` §3). `true` ⇒ flip
+	 * the order (PRDs to slice first). It ONLY reorders the two pools relative to
+	 * each other; it never changes WHICH items are eligible. Resolved per-repo like
+	 * `allowAgents`/`autoSlice`: flag > `AGENT_RUNNER_PRDS_FIRST` env > per-repo >
+	 * global > default false. The shared selection helper (`select-priority.ts`)
+	 * reads it; `run`'s tick can adopt the same helper later.
+	 */
+	prdsFirst: boolean;
 	/** Global cap on how many items the runner claims+runs in one tick. */
 	maxParallel: number;
 	/** Per-repo cap on concurrent claims (≤ maxParallel in effect). */
@@ -213,6 +225,9 @@ export const DEFAULT_CONFIG: Config = {
 	// Auto-slicing is human-first by default: an agent slices nothing unless a
 	// repo opts in via `autoSlice` (mirrors `allowAgents`, one level up).
 	autoSlice: false,
+	// Slices-first by default (ADR §3): a selection drains ready slices before it
+	// creates more work by slicing PRDs. `prdsFirst: true` flips the two pools.
+	prdsFirst: false,
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',

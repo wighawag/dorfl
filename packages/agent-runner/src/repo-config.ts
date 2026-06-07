@@ -61,6 +61,10 @@ export const REPO_ALLOWED_KEYS = [
 	// genuine repo property — the slicing-autonomy mirror of `allowAgents`
 	// (`work/prd/auto-slice.md`), resolved per-repo through the same chain.
 	'autoSlice',
+	// `prdsFirst` (does an auto-pick/-n/multi selection take sliceable PRDs before
+	// eligible slices?) is a genuine repo property — the per-repo toggle ADR §3
+	// specifies for the slices-first priority, resolved per-repo like `autoSlice`.
+	'prdsFirst',
 	// `model` (which model this repo's work runs on) and `harness` (which adapter)
 	// are legitimate repo properties (ADR §13) — model is routing intent, not auth,
 	// and a repo may prefer a given harness. `piBin`/`agentCmd` stay host-only

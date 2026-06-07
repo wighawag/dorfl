@@ -1,0 +1,205 @@
+import {performDo, type DoOptions, type DoResult} from './do.js';
+import {scanRepoPaths} from './scan.js';
+import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
+import {
+	selectPrioritised,
+	sliceablePrds,
+	type PrdCandidate,
+	type SelectedItem,
+} from './select-priority.js';
+import type {Config} from './config.js';
+
+/**
+ * The MULTI-ITEM selection forms of `do` (ADR `command-surface-and-journeys`
+ * §3), layered ON TOP of the single-item in-place pipeline from `do-in-place`
+ * ({@link performDo}) — it does NOT reimplement that pipeline; it SELECTS +
+ * ORDERS items and runs the existing pipeline per item, SEQUENTIALLY (`do` is
+ * sequential; parallelism is `run`'s job).
+ *
+ *   - **`do` (no arg)** — auto-pick ONE eligible thing and do it.
+ *   - **`do -n <x>`** — do x eligible things, in sequence.
+ *   - **`do <a> <b> …`** — do those NAMED items, in sequence.
+ *
+ * Auto-pick / `-n` draw from TWO POOLS with the slices-first priority (the
+ * shared, pure {@link selectPrioritised} helper): eligible SLICES (the existing
+ * `scan`/`selectCandidates`/eligibility path) first, then SLICEABLE PRDs (the NEW
+ * pool built from the PRD reader + `autoslice-gate`'s predicate), with a per-repo
+ * `prdsFirst` toggle to flip the order. A selected PRD dispatches to the
+ * `do prd:<slug>` path (slicing itself is `autoslice-command`, not built here).
+ *
+ * Explicit multi-arg (`do <a> <b>`) bypasses the pools/priority entirely — the
+ * named items are resolved + run in the given order (the operator chose them).
+ */
+
+/** The single-`do` runner the multi-item layer drives per selected item. */
+export type DoRunner = (options: DoOptions) => Promise<DoResult>;
+
+/** Options shared with {@link performDo}, threaded verbatim to each per-item run. */
+type SharedDoOptions = Omit<DoOptions, 'arg'>;
+
+export interface PerformDoMultiOptions extends SharedDoOptions {
+	/**
+	 * The resolved repo config (provides `autoSlice` for the PRD gate, `prdsFirst`
+	 * for the toggle, and the slice-pool selection caps). The per-item runs still
+	 * receive `autoSlice`/`integration`/etc. via the spread `SharedDoOptions`.
+	 */
+	config: Config;
+	/**
+	 * `do -n <x>`: how many eligible items to do, in sequence. Auto-pick (no arg,
+	 * no count) ⇒ 1. SEQUENTIAL — never a parallelism knob (advance-loop locks
+	 * this: `-n` is always sequential for `do`/`advance`).
+	 */
+	count?: number;
+	/** Override the single-`do` runner (tests inject a stub). Defaults to {@link performDo}. */
+	run?: DoRunner;
+	/** Override the read seam (PRD pool); defaults to the active {@link ledgerRead}. */
+	read?: LedgerReadStrategy;
+}
+
+/** The aggregate result of a multi-item `do` invocation. */
+export interface DoMultiResult {
+	/** Each per-item {@link DoResult}, in the order they ran. */
+	results: DoResult[];
+	/**
+	 * The process exit code for the whole invocation: 0 iff EVERY item that ran
+	 * succeeded (or there was nothing eligible to do — an empty auto-pick is not a
+	 * failure); otherwise the first non-zero per-item exit code (the worst
+	 * outcome surfaces). Mirrors the single-`do` exit contract per item.
+	 */
+	exitCode: number;
+	/** Human-readable summary (printed by the CLI). */
+	message: string;
+}
+
+/**
+ * The slice-pool caps for an in-place `do` selection. `do` is per-repo +
+ * sequential, so the REAL bound is the requested `count` (handled by the
+ * priority helper); the slice-pool selection should not truncate BEFORE the
+ * count + the PRD pool are combined. We therefore cap the slice pool at "all
+ * eligible" (a large bound) and let {@link selectPrioritised}'s `count` do the
+ * trimming across both pools.
+ */
+const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Run the AUTO-PICK / `-n <x>` form: build the two pools for `cwd`, order them
+ * (slices-first, or flipped by `prdsFirst`), take `count` (default 1), and run
+ * the existing `do` pipeline per selected item, SEQUENTIALLY.
+ */
+export async function performDoAuto(
+	options: PerformDoMultiOptions,
+): Promise<DoMultiResult> {
+	const run = options.run ?? performDo;
+	const read = options.read ?? ledgerRead;
+	const note = options.note ?? (() => {});
+	const cwd = options.cwd;
+	const count = options.count ?? 1;
+
+	// Pool 1 — eligible SLICES via the EXISTING scan/select path (slice-only).
+	const report = scanRepoPaths([cwd], options.config);
+
+	// Pool 2 — SLICEABLE PRDs: the NEW pool from the shared PRD read path
+	// (`resolvePrdPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
+	const pool = read.resolvePrdPool({repoPath: cwd});
+	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
+		repoPath: cwd,
+		slug: prd.slug,
+		humanOnly: prd.humanOnly,
+		needsAnswers: prd.needsAnswers,
+		sliceAfter: prd.sliceAfter,
+	}));
+	const eligiblePrds = sliceablePrds({
+		candidates: prdCandidates,
+		slicedSlugs: pool.slicedSlugs,
+		autoSlice: options.config.autoSlice,
+	});
+
+	// Order across both pools (slices-first / flipped) + bound by count. The slice
+	// pool is selected via the SHARED `selectCandidates` primitive `run` uses.
+	const selected = selectPrioritised({
+		report,
+		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
+		prds: eligiblePrds,
+		prdsFirst: options.config.prdsFirst,
+		count,
+	});
+
+	if (selected.length === 0) {
+		const message =
+			'Nothing eligible to do (no eligible slices and no sliceable PRDs).';
+		note(message);
+		return {results: [], exitCode: 0, message};
+	}
+
+	return runSelectedInSequence(selected, options, run);
+}
+
+/**
+ * Run the EXPLICIT multi-arg form (`do <a> <b> …`): the named items in the GIVEN
+ * order (no pool/priority — the operator chose them). Each arg is run through the
+ * existing `do` pipeline, which itself resolves bare/`slice:`/`prd:` (so a named
+ * PRD dispatches to the slicing path and a collision errors), SEQUENTIALLY.
+ */
+export async function performDoArgs(
+	args: string[],
+	options: PerformDoMultiOptions,
+): Promise<DoMultiResult> {
+	const run = options.run ?? performDo;
+	const selected: SelectedItem[] = args.map((arg) => ({
+		repoPath: options.cwd,
+		slug: arg,
+		// The arg is passed VERBATIM to `performDo` (it does its own slug
+		// resolution); the namespace is irrelevant for explicit args.
+		namespace: 'slice' as const,
+	}));
+	return runSelectedInSequence(selected, options, run, {verbatimArg: true});
+}
+
+/**
+ * Run a list of selected items through the existing `do` pipeline, SEQUENTIALLY,
+ * threading the shared options to each. For the pool path the `do` arg encodes
+ * the namespace (`prd:<slug>` for a selected PRD, bare slug for a slice); for the
+ * explicit-arg path the caller's raw arg is passed verbatim.
+ */
+async function runSelectedInSequence(
+	selected: SelectedItem[],
+	options: PerformDoMultiOptions,
+	run: DoRunner,
+	mode: {verbatimArg?: boolean} = {},
+): Promise<DoMultiResult> {
+	const shared = sharedDoOptions(options);
+	const results: DoResult[] = [];
+	for (const item of selected) {
+		const arg = mode.verbatimArg
+			? item.slug
+			: item.namespace === 'prd'
+				? `prd:${item.slug}`
+				: item.slug;
+		const result = await run({...shared, arg});
+		results.push(result);
+	}
+
+	const firstFailure = results.find((r) => r.exitCode !== 0);
+	const exitCode = firstFailure ? firstFailure.exitCode : 0;
+	const ok = results.filter((r) => r.exitCode === 0).length;
+	const message =
+		`did ${results.length} item${results.length === 1 ? '' : 's'} ` +
+		`(${ok} ok, ${results.length - ok} not).`;
+	return {results, exitCode, message};
+}
+
+/** Strip the multi-only fields, leaving exactly the per-item {@link DoOptions} base. */
+function sharedDoOptions(options: PerformDoMultiOptions): SharedDoOptions {
+	const {
+		config: _config,
+		count: _count,
+		run: _run,
+		read: _read,
+		...rest
+	} = options;
+	void _config;
+	void _count;
+	void _run;
+	void _read;
+	return rest;
+}

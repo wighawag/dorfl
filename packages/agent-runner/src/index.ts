@@ -67,11 +67,14 @@ export {
 export type {
 	LedgerBacklogItem,
 	LedgerNeedsAttentionItem,
+	LedgerPrdItem,
+	LedgerPrdPool,
 	PrdExistence,
 	LocalLedgerState,
 	ArbiterLedgerState,
 	ResolveLocalStateInput,
 	ResolvePrdExistenceInput,
+	ResolvePrdPoolInput,
 	ResolveArbiterStateInput,
 	ResolveMirrorStateInput,
 	LedgerReadStrategy,
@@ -153,6 +156,15 @@ export type {Candidate, SelectCaps} from './select.js';
 export {selectCandidates} from './select.js';
 
 export type {
+	SelectedNamespace,
+	SelectedItem,
+	PrdCandidate,
+	SliceablePrdsInput,
+	SelectPrioritisedInput,
+} from './select-priority.js';
+export {sliceablePrds, selectPrioritised} from './select-priority.js';
+
+export type {
 	ClaimExitCode,
 	ClaimCasOutcome,
 	ClaimCasOptions,
@@ -189,6 +201,13 @@ export type {
 	DoRemoteOptions,
 } from './do.js';
 export {performDo, performDoRemote} from './do.js';
+
+export type {
+	DoRunner,
+	PerformDoMultiOptions,
+	DoMultiResult,
+} from './do-autopick.js';
+export {performDoAuto, performDoArgs} from './do-autopick.js';
 
 export type {
 	SliceOutcome,

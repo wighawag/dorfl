@@ -107,6 +107,77 @@ describe('ledger-read seam — local-tree resolve method', () => {
 	});
 });
 
+describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD source)', () => {
+	function writePrd(
+		folder: 'prd' | 'slicing',
+		file: string,
+		fm: Record<string, string>,
+	): void {
+		const dir = join(root, 'repo', 'work', folder);
+		mkdirSync(dir, {recursive: true});
+		const lines = ['---'];
+		for (const [k, v] of Object.entries(fm)) {
+			lines.push(`${k}: ${v}`);
+		}
+		lines.push('---', '', '# PRD');
+		writeFileSync(join(dir, file), lines.join('\n'));
+	}
+
+	it('enumerates work/prd/*.md with each PRD’s gate axes, sorted by slug', () => {
+		writePrd('prd', 'beta.md', {
+			slug: 'beta',
+			needsAnswers: 'true',
+			sliceAfter: '[alpha]',
+		});
+		writePrd('prd', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
+
+		const pool = currentLedgerRead.resolvePrdPool({
+			repoPath: join(root, 'repo'),
+		});
+		expect(pool.prds.map((p) => p.slug)).toEqual(['alpha', 'beta']);
+		expect(pool.prds[0]).toMatchObject({
+			file: 'alpha.md',
+			slug: 'alpha',
+			humanOnly: true,
+			sliceAfter: [],
+		});
+		expect(pool.prds[1]).toMatchObject({
+			slug: 'beta',
+			needsAnswers: true,
+			sliceAfter: ['alpha'],
+		});
+	});
+
+	it('collects already-SLICED slugs from the `sliced:` marker (prd + slicing folders)', () => {
+		writePrd('prd', 'alpha.md', {slug: 'alpha', sliced: '2026-01-01'});
+		writePrd('prd', 'beta.md', {slug: 'beta'});
+		// a PRD in flight under the lock still carries its prior marker.
+		writePrd('slicing', 'gamma.md', {slug: 'gamma', sliced: '2026-02-02'});
+
+		const pool = currentLedgerRead.resolvePrdPool({
+			repoPath: join(root, 'repo'),
+		});
+		expect(pool.slicedSlugs).toEqual(new Set(['alpha', 'gamma']));
+	});
+
+	it('is OFFLINE/synchronous and reads an absent work/prd as an empty pool', () => {
+		const pool = currentLedgerRead.resolvePrdPool({
+			repoPath: join(root, 'repo'),
+		});
+		expect(pool).not.toBeInstanceOf(Promise);
+		expect(pool.prds).toEqual([]);
+		expect(pool.slicedSlugs).toEqual(new Set());
+	});
+
+	it('falls back to the filename when a PRD has no slug frontmatter', () => {
+		writePrd('prd', 'no-slug.md', {title: 'x'});
+		const pool = currentLedgerRead.resolvePrdPool({
+			repoPath: join(root, 'repo'),
+		});
+		expect(pool.prds.map((p) => p.slug)).toEqual(['no-slug']);
+	});
+});
+
 describe('ledger-read seam — readers route THROUGH it', () => {
 	it('readBacklogItems / readDoneSlugs / scanRepoPaths go through resolveLocalState', () => {
 		writeItem('repo', 'backlog', 'a.md', {slug: 'a'});

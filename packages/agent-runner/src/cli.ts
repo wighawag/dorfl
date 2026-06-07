@@ -25,7 +25,12 @@ import {
 	persistHumanWorktreesDir,
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
-import {performDo, performDoRemote} from './do.js';
+import {performDo, performDoRemote, type DoOptions} from './do.js';
+import {
+	performDoAuto,
+	performDoArgs,
+	type DoMultiResult,
+} from './do-autopick.js';
 import {createHarness} from './pi-harness.js';
 import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
@@ -227,6 +232,8 @@ interface DoFlags {
 	config?: string;
 	arbiter?: string;
 	remote?: string;
+	/** `-n <x>`: do x eligible items in sequence (auto-pick form). */
+	number?: string;
 	merge?: boolean;
 	propose?: boolean;
 	ignoreDivergedMain?: boolean;
@@ -937,19 +944,25 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path, not yet wired). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh. (auto-pick / -n is do-autopick.)',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws SLICES-FIRST then PRDs-to-slice (per-repo prdsFirst flips it). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
-		// EXTENSIBLE argument grammar (the three do-* slices grow this one block): a
-		// single named item here, optional so do-autopick can widen it to variadic /
-		// auto-pick without tearing it up. This slice uses EXACTLY one arg.
+		// EXTENSIBLE argument grammar (the three do-* slices grow this one block):
+		// `do-autopick` widens the single optional positional into a VARIADIC one so
+		// `do` (zero args = auto-pick), `do <a> <b> …` (named, in sequence), and
+		// `do <slug>` (exactly one) all share the one command. `-n <x>` is the count
+		// for the auto-pick form. `do` stays SEQUENTIAL (parallelism is `run`).
 		.argument(
-			'[slug]',
-			'the item to do: bare (= the slice), slice:<slug>, or prd:<slug> (slice the PRD)',
+			'[slugs...]',
+			'the item(s) to do: bare (= the slice), slice:<slug>, or prd:<slug> (slice the PRD). Zero args = auto-pick; multiple = do them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--arbiter <remote>',
 			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
+		)
+		.option(
+			'-n, --number <x>',
+			'AUTO-PICK x eligible items and do them IN SEQUENCE (slices-first then PRDs-to-slice; per-repo prdsFirst flips). Sequential — never a parallelism knob (that is `run`). Mutually exclusive with naming items.',
 		)
 		.option(
 			'--remote <r>',
@@ -1012,16 +1025,33 @@ export function buildProgram(): Command {
 			'--review-max-rounds <n>',
 			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
 		)
-		.action(async (rawSlug: string | undefined, flags: DoFlags) => {
-			if (rawSlug === undefined) {
-				// Auto-pick (no arg) is the do-autopick slice; this slice is the
-				// single-named-item, in-place path only.
-				console.error(
-					'error: `do` needs an item to do (a <slug>). Auto-pick (no arg) ' +
-						'is not yet wired (the do-autopick slice).',
-				);
-				process.exit(1);
+		.action(async (rawSlugs: string[], flags: DoFlags) => {
+			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
+			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count.
+			const args = rawSlugs ?? [];
+
+			// `-n <x>` parse + validation. It is the AUTO-PICK count (sequential), so it
+			// is mutually exclusive with NAMING items (you either auto-pick a count or
+			// name the items, not both).
+			let count: number | undefined;
+			if (flags.number !== undefined) {
+				const n = Number(flags.number);
+				if (flags.number.trim() === '' || !Number.isInteger(n) || n < 1) {
+					console.error(
+						`error: -n/--number must be a positive integer (got '${flags.number}').`,
+					);
+					process.exit(1);
+				}
+				if (args.length > 0) {
+					console.error(
+						'error: -n/--number auto-picks a COUNT of eligible items; do not also ' +
+							'name items. Use `do -n <x>` OR `do <a> <b> ...`, not both.',
+					);
+					process.exit(1);
+				}
+				count = n;
 			}
+
 			const cwd = process.cwd();
 			const global = loadConfig(flags.config);
 			// Resolve the integration mode at integrate-time, highest first:
@@ -1043,6 +1073,23 @@ export function buildProgram(): Command {
 			// overrides (flag > env > global > default). The worktree + mirror live in
 			// the agents' area (`workspacesDir`); the human area is NEVER touched.
 			if (flags.remote !== undefined) {
+				// `--remote` is the single-named-item, NO-checkout form. Auto-pick / `-n`
+				// / multi-arg selection is the IN-PLACE checkout's pools (this slice); a
+				// remote auto-pick would need a mirror-side pool scan (out of scope here).
+				if (count !== undefined) {
+					console.error(
+						'error: -n/--number (auto-pick) is the in-place form; it does not ' +
+							'combine with --remote. Name a single item: `do --remote <r> <slug>`.',
+					);
+					process.exit(1);
+				}
+				if (args.length !== 1) {
+					console.error(
+						'error: --remote needs exactly one item: `do --remote <r> <slug>`.',
+					);
+					process.exit(1);
+				}
+				const rawSlug = args[0];
 				const remoteConfig = resolveGlobalConfig(
 					global,
 					doFlagOverrides(flags, flagMode),
@@ -1119,8 +1166,10 @@ export function buildProgram(): Command {
 				harness: config.harness,
 				piBin: config.piBin,
 			});
-			const result = await performDo({
-				arg: rawSlug,
+			// The per-item `DoOptions` (everything BUT `arg`) — built ONCE and reused for
+			// the single-item path AND threaded by the multi-item layer to each
+			// sequential `performDo` (do-autopick runs the EXISTING pipeline per item).
+			const baseDoOptions: Omit<DoOptions, 'arg'> = {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
@@ -1156,7 +1205,35 @@ export function buildProgram(): Command {
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),
-			});
+			};
+
+			// DISPATCH the variadic grammar (in-place forms):
+			//   zero args         -> AUTO-PICK `count` (default 1) across the two pools
+			//                        (slices-first then PRDs-to-slice; prdsFirst flips)
+			//   one named arg     -> the single-item pipeline (unchanged from do-in-place)
+			//   many named args   -> those, IN SEQUENCE (operator's order; no pool)
+			// Auto-pick / multi-arg run the EXISTING `performDo` pipeline per item,
+			// sequentially (`do` is sequential; parallelism is `run`).
+			if (args.length === 0) {
+				const multi: DoMultiResult = await performDoAuto({
+					...baseDoOptions,
+					config,
+					count,
+				});
+				console.error(`>> ${multi.message}`);
+				process.exit(multi.exitCode);
+			}
+			if (args.length > 1) {
+				const multi: DoMultiResult = await performDoArgs(args, {
+					...baseDoOptions,
+					config,
+				});
+				console.error(`>> ${multi.message}`);
+				process.exit(multi.exitCode);
+			}
+
+			// Exactly one named item: the single-item in-place pipeline (do-in-place).
+			const result = await performDo({...baseDoOptions, arg: args[0]});
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
 			}
