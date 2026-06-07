@@ -1,5 +1,8 @@
+import {existsSync, mkdirSync, rmSync} from 'node:fs';
+import {dirname, join} from 'node:path';
 import {performStart} from './start.js';
 import {performComplete} from './complete.js';
+import {performClaim} from './claim-cas.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
@@ -7,10 +10,12 @@ import {PiHarness} from './pi-harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {ledgerWrite} from './ledger-write.js';
+import {jobWorktreeStrategy, type IsolatedTree} from './isolation.js';
+import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
-import {runAsync} from './git.js';
+import {git, runAsync} from './git.js';
 
 /**
  * `agent-runner do <slug>` (in-place form) — the per-repo, in-place WORKER that
@@ -172,6 +177,69 @@ export interface DoOptions {
 	 * a sink to assert the surfaced lines without a real terminal.
 	 */
 	watchSink?: (line: string) => void;
+}
+
+/**
+ * The agent-launch fields {@link runDoAgent} reads, shared by the in-place
+ * {@link DoOptions} and the remote {@link DoRemoteOptions} (so one launch helper
+ * serves both forms). A structural subset — both option shapes satisfy it.
+ */
+interface DoAgentLaunchOptions {
+	agentRunner?: DoAgentRunner;
+	harness?: Harness;
+	agentCmd?: string;
+	model?: string;
+	sessionsDir?: string;
+	watch?: boolean;
+	watchSink?: (line: string) => void;
+	color?: boolean;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Options for {@link performDoRemote} — `do --remote <r> <arg>`. It carries the
+ * SAME pipeline knobs as {@link DoOptions} (integration / verify / review /
+ * agent-launch), but selects a REGISTERED repo by `remote` (auto-mirrored) +
+ * `workspacesDir` (the agents' execution area) INSTEAD of an in-place `cwd`:
+ * there is no checkout, so the worktree is materialised under `workspacesDir`.
+ */
+export interface DoRemoteOptions extends DoAgentLaunchOptions {
+	/** The raw CLI slug argument: bare (= slice), `slice:<slug>`, or `prd:<slug>`. */
+	arg: string;
+	/**
+	 * The registered remote spec/URL to run against (`do --remote <r>`). Resolved
+	 * to a hub mirror via `ensureMirror` (auto-created when unregistered).
+	 */
+	remote: string;
+	/**
+	 * The execution working area (config `workspacesDir`) — the AGENTS' area where
+	 * the hub mirror + job worktree live. NEVER the human area.
+	 */
+	workspacesDir: string;
+	/**
+	 * Name of the arbiter remote, used ONLY for human-readable surfacing messages
+	 * (the actual rebase/integrate/push target inside the worktree is `origin`, the
+	 * bare mirror's clone remote). Defaults to `origin`.
+	 */
+	arbiter?: string;
+	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
+	integration?: IntegrationMode;
+	/** The declared per-repo acceptance gate (string | list). */
+	verify?: VerifyConfig;
+	/** Review-request provider override (propose mode); auto-detect when unset. */
+	provider?: ReviewProviderName;
+	/** Gate 2 (PR/code review) toggle — threaded verbatim into `performComplete`. */
+	review?: boolean;
+	autoMerge?: boolean;
+	reviewModel?: string;
+	reviewMaxRounds?: number;
+	reviewGate?: ReviewGate;
+	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
+	read?: LedgerReadStrategy;
+	/** Sink for human-readable progress notes. */
+	note?: (message: string) => void;
+	/** Sink for a pre-formatted block (forwarded to `complete`'s next-step block). */
+	noteBlock?: (message: string) => void;
 }
 
 const DEFAULT_ARBITER = 'origin';
@@ -527,7 +595,7 @@ async function saveAgentFailure(params: {
  * watch implementation, two callers (slice `watch-review-session`).
  */
 async function runDoAgent(
-	options: DoOptions,
+	options: DoAgentLaunchOptions,
 	cwd: string,
 	prompt: string,
 	slug: string,
@@ -574,4 +642,468 @@ async function isDirtyTree(
 		env,
 	});
 	return staged.status !== 0;
+}
+
+/**
+ * `agent-runner do --remote <r> <arg>` — the per-repo `do` WORKER run against a
+ * REGISTERED repo with NO checkout (`docs/adr/command-surface-and-journeys.md`
+ * §3). Where the in-place {@link performDo} uses the CURRENT checkout AS its
+ * isolation, this form materialises a **hub mirror + job worktree in the AGENTS'
+ * area** (`workspacesDir`, the SAME isolation `run` uses — NEVER the human area),
+ * runs the existing `do` pipeline against that worktree, then tears it down per
+ * the §4 provably-safe deletion predicate.
+ *
+ * **Option A — materialise-then-reuse** (the drift correction; the full
+ * IsolatedTree-seam unification is the SEPARATE `do-run-share-isolation-seam`
+ * slice). `performDo` composes the human verbs against a literal `cwd`; this
+ * function does the same — it just points that `cwd` at a freshly-cut job
+ * worktree instead of a checkout. It reuses (does NOT reimplement) the pipeline:
+ * `performStart` (resume) → agent → `performComplete`.
+ *
+ * **The claim ↔ worktree ↔ start composition.** Both `createJob` (cuts the
+ * `work/<slug>` branch off the mirror's fresh main) and `performStart` (claims +
+ * switches to `work/<slug>`) overlap. To compose without double-claiming or
+ * fighting over the branch we order them as the slice mandates:
+ *
+ *   1. **CLAIM FIRST** — the CAS push to the arbiter, run in a throwaway clone of
+ *      the mirror (the CAS needs a non-bare checkout with an `origin/main`
+ *      tracking ref + a worktree to commit in, which a bare mirror does not
+ *      provide — exactly `work-on`'s remote-form claim context).
+ *   2. **MATERIALISE the worktree** off the POST-CLAIM fresh main via the EXISTING
+ *      job-worktree machinery (`jobWorktreeStrategy`/`createJob`): `createJob`
+ *      re-`ensureMirror`s (fetching the claim move) then cuts `work/<slug>` off
+ *      the freshly-fetched mirror main.
+ *   3. **RUN start/agent/complete** against the worktree dir as `cwd`. `start` is
+ *      driven with `resume: true` so it PLAIN-SWITCHES the branch `createJob`
+ *      already created (the item is in-progress on the arbiter after the claim;
+ *      `performStart`'s resume path switches without re-claiming) — no
+ *      double-claim, no branch fight. The worktree's arbiter remote is `origin`
+ *      (the bare mirror's clone remote), so both `start` and `complete` use
+ *      `origin`.
+ *
+ * **Teardown** re-applies the §4 predicate via the strategy handle's `teardown`
+ * (`reapJob`): reap the worktree iff clean AND on the arbiter, retain otherwise
+ * (the never-lose-work signal). NEVER `--force`.
+ *
+ * **Recovery contract.** The worktree is disposable; the durable artifact is the
+ * `work/<slug>` BRANCH (pushed by the autonomous needs-attention surfacing on a
+ * stuck/failed run). A human recovers via the human face (`requeue` + re-claim,
+ * or `work-on`), NEVER by editing the agents'-area worktree.
+ */
+export async function performDoRemote(
+	options: DoRemoteOptions,
+): Promise<DoResult> {
+	const note = options.note ?? (() => {});
+	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
+	const env = options.env;
+	const workspacesDir = options.workspacesDir;
+
+	// 0. `--watch` REQUIRES the pi harness (same guard as in-place `do`): only the
+	//    pi adapter writes a session `.jsonl` to tail. Error CLEARLY here, BEFORE
+	//    any mirror/claim/worktree side-effect. The injected `agentRunner` (tests)
+	//    is its own launch path and is exempt.
+	if (
+		options.watch === true &&
+		options.agentRunner === undefined &&
+		!(options.harness instanceof PiHarness)
+	) {
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message:
+				'`do --watch` requires the pi harness; configure `harness: pi` or drop ' +
+				'`--watch`.',
+		};
+	}
+
+	// 1. Resolve / auto-create the hub mirror for `<r>` (the `registry-remote` /
+	//    `work-on`-remote precedent: an unregistered remote is auto-mirrored
+	//    before use). `ensureMirror` creates it (`git clone --bare`) when absent
+	//    or fetches it when present, under `workspacesDir/repos/` — the agents'
+	//    area, NEVER the human area.
+	let mirror;
+	try {
+		mirror = ensureMirror({url: options.remote, workspacesDir, env});
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return {exitCode: 1, outcome: 'usage-error', message};
+	}
+	note(
+		mirror.created
+			? `Auto-registered hub mirror for ${mirror.url} at ${mirror.path}.`
+			: `Using hub mirror for ${mirror.url} at ${mirror.path}.`,
+	);
+
+	// 2. A throwaway claim clone of the mirror (the CAS context). Slug resolution
+	//    + the claim both run here against `origin` (the arbiter URL).
+	const claimDir = join(
+		workspacesDir,
+		'claim',
+		`${encodeRepoKey(mirror.url).split('/').join('__')}__remote`,
+	);
+	rmSync(claimDir, {recursive: true, force: true});
+	mkdirSync(dirname(claimDir), {recursive: true});
+	git(['clone', '--quiet', mirror.url, claimDir], dirname(claimDir), {env});
+
+	try {
+		// 2a. Resolve the slug across BOTH namespaces against the claim clone (it
+		//     carries `work/` from the mirror's main). A collision / resolution
+		//     failure is a loud usage error; a `prd:` arg reaches the not-yet-wired
+		//     stub — identical behaviour to in-place `do`.
+		let resolved;
+		try {
+			resolved = resolveSlug({
+				arg: options.arg,
+				repoPath: claimDir,
+				read: options.read ?? ledgerRead,
+			});
+		} catch (err) {
+			if (err instanceof SlugResolutionError) {
+				return {exitCode: 1, outcome: 'usage-error', message: err.message};
+			}
+			const message = err instanceof Error ? err.message : String(err);
+			return {exitCode: 1, outcome: 'usage-error', message};
+		}
+
+		if (resolved.namespace === 'prd') {
+			const message =
+				`'${resolved.slug}' is a PRD; \`do prd:${resolved.slug}\` would SLICE ` +
+				'it, but the PRD-slicing path is not wired yet (it lands with the ' +
+				'autoslice-command slice). Slice the PRD manually for now.';
+			note(message);
+			return {
+				exitCode: 1,
+				outcome: 'prd-not-wired',
+				slug: resolved.slug,
+				message,
+			};
+		}
+		const slug = resolved.slug;
+
+		// 3. CLAIM FIRST (the CAS push to the arbiter), in the throwaway clone.
+		//    `origin` there IS the arbiter URL. A lost/contended/usage claim is
+		//    propagated verbatim — NO worktree is materialised (clean failure, like
+		//    `run`'s `runOneItem`).
+		const claim = await performClaim({
+			slug,
+			cwd: claimDir,
+			arbiter: 'origin',
+			env,
+			note,
+		});
+		if (claim.outcome === 'lost') {
+			return {exitCode: 2, outcome: 'lost', slug, message: claim.message};
+		}
+		if (claim.outcome === 'contended') {
+			return {exitCode: 3, outcome: 'contended', slug, message: claim.message};
+		}
+		if (claim.exitCode !== 0) {
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				slug,
+				message: claim.message,
+			};
+		}
+
+		// 4. MATERIALISE the job worktree off the POST-CLAIM fresh main via the
+		//    EXISTING job-worktree machinery (the SAME path `run` uses). `createJob`
+		//    re-`ensureMirror`s (fetching the claim move) then cuts `work/<slug>`
+		//    off the freshly-fetched mirror main, in the agents' area.
+		const strategy = jobWorktreeStrategy({
+			fromRepo: claimDir,
+			arbiter: 'origin',
+			workspacesDir,
+		});
+		let tree: IsolatedTree | undefined;
+		try {
+			tree = strategy.prepare({slug, env});
+			return await runRemotePipeline(options, tree, slug, arbiter, note, env);
+		} finally {
+			// 7. Teardown via the strategy handle: reap iff clean AND on the arbiter,
+			//    retain otherwise. NEVER --force. Always safe to call.
+			if (tree) {
+				tree.teardown();
+			}
+		}
+	} finally {
+		// Remove the throwaway claim clone either way.
+		rmSync(claimDir, {recursive: true, force: true});
+	}
+}
+
+/**
+ * Run the existing `do` pipeline (start[resume] → agent → complete) against an
+ * already-materialised job worktree. Mirrors {@link performDo}'s middle/back —
+ * but `cwd` is the worktree and the arbiter remote inside it is `origin`. The
+ * needs-attention surfacing is the AUTONOMOUS, arbiter-passed variant (like
+ * `run`/in-place `do`): a stuck remote `do` must be cross-machine visible.
+ */
+async function runRemotePipeline(
+	options: DoRemoteOptions,
+	tree: IsolatedTree,
+	slug: string,
+	displayArbiter: string,
+	note: (m: string) => void,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<DoResult> {
+	const cwd = tree.dir;
+	const arbiterRemote = tree.arbiterRemote; // `origin` (the bare mirror's clone).
+
+	// 4a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a `work/<slug>`
+	//     that did not replay onto the current main at onboard-time (aborted, never
+	//     auto-resolved). Route to needs-attention via the seam (surfaced on the
+	//     arbiter + the kept branch already on the arbiter) instead of running the
+	//     agent — the §10 path `run` uses.
+	if (tree.continueRebaseConflict) {
+		const reason =
+			`continuing the kept work/${slug}: rebase onto the latest main ` +
+			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
+			'main, or `requeue --reset` to discard and start fresh';
+		ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			arbiter: arbiterRemote,
+			env,
+			note,
+		});
+		return {
+			exitCode: 1,
+			outcome: 'needs-attention',
+			slug,
+			branch: tree.branch,
+			message: reason,
+		};
+	}
+
+	// 5. HARDEN start to work against a job-worktree `cwd` (the load-bearing work).
+	//    `performStart` reads/switches via the `<arbiter>/main` REMOTE-TRACKING ref
+	//    (`origin/main` here). A job worktree is cut from a BARE hub mirror whose
+	//    `origin` remote has NO fetch refspec, so `origin/main` /
+	//    `origin/work/<slug>` would not otherwise resolve — and `start` would
+	//    wrongly read the slug as "absent". Prime those two remote-tracking refs
+	//    EXPLICITLY (the SAME technique `integrator.rebaseOntoArbiterMain` /
+	//    `gc.fetchTracking` use against a bare-mirror worktree). After this the
+	//    existing `performStart` runs UNCHANGED against the worktree.
+	await primeWorktreeTrackingRef(cwd, arbiterRemote, 'main', env);
+	await primeWorktreeTrackingRef(cwd, arbiterRemote, `work/${slug}`, env);
+
+	// Onboard onto the work branch like in-place `do` — but the item is ALREADY
+	// CLAIMED (step 3), so `performStart` runs with `resume: true`: it
+	// PLAIN-SWITCHES the `work/<slug>` branch `createJob` already created WITHOUT
+	// re-claiming (no double-claim, no branch fight). This proves `start` works
+	// against a job-worktree `cwd`.
+	const started = await performStart({
+		slug,
+		cwd,
+		arbiter: arbiterRemote,
+		resume: true,
+		env,
+		note,
+	});
+	if (started.outcome === 'needs-attention') {
+		return {
+			exitCode: 1,
+			outcome: 'needs-attention',
+			slug,
+			branch: started.branch,
+			message: started.message,
+		};
+	}
+	if (started.exitCode !== 0) {
+		const outcome: DoOutcome =
+			started.outcome === 'refused' ? 'refused' : 'usage-error';
+		return {exitCode: 1, outcome, slug, message: started.message};
+	}
+	const branch = started.branch;
+
+	// 6. Build the prompt + run the agent autonomously in the worktree (the SAME
+	//    assembly in-place `do` uses). The agent only edits code.
+	let prompt: string;
+	try {
+		const slice = resolveSlice(cwd, slug);
+		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
+	} catch (err) {
+		if (err instanceof PromptError) {
+			return await saveRemoteAgentFailure({
+				slug,
+				branch,
+				cwd,
+				arbiterRemote,
+				displayArbiter,
+				detail: err.message,
+				env,
+				note,
+			});
+		}
+		throw err;
+	}
+
+	let agent: {ok: boolean; detail?: string; output?: string};
+	try {
+		agent = await runDoAgent(options, cwd, prompt, slug);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return await saveRemoteAgentFailure({
+			slug,
+			branch,
+			cwd,
+			arbiterRemote,
+			displayArbiter,
+			detail: message,
+			env,
+			note,
+		});
+	}
+	if (!agent.ok) {
+		const detail = agent.detail ?? `the agent failed to build '${slug}'.`;
+		return await saveRemoteAgentFailure({
+			slug,
+			branch,
+			cwd,
+			arbiterRemote,
+			displayArbiter,
+			detail,
+			env,
+			note,
+		});
+	}
+
+	// 7. Gate + done-move + commit + rebase + integrate LIKE in-place `do`: the
+	//    AUTONOMOUS surfacing (`surfaceArbiter: origin`) so a red gate / rebase
+	//    conflict / review block surfaces on the arbiter's main (cross-machine
+	//    visible). The success path reuses `complete`'s machinery unchanged.
+	const completed = await performComplete({
+		slug,
+		cwd,
+		arbiter: arbiterRemote,
+		integration: options.integration,
+		verify: options.verify,
+		provider: options.provider,
+		body: agent.output,
+		review: options.review,
+		autoMerge: options.autoMerge,
+		reviewModel: options.reviewModel,
+		reviewMaxRounds: options.reviewMaxRounds,
+		reviewGate: options.reviewGate,
+		watch: options.watch,
+		watchSink: options.watchSink,
+		sessionsDir: options.sessionsDir,
+		surfaceArbiter: arbiterRemote,
+		color: options.color,
+		note,
+		noteBlock: options.noteBlock,
+		env,
+	});
+
+	if (completed.outcome === 'completed') {
+		return {
+			exitCode: 0,
+			outcome: 'completed',
+			slug,
+			branch,
+			message: completed.message,
+		};
+	}
+	if (
+		completed.outcome === 'gate-failed' ||
+		completed.outcome === 'review-blocked' ||
+		completed.outcome === 'rebase-conflict'
+	) {
+		return {
+			exitCode: 1,
+			outcome: 'needs-attention',
+			slug,
+			branch,
+			message: completed.message,
+		};
+	}
+	const outcome: DoOutcome =
+		completed.outcome === 'refused' ? 'refused' : 'usage-error';
+	return {exitCode: 1, outcome, slug, branch, message: completed.message};
+}
+
+/**
+ * SAVE the partial work of a FAILED agent in a remote `do` worktree — the same
+ * work-preserving routing in-place `do`'s {@link saveAgentFailure} uses, but
+ * against the worktree's `origin` arbiter remote. The agent's edits + the failure
+ * reason are committed + surfaced on the arbiter's main AND the `work/<slug>`
+ * branch is pushed (the RECOVERABLE durable artifact — the disposable worktree is
+ * NOT the recovery surface). The outcome stays `agent-failed`.
+ */
+async function saveRemoteAgentFailure(params: {
+	slug: string;
+	branch: string | undefined;
+	cwd: string;
+	arbiterRemote: string;
+	displayArbiter: string;
+	detail: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<DoResult> {
+	const {slug, cwd, arbiterRemote, displayArbiter, detail, env, note} = params;
+	const branch = params.branch ?? `work/${slug}`;
+	const reason = `agent failed: ${detail}`;
+
+	const routed = ledgerWrite.applyNeedsAttentionTransition({
+		cwd,
+		slug,
+		reason,
+		arbiter: arbiterRemote,
+		env,
+		note,
+	});
+
+	const message = routed.moved
+		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +
+			`routed it to work/needs-attention/ (surfaced on ${displayArbiter}/main; ` +
+			`pushed ${branch}). Recover via \`requeue\` (continue) or \`requeue ` +
+			'--reset` to discard.'
+		: `Agent failed building '${slug}' (${detail}); could not route to ` +
+			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
+	note(message);
+	return {
+		exitCode: 1,
+		outcome: 'agent-failed',
+		slug,
+		branch,
+		routedToNeedsAttention: routed.moved,
+		message,
+	};
+}
+
+/**
+ * Prime ONE arbiter head into its remote-tracking ref inside a job worktree
+ * (`+refs/heads/<head>:refs/remotes/<arbiter>/<head>`). A job worktree is cut
+ * from a BARE hub mirror whose `origin` remote has no fetch refspec, so
+ * `<arbiter>/main` / `<arbiter>/work/<slug>` would not otherwise resolve — which
+ * makes the (otherwise unchanged) `performStart` read the slug as absent. This is
+ * the EXACT technique `integrator.rebaseOntoArbiterMain` + `gc.fetchTracking`
+ * already use for the same bare-mirror-worktree reason. Best-effort: an
+ * unreachable arbiter / a missing head leaves the local ref absent, which `start`
+ * then handles (the FRESH branch already exists locally from `createJob`).
+ */
+async function primeWorktreeTrackingRef(
+	cwd: string,
+	arbiter: string,
+	head: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+	// SOFT (no throw): the head may not exist on the arbiter (e.g. a FRESH cut has
+	// no pushed `work/<slug>` yet) — that is the common, expected case, and `start`
+	// handles a missing remote-tracking ref (the local branch `createJob` created
+	// is plain-switched). A genuine fetch error likewise leaves the ref absent →
+	// the safe direction.
+	await runAsync(
+		'git',
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/${head}:refs/remotes/${arbiter}/${head}`,
+		],
+		cwd,
+		{env},
+	);
 }

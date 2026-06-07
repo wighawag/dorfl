@@ -23,7 +23,7 @@ import {
 	persistHumanWorktreesDir,
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
-import {performDo} from './do.js';
+import {performDo, performDoRemote} from './do.js';
 import {createHarness} from './pi-harness.js';
 import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
@@ -224,6 +224,7 @@ interface CompleteFlags {
 interface DoFlags {
 	config?: string;
 	arbiter?: string;
+	remote?: string;
 	merge?: boolean;
 	propose?: boolean;
 	agentCmd?: string;
@@ -794,7 +795,7 @@ export function buildProgram(): Command {
 	program
 		.command('do')
 		.description(
-			'The per-repo, in-place WORKER (the CI command): in the CURRENT checkout, refuse on a dirty tree, then claim + onboard onto work/<slug>, run the agent, gate, integrate in-place, and exit. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path, not yet wired). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh. (do --remote is the do-remote slice; auto-pick / -n is do-autopick.)',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path, not yet wired). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh. (auto-pick / -n is do-autopick.)',
 		)
 		// EXTENSIBLE argument grammar (the three do-* slices grow this one block): a
 		// single named item here, optional so do-autopick can widen it to variadic /
@@ -807,6 +808,10 @@ export function buildProgram(): Command {
 		.option(
 			'--arbiter <remote>',
 			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
+		)
+		.option(
+			'--remote <r>',
+			'run against a REGISTERED repo with NO checkout: materialise a hub mirror + job worktree in the agents\u2019 area (auto-registers an unknown remote), run the pipeline there, then reap (never touches the human area)',
 		)
 		.option(
 			'--merge',
@@ -885,6 +890,60 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+
+			// `do --remote <r>`: run against a REGISTERED repo with NO checkout. There
+			// is no per-repo `.agent-runner.json` to layer (the registered repo is a
+			// bare mirror), so config resolves from global + the SAME `do` flag
+			// overrides (flag > env > global > default). The worktree + mirror live in
+			// the agents' area (`workspacesDir`); the human area is NEVER touched.
+			if (flags.remote !== undefined) {
+				const remoteConfig = resolveGlobalConfig(
+					global,
+					doFlagOverrides(flags, flagMode),
+				);
+				if (doNeedsAgentCmd(remoteConfig)) {
+					console.error(
+						'error: no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
+					);
+					process.exit(1);
+				}
+				const remoteHarness = createHarness({
+					harness: remoteConfig.harness,
+					piBin: remoteConfig.piBin,
+				});
+				const remoteResult = await performDoRemote({
+					arg: rawSlug,
+					remote: flags.remote,
+					workspacesDir: remoteConfig.workspacesDir,
+					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
+					integration: remoteConfig.integration,
+					verify: remoteConfig.verify,
+					provider: remoteConfig.provider,
+					harness: remoteHarness,
+					agentCmd: remoteConfig.agentCmd,
+					model: remoteConfig.model,
+					sessionsDir: remoteConfig.sessionsDir,
+					review: remoteConfig.review,
+					autoMerge: remoteConfig.autoMerge,
+					reviewModel: remoteConfig.reviewModel,
+					reviewMaxRounds: remoteConfig.reviewMaxRounds,
+					reviewGate: remoteConfig.review
+						? harnessReviewGate({
+								harness: remoteHarness,
+								agentCmd: remoteConfig.agentCmd,
+							})
+						: undefined,
+					watch: flags.watch === true,
+					color: shouldUseColor(process.stdout),
+					note: (message) => console.error(`>> ${message}`),
+					noteBlock: (message) => console.error(message),
+				});
+				if (remoteResult.exitCode !== 0) {
+					console.error(`error: ${remoteResult.message}`);
+				}
+				process.exit(remoteResult.exitCode);
+			}
+
 			// Thread the `do` CLI flags (--harness/--agent-cmd/--pi-bin/--model)
 			// AND the integrate-time mode into the resolved config — the SAME flag
 			// override path `run` uses (do-config.doFlagOverrides reuses
