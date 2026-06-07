@@ -85,7 +85,17 @@ export type DoAgentRunner = (input: {
 	prompt: string;
 	slug: string;
 	env?: NodeJS.ProcessEnv;
-}) => {ok: boolean; detail?: string};
+}) => {
+	ok: boolean;
+	detail?: string;
+	/**
+	 * The agent's FINAL SUMMARY (the harness seam's `LaunchResult.output`): the
+	 * channel the propose-mode PR BODY is built from. Optional so a test agent may
+	 * supply a body; production surfaces the build agent's last assistant message.
+	 * Absent ⇒ no body ⇒ the provider degrades to `--fill` (no regression).
+	 */
+	output?: string;
+};
 
 export interface DoOptions {
 	/** The raw CLI slug argument: bare (= slice), `slice:<slug>`, or `prd:<slug>`. */
@@ -308,7 +318,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		throw err;
 	}
 
-	let agent: {ok: boolean; detail?: string};
+	let agent: {ok: boolean; detail?: string; output?: string};
 	try {
 		agent = await runDoAgent(options, cwd, prompt, slug);
 	} catch (err) {
@@ -349,6 +359,12 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		integration: options.integration,
 		verify: options.verify,
 		provider: options.provider,
+		// Half B (propose-mode PR body): the build agent's FINAL SUMMARY, captured
+		// from the harness seam's `LaunchResult.output` (surfaced by `runDoAgent`
+		// below) and threaded as the PR description. `complete` scaffolds a
+		// deterministic header (slice pointer) above it. Undefined ⇒ no body ⇒ the
+		// provider degrades to `gh ... --fill` (no regression).
+		body: agent.output,
 		// Gate 2 (PR/code review) rides INSIDE `complete`: run the `review` SKILL as a
 		// fresh-context agent after the green `verify` (the non-skippable floor) and
 		// before the done-move. A `block` re-uses the same needs-attention surfacing
@@ -515,7 +531,7 @@ async function runDoAgent(
 	cwd: string,
 	prompt: string,
 	slug: string,
-): Promise<{ok: boolean; detail?: string}> {
+): Promise<{ok: boolean; detail?: string; output?: string}> {
 	if (options.agentRunner) {
 		return options.agentRunner({cwd, prompt, slug, env: options.env});
 	}
@@ -535,7 +551,10 @@ async function runDoAgent(
 		color: options.color,
 		env: options.env,
 	});
-	return {ok: launched.ok, detail: launched.detail};
+	// Surface the agent's FINAL SUMMARY (`LaunchResult.output`) — the source channel
+	// for the propose-mode PR body — instead of dropping it. Absent (no parseable
+	// assistant text) ⇒ undefined ⇒ the body degrades to `--fill` (no regression).
+	return {ok: launched.ok, detail: launched.detail, output: launched.output};
 }
 
 /**

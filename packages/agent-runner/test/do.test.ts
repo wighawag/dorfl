@@ -1,5 +1,11 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, existsSync} from 'node:fs';
+import {
+	writeFileSync,
+	mkdirSync,
+	existsSync,
+	chmodSync,
+	readFileSync,
+} from 'node:fs';
 import {join} from 'node:path';
 import {performDo, type DoAgentRunner} from '../src/do.js';
 import {performComplete} from '../src/complete.js';
@@ -686,6 +692,99 @@ describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 				repo,
 			).trim(),
 		).not.toBe('');
+	});
+});
+
+describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider --body', () => {
+	/**
+	 * Half B source-capture: `runDoAgent` now RETURNS the build agent's
+	 * `LaunchResult.output` (it used to drop it), and `do` threads it into
+	 * `performComplete` as the PR `body`. With a `gh` stub on PATH (recording its
+	 * args), the stubbed agent's `output` must surface in `gh pr create --body`.
+	 */
+	it('a stubbed agent`s output is threaded to gh pr create --body (under a slice pointer)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// A recording `gh` stub on PATH (no real GitHub).
+		const binDir = join(scratch.root, 'gh-stub-do');
+		mkdirSync(binDir, {recursive: true});
+		const argsFile = join(binDir, 'gh-args.txt');
+		const gh = join(binDir, 'gh');
+		writeFileSync(
+			gh,
+			[
+				'#!/usr/bin/env bash',
+				`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+				"printf '%s\\n' 'https://github.com/o/r/pull/5'",
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(gh, 0o755);
+
+		// The build agent SUPPLIES a final summary on `output` (the source channel).
+		const summarisingAgent: DoAgentRunner = ({cwd}) => {
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
+			return {
+				ok: true,
+				output: 'Implemented alpha. Note: refactored the seam.',
+			};
+		};
+
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github',
+			verify: PASS,
+			agentRunner: summarisingAgent,
+			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+
+		const args = readFileSync(argsFile, 'utf8');
+		expect(args).toMatch(/^--body$/m);
+		expect(args).toContain('Implemented alpha. Note: refactored the seam.');
+		expect(args).toContain('work/done/alpha.md');
+		// Half A still applies: a synthesised single-line title, never --fill.
+		expect(args).toMatch(/^--title$/m);
+		expect(args).not.toMatch(/^--fill$/m);
+	});
+
+	it('no agent output ⇒ no body ⇒ gh still gets the title (no regression to a run-on)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const binDir = join(scratch.root, 'gh-stub-do2');
+		mkdirSync(binDir, {recursive: true});
+		const argsFile = join(binDir, 'gh-args.txt');
+		const gh = join(binDir, 'gh');
+		writeFileSync(
+			gh,
+			[
+				'#!/usr/bin/env bash',
+				`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+				"printf '%s\\n' 'https://github.com/o/r/pull/6'",
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(gh, 0o755);
+
+		// editingAgent supplies NO `output` ⇒ no PR body.
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github',
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		const args = readFileSync(argsFile, 'utf8');
+		// Title always present; the (empty) body field present so gh never re-derives.
+		expect(args).toMatch(/^--title$/m);
+		expect(args).toMatch(/^--body$/m);
+		expect(args).not.toMatch(/^--fill$/m);
 	});
 });
 
