@@ -266,7 +266,6 @@ export type {
 	RunOnceResult,
 	RunOnceOptions,
 	AgentRunner,
-	TestGate,
 } from './run.js';
 export {runOnce, defaultRunWorkspace} from './run.js';
 

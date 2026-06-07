@@ -8,7 +8,7 @@ import {
 	DEFAULT_GH_BIN,
 } from '../src/github.js';
 import {NoneProvider} from '../src/integrator.js';
-import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
+import {runOnce, type AgentRunner} from '../src/run.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {readJobRecord, jobWorktreePath} from '../src/workspace.js';
@@ -200,7 +200,6 @@ const editingAgent: AgentRunner = ({cwd}) => {
 	writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
 	return {ok: true};
 };
-const greenGate: TestGate = () => ({green: true});
 
 /** The injected working-tree scan report for `run` over the seeded `project`. */
 function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
@@ -215,6 +214,9 @@ function configFor(root: string, overrides = {}) {
 		perRepoMax: 2,
 		integration: 'propose',
 		agentCmd: 'true',
+		// The gate is now the per-repo `verify` (the converged core), injected as a
+		// string command; green for these provider end-to-end tests.
+		verify: 'exit 0',
 		allowAgents: true,
 		...overrides,
 	});
@@ -231,7 +233,6 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			// Inject the GitHub provider with the stubbed gh (the URL-selection path
 			// is unit-tested separately; here we drive the full pipeline).
@@ -268,7 +269,6 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			provider: new GitHubProvider({ghBin: missingGhBin()}),
 		});
@@ -292,7 +292,6 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			provider: new GitHubProvider({ghBin: stub.bin}),
 		});
@@ -313,7 +312,6 @@ describe('runOnce — provider auto-selection via config + URL (no gh)', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			// No injected provider: selection is auto from the (file://) arbiter URL.
 		});

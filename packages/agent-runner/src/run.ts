@@ -10,17 +10,13 @@ import {
 	type IsolatedTree,
 	type IsolationStrategy,
 } from './isolation.js';
-import {NullHarness, type Harness} from './harness.js';
+import type {Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
-import {git, gitMv} from './git.js';
-import {
-	Integrator,
-	type ReviewProvider,
-	type IntegrateResult,
-} from './integrator.js';
-import {selectProvider} from './github.js';
+import {type IntegrateResult, type ReviewProvider} from './integrator.js';
+import {performIntegration} from './integration-core.js';
+import type {ReviewGate} from './review-gate.js';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -58,14 +54,18 @@ export type AgentRunner = (input: {
 	prompt: string;
 	slug: string;
 	env?: NodeJS.ProcessEnv;
-}) => {ok: boolean; detail?: string};
-
-/** The acceptance-test gate: green ⇒ true. */
-export type TestGate = (input: {
-	cwd: string;
-	slug: string;
-	env?: NodeJS.ProcessEnv;
-}) => {green: boolean; detail?: string};
+}) => {
+	ok: boolean;
+	detail?: string;
+	/**
+	 * The agent's FINAL SUMMARY (the harness seam's `LaunchResult.output`): the
+	 * channel the propose-mode PR BODY is built from (mirrors `do`'s
+	 * `DoAgentRunner.output`). Optional so a test agent may supply one; production
+	 * surfaces the build agent's last assistant message. Absent ⇒ no body ⇒ the
+	 * provider degrades to `--fill` (no regression).
+	 */
+	output?: string;
+};
 
 export interface RunOnceOptions {
 	config: Config;
@@ -88,9 +88,20 @@ export interface RunOnceOptions {
 	agentRunner?: AgentRunner;
 	/** The harness seam (ADR §5); defaults to the null adapter. */
 	harness?: Harness;
-	/** How to run the acceptance tests. Defaults to the repo's `pnpm -r test`. */
-	testGate?: TestGate;
-	/** Review-request provider for `propose` mode (ADR §6); default `none`. */
+	/**
+	 * The PR/code review gate (Gate 2) SEAM, threaded into the shared
+	 * `performIntegration` core. Tests inject a canned `approve`/`block` verdict
+	 * (no real model); the CLI passes the production `harnessReviewGate()` ONLY
+	 * when `config.review` resolves on. Unset ⇒ no review (the default). The core
+	 * throws if `review` is on but this is absent — `runOneItem` guards that.
+	 */
+	reviewGate?: ReviewGate;
+	/**
+	 * An explicitly-injected, fully-formed review provider that overrides per-item
+	 * auto-detection (tests / embedding). Forwarded to `performIntegration` as
+	 * `providerInstance` (carrying title/body/url). Unset ⇒ the core selects the
+	 * provider from the arbiter URL + the per-repo `provider` override.
+	 */
 	provider?: ReviewProvider;
 	/** Optional injectable PR opener for `integration: propose` (legacy bridge). */
 	openPr?: (opts: {
@@ -108,31 +119,6 @@ export interface RunOnceOptions {
 	 * stays pure; the CLI wires this to stderr.
 	 */
 	onWarn?: (message: string) => void;
-}
-
-/** Default test gate: run the repo's acceptance tests via `pnpm -r test`. */
-function defaultTestGate(): TestGate {
-	return ({cwd, env}) => {
-		const result = runPnpmTest(cwd, env);
-		return {
-			green: result.green,
-			detail: result.green ? undefined : result.detail,
-		};
-	};
-}
-
-function runPnpmTest(
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): {green: boolean; detail?: string} {
-	const harness = new NullHarness();
-	const out = harness.launch({
-		dir: cwd,
-		slug: '',
-		command: 'pnpm -r test',
-		env,
-	});
-	return {green: out.ok, detail: out.detail};
 }
 
 /**
@@ -158,7 +144,6 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 		perRepoMax: config.perRepoMax,
 	});
 
-	const testGate = options.testGate ?? defaultTestGate();
 	// The launch harness: an explicit injection wins (tests); otherwise build the
 	// adapter the config selects (`harness: 'pi'` ⇒ the pi CLI; default ⇒ null,
 	// shelling out to `agentCmd`). pi specifics stay behind the seam.
@@ -180,7 +165,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 				workspace,
 				agentRunner: options.agentRunner,
 				harness,
-				testGate,
+				reviewGate: options.reviewGate,
 				provider,
 				openPr: options.openPr,
 				env,
@@ -214,7 +199,8 @@ interface OneItemContext {
 	workspace: string;
 	agentRunner?: AgentRunner;
 	harness: Harness;
-	testGate: TestGate;
+	/** The PR/code review gate (Gate 2) seam threaded into `performIntegration`. */
+	reviewGate?: ReviewGate;
 	/** An explicitly-injected provider that overrides per-item auto-detection. */
 	provider?: ReviewProvider;
 	openPr?: (opts: {
@@ -224,21 +210,6 @@ interface OneItemContext {
 	}) => void;
 	env?: NodeJS.ProcessEnv;
 	onWarn?: (message: string) => void;
-}
-
-/**
- * Commit the completed work + the done-move as ONE atomic commit, using the
- * work-contract message format. The runner authors this deterministically (the
- * agent never commits).
- */
-function commitCompletion(
-	dir: string,
-	slug: string,
-	env: NodeJS.ProcessEnv | undefined,
-): void {
-	git(['add', '-A'], dir, {env});
-	const message = `feat(${slug}): complete work slice; done`;
-	git(['commit', '-q', '-m', message], dir, {env});
 }
 
 async function runOneItem(
@@ -340,7 +311,7 @@ async function runOneItem(
 		//    (null adapter by default), shelling out to the configured agentCmd. The
 		//    resolved per-repo `model` (ADR §13) flows through the seam to the adapter;
 		//    a `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
-		let agent: {ok: boolean; detail?: string};
+		let agent: {ok: boolean; detail?: string; output?: string};
 		try {
 			agent = runAgent(
 				ctx,
@@ -370,101 +341,107 @@ async function runOneItem(
 			);
 		}
 
-		// 5. Test-gate: only green work proceeds. Bad work is routed to
-		//    needs-attention (it never auto-merges; the worktree is the signal).
-		const gate = ctx.testGate({cwd: tree.dir, slug, env: ctx.env});
-		if (!gate.green) {
-			const reason = gate.detail ?? 'acceptance gate failed';
-			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			// Folder-native surfacing (ADR §12): bounce the work item itself from
-			// in-progress/ to needs-attention/ (saving the aborted work as a wip
-			// commit + the move-only commit on the work branch) THROUGH the ledger
-			// write seam's needs-attention transition. Passing the arbiter both
-			// SURFACES the stuck state's LEDGER on the arbiter's main (OBSERVABLE —
-			// the mode-M cherry-pick) AND pushes the `work/<slug>` branch (RECOVERABLE
-			// — the saved wip + move travel cross-machine so a requeue-continue on a
-			// different machine has a branch to continue from; continue-detection reads
-			// <arbiter>/work/<slug>). One operation in one place; the asymmetry that
-			// once needed a bolted-on push cannot recur. This is a LEDGER write, so it
-			// happens in both merge and propose (the integration axis governs CODE
-			// only). The runner owns this move (the agent does no git).
-			ledgerWrite.applyNeedsAttentionTransition({
-				cwd: tree.dir,
-				slug,
-				reason,
-				arbiter: tree.arbiterRemote,
-				env: ctx.env,
-			});
-			return {...base, status: 'tests-failed', detail: gate.detail};
-		}
-
-		// 6. Done-move (mkdir -p then git mv) + completion commit — runner-owned.
-		gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, tree.dir);
-		commitCompletion(tree.dir, slug, ctx.env);
-
-		// 7. Rebase-before-integrate (ADR §10) then integrate per mode. A
-		//    conflicting rebase is aborted + routed to needs-attention (never
-		//    auto-resolved); integration never --forces.
+		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
+		// integrate band — plus the needs-attention routing on any failure — now runs
+		// through the SHARED `performIntegration` core (`integration-core.ts`, the
+		// run/do convergence PRD). `run` no longer forks its own gate / done-move /
+		// completion commit / `Integrator`+`integrateWithRebase`: that closed all
+		// three drift instances at once (the fleet now gets the review gate, the PR
+		// title/body, AND the per-repo language-agnostic `verify` gate instead of the
+		// old test-only `pnpm -r test` floor). The HEAD above (claim, isolate, agent,
+		// failure-save) and the TAIL below (job record + worktree reap) stay here;
+		// the band is what they share. `run` is ALWAYS autonomous, so it ALWAYS
+		// passes `surfaceArbiter` (every failure surfaces on the arbiter's main +
+		// pushes the branch). The injected `openPr` legacy bridge is forwarded to the
+		// core unchanged; absent it the core selects the provider from the arbiter
+		// URL + the per-repo `provider` override (a GitHub remote ⇒ `gh pr create`).
 		//
-		// Provider selection (ADR §6, `propose` mode): an injected `openPr` wins
-		// (the legacy test bridge); otherwise pick by the per-repo `provider`
-		// override LAYERED OVER auto-detection from the ARBITER URL (a GitHub
-		// remote ⇒ the `gh` provider). We key detection off the handle's resolved
-		// arbiter URL (`tree.arbiterUrl` — the mirror's arbiter URL for the
-		// job-worktree strategy), not the in-worktree remote NAME. If `gh` is
-		// absent/unauthenticated the GitHub provider degrades to push-only at
-		// runtime — never a hard failure (the branch is already pushed).
-		const provider = ctx.openPr
-			? bridgeProvider(ctx.openPr)
-			: (ctx.provider ??
-				selectProvider({
-					arbiterUrl: tree.arbiterUrl,
-					provider: config.provider,
-				}));
-		const integratorForItem = new Integrator({provider});
-		const outcome = integratorForItem.integrateWithRebase({
-			cwd: tree.dir,
-			// The arbiter remote name valid inside the isolated tree (job-worktree:
-			// the mirror's clone remote `origin`; in-place: the checkout's arbiter
-			// remote), NOT the source repo's `defaultArbiter` name.
-			arbiter: tree.arbiterRemote,
-			branch: tree.branch,
-			mode: config.integration,
-			env: ctx.env,
-		});
-		if (outcome.outcome === 'needs-attention') {
-			const reason = outcome.reason ?? 'needs attention';
-			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			// Rebase conflict at integrate time (ADR §10): the item was already
-			// done-moved + committed at step 6, so route it from done/ to
-			// needs-attention/ — the same folder-native surfacing, dispatched through
-			// the ledger write seam's needs-attention transition. Passing the arbiter
-			// both surfaces the stuck state on main (OBSERVABLE — only the MOVE-ONLY
-			// commit is cherry-picked, so the conflicting code never lands there) AND
-			// pushes the `work/<slug>` branch (RECOVERABLE — so the SAVED work travels
-			// cross-machine and a requeue-continue can recover it; continue-detection
-			// reads <arbiter>/work/<slug> ahead of main). The conflicting rebase was
-			// ABORTED (ADR §10), so the branch is at its pre-rebase tip (the agent's
-			// work as left, un-rebased); the next claim's onboard-time rebase re-attempts
-			// it and re-routes here if it still conflicts. Without the push, a `run`
-			// integrate-time conflict on a multi-machine fleet would strand the
-			// (green-but-unrebased) work on this machine's worktree — the very loss
-			// §14's branch-is-the-durable-artifact model exists to prevent.
-			ledgerWrite.applyNeedsAttentionTransition({
+		// `performIntegration` THROWS a plain `Error` for a misconfigured gate
+		// (`review` on with no `reviewGate` wired) — `run`'s CLI always wires one when
+		// `config.review` is on, so that is a defensive case, but it must NOT crash
+		// the whole tick. We catch it and route the item through the same
+		// work-preserving needs-attention seam an agent failure uses (`saveAgentFailure`)
+		// so the worktree is handled and the run continues to the next item.
+		let core;
+		try {
+			core = await performIntegration({
 				cwd: tree.dir,
-				slug,
-				reason,
+				// The arbiter remote name valid inside the isolated tree (job-worktree:
+				// the mirror's clone remote `origin`), NOT the source repo's
+				// `defaultArbiter` name.
 				arbiter: tree.arbiterRemote,
+				slug,
+				source: 'in-progress',
+				recovering: false,
+				// `run` is ALWAYS autonomous → surface every failure on the arbiter's
+				// main AND push the work branch (DATA, not a caller-identity flag).
+				surfaceArbiter: tree.arbiterRemote,
+				// The per-repo, language-agnostic gate (ADR §8) — the protocol-conformance
+				// fix: `run` now honours `config.verify` instead of the deleted
+				// `defaultTestGate`'s hardcoded `pnpm -r test`.
+				verify: config.verify,
+				// Gate 2 (PR/code review): the per-repo resolved flags ride from `config`;
+				// only the gate SEAM is threaded through `ctx` (the CLI wires the prod
+				// `harnessReviewGate()` only when `config.review` is on).
+				review: config.review,
+				autoMerge: config.autoMerge,
+				reviewModel: config.reviewModel,
+				reviewMaxRounds: config.reviewMaxRounds,
+				reviewGate: ctx.reviewGate,
+				mode: config.integration,
+				// Provider: an injected `openPr` wins (legacy test bridge); otherwise the
+				// core selects from the arbiter URL + the per-repo `provider` override
+				// (a GitHub remote ⇒ `gh pr create`, else push-only `none`).
+				provider: config.provider,
+				providerInstance: ctx.provider,
+				openPr: ctx.openPr,
+				// Half A/B: the synthesised single-line title + the agent's surfaced
+				// final summary as the PR body (the core scaffolds the slice-pointer
+				// header). `title` is synthesised inside the core from the slice's
+				// frontmatter; `body` is the agent output (undefined ⇒ `--fill`).
+				body: agent.output,
 				env: ctx.env,
 			});
-			return {...base, status: 'needs-attention', detail: outcome.reason};
+		} catch (err) {
+			// A thrown core error (misconfigured gate, or an unexpected plumbing
+			// failure) — SAVE the work + route to needs-attention, never crash the tick.
+			return saveAgentFailure(
+				base,
+				tree,
+				slug,
+				(err as Error).message,
+				ctx.env,
+			);
 		}
 
-		// Record the PR/MR URL on the job (surfaced by `status`) when a provider
-		// opened one (propose + a real provider that reported a URL).
-		const prUrl = outcome.integration?.url;
+		// TAIL: map the core's DATA outcome onto the job record + `ItemStatus`. The
+		// core already ran the gate/review/move/commit/rebase/integrate AND did the
+		// needs-attention routing; `run`'s tail does ONLY the job-record write + (in
+		// `finally`) the worktree reap. `run` NEVER switches/ff/deletes branches
+		// (that is `do`'s in-place tail; a job worktree is reaped, not switched).
+		if (core.outcome === 'gate-failed') {
+			updateJobRecord(tree.dir, {
+				state: 'needs-attention',
+				reason: core.reason,
+			});
+			return {...base, status: 'tests-failed', detail: core.reason};
+		}
+		if (
+			core.outcome === 'review-blocked' ||
+			core.outcome === 'rebase-conflict'
+		) {
+			updateJobRecord(tree.dir, {
+				state: 'needs-attention',
+				reason: core.reason,
+			});
+			return {...base, status: 'needs-attention', detail: core.reason};
+		}
+
+		// SUCCESS: the core integrated. Record the PR/MR URL (when a provider opened
+		// one) on the job, surfaced by `status`.
+		const prUrl = core.integration?.url;
 		updateJobRecord(tree.dir, {state: 'done', prUrl});
-		return {...base, status: 'claimed-done', integration: outcome.integration};
+		return {...base, status: 'claimed-done', integration: core.integration};
 	} finally {
 		// Strategy-appropriate teardown via the uniform handle (ADR §4). Job-worktree:
 		// re-apply the provably-safe deletion predicate and remove the worktree ONLY
@@ -492,7 +469,7 @@ function runAgent(
 	agentCmd: string,
 	model: string | undefined,
 	sessionsDir: string | undefined,
-): {ok: boolean; detail?: string} {
+): {ok: boolean; detail?: string; output?: string} {
 	if (ctx.agentRunner) {
 		return ctx.agentRunner({cwd: tree.dir, prompt, slug, env: ctx.env});
 	}
@@ -518,7 +495,10 @@ function runAgent(
 		env: ctx.env,
 	});
 	updateJobRecord(tree.dir, {harness: launched.record});
-	return {ok: launched.ok, detail: launched.detail};
+	// Surface the agent's FINAL SUMMARY (`LaunchResult.output`) — the source channel
+	// for the propose-mode PR body — instead of dropping it (mirrors `do`'s
+	// `runDoAgent`). Absent (no parseable assistant text) ⇒ undefined ⇒ `--fill`.
+	return {ok: launched.ok, detail: launched.detail, output: launched.output};
 }
 
 /**
@@ -563,26 +543,6 @@ function saveAgentFailure(
 		env,
 	});
 	return {...base, status: 'agent-failed', detail};
-}
-
-/** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */
-function bridgeProvider(
-	openPr: (opts: {
-		cwd: string;
-		branch: string;
-		env?: NodeJS.ProcessEnv;
-	}) => void,
-): ReviewProvider {
-	return {
-		name: 'none',
-		openRequest(input) {
-			openPr({cwd: input.cwd, branch: input.branch, env: input.env});
-			return {
-				opened: true,
-				instruction: `Opened a review for ${input.branch}.`,
-			};
-		},
-	};
 }
 
 /** A throwaway default workspace under the OS temp dir (CLI convenience). */

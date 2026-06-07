@@ -56,6 +56,12 @@ const RACE_SENSITIVE = [
 	// and routes failures; keep it out of file-parallel pressure for the same
 	// deterministic claim/main-CAS reasoning as review-gate-pr.test.ts.
 	'test/integration-core.test.ts',
+	// `run` routed through the shared core (Slice 2 of the run/do convergence): the
+	// fleet's review gate + PR title/body + per-repo verify proofs. Drives real git
+	// against a --bare arbiter, integrates/merges on approve (writes main), and
+	// routes failures (the needs-attention surfacing); keep it out of file-parallel
+	// pressure for the same deterministic claim/main-CAS reasoning as run.test.ts.
+	'test/run-integration-core.test.ts',
 ];
 
 export default defineConfig({

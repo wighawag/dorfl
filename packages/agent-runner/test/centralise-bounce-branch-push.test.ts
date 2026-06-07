@@ -2,7 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, existsSync, chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {ledgerWrite} from '../src/ledger-write.js';
-import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
+import {runOnce, type AgentRunner} from '../src/run.js';
 import {performStart} from '../src/start.js';
 import {performComplete} from '../src/complete.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -219,8 +219,6 @@ const editingAgent: AgentRunner = ({cwd}) => {
 	writeFileSync(join(cwd, 'partial.txt'), 'half-built\n');
 	return {ok: false, detail: 'boom'};
 };
-const greenGate: TestGate = () => ({green: true});
-
 function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
 	return scanRepoPaths([join(scratch.root, 'project')], config);
 }
@@ -232,6 +230,11 @@ function configFor(overrides = {}) {
 		integration: 'merge',
 		agentCmd: 'true',
 		allowAgents: true,
+		// Gate unified on the per-repo `verify` (the deleted `defaultTestGate`/
+		// `TestGate` are gone). Both tests here route BEFORE the gate is reached
+		// (agent-failed / onboard-conflict), so this green stub is never actually
+		// run; it keeps the config shape valid without a bespoke gate function.
+		verify: 'exit 0',
 		...overrides,
 	});
 }
@@ -245,7 +248,6 @@ describe('run agent-failure is SAVED + cross-machine recoverable (the fifth gap)
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('agent-failed');
@@ -342,7 +344,6 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 			agentRunner: () => {
 				throw new Error('agent must NOT run on an onboard continue-conflict');
 			},
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('needs-attention');
