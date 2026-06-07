@@ -2,9 +2,30 @@
 title: review-gate-pr-comment — post the agent's VERBATIM Gate-2 review (incl. on approve) as a PR comment via a provider postComment seam
 slug: review-gate-pr-comment
 prd: review
-blockedBy: [propose-pr-body]
+blockedBy: []
 covers: [3]
 ---
+
+> **DRIFT UPDATE 2026-06-07 — re-reviewed against merged code. TWO changes:**
+> 1. **`blockedBy` cleared:** `propose-pr-body` (the shared-seam dep) is MERGED
+>    (PR #15) — the `body`-on-`OpenRequestInput` seam is already on `main`, so it is
+>    a FOUNDATION, not a pending dep. `[propose-pr-body]` → `[]`.
+> 2. **Wiring point MOVED:** the run/do convergence (PR #17/#18) moved the
+>    review/approve block + the integrate call out of `complete.ts` into
+>    `src/integration-core.ts` (`performIntegration`), shared by `do` AND `run`. The
+>    verdict (`lastVerdict`) is now produced INSIDE the core and is NOT returned
+>    (`IntegrationCoreResult` exposes only outcome/branch/reason/commitMessage/
+>    integration — no verdict, no agent output). So the slice's old plan ("post from
+>    `complete.ts` after integrate, where `lastVerdict` + `result.url` are both in
+>    scope") NO LONGER WORKS — neither is in scope in `complete.ts` anymore.
+>    **RESOLVED (Option A): post the comment INSIDE `performIntegration`**, after the
+>    integrate, where `lastVerdict`, the resolved `provider`, AND `integration.url`
+>    are all in scope. This is clean (the core already resolves the provider) and
+>    parallels `review-nits-observation` (both use the verbatim review at the same
+>    in-core approve point), and it covers `do` AND `run` for free. The alternative
+>    (expose the verdict+output on `IntegrationCoreResult` and post from each tail)
+>    was REJECTED: it re-introduces the per-caller duplication the convergence just
+>    removed.
 
 ## What to build
 
@@ -36,30 +57,32 @@ discipline), do NOT build two parallel posting mechanisms:
   it via `gh pr comment <pr> --body <text>` (or `gh api`); the `none` provider
   degrades (no API → surface the verdict in the run output / instruction, never
   throw — ADR §6, like `openRequest`).
-- **PR identity — and the CORRECT wiring LAYER (verified against the code, review
-  finding 2026-06-06):** the review VERDICT is produced in `src/complete.ts`
-  (`performComplete`'s `review` block, as `lastVerdict`). `openRequest` is NOT
-  called there — it is called DEEP inside the integrator (`src/integrator.ts`
-  `integrateWithRebase`'s propose branch), TWO LAYERS DOWN, where the verdict is
-  NOT in scope. **Do NOT post the comment "after `openRequest`" in the
-  integrator.** Instead: the integrator RETURNS the opened PR `url` back UP
-  (`IntegrateWithRebaseResult` → `complete.ts`'s `result.url`, exposed as `prUrl`).
-  Post the comment FROM `complete.ts`, AFTER integrate returns, on the propose
-  path, where BOTH `lastVerdict` AND `result.url` are in scope. Order: gate →
-  `lastVerdict` → integrate (opens PR, returns `url`) → (in `complete.ts`)
-  `postComment(url, <verbatim review output, JSON block stripped>)`. If `result.url`
-  is absent (degraded / no PR — e.g. local `--bare` arbiter), no-op (verdict stays in the run
-  output; no throw).
+- **PR identity — and the CORRECT wiring LAYER (re-verified 2026-06-07,
+  post-convergence):** the review VERDICT (`lastVerdict`) is produced INSIDE
+  `performIntegration` (`src/integration-core.ts`) — NOT `complete.ts` anymore. The
+  integrate (which opens the PR and yields `integration.url`) ALSO happens inside
+  the core, right after the review block. So `lastVerdict`, the resolved `provider`,
+  and `integration.url` are ALL in scope in the core, after integrate. **Post the
+  comment THERE (Option A), inside `performIntegration` after the integrate**, on
+  the propose path. Order (all in the core): gate → review (`lastVerdict`) →
+  done-move/commit/rebase → integrate (opens PR, yields `integration.url`) →
+  `postComment(url, <verbatim review output, JSON block stripped>)`. If the url is
+  absent (degraded / no PR — e.g. local `--bare` arbiter, or `merge` mode), no-op
+  (verdict stays in the run output; no throw). Do NOT expose the verdict on
+  `IntegrationCoreResult` to post from the tails — that re-introduces per-caller
+  duplication; post in the one shared place.
 
-### Where it wires in (verified: in `complete.ts`, post-integrate — NOT the integrator)
+### Where it wires in (post-convergence: INSIDE `performIntegration`, post-integrate)
 
-The Gate-2 verdict (`lastVerdict`) is produced in `performComplete`
-(`src/complete.ts`, the `review` block). The propose integrate call returns the
-opened PR `url` (`result.url` / `prUrl`) back into `complete.ts` — THAT is the
-wiring point: after a successful propose integrate, if a review ran and
-`result.url` is present, `postComment` the review to that PR. `postComment` is a NEW
-method on the provider seam (so the core still never imports `gh`); the GitHub
-adapter shells out to `gh pr comment`.
+The Gate-2 verdict (`lastVerdict`) is produced inside `performIntegration`
+(`src/integration-core.ts`, the `review` block), and the propose integrate runs in
+the same function and yields the opened PR `url` (`integration.url`). THAT is the
+wiring point: after a successful propose integrate, if a review ran and the url is
+present, `postComment` the review to that PR — using the `provider` the core already
+resolved for the integrate. `postComment` is a NEW method on the provider seam (so
+the core still never imports `gh`); the GitHub adapter shells out to `gh pr comment`.
+Because this is in the shared core, BOTH `do`/`complete` AND `run` post the comment
+— no per-caller wiring.
 
 **Post the agent's VERBATIM review, NOT a re-formatted verdict (resolved 2026-06-06
 — see `work/findings/review-nonblocking-findings-disposition.md`).** The review
@@ -79,10 +102,10 @@ for the comment. The COMMENT is advisory — it gates nothing; pure visibility.
 ### Scope fence
 
 - IN: a `postComment` method on the provider seam (GitHub via `gh pr comment`; none
-  degrades); formatting the verdict (approve-with-nits AND block) into a comment;
-  wiring it in `complete.ts` AFTER integrate returns (post-integrate, propose
-  path), threading the PR url from `result.url`;
-  posting on approve (the decided behaviour).
+  degrades); posting the VERBATIM review (JSON block stripped) as a comment; wiring
+  it INSIDE `performIntegration` (`src/integration-core.ts`) AFTER the integrate, on
+  the propose path, using the resolved `provider` + `integration.url`; posting on
+  approve (the decided behaviour); covers `do` AND `run` (shared core).
 - OUT: the creation BODY (that is `propose-pr-body`, this slice's dep); changing the
   gate's verdict/routing logic (#11/#12 — unchanged; this only ADDS posting);
   auto-merge behaviour; the slicer edit loop. Block-routing still goes to
@@ -120,12 +143,12 @@ for the comment. The COMMENT is advisory — it gates nothing; pure visibility.
 
 ## Blocked by
 
-- `propose-pr-body` — SHARED provider seam ("write text to the PR"). That slice
-  establishes the body-at-open half + the seam consistency; this adds the
-  comment-after half. Serialised so both shape the provider seam coherently (and to
-  avoid two slices editing `src/integrator.ts` + `src/github.ts` in parallel).
-- (Builds ON the merged Gate-2 work, #11/#12 — the verdict it posts; that is on
-  `main`, so it is a foundation, not a pending dep.)
+- None (cleared 2026-06-07). `propose-pr-body` (the shared "write text to the PR"
+  seam) is MERGED (PR #15) — the `body`-on-`OpenRequestInput` half + the seam
+  consistency are on `main`; this slice adds the sibling `postComment` half on the
+  SAME seam, keeping the same graceful-degradation discipline. Also builds ON the
+  merged Gate-2 work (#11/#12) and the run/do convergence (#17/#18, which moved the
+  verdict into `integration-core.ts`). All foundations, not pending deps.
 
 ## Prompt
 
@@ -135,21 +158,23 @@ for the comment. The COMMENT is advisory — it gates nothing; pure visibility.
 > reasoning). Today the verdict only hits the terminal `note(...)` / the
 > needs-attention body; nothing reaches the PR.
 >
-> FIRST run the drift check: confirm `src/integrator.ts` `ReviewProvider` has
-> `openRequest` returning `OpenRequestResult.url` (the PR identity you thread into
-> the comment); confirm `src/github.ts` opens the PR via `gh pr create` (you add a
-> sibling `gh pr comment`); confirm `src/complete.ts`'s `review` block produces
-> `lastVerdict`; confirm the propose integrate call RETURNS the PR `url` back into
-> `complete.ts` as `result.url`/`prUrl` (the integrator's `openRequest` is two
-> layers down — do NOT wire there); confirm `propose-pr-body`
-> (your dep) landed the `body`-on-`OpenRequestInput` seam shape you build alongside.
-> Route to needs-attention on any real discrepancy.
+> FIRST run the drift check (the layer MOVED in the run/do convergence — #17/#18):
+> confirm `src/integration-core.ts` `performIntegration` is now where the `review`
+> block produces `lastVerdict` AND where the integrate runs (yielding the PR url via
+> `integration.url`) — NOT `complete.ts`; confirm the core RESOLVES a `provider`
+> instance for the integrate (you reuse it for `postComment`); confirm
+> `src/integrator.ts` `ReviewProvider`'s `openRequest` returns
+> `OpenRequestResult.url`; confirm `src/github.ts` opens via `gh pr create` (you add
+> a sibling `gh pr comment`); confirm `propose-pr-body` (MERGED, #15) landed the
+> `body`-on-`OpenRequestInput` seam you extend. Route to needs-attention on any real
+> discrepancy.
 >
 > Implement: add `postComment(input)` to `ReviewProvider` (GitHub: `gh pr comment
 > <pr> --body <text>` / `gh api`; none: degrade — surface in run output, never
-> throw, ADR §6). In `complete.ts`, AFTER the propose integrate returns (where both
-> `lastVerdict` and `result.url` are in scope — NOT in the integrator), if a review
-> ran and a PR url is present, post the AGENT'S VERBATIM review output
+> throw, ADR §6). INSIDE `performIntegration` (`src/integration-core.ts`), AFTER the
+> propose integrate (where `lastVerdict`, the resolved `provider`, and the PR url are
+> all in scope), if a review ran and a PR url is present, post the AGENT'S VERBATIM
+> review output
 > (`LaunchResult.output`) with the trailing `{verdict,findings}` JSON block STRIPPED
 > — NOT a re-formatted verdict (do NOT write a `formatVerdict`; verbatim auto-
 > includes the nits + reasoning and is less code). The runner already locates the
@@ -160,14 +185,17 @@ for the comment. The COMMENT is advisory — it gates nothing; pure visibility.
 > logic.
 >
 > READ FIRST: `work/prd/review.md` RESOLVED DESIGN (Gate 2 "more visible — posted as
-> a PR comment"); `src/integrator.ts` (`ReviewProvider`, `OpenRequestResult.url`);
-> `src/github.ts` (`gh pr create` → add `gh pr comment`); `src/complete.ts` (the
-> `review` block, `lastVerdict`, `result.url`); `src/review-gate.ts`
+> a PR comment"); `src/integration-core.ts` (`performIntegration` — the `review`
+> block / `lastVerdict`, the integrate + resolved `provider` + `integration.url`;
+> THIS is the wiring point, shared by `do` AND `run`); `src/integrator.ts`
+> (`ReviewProvider`, `OpenRequestResult.url` — add `postComment`); `src/github.ts`
+> (`gh pr create` → add `gh pr comment`); `src/review-gate.ts`
 > (`LaunchResult.output` carries the verbatim review; the JSON-extraction logic
-> already there tells you where the trailing JSON block starts, so you can strip it)
-> (`ReviewVerdict`/`formatBlockReason` to reuse); `work/backlog/propose-pr-body.md`
-> (the shared seam — body-at-open; keep consistent); ADR §6 (provider seam +
-> graceful degradation).
+> already there tells you where the trailing JSON block starts, so you can strip it);
+> `work/done/propose-pr-body.md` (the shared seam — body-at-open, MERGED; keep
+> consistent); `work/backlog/review-nits-observation.md` (the sibling that also uses
+> the verbatim review at the same in-core approve point — keep them coherent); ADR
+> §6 (provider seam + graceful degradation).
 >
 > TDD with vitest, house style (stubbed provider, no real gh/network): approve →
 > postComment with the verbatim review (JSON stripped) + right PR identity; the
