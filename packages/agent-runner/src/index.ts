@@ -129,7 +129,13 @@ export {
 	projectIdFromKey,
 } from './registry.js';
 
-export {formatReport, gateLabel} from './format.js';
+export {formatReport, formatCwdSection, gateLabel} from './format.js';
+export type {
+	CwdSection,
+	CwdArbiter,
+	ResolveCwdSectionOptions,
+} from './cwd-section.js';
+export {resolveCwdSection} from './cwd-section.js';
 
 export type {
 	SliceFolder,

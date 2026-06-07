@@ -9,6 +9,8 @@ import {fetchMirrorMainOrWarn} from './repo-mirror.js';
 import {extractReason} from './needs-attention.js';
 import {type NeedsAttentionItem} from './needs-attention.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
+import {formatCwdSection} from './format.js';
+import type {CwdSection} from './cwd-section.js';
 
 /**
  * `agent-runner status` — the **operational dashboard of jobs** (ADR §4/§5/§12
@@ -107,6 +109,14 @@ export interface StatusReport {
 	 * a current-checkout concern); absent for the pure job-area dashboard.
 	 */
 	arbiter?: ArbiterStatusReport;
+	/**
+	 * The CWD-LOCAL section (the `scan-status-read-cwd-repo` slice): when `status`
+	 * runs INSIDE a participating repo, this is that CURRENT repo read from its
+	 * LOCAL WORKING TREE (fetch-its-arbiter-first), reported as a DISTINCT,
+	 * separately-counted block alongside (never merged into) the registry view.
+	 * Absent when the cwd does not participate or the caller did not resolve it.
+	 */
+	cwd?: CwdSection;
 }
 
 export interface StatusOptions {
@@ -143,6 +153,14 @@ export interface StatusOptions {
 	 * checkout; omitted ⇒ no arbiter section.
 	 */
 	arbiter?: ArbiterStatusReport;
+	/**
+	 * The pre-resolved CWD-LOCAL section (the `scan-status-read-cwd-repo` slice).
+	 * The CLI resolves it via `resolveCwdSection` (cwd participation + fetch-first
+	 * divergence + registry de-dup) and hands it here; `status` carries it onto the
+	 * report and `formatStatus` renders it as a distinct local block. Omitted ⇒ no
+	 * local section.
+	 */
+	cwd?: CwdSection;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -203,6 +221,7 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 		attention,
 		needsAttention,
 		...(options.arbiter ? {arbiter: options.arbiter} : {}),
+		...(options.cwd ? {cwd: options.cwd} : {}),
 	};
 }
 
@@ -249,15 +268,26 @@ function toJobStatus(job: GcJob, forced: Harness | undefined): JobStatus {
 export function formatStatus(report: StatusReport): string {
 	const lines: string[] = [];
 
+	// The cwd-local section (the `scan-status-read-cwd-repo` slice): a DISTINCT,
+	// separately-counted block for the CURRENT repo's working tree, ABOVE the
+	// job/registry dashboard (never merged into the job counts).
+	const cwdLines = report.cwd !== undefined ? formatCwdSection(report.cwd) : [];
+
 	const needsAttention = report.needsAttention ?? [];
 	const naCount = needsAttention.reduce((sum, r) => sum + r.items.length, 0);
 	if (
 		report.active.length === 0 &&
 		report.attention.length === 0 &&
 		naCount === 0 &&
-		report.arbiter === undefined
+		report.arbiter === undefined &&
+		cwdLines.length === 0
 	) {
 		return 'No jobs running or retained (the work area is empty).';
+	}
+
+	if (cwdLines.length > 0) {
+		lines.push(...cwdLines);
+		lines.push('');
 	}
 
 	lines.push('Active jobs (running):');
