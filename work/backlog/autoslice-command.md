@@ -47,7 +47,22 @@ End-to-end flow:
    does git.
 
 Reuse the existing harness seam + the runner-owns-git pattern from `do`/`run`; do
-NOT reimplement claiming/isolation. The confidence / needs-attention behaviour
+NOT reimplement claiming/isolation.
+
+> **DRIFT NOTE (2026-06-07, drift-review pass):** this slice was authored
+> 2026-06-05, BEFORE the run/do convergence (PRs #17/#18) extracted the shared
+> gate→integrate band out of `run.ts`/`complete.ts` into
+> `src/integration-core.ts` (`performIntegration`). So read the CURRENT split:
+> `run.ts` is now HEAD (claim/isolate/agent/failure-save) + TAIL (job record +
+> worktree reap), and `integration-core.ts` owns the shared runner-owns-git band.
+> The slicing transition you build here is DIFFERENT (prd→slicing→prd + emit
+> backlog slices, NOT verify→review→done-move→rebase→integrate), so it will NOT
+> call `performIntegration` — it follows the same "agent edits, runner does all
+> git" DISCIPLINE with its own transition. The `do prd:` STUB you fill is
+> confirmed present: `do.ts`, the `resolved.namespace === 'prd'` branch returning
+> the `prd-not-wired` outcome — fill BEHIND it (the `resolveSlug` resolver already
+> handles `prd:`/`slice:`/bare + collision). See
+> `work/observations/autoslice-command-runner-owns-git-pattern-moved-to-integration-core.md`. The confidence / needs-attention behaviour
 when no human is present is owned by a SEPARATE later slice
 (`slicer-review-edit-loop`, the review/edit loop + its needsAnswers /
 needs-attention verdict routing — this `do prd:` path just produces candidate

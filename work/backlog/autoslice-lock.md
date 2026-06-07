@@ -30,15 +30,19 @@ NOT a new lock mechanism.
   provides the lock + release primitives). After a successful slice the PRD is
   back in `work/prd/` and `slicing/` is empty — sliced-ness is recorded by the
   PRD's `sliced:` frontmatter marker, never by residence in `slicing/`.
-  > **DRIFT to reconcile (spotted 2026-06-06):** `src/ledger-read.ts`
-  > (`PrdExistence`) currently comments `work/slicing/<slug>.md` as the PRD's
-  > *"slicing record"* that exists *"once sliced"* — i.e. it reads `slicing/` as a
-  > resting post-slice state. That contradicts this lock-only semantic (the PRD
-  > returns to `prd/`, so nothing rests in `slicing/`). Reconcile when building:
-  > `slicing/` means "a slice is IN FLIGHT (lock held)," not "has been sliced."
-  > Fix the `ledger-read` comment/`slicingFile` doc accordingly (the field stays —
-  > it just means "a lock is currently held," which the slug-namespace resolver
-  > may still want to detect).
+  > **DRIFT to reconcile (spotted 2026-06-06; UPDATED 2026-06-07):** this was
+  > originally a larger reconciliation — `src/ledger-read.ts` read `work/slicing/`
+  > as a resting post-slice state. Re-checked on current `main`: it is now **~90%
+  > already reconciled** (the `PrdExistence` docstring, the `slicingFile` field, and
+  > `findPrdFileBySlug` all already say "transient held lock … in flight, not
+  > 'sliced'"). **One leftover stale phrase remains** at `ledger-read.ts` ~line 185
+  > (the `resolvePrdExistence` method docstring): `work/slicing/` (its **post-slice
+  > record**)` — fix that ONE phrase to match the lock-only wording above. So this
+  > criterion is now a one-line mop-up, not the larger fix. (See
+  > `work/observations/ledger-read-slicing-post-slice-record-stale-comment.md`.)
+  > Note: `LedgerTransitionKind` is currently `'claim' | 'complete' |
+  > 'needs-attention'` — there is NO `'slicing'` kind yet, so adding one (vs reusing
+  > the claim primitive) is the open choice this slice resolves, NOT drift.
 - **Read-stability / concurrent PRD EDITS (the real gap, not just double-slicing):**
   the lock serialises two *slicers*, but a human (or another agent) can EDIT the
   PRD body while a slice is in flight, producing backlog slices derived from stale
