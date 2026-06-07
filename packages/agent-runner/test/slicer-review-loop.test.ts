@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -43,6 +44,18 @@ function seedCandidate(name: string, body = 'draft'): string {
 		`---\nslug: ${name}\nprd: it\n---\n\n## Prompt\n\n> ${body}\n`,
 	);
 	return rel;
+}
+
+/** A snapshot (filename → content) of `work/backlog/` — the loop's `before` fence. */
+function snapshotBacklog(): Map<string, string> {
+	const dir = join(cwd, 'work', 'backlog');
+	const snap = new Map<string, string>();
+	for (const name of readdirSync(dir)) {
+		if (name.toLowerCase().endsWith('.md')) {
+			snap.set(name, readFileSync(join(dir, name), 'utf8'));
+		}
+	}
+	return snap;
 }
 
 /** A gate that returns a scripted sequence of verdicts (one per pass). */
@@ -160,6 +173,115 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 		});
 		// The escaping edit was NOT applied — only candidate slices are improved.
 		expect(readFileSync(escaped, 'utf8')).toBe('original PRD');
+	});
+});
+
+describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', () => {
+	// The requeue fix: on a POPULATED backlog (the normal steady state), the loop
+	// must review/edit/flag ONLY the slices new-or-changed since the `before`
+	// snapshot — never the pre-existing, already-landed slices that share the dir.
+
+	it('reviews ONLY the run’s own candidate slices (pre-existing ones are not passed to the gate)', async () => {
+		// Two pre-existing LANDED slices already in the backlog.
+		seedCandidate('landed-a', 'landed a');
+		seedCandidate('landed-b', 'landed b');
+		const before = snapshotBacklog();
+		// THIS run produces one new slice on top.
+		seedCandidate('mine', 'mine');
+		let seen: string[] = [];
+		const gate: SliceReviewGate = async (input) => {
+			seen = input.candidateSlices;
+			return {verdict: 'approve', findings: []};
+		};
+		const result = await runSliceReviewLoop({
+			slug: 'it',
+			cwd,
+			gate,
+			before,
+			maxReview: 3,
+		});
+		expect(result.outcome).toBe('converged');
+		// The gate only saw THIS run's own slice — never the pre-existing landed ones.
+		expect(seen).toEqual(['work/backlog/mine.md']);
+		// The returned slices set is likewise scoped to the run's own output.
+		expect(Object.keys(result.slices)).toEqual(['work/backlog/mine.md']);
+	});
+
+	it('REFUSES an edit to a pre-existing landed slice (untouched on disk)', async () => {
+		const landedRel = seedCandidate('landed', 'ORIGINAL landed content');
+		const before = snapshotBacklog();
+		seedCandidate('mine', 'mine');
+		await runSliceReviewLoop({
+			slug: 'it',
+			cwd,
+			gate: scriptedGate([
+				{
+					verdict: 'block',
+					findings: [
+						{severity: 'blocking', question: 'hijack the landed slice'},
+					],
+					edits: [{path: landedRel, content: 'HIJACKED'}],
+				},
+				{verdict: 'approve', findings: []},
+			]),
+			before,
+			maxReview: 3,
+		});
+		// The pre-existing landed slice was NOT overwritten by the loop.
+		expect(readFileSync(join(cwd, landedRel), 'utf8')).toMatch(
+			/ORIGINAL landed content/,
+		);
+	});
+
+	it('the uncertain-slices FLOOR flags only the run’s own slices (not pre-existing)', async () => {
+		seedCandidate('landed', 'landed');
+		const before = snapshotBacklog();
+		seedCandidate('mine', 'mine');
+		const result = await runSliceReviewLoop({
+			slug: 'it',
+			cwd,
+			// Block with NO named uncertain slice → the floor maps the run's own set.
+			gate: scriptedGate([
+				{
+					verdict: 'block',
+					findings: [{severity: 'blocking', question: 'broadly unclear'}],
+				},
+			]),
+			before,
+			maxReview: 1,
+		});
+		expect(result.outcome).toBe('uncertain-slices');
+		// Only THIS run's slice is flagged — the pre-existing landed one is untouched.
+		expect(result.uncertainSlices.map((u) => u.path)).toEqual([
+			'work/backlog/mine.md',
+		]);
+	});
+
+	it('an edit that IMPROVES the run’s own slice still applies (in-scope)', async () => {
+		seedCandidate('landed', 'landed');
+		const before = snapshotBacklog();
+		const mineRel = seedCandidate('mine', 'draft');
+		await runSliceReviewLoop({
+			slug: 'it',
+			cwd,
+			gate: scriptedGate([
+				{
+					verdict: 'block',
+					findings: [{severity: 'blocking', question: 'thin'}],
+					edits: [
+						{
+							path: mineRel,
+							content:
+								'---\nslug: mine\nprd: it\n---\n\n## Prompt\n\n> IMPROVED\n',
+						},
+					],
+				},
+				{verdict: 'approve', findings: []},
+			]),
+			before,
+			maxReview: 3,
+		});
+		expect(readFileSync(join(cwd, mineRel), 'utf8')).toMatch(/IMPROVED/);
 	});
 });
 

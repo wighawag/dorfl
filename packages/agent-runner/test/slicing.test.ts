@@ -608,6 +608,72 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(result.loop).toBeUndefined();
 		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(true);
 	});
+
+	it('on a POPULATED backlog, the loop touches ONLY this run’s own slice (pre-existing landed slices untouched)', async () => {
+		// The requeue fix (regression): seed a POPULATED backlog — a pre-existing,
+		// already-LANDED slice committed on the arbiter — then slice. The loop must
+		// review/edit/flag ONLY the slice THIS run produced; the pre-existing slice
+		// must be left completely alone (not edited, not needsAnswers-flagged, not
+		// re-committed into the runner-owned slicing release).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['landed']);
+		const landedBefore = showArbiter(repo, 'work/backlog/landed.md');
+		seedPrd(repo, 'it');
+		const seenByGate: string[][] = [];
+		// A loop gate that, given the chance, would HIJACK + flag EVERY backlog file
+		// — only the scoping fence stops it from touching the pre-existing slice.
+		const gate: SliceReviewGate = async (input) => {
+			seenByGate.push(input.candidateSlices);
+			return {
+				verdict: 'block',
+				findings: [{severity: 'blocking', question: 'rewrite everything'}],
+				edits: [
+					// Try to overwrite the pre-existing landed slice (must be REFUSED)…
+					{path: 'work/backlog/landed.md', content: 'HIJACKED landed'},
+					// …and improve the run's own slice (allowed), keeping valid frontmatter.
+					...input.candidateSlices.map((path) => ({
+						path,
+						content:
+							'---\nslug: child\nprd: it\n---\n\n## Prompt\n\n> IMPROVED by the loop\n',
+					})),
+				],
+				// Also try to flag the pre-existing slice directly by name.
+				uncertainSlices: [
+					{path: 'work/backlog/landed.md', questions: ['hijack flag']},
+					...input.candidateSlices.map((path) => ({
+						path,
+						questions: ['own flag'],
+					})),
+				],
+			};
+		};
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			reviewLoop: gate,
+			maxReview: 1,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBe('uncertain-slices');
+		// The gate was only ever shown THIS run's own produced slice.
+		for (const seen of seenByGate) {
+			expect(seen).toEqual(['work/backlog/child.md']);
+		}
+		// The pre-existing landed slice on the arbiter is BYTE-FOR-BYTE unchanged:
+		// not hijacked, not needsAnswers-flagged, not re-committed.
+		expect(showArbiter(repo, 'work/backlog/landed.md')).toBe(landedBefore);
+		expect(showArbiter(repo, 'work/backlog/landed.md')).not.toMatch(/HIJACKED/);
+		expect(showArbiter(repo, 'work/backlog/landed.md')).not.toMatch(
+			/needsAnswers/,
+		);
+		// THIS run's own slice WAS the one flagged needsAnswers (cap hit).
+		const child = showArbiter(repo, 'work/backlog/child.md');
+		expect(child).toMatch(/needsAnswers: true/);
+		expect(child).toMatch(/own flag/);
+	});
 });
 
 describe('performSlice — usage', () => {

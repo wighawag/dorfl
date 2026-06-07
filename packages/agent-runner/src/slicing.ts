@@ -290,6 +290,10 @@ export async function performSlice(
 			slug,
 			cwd,
 			gate: options.reviewLoop,
+			// SCOPING FENCE (the requeue fix): the loop reviews/edits/flags ONLY the
+			// slices THIS run produced (new-or-changed vs `before`), never the
+			// pre-existing landed slices that share work/backlog/.
+			before,
 			maxReview: options.maxReview ?? 3,
 			executions: options.reviewExecutions,
 			reviewModel: options.reviewModel,

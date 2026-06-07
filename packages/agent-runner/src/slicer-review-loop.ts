@@ -191,6 +191,20 @@ export interface RunSliceReviewLoopOptions {
 	/** The review+edit gate seam (tests inject a canned verdict; production: harness). */
 	gate: SliceReviewGate;
 	/**
+	 * **The SCOPING FENCE (the requeue fix).** A snapshot of `work/backlog/` taken
+	 * BEFORE this slicing run produced its candidate slices (filename → content;
+	 * the `before` map `performSlice` already computes at step 3). The loop reviews,
+	 * edits, and flags ONLY the slices that are NEW or CHANGED vs this snapshot —
+	 * i.e. THIS run's own output — NEVER the pre-existing, already-landed slices
+	 * that share the same `work/backlog/` directory (the normal steady state). On a
+	 * populated backlog this is what keeps the loop from editing / `needsAnswers`-
+	 * flagging unrelated slices and sweeping them into the runner-owned slicing
+	 * commit. Omitted ⇒ an EMPTY snapshot (every `work/backlog/*.md` is treated as
+	 * this run's output — the legacy whole-directory behaviour, kept only for the
+	 * degenerate empty-backlog case / direct callers that pass none).
+	 */
+	before?: Map<string, string>;
+	/**
 	 * The HARD CAP on in-context review passes (N) per fresh context. Reaching it
 	 * with unresolved blockers REJECTS via the sink (never an infinite loop). The
 	 * natural terminator (no new blocking issue) usually fires first.
@@ -238,6 +252,10 @@ export async function runSliceReviewLoop(
 	const note = options.note ?? (() => {});
 	const executions = Math.max(1, options.executions ?? 1);
 	const maxReview = Math.max(1, options.maxReview);
+	// The SCOPING FENCE: review/edit/flag ONLY this run's own new-or-changed
+	// slices, never pre-existing landed ones (the requeue fix). No snapshot ⇒ an
+	// empty one (the legacy whole-directory behaviour for the empty-backlog case).
+	const before = options.before ?? new Map<string, string>();
 
 	let totalPasses = 0;
 	let last: SingleExecutionResult | undefined;
@@ -251,6 +269,7 @@ export async function runSliceReviewLoop(
 			gate: options.gate,
 			maxReview,
 			execution: m,
+			before,
 			reviewModel: options.reviewModel,
 			sessionsDir: options.sessionsDir,
 			env: options.env,
@@ -266,7 +285,7 @@ export async function runSliceReviewLoop(
 			);
 			return {
 				outcome: 'converged',
-				slices: readCandidates(options.cwd),
+				slices: readCandidates(options.cwd, before),
 				uncertainSlices: [],
 				prdQuestions: [],
 				passes: totalPasses,
@@ -291,7 +310,7 @@ export async function runSliceReviewLoop(
 		);
 		return {
 			outcome: 'decomposition-unclear',
-			slices: readCandidates(options.cwd),
+			slices: readCandidates(options.cwd, before),
 			uncertainSlices: [],
 			prdQuestions: questions,
 			passes: totalPasses,
@@ -305,13 +324,28 @@ export async function runSliceReviewLoop(
 	}
 
 	// A specific-slice rejection: emit the uncertain slice(s) `needsAnswers: true`.
-	// Floor: if the agent named none but still blocks, treat ALL candidates as
-	// uncertain (never land a slice the loop could not approve, never silently
-	// drop the rejection).
+	// SCOPED to THIS run's own output (the requeue fix): an agent-named uncertain
+	// slice that is NOT one of this run's new-or-changed slices is DROPPED (the
+	// agent must never flag a pre-existing landed slice). Floor: if the agent named
+	// none (or named only out-of-scope ones) but still blocks, treat THIS run's own
+	// candidates as uncertain — never land a slice the loop could not approve, never
+	// silently drop the rejection, but never escape to unrelated slices.
+	const ownPaths = new Set(newOrChangedBacklog(options.cwd, before));
+	const named = (verdict.uncertainSlices ?? []).filter((u) => {
+		const normalized = u.path.replace(/\\/g, '/');
+		if (ownPaths.has(normalized)) {
+			return true;
+		}
+		note(
+			`Dropped an uncertain-slice flag on ${u.path} — not one of THIS run’s ` +
+				'own candidate slices (the loop never flags pre-existing landed slices).',
+		);
+		return false;
+	});
 	const uncertain =
-		verdict.uncertainSlices && verdict.uncertainSlices.length > 0
-			? verdict.uncertainSlices
-			: readCandidatePaths(options.cwd).map((path) => ({
+		named.length > 0
+			? named
+			: [...ownPaths].sort().map((path) => ({
 					path,
 					questions: blockingQuestions(verdict),
 				}));
@@ -322,7 +356,7 @@ export async function runSliceReviewLoop(
 	);
 	return {
 		outcome: 'uncertain-slices',
-		slices: readCandidates(options.cwd),
+		slices: readCandidates(options.cwd, before),
 		uncertainSlices: uncertain,
 		prdQuestions: [],
 		passes: totalPasses,
@@ -352,16 +386,20 @@ async function runOneExecution(params: {
 	gate: SliceReviewGate;
 	maxReview: number;
 	execution: number;
+	before: Map<string, string>;
 	reviewModel?: string;
 	sessionsDir?: string;
 	env?: NodeJS.ProcessEnv;
 	note: (message: string) => void;
 }): Promise<SingleExecutionResult> {
-	const {slug, cwd, gate, maxReview, execution, note} = params;
+	const {slug, cwd, gate, maxReview, execution, before, note} = params;
 	let lastVerdict: SliceReviewVerdict = {verdict: 'block', findings: []};
 	let passes = 0;
 	for (let pass = 1; pass <= maxReview; pass++) {
-		const candidateSlices = readCandidatePaths(cwd);
+		// SCOPED: only THIS run's own new-or-changed slices are reviewed — a slice
+		// the loop CREATED in an earlier pass is new-vs-`before` so it is in scope;
+		// a pre-existing landed slice is unchanged so it is NOT (the requeue fix).
+		const candidateSlices = newOrChangedBacklog(cwd, before);
 		const verdict = await gate({
 			slug,
 			cwd,
@@ -377,8 +415,11 @@ async function runOneExecution(params: {
 
 		// APPLY the edits to the candidate slice files (the improver step) — the
 		// runner writes the agent's full-content edits; the agent does no disk/git.
+		// SCOPED to this run's own output: an edit may improve a slice THIS run
+		// produced or CREATE a new candidate, but NEVER overwrite a pre-existing
+		// landed slice (the requeue fix).
 		if (verdict.edits && verdict.edits.length > 0) {
-			applyEdits(cwd, verdict.edits, note);
+			applyEdits(cwd, verdict.edits, before, note);
 		}
 
 		if (verdict.verdict === 'approve') {
@@ -399,10 +440,19 @@ async function runOneExecution(params: {
  * never escapes to other parts of the tree (a defensive scope fence; the runner,
  * not the agent, performs the write). An edit may CREATE a new candidate slice file
  * (e.g. the review split one slice into two) — that is in-scope.
+ *
+ * **SCOPED to this run's own output (the requeue fix).** Beyond the
+ * `work/backlog/` prefix fence, an edit is only applied when its target is THIS
+ * run's own slice: either a path NOT present in the `before` snapshot (a slice this
+ * run created, or a new file the review is splitting out) OR one this run already
+ * changed vs `before`. A pre-existing, unchanged landed slice (present in `before`
+ * with identical content) is REFUSED — the loop must never edit an unrelated,
+ * already-landed slice and sweep it into the runner-owned slicing commit.
  */
 function applyEdits(
 	cwd: string,
 	edits: SliceEdit[],
+	before: Map<string, string>,
 	note: (message: string) => void,
 ): void {
 	for (const edit of edits) {
@@ -414,13 +464,41 @@ function applyEdits(
 			);
 			continue;
 		}
+		const filename = normalized.slice('work/backlog/'.length);
+		// A pre-existing slice this run did NOT touch must not be overwritten: it is
+		// in `before` and the current on-disk content still equals the snapshot.
+		if (before.has(filename)) {
+			const abs = join(cwd, normalized);
+			let current: string | undefined;
+			try {
+				current = readFileSync(abs, 'utf8');
+			} catch {
+				current = undefined;
+			}
+			if (current !== undefined && current === before.get(filename)) {
+				note(
+					`Skipped a review edit to the pre-existing landed slice ${edit.path} ` +
+						'— the loop only improves THIS run’s own candidate slices.',
+				);
+				continue;
+			}
+		}
 		const abs = join(cwd, normalized);
 		writeFileSync(abs, edit.content);
 	}
 }
 
-/** Repo-relative paths of the candidate slices currently in `work/backlog/`. */
-function readCandidatePaths(cwd: string): string[] {
+/**
+ * Repo-relative paths of the `work/backlog/*.md` files that are NEW or CHANGED vs
+ * the `before` snapshot — exactly THIS slicing run's own output (the requeue-fix
+ * scoping fence). A pre-existing slice present in `before` with identical content
+ * is excluded; a file the loop created (absent from `before`) or improved (content
+ * differs) is included. Mirrors `slicing.ts`'s `newOrChangedBacklog`.
+ */
+function newOrChangedBacklog(
+	cwd: string,
+	before: Map<string, string>,
+): string[] {
 	const dir = join(cwd, 'work', 'backlog');
 	let entries: string[];
 	try {
@@ -428,16 +506,29 @@ function readCandidatePaths(cwd: string): string[] {
 	} catch {
 		return [];
 	}
-	return entries
-		.filter((name) => name.toLowerCase().endsWith('.md'))
-		.sort()
-		.map((name) => `work/backlog/${name}`);
+	const out: string[] = [];
+	for (const name of entries) {
+		if (!name.toLowerCase().endsWith('.md')) {
+			continue;
+		}
+		const content = readFileSync(join(dir, name), 'utf8');
+		if (before.get(name) !== content) {
+			out.push(`work/backlog/${name}`);
+		}
+	}
+	return out.sort();
 }
 
-/** The candidate slices keyed by repo-relative path → current content. */
-function readCandidates(cwd: string): Record<string, string> {
+/**
+ * THIS run's candidate slices keyed by repo-relative path → current content —
+ * scoped to the new-or-changed set (never the pre-existing landed slices).
+ */
+function readCandidates(
+	cwd: string,
+	before: Map<string, string>,
+): Record<string, string> {
 	const out: Record<string, string> = {};
-	for (const rel of readCandidatePaths(cwd)) {
+	for (const rel of newOrChangedBacklog(cwd, before)) {
 		out[rel] = readFileSync(join(cwd, rel), 'utf8');
 	}
 	return out;
