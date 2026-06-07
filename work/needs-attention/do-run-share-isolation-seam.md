@@ -121,3 +121,10 @@ agent-runner claim do-run-share-isolation-seam --arbiter <remote>
 git fetch <remote> && git switch -c work/do-run-share-isolation-seam <remote>/main
 git mv work/in-progress/do-run-share-isolation-seam.md work/done/do-run-share-isolation-seam.md
 ```
+
+## Needs attention
+
+PR/code review (Gate 2) blocked this work:
+- The branch delivers no code — `git diff main...HEAD` is only the claim file-move (the slice .md rename), 0 source insertions/deletions. The slice's acceptance criteria are entirely unmet. Should this be blocked and re-scoped rather than landed? (git diff main...HEAD shows only work/backlog/...md → work/in-progress/...md (similarity 100%). No change to any packages/agent-runner/src file. Slice still in work/in-progress/, not done-moved.)
+- AC #1 requires in-place `do` to run its post-claim pipeline through `selectIsolationStrategy`/the `IsolatedTree` handle. This is the one genuine remaining gap and it was NOT built. `performDo` still reads a literal `cwd` and `selectIsolationStrategy`/`inPlaceStrategy` have zero production consumers. (do.ts:326 performDo uses `const cwd = options.cwd` and composes performStart/performComplete directly. grep shows selectIsolationStrategy/inPlaceStrategy referenced only in isolation.test.ts and re-exported in index.ts — never in run.ts/do.ts production paths. ADR/PRD §6/§7 want all three forms (run, do --remote, in-place do) on the one seam.)
+PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
