@@ -11,7 +11,7 @@ import {
 } from './integration-core.js';
 import {ledgerWrite} from './ledger-write.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
-import {runAsync, type RunResult} from './git.js';
+import {runAsync, localMainAheadCount, type RunResult} from './git.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
 
 // Re-export the propose-mode title/body helpers from their new home (the shared
@@ -105,6 +105,15 @@ export interface CompleteOptions {
 	arbiter?: string;
 	/** Integration mode: `propose` (default) or `merge`. */
 	integration?: IntegrationMode;
+	/**
+	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
+	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
+	 * `<arbiter>/main` (has unpushed commits). MERGE MODE ONLY (only merge mode ff's
+	 * local `main`). When overridden and the divergence persists, the now-NON-FATAL
+	 * {@link syncLocalMain} reports it honestly (work on the arbiter; local `main`
+	 * left to rebase). Loud, never the default.
+	 */
+	ignoreDivergedMain?: boolean;
 	/**
 	 * Leave the human ON the `work/<slug>` branch (and KEEP it) in either mode,
 	 * instead of switching back to `main` + deleting the provably-landed branch.
@@ -246,6 +255,15 @@ export interface CompleteResult {
 	commitMessage?: string;
 	/** True when the work landed on the arbiter's `main` (merge mode). */
 	mergedToMain?: boolean;
+	/**
+	 * Merge mode only: whether the LOCAL `main` was fast-forwarded to the
+	 * just-pushed `<arbiter>/main` (the ergonomic courtesy AFTER the authoritative
+	 * push). `true` on the normal ff path; `false` when local `main` had DIVERGED
+	 * and the ff could not apply — a NON-FATAL skip (the arbiter push already
+	 * defined success, so `outcome` stays `completed` / exit 0; the operator is told
+	 * to `git rebase` to sync). Undefined outside merge mode / `--no-switch`.
+	 */
+	localMainSynced?: boolean;
 	/** The branch HEAD ended on after completing (`main`, or the work branch). */
 	switchedTo?: string;
 	/** True iff the local `work/<slug>` branch was deleted (provably on arbiter). */
@@ -389,6 +407,27 @@ async function runComplete(
 	}
 	const recovering = source === 'needs-attention';
 
+	// Pre-flight DIVERGENCE GUARD (merge mode only) — the SAME class of refusal `do`
+	// raises up front: a local `main` AHEAD of `<arbiter>/main` (unpushed commits)
+	// cannot be fast-forwarded by the merge-back, so refuse BEFORE the gate so no
+	// work is wasted. Only merge mode ff's local `main`; propose only switches to it
+	// (no ff), so the guard is irrelevant there. `--ignore-diverged-main` overrides
+	// (mirrors `--ignore-not-ready`); when overridden, the now-NON-FATAL
+	// `syncLocalMain` handles the persisting divergence honestly at integrate-time.
+	if (requestedMode === 'merge' && options.ignoreDivergedMain !== true) {
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+		const ahead = await localMainAheadCount(cwd, arbiter, env);
+		if (ahead > 0) {
+			throw new CompleteRefusal(
+				`local main is ahead of ${arbiter}/main by ${ahead} commit` +
+					`${ahead === 1 ? '' : 's'} (unpushed); a merge completion ff's local ` +
+					"main, which can't fast-forward against a diverged main — push or " +
+					'reconcile main first (or re-run with --ignore-diverged-main to ' +
+					'proceed anyway).',
+			);
+		}
+	}
+
 	// CORE: run the SHARED gate→integrate band (verify → review → effective-mode
 	// decision → done-move → commit → rebase → integrate → needs-attention routing).
 	// It returns DATA (the routing + the effective-mode decision already happened
@@ -469,10 +508,16 @@ async function runComplete(
 	// `--no-switch` keeps the human on the work branch AND keeps the branch.
 	let switchedTo = branch;
 	let deletedLocalBranch = false;
+	// Merge mode only: whether the local `main` ff'd (the courtesy after the
+	// authoritative push). `true` by default; flipped to `false` by `syncLocalMain`
+	// on a NON-FATAL diverged-`main` skip. Undefined in propose / `--no-switch`.
+	let localMainSynced: boolean | undefined;
 	if (!options.noSwitch) {
 		if (mode === 'merge') {
 			// merge: the work landed on <arbiter>/main, so switch to main AND ff it.
-			await syncLocalMain(cwd, arbiter, env);
+			// The ff is a COURTESY — if local `main` diverged it cannot apply, which is
+			// NON-FATAL (the push already defined success); `syncLocalMain` reports it.
+			localMainSynced = await syncLocalMain(cwd, arbiter, env, note);
 		} else {
 			// propose: the work is on a pushed branch awaiting review, NOT on main,
 			// so JUST switch to main — do NOT ff (arbiter main has not moved).
@@ -490,9 +535,15 @@ async function runComplete(
 	}
 
 	if (mode === 'merge') {
+		// When the local ff was SKIPPED (diverged main, non-fatal), say so honestly —
+		// the work IS on the arbiter; only the local courtesy ff was left undone.
+		const localState =
+			localMainSynced === false
+				? 'local main left diverged (run `git rebase origin/main` to sync)'
+				: 'local main updated';
 		const landed = options.noSwitch
 			? `merged to ${arbiter}/main; left on ${branch} (--no-switch).`
-			: `merged to ${arbiter}/main; local main updated` +
+			: `merged to ${arbiter}/main; ${localState}` +
 				`${deletedLocalBranch ? ` and ${branch} deleted` : ''}.`;
 		const message = `Completed '${slug}': ${landed}`;
 		note(message);
@@ -502,6 +553,7 @@ async function runComplete(
 			branch,
 			commitMessage,
 			mergedToMain: result.mergedToMain,
+			localMainSynced,
 			switchedTo,
 			deletedLocalBranch,
 			message,
@@ -549,18 +601,45 @@ async function runComplete(
 
 /**
  * Sync the local `main` to the just-pushed `<arbiter>/main`: switch to main and
- * fast-forward it. We fetch + reset --hard to the arbiter's main (a ff in
- * practice — we just pushed our rebased work there) so the user lands on an
- * up-to-date local main without merge noise.
+ * fast-forward it. We fetch the arbiter's main (we just pushed our rebased work
+ * there) then `merge --ff-only` so the user lands on an up-to-date local main
+ * without merge noise.
+ *
+ * The ff is a COURTESY, NOT the safety-bearing step — the authoritative push to
+ * `<arbiter>/main` already defined `complete`'s success. So the ff is NON-FATAL:
+ * if local `main` has DIVERGED (unpushed commits the arbiter lacks) the ff cannot
+ * apply; rather than throw (which would make `complete` exit non-zero even though
+ * the merge ALREADY LANDED on the arbiter), we print a clear "rebase to sync"
+ * message and return `false` (the caller records `localMainSynced: false` and
+ * keeps `outcome: completed` / exit 0). Returns `true` on a normal ff.
+ *
+ * Only the diverged / ff-cannot-apply case is softened — the `fetch` and `switch`
+ * stay `gitHard` (a genuinely different failure is NOT masked, per the slice).
+ * Exported for direct testing of the softened-vs-fatal boundary in isolation.
  */
-async function syncLocalMain(
+export async function syncLocalMain(
 	cwd: string,
 	arbiter: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<void> {
+	note: (m: string) => void,
+): Promise<boolean> {
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(['switch', '--quiet', 'main'], cwd, env);
-	await gitHard(['merge', '--ff-only', '--quiet', `${arbiter}/main`], cwd, env);
+	// SOFT: a non-zero here is (almost always) "not possible to fast-forward" —
+	// local `main` diverged. That is the one case we make non-fatal.
+	const ff = await gitSoft(
+		['merge', '--ff-only', '--quiet', `${arbiter}/main`],
+		cwd,
+		env,
+	);
+	if (ff.status === 0) {
+		return true;
+	}
+	note(
+		`work landed on ${arbiter}/main; your local main couldn't fast-forward (it ` +
+			'has diverged) — run `git rebase origin/main` to sync.',
+	);
+	return false;
 }
 
 /**
