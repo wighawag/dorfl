@@ -70,8 +70,6 @@ export interface StartOptions {
 	 * loudly. Forwarded to the claim CAS's human-path guard.
 	 */
 	override?: boolean;
-	/** Advisory claimer id forwarded to the claim CAS. */
-	by?: string;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -162,7 +160,6 @@ async function runStart(
 				arbiter,
 				cwd,
 				env,
-				by: options.by,
 				override: options.override ?? false,
 				note,
 			});
@@ -198,11 +195,10 @@ async function startFromBacklog(params: {
 	arbiter: string;
 	cwd: string;
 	env: NodeJS.ProcessEnv | undefined;
-	by: string | undefined;
 	override: boolean;
 	note: (m: string) => void;
 }): Promise<StartResult> {
-	const {slug, arbiter, cwd, env, by, override, note} = params;
+	const {slug, arbiter, cwd, env, override, note} = params;
 
 	// The human-path readiness guard lives in the claim CAS (so both `claim` and
 	// `start` inherit it): an unmet `blockedBy` is refused (exit 1, 'not-ready')
@@ -211,7 +207,6 @@ async function startFromBacklog(params: {
 		slug,
 		cwd,
 		arbiter,
-		by,
 		env,
 		humanPath: true,
 		override,
@@ -366,14 +361,13 @@ async function startFromInProgress(params: {
 	const {slug, arbiter, cwd, env, resume, note} = params;
 
 	if (!resume) {
-		// Surfaced for the human, NEVER used to decide (the folder already drove the
-		// decision). Who claimed comes from the claim COMMIT (the source of truth),
-		// not a frontmatter field (there is none — WORK-CONTRACT rule 6).
-		const claimedBy = await claimedByFromCommit(slug, arbiter, cwd, env);
-		const who = claimedBy ? claimedBy : '(see git log)';
+		// The folder drove the decision (WORK-CONTRACT rule 6: the folder + git
+		// history are the source of truth). We do NOT name the claimer in the
+		// message; whoever holds it is read from git history
+		// (`git log work/in-progress/<slug>.md`).
 		throw new StartRefusal(
-			`'${slug}' is already in-progress; claimed ${who}; ` +
-				'if this is your own resumed work, re-run with --resume.',
+			`'${slug}' is already in-progress; see \`git log\` for who claimed it; ` +
+				'if this is your own work, re-run with --resume.',
 		);
 	}
 
@@ -609,32 +603,6 @@ async function folderOnArbiterMain(
 		}
 	}
 	return 'absent';
-}
-
-/**
- * Derive who claimed the slice from the claim COMMIT that introduced it to
- * `work/in-progress/` (the message is `claim: <slug> (by <who>)`), purely to make
- * the refusal message helpful. This is the source of truth for who/when (there is
- * no advisory `claimed_by` frontmatter field — WORK-CONTRACT rule 6); the folder
- * already drove the start decision, so this value is NEVER used to decide.
- */
-async function claimedByFromCommit(
-	slug: string,
-	arbiter: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string> {
-	const path = `work/in-progress/${slug}.md`;
-	const log = await gitSoft(
-		['log', '-1', '--format=%s', `${arbiter}/main`, '--', path],
-		cwd,
-		env,
-	);
-	if (log.status !== 0) {
-		return '';
-	}
-	const match = /\(by (.+)\)\s*$/.exec(log.stdout.trim());
-	return match ? `by ${match[1].trim()}` : '';
 }
 
 /**

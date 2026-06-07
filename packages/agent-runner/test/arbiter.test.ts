@@ -263,7 +263,6 @@ describe('claim against a provisioned arbiter (end-to-end)', () => {
 			slug: 'feat',
 			cwd: clone,
 			arbiter: 'arbiter',
-			by: 'tester',
 			env: gitEnv(),
 		});
 

@@ -146,7 +146,7 @@ describe('start — backlog item, losing/contended claim', () => {
 });
 
 describe('start — in-progress item', () => {
-	it('refuses by default with a folder-based message (claimer from the commit)', async () => {
+	it('refuses by default with a folder-based message that points at `git log`', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
 		const repo = seeded.repo;
 		// Claim it from a separate clone so it is in-progress on the arbiter.
@@ -155,7 +155,6 @@ describe('start — in-progress item', () => {
 			slug: 'beta',
 			cwd: other,
 			arbiter: 'arbiter',
-			by: 'someone-else',
 			env: gitEnv(),
 		});
 
@@ -171,9 +170,10 @@ describe('start — in-progress item', () => {
 		expect(result.message).toMatch(/already in-progress/);
 		expect(result.message).toMatch(/--resume/);
 		// The decision is folder-based (WORK-CONTRACT rule 6 — no claimed_by field).
-		// The helper "who" is derived from the claim COMMIT (`claim: <slug> (by X)`),
-		// the source of truth, purely to make the refusal message useful.
-		expect(result.message).toMatch(/by someone-else/);
+		// There is NO `claimedBy` concept any more (ADR §7): the message never names
+		// the claimer; it points at git history instead.
+		expect(result.message).toMatch(/git log/);
+		expect(result.message).not.toMatch(/\bby \w/);
 		// User untouched; no work branch.
 		expect(currentBranch(repo)).toBe(before);
 		expect(localBranchExists(repo, 'work/beta')).toBe(false);
