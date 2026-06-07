@@ -48,6 +48,7 @@ type Coercion =
  */
 const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
 	allowAgents: 'boolean',
+	autoSlice: 'boolean',
 	maxParallel: 'number',
 	perRepoMax: 'number',
 	defaultArbiter: 'string',

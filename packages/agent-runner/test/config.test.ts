@@ -14,6 +14,11 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).allowAgents).toBe(false);
 	});
 
+	it('defaults autoSlice to false (human-first slicing)', () => {
+		expect(DEFAULT_CONFIG.autoSlice).toBe(false);
+		expect(mergeConfig({}).autoSlice).toBe(false);
+	});
+
 	it('defaults the autonomy gate to strict (allowAgents false)', () => {
 		expect(mergeConfig({}).allowAgents).toBe(false);
 	});

@@ -49,6 +49,16 @@ export interface Config {
 	 * global > default.
 	 */
 	allowAgents: boolean;
+	/**
+	 * Per-repo policy: may an agent auto-slice *undeclared* (not `humanOnly`,
+	 * no open questions) PRDs in this repo? `false` (default, strict, human-first)
+	 * ⇒ a human must drive every PRD's slicing; `true` ⇒ an agent may auto-slice
+	 * any PRD that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
+	 * `allowAgents`: flag > `AGENT_RUNNER_AUTO_SLICE` env > per-repo > global >
+	 * default. The two-axis slicing gate (`work/prd/auto-slice.md`), one level up
+	 * from the build gate's `allowAgents`.
+	 */
+	autoSlice: boolean;
 	/** Global cap on how many items the runner claims+runs in one tick. */
 	maxParallel: number;
 	/** Per-repo cap on concurrent claims (≤ maxParallel in effect). */
@@ -199,6 +209,9 @@ export type PartialConfig = Partial<Config>;
  */
 export const DEFAULT_CONFIG: Config = {
 	allowAgents: false,
+	// Auto-slicing is human-first by default: an agent slices nothing unless a
+	// repo opts in via `autoSlice` (mirrors `allowAgents`, one level up).
+	autoSlice: false,
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',

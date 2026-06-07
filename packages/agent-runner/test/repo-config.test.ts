@@ -27,6 +27,9 @@ describe('repo-config constants', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('verify');
 		expect(REPO_ALLOWED_KEYS).toContain('defaultArbiter');
 		expect(REPO_ALLOWED_KEYS).toContain('allowAgents');
+		// `autoSlice` is the slicing-autonomy mirror of `allowAgents` — a genuine
+		// repo property, resolved per-repo through the same chain.
+		expect(REPO_ALLOWED_KEYS).toContain('autoSlice');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
@@ -200,6 +203,37 @@ describe('resolveRepoConfig — per-key layering', () => {
 				flags: {allowAgents: false},
 			}).config.allowAgents,
 		).toBe(false);
+	});
+
+	it('resolves `autoSlice` flag > env > per-repo > global > default false (like allowAgents)', () => {
+		// default false; bare global ⇒ stays the built-in default false.
+		expect(
+			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
+				.config.autoSlice,
+		).toBe(false);
+		// per-repo opts in over a false global.
+		writeRepoConfig(repo, {autoSlice: true});
+		const global = mergeConfig({autoSlice: false});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoSlice,
+		).toBe(true);
+		// env (AGENT_RUNNER_AUTO_SLICE) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_AUTO_SLICE: 'false'},
+			}).config.autoSlice,
+		).toBe(false);
+		// a flag beats env, per-repo, and global.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_AUTO_SLICE: 'false'},
+				flags: {autoSlice: true},
+			}).config.autoSlice,
+		).toBe(true);
 	});
 
 	it('keeps runner/host-only keys from the GLOBAL (per-repo cannot touch them)', () => {
