@@ -145,6 +145,24 @@ export interface CompleteOptions {
 	 * `review` on is a usage error — the floor must not be silently skipped).
 	 */
 	reviewGate?: ReviewGate;
+	/**
+	 * `--watch`: tail the Gate-2 REVIEW agent's pi session `.jsonl` live, the SAME
+	 * way `do --watch` tails the build agent's (slice `watch-review-session`).
+	 * Threaded into the `reviewGate` invocation below so the production gate
+	 * (`harnessReviewGate`) routes its launch through the shared
+	 * `launchWithOptionalWatch` helper. OFF (the default) ⇒ the review path is
+	 * byte-for-byte unchanged (sync launch, no tailer). Observability only — it
+	 * never changes the verdict/routing.
+	 */
+	watch?: boolean;
+	/** Where the tailed review lines are written (defaults to stderr). */
+	watchSink?: (line: string) => void;
+	/**
+	 * The HOST-ONLY sessions root the review session FILE is generated under
+	 * (resolved `config.sessionsDir`). Threaded to the review-agent launch so its
+	 * (distinct `<slug>-review`) session lands under the same root as the build's.
+	 */
+	sessionsDir?: string;
 	/** Conventional-commit type for the completion commit. Defaults to `feat`. */
 	type?: string;
 	/** Commit summary. Defaults to the slice `title` minus a leading `slug — `. */
@@ -451,6 +469,14 @@ async function runComplete(
 				cwd,
 				reviewModel: options.reviewModel,
 				round,
+				// `--watch` threading (slice `watch-review-session`): when on, the
+				// production gate tails the review session live (after the build stream,
+				// with a build→review boundary). OFF ⇒ the gate does its plain sync
+				// launch, unchanged. The stub gate (tests / non-harness) ignores these.
+				watch: options.watch,
+				watchSink: options.watchSink,
+				color: options.color,
+				sessionsDir: options.sessionsDir,
 				env,
 			});
 			lastVerdict = verdict;

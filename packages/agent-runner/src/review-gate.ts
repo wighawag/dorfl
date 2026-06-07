@@ -1,4 +1,6 @@
 import {NullHarness, substituteModel, type Harness} from './harness.js';
+import {launchWithOptionalWatch} from './agent-launch.js';
+import {boundaryLine} from './watch-session.js';
 
 /**
  * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`), the
@@ -59,6 +61,27 @@ export interface ReviewGateInput {
 	reviewModel?: string;
 	/** Which review ROUND this is (1-based), for the revise↔review loop bound. */
 	round: number;
+	/**
+	 * `--watch`: tail the REVIEW agent's pi session `.jsonl` live, the SAME way the
+	 * build agent's is tailed (slice `watch-review-session`). Threaded in from the
+	 * caller's `CompleteOptions`/`DoOptions` so the production gate
+	 * ({@link harnessReviewGate}) can route its launch through the shared
+	 * {@link launchWithOptionalWatch} helper. OFF (the default) ⇒ the gate does a
+	 * plain sync `launch`, byte-identical to before. A pure observer — it never
+	 * changes the verdict.
+	 */
+	watch?: boolean;
+	/** Where the tailed review lines are written (defaults to stderr). */
+	watchSink?: (line: string) => void;
+	/** Emit ANSI colour in the tailed review lines (the caller's TTY decision). */
+	color?: boolean;
+	/**
+	 * The HOST-ONLY sessions root the review session FILE is generated under
+	 * (resolved `config.sessionsDir`). `undefined` ⇒ pi's per-cwd default. Same
+	 * bridge the build launch uses; the review launch passes a DISTINCT session id
+	 * (`<slug>-review`) under it so its session never collides with the build's.
+	 */
+	sessionsDir?: string;
 	/** Environment for the review-agent launch. */
 	env?: NodeJS.ProcessEnv;
 }
@@ -241,13 +264,38 @@ export function harnessReviewGate(
 	const harness = options.harness ?? new NullHarness();
 	const readOutput = options.readOutput ?? ((output) => output ?? '');
 	return async (input: ReviewGateInput): Promise<ReviewVerdict> => {
-		const launched = harness.launch({
+		// When watching, print the build→review BOUNDARY banner so the human knows
+		// the build stream ended and the review stream is beginning (reuses the watch
+		// formatting; slice `watch-review-session`). A pure observability line.
+		if (input.watch === true) {
+			const sink =
+				input.watchSink ??
+				((line: string) => process.stderr.write(`${line}\n`));
+			sink(
+				boundaryLine(
+					`review gate — reviewing ${input.slug}…`,
+					input.color ?? false,
+				),
+			);
+		}
+		// The SAME shared launch helper the BUILD launch uses (slice
+		// `watch-review-session`) — NOT a copy of the watch block. When `watch` is on
+		// (pi harness), it tails the review session `.jsonl` live; OFF, it does a
+		// plain sync `launch`, byte-identical to before. The review uses a DISTINCT
+		// session id (`<slug>-review`) so it never collides with the build session.
+		const launched = await launchWithOptionalWatch({
+			harness,
 			dir: input.cwd,
 			slug: input.slug,
 			command: options.agentCmd ?? '',
 			prompt: buildReviewPrompt(input.slug),
 			// The reviewModel override rides the EXISTING model-routing seam.
 			model: input.reviewModel,
+			sessionId: `${input.slug}-review`,
+			sessionsDir: input.sessionsDir,
+			watch: input.watch,
+			watchSink: input.watchSink,
+			color: input.color,
 			env: input.env,
 		});
 		if (!launched.ok) {

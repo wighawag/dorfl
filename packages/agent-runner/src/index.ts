@@ -207,7 +207,15 @@ export type {GenerateSessionPathInput} from './session-path.js';
 export {generateSessionPath, piDefaultSessionDir} from './session-path.js';
 
 export type {SessionTailerOptions} from './watch-session.js';
-export {formatWatchEvent, SessionTailer} from './watch-session.js';
+export {
+	formatWatchEvent,
+	finishedLine,
+	boundaryLine,
+	SessionTailer,
+} from './watch-session.js';
+
+export type {LaunchWithOptionalWatchInput} from './agent-launch.js';
+export {launchWithOptionalWatch} from './agent-launch.js';
 
 export type {
 	ReviewProvider,
