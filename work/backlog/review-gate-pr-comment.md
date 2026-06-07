@@ -1,5 +1,5 @@
 ---
-title: review-gate-pr-comment — post the Gate-2 review verdict (incl. on approve) as a PR comment via a provider postComment seam
+title: review-gate-pr-comment — post the agent's VERBATIM Gate-2 review (incl. on approve) as a PR comment via a provider postComment seam
 slug: review-gate-pr-comment
 prd: review
 blockedBy: [propose-pr-body]
@@ -47,8 +47,8 @@ discipline), do NOT build two parallel posting mechanisms:
   Post the comment FROM `complete.ts`, AFTER integrate returns, on the propose
   path, where BOTH `lastVerdict` AND `result.url` are in scope. Order: gate →
   `lastVerdict` → integrate (opens PR, returns `url`) → (in `complete.ts`)
-  `postComment(url, formatVerdict(lastVerdict))`. If `result.url` is absent
-  (degraded / no PR — e.g. local `--bare` arbiter), no-op (verdict stays in the run
+  `postComment(url, <verbatim review output, JSON block stripped>)`. If `result.url`
+  is absent (degraded / no PR — e.g. local `--bare` arbiter), no-op (verdict stays in the run
   output; no throw).
 
 ### Where it wires in (verified: in `complete.ts`, post-integrate — NOT the integrator)
@@ -56,13 +56,25 @@ discipline), do NOT build two parallel posting mechanisms:
 The Gate-2 verdict (`lastVerdict`) is produced in `performComplete`
 (`src/complete.ts`, the `review` block). The propose integrate call returns the
 opened PR `url` (`result.url` / `prUrl`) back into `complete.ts` — THAT is the
-wiring point: after a successful propose integrate, if a verdict exists and
-`result.url` is present, `postComment` the formatted verdict to that PR.
-`postComment` is a NEW method on the provider seam (so the core still never imports
-`gh`); the GitHub adapter shells out to `gh pr comment`. Reuse `review-gate.ts`'s
-`formatBlockReason` shape for findings; add a `formatVerdict` (approve + any
-non-blocking findings) for the approve case. The COMMENT is advisory — it gates
-nothing (the gate already decided); it is pure visibility.
+wiring point: after a successful propose integrate, if a review ran and
+`result.url` is present, `postComment` the review to that PR. `postComment` is a NEW
+method on the provider seam (so the core still never imports `gh`); the GitHub
+adapter shells out to `gh pr comment`.
+
+**Post the agent's VERBATIM review, NOT a re-formatted verdict (resolved 2026-06-06
+— see `work/findings/review-nonblocking-findings-disposition.md`).** The review
+agent's output (`LaunchResult.output`, captured by `harness-agent-output`) is rich
+prose — the ordered lenses, the destination-check narrative, AND the
+`{verdict,findings}` JSON at the end. Re-formatting from the parsed JSON would THROW
+AWAY the reasoning (the most useful part) and silently drop non-blocking findings.
+So post the **verbatim `output`**, which AUTOMATICALLY includes the nits + the
+reasoning — richer, and LESS code (no `formatVerdict`/`formatBlockReason` formatter
+to write for the comment). **Strip only the trailing `{verdict,findings}` JSON
+block** before posting (the runner already locates that JSON to parse the verdict,
+so it knows where it starts — trimming it is near-free; a raw JSON blob in a PR
+comment is noise). The runner STILL parses the verdict for its ROUTING decision
+(approve→integrate / block→needs-attention) — unchanged; the verbatim text is ONLY
+for the comment. The COMMENT is advisory — it gates nothing; pure visibility.
 
 ### Scope fence
 
@@ -82,20 +94,26 @@ nothing (the gate already decided); it is pure visibility.
 - [ ] `ReviewProvider` gains `postComment(input)`; the GitHub provider posts via
       `gh pr comment` (or `gh api`) to the opened PR; the `none` provider degrades
       (surfaces the verdict in run output, never throws).
-- [ ] On a `--propose` run with `review` on and an APPROVE verdict, the verdict
-      (approve + any non-blocking findings) is posted as a comment on the PR that
-      `openRequest` opened. PR identity comes from `openRequest`'s returned url/number.
+- [ ] On a `--propose` run with `review` on and an APPROVE verdict, the agent's
+      VERBATIM review output (with the trailing `{verdict,findings}` JSON block
+      stripped) is posted as a comment on the PR that `openRequest` opened — so the
+      nits + reasoning are included automatically. PR identity comes from
+      `openRequest`'s returned url/number.
+- [ ] The posted text is the captured `LaunchResult.output`, NOT a re-formatted
+      verdict (no `formatVerdict` for the comment); only the trailing JSON block is
+      removed. A test asserts the comment contains the review prose and NOT the raw
+      JSON.
 - [ ] If `openRequest` degraded (no PR opened), `postComment` is a clean no-op (the
-      verdict remains in the run output) — no throw, no lost work.
+      review stays in the run output) — no throw, no lost work.
 - [ ] The comment is advisory only: it changes no gate/verdict/merge/integration
       logic (assert the gate decision is identical with and without the comment).
-- [ ] Verdict formatting covers approve-with-nits and (for any path that opens a PR
-      despite findings) blocking findings; reuses/extends `review-gate.ts`'s
-      formatting, not a parallel formatter.
+- [ ] The runner still PARSES the verdict for routing (approve→integrate /
+      block→needs-attention) — unchanged; the verbatim text is used ONLY for the
+      comment.
 - [ ] Consistent with `propose-pr-body` on the same seam (one provider, same
       degradation discipline; body-at-open vs comment-after are separate).
 - [ ] Tests (stubbed provider, no real `gh`/network): approve → `postComment`
-      called with the formatted verdict + the right PR identity; degraded provider
+      called with the verbatim review text (JSON block stripped) + the right PR identity; degraded provider
       → no-op; the GitHub adapter builds the right `gh` args; the gate decision is
       unchanged by commenting.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
@@ -111,9 +129,10 @@ nothing (the gate already decided); it is pure visibility.
 
 ## Prompt
 
-> Make the Gate-2 review verdict VISIBLE on the PR: post it as a PR COMMENT on the
-> `--propose` path, INCLUDING on approve (decided 2026-06-06 — the comment is the
-> audit trail). Today the verdict only hits the terminal `note(...)` / the
+> Make the Gate-2 review VISIBLE on the PR: post the agent's VERBATIM review as a PR
+> COMMENT on the `--propose` path, INCLUDING on approve (decided 2026-06-06 — the
+> comment is the audit trail; verbatim auto-includes the non-blocking nits + the
+> reasoning). Today the verdict only hits the terminal `note(...)` / the
 > needs-attention body; nothing reaches the PR.
 >
 > FIRST run the drift check: confirm `src/integrator.ts` `ReviewProvider` has
@@ -130,23 +149,29 @@ nothing (the gate already decided); it is pure visibility.
 > <pr> --body <text>` / `gh api`; none: degrade — surface in run output, never
 > throw, ADR §6). In `complete.ts`, AFTER the propose integrate returns (where both
 > `lastVerdict` and `result.url` are in scope — NOT in the integrator), if a review
-> verdict exists and a PR url is present, format it (approve + non-blocking nits,
-> reusing/extending
-> `review-gate.ts`'s `formatBlockReason` — add a `formatVerdict`) and `postComment`
-> it to the opened PR (thread the url/number from `openRequest`). If no PR opened
-> (degraded), no-op. The comment is ADVISORY — it must change no gate/verdict/merge
+> ran and a PR url is present, post the AGENT'S VERBATIM review output
+> (`LaunchResult.output`) with the trailing `{verdict,findings}` JSON block STRIPPED
+> — NOT a re-formatted verdict (do NOT write a `formatVerdict`; verbatim auto-
+> includes the nits + reasoning and is less code). The runner already locates the
+> JSON to parse the verdict, so trimming it is near-free. `postComment` it to the
+> opened PR (thread the url from `openRequest`). The runner STILL parses the verdict
+> for ROUTING (unchanged). If no PR opened (degraded), no-op. The comment is
+> ADVISORY — it must change no gate/verdict/merge
 > logic.
 >
 > READ FIRST: `work/prd/review.md` RESOLVED DESIGN (Gate 2 "more visible — posted as
 > a PR comment"); `src/integrator.ts` (`ReviewProvider`, `OpenRequestResult.url`);
 > `src/github.ts` (`gh pr create` → add `gh pr comment`); `src/complete.ts` (the
-> `review` verdict + the propose `openRequest` call site); `src/review-gate.ts`
+> `review` block, `lastVerdict`, `result.url`); `src/review-gate.ts`
+> (`LaunchResult.output` carries the verbatim review; the JSON-extraction logic
+> already there tells you where the trailing JSON block starts, so you can strip it)
 > (`ReviewVerdict`/`formatBlockReason` to reuse); `work/backlog/propose-pr-body.md`
 > (the shared seam — body-at-open; keep consistent); ADR §6 (provider seam +
 > graceful degradation).
 >
 > TDD with vitest, house style (stubbed provider, no real gh/network): approve →
-> postComment with the formatted verdict + right PR identity; degraded provider →
+> postComment with the verbatim review (JSON stripped) + right PR identity; the
+> comment contains the review prose, NOT the raw JSON; degraded provider →
 > no-op; gh adapter builds the right args; the gate decision is unchanged by
 > commenting. "Done" = acceptance criteria met and the gate green.
 
