@@ -95,6 +95,37 @@ function toBoolean(value: string): boolean | undefined {
 	return undefined;
 }
 
+/**
+ * Stamp (insert or replace) the PRD `sliced: <date>` frontmatter marker on a
+ * markdown document, returning the new content. Used by the `do prd:` completing
+ * transition to record sliced-ness on the durable marker (never on residence in
+ * `work/slicing/`). If a `sliced:` line already exists it is REPLACED (idempotent
+ * re-slice); otherwise it is appended as the last line inside the frontmatter
+ * fence. A document with no frontmatter fence is returned unchanged (the PRD the
+ * lock holds always has one, so this is only a defensive no-op).
+ */
+export function setSlicedMarker(content: string, date: string): string {
+	const normalized = content.replace(/\r\n/g, '\n');
+	if (!normalized.startsWith('---\n')) {
+		return content;
+	}
+	const lines = normalized.split('\n');
+	const closing = lines.indexOf('---', 1);
+	if (closing === -1) {
+		return content;
+	}
+	// Replace an existing top-level `sliced:` line in the frontmatter block.
+	for (let i = 1; i < closing; i++) {
+		if (/^sliced\s*:/.test(lines[i])) {
+			lines[i] = `sliced: ${date}`;
+			return lines.join('\n');
+		}
+	}
+	// Otherwise insert it as the last frontmatter line (just before the closing fence).
+	lines.splice(closing, 0, `sliced: ${date}`);
+	return lines.join('\n');
+}
+
 export function parseFrontmatter(content: string): Frontmatter {
 	const block = extractBlock(content);
 	const result: Frontmatter = {

@@ -1062,6 +1062,8 @@ export function buildProgram(): Command {
 					remote: flags.remote,
 					workspacesDir: remoteConfig.workspacesDir,
 					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
+					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
+					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
 					verify: remoteConfig.verify,
 					provider: remoteConfig.provider,
@@ -1121,6 +1123,8 @@ export function buildProgram(): Command {
 				arg: rawSlug,
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
+				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
+				autoSlice: config.autoSlice,
 				integration: config.integration,
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,

@@ -12,6 +12,7 @@ import {performComplete} from '../src/complete.js';
 import {performStart} from '../src/start.js';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {performClaim} from '../src/claim-cas.js';
+import {run} from '../src/git.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -819,11 +820,13 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.slug).toBe('alpha');
 	});
 
-	it('do prd:<slug> dispatches to the slicing path (a clear "not yet wired" stub)', async () => {
+	it('do prd:<slug> dispatches to the slicing path (gate-bound for the agent)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'somePrd');
 
 		let agentRan = false;
+		// autoSlice OFF (the default) → the agent gate refuses an undeclared PRD. The
+		// refusal is HONEST (names autoSlice) and runs no agent / no slicing.
 		const result = await performDo({
 			arg: 'prd:somePrd',
 			cwd: repo,
@@ -835,13 +838,84 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			},
 			env: gitEnv(),
 		});
-		// Reaches the slicing-path entry, which is not built yet (autoslice-command).
 		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('prd-not-wired');
+		expect(result.outcome).toBe('gate-refused');
 		expect(result.slug).toBe('somePrd');
-		expect(result.message).toMatch(/slic/i);
-		// It dispatched to slicing — it did NOT build a slice / run the agent.
+		expect(result.message).toMatch(/autoSlice/);
+		// The gate refused BEFORE running the agent / taking the lock.
 		expect(agentRan).toBe(false);
+	});
+
+	it('do prd:<slug> with autoSlice on slices the PRD (runner owns the git)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'somePrd');
+
+		// The stubbed slicing agent writes a backlog slice file (no git).
+		const result = await performDo({
+			arg: 'prd:somePrd',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: ({cwd}) => {
+				const dir = join(cwd, 'work', 'backlog');
+				mkdirSync(dir, {recursive: true});
+				writeFileSync(
+					join(dir, 'somePrd-first.md'),
+					[
+						'---',
+						'title: somePrd-first',
+						'slug: somePrd-first',
+						'prd: somePrd',
+						'---',
+						'',
+						'## Prompt',
+						'',
+						'> build it',
+						'',
+					].join('\n'),
+				);
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		expect(result.slug).toBe('somePrd');
+
+		// The runner committed the produced backlog slice + restored the PRD to prd/.
+		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).toBe(0);
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/prd/somePrd.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).toBe(0);
+		// slicing/ is empty (the lock was released), and the PRD is marked sliced.
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/slicing/somePrd.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).not.toBe(0);
+		const prd = run(
+			'git',
+			['show', `${ARBITER}/main:work/prd/somePrd.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(prd).toMatch(/sliced:/);
 	});
 
 	it('a bare slug that collides (a slice AND a PRD share it) ERRORS loudly', async () => {

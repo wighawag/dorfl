@@ -4,6 +4,7 @@ import {performStart} from './start.js';
 import {performComplete} from './complete.js';
 import {performClaim} from './claim-cas.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
+import {performSlice, type SliceResult} from './slicing.js';
 import {
 	resolveSlice,
 	buildAgentPrompt,
@@ -69,7 +70,9 @@ export type DoOutcome =
 	| 'agent-failed' // the agent invocation itself errored before the gate — work SAVED + surfaced
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
-	| 'prd-not-wired'; // `do prd:<slug>` — the slicing path is not built yet
+	| 'sliced' // `do prd:<slug>` — the PRD was sliced into work/backlog/ (runner-owned)
+	| 'gate-refused' // `do prd:<slug>` — the slicing gate refused (honest skip)
+	| 'stale'; // `do prd:<slug>` — the held PRD was edited under the lock (stale slicing)
 
 export interface DoResult {
 	exitCode: 0 | 1 | 2 | 3;
@@ -114,6 +117,13 @@ export interface DoOptions {
 	cwd: string;
 	/** Name of the arbiter git remote. Defaults to `origin`. */
 	arbiter?: string;
+	/**
+	 * Per-repo `autoSlice` policy (resolved by `autoslice-gate`: flag > env >
+	 * per-repo > global > default false). Consumed ONLY by the `do prd:<slug>`
+	 * slicing path — the agent gate refuses to auto-slice an undeclared PRD unless
+	 * this is on. Ignored by the slice-build path.
+	 */
+	autoSlice?: boolean;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
@@ -236,6 +246,11 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * bare mirror's clone remote). Defaults to `origin`.
 	 */
 	arbiter?: string;
+	/**
+	 * Per-repo `autoSlice` policy — consumed only by the `do --remote prd:<slug>`
+	 * slicing path (the agent slicing gate). Ignored by the slice-build path.
+	 */
+	autoSlice?: boolean;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/** The declared per-repo acceptance gate (string | list). */
@@ -257,6 +272,50 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 }
 
 const DEFAULT_ARBITER = 'origin';
+
+/**
+ * Map a `do prd:<slug>` {@link SliceResult} onto the `do` {@link DoResult}
+ * contract: outcomes pass through (sliced / gate-refused / stale / agent-failed /
+ * usage-error), the lock-lost outcome splits into `lost` (exit 2) vs `contended`
+ * (exit 3) by its exit code, and the slicing-only exit 4 (stale) is reported on
+ * the `do` exit contract (`0|1|2|3`) as exit 1 — the needs-attention-class
+ * failure code, same as a stuck build.
+ */
+function sliceResultToDoResult(sliced: SliceResult): DoResult {
+	let outcome: DoOutcome;
+	let exitCode: 0 | 1 | 2 | 3;
+	switch (sliced.outcome) {
+		case 'sliced':
+			outcome = 'sliced';
+			exitCode = 0;
+			break;
+		case 'gate-refused':
+			outcome = 'gate-refused';
+			exitCode = 1;
+			break;
+		case 'lock-lost':
+			if (sliced.exitCode === 3) {
+				outcome = 'contended';
+				exitCode = 3;
+			} else {
+				outcome = 'lost';
+				exitCode = 2;
+			}
+			break;
+		case 'stale':
+			outcome = 'stale';
+			exitCode = 1;
+			break;
+		case 'agent-failed':
+			outcome = 'agent-failed';
+			exitCode = 1;
+			break;
+		default:
+			outcome = 'usage-error';
+			exitCode = 1;
+	}
+	return {exitCode, outcome, slug: sliced.slug, message: sliced.message};
+}
 
 /**
  * Run the in-place `do` ritual end-to-end. Never throws for the expected
@@ -309,23 +368,31 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
 
-	// 2. `do prd:<slug>` → the PRD-SLICING path. THIS slice only wires the
-	//    resolver so `do` accepts + dispatches `prd:` correctly; the actual
-	//    slicing orchestration is the reshaped `autoslice-command` slice (blocked
-	//    on this one). Reach the slicing-path entry with a clear "not yet wired"
-	//    stub — do NOT reimplement slicing here.
+	// 2. `do prd:<slug>` → the PRD-SLICING path (`autoslice-command`): the in-place
+	//    `do` worker is AUTONOMOUS, so it slices as the AGENT (gate-bound + lock).
+	//    The orchestration (gate → lock → to-slices harness → runner-owned commit)
+	//    lives in `slicing.ts`; `do` dispatches `prd:` here. The agent only writes
+	//    slice files — the runner owns every git transition (same boundary as the
+	//    build path). It does NOT run the slice-build pipeline below.
 	if (resolved.namespace === 'prd') {
-		const message =
-			`'${resolved.slug}' is a PRD; \`do prd:${resolved.slug}\` would SLICE it, ` +
-			'but the PRD-slicing path is not wired yet (it lands with the ' +
-			'autoslice-command slice). Slice the PRD manually for now.';
-		note(message);
-		return {
-			exitCode: 1,
-			outcome: 'prd-not-wired',
+		const sliced = await performSlice({
 			slug: resolved.slug,
-			message,
-		};
+			cwd,
+			arbiter,
+			doer: 'agent',
+			autoSlice: options.autoSlice,
+			// The injected agent runner (tests) writes slice files directly. The
+			// DoAgentRunner shape is a structural superset of SliceAgentRunner (its
+			// extra `output` is ignored by the slicing path), so it threads straight in.
+			agentRunner: options.agentRunner,
+			harness: options.harness,
+			agentCmd: options.agentCmd,
+			model: options.model,
+			sessionsDir: options.sessionsDir,
+			env,
+			note,
+		});
+		return sliceResultToDoResult(sliced);
 	}
 
 	const slug = resolved.slug;
@@ -822,17 +889,26 @@ export async function performDoRemote(
 		}
 
 		if (resolved.namespace === 'prd') {
-			const message =
-				`'${resolved.slug}' is a PRD; \`do prd:${resolved.slug}\` would SLICE ` +
-				'it, but the PRD-slicing path is not wired yet (it lands with the ' +
-				'autoslice-command slice). Slice the PRD manually for now.';
-			note(message);
-			return {
-				exitCode: 1,
-				outcome: 'prd-not-wired',
+			// `do --remote prd:<slug>`: slice the PRD as the AGENT, against the claim
+			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
+			// mirror's main). No job worktree is needed — the slicing transition is a
+			// runner-owned `prd → slicing → prd` move + emit-backlog on the arbiter, not
+			// a build pipeline. The agent only writes slice files; the runner does all git.
+			const sliced = await performSlice({
 				slug: resolved.slug,
-				message,
-			};
+				cwd: claimDir,
+				arbiter: 'origin',
+				doer: 'agent',
+				autoSlice: options.autoSlice,
+				agentRunner: options.agentRunner,
+				harness: options.harness,
+				agentCmd: options.agentCmd,
+				model: options.model,
+				sessionsDir: options.sessionsDir,
+				env,
+				note,
+			});
+			return sliceResultToDoResult(sliced);
 		}
 		const slug = resolved.slug;
 
