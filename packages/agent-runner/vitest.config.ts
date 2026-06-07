@@ -38,6 +38,12 @@ const RACE_SENSITIVE = [
 	// concurrently; keep it out of file-parallel pressure for the same reason as
 	// do.test.ts (deterministic claim/main-CAS).
 	'test/do-watch.test.ts',
+	// `do --remote <r>` materialises a hub mirror + job worktree in a temp agents'
+	// area, runs the pipeline against the worktree, AND writes main (the autonomous
+	// needs-attention surfacing) against a --bare arbiter; keep it out of
+	// file-parallel pressure for the same deterministic claim/main-CAS reasoning as
+	// do.test.ts.
+	'test/do-remote.test.ts',
 	// `do --review --watch` drives real git against a --bare arbiter, writes main
 	// (approve→merge / block→needs-attention surfacing), AND launches a stubbed pi
 	// (async spawn) for BOTH the build and the review, whose session .jsonl files
