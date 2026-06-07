@@ -5,6 +5,8 @@ import {
 	type ReviewProvider,
 	type OpenRequestInput,
 	type OpenRequestResult,
+	type PostCommentInput,
+	type PostCommentResult,
 } from './integrator.js';
 
 /**
@@ -217,6 +219,38 @@ export class GitHubProvider implements ReviewProvider {
 			opened: true,
 			url,
 			instruction: `Opened a GitHub PR for ${input.branch}: ${url}`,
+		};
+	}
+
+	/**
+	 * Post a follow-up COMMENT on an already-opened PR via
+	 * `gh pr comment <url> --body <text>` (slice `review-gate-pr-comment`),
+	 * threading the PR by the `url` {@link openRequest} returned. The PR already
+	 * exists (this runs AFTER the propose integrate), so any `gh` failure is
+	 * non-fatal: a missing/unauthenticated `gh` DEGRADES to the same surface-the-
+	 * text result the `none` provider returns — NEVER throws (ADR §6). The comment
+	 * is ADVISORY: it changes no gate/verdict/merge logic. NEVER `--force`s.
+	 */
+	postComment(input: PostCommentInput): PostCommentResult {
+		const result = this.runGh(
+			['pr', 'comment', input.url, '--body', input.body],
+			input.cwd,
+			input.env,
+		);
+		// gh missing (spawn failed) OR non-zero exit (e.g. unauthenticated): the PR
+		// already exists and the review is in the run output, so degrade gracefully
+		// — NEVER throw (the comment is advisory; a failure must not lose work).
+		if (result === undefined || result.status !== 0) {
+			return {
+				posted: false,
+				instruction:
+					`\`gh\` is unavailable or unauthenticated, so the review was not ` +
+					`posted as a comment on ${input.url}. The review:\n${input.body}`,
+			};
+		}
+		return {
+			posted: true,
+			instruction: `Posted the review as a comment on ${input.url}.`,
 		};
 	}
 

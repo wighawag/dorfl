@@ -31,6 +31,40 @@ export interface ReviewProvider {
 	 * a provider failure never loses work.
 	 */
 	openRequest(input: OpenRequestInput): OpenRequestResult;
+	/**
+	 * Post a follow-up COMMENT on an already-opened review request (the PR the
+	 * sibling {@link openRequest} created), threaded by its `url`. Used by the
+	 * Gate-2 review-comment poster (slice `review-gate-pr-comment`) to make the
+	 * review's verdict VISIBLE on the PR. It is the SIBLING of `openRequest` on the
+	 * "write text to the PR" surface: `openRequest` writes the creation BODY,
+	 * `postComment` writes a follow-up comment AFTER the PR exists.
+	 *
+	 * ADVISORY — it gates nothing; like `openRequest` it must NEVER throw (a
+	 * missing/unauthenticated `gh`, or the `none` provider, DEGRADES: it surfaces
+	 * the text in the result `instruction`, never losing the review — ADR §6).
+	 */
+	postComment(input: PostCommentInput): PostCommentResult;
+}
+
+export interface PostCommentInput {
+	cwd: string;
+	/**
+	 * The URL of the opened review request (the PR) to comment on — the `url`
+	 * {@link OpenRequestResult} returned. The GitHub provider passes it to
+	 * `gh pr comment <url>`; absent ⇒ the caller should not call postComment (no
+	 * PR to comment on).
+	 */
+	url: string;
+	/** The comment body (the verbatim review prose, JSON block stripped). */
+	body: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface PostCommentResult {
+	/** True iff a comment was actually posted (a real, authenticated provider). */
+	posted: boolean;
+	/** Human-readable confirmation / fallback (the verdict text on degrade). */
+	instruction: string;
 }
 
 export interface OpenRequestInput {
@@ -87,6 +121,21 @@ export class NoneProvider implements ReviewProvider {
 				`Pushed ${input.branch} to ${input.arbiter}. Open a review request ` +
 				'manually to land it on main (no review provider configured).' +
 				manualRequestText(input),
+		};
+	}
+
+	/**
+	 * No API to post a comment (a local `--bare` arbiter has no review concept), so
+	 * DEGRADE: surface the review text in the result instead of throwing — the
+	 * verdict stays in the run output, never lost (ADR §6). The caller treats this
+	 * as a clean no-op for the PR (nothing was posted).
+	 */
+	postComment(input: PostCommentInput): PostCommentResult {
+		return {
+			posted: false,
+			instruction:
+				'No review provider configured — the review was not posted as a PR ' +
+				`comment. The review:\n${input.body}`,
 		};
 	}
 }

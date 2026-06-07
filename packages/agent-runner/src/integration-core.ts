@@ -4,8 +4,10 @@ import {runVerify, type VerifyConfig} from './verify.js';
 import {
 	type ReviewGate,
 	type ReviewFinding,
+	type ReviewVerdict,
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
+	stripVerdictJson,
 } from './review-gate.js';
 import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -213,6 +215,12 @@ export async function performIntegration(
 	const recovering = input.recovering;
 	const note = input.note ?? (() => {});
 	const branch = `work/${slug}`;
+	// Captured from the Gate-2 review (when it runs + approves) so that AFTER the
+	// propose integrate — where the opened PR url is finally in scope — we can post
+	// the agent's VERBATIM review as a PR comment (slice `review-gate-pr-comment`).
+	// Stays undefined when review is off / the gate produced no raw output, so the
+	// post is skipped (no-op). The verdict/routing decision uses neither.
+	let approvedVerdict: ReviewVerdict | undefined;
 	// `let` (not `const`): Gate 2's `autoMerge`-off policy may DOWNGRADE a resolved
 	// `merge` to `propose` on an approve (review gates, a human merges) below.
 	let mode = input.mode;
@@ -315,7 +323,7 @@ export async function performIntegration(
 		const maxRounds = Math.max(1, input.reviewMaxRounds ?? 2);
 		note('Running the PR/code review gate (Gate 2)…');
 		let approved = false;
-		let lastVerdict;
+		let lastVerdict: ReviewVerdict | undefined;
 		for (let round = 1; round <= maxRounds; round++) {
 			const verdict = await reviewGate({
 				slug,
@@ -375,6 +383,10 @@ export async function performIntegration(
 			};
 		}
 		note(`PR/code review (Gate 2) approved '${slug}'.`);
+		// Carry the approved verdict (with its VERBATIM agent output) past the review
+		// block so that AFTER the propose integrate — once the opened PR url is in
+		// scope — we can post it as a PR comment (see the post-integrate block below).
+		approvedVerdict = lastVerdict;
 		// APPROVE-with-non-blocking-findings: give the reviewer's NITS a durable,
 		// contract-native home (GATES PRD `work/prd/review.md`;
 		// `work/findings/review-nonblocking-findings-disposition.md`). On a BLOCK the
@@ -554,6 +566,31 @@ export async function performIntegration(
 		env,
 	});
 
+	// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-gate-pr-comment`):
+	//    AFTER the propose integrate, where the approved verdict (with its VERBATIM
+	//    agent output), the resolved `provider`, AND the opened PR url
+	//    (`integration.url`) are ALL in scope, post the agent's verbatim review (the
+	//    trailing `{verdict, findings}` JSON block stripped) as a comment on that PR
+	//    — INCLUDING on approve (the audit trail; decided 2026-06-06). It reuses the
+	//    SAME `provider` the integrate used (the core never imports `gh`). The
+	//    comment is ADVISORY: it changes no gate/verdict/merge/integration logic —
+	//    by here the verdict has ALREADY routed (block never reaches this point; it
+	//    routed to needs-attention above) and the integrate has ALREADY happened.
+	//    No PR url (merge mode, or a degraded/push-only propose) ⇒ a clean no-op:
+	//    the review stays in the run output; `postComment` is never called and never
+	//    throws. Because this lives in the shared core, BOTH `do`/`complete` AND
+	//    `run` post the comment — no per-caller wiring.
+	if (approvedVerdict?.output !== undefined && integration.url !== undefined) {
+		const comment = stripVerdictJson(approvedVerdict.output);
+		const posted = provider.postComment({
+			cwd,
+			url: integration.url,
+			body: comment,
+			env,
+		});
+		note(posted.instruction);
+	}
+
 	return {
 		outcome: 'completed',
 		routedToNeedsAttention: false,
@@ -603,6 +640,17 @@ function bridgeProvider(
 			return {
 				opened: true,
 				instruction: `Opened a review for ${req.branch}.`,
+			};
+		},
+		// The legacy `openPr` bridge has no comment channel (it returns no PR url),
+		// so postComment degrades: it never opens a PR url to comment on, so the
+		// in-core poster no-ops anyway. Implemented for the seam, surfacing the text.
+		postComment(req) {
+			return {
+				posted: false,
+				instruction:
+					'The legacy review bridge cannot post a comment; the review:\n' +
+					req.body,
 			};
 		},
 	};

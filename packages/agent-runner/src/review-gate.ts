@@ -45,6 +45,18 @@ export interface ReviewFinding {
 export interface ReviewVerdict {
 	verdict: 'approve' | 'block';
 	findings: ReviewFinding[];
+	/**
+	 * The review agent's VERBATIM textual output (`LaunchResult.output`) — the
+	 * ordered lenses + the destination-check narrative + the trailing
+	 * `{verdict, findings}` JSON. Carried alongside the parsed verdict so a caller
+	 * (the in-core PR-comment poster, slice `review-gate-pr-comment`) can post the
+	 * rich prose VERBATIM (JSON block stripped via {@link stripVerdictJson}) rather
+	 * than re-formatting from the parsed fields (which would drop the reasoning +
+	 * the non-blocking nits). Advisory only — it gates nothing; the verdict/routing
+	 * decision uses ONLY `verdict`/`findings`. Absent when the gate had no raw
+	 * output (e.g. a test stub that did not supply one).
+	 */
+	output?: string;
 }
 
 /** What the review gate needs to launch a fresh-context review of one slice. */
@@ -106,21 +118,42 @@ export class ReviewParseError extends Error {}
  * unparseable verdict as an error → needs-attention, never a silent approve).
  */
 export function parseReviewVerdict(output: string): ReviewVerdict {
-	const candidate = extractVerdictJson(output);
-	if (candidate === undefined) {
+	const span = extractVerdictJsonSpan(output);
+	if (span === undefined) {
 		throw new ReviewParseError(
 			'review agent produced no parseable {verdict, findings} result',
 		);
 	}
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(candidate);
+		parsed = JSON.parse(output.slice(span.start, span.end));
 	} catch (err) {
 		throw new ReviewParseError(
 			`review verdict was not valid JSON: ${(err as Error).message}`,
 		);
 	}
-	return validateVerdict(parsed);
+	// Carry the VERBATIM output alongside the parsed verdict so the in-core
+	// PR-comment poster can post the rich prose (JSON block stripped) without
+	// re-formatting. Routing still uses ONLY `verdict`/`findings`.
+	return {...validateVerdict(parsed), output};
+}
+
+/**
+ * Strip the trailing `{verdict, findings}` JSON block from the review agent's
+ * VERBATIM output, leaving the human-readable review prose (the ordered lenses +
+ * the destination-check narrative + any non-blocking nits) for posting as a PR
+ * comment (slice `review-gate-pr-comment`). The runner already locates that JSON
+ * to PARSE the verdict, so trimming it is near-free — a raw JSON blob in a PR
+ * comment is noise. Reuses the SAME brace-matched span {@link parseReviewVerdict}
+ * extracts, so "what is parsed" and "what is stripped" can never diverge. When no
+ * verdict JSON is present the output is returned trimmed but otherwise unchanged.
+ */
+export function stripVerdictJson(output: string): string {
+	const span = extractVerdictJsonSpan(output);
+	if (span === undefined) {
+		return output.trim();
+	}
+	return (output.slice(0, span.start) + output.slice(span.end)).trim();
 }
 
 /** Validate a parsed object is a `{verdict, findings}` shape; normalise it. */
@@ -152,12 +185,17 @@ function validateVerdict(parsed: unknown): ReviewVerdict {
 }
 
 /**
- * Extract the first JSON object that carries a `"verdict"` key from arbitrary
- * agent output (it may be fenced, prefixed with prose, or bare). Brace-matched
- * from the `"verdict"` occurrence outward so a surrounding fence/prose does not
- * defeat parsing. Returns `undefined` when none is found.
+ * Locate the first JSON object that carries a `"verdict"` key in arbitrary agent
+ * output (it may be fenced, prefixed with prose, or bare), returning its `[start,
+ * end)` span (`output.slice(start, end)` is the JSON). Brace-matched from the
+ * `"verdict"` occurrence outward so a surrounding fence/prose does not defeat
+ * parsing. Returns `undefined` when none is found. The span (not just the text) is
+ * exposed so {@link stripVerdictJson} can REMOVE exactly what
+ * {@link parseReviewVerdict} parsed — one source of truth for the JSON boundary.
  */
-function extractVerdictJson(output: string): string | undefined {
+function extractVerdictJsonSpan(
+	output: string,
+): {start: number; end: number} | undefined {
 	const key = output.indexOf('"verdict"');
 	if (key === -1) {
 		return undefined;
@@ -193,7 +231,7 @@ function extractVerdictJson(output: string): string | undefined {
 		} else if (ch === '}') {
 			depth--;
 			if (depth === 0) {
-				return output.slice(start, i + 1);
+				return {start, end: i + 1};
 			}
 		}
 	}
