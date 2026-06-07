@@ -1,17 +1,23 @@
-import {existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {existsSync} from 'node:fs';
 import {join} from 'node:path';
-import {runVerify, type VerifyConfig} from './verify.js';
+import type {VerifyConfig} from './verify.js';
+import type {ReviewGate} from './review-gate.js';
 import {
-	type ReviewGate,
-	formatBlockReason,
-	reviewRoundsExhaustedReason,
-} from './review-gate.js';
-import type {ReviewProvider} from './integrator.js';
+	performIntegration,
+	IntegrationNothingStaged,
+	synthesiseProposeTitle,
+	composeProposeBody,
+	PR_TITLE_MAX,
+} from './integration-core.js';
 import {ledgerWrite} from './ledger-write.js';
-import {selectProvider} from './github.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import {runAsync, type RunResult} from './git.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
+
+// Re-export the propose-mode title/body helpers from their new home (the shared
+// integration core) so existing importers (`test/propose-pr-body.test.ts`) keep
+// working unchanged after the gate→integrate band moved out of this file.
+export {synthesiseProposeTitle, composeProposeBody, PR_TITLE_MAX};
 
 /**
  * `agent-runner complete [<slug>] [--skip-verify] [--type <t>] [--message <s>]
@@ -255,7 +261,6 @@ export interface CompleteResult {
 }
 
 const DEFAULT_ARBITER = 'origin';
-const DEFAULT_TYPE = 'feat';
 const DEFAULT_INTEGRATION: IntegrationMode = 'propose';
 
 /**
@@ -303,7 +308,12 @@ export async function performComplete(
 	try {
 		return await runComplete(options, note);
 	} catch (err) {
-		if (err instanceof CompleteRefusal) {
+		if (
+			err instanceof CompleteRefusal ||
+			err instanceof IntegrationNothingStaged
+		) {
+			// `IntegrationNothingStaged` is the core's empty-commit refusal — the same
+			// `refused` outcome the inline band raised before the extraction.
 			return {exitCode: 1, outcome: 'refused', message: err.message};
 		}
 		if (err instanceof CompleteUsageError) {
@@ -321,9 +331,10 @@ async function runComplete(
 	const cwd = options.cwd;
 	const env = options.env;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	// `let` (not `const`): Gate 2's `autoMerge`-off policy may DOWNGRADE a resolved
-	// `merge` to `propose` on an approve (review gates, a human merges) below.
-	let mode = options.integration ?? DEFAULT_INTEGRATION;
+	// The REQUESTED integration mode. The shared core owns the EFFECTIVE-mode
+	// decision (incl. Gate 2's `autoMerge`-off `merge`→`propose` downgrade); the
+	// tail below reads the effective mode from `core.integration.mode`, NEVER this.
+	const requestedMode = options.integration ?? DEFAULT_INTEGRATION;
 
 	if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
 		throw new CompleteUsageError('not inside a git repository');
@@ -378,300 +389,80 @@ async function runComplete(
 	}
 	const recovering = source === 'needs-attention';
 
-	// 1. Gate: bad work never proceeds to done. Default-on; --skip-verify is a
-	//    human-only escape hatch (the autonomous runner never skips — ADR §8).
-	if (options.skipVerify) {
-		note('Skipping the acceptance gate (--skip-verify).');
-	} else {
-		note('Running the acceptance gate (verify)…');
-		const gate = await runVerify({cwd, verify: options.verify, env});
-		if (!gate.passed && recovering) {
-			// RECOVERY path, RED re-gate: the item is ALREADY in needs-attention/ (this
-			// is a finish-the-stuck-item attempt, not a fresh in-progress completion).
-			// The gate stays authoritative — a still-red item is NOT completed; it
-			// simply STAYS in needs-attention/ (no re-route, no re-surface, no double
-			// reason block). --skip-verify remains the only, human-only, loud override.
-			const message =
-				`Acceptance gate still failed (exit ${gate.exitCode}); '${slug}' stays in ` +
-				'work/needs-attention/ (the cause is not actually fixed). Fix the work, ' +
-				'or use --skip-verify to override.';
-			note(message);
-			return {
-				exitCode: 1,
-				outcome: 'gate-failed',
-				routedToNeedsAttention: false,
-				branch,
-				message,
-			};
-		}
-		if (!gate.passed) {
-			// Don't leave the item dangling in in-progress/: route it to
-			// needs-attention/ with the reason (ADR §12) THROUGH the ledger write
-			// seam's needs-attention transition. The item has NOT been committed/moved
-			// yet, so the move bounces it straight from in-progress/ — recording the
-			// reason + committing the move (with the agent's uncommitted work) as ONE
-			// atomic transition. No partial state.
-			const reason = `acceptance gate failed (exit ${gate.exitCode})`;
-			const routed = ledgerWrite.applyNeedsAttentionTransition({
-				cwd,
-				slug,
-				reason,
-				// Autonomous caller (`do`) passes the arbiter so the seam both SURFACES
-				// the stuck state on `main` (OBSERVABLE, cross-machine visible) AND
-				// pushes the `work/<slug>` branch (RECOVERABLE — a requeue-continue on
-				// another machine, reading <arbiter>/work/<slug>, lands on the saved
-				// wip). The human `complete` leaves it unset → no surface, no push,
-				// local-only (a human is right there). One operation in one place: the
-				// push lives in the seam (it is HEAD's branch — `work/<slug>` — here),
-				// no bolted-on push to forget.
-				arbiter: options.surfaceArbiter,
-				env,
-				note,
-			});
-			return {
-				exitCode: 1,
-				outcome: 'gate-failed',
-				routedToNeedsAttention: routed.moved,
-				branch,
-				message: routed.moved
-					? `Acceptance gate failed (exit ${gate.exitCode}); routed '${slug}' ` +
-						'to work/needs-attention/ (surfaced by status; return to backlog/ ' +
-						'once resolved). Fix the work, or use --skip-verify to override.'
-					: `Acceptance gate failed (exit ${gate.exitCode}); not completing ` +
-						`'${slug}'. Fix the work, or use --skip-verify to override.`,
-			};
-		}
-	}
-
-	// 1b. Gate 2 — the PR/code REVIEW gate (GATES PRD `work/prd/review.md`),
-	//     INSERTED BETWEEN the green `verify` and the done-move. It is a JUDGEMENT
-	//     gate layered ON TOP of the deterministic `verify` floor (ADR §8) — NEVER a
-	//     replacement: `verify` already ran (and is non-skippable), and only on its
-	//     GREEN does control reach here. Runs ONLY when `review` resolves on.
-	//
-	//     The `review` SKILL runs as a FRESH-CONTEXT agent (its own harness launch,
-	//     the injectable `reviewGate` seam), returning `{verdict, findings}`:
-	//       approve → fall through to the done-move/commit/integrate unchanged;
-	//       block   → route to needs-attention via the SAME machinery the red gate
-	//                 uses (`applyNeedsAttentionTransition`, surfaced on
-	//                 `surfaceArbiter` for the autonomous `do` path), with the
-	//                 blocking findings recorded as the reason, no integrate, exit 1.
-	//     `reviewMaxRounds` bounds the revise↔review loop: the gate is invoked per
-	//     round; a persistent `block` exhausts the rounds and ERRORS OUT to
-	//     needs-attention (never silently merges or loops).
-	if (options.review) {
-		const reviewGate = options.reviewGate;
-		if (!reviewGate) {
-			// `review` on with no gate wired is a usage error — the floor must never
-			// be silently skipped. (Production always wires `harnessReviewGate`.)
-			throw new CompleteUsageError(
-				`review is on but no review gate is configured — cannot run Gate 2 ` +
-					`for '${slug}' (this is a wiring bug; the gate must not be skipped).`,
-			);
-		}
-		const maxRounds = Math.max(1, options.reviewMaxRounds ?? 2);
-		note('Running the PR/code review gate (Gate 2)…');
-		let approved = false;
-		let lastVerdict;
-		for (let round = 1; round <= maxRounds; round++) {
-			const verdict = await reviewGate({
-				slug,
-				cwd,
-				reviewModel: options.reviewModel,
-				round,
-				// `--watch` threading (slice `watch-review-session`): when on, the
-				// production gate tails the review session live (after the build stream,
-				// with a build→review boundary). OFF ⇒ the gate does its plain sync
-				// launch, unchanged. The stub gate (tests / non-harness) ignores these.
-				watch: options.watch,
-				watchSink: options.watchSink,
-				color: options.color,
-				sessionsDir: options.sessionsDir,
-				env,
-			});
-			lastVerdict = verdict;
-			if (verdict.verdict === 'approve') {
-				approved = true;
-				break;
-			}
-			// A `block`: re-review up to `reviewMaxRounds` (a future builder-revise
-			// step plugs in here). A persistent block exhausts the loop → routed below.
-		}
-		if (!approved) {
-			// NON-approve verdict: route to needs-attention via the SAME seam the red
-			// gate uses, NEVER integrate. The reason records the blocking findings AND
-			// (since the loop ran every allowed round without an approve) notes the
-			// `reviewMaxRounds` bound was hit — a single block IS exhaustion when
-			// maxRounds=1, satisfying both "block → findings" and "exhaustion → forced
-			// needs-attention" criteria with one route.
-			const reason =
-				(lastVerdict ? formatBlockReason(lastVerdict) + '\n' : '') +
-				reviewRoundsExhaustedReason(maxRounds);
-			const routed = ledgerWrite.applyNeedsAttentionTransition({
-				cwd,
-				slug,
-				reason,
-				// Same autonomous-vs-human gate as the red-gate path: `do` passes the
-				// arbiter (surface on main + push the branch), the human `complete`
-				// leaves it unset (local-only).
-				arbiter: options.surfaceArbiter,
-				env,
-				note,
-			});
-			const message = routed.moved
-				? `PR/code review (Gate 2) blocked '${slug}'; routed it to ` +
-					'work/needs-attention/ (surfaced by status; the blocking findings are ' +
-					'recorded in the item body). NOT integrated.'
-				: `PR/code review (Gate 2) blocked '${slug}'; NOT integrating.`;
-			note(message);
-			return {
-				exitCode: 1,
-				outcome: 'review-blocked',
-				routedToNeedsAttention: routed.moved,
-				branch,
-				message,
-			};
-		}
-		note(`PR/code review (Gate 2) approved '${slug}'.`);
-		// approve + `autoMerge` OFF → DOWNGRADE a resolved `merge` to `propose`: review
-		// gated (approve), but the autonomous merge is opt-in repo policy, so a human
-		// does the merge (`--propose` semantics). With `autoMerge` ON, the resolved
-		// `merge` proceeds autonomously below. A non-approve never reaches here.
-		if (mode === 'merge' && !options.autoMerge) {
-			note(
-				`autoMerge is off — leaving the merge to a human (proposing '${slug}' ` +
-					'instead of auto-merging an approved review).',
-			);
-			mode = 'propose';
-		}
-	}
-
-	// Read the title now, BEFORE the move, for the default commit summary AND the
-	// synthesised propose-mode PR TITLE (the source file is about to be git-mv'd
-	// away). The PR title is a SINGLE, capped line built runner-side from the
-	// slice's `title:` frontmatter + the slug (`<type>(<slug>): <title>`) so it can
-	// never be the multi-line commit-subject run-on `--fill` would derive.
-	const defaultMessage = defaultSummary(sourcePath, slug);
-	const sliceTitle = readSliceTitle(sourcePath);
-	const prTitle = synthesiseProposeTitle({
-		type: (options.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE,
+	// CORE: run the SHARED gate→integrate band (verify → review → effective-mode
+	// decision → done-move → commit → rebase → integrate → needs-attention routing).
+	// It returns DATA (the routing + the effective-mode decision already happened
+	// inside it); the TAIL below does only `complete`'s caller-specific post-step
+	// (switch-to-main / ff / delete-branch / `--no-switch` / the propose next-step
+	// block). The human-vs-autonomous difference rides on `surfaceArbiter` (DATA).
+	// `IntegrationNothingStaged` is the one refusal the core raises (empty commit);
+	// `performComplete`'s try/catch maps it to `refused`, unchanged.
+	const core = await performIntegration({
+		cwd,
+		arbiter,
 		slug,
-		title: sliceTitle,
+		source,
+		recovering,
+		verify: options.verify,
+		skipVerify: options.skipVerify,
+		review: options.review,
+		reviewGate: options.reviewGate,
+		autoMerge: options.autoMerge,
+		reviewModel: options.reviewModel,
+		reviewMaxRounds: options.reviewMaxRounds,
+		mode: requestedMode,
+		provider: options.provider,
+		openPr: options.openPr,
+		body: options.body,
+		type: options.type,
+		message: options.message,
+		surfaceArbiter: options.surfaceArbiter,
+		watch: options.watch,
+		watchSink: options.watchSink,
+		color: options.color,
+		sessionsDir: options.sessionsDir,
+		env,
+		note,
 	});
 
-	// 2. Mark done: mkdir -p work/done, then git mv <source> → done. The source is
-	//    in-progress/ on the normal path, or needs-attention/ on the recovery path.
-	mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
-	await gitHard(
-		['mv', `work/${source}/${slug}.md`, `work/done/${slug}.md`],
-		cwd,
-		env,
-	);
-
-	// 3. Commit: git add -A (the agent's uncommitted work + the move) into ONE
-	//    atomic commit. Nothing to commit is FATAL (no-op-is-fatal, like claim.sh).
-	await gitHard(['add', '-A'], cwd, env);
-	if (await nothingStaged(cwd, env)) {
-		throw new CompleteRefusal(
-			`nothing to commit for '${slug}' — no work and no move staged. ` +
-				'(Did the agent produce changes? Is the slice already done?)',
-		);
+	// The three FAILURE outcomes map 1:1 onto `complete`'s — the core already
+	// note()'d the reason and did any routing; the tail never runs for them.
+	if (core.outcome === 'gate-failed') {
+		return {
+			exitCode: 1,
+			outcome: 'gate-failed',
+			routedToNeedsAttention: core.routedToNeedsAttention,
+			branch: core.branch,
+			message: core.reason ?? '',
+		};
 	}
-	const summary = options.message ?? defaultMessage;
-	const type = (options.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE;
-	const commitMessage = `${type}(${slug}): ${summary}; done`;
-	await gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
-	note(`Committed: ${commitMessage}`);
-
-	// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
-	//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
-	//
-	//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
-	//    branch's history still carries the original `in-progress → needs-attention`
-	//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
-	//    (the item is in needs-attention/ on main). Replaying that historical move
-	//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
-	//    rebase conflict the human hit doing this by hand. So we DROP that move-only
-	//    commit during the rebase: the replay becomes `wip + (needs-attention →
-	//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
-	//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
-	//    leftover/conflicting on-`main` surface for the human to resolve.
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const rebase = recovering
-		? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
-		: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
-	if (rebase.status !== 0) {
-		// NEVER auto-resolve: abort the rebase (back to a clean work-branch tip).
-		await gitSoft(['rebase', '--abort'], cwd, env);
-		// Then route the item to needs-attention/ with the conflict reason (ADR
-		// §12) THROUGH the ledger write seam's needs-attention transition, rather
-		// than leaving it dangling in done/. The done-move was already committed
-		// above, so the item sits in work/done/; the move bounces it from there and
-		// commits the in-progress→needs-attention move (here done→needs-attention)
-		// as ONE transition. No partial state.
-		const reason = `rebase onto ${arbiter}/main conflicted (aborted, never auto-resolved)`;
-		const routed = ledgerWrite.applyNeedsAttentionTransition({
-			cwd,
-			slug,
-			reason,
-			// Autonomous caller (`do`) passes the arbiter so the seam both surfaces the
-			// conflict on `main` (OBSERVABLE) AND pushes the `work/<slug>` branch
-			// (RECOVERABLE, cross-machine). The human `complete` leaves it unset →
-			// no surface, no push, local-only. The push lives in the seam (HEAD's
-			// branch is `work/<slug>` here) — no bolted-on push.
-			arbiter: options.surfaceArbiter,
-			env,
-			note,
-		});
+	if (core.outcome === 'review-blocked') {
+		return {
+			exitCode: 1,
+			outcome: 'review-blocked',
+			routedToNeedsAttention: core.routedToNeedsAttention,
+			branch: core.branch,
+			message: core.reason ?? '',
+		};
+	}
+	if (core.outcome === 'rebase-conflict') {
 		return {
 			exitCode: 1,
 			outcome: 'rebase-conflict',
-			routedToNeedsAttention: routed.moved,
-			branch,
-			commitMessage,
-			message: routed.moved
-				? `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-					`aborted (never auto-resolved) and '${slug}' was routed to ` +
-					'work/needs-attention/ (surfaced by status). Resolve against the ' +
-					'latest main, then return it to backlog/ and re-run.'
-				: `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-					'aborted (never auto-resolved). Resolve against the latest main, ' +
-					'then re-run complete.',
+			routedToNeedsAttention: core.routedToNeedsAttention,
+			branch: core.branch,
+			commitMessage: core.commitMessage,
+			message: core.reason ?? '',
 		};
 	}
 
-	// 5. Integrate per mode through the ledger write seam's COMPLETE transition
-	//    (ADR §6 + `docs/adr/claim-ledger-vs-protected-main.md`). The rebase above
-	//    already brought the branch up to date, so the seam's sole strategy uses
-	//    `integrate` (not `integrateWithRebase`) and never --forces. Provider
-	//    selection: an injected `openPr` wins (legacy bridge); otherwise pick by
-	//    the `provider` override LAYERED OVER auto-detection from the arbiter's
-	//    remote URL (a GitHub remote ⇒ `gh pr create`, else push-only `none`). A
-	//    missing/unauthenticated `gh` degrades to push-only at runtime — never a
-	//    hard failure. The seam is storage-agnostic: we hand it the work branch,
-	//    the integration mode, and the provider — `main` lives only in the strategy.
-	const provider = options.openPr
-		? bridgeProvider(options.openPr)
-		: selectProvider({
-				arbiterUrl: await arbiterUrl(cwd, arbiter, env),
-				provider: options.provider,
-			});
-	const result = ledgerWrite.applyCompleteTransition({
-		arbiter,
-		branch,
-		mode,
-		provider,
-		// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
-		// derives a run-on title from the commit subject via `--fill`.
-		title: prTitle,
-		// Half B: the propose-mode PR body — the agent's summary under a deterministic
-		// runner header (slice pointer). Undefined when no body was supplied (the
-		// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
-		// regression). Ignored in merge mode by the provider/integrator.
-		body: composeProposeBody({slug, body: options.body}),
-		cwd,
-		env,
-	});
+	// SUCCESS: the core integrated. `result` is its integration result; `mode` is
+	// the EFFECTIVE mode the core resolved (post-downgrade), read from the result —
+	// NEVER the requested mode (an `autoMerge`-off approve downgraded `merge` to
+	// `propose`, and the tail must switch/ff per the mode that actually integrated).
+	const result = core.integration!;
+	const commitMessage = core.commitMessage;
+	const mode = result.mode;
 
 	// Land back on `main` by default in BOTH modes (the move differs per mode),
 	// then delete the local work branch iff its work is provably on the arbiter.
@@ -753,43 +544,6 @@ async function runComplete(
 		deletedLocalBranch,
 		prUrl: result.url,
 		message,
-	};
-}
-
-/**
- * The arbiter's remote URL for `arbiter` in `cwd` (for provider auto-detection),
- * or `undefined` when it cannot be resolved. Read-only; soft (never throws).
- */
-async function arbiterUrl(
-	cwd: string,
-	arbiter: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string | undefined> {
-	const res = await gitSoft(['remote', 'get-url', arbiter], cwd, env);
-	if (res.status !== 0) {
-		return undefined;
-	}
-	const url = res.stdout.trim();
-	return url === '' ? undefined : url;
-}
-
-/** Adapt the legacy `openPr` callback into the new ReviewProvider seam. */
-function bridgeProvider(
-	openPr: (opts: {
-		cwd: string;
-		branch: string;
-		env?: NodeJS.ProcessEnv;
-	}) => void,
-): ReviewProvider {
-	return {
-		name: 'none',
-		openRequest(input) {
-			openPr({cwd: input.cwd, branch: input.branch, env: input.env});
-			return {
-				opened: true,
-				instruction: `Opened a review for ${input.branch}.`,
-			};
-		},
 	};
 }
 
@@ -893,136 +647,6 @@ export async function isLocalBranchProvablyOnArbiter(
 	return remoteTip !== '' && remoteTip === localTip;
 }
 
-/**
- * Default commit summary: the slice's `title` frontmatter with any leading
- * `slug — ` (or `slug -`) prefix stripped, so a slice titled
- * "complete — gate, mark done, …" yields "gate, mark done, …". Falls back to a
- * generic summary when the title is missing/unreadable.
- */
-function defaultSummary(inProgressPath: string, slug: string): string {
-	let title: string | undefined;
-	try {
-		title = readTitle(readFileSync(inProgressPath, 'utf8'));
-	} catch {
-		title = undefined;
-	}
-	if (!title) {
-		return 'complete work slice';
-	}
-	// Strip a leading "slug" followed by an em-dash / en-dash / hyphen separator.
-	const prefix = new RegExp(`^${escapeRegExp(slug)}\\s*[—–-]\\s*`, 'i');
-	return title.replace(prefix, '').trim() || title;
-}
-
-/**
- * The sane single-line cap for a synthesised PR title (Half A). GitHub itself
- * accepts long titles, but a PR list/notification truncates ugly past ~72 chars;
- * we cap to keep the title scannable and guarantee it is never a run-on. Beyond
- * the cap we truncate and append an ellipsis (counted within the cap).
- */
-export const PR_TITLE_MAX = 72;
-
-/**
- * The slice's raw `title:` frontmatter (NOT the commit-summary-stripped form),
- * or undefined when missing/unreadable. Used as the human-authored source for
- * the synthesised PR title.
- */
-function readSliceTitle(slicePath: string): string | undefined {
-	try {
-		return readTitle(readFileSync(slicePath, 'utf8'));
-	} catch {
-		return undefined;
-	}
-}
-
-/**
- * Synthesise the propose-mode PR TITLE runner-side (Half A) from data the runner
- * already has — NO agent text: `<type>(<slug>): <title>`, reusing `complete`'s
- * `--type` convention (default `feat`). It is FORCED to a single line (newlines
- * → spaces, runs of whitespace collapsed) and CAPPED to {@link PR_TITLE_MAX}
- * (truncating with a trailing `…`), so it can NEVER be the multi-line run-on
- * `gh ... --fill` derives from the commit subject. When the slice `title:` is
- * missing it falls back to the slug alone (`<type>(<slug>)`). Exported for unit
- * tests of the single-line + cap guarantee.
- */
-export function synthesiseProposeTitle(input: {
-	type: string;
-	slug: string;
-	title?: string;
-}): string {
-	const type = input.type.trim() || DEFAULT_TYPE;
-	// Strip a leading `slug — ` / `slug -` prefix (some slice titles repeat the
-	// slug; the `<slug>` scope already carries it) and flatten to one line.
-	const prefix = new RegExp(`^${escapeRegExp(input.slug)}\\s*[—–-]\\s*`, 'i');
-	const cleanTitle = (input.title ?? '')
-		.replace(prefix, '')
-		.replace(/\s+/g, ' ')
-		.trim();
-	const composed =
-		cleanTitle === ''
-			? `${type}(${input.slug})`
-			: `${type}(${input.slug}): ${cleanTitle}`;
-	if (composed.length <= PR_TITLE_MAX) {
-		return composed;
-	}
-	// Cap, reserving one char for the ellipsis (counted within the cap).
-	return composed.slice(0, PR_TITLE_MAX - 1).trimEnd() + '…';
-}
-
-/**
- * Compose the propose-mode PR BODY (Half B): the supplied advisory prose (the
- * build agent's final summary, or a human `--body`) UNDER a deterministic runner
- * header that points a reviewer back to the slice file. Returns `undefined` when
- * no body was supplied — so the provider degrades to today's `gh ... --fill` (no
- * regression); the header is ONLY scaffolded when there IS prose to carry.
- * Exported for unit tests of the header + pointer.
- */
-export function composeProposeBody(input: {
-	slug: string;
-	body?: string;
-}): string | undefined {
-	const prose = input.body?.trim();
-	if (!prose) {
-		return undefined;
-	}
-	const header = `Slice: \`work/done/${input.slug}.md\``;
-	return `${header}\n\n${prose}`;
-}
-
-/** Read the `title:` scalar from a slice's frontmatter block, or undefined. */
-function readTitle(content: string): string | undefined {
-	const normalized = content.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
-	if (!normalized.startsWith('---\n')) {
-		return undefined;
-	}
-	const lines = normalized.split('\n');
-	const closing = lines.indexOf('---', 1);
-	const block = closing === -1 ? lines.slice(1) : lines.slice(1, closing);
-	for (const line of block) {
-		const match = /^title\s*:\s*(.*)$/.exec(line);
-		if (match) {
-			const value = match[1].trim();
-			return value === '' ? undefined : unquote(value);
-		}
-	}
-	return undefined;
-}
-
-function unquote(value: string): string {
-	if (value.length >= 2) {
-		const first = value[0];
-		const last = value[value.length - 1];
-		if ((first === '"' || first === "'") && last === first) {
-			return value.slice(1, -1);
-		}
-	}
-	return value;
-}
-
-function escapeRegExp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 /** If HEAD is a `work/<slug>` branch, return `<slug>`; else ''. */
 async function inferSlugFromBranch(
 	cwd: string,
@@ -1044,98 +668,6 @@ async function currentBranch(
 		env,
 	);
 	return sym.status === 0 ? sym.stdout.trim() : '';
-}
-
-/** True when the index has no staged changes against HEAD (nothing to commit). */
-async function nothingStaged(
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<boolean> {
-	// `diff --cached --quiet` exits 0 when there is NOTHING staged, 1 when there is.
-	const res = await gitSoft(['diff', '--cached', '--quiet'], cwd, env);
-	return res.status === 0;
-}
-
-/**
- * The RECOVERY rebase: rebase the work branch onto `<arbiter>/main` while
- * DROPPING the historical `in-progress → needs-attention` move-only commit, so
- * the replay does not conflict with the surfaced needs-attention state already
- * on `main`.
- *
- * The work branch (as the autonomous `do`/`run` path left it) carries, ABOVE the
- * claim-time main: a `wip` commit (the aborted agent work), the route-to-
- * needs-attention `chore(<slug>): route to needs-attention; …` MOVE-ONLY commit,
- * and (just committed by `complete`) the `needs-attention → done` done-move. The
- * arbiter's `main` was surfaced to ALSO hold the item in needs-attention/, so a
- * plain rebase replays the historical move-only commit (in-progress → needs-
- * attention) onto a main that has no in-progress/<slug>.md → conflict.
- *
- * We rebase the whole range `(merge-base, HEAD]` `--onto <arbiter>/main` and use
- * a `GIT_SEQUENCE_EDITOR` that DELETES the move-only commit's line from the todo
- * list (matched by its message). The remaining `wip + (needs-attention → done)`
- * replays cleanly: wip touches only the agent's files, and the done-move's
- * `git mv work/needs-attention/<slug>.md → work/done/<slug>.md` applies because
- * the surfaced main HAS the item in needs-attention/. Result: the done-move
- * supersedes the surfaced state, and the human never sees a conflict.
- *
- * When the branch carries NO such move-only commit (e.g. a needs-attention item
- * placed by hand, never autonomously surfaced), the editor deletes nothing and
- * this degrades to a normal rebase. The seam returns the rebase RunResult so the
- * caller's existing conflict-abort path handles a genuine (non-surface) conflict
- * unchanged.
- */
-async function rebaseDroppingNeedsAttentionSurface(
-	cwd: string,
-	arbiter: string,
-	slug: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<RunResult> {
-	// The branch we are ON (the work branch). Rebasing must UPDATE this ref — so
-	// we pass the branch NAME to `git rebase` (passing the literal `HEAD` would
-	// rebase in DETACHED mode and leave the branch ref behind).
-	const onBranch = (
-		await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
-	).stdout.trim();
-	const base = (
-		await gitSoft(['merge-base', 'HEAD', `${arbiter}/main`], cwd, env)
-	).stdout.trim();
-	if (base === '') {
-		// No common ancestor (shouldn't happen for a branch cut from main): fall
-		// back to a plain rebase so the caller's conflict path still governs.
-		return gitSoft(['rebase', `${arbiter}/main`], cwd, env);
-	}
-	// A sequence editor that strips the route-to-needs-attention move-only commit
-	// from the interactive todo list. `routeToNeedsAttention` authors it as
-	// `chore(<slug>): route to needs-attention; <reason>` — match that prefix and
-	// delete those `pick` lines, leaving the wip + the done-move to replay.
-	const rebaseEnv: NodeJS.ProcessEnv = {
-		...(env ?? process.env),
-		GIT_SEQUENCE_EDITOR: dropMoveOnlySequenceEditor(slug),
-		// Keep the rebase non-interactive for the commit-message editor too.
-		GIT_EDITOR: 'true',
-	};
-	return gitSoft(
-		onBranch === ''
-			? ['rebase', '-i', '--onto', `${arbiter}/main`, base]
-			: ['rebase', '-i', '--onto', `${arbiter}/main`, base, onBranch],
-		cwd,
-		rebaseEnv,
-	);
-}
-
-/**
- * Build a one-shot `GIT_SEQUENCE_EDITOR` command (a `sed` invocation) that
- * deletes, from the rebase todo file (passed as `$1`), every `pick` line whose
- * subject is the route-to-needs-attention move-only commit for `slug`
- * (`chore(<slug>): route to needs-attention`). Deleting a `pick` line drops that
- * commit from the rebase — the mechanism for skipping the move that conflicts
- * with the surfaced main. Anchored to the slug so no unrelated commit is dropped.
- */
-function dropMoveOnlySequenceEditor(slug: string): string {
-	// The todo line looks like: `pick <sha> chore(<slug>): route to needs-attention; …`
-	// Escape any sed-special characters in the slug before embedding it.
-	const escaped = slug.replace(/[\\/&.[\]*^$]/g, '\\$&');
-	return `sed -i -e '/^pick [0-9a-f]* chore(${escaped}): route to needs-attention/d'`;
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
