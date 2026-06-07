@@ -53,11 +53,18 @@ GitHub provider runs `gh pr create ... --fill` (derives title/body from commit
 subjects → title-only, empty body). A reviewer landing on a multi-file PR gets no
 summary, no decisions, no pointer to the slice spec.
 
-- **Add an optional `body` to the provider seam.** `OpenRequestInput`
-  (`src/integrator.ts`) gains an optional `body`; the GitHub provider passes it as
-  `gh pr create --body <body>` (instead of `--fill` when a body is present); the
-  `none` provider includes it in its manual-instruction output; no behaviour change
-  when `body` is absent (degrades to today's `--fill`).
+- **Add an optional `body` (and `title`) to the provider seam — AND thread it from
+  `complete.ts` (verified layer note 2026-06-06).** `OpenRequestInput`
+  (`src/integrator.ts`) gains optional `body`/`title`; the GitHub provider passes
+  them as `gh pr create --title <t> --body <body>` (instead of `--fill` when
+  present); the `none` provider includes them in its manual-instruction output; no
+  behaviour change when absent (degrades to today's `--fill`). **NOTE the call
+  chain (one layer longer than just `OpenRequestInput`):** `openRequest` is called
+  INSIDE the integrator (`integrateWithRebase`), which is built from
+  `IntegrateInput` passed DOWN from `complete.ts`. So `body`/`title` must also be
+  added to `IntegrateInput` and threaded `complete.ts` → `IntegrateInput` →
+  `OpenRequestInput` → `gh`. The body's SOURCE (the agent's `LaunchResult.output`)
+  lives in `complete.ts`, so that is where it enters the chain.
 - **Source (RESOLVED):** the agent's FINAL SUMMARY via `LaunchResult.output`
   (`harness-agent-output`, PR #12) as the prose, optionally under a runner-scaffolded
   header (slice pointer + PRD/ADR + diff stat).
