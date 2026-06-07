@@ -7,7 +7,6 @@ import {
 	type ReviewVerdict,
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
-	stripVerdictJson,
 } from './review-gate.js';
 import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -217,9 +216,10 @@ export async function performIntegration(
 	const branch = `work/${slug}`;
 	// Captured from the Gate-2 review (when it runs + approves) so that AFTER the
 	// propose integrate — where the opened PR url is finally in scope — we can post
-	// the agent's VERBATIM review as a PR comment (slice `review-gate-pr-comment`).
-	// Stays undefined when review is off / the gate produced no raw output, so the
-	// post is skipped (no-op). The verdict/routing decision uses neither.
+	// the agent's deliberately-authored `review` prose as a PR comment (slice
+	// `review-comment-prose-field`). Stays undefined when review is off / the agent
+	// emitted no `review` field, so the post is skipped (no-op). The verdict/routing
+	// decision uses neither.
 	let approvedVerdict: ReviewVerdict | undefined;
 	// `let` (not `const`): Gate 2's `autoMerge`-off policy may DOWNGRADE a resolved
 	// `merge` to `propose` on an approve (review gates, a human merges) below.
@@ -383,7 +383,7 @@ export async function performIntegration(
 			};
 		}
 		note(`PR/code review (Gate 2) approved '${slug}'.`);
-		// Carry the approved verdict (with its VERBATIM agent output) past the review
+		// Carry the approved verdict (with its authored `review` prose) past the review
 		// block so that AFTER the propose integrate — once the opened PR url is in
 		// scope — we can post it as a PR comment (see the post-integrate block below).
 		approvedVerdict = lastVerdict;
@@ -566,26 +566,28 @@ export async function performIntegration(
 		env,
 	});
 
-	// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-gate-pr-comment`):
-	//    AFTER the propose integrate, where the approved verdict (with its VERBATIM
-	//    agent output), the resolved `provider`, AND the opened PR url
-	//    (`integration.url`) are ALL in scope, post the agent's verbatim review (the
-	//    trailing `{verdict, findings}` JSON block stripped) as a comment on that PR
-	//    — INCLUDING on approve (the audit trail; decided 2026-06-06). It reuses the
-	//    SAME `provider` the integrate used (the core never imports `gh`). The
-	//    comment is ADVISORY: it changes no gate/verdict/merge/integration logic —
-	//    by here the verdict has ALREADY routed (block never reaches this point; it
+	// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-comment-prose-field`,
+	//    refining `review-gate-pr-comment`): AFTER the propose integrate, where the
+	//    approved verdict (with its deliberately-authored `review` prose), the
+	//    resolved `provider`, AND the opened PR url (`integration.url`) are ALL in
+	//    scope, post `verdict.review` as a comment on that PR — INCLUDING on approve
+	//    (the audit trail; decided 2026-06-06). The `review` field is a first-class
+	//    AUTHORED review (the prompt requires it), NOT the residue around the JSON
+	//    — posting the residue was the bug
+	//    (`work/findings/review-comment-posts-agent-thinking-not-a-review.md`). It
+	//    reuses the SAME `provider` the integrate used (the core never imports `gh`).
+	//    The comment is ADVISORY: it changes no gate/verdict/merge/integration logic
+	//    — by here the verdict has ALREADY routed (block never reaches this point; it
 	//    routed to needs-attention above) and the integrate has ALREADY happened.
 	//    No PR url (merge mode, or a degraded/push-only propose) ⇒ a clean no-op:
 	//    the review stays in the run output; `postComment` is never called and never
 	//    throws. Because this lives in the shared core, BOTH `do`/`complete` AND
 	//    `run` post the comment — no per-caller wiring.
-	if (approvedVerdict?.output !== undefined && integration.url !== undefined) {
-		const comment = stripVerdictJson(approvedVerdict.output);
+	if (approvedVerdict?.review !== undefined && integration.url !== undefined) {
 		const posted = provider.postComment({
 			cwd,
 			url: integration.url,
-			body: comment,
+			body: approvedVerdict.review,
 			env,
 		});
 		note(posted.instruction);

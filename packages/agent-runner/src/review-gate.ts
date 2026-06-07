@@ -46,17 +46,19 @@ export interface ReviewVerdict {
 	verdict: 'approve' | 'block';
 	findings: ReviewFinding[];
 	/**
-	 * The review agent's VERBATIM textual output (`LaunchResult.output`) — the
-	 * ordered lenses + the destination-check narrative + the trailing
-	 * `{verdict, findings}` JSON. Carried alongside the parsed verdict so a caller
-	 * (the in-core PR-comment poster, slice `review-gate-pr-comment`) can post the
-	 * rich prose VERBATIM (JSON block stripped via {@link stripVerdictJson}) rather
-	 * than re-formatting from the parsed fields (which would drop the reasoning +
-	 * the non-blocking nits). Advisory only — it gates nothing; the verdict/routing
-	 * decision uses ONLY `verdict`/`findings`. Absent when the gate had no raw
-	 * output (e.g. a test stub that did not supply one).
+	 * The deliberately-authored, human-readable REVIEW prose the agent emits as a
+	 * FIELD inside the single verdict JSON object (slice `review-comment-prose-field`):
+	 * it leads with Approved/Blocked and gives the lenses + destination-check
+	 * reasoning, written FOR a human landing on the PR. This is what the in-core
+	 * PR-comment poster posts — a first-class authored artifact, NOT the unstructured
+	 * residue around the JSON (the old verbatim-output path posted the agent's
+	 * stream-of-consciousness; see
+	 * `work/findings/review-comment-posts-agent-thinking-not-a-review.md`). Advisory
+	 * only — it gates nothing; the verdict/routing decision uses ONLY
+	 * `verdict`/`findings`. Absent when the agent emitted no `review` field (e.g. an
+	 * older test stub) ⇒ the poster no-ops.
 	 */
-	output?: string;
+	review?: string;
 }
 
 /** What the review gate needs to launch a fresh-context review of one slice. */
@@ -132,31 +134,13 @@ export function parseReviewVerdict(output: string): ReviewVerdict {
 			`review verdict was not valid JSON: ${(err as Error).message}`,
 		);
 	}
-	// Carry the VERBATIM output alongside the parsed verdict so the in-core
-	// PR-comment poster can post the rich prose (JSON block stripped) without
-	// re-formatting. Routing still uses ONLY `verdict`/`findings`.
-	return {...validateVerdict(parsed), output};
+	// The verdict carries the agent's authored `review` prose FIELD (validated
+	// below); the in-core PR-comment poster posts that field. Routing still uses
+	// ONLY `verdict`/`findings`.
+	return validateVerdict(parsed);
 }
 
-/**
- * Strip the trailing `{verdict, findings}` JSON block from the review agent's
- * VERBATIM output, leaving the human-readable review prose (the ordered lenses +
- * the destination-check narrative + any non-blocking nits) for posting as a PR
- * comment (slice `review-gate-pr-comment`). The runner already locates that JSON
- * to PARSE the verdict, so trimming it is near-free — a raw JSON blob in a PR
- * comment is noise. Reuses the SAME brace-matched span {@link parseReviewVerdict}
- * extracts, so "what is parsed" and "what is stripped" can never diverge. When no
- * verdict JSON is present the output is returned trimmed but otherwise unchanged.
- */
-export function stripVerdictJson(output: string): string {
-	const span = extractVerdictJsonSpan(output);
-	if (span === undefined) {
-		return output.trim();
-	}
-	return (output.slice(0, span.start) + output.slice(span.end)).trim();
-}
-
-/** Validate a parsed object is a `{verdict, findings}` shape; normalise it. */
+/** Validate a parsed object is a `{verdict, review?, findings}` shape; normalise it. */
 function validateVerdict(parsed: unknown): ReviewVerdict {
 	if (typeof parsed !== 'object' || parsed === null) {
 		throw new ReviewParseError('review verdict was not an object');
@@ -181,7 +165,11 @@ function validateVerdict(parsed: unknown): ReviewVerdict {
 			...(typeof item.context === 'string' ? {context: item.context} : {}),
 		};
 	});
-	return {verdict, findings};
+	return {
+		verdict,
+		...(typeof obj.review === 'string' ? {review: obj.review} : {}),
+		findings,
+	};
 }
 
 /**
@@ -189,9 +177,7 @@ function validateVerdict(parsed: unknown): ReviewVerdict {
  * output (it may be fenced, prefixed with prose, or bare), returning its `[start,
  * end)` span (`output.slice(start, end)` is the JSON). Brace-matched from the
  * `"verdict"` occurrence outward so a surrounding fence/prose does not defeat
- * parsing. Returns `undefined` when none is found. The span (not just the text) is
- * exposed so {@link stripVerdictJson} can REMOVE exactly what
- * {@link parseReviewVerdict} parsed — one source of truth for the JSON boundary.
+ * parsing. Returns `undefined` when none is found.
  */
 function extractVerdictJsonSpan(
 	output: string,
@@ -241,9 +227,16 @@ function extractVerdictJsonSpan(
 /**
  * Render the review-agent PROMPT: instruct a fresh-context agent to run the
  * `review` SKILL on the diff for `slug` against the slice that specified it, and
- * to EMIT ONLY the `{verdict, findings[…]}` result (so {@link parseReviewVerdict}
- * can read it). The skill itself carries the lenses + the destination check; this
- * prompt only frames the artifact (code-vs-its-slice) and the required output.
+ * to EMIT a single `{verdict, review, findings[…]}` JSON object (so
+ * {@link parseReviewVerdict} can read it). The single-JSON-object contract does
+ * two jobs we keep BOTH of: it carries the machine verdict for routing AND it
+ * STRUCTURES the agent's output. The `review` FIELD is the deliberately-authored,
+ * human-readable review the PR-comment poster posts — so the comment is a
+ * first-class authored artifact, not the agent's stream-of-consciousness around
+ * the JSON (slice `review-comment-prose-field`;
+ * `work/findings/review-comment-posts-agent-thinking-not-a-review.md`). The skill
+ * itself carries the lenses + the destination check; this prompt frames the
+ * artifact (code-vs-its-slice) and the required output shape.
  */
 export function buildReviewPrompt(slug: string): string {
 	return [
@@ -262,13 +255,23 @@ export function buildReviewPrompt(slug: string): string {
 		`re-execute the suite. Spend your budget on JUDGEMENT.`,
 		`Do NOT edit any files, run no git — you EMIT a verdict only.`,
 		``,
-		`Output ONLY a single JSON object of this exact shape (no other prose):`,
-		`{"verdict": "approve" | "block", "findings": [`,
-		`  {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}`,
-		`]}`,
+		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
+		`{"verdict": "approve" | "block",`,
+		` "review": "<the review prose — see below>",`,
+		` "findings": [`,
+		`   {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}`,
+		` ]}`,
 		`Use "block" with at least one blocking finding if the diff does not deliver`,
 		`the slice, drifts from its premise, or hides a defect a human reviewer would`,
 		`flag; otherwise "approve".`,
+		``,
+		`The "review" field is a human-readable REVIEW that gets posted as a comment on`,
+		`the PR — write it FOR a human landing there, NOT as scratch thinking. LEAD with`,
+		`the verdict ("Approved" or "Blocked") and then give the lenses' reasoning and`,
+		`the destination check ("merged as written, do we reach the slice/PRD goal?").`,
+		`Write it deliberately; do NOT narrate your process ("Let me check…"). Make it as`,
+		`long or as short as the review genuinely needs — there is NO length limit and no`,
+		`need to pad. It is plain text inside the JSON string (escape newlines as \\n).`,
 	].join('\n');
 }
 
