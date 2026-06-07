@@ -186,3 +186,9 @@ agent-runner claim slicer-review-edit-loop --arbiter <remote>      # default --a
 git fetch <remote> && git switch -c work/slicer-review-edit-loop <remote>/main
 git mv work/in-progress/slicer-review-edit-loop.md work/done/slicer-review-edit-loop.md
 ```
+
+## Needs attention
+
+PR/code review (Gate 2) blocked this work:
+- The slicer loop operates on the ENTIRE work/backlog/ directory, not on the slices THIS run produced. On a populated backlog (the normal steady state) this lets the review agent edit and/or needsAnswers-flag unrelated, already-landed slices, and those changes get committed into the runner-owned slicing release. Scope the loop's candidate set and applyEdits/floor to the files new-or-changed since the step-3 `before` snapshot. (slicer-review-loop.ts readCandidatePaths() reads all of work/backlog/; performSlice (slicing.ts ~L288) calls runSliceReviewLoop without passing the `before` snapshot it computed at L259. applyEdits fences only on the `work/backlog/` prefix, and the uncertain-slices FLOOR maps over readCandidatePaths(cwd) = ALL backlog files. newOrChangedBacklog(before) then commits any edited pre-existing slice as 'changed'. Drifts from the slice premise ('improve the candidate slices that path produces').)
+PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
