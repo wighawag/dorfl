@@ -103,3 +103,36 @@ export function gitMv(from: string, to: string, cwd: string): void {
 function toAbsolute(cwd: string, p: string): string {
 	return p.startsWith('/') ? p : `${cwd}/${p}`;
 }
+
+/**
+ * The pre-flight DIVERGENCE check for the in-place ff paths (`do` /
+ * `complete --merge`): how many commits local `main` is AHEAD of
+ * `<arbiter>/main` (`git rev-list --count <arbiter>/main..main`). A non-zero
+ * count means local `main` carries UNPUSHED commits the arbiter lacks — the slice
+ * builds off `<arbiter>/main`, so its merge-back ff cannot apply, exactly the
+ * "checkout state that breaks the in-place flow" class the dirty-tree refusal
+ * guards. Returns 0 when local `main` is at/behind the arbiter (safe).
+ *
+ * Best-effort / SAFE-direction: if either ref cannot be resolved (no local
+ * `main`, an unreachable arbiter that left `<arbiter>/main` absent) the count
+ * cannot be computed, so we read it as 0 (do NOT block on an unknown) — the
+ * caller is expected to have fetched first, and a genuinely diverged main is the
+ * case we DO catch. Read-only.
+ */
+export async function localMainAheadCount(
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<number> {
+	const res = await runAsync(
+		'git',
+		['rev-list', '--count', `${arbiter}/main..main`],
+		cwd,
+		{env},
+	);
+	if (res.status !== 0) {
+		return 0; // a ref did not resolve — cannot compute; do not block (safe).
+	}
+	const n = Number.parseInt(res.stdout.trim(), 10);
+	return Number.isFinite(n) ? n : 0;
+}

@@ -20,7 +20,7 @@ import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
-import {git, runAsync} from './git.js';
+import {git, runAsync, localMainAheadCount} from './git.js';
 
 /**
  * `agent-runner do <slug>` (in-place form) — the per-repo, in-place WORKER that
@@ -116,6 +116,15 @@ export interface DoOptions {
 	arbiter?: string;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
+	/**
+	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
+	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
+	 * `<arbiter>/main` (has unpushed commits). When overridden and the divergence
+	 * persists, `complete`'s now-NON-FATAL local-main sync handles the outcome
+	 * honestly (the work lands on the arbiter; local `main` is left for the operator
+	 * to rebase). Loud, never the default.
+	 */
+	ignoreDivergedMain?: boolean;
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
 	/** Review-request provider override (propose mode); auto-detect when unset. */
@@ -334,6 +343,27 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'refused', slug, message};
 	}
 
+	// 3b. Refuse on a DIVERGED local `main` (sibling to the dirty-tree refusal). A
+	//     local `main` that is AHEAD of `<arbiter>/main` (unpushed commits) is the
+	//     same class of "checkout state that breaks the in-place flow": the slice is
+	//     built off `<arbiter>/main`, so the merge-back ff cannot fast-forward. Catch
+	//     it UP FRONT — before the claim + agent run — so a whole build is not wasted.
+	//     Fetch first (as the onboarding flow does), then compare. `--ignore-diverged
+	//     -main` overrides (mirrors `--ignore-not-ready`); when overridden, Part 1's
+	//     non-fatal sync handles the persisting divergence honestly at complete-time.
+	if (options.ignoreDivergedMain !== true) {
+		await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
+		const ahead = await localMainAheadCount(cwd, arbiter, env);
+		if (ahead > 0) {
+			const message =
+				`local main is ahead of ${arbiter}/main by ${ahead} commit` +
+				`${ahead === 1 ? '' : 's'} (unpushed); the slice builds off ${arbiter}/main ` +
+				"and the merge-back can't fast-forward — push or reconcile main first " +
+				'(or re-run with --ignore-diverged-main to proceed anyway).';
+			return {exitCode: 1, outcome: 'refused', slug, message};
+		}
+	}
+
 	// 4. Onboard like `start`: claim (only if needed) AND switch the checkout to
 	//    work/<slug> off the freshly-fetched <arbiter>/main (the agent edits ON
 	//    the work branch). A lost/contended claim is propagated verbatim and
@@ -446,6 +476,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		cwd,
 		arbiter,
 		integration: options.integration,
+		// `do` already ran the pre-flight divergence guard UP FRONT (step 3b), before
+		// the claim + agent; skip `complete`'s redundant re-check. When `do` was run
+		// with --ignore-diverged-main the guard was bypassed there too, so either way
+		// the (now non-fatal) local-main sync handles any persisting divergence.
+		ignoreDivergedMain: true,
 		verify: options.verify,
 		provider: options.provider,
 		// Half B (propose-mode PR body): the build agent's FINAL SUMMARY, captured
@@ -1014,6 +1049,10 @@ async function runRemotePipeline(
 		cwd,
 		arbiter: arbiterRemote,
 		integration: options.integration,
+		// SCOPE: the divergence guard is in-place only. A job worktree is cut fresh off
+		// the bare mirror and never ff's the operator's local main, so the guard does
+		// not apply here — opt out explicitly (the slice: do NOT touch do --remote/run).
+		ignoreDivergedMain: true,
 		verify: options.verify,
 		provider: options.provider,
 		body: agent.output,

@@ -213,6 +213,7 @@ interface CompleteFlags {
 	merge?: boolean;
 	propose?: boolean;
 	switch?: boolean;
+	ignoreDivergedMain?: boolean;
 	skipVerify?: boolean;
 	type?: string;
 	message?: string;
@@ -228,6 +229,7 @@ interface DoFlags {
 	remote?: string;
 	merge?: boolean;
 	propose?: boolean;
+	ignoreDivergedMain?: boolean;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -827,6 +829,10 @@ export function buildProgram(): Command {
 			'--no-switch',
 			'stay on the work/<slug> branch (and keep it) instead of switching back to main',
 		)
+		.option(
+			'--ignore-diverged-main',
+			'override the merge-mode divergence guard: complete --merge even when local main is ahead of <arbiter>/main (unpushed). The work still lands on the arbiter; local main is left for you to `git rebase`. Loud, never default.',
+		)
 		.addOption(
 			new Option(
 				'--skip-verify',
@@ -899,6 +905,7 @@ export function buildProgram(): Command {
 				integration: config.integration,
 				provider: config.provider,
 				noSwitch: flags.switch === false,
+				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				verify: config.verify,
 				skipVerify: flags.skipVerify,
 				// Gate 2 (PR/code review): when `review` resolves on, run the `review`
@@ -955,6 +962,10 @@ export function buildProgram(): Command {
 		.option(
 			'--propose',
 			'integrate in propose mode this invocation (default; mutually exclusive with --merge; overrides config)',
+		)
+		.option(
+			'--ignore-diverged-main',
+			'override the in-place divergence guard: run even when local main is ahead of <arbiter>/main (unpushed). The work still lands on the arbiter; local main is left for you to `git rebase`. In-place only; loud, never default.',
 		)
 		.option('--agent-cmd <cmd>', 'command to run the agent on the slice prompt')
 		.option(
@@ -1111,6 +1122,8 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: config.integration,
+				// In-place divergence guard override (mirrors --ignore-not-ready).
+				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				verify: config.verify,
 				provider: config.provider,
 				harness,

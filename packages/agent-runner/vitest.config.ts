@@ -33,6 +33,11 @@ const RACE_SENSITIVE = [
 	// keep it out of file-parallel pressure so the claim/main-CAS stays
 	// deterministic (same reasoning as start/run/needs-attention-surface).
 	'test/do.test.ts',
+	// The main-divergence guard + non-fatal local-main sync: drives real git
+	// against a --bare arbiter, diverges local main, and writes main (the merge-mode
+	// integration + autonomous surfacing); keep it out of file-parallel pressure for
+	// the same deterministic claim/main-CAS reasoning as do.test.ts.
+	'test/main-divergence-guard.test.ts',
 	// `do --watch` drives real git against a --bare arbiter, writes main, AND
 	// launches a stubbed pi (async spawn) whose session .jsonl is tailed
 	// concurrently; keep it out of file-parallel pressure for the same reason as
