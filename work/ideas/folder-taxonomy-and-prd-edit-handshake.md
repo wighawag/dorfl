@@ -107,6 +107,20 @@ through* it).
 
 # A `needsAnswers` edit-handshake command (sibling idea)
 
+> **SUPERSEDED 2026-06-07 by the advance-loop design
+> (`work/ideas/advance-loop-question-answer-protocol.md`).** The mechanism below
+> RELIED on `needsAnswers: true` meaning "agents stay away" (the gate is
+> `needsAnswers !== true`), so flipping it gave a human a safe edit window. The
+> advance-loop BREAKS that premise: `advance` ACTS ON `needsAnswers: true` items
+> (surfacing/applying answers is its whole point), so `needsAnswers` can no longer
+> double as the human edit-lock. The REPLACEMENT: the human edit-handshake takes the
+> **transition lock (the "answer/edit" kind) via the same CAS seam** the autonomous
+> driver uses — human and driver contend honestly on ONE lock primitive (which is
+> just the existing claim/slicing CAS, generalised to kinds). `needsAnswers` reverts
+> to the pure answer-required axis. Keep the rest of this idea (the handshake is
+> still wanted; only its MECHANISM changes from flag-flip to lock-take). The
+> original text is preserved below for history.
+
 Spawned by `work/observations/slicing-lock-does-not-stabilise-prd-content.md`. A
 human who wants to edit a PRD safely while agents might slice it should be able to
 **flip `needsAnswers: true` via the seam CAS** and be told win/lose: if the flip
