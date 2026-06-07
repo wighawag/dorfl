@@ -93,6 +93,8 @@ export function seedRepoWithArbiter(
 		needsAnswers?: boolean;
 		blockedBy?: string[];
 		promptBody?: string;
+		/** PRD slugs to seed under `work/prd/<slug>.md` (for the slicing lock). */
+		prds?: string[];
 	} = {},
 ): SeededRepo {
 	const repo = join(root, 'project');
@@ -103,6 +105,13 @@ export function seedRepoWithArbiter(
 	mkdirSync(backlog, {recursive: true});
 	for (const slug of slugs) {
 		writeFileSync(join(backlog, `${slug}.md`), sliceFile(slug, opts));
+	}
+	if (opts.prds && opts.prds.length > 0) {
+		const prdDir = join(repo, 'work', 'prd');
+		mkdirSync(prdDir, {recursive: true});
+		for (const slug of opts.prds) {
+			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
+		}
 	}
 	writeFileSync(join(repo, 'README.md'), '# project\n');
 	gx(['add', '-A'], repo);
@@ -165,6 +174,21 @@ function sliceFile(
 		'## Prompt',
 		'',
 		body,
+		'',
+	].join('\n');
+}
+
+/** A minimal PRD file body for `work/prd/<slug>.md` (slicing-lock fixtures). */
+export function prdFile(slug: string, marker = 'ORIGINAL'): string {
+	return [
+		'---',
+		`title: ${slug}`,
+		`slug: ${slug}`,
+		'---',
+		'',
+		'## Problem Statement',
+		'',
+		`PRD body for ${slug} (${marker}).`,
 		'',
 	].join('\n');
 }

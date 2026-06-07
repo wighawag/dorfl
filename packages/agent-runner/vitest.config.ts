@@ -20,6 +20,11 @@ import {defineConfig} from 'vitest/config';
  */
 const RACE_SENSITIVE = [
 	'test/claim-cas.test.ts',
+	// The slicing concurrency lock reuses the claim CAS (prd → slicing/ → prd)
+	// against a --bare arbiter and runs an in-process two-slicer race plus a
+	// release-rebase-conflict test that writes main; keep it out of file-parallel
+	// pressure for the same deterministic claim/main-CAS reasoning as claim-cas.
+	'test/slicing-lock.test.ts',
 	'test/start.test.ts',
 	'test/work-on.test.ts',
 	'test/run.test.ts',

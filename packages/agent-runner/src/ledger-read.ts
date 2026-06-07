@@ -182,7 +182,8 @@ export interface LedgerReadStrategy {
 	resolveMirrorState(input: ResolveMirrorStateInput): Promise<LocalLedgerState>;
 	/**
 	 * Resolve whether a PRD named `<slug>` exists in the LOCAL working tree's
-	 * `work/prd/` (the PRD source) and/or `work/slicing/` (its post-slice record).
+	 * `work/prd/` (the PRD source) and/or `work/slicing/` (a transient held lock
+	 * while the PRD is being sliced).
 	 * The slug is resolved from each candidate file's frontmatter `slug:`, falling
 	 * back to the filename — the SAME shape the slice readers use.
 	 *
