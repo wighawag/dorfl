@@ -4,8 +4,7 @@ import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
 import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
 import {PiHarness} from './pi-harness.js';
-import {SessionTailer} from './watch-session.js';
-import {generateSessionPath} from './session-path.js';
+import {launchWithOptionalWatch} from './agent-launch.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {ledgerWrite} from './ledger-write.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
@@ -359,6 +358,13 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
 		reviewGate: options.reviewGate,
+		// `--watch` (slice `watch-review-session`): tail the Gate-2 review agent's
+		// session live too, AFTER the build stream the `runDoAgent` watch surfaced
+		// (the gate prints a build→review boundary). Threaded into the gate launch via
+		// `complete`; OFF ⇒ the review path is byte-identical (sync launch, no tailer).
+		watch: options.watch,
+		watchSink: options.watchSink,
+		sessionsDir: options.sessionsDir,
 		// The autonomous failure-surfacing: route stuck items to the arbiter's
 		// main (the `run` semantics), NOT local-only (the human `complete`).
 		surfaceArbiter: arbiter,
@@ -488,15 +494,21 @@ async function saveAgentFailure(params: {
 
 /**
  * Run the agent against the checkout. Prefers the injected `agentRunner` (tests
- * / custom embeddings); otherwise launches `agentCmd` through the harness seam
- * (the null adapter by default), forwarding the model routing intent.
+ * / custom embeddings); otherwise launches `agentCmd` through the SHARED
+ * {@link launchWithOptionalWatch} helper (the null adapter by default),
+ * forwarding the model routing intent.
  *
- * With `--watch` (pi harness only, validated earlier), the agent is launched
- * NON-BLOCKING (`PiHarness.launchAsync` — `spawn`, not `spawnSync`) so a
- * {@link SessionTailer} can READ the growing session `.jsonl` concurrently and
- * surface the high-signal events live. The tailer is a pure observer: the
- * launch result returned here is IDENTICAL to the non-watch path, so outcome /
- * gate / git / exit code are unchanged — only a concurrent log-tail is added.
+ * With `--watch` (pi harness only, validated earlier), the helper launches the
+ * agent NON-BLOCKING (`PiHarness.launchAsync` — `spawn`, not `spawnSync`) so a
+ * `SessionTailer` can READ the growing session `.jsonl` concurrently and surface
+ * the high-signal events live. The tailer is a pure observer: the launch result
+ * is IDENTICAL to the non-watch path, so outcome / gate / git / exit code are
+ * unchanged — only a concurrent log-tail is added.
+ *
+ * The build session-id is the SLUG (in-place `do` has no work-id), which the
+ * helper makes unique per launch; the Gate-2 REVIEW launch uses the SAME helper
+ * with a DISTINCT id (`<slug>-review`) so the two sessions never collide — one
+ * watch implementation, two callers (slice `watch-review-session`).
  */
 async function runDoAgent(
 	options: DoOptions,
@@ -508,56 +520,19 @@ async function runDoAgent(
 		return options.agentRunner({cwd, prompt, slug, env: options.env});
 	}
 	const harness = options.harness ?? new NullHarness();
-
-	// Generate the full pi session-FILE path ONCE here (caller-generates) so the
-	// adapter and the `--watch` tailer cannot disagree, and so the tailer knows it
-	// BEFORE pi starts (slice `session-path-pi-default`). In-place `do` has NO
-	// work-id, so the unique id is the slug (+ a per-launch suffix inside the
-	// generator). `sessionsDir` unset ⇒ pi's per-cwd default folder. The non-pi
-	// null adapter ignores `session`, but generating it unconditionally keeps ONE
-	// path for BOTH the watch and non-watch branches (the non-watch branch is the
-	// COMMON/CI case — it must not be left polluting the checkout / dashboard-blind).
-	const session = generateSessionPath({
-		sessionsDir: options.sessionsDir,
-		cwd,
-		id: slug,
-	});
-
-	// `--watch` (pi only): launch async + tail the KNOWN session .jsonl path
-	// concurrently. (The non-pi case is already rejected as a usage error before
-	// any git transition, so reaching here with watch ⇒ a PiHarness.)
-	if (options.watch === true && harness instanceof PiHarness) {
-		const tailer = new SessionTailer({
-			sessionFile: session,
-			color: options.color ?? false,
-			sink: options.watchSink,
-		});
-		tailer.start();
-		try {
-			const launched = await harness.launchAsync({
-				dir: cwd,
-				slug,
-				command: options.agentCmd ?? '',
-				prompt,
-				model: options.model,
-				session,
-				env: options.env,
-			});
-			return {ok: launched.ok, detail: launched.detail};
-		} finally {
-			// Always release the tailer (one final drain) — even on a launch error —
-			// so the observer never outlives the run or leaks a handle.
-			await tailer.stop();
-		}
-	}
-
-	const launched = harness.launch({
+	const launched = await launchWithOptionalWatch({
+		harness,
 		dir: cwd,
 		slug,
 		command: options.agentCmd ?? '',
 		prompt,
 		model: options.model,
-		session,
+		// In-place `do` has NO work-id, so the build session id is the slug.
+		sessionId: slug,
+		sessionsDir: options.sessionsDir,
+		watch: options.watch,
+		watchSink: options.watchSink,
+		color: options.color,
 		env: options.env,
 	});
 	return {ok: launched.ok, detail: launched.detail};

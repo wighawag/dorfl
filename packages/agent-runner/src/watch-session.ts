@@ -75,6 +75,18 @@ export function finishedLine(color: boolean): string {
 }
 
 /**
+ * A one-line VISUAL BOUNDARY banner the caller prints between two tailed agent
+ * streams (e.g. the build stream and the Gate-2 review stream — slice
+ * `watch-review-session`), so a watching human knows the first stream ended and
+ * the next began. Reuses this module's colour rule (cyan, the same marker hue as
+ * the `▶ <tool>` lines) so it reads as part of the same live view. Pure: returns
+ * the string; the caller routes it to the watch sink.
+ */
+export function boundaryLine(label: string, color: boolean): string {
+	return paint(`▶ ${label}`, color, CYAN);
+}
+
+/**
  * Parse ONE pi SESSION-LOG `.jsonl` line and return the high-signal lines to
  * surface — or `[]` to SKIP it. This is the pure, unit-testable classifier,
  * mirroring pi-remote's `session-pool.ts` block walk:
