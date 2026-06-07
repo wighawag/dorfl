@@ -18,6 +18,21 @@ Bootstrap a repo onto the `work/` contract: scaffold `CONTEXT.md` (with the
 correct project name, from the brand identity), the `work/` folder skeleton, a
 default `.agent-runner.json`, and pointers to the contract docs + required skills.
 
+> **NOTE — scaffold a stack-appropriate `verify` (added 2026-06-07).** The
+> `.agent-runner.json` `setup` writes MUST include an explicit `verify` gate that
+> matches the repo's actual stack — do NOT leave it unset and rely on the
+> built-in fallback. The fallback (`DEFAULT_VERIFY_COMMAND` in `verify.ts`) is
+> `pnpm -r build && pnpm -r test && pnpm -r format:check`, which is **Node/pnpm-
+> specific** and silently wrong for a Rust/Go/Python/etc. repo. `verify` is the
+> protocol's per-project, language-agnostic acceptance gate (ADR §8), so the
+> right fix is to detect the stack at setup time and write a matching command
+> (e.g. `cargo build && cargo test && cargo fmt --check`), rather than changing
+> the hardcoded default. (Spotted while designing the run/do integrate-path
+> convergence: `run.ts`'s old `defaultTestGate` ALSO hardcoded `pnpm -r test` and
+> ignored `config.verify` entirely — a protocol violation the convergence
+> deletes; this note keeps the SAME class of pnpm-assumption from re-entering via
+> a setup-scaffolded config.)
+
 - **Why a skill, not a command:** adoption must NOT require `agent-runner` to be
   installed — the contract is a runner-agnostic protocol (ADR §9). A skill keeps
   setup in the protocol layer (any human/agent/harness can follow it).
