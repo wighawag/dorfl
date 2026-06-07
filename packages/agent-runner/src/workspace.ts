@@ -11,6 +11,7 @@ import {
 	rebaseContinuedBranchOntoMain,
 } from './continue-branch.js';
 import {type HarnessRecord} from './harness.js';
+import {brand} from './brand.js';
 
 /**
  * The workspace manager (ADR §2): one git worktree per **job** (a claimed work
@@ -97,8 +98,9 @@ export function jobWorktreePath(
 	return join(workspacesDir, 'work', encodeWorkId(url, slug));
 }
 
-/** Filename of the per-job record inside its worktree. */
-export const JOB_RECORD_FILENAME = '.agent-runner-job.json';
+/** Filename of the per-job record inside its worktree. Derived from the single
+ * brand identity (`.{base}-job.json`) so a rename flips it in lockstep. */
+export const JOB_RECORD_FILENAME = brand.jobRecordFilename;
 
 export interface CreateJobOptions {
 	/**

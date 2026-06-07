@@ -1,4 +1,5 @@
 import type {Config, PartialConfig} from './config.js';
+import {brand, constantCase} from './brand.js';
 
 /**
  * The environment-variable config layer.
@@ -29,8 +30,12 @@ import type {Config, PartialConfig} from './config.js';
  * (never silently ignored) with a message naming the offending variable.
  */
 
-/** The shared `AGENT_RUNNER_` prefix on every env config variable. */
-export const ENV_PREFIX = 'AGENT_RUNNER_';
+/**
+ * The shared `AGENT_RUNNER_` prefix on every env config variable. Derived from
+ * the single brand identity (`constantCase(base) + '_'`) so a rename flips the
+ * prefix in lockstep with the binary name (see `brand.ts`).
+ */
+export const ENV_PREFIX = brand.envPrefix;
 
 /** How a key's env value is coerced from its raw string. */
 type Coercion =
@@ -69,14 +74,10 @@ const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
 	reviewMaxRounds: 'number',
 };
 
-/** camelCase config key → SCREAMING_SNAKE (`perRepoMax` → `PER_REPO_MAX`). */
-function screamingSnake(key: string): string {
-	return key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
-}
-
-/** The `AGENT_RUNNER_*` env var name for a config key. */
+/** The `AGENT_RUNNER_*` env var name for a config key (`perRepoMax` →
+ * `AGENT_RUNNER_PER_REPO_MAX`): the brand prefix + the key in `constantCase`. */
 export function envVarName(key: keyof Config): string {
-	return ENV_PREFIX + screamingSnake(key);
+	return ENV_PREFIX + constantCase(key);
 }
 
 /** A raw env map (defaults to `process.env`). */

@@ -1,6 +1,7 @@
 import {readFileSync, writeFileSync, existsSync, mkdirSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {dirname, join} from 'node:path';
+import {brand} from './brand.js';
 
 /**
  * How a completed item is integrated back to the arbiter's `main`. `merge` lands
@@ -215,7 +216,7 @@ export const DEFAULT_CONFIG: Config = {
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',
-	workspacesDir: join(homedir(), '.agent-runner'),
+	workspacesDir: join(homedir(), brand.workdirName),
 	arbitersDir: join(homedir(), 'git'),
 	integration: 'propose',
 	agentCmd: '',
@@ -229,7 +230,7 @@ export const DEFAULT_CONFIG: Config = {
 
 /** The conventional config location (`~/.config/agent-runner/config.json`). */
 export function defaultConfigPath(): string {
-	return join(homedir(), '.config', 'agent-runner', 'config.json');
+	return join(homedir(), '.config', brand.configDirName, 'config.json');
 }
 
 /** Merge a partial config over the built-in defaults; arrays are replaced. */

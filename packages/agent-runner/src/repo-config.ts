@@ -2,6 +2,7 @@ import {readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {mergeConfig, type Config, type PartialConfig} from './config.js';
 import {envOverrides, type EnvMap} from './env-config.js';
+import {brand} from './brand.js';
 
 /**
  * The per-repo config layer.
@@ -38,8 +39,12 @@ import {envOverrides, type EnvMap} from './env-config.js';
  * behaviour is unchanged from before this layer existed.
  */
 
-/** The conventional per-repo config filename, committed at the repo root. */
-export const REPO_CONFIG_FILENAME = '.agent-runner.json';
+/**
+ * The conventional per-repo config filename, committed at the repo root. Derived
+ * from the single brand identity (`.{base}.json`) so a rename flips it in lockstep
+ * (see `brand.ts`).
+ */
+export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
 
 /**
  * Config keys that are genuinely repo properties and so are honoured in a

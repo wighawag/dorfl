@@ -1,3 +1,6 @@
+export type {Brand} from './brand.js';
+export {BASE, brand, deriveBrand, paramCase, constantCase} from './brand.js';
+
 export type {
 	Config,
 	PartialConfig,

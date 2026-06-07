@@ -43,6 +43,7 @@ import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 import {resolveSliceOnlyArg, SlugResolutionError} from './slug-namespace.js';
+import {brand} from './brand.js';
 
 interface ScanFlags {
 	config?: string;
@@ -360,7 +361,7 @@ export function buildProgram(): Command {
 	const program = new Command();
 
 	program
-		.name('agent-runner')
+		.name(brand.bin)
 		.description('Autonomous parallel agents over file-based work/ queues.');
 
 	program

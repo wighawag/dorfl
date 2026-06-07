@@ -15,6 +15,7 @@ import {
 	saveConfig,
 	type Config,
 } from './config.js';
+import {brand} from './brand.js';
 
 /**
  * `agent-runner work-on` — the HUMAN command to claim a slice and create an
@@ -173,7 +174,7 @@ async function runWorkOn(
 	}
 	const env = options.env;
 	const workspacesDir =
-		options.workspacesDir ?? join(homedir(), '.agent-runner');
+		options.workspacesDir ?? join(homedir(), brand.workdirName);
 
 	// The human worktree root: configured value wins; otherwise prompt + save on
 	// first use (a sensible suggestion, NEVER a silent default; never under
@@ -532,7 +533,7 @@ async function resolveHumanWorktreesRoot(
  * §3): work-on is human-only and must never share that space.
  */
 function assertHumanRoot(dir: string): string {
-	const agentArea = join(homedir(), '.agent-runner');
+	const agentArea = join(homedir(), brand.workdirName);
 	const normalized = dir.endsWith('/') ? dir.slice(0, -1) : dir;
 	if (normalized === agentArea || normalized.startsWith(agentArea + '/')) {
 		throw new WorkOnUsageError(
