@@ -72,7 +72,83 @@ as written, do we reach the PRD/ADR goal?"). The skill is the single source of t
 protocol; both gates run the SAME skill. (Full protocol + the empirical case for
 multiple independent passes live in the idea file; do not duplicate here.)
 
-### Gate 1 — SPEC/SLICE review (default-ON for auto-slicing)
+### RESOLVED DESIGN (2026-06-06 grilling pass) — THREE concepts, ONE mechanism, MANY insertion points
+
+> This section is the authoritative resolved shaping; where older text below
+> ("Gate 1 / Gate 2", the idea file's "one-mechanism-two-defaults") conflicts, THIS
+> wins. Source: `work/findings/review-gate-vs-slicer-edit-loop.md` +
+> `work/findings/run-and-do-have-separate-integrate-paths.md` + the idea file's M×N.
+
+The review PROTOCOL (the ordered adversarial lenses + the destination/goal check) is
+ONE methodology (the `review` skill, already built — `done/review-skill.md`). It is
+consumed in TWO operational SHAPES, and plugged in at several INSERTION POINTS:
+
+**Shape 1 — the review GATE (one-shot, terminal: approve / block).**
+- A single reviewer invocation → verdict. approve ⇒ proceed; block ⇒ route to
+  `needsAnswers` / `needs-attention` (the existing seam). NOT a loop — **no
+  `reviewMaxRounds` on a gate** (the rounds knob on the built Gate-2 path is an
+  orphan from a miscommunication — see
+  `work/observations/reviewmaxrounds-on-wrong-concept.md`; later removed from the
+  gate).
+- The **destination/goal check is a PROMPT-FRAMING ASPECT folded into the single
+  gate pass**, not a separate step: "do these slices / this diff reach the PRD/ADR
+  goal?" is part of the best review prompt, combinable with the other lenses.
+- Insertion points (same mechanism, different prompt): post-build impl review
+  (**built — #11/#12**); and, later, the pre-build slice check + the run path (see
+  below).
+
+**Shape 2 — the SLICER EDIT LOOP (NOT a gate — an improver).**
+- The observed phenomenon: slices keep IMPROVING when reviewed; findings feed back
+  into EDITS, repeatedly. So slice-generation review is a **review→edit→re-review→
+  converge** loop, with the goal/destination check INSIDE the loop (it can itself
+  trigger edits — which is why it is a loop, not a terminal gate).
+- **Mechanism (resolved Q1): ONE agent reviews-and-EDITS in a SINGLE context** (the
+  N in-context multipass, accumulating across angle-switched passes). A **fresh
+  context is simply a NEW EXECUTION of that same loop in a fresh context** (the M).
+  So the M×N grid = "run the (review+edit) loop N passes deep, M times in fresh
+  contexts." Degenerate `M=1,N=2` = cheap; `M=k` = k fresh independent loops.
+- **Termination (resolved Q2):** natural terminator = a pass finds no NEW blocking
+  issue; `maxReview` is the HARD CAP (per-repo configurable, flag > env > per-repo >
+  global, cheap default). **On reaching `maxReview` with unresolved blockers, the
+  slice(s) are REJECTED as `needsAnswers`** (the verdict sink below). `maxReview`
+  lives HERE (the loop), never on the gate.
+- **Verdict routing (the loop's sink) = the EXISTING needsAnswers / needs-attention
+  routing** that `autoslice-confidence` built: (a) a specific uncertain slice →
+  emit with `needsAnswers: true` + questions in its body; (b) the whole
+  decomposition unclear / `maxReview` exhausted → route the PRD to
+  `needs-attention/` with the questions, emit no guessed slices. The loop FEEDS
+  this routing; it does not replace it.
+
+**Relation to `autoslice-confidence` (resolved Q4): re-scope, do NOT blind-delete.**
+`autoslice-confidence` bundles two things: (1) a one-shot self-confidence JUDGEMENT
+— SUPERSEDED by the edit loop (the loop is the confidence mechanism done right, an
+INDEPENDENT adversarial pass a self-check cannot be); and (2) the needsAnswers /
+needs-attention ROUTING fallbacks — LOAD-BEARING, and exactly the edit loop's
+verdict sink. So: the edit-loop slice ABSORBS the judgement; the ROUTING survives
+(carried by the edit-loop slice, or kept as a re-scoped routing slice the loop
+`blockedBy`s). 4 artifacts reference `autoslice-confidence` (`autoslice-command`,
+the `auto-slice`/`command-surface-phase-2`/`review` PRDs) — reconcile those refs
+when re-scoping; the routing behaviour must NOT be lost.
+
+**Insertion points (the mechanism is defined ONCE, consumed at each):**
+- **(A) slice-generation** — the SLICER EDIT LOOP on the `do prd:<slug>` path.
+  **THE FIRST SET (built now, to dogfood slicing non-yet-sliced PRDs).**
+- **(B) pre-build slice check** — a slice-review (Shape-1 gate, slice-framed prompt)
+  INSIDE `do <slug>` BEFORE the agent builds, so a slice that slipped through with a
+  missed judgement is caught/refined before implementation. **Later set.**
+- **(C) post-build impl review** — Gate 2. **Built (#11/#12).**
+- **(D) run coverage** — `run` has a SEPARATE integrate path and does NOT inherit
+  the gate today (`work/findings/run-and-do-have-separate-integrate-paths.md`).
+  This is its OWN later set whose FIRST job is to converge `run` on the `do`
+  codepath (`performComplete`); review then integrates naturally, no duplication.
+- **(E) issue-thread surface** — issue-to-prd / issue-intake CI runs the SAME
+  review/edit loop on the generated PRD/slices and surfaces findings as QUESTIONS
+  (and edits where sensible) into the ISSUE COMMENT THREAD. **Later set** (belongs
+  in the issue-intake design; reuses this mechanism).
+
+### Gate 1 — SPEC/SLICE review  *(SUPERSEDED by "RESOLVED DESIGN" above — slice-gen
+review is the EDIT LOOP (Shape 2, insertion point A), not a one-shot gate. Retained
+for history.)*
 
 - Runs as a distinct STEP after the auto-slicer emits slices (NOT a "review
   yourself" line in the slicer prompt — a separate invocation/role; a prompt
@@ -254,16 +330,27 @@ stdout-stream). `review-gate-pr` FUNCTIONS live (real `reviewPr: on`) only once
 is correct in isolation; the output-read is the activation). See also
 `work/observations/pi-harness-jsonl-reliance.md` (the `.jsonl`-scraping debt).
 
-This PRD is **deliberately NOT marked `sliced:`** because two scopes remain to be
-sliced as named follow-ups:
-  - **`review-gate-spec` (Gate 1)** — spec/slice review after auto-slicing (guards
-    the `autoslice-*` chain). Slice when that chain is being built.
+**The SECOND set is now being sliced (2026-06-06):** the **slicer EDIT LOOP**
+(insertion point A, Shape 2) on the `do prd:<slug>` path — emitted as
+**`work/backlog/slicer-review-edit-loop.md`** (built next, to dogfood slicing the
+not-yet-sliced PRDs). See the RESOLVED DESIGN section.
+
+This PRD is **deliberately NOT marked `sliced:`** because further scopes remain as
+named follow-ups (all REUSE the one review mechanism — see RESOLVED DESIGN insertion
+points):
+  - **pre-build slice check (B)** — a slice-review gate inside `do <slug>` before
+    building. Later set.
+  - **run coverage (D)** — its own set; converge `run` on the `do`/`performComplete`
+    path FIRST, then review integrates. Later set.
+  - **issue-thread surface (E)** — run the review/edit loop in issue-to-prd /
+    issue-intake CI, surfacing findings as comment-thread questions/edits. Later
+    set (issue-intake design).
   - **`review-gate-pr-comment`** — post the Gate-2 verdict AS a GitHub PR
-    review/comment via a provider seam (the "more visible" property). Blocked on a
-    provider/PR-comment seam, which does NOT exist in `src/` today. Slice once that
-    seam lands.
-Add the `sliced:` marker (and do the one-time PRD trim) only once all three are
-sliced. Until then this PRD stays the source for the remaining two.
+    review/comment via a provider seam (does NOT exist in `src/` today). Later.
+  - **remove `reviewMaxRounds` from the Gate-2 path** (orphan; the loop owns
+    `maxReview`) — cleanup, later.
+Add the `sliced:` marker (and the one-time PRD trim) only once these are sliced.
+Until then this PRD stays the source for them.
 
 ## Out of Scope
 
