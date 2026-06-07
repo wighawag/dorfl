@@ -47,6 +47,15 @@ review gate, PR title/body, AND the per-repo `verify` gate.
   recording `reason`), set `prUrl` from `integration?.url`; the `teardown()` reap in
   `finally` is unchanged. `run` NEVER does switch/ff/delete-branch (that is `do`'s
   tail; a job worktree is reaped, not switched).
+- **Handle a THROWN error from the core (from PR #17 review, finding #2):**
+  `performIntegration` THROWS a plain `Error` for a misconfigured gate (`review` on
+  but no `reviewGate` wired) — `complete.ts` catches it via its `performComplete`
+  catch-all and maps it to a usage failure. `run`'s tail has NO such catch-all
+  today, so `runOneItem` must wrap the `performIntegration` call so a thrown core
+  error becomes a saved/needs-attention `ItemResult` (reuse `saveAgentFailure` / the
+  needs-attention seam), NOT an uncaught crash that takes down the whole tick. Since
+  `run` always passes a real `reviewGate` when `config.review` is on, this is a
+  defensive guard, but it must not be left to crash.
 - **Gate UNIFICATION (option a — protocol-conformance fix):** DELETE
   `defaultTestGate` and the `TestGate` type. `run` now gates via the core's
   `runVerify(config.verify)` — the per-repo, language-agnostic gate it currently
@@ -105,6 +114,11 @@ review gate, PR title/body, AND the per-repo `verify` gate.
 - [ ] The TAIL mapping is correct: `completed`→`claimed-done` (+prUrl);
       `gate-failed`→`tests-failed`; `review-blocked`/`rebase-conflict`→
       `needs-attention` (with the reason); `teardown` reap unchanged.
+- [ ] A THROWN core error (e.g. `review` on with no `reviewGate` — `performIntegration`
+      throws a plain `Error`, unlike the data outcomes) is caught in `runOneItem` and
+      turned into a saved/needs-attention `ItemResult`, NOT an uncaught crash of the
+      tick (a test injects the misconfiguration / a throwing gate and asserts the
+      item is routed, the worktree handled, and the run continues).
 - [ ] **Test isolation:** all writes go to temp work trees / scratch arbiters; the
       real `~/.agent-runner/` + `~/.pi/agent/sessions/` are UNTOUCHED.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
