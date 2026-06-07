@@ -7,12 +7,19 @@ status: incubating
 
 # advance-loop: turn a set of PRDs into shipped product, with the only human work being to answer questions
 
-> Captured 2026-06-07 from a design conversation; refined the same day. The
+> Captured 2026-06-07 from a design conversation; hardened the same day by a full
+> grilling pass (every major seam RESOLVED; one PRD-time byte-detail remains). The
 > unification of three things that already exist separately: the `batch-qa`
 > step-function (the lifecycle rungs), the `run`/`do` execution machinery (one-shot
 > tick + loop + isolation + CAS), and the `auto-slice` family (`do prd:<slug>`
-> already generalized `do` beyond building). NOT built; framed for a later PRD +
-> grilling pass. Names (`advance`, `obs:`, the repo-config key) are placeholders.
+> already generalized `do` beyond building). NOT built; PRD-ready. Names (`advance`,
+> `obs:`, the repo-config key) are placeholders.
+>
+> Reading order: vision → core idea → command surface → execution (the tick) → the
+> two artifacts the rest depends on (the question SIDECAR, then the tick STATE
+> MACHINE) → the rungs/mechanics that use them (triage, lock model, classify→lock→
+> execute, per-type transitions) → the contract+repo-config → batch-qa refactor → CI
+> shape → termination → remaining detail → sequencing.
 
 ## The product vision (the north star)
 
@@ -81,21 +88,13 @@ Decisions baked in (do not relitigate without cause):
 
 Define `advance` as a PURE one-item TICK; both drivers wrap the SAME tick (the same
 "extract the shared thing, two callers" move the run/do convergence used for
-`integration-core` — one level up).
+`integration-core` — one level up). The tick's internals (the deterministic trigger,
+the classify→lock→execute flow) are defined in the sections below; here is the shape:
 
-**The advance TICK (one item, substrate-agnostic):**
-
-1. **Take the transition lock** (CAS seam) on the item; lose → skip (contended).
-2. **Read** the item's state + any answers present in its question artifact.
-3. **Apply** answers present (merge into the item; flip `needsAnswers` where now
-   fully resolved) — deterministic, no agent.
-4. **Do the autonomous rung** the state calls for: observation → triage
-   (review/stub); ready PRD → the `do prd:` slice rung; ready slice → the `do <slug>`
-   build rung; `needsAnswers:true` item with no new answer → run review, emit/refresh
-   its question.
-5. **Write** any new questions (the per-item question artifact).
-6. **Release the lock** (with the `autoslice-lock` release-rebase backstop).
-7. **Return** what it did / what is now blocked-on-answer. NEVER invents an answer.
+**The advance TICK (one item, substrate-agnostic):** classify the item's next rung
+(cheap, read-only) → take the rung's CAS lock → execute the rung (apply answers /
+surface questions / build / slice / triage), winner-only → release. NEVER invents an
+answer.
 
 **Two drivers wrap the identical tick:**
 
@@ -126,52 +125,133 @@ concern: `scan` (already exists) reports what is eligible/present, and the calle
 sequences its own invocations. The verbs stay order-free; `scan` is the ordering
 oracle.
 
-## One question/answer CONTRACT, two drivers, repo-config gated
+## The question/answer artifact — a per-item SIDECAR (RESOLVED 2026-06-07 — the keystone)
 
-Do NOT build a parallel question mechanism for the autonomous flow. Design ONE
-question/answer protocol (a contract-native artifact) and have BOTH drivers use it:
+**Option B: a per-item SIDECAR file, flat, in its own tree** —
+`work/questions/<type>-<slug>.md` (e.g. `work/questions/prd-autoslice.md`,
+`work/questions/slice-foo.md`, `work/questions/obs-bar.md`). Chosen over an
+in-item structured block (Option A) for these reasons + four properties:
 
-- **human-interactive driver** — `batch-qa`, REFACTORED ONTO this contract (it stops
-  being a bespoke one-off batch file and becomes the human face of the same
-  protocol).
-- **autonomous driver** — the advance tick above (one-shot or looped).
+WHY B over A (in-body block):
+- **A would require a round-trip parser over human-authored prose** — nothing today
+  reads open-questions from item bodies (only the `needsAnswers` FLAG is read, by
+  `categorise.ts`); the `## Open questions` block is pure prose. Editing a
+  structured Q&A block inside a human-authored file without corrupting it, on every
+  apply, is exactly the fragility the idea set out to avoid (`> ANSWER:` lines).
+  The sidecar is a file the tooling FULLY OWNS in a strict, testable format.
+- **B decouples the contention surface** — surfacing a question / reading an answer
+  touches only the sidecar; the item body is mutated only on the apply rung. (A
+  would make every answer-apply lock the whole item AND invite human-prose-edit vs
+  agent-block-edit merge conflicts in the SAME file.)
+- **Human + machine visibility** — `ls work/questions/` is the live, always-current
+  "what needs me?" dashboard (the durable form of what `batch-qa` produces
+  ephemerally); `scan`/`status` already group by `needsAnswers` and gain the actual
+  questions for free.
+- **Strict machine-readable answered-vs-open** — the sidecar format carries, per
+  entry, an explicit answered-state (`id`, `question`, `context`, `answered:
+  bool`, `answer:`), so the agent NEVER re-asks a resolved question. No prose
+  round-trip.
 
-### Repo-config: a FLAT per-action gate family (RESOLVED 2026-06-07)
+FOUR PROPERTIES (these defuse B's weaknesses):
+1. **Type-encoded flat name `<type>-<slug>`** — slugs collide across namespaces (a
+   slice and a PRD can share a slug — that is why `slug-namespace-resolution`
+   exists), so the sidecar name must encode the item TYPE (mirroring the
+   `slice:`/`prd:`/`obs:` namespace prefixes, `:`→`-` for filenames). Derived
+   deterministically from the item's NAMESPACED identity (the resolver stays the
+   single source of truth).
+2. **Identity-keyed, NOT folder-keyed** — items `git mv` between folders on every
+   lifecycle step (claim/complete/bounce/requeue); the sidecar is keyed to item
+   IDENTITY (`<type>-<slug>`), so it SURVIVES folder moves WITHOUT a lock-step
+   `git mv` of the sidecar. (A feature: questions persist across the item's moves.)
+3. **Terminal cleanup** — on the item reaching a TERMINAL state (`done/` or
+   deleted), the advance tick DELETES the sidecar as part of that rung (a done item
+   has no open questions). One owner, one deletion point — avoids orphans (the same
+   lifecycle-hygiene concern `review-nits-observation` handled).
+4. **Atomic apply** — applying an answer mutates the item body AND updates/removes
+   the sidecar entry in ONE commit (the atomic-commit discipline `complete` /
+   `review-nits-observation` already use), so you never get "answer applied but
+   sidecar still says open" (re-ask) or the reverse.
 
-Advance does NOT get a single master "allowAdvance" knob. It COMPOSES the existing
-per-action gates and adds one new gate — because "advance" spans actions of very
-different blast radius. Verified: today `allowAgents` is NOT a master — it gates
-ONLY slice-BUILD (`resolveGate()` in `eligibility.ts`: agent-claimable iff
-`needsAnswers!==true && humanOnly!==true && allowAgents`); `autoSlice` is ALREADY a
-separate flag. So the system is already flat per-action; advance continues that:
+(The exact sidecar FORMAT bytes are the one remaining PRD-time detail — see
+"Remaining open detail" below.)
 
-| action | gate | default | notes |
-|---|---|---|---|
-| build a ready slice | `allowAgents` (→ rename `autoBuild`, see below) | off | exists |
-| slice a ready PRD | `autoSlice` | off | exists |
-| auto-disposition an observation (the no-question triage path) | **`autoTriage` (NEW)** | off | the only genuinely new autonomous decision |
-| SURFACE a question (write sidecar) | none — ALWAYS allowed | — | additive/harmless; it IS the loop's core convenience |
-| APPLY a human's answer (mutate item) | none — ALWAYS allowed | — | just executes a decision the human already made |
+## The tick's per-item state machine (RESOLVED 2026-06-07 — deterministic trigger)
 
-So a repo with every flag OFF still gets the QUESTION LOOP (agents surface
-questions + apply the human's answers — the core convenience) but never autonomously
-builds/slices/triages. Turning on `allowAgents`/`autoSlice`/`autoTriage`
-progressively hands over more autonomy. Advance, as an orchestrator, must RESPECT
-these (a build rung obeys `allowAgents`, a slice rung obeys `autoSlice`) — it never
-bypasses them.
+What a tick acts on is decided by TWO signals only — the `needsAnswers` flag (which
+already gates autonomous work, `categorise.ts`) + the sidecar's answered-state. No
+third state store:
 
-### Rename `allowAgents` → `autoBuild` (SEQUENCED LAST — after the rest)
+```
+needsAnswers: true?
+├─ NO  → ANALYSE (run the state-appropriate rung: build a ready slice / slice a
+│        ready PRD / triage an untriaged observation). Analysis MAY advance the
+│        item, OR SURFACE questions (atomically set needsAnswers:true + write the
+│        sidecar) if it hits judgement it cannot resolve.
+└─ YES → sidecar exists?
+         ├─ NO  → ANALYSE (first pass: generate questions → write the sidecar).
+         │        [transitional — normally the surfacing that set needsAnswers:true
+         │         ALSO wrote the sidecar atomically, so this branch is rare]
+         └─ YES → all entries answered?
+                  ├─ YES → ANALYSE: apply the answers + advance. May APPEND new
+                  │        questions (→ stays needsAnswers:true, re-pauses for the
+                  │        human), OR resolve fully (→ clear needsAnswers + delete the
+                  │        sidecar, ATOMICALLY, in one commit).
+                  └─ NO  → NO-OP (awaiting human; a `run` daemon tick is cheap).
+```
 
-`allowAgents` reads like a master ("may agents act at all") but only gates BUILD — a
-naming trap once `autoSlice`/`autoTriage` siblings exist (a reader sets
-`allowAgents:false` expecting "no agent autonomy" but slice/triage have their own
-flags). Rename it to `autoBuild` so the family is symmetric
-(`autoBuild`/`autoSlice`/`autoTriage`). This is a BREAKING config rename (touches
-`.agent-runner.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs,
-WORK-CONTRACT; precedent: `rename-reviewpr-to-review`). DO IT LAST — build the
-advance family with `allowAgents` named as-is, then rename as one clean isolated
-migration (with an alias/deprecation window) AFTER the advance work lands. Easier to
-sequence the rename alone than to entangle it with the feature.
+Key points (RESOLVED):
+
+- **"ANALYSE" ≠ "always advance."** It runs the state-appropriate analysis, which
+  may instead SURFACE-AND-PAUSE (set `needsAnswers:true` + write the sidecar). So
+  "surface questions" is itself one of the rungs — used by triage and by any rung
+  that hits judgement. An untriaged observation (likely has NO `needsAnswers` yet)
+  hits the top branch; triage may then surface a question, flipping it to
+  `needsAnswers:true` + a sidecar.
+- **Subset of answers → SKIP** (the human answers all before the item is re-analysed)
+  — deterministic, no thrash.
+- **Append, never overwrite.** When a triggered analysis reveals NEW questions,
+  APPEND them to the sidecar (keep the answered entries). The sidecar becomes the
+  item's full Q&A HISTORY — good for the human (sees the thread) AND the machine
+  (remembers each decision + why, so it never re-asks and can reason from prior
+  answers). "All answered?" naturally flips back to false when new entries appear,
+  re-pausing the loop. (The applied answers are ALSO integrated into the item body;
+  the sidecar keeps the record of WHAT was asked/answered.)
+- **Two invariants:**
+  1. `needsAnswers:false` ⟺ NO active sidecar — clearing the flag and deleting the
+     sidecar are the SAME atomic step, so the predicate never sees a
+     `false`+sidecar contradiction.
+  2. A pending (not-all-answered) sidecar makes the tick a clean NO-OP — so a `run`
+     daemon never spins hot re-surfacing the same question.
+- **Declined/keep is an answer** — "keep-watching" / "don't promote" is an answered
+  entry + a recorded marker on the item, so a settled observation drops out of the
+  candidate pool and is never re-asked.
+- **Churn is visible, not auto-managed** — an item that keeps generating new questions
+  across rungs is doing real discovery; the appended sidecar thread makes the
+  round-trips visible so a human can take it to a `grill-me`/design pass. A
+  round-counter that flips it to needs-design after N round-trips (mirroring
+  `reviewMaxRounds` exhaustion) is a DEFERRED optional refinement, not built first.
+
+## The observation-triage rung (RESOLVED 2026-06-07 — option c, high bar)
+
+Observation disposition (promote-to-slice / promote-to-ADR / keep / delete) is
+product judgement, so the rung is **question-gated BY DEFAULT** — the agent surfaces
+a triage question into the sidecar and waits for a human answer; it never decides
+"is this worth building?" autonomously.
+
+BUT (option c): **if there is genuinely NO question, the agent may auto-disposition
+without asking.** "No question" must be set CONSERVATIVELY — the test is "a human
+would not plausibly disagree," e.g. the observation is an exact duplicate of an
+existing finding/slice (→ suggest delete/merge), or it maps unambiguously onto an
+existing PRD/slice with no judgement about whether to build it. When in ANY doubt,
+SURFACE — the asymmetry is the usual one: a needless question costs one human
+glance; an auto-disposition of a real signal (auto-deleting a genuine observation,
+or drafting a slice for something not worth building) is expensive. The agent NEVER
+auto-DELETES a non-duplicate signal and NEVER auto-promotes a judgement call.
+
+Consequence (state honestly): item-classes do NOT advance equally autonomously.
+Slices/PRDs advance a lot (build/slice autonomously when ready); observations
+advance mostly via a human triage answer, with auto-disposition reserved for the
+no-question cases. That is correct, not a gap.
 
 ## The lock model (RESOLVED 2026-06-07)
 
@@ -233,12 +313,12 @@ EXPENSIVE work is always POST-lock, winner-only.
    Loser of the CAS gets exit-2 and backs off HAVING SPENT ~NOTHING.
 3. **EXECUTE the rung (may be expensive: agent/model) — WINNER ONLY.**
 
-**Why this matters (maintainer, 2026-06-07):** a pure "analyse-expensively then lock"
-optimism would let two GitHub Actions runners each burn model tokens + CI minutes on
-the same item, with one thrown away. Locking BEFORE the expensive phase (classify is
-the cheap part that decides the action) means a CAS loser never starts the model
-work. TOCTOU between classify and CAS is harmless — only the FREE classification is
-wasted on a stale decision; the CAS catches it and the tick retries.
+**Why this matters:** a pure "analyse-expensively then lock" optimism would let two
+GitHub Actions runners each burn model tokens + CI minutes on the same item, with one
+thrown away. Locking BEFORE the expensive phase (classify is the cheap part that
+decides the action) means a CAS loser never starts the model work. TOCTOU between
+classify and CAS is harmless — only the FREE classification is wasted on a stale
+decision; the CAS catches it and the tick retries.
 
 **New-item creation goes THROUGH the CAS too** (e.g. observation→promote drafts a
 new `work/backlog/<new-slug>.md`). The create-rung locks on the NEW item's identity
@@ -306,134 +386,51 @@ observations/ (answered "delete")
 4. Same-slug new-item creation race → routed through the CAS, loser backs off (see
    above). ✓ (minor; unlikely)
 
-## The question/answer artifact (RESOLVED 2026-06-07 — the keystone)
+## One question/answer CONTRACT, two drivers, repo-config gated
 
-**Option B: a per-item SIDECAR file, flat, in its own tree** —
-`work/questions/<type>-<slug>.md` (e.g. `work/questions/prd-autoslice.md`,
-`work/questions/slice-foo.md`, `work/questions/obs-bar.md`). Chosen over an
-in-item structured block (Option A) for these reasons + four properties:
+Do NOT build a parallel question mechanism for the autonomous flow. Design ONE
+question/answer protocol (the sidecar contract above) and have BOTH drivers use it:
 
-WHY B over A (in-body block):
-- **A would require a round-trip parser over human-authored prose** — nothing today
-  reads open-questions from item bodies (only the `needsAnswers` FLAG is read, by
-  `categorise.ts`); the `## Open questions` block is pure prose. Editing a
-  structured Q&A block inside a human-authored file without corrupting it, on every
-  apply, is exactly the fragility the idea set out to avoid (`> ANSWER:` lines).
-  The sidecar is a file the tooling FULLY OWNS in a strict, testable format.
-- **B decouples the contention surface** — surfacing a question / reading an answer
-  touches only the sidecar; the item body is mutated only on the apply rung. (A
-  would make every answer-apply lock the whole item AND invite human-prose-edit vs
-  agent-block-edit merge conflicts in the SAME file.)
-- **Human + machine visibility** — `ls work/questions/` is the live, always-current
-  "what needs me?" dashboard (the durable form of what `batch-qa` produces
-  ephemerally); `scan`/`status` already group by `needsAnswers` and gain the actual
-  questions for free.
-- **Strict machine-readable answered-vs-open** — the sidecar format carries, per
-  entry, an explicit answered-state (`id`, `question`, `context`, `answered:
-  bool`, `answer:`), so the agent NEVER re-asks a resolved question. No prose
-  round-trip.
+- **human-interactive driver** — `surface-questions` (the refocused `batch-qa`, see
+  below), human-invoked.
+- **autonomous driver** — the advance tick (one-shot or looped).
 
-FOUR PROPERTIES (these defuse B's weaknesses):
-1. **Type-encoded flat name `<type>-<slug>`** — slugs collide across namespaces (a
-   slice and a PRD can share a slug — that is why `slug-namespace-resolution`
-   exists), so the sidecar name must encode the item TYPE (mirroring the
-   `slice:`/`prd:`/`obs:` namespace prefixes, `:`→`-` for filenames). Derived
-   deterministically from the item's NAMESPACED identity (the resolver stays the
-   single source of truth).
-2. **Identity-keyed, NOT folder-keyed** — items `git mv` between folders on every
-   lifecycle step (claim/complete/bounce/requeue); the sidecar is keyed to item
-   IDENTITY (`<type>-<slug>`), so it SURVIVES folder moves WITHOUT a lock-step
-   `git mv` of the sidecar. (A feature: questions persist across the item's moves.)
-3. **Terminal cleanup** — on the item reaching a TERMINAL state (`done/` or
-   deleted), the advance tick DELETES the sidecar as part of that rung (a done item
-   has no open questions). One owner, one deletion point — avoids orphans (the same
-   lifecycle-hygiene concern `review-nits-observation` handled).
-4. **Atomic apply** — applying an answer mutates the item body AND updates/removes
-   the sidecar entry in ONE commit (the atomic-commit discipline `complete` /
-   `review-nits-observation` already use), so you never get "answer applied but
-   sidecar still says open" (re-ask) or the reverse.
+### Repo-config: a FLAT per-action gate family (RESOLVED 2026-06-07)
 
-Residual open detail (for the PRD): the exact sidecar file FORMAT (frontmatter +
-per-entry fields), and the pointer/convention linking item → sidecar (likely just
-`needsAnswers: true` + the deterministic name; a reader knows where to look).
+Advance does NOT get a single master "allowAdvance" knob. It COMPOSES the existing
+per-action gates and adds one new gate — because "advance" spans actions of very
+different blast radius. Verified: today `allowAgents` is NOT a master — it gates
+ONLY slice-BUILD (`resolveGate()` in `eligibility.ts`: agent-claimable iff
+`needsAnswers!==true && humanOnly!==true && allowAgents`); `autoSlice` is ALREADY a
+separate flag. So the system is already flat per-action; advance continues that:
 
-## The observation-triage rung (RESOLVED 2026-06-07 — option c, high bar)
+| action | gate | default | notes |
+|---|---|---|---|
+| build a ready slice | `allowAgents` (→ rename `autoBuild`, see below) | off | exists |
+| slice a ready PRD | `autoSlice` | off | exists |
+| auto-disposition an observation (the no-question triage path) | **`autoTriage` (NEW)** | off | the only genuinely new autonomous decision |
+| SURFACE a question (write sidecar) | none — ALWAYS allowed | — | additive/harmless; it IS the loop's core convenience |
+| APPLY a human's answer (mutate item) | none — ALWAYS allowed | — | just executes a decision the human already made |
 
-Observation disposition (promote-to-slice / promote-to-ADR / keep / delete) is
-product judgement, so the rung is **question-gated BY DEFAULT** — the agent surfaces
-a triage question into the sidecar and waits for a human answer; it never decides
-"is this worth building?" autonomously.
+So a repo with every flag OFF still gets the QUESTION LOOP (agents surface
+questions + apply the human's answers — the core convenience) but never autonomously
+builds/slices/triages. Turning on `allowAgents`/`autoSlice`/`autoTriage`
+progressively hands over more autonomy. Advance, as an orchestrator, must RESPECT
+these (a build rung obeys `allowAgents`, a slice rung obeys `autoSlice`) — it never
+bypasses them.
 
-BUT (option c): **if there is genuinely NO question, the agent may auto-disposition
-without asking.** "No question" must be set CONSERVATIVELY — the test is "a human
-would not plausibly disagree," e.g. the observation is an exact duplicate of an
-existing finding/slice (→ suggest delete/merge), or it maps unambiguously onto an
-existing PRD/slice with no judgement about whether to build it. When in ANY doubt,
-SURFACE — the asymmetry is the usual one: a needless question costs one human
-glance; an auto-disposition of a real signal (auto-deleting a genuine observation,
-or drafting a slice for something not worth building) is expensive. The agent NEVER
-auto-DELETES a non-duplicate signal and NEVER auto-promotes a judgement call.
+### Rename `allowAgents` → `autoBuild` (SEQUENCED LAST — after the rest)
 
-Consequence (state honestly): item-classes do NOT advance equally autonomously.
-Slices/PRDs advance a lot (build/slice autonomously when ready); observations
-advance mostly via a human triage answer, with auto-disposition reserved for the
-no-question cases. That is correct, not a gap.
-
-## The tick's per-item state machine (RESOLVED 2026-06-07 — deterministic trigger)
-
-What a tick acts on is decided by TWO signals only — the `needsAnswers` flag (which
-already gates autonomous work, `categorise.ts`) + the sidecar's answered-state. No
-third state store:
-
-```
-needsAnswers: true?
-├─ NO  → ANALYSE (run the state-appropriate rung: build a ready slice / slice a
-│        ready PRD / triage an untriaged observation). Analysis MAY advance the
-│        item, OR SURFACE questions (atomically set needsAnswers:true + write the
-│        sidecar) if it hits judgement it cannot resolve.
-└─ YES → sidecar exists?
-         ├─ NO  → ANALYSE (first pass: generate questions → write the sidecar).
-         │        [transitional — normally the surfacing that set needsAnswers:true
-         │         ALSO wrote the sidecar atomically, so this branch is rare]
-         └─ YES → all entries answered?
-                  ├─ YES → ANALYSE: apply the answers + advance. May APPEND new
-                  │        questions (→ stays needsAnswers:true, re-pauses for the
-                  │        human), OR resolve fully (→ clear needsAnswers + delete the
-                  │        sidecar, ATOMICALLY, in one commit).
-                  └─ NO  → NO-OP (awaiting human; a `run` daemon tick is cheap).
-```
-
-Key points (RESOLVED):
-
-- **"ANALYSE" ≠ "always advance" (Q3b).** It runs the state-appropriate analysis,
-  which may instead SURFACE-AND-PAUSE (set `needsAnswers:true` + write the sidecar).
-  So "surface questions" is itself one of the rungs — used by triage and by any rung
-  that hits judgement. An untriaged observation (likely has NO `needsAnswers` yet)
-  hits the top branch; triage may then surface a question, flipping it to
-  `needsAnswers:true` + a sidecar.
-- **Subset of answers → SKIP** (the human answers all before the item is re-analysed)
-  — deterministic, no thrash.
-- **Append, never overwrite (Q3a, RESOLVED).** When a triggered analysis reveals NEW
-  questions, APPEND them to the sidecar (keep the answered entries). The sidecar
-  becomes the item's full Q&A HISTORY — good for the human (sees the thread) AND the
-  machine (remembers each decision + why, so it never re-asks and can reason from
-  prior answers). "All answered?" naturally flips back to false when new entries
-  appear, re-pausing the loop. (The applied answers are also integrated into the
-  item body; the sidecar keeps the record of WHAT was asked/answered.)
-- **Two invariants (Q3b, RESOLVED):**
-  1. `needsAnswers:false` ⟺ NO active sidecar — clearing the flag and deleting the
-     sidecar are the SAME atomic step, so the predicate never sees a
-     `false`+sidecar contradiction.
-  2. A pending (not-all-answered) sidecar makes the tick a clean NO-OP — so a `run`
-     daemon never spins hot re-surfacing the same question.
-- **Declined/keep is an answer** — "keep-watching" / "don't promote" is an answered
-  entry + a recorded marker on the item, so a settled observation drops out of the
-  candidate pool and is never re-asked.
-- **Churn is visible, not auto-managed** — an item that keeps generating new questions
-  across rungs is doing real discovery; the appended sidecar thread makes the
-  round-trips visible so a human can take it to a `grill-me`/design pass. A
-  round-counter that flips it to needs-design after N round-trips (mirroring
-  `reviewMaxRounds` exhaustion) is a DEFERRED optional refinement, not built first.
+`allowAgents` reads like a master ("may agents act at all") but only gates BUILD — a
+naming trap once `autoSlice`/`autoTriage` siblings exist (a reader sets
+`allowAgents:false` expecting "no agent autonomy" but slice/triage have their own
+flags). Rename it to `autoBuild` so the family is symmetric
+(`autoBuild`/`autoSlice`/`autoTriage`). This is a BREAKING config rename (touches
+`.agent-runner.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs,
+WORK-CONTRACT; precedent: `rename-reviewpr-to-review`). DO IT LAST — build the
+advance family with `allowAgents` named as-is, then rename as one clean isolated
+migration (with an alias/deprecation window) AFTER the advance work lands. Easier to
+sequence the rename alone than to entangle it with the feature.
 
 ## batch-qa → `surface-questions` (RESOLVED 2026-06-07)
 
@@ -554,8 +551,13 @@ A NEXT-HORIZON PRD, not a now-slice. It builds on:
 
 ## Disposition
 
-Promote to its own PRD when prioritised (after auto-slice). Grill the open seams
-above first — especially seam 1 (the question/answer artifact shape), which is the
-one load-bearing piece of genuinely new design; almost everything else is reuse of
-machinery that already exists (the tick/loop split, the CAS lock kinds, the
-slug-namespace resolver, the isolation-strategy seam, the `batch-qa` rungs).
+PRD-READY (grilled 2026-06-07 — every major seam resolved; only the sidecar FORMAT
+bytes remain, a PRD-time detail). Promote to its own PRD via `to-prd` (best run in a
+FRESH context reading THIS file as the sole input — it is self-contained). Sequence
+the PRD after auto-slice. Intended to be dogfooded by auto-slice itself once that
+lands — so the `to-prd` pass should resolve any residual `needsAnswers` and weigh
+whether the PRD truly warrants `humanOnly` (a `humanOnly` PRD cannot be auto-sliced;
+if dogfooding is wanted, it must be non-`humanOnly`). Almost everything here is reuse
+of existing machinery (the tick/loop split, the CAS lock kinds + the new `advancing`
+borrow, the slug-namespace resolver, the isolation-strategy seam, the `batch-qa`
+rungs); the one genuinely-new piece is the question/answer sidecar contract.
