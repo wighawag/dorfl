@@ -53,21 +53,35 @@ GitHub provider runs `gh pr create ... --fill` (derives title/body from commit
 subjects → title-only, empty body). A reviewer landing on a multi-file PR gets no
 summary, no decisions, no pointer to the slice spec.
 
-- **Add an optional `body` (and `title`) to the provider seam — AND thread it from
-  `complete.ts` (verified layer note 2026-06-06).** `OpenRequestInput`
-  (`src/integrator.ts`) gains optional `body`/`title`; the GitHub provider passes
-  them as `gh pr create --title <t> --body <body>` (instead of `--fill` when
-  present); the `none` provider includes them in its manual-instruction output; no
-  behaviour change when absent (degrades to today's `--fill`). **NOTE the call
-  chain (one layer longer than just `OpenRequestInput`):** `openRequest` is called
-  INSIDE the integrator (`integrateWithRebase`), which is built from
-  `IntegrateInput` passed DOWN from `complete.ts`. So `body`/`title` must also be
-  added to `IntegrateInput` and threaded `complete.ts` → `IntegrateInput` →
-  `OpenRequestInput` → `gh`. The body's SOURCE (the agent's `LaunchResult.output`)
-  lives in `complete.ts`, so that is where it enters the chain.
-- **Source (RESOLVED):** the agent's FINAL SUMMARY via `LaunchResult.output`
-  (`harness-agent-output`, PR #12) as the prose, optionally under a runner-scaffolded
-  header (slice pointer + PRD/ADR + diff stat).
+- **Add an optional `body` (and `title`) to the provider seam — AND thread it
+  end-to-end (call chain VERIFIED 2026-06-07 against the real code; the chain is
+  TWO layers longer than the original note claimed):** `OpenRequestInput`
+  (`src/integrator.ts`) gains optional `body`/`title`; the GitHub provider
+  (`src/github.ts`) passes them as `gh pr create --title <t> --body <body>`
+  (instead of `--fill` when present); the `none` provider includes them in its
+  manual-instruction output; no behaviour change when absent (degrades to today's
+  `--fill`). The full thread is:
+  `do.ts (captures the build agent's LaunchResult.output)` →
+  `CompleteOptions` (NEW `body` field) → `performComplete` →
+  `ledgerWrite.applyCompleteTransition(ApplyCompleteTransitionInput)` (NEW `body`)
+  → `Integrator.integrate(IntegrateInput)` (NEW `body`) →
+  `provider.openRequest(OpenRequestInput)` (NEW `body`) → `gh`. Note the seam goes
+  THROUGH `ledger-write.ts`'s `applyCompleteTransition`, not directly
+  `complete.ts`→`integrator.ts` — so `ApplyCompleteTransitionInput` gains the
+  field too.
+- **Source (RESOLVED) — BUT the SOURCE does NOT live in `complete.ts` (original
+  note was WRONG; corrected 2026-06-07):** the agent's FINAL SUMMARY is
+  `LaunchResult.output` (`harness-agent-output`, PR #12), and it is produced in
+  `do.ts`'s `runDoAgent` — which TODAY DISCARDS it (`return {ok: launched.ok,
+  detail: launched.detail}` drops `launched.output`). So Half B has a REAL,
+  implementer-blocking prerequisite the original slice glossed: (a) `runDoAgent`
+  must RETURN `launched.output`; (b) the injectable `DoAgentRunner` seam
+  (`do.ts`, today `=> {ok, detail}`) must gain an optional `output` so the
+  test-injected agent can supply a body too; (c) `do.ts` must capture it and pass
+  it into `performComplete` via the NEW `CompleteOptions.body`. `complete.ts`
+  never sees `LaunchResult` on its own — it only gets the body if `do.ts` hands
+  it over. The runner MAY wrap it under a deterministic header (slice pointer +
+  PRD/ADR + diff stat).
 - **The body should carry:** a short summary of what was built, key
   decisions/deviations worth a reviewer's attention, a pointer back to the slice
   file (`work/done/<slug>.md`) + the PRD/ADR it serves, and optionally any "please
@@ -96,15 +110,23 @@ summary, no decisions, no pointer to the slice spec.
    append the agent's `output` summary as the prose — the hybrid the question
    floated, now cheap because the channel exists. No new "final summary" channel is
    needed; reuse `LaunchResult.output`.
-2. **Hand-off channel — RESOLVED: `LaunchResult.output`.** The harness already
-   returns the agent's final assistant message (pi from its `.jsonl`, null/shell
-   from stdout — `harness-agent-output`). The agent does NO git; the runner reads
+2. **Hand-off channel — RESOLVED: `LaunchResult.output`, BUT it is produced in
+   `do.ts`, not `complete.ts` (corrected 2026-06-07).** The harness returns the
+   agent's final assistant message on `LaunchResult.output`; `do.ts`'s
+   `runDoAgent` is the ONLY place that holds the build agent's `LaunchResult`, and
+   it currently DROPS `output` (returns only `{ok, detail}`). To carry a live
+   body, `runDoAgent` (and the `DoAgentRunner` injectable seam) must surface
+   `output`, and `do.ts` must thread it into `performComplete`. The agent does NO
+   git; the runner reads
    `output` and composes the PR body. No transient-path convention needed.
-3. **Human `complete --propose` — RESOLVED: YES, optionally.** The same optional
-   `body` field applies; a human may pass a `--message`/`--body`-style description
-   on `complete --propose`. Thin add (the field already exists for the autonomous
-   path); not required to ship the autonomous body, but in scope so the two paths
-   share one mechanism.
+3. **Human `complete --propose` — RESOLVED: YES, optionally, via a NEW flag.**
+   The same optional `body` field on `CompleteOptions` applies. NOTE (verified
+   2026-06-07): the existing `complete --message`/`flags.message` is the
+   COMMIT-summary, threaded to `options.message` and used for the commit, NOT a PR
+   body — so a human PR body needs a DISTINCT field/flag (e.g. `--body`), it can
+   NOT reuse `--message`. Thin add (the underlying `body` field exists for the
+   autonomous path); not required to ship the autonomous body, but in scope so the
+   two paths share one mechanism.
 
 ## Acceptance criteria
 
@@ -120,8 +142,19 @@ summary, no decisions, no pointer to the slice spec.
 - [ ] **(Half B — body)** `OpenRequestInput` carries an optional `body`; the GitHub
       provider passes it via `gh pr create --body` (and only falls back to `--fill`
       when absent); the `none` provider surfaces it in its manual instructions.
-- [ ] The resolved body (per the decided source, Q1) includes a summary + a pointer
-      to `work/done/<slug>.md`; absent body ⇒ today's behaviour (no regression).
+- [ ] **(Half B — wiring)** the optional `body` is threaded through the WHOLE chain
+      verified to exist: `CompleteOptions.body` → `performComplete` →
+      `ApplyCompleteTransitionInput.body` (`ledger-write.ts`) → `IntegrateInput.body`
+      (`integrator.ts`) → `OpenRequestInput.body`. Absent at every hop ⇒ today's
+      behaviour (no regression).
+- [ ] **(Half B — source capture)** `do.ts`'s `runDoAgent` RETURNS the build
+      agent's `LaunchResult.output` (today it drops it), the `DoAgentRunner`
+      injectable seam gains an optional `output` (so a test agent can supply a
+      body), and `do.ts` passes it into `performComplete` as `body`. A test proves
+      a stubbed agent's `output` reaches the (stubbed) provider's body on the
+      `do` propose path.
+- [ ] The resolved body includes a summary + a pointer to `work/done/<slug>.md`;
+      absent body ⇒ today's behaviour (no regression).
 - [ ] Tests (stubbed provider): a PR opened with a body passes it through; absent
       body degrades cleanly; the GitHub adapter builds the right `gh` args.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
@@ -131,7 +164,10 @@ summary, no decisions, no pointer to the slice spec.
 - None for the code. (`needsAnswers` is now CLEARED — Q1–Q3 resolved.) Half B reads
   the agent summary from `LaunchResult.output`, which `harness-agent-output` (PR #12)
   built — so for the live agent body to be non-empty, that must be merged first
-  (it is, on `main`). Half A (title) depends on nothing.
+  (it is, on `main`). NOTE (verified 2026-06-07): although `LaunchResult.output`
+  exists, `do.ts`'s `runDoAgent` currently DISCARDS it; Half B's source-capture
+  criterion above is part of THIS slice (no extra blocker, but real work). Half A
+  (title) depends on nothing.
 
 ## Prompt
 
@@ -147,22 +183,32 @@ summary, no decisions, no pointer to the slice spec.
 > length. No agent text needed — pure runner synthesis from the slice file.
 >
 > HALF B (body, now unblocked): give `propose`-mode PRs a real body instead of `gh
-> pr create --fill`'s empty description. Add an optional `body` to `OpenRequestInput`
-> (`src/integrator.ts`); the GitHub provider (`src/github.ts`) passes `--body` when
-> present (else today's `--fill`); the `none` provider includes it in its manual
-> instructions. SOURCE (resolved): the agent's final summary from
-> `LaunchResult.output` (the harness seam built by `harness-agent-output`), optionally
+> pr create --fill`'s empty description. Add an optional `body` and thread it the
+> WHOLE chain (VERIFIED 2026-06-07): `do.ts` captures the build agent's
+> `LaunchResult.output` (TODAY `runDoAgent` DROPS it — make it return `output`,
+> and add `output` to the `DoAgentRunner` seam) → `CompleteOptions.body` →
+> `performComplete` → `ApplyCompleteTransitionInput.body` (`src/ledger-write.ts`)
+> → `IntegrateInput.body` (`src/integrator.ts`) → `OpenRequestInput.body` → the
+> GitHub provider (`src/github.ts`) passes `--body` when present (else today's
+> `--fill`); the `none` provider includes it in its manual instructions. SOURCE
+> (resolved): the agent's final summary from `LaunchResult.output`, optionally
 > under a runner-scaffolded header (slice pointer + PRD/ADR + diff stat). Body is
-> advisory prose — no gate role. NOTE the SHARED provider seam with
+> advisory prose — no gate role. The human `complete` body (Q3) needs a NEW flag
+> (NOT `--message`, which is the commit summary). NOTE the SHARED provider seam with
 > `review-gate-pr-comment` (which adds a follow-up `postComment`): keep the "write
 > text to the PR" surface consistent, but body-at-open and comment-after are
 > separate.
 >
-> READ FIRST: `work/observations/propose-pr-has-empty-body-no-agent-message.md`
-> (the gap + direction), `src/integrator.ts` (`ReviewProvider.openRequest` /
-> `OpenRequestInput`), `src/github.ts` (the `gh pr create --fill` call to extend),
-> `docs/adr/execution-substrate-decisions.md` §6 (the integration seam), and — if
-> agent-emitted — `src/harness.ts` (how a final agent summary would be captured).
+> READ FIRST: `src/integrator.ts` (`ReviewProvider.openRequest` /
+> `OpenRequestInput`, AND `IntegrateInput` — the body must thread through both);
+> `src/github.ts` (the `gh pr create --fill` call to extend); `src/ledger-write.ts`
+> (`ApplyCompleteTransitionInput` / `applyCompleteTransition` — the seam the body
+> passes THROUGH, between `complete.ts` and `integrator.ts`); `src/complete.ts`
+> (`CompleteOptions` + the `applyCompleteTransition` call); `src/do.ts`
+> (`runDoAgent` — which DROPS `launched.output` today — and the `DoAgentRunner`
+> seam + the `performComplete` call); `src/harness.ts` (`LaunchResult.output`, the
+> source channel); `docs/adr/execution-substrate-decisions.md` §6 (the integration
+> seam).
 >
 > TDD with vitest, house style (stubbed provider): body passed through to `gh`
 > args; absent body = no regression; `none` provider surfaces it. "Done" =

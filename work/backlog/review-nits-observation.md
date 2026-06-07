@@ -44,12 +44,19 @@ review to the PR, propose-path only): the OBSERVATION works on **all** paths —
 - **No empty observations:** an approve with ZERO non-blocking findings writes
   NOTHING. A BLOCK still goes to `needs-attention/` (unchanged) — this is ONLY for
   the approve-with-non-blocking-findings case that currently evaporates.
-- **Git ownership per path:** on the autonomous `--merge`/CI path the runner OWNS
-  git, so the observation must be COMMITTED as part of the run (so it lands on main
-  / the branch, not left dangling). On the human propose path, follow the same
-  in-band git discipline `complete` already uses for the items it writes (match how
-  `needs-attention/` writes are committed/surfaced — do not invent a new git
-  pattern; reuse the ledger-write/needs-attention precedent).
+- **Git ownership — SIMPLER than the needs-attention path (call sites VERIFIED
+  2026-06-07):** the approve case does NOT need its own commit/move machinery.
+  After an approve, `complete.ts` continues to the done-move + the ONE ATOMIC
+  `git add -A` commit (it stages the agent's work + the `git mv` source→done
+  together). So the observation just needs to be WRITTEN to
+  `work/observations/<…>.md` on disk BEFORE that `git add -A` / commit, and it is
+  swept into the SAME done-commit automatically — on EVERY path (merge / propose /
+  CI), with no separate commit, no separate push, and no surface-on-main step.
+  This is the in-band discipline, but it is NOT the `applyNeedsAttentionTransition`
+  move pattern (that helper does its own `git mv` + commit + autonomous surface,
+  which is the WRONG, heavier model here — do NOT reuse it for the write). The
+  block path keeps using `applyNeedsAttentionTransition` unchanged; only the
+  approve path adds this plain pre-commit file write.
 
 ### Observation file content
 
@@ -82,10 +89,11 @@ like any other observation.
       review-nits observation is written for a block.
 - [ ] The file is one-per-RUN (not per-nit) and is NOT an append to any shared
       file; the dated, content-derived name avoids collisions across runs.
-- [ ] Git ownership: on the autonomous (`--merge`/CI) path the observation is
-      COMMITTED as part of the run (reusing `complete`'s in-band git discipline for
-      runner-written work items, same as the `needs-attention/` write); it is not
-      left uncommitted/dangling.
+- [ ] Git ownership: the observation is written to disk BEFORE `complete.ts`'s
+      done-move + atomic `git add -A` commit, so it is swept into that SAME
+      done-commit on every path (merge / propose / CI) — NOT via
+      `applyNeedsAttentionTransition` (no separate commit/move/surface). It is
+      never left uncommitted/dangling.
 - [ ] The review VERDICT, routing (approve→integrate / block→needs-attention), and
       gate decision are UNCHANGED (this is post-decision capture only; assert the
       decision is identical with and without the observation write).
@@ -121,15 +129,19 @@ like any other observation.
 > findings, and that the BLOCK path uses `applyNeedsAttentionTransition`
 > (`ledger-write.ts`). Confirm how `complete` COMMITS the work items it writes on the
 > autonomous path (the in-band git discipline) so you reuse it for the observation
-> write — do NOT invent a new git pattern. Confirm the `work/observations/*.md`
-> frontmatter shape to match. Route to needs-attention on any real discrepancy.
+> write — reuse the approve path's EXISTING atomic `git add -A` done-commit (write
+> the observation BEFORE it; do NOT use `applyNeedsAttentionTransition`'s heavier
+> move/commit/surface for the write). Confirm the recent `work/observations/*.md`
+> YAML frontmatter shape (`title`/`date`/`status: open`) to match. Route to
+> needs-attention on any real discrepancy.
 >
 > Implement: after an approve, if the parsed verdict has ≥1 non-blocking finding,
 > the runner writes one `work/observations/review-nits-<slug>-<date>.md` (all of the
 > run's non-blocking findings + observations-convention frontmatter incl. a
-> slug/run pointer), and COMMITS it per the path's git ownership (autonomous: commit
-> it as part of the run, mirroring the needs-attention write; human: same in-band
-> discipline `complete` uses). ZERO non-blocking findings → write nothing. BLOCK →
+> slug/run pointer). WRITE it BEFORE the done-move + atomic `git add -A` commit so
+> it is swept into the SAME done-commit on every path (merge/propose/CI) — do NOT
+> use `applyNeedsAttentionTransition` for the write (that is the block path's
+> heavier move/commit/surface pattern). ZERO non-blocking findings → write nothing. BLOCK →
 > unchanged (needs-attention/). Change NO verdict/routing/gate logic — post-decision
 > capture only. The review agent does NOT write — the runner does.
 >
