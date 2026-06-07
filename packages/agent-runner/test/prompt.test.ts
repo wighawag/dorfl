@@ -8,10 +8,14 @@ import {
 	resolveClaimProtocolPath,
 	wrapper,
 	buildAgentPrompt,
+	buildContinueBlock,
+	extractRequeueNotes,
+	resolveContinueContext,
 	resolveSlice,
 	inferSlugFromBranch,
 	renderPrompt,
 	PromptError,
+	type ContinueContext,
 } from '../src/prompt.js';
 import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
 
@@ -153,6 +157,220 @@ describe('buildAgentPrompt', () => {
 		const stripA = a.replace(/alpha/g, 'SLUG').replace(/prd-a/g, 'PRD');
 		const stripB = b.replace(/bravo/g, 'SLUG').replace(/prd-b/g, 'PRD');
 		expect(stripA).toBe(stripB);
+	});
+});
+
+describe('extractRequeueNotes — accumulated handoff notes from the body', () => {
+	it('returns [] when no `## Requeue` section is present', () => {
+		expect(extractRequeueNotes('# Title\n\nbody only')).toEqual([]);
+	});
+
+	it('extracts a single requeue note', () => {
+		const body = [
+			'## What to build',
+			'',
+			'thing',
+			'',
+			'## Requeue 2026-06-07',
+			'',
+			'Try the other approach next time.',
+			'',
+		].join('\n');
+		expect(extractRequeueNotes(body)).toEqual([
+			'Try the other approach next time.',
+		]);
+	});
+
+	it('accumulates multiple requeue notes in file order (oldest first)', () => {
+		const body = [
+			'## What to build',
+			'',
+			'thing',
+			'',
+			'## Requeue 2026-06-01',
+			'',
+			'first note',
+			'',
+			'## Requeue 2026-06-07',
+			'',
+			'second note',
+			'',
+		].join('\n');
+		expect(extractRequeueNotes(body)).toEqual(['first note', 'second note']);
+	});
+
+	it('captures multi-line note prose under a heading', () => {
+		const body = ['## Requeue 2026-06-07', '', 'line one', 'line two', ''].join(
+			'\n',
+		);
+		expect(extractRequeueNotes(body)).toEqual(['line one\nline two']);
+	});
+});
+
+describe('buildContinueBlock — the injected CONTINUE block', () => {
+	it('frames continuing + points at the prior diff vs <arbiter>/main', () => {
+		const ctx: ContinueContext = {
+			arbiter: 'origin',
+			reason: '',
+			requeueNotes: [],
+		};
+		const block = buildContinueBlock('my-slug', ctx);
+		expect(block).toMatch(/CONTINUING/i);
+		expect(block).toContain('origin/main...work/my-slug');
+	});
+
+	it('includes the needs-attention reason when present', () => {
+		const ctx: ContinueContext = {
+			arbiter: 'origin',
+			reason: 'the acceptance gate was red',
+			requeueNotes: [],
+		};
+		const block = buildContinueBlock('my-slug', ctx);
+		expect(block).toContain('the acceptance gate was red');
+	});
+
+	it('includes the requeue handoff note(s) when present', () => {
+		const ctx: ContinueContext = {
+			arbiter: 'origin',
+			reason: 'red gate',
+			requeueNotes: ['note A', 'note B'],
+		};
+		const block = buildContinueBlock('my-slug', ctx);
+		expect(block).toContain('note A');
+		expect(block).toContain('note B');
+	});
+
+	it('omits the reason/note sub-sections when both are empty', () => {
+		const block = buildContinueBlock('my-slug', {
+			arbiter: 'origin',
+			reason: '',
+			requeueNotes: [],
+		});
+		expect(block).not.toMatch(/needs-attention reason/i);
+		expect(block).not.toMatch(/handoff note/i);
+	});
+});
+
+describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
+	const FRESH = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY');
+
+	it('fresh-mode (no continueContext) is byte-identical to the baseline', () => {
+		// The baseline = wrapper + slice body, no CONTINUE block. Passing options
+		// without a continueContext must not alter a single byte.
+		const again = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {});
+		expect(again).toBe(FRESH);
+		expect(FRESH).toContain(wrapper('example', 'my-prd'));
+		expect(FRESH).toContain('SLICE-BODY');
+		expect(FRESH).not.toMatch(/CONTINUING/i);
+	});
+
+	it('continue-mode injects the CONTINUE block before the slice body', () => {
+		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+			continueContext: {
+				arbiter: 'origin',
+				reason: 'the gate was red',
+				requeueNotes: ['use the v2 helper'],
+			},
+		});
+		// It is a SUPERSET of fresh: same wrapper + same slice body, PLUS the block.
+		expect(out).toContain(wrapper('example', 'my-prd'));
+		expect(out).toContain('SLICE-BODY');
+		expect(out).toMatch(/CONTINUING/i);
+		expect(out).toContain('origin/main...work/example');
+		expect(out).toContain('the gate was red');
+		expect(out).toContain('use the v2 helper');
+		// The block precedes the slice body in the assembly.
+		expect(out.indexOf('CONTINUING')).toBeLessThan(out.indexOf('SLICE-BODY'));
+		expect(out).not.toBe(FRESH);
+	});
+});
+
+describe('resolveContinueContext — reuse branchAheadOf detection', () => {
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('agent-runner-prompt-continue-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	/** A repo with a `main` and a `work/<slug>` branch ahead of main. */
+	function repoWithKeptBranch(slug: string, ahead: boolean): string {
+		const repo = join(scratch.root, 'repo');
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		writeFileSync(join(repo, 'README.md'), '# x\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed'], repo);
+		gitIn(['branch', `work/${slug}`], repo);
+		if (ahead) {
+			gitIn(['switch', '-q', `work/${slug}`], repo);
+			writeFileSync(join(repo, 'prior.txt'), 'prior work\n');
+			gitIn(['add', '-A'], repo);
+			gitIn(['commit', '-q', '-m', 'prior attempt'], repo);
+			gitIn(['switch', '-q', 'main'], repo);
+		}
+		return repo;
+	}
+
+	const BODY = [
+		'## What to build',
+		'',
+		'thing',
+		'',
+		'## Needs attention',
+		'',
+		'the acceptance gate was red',
+		'',
+		'## Requeue 2026-06-07',
+		'',
+		'try the other approach',
+		'',
+	].join('\n');
+
+	it('returns a context (reason+notes from body) when the branch is ahead', () => {
+		const repo = repoWithKeptBranch('alpha', true);
+		const ctx = resolveContinueContext({
+			cwd: repo,
+			slug: 'alpha',
+			arbiter: 'origin',
+			branchRef: 'work/alpha',
+			mainRef: 'main',
+			content: BODY,
+			env: gitEnv(),
+		});
+		expect(ctx).toBeDefined();
+		expect(ctx!.arbiter).toBe('origin');
+		expect(ctx!.reason).toBe('the acceptance gate was red');
+		expect(ctx!.requeueNotes).toEqual(['try the other approach']);
+	});
+
+	it('returns undefined (fresh) when the branch is NOT ahead of main', () => {
+		const repo = repoWithKeptBranch('beta', false);
+		const ctx = resolveContinueContext({
+			cwd: repo,
+			slug: 'beta',
+			arbiter: 'origin',
+			branchRef: 'work/beta',
+			mainRef: 'main',
+			content: BODY,
+			env: gitEnv(),
+		});
+		expect(ctx).toBeUndefined();
+	});
+
+	it('returns undefined (fresh) when the branch is absent', () => {
+		const repo = repoWithKeptBranch('gamma', false);
+		const ctx = resolveContinueContext({
+			cwd: repo,
+			slug: 'absent-slug',
+			arbiter: 'origin',
+			branchRef: 'work/absent-slug',
+			mainRef: 'main',
+			content: BODY,
+			env: gitEnv(),
+		});
+		expect(ctx).toBeUndefined();
 	});
 });
 

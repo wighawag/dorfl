@@ -1,10 +1,15 @@
-import {existsSync, mkdirSync, rmSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {performStart} from './start.js';
 import {performComplete} from './complete.js';
 import {performClaim} from './claim-cas.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
-import {resolveSlice, buildAgentPrompt, PromptError} from './prompt.js';
+import {
+	resolveSlice,
+	buildAgentPrompt,
+	resolveContinueContext,
+	PromptError,
+} from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
 import {PiHarness} from './pi-harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
@@ -370,7 +375,23 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	let prompt: string;
 	try {
 		const slice = resolveSlice(cwd, slug);
-		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
+		// CONTINUE-mode (the `agent-prompt-continue-context` slice): if the arbiter
+		// holds a kept `work/<slug>` ahead of main (a requeue) the checkout was
+		// CONTINUED onto it — inject the continue block (prior diff + reason + note).
+		// REUSE the SAME continue-detection the onboarding path used (in-place clone
+		// refs: `<arbiter>/work/<slug>` vs `<arbiter>/main`).
+		const continueContext = resolveContinueContext({
+			cwd,
+			slug,
+			arbiter,
+			branchRef: `${arbiter}/work/${slug}`,
+			mainRef: `${arbiter}/main`,
+			content: readFileSync(slice.path, 'utf8'),
+			env,
+		});
+		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+			continueContext,
+		});
 	} catch (err) {
 		if (err instanceof PromptError) {
 			return await saveAgentFailure({
@@ -923,7 +944,21 @@ async function runRemotePipeline(
 	let prompt: string;
 	try {
 		const slice = resolveSlice(cwd, slug);
-		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt);
+		// CONTINUE-mode (job-worktree path): the worktree's tracking refs were primed
+		// above (`primeWorktreeTrackingRef`), so reuse the SAME continue-detection with
+		// the worktree's `<origin>/work/<slug>` vs `<origin>/main` refs.
+		const continueContext = resolveContinueContext({
+			cwd,
+			slug,
+			arbiter: arbiterRemote,
+			branchRef: `${arbiterRemote}/work/${slug}`,
+			mainRef: `${arbiterRemote}/main`,
+			content: readFileSync(slice.path, 'utf8'),
+			env,
+		});
+		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+			continueContext,
+		});
 	} catch (err) {
 		if (err instanceof PromptError) {
 			return await saveRemoteAgentFailure({
