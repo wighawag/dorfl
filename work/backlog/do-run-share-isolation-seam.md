@@ -45,6 +45,24 @@ deliberately AFTER `do-remote` so (a) Option A proves the pipeline is tree-agnos
 before we commit to the handle abstraction, and (b) this slice unifies `run` + `do`
 together rather than touching only one.
 
+> **FORWARD-POINTER — this convergence is the substrate the `advance` tick will
+> wrap (do not build it as a one-off).** The `advance-loop` PRD
+> (`work/prd/advance-loop.md`, `sliceAfter: [auto-slice]`) is architected as "one
+> substrate-agnostic TICK, two drivers" and explicitly REUSES "the tick/loop split
+> (the `do`/`run` convergence)" — i.e. THIS slice. It is the single load-bearing
+> prerequisite that lets the advance PRD be sliced WITHOUT changes to the PRD
+> itself. So shape the shared post-claim pipeline as a genuinely reusable, uniform
+> handle-driven seam (the `IsolatedTree` handle + a thin shared pipeline both
+> consumers call), NOT a `do`-specific and a `run`-specific path that merely happen
+> to look alike. Concretely: the shared pipeline should be a NAMED, independently-
+> callable unit (the thing the future `advance` tick can invoke to do a build /
+> slice rung), with `do` and `run` as two thin drivers over it. If a later reviewer
+> can point at "this function/seam IS the tick both drivers wrap", advance slices
+> clean; if the convergence is a private refactor with no callable shared entry
+> point, advance's slicer will have to amend the PRD or build the convergence
+> itself. Keep `covers: []` (still no command-surface user story) — this note is
+> about the SHAPE, not added scope.
+
 ## Acceptance criteria
 
 - [ ] `do` (in-place AND `--remote`) and `run` all run their post-claim pipeline

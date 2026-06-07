@@ -33,6 +33,14 @@ pipeline from `do-in-place`:
 All forms run the existing `do` pipeline (`do-in-place`) per selected item, in
 sequence (`do` is sequential — parallelism is `run`'s job).
 
+> **FORWARD-POINTER (advance-loop):** keep `-n <x>` (and multi-arg) STRICTLY
+> SEQUENTIAL — never a parallelism knob. The `advance-loop` PRD locks this in (User
+> Story 25: "`-n x` is ALWAYS SEQUENTIAL for both `do` and `advance`; parallelism
+> comes ONLY from `run` or the CI matrix"). The slices-first two-pool selection
+> helper built here is also the one the future `advance` tick reuses, so keep it the
+> standalone pure function this slice already specifies. No scope change — just
+> don't let `-n` drift toward concurrency.
+
 **Two candidate POOLS, not one — and the PRD pool is NEW machinery.** The
 slices-first/PRDs-second priority selects across TWO pools:
 - **Eligible slices** — reuse the existing `scan`/`selectCandidates`/`eligibility`

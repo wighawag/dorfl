@@ -66,6 +66,17 @@ this slice. **The implementer does NOT touch any sibling slice or PRD** — that
 reconciliation is already done; this slice is PURE CODE (the loop + the routing).
 There is no `autoslice-confidence` slice to build, depend on, or edit.
 
+> **FORWARD-POINTER (advance-loop) — in-body questions are the PRE-sidecar form.**
+> The routing above emits surfaced questions "in the item body" (`needsAnswers: true`
+> + questions in the slice body, or in the PRD's `needs-attention/` reason). The
+> `advance-loop` PRD (`work/prd/advance-loop.md`) introduces a per-item question/
+> answer SIDECAR (`work/questions/<type>-<slug>.md`, strict machine-owned format)
+> that SUPERSEDES "questions in the item body" as the question channel. This slice
+> correctly ships the in-body form (no sidecar exists yet); when advance-loop lands,
+> its surface/apply rungs become the canonical question home and this slice's
+> in-body questions should be reconciled onto the sidecar. Build the in-body form
+> now — just know it is the pre-sidecar shape, not the final one (no scope change).
+
 ### Scope fence
 
 - IN: the review→edit→converge loop on the `do prd:` path; M×N (one loop, fresh

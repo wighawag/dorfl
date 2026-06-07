@@ -44,6 +44,17 @@ daemon** — and absorb the deleted `watch` verb's behaviour so nothing is lost.
   both be genuinely concurrent.
 - **`run --once`** — one tick then stop. A debug/test affordance on the daemon (NOT
   the CI path — CI is `do`). The existing `runOnce` IS this tick; keep it.
+
+> **FORWARD-POINTER (advance-loop):** the genuinely-concurrent loop machinery this
+> slice builds is the REUSABLE part. The `advance-loop` PRD
+> (`work/prd/advance-loop.md`) makes the `run` daemon the LOOP driver that wraps a
+> generalised `advance` TICK (build / slice / triage / surface / apply), "ideally"
+> building on this slice. So build the concurrent loop so its TICK is swappable —
+> today the tick is `runOneItem` (build a slice); advance-loop will swap it for the
+> advance tick without re-architecting the loop. Keep the loop and the tick as
+> separable units (the loop owns concurrency/scheduling; the tick owns one item's
+> work). Stays slice-only here (as already scoped) — this note is about KEEPING THE
+> LOOP/TICK SEPARABLE, not adding scope.
 - **SCOPE: `run`'s tick stays SLICE-ONLY here; PRD-auto-slicing in `run` is a noted
   follow-up.** The ADR §3 intends `run`/`do` to do "slices-first, then PRDs to
   slice." But the two-pool (slices + sliceable-PRDs) priority helper is built by
