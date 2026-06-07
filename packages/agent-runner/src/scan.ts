@@ -6,6 +6,7 @@ import {
 	type LocalLedgerState,
 } from './ledger-read.js';
 import {listMirrors} from './registry.js';
+import {fetchMirrorMainOrWarn} from './repo-mirror.js';
 import {resolveRepoConfig} from './repo-config.js';
 
 /**
@@ -85,11 +86,21 @@ function scoreItems(
 
 /**
  * Read-only end-to-end scan over the REGISTRY (ADR §1): enumerate the registered
- * hub mirrors under `<workspacesDir>/repos/`, read each one's full `work/`
- * lifecycle from its BARE `main` ref through the read seam's mirror method
- * (mirrors have no working tree — `resolveLocalState`'s `readdirSync` cannot read
- * them), and resolve eligibility per item (autonomy gate + per-repo `blockedBy`).
- * Claims and runs nothing.
+ * hub mirrors under `<workspacesDir>/repos/`, **fetch each mirror's `main` first**
+ * (ADR §5/§6 — the remote is the source of truth in the registry model), then read
+ * each one's full `work/` lifecycle from its BARE `main` ref through the read
+ * seam's mirror method (mirrors have no working tree — `resolveLocalState`'s
+ * `readdirSync` cannot read them), and resolve eligibility per item (autonomy
+ * gate + per-repo `blockedBy`). Claims and runs nothing.
+ *
+ * **Fetch-first, never fatal:** the old "scan is always offline" invariant is
+ * RETIRED (it was the roots-local model); `scan` now refreshes each mirror's
+ * `main` before reading. A failed fetch (offline, dead arbiter) is NOT an error —
+ * it WARNS via `warn` and falls back to that mirror's last-known `main`, so the
+ * queue still reports (its freshness = the last successful fetch). This does NOT
+ * change the ledger read STRATEGY (`claim-ledger-vs-protected-main.md`): the
+ * offline read of `<mirror>/main:work/...` stays the single strategy — `scan`
+ * merely ensures that ref is fresh before reading it.
  *
  * Discovery is the registered hub-mirror set, NOT a config `roots` walk (there is
  * no `roots`/`remotes` field). `scan`/`status` share the {@link listMirrors}
@@ -100,17 +111,32 @@ function scoreItems(
  * read from it — the global/env-resolved policy applies (the per-repo override is
  * a working-checkout concern, served by {@link scanRepoPaths}).
  */
-export async function scan(config: Config): Promise<ScanReport> {
-	const mirrors = listMirrors({workspacesDir: config.workspacesDir});
+export async function scan(
+	config: Config,
+	options: {warn?: (message: string) => void; env?: NodeJS.ProcessEnv} = {},
+): Promise<ScanReport> {
+	const mirrors = listMirrors({
+		workspacesDir: config.workspacesDir,
+		env: options.env,
+	});
 
 	const repos: RepoReport[] = [];
 	const counts = {totalItems: 0, totalEligible: 0};
 
 	for (const mirror of mirrors) {
+		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the read below
+		// sees the remote truth. Never fatal — a failed fetch WARNS and falls back to
+		// the mirror's last-known `main` (the read strategy is unchanged).
+		fetchMirrorMainOrWarn({
+			mirrorPath: mirror.path,
+			warn: options.warn,
+			env: options.env,
+		});
 		// Read the full `work/` lifecycle from the mirror's bare `main` ref through
 		// the read seam (git ls-tree/show; NOT a working-tree read).
 		const state = await ledgerRead.resolveMirrorState({
 			mirrorPath: mirror.path,
+			env: options.env,
 		});
 		const allowAgents = resolveRepoConfig({
 			repoPath: mirror.path,
@@ -130,11 +156,13 @@ export async function scan(config: Config): Promise<ScanReport> {
 }
 
 /**
- * Read-only scan over an EXPLICIT set of working checkouts (offline working-tree
- * read), used by the in-place worker paths (`run`) that operate on a real
- * checkout rather than the registry's bare mirrors. Reads each repo's `work/`
- * via the read seam's local-tree method and honours its per-repo
- * `.agent-runner.json` `allowAgents`. The registry `scan` above is the
+ * Read-only scan over an EXPLICIT set of working checkouts, used by the in-place
+ * worker paths (`run`) that operate on a real checkout rather than the registry's
+ * bare mirrors. This is a working-TREE read (it has nothing to fetch — the
+ * checkout IS the local state); the fetch-first contract (ADR §5/§6) applies to
+ * the REGISTRY `scan` above, which refreshes each bare mirror before reading.
+ * Reads each repo's `work/` via the read seam's local-tree method and honours its
+ * per-repo `.agent-runner.json` `allowAgents`. The registry `scan` above is the
  * mirror-ref counterpart; this is its working-tree sibling.
  */
 export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
