@@ -104,13 +104,13 @@ export interface DoOptions {
 	/**
 	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`):
 	 * threaded VERBATIM into `performComplete` (the gate rides inside the shared
-	 * `do`/`complete` pipeline, so CI inherits it for free). When `reviewPr` is on,
+	 * `do`/`complete` pipeline, so CI inherits it for free). When `review` is on,
 	 * the `review` SKILL runs as a fresh-context agent AFTER the green `verify` and
 	 * BEFORE the done-move; a `block` maps to the `needs-attention` outcome the same
 	 * way `gate-failed` does (exit 1). `autoMerge`/`reviewModel`/`reviewMaxRounds`
 	 * tune it; `reviewGate` is the injectable seam (production: harness-backed).
 	 */
-	reviewPr?: boolean;
+	review?: boolean;
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: number;
@@ -354,7 +354,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// fresh-context agent after the green `verify` (the non-skippable floor) and
 		// before the done-move. A `block` re-uses the same needs-attention surfacing
 		// (`surfaceArbiter`) the red gate does; mapped to `needs-attention` below.
-		reviewPr: options.reviewPr,
+		review: options.review,
 		autoMerge: options.autoMerge,
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,

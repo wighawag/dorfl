@@ -66,7 +66,7 @@ export function doFlagOverrides(
 	const overrides = {
 		...harnessFlagOverrides(flags),
 		// Gate 2 (PR/code review) flags ride the SAME flag-override path so
-		// `--review-pr`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
+		// `--review`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
 		// flag > env > per-repo > global > default, exactly like the harness flags.
 		...reviewFlagOverrides(flags),
 	};
@@ -78,14 +78,14 @@ export function doFlagOverrides(
 
 /**
  * The Gate-2 (PR/code review) CLI flags, offered by `do` AND `complete`
- * (`--review-pr`/`--no-review-pr`, `--auto-merge`/`--no-auto-merge`,
+ * (`--review`/`--no-review`, `--auto-merge`/`--no-auto-merge`,
  * `--review-model`, `--review-max-rounds`). Both commands resolve them through
  * the SAME `flag > env > per-repo > global > default` chain as `integration`, so
  * the mapping lives in ONE place (not a parallel copy per command).
  */
 export interface ReviewFlags {
-	/** `--review-pr` ⇒ true, `--no-review-pr` ⇒ false, absent ⇒ undefined. */
-	reviewPr?: boolean;
+	/** `--review` ⇒ true, `--no-review` ⇒ false, absent ⇒ undefined. */
+	review?: boolean;
 	/** `--auto-merge` ⇒ true, `--no-auto-merge` ⇒ false, absent ⇒ undefined. */
 	autoMerge?: boolean;
 	/** `--review-model <id>` — the de-correlated review model (routing intent). */
@@ -103,8 +103,8 @@ export interface ReviewFlags {
  */
 export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
 	const overrides: PartialConfig = {};
-	if (flags.reviewPr !== undefined) {
-		overrides.reviewPr = flags.reviewPr;
+	if (flags.review !== undefined) {
+		overrides.review = flags.review;
 	}
 	if (flags.autoMerge !== undefined) {
 		overrides.autoMerge = flags.autoMerge;

@@ -155,16 +155,16 @@ export interface Config {
 	 * `verify` floor, AFTER `verify` passes and BEFORE the done-move, on the
 	 * `do`/`complete` path. Default **OFF** (it puts a model on the merge path —
 	 * opt-in, ADR §8). Resolved per-repo like `integration`: flag
-	 * (`--review-pr`/`--no-review-pr`) > env > per-repo > global > default false.
+	 * (`--review`/`--no-review`) > env > per-repo > global > default false.
 	 * `verify` is never replaced — review is layered, never a substitute.
 	 */
-	reviewPr: boolean;
+	review: boolean;
 	/**
 	 * On a Gate-2 `approve`, allow the resolved `merge` integration to proceed
 	 * AUTONOMOUSLY. Default **OFF**. **Repo policy only** (the `do`-path author is
 	 * the operator who ran the command — no author-trust resolver here; that is the
 	 * `issue-intake` concern, decoupled). A non-`approve` verdict NEVER auto-merges
-	 * regardless. With `reviewPr` on but `autoMerge` off, review still gates
+	 * regardless. With `review` on but `autoMerge` off, review still gates
 	 * (block/approve) but a human does the merge (`--propose` semantics). Resolved
 	 * like `integration`: flag (`--auto-merge`/`--no-auto-merge`) > env > per-repo >
 	 * global > default false.
@@ -209,7 +209,7 @@ export const DEFAULT_CONFIG: Config = {
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8); its auto-merge sub-policy is OFF too. The loop bound is
 	// a small N so an unattended revise↔review can never run forever.
-	reviewPr: false,
+	review: false,
 	autoMerge: false,
 	reviewMaxRounds: 2,
 };

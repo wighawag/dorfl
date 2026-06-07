@@ -21,7 +21,7 @@ import {NullHarness, substituteModel, type Harness} from './harness.js';
  *
  * Determinism boundary (ADR §8), explicit: review is a JUDGEMENT gate, never a
  * replacement for `verify`. `verify` stays the non-skippable model-free floor;
- * review runs ON TOP, only when `reviewPr` resolves on.
+ * review runs ON TOP, only when `review` resolves on.
  */
 
 /** A single review finding, mirroring the `review` SKILL's verdict shape. */
