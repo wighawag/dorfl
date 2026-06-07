@@ -228,13 +228,15 @@ describe('do --remote — auto-registers an unknown remote', () => {
 });
 
 describe('do --remote — slug resolution parity with do-in-place', () => {
-	it('rejects a prd: arg with the not-yet-wired stub (no claim, no worktree)', async () => {
+	it('a prd: arg dispatches to the slicing path, gate-bound for the agent (no worktree)', async () => {
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
 			prds: ['someprd'],
 		});
 		const ws = workspacesDir();
 
 		let agentRan = false;
+		// autoSlice OFF (default) → the agent slicing gate refuses; no worktree, no
+		// agent, no build pipeline (a prd: arg never enters the slice-build worktree).
 		const result = await performDoRemote({
 			arg: 'prd:someprd',
 			remote: remoteUrl(arbiter),
@@ -246,7 +248,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 			},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-not-wired');
+		expect(result.outcome).toBe('gate-refused');
 		expect(result.slug).toBe('someprd');
 		expect(agentRan).toBe(false);
 		// No job worktree was materialised for a prd: arg.

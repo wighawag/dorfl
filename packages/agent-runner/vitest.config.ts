@@ -25,6 +25,12 @@ const RACE_SENSITIVE = [
 	// release-rebase-conflict test that writes main; keep it out of file-parallel
 	// pressure for the same deterministic claim/main-CAS reasoning as claim-cas.
 	'test/slicing-lock.test.ts',
+	// The `do prd:<slug>` slicing path (`performSlice`): drives the lock CAS
+	// (prd → slicing → prd) against a --bare arbiter AND writes main (the
+	// runner-owned completing transition that emits backlog slices + marks the PRD
+	// sliced); keep it out of file-parallel pressure for the same deterministic
+	// claim/main-CAS reasoning as slicing-lock.test.ts.
+	'test/slicing.test.ts',
 	'test/start.test.ts',
 	'test/work-on.test.ts',
 	'test/run.test.ts',

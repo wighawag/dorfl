@@ -259,10 +259,40 @@ describe('releaseSlicingLock — happy path', () => {
 			slug: 'alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			// A lockedBlob is now REQUIRED (omitted ⇒ refuse); pass a dummy so we still
+			// exercise the "lock not held" path (it returns lost before any stale check).
+			lockedBlob: '0'.repeat(40),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
+	});
+
+	it('REFUSES (usage-error) when lockedBlob is omitted (never a silent overwrite)', async () => {
+		// The omitted-lockedBlob path must REFUSE rather than skip the stale check and
+		// blindly restore — closing the footgun the lock's first consumer flagged.
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const acquired = await acquireSlicingLock({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(acquired.exitCode).toBe(0);
+		const result = await releaseSlicingLock({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			// lockedBlob deliberately omitted.
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('usage-error');
+		expect(result.message).toMatch(/lockedBlob/);
+		// The arbiter was NOT touched — the lock is still held, the PRD did not
+		// silently return to prd/.
+		expect(slicingOnArbiter(repo, 'alpha')).toBe(true);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(false);
 	});
 });
 

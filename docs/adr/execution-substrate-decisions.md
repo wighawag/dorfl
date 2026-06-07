@@ -430,6 +430,6 @@ human editing the agents'-area worktree. Decisions:
   discard them — the written slices are a valuable durable artifact (re-deriving the
   decomposition loses the reviewer's context); a requeue continues from the written
   slices, exactly as a build continues from the code wip. So `auto-slice` (the
-  `do prd:<slug>` slicing path, currently `prd-not-wired`) REUSES this seam — it
+  `do prd:<slug>` slicing path, now wired in `slicing.ts`) REUSES this seam — it
   passes its `work/slicing/<slug>` as the seam's `branch` rather than re-inventing
   the push (and so never re-discovers the bolt-on asymmetry a sixth time).

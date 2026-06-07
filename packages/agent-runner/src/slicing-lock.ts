@@ -1,7 +1,8 @@
-import {mkdirSync} from 'node:fs';
+import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
+import {setSlicedMarker} from './frontmatter.js';
 
 /**
  * The **slicing concurrency lock** (PRD `auto-slice`, slice `autoslice-lock`).
@@ -366,16 +367,40 @@ export interface ReleaseSlicingLockOptions {
 	 * held `work/slicing/<slug>.md` body on the arbiter against this; if they
 	 * differ, a concurrent writer edited the held PRD while the lock was held → the
 	 * slicing is STALE → fail loud (outcome `stale`). This is the read-stability
-	 * backstop, content-identity not a textual rebase conflict. STRONGLY
-	 * RECOMMENDED; if omitted, release falls back to a rebase-conflict-only check
-	 * (which can MISS a clean rename+edit merge — the silent-stale-slice case), so
-	 * the caller (the `do prd:` command) should always pass it.
+	 * backstop: a CONTENT-IDENTITY check (compare the held blob to the locked
+	 * snapshot), deliberately STRONGER than a textual rebase conflict (which can
+	 * MISS a clean rename+edit merge — the silent-stale-slice case).
+	 *
+	 * REQUIRED in practice: when OMITTED the release REFUSES (outcome
+	 * `usage-error`) rather than silently restoring `slicing/ → prd/` — because
+	 * without the snapshot the stale check cannot run, and an unchecked restore
+	 * would silently carry a concurrent edit into `prd/` (the exact
+	 * never-silently-overwrite behaviour the lock forbids). The `do prd:` command
+	 * (the lock's first live consumer) captures it at acquire-time and always
+	 * passes it back here.
 	 */
 	lockedBlob?: string;
 	/** Advisory releaser id. Defaults to git user.name, then $USER. */
 	by?: string;
 	/** Cap on push retries when main merely advanced. Default 3. */
 	retries?: number;
+	/**
+	 * The COMPLETING slicing transition (the `do prd:` command, slice
+	 * `autoslice-command`): the produced backlog slice files to drop INTO the same
+	 * release commit, keyed by repo-relative path (e.g.
+	 * `work/backlog/<slug>.md`) → file content. The runner commits these alongside
+	 * the `slicing/ → prd/` restore so the emitted backlog, the lock release, and
+	 * the `sliced:` marker are ONE runner-owned transition (never the agent's git).
+	 * Omitted ⇒ a bare lock release (no slices emitted).
+	 */
+	emitSlices?: Record<string, string>;
+	/**
+	 * When set (the `do prd:` completing transition), stamp the restored PRD's
+	 * frontmatter with `sliced: <markSliced>` (a `YYYY-MM-DD` date) in the SAME
+	 * release commit — recording sliced-ness on the durable PRD marker, not on
+	 * residence in `slicing/`. Omitted ⇒ the PRD frontmatter is restored unchanged.
+	 */
+	markSliced?: string;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -391,21 +416,37 @@ export interface ReleaseSlicingLockResult {
 
 /**
  * Release the slicing lock for `slug`: move the PRD back
- * `work/slicing/<slug>.md → work/prd/<slug>.md` by REBASING the restore against
- * the CURRENT arbiter `main` — never a force-restore.
+ * `work/slicing/<slug>.md → work/prd/<slug>.md` against the CURRENT arbiter
+ * `main` (the restore is a normal commit on the latest `main`, CAS-leased so it
+ * can only fast-forward) — never a force-restore.
  *
- * The restore is built on the lock's ACQUIRE base (where `work/slicing/<slug>.md`
- * held the snapshot the slicer locked), then rebased onto the current
- * `<arbiter>/main`. If a concurrent writer edited the held PRD's body on the
- * arbiter (`work/slicing/<slug>.md` changed under the lock), the rebase CONFLICTS
- * → the slicing is STALE → we FAIL LOUD (outcome `stale`, exit 4) and the arbiter
- * is left UNTOUCHED (the lock stays held, the edit is preserved). The caller then
+ * Before restoring, a CONTENT-IDENTITY STALE CHECK + a leased CAS restore (NOT a
+ * textual rebase) decides released-vs-stale: it compares the CURRENTLY held
+ * `work/slicing/<slug>.md` body on the arbiter against the snapshot the lock TOOK
+ * ({@link ReleaseSlicingLockOptions.lockedBlob}). If a concurrent writer edited
+ * the held PRD's body on the arbiter (the blob changed under the lock), the
+ * slicing is STALE → we FAIL LOUD (outcome `stale`, exit 4) and the arbiter is
+ * left UNTOUCHED (the lock stays held, the edit is preserved). The caller then
  * re-slices from the edited PRD or routes it to `work/needs-attention/`. We never
- * silently overwrite the edit or land stale slices.
+ * silently overwrite the edit or land stale slices. This is deliberately
+ * STRONGER than "rebase the restore and see if it conflicts": git's rename+edit
+ * merge would apply a slicing-body edit CLEANLY onto a rebased restore, silently
+ * carrying it into `prd/` while the emitted slices were cut from the OLD body.
+ *
+ * When `lockedBlob` is OMITTED the release REFUSES (outcome `usage-error`)
+ * instead of skipping the stale check and unconditionally restoring — an
+ * unchecked restore would silently carry a concurrent edit into `prd/`, the exact
+ * footgun the lock forbids. Pass the acquire-time `lockedBlob` (the `do prd:`
+ * command always does).
+ *
+ * The COMPLETING `do prd:` transition (`emitSlices` / `markSliced`) folds the
+ * produced backlog slices + the PRD's `sliced:` marker INTO the same release
+ * commit, so the emitted backlog, the lock release, and the marker are ONE
+ * runner-owned transition (the agent never does git).
  *
  * Outcomes:
  *   - `released` (0): the PRD is back in `work/prd/`, `work/slicing/` empty.
- *   - `usage-error` (1): bad input / environment.
+ *   - `usage-error` (1): bad input / environment (incl. an omitted `lockedBlob`).
  *   - `lost` (2): the lock is not held (no `work/slicing/<slug>.md` on main).
  *   - `contended` (3): the push kept failing (main churning) — try again.
  *   - `stale` (4): a concurrent edit landed; the slicing is stale — fail loud.
@@ -449,6 +490,19 @@ async function runRelease(
 			`no git remote named '${arbiter}' (set one, or pass --arbiter)`,
 		);
 	}
+	// REFUSE an omitted lockedBlob: without the snapshot the content-identity stale
+	// check cannot run, and an unchecked restore would silently carry a concurrent
+	// edit into prd/ — the never-silently-overwrite behaviour the lock forbids. The
+	// `do prd:` command (the lock's first live consumer) always passes it.
+	if (lockedBlob === undefined) {
+		throw new SlicingLockUsageError(
+			`refusing to release '${slug}' without the acquire-time lockedBlob: the ` +
+				'content-identity stale check cannot run, and an unchecked restore could ' +
+				'silently overwrite a concurrent edit. Pass the lockedBlob acquire ' +
+				'returned.',
+		);
+	}
+
 	const by = options.by || (await resolveBy(cwd, env));
 
 	const dirtyWorktree =
@@ -480,6 +534,8 @@ async function runRelease(
 				slicing,
 				releaseBranch,
 				lockedBlob,
+				emitSlices: options.emitSlices,
+				markSliced: options.markSliced,
 				note,
 			});
 			if (result.kind === 'released') {
@@ -516,6 +572,8 @@ interface ReleaseAttemptContext {
 	slicing: string;
 	releaseBranch: string;
 	lockedBlob: string | undefined;
+	emitSlices: Record<string, string> | undefined;
+	markSliced: string | undefined;
 	note: (m: string) => void;
 }
 
@@ -555,6 +613,8 @@ async function releaseAttempt(
 		slicing,
 		releaseBranch,
 		lockedBlob,
+		emitSlices,
+		markSliced,
 		cwd,
 		env,
 		note,
@@ -617,6 +677,25 @@ async function releaseAttempt(
 			`git mv failed for '${slicing}' (unexpected — aborting release)`,
 		);
 	}
+
+	// COMPLETING `do prd:` transition: fold the produced backlog slices + the
+	// PRD's `sliced:` marker INTO this SAME release commit, so the emitted backlog,
+	// the lock release, and the marker are ONE runner-owned transition (the agent
+	// never does git). A bare release (no emitSlices/markSliced) is unchanged.
+	if (markSliced !== undefined) {
+		const current = readFileSync(prdAbs, 'utf8');
+		writeFileSync(prdAbs, setSlicedMarker(current, markSliced));
+		await gitHard(['add', '--', prd], cwd, env);
+	}
+	if (emitSlices) {
+		for (const [relPath, content] of Object.entries(emitSlices)) {
+			const abs = join(cwd, relPath);
+			mkdirSync(dirname(abs), {recursive: true});
+			writeFileSync(abs, content);
+			await gitHard(['add', '--', relPath], cwd, env);
+		}
+	}
+
 	await gitHard(
 		['commit', '--quiet', '-m', `slicing: release ${slug} (by ${ctx.by})`],
 		cwd,
