@@ -1,7 +1,7 @@
 ---
-title: the Gate-2 PR comment posts the review agent's stream-of-consciousness (prompt says "JSON only", postComment wants prose) — fix direction: a structured `review` prose field INSIDE the verdict JSON
+title: the Gate-2 PR comment posts the review agent's stream-of-consciousness (prompt says "JSON only", postComment wants prose) — RESOLVED fix: a `review` prose field INSIDE the verdict JSON; retire the verbatim-output/stripVerdictJson path
 date: 2026-06-07
-status: open
+status: resolved
 ---
 
 ## The signal (observed on PR #20, the feature's debut)
@@ -80,42 +80,64 @@ This makes the comment a first-class authored artifact while keeping the JSON th
 single source of structure — the inverse of today (today the comment is the
 unstructured residue; the JSON is structured).
 
-## Open questions (resolve before building — this is a DIRECTION, not a decision)
+## Open questions — RESOLVED (maintainer, 2026-06-07)
 
-1. **Does adding a `review` prose field re-introduce the "agent writes prose"
-   reliability problem we just hit?** A field is more constrained than free output
-   (it is inside the JSON the agent already emits reliably), but it is still prose.
-   Does it need length/shape guidance ("a few short paragraphs; lead with the
-   verdict") to stay clean?
-2. **`stripVerdictJson` + the "post verbatim output" path:** retire them entirely
-   (post `verdict.review` only), or keep verbatim as a fallback when `review` is
-   absent (older agents / a stub with no field)? Graceful-degradation discipline
-   says: if `review` is missing, post nothing rather than the raw thinking? Or fall
-   back? Decide.
-3. **`ReviewVerdict` shape change:** add `review?: string` to the parsed verdict
-   (`review-gate.ts` `validateVerdict`); the comment poster reads `verdict.review`
-   instead of `verdict.output`. Does anything else rely on `output`? (Today only
-   the comment poster does — `output` was added BY the comment slice.)
-4. **The `block` path:** `review` prose could also improve the needs-attention
-   reason (today `formatBlockReason` re-formats from `findings[]`). In scope, or
-   keep that separate?
-5. **Confirm Issue 2 (secondary):** is the pi adapter's `LaunchResult.output` even
-   the clean "final assistant message", or does it include thinking/narration? If
-   the latter, the verbatim approach was doubly doomed and the `review`-field
-   approach side-steps it entirely (we post a field, not the raw message). Worth
-   confirming so we know whether `output` capture itself needs attention.
+1. **Does a `review` prose field re-introduce the prose-reliability problem?**
+   **RESOLVED:** add GUIDANCE, but do NOT impose a length limit and do NOT force
+   verbosity. The field should lead with the verdict (Approved/Blocked) and give
+   the lenses + destination-check reasoning; length is whatever the review needs —
+   neither capped nor padded for its own sake. ("Guidance should not hurt; length
+   is fine either way.")
+2. **Retire `stripVerdictJson` / the "post verbatim output" path?**
+   **RESOLVED: RETIRE it.** Post `verdict.review` only — we ASSUME the `review`
+   field is filled (the prompt requires it). No fallback to posting the raw final
+   message minus JSON (that residue-posting is exactly the bug). The verbatim-output
+   path + `stripVerdictJson` go away.
+3. **`ReviewVerdict` shape change?** **RESOLVED: YES.** Add `review?: string` to
+   the parsed verdict (`review-gate.ts` `validateVerdict`); the comment poster reads
+   `verdict.review` instead of `verdict.output`. Confirmed (2026-06-07) that ONLY
+   the comment poster reads `output` today — `output` was added BY the comment
+   slice — so switching the poster + retiring `output`/`stripVerdictJson` touches
+   nothing else.
+4. **The `block` path?** **RESOLVED (conditional): YES, IF a block is still posted
+   as a PR.** On the propose path a block routes to needs-attention and opens no PR,
+   so there is normally nothing to comment on. But IF a block ever IS posted as a
+   PR comment, post the `review` prose there too (consistent with approve). So the
+   poster uses `verdict.review` regardless of verdict; whether a PR exists to
+   receive it is the existing url-present gate.
+5. **Issue 2 — what does the pi adapter actually put in `LaunchResult.output`?**
+   **RESOLVED — CONFIRMED CLEAN; Issue 2 is NOT the cause.** `pi-harness.ts`
+   `output: readLastAssistantText(sessionFile)` → `watch-session.ts`
+   `lastAssistantText` → `assistantContentText`, which keeps ONLY `p.type ===
+   'text'` parts and **explicitly DROPS `thinking`/reasoning and `toolCall`
+   blocks**, taking the LAST assistant message with non-empty text. So `output` is
+   already the clean final ANSWER, not hidden chain-of-thought. The PR #20 mess was
+   the agent's actual FINAL ANSWER written as casual prose (because the prompt only
+   asked for "JSON only"), not a capture artifact. This CONFIRMS the fix direction:
+   since `output` is a clean final-message read, posting a deliberately-authored
+   `review` FIELD (not "final message minus JSON") is exactly right — `output`
+   capture itself needs NO attention.
 
 ## Disposition
 
-- **Capture only (this file).** The maintainer wants the FIX to get more thought —
-  the `review`-field direction above is the lean, not a settled design. Do NOT
-  build yet.
-- When it ripens: likely a small slice (amend `buildReviewPrompt` to require the
-  `review` field; add `review?` to `ReviewVerdict`/`validateVerdict`; switch the
-  comment poster to post `verdict.review`; decide the degradation + whether to
-  retire `stripVerdictJson`). It touches the same `review-gate.ts` +
-  `integration-core.ts` step-6 the comment slice did.
+- **PRD-/slice-READY (all open questions resolved 2026-06-07).** Capture-only for
+  now per the maintainer; ready to turn into a slice when sequenced. The design is
+  settled: the `review`-field-in-the-JSON approach, decisions 1–5 above.
+- **The slice (when built):**
+  - `buildReviewPrompt` (`review-gate.ts`): require a `review` PROSE field IN the
+    JSON object (lead with Approved/Blocked + the lenses + destination-check
+    reasoning; guidance, no length cap, no forced verbosity). Keep the single-JSON-
+    object contract (it still carries `verdict`/`findings` + STRUCTURES the output).
+  - `validateVerdict` / `ReviewVerdict`: add `review?: string`.
+  - `integration-core.ts` step 6 (the comment poster): post `verdict.review`
+    (regardless of verdict; the existing PR-url-present gate decides if there is a
+    PR). **RETIRE** `stripVerdictJson` + the `output`-verbatim path + the `output`
+    field's comment role (assume `review` is filled; no residue fallback).
+  - Tests: a verdict carrying `review` posts that field; the comment is the authored
+    prose, never the raw final message; the parse still reads `verdict`/`findings`
+    for routing unchanged.
 - Related: `work/findings/review-nonblocking-findings-disposition.md` (the verbatim-
-  output / nits decisions this would partly supersede).
+  output / nits decisions this SUPERSEDES on the comment surface — the comment is
+  now `verdict.review`, not the verbatim output).
 
 (Captured 2026-06-07 from PR #20 — the first live Gate-2 comment after #19 landed.)
