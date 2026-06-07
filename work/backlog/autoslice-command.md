@@ -49,6 +49,30 @@ End-to-end flow:
 Reuse the existing harness seam + the runner-owns-git pattern from `do`/`run`; do
 NOT reimplement claiming/isolation.
 
+> **MUST-FIX-BEFORE-CONSUME (carried forward from the `autoslice-lock` Gate-2
+> review nits, `work/observations/review-nits-autoslice-lock-2026-06-07.md`) —
+> address these AS PART OF wiring this consumer of the lock primitive:**
+>
+> 1. **Always pass `lockedBlob` to `releaseSlicingLock`.** This `do prd:` path is
+>    the first live caller of the lock; it MUST capture the slicing PRD's blob at
+>    acquire-time and pass it back on release so the content-identity stale check
+>    actually runs.
+> 2. **Make `releaseSlicingLock`'s omitted-`lockedBlob` path REFUSE, not silently
+>    overwrite.** Today, when `lockedBlob` is `undefined`, `slicing-lock.ts` SKIPS
+>    the stale check entirely and unconditionally restores `slicing/ → prd/`,
+>    silently carrying any concurrent edit into `prd/` — exactly the
+>    "never silently overwrite the edit" behaviour the lock slice forbids. Change
+>    that latent footgun so an omitted `lockedBlob` REFUSES (throws / errors)
+>    rather than blindly overwriting. (You are its first consumer; close the
+>    footgun now.)
+> 3. **Correct the stale "rebase" wording to "content-identity check".** The
+>    `releaseAttempt`/`lockedBlob` JSDoc in `slicing-lock.ts` calls the staleness
+>    mechanism a "rebase" / "rebase-conflict-only check" — but the code does a
+>    blob content-identity check + a leased-CAS restore (stronger; catches the
+>    clean rename+edit merge a textual rebase would miss). Align the prose to
+>    "content-identity stale check + leased CAS restore" so a future reader isn't
+>    misled.
+
 > **DRIFT NOTE (2026-06-07, drift-review pass):** this slice was authored
 > 2026-06-05, BEFORE the run/do convergence (PRs #17/#18) extracted the shared
 > gate→integrate band out of `run.ts`/`complete.ts` into
