@@ -80,6 +80,16 @@ export interface ApplyCompleteTransitionInput {
 	mode: IntegrationMode;
 	/** The review-request provider (propose mode); push-only `none` otherwise. */
 	provider: ReviewProvider;
+	/**
+	 * Optional single-line review-request TITLE (propose mode), threaded straight
+	 * to the provider. Absent ⇒ the provider's `--fill` default (no regression).
+	 */
+	title?: string;
+	/**
+	 * Optional review-request BODY (propose mode) — advisory prose, gates nothing —
+	 * threaded straight to the provider. Absent ⇒ the provider's `--fill` default.
+	 */
+	body?: string;
 	/** Working clone/worktree the integration runs in. */
 	cwd: string;
 	/** Environment for child git processes. */
@@ -337,11 +347,13 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		branch,
 		mode,
 		provider,
+		title,
+		body,
 		cwd,
 		env,
 	}): ApplyCompleteTransitionResult {
 		const integrator = new Integrator({provider});
-		return integrator.integrate({cwd, arbiter, branch, mode, env});
+		return integrator.integrate({cwd, arbiter, branch, mode, title, body, env});
 	},
 
 	/**

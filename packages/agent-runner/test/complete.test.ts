@@ -90,6 +90,37 @@ function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
 	writeFileSync(join(repo, file), body);
 }
 
+/**
+ * Write an executable `gh` STUB on a fresh dir (prepend its `binDir` to PATH) that
+ * RECORDS the args it was invoked with (newline-per-arg) and prints a fake PR URL.
+ * Lets a propose-mode `complete`/`do` test assert the EXACT `gh pr create` args
+ * (`--title`/`--body` vs `--fill`) through the full chain, no real GitHub.
+ */
+function recordingGhStub(stdout = 'https://github.com/o/r/pull/1'): {
+	binDir: string;
+	readArgs: () => string;
+} {
+	const binDir = join(
+		scratch.root,
+		`gh-stub-${Math.random().toString(36).slice(2)}`,
+	);
+	mkdirSync(binDir, {recursive: true});
+	const argsFile = join(binDir, 'gh-args.txt');
+	const gh = join(binDir, 'gh');
+	const script = [
+		'#!/usr/bin/env bash',
+		`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+		`printf '%s\\n' ${JSON.stringify(stdout)}`,
+		'exit 0',
+	].join('\n');
+	writeFileSync(gh, script + '\n');
+	chmodSync(gh, 0o755);
+	return {
+		binDir,
+		readArgs: () => readFileSync(argsFile, 'utf8'),
+	};
+}
+
 /** A `verify` gate that always passes / always fails, deterministically. */
 const PASS = 'exit 0';
 const FAIL = 'exit 1';
@@ -443,6 +474,82 @@ describe('complete — propose integration', () => {
 		const lines = block.split('\n');
 		expect(lines[0]).toBe('');
 		expect(lines[lines.length - 1]).toBe('');
+	});
+
+	// --- Half A (title) + Half B (body): the synthesised single-line --title and
+	//     the threaded --body reach `gh pr create` (a recording stub on PATH).
+
+	it('passes an explicit single-line --title synthesised from the slice (not --fill-derived)', async () => {
+		const {repo} = await claimAndBranch('titled');
+		agentEdits(repo);
+		const gh = recordingGhStub('https://github.com/o/r/pull/1');
+		const result = await performComplete({
+			slug: 'titled',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github',
+			verify: PASS,
+			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		const args = gh.readArgs();
+		expect(args).toMatch(/^--title$/m);
+		// The seeded slice title == the slug, so `<type>(<slug>): <title>`.
+		expect(args).toMatch(/^feat\(titled\): titled$/m);
+		// The title NEVER relies on --fill (which would derive the commit run-on).
+		expect(args).not.toMatch(/^--fill$/m);
+		// The title arg is a single line.
+		const lines = args.split('\n');
+		const titleIdx = lines.indexOf('--title');
+		expect(lines[titleIdx + 1]).toBe('feat(titled): titled');
+	});
+
+	it('threads the --body (under a slice-pointer header) when supplied; absent ⇒ --fill', async () => {
+		const {repo} = await claimAndBranch('bodied');
+		agentEdits(repo);
+		const gh = recordingGhStub('https://github.com/o/r/pull/2');
+		const result = await performComplete({
+			slug: 'bodied',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github',
+			verify: PASS,
+			body: 'Built the thing. Decided to inline the helper.',
+			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		const args = gh.readArgs();
+		expect(args).toMatch(/^--body$/m);
+		// The body carries the summary AND a pointer back to the slice file.
+		expect(args).toContain('Built the thing. Decided to inline the helper.');
+		expect(args).toContain('work/done/bodied.md');
+		expect(args).not.toMatch(/^--fill$/m);
+	});
+
+	it('with NO body the gh invocation still drops --fill but supplies the title (no run-on)', async () => {
+		const {repo} = await claimAndBranch('nobody');
+		agentEdits(repo);
+		const gh = recordingGhStub('https://github.com/o/r/pull/3');
+		const result = await performComplete({
+			slug: 'nobody',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github',
+			verify: PASS,
+			// no body
+			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		const args = gh.readArgs();
+		// Title is always synthesised (Half A), so --fill is gone even without a body.
+		expect(args).toMatch(/^--title$/m);
+		expect(args).toMatch(/^feat\(nobody\): nobody$/m);
+		expect(args).not.toMatch(/^--fill$/m);
+		// The (empty) body field is supplied so gh never re-derives from the subject.
+		expect(args).toMatch(/^--body$/m);
 	});
 });
 

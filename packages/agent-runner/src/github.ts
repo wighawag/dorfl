@@ -1,6 +1,7 @@
 import {run, type RunResult} from './git.js';
 import {
 	NoneProvider,
+	manualRequestText,
 	type ReviewProvider,
 	type OpenRequestInput,
 	type OpenRequestResult,
@@ -167,16 +168,31 @@ export class GitHubProvider implements ReviewProvider {
 	}
 
 	/**
-	 * Open a PR for `input.branch` via `gh pr create --base main --head <branch>
-	 * --fill`. The branch is GUARANTEED to be on the arbiter already (the push is
-	 * the seam's safety-bearing step), so any `gh` failure is non-fatal: we fall
-	 * back to the same manual-instructions result the `none` provider returns. On
-	 * success we parse the PR URL `gh` prints and surface it (recorded by the
-	 * caller into the job record / `status`).
+	 * Open a PR for `input.branch` via `gh pr create --base main --head <branch>`,
+	 * passing an explicit `--title`/`--body` when the caller supplied them (the
+	 * synthesised single-line title + the agent's summary body) and falling back to
+	 * `--fill` ONLY when BOTH are absent (today's behaviour — no regression). A
+	 * partial set (one present) still drops `--fill`: `--fill` and an explicit
+	 * `--title`/`--body` are mutually exclusive to `gh`, so once we override either
+	 * field we must supply both explicitly (the other defaults to the slug-derived
+	 * title / an empty body rather than re-deriving a run-on subject). The branch
+	 * is GUARANTEED to be on the arbiter already (the push is the seam's safety-
+	 * bearing step), so any `gh` failure is non-fatal: we fall back to the same
+	 * manual-instructions result the `none` provider returns. On success we parse
+	 * the PR URL `gh` prints and surface it (recorded by the caller into the job
+	 * record / `status`).
 	 */
 	openRequest(input: OpenRequestInput): OpenRequestResult {
 		const result = this.runGh(
-			['pr', 'create', '--base', this.base, '--head', input.branch, '--fill'],
+			[
+				'pr',
+				'create',
+				'--base',
+				this.base,
+				'--head',
+				input.branch,
+				...prCreateContentArgs(input),
+			],
 			input.cwd,
 			input.env,
 		);
@@ -233,14 +249,38 @@ export class GitHubProvider implements ReviewProvider {
 
 	/** The graceful-degradation result: identical to the `none` provider's. */
 	private degrade(input: OpenRequestInput): OpenRequestResult {
+		// Echo the explicit title/body in the suggested manual command when present,
+		// so a human opening the PR by hand reuses the same content the autonomous
+		// path would have set (else fall back to the bare `--fill` suggestion).
+		const contentArgs = prCreateContentArgs(input);
+		const suggestion =
+			`gh pr create --base ${this.base} --head ${input.branch} ${contentArgs.join(' ')}`.trim();
 		return {
 			opened: false,
 			instruction:
 				`Pushed ${input.branch} to ${input.arbiter}. \`gh\` is unavailable ` +
 				'or unauthenticated, so no PR was opened — open one manually, e.g. ' +
-				`\`gh pr create --base ${this.base} --head ${input.branch} --fill\`.`,
+				`\`${suggestion}\`.` +
+				manualRequestText(input),
 		};
 	}
+}
+
+/**
+ * The CONTENT args for `gh pr create`: an explicit `--title`/`--body` when the
+ * caller supplied either (a partial set is completed so `--fill` is never mixed
+ * with an explicit field — `gh` forbids that), else the lone `--fill` (today's
+ * behaviour, no regression). Returned as a flat arg array so both the live
+ * invocation and the degraded suggestion build from one source of truth.
+ */
+export function prCreateContentArgs(input: {
+	title?: string;
+	body?: string;
+}): string[] {
+	if (input.title === undefined && input.body === undefined) {
+		return ['--fill'];
+	}
+	return ['--title', input.title ?? '', '--body', input.body ?? ''];
 }
 
 /**
