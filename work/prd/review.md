@@ -347,8 +347,13 @@ points):
   - **issue-thread surface (E)** — run the review/edit loop in issue-to-prd /
     issue-intake CI, surfacing findings as comment-thread questions/edits. Later
     set (issue-intake design).
-  - **`review-gate-pr-comment`** — post the Gate-2 verdict AS a GitHub PR
-    review/comment via a provider seam (does NOT exist in `src/` today). Later.
+  - **`review-gate-pr-comment`** — SLICED 2026-06-06
+    (`work/backlog/review-gate-pr-comment.md`): post the Gate-2 verdict as a PR
+    COMMENT via a new provider `postComment` seam, **including on APPROVE** (the
+    audit trail — maintainer decision). Shares the "write text to the PR" provider
+    surface with `propose-pr-body` (body-at-open vs comment-after); `blockedBy:
+    [propose-pr-body]`. (Today the verdict only hits the terminal note / the
+    needs-attention body — nothing reaches the PR; this closes that.)
   - **remove `reviewMaxRounds` from the Gate-2 path** (orphan; the loop owns
     `maxReview`) — cleanup, later.
 Add the `sliced:` marker (and the one-time PRD trim) only once these are sliced.

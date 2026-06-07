@@ -1,10 +1,16 @@
 ---
 title: propose-mode PR title + body — a short title and the agent's summary, not gh --fill's run-on subject + empty description
 slug: propose-pr-body
-needsAnswers: true
 blockedBy: []
 covers: []
 ---
+
+> **`needsAnswers` CLEARED 2026-06-06** — Half B's open questions are resolved (see
+> "Open questions" below, now answered): the body is the AGENT'S final summary,
+> captured via the harness seam's `LaunchResult.output` (built by
+> `harness-agent-output`, PR #12) — the exact hand-off channel Q1/Q2 needed. Q3:
+> human `complete --propose` MAY pass a `--message`-style body too (same optional
+> `body` field), but that is a thin add, not required for the autonomous path.
 
 ## What to build
 
@@ -52,38 +58,46 @@ summary, no decisions, no pointer to the slice spec.
   `gh pr create --body <body>` (instead of `--fill` when a body is present); the
   `none` provider includes it in its manual-instruction output; no behaviour change
   when `body` is absent (degrades to today's `--fill`).
-- **The body should carry** (whatever the resolved source — see the open question):
-  a short summary of what was built, key decisions/deviations worth a reviewer's
-  attention, a pointer back to the slice file (`work/done/<slug>.md`) + the PRD/ADR
-  it serves, and optionally any "please check X" the agent was unsure about (a
-  lightweight in-PR echo of needs-attention surfacing).
+- **Source (RESOLVED):** the agent's FINAL SUMMARY via `LaunchResult.output`
+  (`harness-agent-output`, PR #12) as the prose, optionally under a runner-scaffolded
+  header (slice pointer + PRD/ADR + diff stat).
+- **The body should carry:** a short summary of what was built, key
+  decisions/deviations worth a reviewer's attention, a pointer back to the slice
+  file (`work/done/<slug>.md`) + the PRD/ADR it serves, and optionally any "please
+  check X" the agent was unsure about (a lightweight in-PR echo of needs-attention
+  surfacing).
+- **Shared seam note:** the optional `body` on `OpenRequestInput` (added here) and
+  the PR-COMMENT capability `review-gate-pr-comment` adds are BOTH "write text to the
+  PR" on the provider seam. This slice adds the **creation body** (`--body` at PR
+  open); `review-gate-pr-comment` adds a **follow-up comment** (`postComment` on the
+  opened PR). Design them consistently — same provider, same graceful-degradation
+  discipline — but they are separate fields/methods (body at open vs comment after).
 - The body is **advisory prose** — it gates nothing (no trust-boundary role), so a
   model-authored body is fine (unlike the `verify` gate).
 
-## Open questions (gate Half B only; Half A — the title — is decided)
+## Open questions — RESOLVED 2026-06-06 (were Half B gates; now answered)
 
-> NOTE: these questions gate the **body** (Half B). **Half A (the title) is
-> answerable now** and can ship even while these stay open — if a future build
-> wants to land the title fix first and leave `needsAnswers` set for the body,
-> that is in-contract (the title needs no agent hand-off channel).
+> Half A (the title) was always decided. Half B's questions are now resolved by the
+> `harness-agent-output` seam (PR #12), which built the exact hand-off channel Q1/Q2
+> needed.
 
-1. **Source of the body — agent-emitted vs runner-synthesised?** The build agent
-   does NO git (the runner owns the PR open), so an agent-authored summary needs a
-   clean hand-off channel: the runner captures the agent's final message (or a
-   designated `## Summary` block the agent emits) and passes it as the body. The
-   alternative is the runner SYNTHESISING the body from the slice file + the diff
-   (no agent text needed, but less rich). Decide which (or a hybrid: runner
-   scaffolds slice-pointer + diff stat, agent's summary fills the prose). This is
-   the load-bearing decision — it determines whether the harness seam needs a
-   "final summary" output channel.
-2. **Hand-off channel (if agent-emitted):** how does the agent's summary reach the
-   runner without the agent doing git? (e.g. the harness returns the agent's last
-   assistant message; or a convention that the agent writes the summary to a known
-   transient path the runner reads.) Mind that the agent is sandboxed to editing
-   code + getting the gate green.
-3. **Human `complete --propose` too?** Should the same body capability apply when a
-   HUMAN runs `complete --propose` (a human-authored `--message`-style body), or is
-   this autonomous-path-only for now?
+1. **Source of the body — RESOLVED: AGENT-EMITTED (hybrid-friendly).** The body is
+   the build agent's FINAL SUMMARY, captured via the harness seam's
+   `LaunchResult.output` (the last assistant message — built by
+   `harness-agent-output`). The runner MAY scaffold a deterministic header
+   (slice-pointer `work/done/<slug>.md` + the PRD/ADR it serves + diff stat) and
+   append the agent's `output` summary as the prose — the hybrid the question
+   floated, now cheap because the channel exists. No new "final summary" channel is
+   needed; reuse `LaunchResult.output`.
+2. **Hand-off channel — RESOLVED: `LaunchResult.output`.** The harness already
+   returns the agent's final assistant message (pi from its `.jsonl`, null/shell
+   from stdout — `harness-agent-output`). The agent does NO git; the runner reads
+   `output` and composes the PR body. No transient-path convention needed.
+3. **Human `complete --propose` — RESOLVED: YES, optionally.** The same optional
+   `body` field applies; a human may pass a `--message`/`--body`-style description
+   on `complete --propose`. Thin add (the field already exists for the autonomous
+   path); not required to ship the autonomous body, but in scope so the two paths
+   share one mechanism.
 
 ## Acceptance criteria
 
@@ -107,16 +121,16 @@ summary, no decisions, no pointer to the slice spec.
 
 ## Blocked by
 
-- None — self-contained against the integration seam. (`needsAnswers` until Q1–Q3
-  are decided.)
+- None for the code. (`needsAnswers` is now CLEARED — Q1–Q3 resolved.) Half B reads
+  the agent summary from `LaunchResult.output`, which `harness-agent-output` (PR #12)
+  built — so for the live agent body to be non-empty, that must be merged first
+  (it is, on `main`). Half A (title) depends on nothing.
 
 ## Prompt
 
-> NOTE: `needsAnswers: true` gates the BODY (Half B) only. The TITLE (Half A) is
-> DECIDED and answerable now — a build MAY land Half A (and only Half A) while the
-> flag stays set for the body. Half B's open questions (body SOURCE: agent-emitted
-> vs runner-synthesised; the hand-off channel; whether human `complete --propose`
-> is in scope) must be answered + the flag cleared before building the body.
+> NOTE: `needsAnswers` is CLEARED (2026-06-06) — both halves are buildable. Body
+> SOURCE is RESOLVED: the agent's final summary via `LaunchResult.output`
+> (`harness-agent-output`, PR #12); human `complete --propose` may pass a body too.
 >
 > HALF A (title, decided): stop letting `gh pr create --fill` set the title from
 > the commit subject (PR #6 got a 4-clause run-on title ending `; done`). Pass an
@@ -125,13 +139,17 @@ summary, no decisions, no pointer to the slice spec.
 > convention; default `feat`), forced to a single line and capped to a sane
 > length. No agent text needed — pure runner synthesis from the slice file.
 >
-> HALF B (body, blocked on Qs): give `propose`-mode PRs a real body instead of `gh
+> HALF B (body, now unblocked): give `propose`-mode PRs a real body instead of `gh
 > pr create --fill`'s empty description. Add an optional `body` to `OpenRequestInput`
 > (`src/integrator.ts`); the GitHub provider (`src/github.ts`) passes `--body` when
 > present (else today's `--fill`); the `none` provider includes it in its manual
-> instructions. Source the body per the resolved Q1 decision (capture the agent's
-> final summary via the harness seam, or synthesise from slice + diff). Body is
-> advisory prose — no gate role.
+> instructions. SOURCE (resolved): the agent's final summary from
+> `LaunchResult.output` (the harness seam built by `harness-agent-output`), optionally
+> under a runner-scaffolded header (slice pointer + PRD/ADR + diff stat). Body is
+> advisory prose — no gate role. NOTE the SHARED provider seam with
+> `review-gate-pr-comment` (which adds a follow-up `postComment`): keep the "write
+> text to the PR" surface consistent, but body-at-open and comment-after are
+> separate.
 >
 > READ FIRST: `work/observations/propose-pr-has-empty-body-no-agent-message.md`
 > (the gap + direction), `src/integrator.ts` (`ReviewProvider.openRequest` /
