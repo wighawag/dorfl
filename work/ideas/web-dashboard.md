@@ -16,6 +16,12 @@ status: incubating
 > (committed north-star) -> `work/backlog/` (slices) -> `work/done/`.** Nothing
 > traces to an idea; slices trace to PRDs.
 
+> RELATED (2026-06-07): `work/ideas/chat-driven-idea-to-product.md` is the
+> CONTROL + conversation surface this read-only dashboard explicitly deferred (it
+> runs agents / mutates git from web requests, and adds an idea→PRD chat
+> bootstrap). This dashboard is its read-only sibling; that idea consciously
+> revisits the same "no web control surface" boundary noted below.
+
 ## The rough thought
 
 A web dashboard layered on top of the existing CLI surfaces (`scan`, `status`)

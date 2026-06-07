@@ -21,6 +21,13 @@ status: incubating
 > execute, per-type transitions) → the contract+repo-config → batch-qa refactor → CI
 > shape → termination → remaining detail → sequencing.
 
+> RELATED FRONTEND (2026-06-07): `work/ideas/chat-driven-idea-to-product.md` is a
+> chat-based web app that RENDERS this engine's question/answer sidecar +
+> `needs-attention` as a conversation (idea → product, the human only answers
+> questions). It is a face on this engine, not a second question mechanism — it
+> reuses this sidecar contract. It also records the one engine change it implies:
+> structured/JSON lifecycle event output.
+
 ## The product vision (the north star)
 
 > **advance is the ultimate mechanism to transform a set of PRDs into a final
