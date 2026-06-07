@@ -209,6 +209,21 @@ export interface Config {
 	 * (`--review-max-rounds`) > env > per-repo > global > default.
 	 */
 	reviewMaxRounds: number;
+	/**
+	 * **The slicer review→edit→converge LOOP cap** (`slicer-review-edit-loop`,
+	 * GATES PRD `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point
+	 * A). On the `do prd:<slug>` slicing path, AFTER the agent produces candidate
+	 * slices the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
+	 * until a pass finds no NEW blocking issue (the natural terminator). `maxReview`
+	 * is the HARD CAP on the in-context review passes (N) so the loop can never run
+	 * forever; on hitting it WITH unresolved blockers the loop REJECTS via the
+	 * needsAnswers / needs-attention sink. It lives on the LOOP, never on a gate
+	 * (the orphaned `reviewMaxRounds` belongs to the Gate-2 path — separate
+	 * cleanup). A cheap default (3). Resolved per-repo like `integration`: flag
+	 * (`--max-review`) > env > per-repo > global > default. Distinct from Gate-2's
+	 * `reviewMaxRounds`.
+	 */
+	maxReview: number;
 }
 
 /** A partial config, e.g. loaded from a JSON file or built from CLI flags. */
@@ -241,6 +256,10 @@ export const DEFAULT_CONFIG: Config = {
 	review: false,
 	autoMerge: false,
 	reviewMaxRounds: 2,
+	// The slicer edit loop's hard cap on in-context review passes — a cheap
+	// default so an unattended review→edit→re-review can never run forever (the
+	// natural terminator is "no new blocking issue"; this is the ceiling on top).
+	maxReview: 3,
 };
 
 /** The conventional config location (`~/.config/agent-runner/config.json`). */

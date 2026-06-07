@@ -92,6 +92,13 @@ export interface ReviewFlags {
 	reviewModel?: string;
 	/** `--review-max-rounds <n>` — the revise↔review loop bound (parsed to a number). */
 	reviewMaxRounds?: string;
+	/**
+	 * `--max-review <n>` — the SLICER review→edit→converge loop's hard cap on
+	 * in-context review passes (`slicer-review-edit-loop`), parsed to a number. The
+	 * loop's ceiling (flag > env > per-repo > global > default), DISTINCT from the
+	 * Gate-2 `--review-max-rounds` (which lives on the gate, separate cleanup).
+	 */
+	maxReview?: string;
 }
 
 /**
@@ -116,6 +123,12 @@ export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
 		const n = Number(flags.reviewMaxRounds);
 		if (flags.reviewMaxRounds.trim() !== '' && !Number.isNaN(n)) {
 			overrides.reviewMaxRounds = n;
+		}
+	}
+	if (flags.maxReview !== undefined) {
+		const n = Number(flags.maxReview);
+		if (flags.maxReview.trim() !== '' && !Number.isNaN(n)) {
+			overrides.maxReview = n;
 		}
 	}
 	return overrides;

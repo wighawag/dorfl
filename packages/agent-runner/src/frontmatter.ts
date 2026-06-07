@@ -126,6 +126,36 @@ export function setSlicedMarker(content: string, date: string): string {
 	return lines.join('\n');
 }
 
+/**
+ * Set (or clear) the top-level `needsAnswers:` frontmatter marker on a `work/`
+ * markdown document, returning the new content. Used by the slicer review→edit
+ * LOOP's verdict sink (`slicer-review-edit-loop`) to emit a specific uncertain
+ * candidate slice as `needsAnswers: true` (open questions block autonomous build;
+ * a human must answer them). If a `needsAnswers:` line already exists it is
+ * REPLACED (idempotent); otherwise it is appended as the last line inside the
+ * frontmatter fence. A document with no frontmatter fence is returned unchanged.
+ * Mirrors {@link setSlicedMarker} exactly so the two markers behave identically.
+ */
+export function setNeedsAnswersMarker(content: string, value: boolean): string {
+	const normalized = content.replace(/\r\n/g, '\n');
+	if (!normalized.startsWith('---\n')) {
+		return content;
+	}
+	const lines = normalized.split('\n');
+	const closing = lines.indexOf('---', 1);
+	if (closing === -1) {
+		return content;
+	}
+	for (let i = 1; i < closing; i++) {
+		if (/^needsAnswers\s*:/.test(lines[i])) {
+			lines[i] = `needsAnswers: ${value}`;
+			return lines.join('\n');
+		}
+	}
+	lines.splice(closing, 0, `needsAnswers: ${value}`);
+	return lines.join('\n');
+}
+
 export function parseFrontmatter(content: string): Frontmatter {
 	const block = extractBlock(content);
 	const result: Frontmatter = {

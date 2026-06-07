@@ -401,6 +401,19 @@ export interface ReleaseSlicingLockOptions {
 	 * residence in `slicing/`. Omitted ⇒ the PRD frontmatter is restored unchanged.
 	 */
 	markSliced?: string;
+	/**
+	 * The slicer review→edit LOOP's **decomposition-unclear** verdict
+	 * (`slicer-review-edit-loop`): instead of restoring the held PRD
+	 * `work/slicing/<slug>.md → work/prd/<slug>.md`, restore it to
+	 * `work/needs-attention/<slug>.md` with this reason recorded as body prose (the
+	 * open questions), emitting NO guessed slices. The lock is still released (the
+	 * PRD leaves `work/slicing/`), but it lands in needs-attention rather than back
+	 * in `work/prd/`, so it is NOT re-sliceable until a human resolves it. When set,
+	 * `emitSlices`/`markSliced` are IGNORED (no slices land, the PRD is not marked
+	 * sliced). Omitted ⇒ the normal `slicing/ → prd/` restore. The CONTENT-IDENTITY
+	 * stale check still runs first (a concurrent edit under the lock is still `stale`).
+	 */
+	routeToNeedsAttention?: {reason: string};
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -536,6 +549,7 @@ async function runRelease(
 				lockedBlob,
 				emitSlices: options.emitSlices,
 				markSliced: options.markSliced,
+				routeToNeedsAttention: options.routeToNeedsAttention,
 				note,
 			});
 			if (result.kind === 'released') {
@@ -574,6 +588,7 @@ interface ReleaseAttemptContext {
 	lockedBlob: string | undefined;
 	emitSlices: Record<string, string> | undefined;
 	markSliced: string | undefined;
+	routeToNeedsAttention: {reason: string} | undefined;
 	note: (m: string) => void;
 }
 
@@ -615,6 +630,7 @@ async function releaseAttempt(
 		lockedBlob,
 		emitSlices,
 		markSliced,
+		routeToNeedsAttention,
 		cwd,
 		env,
 		note,
@@ -668,39 +684,74 @@ async function releaseAttempt(
 		env,
 	);
 
-	// Restore the PRD: work/slicing/<slug>.md -> work/prd/<slug>.md.
-	const prdAbs = join(cwd, prd);
-	mkdirSync(dirname(prdAbs), {recursive: true});
-	const mv = await gitSoft(['mv', slicing, prd], cwd, env);
-	if (mv.status !== 0) {
-		throw new SlicingLockUsageError(
-			`git mv failed for '${slicing}' (unexpected — aborting release)`,
+	// The slicer edit loop's DECOMPOSITION-UNCLEAR verdict: restore the held PRD to
+	// work/needs-attention/<slug>.md (NOT work/prd/) with the reason as body prose,
+	// emitting NO guessed slices and NOT marking the PRD sliced. The lock is still
+	// released (the PRD leaves slicing/), but it lands in needs-attention so it is
+	// not re-sliceable until a human resolves it.
+	if (routeToNeedsAttention !== undefined) {
+		const naRel = `work/needs-attention/${slug}.md`;
+		const naAbs = join(cwd, naRel);
+		mkdirSync(dirname(naAbs), {recursive: true});
+		const mvNa = await gitSoft(['mv', slicing, naRel], cwd, env);
+		if (mvNa.status !== 0) {
+			throw new SlicingLockUsageError(
+				`git mv failed for '${slicing}' (unexpected — aborting release)`,
+			);
+		}
+		writeFileSync(
+			naAbs,
+			appendNeedsAttentionReason(
+				readFileSync(naAbs, 'utf8'),
+				routeToNeedsAttention.reason,
+			),
+		);
+		await gitHard(['add', '--', naRel], cwd, env);
+		await gitHard(
+			[
+				'commit',
+				'--quiet',
+				'-m',
+				`slicing: route ${slug} to needs-attention (by ${ctx.by})`,
+			],
+			cwd,
+			env,
+		);
+	} else {
+		// Restore the PRD: work/slicing/<slug>.md -> work/prd/<slug>.md.
+		const prdAbs = join(cwd, prd);
+		mkdirSync(dirname(prdAbs), {recursive: true});
+		const mv = await gitSoft(['mv', slicing, prd], cwd, env);
+		if (mv.status !== 0) {
+			throw new SlicingLockUsageError(
+				`git mv failed for '${slicing}' (unexpected — aborting release)`,
+			);
+		}
+
+		// COMPLETING `do prd:` transition: fold the produced backlog slices + the
+		// PRD's `sliced:` marker INTO this SAME release commit, so the emitted backlog,
+		// the lock release, and the marker are ONE runner-owned transition (the agent
+		// never does git). A bare release (no emitSlices/markSliced) is unchanged.
+		if (markSliced !== undefined) {
+			const current = readFileSync(prdAbs, 'utf8');
+			writeFileSync(prdAbs, setSlicedMarker(current, markSliced));
+			await gitHard(['add', '--', prd], cwd, env);
+		}
+		if (emitSlices) {
+			for (const [relPath, content] of Object.entries(emitSlices)) {
+				const abs = join(cwd, relPath);
+				mkdirSync(dirname(abs), {recursive: true});
+				writeFileSync(abs, content);
+				await gitHard(['add', '--', relPath], cwd, env);
+			}
+		}
+
+		await gitHard(
+			['commit', '--quiet', '-m', `slicing: release ${slug} (by ${ctx.by})`],
+			cwd,
+			env,
 		);
 	}
-
-	// COMPLETING `do prd:` transition: fold the produced backlog slices + the
-	// PRD's `sliced:` marker INTO this SAME release commit, so the emitted backlog,
-	// the lock release, and the marker are ONE runner-owned transition (the agent
-	// never does git). A bare release (no emitSlices/markSliced) is unchanged.
-	if (markSliced !== undefined) {
-		const current = readFileSync(prdAbs, 'utf8');
-		writeFileSync(prdAbs, setSlicedMarker(current, markSliced));
-		await gitHard(['add', '--', prd], cwd, env);
-	}
-	if (emitSlices) {
-		for (const [relPath, content] of Object.entries(emitSlices)) {
-			const abs = join(cwd, relPath);
-			mkdirSync(dirname(abs), {recursive: true});
-			writeFileSync(abs, content);
-			await gitHard(['add', '--', relPath], cwd, env);
-		}
-	}
-
-	await gitHard(
-		['commit', '--quiet', '-m', `slicing: release ${slug} (by ${ctx.by})`],
-		cwd,
-		env,
-	);
 
 	// CAS-push the restore through the seam (kind `slicing`, lease = current main).
 	// The branch is already ON current main (no rebase needed — we restore from
@@ -726,11 +777,28 @@ async function releaseAttempt(
 		note,
 	});
 	if (result.kind === 'published') {
-		const message = `RELEASED '${slug}' -> work/prd/ on ${arbiter}/main (slicing/ empty).`;
+		const message =
+			routeToNeedsAttention !== undefined
+				? `RELEASED '${slug}' -> work/needs-attention/ on ${arbiter}/main (decomposition unclear; no slices emitted).`
+				: `RELEASED '${slug}' -> work/prd/ on ${arbiter}/main (slicing/ empty).`;
 		note(message);
 		return {kind: 'released', message};
 	}
 	return {kind: 'rejected', message: result.message};
+}
+
+/** Marker that opens the reason block in a routed PRD's needs-attention body. */
+const NEEDS_ATTENTION_REASON_HEADING = '## Needs attention';
+
+/**
+ * Append a `## Needs attention` reason block (prose, never a frontmatter field —
+ * WORK-CONTRACT rule 3) to a PRD routed to needs-attention by the slicer edit
+ * loop's decomposition-unclear verdict. Mirrors the body-prose reason the
+ * needs-attention move helper records for build bounces.
+ */
+function appendNeedsAttentionReason(content: string, reason: string): string {
+	const base = content.replace(/\s*$/, '');
+	return [base, '', NEEDS_ATTENTION_REASON_HEADING, '', reason, ''].join('\n');
 }
 
 // --- Shared helpers (same shape as claim-cas.ts) --------------------------
