@@ -14,9 +14,14 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	gitEnv,
+	isolatePiAgentDir,
 	type Scratch,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
+import type {
+	SliceReviewGate,
+	SliceReviewVerdict,
+} from '../src/slicer-review-loop.js';
 
 /**
  * `do prd:<slug>` slicing-path tests (`performSlice`, slice `autoslice-command`).
@@ -31,10 +36,15 @@ import {run} from '../src/git.js';
 const ARBITER = 'arbiter';
 
 let scratch: Scratch;
+let restorePiAgentDir: () => void;
 beforeEach(() => {
 	scratch = makeScratch('agent-runner-slicing-');
+	// Test-isolation (shared-write rule): point pi's session storage at scratch so
+	// no slice-file/session write touches the real ~/.pi/agent/sessions/.
+	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
+	restorePiAgentDir();
 	scratch.cleanup();
 });
 
@@ -404,6 +414,265 @@ describe('performSlice — lock lost / agent failed', () => {
 		expect(result.message).toMatch(/boom/);
 		// The runner did NOT release the lock on a failed slice (recoverable/re-run).
 		expect(released).toBe(false);
+	});
+});
+
+// --- The slicer review→edit→converge LOOP (slicer-review-edit-loop) -----------
+
+describe('performSlice — the slicer review→edit→converge loop', () => {
+	/** A loop gate returning a scripted sequence of verdicts (one per pass). */
+	function loopGate(verdicts: SliceReviewVerdict[]): SliceReviewGate {
+		let i = 0;
+		return async () => {
+			const v = verdicts[Math.min(i, verdicts.length - 1)];
+			i++;
+			return v;
+		};
+	}
+
+	it('a converging loop (findings → edits → clean) LANDS the IMPROVED slices', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			reviewLoop: loopGate([
+				// Pass 1: block + improve the candidate slice in place.
+				{
+					verdict: 'block',
+					findings: [{severity: 'blocking', question: 'thin prompt'}],
+					edits: [
+						{
+							path: 'work/backlog/child.md',
+							content:
+								'---\nslug: child\nprd: it\n---\n\n## Prompt\n\n> IMPROVED by the loop\n',
+						},
+					],
+				},
+				// Pass 2: converged.
+				{verdict: 'approve', findings: []},
+			]),
+			maxReview: 3,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBe('converged');
+		// The IMPROVED slice landed on the arbiter (not the pre-loop draft).
+		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(true);
+		expect(showArbiter(repo, 'work/backlog/child.md')).toMatch(
+			/IMPROVED by the loop/,
+		);
+		// The lock was released + the PRD marked sliced (the normal completing transition).
+		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
+		expect(showArbiter(repo, 'work/prd/it.md')).toMatch(/sliced:/);
+	});
+
+	it('a persistent block hits maxReview → emits the uncertain slice needsAnswers + questions', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			reviewLoop: loopGate([
+				{
+					verdict: 'block',
+					findings: [{severity: 'blocking', question: 'unresolved seam'}],
+					uncertainSlices: [
+						{
+							path: 'work/backlog/child.md',
+							questions: ['which seam does this reuse?'],
+						},
+					],
+				},
+			]),
+			maxReview: 2,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBe('uncertain-slices');
+		// The slice landed BUT is flagged needsAnswers with the questions in its body.
+		const body = showArbiter(repo, 'work/backlog/child.md');
+		expect(body).toMatch(/needsAnswers: true/);
+		expect(body).toMatch(/which seam does this reuse\?/);
+		expect(body).toMatch(/## Open questions/);
+	});
+
+	it('decomposition-unclear → routes the PRD to needs-attention, emits NO slices', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			reviewLoop: loopGate([
+				{
+					verdict: 'block',
+					findings: [{severity: 'blocking', question: 'wrong shape'}],
+					decompositionUnclear: {
+						questions: ['should this be split across two PRDs?'],
+					},
+				},
+			]),
+			maxReview: 2,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('needs-attention');
+		expect(result.exitCode).toBe(1);
+		// The PRD is in needs-attention (NOT back in prd/, NOT marked sliced).
+		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
+		// No guessed slices emitted.
+		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(false);
+		// The questions are recorded as the needs-attention reason.
+		expect(showArbiter(repo, 'work/needs-attention/it.md')).toMatch(
+			/should this be split across two PRDs\?/,
+		);
+	});
+
+	it('M>1 runs the loop in fresh contexts (the loop seam is invoked per execution)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const executions: number[] = [];
+		const gate: SliceReviewGate = async (input) => {
+			executions.push(input.execution);
+			// Execution 1 never converges; execution 2 converges on pass 1.
+			if (input.execution === 1) {
+				return {
+					verdict: 'block',
+					findings: [{severity: 'blocking', question: 'try again fresh'}],
+				};
+			}
+			return {verdict: 'approve', findings: []};
+		};
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			reviewLoop: gate,
+			maxReview: 2,
+			reviewExecutions: 3,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBe('converged');
+		// Execution 1 ran twice (maxReview), execution 2 once (converged), 3 never.
+		expect(executions).toEqual([1, 1, 2]);
+	});
+
+	it('the HUMAN path is UNAFFECTED by the loop (no loop runs even when a gate is wired)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it', {humanOnly: true});
+		let loopRan = false;
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			doer: 'human',
+			agentRunner: slicingAgent('child'),
+			reviewLoop: async () => {
+				loopRan = true;
+				return {verdict: 'approve', findings: []};
+			},
+			maxReview: 3,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBeUndefined();
+		// The loop seam was never invoked on the human path.
+		expect(loopRan).toBe(false);
+	});
+
+	it('no loop seam wired ⇒ the candidate slices land as-is (pre-loop behaviour)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBeUndefined();
+		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(true);
+	});
+
+	it('on a POPULATED backlog, the loop touches ONLY this run’s own slice (pre-existing landed slices untouched)', async () => {
+		// The requeue fix (regression): seed a POPULATED backlog — a pre-existing,
+		// already-LANDED slice committed on the arbiter — then slice. The loop must
+		// review/edit/flag ONLY the slice THIS run produced; the pre-existing slice
+		// must be left completely alone (not edited, not needsAnswers-flagged, not
+		// re-committed into the runner-owned slicing release).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['landed']);
+		const landedBefore = showArbiter(repo, 'work/backlog/landed.md');
+		seedPrd(repo, 'it');
+		const seenByGate: string[][] = [];
+		// A loop gate that, given the chance, would HIJACK + flag EVERY backlog file
+		// — only the scoping fence stops it from touching the pre-existing slice.
+		const gate: SliceReviewGate = async (input) => {
+			seenByGate.push(input.candidateSlices);
+			return {
+				verdict: 'block',
+				findings: [{severity: 'blocking', question: 'rewrite everything'}],
+				edits: [
+					// Try to overwrite the pre-existing landed slice (must be REFUSED)…
+					{path: 'work/backlog/landed.md', content: 'HIJACKED landed'},
+					// …and improve the run's own slice (allowed), keeping valid frontmatter.
+					...input.candidateSlices.map((path) => ({
+						path,
+						content:
+							'---\nslug: child\nprd: it\n---\n\n## Prompt\n\n> IMPROVED by the loop\n',
+					})),
+				],
+				// Also try to flag the pre-existing slice directly by name.
+				uncertainSlices: [
+					{path: 'work/backlog/landed.md', questions: ['hijack flag']},
+					...input.candidateSlices.map((path) => ({
+						path,
+						questions: ['own flag'],
+					})),
+				],
+			};
+		};
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			agentRunner: slicingAgent('child'),
+			reviewLoop: gate,
+			maxReview: 1,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.loop).toBe('uncertain-slices');
+		// The gate was only ever shown THIS run's own produced slice.
+		for (const seen of seenByGate) {
+			expect(seen).toEqual(['work/backlog/child.md']);
+		}
+		// The pre-existing landed slice on the arbiter is BYTE-FOR-BYTE unchanged:
+		// not hijacked, not needsAnswers-flagged, not re-committed.
+		expect(showArbiter(repo, 'work/backlog/landed.md')).toBe(landedBefore);
+		expect(showArbiter(repo, 'work/backlog/landed.md')).not.toMatch(/HIJACKED/);
+		expect(showArbiter(repo, 'work/backlog/landed.md')).not.toMatch(
+			/needsAnswers/,
+		);
+		// THIS run's own slice WAS the one flagged needsAnswers (cap hit).
+		const child = showArbiter(repo, 'work/backlog/child.md');
+		expect(child).toMatch(/needsAnswers: true/);
+		expect(child).toMatch(/own flag/);
 	});
 });
 

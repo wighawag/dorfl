@@ -5,6 +5,7 @@ import {performComplete} from './complete.js';
 import {performClaim} from './claim-cas.js';
 import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
 import {performSlice, type SliceResult} from './slicing.js';
+import type {SliceReviewGate} from './slicer-review-loop.js';
 import {
 	resolveSlice,
 	buildAgentPrompt,
@@ -124,6 +125,20 @@ export interface DoOptions {
 	 * this is on. Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
+	/**
+	 * **The slicer review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
+	 * consumed ONLY by the `do prd:<slug>` slicing path — after the agent produces
+	 * candidate slices, run the `review` SKILL as a review→edit→re-review loop that
+	 * improves them, routing the verdict through the needsAnswers / needs-attention
+	 * sink. Ignored by the slice-build path. Omitted ⇒ no loop (candidate slices land
+	 * as-is). Production wires {@link harnessSliceReviewGate}; tests inject a canned
+	 * verdict+edits.
+	 */
+	reviewLoop?: SliceReviewGate;
+	/** The slicer edit loop's `maxReview` cap (flag > env > per-repo > global > default). Loop only. */
+	maxReview?: number;
+	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
+	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
@@ -251,6 +266,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * slicing path (the agent slicing gate). Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
+	/** The slicer review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
+	reviewLoop?: SliceReviewGate;
+	/** The slicer edit loop's `maxReview` cap. Loop only. */
+	maxReview?: number;
+	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
+	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/** The declared per-repo acceptance gate (string | list). */
@@ -304,6 +325,13 @@ function sliceResultToDoResult(sliced: SliceResult): DoResult {
 			break;
 		case 'stale':
 			outcome = 'stale';
+			exitCode = 1;
+			break;
+		case 'needs-attention':
+			// The slicer review→edit loop found the decomposition unclear and routed the
+			// PRD to needs-attention (no guessed slices). Same exit class as a stuck
+			// build (1).
+			outcome = 'needs-attention';
 			exitCode = 1;
 			break;
 		case 'agent-failed':
@@ -389,6 +417,13 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			agentCmd: options.agentCmd,
 			model: options.model,
 			sessionsDir: options.sessionsDir,
+			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
+			// candidate slices in place + routes the verdict through the needsAnswers /
+			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
+			reviewLoop: options.reviewLoop,
+			maxReview: options.maxReview,
+			reviewExecutions: options.reviewExecutions,
+			reviewModel: options.reviewModel,
 			env,
 			note,
 		});
@@ -905,6 +940,11 @@ export async function performDoRemote(
 				agentCmd: options.agentCmd,
 				model: options.model,
 				sessionsDir: options.sessionsDir,
+				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
+				reviewLoop: options.reviewLoop,
+				maxReview: options.maxReview,
+				reviewExecutions: options.reviewExecutions,
+				reviewModel: options.reviewModel,
 				env,
 				note,
 			});

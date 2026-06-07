@@ -42,6 +42,7 @@ import {
 	reviewFlagOverrides,
 } from './do-config.js';
 import {harnessReviewGate} from './review-gate.js';
+import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
@@ -250,6 +251,8 @@ interface DoFlags {
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
+	/** `--max-review <n>` — the slicer review→edit→converge loop's hard cap (`do prd:` path). */
+	maxReview?: string;
 }
 
 interface GcFlags {
@@ -1048,6 +1051,10 @@ export function buildProgram(): Command {
 			'--review-max-rounds <n>',
 			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
 		)
+		.option(
+			'--max-review <n>',
+			'cap the slicer review→edit→converge loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the PRD to needs-attention (default 3)',
+		)
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
 			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count.
@@ -1151,6 +1158,17 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
+					// The slicer review→edit→converge LOOP on the `do --remote prd:` path is
+					// ON by default (auto-slicing has no `verify` floor, so the loop is the
+					// only quality gate). `maxReview` resolves per-repo (flag > env > per-repo
+					// > global > cheap default).
+					// `reviewModel` (already threaded for Gate 2) also de-correlates the
+					// loop's review agent.
+					reviewLoop: harnessSliceReviewGate({
+						harness: remoteHarness,
+						agentCmd: remoteConfig.agentCmd,
+					}),
+					maxReview: remoteConfig.maxReview,
 					watch: flags.watch === true,
 					color: shouldUseColor(process.stdout),
 					note: (message) => console.error(`>> ${message}`),
@@ -1222,6 +1240,17 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
+				// The slicer review→edit→converge LOOP on the `do prd:` slicing path is ON
+				// by default (auto-slicing has no `verify` floor — the loop is the only
+				// quality gate there). `maxReview` resolves per-repo (flag > env > per-repo
+				// > global > cheap default); the slice-build path ignores all of these.
+				// `reviewModel` (already threaded for Gate 2 above) also de-correlates the
+				// loop's review agent.
+				reviewLoop: harnessSliceReviewGate({
+					harness,
+					agentCmd: config.agentCmd,
+				}),
+				maxReview: config.maxReview,
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
 				watch: flags.watch === true,

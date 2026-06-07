@@ -73,6 +73,7 @@ const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
 	autoMerge: 'boolean',
 	reviewModel: 'string',
 	reviewMaxRounds: 'number',
+	maxReview: 'number',
 };
 
 /** The `AGENT_RUNNER_*` env var name for a config key (`perRepoMax` →

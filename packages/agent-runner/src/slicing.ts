@@ -1,4 +1,4 @@
-import {existsSync, readdirSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {
@@ -15,6 +15,12 @@ import {
 } from './slicing-lock.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
+import {setNeedsAnswersMarker} from './frontmatter.js';
+import {
+	runSliceReviewLoop,
+	type SliceReviewGate,
+	type RunSliceReviewLoopResult,
+} from './slicer-review-loop.js';
 
 /**
  * The **`do prd:<slug>` slicing path** (PRD `auto-slice`, slice
@@ -58,6 +64,7 @@ export type SliceOutcome =
 	| 'lock-lost' // the lock was lost/contended (another slicer holds it)
 	| 'agent-failed' // the agent invocation itself errored
 	| 'stale' // the held PRD was edited under the lock → the slicing is stale
+	| 'needs-attention' // the slicer edit loop found the decomposition unclear → PRD routed to needs-attention (no slices)
 	| 'usage-error'; // usage / environment problem (missing PRD, bad release, …)
 
 export interface SliceResult {
@@ -67,6 +74,14 @@ export interface SliceResult {
 	slug: string;
 	/** Repo-relative paths of the backlog slices the runner committed. */
 	emitted?: string[];
+	/**
+	 * The slicer review→edit LOOP's disposition (`slicer-review-edit-loop`), when
+	 * the loop ran. `converged` = the improved slices landed; `uncertain-slices` =
+	 * the cap was hit and specific slices landed `needsAnswers: true`; absent when
+	 * no loop ran or the PRD was routed to needs-attention (`outcome:
+	 * 'needs-attention'`).
+	 */
+	loop?: 'converged' | 'uncertain-slices';
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -130,6 +145,34 @@ export interface PerformSliceOptions {
 	today?: string;
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
 	lock?: SlicingLockSeam;
+	/**
+	 * **The slicer review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES PRD
+	 * `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
+	 * provided, AFTER the agent produces candidate slices (step 3) and BEFORE the
+	 * runner finalises them (step 4), run the `review` SKILL as a review→edit→
+	 * re-review loop that IMPROVES the candidate slices in place, then routes the
+	 * verdict through the three outcomes (converge→land / uncertain-slice→
+	 * needsAnswers / decomposition-unclear→PRD-to-needs-attention). The seam is the
+	 * review+edit gate (tests inject a canned verdict+edits; production:
+	 * {@link harnessSliceReviewGate}). Omitted ⇒ NO loop (the candidate slices land
+	 * as-is — the pre-loop behaviour). The HUMAN path is unaffected (the loop runs
+	 * on the auto-slicer's output only — see the gating in {@link performSlice}).
+	 */
+	reviewLoop?: SliceReviewGate;
+	/**
+	 * The HARD CAP on the slicer edit loop's in-context review passes (N) — resolved
+	 * per-repo (flag > env > per-repo > global > cheap default). Only consulted when
+	 * {@link reviewLoop} is set. Defaults to 3 (the cheap default) when omitted.
+	 */
+	maxReview?: number;
+	/**
+	 * How many fresh-context EXECUTIONS (M) of the loop to run — each a NEW launch in
+	 * a fresh context. Default 1 (the cheap degenerate case). Only consulted when
+	 * {@link reviewLoop} is set.
+	 */
+	reviewExecutions?: number;
+	/** The model the review agent runs on (de-correlated from the slicer). Loop only. */
+	reviewModel?: string;
 	/** Environment for child git/agent processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -233,12 +276,85 @@ export async function performSlice(
 		return {exitCode: 1, outcome: 'agent-failed', slug, message};
 	}
 
+	// 3.5 THE SLICER REVIEW→EDIT→CONVERGE LOOP (`slicer-review-edit-loop`, Shape 2 /
+	//     insertion point A): when a loop seam is wired, run the `review` SKILL as a
+	//     review→edit→re-review loop that IMPROVES the candidate slices in place, then
+	//     determines the disposition (the three outcomes). This plugs in AFTER the
+	//     candidate slices are produced and BEFORE they are finalised. The agent makes
+	//     the review/edit JUDGEMENTS; the loop applies edits to the candidate files
+	//     and routes the verdict; the runner (below) owns the git transition. Only the
+	//     AGENT path runs the loop — the human slicing path is unaffected.
+	let loopDisposition: RunSliceReviewLoopResult | undefined;
+	if (options.reviewLoop && doer === 'agent') {
+		loopDisposition = await runSliceReviewLoop({
+			slug,
+			cwd,
+			gate: options.reviewLoop,
+			// SCOPING FENCE (the requeue fix): the loop reviews/edits/flags ONLY the
+			// slices THIS run produced (new-or-changed vs `before`), never the
+			// pre-existing landed slices that share work/backlog/.
+			before,
+			maxReview: options.maxReview ?? 3,
+			executions: options.reviewExecutions,
+			reviewModel: options.reviewModel,
+			sessionsDir: options.sessionsDir,
+			env,
+			note,
+		});
+		// DECOMPOSITION UNCLEAR: emit NO guessed slices — route the held PRD to
+		// needs-attention with the questions as the reason (the lock is released by
+		// the SAME runner-owned transition, redirecting slicing/ → needs-attention/).
+		if (loopDisposition.outcome === 'decomposition-unclear') {
+			const reason = decompositionUnclearReason(
+				slug,
+				loopDisposition.prdQuestions,
+			);
+			if (useLock) {
+				const routed = await lock.release({
+					slug,
+					cwd,
+					arbiter,
+					lockedBlob,
+					routeToNeedsAttention: {reason},
+					env,
+					note,
+				});
+				if (routed.outcome !== 'released') {
+					return releaseFailureToResult(routed, slug);
+				}
+			}
+			note(loopDisposition.message);
+			return {
+				exitCode: 1,
+				outcome: 'needs-attention',
+				slug,
+				message: loopDisposition.message,
+			};
+		}
+		// UNCERTAIN SLICES: mark each named candidate `needsAnswers: true` + record
+		// its questions in the body, so it lands but is not agent-buildable. The
+		// runner writes the marker (the agent does no git/disk-escape).
+		if (loopDisposition.outcome === 'uncertain-slices') {
+			for (const uncertain of loopDisposition.uncertainSlices) {
+				markSliceNeedsAnswers(cwd, uncertain.path, uncertain.questions, note);
+			}
+		}
+	}
+
 	// 4. The RUNNER commits the COMPLETING transition: drop the produced backlog
 	//    slices IN + restore the PRD slicing/ -> prd/ (release the lock) + mark the
-	//    PRD `sliced:` — ONE runner-owned commit. The agent never does git.
+	//    PRD `sliced:` — ONE runner-owned commit. The agent never does git. (The
+	//    backlog snapshot is taken AFTER any loop edits, so the runner commits the
+	//    IMPROVED slices, not the pre-loop candidates.)
 	const emitted = newOrChangedBacklog(cwd, before);
 	const emitSlices = collectEmittedSlices(cwd, emitted);
 	const today = options.today ?? new Date().toISOString().slice(0, 10);
+	const loopTag: 'converged' | 'uncertain-slices' | undefined =
+		loopDisposition?.outcome === 'converged'
+			? 'converged'
+			: loopDisposition?.outcome === 'uncertain-slices'
+				? 'uncertain-slices'
+				: undefined;
 
 	if (useLock) {
 		const released = await lock.release({
@@ -257,7 +373,14 @@ export async function performSlice(
 				`${emitted.length === 1 ? '' : 's'}; the runner committed them, released ` +
 				`the lock (work/slicing/ -> work/prd/), and marked the PRD sliced.`;
 			note(message);
-			return {exitCode: 0, outcome: 'sliced', slug, emitted, message};
+			return {
+				exitCode: 0,
+				outcome: 'sliced',
+				slug,
+				emitted,
+				loop: loopTag,
+				message,
+			};
 		}
 		if (released.outcome === 'stale') {
 			return {exitCode: 4, outcome: 'stale', slug, message: released.message};
@@ -287,7 +410,100 @@ export async function performSlice(
 		`${emitted.length === 1 ? '' : 's'} (human path, no lock). Inspect + commit ` +
 		`the produced files (and the PRD's sliced: marker) yourself.`;
 	note(message);
-	return {exitCode: 0, outcome: 'sliced', slug, emitted, message};
+	return {
+		exitCode: 0,
+		outcome: 'sliced',
+		slug,
+		emitted,
+		loop: loopTag,
+		message,
+	};
+}
+
+/**
+ * Map a non-`released` lock-release result onto the {@link SliceResult} contract
+ * (the decomposition-unclear routing reuses the SAME release seam, so it can also
+ * be `stale`/`lost`/`contended`/usage-error). Mirrors the step-4 release mapping.
+ */
+function releaseFailureToResult(
+	released: ReleaseSlicingLockResult,
+	slug: string,
+): SliceResult {
+	if (released.outcome === 'stale') {
+		return {exitCode: 4, outcome: 'stale', slug, message: released.message};
+	}
+	if (released.outcome === 'lost' || released.outcome === 'contended') {
+		const code = released.outcome === 'lost' ? 2 : 3;
+		return {
+			exitCode: code,
+			outcome: 'lock-lost',
+			slug,
+			message: released.message,
+		};
+	}
+	return {exitCode: 1, outcome: 'usage-error', slug, message: released.message};
+}
+
+/**
+ * Build the needs-attention REASON for a decomposition-unclear loop verdict (the
+ * PRD is routed to `work/needs-attention/` with these open questions, no guessed
+ * slices). Prose only — recorded as the PRD's needs-attention body block.
+ */
+function decompositionUnclearReason(slug: string, questions: string[]): string {
+	const head =
+		`The slicer review→edit loop could not converge on a sound decomposition of ` +
+		`'${slug}' (maxReview exhausted with unresolved blockers). The PRD is routed ` +
+		`to needs-attention with no guessed slices; a human must resolve:`;
+	const body =
+		questions.length > 0
+			? questions.map((q) => `- ${q}`).join('\n')
+			: '- (no specific questions surfaced; the decomposition is broadly unclear)';
+	return `${head}\n${body}`;
+}
+
+/**
+ * Mark a candidate slice file `needsAnswers: true` and record its open questions in
+ * its body (the loop's uncertain-slice routing outcome). The runner writes the
+ * file; the agent does no git/disk-escape. A path outside `work/backlog/` is
+ * skipped (defensive). A relative `work/backlog/<slug>.md` that does not exist is
+ * skipped with a note (never crash the transition).
+ */
+function markSliceNeedsAnswers(
+	cwd: string,
+	relPath: string,
+	questions: string[],
+	note: (message: string) => void,
+): void {
+	const normalized = relPath.replace(/\\/g, '/');
+	if (!normalized.startsWith('work/backlog/') || normalized.includes('..')) {
+		note(`Skipped a needsAnswers mark outside work/backlog/ (${relPath}).`);
+		return;
+	}
+	const abs = join(cwd, normalized);
+	if (!existsSync(abs)) {
+		note(`Skipped a needsAnswers mark for missing candidate slice ${relPath}.`);
+		return;
+	}
+	const current = readFileSync(abs, 'utf8');
+	const marked = setNeedsAnswersMarker(current, true);
+	writeFileSync(abs, appendQuestionsBlock(marked, questions));
+}
+
+/** The heading that opens the open-questions block in an uncertain slice body. */
+const OPEN_QUESTIONS_HEADING = '## Open questions';
+
+/**
+ * Append an `## Open questions` block (prose, never a frontmatter field —
+ * WORK-CONTRACT rule 3) listing the loop's surfaced questions to an uncertain
+ * slice's body. A human answers these before the slice becomes agent-buildable.
+ */
+function appendQuestionsBlock(content: string, questions: string[]): string {
+	if (questions.length === 0) {
+		return content;
+	}
+	const base = content.replace(/\s*$/, '');
+	const items = questions.map((q) => `- ${q}`).join('\n');
+	return [base, '', OPEN_QUESTIONS_HEADING, '', items, ''].join('\n');
 }
 
 /**
