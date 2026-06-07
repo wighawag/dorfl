@@ -136,3 +136,51 @@ export async function localMainAheadCount(
 	const n = Number.parseInt(res.stdout.trim(), 10);
 	return Number.isFinite(n) ? n : 0;
 }
+
+/** How far local `main` has diverged from `<arbiter>/main`, both directions. */
+export interface LocalMainDivergence {
+	/** Commits on local `main` the arbiter lacks (UNPUSHED — `main-divergence-guard`). */
+	ahead: number;
+	/** Commits on `<arbiter>/main` the local `main` lacks (behind — needs a pull/rebase). */
+	behind: number;
+}
+
+/**
+ * Read the DIVERGENCE of local `main` vs `<arbiter>/main` in BOTH directions
+ * (`git rev-list --left-right --count <arbiter>/main...main`): `ahead` =
+ * unpushed local commits the arbiter lacks (the `main-divergence-guard`
+ * framing), `behind` = arbiter commits the local tree lacks. This is the honest
+ * expression of the LOCAL working tree's staleness relative to the arbiter — the
+ * source of truth — for the cwd-local section of `scan`/`status` (it labels the
+ * section as possibly ahead of / behind the fetched arbiter `main`).
+ *
+ * Best-effort / SAFE: if either ref cannot be resolved (no local `main`, an
+ * unreachable arbiter so `<arbiter>/main` is absent) the divergence cannot be
+ * computed, so it reads as `{ahead: 0, behind: 0}` (in sync) — never throws. The
+ * caller is expected to have fetched the arbiter first; a genuinely diverged
+ * `main` is the case we DO catch. Read-only.
+ */
+export async function localMainDivergence(
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LocalMainDivergence> {
+	const res = await runAsync(
+		'git',
+		['rev-list', '--left-right', '--count', `${arbiter}/main...main`],
+		cwd,
+		{env},
+	);
+	if (res.status !== 0) {
+		return {ahead: 0, behind: 0}; // a ref did not resolve — read as in sync (safe).
+	}
+	// `--left-right --count A...B` prints `<behind>\t<ahead>` (left = A=arbiter
+	// commits B lacks = behind; right = B=local commits A lacks = ahead).
+	const parts = res.stdout.trim().split(/\s+/);
+	const behind = Number.parseInt(parts[0] ?? '', 10);
+	const ahead = Number.parseInt(parts[1] ?? '', 10);
+	return {
+		ahead: Number.isFinite(ahead) ? ahead : 0,
+		behind: Number.isFinite(behind) ? behind : 0,
+	};
+}

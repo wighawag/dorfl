@@ -16,6 +16,7 @@ import {scan} from './scan.js';
 import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
 import {findParticipatingRepos} from './detect.js';
 import {formatReport} from './format.js';
+import {resolveCwdSection} from './cwd-section.js';
 import {runOnce, runLoop, type ItemResult, type RunOnceResult} from './run.js';
 import {performClaim} from './claim-cas.js';
 import {performStart} from './start.js';
@@ -54,6 +55,8 @@ interface ScanFlags {
 	config?: string;
 	allowAgents?: boolean;
 	json?: boolean;
+	cwd?: boolean;
+	arbiterRemote?: string;
 }
 
 /**
@@ -262,6 +265,7 @@ interface StatusFlags {
 	workspace?: string;
 	arbiterRemote?: string;
 	noArbiter?: boolean;
+	cwd?: boolean;
 	json?: boolean;
 }
 
@@ -388,6 +392,14 @@ export function buildProgram(): Command {
 			'--no-allow-agents',
 			'forbid agents from claiming undeclared slices (default)',
 		)
+		.option(
+			'--arbiter-remote <name>',
+			`the current repo's arbiter remote to fetch + diff its local section against (default: ${DEFAULT_ARBITER_REMOTE})`,
+		)
+		.option(
+			'--no-cwd',
+			'skip the cwd-local section (report only the cross-repo registry view)',
+		)
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: ScanFlags, command: Commander) => {
 			const fileConfig = loadConfig(flags.config);
@@ -395,19 +407,30 @@ export function buildProgram(): Command {
 				fileConfig,
 				flagOverrides(flags, command),
 			);
-			const report = await scan(config, {
-				warn: (message) => console.error(`>> ${message}`),
-			});
+			const warn = (message: string) => console.error(`>> ${message}`);
+			const report = await scan(config, {warn});
+			// The cwd-local section (the `scan-status-read-cwd-repo` slice): when run
+			// INSIDE a participating repo, ALSO report it as a separately-counted local
+			// block (fetch-its-arbiter-first), distinct from the registry view.
+			const cwdSection =
+				flags.cwd === false
+					? undefined
+					: await resolveCwdSection({
+							cwd: process.cwd(),
+							config,
+							arbiterRemote: flags.arbiterRemote,
+							warn,
+						});
 			if (flags.json) {
 				console.log(
 					JSON.stringify(
-						report,
+						{...report, cwd: cwdSection},
 						(_key, value) => (value instanceof Set ? [...value] : value),
 						2,
 					),
 				);
 			} else {
-				console.log(formatReport(report));
+				console.log(formatReport(report, cwdSection));
 			}
 		});
 
@@ -1320,10 +1343,15 @@ export function buildProgram(): Command {
 			`the current repo's arbiter remote to report on (folds in the old \`arbiter status\`; default: ${DEFAULT_ARBITER_REMOTE})`,
 		)
 		.option('--no-arbiter', "skip the current repo's arbiter section")
+		.option(
+			'--no-cwd',
+			'skip the cwd-local section (report only the jobs + registry view)',
+		)
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: StatusFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
+			const warn = (message: string) => console.error(`>> ${message}`);
 			// Surface the folder-native needs-attention set (ADR §12) from each
 			// REGISTERED HUB MIRROR (the registry), read from its bare `main` ref
 			// through the read seam (mirrors have no working tree).
@@ -1337,11 +1365,24 @@ export function buildProgram(): Command {
 							cwd: process.cwd(),
 							remote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
 						});
+			// The cwd-local section (the `scan-status-read-cwd-repo` slice): when run
+			// INSIDE a participating repo, ALSO report it as a separately-counted local
+			// block (fetch-its-arbiter-first), distinct from the registry/job view.
+			const cwdSection =
+				flags.cwd === false
+					? undefined
+					: await resolveCwdSection({
+							cwd: process.cwd(),
+							config,
+							arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+							warn,
+						});
 			const report = await status({
 				workspacesDir,
 				mirrorPaths,
 				arbiter,
-				warn: (message) => console.error(`>> ${message}`),
+				cwd: cwdSection,
+				warn,
 			});
 			if (flags.json) {
 				console.log(JSON.stringify(report, null, 2));

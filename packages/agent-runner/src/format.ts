@@ -1,4 +1,5 @@
 import type {ScanReport, ScannedItem} from './scan.js';
+import type {CwdSection} from './cwd-section.js';
 import {
 	categoriseItems,
 	summariseGroups,
@@ -70,6 +71,106 @@ function pluralRepos(n: number): string {
 	return n === 1 ? 'repo' : 'repos';
 }
 
+function pluralItems(n: number): string {
+	return n === 1 ? 'item' : 'items';
+}
+
+/**
+ * The divergence-vs-arbiter line for the cwd-local section, using the
+ * `main-divergence-guard` framing: local `main` AHEAD of `<arbiter>/main` means
+ * UNPUSHED commits (the local working tree is more authoritative than the
+ * arbiter for those); BEHIND means the arbiter has commits the local tree lacks.
+ * When the fetch failed it says so (the divergence reflects last-known).
+ */
+function cwdDivergenceLine(
+	arbiter: NonNullable<CwdSection['arbiter']>,
+): string {
+	const freshness = arbiter.fetched
+		? 'fetched just now'
+		: 'FETCH FAILED — last-known (offline)';
+	const {ahead, behind, remote} = arbiter;
+	if (ahead === 0 && behind === 0) {
+		return `      in sync with ${remote}/main (${freshness}).`;
+	}
+	const parts: string[] = [];
+	if (ahead > 0) {
+		parts.push(`${ahead} commit${ahead === 1 ? '' : 's'} ahead (unpushed)`);
+	}
+	if (behind > 0) {
+		parts.push(`${behind} commit${behind === 1 ? '' : 's'} behind`);
+	}
+	return `      local main is ${parts.join(', ')} vs ${remote}/main (${freshness}).`;
+}
+
+/**
+ * Render the CWD-LOCAL section of `scan`/`status` (the `scan-status-read-cwd-repo`
+ * slice): a DISTINCT, separately-counted block for the CURRENT repo, read from
+ * the LOCAL WORKING TREE (NOT the registry's bare mirror ref). Returns `[]` when
+ * the cwd does NOT participate (no local section). The section LABELS its source
+ * + freshness, shows the divergence-vs-arbiter (`main-divergence-guard` framing),
+ * and — when the cwd participates but is NOT registered — teaches
+ * self-registration instead of the dead-end "No participating repos found".
+ *
+ * The counts here are the cwd's OWN (never merged into the registry total — the
+ * consistency rule): the two reads have different freshness + storage models.
+ */
+export function formatCwdSection(section: CwdSection): string[] {
+	if (!section.participating || section.repo === undefined) {
+		return [];
+	}
+	const lines: string[] = [];
+	const dedup = section.alsoRegistered === true ? ' (also registered)' : '';
+	lines.push('This repo (local working tree):');
+	lines.push(`  ${section.path}${dedup}`);
+	lines.push(
+		'  source: local working tree (may be ahead of / behind the arbiter) — ' +
+			'distinct from the registry view below (arbiter main, fetched).',
+	);
+
+	// Fetch-first divergence-vs-arbiter (or a no-arbiter note).
+	if (section.arbiter !== undefined) {
+		lines.push(cwdDivergenceLine(section.arbiter));
+	} else {
+		lines.push(
+			'      no arbiter remote configured — divergence vs arbiter unknown.',
+		);
+	}
+
+	const total = section.totalItems ?? 0;
+	// Self-registration hint when the cwd participates but is NOT registered.
+	if (section.alsoRegistered !== true) {
+		lines.push('');
+		lines.push(
+			`  This repo participates (${total} backlog ${pluralItems(total)}) but is ` +
+				'NOT registered — `run`/`scan` across machines won’t see it until ' +
+				'`agent-runner remote add . --local` (or `remote add <its-url>`).',
+		);
+	}
+
+	// The cwd's grouped backlog — the SAME who-can-take-it grouping the registry
+	// view uses, but read from the working tree and counted SEPARATELY.
+	const groups = categoriseItems(section.repo.items);
+	lines.push('');
+	for (const category of CATEGORY_ORDER) {
+		lines.push(`    ${CATEGORY_LABELS[category]}:`);
+		const entries = groups[category];
+		if (entries.length === 0) {
+			lines.push('      (none)');
+		} else {
+			for (const entry of entries) {
+				lines.push(formatItem(entry));
+			}
+		}
+	}
+	lines.push('');
+	lines.push(
+		`  Local total: ${total} ${pluralItems(total)} ` +
+			`(${section.totalEligible ?? 0} eligible) — this repo only, NOT merged with ` +
+			'the registry total below.',
+	);
+	return lines;
+}
+
 /**
  * Render the cross-repo queue as a human decision dashboard: under each repo,
  * every backlog item is grouped by who-can-take-it (Agent-claimable now /
@@ -80,34 +181,64 @@ function pluralRepos(n: number): string {
  * *verdict* line reflects the policy (`report.totalEligible` counts an
  * agent-claimable item only when `allowAgents` is on).
  */
-export function formatReport(report: ScanReport): string {
+export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 	const lines: string[] = [];
 
-	if (report.repos.length === 0) {
-		lines.push('No participating repos found.');
-		lines.push(
-			'(A repo participates iff it has a work/backlog/ with >= 1 .md file.)',
-		);
-		return lines.join('\n');
+	// The cwd-local section (the `scan-status-read-cwd-repo` slice): a DISTINCT,
+	// separately-counted block for the CURRENT repo, ABOVE the registry view.
+	const cwdLines = cwd !== undefined ? formatCwdSection(cwd) : [];
+	if (cwdLines.length > 0) {
+		lines.push(...cwdLines);
+		lines.push('');
 	}
 
+	// De-dup: when the cwd is ALSO registered, drop its registry row (shown once,
+	// above, marked "(also registered)") so the same repo never appears twice.
+	const registryRepos =
+		cwd?.alsoRegistered === true && cwd.registeredMirrorPath !== undefined
+			? report.repos.filter((r) => r.path !== cwd.registeredMirrorPath)
+			: report.repos;
+
+	if (registryRepos.length === 0) {
+		// If the cwd participates we already rendered its local section above (no
+		// dead-end). Otherwise keep the existing empty-state.
+		if (cwdLines.length === 0) {
+			lines.push('No participating repos found.');
+			lines.push(
+				'(A repo participates iff it has a work/backlog/ with >= 1 .md file.)',
+			);
+		} else {
+			lines.push(
+				'Registered repos: (none) — nothing registered in the registry yet.',
+			);
+		}
+		return lines.join('\n').replace(/\n+$/, '');
+	}
+
+	lines.push('Registered repos (registry — arbiter main, fetched):');
+	lines.push('');
 	const allGroups: CategorisedGroups[] = [];
-	for (const repo of report.repos) {
+	for (const repo of registryRepos) {
 		const groups = categoriseItems(repo.items);
 		allGroups.push(groups);
 		lines.push(...formatRepo(repo.path, groups));
 	}
 
 	const s = summariseGroups(allGroups);
-	const repoCount = report.repos.length;
+	const repoCount = registryRepos.length;
+	const registryItems = registryRepos.reduce((n, r) => n + r.items.length, 0);
+	const registryEligible = registryRepos.reduce(
+		(n, r) => n + r.items.filter((i) => i.eligibility.eligible).length,
+		0,
+	);
 	lines.push(
-		`Summary: ${report.totalItems} item(s) across ${repoCount} ${pluralRepos(repoCount)} — ` +
+		`Registry summary: ${registryItems} item(s) across ${repoCount} ${pluralRepos(repoCount)} — ` +
 			`${s.agentClaimable} agent-claimable, ${s.humanOnly} human-only, ` +
 			`${s.needsAnswers} needs-answers, ${s.blocked} blocked ` +
 			`(${s.ready} ready).`,
 	);
 	lines.push(
-		`Runner verdict: ${report.totalEligible}/${report.totalItems} item(s) eligible now ` +
+		`Runner verdict: ${registryEligible}/${registryItems} item(s) eligible now ` +
 			`(under the current --allow-agents policy).`,
 	);
 
