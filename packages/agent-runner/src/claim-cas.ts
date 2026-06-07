@@ -47,8 +47,6 @@ export interface ClaimCasOptions {
 	cwd: string;
 	/** Name of the arbiter remote (`--arbiter`). Defaults to `origin`. */
 	arbiter?: string;
-	/** Advisory claimer id (`--by`). Defaults to git user.name, then $USER. */
-	by?: string;
 	/** Cap on push retries when main merely advanced (`--retries`). Default 3. */
 	retries?: number;
 	/** Show the intended push without mutating the arbiter (`--dry-run`). */
@@ -138,7 +136,7 @@ async function runClaim(
 
 	if (!slug) {
 		throw new ClaimUsageError(
-			'missing <slug>. usage: agent-runner claim <slug> [--arbiter remote] [--by who]',
+			'missing <slug>. usage: agent-runner claim <slug> [--arbiter remote]',
 		);
 	}
 	if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
@@ -149,7 +147,6 @@ async function runClaim(
 			`no git remote named '${arbiter}' (set one, or pass --arbiter)`,
 		);
 	}
-	const by = options.by || (await resolveBy(cwd, env));
 
 	// Refuse to run with a dirty tree — the claim must be a clean, isolated commit.
 	const dirtyWorktree =
@@ -217,7 +214,6 @@ async function runClaim(
 			const result = await attempt({
 				slug,
 				arbiter,
-				by,
 				dryRun,
 				cwd,
 				env,
@@ -251,7 +247,6 @@ async function runClaim(
 interface AttemptContext {
 	slug: string;
 	arbiter: string;
-	by: string;
 	dryRun: boolean;
 	cwd: string;
 	env: NodeJS.ProcessEnv | undefined;
@@ -310,14 +305,11 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		);
 	}
 
-	// Who/when is recorded authoritatively by THIS commit (folder + git history
-	// are the source of truth — there is no advisory claimed_by frontmatter field;
-	// see WORK-CONTRACT rule 6).
-	await gitHard(
-		['commit', '--quiet', '-m', `claim: ${slug} (by ${ctx.by})`],
-		cwd,
-		env,
-	);
+	// Who/when is recorded authoritatively by THIS commit (the folder + git
+	// history — the committer identity and timestamp — are the source of truth;
+	// there is no advisory claimed_by frontmatter field and no `(by ...)` subject
+	// suffix; read the claimer with `git log` — see WORK-CONTRACT rule 6).
+	await gitHard(['commit', '--quiet', '-m', `claim: ${slug}`], cwd, env);
 
 	// Sanity: the claim commit MUST be a real child of the arbiter main we branched
 	// from (i.e. it actually changed something). Guards against a no-op claim that
@@ -407,19 +399,6 @@ async function cleanup(
 ): Promise<void> {
 	await gitSoft(['checkout', '--quiet', origRef], cwd, env);
 	await gitSoft(['branch', '-D', claimBranch], cwd, env);
-}
-
-/** Resolve the advisory claimer: git user.name, else $USER/$USERNAME, else ''. */
-async function resolveBy(
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string> {
-	const name = await gitSoft(['config', 'user.name'], cwd, env);
-	if (name.status === 0 && name.stdout.trim() !== '') {
-		return name.stdout.trim();
-	}
-	const e = env ?? process.env;
-	return e.USER ?? e.USERNAME ?? '';
 }
 
 /** `git cat-file -e <object>` — true iff the object exists. */

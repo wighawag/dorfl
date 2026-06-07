@@ -42,7 +42,6 @@ describe('performClaim — happy path', () => {
 			slug: 'alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
-			by: 'alice',
 			env: gitEnv(),
 		});
 		const content = gitIn(
@@ -53,18 +52,21 @@ describe('performClaim — happy path', () => {
 		expect(content).not.toMatch(/^claimed_at:/m);
 	});
 
-	it('records the claimer in the claim COMMIT message, not in frontmatter', async () => {
-		// Source of truth for who/when: the commit `claim: <slug> (by <who>)`.
+	it('uses a PLAIN claim commit subject with no `(by ...)` suffix (claimer lives in git history)', async () => {
+		// The claimer is NOT in the commit-message header any more (the `--by` flag
+		// and the `claimedBy` concept were removed, ADR §7): the subject is plain
+		// `claim: <slug>`. Who claimed is read from git (`git log` — committer
+		// identity + timestamp), not parsed back out of the subject.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['who']);
 		await performClaim({
 			slug: 'who',
 			cwd: repo,
 			arbiter: 'arbiter',
-			by: 'alice',
 			env: gitEnv(),
 		});
 		const subject = gitIn(['log', '-1', '--format=%s', 'arbiter/main'], repo);
-		expect(subject.trim()).toBe('claim: who (by alice)');
+		expect(subject.trim()).toBe('claim: who');
+		expect(subject).not.toMatch(/\(by /);
 	});
 
 	it('leaves legacy claimed_by / claimed_at lines untouched (no longer stamped)', async () => {
@@ -85,7 +87,6 @@ describe('performClaim — happy path', () => {
 			slug: 'legacy',
 			cwd: repo,
 			arbiter: 'arbiter',
-			by: 'alice',
 			env: gitEnv(),
 		});
 		const content = gitIn(

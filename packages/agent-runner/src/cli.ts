@@ -180,10 +180,8 @@ function formatItemLine(item: ItemResult): string {
 
 interface ClaimFlags {
 	arbiter?: string;
-	by?: string;
 	retries?: string;
 	dryRun?: boolean;
-	force?: boolean;
 	ignoreNotReady?: boolean;
 }
 
@@ -193,20 +191,16 @@ interface VerifyFlags {
 
 interface StartFlags {
 	arbiter?: string;
-	by?: string;
 	resume?: boolean;
-	force?: boolean;
 	ignoreNotReady?: boolean;
 }
 
 interface WorkOnFlags {
 	config?: string;
 	arbiter?: string;
-	by?: string;
 	remote?: string;
 	copy?: string;
 	copyFrom?: string;
-	force?: boolean;
 	ignoreNotReady?: boolean;
 	printDir?: boolean;
 	workspace?: string;
@@ -261,7 +255,7 @@ interface StatusFlags {
 	json?: boolean;
 }
 
-interface ReturnFlags {
+interface RequeueFlags {
 	config?: string;
 	cwd?: string;
 	arbiter?: string;
@@ -337,10 +331,9 @@ async function runStartAction(
 		slug,
 		cwd: process.cwd(),
 		arbiter: flags.arbiter ?? 'origin',
-		by: flags.by,
 		// `resume` (the verb) always asserts ownership; `start` honours --resume.
 		resume: resume || flags.resume === true,
-		override: flags.force === true || flags.ignoreNotReady === true,
+		override: flags.ignoreNotReady === true,
 		note: (message) => console.error(`>> ${message}`),
 	});
 	if (result.exitCode !== 0) {
@@ -348,6 +341,20 @@ async function runStartAction(
 	}
 	process.exit(result.exitCode);
 }
+
+/**
+ * Help GROUP labels for the two-tier surface (ADR §7). commander v14's
+ * `command.helpGroup(...)` renders each command under its label heading, so the
+ * HEADLINE tier (the surface a user reaches for) lists first and the
+ * ADVANCED/PLUMBING tier (kept, but de-emphasised) lists under its own heading
+ * — without removing or hiding anything. Headline: run/do/work-on/start/resume/
+ * complete/requeue/scan/status + remote add/ls/find. Advanced: claim/prompt/
+ * verify/gc + remote rm.
+ */
+const HEADLINE_GROUP = 'Commands:';
+const ADVANCED_GROUP = 'Advanced / plumbing:';
+/** Help group for the de-emphasised plumbing FLAGS named in ADR §7. */
+const ADVANCED_OPT_GROUP = 'Advanced / plumbing options:';
 
 export function buildProgram(): Command {
 	const program = new Command();
@@ -358,6 +365,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('scan')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Read-only: list the cross-repo queue of work items (across the registered hub mirrors) and whether each is runnable now. Discovery is the registry — the hub-mirror set under workspacesDir/repos/ (no --root/roots).',
 		)
@@ -395,6 +403,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('run')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'The cross-repo, parallel daemon: loop the supervised tick over the registry — each tick claims up to maxParallel eligible items (perRepoMax per repo), runs the agents CONCURRENTLY in isolation, integrates, then loops (forever, or until a stop bound). Stuck items surface via the needs-attention seam (on main). `run --once` = one debug tick (NOT the CI path — CI is `do`).',
 		)
@@ -580,6 +589,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('verify')
+		.helpGroup(ADVANCED_GROUP)
 		.description(
 			"Run the repo's declared acceptance gate (per-repo `verify` config) and exit with its status (0 = pass). Deterministic shell gate; no model. Read-only with respect to work/.",
 		)
@@ -595,6 +605,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('claim')
+		.helpGroup(ADVANCED_GROUP)
 		.description(
 			'Atomically claim a work/backlog/<slug>.md item via a compare-and-swap push to the arbiter (in-process; mirrors scripts/claim.sh).',
 		)
@@ -604,16 +615,11 @@ export function buildProgram(): Command {
 			'name of the arbiter git remote (default: origin)',
 			'origin',
 		)
-		.option('--by <who>', 'advisory claimer id (default: git user.name)')
 		.option('--retries <n>', 'cap on push retries when main advances', '3')
 		.option('--dry-run', 'show the intended push without mutating the arbiter')
 		.option(
-			'--force',
-			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
-		)
-		.option(
 			'--ignore-not-ready',
-			'alias of --force for the readiness guard override',
+			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
 		.action(async (rawSlug: string, flags: ClaimFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
@@ -622,12 +628,11 @@ export function buildProgram(): Command {
 				slug,
 				cwd: process.cwd(),
 				arbiter: flags.arbiter ?? 'origin',
-				by: flags.by,
 				retries:
 					flags.retries !== undefined ? Number(flags.retries) : undefined,
 				dryRun: flags.dryRun,
 				humanPath: true,
-				override: flags.force === true || flags.ignoreNotReady === true,
+				override: flags.ignoreNotReady === true,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {
@@ -638,6 +643,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('start')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Claim a backlog item (only if needed) and onboard onto its work/<slug> branch in the CURRENT checkout. Decides on the folder on <arbiter>/main, never on a frontmatter field. Launches no agent/editor.',
 		)
@@ -650,7 +656,6 @@ export function buildProgram(): Command {
 			'name of the arbiter git remote (default: origin)',
 			'origin',
 		)
-		.option('--by <who>', 'advisory claimer id forwarded to the claim CAS')
 		// `--resume` is now the HIDDEN alias of the `resume` verb (ADR §4/§7): the
 		// documented surface is `start` = begin here, `resume` = continue here. Kept
 		// (hidden) for muscle memory; addHelpText below points at the verb.
@@ -661,12 +666,8 @@ export function buildProgram(): Command {
 			).hideHelp(),
 		)
 		.option(
-			'--force',
-			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
-		)
-		.option(
 			'--ignore-not-ready',
-			'alias of --force for the readiness guard override',
+			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
 		.action((rawSlug: string | undefined, flags: StartFlags) =>
 			runStartAction(rawSlug, flags, false),
@@ -674,6 +675,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('resume')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Re-engage an already in-progress item in the CURRENT checkout: switch to its work/<slug> branch WITHOUT claiming (the item is already in-progress; you assert ownership). The human “continue here” verb — the counterpart to `start` (“begin here”). Decides on the folder on <arbiter>/main, never on a frontmatter field. Launches no agent/editor.',
 		)
@@ -692,6 +694,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('work-on')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'HUMAN command: claim a slice and create an isolated worktree in a human-friendly location (under config humanWorktreesDir, NEVER ~/.agent-runner) for parallel work, and cd you in by default (via the shell wrapper). Two forms: `work-on <slug>` (in-repo: infer the arbiter from the current repo) and `work-on --remote <r> <slug>` (ensure a hub mirror via repo-mirror, creating if absent) — consistent with `do --remote` (bare = current repo; --remote = anywhere). BOTH claim, then always fetch + branch work/<slug> off the freshly-fetched <arbiter>/main — same claim, same starting commit; only the worktree LOCATION differs. --copy <patterns> copies named gitignored files (copy, not symlink; --copy-from required in remote mode) with a security notice. A binary cannot cd your shell, so install the wrapper `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`; --print-dir is that wrapper’s plumbing (emits ONLY the path).',
 		)
@@ -709,30 +712,31 @@ export function buildProgram(): Command {
 			'name of the arbiter git remote in the current repo (in-repo form; default: origin)',
 			'origin',
 		)
-		.option('--by <who>', 'advisory claimer id forwarded to the claim CAS')
-		.option(
-			'--copy <patterns>',
-			'comma-separated gitignored filenames to COPY into the worktree (e.g. .env.local,.env). In-repo: from the current repo; remote: requires --copy-from. Copy, not symlink.',
+		.addOption(
+			new Option(
+				'--copy <patterns>',
+				'comma-separated gitignored filenames to COPY into the worktree (e.g. .env.local,.env). In-repo: from the current repo; remote: requires --copy-from. Copy, not symlink.',
+			).helpGroup(ADVANCED_OPT_GROUP),
 		)
-		.option(
-			'--copy-from <path>',
-			'source dir for --copy in the remote form (required there; there is no implicit current repo)',
+		.addOption(
+			new Option(
+				'--copy-from <path>',
+				'source dir for --copy in the remote form (required there; there is no implicit current repo)',
+			).helpGroup(ADVANCED_OPT_GROUP),
 		)
-		.option(
-			'--print-dir',
-			'print ONLY the worktree path to stdout (for a shell wrapper: work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; })',
+		.addOption(
+			new Option(
+				'--print-dir',
+				'print ONLY the worktree path to stdout (for a shell wrapper: work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; })',
+			).helpGroup(ADVANCED_OPT_GROUP),
 		)
 		.option(
 			'--workspace <dir>',
 			'execution working area for hub mirrors (default: workspacesDir / ~/.agent-runner)',
 		)
 		.option(
-			'--force',
-			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
-		)
-		.option(
 			'--ignore-not-ready',
-			'alias of --force for the readiness guard override',
+			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
 		.action(async (rawSlug: string, flags: WorkOnFlags) => {
 			// The two forms are now distinguished by the `--remote` FLAG (ADR §4,
@@ -757,10 +761,9 @@ export function buildProgram(): Command {
 				remote,
 				cwd: process.cwd(),
 				arbiter: flags.arbiter ?? 'origin',
-				by: flags.by,
 				copy: flags.copy,
 				copyFrom: flags.copyFrom,
-				override: flags.force === true || flags.ignoreNotReady === true,
+				override: flags.ignoreNotReady === true,
 				workspacesDir: workspace,
 				humanWorktreesDir: configuredRoot,
 				promptForRoot: (suggestion) => promptForWorktreesRoot(suggestion),
@@ -780,6 +783,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('prompt')
+		.helpGroup(ADVANCED_GROUP)
 		.description(
 			"Print to stdout the work-agent prompt for a slice: the canonical CLAIM-PROTOCOL wrapper + the slice's own ## Prompt (with <slug> and source PRD substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
 		)
@@ -796,6 +800,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('complete')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'On a work/<slug> branch (slug inferred if omitted): run the gate, mark done (git mv in-progress\u2192done), commit (<type>(<slug>): <summary>; done) the agent\u2019s uncommitted work + the move, rebase onto <arbiter>/main, and integrate. Mode resolved at completion time (--merge/--propose > per-repo > global > default propose): merge\u2192push to main + switch+ff local main; propose\u2192push branch + switch to main (no ff). Then delete the LOCAL work branch iff provably on the arbiter (never the remote); --no-switch stays on the branch and keeps it. Never --force.',
 		)
@@ -821,14 +826,22 @@ export function buildProgram(): Command {
 			'--no-switch',
 			'stay on the work/<slug> branch (and keep it) instead of switching back to main',
 		)
-		.option(
-			'--skip-verify',
-			'skip the acceptance gate (human-only escape hatch; the runner never skips)',
+		.addOption(
+			new Option(
+				'--skip-verify',
+				'skip the acceptance gate (human-only escape hatch; the runner never skips)',
+			).helpGroup(ADVANCED_OPT_GROUP),
 		)
-		.option('--type <type>', 'conventional-commit type for the commit', 'feat')
-		.option(
-			'--message <summary>',
-			'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
+		.addOption(
+			new Option('--type <type>', 'conventional-commit type for the commit')
+				.default('feat')
+				.helpGroup(ADVANCED_OPT_GROUP),
+		)
+		.addOption(
+			new Option(
+				'--message <summary>',
+				'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
+			).helpGroup(ADVANCED_OPT_GROUP),
 		)
 		.option(
 			'--review',
@@ -914,6 +927,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('do')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path, not yet wired). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh. (auto-pick / -n is do-autopick.)',
 		)
@@ -1133,6 +1147,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('gc')
+		.helpGroup(ADVANCED_GROUP)
 		.description(
 			'Re-apply the provably-safe deletion predicate (ADR \u00a74) across every job worktree under workspacesDir/work/*: reap the provably-safe ones (clean tree AND branch tip reachable on the arbiter \u2014 merged or pushed) via git worktree remove (+ prune, never rm -rf), and report each RETAINED one with a reason. The catch-up for when end-of-job auto-reap did not run (runner crash/kill). --force overrides the predicate (discards un-saved work) \u2014 loud, never default.',
 		)
@@ -1196,6 +1211,7 @@ export function buildProgram(): Command {
 
 	program
 		.command('status')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Read-only operational dashboard of JOBS (distinct from scan’s backlog queue): list every job under workspacesDir/work/* from its .agent-runner-job.json record + worktree state, grouped active (running + alive) vs failed/retained (needs-attention with its reason, a crashed running-but-dead job, or a done-but-un-reaped one). Liveness comes from the harness seam (PID/session), NOT mtime. Never claims/runs/moves/deletes (deletion is gc).',
 		)
@@ -1240,7 +1256,8 @@ export function buildProgram(): Command {
 		});
 
 	program
-		.command('return <slug>')
+		.command('requeue <slug>')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Requeue a needs-attention item to the backlog for re-claiming (ADR §12/§14). DEFAULT = keep + continue: git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md and commit it, leaving the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time). --reset = discard + fresh: delete the remote work/<slug> branch FIRST (then the move) so the next claim starts fresh (guarded; never the default). -m/--message appends a dated handoff note to the item body (both modes; append-only). The recorded reason stays in the body as a durable note.',
 		)
@@ -1261,10 +1278,8 @@ export function buildProgram(): Command {
 			'-m, --message <note>',
 			'append a dated handoff note to the item body for the next agent (append-only; applies to both default and --reset)',
 		)
-		.action((rawSlug: string, flags: ReturnFlags) => {
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`. (This is
-			// the `return` verb today; the `flag-cleanup-renames` sibling slice renames
-			// it to `requeue` — the guard wiring carries over unchanged.)
+		.action((rawSlug: string, flags: RequeueFlags) => {
+			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
 			// Route the requeue (default keep+continue / --reset discard / -m handoff)
@@ -1294,12 +1309,14 @@ export function buildProgram(): Command {
 	// command group, and no `roots`/`remotes` config field.
 	const remote = program
 		.command('remote')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'The registry: the registered set of targets IS the hub mirrors on disk under workspacesDir/repos/ (no roots/remotes config). add/rm/ls/find manage that set. `remote add --local` provisions a bare arbiter (absorbing `arbiter init`); `arbiter status` is folded into `status`.',
 		);
 
 	remote
 		.command('add <target>')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Register a target by creating its hub mirror (idempotent). <target> is the arbiter URL; with --local it is a WORKING REPO whose bare arbiter is provisioned under arbitersDir (~/git, precious DATA, NEVER ~/.agent-runner) and THAT arbiter is registered (absorbing `arbiter init`). The transport guard refuses registering one project (same host/org/name) under a second transport unless --force.',
 		)
@@ -1353,6 +1370,7 @@ export function buildProgram(): Command {
 
 	remote
 		.command('rm <target>')
+		.helpGroup(ADVANCED_GROUP)
 		.description(
 			'Delete a hub mirror by key (host/org/name) or origin URL. The ONLY mirror deleter — `gc` NEVER reaps mirrors. Plumbing tier.',
 		)
@@ -1369,6 +1387,7 @@ export function buildProgram(): Command {
 
 	remote
 		.command('ls')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'List every registered hub mirror with its origin URL + transport. The origin URL is read from each mirror (the key encoding is lossy — it drops scheme/transport), so it is authoritative, not reconstructed from the key.',
 		)
@@ -1396,6 +1415,7 @@ export function buildProgram(): Command {
 
 	remote
 		.command('find <folder>')
+		.helpGroup(HEADLINE_GROUP)
 		.description(
 			'Discover work/-participating repos under <folder> (a populated work/backlog/), then toggle-add the chosen ones via `remote add`. Interactive multi-select by default; --yes adds ALL discovered repos non-interactively.',
 		)

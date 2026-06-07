@@ -78,10 +78,8 @@ export interface WorkOnOptions {
 	 * `origin`. Ignored in remote mode (the mirror's own `origin` is used).
 	 */
 	arbiter?: string;
-	/** Advisory claimer id forwarded to the claim CAS. */
-	by?: string;
 	/**
-	 * Override the readiness guard (`--force`/`--ignore-not-ready`): claim despite
+	 * Override the readiness guard (`--ignore-not-ready`): claim despite
 	 * an unmet `blockedBy`, and silence the `needsAnswers` warning. Forwarded to
 	 * the claim CAS's human-path guard.
 	 */
@@ -203,7 +201,6 @@ async function runWorkOn(
 			slug,
 			cwd: ctx.claimCwd,
 			arbiter: ctx.claimArbiter,
-			by: options.by,
 			env,
 			humanPath: true,
 			override: options.override,
