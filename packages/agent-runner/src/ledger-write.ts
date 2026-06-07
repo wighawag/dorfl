@@ -58,8 +58,23 @@ import {
  * seam, not bolted onto the move code.
  */
 
-/** The three `work/` lifecycle transitions the write seam can apply. */
-export type LedgerTransitionKind = 'claim' | 'complete' | 'needs-attention';
+/**
+ * The `work/` lifecycle transitions the write seam can apply.
+ *
+ * `slicing` is the **slicing-lock** transition (ADR `auto-slice`): it races a
+ * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit to the
+ * arbiter via the SAME CAS the `claim` transition uses, so two concurrent slicers
+ * never double-slice one PRD. Like `claim` it rides {@link applyTransition} (the
+ * publish/lease is identical); it is a distinct KIND only so the lock is
+ * self-documenting and uses a non-colliding branch name (see
+ * `slicing-lock.ts`). `work/slicing/` is a TRANSIENT held lock, not a resting
+ * state — release returns the PRD to `work/prd/`.
+ */
+export type LedgerTransitionKind =
+	| 'claim'
+	| 'complete'
+	| 'needs-attention'
+	| 'slicing';
 
 /**
  * A *prepared* COMPLETE transition the caller asks the seam to publish: a

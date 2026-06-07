@@ -16,6 +16,8 @@ code; AFK work happens in clones/worktrees of that repo.
 work/
   # ---- WORK ITEMS: status IS the folder; they FLOW via `git mv` ----
   prd/<slug>.md            # PRDs / design docs (the source material to slice)
+  slicing/<slug>.md        # TRANSIENT HELD LOCK: a PRD is CURRENTLY being sliced
+                           #   (not a resting state) — see note below
   backlog/<slug>.md        # sliced, grabbable items — NOT yet claimed
   in-progress/<slug>.md    # claimed (moved here via `git mv` during claim)
   needs-attention/<slug>.md # claimed + attempted but STUCK — bounced back for a human
@@ -63,6 +65,36 @@ work/
 field.** Claiming / finishing = moving the file between folders with `git mv`.
 This is what makes concurrent updates safe: two agents moving *different* files
 never conflict. (Capture buckets are exempt — see above.)
+
+### `slicing/` — the PRD-slicing concurrency lock (a TRANSIENT HELD LOCK)
+
+`work/slicing/<slug>.md` is **not a resting/post-slice state** — it is a
+*transient held lock* that serialises *concurrent* slicers (two CI runs, or human
++ CI) so a PRD is never double-sliced. Acquiring the lock races a
+`git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit to the arbiter
+via the SAME compare-and-swap the build-claim uses (winner holds the lock; a loser
+backs off). On release the PRD is moved **back** to `work/prd/<slug>.md` and
+`work/slicing/` is empty again.
+
+- **Sliced-ness is the PRD's `sliced:` frontmatter marker — never residence in
+  `slicing/`.** A PRD in `slicing/` is *being sliced right now*, not *has been
+  sliced*.
+- **`slicing/`-absence-from-`prd/` is the hands-off signal.** While the lock is
+  held the PRD lives at `work/slicing/<slug>.md`, not `work/prd/` — the same
+  folder-as-signal a claimed slice leaving `backlog/` gives. **Edit a PRD after it
+  returns to `prd/`, not while it is in `slicing/`.** (A human on a stale local
+  checkout won't see the `git mv` until they fetch — the protocol guarantees no
+  *silent corruption*, not no *human surprise*.)
+- **Release fails loud on a concurrent edit (never a silent stale slice).** If the
+  held PRD body was edited while the lock was held, the release detects it (the
+  held content no longer matches the snapshot the lock took) and FAILS LOUD: the
+  slicing is stale → re-slice from the edited PRD or route it to
+  `needs-attention/`. The release NEVER force-restores over the edit or emits
+  slices cut from a stale snapshot.
+- **The human path needs no lock.** A human slicing locally with no agent running
+  has no contention and may slice on `main` directly — the lock is mandatory for
+  the agent, optional for the human (parallel to "the runner never skips verify;
+  the human may").
 
 ### `needs-attention/` — the post-claim "stuck" state
 
