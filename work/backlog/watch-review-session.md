@@ -31,48 +31,72 @@ session files under `~/.pi/agent/sessions/<encoded-cwd>/`:
 opening "I'll run the review skill on this slice…"). `--watch` tailed only the
 first.
 
-### The shape of the fix
+### The shape of the fix — EXTRACT a shared launch-with-optional-watch helper (do NOT fork)
 
-The review gate currently launches via `harnessReviewGate` (`review-gate.ts`),
-which calls `harness.launch(...)` (SYNC) — NOT `launchAsync`, and is handed no
-session path or tailer. To watch it, the review launch needs the SAME treatment
-the build launch already has:
+> **This is the load-bearing requirement (raised in review 2026-06-06).** Today the
+> watch wiring — `generateSessionPath` → `new SessionTailer` → `start()` →
+> `launchAsync` → `finally tailer.stop()` (else sync `launch`) — exists ONLY as an
+> INLINE block in `do.ts`'s `runDoAgent`. There is NO shared helper. The review gate
+> launches from a DIFFERENT place (`complete.ts` → `harnessReviewGate` in
+> `review-gate.ts`) via `harness.launch(...)` with none of that scaffolding. The
+> WRONG fix (path of least resistance) is to COPY the watch block into the review
+> path — that creates a second parallel implementation of watch wiring (the same
+> duplication class as run/do's separate integrate paths; and `run.ts` would be a
+> THIRD copy waiting to happen).
+>
+> **The REQUIRED fix: extract ONE shared helper that both the build launch AND the
+> review launch call.** e.g. `launchWithOptionalWatch({harness, dir, slug, command,
+> prompt, model, sessionId, watch, watchSink, color, env}) -> Promise<LaunchResult>`
+> (in a shared module — `watch-session.ts` or a small new `agent-launch.ts`). It owns:
+> generate the session path from `sessionId`; if `watch && harness instanceof
+> PiHarness` → start a `SessionTailer` + `launchAsync` + `finally stop()`; else sync
+> `launch`; return the `LaunchResult`. Then:
+> - `do.ts`'s `runDoAgent` is REFACTORED to call it (build prompt/model, `sessionId
+>   = slug`) — same behaviour, now via the helper, not the inline block.
+> - `harnessReviewGate` calls the SAME helper (review prompt/model, a DISTINCT
+>   `sessionId` e.g. `<slug>-review`), then parses `LaunchResult.output` as today.
+> One codepath, two callers. A test should assert there is ONE watch implementation
+> (e.g. the review path exercises the same helper the build path does).
 
-- **A known session path for the review agent**, generated up-front (like the build
-  path via `generateSessionPath`) so a tailer can follow it. It must be DISTINCT
-  from the build session path (different `id`/suffix) so the two don't collide —
-  pi already produced two distinct files, so the `ReviewGateInput` just needs to
-  carry/derive its own session path.
-- **Tail the review session when `watch` is on** — a second `SessionTailer` over
-  the review session, started before the review launch and stopped after, mirroring
-  the build tailer. Likely the review launch must move from `launch` (sync) to
-  `launchAsync` on the watch path (the tailer needs the agent running concurrently,
-  same reason the build path uses `launchAsync` under `--watch`).
-- **Thread `watch` + the watch sink into the gate.** `reviewGate`/`harnessReviewGate`
-  (and the `CompleteOptions`/`DoOptions` that reach it) need to know watch is on and
-  where to write (the `watchSink`), so the review tailer surfaces to the same place
-  the build one does. Keep it OFF the non-watch path (zero behaviour change when not
-  watching).
-- **A clear visual boundary** between the two streams so the human knows which agent
-  is talking — e.g. a one-line banner ("▶ review gate — reviewing <slug>…") before
-  the review stream, reusing the existing watch formatting (`watch-session.ts`).
+What the helper must encode (the parts that were inline in `do.ts`):
+
+- **A known session path per launch**, generated up-front via `generateSessionPath`
+  so the tailer follows the exact file. The review launch passes a DISTINCT
+  `sessionId` (e.g. `<slug>-review`) so its session never collides with the build's
+  (pi already writes two distinct files; the helper just makes the path explicit).
+- **Tail when `watch` is on** — the `SessionTailer` + `launchAsync` + `finally
+  stop()`, exactly as the build path does today (moved into the helper, not copied).
+- **`watch` + the watch sink threaded into the gate.** `harnessReviewGate` (and the
+  `CompleteOptions`/`DoOptions` reaching it) must know watch is on + the `watchSink`,
+  to pass into the helper. OFF the watch path: the helper does the sync `launch` —
+  byte-identical to today.
+- **A clear visual boundary** before the review stream (e.g. a one-line banner
+  "▶ review gate — reviewing <slug>…"), reusing `watch-session.ts` formatting, so the
+  human knows the build stream ended and the review stream began.
 
 ### Scope fence
 
-- IN: tailing the review gate's session under `--watch` (the second tailer + its
-  session path + the watch/sink threading into `harnessReviewGate`); the
-  build→review visual boundary; review launch moves to `launchAsync` on the watch
-  path if needed.
-- OUT: changing the review VERDICT/routing/gate logic (untouched — this is purely
+- IN: EXTRACT the shared launch-with-optional-watch helper; REFACTOR the build
+  launch (`do.ts`) onto it; route the review launch (`harnessReviewGate`) through
+  it with a distinct session id; thread `watch`/sink into the gate; the
+  build→review visual boundary.
+- OUT: changing the review VERDICT/routing/gate logic (untouched — purely
   observability); the `maxReview` slicer-loop watching (separate concept, separate
   slice); posting to the PR (that is `review-gate-pr-comment`). Non-watch behaviour
-  is byte-identical.
+  is byte-identical; the build-watch behaviour is byte-identical (just relocated
+  into the shared helper).
 
 ## Acceptance criteria
 
+- [ ] **ONE shared codepath:** a single launch-with-optional-watch helper is
+      extracted; BOTH the build launch (`do.ts` `runDoAgent`, refactored onto it)
+      AND the review launch (`harnessReviewGate`) call it. The inline watch block in
+      `do.ts` is GONE (moved into the helper), NOT copied. A test demonstrates both
+      paths use the same helper (no second watch implementation).
 - [ ] With `do <slug> --review --watch` (pi harness), the REVIEW gate's agent
       conversation is surfaced live (its lenses/verdict reasoning), after the
-      implementation stream, with a visual boundary marking the review stream.
+      implementation stream, with a visual boundary marking the review stream — via
+      the SAME helper the build stream uses.
 - [ ] The review agent writes/uses a KNOWN, DISTINCT session path (not colliding
       with the build session); the tailer follows that exact path (no
       newest-by-mtime guessing — same discipline as the build tailer).
@@ -118,13 +142,20 @@ the build launch already has:
 > rename) is the flag/key (NOT `reviewPr`). Route to needs-attention on any real
 > discrepancy.
 >
-> Implement: give the review launch a known, DISTINCT session path; when watch is
-> on, start a second `SessionTailer` over it (move the review launch to
-> `launchAsync` on the watch path if the tailer needs concurrency), print a
-> one-line boundary banner before the review stream, and stop the tailer after.
-> Thread `watch` + the watch sink from `CompleteOptions`/`DoOptions` into
-> `harnessReviewGate`. OFF the watch path: byte-identical to today (sync `launch`,
-> no tailer). Change NO verdict/routing/gate logic — observability only.
+> Implement by EXTRACTING ONE shared helper, NOT by copying the watch block. Today
+> the watch wiring (`generateSessionPath` → `SessionTailer` → `start` →
+> `launchAsync` → `finally stop`, else sync `launch`) is INLINE in `do.ts`'s
+> `runDoAgent` and there is NO shared helper — copying it into the review path would
+> fork it (the run/do duplication anti-pattern; `run.ts` would be a 3rd copy). So:
+> extract `launchWithOptionalWatch({harness, dir, slug, command, prompt, model,
+> sessionId, watch, watchSink, color, env}) -> Promise<LaunchResult>` (shared
+> module); REFACTOR `runDoAgent` to call it (build prompt/model, sessionId = slug —
+> same behaviour); have `harnessReviewGate` call the SAME helper (review
+> prompt/model, a DISTINCT sessionId e.g. `<slug>-review`) then parse
+> `LaunchResult.output` as today. Thread `watch` + the watch sink from
+> `CompleteOptions`/`DoOptions` into the gate. Print a one-line build→review
+> boundary banner. OFF the watch path: the helper does sync `launch` — byte-identical
+> to today. Change NO verdict/routing/gate logic — observability only.
 >
 > READ FIRST: `src/do.ts` (the build `--watch` wiring to mirror); `src/review-gate.ts`
 > (`harnessReviewGate`, `ReviewGateInput`); `src/complete.ts` (the `review` block +
