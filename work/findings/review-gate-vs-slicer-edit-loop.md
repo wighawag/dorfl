@@ -69,6 +69,39 @@ these down in the grilling pass BEFORE slicing `review-gate-spec` / the edit loo
 - The grilling pass should state the relationship explicitly so neither is built as
   the other.
 
+## Additional insertion points raised 2026-06-06 (fold into the pass)
+
+The review MECHANISM (one protocol) plugs in at MULTIPLE points — the pass should
+treat "where review runs" as a set of insertion points, not one gate:
+
+- **(A) slice-generation** — review/edit-loop at SLICING time (concepts #1/#2 above).
+- **(B) PRE-BUILD slice check (NEW — maintainer point 1)** — a slice-review step
+  INSIDE `do <slug>` implementation, BEFORE the agent builds. Rationale: slices are
+  assumed coherent, but one can slip through with a missed judgement (e.g. a human
+  authored it without review). Today a slice is "trusted" once in `backlog/`; nothing
+  re-checks it at BUILD time. This lets the implementer CHECK + refine (or raise
+  `needsAnswers`) before implementing. Same mechanism, new insertion point + prompt
+  ("review the slice you are about to build; refine or flag before implementing").
+  Distinct from the slice-gen gate (slicing time) and the impl gate (post-build).
+- **(C) post-build impl review** — Gate 2, already built (#11/#12).
+- **(D) run coverage (NEW — maintainer point 3)** — review must cover `run`, which
+  has a SEPARATE integrate path (see
+  `work/findings/run-and-do-have-separate-integrate-paths.md`). Resolve: converge
+  `run` on `performComplete`, or explicitly wire the gate into `run` too.
+- **(E) issue-thread surface (NEW — maintainer point 2)** — for issue-to-prd /
+  issue-intake CI: run the SAME review/edit loop on the generated PRD/slices and
+  surface its findings as QUESTIONS (and edits where sensible) into the ISSUE
+  COMMENT THREAD, so the human-in-thread loop is FED BY the adversarial review and
+  the generated slice is high-quality. Same engine as the slicer edit loop, routed
+  to a comment thread instead of `needsAnswers`. Belongs in the issue-intake /
+  issue-to-prd design; SHARES the review mechanism (define once, consume from
+  multiple surfaces). NOT necessarily the same PRD/slice set as the core review
+  work, but should reuse it.
+
+**Principle:** define the review protocol + the slicer edit loop ONCE; the gate, the
+pre-build check, the run path, and the issue-thread surface are all CONSUMERS of it
+at different insertion points. Avoid N copies of the mechanism.
+
 ## What to produce in the grilling pass
 
 1. Promote the idea file's M×N + edit-loop + destination content into `review.md`
