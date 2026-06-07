@@ -28,11 +28,13 @@ import {
  * worktree's files live**; the claim, the integration semantics, and the
  * starting commit are IDENTICAL:
  *
- *   work-on <slug>            in-repo: the arbiter remote/URL is inferred from
- *                             the current repo; the claim runs in that repo.
- *   work-on <remote> <slug>   remote: ensure a hub mirror for <remote> (creating
- *                             it via repo-mirror if absent, exactly like agents
- *                             do), then claim against it from a throwaway worktree.
+ *   work-on <slug>                in-repo: the arbiter remote/URL is inferred from
+ *                                 the current repo; the claim runs in that repo.
+ *   work-on --remote <r> <slug>   remote: ensure a hub mirror for <r> (creating
+ *                                 it via repo-mirror if absent, exactly like
+ *                                 agents do), then claim against it from a
+ *                                 throwaway worktree. The remote target is a FLAG
+ *                                 (consistent with `do --remote`), not positional.
  *
  * BOTH forms: claim the slug, then ALWAYS `git fetch` and branch the worktree off
  * the **freshly-fetched `<arbiter>/main`** — never a possibly-stale local ref.
@@ -64,9 +66,9 @@ export interface WorkOnOptions {
 	slug: string;
 	/**
 	 * Remote mode: the remote spec/URL to mirror via `repo-mirror`. When given,
-	 * `work-on <remote> <slug>` ensures a hub mirror (creating it if absent) and
-	 * claims against it. When omitted, in-repo mode: the arbiter is inferred from
-	 * `cwd`.
+	 * `work-on --remote <r> <slug>` ensures a hub mirror (creating it if absent)
+	 * and claims against it. When omitted, in-repo mode: the arbiter is inferred
+	 * from `cwd`.
 	 */
 	remote?: string;
 	/** The current working directory (in-repo mode resolves the arbiter from it). */
@@ -168,7 +170,7 @@ async function runWorkOn(
 	const slug = options.slug;
 	if (!slug) {
 		throw new WorkOnUsageError(
-			'missing <slug>. usage: agent-runner work-on [<remote>] <slug>',
+			'missing <slug>. usage: agent-runner work-on <slug> [--remote <r>]',
 		);
 	}
 	const env = options.env;
@@ -292,7 +294,7 @@ async function resolveClaimContext(params: {
 		// IN-REPO: infer the arbiter URL from the current repo; claim runs here.
 		if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
 			throw new WorkOnUsageError(
-				'not inside a git repository (run inside a clone, or use the remote form: work-on <remote> <slug>)',
+				'not inside a git repository (run inside a clone, or use the remote form: work-on --remote <r> <slug>)',
 			);
 		}
 		const url = await gitSoft(['remote', 'get-url', arbiter], cwd, env);
