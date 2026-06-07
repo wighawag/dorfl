@@ -206,7 +206,7 @@ interface CompleteFlags {
 	skipVerify?: boolean;
 	type?: string;
 	message?: string;
-	reviewPr?: boolean;
+	review?: boolean;
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
@@ -223,7 +223,7 @@ interface DoFlags {
 	piBin?: string;
 	sessionsDir?: string;
 	watch?: boolean;
-	reviewPr?: boolean;
+	review?: boolean;
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
@@ -674,11 +674,11 @@ export function buildProgram(): Command {
 			'commit summary (default: the slice title, minus a leading "slug \u2014 " prefix)',
 		)
 		.option(
-			'--review-pr',
+			'--review',
 			'run Gate 2 (PR/code review) after verify, before the done-move (overrides config). Resolved flag > per-repo > global > default off.',
 		)
 		.option(
-			'--no-review-pr',
+			'--no-review',
 			'do NOT run Gate 2 this invocation (overrides config)',
 		)
 		.option(
@@ -730,15 +730,15 @@ export function buildProgram(): Command {
 				noSwitch: flags.switch === false,
 				verify: config.verify,
 				skipVerify: flags.skipVerify,
-				// Gate 2 (PR/code review): when `reviewPr` resolves on, run the `review`
+				// Gate 2 (PR/code review): when `review` resolves on, run the `review`
 				// SKILL as a fresh-context agent (the production harness-backed gate)
 				// AFTER the green verify and BEFORE the done-move. The `reviewModel`
 				// override flows to the launch through the existing harness seam.
-				reviewPr: config.reviewPr,
+				review: config.review,
 				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
-				reviewGate: config.reviewPr ? harnessReviewGate() : undefined,
+				reviewGate: config.review ? harnessReviewGate() : undefined,
 				type: flags.type,
 				message: flags.message,
 				// Color the propose-mode next-step block only on an interactive
@@ -802,11 +802,11 @@ export function buildProgram(): Command {
 			"stream the agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git)",
 		)
 		.option(
-			'--review-pr',
+			'--review',
 			'run Gate 2 (PR/code review) after verify, before the done-move (overrides config). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
-			'--no-review-pr',
+			'--no-review',
 			'do NOT run Gate 2 this invocation (overrides config)',
 		)
 		.option(
@@ -892,15 +892,15 @@ export function buildProgram(): Command {
 				// resolves but never reaches the launch (a silent no-op).
 				sessionsDir: config.sessionsDir,
 				// Gate 2 (PR/code review) rides inside `complete` (so CI inherits it for
-				// free): when `reviewPr` resolves on, run the `review` SKILL as a
+				// free): when `review` resolves on, run the `review` SKILL as a
 				// fresh-context agent (its OWN harness launch — same adapter + agentCmd,
 				// `reviewModel` via the existing model-routing seam) after the green
 				// verify, before the done-move. A block routes to needs-attention.
-				reviewPr: config.reviewPr,
+				review: config.review,
 				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
-				reviewGate: config.reviewPr
+				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				// `--watch`: tail the pi session log live (pi harness only; the

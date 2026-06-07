@@ -15,7 +15,7 @@ detail?}`) carries only success + the liveness record + `stderr`-on-failure; the
 is **no channel for the agent's output on success**. The `review` Gate-2 wiring
 (`review-gate.ts` `harnessReviewGate`) already needs this: it reads
 `readOutput(launched.detail)`, which is **empty on success**, so a live
-`reviewPr: on` run would parse an empty string → `ReviewParseError` → needs-
+`review: on` run would parse an empty string → `ReviewParseError` → needs-
 attention on every run. This slice closes that gap.
 
 ### The decision (made 2026-06-06 — Option C; do not relitigate)
@@ -69,7 +69,7 @@ rejected: opencode has no persisted record to re-read). The seam stays uniform
 - **Wire it through to the review gate:** change `harnessReviewGate`
   (`src/review-gate.ts`) to read `launched.output` (falling back to its injected
   `readOutput` for tests) instead of `launched.detail`. With this, a live
-  `reviewPr: on` run gets the real verdict text. (Keep the `readOutput` injection
+  `review: on` run gets the real verdict text. (Keep the `readOutput` injection
   point so tests still stub a canned verdict string.)
 
 ### Scope fence
@@ -119,7 +119,7 @@ rejected: opencode has no persisted record to re-read). The seam stays uniform
 > assistant message at launch and return it in `LaunchResult.output` (Option C —
 > decided 2026-06-06; see this slice's "The decision"). This unblocks the live
 > `review` Gate 2: `harnessReviewGate` currently reads `launched.detail`, which is
-> EMPTY on success, so a real `reviewPr: on` run never sees the verdict.
+> EMPTY on success, so a real `review: on` run never sees the verdict.
 >
 > FIRST run the drift check (launch snapshot — verify against what landed):
 >   - Confirm `src/harness.ts` `LaunchResult` is still `{ok, record, detail?}` and

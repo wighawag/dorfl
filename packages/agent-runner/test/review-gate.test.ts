@@ -33,11 +33,11 @@ import {NullHarness, MODEL_PLACEHOLDER, type Harness} from '../src/harness.js';
  */
 
 describe('config — the four Gate-2 keys (defaults + carry-through)', () => {
-	it('reviewPr + autoMerge default OFF; reviewMaxRounds defaults to 2', () => {
-		expect(DEFAULT_CONFIG.reviewPr).toBe(false);
+	it('review + autoMerge default OFF; reviewMaxRounds defaults to 2', () => {
+		expect(DEFAULT_CONFIG.review).toBe(false);
 		expect(DEFAULT_CONFIG.autoMerge).toBe(false);
 		expect(DEFAULT_CONFIG.reviewMaxRounds).toBe(2);
-		expect(mergeConfig({}).reviewPr).toBe(false);
+		expect(mergeConfig({}).review).toBe(false);
 		expect(mergeConfig({}).autoMerge).toBe(false);
 		expect(mergeConfig({}).reviewMaxRounds).toBe(2);
 	});
@@ -50,12 +50,12 @@ describe('config — the four Gate-2 keys (defaults + carry-through)', () => {
 
 	it('carries the keys through mergeConfig when set', () => {
 		const merged = mergeConfig({
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewModel: 'review/model',
 			reviewMaxRounds: 5,
 		});
-		expect(merged.reviewPr).toBe(true);
+		expect(merged.review).toBe(true);
 		expect(merged.autoMerge).toBe(true);
 		expect(merged.reviewModel).toBe('review/model');
 		expect(merged.reviewMaxRounds).toBe(5);
@@ -63,22 +63,22 @@ describe('config — the four Gate-2 keys (defaults + carry-through)', () => {
 });
 
 describe('env-config — the four keys are coerced (typed, loud)', () => {
-	it('coerces reviewPr/autoMerge as booleans and reviewMaxRounds as a number', () => {
+	it('coerces review/autoMerge as booleans and reviewMaxRounds as a number', () => {
 		const env = {
-			AGENT_RUNNER_REVIEW_PR: 'true',
+			AGENT_RUNNER_REVIEW: 'true',
 			AGENT_RUNNER_AUTO_MERGE: 'false',
 			AGENT_RUNNER_REVIEW_MODEL: 'env/review',
 			AGENT_RUNNER_REVIEW_MAX_ROUNDS: '3',
 		};
 		const o = envOverrides(env);
-		expect(o.reviewPr).toBe(true);
+		expect(o.review).toBe(true);
 		expect(o.autoMerge).toBe(false);
 		expect(o.reviewModel).toBe('env/review');
 		expect(o.reviewMaxRounds).toBe(3);
 	});
 
 	it('names the env vars by the SCREAMING_SNAKE convention', () => {
-		expect(envVarName('reviewPr')).toBe('AGENT_RUNNER_REVIEW_PR');
+		expect(envVarName('review')).toBe('AGENT_RUNNER_REVIEW');
 		expect(envVarName('autoMerge')).toBe('AGENT_RUNNER_AUTO_MERGE');
 		expect(envVarName('reviewModel')).toBe('AGENT_RUNNER_REVIEW_MODEL');
 		expect(envVarName('reviewMaxRounds')).toBe(
@@ -86,9 +86,9 @@ describe('env-config — the four keys are coerced (typed, loud)', () => {
 		);
 	});
 
-	it('fails LOUDLY on a non-boolean reviewPr', () => {
-		expect(() => envOverrides({AGENT_RUNNER_REVIEW_PR: 'yes'})).toThrow(
-			/AGENT_RUNNER_REVIEW_PR/,
+	it('fails LOUDLY on a non-boolean review', () => {
+		expect(() => envOverrides({AGENT_RUNNER_REVIEW: 'yes'})).toThrow(
+			/AGENT_RUNNER_REVIEW/,
 		);
 	});
 });
@@ -106,9 +106,9 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 		writeFileSync(join(repo, REPO_CONFIG_FILENAME), JSON.stringify(value));
 	}
 
-	it('treats reviewPr/autoMerge/reviewModel/reviewMaxRounds as repo-appropriate', () => {
+	it('treats review/autoMerge/reviewModel/reviewMaxRounds as repo-appropriate', () => {
 		for (const key of [
-			'reviewPr',
+			'review',
 			'autoMerge',
 			'reviewModel',
 			'reviewMaxRounds',
@@ -120,7 +120,7 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 
 	it('honours the keys from a per-repo file', () => {
 		writeRepoConfig({
-			reviewPr: true,
+			review: true,
 			autoMerge: true,
 			reviewModel: 'repo/review',
 			reviewMaxRounds: 4,
@@ -129,53 +129,53 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 			repoPath: repo,
 			global: mergeConfig({}),
 		});
-		expect(resolved.config.reviewPr).toBe(true);
+		expect(resolved.config.review).toBe(true);
 		expect(resolved.config.autoMerge).toBe(true);
 		expect(resolved.config.reviewModel).toBe('repo/review');
 		expect(resolved.config.reviewMaxRounds).toBe(4);
 	});
 
-	it('resolves reviewPr: flag > env > per-repo > global > default-off (the integration chain)', () => {
+	it('resolves review: flag > env > per-repo > global > default-off (the integration chain)', () => {
 		// default: off
 		expect(
 			resolveRepoConfig({repoPath: repo, global: mergeConfig({})}).config
-				.reviewPr,
+				.review,
 		).toBe(false);
 
 		// global only
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
-				global: mergeConfig({reviewPr: true}),
-			}).config.reviewPr,
+				global: mergeConfig({review: true}),
+			}).config.review,
 		).toBe(true);
 
 		// per-repo beats global (repo says off, global says on)
-		writeRepoConfig({reviewPr: false});
+		writeRepoConfig({review: false});
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
-				global: mergeConfig({reviewPr: true}),
-			}).config.reviewPr,
+				global: mergeConfig({review: true}),
+			}).config.review,
 		).toBe(false);
 
 		// env beats per-repo + global
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
-				global: mergeConfig({reviewPr: true}),
-				env: {AGENT_RUNNER_REVIEW_PR: 'true'},
-			}).config.reviewPr,
+				global: mergeConfig({review: true}),
+				env: {AGENT_RUNNER_REVIEW: 'true'},
+			}).config.review,
 		).toBe(true);
 
 		// flag beats everything (flag off wins over env/global on)
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
-				global: mergeConfig({reviewPr: true}),
-				env: {AGENT_RUNNER_REVIEW_PR: 'true'},
-				flags: reviewFlagOverrides({reviewPr: false}),
-			}).config.reviewPr,
+				global: mergeConfig({review: true}),
+				env: {AGENT_RUNNER_REVIEW: 'true'},
+				flags: reviewFlagOverrides({review: false}),
+			}).config.review,
 		).toBe(false);
 	});
 
@@ -206,13 +206,13 @@ describe('reviewFlagOverrides / doFlagOverrides — flag mapping', () => {
 	it('maps present flags only (absent ⇒ absent key)', () => {
 		expect(reviewFlagOverrides({})).toEqual({});
 		const o = reviewFlagOverrides({
-			reviewPr: true,
+			review: true,
 			autoMerge: false,
 			reviewModel: 'x',
 			reviewMaxRounds: '3',
 		});
 		expect(o).toEqual({
-			reviewPr: true,
+			review: true,
 			autoMerge: false,
 			reviewModel: 'x',
 			reviewMaxRounds: 3,
@@ -230,11 +230,11 @@ describe('reviewFlagOverrides / doFlagOverrides — flag mapping', () => {
 
 	it('doFlagOverrides folds the review flags in alongside the harness flags', () => {
 		const o = doFlagOverrides(
-			{harness: 'pi', reviewPr: true, reviewModel: 'r/m'},
+			{harness: 'pi', review: true, reviewModel: 'r/m'},
 			'merge',
 		);
 		expect(o.harness).toBe('pi');
-		expect(o.reviewPr).toBe(true);
+		expect(o.review).toBe(true);
 		expect(o.reviewModel).toBe('r/m');
 		expect(o.integration).toBe('merge');
 	});

@@ -185,7 +185,7 @@ for history.)*
 
 ### Both gates: one role, two toggles, independent
 
-- `reviewSpec` (Gate 1) and `reviewPr` (Gate 2) are **independent per-repo
+- `reviewSpec` (Gate 1) and `review` (Gate 2) are **independent per-repo
   toggles** (each on/off), resolved like other policies. Gate 1 defaults ON
   (slicing has no other floor); Gate 2 defaults OFF (it adds a model to the merge
   path — opt-in), and its `autoMerge` sub-policy defaults OFF.
@@ -285,7 +285,7 @@ for history.)*
     `needs-attention/` (never silently merge or loop) — matches the Testing
     Decisions `reviewMaxRounds` bullet.
   - **Auto-merge trust model — RESOLVED (round 2): `autoMerge` keys on PER-REPO
-    POLICY ONLY.** A repo opts in (`reviewPr: on` + `autoMerge: on`, resolved
+    POLICY ONLY.** A repo opts in (`review: on` + `autoMerge: on`, resolved
     flag > per-repo > global > default-off); on an `approve` verdict the work
     merges; any other verdict never does. **Author-trust is OUT OF SCOPE for the
     `do`/review gate** — on the `do` path the author IS the operator who ran the
@@ -312,7 +312,7 @@ for history.)*
   `review-skill` ✓ are both sliced; the `review` skill itself is built).
 - **Scope for the FIRST slice = Gate 2 (PR/code review) on the local `do`
   `--propose`/`--merge` path** — that is the gate guarding `--merge`, the unlock
-  for `do -n <N> --merge` on a `reviewPr`-configured repo. **Gate 1 (spec/slice
+  for `do -n <N> --merge` on a `review`-configured repo. **Gate 1 (spec/slice
   review after auto-slicing) is DEFERRED** — it guards the `autoslice-*` chain,
   not the build-backlog drain, so it is a later slice.
 
@@ -320,14 +320,14 @@ for history.)*
 
 The Gate-2 slice has been emitted: **`work/backlog/review-gate-pr.md`** (the
 PR/code review gate on the `do`/`complete` pipeline — run review after `verify`,
-approve→integrate, block→needs-attention, per-repo `reviewPr`/`autoMerge`/
+approve→integrate, block→needs-attention, per-repo `review`/`autoMerge`/
 `reviewModel`/`reviewMaxRounds`). A supporting slice was also emitted:
 **`work/backlog/harness-agent-output.md`** — the harness seam had no channel for an
 agent invocation's OUTPUT (only `ok`/liveness/`stderr`), so Gate 2 could not read
 the review verdict live. Resolved as **Option C** (2026-06-06, after a pi-vs-opencode
 research pass): each adapter extracts the final assistant message at launch and
 returns it in `LaunchResult.output` (pi from its `.jsonl`, opencode from its
-stdout-stream). `review-gate-pr` FUNCTIONS live (real `reviewPr: on`) only once
+stdout-stream). `review-gate-pr` FUNCTIONS live (real `review: on`) only once
 `harness-agent-output` lands — though it does not formally `blockedBy` it (the gate
 is correct in isolation; the output-read is the activation). See also
 `work/observations/pi-harness-jsonl-reliance.md` (the `.jsonl`-scraping debt).

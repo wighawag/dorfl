@@ -117,13 +117,13 @@ export interface CompleteOptions {
 	 * needs-attention (NEVER merge). `verify` is the non-skippable floor; review is
 	 * a JUDGEMENT gate ON TOP (ADR §8), never a replacement. Default OFF.
 	 */
-	reviewPr?: boolean;
+	review?: boolean;
 	/**
 	 * On a Gate-2 `approve`, allow a resolved `merge` integration to proceed
 	 * AUTONOMOUSLY. Repo policy only. Default OFF. A non-`approve` verdict NEVER
-	 * auto-merges. With `reviewPr` on but `autoMerge` off, review still gates but
+	 * auto-merges. With `review` on but `autoMerge` off, review still gates but
 	 * the resolved `merge` is DOWNGRADED to `propose` (a human does the merge —
-	 * `--propose` semantics). Ignored unless `reviewPr` is on.
+	 * `--propose` semantics). Ignored unless `review` is on.
 	 */
 	autoMerge?: boolean;
 	/**
@@ -141,8 +141,8 @@ export interface CompleteOptions {
 	 * The review-gate SEAM (injectable, like `do`'s `agentRunner`): a fresh-context
 	 * review that returns a parsed `{verdict, findings}`. Tests inject a canned
 	 * verdict (no real model); production wires the harness-backed gate
-	 * (`harnessReviewGate`). Required when `reviewPr` is on (a missing gate with
-	 * `reviewPr` on is a usage error — the floor must not be silently skipped).
+	 * (`harnessReviewGate`). Required when `review` is on (a missing gate with
+	 * `review` on is a usage error — the floor must not be silently skipped).
 	 */
 	reviewGate?: ReviewGate;
 	/** Conventional-commit type for the completion commit. Defaults to `feat`. */
@@ -419,7 +419,7 @@ async function runComplete(
 	//     INSERTED BETWEEN the green `verify` and the done-move. It is a JUDGEMENT
 	//     gate layered ON TOP of the deterministic `verify` floor (ADR §8) — NEVER a
 	//     replacement: `verify` already ran (and is non-skippable), and only on its
-	//     GREEN does control reach here. Runs ONLY when `reviewPr` resolves on.
+	//     GREEN does control reach here. Runs ONLY when `review` resolves on.
 	//
 	//     The `review` SKILL runs as a FRESH-CONTEXT agent (its own harness launch,
 	//     the injectable `reviewGate` seam), returning `{verdict, findings}`:
@@ -431,13 +431,13 @@ async function runComplete(
 	//     `reviewMaxRounds` bounds the revise↔review loop: the gate is invoked per
 	//     round; a persistent `block` exhausts the rounds and ERRORS OUT to
 	//     needs-attention (never silently merges or loops).
-	if (options.reviewPr) {
+	if (options.review) {
 		const reviewGate = options.reviewGate;
 		if (!reviewGate) {
-			// `reviewPr` on with no gate wired is a usage error — the floor must never
+			// `review` on with no gate wired is a usage error — the floor must never
 			// be silently skipped. (Production always wires `harnessReviewGate`.)
 			throw new CompleteUsageError(
-				`reviewPr is on but no review gate is configured — cannot run Gate 2 ` +
+				`review is on but no review gate is configured — cannot run Gate 2 ` +
 					`for '${slug}' (this is a wiring bug; the gate must not be skipped).`,
 			);
 		}

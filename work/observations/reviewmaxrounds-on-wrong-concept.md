@@ -36,7 +36,7 @@ ceiling so an unattended review↔edit cycle can never run forever. So:
 - **Keep the parameter for now** (it is live in the Gate-2 code; removing it is a
   separate change). Do NOT delete it in isolation.
 - **Later: remove `reviewMaxRounds` from the review GATE** (`complete`/`do`
-  Gate-2 path: `reviewPr`/`autoMerge`/`reviewModel` stay; the rounds loop +
+  Gate-2 path: `review`/`autoMerge`/`reviewModel` stay; the rounds loop +
   `reviewMaxRounds` go). The gate becomes a single reviewer invocation → verdict.
 - **Later: (re)introduce `reviewMaxRounds` on the SLICER EDIT LOOP** when that is
   built — same name, NEW home + meaning (loop ceiling, not gate retries),
