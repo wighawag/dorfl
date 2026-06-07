@@ -30,7 +30,11 @@ import {runAsync, type RunResult} from './git.js';
  *     full `work/` lifecycle from each BARE hub mirror's `main` ref. A mirror has
  *     no working tree, so this reads the committed tree via `git ls-tree`/`git
  *     show` (the SAME mechanism the arbiter `done/` read uses, widened to the
- *     full backlog + needs-attention set).
+ *     full backlog + needs-attention set). This read itself is offline; the
+ *     fetch-first contract (ADR §5/§6 — the old "scan is always offline" invariant
+ *     is retired) lives ONE layer up in `scan`/`status`, which refresh the
+ *     mirror's `main` before calling this method. The read STRATEGY here is
+ *     unchanged either way.
  *
  * The signatures stay at the SEMANTIC level ("resolve live state") and storage-
  * agnostic: the ONLY public distinction is local-vs-arbiter (no `main`/path is

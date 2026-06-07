@@ -9,7 +9,11 @@ import {
 	readBacklogItems,
 } from '../src/scan.js';
 import {mergeConfig} from '../src/config.js';
-import {registerMirrorWithWork} from './helpers/gitRepo.js';
+import {
+	registerMirrorWithWork,
+	pushWorkToMirrorOrigin,
+	breakMirrorOrigin,
+} from './helpers/gitRepo.js';
 
 let root: string;
 
@@ -240,6 +244,57 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		);
 		expect(report.totalItems).toBe(3);
 		expect(report.totalEligible).toBe(2);
+	});
+});
+
+describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', () => {
+	it('sees a change pushed to the arbiter AFTER fetching (not just last-known)', async () => {
+		// Register a mirror with one backlog item, then push a SECOND item onto the
+		// mirror's origin (source repo) only — the bare mirror's `main` is now stale.
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'first.md': slice({slug: 'first'})},
+		});
+		pushWorkToMirrorOrigin(
+			workspacesDir(),
+			'repo',
+			'backlog',
+			'second.md',
+			slice({slug: 'second'}),
+		);
+
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+		);
+		// Fetch-first ⇒ the second item (pushed after mirror creation) is visible.
+		const slugs = report.repos[0].items.map((i) => i.slug).sort();
+		expect(slugs).toEqual(['first', 'second']);
+	});
+
+	it('WARNS and falls back to last-known when the fetch FAILS (never errors)', async () => {
+		const {mirrorPath} = registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'known.md': slice({slug: 'known'})},
+		});
+		// A later push the broken fetch can never see.
+		pushWorkToMirrorOrigin(
+			workspacesDir(),
+			'repo',
+			'backlog',
+			'unseen.md',
+			slice({slug: 'unseen'}),
+		);
+		breakMirrorOrigin(mirrorPath);
+
+		const warnings: string[] = [];
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			{warn: (m) => warnings.push(m)},
+		);
+
+		// Did NOT throw; still reports the last-known backlog (offline fall-back).
+		expect(report.repos[0].items.map((i) => i.slug)).toEqual(['known']);
+		// And it warned about the failed fetch / offline fall-back.
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0].toLowerCase()).toMatch(/fetch|offline|last-known/);
 	});
 });
 

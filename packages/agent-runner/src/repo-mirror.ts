@@ -189,3 +189,38 @@ export function mirrorMainSha(
 ): string {
 	return git(['rev-parse', 'main'], mirrorDir, {env}).trim();
 }
+
+/**
+ * Fetch-first for the READ paths (`scan`/`status`, ADR
+ * `command-surface-and-journeys` §5/§6): refresh a registered mirror's `main`
+ * before reading its `work/` tree, so the read sees the remote truth (the
+ * registry model makes the remote the source of truth). It is a thin wrapper
+ * over {@link fetchMirrorMain} (the load-bearing main-only, no-prune fetch — it
+ * must NOT be the pruning `ensureMirror` fetch, which would delete live
+ * worktrees' `work/<slug>` branches, ADR §6).
+ *
+ * **Never errors out: warn + fall back to last-known.** A failed fetch (offline,
+ * a vanished origin, a dead arbiter) is NOT fatal for a read — `scan`/`status`
+ * must still report from the mirror's last-known `main`. On failure it routes a
+ * human-readable note through `warn` and returns `false`; on success it returns
+ * `true`. The freshness of the read then reflects the last SUCCESSFUL fetch.
+ */
+export function fetchMirrorMainOrWarn(options: {
+	/** The bare hub mirror directory whose `main` to refresh. */
+	mirrorPath: string;
+	/** Sink for the fall-back warning when the fetch fails. */
+	warn?: (message: string) => void;
+	env?: NodeJS.ProcessEnv;
+}): boolean {
+	try {
+		fetchMirrorMain(options.mirrorPath, options.env);
+		return true;
+	} catch (err) {
+		const reason = err instanceof Error ? err.message : String(err);
+		options.warn?.(
+			`could not fetch mirror at ${options.mirrorPath}; ` +
+				`reading last-known state (offline). ${reason}`,
+		);
+		return false;
+	}
+}

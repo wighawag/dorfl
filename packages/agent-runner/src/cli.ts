@@ -374,7 +374,9 @@ export function buildProgram(): Command {
 				fileConfig,
 				flagOverrides(flags, command),
 			);
-			const report = await scan(config);
+			const report = await scan(config, {
+				warn: (message) => console.error(`>> ${message}`),
+			});
 			if (flags.json) {
 				console.log(
 					JSON.stringify(
@@ -1147,7 +1149,12 @@ export function buildProgram(): Command {
 							cwd: process.cwd(),
 							remote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
 						});
-			const report = await status({workspacesDir, mirrorPaths, arbiter});
+			const report = await status({
+				workspacesDir,
+				mirrorPaths,
+				arbiter,
+				warn: (message) => console.error(`>> ${message}`),
+			});
 			if (flags.json) {
 				console.log(JSON.stringify(report, null, 2));
 			} else {

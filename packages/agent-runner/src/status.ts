@@ -5,6 +5,7 @@ import {resolveHarness, type Harness} from './harness.js';
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
 import {ledgerRead} from './ledger-read.js';
+import {fetchMirrorMainOrWarn} from './repo-mirror.js';
 import {extractReason} from './needs-attention.js';
 import {type NeedsAttentionItem} from './needs-attention.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
@@ -27,6 +28,13 @@ import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
  * (ADR §5): a live agent can think for minutes without writing files, so mtime
  * would mistake a thinking agent for a dead one. The harness answers liveness
  * from the real signal.
+ *
+ * **Fetch-first (ADR §5/§6):** the folder-native needs-attention surface is read
+ * from each registered hub mirror's `main` ref AFTER refreshing that ref — the
+ * old "scan is always offline" framing is RETIRED (it was the roots-local model).
+ * A failed mirror fetch is NOT fatal: it WARNS and falls back to that mirror's
+ * last-known `main`. The ledger read STRATEGY is unchanged
+ * (`claim-ledger-vs-protected-main.md`); `status` only ensures the ref is fresh.
  *
  * It is strictly **read-only**: it inspects records/worktrees; it never claims,
  * runs, moves, or deletes (deletion is `gc`; the needs-attention move is the
@@ -117,10 +125,18 @@ export interface StatusOptions {
 	 * Hub-mirror PATHS whose `work/needs-attention/` to surface (ADR §12), read
 	 * from each mirror's BARE `main` ref THROUGH the read seam (mirrors have no
 	 * working tree). The CLI wires these from the registry's {@link listMirrors}.
-	 * Omitted ⇒ the folder-native surface is skipped (only the job worktrees are
-	 * reported).
+	 * `status` FETCHES each mirror's `main` first (ADR §5/§6 — the registry's remote
+	 * is the source of truth); a failed fetch WARNS and falls back to last-known
+	 * (never errors). Omitted ⇒ the folder-native surface is skipped (only the job
+	 * worktrees are reported).
 	 */
 	mirrorPaths?: string[];
+	/**
+	 * Sink for the fetch-first fall-back warning (ADR §5/§6): when a mirror's `main`
+	 * cannot be fetched, `status` warns through this and reads that mirror's
+	 * last-known state. The CLI wires it to the standard `>>` stderr note.
+	 */
+	warn?: (message: string) => void;
 	/**
 	 * The current repo's arbiter state to fold into the dashboard (the old `arbiter
 	 * status`, ADR §1). The CLI resolves it via `arbiterStatus` for the current
@@ -163,6 +179,10 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 	// mirror's BARE `main` ref THROUGH the read seam (mirrors have no working tree).
 	const needsAttention: RepoNeedsAttention[] = [];
 	for (const mirrorPath of options.mirrorPaths ?? []) {
+		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the surface
+		// reflects the remote truth. Never fatal — a failed fetch WARNS and falls
+		// back to the mirror's last-known `main` (the read strategy is unchanged).
+		fetchMirrorMainOrWarn({mirrorPath, warn: options.warn, env: options.env});
 		const state = await ledgerRead.resolveMirrorState({
 			mirrorPath,
 			env: options.env,

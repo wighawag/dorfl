@@ -245,6 +245,11 @@ export interface RegisteredMirrorFixture {
 	originUrl: string;
 }
 
+/** The throwaway source repo (the mirror's origin) for `name`. */
+function mirrorSrc(workspacesDir: string, name: string): string {
+	return join(workspacesDir, '..', `mirror-src-${name}`);
+}
+
 export function registerMirrorWithWork(
 	workspacesDir: string,
 	name: string,
@@ -255,7 +260,7 @@ export function registerMirrorWithWork(
 	},
 ): RegisteredMirrorFixture {
 	// 1. A throwaway working repo (the would-be arbiter source) with the work/ tree.
-	const src = join(workspacesDir, '..', `mirror-src-${name}`);
+	const src = mirrorSrc(workspacesDir, name);
 	mkdirSync(src, {recursive: true});
 	gx(['init', '-q', '-b', 'main'], src);
 	const writeAll = (
@@ -284,6 +289,45 @@ export function registerMirrorWithWork(
 	mkdirSync(dirname(dest), {recursive: true});
 	gx(['clone', '--quiet', '--bare', originUrl, dest], dirname(dest));
 	return {mirrorPath: dest, originUrl};
+}
+
+/**
+ * Commit a new `work/<folder>/<file>` onto the mirror SOURCE repo's `main` (the
+ * mirror's origin) WITHOUT touching the bare mirror itself. After this the
+ * mirror's `main` is STALE until something fetches it — exactly the condition a
+ * fetch-first `scan`/`status` must close. Pairs with {@link registerMirrorWithWork}.
+ */
+export function pushWorkToMirrorOrigin(
+	workspacesDir: string,
+	name: string,
+	folder: 'backlog' | 'done' | 'needs-attention',
+	file: string,
+	content: string,
+): void {
+	const src = mirrorSrc(workspacesDir, name);
+	const dir = join(src, 'work', folder);
+	mkdirSync(dir, {recursive: true});
+	writeFileSync(join(dir, file), content);
+	gx(['add', '-A'], src);
+	gx(['commit', '-q', '-m', `add ${folder}/${file}`], src);
+}
+
+/**
+ * Break a registered mirror's `origin` so the next fetch FAILS (it points at a
+ * path that does not exist). Used to simulate an unreachable arbiter: a
+ * fetch-first `scan`/`status` must WARN and fall back to the mirror's last-known
+ * `main`, never error out.
+ */
+export function breakMirrorOrigin(mirrorPath: string): void {
+	gx(
+		[
+			'remote',
+			'set-url',
+			'origin',
+			'file:///nonexistent/agent-runner-gone.git',
+		],
+		mirrorPath,
+	);
 }
 
 export {gx as gitIn};

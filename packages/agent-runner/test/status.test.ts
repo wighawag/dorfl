@@ -11,6 +11,8 @@ import type {Harness, HarnessRecord} from '../src/harness.js';
 import {
 	makeScratch,
 	registerMirrorWithWork,
+	pushWorkToMirrorOrigin,
+	breakMirrorOrigin,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -402,6 +404,77 @@ describe('status — folder-native needs-attention surface (ADR §12)', () => {
 		seedNeedsAttentionMirror('ignored', 'should not appear');
 		const report = await status({workspacesDir: workspacesDir()});
 		expect(report.needsAttention).toEqual([]);
+	});
+});
+
+/** A needs-attention slice body (the shape `routeToNeedsAttention` produces). */
+function needsAttentionBody(slug: string, reason: string): string {
+	return [
+		'---',
+		`title: ${slug}`,
+		`slug: ${slug}`,
+		'---',
+		'',
+		'## Needs attention',
+		'',
+		reason,
+		'',
+	].join('\n');
+}
+
+describe('status — fetch-first (ADR §5/§6; offline-scan invariant retired)', () => {
+	it('sees a needs-attention item pushed to the arbiter AFTER fetching', async () => {
+		// A mirror with one needs-attention item; a SECOND is pushed onto its origin
+		// only — the bare mirror's `main` is stale until status fetches.
+		const mirror = registerMirrorWithWork(workspacesDir(), 'project', {
+			needsAttention: {
+				'first.md': needsAttentionBody('first', 'reason one'),
+			},
+		}).mirrorPath;
+		pushWorkToMirrorOrigin(
+			workspacesDir(),
+			'project',
+			'needs-attention',
+			'second.md',
+			needsAttentionBody('second', 'reason two'),
+		);
+
+		const report = await status({
+			workspacesDir: workspacesDir(),
+			mirrorPaths: [mirror],
+		});
+		const slugs = report.needsAttention?.[0].items.map((i) => i.slug).sort();
+		expect(slugs).toEqual(['first', 'second']);
+	});
+
+	it('WARNS and falls back to last-known when the fetch FAILS (never errors)', async () => {
+		const mirror = registerMirrorWithWork(workspacesDir(), 'project', {
+			needsAttention: {
+				'known.md': needsAttentionBody('known', 'known reason'),
+			},
+		}).mirrorPath;
+		pushWorkToMirrorOrigin(
+			workspacesDir(),
+			'project',
+			'needs-attention',
+			'unseen.md',
+			needsAttentionBody('unseen', 'never fetched'),
+		);
+		breakMirrorOrigin(mirror);
+
+		const warnings: string[] = [];
+		const report = await status({
+			workspacesDir: workspacesDir(),
+			mirrorPaths: [mirror],
+			warn: (m) => warnings.push(m),
+		});
+
+		// Did NOT throw; still surfaces the last-known item (offline fall-back).
+		expect(report.needsAttention?.[0].items.map((i) => i.slug)).toEqual([
+			'known',
+		]);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0].toLowerCase()).toMatch(/fetch|offline|last-known/);
 	});
 });
 
