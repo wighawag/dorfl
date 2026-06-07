@@ -33,6 +33,12 @@ const RACE_SENSITIVE = [
 	// concurrently; keep it out of file-parallel pressure for the same reason as
 	// do.test.ts (deterministic claim/main-CAS).
 	'test/do-watch.test.ts',
+	// `do --review --watch` drives real git against a --bare arbiter, writes main
+	// (approve→merge / block→needs-attention surfacing), AND launches a stubbed pi
+	// (async spawn) for BOTH the build and the review, whose session .jsonl files
+	// are tailed concurrently; keep it out of file-parallel pressure for the same
+	// reason as do-watch.test.ts (deterministic claim/main-CAS).
+	'test/watch-review-session.test.ts',
 	// Drives real git against a --bare arbiter AND writes main (surface-on-main
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
