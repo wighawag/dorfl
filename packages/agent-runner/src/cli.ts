@@ -133,6 +133,10 @@ interface RunFlags extends ScanFlags {
 	piBin?: string;
 	sessionsDir?: string;
 	workspace?: string;
+	review?: boolean;
+	autoMerge?: boolean;
+	reviewModel?: string;
+	reviewMaxRounds?: string;
 }
 
 function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
@@ -156,6 +160,11 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	// the SHARED per-key mapping `do` also reuses (do-config.harnessFlagOverrides),
 	// so there is exactly ONE override path for them.
 	Object.assign(overrides, harnessFlagOverrides(flags));
+	// Gate 2 (PR/code review) flags ride the SAME flag-override path so
+	// `--review`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
+	// flag > env > per-repo > global > default — mirroring the `do` command (the
+	// fleet inherits the review gate via the converged `performIntegration` core).
+	Object.assign(overrides, reviewFlagOverrides(flags));
 	return overrides;
 }
 
@@ -390,6 +399,27 @@ export function buildProgram(): Command {
 			'--workspace <dir>',
 			'execution working area for hub mirrors + job worktrees (default: workspacesDir / ~/.agent-runner)',
 		)
+		.option(
+			'--review',
+			'run Gate 2 (PR/code review) after verify, before the done-move, on every item (overrides config). Resolved flag > env > per-repo > global > default off.',
+		)
+		.option('--no-review', 'do NOT run Gate 2 this tick (overrides config)')
+		.option(
+			'--auto-merge',
+			'on a Gate-2 approve, let a resolved merge proceed autonomously (overrides config; repo policy only). Default off.',
+		)
+		.option(
+			'--no-auto-merge',
+			'do NOT auto-merge on approve (a human merges; --propose semantics)',
+		)
+		.option(
+			'--review-model <id>',
+			'model the Gate-2 review agent runs on (de-correlated from the builder; routing intent). Resolved flag > env > per-repo > global > default.',
+		)
+		.option(
+			'--review-max-rounds <n>',
+			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
+		)
 		.option('--json', 'output the raw result as JSON')
 		.action(async (flags: RunFlags, command: Commander) => {
 			if (!flags.once) {
@@ -413,6 +443,12 @@ export function buildProgram(): Command {
 			const result = await runOnce({
 				config,
 				workspace,
+				// Gate 2 (PR/code review): wire the PRODUCTION harness-backed gate ONLY
+				// when `config.review` resolves on (mirror the `do`/`complete` commands).
+				// The per-repo `review`/`autoMerge`/`reviewModel`/`reviewMaxRounds` are
+				// resolved per-item from each repo's config inside `runOneItem`; only the
+				// gate SEAM is threaded here. Off ⇒ undefined ⇒ no review (the default).
+				reviewGate: config.review ? harnessReviewGate() : undefined,
 				onWarn: (message) => console.error(`>> ${message}`),
 			});
 			if (flags.json) {

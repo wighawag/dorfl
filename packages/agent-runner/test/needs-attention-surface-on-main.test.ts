@@ -2,7 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {ledgerWrite} from '../src/ledger-write.js';
-import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
+import {runOnce, type AgentRunner} from '../src/run.js';
 import {performStart} from '../src/start.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performComplete} from '../src/complete.js';
@@ -163,7 +163,9 @@ const editingAgent: AgentRunner = ({cwd}) => {
 	writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
 	return {ok: true};
 };
-const redGate: TestGate = () => ({green: false, detail: 'tests failed'});
+// The gate is now the per-repo `verify` command (the converged core); `exit 1`
+// stands in for a red gate (the deleted `defaultTestGate`/`TestGate` are gone).
+const FAIL = 'exit 1';
 
 /** The injected working-tree scan report for `run` over the seeded `project`. */
 function scanProject(config: Parameters<typeof scanRepoPaths>[1]) {
@@ -188,13 +190,12 @@ describe('needs-attention surface-on-main — surfaces in BOTH merge and propose
 		it(`runOnce (${integration}) surfaces a red item on main (ledger write, not code integration)`, async () => {
 			const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 			const workspacesDir = join(scratch.root, 'ws');
-			const config = configFor(scratch.root, {integration});
+			const config = configFor(scratch.root, {integration, verify: FAIL});
 			const result = await runOnce({
 				config,
 				report: scanProject(config),
 				workspace: workspacesDir,
 				agentRunner: editingAgent,
-				testGate: redGate,
 				env: gitEnv(),
 			});
 			expect(result.items[0].status).toBe('tests-failed');

@@ -108,6 +108,15 @@ export interface IntegrationCoreInput {
 	 * legacy bridge wins). `merge` mode ignores it.
 	 */
 	provider?: ReviewProviderName;
+	/**
+	 * Optional FULLY-FORMED review provider to use VERBATIM (highest precedence,
+	 * above `openPr` and `provider`/auto-detection). The `run` path injects a
+	 * stubbed `GitHubProvider` here in tests (a custom `gh` binary path) to drive
+	 * the full propose pipeline incl. title/body/url — which the lossy `openPr`
+	 * bridge cannot carry. Unset by `do`/`complete` (they use `provider`/`openPr`),
+	 * so their behaviour is unchanged.
+	 */
+	providerInstance?: ReviewProvider;
 	/** Optional injectable PR opener (legacy bridge); used in `propose` mode. */
 	openPr?: (opts: {
 		cwd: string;
@@ -428,7 +437,22 @@ export async function performIntegration(
 	//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
 	//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
 	//    leftover/conflicting on-`main` surface for the human to resolve.
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+	// Fetch the arbiter's `main` into the `<arbiter>/main` remote-tracking ref
+	// EXPLICITLY. A `run` JOB WORKTREE is cut from a bare hub mirror whose remote
+	// has no fetch refspec (so `<arbiter>/main` would not otherwise resolve / would
+	// be stale, causing a spurious rebase conflict); a regular clone (`do`/
+	// `complete`) already has it, where the explicit refspec is harmless (the same
+	// refspec `rebaseOntoArbiterMain` used before the convergence).
+	await gitHard(
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/main:refs/remotes/${arbiter}/main`,
+		],
+		cwd,
+		env,
+	);
 	const rebase = recovering
 		? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
 		: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
@@ -481,12 +505,18 @@ export async function performIntegration(
 	//    missing/unauthenticated `gh` degrades to push-only at runtime — never a
 	//    hard failure. The seam is storage-agnostic: we hand it the work branch,
 	//    the integration mode, and the provider — `main` lives only in the strategy.
-	const provider = input.openPr
-		? bridgeProvider(input.openPr)
-		: selectProvider({
-				arbiterUrl: await arbiterUrl(cwd, arbiter, env),
-				provider: input.provider,
-			});
+	// Provider precedence: an injected fully-formed provider wins (the `run`
+	// stubbed-provider seam, carrying title/body/url); else the legacy `openPr`
+	// bridge; else select by the `provider` override LAYERED OVER auto-detection
+	// from the arbiter URL.
+	const provider =
+		input.providerInstance ??
+		(input.openPr
+			? bridgeProvider(input.openPr)
+			: selectProvider({
+					arbiterUrl: await arbiterUrl(cwd, arbiter, env),
+					provider: input.provider,
+				}));
 	const integration = ledgerWrite.applyCompleteTransition({
 		arbiter,
 		branch,

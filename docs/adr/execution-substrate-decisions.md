@@ -167,6 +167,20 @@ A possible later optimization is caching *test results* (skip re-running when th
 git tree is unchanged) — but it must be off-by-default for the authoritative
 autonomous gate (a safety boundary must not trust a cache). Out of scope for now.
 
+> **Note (gate unification — run now honours `verify`, 2026-06-07):** the
+> autonomous `run` path previously had its OWN gate (`defaultTestGate`,
+> hardcoded `pnpm -r test` — test-only, Node-only, ignoring `config.verify`) — a
+> PROTOCOL VIOLATION of this section's per-repo, language-agnostic gate. The
+> run/do integrate-path convergence (`work/prd/run-do-integrate-convergence.md`)
+> routed `runOneItem` through the shared `performIntegration` core, which gates on
+> `runVerify(config.verify)` exactly like `do`/`complete`. `defaultTestGate` and
+> the `TestGate` type are DELETED. This is a deliberate, intended BEHAVIOUR
+> CHANGE: the fleet now enforces the SAME full configured floor (build + test +
+> format, or the repo's command) in ANY language — closing drift instance #3 in
+> `work/findings/run-and-do-have-separate-integrate-paths.md`. The same
+> convergence also gave `run` the review gate (Gate 2) and the synthesised PR
+> title/body it previously lacked.
+
 ## 9. agent-runner is the primary implementation; contract + `claim.sh` are the portable substrate
 
 agent-runner and the `to-slices` skill (the `work/` contract,

@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {writeFileSync, existsSync, readFileSync, chmodSync} from 'node:fs';
-import {runOnce, type AgentRunner, type TestGate} from '../src/run.js';
+import {runOnce, type AgentRunner} from '../src/run.js';
 import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
@@ -36,8 +36,13 @@ const editingAgent: AgentRunner = ({cwd}) => {
 	return {ok: true};
 };
 
-const greenGate: TestGate = () => ({green: true});
-const redGate: TestGate = () => ({green: false, detail: 'tests failed'});
+// The gate is now the per-repo, language-agnostic `verify` command (the converged
+// `performIntegration` core), NOT the deleted `defaultTestGate`/`TestGate`. Tests
+// inject it via a string command, exactly as `do`/`complete`'s tests do: `exit 0`
+// stands in for a green gate, `exit 1` for a red one. (The default config sets
+// `verify: PASS` so the existing green-path assertions are unchanged.)
+const PASS = 'exit 0';
+const FAIL = 'exit 1';
 
 /**
  * Build the injected scan report for `run` from the seeded `project` working
@@ -76,6 +81,10 @@ function configFor(root: string, overrides = {}) {
 		perRepoMax: 2,
 		integration: 'merge',
 		agentCmd: 'true',
+		// The per-repo gate, injected as a string command (green by default). The
+		// gate is now `runVerify(config.verify)` inside the shared core, NOT the
+		// deleted `defaultTestGate` — red-gate tests override with `verify: FAIL`.
+		verify: PASS,
 		// Seeded slices are undeclared (not humanOnly) — agents may claim them only
 		// when this per-repo/global policy is on.
 		allowAgents: true,
@@ -92,7 +101,6 @@ describe('runOnce — happy path (green gate)', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -109,13 +117,12 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 	it('surfaces a red item as needs-attention on main, never moving it to done', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, 'ws');
-		const config = configFor(scratch.root);
+		const config = configFor(scratch.root, {verify: FAIL});
 		const result = await runOnce({
 			config,
 			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
-			testGate: redGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -144,13 +151,12 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 	it('PUSHES the work/<slug> branch on the red-gate bounce (saving the wip cross-machine)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, 'ws');
-		const config = configFor(scratch.root);
+		const config = configFor(scratch.root, {verify: FAIL});
 		const result = await runOnce({
 			config,
 			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
-			testGate: redGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -186,7 +192,6 @@ describe('runOnce — concurrency caps', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -202,7 +207,6 @@ describe('runOnce — concurrency caps', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -230,7 +234,6 @@ describe('runOnce — lost race is skipped cleanly', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -254,6 +257,7 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 				perRepoMax: 2,
 				integration: 'merge',
 				agentCmd: 'true',
+				verify: PASS,
 				allowAgents: true,
 			});
 
@@ -264,7 +268,6 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 				report: scanRepoPaths([clone], config),
 				workspace: join(scratch.root, `ws-${agentId}`),
 				agentRunner: editingAgent,
-				testGate: greenGate,
 				env: gitEnv(),
 				agentId: () => agentId,
 			});
@@ -292,7 +295,6 @@ describe('runOnce — integration modes', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 			openPr: ({branch}) => {
@@ -318,7 +320,6 @@ describe('runOnce — integration modes', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -343,7 +344,6 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 			openPr: ({branch}) => {
@@ -374,6 +374,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			perRepoMax: 2,
 			integration: 'merge',
 			agentCmd: 'true',
+			verify: PASS,
 			allowAgents: true,
 		});
 		let bBranch = '';
@@ -382,7 +383,6 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			report: scanRepoPaths([a.repo, b.repo], config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentZ',
 			openPr: ({branch}) => {
@@ -418,7 +418,6 @@ describe('runOnce — agent failure', () => {
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: failingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -458,7 +457,6 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('claimed-done');
@@ -472,7 +470,7 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 	it('REAPS a red-gate job once its work branch is pushed to the arbiter (ADR §4: provable safety)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, '.agent-runner');
-		const config = configFor(scratch.root, {workspacesDir});
+		const config = configFor(scratch.root, {workspacesDir, verify: FAIL});
 		// A red gate bounces the item to needs-attention AND pushes the work branch
 		// (the gate-fail-pushes-work-branch fix) so the wip is cross-machine
 		// recoverable. The branch is now provably on the arbiter (pushed), so the
@@ -484,7 +482,6 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 			report: scanProject(config),
 			workspace: workspacesDir,
 			agentRunner: editingAgent,
-			testGate: redGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('tests-failed');
@@ -537,7 +534,6 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 			report,
 			workspace: workspacesDir,
 			agentRunner: conflictingAgent,
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 
@@ -671,7 +667,6 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 			report: scanProject(config),
 			workspace: workspacesDir,
 			// No agentRunner injection ⇒ the real harness seam (pi adapter) runs.
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 
@@ -713,7 +708,6 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 			config,
 			report: scanProject(config),
 			workspace: workspacesDir,
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('agent-failed');
@@ -775,7 +769,6 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 			config,
 			report: scanProject(config),
 			workspace: workspacesDir,
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('claimed-done');
@@ -801,7 +794,6 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 			report: scanProject(config),
 			workspace: workspacesDir,
 			// No agentRunner injection ⇒ the real null harness seam runs agentCmd.
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('claimed-done');
@@ -821,7 +813,6 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 			config,
 			report: scanProject(config),
 			workspace: workspacesDir,
-			testGate: greenGate,
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('agent-failed');
