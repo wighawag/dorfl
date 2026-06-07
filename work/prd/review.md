@@ -112,23 +112,25 @@ consumed in TWO operational SHAPES, and plugged in at several INSERTION POINTS:
   global, cheap default). **On reaching `maxReview` with unresolved blockers, the
   slice(s) are REJECTED as `needsAnswers`** (the verdict sink below). `maxReview`
   lives HERE (the loop), never on the gate.
-- **Verdict routing (the loop's sink) = the EXISTING needsAnswers / needs-attention
-  routing** that `autoslice-confidence` built: (a) a specific uncertain slice →
-  emit with `needsAnswers: true` + questions in its body; (b) the whole
-  decomposition unclear / `maxReview` exhausted → route the PRD to
-  `needs-attention/` with the questions, emit no guessed slices. The loop FEEDS
-  this routing; it does not replace it.
+- **Verdict routing (the loop's sink) = the needsAnswers / needs-attention routing**
+  (the outcome distinction the loop OWNS): (a) a specific uncertain slice → emit
+  with `needsAnswers: true` + questions in its body; (b) the whole decomposition
+  unclear / `maxReview` exhausted → route the PRD to `needs-attention/` with the
+  questions, emit no guessed slices. Keeping this routing IN the loop slice is why
+  the slice reads coherently: the loop produces the verdict AND owns the three
+  outcomes (converge→land / uncertain-slice→needsAnswers / decomposition-unclear→
+  PRD-to-needs-attention).
 
-**Relation to `autoslice-confidence` (resolved Q4): re-scope, do NOT blind-delete.**
-`autoslice-confidence` bundles two things: (1) a one-shot self-confidence JUDGEMENT
-— SUPERSEDED by the edit loop (the loop is the confidence mechanism done right, an
-INDEPENDENT adversarial pass a self-check cannot be); and (2) the needsAnswers /
-needs-attention ROUTING fallbacks — LOAD-BEARING, and exactly the edit loop's
-verdict sink. So: the edit-loop slice ABSORBS the judgement; the ROUTING survives
-(carried by the edit-loop slice, or kept as a re-scoped routing slice the loop
-`blockedBy`s). 4 artifacts reference `autoslice-confidence` (`autoslice-command`,
-the `auto-slice`/`command-surface-phase-2`/`review` PRDs) — reconcile those refs
-when re-scoping; the routing behaviour must NOT be lost.
+**Relation to `autoslice-confidence` (resolved Q4 → decision B, 2026-06-06): FOLD +
+DELETE.** `autoslice-confidence` bundled (1) a one-shot self-confidence JUDGEMENT —
+SUPERSEDED by the edit loop (an INDEPENDENT adversarial pass is the confidence
+mechanism a self-check cannot be); and (2) the needsAnswers / needs-attention
+ROUTING fallbacks — LOAD-BEARING. **Decision B (chosen for coherence — the routing
+belongs with the loop that produces the verdicts): `slicer-review-edit-loop` FOLDS
+IN the routing and `autoslice-confidence` is DELETED**, its 4 references reconciled
+to point at the loop (done 2026-06-06, at slice-authoring time — the build agent
+never touches sibling slices). The routing behaviour is preserved IN the loop
+slice; only the redundant self-check concept is gone.
 
 **Insertion points (the mechanism is defined ONCE, consumed at each):**
 - **(A) slice-generation** — the SLICER EDIT LOOP on the `do prd:<slug>` path.
@@ -373,8 +375,10 @@ Until then this PRD stays the source for them.
   context, M fresh-context reviewers) live in
   `work/ideas/review-gate-default-for-autoslicing.md`. Carry that protocol into the
   `review` skill verbatim; do not re-derive it here.
-- Complements `autoslice-confidence` (the slicer's SELF-confidence check): review
-  is the INDEPENDENT second opinion a self-check cannot be.
+- SUPERSEDES the former `autoslice-confidence` (the slicer's SELF-confidence check):
+  the slicer edit loop is the INDEPENDENT second opinion a self-check cannot be, and
+  it FOLDS IN that slice's needsAnswers / needs-attention routing (decision B,
+  2026-06-06). `autoslice-confidence` is deleted; `slicer-review-edit-loop` owns it.
 - ~~The PR-review/auto-merge author-trust question is deliberately shared with
   `issue-to-slices`~~ — **WITHDRAWN 2026-06-06.** On the `do` path the author is
   the operator who ran the command (no untrusted author), so `autoMerge` is

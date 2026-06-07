@@ -48,7 +48,10 @@ End-to-end flow:
 
 Reuse the existing harness seam + the runner-owns-git pattern from `do`/`run`; do
 NOT reimplement claiming/isolation. The confidence / needs-attention behaviour
-when no human is present is a SEPARATE later slice (autoslice-confidence).
+when no human is present is owned by a SEPARATE later slice
+(`slicer-review-edit-loop`, the review/edit loop + its needsAnswers /
+needs-attention verdict routing — this `do prd:` path just produces candidate
+slices; the loop improves them and routes a low-confidence/maxReview outcome).
 
 **Slug resolution (ADR §3a):** this path is reached via `do prd:<slug>`. `do`
 must resolve `prd:<slug>` to the PRD, bare `<slug>` to a slice (error if both
@@ -107,7 +110,8 @@ prefix. The auto-pick / `run` tick reaches this path for eligible PRDs
 > the to-slices brief (agent produces slice FILES only, no git) → RUNNER commits
 > the produced backlog slices + releases the lock (work/slicing/ → work/prd/) +
 > marks the PRD sliced:, as ONE runner-owned transition. Do NOT build the
-> no-human confidence/needs-attention routing here (that is autoslice-confidence).
+> no-human confidence/needs-attention routing here (that is the review/edit loop +
+> its verdict routing, owned by `slicer-review-edit-loop`).
 >
 > TDD with vitest, stubbing the harness (no real model): gate-refusal paths, lock
 > taken/released, slices land in work/backlog/, PRD marked sliced:, runner (not

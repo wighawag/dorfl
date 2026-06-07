@@ -44,8 +44,10 @@ running code still embodies the old, drifted model:
 - `scan`/`status` still assume the retired "scan is always offline" invariant.
 
 Until the code matches the model, the surface a user touches is the old, confusing
-one — and the reshaped backlog slices (`autoslice-command`, `autoslice-confidence`)
-are blocked because they target a `do` command that does not yet exist.
+one — and the reshaped backlog slices (`autoslice-command`; and the slicer
+review/edit loop, `slicer-review-edit-loop`, which supersedes the former
+`autoslice-confidence`) are blocked because they target a `do` command that does
+not yet exist.
 
 ## Solution
 
@@ -304,10 +306,12 @@ the slices encode these, but they are recorded here as durable warnings:
 
 ## Sequencing constraint (carried from the reconciliation note)
 
-The backlog slices `autoslice-command` + `autoslice-confidence` are reshaped to
-build against `do prd:<slug>` (slug resolution from slice 3 + the `do` path from
-slice 4). They are **blocked on the `do` keystone** and MUST NOT be claimed before
-`do-in-place` (and slug-namespace-resolution) land. `autoslice-gate` +
+The backlog slices `autoslice-command` + `slicer-review-edit-loop` (the latter
+supersedes the former `autoslice-confidence`, folding in its needsAnswers /
+needs-attention routing — see `work/prd/review.md`) are reshaped to build against
+`do prd:<slug>` (slug resolution from slice 3 + the `do` path from slice 4). They
+are **blocked on the `do` keystone** and MUST NOT be claimed before `do-in-place`
+(and slug-namespace-resolution) land. `autoslice-gate` +
 `autoslice-lock` + `brand-identity-single-source` are independent of phase 2 and
 buildable now. The `watch` backlog slice is retired by `run-daemon-reframe`.
 

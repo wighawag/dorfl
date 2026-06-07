@@ -117,8 +117,12 @@ claim-CAS lock so concurrent slicers never collide.
    rest of the system.
 
 > Implementation & testing detail moved to the slices (`autoslice-gate`,
-> `autoslice-lock`, `autoslice-command`, `autoslice-confidence`); durable rationale
-> for the seam the lock rides on is in `docs/adr/claim-ledger-vs-protected-main.md`.
+> `autoslice-lock`, `autoslice-command`); the no-human confidence/needs-attention
+> routing once planned as `autoslice-confidence` is SUPERSEDED by and folded into
+> `slicer-review-edit-loop` (the review/edit loop owns both the confidence judgement
+> and the verdict routing — see `work/prd/review.md` RESOLVED DESIGN). Durable
+> rationale for the seam the lock rides on is in
+> `docs/adr/claim-ledger-vs-protected-main.md`.
 
 ## Autonomy notes (the gate axes)
 

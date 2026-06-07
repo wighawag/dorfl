@@ -58,16 +58,24 @@ these down in the grilling pass BEFORE slicing `review-gate-spec` / the edit loo
 - Disposition: keep for now; later REMOVE from the gate and (re)introduce on the
   edit loop (a move + reframe, not a pure delete).
 
-## Relation to `autoslice-confidence` (already in backlog) — keep them DISTINCT
+## Relation to `autoslice-confidence` — RESOLVED (decision B, 2026-06-06): FOLD + DELETE
 
-- `autoslice-confidence` = the slicer's own ONE-SHOT self-confidence check (low
-  confidence → `needsAnswers`/needs-attention). The idea file itself calls this
-  "necessary but weak — a model rubber-stamping its own decomposition."
+> UPDATE: the grilling pass resolved this. `autoslice-confidence` is DELETED; its
+> routing is folded into `slicer-review-edit-loop`. The "keep them distinct" framing
+> below is the pre-decision reasoning, retained for history.
+
+- `autoslice-confidence` bundled (1) a ONE-SHOT self-confidence check (low
+  confidence → `needsAnswers`/needs-attention) — the idea file itself calls this
+  "necessary but weak — a model rubber-stamping its own decomposition" — and (2) the
+  needsAnswers / needs-attention ROUTING fallbacks.
 - The slicer EDIT LOOP (#2) is the INDEPENDENT, adversarial improver the self-check
-  cannot be. They are complementary, NOT the same: confidence-check = cheap
-  producer humility; edit loop = independent review→revise improvement.
-- The grilling pass should state the relationship explicitly so neither is built as
-  the other.
+  cannot be — so it SUPERSEDES (1). And the routing (2) is the loop's verdict sink.
+- **Decision B (chosen for coherence): FOLD the routing into `slicer-review-edit-
+  loop` and DELETE `autoslice-confidence`** — the routing reads coherently next to
+  the loop that produces the verdicts (the three outcomes: converge→land /
+  uncertain-slice→needsAnswers / decomposition-unclear→PRD-to-needs-attention). The
+  4 references were reconciled at slice-authoring time; the build agent touches no
+  sibling slices.
 
 ## Additional insertion points raised 2026-06-06 (fold into the pass)
 

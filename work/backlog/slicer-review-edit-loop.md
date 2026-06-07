@@ -45,23 +45,26 @@ empirical finding behind the `review` PRD + its idea file).
   - the whole decomposition still unclear / cap hit broadly → route the PRD to
     `work/needs-attention/<slug>.md` with the questions as the reason, emitting no
     guessed slices.
-  This is the SAME routing `autoslice-confidence` specified — see the re-scope note
-  below: the loop FEEDS this sink. `maxReview` lives on the LOOP, never on a gate.
+  This routing is OWNED by this slice (folded in from the former
+  `autoslice-confidence`, now deleted — see the section below). `maxReview` lives on
+  the LOOP, never on a gate.
 
-### Re-scope `autoslice-confidence` (do NOT lose its routing)
+### This slice OWNS the verdict routing (folded in from the former `autoslice-confidence`)
 
-`autoslice-confidence` (in `work/backlog/`) bundles (1) a one-shot self-confidence
-JUDGEMENT and (2) the needsAnswers / needs-attention ROUTING fallbacks. This loop
-SUPERSEDES (1) — an independent adversarial loop is the confidence mechanism a
-self-check cannot be — and CONSUMES (2) as its verdict sink. So this slice should
-**absorb the routing** (or depend on a re-scoped routing slice); the
-self-confidence-check concept is dropped. Reconcile the 4 references to
-`autoslice-confidence` (`autoslice-command` + the `auto-slice` /
-`command-surface-phase-2` / `review` PRDs). The routing BEHAVIOUR must survive even
-as the self-check concept goes. (If reconciling those refs is too large for this
-slice, do the minimum: implement the routing here, and leave a note that
-`autoslice-confidence` is now redundant for the judgement but its routing is
-covered — do NOT silently delete it; flag for the human.)
+The needsAnswers / needs-attention routing is PART OF this slice — it is the loop's
+verdict sink and is what makes the three OUTCOMES coherent in one place:
+- converge (no new blocking issue) → the improved slices land claimable;
+- a specific uncertain slice → emit it `needsAnswers: true` + questions in its body;
+- the whole decomposition unclear / `maxReview` exhausted → route the PRD to
+  `work/needs-attention/<slug>.md` with the questions, emit no guessed slices.
+
+This routing was previously planned as a separate `autoslice-confidence` slice.
+That slice has been **DELETED** (decision B, 2026-06-06, at slice-authoring time):
+its one-shot self-confidence JUDGEMENT is superseded by this loop, and its routing
+is FOLDED IN here. The 4 references to it have already been reconciled to point at
+this slice. **The implementer does NOT touch any sibling slice or PRD** — that
+reconciliation is already done; this slice is PURE CODE (the loop + the routing).
+There is no `autoslice-confidence` slice to build, depend on, or edit.
 
 ### Scope fence
 
@@ -93,10 +96,9 @@ covered — do NOT silently delete it; flag for the human.)
       there), human path unaffected.
 - [ ] The `review` skill is REUSED (no re-authored protocol); the loop wires
       edit-application + routing around it.
-- [ ] `autoslice-confidence`'s ROUTING behaviour is preserved (absorbed here or via
-      a re-scoped dep); the self-confidence-check concept is dropped or flagged
-      redundant — its routing is NOT lost; the 4 references are reconciled or the
-      gap is flagged for the human.
+- [ ] The verdict routing (folded in from the deleted `autoslice-confidence`) is
+      implemented HERE as the loop's sink — the three outcomes above. (No sibling
+      slice/PRD edits: that reconciliation was done at slice-authoring time.)
 - [ ] Tests (stub the review agent's verdict + edits; stub the harness; temp dirs):
       a converging loop (findings → edits → clean) lands improved slices; a
       persistent-block loop hits `maxReview` and rejects via needsAnswers /
@@ -142,16 +144,16 @@ covered — do NOT silently delete it; flag for the human.)
 > agent makes the review/edit JUDGEMENTS; you wire the loop + edit-application +
 > routing. The human slicing path is unaffected.
 >
-> Re-scope `autoslice-confidence`: this loop supersedes its self-confidence JUDGEMENT
-> but MUST preserve its needsAnswers / needs-attention ROUTING (absorb it here, or
-> depend on a re-scoped routing slice). Reconcile the 4 refs to it, or flag the gap
-> for the human — do NOT silently lose the routing or silently delete the slice.
+> The verdict routing is PART OF this slice (folded in from the former
+> `autoslice-confidence`, now DELETED — decision B). Implement the routing HERE as
+> the loop's sink (the three outcomes). Do NOT touch any sibling slice or PRD — the
+> reference reconciliation was already done at slice-authoring time; this slice is
+> pure code. There is no `autoslice-confidence` slice.
 >
 > READ FIRST: `skills/review/SKILL.md` (the protocol to RUN — lenses + destination
 > check + the M×N / "second instance is a signal" disciplines); `work/prd/review.md`
 > RESOLVED DESIGN; `work/backlog/autoslice-command.md` + its module (the `do prd:`
-> path); `work/backlog/autoslice-confidence.md` (the routing to absorb);
-> `src/needs-attention.ts` + `ledger-write-seam-needs-attention` (the sink);
+> path); `src/needs-attention.ts` + `ledger-write-seam-needs-attention` (the sink);
 > `src/repo-config.ts` + `src/config.ts` (the per-repo precedence for `maxReview`);
 > `src/harness.ts` (`LaunchInput`/`launch` — a fresh context per M is a fresh
 > launch; `LaunchResult.output` carries the agent's verdict, slice
