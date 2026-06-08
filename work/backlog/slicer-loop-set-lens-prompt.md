@@ -2,10 +2,29 @@
 title: Verify/tighten the slicer improver-loop prompt to name the review skill's whole-SET lens explicitly (graph coherence / gaps / overlap / goal-composition)
 slug: slicer-loop-set-lens-prompt
 prd: slicing-coherence
-needsAnswers: true
 blockedBy: [slicer-loop-flag-family]
 covers: [3]
 ---
+
+## Answer (2026-06-08 — needsAnswers cleared)
+
+Resolved by the maintainer; the three Open Questions are settled — this slice is a
+minimal TIGHTEN, not a no-op closure:
+
+1. **Is any prompt change wanted?** YES — option (b). The destination check already
+   IMPLIES graph/gaps/overlap (per
+   `work/observations/slicer-prompt-already-uses-set-lens.md`), but they are not
+   NAMED. Name them explicitly so the intent is legible (and so the conceptual-
+   coherence "overlap / duplicate-or-fork" lens is called out — the exact defect
+   class the duplicate-observation episode hit). Do NOT close/out-of-scope.
+2. **Where?** Both, minimally: `buildSliceReviewPrompt` (`src/slicer-review-loop.ts`)
+   AND the `review` skill's set-of-slices mode (`skills/review/SKILL.md`) if it is
+   in-repo-editable from this work; if the skills tree is out of reach, do the
+   prompt builder and FLAG the skill edit for the maintainer. Keep it a few words,
+   not a rewrite of the working prompt.
+3. **Acceptance signal?** A prompt-CONTENT assertion (the prompt string names graph
+   coherence / gaps / overlap / goal-composition) — a behavioural test for a prompt
+   is not the bar. The existing `slicer-review-loop.test.ts` must still pass.
 
 ## What to build
 
@@ -30,35 +49,18 @@ coherence / gaps / overlap, not only the implied destination check, and add the
 missing words if any are genuinely absent. It is doc/prompt-shaped where it
 touches the skill — NOT a from-scratch rewrite of a correct prompt.
 
-## Open questions (clear `needsAnswers` before building)
-
-1. **Is ANY prompt change actually wanted?** The destination check already implies
-   graph/gaps/overlap. Does the maintainer want those three lenses NAMED
-   explicitly in `buildSliceReviewPrompt` (and/or the `review` skill's
-   set-of-slices section), or is the current implication sufficient and this slice
-   should be CLOSED as already-done (move to `out-of-scope/` / delete)?
-2. **If a change IS wanted, where?** In the agent-runner prompt builder
-   (`src/slicer-review-loop.ts`), in the `review` SKILL's set-of-slices mode
-   (`skills/review/SKILL.md` — an external skills tree), or both? The PRD says
-   "doc-shaped where it touches the skill", implying the skill — confirm whether
-   the skill is in-repo-editable from this work and in scope.
-3. **What is the acceptance signal** for "the loop invokes the set lens"? A
-   prompt-content assertion (the prompt string names graph/gaps/overlap)? A
-   behavioural test is hard for a prompt — confirm a content/doc assertion is the
-   intended bar.
-
-(These are flagged rather than guessed because the premise has drifted: building a
-prompt rewrite against an already-correct prompt risks churning a working seam.
-One human glance resolves whether this is a no-op closure or a one-line tighten.)
-
 ## Acceptance criteria
 
-- [ ] (After the questions are answered) The improver-loop prompt / the `review`
-      skill's set-of-slices mode explicitly covers graph coherence, gaps, overlap,
-      and goal-composition — OR this slice is recorded as already-satisfied and
-      closed with a pointer to the existing prompt.
-- [ ] If a change is made: an assertion (prompt-content or doc-shaped) that the set
-      lens is named; existing `slicer-review-loop.test.ts` still passes.
+- [ ] `buildSliceReviewPrompt` (`src/slicer-review-loop.ts`) explicitly NAMES the
+      whole-SET lenses: graph coherence, gaps, overlap, and goal-composition (a few
+      words added to the existing destination-check framing — NOT a rewrite).
+- [ ] If the `review` skill's set-of-slices mode (`skills/review/SKILL.md`) is
+      in-repo-editable from this work, it likewise names the three lenses; if the
+      skills tree is out of reach, the prompt-builder edit lands and the skill edit
+      is FLAGGED for the maintainer.
+- [ ] A prompt-CONTENT assertion verifies the prompt string names graph coherence /
+      gaps / overlap / goal-composition; existing `slicer-review-loop.test.ts` still
+      passes.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -73,20 +75,20 @@ One human glance resolves whether this is a no-op closure or a one-line tighten.
 > overlap / "does the set compose into the PRD goal"), per US #3 of
 > `work/prd/slicing-coherence.md`.
 >
-> CRITICAL FIRST STEP — this slice carries `needsAnswers: true` because its premise
-> has DRIFTED. Read `work/observations/slicer-prompt-already-uses-set-lens.md` and
-> `buildSliceReviewPrompt` in `src/slicer-review-loop.ts`: the prompt ALREADY
+> CONTEXT — the premise had DRIFTED and is now resolved (see the `## Answer` block:
+> needsAnswers is CLEARED, the decision is option (b), a minimal tighten). Read
+> `work/observations/slicer-prompt-already-uses-set-lens.md` and
+> `buildSliceReviewPrompt` in `src/slicer-review-loop.ts` first: the prompt ALREADY
 > reviews the candidate DECOMPOSITION with the review skill's lenses + the
-> destination check. Do NOT build until the Open Questions in this slice's body are
-> answered by a human (is any change wanted; where; what's the acceptance signal).
-> If they are unanswered, leave the slice as-is.
+> destination check, so this is NOT an "add a set lens" rewrite — it is naming the
+> three lenses explicitly.
 >
-> If the answer is "no change needed", record this slice as already-satisfied
-> (point at the existing prompt) and let the runner close it. If a tighten IS
-> wanted, make the MINIMAL change (name graph/gaps/overlap in the prompt and/or the
-> `review` skill's set-of-slices mode) with a content/doc assertion — never a
-> rewrite of the working prompt.
+> MAKE THE MINIMAL CHANGE: add the words "graph coherence / gaps / overlap /
+> goal-composition" to the existing set-level framing in `buildSliceReviewPrompt`
+> (and, if in scope, the `review` skill's set-of-slices section — else flag it),
+> with a prompt-CONTENT assertion. Do NOT rewrite the working prompt; do NOT close
+> the slice as a no-op (the maintainer chose to name them).
 >
-> "Done" = the questions are resolved and either a minimal, asserted tighten landed
-> or the slice is closed as already-satisfied; `pnpm -r build && pnpm -r test &&
-> pnpm -r format:check` green.
+> "Done" = the prompt explicitly names the whole-set lenses, a content assertion
+> covers it, the `review` skill edit is done-or-flagged, and `pnpm -r build &&
+> pnpm -r test && pnpm -r format:check` green.
