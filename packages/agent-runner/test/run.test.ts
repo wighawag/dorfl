@@ -30,9 +30,16 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** An agent that edits a file (so the commit is non-empty) and succeeds. */
-const editingAgent: AgentRunner = ({cwd}) => {
-	writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
+/**
+ * An agent that edits a file (so the commit is non-empty) and succeeds. The
+ * content is SLUG-SPECIFIC so two concurrently-claimed items never write
+ * byte-identical content to the SAME path — which, once the first merges to main,
+ * would make the second's diff vs the advanced main genuinely empty and trip the
+ * `agent-stop-signal` empty-diff backstop. (Single-item tests assert the file
+ * EXISTS, not its content, so this is transparent to them.)
+ */
+const editingAgent: AgentRunner = ({cwd, slug}) => {
+	writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
 	return {ok: true};
 };
 
@@ -568,6 +575,83 @@ describe('runOnce — agent failure', () => {
 		expect(
 			gitIn(['cat-file', '-e', 'arbiter/work/feat:partial.txt'], repo),
 		).toBe('');
+	});
+});
+
+describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gate (agent-stop-signal)', () => {
+	it('a sentinel STOP → agent-stopped, surfaced on main, NO gate (mirrors do)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		// A gate that would EXPLODE if run — proves the gate is SKIPPED on a STOP.
+		const config = configFor(scratch.root, {
+			verify: 'echo GATE-RAN >&2; exit 1',
+		});
+		const stoppingAgent: AgentRunner = () => ({
+			ok: true,
+			output: [
+				'=== SLICE-STOP ===',
+				'drifted: the seam this slice targets already landed elsewhere.',
+				'=== END SLICE-STOP ===',
+			].join('\n'),
+		});
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: stoppingAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		const item = result.items[0];
+		// The NEW status — distinct from needs-attention / agent-failed.
+		expect(item.status).toBe('agent-stopped');
+		expect(item.detail).toMatch(/already landed elsewhere/);
+		// Routed + surfaced on the arbiter main; never reached done.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+		// The reason is recorded in the item body.
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const body = gitIn(
+			['show', 'arbiter/main:work/needs-attention/feat.md'],
+			repo,
+		);
+		expect(body).toMatch(/already landed elsewhere/);
+		// Counted as needs-attention (a STOP is a human-must-look outcome).
+		expect(result.needsAttention).toBe(1);
+	});
+
+	it('the empty-diff BACKSTOP: agent.ok + no source change → agent-stopped without a sentinel', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor(scratch.root);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			// Succeeds but edits nothing + emits no sentinel.
+			agentRunner: () => ({ok: true, output: 'nothing to do'}),
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('agent-stopped');
+		expect(result.items[0].detail).toMatch(
+			/no source change|empty diff|no-op/i,
+		);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+	});
+
+	it('a NORMAL build (non-empty diff, no sentinel) is UNAFFECTED', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor(scratch.root);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('claimed-done');
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(true);
 	});
 });
 

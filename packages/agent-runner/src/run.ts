@@ -24,6 +24,11 @@ import {
 	PromptError,
 } from './prompt.js';
 import {type IntegrateResult, type ReviewProvider} from './integrator.js';
+import {
+	parseStopSentinel,
+	isWorkBranchDiffEmpty,
+	emptyDiffStopReason,
+} from './agent-stop.js';
 import {performIntegration} from './integration-core.js';
 import type {ReviewGate} from './review-gate.js';
 import {tmpdir} from 'node:os';
@@ -140,7 +145,8 @@ export type ItemStatus =
 	| 'claim-error' // claim exit 1 / unexpected
 	| 'tests-failed' // claimed + ran, but gate red → routed to needs-attention
 	| 'needs-attention' // rebase conflict at integrate time (ADR §10) — human must look
-	| 'agent-failed'; // agentCmd itself errored before the gate
+	| 'agent-failed' // agentCmd itself errored before the gate
+	| 'agent-stopped'; // the agent DELIBERATELY stopped (slice drifted) OR produced no change — gate + Gate-2 skipped
 
 export interface ItemResult {
 	repoPath: string;
@@ -328,12 +334,16 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 		(i) => i.status === 'lost-race' || i.status === 'claim-contended',
 	).length;
 	const needsAttention = items.filter(
-		(i) => i.status === 'tests-failed' || i.status === 'needs-attention',
+		(i) =>
+			i.status === 'tests-failed' ||
+			i.status === 'needs-attention' ||
+			i.status === 'agent-stopped',
 	).length;
 	const failed = items.filter(
 		(i) =>
 			i.status === 'tests-failed' ||
 			i.status === 'needs-attention' ||
+			i.status === 'agent-stopped' ||
 			i.status === 'agent-failed' ||
 			i.status === 'claim-error',
 	).length;
@@ -538,6 +548,28 @@ async function runOneItem(
 			);
 		}
 
+		// 4b. HONOR a deliberate STOP (slice `agent-stop-signal`) — the SAME detection
+		//     in-place/remote `do` run, mirrored here. The agent exited cleanly but the
+		//     CLAIM-PROTOCOL wrapper tells it to STOP on a DRIFTED/ambiguous slice; an
+		//     in-band sentinel carries its reason VERBATIM, and the empty-diff backstop
+		//     catches a stop without one. Either routes to needs-attention (surfaced on
+		//     the arbiter) and SKIPS the gate + Gate-2 (the whole `performIntegration`
+		//     band) — a clean STOP is NOT "a build that changed nothing".
+		const sentinel = parseStopSentinel(agent.output);
+		const stopReason =
+			sentinel !== undefined
+				? sentinel.reason
+				: (await isWorkBranchDiffEmpty({
+							cwd: tree.dir,
+							arbiter: tree.arbiterRemote,
+							env: ctx.env,
+					  }))
+					? emptyDiffStopReason(slug)
+					: undefined;
+		if (stopReason !== undefined) {
+			return saveAgentStop(base, tree, slug, stopReason, ctx.env);
+		}
+
 		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
 		// integrate band — plus the needs-attention routing on any failure — now runs
 		// through the SHARED `performIntegration` core (`integration-core.ts`, the
@@ -740,6 +772,34 @@ function saveAgentFailure(
 		env,
 	});
 	return {...base, status: 'agent-failed', detail};
+}
+
+/**
+ * Route a DELIBERATE agent STOP (slice `agent-stop-signal`) to needs-attention
+ * through the SAME work-preserving seam `saveAgentFailure` uses, but as the
+ * DISTINCT `agent-stopped` status (NOT `agent-failed` — the agent did not error;
+ * NOT `tests-failed`/`needs-attention` — there was no red gate / rebase conflict).
+ * The agent's STOP reason is recorded VERBATIM; the job record names it honestly.
+ * The `performIntegration` band (gate + Gate-2) is NEVER reached.
+ */
+function saveAgentStop(
+	base: ItemResult,
+	tree: IsolatedTree,
+	slug: string,
+	reason: string,
+	env: NodeJS.ProcessEnv | undefined,
+): ItemResult {
+	updateJobRecord(tree.dir, {state: 'needs-attention', reason});
+	ledgerWrite.applyNeedsAttentionTransition({
+		cwd: tree.dir,
+		slug,
+		reason,
+		// Autonomous (`run`): surface on the arbiter's main AND push the work branch
+		// (the seam does both), so the stopped item is cross-machine visible/recoverable.
+		arbiter: tree.arbiterRemote,
+		env,
+	});
+	return {...base, status: 'agent-stopped', detail: reason};
 }
 
 /** A throwaway default workspace under the OS temp dir (CLI convenience). */

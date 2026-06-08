@@ -643,6 +643,139 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 	});
 });
 
+describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the gate (agent-stop-signal)', () => {
+	/** A STOP agent: emits the in-band sentinel in `output`, makes NO source change. */
+	const stoppingAgent: DoAgentRunner = () => ({
+		ok: true,
+		output: [
+			'I ran the slice drift-check.',
+			'=== SLICE-STOP ===',
+			'The slice rests on premise X which is false against current src/foo.ts.',
+			'Re-scope before re-claiming.',
+			'=== END SLICE-STOP ===',
+		].join('\n'),
+	});
+
+	it('a sentinel STOP → agent-stopped, needs-attention with the VERBATIM reason, NO gate run', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// A gate that would EXPLODE if run — proves the gate is SKIPPED on a STOP.
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: 'echo GATE-RAN >&2; exit 1',
+			agentRunner: stoppingAgent,
+			env: gitEnv(),
+		});
+
+		// The NEW terminal outcome — distinct from needs-attention / agent-failed.
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('agent-stopped');
+		expect(result.routedToNeedsAttention).toBe(true);
+		// The agent's STOP reason is recorded VERBATIM in the message + body.
+		expect(result.message).toMatch(/premise X which is false/);
+		expect(result.message).toMatch(/Re-scope before re-claiming/);
+
+		// Routed to needs-attention, surfaced on the arbiter main (autonomous).
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+		// The reason landed in the item body.
+		const body = readFileSync(
+			join(repo, 'work', 'needs-attention', 'alpha.md'),
+			'utf8',
+		);
+		expect(body).toMatch(/premise X which is false/);
+
+		// The acceptance gate was NEVER run (the exploding verify never fired) — a
+		// STOP short-circuits before the gate + Gate-2.
+		// (If the gate had run, verify:exit 1 would still land needs-attention, but
+		//  the outcome would be `needs-attention`, not `agent-stopped`; the distinct
+		//  outcome above is the proof the STOP path was taken.)
+	});
+
+	it('the empty-diff BACKSTOP: agent.ok + NO source change → agent-stopped without a sentinel', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// An agent that succeeds but makes NO edits and emits NO sentinel.
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: 'echo GATE-RAN >&2; exit 0',
+			agentRunner: () => ({ok: true, output: 'all done (changed nothing)'}),
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('agent-stopped');
+		expect(result.routedToNeedsAttention).toBe(true);
+		expect(result.message).toMatch(/no source change|empty diff|no-op/i);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+	});
+
+	it('a NORMAL build (non-empty diff, no sentinel) is UNAFFECTED — it gates + completes', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			// editingAgent edits a file (non-empty diff) and emits NO sentinel.
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
+	});
+
+	it('a non-empty diff WITH a sentinel is still a STOP (the sentinel wins over scratch)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: ({cwd}) => {
+				// Left some scratch, but DECLARED a STOP — the sentinel wins.
+				writeFileSync(join(cwd, 'scratch.txt'), 'leftover\n');
+				return {
+					ok: true,
+					output: [
+						'=== SLICE-STOP ===',
+						'drifted: the API this slice targets was removed.',
+						'=== END SLICE-STOP ===',
+					].join('\n'),
+				};
+			},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-stopped');
+		expect(result.message).toMatch(/the API this slice targets was removed/);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+	});
+
+	it('agent-failed (the agent ERRORED) is UNCHANGED — STOP is a THIRD state', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: () => ({ok: false, detail: 'agent exploded'}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.outcome).not.toBe('agent-stopped');
+		expect(result.message).toMatch(/exploded/);
+	});
+});
+
 describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 	it('--merge lands the work ON the arbiter main (done/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
@@ -750,6 +883,63 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 		// Half A still applies: a synthesised single-line title, never --fill.
 		expect(args).toMatch(/^--title$/m);
 		expect(args).not.toMatch(/^--fill$/m);
+	});
+
+	it('a ## Decisions block in agent.output is SURFACED for review (in the PR body) and does NOT block (Part B)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const binDir = join(scratch.root, 'gh-stub-decisions');
+		mkdirSync(binDir, {recursive: true});
+		const argsFile = join(binDir, 'gh-args.txt');
+		const gh = join(binDir, 'gh');
+		writeFileSync(
+			gh,
+			[
+				'#!/usr/bin/env bash',
+				`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+				"printf '%s\\n' 'https://github.com/o/r/pull/7'",
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(gh, 0o755);
+
+		// The agent PROCEEDS (real edit, no STOP sentinel) but records a non-obvious
+		// in-scope decision in a `## Decisions` block on its output channel.
+		const decidingAgent: DoAgentRunner = ({cwd}) => {
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
+			return {
+				ok: true,
+				output: [
+					'Implemented alpha.',
+					'',
+					'## Decisions',
+					'',
+					'- Chose to ERROR on -n × --remote (touches the do command); ',
+					'  alternative: silently auto-pick. Reversible.',
+				].join('\n'),
+			};
+		};
+
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			provider: 'github',
+			verify: PASS,
+			agentRunner: decidingAgent,
+			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
+		});
+
+		// The build PROCEEDED + completed — a recorded decision NEVER blocks.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+
+		// The decisions block is surfaced for review via the PR body (the existing
+		// agent.output → --body path), so Gate-2 + the human see it in the PR.
+		const args = readFileSync(argsFile, 'utf8');
+		expect(args).toMatch(/^--body$/m);
+		expect(args).toContain('## Decisions');
+		expect(args).toContain('ERROR on -n × --remote');
 	});
 
 	it('no agent output ⇒ no body ⇒ gh still gets the title (no regression to a run-on)', async () => {

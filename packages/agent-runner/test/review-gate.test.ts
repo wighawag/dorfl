@@ -308,6 +308,21 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 		// tests — no "ignore tests" wording.
 		expect(p).not.toMatch(/ignore tests/i);
 	});
+
+	it('HUNTS for in-scope decisions the slice did not specify, flagged for ratification (Part C)', () => {
+		const p = buildReviewPrompt('my-slice');
+		// The reviewer must look for undeclared in-scope decisions — cross-slice
+		// interactions, new errors/refusals, user-visible defaults.
+		expect(p).toMatch(/decision/i);
+		expect(p).toMatch(/cross-slice/i);
+		expect(p).toMatch(/error|refusal/i);
+		expect(p).toMatch(/default/i);
+		// It STARTS from the agent's `## Decisions` block + hunts for missed ones.
+		expect(p).toMatch(/## Decisions/);
+		expect(p).toMatch(/ratif/i);
+		// Non-blocking by DEFAULT (the build proceeds; the human ratifies/reverses).
+		expect(p).toMatch(/non-blocking/i);
+	});
 });
 
 describe('harnessReviewGate — reviewModel reaches the launch via the existing seam', () => {

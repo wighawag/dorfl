@@ -138,8 +138,29 @@ specifically what is unclear or contradicted (and where), so a human can resolve
 (the runner routes the item to needs-attention). Do not be shy about this: a
 confident build on a wrong/ambiguous premise produces wrong-but-compiling work that
 is far more expensive than a question. Building exactly what a flawed slice says is
-NOT success. A genuinely small, certain factual gap you can resolve from the code
-itself, resolve and proceed; a real ambiguity or stale premise, surface it.
+NOT success.
+
+To STOP, make NO source change and end your final report with this EXACT
+machine-readable block (the runner detects it, routes the item to
+needs-attention with your reason VERBATIM, and SKIPS the gate + review — so put
+the specific drift report INSIDE it):
+
+=== SLICE-STOP ===
+<the specific reason: which premises are false, where, and a suggested re-scope>
+=== END SLICE-STOP ===
+
+The decision bar between "resolve and proceed" and "STOP" / "record a decision":
+A genuinely small, certain, SELF-CONTAINED factual gap you can resolve from the
+code itself (it affects nothing outside this slice), resolve and proceed silently.
+But a choice that touches ANOTHER command/flag/slice, introduces a new
+ERROR/REFUSAL, or sets a USER-VISIBLE DEFAULT is a DESIGN decision, NOT a small
+factual gap — do NOT bury it in code. If it is load-bearing AND hard to reverse,
+STOP (above). Otherwise PROCEED but RECORD it: end your report with a "## Decisions"
+block, one entry per decision — what you chose + why + the alternative(s) you
+considered + what it touches (which other flag/command/slice). This does NOT stop
+the build; it makes the choice visible so the reviewer + the human can ratify or
+reverse it. The bar is "would another slice / a user / a reviewer be surprised this
+was decided here?" — if yes, record it. A real ambiguity or stale premise, STOP.
 
 Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
 move any files between work/ folders, and do not touch work/in-progress/<slug>.md.

@@ -34,9 +34,15 @@ afterEach(() => {
 const PASS = 'exit 0';
 const FAIL = 'exit 1';
 
-/** An agent that edits a file (non-empty commit) and succeeds. */
-const editingAgent: AgentRunner = ({cwd}) => {
-	writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
+/**
+ * An agent that edits a file (non-empty commit) and succeeds. The content is
+ * SLUG-SPECIFIC so two concurrently-claimed items never write byte-identical
+ * content to the SAME path (which, after the first merges, would make the
+ * second's diff vs the advanced main empty and trip the `agent-stop-signal`
+ * empty-diff backstop).
+ */
+const editingAgent: AgentRunner = ({cwd, slug}) => {
+	writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
 	return {ok: true};
 };
 
