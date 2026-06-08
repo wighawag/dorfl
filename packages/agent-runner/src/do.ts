@@ -23,6 +23,11 @@ import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
 import {git, runAsync, localMainAheadCount} from './git.js';
+import {
+	parseStopSentinel,
+	isWorkBranchDiffEmpty,
+	emptyDiffStopReason,
+} from './agent-stop.js';
 
 /**
  * `agent-runner do <slug>` (in-place form) — the per-repo, in-place WORKER that
@@ -69,6 +74,7 @@ export type DoOutcome =
 	| 'contended' // claim push kept being rejected
 	| 'needs-attention' // red gate / rebase conflict / review-block → surfaced (autonomous)
 	| 'agent-failed' // the agent invocation itself errored before the gate — work SAVED + surfaced
+	| 'agent-stopped' // the agent DELIBERATELY stopped (slice drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
 	| 'sliced' // `do prd:<slug>` — the PRD was sliced into work/backlog/ (runner-owned)
@@ -567,6 +573,33 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		});
 	}
 
+	// 5b. HONOR a deliberate STOP (slice `agent-stop-signal`). The agent exited
+	//     cleanly (`agent.ok`), but the CLAIM-PROTOCOL wrapper tells it to STOP and
+	//     report on a DRIFTED/ambiguous/stale-premise slice WITHOUT building. Detect
+	//     that BEFORE the gate via the in-band sentinel (the agent's reason is the
+	//     needs-attention reason VERBATIM); a clean STOP with no source change is the
+	//     deterministic empty-diff backstop. Either routes to needs-attention and
+	//     SKIPS the acceptance gate AND Gate-2 — a clean STOP is NOT "a build that
+	//     changed nothing".
+	const stopReason = await resolveStopReason({
+		output: agent.output,
+		slug,
+		cwd,
+		arbiter,
+		env,
+	});
+	if (stopReason !== undefined) {
+		return await saveAgentStop({
+			slug,
+			branch,
+			cwd,
+			arbiter,
+			reason: stopReason,
+			env,
+			note,
+		});
+	}
+
 	// 6. Gate + done-move + commit + rebase + integrate + branch-tidy LIKE
 	//    `complete` — but with the AUTONOMOUS needs-attention surfacing (pass
 	//    `surfaceArbiter` so a red gate / rebase conflict surfaces on the
@@ -727,6 +760,87 @@ async function saveAgentFailure(params: {
 	return {
 		exitCode: 1,
 		outcome: 'agent-failed',
+		slug,
+		branch,
+		routedToNeedsAttention: routed.moved,
+		message,
+	};
+}
+
+/**
+ * Resolve the STOP reason for a clean (`agent.ok`) run, or `undefined` when the
+ * run is a genuine build that should proceed to the gate (slice
+ * `agent-stop-signal`). TWO independent triggers, the sentinel winning:
+ *
+ *   1. The IN-BAND STOP sentinel in the agent's output ({@link parseStopSentinel})
+ *      — the principled case: the agent declared the slice drifted/ambiguous and
+ *      reported WHY. Its reason is used VERBATIM (a non-empty diff with a sentinel
+ *      is still a STOP — the agent may have left scratch; the sentinel wins).
+ *   2. The DETERMINISTIC empty-diff backstop ({@link isWorkBranchDiffEmpty}) — the
+ *      observable safety net for when the agent stopped WITHOUT (or with a
+ *      malformed) sentinel: `agent.ok` but no source change vs `<arbiter>/main` is
+ *      never a successful build.
+ *
+ * Shared by `performDo` and `runRemotePipeline` so the in-place and remote forms
+ * detect a STOP identically.
+ */
+async function resolveStopReason(params: {
+	output: string | undefined;
+	slug: string;
+	cwd: string;
+	arbiter: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<string | undefined> {
+	const {output, slug, cwd, arbiter, env} = params;
+	const sentinel = parseStopSentinel(output);
+	if (sentinel !== undefined) {
+		return sentinel.reason;
+	}
+	if (await isWorkBranchDiffEmpty({cwd, arbiter, env})) {
+		return emptyDiffStopReason(slug);
+	}
+	return undefined;
+}
+
+/**
+ * Route a DELIBERATE agent STOP (slice `agent-stop-signal`) to needs-attention
+ * through the SAME work-preserving seam `saveAgentFailure` uses (save the branch,
+ * surface on the arbiter) — but as the DISTINCT `agent-stopped` outcome, NOT
+ * `agent-failed` (the agent did not error) nor `needs-attention` (no red gate /
+ * rebase conflict). The agent's STOP reason is recorded VERBATIM as the
+ * needs-attention reason. The acceptance gate AND Gate-2 are NEVER reached.
+ */
+async function saveAgentStop(params: {
+	slug: string;
+	branch: string | undefined;
+	cwd: string;
+	arbiter: string;
+	reason: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<DoResult> {
+	const {slug, cwd, arbiter, reason, env, note} = params;
+	const branch = params.branch ?? `work/${slug}`;
+
+	const routed = ledgerWrite.applyNeedsAttentionTransition({
+		cwd,
+		slug,
+		reason,
+		arbiter,
+		env,
+		note,
+	});
+
+	const message = routed.moved
+		? `The agent STOPPED building '${slug}' (the slice drifted / is ambiguous / ` +
+			`produced no change); routed it to work/needs-attention/ (surfaced on ` +
+			`${arbiter}/main) WITHOUT running the gate or Gate-2 review. Reason: ${reason}`
+		: `The agent STOPPED building '${slug}' but it could not be routed to ` +
+			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}). Reason: ${reason}`;
+	note(message);
+	return {
+		exitCode: 1,
+		outcome: 'agent-stopped',
 		slug,
 		branch,
 		routedToNeedsAttention: routed.moved,
@@ -1151,6 +1265,30 @@ async function runRemotePipeline(
 			arbiterRemote,
 			displayArbiter,
 			detail,
+			env,
+			note,
+		});
+	}
+
+	// 6b. HONOR a deliberate STOP (slice `agent-stop-signal`) — the SAME detection
+	//     in-place `do` runs, shared via `resolveStopReason`/`saveAgentStop`. A
+	//     sentinel STOP (verbatim reason) or an empty work-branch diff routes to
+	//     needs-attention (surfaced on the arbiter) and SKIPS the gate + Gate-2. The
+	//     diff base is the worktree's `origin` (arbiterRemote).
+	const stopReason = await resolveStopReason({
+		output: agent.output,
+		slug,
+		cwd,
+		arbiter: arbiterRemote,
+		env,
+	});
+	if (stopReason !== undefined) {
+		return await saveAgentStop({
+			slug,
+			branch,
+			cwd,
+			arbiter: arbiterRemote,
+			reason: stopReason,
 			env,
 			note,
 		});

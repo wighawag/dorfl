@@ -142,6 +142,27 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 			'prompt handed to the work agent',
 		);
 	});
+
+	it('the assembled wrapper carries the machine-readable STOP sentinel form (Part A)', () => {
+		const emitted = wrapper('example', 'my-prd');
+		// The runner detects this EXACT block; it must be in-band in the prompt.
+		expect(emitted).toContain('=== SLICE-STOP ===');
+		expect(emitted).toContain('=== END SLICE-STOP ===');
+		// The reason goes INSIDE the block (it becomes the needs-attention reason).
+		expect(emitted).toMatch(/reason.*INSIDE it|INSIDE it/i);
+	});
+
+	it('the assembled wrapper carries the ## Decisions block + reframed decision bar (Part B)', () => {
+		const emitted = wrapper('example', 'my-prd');
+		expect(emitted).toContain('## Decisions');
+		// The reframed bar: a choice touching another command/flag/slice or a
+		// user-visible default is a DESIGN decision, not a small factual gap.
+		expect(emitted).toMatch(/DESIGN decision/);
+		expect(emitted).toMatch(/command\/flag\/slice/);
+		expect(emitted).toMatch(/USER-VISIBLE DEFAULT|user-visible default/i);
+		// It must NOT block the build (record, proceed).
+		expect(emitted).toMatch(/does NOT stop\s+the build/i);
+	});
 });
 
 describe('buildAgentPrompt', () => {

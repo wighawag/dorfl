@@ -227,6 +227,55 @@ describe('do --remote — auto-registers an unknown remote', () => {
 	});
 });
 
+describe('do --remote — a deliberate STOP routes to needs-attention (shared runRemotePipeline)', () => {
+	it('a sentinel STOP → agent-stopped, surfaced on the arbiter, NO gate', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		const result = await performDoRemote({
+			arg: 'alpha',
+			remote: remoteUrl(arbiter),
+			workspacesDir: ws,
+			integration: 'merge',
+			// A gate that would EXPLODE if run — proves it is SKIPPED on a STOP.
+			verify: 'echo GATE-RAN >&2; exit 1',
+			agentRunner: () => ({
+				ok: true,
+				output: [
+					'=== SLICE-STOP ===',
+					'drifted: this slice depends on a flag that was removed.',
+					'=== END SLICE-STOP ===',
+				].join('\n'),
+			}),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('agent-stopped');
+		expect(result.routedToNeedsAttention).toBe(true);
+		expect(result.message).toMatch(/a flag that was removed/);
+		// Surfaced on the arbiter main; never reached done.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+	});
+
+	it('the empty-diff backstop fires in the remote worktree too', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		const result = await performDoRemote({
+			arg: 'alpha',
+			remote: remoteUrl(arbiter),
+			workspacesDir: ws,
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: () => ({ok: true, output: 'changed nothing'}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-stopped');
+		expect(result.message).toMatch(/no source change|empty diff|no-op/i);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+	});
+});
+
 describe('do --remote — slug resolution parity with do-in-place', () => {
 	it('a prd: arg dispatches to the slicing path, gate-bound for the agent (no worktree)', async () => {
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
