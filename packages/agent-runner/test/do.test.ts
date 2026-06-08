@@ -776,6 +776,179 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 	});
 });
 
+describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceStrategy', () => {
+	// These pin the equivalence the `do-run-share-isolation-seam` slice requires:
+	// in-place `do` now onboards through `selectIsolationStrategy({checkout})` →
+	// `inPlaceStrategy.prepare()` (the §14 continue + §10 conflict path) instead of
+	// composing `performStart`'s onboarding on a literal `cwd`.
+
+	it('CONTINUES a requeued kept work/<slug> in-place: the agent sees the prior work + the run completes', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const repo = seeded.repo;
+
+		// First attempt: the agent edits a file, the gate is RED → `do` saves the
+		// partial work + pushes `work/alpha` to the arbiter (the durable artifact a
+		// requeue continues from).
+		const first = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: FAIL,
+			agentRunner: ({cwd}) => {
+				writeFileSync(join(cwd, 'prior.txt'), 'prior attempt work\n');
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(first.outcome).toBe('needs-attention');
+
+		// A human resolves the cause + requeues (keep + continue): the ledger file
+		// moves needs-attention → backlog; the pushed work branch stays on the arbiter.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		const requeued = returnToBacklog({
+			cwd: repo,
+			slug: 'alpha',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(requeued.moved).toBe(true);
+
+		// Second attempt IN-PLACE: `inPlaceStrategy.prepare()` must CONTINUE from the
+		// kept branch (not cut fresh off main), so the agent runs ON the prior work.
+		let sawPriorWork = false;
+		const second = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: ({cwd}) => {
+				sawPriorWork = existsSync(join(cwd, 'prior.txt'));
+				writeFileSync(join(cwd, 'agent-output.txt'), 'finished\n');
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(second.outcome).toBe('completed');
+		// The continue worked: the agent saw the prior attempt's file (onboarded onto
+		// the kept branch, the seam's §14 continue path).
+		expect(sawPriorWork).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
+	});
+
+	it('a CONTINUE rebase CONFLICT onboarding in-place routes to needs-attention WITHOUT running the agent (§10)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const repo = seeded.repo;
+
+		// First attempt edits a SHARED file then the gate fails → the kept work/alpha
+		// (with that edit) is pushed to the arbiter.
+		const first = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: FAIL,
+			agentRunner: ({cwd}) => {
+				writeFileSync(join(cwd, 'shared.txt'), 'agent version\n');
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(first.outcome).toBe('needs-attention');
+
+		// Requeue (keep + continue).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		const requeued = returnToBacklog({
+			cwd: repo,
+			slug: 'alpha',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(requeued.moved).toBe(true);
+
+		// Meanwhile main advances with a CONFLICTING edit to the same file (from a
+		// separate clone), so the kept branch cannot replay onto the new main.
+		const mover = seeded.clone('mover');
+		gitIn(['fetch', '-q', ARBITER], mover);
+		gitIn(['switch', '-q', '-C', 'mv-main', `${ARBITER}/main`], mover);
+		writeFileSync(join(mover, 'shared.txt'), 'main version (conflicting)\n');
+		gitIn(['add', '-A'], mover);
+		gitIn(['commit', '-q', '-m', 'conflicting main edit'], mover);
+		gitIn(['push', '-q', ARBITER, 'mv-main:main'], mover);
+
+		// Second attempt IN-PLACE: the onboard-time continue rebase conflicts → the
+		// seam sets continueRebaseConflict → the driver routes to needs-attention and
+		// NEVER runs the agent (the §10 path), surfaced on the arbiter.
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		let agentRan = false;
+		const second = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: () => {
+				agentRan = true;
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(second.exitCode).toBe(1);
+		expect(second.outcome).toBe('needs-attention');
+		expect(second.message).toMatch(/conflict/i);
+		// The agent NEVER ran (the §10 continue-conflict returns before the agent),
+		// and the run did NOT complete — byte-parity with `run`'s onboard-conflict.
+		expect(agentRan).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+		// The durable artifact — the kept work/alpha branch — is still on the arbiter
+		// (the rebase was aborted; recovery flows through the branch + the surface the
+		// prior bounce already published).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				repo,
+			).trim(),
+		).not.toBe('');
+	});
+
+	it('an already-in-progress (claimed) item is skipped as LOST in-place (claim-or-lose, like do --remote/run)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
+		const repo = seeded.repo;
+		// Another doer claims first from a separate clone.
+		const other = seeded.clone('other');
+		const won = await performClaim({
+			slug: 'solo',
+			cwd: other,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(won.exitCode).toBe(0);
+
+		let agentRan = false;
+		const result = await performDo({
+			arg: 'slice:solo', // explicit (no backlog existence check), reaches the claim
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: () => {
+				agentRan = true;
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		// The claim-first composition reports the in-progress item as LOST (exit 2),
+		// runs no agent, creates no work branch — `do` never re-claims someone's item.
+		expect(result.exitCode).toBe(2);
+		expect(result.outcome).toBe('lost');
+		expect(agentRan).toBe(false);
+		expect(currentBranch(repo)).toBe('main');
+	});
+});
+
 describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 	it('--merge lands the work ON the arbiter main (done/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
