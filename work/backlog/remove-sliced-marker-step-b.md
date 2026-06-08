@@ -21,6 +21,19 @@ mirroring the `allowAgents→autoBuild` / `reviewPr→review` clean-rename prece
   fallback; after Step A they read the FOLDER, so the marker code is dead).
 - Strip the `sliced:` marker from existing PRD files that still carry it (e.g. the
   backfilled ones in `prd-sliced/`) so the field is gone repo-wide.
+> FORWARD-POINTER (planted by the conductor after Step A landed, 2026-06-08):
+> Step A flipped the readers to `prd-sliced/` residence but left TWO stale
+> implementation doc-comments that still describe sliced-ness as "the `sliced:`
+> marker" — `src/slicing-eligibility.ts` (the `slicedSlugs` doc: "resolved against
+> the `sliced:` marker, NOT `work/done/`" + the `slicedSlugs` field comment "their
+> `sliced:` marker is set") and `src/select-priority.ts` (the `slicedSlugs` field
+> comment "whose PRD already carries a `sliced:` marker (resolves `sliceAfter`)").
+> Both files are runtime-correct (they consume the now-folder-derived `Set`); only
+> the comments are stale. Step B's "no lingering `sliced:` marker references in any
+> in-repo doc" sweep MUST include these two `src/` comments (re-word to
+> "`prd-sliced/` residence"). Source nit:
+> `work/observations/review-nits-prd-sliced-folder-step-a-2026-06-08.md` (#3).
+
 - Update WORK-CONTRACT.md / `CONTEXT.md` / skills / ADRs that still DOCUMENT
   `sliced:` to describe `prd-sliced/`-residence as the sole sliced-ness signal
   (Step A pointed the glossary at the folder while keeping the marker as a derived
