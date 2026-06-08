@@ -194,7 +194,7 @@ export interface PerformSliceOptions {
 	/**
 	 * The model the slice-SET acceptance-gate reviewer runs on (the BUILD
 	 * `--review-model`, de-correlated from the slicer). DISTINCT from the improver
-	 * loop's {@link reviewModel} — see the note there.
+	 * loop's {@link slicerLoopModel} — see the note there.
 	 */
 	acceptanceReviewModel?: string;
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
@@ -214,19 +214,24 @@ export interface PerformSliceOptions {
 	 */
 	reviewLoop?: SliceReviewGate;
 	/**
-	 * The HARD CAP on the slicer edit loop's in-context review passes (N) — resolved
-	 * per-repo (flag > env > per-repo > global > cheap default). Only consulted when
-	 * {@link reviewLoop} is set. Defaults to 3 (the cheap default) when omitted.
+	 * The HARD CAP on the slicer improver loop's in-context review passes (N) —
+	 * resolved per-repo (flag `--slicer-loop-max` > env > per-repo > global > cheap
+	 * default). Only consulted when {@link reviewLoop} is set. Defaults to 3 (the
+	 * cheap default) when omitted.
 	 */
-	maxReview?: number;
+	slicerLoopMax?: number;
 	/**
 	 * How many fresh-context EXECUTIONS (M) of the loop to run — each a NEW launch in
 	 * a fresh context. Default 1 (the cheap degenerate case). Only consulted when
 	 * {@link reviewLoop} is set.
 	 */
 	reviewExecutions?: number;
-	/** The model the review agent runs on (de-correlated from the slicer). Loop only. */
-	reviewModel?: string;
+	/**
+	 * The model the IMPROVER loop's review agent runs on (de-correlated from the
+	 * slicer; the `--slicer-loop-model` family). Loop only. DISTINCT from the
+	 * acceptance gate's {@link acceptanceReviewModel} (build `--review-model`).
+	 */
+	slicerLoopModel?: string;
 	/** Environment for child git/agent processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -361,9 +366,9 @@ export async function performSlice(
 			// slices THIS run produced (new-or-changed vs `before`), never the
 			// pre-existing landed slices that share work/backlog/.
 			before,
-			maxReview: options.maxReview ?? 3,
+			maxReview: options.slicerLoopMax ?? 3,
 			executions: options.reviewExecutions,
-			reviewModel: options.reviewModel,
+			slicerLoopModel: options.slicerLoopModel,
 			sessionsDir: options.sessionsDir,
 			env,
 			note,

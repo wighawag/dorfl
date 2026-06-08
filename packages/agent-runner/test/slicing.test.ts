@@ -605,7 +605,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 				// Pass 2: converged.
 				{verdict: 'approve', findings: []},
 			]),
-			maxReview: 3,
+			slicerLoopMax: 3,
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -622,7 +622,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
 	});
 
-	it('a persistent block hits maxReview → emits the uncertain slice needsAnswers + questions', async () => {
+	it('a persistent block hits slicerLoopMax → emits the uncertain slice needsAnswers + questions', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const result = await performSlice({
@@ -644,7 +644,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 					],
 				},
 			]),
-			maxReview: 2,
+			slicerLoopMax: 2,
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -674,7 +674,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 					},
 				},
 			]),
-			maxReview: 2,
+			slicerLoopMax: 2,
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('needs-attention');
@@ -714,13 +714,13 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			autoSlice: true,
 			agentRunner: slicingAgent('child'),
 			reviewLoop: gate,
-			maxReview: 2,
+			slicerLoopMax: 2,
 			reviewExecutions: 3,
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
 		expect(result.loop).toBe('converged');
-		// Execution 1 ran twice (maxReview), execution 2 once (converged), 3 never.
+		// Execution 1 ran twice (slicerLoopMax), execution 2 once (converged), 3 never.
 		expect(executions).toEqual([1, 1, 2]);
 	});
 
@@ -738,7 +738,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 				loopRan = true;
 				return {verdict: 'approve', findings: []};
 			},
-			maxReview: 3,
+			slicerLoopMax: 3,
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -809,7 +809,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: gate,
-			maxReview: 1,
+			slicerLoopMax: 1,
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');

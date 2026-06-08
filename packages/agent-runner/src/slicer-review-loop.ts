@@ -124,10 +124,12 @@ export interface SliceReviewGateInput {
 	/** Which fresh-context EXECUTION this is (1-based) — the M. */
 	execution: number;
 	/**
-	 * The model the REVIEW agent runs on (de-correlated from the slicer). `undefined`
-	 * ⇒ no forced model. Flows through `LaunchInput.model` / `substituteModel`.
+	 * The model the IMPROVER-loop REVIEW agent runs on (de-correlated from the
+	 * slicer; the `--slicer-loop-model` family). `undefined` ⇒ no forced model.
+	 * Flows through `LaunchInput.model` / `substituteModel`. DISTINCT from the
+	 * acceptance gate's `reviewModel`.
 	 */
-	reviewModel?: string;
+	slicerLoopModel?: string;
 	/** The HOST-ONLY sessions root the review session FILE is generated under. */
 	sessionsDir?: string;
 	/** Environment for the review-agent launch. */
@@ -217,8 +219,8 @@ export interface RunSliceReviewLoopOptions {
 	 * execution's blocking verdict is routed.
 	 */
 	executions?: number;
-	/** The model the review agent runs on (de-correlation). */
-	reviewModel?: string;
+	/** The model the improver-loop review agent runs on (de-correlation; `--slicer-loop-model`). */
+	slicerLoopModel?: string;
 	/** The HOST-ONLY sessions root for the review session file. */
 	sessionsDir?: string;
 	/** Environment for child processes. */
@@ -270,7 +272,7 @@ export async function runSliceReviewLoop(
 			maxReview,
 			execution: m,
 			before,
-			reviewModel: options.reviewModel,
+			slicerLoopModel: options.slicerLoopModel,
 			sessionsDir: options.sessionsDir,
 			env: options.env,
 			note,
@@ -387,7 +389,7 @@ async function runOneExecution(params: {
 	maxReview: number;
 	execution: number;
 	before: Map<string, string>;
-	reviewModel?: string;
+	slicerLoopModel?: string;
 	sessionsDir?: string;
 	env?: NodeJS.ProcessEnv;
 	note: (message: string) => void;
@@ -406,7 +408,7 @@ async function runOneExecution(params: {
 			candidateSlices,
 			pass,
 			execution,
-			reviewModel: params.reviewModel,
+			slicerLoopModel: params.slicerLoopModel,
 			sessionsDir: params.sessionsDir,
 			env: params.env,
 		});
@@ -592,7 +594,7 @@ export function harnessSliceReviewGate(
 			slug: input.slug,
 			command: options.agentCmd ?? '',
 			prompt: buildSliceReviewPrompt(input),
-			model: input.reviewModel,
+			model: input.slicerLoopModel,
 			// A DISTINCT session id per pass + fresh context so launches never collide.
 			sessionId: `slice-review-${input.slug}-m${input.execution}-n${input.pass}`,
 			sessionsDir: input.sessionsDir,

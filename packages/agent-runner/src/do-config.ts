@@ -60,7 +60,7 @@ export function harnessFlagOverrides(flags: HarnessFlags): PartialConfig {
  * default).
  */
 export function doFlagOverrides(
-	flags: HarnessFlags & ReviewFlags,
+	flags: HarnessFlags & ReviewFlags & SlicerLoopFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
 	const overrides = {
@@ -69,6 +69,10 @@ export function doFlagOverrides(
 		// `--review`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
 		// flag > env > per-repo > global > default, exactly like the harness flags.
 		...reviewFlagOverrides(flags),
+		// The slicer IMPROVER-loop family (`--slicer-loop`/`--no-slicer-loop`/
+		// `--slicer-loop-max`/`--slicer-loop-model`) rides the same chain — a DISTINCT
+		// family from the gate's `--review*`, never sharing a flag/key/field name.
+		...slicerLoopFlagOverrides(flags),
 	};
 	if (integration !== undefined) {
 		overrides.integration = integration;
@@ -92,13 +96,23 @@ export interface ReviewFlags {
 	reviewModel?: string;
 	/** `--review-max-rounds <n>` — the revise↔review loop bound (parsed to a number). */
 	reviewMaxRounds?: string;
-	/**
-	 * `--max-review <n>` — the SLICER review→edit→converge loop's hard cap on
-	 * in-context review passes (`slicer-review-edit-loop`), parsed to a number. The
-	 * loop's ceiling (flag > env > per-repo > global > default), DISTINCT from the
-	 * Gate-2 `--review-max-rounds` (which lives on the gate, separate cleanup).
-	 */
-	maxReview?: string;
+}
+
+/**
+ * The slicer IMPROVER-loop CLI flags (`do` only): `--slicer-loop` /
+ * `--no-slicer-loop` (the on/off toggle), `--slicer-loop-max <n>` (the in-context
+ * convergence cap), and `--slicer-loop-model <id>` (the loop reviewer's
+ * de-correlated model). A DISTINCT family from the acceptance gate's `--review*`
+ * (see {@link ReviewFlags}) — no flag/key/field name spans both. Resolved through
+ * the SAME `flag > env > per-repo > global > default` chain.
+ */
+export interface SlicerLoopFlags {
+	/** `--slicer-loop` ⇒ true, `--no-slicer-loop` ⇒ false, absent ⇒ undefined. */
+	slicerLoop?: boolean;
+	/** `--slicer-loop-max <n>` — the loop's in-context convergence cap (parsed to a number). */
+	slicerLoopMax?: string;
+	/** `--slicer-loop-model <id>` — the loop reviewer's de-correlated model (routing intent). */
+	slicerLoopModel?: string;
 }
 
 /**
@@ -125,11 +139,29 @@ export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
 			overrides.reviewMaxRounds = n;
 		}
 	}
-	if (flags.maxReview !== undefined) {
-		const n = Number(flags.maxReview);
-		if (flags.maxReview.trim() !== '' && !Number.isNaN(n)) {
-			overrides.maxReview = n;
+	return overrides;
+}
+
+/**
+ * Map the slicer IMPROVER-loop flags into a {@link PartialConfig} of overrides.
+ * Only flags actually present contribute (absent flag ⇒ absent key), so the
+ * override layer never clobbers a lower-precedence source with `undefined`.
+ * `--slicer-loop-max` is parsed to a number; a non-numeric value is dropped (the
+ * lower layer / default decides). A DISTINCT family from {@link reviewFlagOverrides}.
+ */
+export function slicerLoopFlagOverrides(flags: SlicerLoopFlags): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.slicerLoop !== undefined) {
+		overrides.slicerLoop = flags.slicerLoop;
+	}
+	if (flags.slicerLoopMax !== undefined) {
+		const n = Number(flags.slicerLoopMax);
+		if (flags.slicerLoopMax.trim() !== '' && !Number.isNaN(n)) {
+			overrides.slicerLoopMax = n;
 		}
+	}
+	if (flags.slicerLoopModel !== undefined) {
+		overrides.slicerLoopModel = flags.slicerLoopModel;
 	}
 	return overrides;
 }
