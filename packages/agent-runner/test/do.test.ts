@@ -838,6 +838,59 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
 	});
 
+	it('a CONTINUE-FROM-TIP whose prior work is already committed + green and adds NOTHING this session is NOT a no-op (reaches the gate + PR, slice noop-backstop-counts-branch-commits)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const repo = seeded.repo;
+
+		// First attempt: the agent produces real source work, but the gate is RED →
+		// `do` saves the partial work + pushes `work/alpha` to the arbiter (a chain of
+		// COMMITTED commits ahead of main — the durable artifact a requeue continues).
+		const first = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: FAIL,
+			agentRunner: ({cwd}) => {
+				writeFileSync(join(cwd, 'feature.ts'), 'export const x = 1;\n');
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(first.outcome).toBe('needs-attention');
+
+		// Requeue (keep + continue): the ledger moves needs-attention → backlog; the
+		// pushed work branch (with the committed feature) stays on the arbiter.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		const requeued = returnToBacklog({
+			cwd: repo,
+			slug: 'alpha',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(requeued.moved).toBe(true);
+
+		// Second attempt: the cause is already fixed on the kept branch, so the agent
+		// correctly adds NOTHING this session (clean working tree). BEFORE this slice
+		// the working-tree-only backstop read that as a no-op and routed to
+		// needs-attention BEFORE the gate; now the prior SOURCE commit ahead of
+		// `<arbiter>/main` keeps it out of "no-op" so it flows to the gate + completes.
+		const second = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: () => ({ok: true, output: 'prior work already complete\n'}),
+			env: gitEnv(),
+		});
+		expect(second.outcome).toBe('completed');
+		expect(second.outcome).not.toBe('agent-stopped');
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
+	});
+
 	it('a CONTINUE rebase CONFLICT onboarding in-place routes to needs-attention WITHOUT running the agent (§10)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const repo = seeded.repo;

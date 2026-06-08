@@ -144,35 +144,48 @@ export function extractDecisionsBlock(
  * paying for the gate + Gate-2, even when the agent stopped without (or with a
  * malformed) sentinel.
  *
- * The check is ISOLATION-AGNOSTIC and needs NO remote ref. At this point in the
- * pipeline (after the agent returns, BEFORE the gate / done-move) the runner has
- * committed nothing of the agent's work — the work branch HEAD is still the CLAIM
- * commit, so the agent's output sits ENTIRELY in the WORKING TREE (tracked
- * modifications OR brand-new untracked files; the agent does no git). So "empty"
- * is simply: the working tree carries no change outside the `work/` ledger.
+ * The check has TWO independent signals; the build is empty IFF BOTH say "no
+ * source change":
  *
- *   - tracked modifications: `git status --porcelain` reports any modified/added/
- *     deleted TRACKED path;
- *   - untracked files: `--porcelain` also lists `??` untracked paths (a new source
- *     file the agent created), which a `git diff` against a commit would MISS.
+ *   1. **The WORKING TREE** (the primary signal, the common FRESH-build path). At
+ *      this point in the pipeline (after the agent returns, BEFORE the gate /
+ *      done-move) the runner has committed nothing of the agent's work — for a
+ *      FRESH build the work branch HEAD is still the CLAIM commit, so the agent's
+ *      output sits ENTIRELY in the WORKING TREE (tracked modifications OR
+ *      brand-new untracked files; the agent does no git):
+ *        - tracked modifications: `git status --porcelain` reports any modified/
+ *          added/deleted TRACKED path;
+ *        - untracked files: `--porcelain` also lists `??` untracked paths (a new
+ *          source file the agent created), which a `git diff` would MISS.
  *
- * TWO things are filtered out of the porcelain so they do not read as a build:
- * the `work/` ledger (the runner's own claim move, the ONLY thing in the tree on
- * a clean STOP) and the runner's own `.agent-runner-job.json` record (a
- * job-worktree leaves one — the SAME line `gc`'s `isWorktreeClean` filters). The
- * build is empty IFF nothing else remains. Best-effort: a plumbing failure is
- * treated as NON-empty (the safe direction — never short-circuit a genuine build
- * by mistake).
+ *   2. **SOURCE COMMITS on the branch ahead of `<arbiter>/main`** (the additional
+ *      condition that honours a `requeue` CONTINUE-FROM-TIP). The working-tree-only
+ *      assumption — "HEAD is still the claim commit" — is FALSE for a `requeue`
+ *      keep+continue: the kept `work/<slug>` branch's prior work is a chain of
+ *      COMMITTED commits ahead of main, with a legitimately CLEAN working tree.
+ *      Such a continue is NOT a no-op, so we ALSO ask: does any commit in
+ *      `git rev-list <arbiter>/main..HEAD` touch a NON-`work/` path? If so the
+ *      branch carries real source work and the build is NOT empty, even though the
+ *      current session's working tree is clean.
  *
- * (`arbiter` is accepted for call-site symmetry with the STOP-sentinel caller and
- * possible future strategies; the worktree-status check does not use it.)
+ * TWO things are filtered out of BOTH signals so they do not read as a build: the
+ * `work/` ledger (the runner's own claim move, the ONLY thing in the tree — and
+ * the ONLY thing the claim commit touches — on a clean STOP) and the runner's own
+ * `.agent-runner-job.json` record (a job-worktree leaves one — the SAME line
+ * `gc`'s `isWorktreeClean` filters). The build is empty IFF nothing else remains
+ * in EITHER signal. Best-effort: a plumbing failure in EITHER check is treated as
+ * NON-empty (the safe direction — never short-circuit a genuine build by mistake).
+ *
+ * `arbiter` (already threaded for call-site symmetry) is used by signal 2 to
+ * resolve `<arbiter>/main`; we fetch it first (mirroring the integration band) so
+ * the remote-tracking ref exists / is current even in a bare-mirror job worktree.
  */
 export async function isWorkBranchDiffEmpty(params: {
 	cwd: string;
 	arbiter: string;
 	env?: NodeJS.ProcessEnv;
 }): Promise<boolean> {
-	const {cwd, env} = params;
+	const {cwd, arbiter, env} = params;
 	const status = await runAsync(
 		'git',
 		['status', '--porcelain', '--', '.', ':(exclude)work'],
@@ -190,7 +203,73 @@ export async function isWorkBranchDiffEmpty(params: {
 		.map((line) => line.trimEnd())
 		.filter((line) => line !== '')
 		.filter((line) => line.slice(3).trim() !== JOB_RECORD_FILENAME);
-	return remaining.length === 0;
+	if (remaining.length > 0) {
+		return false; // the working tree carries source change ⇒ a real build.
+	}
+	// Working tree is clean. It is STILL a real build if the branch carries source
+	// COMMITS ahead of `<arbiter>/main` (a `requeue` continue-from-tip). Only when
+	// there are none is this a genuine no-op.
+	return !(await hasSourceCommitsAhead({cwd, arbiter, env}));
+}
+
+/**
+ * Does the work branch have at least one commit in `<arbiter>/main..HEAD` that
+ * touches a NON-`work/`, non-job-record path? Fetches `<arbiter>/main` first
+ * (mirroring the integration band) so the ref resolves even in a bare-mirror job
+ * worktree. Best-effort / SAFE direction: any plumbing failure (the fetch, the
+ * rev-list, an unresolvable ref) reads as TRUE ("has source") — the same
+ * never-short-circuit-a-genuine-build stance the working-tree check takes, so an
+ * unknown can never collapse a real continue-from-tip into a no-op.
+ */
+async function hasSourceCommitsAhead(params: {
+	cwd: string;
+	arbiter: string;
+	env?: NodeJS.ProcessEnv;
+}): Promise<boolean> {
+	const {cwd, arbiter, env} = params;
+	// Refresh `<arbiter>/main` so the range resolves (a bare-mirror job worktree
+	// has no fetch refspec; a regular clone gets the same harmless explicit ref).
+	const fetched = await runAsync(
+		'git',
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/main:refs/remotes/${arbiter}/main`,
+		],
+		cwd,
+		{env},
+	);
+	if (fetched.status !== 0) {
+		return true; // could not refresh the ref ⇒ NON-empty (safe direction).
+	}
+	// Count the commits in `<arbiter>/main..HEAD` that touch a path OTHER than the
+	// `work/` ledger and the runner's own job record — the SAME two exclusions the
+	// working-tree check applies, expressed as pathspecs so `--count` only counts
+	// commits with genuine source change. A claim-commit-only branch (claim touches
+	// `work/` only) counts 0; a continue-from-tip with prior source commits counts >0.
+	const revList = await runAsync(
+		'git',
+		[
+			'rev-list',
+			'--count',
+			`${arbiter}/main..HEAD`,
+			'--',
+			'.',
+			':(exclude)work',
+			`:(exclude)${JOB_RECORD_FILENAME}`,
+		],
+		cwd,
+		{env},
+	);
+	if (revList.status !== 0) {
+		return true; // could not compute the range ⇒ NON-empty (safe direction).
+	}
+	const count = Number.parseInt(revList.stdout.trim(), 10);
+	if (!Number.isFinite(count)) {
+		return true; // unparseable ⇒ NON-empty (safe direction).
+	}
+	return count > 0;
 }
 
 /** The needs-attention reason for the deterministic empty-diff backstop. */
