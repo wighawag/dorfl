@@ -1,6 +1,6 @@
 ---
 name: drive-backlog
-description: "Drive a whole work/ backlog of ready SLICES to exhaustion as a CONDUCTOR over the agent-runner worker: analyse the slice set + its dependency graph, CHECK each ready slice is still up-to-date (not drifted/stale), add forward-looking notes a soon-to-be-sliced PRD will need, pick the slices AND a practical order, then for each ready slice build it (`agent-runner do … --review --propose`), review the review (and review the diff yourself = Gate-3), merge, and continue until no ready slice can advance — never forcing a blocked one. Runs in two POSTURES sharing one loop: INTERACTIVE (default, main session — voice the batch of accumulated blockers/questions when the loop stalls, then continue from the answers) and AUTONOMOUS (sub-agent-safe — never ask; terminate when nothing can advance and RETURN the accumulated questions + report to the caller). Use when asked to 'drive/work through the backlog', 'implement every ready slice', 'build the ready slices in a loop'. This is the SUPERVISED conductor (distinct from `run`, the unattended parallel daemon). Composes `review` (Gate-3) and `to-slices` (forward-notes). NEVER force-merges a red/blocked slice. The higher-level survey-everything-and-fill-gaps conductor is `orchestrate` (Skill B), which CALLS this one to build."
+description: "Drive a whole work/ backlog of ready SLICES to exhaustion as a CONDUCTOR over the agent-runner worker: analyse the slice set + its dependency graph, CHECK each ready slice is still up-to-date (not drifted/stale), add forward-looking notes a soon-to-be-sliced PRD will need, pick the slices AND a practical order, then for each ready slice build it (`agent-runner do … --review --propose`), review the diff yourself against the slice's criteria, merge, and continue until no ready slice can advance — accumulating anything stuck/uncertain into a stuck-set rather than stalling, and never forcing a blocked one. When the loop stalls: if a human is present, ask the batched stuck-set and continue from the answers; otherwise report the stuck-set and stop. Use when asked to 'drive/work through the backlog', 'implement every ready slice', 'build the ready slices in a loop'. This is the SUPERVISED conductor (distinct from `run`, the unattended parallel daemon). Composes `review` and `to-slices` (forward-notes). NEVER force-merges a red/blocked slice. The higher-level survey-everything-and-fill-gaps conductor is `orchestrate`, which delegates the building to this skill. REQUIRES the `agent-runner` CLI + the work/ contract."
 ---
 
 # drive-backlog
@@ -13,63 +13,49 @@ backlog, checks each ready slice is still *fresh*, decides *what* to build and i
 each PR before merging it.
 
 It is a **methodology skill** (prose you follow), like `to-slices` / `review` —
-NOT a runner command. It composes:
+NOT a runner command. **Precondition:** it drives the **`agent-runner` CLI** over a
+repo using the **`work/` contract** — if neither is present, this skill does not
+apply. (It is the ONE skill that leans on the runner CLI directly; that is its job.
+The other skills stay protocol-native.) It composes:
 
-- **`agent-runner do … --review --propose`** — the per-slice worker (build + gate + Gate-2). The harness, model, and acceptance gate come from agent-runner CONFIG (per-repo / global) — do not hardcode them here; pass only the flags a given run needs.
-- **`review`** (`skills/review/`) — your own Gate-3 pass over each opened PR.
+- **`agent-runner do … --review --propose`** — the per-slice worker (build + acceptance gate + the PR/code-review gate). The harness, model, and acceptance gate come from agent-runner CONFIG (per-repo / global) — do not hardcode them here; pass only the flags a given run needs.
+- **`review`** (`skills/review/`) — the discipline for your own diff-vs-criteria pass over each opened PR.
 - **`to-slices`** (`skills/to-slices/`) — for the forward-note step and any re-slice the human asks for.
 
 It is **scoped to building ready SLICES.** The broader job — survey *everything*
 (observations, ideas, PRDs, slices), figure out what can advance, fill judgement
 gaps conversationally until new slices are READY, then build them — is `orchestrate`
-(Skill B). `orchestrate` CALLS `drive-backlog` (often as a sub-agent, autonomous
-posture) to do the building. Keep this skill focused; hand the deep survey up to B.
+(`orchestrate`). `orchestrate` delegates the BUILDING to `drive-backlog`. Keep this
+skill focused on building ready slices; hand the deep survey up to `orchestrate`.
 
-## The two postures (one loop, different VOICING of the stuck-set)
+## How it stalls (the stuck-set)
 
-Both postures run the IDENTICAL loop and the IDENTICAL
-[accumulate-don't-block rule](#the-accumulate-dont-block-rule): advance every slice
-you can, write down what's stuck/uncertain, keep going. They differ ONLY in what
-happens when nothing more can advance:
+There is ONE loop. The skill **advances every slice it can** and, whenever it hits a
+wall on a particular slice, it does NOT halt — it records that slice + its specific
+question in a **stuck-set** and moves to the next independent ready slice (the
+[accumulate-don't-block rule](#the-accumulate-dont-block-rule)). Only when nothing
+more can advance does it deal with the stuck-set, and HERE is the only behavioural
+fork — it depends purely on whether a human is reachable in this session:
 
-- **INTERACTIVE** (default — running in the main session, the human is here): when
-  the loop stalls, **present the accumulated batch of questions** (regrouped — see
-  [batching](#batching-the-questions)), take the human's answers, and **continue the
-  loop from there**. This is the mode used live this session.
-- **AUTONOMOUS** (sub-agent-safe — no human to ask): **never pause to ask.** Advance
-  everything possible, then **terminate when nothing is left** and **RETURN the
-  accumulated questions + the full report** to the caller. A sub-agent cannot ask you
-  live; it surfaces questions by *returning them as data*, and its in-session parent
-  (`orchestrate`) voices them to you. This is how `orchestrate` delegates the heavy
-  building yet still gets the questions in front of you.
+- **A human is present** (the normal case — you are running in their session): present
+  the accumulated stuck-set as one [batched set of questions](#batching-the-questions),
+  take the answers, and **continue the loop** (a slice whose question is resolved
+  becomes buildable again; one the human defers stays parked).
+- **No human is reachable** (you were invoked to run unattended): do not block waiting
+  — finish everything that can advance, then **stop and report the stuck-set** (plus
+  the built/merged/needs-attention summary) as your result.
 
-State the posture at the start ("running INTERACTIVE" / "running AUTONOMOUS for the
-calling agent"). Default to INTERACTIVE unless invoked as a sub-agent or told
-otherwise.
+That is the whole difference; the loop, the selection, and the stuck-set are
+identical either way.
 
-### Isolation: in-place vs worktree (by posture)
+### Selection + isolation
 
-This skill ALWAYS does its own intelligent per-slice selection (graph order +
-freshness + Gate-3) and dispatches `do` **per chosen slug** — it never uses `do`'s
-auto-pick (that is `run`'s daemon mechanism, not a conductor's). What changes by
-posture is WHERE each `do` runs:
-
-- **INTERACTIVE (default)** → **in-place `do slice:<slug>`** in the human's checkout.
-  You are watching; in-place keeps the work visible and rebases trivial between
-  merges. (This is what this session did.)
-- **AUTONOMOUS (sub-agent)** → prefer an **ISOLATED worktree per build**, because a
-  sub-agent shares the human's filesystem/cwd and an in-place build would fight the
-  human's checkout (`do` refuses on a dirty tree — they can't both work the same
-  checkout). Run each chosen slug in the agents' isolation area, the same one `run`
-  uses. Today that means either `do --remote <url> slice:<slug>` (a job worktree off
-  that arbiter) or running from a SEPARATE clone the sub-agent owns.
-  > CAVEAT (current limitation, captured in
-  > `work/observations/do-remote-no-arg-and-remote-autopick-for-isolated-conductor.md`):
-  > `do --remote` today REQUIRES a url and does NOT support no-arg (infer-from-cwd)
-  > or `-n`. So a sub-agent must pass its own arbiter url per slug, or use a
-  > dedicated clone. A proposed `do --remote` no-arg ("isolate this slug off MY
-  > arbiter") would make this clean — not yet built. Either way the conductor still
-  > SELECTS the slug; only execution is isolated.
+This skill does its OWN intelligent per-slice selection (graph order + freshness +
+diff review) and dispatches `do` **per chosen slug** — it never uses `do`'s auto-pick
+(that is `run`'s daemon mechanism, not a conductor's). Builds run **in-place**
+(`do slice:<slug>` in the current checkout): one slice end-to-end, visible, with
+trivial rebases between merges. (`do` refuses on a dirty tree, so keep the tree clean
+between builds — golden rule 5.)
 
 ## When to use vs. not
 
@@ -111,8 +97,8 @@ posture is WHERE each `do` runs:
    every commit in the summary.
 6. **Accumulate, don't stall.** When ONE slice is stuck or needs a judgement call,
    write it into the stuck-set and move to the next INDEPENDENT ready slice — never
-   block the whole loop on one item. Voice the stuck-set per your posture (interactive
-   = ask the batch when stalled; autonomous = return it at the end). See
+   block the whole loop on one item. When nothing more can advance, surface the
+   stuck-set: ask the human if one is present, else report it. See
    [the rule](#the-accumulate-dont-block-rule).
 
 ## The accumulate-don't-block rule
@@ -129,17 +115,17 @@ judgement call. Whenever you hit a **wall** on a slice —
 — do NOT stop the loop. **Record the item + the specific question in a STUCK-SET**
 (a running list you keep for the session), SKIP that slice (and its dependents), and
 **continue with the next independent ready slice.** Only when nothing more can
-advance do you deal with the stuck-set, per posture:
+advance do you deal with the stuck-set:
 
-- **INTERACTIVE** → present the stuck-set as a [batched set of questions](#batching-the-questions),
+- **A human is present** → present the stuck-set as a [batched set of questions](#batching-the-questions),
   take answers, and resume the loop (a slice whose question is resolved becomes
   buildable again; one the human defers stays parked).
-- **AUTONOMOUS** → terminate and RETURN the stuck-set (+ the built/merged/
-  needs-attention report) to the caller; do not ask.
+- **No human reachable** → finish all you can, then stop and report the stuck-set
+  (+ the built/merged/needs-attention summary) as your result; do not block waiting.
 
-This maximises work-done in BOTH postures and is the single behaviour that unifies
-them — the sub-agent does as much as it can and brings back the residue; the
-interactive run does as much as it can and then asks the residue in one go.
+Either way the discipline is the same: do as much as can be done, then surface the
+residue in ONE batch — never dribble out one question at a time, never stall the
+whole loop on a single item.
 
 ## Recovering a needs-attention item (requeue)
 
@@ -158,10 +144,10 @@ can re-drive it depends on the reason:
   `agent-prompt-continue-context` puts the prior work + the needs-attention reason
   + your `-m` note into the agent's prompt — so it BUILDS ON the good code and fixes
   the gap rather than restarting. (This session fixed `slicer-review-edit-loop`
-  exactly this way: `requeue -m "<scoping fix>"` → `do` → Gate-3 → merge.)
+  exactly this way: `requeue -m "<scoping fix>"` → `do` → review → merge.)
 - **A genuine human-decision block** — the slice is ambiguous / drifted / rests on an
   unresolved fork — is NOT something a retry fixes. Leave it parked; it is a
-  stuck-set question (interactive: ask it; autonomous: return it). Do NOT requeue a
+  stuck-set question (ask it if a human is present, else report it). Do NOT requeue a
   slice whose premise is wrong — re-scope it first (that is `orchestrate`/human work).
 - **`requeue --reset`** (DISCARD + fresh: deletes the remote branch first, then
   moves to backlog so the next claim starts CLEAN) is for when the kept work is
@@ -170,7 +156,7 @@ can re-drive it depends on the reason:
 
 AFTER any requeue, re-sync (`git fetch && pull --rebase`) so the re-`do` claims off
 the latest main. A requeued-and-rebuilt slice then flows through the normal
-step-4 BUILD → Gate-3 → MERGE.
+step-4 BUILD → REVIEW → MERGE.
 
 ## The loop
 
@@ -233,8 +219,8 @@ notes are load-bearing: they prevent the downstream PRD from needing changes. A 
 you're CONFIDENT about: plant it and COMMIT it (it must land before that slice's `do`
 to take effect; per rule 5 this small protocol edit is committed, unlike authored
 artifacts). If a note is non-trivial or you're unsure it's wanted, that is a WALL →
-record it in the stuck-set (interactive asks it later in the batch; autonomous
-returns it) rather than planting a guessed note.
+record it in the stuck-set (surface it with the batch when the loop stalls) rather
+than planting a guessed note.
 
 > This is the step that earns the conductor its keep — a per-slice `do` agent only
 > sees its own slice; only the conductor sees the whole graph + the pending PRDs and
@@ -270,32 +256,33 @@ the child); then discard its partial edits and revert the claim before retrying.
   branch) — see [Recovering a needs-attention item](#recovering-a-needs-attention-item-requeue);
   otherwise it becomes a stuck-set question.
 
-**4b. Gate-3 — review the opened PR yourself** (the discipline that makes you a real
-third reviewer, not a rubber stamp):
-- Read the **diff against the slice's acceptance criteria** — tick each criterion.
+**4b. Gate-3 — review the opened PR yourself** (the conductor's own review, the third
+review layer after Gate-1 = `do`'s acceptance gate and Gate-2 = `do`'s PR/code-review
+gate — the discipline that makes you a real reviewer of the result, not a rubber
+stamp). `do` already ran Gate-1 AND Gate-2 before opening the PR, so **trust that
+green** — do NOT re-run the (potentially slow) acceptance gate here. Your job is
+the JUDGEMENT the gates can't fully do: does the diff actually deliver THIS slice?
+- Read the **diff against the slice's acceptance criteria** — tick each criterion
+  (apply the `review` skill's lenses + destination check).
 - **Verify every drift note / forward-pointer / must-fix-before-consume** the slice
   carried was actually honoured (these are exactly where a `do` agent silently
   drifts — e.g. "don't rename X", "keep it sequential", "make the omitted path
   REFUSE"). Grep the branch to confirm.
 - Read the gate-generated `work/observations/review-nits-<slug>-*.md` and triage each
   nit (blocking? benign? a real off-path finding worth its own observation?).
-- **Run the gate yourself** on the PR branch in a throwaway worktree to confirm green
-  independently — use the repo's declared acceptance gate via **`agent-runner verify`**
-  (it runs the per-repo `verify` config; do not hardcode a specific build/test/format
-  command, which varies by repo):
-  ```sh
-  git worktree add /tmp/ar-rev-<slug> origin/work/<slug>
-  cd /tmp/ar-rev-<slug> && <install deps per the repo>   # only if the gate needs it
-  agent-runner verify                                    # the declared gate; 0 = pass
-  git worktree remove --force /tmp/ar-rev-<slug>
-  ```
-- **Verdict:** if a drift note was violated, an acceptance criterion is unmet, or the
-  gate is red → **BLOCK** (comment the blocking findings; do NOT merge). If the
-  verdict is a clear BLOCK or clear APPROVE, act on it. If it is a genuine
-  **judgement call** (a maybe-blocking nit, an ambiguously-met criterion), that is a
-  WALL → record it in the stuck-set and skip (do not merge on a coin-flip), per the
+- **Verdict:** if a drift note was violated or an acceptance criterion is unmet →
+  **BLOCK** (comment the blocking findings; do NOT merge). If it is a clear
+  BLOCK or clear APPROVE, act on it. If it is a genuine **judgement call** (a
+  maybe-blocking nit, an ambiguously-met criterion), that is a WALL → record it in
+  the stuck-set and skip (do not merge on a coin-flip), per the
   [accumulate-don't-block rule](#the-accumulate-dont-block-rule). Otherwise
   **APPROVE**.
+
+  > The gate `do` ran tests the agent's checkout, not the exact pushed branch — a
+  > rare divergence the conductor no longer re-checks (re-running a full gate per
+  > slice is too costly). The durable fix is to make `do`'s OWN gate run against the
+  > to-be-pushed tree; tracked in
+  > `work/observations/gate1-could-run-in-fresh-worktree-to-match-pushed-branch.md`.
 
 **4c. Merge** (golden rule 4):
 ```sh
@@ -304,6 +291,16 @@ gh pr merge <n> --squash --delete-branch
 ```
 Use `--body-file` (PR bodies are backtick-heavy and break inline `--body` shell
 quoting).
+
+> PROVIDER ASSUMPTION: the verdict-as-PR-comment + `gh pr merge` flow above assumes
+> **`--propose` mode + a GitHub arbiter** (the only review-surface this skill knows
+> today). In `--merge` mode `do` integrates directly with no PR — then your Gate-3
+> diff review still applies, but you record the verdict in the slice/observation, not
+> a PR comment, and there is nothing to `gh pr merge`. A non-GitHub arbiter has no
+> `gh` at all. Making the approval/merge surface provider-agnostic (a likely future
+> `agent-runner` command, e.g. an `approve`/`land` verb) is NOT built yet; until
+> then this step is GitHub-propose-specific — adapt the merge mechanics to the
+> repo's actual integration mode.
 
 **4d. Re-sync + re-evaluate:**
 ```sh
@@ -318,19 +315,19 @@ freshness check on newly-unlocked slices) and continue.
 ### 5. CONTINUE until nothing can advance
 
 Repeat step 4 until no ready slice can advance (the READY set is empty OR every
-remaining ready slice is parked in the stuck-set). THEN deal with the stuck-set per
-posture ([the rule](#the-accumulate-dont-block-rule)): INTERACTIVE → ask the batched
-questions, then resume the loop from the answers; AUTONOMOUS → return the stuck-set
-+ report to the caller (do not ask).
+remaining ready slice is parked in the stuck-set). THEN deal with the stuck-set
+([the rule](#the-accumulate-dont-block-rule)): if a human is present, ask the batched
+questions and resume the loop from the answers; if not, report the stuck-set and
+stop.
 
 ### 6. SUMMARISE — the conductor's report
 
 End with a structured rundown (this is a first-class deliverable, not an
 afterthought):
 
-- **Built + merged** — each slice with its PR number + a gate-green confirmation
-  (the repo's declared `verify` passed) + a one-line note on any
-  drift/forward-pointer/must-fix it honoured.
+- **Built + merged** — each slice with its PR number + a one-line note on any
+  drift/forward-pointer/must-fix it honoured (`do` ran the acceptance + review
+  gates; you reviewed the diff).
 - **Routed to needs-attention** — each, with the EXACT blocking reason, whether the
   agent produced no code vs. a real bug the gate caught, and that the branch is
   preserved on the arbiter (recoverable via `requeue` + re-claim, or `work-on`).
@@ -344,8 +341,8 @@ afterthought):
 - **Housekeeping** — any direct-to-`main` chore commits you made (claim reverts,
   forward-notes), so the human can see them in `git log`.
 
-In AUTONOMOUS posture this report (plus the stuck-set) is the RETURN VALUE to the
-caller, not a message to a human.
+When you run unattended (no human reachable), this report (plus the stuck-set) is
+your RESULT to whoever invoked you, not a message to a human.
 
 ## Batching the questions
 
@@ -354,30 +351,29 @@ When the loop stalls with a non-empty stuck-set, do NOT ask one question at a ti
 conductor surfaces everything at once for one efficient answering pass):
 
 - Group by item, each with: the slice, the SPECIFIC question, why it's stuck (stale
-  premise / uncertain forward-note / Gate-3 judgement call), enough inline context
+  premise / uncertain forward-note / review judgement call), enough inline context
   to answer WITHOUT opening the file, and a **suggested default** where you have one.
 - Order by leverage (a question whose answer unblocks the most downstream work first).
-- INTERACTIVE: present the batch, take answers, resume the loop (resolved → buildable
-  again; deferred → stays parked). AUTONOMOUS: this batch IS the returned residue —
-  the parent (`orchestrate`) voices it to the human.
+- If a human is present: present the batch, take answers, resume the loop (resolved →
+  buildable again; deferred → stays parked). If not: this batch is the residue you
+  report and stop on.
 
-Here the batch is conversational (interactive) or a returned payload (autonomous),
-not a written file.
+The batch is conversational (asked) or reported (unattended), not a written file.
 
 ## Beyond slices
 
 This skill builds READY SLICES. Two things sit ABOVE it, sharing its loop shape:
 
-- **`orchestrate` (Skill B)** — the human-in-the-loop META conductor: surveys
-  *everything* (observations / ideas / PRDs / slices), advances what it can
-  (slicing PRDs, triaging), fills judgement gaps with the human conversationally
-  until new slices are READY, then **calls THIS skill** (often as a sub-agent in
-  AUTONOMOUS posture) to build them, and voices the returned stuck-set to the human.
+- **`orchestrate`** — the human-in-the-loop META conductor: surveys *everything*
+  (observations / ideas / PRDs / slices), advances what it can (slicing PRDs,
+  triaging), fills judgement gaps with the human conversationally until new slices
+  are READY, then **delegates the building to THIS skill** and surfaces the
+  stuck-set to the human.
 - **`advance` (the `advance-loop` PRD, not yet built)** — the AUTONOMOUS,
   file-mediated version of the same idea, driven by `run`/CI with a
-  `work/questions/` sidecar. `drive-backlog` (autonomous posture) + `orchestrate`
-  are the human-agency, synchronous twins of `advance`; expect them to converge on
-  the same tick contract.
+  `work/questions/` sidecar. `drive-backlog` + `orchestrate` are the human-agency,
+  synchronous siblings of `advance`; expect them to converge on the same tick
+  contract.
 
 The conductor is **tick-agnostic**: today the per-item action is
 `agent-runner do slice:<slug>` (build a slice); as `advance`-class ticks land

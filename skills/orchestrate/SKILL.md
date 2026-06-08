@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: "The human-in-the-loop META conductor over a whole work/ tree: survey EVERYTHING (observations, ideas, PRDs, slices, needs-attention) in one pass, advance every autonomous rung it can (triage observations, slice ready PRDs, build ready slices), and — at the genuine judgement residue — ASK the human conversationally, regrouped into efficient batches, filling the gaps until NEW slices are READY, then build them by calling the `drive-backlog` skill (often as a sub-agent). Use when asked to 'orchestrate the project', 'figure out what to work on and drive it', 'advance the work/ tree', 'review everything and tell me what needs me', or to drain a populated work/ toward 'all ready slices built' while keeping the human's only job 'answer the questions'. Composes `review`, `to-slices`, `to-prd`, and `drive-backlog`; it asks rather than guesses, and NEVER invents an answer to an open question."
+description: "The human-in-the-loop META conductor over a whole work/ tree: survey EVERYTHING (observations, ideas, PRDs, slices, needs-attention) in one pass by reading the work/ files directly, advance every autonomous rung it can (triage observations, slice ready PRDs, build ready slices), and — at the genuine judgement residue — ASK the human conversationally, regrouped into efficient batches, filling the gaps until NEW slices are READY, then build them by following the `drive-backlog` skill. Use when asked to 'orchestrate the project', 'figure out what to work on and drive it', 'advance the work/ tree', 'review everything and tell me what needs me', or to drain a populated work/ toward 'all ready slices built' while keeping the human's only job 'answer the questions'. Composes `review`, `to-slices`, `to-prd`, and `drive-backlog`; it asks rather than guesses, and NEVER invents an answer to an open question."
 ---
 
 # orchestrate
@@ -13,14 +13,16 @@ human into nothing but an **answerer of well-batched questions**, looping until 
 backlog of ready slices is drained.
 
 It is a **methodology skill** (prose you follow), like `to-slices` / `review` —
-NOT a runner command. It composes:
+NOT a runner command. It is **protocol-native**: it works the `work/` tree by
+reading the contract files directly (frontmatter + bodies), not by leaning on runner
+commands to tell it the state. (The one place runner commands ARE used is building
+— which it hands to `drive-backlog`, the skill whose job is to drive the
+`agent-runner` CLI.) It composes:
 
-- **`drive-backlog`** (`skills/drive-backlog/`) — to BUILD the ready slices (it may
-  dispatch this as a **sub-agent in autonomous posture** and surface the returned
-  questions itself).
+- **`drive-backlog`** (`skills/drive-backlog/`) — to BUILD the ready slices (you load
+  and FOLLOW it for the build loop; it owns the runner-CLI mechanics).
 - **`review`** (`skills/review/`) — to judge any artifact (slice / PRD / observation / code).
-- **`to-slices`** (`skills/to-slices/`) — to slice a ready PRD into backlog slices
-  (or drive `agent-runner do prd:<slug>`).
+- **`to-slices`** (`skills/to-slices/`) — to slice a ready PRD into backlog slices.
 - **`to-prd`** (`skills/to-prd/`) — when an idea/observation has matured enough to
   become a PRD.
 
@@ -78,21 +80,25 @@ to advance ONE rung:
 Produce a short **state map**: what's ready to build, what's sliceable, what's
 triageable, and what's parked on a human.
 
-### 2. ADVANCE everything autonomous (no human needed)
+### 2. ADVANCE the non-build rungs (no human needed)
 
-In leverage order (do the rung that unlocks the most downstream work first):
+Do the autonomous rungs that PREPARE work — i.e. everything EXCEPT building ready
+slices (building is step 4, deliberately last, so all gap-filling happens first). In
+leverage order (the rung that unlocks the most downstream work first):
 
-- **Ready slices** → hand to **`drive-backlog`** (see step 4). (You may batch this to
-  the end so all the conversational gap-filling happens first — your call per session.)
 - **Sliceable PRDs** → slice them via **`agent-runner do prd:<slug>`** (harness/model/
   gate from agent-runner config — don't hardcode), or the `to-slices` skill for a
   human-path slice; then **review the produced slices** (compose `review`; the
-  slicer's own review→edit loop also runs on the `do prd:` path).
+  slicer's own review→edit loop also runs on the `do prd:` path). Newly-produced
+  slices feed back into the survey (they may be READY, or carry their own questions).
 - **Clearly-dispositionable observations** → triage them (route/keep/delete) where the
   disposition is obvious; the ambiguous ones become questions (step 3).
 - **Apply any human answers** you already have from earlier in the session → flip the
   relevant `needsAnswers`, fill the slice/PRD gap, which may make new items advanceable
   (re-run step 1's classification for them).
+
+(Ready slices are NOT built here — they accumulate for step 4, after the residue is
+resolved.)
 
 Commit policy (matches the producer skills): **commit your own `work/observations/`
 notes and small load-bearing forward-notes you plant in a slice body** (these are
@@ -123,26 +129,19 @@ ready slices*. Questions the human defers stay parked; you proceed with the rest
 > file-mediated fallback the autonomous `advance` engine also reads). Default is
 > conversational.
 
-### 4. BUILD the ready slices via `drive-backlog`
+### 4. BUILD the ready slices (follow `drive-backlog`)
 
-Once gap-filling has produced a set of READY slices, build them by invoking
-**`drive-backlog`** — hand it the whole ready set; it re-runs its own freshness check
-and dependency ordering, so you do NOT need to pre-filter or pre-order beyond what
-your survey already established. Two ways:
+Once the survey + gap-filling have produced a set of READY slices, build them by
+**loading and following the `drive-backlog` skill inline** (you are already in the
+human's session — `drive-backlog` runs its build→review→merge loop here, asking the
+human when it stalls, exactly as you do). Hand it the whole ready set; it re-runs its
+own freshness check + dependency ordering, so you do NOT need to pre-filter or
+pre-order beyond what your survey established. Its build-loop mechanics (the long
+`do` process, the interrupt footgun, the diff-review, merge) are ITS to own — don't
+re-derive them here.
 
-- **In-session (you watch/steer)** — run `drive-backlog` INTERACTIVE yourself. Best
-  when the human wants to see each build/Gate-3/merge (as in the original session).
-- **Delegated (heavy lifting off your context)** — dispatch `drive-backlog` to a
-  **sub-agent in AUTONOMOUS posture**. The sub-agent builds everything it can,
-  never asks, and **returns its report + a stuck-set of questions**. You (in-session)
-  then **voice that stuck-set to the human as a batch** (step 3) — this is how
-  questions surface from a headless loop: the sub-agent returns them as data; you
-  speak them. Resolve, then re-dispatch for the newly-unblocked slices.
-
-> A sub-agent CANNOT ask the human mid-run. That's exactly why `drive-backlog`'s
-> autonomous posture is "advance all you can, accumulate the rest, return it" — and
-> why `orchestrate` (always in-session) owns the asking. Keep the asking here; push
-> the building down.
+Any slice `drive-backlog` parks in its stuck-set (a drifted slice, a Gate-3
+judgement call) comes back to YOUR step 3 batch — same residue, same human.
 
 ### 5. LOOP until drained, then SUMMARISE
 
@@ -150,7 +149,7 @@ Repeat 1→4 until no rung can advance without a human answer you don't have. Th
 the meta report:
 
 - **Advanced autonomously** — observations triaged, PRDs sliced, slices built+merged
-  (with PR numbers, via `drive-backlog`'s own report).
+  (PR numbers from `drive-backlog`'s own report).
 - **What's now unlocked** — new ready slices, newly-sliceable PRDs, capabilities
   landed (the whole-tree view only this skill has).
 - **Parked on the human** — the questions still unanswered / deferred, and exactly
@@ -166,8 +165,6 @@ the meta report:
 - **Don't over-ask either.** Resolve from the code/ADRs what is genuinely a small
   certain factual gap; only the real judgement residue becomes a question (same
   discipline `drive-backlog`/the build agents use for slices).
-- **Sub-agents return questions; they don't ask them.** Always voice a delegated
-  loop's stuck-set yourself, batched — never assume the sub-agent reached the human.
 - **Commit observations + forward-notes; leave authored artifacts for review.**
   Your `work/observations/` notes and small planted forward-notes are committed as
   you go (contract-native) and listed in the summary; a freshly-authored PRD or
@@ -175,7 +172,12 @@ the meta report:
   sweep in unrelated source changes.
 - **Building mechanics live in `drive-backlog`.** When you build (step 4), the
   long-running `do` process, the interrupt footgun (an abort does NOT kill the
-  spawned agent), generous timeouts, flaky-gate retries, and Gate-3 discipline are
-  all `drive-backlog`'s — follow that skill for them; don't re-derive them here.
+  spawned agent), generous timeouts, flaky-gate retries, and the Gate-3 diff review
+  are all `drive-backlog`'s — follow that skill for them; don't re-derive them here.
+- **If your OWN run is interrupted, re-orient before resuming.** This loop can run
+  long. On resume, do a fresh step-1 survey (state lives in the `work/` files +
+  `git`, not your memory): re-read the buckets, check what is now in-progress /
+  needs-attention / merged, and continue from the recomputed state — never assume
+  the pre-interrupt picture still holds.
 - **Ideas are incubating.** Don't force `work/ideas/` toward readiness; surface the
   ripe ones, leave the rest.
