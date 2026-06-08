@@ -31,6 +31,13 @@ const RACE_SENSITIVE = [
 	// sliced); keep it out of file-parallel pressure for the same deterministic
 	// claim/main-CAS reasoning as slicing-lock.test.ts.
 	'test/slicing.test.ts',
+	// The `do prd:<slug>` slice-output-through-integration keystone
+	// (`slice-output-through-integration`): routes the produced slices + the PRD
+	// lifecycle move through the shared `performIntegration` core, driving the lock
+	// CAS AND writing main (--merge) / pushing the work branch (--propose) against a
+	// --bare arbiter; keep it out of file-parallel pressure for the same
+	// deterministic claim/main-CAS reasoning as slicing.test.ts.
+	'test/slicing-integration.test.ts',
 	'test/start.test.ts',
 	'test/work-on.test.ts',
 	'test/run.test.ts',

@@ -1,13 +1,9 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
 import {
-	acquireSlicingLock,
-	releaseSlicingLock,
-	type AcquireSlicingLockOptions,
 	type AcquireSlicingLockResult,
-	type ReleaseSlicingLockOptions,
 	type ReleaseSlicingLockResult,
 } from '../src/slicing-lock.js';
 import {
@@ -257,6 +253,9 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			// `--merge`: land the produced slices on the arbiter main (the output now
+			// integrates through the shared core; propose would open a PR instead).
+			integration: 'merge',
 			today: '2026-06-07',
 			agentRunner: slicingAgent('it-first'),
 			env: gitEnv(),
@@ -284,6 +283,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				// The lock already moved the PRD to slicing/ on the arbiter; the agent
 				// must not have committed anything itself.
@@ -299,15 +299,17 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		});
 		expect(result.outcome).toBe('sliced');
 
-		// The completing commit on the arbiter is the runner's slicing release
-		// commit (it carries BOTH the backlog slice AND the prd restore + marker).
+		// The completing commit on the arbiter is the runner's slicing INTEGRATE
+		// commit (it carries BOTH the backlog slice AND the prd restore + marker), now
+		// landed through the shared core (`slicing(<slug>): …; sliced`).
 		const subject = run(
 			'git',
 			['log', '-1', '--format=%s', `${ARBITER}/main`],
 			repo,
 			{env: gitEnv()},
 		).stdout.trim();
-		expect(subject).toMatch(/^slicing: release it/);
+		expect(subject).toMatch(/^slicing\(it\):/);
+		expect(subject).toMatch(/; sliced$/);
 		// The completing commit carries BOTH the emitted backlog slice AND the
 		// slicing→prd restore (a rename), in ONE runner-owned commit (rename detection
 		// shows the move as `work/prd/it.md`; slicing/ is verified empty below).
@@ -324,33 +326,66 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
 	});
 
-	it('passes the acquire-time lockedBlob back to release (stale check runs)', async () => {
+	it('the content-identity stale check fires on a concurrent edit of the held PRD', async () => {
+		// The OUTPUT now integrates through the shared core (not the lock release), so
+		// the read-stability backstop is owned at the integrate seam. An agent that
+		// EDITS the held work/slicing/<slug>.md body on the arbiter (a concurrent
+		// writer, under the lock) must make the slicing STALE — fail loud, touch
+		// NOTHING (the lock stays held; no slices land).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		let releasedBlob: string | undefined = 'UNSET';
-		const lock = {
-			acquire: (o: AcquireSlicingLockOptions) => acquireSlicingLock(o),
-			release: (o: ReleaseSlicingLockOptions) => {
-				releasedBlob = o.lockedBlob;
-				return releaseSlicingLock(o);
-			},
-		};
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
-			lock,
-			agentRunner: slicingAgent(),
+			integration: 'merge',
+			agentRunner: ({cwd}) => {
+				// Write a slice (as normal)…
+				slicingAgent('child')({cwd, prompt: '', slug: 'it'});
+				// …then, from a throwaway clone, EDIT the held PRD body on the arbiter
+				// while the lock is held (the concurrent-edit the backstop must catch).
+				editHeldPrdOnArbiter(scratch.root, 'it');
+				return {ok: true};
+			},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
-		// The lockedBlob captured at acquire-time was threaded into release.
-		expect(releasedBlob).toBeTypeOf('string');
-		expect(releasedBlob).not.toBe('UNSET');
-		expect(releasedBlob).toMatch(/^[0-9a-f]{40}$/);
+		expect(result.exitCode).toBe(4);
+		expect(result.outcome).toBe('stale');
+		// The arbiter was NOT modified: the lock is still held (PRD in slicing/), and
+		// no backlog slice landed on main.
+		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(false);
 	});
 });
+
+/**
+ * From a throwaway clone of the arbiter, EDIT the held `work/slicing/<slug>.md`
+ * body and push it to `main` — simulating a concurrent writer editing the PRD
+ * under the slicing lock (the read-stability backstop must detect the changed
+ * blob and fail the release as `stale`).
+ */
+function editHeldPrdOnArbiter(root: string, slug: string): void {
+	const dest = join(root, `concurrent-edit-${slug}`);
+	run(
+		'git',
+		['clone', '-q', `file://${join(root, 'project-work.git')}`, dest],
+		root,
+		{env: gitEnv()},
+	);
+	run('git', ['fetch', '-q', 'origin'], dest, {env: gitEnv()});
+	run('git', ['checkout', '-q', '-B', 'edit', 'origin/main'], dest, {
+		env: gitEnv(),
+	});
+	const held = join(dest, 'work', 'slicing', `${slug}.md`);
+	writeFileSync(
+		held,
+		readFileSync(held, 'utf8') + '\nCONCURRENT EDIT under the lock.\n',
+	);
+	run('git', ['add', '-A'], dest, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', 'concurrent edit'], dest, {env: gitEnv()});
+	run('git', ['push', '-q', 'origin', 'edit:main'], dest, {env: gitEnv()});
+}
 
 // --- Lock contention + agent failure ---------------------------------------
 
@@ -438,6 +473,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: loopGate([
 				// Pass 1: block + improve the candidate slice in place.
@@ -478,6 +514,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: loopGate([
 				{
@@ -601,6 +638,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -651,6 +689,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: gate,
 			maxReview: 1,

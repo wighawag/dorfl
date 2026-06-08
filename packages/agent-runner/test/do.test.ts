@@ -1219,6 +1219,9 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
+			// `--merge`: the slice output now integrates through the shared core; merge
+			// lands it on the arbiter main (propose would open a PR instead).
+			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				const dir = join(cwd, 'work', 'backlog');
 				mkdirSync(dir, {recursive: true});
