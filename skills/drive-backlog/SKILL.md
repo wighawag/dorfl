@@ -107,6 +107,37 @@ This maximises work-done in BOTH postures and is the single behaviour that unifi
 them — the sub-agent does as much as it can and brings back the residue; the
 interactive run does as much as it can and then asks the residue in one go.
 
+## Recovering a needs-attention item (requeue)
+
+When a slice has routed to `work/needs-attention/` (a red gate / Gate-2 block /
+rebase conflict / a build-time STOP), its body carries the reason and its
+`work/<slug>` branch is **preserved on the arbiter** — nothing is lost. Whether you
+can re-drive it depends on the reason:
+
+- **A fixable problem the agent can resolve on a retry** — a real bug the gate
+  caught, a scoping miss, a flaky-test red — is a CONDUCTOR move, not a human
+  question. Recover it with **`agent-runner requeue <slug> --arbiter origin`**
+  (DEFAULT = keep + continue: moves it back to `backlog/`, leaves the branch
+  UNTOUCHED so the next claim CONTINUES from its tip). Optionally add a precise
+  handoff with **`-m "<what to fix>"`** (appended to the body). Then `do slice:<slug>`
+  again: the re-claim CONTINUES from the kept branch, and the merged
+  `agent-prompt-continue-context` puts the prior work + the needs-attention reason
+  + your `-m` note into the agent's prompt — so it BUILDS ON the good code and fixes
+  the gap rather than restarting. (This session fixed `slicer-review-edit-loop`
+  exactly this way: `requeue -m "<scoping fix>"` → `do` → Gate-3 → merge.)
+- **A genuine human-decision block** — the slice is ambiguous / drifted / rests on an
+  unresolved fork — is NOT something a retry fixes. Leave it parked; it is a
+  stuck-set question (interactive: ask it; autonomous: return it). Do NOT requeue a
+  slice whose premise is wrong — re-scope it first (that is `orchestrate`/human work).
+- **`requeue --reset`** (DISCARD + fresh: deletes the remote branch first, then
+  moves to backlog so the next claim starts CLEAN) is for when the kept work is
+  worthless. It is guarded and NEVER the default — only on an explicit human call;
+  the conductor's default recovery is keep+continue.
+
+AFTER any requeue, re-sync (`git fetch && pull --rebase`) so the re-`do` claims off
+the latest main. A requeued-and-rebuilt slice then flows through the normal
+step-4 BUILD → Gate-3 → MERGE.
+
 ## The loop
 
 ### 0. ANALYSE the slice set + dependency graph
@@ -193,7 +224,10 @@ the child); then discard its partial edits and revert the claim before retrying.
 - **Non-zero exit** (red gate / Gate-2 block / rebase conflict) → the item is now in
   `work/needs-attention/` with its reason in the body and its branch preserved on the
   arbiter. STOP that slice (golden rule 2), skip its dependents, move to the next
-  INDEPENDENT ready slice.
+  INDEPENDENT ready slice. If the reason is a FIXABLE problem (not a human-decision
+  block), it is recoverable IN-LOOP via `requeue` + re-`do` (continues from the kept
+  branch) — see [Recovering a needs-attention item](#recovering-a-needs-attention-item-requeue);
+  otherwise it becomes a stuck-set question.
 
 **4b. Gate-3 — review the opened PR yourself** (the discipline that makes you a real
 third reviewer, not a rubber stamp):
