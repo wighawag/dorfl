@@ -47,6 +47,30 @@ State the posture at the start ("running INTERACTIVE" / "running AUTONOMOUS for 
 calling agent"). Default to INTERACTIVE unless invoked as a sub-agent or told
 otherwise.
 
+### Isolation: in-place vs worktree (by posture)
+
+This skill ALWAYS does its own intelligent per-slice selection (graph order +
+freshness + Gate-3) and dispatches `do` **per chosen slug** — it never uses `do`'s
+auto-pick (that is `run`'s daemon mechanism, not a conductor's). What changes by
+posture is WHERE each `do` runs:
+
+- **INTERACTIVE (default)** → **in-place `do slice:<slug>`** in the human's checkout.
+  You are watching; in-place keeps the work visible and rebases trivial between
+  merges. (This is what this session did.)
+- **AUTONOMOUS (sub-agent)** → prefer an **ISOLATED worktree per build**, because a
+  sub-agent shares the human's filesystem/cwd and an in-place build would fight the
+  human's checkout (`do` refuses on a dirty tree — they can't both work the same
+  checkout). Run each chosen slug in the agents' isolation area, the same one `run`
+  uses. Today that means either `do --remote <url> slice:<slug>` (a job worktree off
+  that arbiter) or running from a SEPARATE clone the sub-agent owns.
+  > CAVEAT (current limitation, captured in
+  > `work/observations/do-remote-no-arg-and-remote-autopick-for-isolated-conductor.md`):
+  > `do --remote` today REQUIRES a url and does NOT support no-arg (infer-from-cwd)
+  > or `-n`. So a sub-agent must pass its own arbiter url per slug, or use a
+  > dedicated clone. A proposed `do --remote` no-arg ("isolate this slug off MY
+  > arbiter") would make this clean — not yet built. Either way the conductor still
+  > SELECTS the slug; only execution is isolated.
+
 ## When to use vs. not
 
 - **Use** to take a `work/backlog/` from "N ready slices" to "no ready slice can
