@@ -120,3 +120,10 @@ even though the mirror's refs look fine.
 
 Still a future slice (not phase-2). The cheap guard suffices for now; this records
 the decided shape so the strong version is buildable when wanted.
+
+## Promoted 2026-06-08
+
+The STRONG replace-time guard is PROMOTED to slice
+`work/backlog/hub-mirror-strong-replace-guard.md` (the cheap transport-mismatch
+guard already landed via `registry-remote`). Delete this observation once the strong
+guard slice lands in `done/`.

@@ -54,3 +54,10 @@ protect.
 Captured (not fixed in-place) because it is a design judgment outside this drive's
 build-and-merge scope; route via batch-qa (keep as-is / narrow to merge-mode /
 promote to a slice).
+
+## Triage 2026-06-08 — HOLD (need more context)
+
+Maintainer decision: **HOLD** — needs more context to decide keep-mode-agnostic
+(safety default) vs narrow-to-merge-mode (less `--propose` friction). Not promoted
+yet. Revisit with the concrete friction case (how often a legitimate `do --propose`
+is refused by the diverged-main guard) before deciding.

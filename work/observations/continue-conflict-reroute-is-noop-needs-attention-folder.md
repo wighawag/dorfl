@@ -25,3 +25,8 @@ This is PRE-EXISTING (independent of the push consolidation) and OUT OF SCOPE fo
 `findSourceFolder` to also bounce from `needs-attention/` (idempotent re-surface),
 or have the continue-conflict path surface directly. Small + bounded; revisit if a
 stale continue-conflict surface bites a fleet's `scan`/`status`.
+
+## Promoted 2026-06-08
+
+PROMOTED to slice `work/backlog/continue-conflict-resurface-from-needs-attention.md`.
+Delete this observation once that slice lands in `done/`.

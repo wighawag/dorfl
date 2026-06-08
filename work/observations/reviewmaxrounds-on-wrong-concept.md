@@ -78,3 +78,14 @@ maintainer's clarification). Folding in what was new there:
   (both are "make gate and loop distinct concepts"), but build-path gate cleanup
   is out of slicing-coherence's slice scope unless the slicer chooses to pull it
   in. Flag for the eventual triage pass.
+
+## Triage 2026-06-08 — HOLD
+
+Maintainer decision: **HOLD the build-path Gate-2 cleanup** (removing the rounds
+loop + `reviewMaxRounds` from `integration-core.ts`). The slice-gate side is already
+handled by `slicing-coherence` (the slice acceptance gate is one-shot, does NOT
+inherit `--review-max-rounds`). Removing the live config axis from the BUILD gate is
+a breaking change better RE-HOMED onto a future revise↔review loop than deleted in
+isolation — hold until that loop is designed/built, then move the bound rather than
+drop it. Keep this note as the standing record of the orphan.
+NOT promoted to a slice now.

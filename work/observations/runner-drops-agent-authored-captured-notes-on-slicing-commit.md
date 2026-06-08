@@ -69,10 +69,20 @@ Open sub-questions for the eventual slice:
 - Reporting: the runner's end-of-run summary should LIST captured notes so a human
   sees them even when the commit lands them (visibility, not just persistence).
 
-## Disposition
+## Disposition (2026-06-08 — ROUTED: fold into advance-loop)
 
-Spotted, with a clear fix shape. A real `do prd:` (and likely `do <slice>`) defect:
-the autonomous path can capture a signal but loses it. Route into the agent→runner
-reporting-channel work (advance-loop) or slice standalone. Until fixed, a human
-running `do prd:` must `git status` and manually commit any agent-authored note
-(as in this very test-drive).
+Maintainer decision: **fold into the advance-loop agent→runner REPORTING CHANNEL**,
+NOT a standalone slice. Rationale: the runner capturing + reporting what the agent
+EMITTED (captured notes) is the SAME machinery as advance-loop's `## Decisions` /
+STOP-sentinel reporting seam (`work/done/agent-stop-signal.md`). Slicing it
+separately would FORK that channel into two places — the exact "no duplicate-or-fork"
+conceptual-coherence defect. So advance-loop's reporting-channel slice(s) must cover
+this: the runner scoops + reports agent-authored `work/observations/*` +
+`work/findings/*` (extend Rule B; keep Rule A — agent does no git), on BOTH the
+slice path (`do prd:`) and the build path (`do <slice>`), in one fix.
+
+A fold-in note has been added to `work/prd/advance-loop.md` so the slicer picks this
+up as part of the reporting channel. Until that lands, a human running `do prd:` /
+`do <slice>` must `git status` and manually commit any agent-authored note (as in
+this very test-drive). Keep this observation as the source signal until the
+reporting-channel slice that covers it is built.

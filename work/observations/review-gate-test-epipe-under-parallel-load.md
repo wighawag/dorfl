@@ -31,3 +31,8 @@ write robust to an early-closed child stdin (ignore `EPIPE` on the prompt write,
 serialise/retry the spawn), since the prompt here is empty anyway. This is the
 null/shell ADAPTER's captured-launch path only; the pi adapter + the interactive
 launch are unaffected.
+
+## Promoted 2026-06-08
+
+PROMOTED to slice `work/backlog/null-harness-prompt-write-epipe-tolerant.md`.
+Delete this observation once that slice lands in `done/`.

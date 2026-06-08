@@ -49,3 +49,8 @@ Decide the exact wording + which verbs to name when picked up. Keep the
 done/absent message (claim-cas.ts:272) as-is (it is already accurate). This is a
 message-only change (no behaviour/exit-code change — the `lost`/exit-2 contract was
 the ratified decision).
+
+## Promoted 2026-06-08
+
+PROMOTED to slice `work/backlog/do-lost-on-in-progress-resume-hint.md`. Delete this
+observation once that slice lands in `done/`.

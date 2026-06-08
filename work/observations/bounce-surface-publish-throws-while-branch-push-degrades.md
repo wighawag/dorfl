@@ -54,3 +54,11 @@ than throw — the item is still saved locally + the branch is still local, so a
 retained worktree + a later online retry is the graceful outcome. Keep the
 CONTENTION handling (lease/refetch) as-is — that is a different, healthy path.
 Pre-existing (predates the push consolidation); revisit if it bites.
+
+## Triage 2026-06-08 — HOLD (need more context)
+
+Maintainer decision: **HOLD** — needs more context to answer the open question
+(per-item-contained vs whole-tick-abort severity; whether `runOneItem`'s try/finally
+already contains the throw so only the one item bounces). Not promoted yet. Revisit
+with the container analysis (does a surface-publish throw abort the whole tick, or
+just the one item?) before deciding keep-as-is vs slice.

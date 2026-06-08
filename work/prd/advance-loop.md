@@ -56,6 +56,18 @@ sliceAfter: [auto-slice, slicing-coherence]
 >   STOPs is a surface-a-question signal, not a build failure; the `## Decisions`
 >   block is a natural feed into the sidecar's ratification entries. Worth the slicer
 >   considering as a reuse, not just the batch-qa rungs.
+>   - **EXTEND this channel to agent-authored CAPTURED NOTES (routed here 2026-06-08).**
+>     The reporting channel must also cover the runner SCOOPING + REPORTING
+>     agent-authored capture-bucket files (`work/observations/*`, `work/findings/*`)
+>     the agent writes during a rung — today the `do prd:` runner commits only
+>     `work/backlog/*` and DROPS such notes (left untracked), making the autonomous
+>     path lossier than a human slicer (see
+>     `work/observations/runner-drops-agent-authored-captured-notes-on-slicing-commit.md`).
+>     Fix it ONCE here as part of this channel (NOT a standalone slice — that would
+>     fork the channel): extend Rule B (the runner scoops + reports the notes) while
+>     keeping Rule A (the agent does no git), on BOTH the slice path (`do prd:`) and
+>     the build path (`do <slice>`). A captured note is just another thing the agent
+>     EMITS that the runner must ROUTE, exactly like the `## Decisions` block.
 >
 > Note also: this PRD's `advance` is the AUTONOMOUS, file-mediated sibling of the
 > `orchestrate` skill (the human-in-the-loop conductor) and the `drive-backlog` skill
