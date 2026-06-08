@@ -244,6 +244,18 @@ export interface IntegrationCoreResult {
 	 * decide its switch/ff behaviour, NEVER the requested mode.
 	 */
 	integration?: IntegrateResult;
+	/**
+	 * On a `review-blocked` outcome, the review gate's STRUCTURED block reason (the
+	 * `formatBlockReason` of the blocking findings) — so a caller doing its OWN
+	 * needs-attention routing can record the findings as the item-body prose. The
+	 * slicing path (slice `slice-acceptance-gate`) reads this: its held PRD lives in
+	 * `work/slicing/`, which the core's `applyNeedsAttentionTransition` (hard-coded
+	 * to the build lifecycle's in-progress/done) cannot move, so it routes the PRD
+	 * itself via the lock's `slicing/ -> needs-attention/` redirect, using THIS
+	 * findings text as the body. Absent on every non-`review-blocked` outcome. (The
+	 * build path ignores it — its routing already records the findings in-body.)
+	 */
+	reviewBlockReason?: string;
 }
 
 const DEFAULT_TYPE = 'feat';
@@ -417,8 +429,11 @@ export async function performIntegration(
 			// `reviewMaxRounds` bound was hit — a single block IS exhaustion when
 			// maxRounds=1, satisfying both "block → findings" and "exhaustion → forced
 			// needs-attention" criteria with one route.
+			// The blocking findings (the slice-path caller records exactly this as the
+			// item body; the build path appends the rounds-exhaustion note below).
+			const findingsReason = lastVerdict ? formatBlockReason(lastVerdict) : '';
 			const reason =
-				(lastVerdict ? formatBlockReason(lastVerdict) + '\n' : '') +
+				(findingsReason ? findingsReason + '\n' : '') +
 				reviewRoundsExhaustedReason(maxRounds);
 			const routed = ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
@@ -442,6 +457,10 @@ export async function performIntegration(
 				routedToNeedsAttention: routed.moved,
 				branch,
 				reason: message,
+				// The structured block reason (the blocking findings ONLY — no
+				// rounds-exhaustion note, which is a build-gate concept) for a caller doing
+				// its OWN routing (the slicing path); the build path ignores it.
+				reviewBlockReason: findingsReason || message,
 			};
 		}
 		note(`PR/code review (Gate 2) approved '${slug}'.`);

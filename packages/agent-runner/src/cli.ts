@@ -43,7 +43,7 @@ import {
 	doNeedsAgentCmd,
 	reviewFlagOverrides,
 } from './do-config.js';
-import {harnessReviewGate} from './review-gate.js';
+import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
 import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
@@ -1293,6 +1293,13 @@ export function buildProgram(): Command {
 						agentCmd: remoteConfig.agentCmd,
 					}),
 					maxReview: remoteConfig.maxReview,
+					// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
+					sliceReviewGate: remoteConfig.review
+						? harnessSliceAcceptanceGate({
+								harness: remoteHarness,
+								agentCmd: remoteConfig.agentCmd,
+							})
+						: undefined,
 					watch: flags.watch === true,
 					color: shouldUseColor(process.stdout),
 					note: (message) => console.error(`>> ${message}`),
@@ -1375,6 +1382,12 @@ export function buildProgram(): Command {
 					agentCmd: config.agentCmd,
 				}),
 				maxReview: config.maxReview,
+				// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): the slice-path
+				// mirror of Gate-2, on the SAME `--review` family (so `--no-review` skips
+				// it). ONE-SHOT (no rounds); production wires the slice-SET-prompt gate.
+				sliceReviewGate: config.review
+					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+					: undefined,
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
 				watch: flags.watch === true,
