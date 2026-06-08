@@ -153,3 +153,7 @@ cannot re-fork the term.
 > backfill work, `sliced:` is kept as a derived copy, docs (incl. CONTEXT.md
 > glossary) updated, tests green, and
 > `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+
+## Needs attention
+
+agent failed: Connection error.
