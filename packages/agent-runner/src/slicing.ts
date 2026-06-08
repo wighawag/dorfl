@@ -366,7 +366,7 @@ export async function performSlice(
 			// slices THIS run produced (new-or-changed vs `before`), never the
 			// pre-existing landed slices that share work/backlog/.
 			before,
-			maxReview: options.slicerLoopMax ?? 3,
+			slicerLoopMax: options.slicerLoopMax ?? 3,
 			executions: options.reviewExecutions,
 			slicerLoopModel: options.slicerLoopModel,
 			sessionsDir: options.sessionsDir,
@@ -799,7 +799,7 @@ function sliceGateBlockedReason(
 function decompositionUnclearReason(slug: string, questions: string[]): string {
 	const head =
 		`The slicer review→edit loop could not converge on a sound decomposition of ` +
-		`'${slug}' (maxReview exhausted with unresolved blockers). The PRD is routed ` +
+		`'${slug}' (--slicer-loop-max exhausted with unresolved blockers). The PRD is routed ` +
 		`to needs-attention with no guessed slices; a human must resolve:`;
 	const body =
 		questions.length > 0

@@ -20,7 +20,7 @@ import {
 /**
  * Pure-logic tests for the slicer review→edit→converge LOOP
  * (`slicer-review-edit-loop`). These exercise the loop MECHANICS — the in-context
- * (N) review→edit→re-review, the `maxReview` hard cap, the M fresh-context
+ * (N) review→edit→re-review, the `slicerLoopMax` hard cap, the M fresh-context
  * re-executions, the edit-application to candidate slice files, and the three
  * verdict-routing outcomes — with a STUBBED review gate (no real model, no
  * network, no harness). Candidate slice files live under a temp `work/backlog/`
@@ -101,7 +101,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 			slug: 'it',
 			cwd,
 			gate,
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		expect(result.outcome).toBe('converged');
 		expect(result.passes).toBe(2);
@@ -123,7 +123,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 			slug: 'it',
 			cwd,
 			gate: scriptedGate([{verdict: 'approve', findings: []}]),
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		expect(result.outcome).toBe('converged');
 		expect(result.passes).toBe(1);
@@ -147,7 +147,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 				},
 				{verdict: 'approve', findings: []},
 			]),
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		expect(result.outcome).toBe('converged');
 		expect(Object.keys(result.slices)).toContain('work/backlog/child-b.md');
@@ -169,7 +169,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 				},
 				{verdict: 'approve', findings: []},
 			]),
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		// The escaping edit was NOT applied — only candidate slices are improved.
 		expect(readFileSync(escaped, 'utf8')).toBe('original PRD');
@@ -198,7 +198,7 @@ describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', 
 			cwd,
 			gate,
 			before,
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		expect(result.outcome).toBe('converged');
 		// The gate only saw THIS run's own slice — never the pre-existing landed ones.
@@ -225,7 +225,7 @@ describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', 
 				{verdict: 'approve', findings: []},
 			]),
 			before,
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		// The pre-existing landed slice was NOT overwritten by the loop.
 		expect(readFileSync(join(cwd, landedRel), 'utf8')).toMatch(
@@ -248,7 +248,7 @@ describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', 
 				},
 			]),
 			before,
-			maxReview: 1,
+			slicerLoopMax: 1,
 		});
 		expect(result.outcome).toBe('uncertain-slices');
 		// Only THIS run's slice is flagged — the pre-existing landed one is untouched.
@@ -279,13 +279,13 @@ describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', 
 				{verdict: 'approve', findings: []},
 			]),
 			before,
-			maxReview: 3,
+			slicerLoopMax: 3,
 		});
 		expect(readFileSync(join(cwd, mineRel), 'utf8')).toMatch(/IMPROVED/);
 	});
 });
 
-describe('runSliceReviewLoop — maxReview cap rejects via the sink', () => {
+describe('runSliceReviewLoop — slicerLoopMax cap rejects via the sink', () => {
 	it('persistent block → uncertain-slices (specific slices needsAnswers + questions)', async () => {
 		seedCandidate('child');
 		const gate = scriptedGate([
@@ -301,7 +301,7 @@ describe('runSliceReviewLoop — maxReview cap rejects via the sink', () => {
 			slug: 'it',
 			cwd,
 			gate,
-			maxReview: 2,
+			slicerLoopMax: 2,
 		});
 		expect(result.outcome).toBe('uncertain-slices');
 		// The cap was hit (2 passes), never an infinite loop.
@@ -323,7 +323,7 @@ describe('runSliceReviewLoop — maxReview cap rejects via the sink', () => {
 					findings: [{severity: 'blocking', question: 'broadly unclear'}],
 				},
 			]),
-			maxReview: 1,
+			slicerLoopMax: 1,
 		});
 		expect(result.outcome).toBe('uncertain-slices');
 		// Never silently drops the rejection: every candidate is flagged.
@@ -353,7 +353,7 @@ describe('runSliceReviewLoop — maxReview cap rejects via the sink', () => {
 					},
 				},
 			]),
-			maxReview: 2,
+			slicerLoopMax: 2,
 		});
 		expect(result.outcome).toBe('decomposition-unclear');
 		expect(result.prdQuestions).toEqual(['should this even be one PRD?']);
@@ -383,14 +383,14 @@ describe('runSliceReviewLoop — M fresh-context re-executions', () => {
 			slug: 'it',
 			cwd,
 			gate,
-			maxReview: 2,
+			slicerLoopMax: 2,
 			executions: 3,
 		});
 		expect(result.outcome).toBe('converged');
 		// Stopped at execution 2 (the first to converge) — execution 3 never ran.
 		expect(result.executions).toBe(2);
 		expect(exec).toBe(2);
-		// Execution 1 ran its full maxReview (2 passes), execution 2 converged pass 1.
+		// Execution 1 ran its full slicerLoopMax (2 passes), execution 2 converged pass 1.
 		expect(calls).toEqual([
 			{pass: 1, execution: 1},
 			{pass: 2, execution: 1},
@@ -411,7 +411,7 @@ describe('runSliceReviewLoop — M fresh-context re-executions', () => {
 			slug: 'it',
 			cwd,
 			gate,
-			maxReview: 1,
+			slicerLoopMax: 1,
 			executions: 2,
 		});
 		expect(result.outcome).toBe('decomposition-unclear');
@@ -427,7 +427,7 @@ describe('runSliceReviewLoop — M fresh-context re-executions', () => {
 			slug: 'it',
 			cwd,
 			gate: scriptedGate([{verdict: 'approve', findings: []}], calls),
-			maxReview: 3,
+			slicerLoopMax: 3,
 			executions: 1,
 		});
 		expect(calls).toEqual([{pass: 1, execution: 1}]);
