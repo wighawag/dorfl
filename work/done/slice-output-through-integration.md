@@ -134,14 +134,14 @@ git transition).
 > unchanged, arg parity is asserted, the agent does no git, and
 > `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
 
-## Needs attention
+## Build note (2026-06-08)
 
-acceptance gate failed (exit 1)
-
-## Requeue 2026-06-08
-
-Gate-red was the KNOWN flaky test review-gate.test.ts 'substitutes reviewModel through the null/shell {model} placeholder' (spawnSync bash EPIPE under parallel load — see work/observations/review-gate-test-epipe-under-parallel-load.md, 3rd sighting). The slice's OWN work on the branch tip is GREEN: conductor re-ran the full gate on the branch = pnpm -r build OK, pnpm -r test 1050/1050 PASS, pnpm -r format:check PASS. Continue from the branch tip; the work is complete. If the same EPIPE flake reds the gate again, it is NOT a slice defect.
-
-## Needs attention
-
-the agent produced no source change building 'slice-output-through-integration' (empty diff vs the arbiter main); treating as a no-op/stop — re-scope or re-claim.
+Built by `do slice:` (pi harness). The build-`do`'s acceptance gate red on the
+KNOWN flaky `review-gate.test.ts` EPIPE-under-parallel-load test (see
+`work/observations/review-gate-test-epipe-under-parallel-load.md`); the slice's own
+work is GREEN (`pnpm -r build && pnpm -r test` 1050/1050 `&& pnpm -r format:check`,
+re-verified by the conductor on the branch). The flake-recovery loop hit the
+no-op-on-continue-from-tip gap (`work/observations/`
+`noop-backstop-misfires-on-requeue-continue-from-tip.md`), so the conductor opened
+the PR directly from the preserved green branch and ran the Gate-3 diff review
+before merge.

@@ -439,6 +439,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			agentCmd: options.agentCmd,
 			model: options.model,
 			sessionsDir: options.sessionsDir,
+			// The integrate-time args (slice `slice-output-through-integration`): the
+			// SAME `integration`/`provider` the slice-build path threads, so they resolve
+			// ONCE in the shared `performIntegration` core (arg parity by construction).
+			integration: options.integration,
+			provider: options.provider,
 			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
 			// candidate slices in place + routes the verdict through the needsAnswers /
 			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
@@ -1115,6 +1120,11 @@ export async function performDoRemote(
 				agentCmd: options.agentCmd,
 				model: options.model,
 				sessionsDir: options.sessionsDir,
+				// The integrate-time args (slice `slice-output-through-integration`): the
+				// SAME `integration`/`provider` the slice-build path threads, so the
+				// `--remote prd:` output ALSO routes through the shared core (arg parity).
+				integration: options.integration,
+				provider: options.provider,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
 				reviewLoop: options.reviewLoop,
 				maxReview: options.maxReview,

@@ -67,6 +67,53 @@ export type IntegrationCoreOutcome =
  * `arbiter`; human vs autonomous surfacing = `surfaceArbiter`; do's recovery =
  * `source` + `recovering`; per-repo/lang gate = `verify`.
  */
+/**
+ * A NON-SLICE lifecycle the integrate band threads in place of its default,
+ * slice-shaped done-move + title source. The shared band
+ * (verify→review→commit→rebase→integrate→propose-PR-with-title/body) is
+ * IDENTICAL; only the "which item move + which file to read the title from" step
+ * is caller-supplied. This is the seam the `do prd:<slug>` SLICING transition
+ * rides (slice `slice-output-through-integration`): its "item move" is the PRD
+ * LIFECYCLE move (`work/slicing/<slug>.md → work/prd/<slug>.md` + the `sliced:`
+ * marker) plus its EMITTED backlog files — NOT a slice done-move. Supplying it
+ * makes every integrate-time arg (`--propose`/`--merge`, provider, title/body)
+ * apply to slicing BY CONSTRUCTION, because they resolve ONCE here.
+ *
+ * When set, the band: (1) reads the PR title / default commit summary from
+ * {@link titlePath} instead of `work/<source>/<slug>.md`; (2) calls {@link stage}
+ * (runner-owned, on the work branch) instead of the slice `git mv → work/done/`;
+ * and (3) uses the PLAIN rebase (a slicing transition never `recover`s a
+ * surfaced needs-attention move). Everything else — the `git add -A` that sweeps
+ * the agent's uncommitted work + the staged lifecycle move, the atomic commit,
+ * the rebase, the integrate, and the propose-mode PR title/body — is shared.
+ */
+export interface IntegrationLifecycle {
+	/**
+	 * Absolute path to the item file whose `title:` frontmatter seeds the default
+	 * commit summary AND the synthesised propose-mode PR title. For the slicing
+	 * transition this is the held PRD (`work/slicing/<slug>.md`) — read BEFORE
+	 * {@link stage} moves it.
+	 */
+	titlePath: string;
+	/**
+	 * STAGE the lifecycle move + emitted files into the index on the current work
+	 * branch (runner-owned git; the agent never does git). For the slicing
+	 * transition: `git mv work/slicing/<slug>.md → work/prd/<slug>.md`, stamp the
+	 * `sliced:` marker, and write+`git add` the produced `work/backlog/*.md`
+	 * files. The band's subsequent `git add -A` + atomic commit folds this staging
+	 * AND the agent's uncommitted backlog writes into ONE runner-owned commit. May
+	 * be async (it shells git).
+	 */
+	stage(): Promise<void> | void;
+	/**
+	 * The trailing transition tag on the runner-owned commit subject
+	 * (`<type>(<slug>): <summary>; <commitTag>`). Defaults to `done` (the build
+	 * lifecycle); the slicing transition supplies `sliced`. Cosmetic — it names
+	 * WHICH lifecycle landed; it gates nothing.
+	 */
+	commitTag?: string;
+}
+
 export interface IntegrationCoreInput {
 	/** The working clone/checkout (in-place) OR worktree dir the work branch lives in. */
 	cwd: string;
@@ -78,7 +125,7 @@ export interface IntegrationCoreInput {
 	 * Which folder the item is being completed FROM: `in-progress` (the normal,
 	 * freshly-built path) or `needs-attention` (the runner-owned recovery path).
 	 * The HEAD resolved this; the core uses it for the done-move source folder and
-	 * the recovery rebase.
+	 * the recovery rebase. IGNORED when {@link lifecycle} is set (a non-slice move).
 	 */
 	source: 'in-progress' | 'needs-attention';
 	/**
@@ -156,6 +203,16 @@ export interface IntegrationCoreInput {
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
+	/**
+	 * A NON-SLICE lifecycle move + title source (slice
+	 * `slice-output-through-integration`). When set, the band reads the title from
+	 * its {@link IntegrationLifecycle.titlePath}, calls its
+	 * {@link IntegrationLifecycle.stage} INSTEAD of the slice `git mv → work/done/`,
+	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do prd:`
+	 * SLICING transition supplies it; `do`/`complete`/`run` leave it unset (the
+	 * slice done-move is unchanged).
+	 */
+	lifecycle?: IntegrationLifecycle;
 }
 
 /**
@@ -225,8 +282,13 @@ export async function performIntegration(
 	// `merge` to `propose` on an approve (review gates, a human merges) below.
 	let mode = input.mode;
 
-	const sourcePath =
-		source === 'in-progress'
+	// The file whose `title:` seeds the commit summary + PR title. For a SLICING
+	// transition (a non-slice `lifecycle`) this is the held PRD it supplies; for a
+	// build it is the slice in its source folder. Read BEFORE any move.
+	const lifecycle = input.lifecycle;
+	const sourcePath = lifecycle
+		? lifecycle.titlePath
+		: source === 'in-progress'
 			? join(cwd, 'work', 'in-progress', `${slug}.md`)
 			: join(cwd, 'work', 'needs-attention', `${slug}.md`);
 
@@ -432,14 +494,22 @@ export async function performIntegration(
 		title: sliceTitle,
 	});
 
-	// 2. Mark done: mkdir -p work/done, then git mv <source> → done. The source is
-	//    in-progress/ on the normal path, or needs-attention/ on the recovery path.
-	mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
-	await gitHard(
-		['mv', `work/${source}/${slug}.md`, `work/done/${slug}.md`],
-		cwd,
-		env,
-	);
+	// 2. STAGE the item move into the index. For a build that is the slice done-move
+	//    (`git mv work/<source>/<slug>.md → work/done/<slug>.md`); for a SLICING
+	//    transition (a non-slice `lifecycle`) it is the caller-supplied PRD
+	//    lifecycle move + emitted backlog files (the runner stages them, the agent
+	//    never does git). Either way the subsequent `git add -A` folds the agent's
+	//    uncommitted work + this staging into ONE atomic commit.
+	if (lifecycle) {
+		await lifecycle.stage();
+	} else {
+		mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
+		await gitHard(
+			['mv', `work/${source}/${slug}.md`, `work/done/${slug}.md`],
+			cwd,
+			env,
+		);
+	}
 
 	// 3. Commit: git add -A (the agent's uncommitted work + the move) into ONE
 	//    atomic commit. Nothing to commit is FATAL (no-op-is-fatal, like claim.sh).
@@ -452,7 +522,10 @@ export async function performIntegration(
 	}
 	const summary = input.message ?? defaultMessage;
 	const type = (input.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE;
-	const commitMessage = `${type}(${slug}): ${summary}; done`;
+	// The trailing transition tag: a build is `; done`, a SLICING transition is
+	// `; sliced` (the lifecycle supplies it). Keeps the runner-owned commit subject
+	// honest about WHICH lifecycle landed.
+	const commitMessage = `${type}(${slug}): ${summary}; ${lifecycle?.commitTag ?? 'done'}`;
 	await gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
 	note(`Committed: ${commitMessage}`);
 
@@ -485,9 +558,12 @@ export async function performIntegration(
 		cwd,
 		env,
 	);
-	const rebase = recovering
-		? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
-		: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+	// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
+	// needs-attention move, so it always uses the plain rebase.
+	const rebase =
+		recovering && !lifecycle
+			? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
+			: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
 	if (rebase.status !== 0) {
 		// NEVER auto-resolve: abort the rebase (back to a clean work-branch tip).
 		await gitSoft(['rebase', '--abort'], cwd, env);
