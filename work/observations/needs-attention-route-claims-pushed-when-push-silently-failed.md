@@ -1,0 +1,95 @@
+---
+title: On a network failure, the needs-attention route REPORTS "surfaced on main; pushed work/<slug>" even though BOTH pushes silently failed — moved:true reflects only the LOCAL move, so the operator is told the branch+surface are on the arbiter when they are not
+date: 2026-06-08
+status: open
+---
+
+## The signal
+
+Observed live this session: building `prd-sliced-folder-step-a`, the agent hit a
+transient `Connection error.` mid-build. The runner printed:
+
+> Agent failed building 'prd-sliced-folder-step-a' (Connection error.); SAVED the
+> partial work and routed it to work/needs-attention/ (surfaced on origin/main;
+> **pushed work/prd-sliced-folder-step-a**). Recover via `requeue` …
+
+But when the conductor went to recover, **the branch did NOT exist on origin** and
+the surface had not been published either — the same network outage that failed the
+agent also failed both git pushes. The message asserted two remote effects
+(`surfaced on origin/main`, `pushed work/<slug>`) that **did not happen**. The
+operator was told the work was safe + recoverable cross-machine when it was only
+saved LOCALLY.
+
+## Root cause (the exact seam)
+
+`applyNeedsAttentionTransition` (`src/ledger-write.ts`) does THREE things and
+returns `{moved: true}` based on only the FIRST:
+
+1. `routeToNeedsAttention` (`src/needs-attention.ts`) — the LOCAL `git mv` +
+   wip/move commits. Succeeds offline (no network). Sets `moved: true`.
+   - Its RECOVERABLE branch push is **best-effort**: `gitSoftRun(['push', arbiter,
+     '<branch>:<branch>'])` — the doc-comment says verbatim *"BEST-EFFORT (no throw
+     on a failed/unreachable push)"*. The push RESULT is **not captured** and not
+     reflected in the return value.
+2. `publishSurfaceCommit` — the OBSERVABLE "surface on main" push. Also soft on the
+   final `git push` (`if (push.status === 0) … return; … emit('… left
+   unsurfaced')`). It can `emit` a failure note but does NOT change `moved`, and
+   the caller does not read it.
+3. Returns `{moved: true, commitMessage, moveCommit}` — `moved` is TRUE the moment
+   the LOCAL move committed, irrespective of either push.
+
+The caller (`src/do.ts` `saveAgentFailure`, ~line 843) then branches ONLY on
+`routed.moved` and unconditionally prints `"… (surfaced on ${arbiter}/main; pushed
+${branch})"`. There is no signal threaded back to distinguish "moved locally AND
+pushed" from "moved locally but BOTH pushes failed (offline)". So on a network
+failure the message is a flat lie. (The same pattern is in the `--remote`
+`saveAgentFailure` at ~line 1487 and the STOP-route message at ~line 925.)
+
+## Why it matters
+
+A needs-attention route exists to make a stuck item **observable (on main) +
+recoverable (branch on arbiter) cross-machine**. When the network is down, NEITHER
+holds — yet the operator is told both do. Consequences:
+- A human/CI trusts "pushed work/<slug>" and a teammate on another machine cannot
+  find the branch (it is only local).
+- `requeue` (keep+continue) is documented to continue from the ARBITER branch tip;
+  if the branch never reached the arbiter, a continue from a clean clone has
+  nothing to continue from — the saved work is local-only and invisible to the
+  protocol's recovery path.
+- It masks the very failure (network) the operator most needs to know about to
+  retry.
+
+## Fix direction
+
+Make the reported message reflect what ACTUALLY landed on the arbiter, not just the
+local move. Concretely:
+
+1. **Capture both push results** in `routeToNeedsAttention` /
+   `applyNeedsAttentionTransition`: return e.g. `{moved, surfaced: boolean,
+   branchPushed: boolean, pushError?: string}` alongside `moveCommit`. The surface
+   push already knows (it `emit`s on failure); the branch push currently discards
+   its `RunResult` — capture it.
+2. **Branch the message on those flags** in `saveAgentFailure` (+ the `--remote`
+   and STOP copies): only claim "surfaced on main" / "pushed <branch>" for the
+   pushes that SUCCEEDED. When a push failed, say so loudly and tell the operator
+   the work is **saved LOCALLY only** (and how to push it once connectivity
+   returns), rather than implying cross-machine safety.
+3. **Consider: is local-only "moved" even a success here?** For an autonomous
+   fleet (`run`/CI) a needs-attention route whose pushes both failed has NOT made
+   the item observable/recoverable to anyone else — arguably it should surface the
+   PUSH failure as the headline, not bury it under "SAVED + routed". At minimum the
+   exit/notification should make the degraded (local-only) state unmistakable.
+
+Keep the pushes best-effort (don't crash the tick on a network blip) — the bug is
+not that they're soft, it's that their failure is **invisible in the report**. The
+fix is honest reporting, not hard-failing.
+
+## Related
+
+- `run-thrown-core-error-labeled-agent-failed.md` — adjacent: that one is about
+  mis-CLASSIFYING a thrown config error as `agent-failed`; this one is about the
+  needs-attention route MIS-REPORTING the remote effects of an
+  (any-cause) failure. Both touch the same `saveAgentFailure` reporting surface and
+  both reduce operator trust in the stuck-state message.
+- `slicing.ts`'s own needs-attention routing (the slice path) reuses the same
+  `applyNeedsAttentionTransition` seam, so it inherits the same mis-report.
