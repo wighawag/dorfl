@@ -1,22 +1,27 @@
 import {defineConfig} from 'vitest/config';
 
 /**
- * Two projects so the CLAIM-RACE tests don't flake.
+ * Two projects so the FILE-PARALLEL-FLAKY tests don't flake.
  *
- * The four files below drive REAL git subprocesses and include in-process
- * two-claimer races (`Promise.all` of concurrent claims) against a local
- * `--bare` `file://` arbiter. The claim protocol itself is sound
- * (`--force-with-lease` + post-push verify), but git's `file://` transport does
- * NOT serialise concurrent pushes as atomically as a real remote's receive-pack,
- * so when these run CONCURRENTLY with the rest of the suite the CPU/IO pressure
- * widens the race window and the local sim occasionally lets both pushes
- * fast-forward (a harness artifact, NOT a product bug — confirmed: the suite
- * passes 100% of the time with file parallelism off, flakes ~1-in-3 with it on).
+ * This list collects tests that pass reliably in isolation but flake ONLY under
+ * file-parallel load (the CPU/IO pressure of running concurrently with the rest
+ * of the suite widens a timing window). There are two known classes here:
  *
- * Fix: run these git-heavy files in their OWN project with `fileParallelism:
- * false` (they run one-at-a-time, isolated from the parallel pressure), while the
- * fast pure-logic tests keep running in parallel. This keeps the gate
- * deterministic without slowing the whole suite or masking anything with retries.
+ * 1. git-`file://`-CAS races — the git-heavy files drive REAL git subprocesses
+ *    and include in-process two-claimer races (`Promise.all` of concurrent
+ *    claims) against a local `--bare` `file://` arbiter. The claim protocol
+ *    itself is sound (`--force-with-lease` + post-push verify), but git's
+ *    `file://` transport does NOT serialise concurrent pushes as atomically as a
+ *    real remote's receive-pack, so under concurrent pressure the local sim
+ *    occasionally lets both pushes fast-forward (a harness artifact, NOT a
+ *    product bug — the suite passes 100% with file parallelism off, flakes
+ *    ~1-in-3 with it on).
+ * 2. spawn-stdin races — see `review-gate.test.ts` below.
+ *
+ * Fix: run these flaky files in their OWN project with `fileParallelism: false`
+ * (they run one-at-a-time, isolated from the parallel pressure), while the fast
+ * pure-logic tests keep running in parallel. This keeps the gate deterministic
+ * without slowing the whole suite or masking anything with retries.
  */
 const RACE_SENSITIVE = [
 	'test/claim-cas.test.ts',
@@ -91,6 +96,15 @@ const RACE_SENSITIVE = [
 	// routes failures (the needs-attention surfacing); keep it out of file-parallel
 	// pressure for the same deterministic claim/main-CAS reasoning as run.test.ts.
 	'test/run-integration-core.test.ts',
+	// NOT a git-CAS race — a spawn-stdin race: `NullHarness.launch`'s captured path
+	// (`spawnSync('bash', ['-c', printf ...])`) intermittently throws `spawnSync
+	// bash EPIPE` when the `printf` child closes stdin before the parent writes the
+	// (empty) prompt, but ONLY under heavy concurrent test load (passes 28/28 in
+	// isolation). Keep it out of file-parallel pressure so the gate is
+	// deterministic; the source fix is the separate
+	// `null-harness-prompt-write-epipe-tolerant` slice. See
+	// work/observations/review-gate-test-epipe-under-parallel-load.md.
+	'test/review-gate.test.ts',
 ];
 
 export default defineConfig({
