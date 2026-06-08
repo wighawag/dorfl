@@ -348,7 +348,7 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			integration: 'merge',
 			// BOTH seams on: the improver loop AND the acceptance gate.
 			reviewLoop: convergingLoop,
-			maxReview: 1,
+			slicerLoopMax: 1,
 			review: true,
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),
@@ -370,7 +370,7 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			autoSlice: true,
 			integration: 'merge',
 			reviewLoop: convergingLoop, // improver loop ON
-			maxReview: 1,
+			slicerLoopMax: 1,
 			review: false, // acceptance gate OFF
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),

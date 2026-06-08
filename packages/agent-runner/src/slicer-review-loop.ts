@@ -12,14 +12,14 @@ import {launchWithOptionalWatch} from './agent-launch.js';
  * runner finalises/lands them, this loop RUNS the `review` SKILL
  * (`skills/review/SKILL.md`), APPLIES its findings as EDITS to the candidate slice
  * files, then re-reviews — until a pass finds NO NEW blocking issue (the natural
- * terminator) or the `maxReview` hard cap is hit. It is an IMPROVER, NOT a one-shot
+ * terminator) or the `slicerLoopMax` hard cap is hit. It is an IMPROVER, NOT a one-shot
  * gate: slices measurably keep getting better when reviewed, so the findings feed
  * back into edits, repeatedly. The destination/goal check is part of the SAME
  * review pass (it can itself trigger edits — which is why it is a loop).
  *
  * Two axes (the M×N grid from the idea file):
  *   - **N** — the in-context multipass: ONE agent reviews AND edits in a single
- *     context, accumulating findings across angle-switched passes. `maxReview` caps
+ *     context, accumulating findings across angle-switched passes. `slicerLoopMax` caps
  *     N so the loop can never run forever.
  *   - **M** — fresh-context re-executions: a fresh context is simply a NEW EXECUTION
  *     of that same loop in a fresh harness launch (like the Gate-2 reviewer). The
@@ -37,7 +37,7 @@ import {launchWithOptionalWatch} from './agent-launch.js';
  *     claimable.
  *   - **a specific uncertain slice** → emit it `needsAnswers: true` with the
  *     questions in its body (created, not agent-buildable until a human answers).
- *   - **the whole decomposition unclear / `maxReview` exhausted with blockers** →
+ *   - **the whole decomposition unclear / `slicerLoopMax` exhausted with blockers** →
  *     route the PRD to `work/needs-attention/<slug>.md` with the questions as the
  *     reason, emitting NO guessed slices.
  *
@@ -91,7 +91,7 @@ export interface UncertainSlice {
  *   - `edits` — full-content edits to APPLY to the candidate slices before the next
  *     pass (the improver step). Empty ⇒ no edits this pass.
  *   - `uncertainSlices` — specific slices to emit `needsAnswers: true` + questions
- *     (routing outcome 2). Used when the loop hits `maxReview` with blockers.
+ *     (routing outcome 2). Used when the loop hits `slicerLoopMax` with blockers.
  *   - `decompositionUnclear` — the whole decomposition is still unclear (routing
  *     outcome 3: route the PRD to needs-attention, emit no guessed slices).
  *
@@ -124,10 +124,12 @@ export interface SliceReviewGateInput {
 	/** Which fresh-context EXECUTION this is (1-based) — the M. */
 	execution: number;
 	/**
-	 * The model the REVIEW agent runs on (de-correlated from the slicer). `undefined`
-	 * ⇒ no forced model. Flows through `LaunchInput.model` / `substituteModel`.
+	 * The model the IMPROVER-loop REVIEW agent runs on (de-correlated from the
+	 * slicer; the `--slicer-loop-model` family). `undefined` ⇒ no forced model.
+	 * Flows through `LaunchInput.model` / `substituteModel`. DISTINCT from the
+	 * acceptance gate's `reviewModel`.
 	 */
-	reviewModel?: string;
+	slicerLoopModel?: string;
 	/** The HOST-ONLY sessions root the review session FILE is generated under. */
 	sessionsDir?: string;
 	/** Environment for the review-agent launch. */
@@ -149,9 +151,9 @@ export type SliceReviewGate = (
 export type LoopOutcome =
 	/** A pass found no NEW blocking issue: the improved slices land claimable. */
 	| 'converged'
-	/** `maxReview` hit with blockers → specific uncertain slice(s) → needsAnswers. */
+	/** `slicerLoopMax` hit with blockers → specific uncertain slice(s) → needsAnswers. */
 	| 'uncertain-slices'
-	/** `maxReview` hit / decomposition unclear → route the PRD to needs-attention. */
+	/** `slicerLoopMax` hit / decomposition unclear → route the PRD to needs-attention. */
 	| 'decomposition-unclear';
 
 /** The result of running the loop — the disposition the caller's sink routes. */
@@ -209,7 +211,7 @@ export interface RunSliceReviewLoopOptions {
 	 * with unresolved blockers REJECTS via the sink (never an infinite loop). The
 	 * natural terminator (no new blocking issue) usually fires first.
 	 */
-	maxReview: number;
+	slicerLoopMax: number;
 	/**
 	 * How many fresh-context EXECUTIONS (M) to run — each a NEW launch of the same
 	 * loop in a fresh context. Default 1 (the cheap degenerate case). `M>1` runs M
@@ -217,8 +219,8 @@ export interface RunSliceReviewLoopOptions {
 	 * execution's blocking verdict is routed.
 	 */
 	executions?: number;
-	/** The model the review agent runs on (de-correlation). */
-	reviewModel?: string;
+	/** The model the improver-loop review agent runs on (de-correlation; `--slicer-loop-model`). */
+	slicerLoopModel?: string;
 	/** The HOST-ONLY sessions root for the review session file. */
 	sessionsDir?: string;
 	/** Environment for child processes. */
@@ -234,7 +236,7 @@ export interface RunSliceReviewLoopOptions {
  *
  * Within ONE execution (the N): run the gate (a review+edit pass), APPLY its edits
  * to the candidate slice files, then re-review — until `verdict === 'approve'` (no
- * NEW blocking issue → converged) or the pass count reaches `maxReview`. On the cap
+ * NEW blocking issue → converged) or the pass count reaches `slicerLoopMax`. On the cap
  * with a still-`block` verdict, ROUTE per the verdict's channels:
  *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (PRD → needs-attention,
  *     no guessed slices);
@@ -251,7 +253,7 @@ export async function runSliceReviewLoop(
 ): Promise<RunSliceReviewLoopResult> {
 	const note = options.note ?? (() => {});
 	const executions = Math.max(1, options.executions ?? 1);
-	const maxReview = Math.max(1, options.maxReview);
+	const slicerLoopMax = Math.max(1, options.slicerLoopMax);
 	// The SCOPING FENCE: review/edit/flag ONLY this run's own new-or-changed
 	// slices, never pre-existing landed ones (the requeue fix). No snapshot ⇒ an
 	// empty one (the legacy whole-directory behaviour for the empty-backlog case).
@@ -267,10 +269,10 @@ export async function runSliceReviewLoop(
 			slug: options.slug,
 			cwd: options.cwd,
 			gate: options.gate,
-			maxReview,
+			slicerLoopMax,
 			execution: m,
 			before,
-			reviewModel: options.reviewModel,
+			slicerLoopModel: options.slicerLoopModel,
 			sessionsDir: options.sessionsDir,
 			env: options.env,
 			note,
@@ -298,13 +300,13 @@ export async function runSliceReviewLoop(
 		}
 	}
 
-	// Every execution hit `maxReview` with unresolved blockers — REJECT via the
+	// Every execution hit `slicerLoopMax` with unresolved blockers — REJECT via the
 	// sink. The LAST execution's verdict carries the routing channels.
 	const verdict = last!.lastVerdict;
 	if (verdict.decompositionUnclear) {
 		const questions = verdict.decompositionUnclear.questions;
 		note(
-			`Slicer review loop did not converge within maxReview=${maxReview} ` +
+			`Slicer review loop did not converge within slicerLoopMax=${slicerLoopMax} ` +
 				`across ${executions} fresh context(s); the whole decomposition is ` +
 				'unclear — routing the PRD to needs-attention (no guessed slices).',
 		);
@@ -317,7 +319,7 @@ export async function runSliceReviewLoop(
 			executions,
 			message:
 				`The decomposition of '${options.slug}' is still unclear after ` +
-				`maxReview=${maxReview} review pass(es) across ${executions} fresh ` +
+				`slicerLoopMax=${slicerLoopMax} review pass(es) across ${executions} fresh ` +
 				'context(s); routing the PRD to needs-attention with the open ' +
 				'questions, emitting no guessed slices.',
 		};
@@ -350,7 +352,7 @@ export async function runSliceReviewLoop(
 					questions: blockingQuestions(verdict),
 				}));
 	note(
-		`Slicer review loop did not converge within maxReview=${maxReview} across ` +
+		`Slicer review loop did not converge within slicerLoopMax=${slicerLoopMax} across ` +
 			`${executions} fresh context(s); emitting ${uncertain.length} uncertain ` +
 			'slice(s) with needsAnswers + questions.',
 	);
@@ -362,7 +364,7 @@ export async function runSliceReviewLoop(
 		passes: totalPasses,
 		executions,
 		message:
-			`Slicing '${options.slug}' did not converge after maxReview=${maxReview} ` +
+			`Slicing '${options.slug}' did not converge after slicerLoopMax=${slicerLoopMax} ` +
 			`review pass(es) across ${executions} fresh context(s); ` +
 			`${uncertain.length} slice(s) emitted needsAnswers: true with the open ` +
 			'questions in their bodies (a human must answer before they are buildable).',
@@ -384,18 +386,18 @@ async function runOneExecution(params: {
 	slug: string;
 	cwd: string;
 	gate: SliceReviewGate;
-	maxReview: number;
+	slicerLoopMax: number;
 	execution: number;
 	before: Map<string, string>;
-	reviewModel?: string;
+	slicerLoopModel?: string;
 	sessionsDir?: string;
 	env?: NodeJS.ProcessEnv;
 	note: (message: string) => void;
 }): Promise<SingleExecutionResult> {
-	const {slug, cwd, gate, maxReview, execution, before, note} = params;
+	const {slug, cwd, gate, slicerLoopMax, execution, before, note} = params;
 	let lastVerdict: SliceReviewVerdict = {verdict: 'block', findings: []};
 	let passes = 0;
-	for (let pass = 1; pass <= maxReview; pass++) {
+	for (let pass = 1; pass <= slicerLoopMax; pass++) {
 		// SCOPED: only THIS run's own new-or-changed slices are reviewed — a slice
 		// the loop CREATED in an earlier pass is new-vs-`before` so it is in scope;
 		// a pre-existing landed slice is unchanged so it is NOT (the requeue fix).
@@ -406,7 +408,7 @@ async function runOneExecution(params: {
 			candidateSlices,
 			pass,
 			execution,
-			reviewModel: params.reviewModel,
+			slicerLoopModel: params.slicerLoopModel,
 			sessionsDir: params.sessionsDir,
 			env: params.env,
 		});
@@ -426,7 +428,7 @@ async function runOneExecution(params: {
 			return {converged: true, lastVerdict: verdict, passes};
 		}
 		note(
-			`Slicer review pass ${pass}/${maxReview} (context ${execution}) found ` +
+			`Slicer review pass ${pass}/${slicerLoopMax} (context ${execution}) found ` +
 				`${blockingCount(verdict)} blocking issue(s); ` +
 				`${verdict.edits?.length ?? 0} edit(s) applied — re-reviewing.`,
 		);
@@ -592,7 +594,7 @@ export function harnessSliceReviewGate(
 			slug: input.slug,
 			command: options.agentCmd ?? '',
 			prompt: buildSliceReviewPrompt(input),
-			model: input.reviewModel,
+			model: input.slicerLoopModel,
 			// A DISTINCT session id per pass + fresh context so launches never collide.
 			sessionId: `slice-review-${input.slug}-m${input.execution}-n${input.pass}`,
 			sessionsDir: input.sessionsDir,

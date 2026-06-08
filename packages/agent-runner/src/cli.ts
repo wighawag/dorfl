@@ -270,8 +270,12 @@ interface DoFlags {
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
-	/** `--max-review <n>` — the slicer review→edit→converge loop's hard cap (`do prd:` path). */
-	maxReview?: string;
+	/** `--slicer-loop` / `--no-slicer-loop` — the slicer improver loop on/off toggle (`do prd:` path). */
+	slicerLoop?: boolean;
+	/** `--slicer-loop-max <n>` — the slicer improver loop's in-context convergence cap (`do prd:` path). */
+	slicerLoopMax?: string;
+	/** `--slicer-loop-model <id>` — the slicer improver loop reviewer's de-correlated model (`do prd:` path). */
+	slicerLoopModel?: string;
 }
 
 interface GcFlags {
@@ -1176,8 +1180,20 @@ export function buildProgram(): Command {
 			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
 		)
 		.option(
-			'--max-review <n>',
-			'cap the slicer review→edit→converge loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the PRD to needs-attention (default 3)',
+			'--slicer-loop',
+			'run the slicer IMPROVER loop on `do prd:<slug>` (review→edit→converge over the produced slice set). ON by default; --no-slicer-loop skips it. DISTINCT from the acceptance gate (--review).',
+		)
+		.option(
+			'--no-slicer-loop',
+			'skip the slicer improver loop on `do prd:<slug>`',
+		)
+		.option(
+			'--slicer-loop-max <n>',
+			'cap the slicer improver loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the PRD to needs-attention (default 3)',
+		)
+		.option(
+			'--slicer-loop-model <id>',
+			'model the slicer improver loop review agent runs on (de-correlated from the slicer; routing intent). Resolved flag > env > per-repo > global > default. DISTINCT from --review-model.',
 		)
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
@@ -1282,17 +1298,19 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					// The slicer review→edit→converge LOOP on the `do --remote prd:` path is
-					// ON by default (auto-slicing has no `verify` floor, so the loop is the
-					// only quality gate). `maxReview` resolves per-repo (flag > env > per-repo
-					// > global > cheap default).
-					// `reviewModel` (already threaded for Gate 2) also de-correlates the
-					// loop's review agent.
-					reviewLoop: harnessSliceReviewGate({
-						harness: remoteHarness,
-						agentCmd: remoteConfig.agentCmd,
-					}),
-					maxReview: remoteConfig.maxReview,
+					// The slicer IMPROVER loop on the `do --remote prd:` path is ON by default
+					// (auto-slicing has no `verify` floor, so the loop is the slice path's
+					// quality engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
+					// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
+					// > global > default). DISTINCT from the gate's `--review*` family.
+					reviewLoop: remoteConfig.slicerLoop
+						? harnessSliceReviewGate({
+								harness: remoteHarness,
+								agentCmd: remoteConfig.agentCmd,
+							})
+						: undefined,
+					slicerLoopMax: remoteConfig.slicerLoopMax,
+					slicerLoopModel: remoteConfig.slicerLoopModel,
 					// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
 					sliceReviewGate: remoteConfig.review
 						? harnessSliceAcceptanceGate({
@@ -1371,17 +1389,20 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				// The slicer review→edit→converge LOOP on the `do prd:` slicing path is ON
-				// by default (auto-slicing has no `verify` floor — the loop is the only
-				// quality gate there). `maxReview` resolves per-repo (flag > env > per-repo
-				// > global > cheap default); the slice-build path ignores all of these.
-				// `reviewModel` (already threaded for Gate 2 above) also de-correlates the
-				// loop's review agent.
-				reviewLoop: harnessSliceReviewGate({
-					harness,
-					agentCmd: config.agentCmd,
-				}),
-				maxReview: config.maxReview,
+				// The slicer IMPROVER loop on the `do prd:` slicing path is ON by default
+				// (auto-slicing has no `verify` floor — the loop is the slice path's quality
+				// engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
+				// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
+				// > global > default); the slice-build path ignores all of these. DISTINCT
+				// from the acceptance gate's `--review*` family.
+				reviewLoop: config.slicerLoop
+					? harnessSliceReviewGate({
+							harness,
+							agentCmd: config.agentCmd,
+						})
+					: undefined,
+				slicerLoopMax: config.slicerLoopMax,
+				slicerLoopModel: config.slicerLoopModel,
 				// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): the slice-path
 				// mirror of Gate-2, on the SAME `--review` family (so `--no-review` skips
 				// it). ONE-SHOT (no rounds); production wires the slice-SET-prompt gate.

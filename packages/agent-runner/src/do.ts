@@ -157,8 +157,10 @@ export interface DoOptions {
 	 * verdict+edits.
 	 */
 	reviewLoop?: SliceReviewGate;
-	/** The slicer edit loop's `maxReview` cap (flag > env > per-repo > global > default). Loop only. */
-	maxReview?: number;
+	/** The slicer improver loop's `slicerLoopMax` cap (flag > env > per-repo > global > default). Loop only. */
+	slicerLoopMax?: number;
+	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
+	slicerLoopModel?: string;
 	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
@@ -303,8 +305,10 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	autoSlice?: boolean;
 	/** The slicer review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
 	reviewLoop?: SliceReviewGate;
-	/** The slicer edit loop's `maxReview` cap. Loop only. */
-	maxReview?: number;
+	/** The slicer improver loop's `slicerLoopMax` cap. Loop only. */
+	slicerLoopMax?: number;
+	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
+	slicerLoopModel?: string;
 	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
@@ -463,9 +467,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// candidate slices in place + routes the verdict through the needsAnswers /
 			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
 			reviewLoop: options.reviewLoop,
-			maxReview: options.maxReview,
+			slicerLoopMax: options.slicerLoopMax,
 			reviewExecutions: options.reviewExecutions,
-			reviewModel: options.reviewModel,
+			slicerLoopModel: options.slicerLoopModel,
 			// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): rides the BUILD
 			// `--review`/`--review-model` family — a fresh-context review of the produced
 			// SET before it integrates, ONE-SHOT, independent of the improver loop above.
@@ -1148,9 +1152,9 @@ export async function performDoRemote(
 				provider: options.provider,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
 				reviewLoop: options.reviewLoop,
-				maxReview: options.maxReview,
+				slicerLoopMax: options.slicerLoopMax,
 				reviewExecutions: options.reviewExecutions,
-				reviewModel: options.reviewModel,
+				slicerLoopModel: options.slicerLoopModel,
 				// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
 				review: options.review,
 				reviewGate: options.sliceReviewGate,

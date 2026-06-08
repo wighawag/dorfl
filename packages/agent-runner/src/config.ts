@@ -210,20 +210,40 @@ export interface Config {
 	 */
 	reviewMaxRounds: number;
 	/**
-	 * **The slicer review→edit→converge LOOP cap** (`slicer-review-edit-loop`,
+	 * **The slicer IMPROVER loop on/off toggle** (`--slicer-loop` /
+	 * `--no-slicer-loop`). On the `do prd:<slug>` slicing path the improver loop is
+	 * the slice path's quality engine (auto-slicing has no `verify` floor), so it is
+	 * ON by default; setting this false gates wiring the loop seam (the candidate
+	 * slices land as-is). Resolved per-repo like `integration`: flag
+	 * (`--slicer-loop`/`--no-slicer-loop`) > env > per-repo > global > default (on).
+	 * DISTINCT from the acceptance gate's `review` toggle.
+	 */
+	slicerLoop: boolean;
+	/**
+	 * **The slicer IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
 	 * GATES PRD `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point
 	 * A). On the `do prd:<slug>` slicing path, AFTER the agent produces candidate
 	 * slices the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
-	 * until a pass finds no NEW blocking issue (the natural terminator). `maxReview`
-	 * is the HARD CAP on the in-context review passes (N) so the loop can never run
-	 * forever; on hitting it WITH unresolved blockers the loop REJECTS via the
-	 * needsAnswers / needs-attention sink. It lives on the LOOP, never on a gate
-	 * (the orphaned `reviewMaxRounds` belongs to the Gate-2 path — separate
-	 * cleanup). A cheap default (3). Resolved per-repo like `integration`: flag
-	 * (`--max-review`) > env > per-repo > global > default. Distinct from Gate-2's
-	 * `reviewMaxRounds`.
+	 * until a pass finds no NEW blocking issue (the natural terminator).
+	 * `slicerLoopMax` is the HARD CAP on the in-context review passes (N) so the
+	 * loop can never run forever; on hitting it WITH unresolved blockers the loop
+	 * REJECTS via the needsAnswers / needs-attention sink. It lives on the LOOP,
+	 * never on a gate (the orphaned `reviewMaxRounds` belongs to the Gate-2 path —
+	 * separate cleanup). A cheap default (3). Resolved per-repo like `integration`:
+	 * flag (`--slicer-loop-max`) > env > per-repo > global > default. Distinct from
+	 * Gate-2's `reviewMaxRounds`.
 	 */
-	maxReview: number;
+	slicerLoopMax: number;
+	/**
+	 * The model the slicer IMPROVER loop's review agent runs on (de-correlation
+	 * from the slicer). Optional with NO default so "unset" means "no forced model"
+	 * (the harness's own default). Carried to the review-agent launch through the
+	 * EXISTING harness seam (`LaunchInput.model` / `substituteModel`). Resolved like
+	 * `model`: flag (`--slicer-loop-model`) > env > per-repo > global > default
+	 * (unset). DISTINCT from the acceptance gate's `reviewModel` (build
+	 * `--review-model`).
+	 */
+	slicerLoopModel?: string;
 }
 
 /** A partial config, e.g. loaded from a JSON file or built from CLI flags. */
@@ -256,10 +276,14 @@ export const DEFAULT_CONFIG: Config = {
 	review: false,
 	autoMerge: false,
 	reviewMaxRounds: 2,
-	// The slicer edit loop's hard cap on in-context review passes — a cheap
+	// The slicer improver loop is ON by default — auto-slicing has no `verify`
+	// floor, so the loop is the slice path's quality engine (distinct from the
+	// acceptance gate's `review`, which defaults OFF).
+	slicerLoop: true,
+	// The slicer improver loop's hard cap on in-context review passes — a cheap
 	// default so an unattended review→edit→re-review can never run forever (the
 	// natural terminator is "no new blocking issue"; this is the ceiling on top).
-	maxReview: 3,
+	slicerLoopMax: 3,
 };
 
 /** The conventional config location (`~/.config/agent-runner/config.json`). */

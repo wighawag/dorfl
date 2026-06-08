@@ -81,11 +81,15 @@ export const REPO_ALLOWED_KEYS = [
 	'autoMerge',
 	'reviewModel',
 	'reviewMaxRounds',
-	// `maxReview` (the slicer review→edit→converge loop's hard cap on in-context
-	// review passes) is a genuine repo property — like `reviewMaxRounds`/`review`
-	// it tunes the per-repo review discipline, resolved per-repo through the same
-	// chain. It lives on the LOOP (slice-generation review), not on a gate.
-	'maxReview',
+	// The slicer IMPROVER-loop family (`slicerLoop` on/off, `slicerLoopMax` hard
+	// cap on in-context review passes, `slicerLoopModel` the loop reviewer's
+	// de-correlated model) are genuine repo properties — like `review`/`reviewModel`
+	// they tune the per-repo review discipline, resolved per-repo through the same
+	// chain. They live on the LOOP (slice-generation review), not on a gate, and are
+	// DISTINCT from the acceptance gate's `--review*` family.
+	'slicerLoop',
+	'slicerLoopMax',
+	'slicerLoopModel',
 ] as const satisfies readonly (keyof Config)[];
 
 /** A key honoured in a per-repo file. */

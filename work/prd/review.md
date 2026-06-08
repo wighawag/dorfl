@@ -108,14 +108,15 @@ consumed in TWO operational SHAPES, and plugged in at several INSERTION POINTS:
   So the M×N grid = "run the (review+edit) loop N passes deep, M times in fresh
   contexts." Degenerate `M=1,N=2` = cheap; `M=k` = k fresh independent loops.
 - **Termination (resolved Q2):** natural terminator = a pass finds no NEW blocking
-  issue; `maxReview` is the HARD CAP (per-repo configurable, flag > env > per-repo >
-  global, cheap default). **On reaching `maxReview` with unresolved blockers, the
-  slice(s) are REJECTED as `needsAnswers`** (the verdict sink below). `maxReview`
-  lives HERE (the loop), never on the gate.
+  issue; `slicerLoopMax` is the HARD CAP (per-repo configurable, flag
+  `--slicer-loop-max` > env > per-repo > global, cheap default). **On reaching
+  `slicerLoopMax` with unresolved blockers, the slice(s) are REJECTED as
+  `needsAnswers`** (the verdict sink below). `slicerLoopMax` lives HERE (the loop,
+  the `--slicer-loop*` family), never on the gate.
 - **Verdict routing (the loop's sink) = the needsAnswers / needs-attention routing**
   (the outcome distinction the loop OWNS): (a) a specific uncertain slice → emit
   with `needsAnswers: true` + questions in its body; (b) the whole decomposition
-  unclear / `maxReview` exhausted → route the PRD to `needs-attention/` with the
+  unclear / `slicerLoopMax` exhausted → route the PRD to `needs-attention/` with the
   questions, emit no guessed slices. Keeping this routing IN the loop slice is why
   the slice reads coherently: the loop produces the verdict AND owns the three
   outcomes (converge→land / uncertain-slice→needsAnswers / decomposition-unclear→
@@ -355,7 +356,7 @@ points):
     [propose-pr-body]`. (Today the verdict only hits the terminal note / the
     needs-attention body — nothing reaches the PR; this closes that.)
   - **remove `reviewMaxRounds` from the Gate-2 path** (orphan; the loop owns
-    `maxReview`) — cleanup, later.
+    `slicerLoopMax`, the `--slicer-loop*` family) — cleanup, later.
 Add the `sliced:` marker (and the one-time PRD trim) only once these are sliced.
 Until then this PRD stays the source for them.
 
