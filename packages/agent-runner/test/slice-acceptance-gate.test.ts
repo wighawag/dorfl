@@ -170,9 +170,11 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 		expect(result.outcome).toBe('sliced');
 		// The gate ran (before the integrate) exactly ONCE — it is one-shot.
 		expect(gate.calls).toBe(1);
-		// The approved set integrated onto main (slice + PRD restore + marker).
+		// The approved set integrated onto main (slice + PRD slicing/ -> prd-sliced/
+		// move + derived marker). The PRD rests in prd-sliced/ (source of truth), not prd/.
 		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 	});
 });
@@ -244,6 +246,7 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 		// The gate's blocking findings are recorded in the item body (the reason).
 		const body = showArbiterMain(repo, 'work/needs-attention/it.md');

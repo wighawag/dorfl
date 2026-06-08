@@ -75,6 +75,26 @@ function seedPrd(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
+/**
+ * Seed a SLICED PRD as RESIDENCE in `work/prd-sliced/` (the source of truth for
+ * sliced-ness, slice `prd-sliced-folder-step-a`) — it has left the to-slice pool
+ * (`work/prd/`) and now resolves another PRD's `sliceAfter` by FOLDER residence,
+ * not the `sliced:` marker.
+ */
+function seedSlicedPrd(slug: string): void {
+	const fromDir = join(repo, 'work', 'prd');
+	const from = join(fromDir, `${slug}.md`);
+	rmSync(from, {force: true});
+	const dir = join(repo, 'work', 'prd-sliced');
+	mkdirSync(dir, {recursive: true});
+	writeFileSync(
+		join(dir, `${slug}.md`),
+		['---', `slug: ${slug}`, 'sliced: 2026-01-01', '---', '', '# PRD'].join(
+			'\n',
+		),
+	);
+}
+
 /** A recording stub `do` runner: captures each `arg`, always succeeds. */
 function recordingRunner(): {run: DoRunner; args: string[]} {
 	const args: string[] = [];
@@ -253,7 +273,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		expect(args).toEqual(['prd:ready']);
 	});
 
-	it('a sliceAfter PRD becomes selectable once its blocker is sliced (marker, not done/)', async () => {
+	it('a sliceAfter PRD becomes selectable once its blocker resides in prd-sliced/ (folder residence, not done/)', async () => {
 		// beta's blocker alpha is UNSLICED ⇒ beta is excluded (alpha itself is
 		// sliceable: the gate does not exclude an unsliced PRD).
 		seedPrd('alpha');
@@ -262,13 +282,14 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
 		expect(blocked.args).toEqual(['prd:alpha']);
 
-		// Mark alpha SLICED (the `sliced:` marker, NOT done/) ⇒ beta's sliceAfter is
-		// satisfied and it joins the pool. (alpha stays sliceable too — re-slice is
-		// idempotent; the gate keys off the marker only for sliceAfter resolution.)
-		seedPrd('alpha', {sliced: '2026-01-01'});
+		// Move alpha into `work/prd-sliced/` (the source of truth for sliced-ness) ⇒
+		// beta's sliceAfter is satisfied (resolved against FOLDER residence) and beta
+		// joins the pool. alpha itself has LEFT the to-slice pool (it now rests in
+		// prd-sliced/), so only beta is selectable.
+		seedSlicedPrd('alpha');
 		const unblocked = recordingRunner();
 		await performDoAuto({...base(unblocked.run), config: cfg(), count: 9});
-		expect(unblocked.args).toEqual(['prd:alpha', 'prd:beta']);
+		expect(unblocked.args).toEqual(['prd:beta']);
 	});
 
 	it('blocked slice is excluded from the slice pool (existing eligibility path)', async () => {

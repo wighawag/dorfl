@@ -15,9 +15,11 @@ code; AFK work happens in clones/worktrees of that repo.
 ```
 work/
   # ---- WORK ITEMS: status IS the folder; they FLOW via `git mv` ----
-  prd/<slug>.md            # PRDs / design docs (the source material to slice)
+  prd/<slug>.md            # PRDs / design docs to slice (ready to slice)
   slicing/<slug>.md        # TRANSIENT HELD LOCK: a PRD is CURRENTLY being sliced
                            #   (not a resting state) — see note below
+  prd-sliced/<slug>.md     # SLICED, resting PRDs — the PRD `done/` analogue; the
+                           #   SOURCE OF TRUTH for sliced-ness (see note below)
   backlog/<slug>.md        # sliced, grabbable items — NOT yet claimed
   in-progress/<slug>.md    # claimed (moved here via `git mv` during claim)
   needs-attention/<slug>.md # claimed + attempted but STUCK — bounced back for a human
@@ -32,9 +34,11 @@ work/
 
 ### Two governance regimes (this is the key distinction)
 
-- **Work items** (`prd`/`backlog`/`in-progress`/`needs-attention`/`done`/
-  `out-of-scope`) are the lifecycle: **status = the folder**, transitions are
-  `git mv`, each has one destiny. This is the conflict-safe core.
+- **Work items** (`prd`/`slicing`/`prd-sliced`/`backlog`/`in-progress`/
+  `needs-attention`/`done`/`out-of-scope`) are the lifecycle: **status = the
+  folder**, transitions are `git mv`, each has one destiny. This is the
+  conflict-safe core. (PRDs flow `prd/ → slicing/ → prd-sliced/` — the build
+  machine minus `done/`; see the `slicing/` note below.)
 - **Capture buckets** (`ideas`/`observations`/`findings`) are **NOT work items**
   and are **exempt from status = folder** — they are *notes*, not units of work.
   They do not move through statuses; they sit in their bucket, and the folder is
@@ -66,25 +70,38 @@ field.** Claiming / finishing = moving the file between folders with `git mv`.
 This is what makes concurrent updates safe: two agents moving *different* files
 never conflict. (Capture buckets are exempt — see above.)
 
-### `slicing/` — the PRD-slicing concurrency lock (a TRANSIENT HELD LOCK)
+### The PRD lifecycle: `prd/ → slicing/ → prd-sliced/` (the build machine minus `done/`)
 
+A PRD flows through the SAME folder state machine as a slice, **minus `done/`**:
+`work/prd/` (ready to slice) → `work/slicing/` (the held LOCK, being sliced) →
+`work/prd-sliced/` (sliced, resting). The **folder is the source of truth for
+sliced-ness**, exactly as `work/done/` is for slices (and as `done/` carries no
+`done:` marker). Re-slicing a reshaped PRD is `work/prd-sliced/ → work/prd/`
+(reopen-to-ready, mirroring `done/ → backlog/`).
+
+**`slicing/` — the PRD-slicing concurrency lock (a TRANSIENT HELD LOCK).**
 `work/slicing/<slug>.md` is **not a resting/post-slice state** — it is a
 *transient held lock* that serialises *concurrent* slicers (two CI runs, or human
 + CI) so a PRD is never double-sliced. Acquiring the lock races a
 `git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit to the arbiter
 via the SAME compare-and-swap the build-claim uses (winner holds the lock; a loser
-backs off). On release the PRD is moved **back** to `work/prd/<slug>.md` and
-`work/slicing/` is empty again.
+backs off). On a **successful slice** the release transition moves the PRD
+`work/slicing/ → work/prd-sliced/` (the sliced resting state) in the SAME
+runner-owned commit that emits the backlog slices. On an **aborted / unclear**
+slice the lock release instead returns the PRD `work/slicing/ → work/prd/`
+(re-slice later) or routes it `work/slicing/ → work/needs-attention/`.
 
-- **Sliced-ness is the PRD's `sliced:` frontmatter marker — never residence in
-  `slicing/`.** A PRD in `slicing/` is *being sliced right now*, not *has been
-  sliced*.
+- **Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER, not the marker.**
+  The `sliced:` frontmatter is a DERIVED COPY (written by the release transition
+  in the same commit); the folder is canonical. A PRD in `slicing/` is *being
+  sliced right now*; a PRD in `prd-sliced/` *has been sliced*; a PRD in `prd/` is
+  *to-slice*.
 - **`slicing/`-absence-from-`prd/` is the hands-off signal.** While the lock is
   held the PRD lives at `work/slicing/<slug>.md`, not `work/prd/` — the same
   folder-as-signal a claimed slice leaving `backlog/` gives. **Edit a PRD after it
-  returns to `prd/`, not while it is in `slicing/`.** (A human on a stale local
-  checkout won't see the `git mv` until they fetch — the protocol guarantees no
-  *silent corruption*, not no *human surprise*.)
+  leaves `slicing/` (in `prd/` or `prd-sliced/`), not while it is in `slicing/`.**
+  (A human on a stale local checkout won't see the `git mv` until they fetch — the
+  protocol guarantees no *silent corruption*, not no *human surprise*.)
 - **Release fails loud on a concurrent edit (never a silent stale slice).** If the
   held PRD body was edited while the lock was held, the release detects it (the
   held content no longer matches the snapshot the lock took) and FAILS LOUD: the
@@ -235,7 +252,7 @@ issue: 123           # optional: the issue this PRD was spawned from (the surviv
 humanOnly: true      # optional: a human must drive the SLICING of this PRD. true | omitted.
 needsAnswers: true   # optional: open questions block AUTO-slicing this PRD. true | omitted.
 sliceAfter: []       # optional: PRD slugs that must be SLICED first (see below). [] = sliceable now.
-sliced: 2026-06-03   # set by to-slices after the one-time trim; marks the PRD launched-and-sliced.
+sliced: 2026-06-03   # DERIVED copy of sliced-ness (source of truth = residence in work/prd-sliced/); written by the release transition.
 ---
 ```
 
@@ -269,23 +286,25 @@ gate binds the agent, like the runner-vs-human stance on `verify`).
 (This supersedes the older single `humanOnly`-only gate, which itself replaced the
 three-state `afk` field + `allowUnspecifiedGate`.)
 
-### `sliceAfter` — PRD slicing-order (enforced against `sliced:`, NOT `done/`)
+### `sliceAfter` — PRD slicing-order (enforced against `work/prd-sliced/`, NOT `done/`)
 
 `sliceAfter: [other-prd]` on a PRD is **distinct from** slice `blockedBy`, and
 deliberately named differently because it gates a different verb against a
 different signal:
 
 - **slice `blockedBy`** gates **building** a slice, resolved against `done/`.
-- **PRD `sliceAfter`** gates **slicing** a PRD, resolved against the `sliced:`
-  marker (i.e. the listed PRDs must already be sliced — so this PRD's emitted
-  slices can reference the real slugs of those PRDs' slices in their `blockedBy`).
+- **PRD `sliceAfter`** gates **slicing** a PRD, resolved against `work/prd-sliced/`
+  residence (i.e. the listed PRDs must already be sliced — reside in
+  `work/prd-sliced/` — so this PRD's emitted slices can reference the real slugs of
+  those PRDs' slices in their `blockedBy`). This mirrors `blockedBy` → `done/`
+  exactly: ordering resolves against folder residence, not a frontmatter marker.
 
-It waits on **`sliced:`, not `done/`** on purpose: the reason B waits for A is that
-B's slices need A's slugs to *exist*, which happens the moment A is sliced — not
-when A is fully built. Build-ordering between A's and B's actual work is then
-expressed where it belongs, in B's individual slices' `blockedBy` (against `done/`).
-Enforced for the auto-slicer (it skips a PRD whose `sliceAfter` PRDs aren't yet
-sliced); a human may slice anyway.
+It waits on **sliced-ness (`work/prd-sliced/`), not `done/`** on purpose: the reason
+B waits for A is that B's slices need A's slugs to *exist*, which happens the moment
+A is sliced — not when A is fully built. Build-ordering between A's and B's actual
+work is then expressed where it belongs, in B's individual slices' `blockedBy`
+(against `done/`). Enforced for the auto-slicer (it skips a PRD whose `sliceAfter`
+PRDs do not yet reside in `work/prd-sliced/`); a human may slice anyway.
 
 ### The `prd` link (required *when `covers` is set*)
 

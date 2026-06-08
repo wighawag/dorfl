@@ -109,7 +109,7 @@ describe('ledger-read seam — local-tree resolve method', () => {
 
 describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD source)', () => {
 	function writePrd(
-		folder: 'prd' | 'slicing',
+		folder: 'prd' | 'slicing' | 'prd-sliced',
 		file: string,
 		fm: Record<string, string>,
 	): void {
@@ -148,11 +148,14 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		});
 	});
 
-	it('collects already-SLICED slugs from the `sliced:` marker (prd + slicing folders)', () => {
-		writePrd('prd', 'alpha.md', {slug: 'alpha', sliced: '2026-01-01'});
+	it('collects already-SLICED slugs from `work/prd-sliced/` RESIDENCE (the folder is the source of truth, not the `sliced:` marker)', () => {
+		// alpha + gamma rest in prd-sliced/ (sliced); beta is still to-slice in prd/.
+		writePrd('prd-sliced', 'alpha.md', {slug: 'alpha', sliced: '2026-01-01'});
 		writePrd('prd', 'beta.md', {slug: 'beta'});
-		// a PRD in flight under the lock still carries its prior marker.
-		writePrd('slicing', 'gamma.md', {slug: 'gamma', sliced: '2026-02-02'});
+		writePrd('prd-sliced', 'gamma.md', {slug: 'gamma', sliced: '2026-02-02'});
+		// A `sliced:` MARKER on a PRD still in prd/ does NOT count (folder = truth):
+		// delta carries a stale marker but resides in prd/, so it is NOT sliced.
+		writePrd('prd', 'delta.md', {slug: 'delta', sliced: '2026-03-03'});
 
 		const pool = currentLedgerRead.resolvePrdPool({
 			repoPath: join(root, 'repo'),

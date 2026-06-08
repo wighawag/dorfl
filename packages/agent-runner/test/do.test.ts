@@ -1301,7 +1301,8 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.outcome).toBe('sliced');
 		expect(result.slug).toBe('somePrd');
 
-		// The runner committed the produced backlog slice + restored the PRD to prd/.
+		// The runner committed the produced backlog slice + moved the PRD into the
+		// SLICED resting state (slicing/ -> prd-sliced/, the source of truth).
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		expect(
 			run(
@@ -1314,12 +1315,22 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/prd/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/prd-sliced/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
 		).toBe(0);
-		// slicing/ is empty (the lock was released), and the PRD is marked sliced.
+		// The PRD has LEFT prd/ (it rests in prd-sliced/ now).
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/prd/somePrd.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).not.toBe(0);
+		// slicing/ is empty (the lock was released), and the derived `sliced:` marker
+		// is kept on the resting PRD (Step A).
 		expect(
 			run(
 				'git',
@@ -1330,7 +1341,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		).not.toBe(0);
 		const prd = run(
 			'git',
-			['show', `${ARBITER}/main:work/prd/somePrd.md`],
+			['show', `${ARBITER}/main:work/prd-sliced/somePrd.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
