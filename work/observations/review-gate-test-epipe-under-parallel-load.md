@@ -9,3 +9,25 @@ printf ...])` path — the `printf` child seems to close stdin before the parent
 writes the (empty) prompt, surfacing as EPIPE only under heavy concurrent test
 load. Unrelated to interactive launch (that path uses `stdio: 'inherit'`, no piped
 prompt). Captured, not fixed (out of this slice's scope).
+
+## Recurrence (consolidated)
+
+This is now seen at least TWICE — well past the "a second instance is a signal,
+not noise" threshold:
+
+- **2026-06-07** (first sighting, while running the full vitest suite during an
+  unrelated slice): same `test/review-gate.test.ts > harnessReviewGate …
+  substitutes reviewModel through the null/shell {model} placeholder` failing with
+  `failed to spawn harness command: spawnSync bash EPIPE` (src/harness.ts), passing
+  26/26 in isolation. (This merges the former duplicate note
+  `review-gate-test-flaky-spawn-epipe-under-load.md`.)
+- **2026-06-08** (above): same test, same EPIPE, root cause narrowed to the null
+  adapter's `spawnSync('bash', ['-c', printf …])` path — the `printf` child appears
+  to close stdin before the parent writes the (empty) prompt, surfacing as EPIPE
+  only under heavy concurrent test load.
+
+**Suggested fix direction** (when picked up): make `NullHarness.launch`'s piped-prompt
+write robust to an early-closed child stdin (ignore `EPIPE` on the prompt write, or
+serialise/retry the spawn), since the prompt here is empty anyway. This is the
+null/shell ADAPTER's captured-launch path only; the pi adapter + the interactive
+launch are unaffected.
