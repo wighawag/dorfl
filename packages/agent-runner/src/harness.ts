@@ -64,6 +64,72 @@ export interface LaunchInput {
 	env?: NodeJS.ProcessEnv;
 }
 
+/**
+ * What a harness needs to launch one item's harness INTERACTIVELY (slice
+ * `agent-interactive-launch`): a FOREGROUND human session in `dir`, inherited
+ * stdio, NO prepared prompt. This is the OPPOSITE shape to {@link LaunchInput}
+ * (which feeds a prompt on stdin and captures output for the autonomous path):
+ * here the human drives the agent, so there is nothing to feed and nothing to
+ * capture. A NEW seam intent, NOT a flag on {@link Harness.launch} (decision #1):
+ * `launch` is fundamentally spawnSync + prompt-on-stdin + capture-output, and a
+ * boolean would make its `LaunchResult` lie.
+ */
+export interface InteractiveLaunchInput {
+	/** The onboarded working tree to start the session in (the command runs here). */
+	dir: string;
+	/** The slug being worked on (for adapters that name/log per slug). */
+	slug: string;
+	/**
+	 * The resolved model the human starts pinned to (ADR §13 routing: flag > env
+	 * > per-repo > global). `undefined` ⇒ no model forced. The pi adapter passes
+	 * `--model <model>`; the human may still switch models inside the session.
+	 */
+	model?: string;
+	/**
+	 * The full pi session-FILE path passed as `--session <path>` so the human
+	 * session is still recorded/visible (audit trail + the pi dashboard, decision
+	 * #2). `undefined` ⇒ the pi adapter generates a default for `dir`.
+	 */
+	session?: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The result of an interactive launch — there is NOTHING to capture (the human
+ * drove a foreground session; no prepared prompt, no piped output, no PID record
+ * to persist; it is NOT a tracked job, decision #3). The only useful signal is
+ * the harness's exit code, returned here. Callers may ignore it.
+ */
+export interface InteractiveLaunchResult {
+	/** The harness process's exit code (0 = clean exit). */
+	exitCode: number;
+}
+
+/**
+ * What the human-face verbs (`start`/`work-on`) hand a launcher: just the
+ * onboarded WORKING TREE + the slug + env. The model + the pi `--session` path
+ * are resolved at the CLI boundary (where config lives) and BOUND INTO the
+ * injected closure, so the git-logic modules stay decoupled from `createHarness`
+ * / config resolution. The CLI's closure calls
+ * {@link Harness.launchInteractive} with the resolved model/session.
+ */
+export interface InteractiveLaunchSite {
+	/** The slug being worked on. */
+	slug: string;
+	/** The onboarded working tree to start the foreground session in. */
+	dir: string;
+	/** Environment for the launched harness process. */
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The injectable interactive launcher the human-face verbs call AFTER
+ * onboarding. The CLI binds the resolved harness + model + sessions-dir into it;
+ * tests inject a spy. A thin seam so `start.ts`/`work-on.ts` never import
+ * `createHarness` or resolve config.
+ */
+export type InteractiveLauncher = (site: InteractiveLaunchSite) => void;
+
 /** The `{model}` placeholder the null/shell adapter substitutes in `agentCmd`. */
 export const MODEL_PLACEHOLDER = '{model}';
 
@@ -131,6 +197,16 @@ export interface Harness {
 	readonly adapter: string;
 	/** Launch the job's command; record the PID + liveness pointer. */
 	launch(input: LaunchInput): LaunchResult;
+	/**
+	 * Launch the harness INTERACTIVELY (slice `agent-interactive-launch`): a
+	 * FOREGROUND human session in `input.dir` with INHERITED stdio and NO prepared
+	 * prompt — the human drives it, and control returns when they exit. This is
+	 * the human-facing counterpart to the autonomous {@link launch}; it is NOT a
+	 * tracked job (no `.agent-runner-job.json`, no PID/liveness record, no gate,
+	 * decision #3), so it returns only an exit code. pi-only: the null adapter
+	 * throws a clear pi-only error (decision #2).
+	 */
+	launchInteractive(input: InteractiveLaunchInput): InteractiveLaunchResult;
 	/** Is the job still alive? Answered from the record's anchor, NOT mtime. */
 	isAlive(record: HarnessRecord): boolean;
 }
@@ -181,6 +257,20 @@ export class NullHarness implements Harness {
 			detail: status === 0 ? undefined : (result.stderr ?? '').trim(),
 			output: stdout === '' ? undefined : stdout,
 		};
+	}
+
+	/**
+	 * Interactive launch is NOT supported by the null/shell adapter (decision #2):
+	 * its `agentCmd` is shaped for the captured, prompt-fed AUTONOMOUS path, so
+	 * "interactive" has no clean meaning here. Throw a CLEAR pi-only error
+	 * (mirroring `do --watch`'s fail-on-null decision) rather than silently
+	 * shelling out the wrong way.
+	 */
+	launchInteractive(_input: InteractiveLaunchInput): InteractiveLaunchResult {
+		throw new Error(
+			'interactive launch requires the pi harness; configure `harness: pi` ' +
+				'(the null/shell adapter only supports the captured autonomous launch).',
+		);
 	}
 
 	isAlive(record: HarnessRecord): boolean {

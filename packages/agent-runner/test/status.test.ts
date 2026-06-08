@@ -60,6 +60,9 @@ function stubHarness(alivePids: number[]): Harness {
 		launch() {
 			throw new Error('stub harness does not launch');
 		},
+		launchInteractive() {
+			throw new Error('stub harness does not launch interactively');
+		},
 		isAlive(rec: HarnessRecord): boolean {
 			return rec.pid !== undefined && alivePids.includes(rec.pid);
 		},

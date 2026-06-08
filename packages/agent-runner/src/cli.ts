@@ -33,6 +33,8 @@ import {
 	type DoMultiResult,
 } from './do-autopick.js';
 import {createHarness} from './pi-harness.js';
+import {generateSessionPath} from './session-path.js';
+import type {InteractiveLauncher} from './harness.js';
 import {shouldUseColor} from './output.js';
 import {resolveRepoConfig} from './repo-config.js';
 import {
@@ -199,13 +201,30 @@ interface VerifyFlags {
 	config?: string;
 }
 
-interface StartFlags {
+/**
+ * The flags that drive an INTERACTIVE `--agent` launch (slice
+ * `agent-interactive-launch`), shared by `start` and `work-on`. `--agent` opts
+ * into launching the configured harness interactively after onboarding; the
+ * harness/model/pi-bin/sessions-dir flags resolve the SAME way the autonomous
+ * `do`/`run` path resolves them (flag > env > per-repo > global > default), so
+ * the human starts pinned to the intended model (decision #4).
+ */
+interface AgentLaunchFlags {
+	agent?: boolean;
+	harness?: string;
+	model?: string;
+	piBin?: string;
+	sessionsDir?: string;
+}
+
+interface StartFlags extends AgentLaunchFlags {
+	config?: string;
 	arbiter?: string;
 	resume?: boolean;
 	ignoreNotReady?: boolean;
 }
 
-interface WorkOnFlags {
+interface WorkOnFlags extends AgentLaunchFlags {
 	config?: string;
 	arbiter?: string;
 	remote?: string;
@@ -329,6 +348,62 @@ function resolveSliceOnlySlug(slug: string | undefined): string | undefined {
 }
 
 /**
+ * Build the INTERACTIVE launcher closure for `--agent` (slice
+ * `agent-interactive-launch`), or `undefined` when `--agent` was not passed.
+ *
+ * It resolves the harness + model the SAME way the autonomous `do`/`run` path
+ * does — per-repo config layered flag > env > per-repo > global > default (ADR
+ * §13) — so the human starts pinned to the intended model (decision #4). The
+ * returned closure is what `start.ts`/`work-on.ts` call AFTER onboarding: it
+ * generates the pi `--session` path for the onboarded working tree and calls
+ * `harness.launchInteractive` (which inherits stdio, drops `--print`, feeds no
+ * prompt, foreground). A NON-pi harness throws a clear pi-only error from the
+ * adapter (decision #2). This keeps the git-logic modules decoupled from
+ * `createHarness`/config (they only receive the thin {@link InteractiveLauncher}).
+ *
+ * `repoPath` is the per-repo config root (the current checkout for `start` /
+ * in-repo `work-on`); `undefined` (remote `work-on`, no checkout) resolves from
+ * the global config only — mirroring `do --remote`.
+ */
+function buildInteractiveLauncher(
+	flags: AgentLaunchFlags,
+	configPath: string | undefined,
+	repoPath: string | undefined,
+): InteractiveLauncher | undefined {
+	if (flags.agent !== true) {
+		return undefined;
+	}
+	const global = loadConfig(configPath);
+	const overrides = harnessFlagOverrides(flags);
+	const config =
+		repoPath !== undefined
+			? resolveRepoConfig({repoPath, global, flags: overrides}).config
+			: resolveGlobalConfig(global, overrides);
+	const harness = createHarness({
+		harness: config.harness,
+		piBin: config.piBin,
+	});
+	return (site) => {
+		// Generate the pi `--session` path for the onboarded working tree so the
+		// human session is recorded + dashboard-visible (decision #2); the resolved
+		// model flows in (decision #4). The harness's `launchInteractive` runs pi
+		// WITHOUT `--print`, inherited stdio, no piped prompt, in `site.dir`.
+		const session = generateSessionPath({
+			sessionsDir: config.sessionsDir,
+			cwd: site.dir,
+			id: site.slug,
+		});
+		harness.launchInteractive({
+			slug: site.slug,
+			dir: site.dir,
+			model: config.model,
+			session,
+			env: site.env,
+		});
+	};
+}
+
+/**
  * The shared `start`/`resume` action body. `start` and `resume` are the two
  * human in-place verbs of ADR §4: `start` BEGINS work here (claim if needed +
  * switch); `resume` CONTINUES here (re-engage an already-in-progress item by
@@ -344,13 +419,18 @@ async function runStartAction(
 ): Promise<void> {
 	// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 	const slug = resolveSliceOnlySlug(rawSlug);
+	const cwd = process.cwd();
 	const result = await performStart({
 		slug,
-		cwd: process.cwd(),
+		cwd,
 		arbiter: flags.arbiter ?? 'origin',
 		// `resume` (the verb) always asserts ownership; `start` honours --resume.
 		resume: resume || flags.resume === true,
 		override: flags.ignoreNotReady === true,
+		// `--agent`: launch the configured harness INTERACTIVELY in the checkout
+		// after onboarding (slice `agent-interactive-launch`). The per-repo config
+		// root is the current checkout.
+		launchInteractive: buildInteractiveLauncher(flags, flags.config, cwd),
 		note: (message) => console.error(`>> ${message}`),
 	});
 	if (result.exitCode !== 0) {
@@ -705,6 +785,24 @@ export function buildProgram(): Command {
 			'--ignore-not-ready',
 			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--agent',
+			'after onboarding, launch the configured harness INTERACTIVELY in the checkout (foreground, you drive it — no prepared prompt). Requires harness: pi. Not a tracked job (no record/gate); you still run `complete`/`requeue`.',
+		)
+		.option(
+			'--harness <name>',
+			'harness adapter for --agent: pi (interactive launch requires pi). Resolved flag > env > per-repo > global > default.',
+		)
+		.option(
+			'--model <model>',
+			'model the interactive --agent session starts pinned to (routing intent; you may switch inside pi). Resolved flag > env > per-repo > global > default.',
+		)
+		.option('--pi-bin <path>', 'path to the pi CLI binary (for --agent)')
+		.option(
+			'--sessions-dir <dir>',
+			'HOST-ONLY root folder under which the --agent pi session file is generated',
+		)
 		.action((rawSlug: string | undefined, flags: StartFlags) =>
 			runStartAction(rawSlug, flags, false),
 		);
@@ -774,6 +872,23 @@ export function buildProgram(): Command {
 			'--ignore-not-ready',
 			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
+		.option(
+			'--agent',
+			'after creating the worktree, launch the configured harness INTERACTIVELY in it (foreground, you drive it — no prepared prompt). Requires harness: pi. Not a tracked job (no record/gate); you still run `complete`/`requeue`.',
+		)
+		.option(
+			'--harness <name>',
+			'harness adapter for --agent: pi (interactive launch requires pi). Resolved flag > env > per-repo > global > default.',
+		)
+		.option(
+			'--model <model>',
+			'model the interactive --agent session starts pinned to (routing intent; you may switch inside pi). Resolved flag > env > per-repo > global > default.',
+		)
+		.option('--pi-bin <path>', 'path to the pi CLI binary (for --agent)')
+		.option(
+			'--sessions-dir <dir>',
+			'HOST-ONLY root folder under which the --agent pi session file is generated',
+		)
 		.action(async (rawSlug: string, flags: WorkOnFlags) => {
 			// The two forms are now distinguished by the `--remote` FLAG (ADR §4,
 			// consistent with `do --remote`), not a positional <remote>: bare =
@@ -804,6 +919,15 @@ export function buildProgram(): Command {
 				humanWorktreesDir: configuredRoot,
 				promptForRoot: (suggestion) => promptForWorktreesRoot(suggestion),
 				saveRoot: (chosen) => persistHumanWorktreesDir(chosen, configPath),
+				// `--agent`: launch the configured harness INTERACTIVELY in the new
+				// worktree after creation (slice `agent-interactive-launch`). In-repo
+				// mode resolves per-repo config from the current checkout; remote mode
+				// (no checkout) resolves from the global config only (like `do --remote`).
+				launchInteractive: buildInteractiveLauncher(
+					flags,
+					configPath,
+					remote === undefined ? process.cwd() : undefined,
+				),
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

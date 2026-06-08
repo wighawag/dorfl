@@ -327,6 +327,9 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 					output: '{"verdict":"approve","findings":[]}',
 				};
 			},
+			launchInteractive: () => {
+				throw new Error('stub harness does not launch interactively');
+			},
 			isAlive: () => false,
 		};
 		const gate = harnessReviewGate({harness: spyHarness, agentCmd: 'ignored'});
@@ -378,6 +381,9 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 					'Verdict below.\n{"verdict":"block","findings":[{"severity":"blocking","question":"misses it"}]}',
 				detail: undefined,
 			}),
+			launchInteractive: () => {
+				throw new Error('stub harness does not launch interactively');
+			},
 			isAlive: () => false,
 		};
 		const gate = harnessReviewGate({harness: outputHarness});
@@ -393,6 +399,9 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 		const emptyOutput: Harness = {
 			adapter: 'empty',
 			launch: () => ({ok: true, record: {adapter: 'empty'}, output: undefined}),
+			launchInteractive: () => {
+				throw new Error('stub harness does not launch interactively');
+			},
 			isAlive: () => false,
 		};
 		const gate = harnessReviewGate({harness: emptyOutput});
@@ -409,6 +418,9 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 				record: {adapter: 'fail'},
 				detail: 'boom',
 			}),
+			launchInteractive: () => {
+				throw new Error('stub harness does not launch interactively');
+			},
 			isAlive: () => false,
 		};
 		const gate = harnessReviewGate({harness: failing});
