@@ -133,3 +133,7 @@ git transition).
 > "Done" = `do prd: --propose`/`--merge` behave as above with tests, the lock is
 > unchanged, arg parity is asserted, the agent does no git, and
 > `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
