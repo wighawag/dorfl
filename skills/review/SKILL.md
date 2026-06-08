@@ -25,8 +25,11 @@ is the caller's job. This skill is the *assessment*, not the disposition.
 
 - **Use** to review: a **slice** (well-cut? claim-ready?); **code** in a work PR
   (does it deliver the slice it claims?); a **PRD** (sliceable? gate axes honest?);
-  a **note** (right bucket? actionable?); or a **set of slices** (do they compose
-  into the PRD/ADR goal?).
+  a **note** (right bucket? actionable?); or a **set of slices** — the whole-SET
+  lens: **graph coherence / gaps / overlap / goal-composition** (does the
+  dependency graph cohere, are there set-level gaps or overlapping/duplicated
+  slices, and do they compose into the PRD/ADR goal?). The set-level checks live in
+  lens 3 (cross-artifact composition) and lens 5 (the destination check).
 - **Don't** use it to *produce* the artifact (that's `to-prd` / `to-slices` / the
   build agent), nor to *route* the verdict (that's the caller — a review gate, a
   conductor skill, or a human). This skill only assesses.

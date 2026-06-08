@@ -488,4 +488,21 @@ describe('buildSliceReviewPrompt — frames the artifact + the output shape', ()
 		// The loop is framed as an IMPROVER, not a one-shot gate.
 		expect(prompt).toMatch(/loop, not a one-shot gate/);
 	});
+
+	it('explicitly NAMES the whole-SET lenses (graph coherence / gaps / overlap / goal-composition)', () => {
+		const prompt = buildSliceReviewPrompt({
+			slug: 'it',
+			cwd: '/tmp/x',
+			candidateSlices: ['work/backlog/child.md'],
+			pass: 1,
+			execution: 1,
+		});
+		// US #3 of slicing-coherence: the set-level lens must be NAMED, not only
+		// implied by the destination check.
+		expect(prompt).toMatch(/WHOLE SET/);
+		expect(prompt).toMatch(/graph coherence/i);
+		expect(prompt).toMatch(/gaps/i);
+		expect(prompt).toMatch(/overlap/i);
+		expect(prompt).toMatch(/goal-composition/i);
+	});
 });
