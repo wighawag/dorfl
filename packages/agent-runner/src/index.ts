@@ -349,7 +349,9 @@ export {
 	ReviewParseError,
 	parseReviewVerdict,
 	buildReviewPrompt,
+	buildSliceAcceptancePrompt,
 	harnessReviewGate,
+	harnessSliceAcceptanceGate,
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
 } from './review-gate.js';

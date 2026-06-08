@@ -43,6 +43,13 @@ const RACE_SENSITIVE = [
 	// --bare arbiter; keep it out of file-parallel pressure for the same
 	// deterministic claim/main-CAS reasoning as slicing.test.ts.
 	'test/slicing-integration.test.ts',
+	// The `do prd:<slug>` slice-SET ACCEPTANCE GATE (`slice-acceptance-gate`): the
+	// slice-path mirror of Gate-2 — runs a fresh-context review of the produced SET
+	// before it integrates, driving the lock CAS AND writing main (approve→merge /
+	// block→needs-attention via the lock's slicing/ → needs-attention redirect)
+	// against a --bare arbiter; keep it out of file-parallel pressure for the same
+	// deterministic claim/main-CAS reasoning as slicing-integration.test.ts.
+	'test/slice-acceptance-gate.test.ts',
 	'test/start.test.ts',
 	'test/work-on.test.ts',
 	'test/run.test.ts',

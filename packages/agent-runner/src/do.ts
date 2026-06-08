@@ -191,6 +191,19 @@ export interface DoOptions {
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
 	/**
+	 * **The slice-SET ACCEPTANCE GATE seam** (slice `slice-acceptance-gate`):
+	 * consumed ONLY by the `do prd:<slug>` slicing path. When `review` resolves on,
+	 * a fresh-context review of the produced slice SET runs BEFORE the slices
+	 * integrate (riding `performIntegration`'s review block); `block` routes the set
+	 * to needs-attention, `approve` lets it integrate. It rides the SAME BUILD
+	 * `--review`/`--no-review`/`--review-model` family as Gate-2 (one gate-config
+	 * story) and is ONE-SHOT (no rounds; it does NOT inherit `reviewMaxRounds`). It
+	 * is DISTINCT from the build {@link reviewGate} (a slice-SET prompt, not a code
+	 * diff) and from the slicer improver loop ({@link reviewLoop}). Production wires
+	 * `harnessSliceAcceptanceGate`; tests inject a canned verdict. Omitted ⇒ no gate.
+	 */
+	sliceReviewGate?: ReviewGate;
+	/**
 	 * The autonomous agent invocation. Tests inject this to edit files directly;
 	 * production wires the harness seam (the prompt-fed, run-to-completion launch
 	 * `run` uses). When omitted, {@link harness} is used.
@@ -306,6 +319,8 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewModel?: string;
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
+	/** The slice-SET ACCEPTANCE GATE seam — `do --remote prd:<slug>` path only (see {@link DoOptions.sliceReviewGate}). */
+	sliceReviewGate?: ReviewGate;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/** Sink for human-readable progress notes. */
@@ -451,6 +466,12 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			maxReview: options.maxReview,
 			reviewExecutions: options.reviewExecutions,
 			reviewModel: options.reviewModel,
+			// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): rides the BUILD
+			// `--review`/`--review-model` family — a fresh-context review of the produced
+			// SET before it integrates, ONE-SHOT, independent of the improver loop above.
+			review: options.review,
+			reviewGate: options.sliceReviewGate,
+			acceptanceReviewModel: options.reviewModel,
 			env,
 			note,
 		});
@@ -1130,6 +1151,10 @@ export async function performDoRemote(
 				maxReview: options.maxReview,
 				reviewExecutions: options.reviewExecutions,
 				reviewModel: options.reviewModel,
+				// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
+				review: options.review,
+				reviewGate: options.sliceReviewGate,
+				acceptanceReviewModel: options.reviewModel,
 				env,
 				note,
 			});

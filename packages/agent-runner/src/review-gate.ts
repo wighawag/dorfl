@@ -382,6 +382,127 @@ export function harnessReviewGate(
 }
 
 /**
+ * Render the SLICE-SET acceptance-gate PROMPT — the slice-path mirror of
+ * {@link buildReviewPrompt} (slice `slice-acceptance-gate`). Instead of reviewing
+ * a code diff against ONE slice, this instructs a FRESH-CONTEXT agent to review
+ * the WHOLE candidate SET of `work/backlog/*` slices produced for PRD `slug`,
+ * using the `review` skill's SET-OF-SLICES lens (coherence / dependency graph /
+ * gaps + overlap / "if every slice is built exactly as written, do we reach the
+ * system the PRD describes, and is each slice correct-if-implemented?"). It emits
+ * the SAME single `{verdict, review, findings[…]}` object so
+ * {@link parseReviewVerdict} reads it identically.
+ *
+ * This is a TERMINAL, ONE-SHOT accept/reject gate (it runs BEFORE the slice set
+ * integrates) — NOT the slicer IMPROVER loop (`slicer-review-loop.ts`), which
+ * EDITS slices between passes. This prompt explicitly forbids editing: the agent
+ * EMITS a verdict only; an `approve` lands the set, a `block` routes it to
+ * needs-attention.
+ */
+export function buildSliceAcceptancePrompt(slug: string): string {
+	return [
+		`You are a FRESH-CONTEXT reviewer (the slice-SET ACCEPTANCE GATE). Run the`,
+		`\`review\` skill in its SET-OF-SLICES mode over the candidate slices this`,
+		`slicing run produced for the PRD "${slug}" — the new/changed`,
+		`\`work/backlog/*.md\` files on this work branch — AGAINST their source PRD`,
+		`(work/prd/${slug}.md, or work/slicing/${slug}.md while it is held).`,
+		``,
+		`Review the WHOLE SET as a SET, not each slice in isolation. Apply the review`,
+		`skill's set-of-slices lens, ending in the destination check:`,
+		`  - COHERENCE — do the slices speak the PRD's (and the system's) language`,
+		`    consistently; no slice re-means or forks a concept another slice/the PRD`,
+		`    already owns?`,
+		`  - DEPENDENCY GRAPH — is the \`blockedBy\`/ordering graph sound (acyclic, the`,
+		`    keystone first, each slice's stated blockers really land its premise)?`,
+		`  - GAPS + OVERLAP — does the set COVER the PRD with no missing piece, and`,
+		`    without two slices doing the same work or fighting over the same seam?`,
+		`  - CORRECT-IF-IMPLEMENTED — if EVERY slice is built EXACTLY as written, do we`,
+		`    reach the system the PRD describes, and is each slice individually`,
+		`    correct-if-implemented (no slice that compiles but builds the wrong thing)?`,
+		``,
+		`You are ADVERSARIAL and judge the slices AS WRITTEN, not the PRD's intent.`,
+		`This is a TERMINAL one-shot accept/reject gate: do NOT edit any slice, do NOT`,
+		`run git — you EMIT a verdict only (the slicer improver loop, a SEPARATE`,
+		`concept, is what edits slices; this gate does not).`,
+		``,
+		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
+		`{"verdict": "approve" | "block",`,
+		` "review": "<the review prose — see below>",`,
+		` "findings": [`,
+		`   {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}`,
+		` ]}`,
+		`Use "block" with at least one blocking finding if the SET is incoherent, the`,
+		`dependency graph is unsound, the PRD is not covered (a gap) or is double-`,
+		`covered (an overlap), or a slice would build the wrong thing; otherwise`,
+		`"approve".`,
+		``,
+		`The "review" field is a human-readable REVIEW of the SET — write it FOR a`,
+		`human deciding whether to land these slices. LEAD with the verdict ("Approved"`,
+		`or "Blocked") and then give the lenses' reasoning and the destination check`,
+		`("if every slice is built as written, do we reach the PRD's system?"). Write`,
+		`it deliberately; do NOT narrate your process. It is plain text inside the JSON`,
+		`string (escape newlines as \\n).`,
+	].join('\n');
+}
+
+/**
+ * The PRODUCTION slice-SET acceptance gate (slice `slice-acceptance-gate`): the
+ * slice-path mirror of {@link harnessReviewGate}. It launches the `review` SKILL
+ * as a fresh-context agent through the SAME harness seam, routing the
+ * `reviewModel` override via `LaunchInput.model`, then parses the emitted
+ * `{verdict, findings}` — IDENTICAL machinery to the build gate, differing ONLY
+ * in the PROMPT ({@link buildSliceAcceptancePrompt}, a slice-SET review) and in
+ * being driven ONE-SHOT by the caller (the slicing path passes
+ * `reviewMaxRounds: 1`).
+ *
+ * Reuses the `ReviewGate` seam type verbatim so `performIntegration`'s review
+ * block runs it with no shape change. The review uses a DISTINCT session id
+ * (`<slug>-slice-acceptance`) so it never collides with the build review session
+ * OR the slicer improver loop's review session. NAME: `harnessSliceAcceptanceGate`
+ * (the ACCEPTANCE gate), DISTINCT from `slicer-review-loop.ts`'s
+ * `harnessSliceReviewGate` (the IMPROVER loop seam, which EDITS slices) — the two
+ * are non-overlapping concepts (gate = terminal pass/fail; loop = review→edit).
+ */
+export function harnessSliceAcceptanceGate(
+	options: HarnessReviewGateOptions = {},
+): ReviewGate {
+	const harness = options.harness ?? new NullHarness();
+	const readOutput = options.readOutput ?? ((output) => output ?? '');
+	return async (input: ReviewGateInput): Promise<ReviewVerdict> => {
+		if (input.watch === true) {
+			const sink =
+				input.watchSink ??
+				((line: string) => process.stderr.write(`${line}\n`));
+			sink(
+				boundaryLine(
+					`slice acceptance gate — reviewing ${input.slug}…`,
+					input.color ?? false,
+				),
+			);
+		}
+		const launched = await launchWithOptionalWatch({
+			harness,
+			dir: input.cwd,
+			slug: input.slug,
+			command: options.agentCmd ?? '',
+			prompt: buildSliceAcceptancePrompt(input.slug),
+			model: input.reviewModel,
+			sessionId: `${input.slug}-slice-acceptance`,
+			sessionsDir: input.sessionsDir,
+			watch: input.watch,
+			watchSink: input.watchSink,
+			color: input.color,
+			env: input.env,
+		});
+		if (!launched.ok) {
+			throw new ReviewParseError(
+				`slice acceptance gate launch failed${launched.detail ? `: ${launched.detail}` : ''}`,
+			);
+		}
+		return parseReviewVerdict(readOutput(launched.output));
+	};
+}
+
+/**
  * Format a review's BLOCKING findings into a needs-attention reason string —
  * recorded in the item body when the gate routes a `block` (the SAME body-prose
  * mechanism the red gate's reason uses; WORK-CONTRACT rule 3). Non-blocking

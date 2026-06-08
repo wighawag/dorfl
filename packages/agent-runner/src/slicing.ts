@@ -33,6 +33,7 @@ import {
 	type SliceReviewGate,
 	type RunSliceReviewLoopResult,
 } from './slicer-review-loop.js';
+import type {ReviewGate} from './review-gate.js';
 
 /**
  * The **`do prd:<slug>` slicing path** (PRD `auto-slice`, slice
@@ -175,6 +176,29 @@ export interface PerformSliceOptions {
 	integration?: IntegrationMode;
 	/** The review-request provider override (propose mode); auto-detect when unset. */
 	provider?: ReviewProviderName;
+	/**
+	 * **The slice-SET ACCEPTANCE GATE** (slice `slice-acceptance-gate`): the
+	 * slice-path mirror of the build Gate-2, riding {@link performIntegration}'s
+	 * review-before-integrate block. When `review` resolves on, a FRESH-CONTEXT
+	 * agent reviews the WHOLE produced slice SET (coherence / dependency graph /
+	 * gaps + overlap / PRD-goal correct-if-implemented) BEFORE the slices integrate;
+	 * `approve` lands them, `block` routes the set to needs-attention. It is
+	 * controlled by the BUILD `--review`/`--no-review`/`--review-model` family (ONE
+	 * gate-configuration story shared with the build path) and is ONE-SHOT —
+	 * terminal pass/fail, NO rounds (it does NOT inherit `--review-max-rounds`; the
+	 * caller drives it with a single reviewer invocation). It is DISTINCT from and
+	 * independently controllable from the slicer improver loop ({@link reviewLoop} /
+	 * the `--slicer-loop*` family).
+	 */
+	review?: boolean;
+	/** The slice-SET acceptance-gate SEAM (injectable). Required when `review` is on. */
+	reviewGate?: ReviewGate;
+	/**
+	 * The model the slice-SET acceptance-gate reviewer runs on (the BUILD
+	 * `--review-model`, de-correlated from the slicer). DISTINCT from the improver
+	 * loop's {@link reviewModel} — see the note there.
+	 */
+	acceptanceReviewModel?: string;
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
 	lock?: SlicingLockSeam;
 	/**
@@ -441,11 +465,37 @@ export async function performSlice(
 			// (a slicing transition never recovers a surfaced needs-attention move).
 			source: 'in-progress',
 			recovering: false,
-			// Skip the build acceptance gate: a slicing transition has no `verify` floor
-			// (the slicer review loop above is its quality gate). The fresh-context slice
-			// acceptance gate is the SEPARATE `slice-acceptance-gate` slice, blocked on
-			// this one — NOT added here.
+			// Skip the build acceptance gate (Gate 1 / verify): a slicing transition has
+			// no `verify` floor (the slicer review loop above is its quality gate).
 			skipVerify: true,
+			// THE SLICE-SET ACCEPTANCE GATE (slice `slice-acceptance-gate`): the
+			// slice-path mirror of the build Gate-2, riding THIS shared core's
+			// review-before-integrate block. When `review` resolves on, the wired
+			// `reviewGate` (production: `harnessSliceReviewGate` with the slice-SET
+			// prompt) runs a FRESH-CONTEXT review of the produced slice SET before it
+			// integrates: `approve` lands it, `block` routes the set to needs-attention
+			// via the SAME machinery the build block uses (mapped to the slicing
+			// `needs-attention` outcome below). It is ONE-SHOT: we pin
+			// `reviewMaxRounds: 1` so the gate is a SINGLE reviewer invocation → verdict
+			// (terminal pass/fail). The slice path NEVER exposes/consults
+			// `--review-max-rounds` — a gate is terminal, the rounds bound is an orphan
+			// that belongs to a future revise↔review loop (see
+			// `work/observations/reviewmaxrounds-on-wrong-concept.md`). This is
+			// independently controllable from the slicer improver loop (`reviewLoop` /
+			// the `--slicer-loop*` family); toggling one does not affect the other.
+			review: options.review,
+			reviewGate: options.reviewGate,
+			reviewModel: options.acceptanceReviewModel,
+			reviewMaxRounds: 1,
+			// `autoMerge: true` so an APPROVE lets the EXPLICITLY-chosen integrate mode
+			// proceed AS-IS — a `--merge` slicing run still lands on main on approve,
+			// `--propose` still opens a PR. The slicing path's merge-vs-propose decision
+			// is the `integration` mode the user typed, NOT the build gate's `--auto-merge`
+			// policy (which downgrades merge→propose on approve when off). The slice gate
+			// family is `--review`/`--no-review`/`--review-model` only (PRD US #6) — it
+			// does NOT expose `--auto-merge`, so we never downgrade the chosen mode here.
+			// (See ## Decisions in the slice.)
+			autoMerge: true,
 			mode: options.integration ?? 'propose',
 			provider: options.provider,
 			type: 'slicing',
@@ -458,6 +508,42 @@ export async function performSlice(
 			env,
 			note,
 		});
+
+		// THE SLICE-SET ACCEPTANCE GATE BLOCKED (slice `slice-acceptance-gate`): the
+		// fresh-context review of the produced SET returned `block`, so the core ran
+		// the review BEFORE the stage/integrate and did NOT integrate the slices
+		// (correct). But the held PRD lives in `work/slicing/<slug>.md`, NOT the build
+		// lifecycle's `in-progress/done/` that the core's needs-attention route
+		// (`applyNeedsAttentionTransition`) understands — so that route is a harmless
+		// no-op here (it finds nothing to move). The CORRECT slice-path destination is
+		// the SAME `slicing/ -> needs-attention/` redirect the lock release already
+		// owns for the decomposition-unclear verdict (the existing slice-path
+		// needs-attention concept; see ## Decisions in the slice). So on a block we route
+		// the held PRD to needs-attention THROUGH the lock release — the set never lands.
+		if (core.outcome === 'review-blocked') {
+			const reason = sliceGateBlockedReason(slug, core.reviewBlockReason);
+			const routed = await lock.release({
+				slug,
+				cwd,
+				arbiter,
+				lockedBlob,
+				routeToNeedsAttention: {reason},
+				env,
+				note,
+			});
+			if (routed.outcome !== 'released') {
+				return releaseFailureToResult(routed, slug);
+			}
+			note(reason);
+			return {
+				exitCode: 1,
+				outcome: 'needs-attention',
+				slug,
+				message:
+					`The slice acceptance gate blocked the set produced for '${slug}'; ` +
+					`routed the PRD to work/needs-attention/ (no slices landed).`,
+			};
+		}
 		return integrationToSliceResult(core, {slug, emitted, loop: loopTag});
 	}
 
@@ -510,9 +596,12 @@ function releaseFailureToResult(
  * slicing is `sliced`. The band's FAILURE outcomes are reported on the slicing
  * contract: a `rebase-conflict` against a concurrently-advanced `main` maps to
  * `stale` (exit 4) — the slicing analogue of "the held PRD moved under us"; a
- * `gate-failed` cannot occur (the slicing path passes `skipVerify`) but maps to a
- * usage error defensively; `review-blocked` likewise (no review gate is wired
- * here — the `slice-acceptance-gate` slice adds it).
+ * a `gate-failed` cannot occur (the slicing path passes `skipVerify`) but maps to
+ * a usage error defensively. A `review-blocked` (the slice-SET ACCEPTANCE GATE
+ * blocked the set, slice `slice-acceptance-gate`) is handled by `performSlice`
+ * BEFORE this mapper — it routes the held PRD `slicing/ -> needs-attention/` via
+ * the lock release (the slice-path needs-attention route) — so it never reaches
+ * here; it is mapped defensively to a usage error if it ever does.
  */
 function integrationToSliceResult(
 	core: IntegrationCoreResult,
@@ -676,6 +765,26 @@ async function gitHard(
 		);
 	}
 	return result;
+}
+
+/**
+ * Build the needs-attention REASON for a slice-SET ACCEPTANCE GATE block (slice
+ * `slice-acceptance-gate`): the fresh-context review of the produced set returned
+ * `block`, so the PRD is routed to `work/needs-attention/` with the review's
+ * blocking findings as the body prose and NO slices landed. Takes the core's
+ * structured `reviewBlockReason` (the gate's blocking findings); falls back to a
+ * generic line when absent. DISTINCT from the improver loop's
+ * {@link decompositionUnclearReason} (which carries the loop's open questions).
+ */
+function sliceGateBlockedReason(
+	slug: string,
+	findingsReason: string | undefined,
+): string {
+	const head =
+		`The slice acceptance gate (fresh-context review of the produced SET) blocked ` +
+		`'${slug}'. The PRD is routed to needs-attention with no slices landed; a human ` +
+		`must resolve the blocking findings, then re-slice.`;
+	return findingsReason ? `${head}\n\n${findingsReason}` : head;
 }
 
 /**

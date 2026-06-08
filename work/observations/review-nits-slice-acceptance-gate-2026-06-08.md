@@ -1,0 +1,21 @@
+---
+title: review-gate non-blocking nits for 'slice-acceptance-gate' (Gate 2 approve)
+date: 2026-06-08
+status: open
+slug: slice-acceptance-gate
+---
+
+## Non-blocking review findings
+
+The PR/code review gate (Gate 2) APPROVED 'slice-acceptance-gate' but raised the
+following non-blocking findings (nits). They do not block integration; this
+is their durable home for batch-qa triage (promote-to-slice / keep / delete).
+
+- Ratify the autoMerge:true decision on the slice integrate call: the agent passes autoMerge:true so an APPROVE lets the EXPLICITLY-typed integrate mode (--merge lands on main, --propose opens a PR) proceed AS-IS, rather than the build gate's policy of downgrading merge→propose when --auto-merge is off. Is preserving the typed mode (and NOT exposing --auto-merge on the slice path) the intended behaviour?
+  (slicing.ts performIntegration call: autoMerge:true is recorded in the in-code '## Decisions' rationale (the slice gate family is --review/--no-review/--review-model only, PRD US #6; no --auto-merge). This is a deliberate cross-path divergence from the build gate's downgrade-on-approve semantics and is worth an explicit human ratification, since it is the kind of default that is load-bearing for CI behaviour (a --merge slicing run lands on main directly on approve).)
+- Ratify the slice-path block destination: a blocked SET is routed slicing/ → needs-attention/ via the lock release (the SAME redirect used for the improver loop's decomposition-unclear verdict), reusing the existing slice-path needs-attention concept rather than the build path's in-progress→needs-attention route. Is reusing that one route for both the loop's decomposition-unclear AND the gate's block the intended single concept?
+  (slicing.ts: the block path calls lock.release({routeToNeedsAttention:{reason}}) and maps to outcome 'needs-attention' exit 1. This is a coherent reuse (one slice-path needs-attention concept, two reasons distinguished by sliceGateBlockedReason vs decompositionUnclearReason), but it is an in-scope design choice the slice did not spell out verb-by-verb; flagging for ratification.)
+- Coherence: the new gate seam is harnessSliceAcceptanceGate while the improver-loop seam is harnessSliceReviewGate (slicer-review-loop.ts). The two names are easy to confuse, and the loop's seam is named '...ReviewGate' even though it is a LOOP, not a gate. Should the loop seam be renamed (e.g. to a ...Loop name) so 'gate' vs 'loop' is unambiguous at the function-name layer the way it already is at the flag layer (--review* vs --slicer-loop*)?
+  (review-gate.ts:harnessSliceAcceptanceGate vs slicer-review-loop.ts:harnessSliceReviewGate. The flag-layer naming rule is respected; this is a pre-existing seam-naming muddle the new code did not create, but the new neighbour makes the collision more acute. Non-blocking rename candidate, not a defect of this slice.)
+- Scope note: the slicing performIntegration call does not thread watch/watchSink/color/sessionsDir into the acceptance gate, so --watch will not live-tail the slice gate's review session (unlike the build Gate-2 after watch-review-session). Is leaving --watch un-threaded on the slice gate acceptable for now (a future slice), or should it be wired here?
+  (harnessSliceAcceptanceGate accepts those inputs, but performSlice's performIntegration call omits them. --watch live-tailing is the separate 'watch-review-session' slice's concern and is not in this slice's acceptance criteria, so this is informational, not a gap against the slice.)
