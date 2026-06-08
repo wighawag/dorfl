@@ -15,6 +15,36 @@ sliceAfter: [auto-slice]
 > the launch snapshot of that idea, written to be **dogfooded by `auto-slice`
 > once it lands** — hence non-`humanOnly` (see Autonomy notes). Names (`advance`,
 > `obs:`, the repo-config keys) are taken as proposed; the slicer/ADRs may finalise.
+>
+> **SUBSTRATE-READINESS NOTE (2026-06-08, planted by an `orchestrate` sitting — read
+> before slicing).** The three pieces this PRD declares it REUSES have now LANDED on
+> `main`, so the slicer should treat them as PRESENT substrate, not pending work:
+> - **The `do`/`run` integrate-path convergence** is DONE — both slices of
+>   `run-do-integrate-convergence` (`extract-integration-core`,
+>   `run-through-integration-core`) are in `work/done/`; the shared gate→integrate
+>   back-half is `src/integration-core.ts` (`performIntegration`). The tick's
+>   "execute the build/slice rung" reuses THIS, not `run.ts`/`complete.ts` copies.
+> - **The isolation-strategy seam** now has ALL THREE consumers on the one
+>   `IsolatedTree` handle: `run` + `do --remote` (already) and in-place `do` (slice
+>   `do-run-share-isolation-seam`, built 2026-06-08, in review at PR #37). The tick's
+>   "isolation falls out of the seam" claim (User Story 26) is now literally true —
+>   the handle-driven post-claim pipeline IS the unit the tick wraps. (If PR #37 has
+>   not merged when this PRD is sliced, the in-place consumer may still be a hair
+>   behind — confirm `selectIsolationStrategy`/`inPlaceStrategy` has a production
+>   consumer in `do.ts` before relying on it.)
+> - **The build-agent → runner REPORTING CHANNEL** (slice `agent-stop-signal`,
+>   merged 2026-06-08, PR #36) now exists: a hard STOP sentinel routes a drifted item
+>   to needs-attention BEFORE the gate, and a soft `## Decisions` block surfaces
+>   in-scope decisions for ratification. The advance tick's "never invent an answer /
+>   surface judgement" posture should COMPOSE this channel — a rung whose agent
+>   STOPs is a surface-a-question signal, not a build failure; the `## Decisions`
+>   block is a natural feed into the sidecar's ratification entries. Worth the slicer
+>   considering as a reuse, not just the batch-qa rungs.
+>
+> Note also: this PRD's `advance` is the AUTONOMOUS, file-mediated sibling of the
+> `orchestrate` skill (the human-in-the-loop conductor) and the `drive-backlog` skill
+> (the build loop). They are designed to converge on the SAME tick contract — keep
+> the tick shape here aligned with what those skills actually do by hand.
 
 ## Problem Statement
 
