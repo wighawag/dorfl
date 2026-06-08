@@ -2,10 +2,13 @@
 title: agent-interactive-launch — --agent on start/work-on launches the harness INTERACTIVELY
 slug: agent-interactive-launch
 prd: command-surface-phase-2
-needsAnswers: true
 blockedBy: [human-face-verbs]
 covers: [14]
 ---
+
+> **`needsAnswers` CLEARED 2026-06-07** (human decision). The four open seam
+> questions below are RESOLVED (see "Resolved decisions"); the provisional acceptance
+> criteria are finalised accordingly. This slice is now agent-buildable.
 
 ## What to build
 
@@ -16,10 +19,9 @@ the human-facing counterpart to the autonomous launch in `run`/`do`: here there 
 **no prepared prompt fed on stdin** and **no unattended gate** — it just starts the
 harness in the human's onboarded working tree so they can drive it.
 
-This is split out of `human-face-verbs` (which ships `resume` + `work-on` cd) and
-gated `needsAnswers: true` because it requires a **new harness-seam capability that
-does not exist yet**, and the exact shape of that capability is an open question
-(below). Do NOT build until the questions are answered and the flag cleared.
+This is split out of `human-face-verbs` (which ships `resume` + `work-on` cd)
+because it requires a **new harness-seam capability that does not exist yet**. The
+exact shape was an open question; it is now RESOLVED below ("Resolved decisions").
 
 ### Why this is not a trivial flag
 
@@ -65,38 +67,62 @@ these in when resolving the open questions below:
   launch; `--agent` additionally inherits stdio). Check whether `do-watch`'s launch
   refactor already exposes the seam to build on.
 
-## Open questions (resolve before building — clear `needsAnswers` when done)
+## Resolved decisions (2026-06-07 — the former open questions)
 
-1. **Seam shape.** Is interactive launch a new method on the `Harness` interface
-   (e.g. `launchInteractive(input)`), or a separate code path / a mode flag on the
-   existing seam? The ADR §5 discipline (one declared intent, adapter-specific
-   realisation) should guide it, but the concrete signature is undecided.
-2. **Adapter realisation.** How does each adapter realise it? `pi` (invoke the pi
-   CLI as a foreground interactive session in the working tree — which pi invocation
-   exactly?); `null`/shell (run `agentCmd` with inherited stdio — but `agentCmd` is
-   shaped for the captured autonomous path; does interactive even make sense for the
-   null adapter, or is `--agent` pi-only with a clear error otherwise?).
-3. **Liveness / return semantics.** The autonomous seam records a PID for liveness;
-   an interactive foreground session blocks the CLI until the human exits. What does
-   the command return/record, and does it interact with the job-record/liveness
-   model at all (probably not — it is a human session, not a tracked job)?
-4. **Model routing.** Does the resolved `model` (ADR §13) flow into the interactive
-   launch the same way it does for the autonomous path, or is the model the human's
-   choice inside the interactive session?
+1. **Seam shape — a NEW method on the `Harness` interface: `launchInteractive(input)`,
+   NOT a mode flag on `launch`.** `launch` is fundamentally spawnSync + prompt-on-
+   stdin + capture-output + a `LaunchResult` (`ok`/`output`); interactive is the
+   opposite shape (inherit stdio, no prompt, foreground-block, nothing capturable). A
+   boolean on `launch` would make its return type lie and force every caller to
+   branch. Two clearly-named intents on the seam satisfy ADR §5 (one declared intent,
+   adapter-specific realisation) and keep the autonomous `launch` path byte-identical.
+   Signature: `launchInteractive(input): void` (or a thin result carrying only an exit
+   code — there is no captured output / PID record; see #3).
+2. **Adapter realisation — pi-only, clear error on null.**
+   - **pi adapter:** interactive = `pi` **WITHOUT `--print`**, **inherited stdio**
+     (`stdio: 'inherit'`), **no piped prompt**, run in `input.dir`, foreground. KEEP
+     passing `--session <path>` so the human session is still recorded/visible (audit
+     trail + the pi dashboard still apply). (The autonomous form stays
+     `pi --print --session <path>` with the prompt on stdin, captured.)
+   - **null/shell adapter:** `--agent` is **pi-only** — `launchInteractive` throws a
+     CLEAR error ("interactive launch requires the pi harness; configure `harness:
+     pi`"), mirroring `do-watch`'s fail-on-null decision. `agentCmd` is shaped for the
+     captured autonomous path; "interactive" has no clean meaning there.
+3. **Liveness / return — a human session, NOT a tracked job.** It blocks the CLI in
+   the foreground until the human exits, then returns control. It does NOT write a
+   `.agent-runner-job.json` record, does NOT participate in the PID/liveness/`status`/
+   `gc` model, and does NOT auto-run the gate (no unattended completion). After exit
+   the human is left on the onboarded `work/<slug>` branch and drives `complete`/
+   `requeue` themselves (the normal human face). `launchInteractive` returns void / an
+   exit code only — nothing to record.
+4. **Model routing — the resolved `model` (ADR §13: flag > env > per-repo > global)
+   FLOWS INTO the interactive launch**, the same as the autonomous path, so the human
+   starts pinned to the intended model (otherwise `start --agent --model X` would
+   silently do nothing — a surprising inconsistency with `do`/`run`). The human may
+   still switch models inside the pi session afterward (pi's own affordance); the
+   LAUNCH respects the resolved routing.
 
 ## Acceptance criteria
-
-> Provisional — finalise when the open questions are resolved.
 
 - [ ] `--agent` on `start` and `work-on` launches the configured harness
       INTERACTIVELY in the onboarded working tree (foreground, inherited stdio,
       awaiting the human, NO prepared prompt) — NOT the autonomous captured launch.
-- [ ] The interactive-launch capability is added to the harness seam per the
-      resolved seam shape (Q1/Q2), consistent with ADR §5; the captured `launch`
-      path is unchanged.
+- [ ] A NEW `launchInteractive(input)` method is added to the `Harness` seam
+      (decision #1); the existing captured `launch` path is UNCHANGED (byte-identical
+      — its tests pass unmodified).
+- [ ] pi adapter: `launchInteractive` runs `pi` WITHOUT `--print`, inherited stdio,
+      no piped prompt, in `input.dir`, still passing `--session <path>` (decision #2).
+- [ ] null adapter: `launchInteractive` throws a clear pi-only error (decision #2).
+- [ ] It is NOT a tracked job: no `.agent-runner-job.json`, no PID/liveness record,
+      no gate; it returns control on human exit, leaving them onboarded on
+      `work/<slug>` (decision #3).
+- [ ] The resolved `model` (flag > env > per-repo > global) flows into the
+      interactive pi launch (decision #4).
 - [ ] Tests assert an INTERACTIVE launch (inherited stdio / foreground, no prepared
-      prompt) with the right cwd, via the resolved interactive seam (NOT the
-      captured-`launch` stub used for the autonomous path).
+      prompt) with the right cwd via `launchInteractive` (NOT the captured-`launch`
+      stub); the null adapter's pi-only error; and that `--agent` does not write a
+      job record. Use the house harness-stub + temp-dir isolation; assert the real
+      `~/.agent-runner/` + `~/.pi/agent/sessions/` are untouched.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -107,13 +133,14 @@ these in when resolving the open questions below:
 
 ## Prompt
 
-> NOTE: this slice is `needsAnswers: true` — do NOT build it until the open questions
-> in its body (the interactive-launch seam shape + adapter realisation + return/
-> liveness semantics + model routing) are answered and the flag is cleared. If you
-> are reading this with the flag still set, route to needs-attention / surface the
-> questions rather than guessing a seam design.
+> NOTE: the former `needsAnswers` flag is CLEARED — the four seam questions are
+> RESOLVED in this slice's "Resolved decisions" section (new `launchInteractive` seam
+> method; pi-only with a clear null-adapter error; not a tracked job; resolved
+> `model` flows in). BUILD TO THOSE DECISIONS; do not re-litigate them. If the code
+> has drifted such that a decision no longer fits, STOP and surface it (do not guess
+> a different seam design).
 >
-> Once unblocked: add `--agent` to `start` and `work-on` to launch the configured
+> Add `--agent` to `start` and `work-on` to launch the configured
 > harness INTERACTIVELY (foreground, inherited stdio, no prepared prompt — the human
 > drives it), per `docs/adr/command-surface-and-journeys.md` §4. CRITICAL: the
 > existing `Harness.launch` (`src/harness.ts`) is `spawnSync` + prompt-on-stdin +
