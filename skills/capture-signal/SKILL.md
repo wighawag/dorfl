@@ -67,8 +67,12 @@ Tie-breakers:
 - **Make it actionable:** state what was seen, where (refs/`file:line`/commit), and
   why it matters — enough that a future reader (or you) can act without the
   conversation.
-- **Do NOT auto-commit** in an interactive session — write the file, report the
-  path, leave it for the maintainer (per the repo's git etiquette).
+- **Do NOT auto-commit** when firing standalone in an interactive session — write
+  the file, report the path, leave it for the maintainer (per the repo's git
+  etiquette). (EXCEPTION: when a conductor/autonomous caller — e.g. `drive-backlog`
+  / `orchestrate` — captures the note as part of a run that commits its own
+  observations, it commits this note too and reports it; the no-auto-commit default
+  is for the standalone interactive reflex.)
 
 ## Anti-pattern this skill exists to prevent
 

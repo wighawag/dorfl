@@ -94,12 +94,15 @@ In leverage order (do the rung that unlocks the most downstream work first):
   relevant `needsAnswers`, fill the slice/PRD gap, which may make new items advanceable
   (re-run step 1's classification for them).
 
-Each autonomous action records into the tree and is COMMITTED as it goes: triaged
-observations, planted forward-notes, and the runner-owned slice/PRD transitions
-(`do prd:` commits its own slicing transition). Commit contract-native moves +
-your own `work/` notes; do NOT sweep in unrelated source changes. Report everything
-you committed in the final summary so the human sees it in `git log`. (Slices that
-get BUILT are committed/merged by `drive-backlog` via the normal PR flow.)
+Commit policy (matches the producer skills): **commit your own `work/observations/`
+notes and small load-bearing forward-notes you plant in a slice body** (these are
+contract-native protocol edits), plus the runner-owned transitions that `do prd:` /
+`do` / `complete` make themselves (the slicing transition, done-moves, PR merges).
+Do NOT hand-author-and-commit a full PRD or a fresh SLICE SET — producing those is
+`to-prd`/`to-slices`' job, and per their convention they are left UNSTAGED for human
+review (you surface them; the human commits). Never sweep in unrelated source.
+Report everything you committed in the final summary. (Slices that get BUILT are
+committed/merged by `drive-backlog` via the normal PR flow.)
 
 ### 3. ASK the residue — batched, conversational, never invented
 
@@ -165,10 +168,11 @@ the meta report:
   discipline `drive-backlog`/the build agents use for slices).
 - **Sub-agents return questions; they don't ask them.** Always voice a delegated
   loop's stuck-set yourself, batched — never assume the sub-agent reached the human.
-- **Commit your tree changes; report them.** Triaged observations, planted
-  forward-notes, and the runner-owned slice/PRD transitions are committed as you go
-  (contract-native, append-only) and listed in the summary — don't leave them
-  dangling. Don't sweep in unrelated source changes.
+- **Commit observations + forward-notes; leave authored artifacts for review.**
+  Your `work/observations/` notes and small planted forward-notes are committed as
+  you go (contract-native) and listed in the summary; a freshly-authored PRD or
+  slice SET is left UNSTAGED for the human (the producer-skill convention). Don't
+  sweep in unrelated source changes.
 - **Building mechanics live in `drive-backlog`.** When you build (step 4), the
   long-running `do` process, the interrupt footgun (an abort does NOT kill the
   spawned agent), generous timeouts, flaky-gate retries, and Gate-3 discipline are

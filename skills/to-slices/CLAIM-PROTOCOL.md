@@ -1,4 +1,4 @@
-# Claim protocol (consumed by the lifecycle skill)
+# Claim protocol (consumed by the runner — `agent-runner claim`/`do`/`complete`)
 
 This documents how a `work/backlog/<slug>.md` item is **atomically claimed** by
 one agent (human or AFK) when several may try at once. The **slices** skill does

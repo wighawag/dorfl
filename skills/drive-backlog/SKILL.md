@@ -101,8 +101,14 @@ posture is WHERE each `do` runs:
 5. **Clean tree before every `do`** (`do` refuses on a dirty tree) — so COMMIT your
    own `work/observations/` notes (they are contract-native, append-only, low-risk)
    before the next `do`, rather than leaving them uncommitted/stashed. Report what
-   you committed in the summary. (Do NOT commit unrelated source changes — only your
-   observation notes + the protocol's own moves.)
+   you committed in the summary. **What a conductor commits:** its own
+   `work/observations/` notes; a load-bearing **forward-note it plants in a slice
+   body** (step 2 — it MUST be committed to take effect before that slice's `do`, and
+   it is a small protocol-mechanical edit, not authored content); and the protocol's
+   own moves the runner/`do`/`complete` make (claim reverts, done-moves, PR merges).
+   It does NOT hand-author-and-commit a full PRD or a fresh slice SET — producing
+   those is `to-prd`/`to-slices`' job and they are left for human review. Report
+   every commit in the summary.
 6. **Accumulate, don't stall.** When ONE slice is stuck or needs a judgement call,
    write it into the stuck-set and move to the next INDEPENDENT ready slice — never
    block the whole loop on one item. Voice the stuck-set per your posture (interactive
@@ -223,10 +229,12 @@ design **depends on the shape** of slices you're about to land (a `sliceAfter:` 
 (e.g. "keep this loop/tick separable", "keep `-n` sequential", "don't rename X —
 the advance migration owns it", "shape this as a named callable unit"), **add the
 note to the slice body now** (compose `to-slices`' forward-note discipline). These
-notes are load-bearing: they prevent the downstream PRD from needing changes. If a
-note is non-trivial or you're unsure it's wanted, that is a WALL → record it in the
-stuck-set (interactive asks it later in the batch; autonomous returns it) rather than
-planting a guessed note. (A note you're confident about, just plant.)
+notes are load-bearing: they prevent the downstream PRD from needing changes. A note
+you're CONFIDENT about: plant it and COMMIT it (it must land before that slice's `do`
+to take effect; per rule 5 this small protocol edit is committed, unlike authored
+artifacts). If a note is non-trivial or you're unsure it's wanted, that is a WALL →
+record it in the stuck-set (interactive asks it later in the batch; autonomous
+returns it) rather than planting a guessed note.
 
 > This is the step that earns the conductor its keep — a per-slice `do` agent only
 > sees its own slice; only the conductor sees the whole graph + the pending PRDs and

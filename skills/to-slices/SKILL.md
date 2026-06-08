@@ -11,17 +11,19 @@ file-based equivalent of converting a plan into issues — the source of truth i
 **git markdown**, not an external issue tracker, so it stays versioned with the
 code and works offline.
 
-This skill is the **producer** of `work/` items. A separate lifecycle skill
-*consumes* them (claim → in-progress → done). This skill defines the on-disk
-contract both share.
+This skill is the **producer** of `work/` items. The **runner** consumes them —
+`agent-runner claim`/`start`/`do`/`complete` walk a slice claim → in-progress → done
+(driven across a backlog by the `drive-backlog` / `orchestrate` conductor skills).
+This skill defines the on-disk contract they share.
 
 ## When to use vs. not
 
 - **Use** when slicing a `work/prd/*.md`, a design doc, or a plan into grabbable
   units for solo-with-agents (incl. parallel AFK) work.
 - **Don't** use to *write* the PRD (that's a separate step) or to *claim/run* a
-  slice (that's the lifecycle skill). Don't introduce a shared index file or a
-  status field — status is the folder (see [WORK-CONTRACT.md](WORK-CONTRACT.md)).
+  slice (that's the runner: `agent-runner claim`/`do`/`complete`, or the
+  `drive-backlog` conductor). Don't introduce a shared index file or a status field
+  — status is the folder (see [WORK-CONTRACT.md](WORK-CONTRACT.md)).
 
 ## Process
 
@@ -165,6 +167,6 @@ so the user can inspect them. Report the exact paths written (and the trimmed PR
 
 The full `work/` layout, slug rules, and frontmatter are in
 [WORK-CONTRACT.md](WORK-CONTRACT.md). The claim/lifecycle protocol these files are
-designed to support (consumed by the lifecycle skill) is in
-[CLAIM-PROTOCOL.md](CLAIM-PROTOCOL.md) — read it so the files you emit are
+designed to support (consumed by the runner — `agent-runner claim`/`do`/`complete`)
+is in [CLAIM-PROTOCOL.md](CLAIM-PROTOCOL.md) — read it so the files you emit are
 claim-ready, but this skill does not itself claim or run slices.

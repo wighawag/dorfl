@@ -28,8 +28,8 @@ is the caller's job. This skill is the *assessment*, not the disposition.
   a **note** (right bucket? actionable?); or a **set of slices** (do they compose
   into the PRD/ADR goal?).
 - **Don't** use it to *produce* the artifact (that's `to-prd` / `to-slices` / the
-  build agent), nor to *route* the verdict (that's the caller — a gate, `batch-qa`,
-  a human). This skill only assesses.
+  build agent), nor to *route* the verdict (that's the caller — a review gate, a
+  conductor skill, or a human). This skill only assesses.
 
 ## The core disciplines (what makes a review thorough, not shallow)
 
@@ -164,8 +164,8 @@ per item → { verdict: "approve" | "block",
 - a **review GATE** routes a `block` → set `needsAnswers: true` on the artifact
   (question in its body) or `git mv` to `needs-attention/`; `approve` → let it land
   / auto-merge.
-- **`batch-qa`** routes a `block` → a section in its one batch file for the human
-  to answer in bulk.
+- a **conductor** (e.g. `drive-backlog`/`orchestrate`) routes a `block` → into its
+  stuck-set / batched questions for the human; `approve` → merge / advance.
 
 ## Scope fence
 
