@@ -68,6 +68,13 @@ conductor/orchestrate: this is exactly the kind of cross-slice interaction that
 should surface as a question rather than be settled silently — worth a glance at
 whether OTHER cross-slice seams were decided inline.)
 
+> SYSTEMIC FIX (2026-06-07): this inline-decision-buried-in-code pattern is now
+> addressed by **`work/backlog/agent-stop-signal.md` Part B/C** — the build agent
+> self-reports non-obvious in-scope decisions in a `## Decisions` block, and the
+> Gate-2 review hunts for un-declared ones. That makes a choice like this `-n`×
+> `--remote` refusal a reviewable artifact instead of silent drift. The feature
+> requests (a)/(b) below are separate from that systemic fix.
+
 The capability itself is real and wanted: a remote/isolated auto-pick would need a
 **mirror-side pool scan** (enumerate eligible slices + sliceable PRDs from the bare
 hub mirror's `main`, not the in-place checkout). With (a) + a mirror-side pool, you
