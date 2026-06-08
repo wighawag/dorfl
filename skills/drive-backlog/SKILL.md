@@ -9,8 +9,8 @@ description: "Drive a whole work/ backlog of ready SLICES to exhaustion as a CON
 already builds ONE slice autonomously (claim → build agent → acceptance gate →
 Gate-2 review → PR). `drive-backlog` is the layer ABOVE: it looks at the *whole*
 backlog, checks each ready slice is still *fresh*, decides *what* to build and in
-*what order*, drives `do` per slice, then acts as a **third reviewer** (Gate-3) over
-each PR before merging it.
+*what order*, drives `do` per slice, then acts as a **third reviewer** (Gate-3, the
+conductor's own diff-vs-criteria pass — see step 4b) over each PR before merging it.
 
 It is a **methodology skill** (prose you follow), like `to-slices` / `review` —
 NOT a runner command. **Precondition:** it drives the **`agent-runner` CLI** over a
@@ -24,9 +24,9 @@ The other skills stay protocol-native.) It composes:
 
 It is **scoped to building ready SLICES.** The broader job — survey *everything*
 (observations, ideas, PRDs, slices), figure out what can advance, fill judgement
-gaps conversationally until new slices are READY, then build them — is `orchestrate`
-(`orchestrate`). `orchestrate` delegates the BUILDING to `drive-backlog`. Keep this
-skill focused on building ready slices; hand the deep survey up to `orchestrate`.
+gaps conversationally until new slices are READY, then build them — is `orchestrate`,
+which delegates the BUILDING back to this skill. Keep `drive-backlog` focused on
+building ready slices; hand the deep survey up to `orchestrate`.
 
 ## How it stalls (the stuck-set)
 

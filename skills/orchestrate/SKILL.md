@@ -38,7 +38,7 @@ commands to tell it the state. (The one place runner commands ARE used is buildi
   (`review`). Don't use it as the unattended daemon (`run`/`advance`). It is
   **always main-session and conversational** — its defining job is the live Q&A.
 
-## Interactive vs autonomous draining (read once)
+## Relationship to the autonomous `advance` engine (read once)
 
 `orchestrate` is the **interactive, human-in-the-loop** way to drain a `work/` tree:
 it asks its questions conversationally, in the session, and you answer live. Its
