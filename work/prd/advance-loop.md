@@ -1,7 +1,7 @@
 ---
 title: advance — a question/answer protocol + a generalized "advance any work/ item one lifecycle rung" capability, driven one-shot (do/CI) AND looped (run), human-or-agent per repo-config
 slug: advance-loop
-sliceAfter: [auto-slice]
+sliceAfter: [auto-slice, slicing-coherence]
 ---
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth:
@@ -15,6 +15,22 @@ sliceAfter: [auto-slice]
 > the launch snapshot of that idea, written to be **dogfooded by `auto-slice`
 > once it lands** — hence non-`humanOnly` (see Autonomy notes). Names (`advance`,
 > `obs:`, the repo-config keys) are taken as proposed; the slicer/ADRs may finalise.
+>
+> **PRECURSOR NOTE (2026-06-08).** A new precursor PRD `work/prd/slicing-coherence.md`
+> now owns the slicing-path coherence work this PRD was implicitly assuming: slice
+> output integrating through `performIntegration` (so `do prd:` honors
+> `--propose`/`--merge` — needed for US #27's propose-mode PR matrix), the slice
+> review model mirroring build (improver loop with a whole-SET prompt + a
+> fresh-context acceptance gate), and the PRD folder lifecycle
+> `prd/`→`slicing/`→`prd-sliced/` (folder = source of truth; `sliced:` demoted to a
+> derived copy then removed). `sliceAfter` now includes `slicing-coherence`: it must
+> be sliced + built FIRST so this PRD's slice rung is just "call the shared `do prd:`
+> machinery" over the integrate back-half it assumes. Confirmed there: the slicing
+> LOCK stays on `main` (visibility ledger) and `advancing/` stays a FOLDER borrow
+> (US #19) — do NOT move either to a branch ref. See
+> `work/observations/slice-output-bypasses-integration-vs-build.md` and the
+> `## DECIDED 2026-06-08` section of
+> `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`.
 >
 > **SUBSTRATE-READINESS NOTE (2026-06-08, planted by an `orchestrate` sitting — read
 > before slicing).** The three pieces this PRD declares it REUSES have now LANDED on
