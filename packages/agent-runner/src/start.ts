@@ -5,6 +5,7 @@ import {
 	rebaseContinuedBranchOntoMain,
 } from './continue-branch.js';
 import {runAsync, type RunResult} from './git.js';
+import type {InteractiveLauncher} from './harness.js';
 
 /**
  * `agent-runner start [<slug>]` — the human convenience that claims a slice (only
@@ -70,6 +71,17 @@ export interface StartOptions {
 	 * loudly. Forwarded to the claim CAS's human-path guard.
 	 */
 	override?: boolean;
+	/**
+	 * `--agent` (slice `agent-interactive-launch`): after onboarding onto
+	 * `work/<slug>`, launch the configured harness INTERACTIVELY in the checkout —
+	 * a foreground session the human drives (no prepared prompt). Injected as a
+	 * thin launcher so `start.ts` stays decoupled from `createHarness`: the CLI
+	 * wires it to the resolved harness's `launchInteractive` (model/session/cwd
+	 * resolved there). When omitted, start onboards and gets out of the way (its
+	 * historical behaviour, unchanged). It is NOT a tracked job (decision #3): no
+	 * job record, no gate — after exit the human drives `complete`/`requeue`.
+	 */
+	launchInteractive?: InteractiveLauncher;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -153,6 +165,45 @@ async function runStart(
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const folder = await folderOnArbiterMain(slug, arbiter, cwd, env);
 
+	const result = await onboardFromFolder(folder, {
+		options,
+		slug,
+		arbiter,
+		cwd,
+		env,
+		note,
+	});
+
+	// `--agent` (slice `agent-interactive-launch`): when the human onboarded onto a
+	// work branch (started/resumed/resolved — exit 0 with a branch), launch the
+	// configured harness INTERACTIVELY in the checkout so they can immediately drive
+	// the agent. It is NOT a tracked job (decision #3): no record, no gate — it
+	// blocks in the foreground until the human exits, then control returns and they
+	// drive `complete`/`requeue`. On a failed/refused onboard we never launch.
+	if (
+		options.launchInteractive &&
+		result.exitCode === 0 &&
+		result.branch !== undefined
+	) {
+		note(`Launching the configured harness interactively in ${cwd}.`);
+		options.launchInteractive({slug, dir: cwd, env});
+	}
+	return result;
+}
+
+/** Dispatch the onboard by the slug's folder on `<arbiter>/main`. */
+async function onboardFromFolder(
+	folder: Folder,
+	params: {
+		options: StartOptions;
+		slug: string;
+		arbiter: string;
+		cwd: string;
+		env: NodeJS.ProcessEnv | undefined;
+		note: (m: string) => void;
+	},
+): Promise<StartResult> {
+	const {options, slug, arbiter, cwd, env, note} = params;
 	switch (folder) {
 		case 'backlog':
 			return startFromBacklog({

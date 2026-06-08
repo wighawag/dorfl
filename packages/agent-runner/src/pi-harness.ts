@@ -6,6 +6,8 @@ import {
 	registerHarness,
 	type Harness,
 	type HarnessRecord,
+	type InteractiveLaunchInput,
+	type InteractiveLaunchResult,
 	type LaunchInput,
 	type LaunchResult,
 } from './harness.js';
@@ -238,6 +240,59 @@ export class PiHarness implements Harness {
 			}
 			child.stdin?.end();
 		});
+	}
+
+	/**
+	 * Launch pi INTERACTIVELY (slice `agent-interactive-launch`, decision #2): a
+	 * FOREGROUND human session in `input.dir`. The whole delta from {@link launch}
+	 * is the stdio contract:
+	 *
+	 *  - **NO `--print`** — a real interactive session the human types into (the
+	 *    autonomous form is `pi --print …`, prompt on stdin, captured).
+	 *  - **`stdio: 'inherit'`** — the human's terminal IS pi's terminal (foreground).
+	 *  - **NO piped prompt** — the human drives; nothing is fed on stdin.
+	 *  - **`--model <model>`** still flows in when set (ADR §13: the resolved
+	 *    routing pins the human's starting model; they may switch inside pi).
+	 *  - **`--session <path>`** is STILL passed so the human session is recorded /
+	 *    dashboard-visible (audit trail), exactly as the autonomous path records it.
+	 *
+	 * It BLOCKS in the foreground until the human exits (`spawnSync` + inherited
+	 * stdio), then returns their exit code. It is NOT a tracked job (decision #3):
+	 * no `.agent-runner-job.json`, no PID/liveness record, no gate — there is
+	 * nothing to capture, so it returns only the exit code.
+	 */
+	launchInteractive(input: InteractiveLaunchInput): InteractiveLaunchResult {
+		const sessionFile = this.resolveSessionFile({
+			dir: input.dir,
+			slug: input.slug,
+			command: '',
+			session: input.session,
+		});
+		// The model ROUTING intent (ADR §13): when set, pass it NATIVELY as
+		// `--model <model>`. agent-runner only chooses the model; pi owns auth/keys.
+		const modelArgs =
+			input.model !== undefined && input.model !== ''
+				? ['--model', input.model]
+				: [];
+		// NO `--print` (a real foreground session), but STILL `--session <path>` so
+		// the human session is recorded + dashboard-visible. The operator's
+		// `extraArgs` still layer on.
+		const args = [...modelArgs, ...this.extraArgs, '--session', sessionFile];
+		const result = spawnSync(this.piBin, args, {
+			// Run in the onboarded working tree so the session header `cwd` groups it
+			// correctly in the dashboard (invariant #3) and the human starts there.
+			cwd: input.dir,
+			// INHERIT the human's stdio: their terminal IS pi's terminal (foreground,
+			// interactive) — the opposite of the captured autonomous launch.
+			stdio: 'inherit',
+			env: input.env ?? process.env,
+		});
+		if (result.error) {
+			throw new Error(
+				`failed to spawn pi (${this.piBin}): ${result.error.message}`,
+			);
+		}
+		return {exitCode: result.status ?? -1};
 	}
 
 	isAlive(record: HarnessRecord): boolean {

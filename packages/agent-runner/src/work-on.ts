@@ -16,6 +16,7 @@ import {
 	type Config,
 } from './config.js';
 import {brand} from './brand.js';
+import type {InteractiveLauncher} from './harness.js';
 
 /**
  * `agent-runner work-on` — the HUMAN command to claim a slice and create an
@@ -117,6 +118,17 @@ export interface WorkOnOptions {
 	 * `saveConfig` at `configPath`; tests can inject a spy or a no-op.
 	 */
 	saveRoot?: (dir: string) => void;
+	/**
+	 * `--agent` (slice `agent-interactive-launch`): after the human worktree is
+	 * created, launch the configured harness INTERACTIVELY in THAT worktree — a
+	 * foreground session the human drives (no prepared prompt). Injected as a thin
+	 * launcher so `work-on.ts` stays decoupled from `createHarness`: the CLI wires
+	 * it to the resolved harness's `launchInteractive` (model/session resolved
+	 * there). Omitted ⇒ work-on creates the worktree and prints the cd hint (its
+	 * historical behaviour). It is NOT a tracked job (decision #3): no job record,
+	 * no gate — after exit the human drives `complete`/`requeue`.
+	 */
+	launchInteractive?: InteractiveLauncher;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress + the security notice (stderr). */
@@ -244,6 +256,18 @@ async function runWorkOn(
 		const message = `Created worktree for '${slug}' at ${created.dir} (branch ${created.branch}).`;
 		note(message);
 		note(`To start working:  cd ${created.dir}`);
+
+		// `--agent` (slice `agent-interactive-launch`): launch the configured harness
+		// INTERACTIVELY in the freshly-created worktree so the human can immediately
+		// drive the agent there. It is NOT a tracked job (decision #3): no record, no
+		// gate — it blocks in the foreground until the human exits, then control
+		// returns and they drive `complete`/`requeue`. The model/session are bound in
+		// the CLI's launcher closure (config lives there).
+		if (options.launchInteractive) {
+			note(`Launching the configured harness interactively in ${created.dir}.`);
+			options.launchInteractive({slug, dir: created.dir, env});
+		}
+
 		return {
 			exitCode: 0,
 			outcome: 'created',
