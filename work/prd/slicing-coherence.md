@@ -103,10 +103,12 @@ flag taxonomy.
    correct-if-implemented\"), so a bad set never lands unreviewed.
 6. As a maintainer, I want the slice acceptance gate to keep the BUILD `--review-*`
    family (`--review`/`--no-review`/`--review-model`) so there is one gate
-   configuration story. (`--review-max-rounds` is INHERITED for free via the shared
-   core but is LATENT — it bounds a revise↔review loop whose revise step does not
-   exist yet; NOT a headline feature; see
-   `work/observations/review-max-rounds-bounds-a-loop-with-no-revise-step.md`.)
+   configuration story — and to be ONE-SHOT (terminal pass/fail), with NO rounds.
+   (`--review-max-rounds` is an ORPHAN on the build gate — a rounds bound for a
+   revise↔review loop whose revise step does not exist; the slice gate must NOT
+   inherit it. Any future revise↔review LOOP gets its own loop-family flag,
+   mirroring `--slicer-loop-max`. See
+   `work/observations/reviewmaxrounds-on-wrong-concept.md`.)
 7. As a maintainer, I want a `prd-sliced/` folder so `ls work/prd/` shows \"what
    PRDs still need slicing\" at a glance, exactly as `ls work/backlog/` shows \"what
    slices need building.\"
@@ -154,8 +156,11 @@ on it.
 - ACCEPTANCE gate: a fresh-context review-before-integrate riding
   `performIntegration` (so it only exists once the output goes through the core),
   controlled by the BUILD `--review`/`--no-review`/`--review-model` family (on by
-  default) with a slice-SET prompt. `--review-max-rounds` is inherited but LATENT
-  (no revise step yet) — not a feature to build here.
+  default) with a slice-SET prompt — ONE-SHOT (terminal), NO rounds.
+  `--review-max-rounds` is an orphan on the build gate (see
+  `work/observations/reviewmaxrounds-on-wrong-concept.md`); the slice gate does NOT
+  inherit it. A future revise↔review loop would get its own loop-family flag
+  (mirroring `--slicer-loop-max`), not a gate knob.
 - NAMING RULE: gate = `--review*` (shared with build); improver loop =
   `--slicer-loop*` (slice-only). No flag name spans both.
 

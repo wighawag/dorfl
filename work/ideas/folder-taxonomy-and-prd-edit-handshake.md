@@ -221,11 +221,12 @@ family, mirroring build's `improve → gate-review → integrate`:
    review-before-integrate gate that D2 brings, with a slice-SET-specific prompt
    (coherence / dependency graph / gaps+overlap / "if built, achieves the PRD goal /
    correct-if-implemented"). Keeps the BUILD `--review-*` family (consistency is the
-   win): `--review` / `--no-review` (on by default), `--review-model`. It also
-   INHERITS `--review-max-rounds` for free via the shared core — but that knob is
-   LATENT (it bounds a revise↔review loop whose REVISE step does not exist yet; >1
-   round re-reviews unchanged bytes). So it is NOT a headline feature; see
-   `work/observations/review-max-rounds-bounds-a-loop-with-no-revise-step.md`.
+   win): `--review` / `--no-review` (on by default), `--review-model`. The gate is
+   ONE-SHOT (terminal pass/fail), NO rounds: `--review-max-rounds` is an ORPHAN on
+   the build gate (a rounds bound for a revise step that does not exist) and the
+   slice gate must NOT inherit it; a future revise↔review LOOP gets its own
+   loop-family flag (mirroring `--slicer-loop-max`). See
+   `work/observations/reviewmaxrounds-on-wrong-concept.md`.
 
 Net: gate family = `--review*` (shared with build); improver-loop family =
 `--slicer-loop*` (slice-only). No name blurs across the two.
