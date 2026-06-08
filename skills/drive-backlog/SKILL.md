@@ -12,10 +12,10 @@ backlog, checks each ready slice is still *fresh*, decides *what* to build and i
 *what order*, drives `do` per slice, then acts as a **third reviewer** (Gate-3) over
 each PR before merging it.
 
-It is a **methodology skill** (prose you follow), like `to-slices` / `batch-qa` /
-`review` — NOT a runner command. It composes:
+It is a **methodology skill** (prose you follow), like `to-slices` / `review` —
+NOT a runner command. It composes:
 
-- **`agent-runner do … --harness pi --review --propose`** — the per-slice worker (build + gate + Gate-2).
+- **`agent-runner do … --review --propose`** — the per-slice worker (build + gate + Gate-2). The harness, model, and acceptance gate come from agent-runner CONFIG (per-repo / global) — do not hardcode them here; pass only the flags a given run needs.
 - **`review`** (`skills/review/`) — your own Gate-3 pass over each opened PR.
 - **`to-slices`** (`skills/to-slices/`) — for the forward-note step and any re-slice the human asks for.
 
@@ -79,10 +79,10 @@ posture is WHERE each `do` runs:
   building engine `orchestrate` delegates to.
 - **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no
   human). `drive-backlog` is **one slice at a time, end-to-end**. Don't use it to
-  *author* slices from scratch (that's `to-slices`), to *slice PRDs / triage
-  observations / fill judgement gaps across the whole tree* (that's `orchestrate`),
-  or to *answer scattered open questions* (that's `batch-qa`, until `orchestrate`
-  supersedes it). Don't use it to FORCE a blocked slice — it respects the gate.
+  *author* slices from scratch (that's `to-slices`), or to *slice PRDs / triage
+  observations / fill judgement gaps / answer scattered open questions across the
+  whole tree* (that's `orchestrate`). Don't use it to FORCE a blocked slice — it
+  respects the gate.
 
 ## The golden rules (do not violate)
 
@@ -92,13 +92,17 @@ posture is WHERE each `do` runs:
    the item to `work/needs-attention/` — leave it there, branch preserved, skip its
    dependents, continue with independent ready slices, report it at the end.
 3. **Capture, don't fix-in-place, off-path findings.** Spot drift outside a slice's
-   scope → write a `work/observations/` note, don't expand the slice.
+   scope → write a `work/observations/` note (and COMMIT it — see rule 5), don't
+   expand the slice.
 4. **You merge the approval.** GitHub refuses `gh pr review --approve` on a PR whose
    commits are under your own identity — so post the verdict as a PR **comment**
    (`gh pr comment <n> --body-file …`, lead with `APPROVE ✅` / `BLOCK`), then
    `gh pr merge <n> --squash --delete-branch`. The comment + merge IS the approval.
-5. **Clean tree before every `do`.** `do` refuses on a dirty tree. Stash your own
-   uncommitted notes; never auto-commit them (the human commits observations).
+5. **Clean tree before every `do`** (`do` refuses on a dirty tree) — so COMMIT your
+   own `work/observations/` notes (they are contract-native, append-only, low-risk)
+   before the next `do`, rather than leaving them uncommitted/stashed. Report what
+   you committed in the summary. (Do NOT commit unrelated source changes — only your
+   observation notes + the protocol's own moves.)
 6. **Accumulate, don't stall.** When ONE slice is stuck or needs a judgement call,
    write it into the stuck-set and move to the next INDEPENDENT ready slice — never
    block the whole loop on one item. Voice the stuck-set per your posture (interactive
@@ -110,7 +114,7 @@ posture is WHERE each `do` runs:
 The loop's job is to **advance as much as possible**, not to halt at the first
 judgement call. Whenever you hit a **wall** on a slice —
 
-- it looks **stale/drifted** (the [freshness check](#1-check-freshness--up-to-dateness-of-each-ready-slice) fires),
+- it looks **stale/drifted** (the freshness check in step 1 fires),
 - a **forward-note** seems needed but you're unsure it's wanted,
 - a **Gate-3 review** surfaces a genuine judgement call (a maybe-blocking nit, an
   ambiguously-met criterion), or
@@ -199,9 +203,11 @@ current reality:
 
 If the slice still holds → proceed. **If it smells stale → it's a WALL**: record it
 in the stuck-set with the specific premise that no longer holds + a suggested
-re-scope, SKIP it (per the [accumulate-don't-block rule](#the-accumulate-dont-block-rule)),
-and move on. (This is the check that would have caught
-`do-run-share-isolation-seam` before burning an hour on a build-time STOP.)
+re-scope, SKIP it (per the accumulate-don't-block rule), and move on. (This catches
+drift cheaply up front. The build-time backstop also exists: a slice that IS drifted
+and slips past this check makes the build agent raise a STOP — the runner routes it
+to needs-attention with the agent's reason, skipping the wasted gate — but catching
+it here saves the whole `do` run.)
 
 This is also the natural place for a **light look-ahead**: skim `work/prd/` (and, if
 cheap, `work/observations/` + `work/ideas/`) for what's coming — it informs the
@@ -238,8 +244,11 @@ each subsequent claim rebasing cleanly off fresh `main`. State the planned order
 
 **4a. Build it (clean tree first):**
 ```sh
-agent-runner do slice:<slug> --harness pi --review --propose
+agent-runner do slice:<slug> --review --propose
 ```
+(The harness + model + acceptance gate are resolved from agent-runner config —
+flag > env > per-repo > global. Pass an explicit `--harness`/`--model` only to
+override config for this run; otherwise let config drive it.)
 Use a **generous timeout** — `do` runs a build agent + the full gate + the Gate-2
 review and can take well over an hour for a big slice. If you interrupt it, KILL the
 spawned `do`/agent process tree explicitly (an abort of your wrapper does NOT stop
@@ -263,11 +272,13 @@ third reviewer, not a rubber stamp):
 - Read the gate-generated `work/observations/review-nits-<slug>-*.md` and triage each
   nit (blocking? benign? a real off-path finding worth its own observation?).
 - **Run the gate yourself** on the PR branch in a throwaway worktree to confirm green
-  independently:
+  independently — use the repo's declared acceptance gate via **`agent-runner verify`**
+  (it runs the per-repo `verify` config; do not hardcode a specific build/test/format
+  command, which varies by repo):
   ```sh
   git worktree add /tmp/ar-rev-<slug> origin/work/<slug>
-  cd /tmp/ar-rev-<slug> && pnpm install --frozen-lockfile
-  pnpm -r build && pnpm -r test && pnpm -r format:check     # == agent-runner verify
+  cd /tmp/ar-rev-<slug> && <install deps per the repo>   # only if the gate needs it
+  agent-runner verify                                    # the declared gate; 0 = pass
   git worktree remove --force /tmp/ar-rev-<slug>
   ```
 - **Verdict:** if a drift note was violated, an acceptance criterion is unmet, or the
@@ -289,11 +300,12 @@ quoting).
 **4d. Re-sync + re-evaluate:**
 ```sh
 git checkout main && git fetch origin && git pull --rebase origin main
-pnpm -r build      # rebuild the dist the next `do` invokes
 ```
-The merge landed `work/done/<slug>.md` on `main`; any slice blocked only by it is now
-unlocked. Recompute the READY set (steps 0–1, including a fresh freshness check on
-newly-unlocked slices) and continue.
+If the next `do` runs from a BUILT copy of agent-runner (e.g. a local checkout of
+this very repo), rebuild it so the merge you just made is in the binary the next
+`do` invokes. The merge landed `work/done/<slug>.md` on `main`; any slice blocked
+only by it is now unlocked. Recompute the READY set (steps 0–1, including a fresh
+freshness check on newly-unlocked slices) and continue.
 
 ### 5. CONTINUE until nothing can advance
 
@@ -308,8 +320,9 @@ questions, then resume the loop from the answers; AUTONOMOUS → return the stuc
 End with a structured rundown (this is a first-class deliverable, not an
 afterthought):
 
-- **Built + merged** — each slice with its PR number + tests-passing count + a
-  one-line note on any drift/forward-pointer/must-fix it honoured.
+- **Built + merged** — each slice with its PR number + a gate-green confirmation
+  (the repo's declared `verify` passed) + a one-line note on any
+  drift/forward-pointer/must-fix it honoured.
 - **Routed to needs-attention** — each, with the EXACT blocking reason, whether the
   agent produced no code vs. a real bug the gate caught, and that the branch is
   preserved on the arbiter (recoverable via `requeue` + re-claim, or `work-on`).
@@ -318,7 +331,8 @@ afterthought):
 - **What's now UNLOCKED in the project** — new commands, new behaviours/capabilities,
   retired verbs, and crucially **which PRDs are now sliceable / unblocked** by what
   landed (the cross-cutting view only the conductor has).
-- **Observations filed** (left untracked/uncommitted for the human, per rule 3).
+- **Observations filed** (committed as you go, per rule 5) — list them so the human
+  can find them in `git log`.
 - **Housekeeping** — any direct-to-`main` chore commits you made (claim reverts,
   forward-notes), so the human can see them in `git log`.
 
@@ -339,8 +353,8 @@ conductor surfaces everything at once for one efficient answering pass):
   again; deferred → stays parked). AUTONOMOUS: this batch IS the returned residue —
   the parent (`orchestrate`) voices it to the human.
 
-This is the same batching discipline `batch-qa` uses for files — here it's
-conversational (or a returned payload), not a written `work/questions/` file.
+Here the batch is conversational (interactive) or a returned payload (autonomous),
+not a written file.
 
 ## Beyond slices
 
@@ -372,8 +386,10 @@ a *loop*; the per-item command is the *tick*.)
 - **Flaky tests red a good gate.** If a slice's gate fails ONLY on a known-flaky test
   with everything else green, re-run before treating it as a real block (and the flake
   itself is an `observations/` note, not a slice fix).
-- **A `do` that delivers no code still "passes" the acceptance gate** (nothing
-  changed → nothing breaks) — that's exactly why Gate-2 (and your Gate-3) check the
-  *diff against the criteria*, not just the gate. Trust the block.
+- **A `do` that delivers no code is NOT a success** (nothing changed → the gate
+  passes vacuously). The runner catches this two ways — an agent STOP (drift) routes
+  to needs-attention before the gate, and Gate-2 (plus your Gate-3) check the *diff
+  against the criteria*, not just the gate. Trust the block; never merge an
+  empty-or-criteria-unmet diff.
 - **Don't sum two freshness models.** When reporting cross-repo + local state, keep
-  them distinct (same lesson the `scan`/`status` slices encode).
+  them distinct (the lesson the cwd-local-vs-registry reporting encodes).

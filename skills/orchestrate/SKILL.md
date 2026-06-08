@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: "The human-in-the-loop META conductor over a whole work/ tree: survey EVERYTHING (observations, ideas, PRDs, slices, needs-attention) in one pass, advance every autonomous rung it can (triage observations, slice ready PRDs, build ready slices), and — at the genuine judgement residue — ASK the human conversationally, regrouped into efficient batches, filling the gaps until NEW slices are READY, then build them by calling the `drive-backlog` skill (often as a sub-agent). Use when asked to 'orchestrate the project', 'figure out what to work on and drive it', 'advance the work/ tree', 'review everything and tell me what needs me', or to drain a populated work/ toward 'all ready slices built' while keeping the human's only job 'answer the questions'. The SUCCESSOR to batch-qa (conversational, not file-batched) and the synchronous, human-agency, in-session sibling of the autonomous `advance` PRD. Composes `review`, `to-slices`, `to-prd`, and `drive-backlog`; it asks rather than guesses, and NEVER invents an answer to an open question."
+description: "The human-in-the-loop META conductor over a whole work/ tree: survey EVERYTHING (observations, ideas, PRDs, slices, needs-attention) in one pass, advance every autonomous rung it can (triage observations, slice ready PRDs, build ready slices), and — at the genuine judgement residue — ASK the human conversationally, regrouped into efficient batches, filling the gaps until NEW slices are READY, then build them by calling the `drive-backlog` skill (often as a sub-agent). Use when asked to 'orchestrate the project', 'figure out what to work on and drive it', 'advance the work/ tree', 'review everything and tell me what needs me', or to drain a populated work/ toward 'all ready slices built' while keeping the human's only job 'answer the questions'. Composes `review`, `to-slices`, `to-prd`, and `drive-backlog`; it asks rather than guesses, and NEVER invents an answer to an open question."
 ---
 
 # orchestrate
@@ -12,8 +12,8 @@ and what is stuck on a human**, does every autonomous rung it can, and turns the
 human into nothing but an **answerer of well-batched questions**, looping until the
 backlog of ready slices is drained.
 
-It is a **methodology skill** (prose you follow), like `to-slices` / `batch-qa` /
-`review` — NOT a runner command. It composes:
+It is a **methodology skill** (prose you follow), like `to-slices` / `review` —
+NOT a runner command. It composes:
 
 - **`drive-backlog`** (`skills/drive-backlog/`) — to BUILD the ready slices (it may
   dispatch this as a **sub-agent in autonomous posture** and surface the returned
@@ -36,20 +36,15 @@ It is a **methodology skill** (prose you follow), like `to-slices` / `batch-qa` 
   (`review`). Don't use it as the unattended daemon (`run`/`advance`). It is
   **always main-session and conversational** — its defining job is the live Q&A.
 
-## Relationship to batch-qa and advance (read once)
+## Interactive vs autonomous draining (read once)
 
-- **Successor to `batch-qa`.** `batch-qa` gathers open questions into a FILE the
-  human answers in one sitting. `orchestrate` does the same survey-and-advance but
-  **conversationally** — it asks inline (regrouped into batches), no file required —
-  AND it then *acts* on the answers all the way to built slices, not just one
-  lifecycle step. Prefer `orchestrate` when the human is present and wants agency;
-  reach for `batch-qa` only if you specifically want the questions persisted to a
-  file for later.
-- **Synchronous twin of `advance`.** The `advance-loop` PRD productizes this exact
-  loop as an AUTONOMOUS, file-mediated, `run`/CI-driven engine (`work/questions/`
-  sidecars). `orchestrate` is the same lifecycle drain done in-session with a human
-  in the loop. When `advance` lands, the two converge on the same rung contract;
-  until then, `orchestrate` is how a human drives it by hand with maximum visibility.
+`orchestrate` is the **interactive, human-in-the-loop** way to drain a `work/` tree:
+it asks its questions conversationally, in the session, and you answer live. Its
+autonomous, file-mediated counterpart is the `advance` capability (the `advance-loop`
+PRD), driven by `run`/CI with `work/questions/` sidecars the human answers whenever
+they like. Same lifecycle drain, different mode: reach for `orchestrate` when the
+human is present and wants visibility + agency; the autonomous engine is for
+unattended draining. They converge on the same rung contract.
 
 ## Core invariant
 
@@ -89,18 +84,22 @@ In leverage order (do the rung that unlocks the most downstream work first):
 
 - **Ready slices** → hand to **`drive-backlog`** (see step 4). (You may batch this to
   the end so all the conversational gap-filling happens first — your call per session.)
-- **Sliceable PRDs** → slice them (`agent-runner do prd:<slug>`, or the `to-slices`
-  skill for a human-path slice), then **review the produced slices** (compose
-  `review`; the slicer's own review→edit loop also runs on the `do prd:` path).
+- **Sliceable PRDs** → slice them via **`agent-runner do prd:<slug>`** (harness/model/
+  gate from agent-runner config — don't hardcode), or the `to-slices` skill for a
+  human-path slice; then **review the produced slices** (compose `review`; the
+  slicer's own review→edit loop also runs on the `do prd:` path).
 - **Clearly-dispositionable observations** → triage them (route/keep/delete) where the
   disposition is obvious; the ambiguous ones become questions (step 3).
 - **Apply any human answers** you already have from earlier in the session → flip the
   relevant `needsAnswers`, fill the slice/PRD gap, which may make new items advanceable
   (re-run step 1's classification for them).
 
-Each autonomous action that changes a `work/` file follows the contract: **you may
-write into the tree (notes, slices, forward-notes), but do NOT commit/move unless the
-human asks** — surface what you did for them to commit (same rule `batch-qa` uses).
+Each autonomous action records into the tree and is COMMITTED as it goes: triaged
+observations, planted forward-notes, and the runner-owned slice/PRD transitions
+(`do prd:` commits its own slicing transition). Commit contract-native moves +
+your own `work/` notes; do NOT sweep in unrelated source changes. Report everything
+you committed in the final summary so the human sees it in `git log`. (Slices that
+get BUILT are committed/merged by `drive-backlog` via the normal PR flow.)
 
 ### 3. ASK the residue — batched, conversational, never invented
 
@@ -116,14 +115,17 @@ Present the batch, take the human's answers, then **apply them** (back to step 2
 the now-unblocked items). Iterate steps 1–3 until the only thing left is *building
 ready slices*. Questions the human defers stay parked; you proceed with the rest.
 
-> If the human prefers to answer later / asynchronously, offer to persist the batch
-> as a `batch-qa` file (`work/questions/<date>-batch.md`) instead of asking inline —
-> that is the file-mediated fallback. Default is conversational.
+> If the human prefers to answer later / asynchronously rather than inline, offer to
+> persist the batch as a question file under `work/questions/<date>-batch.md` (the
+> file-mediated fallback the autonomous `advance` engine also reads). Default is
+> conversational.
 
 ### 4. BUILD the ready slices via `drive-backlog`
 
-Once gap-filling has produced a set of READY (and FRESH) slices, build them by
-invoking **`drive-backlog`**. Two ways:
+Once gap-filling has produced a set of READY slices, build them by invoking
+**`drive-backlog`** — hand it the whole ready set; it re-runs its own freshness check
+and dependency ordering, so you do NOT need to pre-filter or pre-order beyond what
+your survey already established. Two ways:
 
 - **In-session (you watch/steer)** — run `drive-backlog` INTERACTIVE yourself. Best
   when the human wants to see each build/Gate-3/merge (as in the original session).
@@ -163,7 +165,13 @@ the meta report:
   discipline `drive-backlog`/the build agents use for slices).
 - **Sub-agents return questions; they don't ask them.** Always voice a delegated
   loop's stuck-set yourself, batched — never assume the sub-agent reached the human.
-- **Write, don't commit.** Surface new slices/notes for the human to commit; never
-  auto-commit/move (the work items are the human's to land), unless asked.
+- **Commit your tree changes; report them.** Triaged observations, planted
+  forward-notes, and the runner-owned slice/PRD transitions are committed as you go
+  (contract-native, append-only) and listed in the summary — don't leave them
+  dangling. Don't sweep in unrelated source changes.
+- **Building mechanics live in `drive-backlog`.** When you build (step 4), the
+  long-running `do` process, the interrupt footgun (an abort does NOT kill the
+  spawned agent), generous timeouts, flaky-gate retries, and Gate-3 discipline are
+  all `drive-backlog`'s — follow that skill for them; don't re-derive them here.
 - **Ideas are incubating.** Don't force `work/ideas/` toward readiness; surface the
   ripe ones, leave the rest.
