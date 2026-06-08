@@ -60,8 +60,8 @@ import type {ReviewGate} from './review-gate.js';
  *      (`performIntegration`, slice `slice-output-through-integration`): the agent's
  *      slicing runs on a `work/<slug>` branch cut from `<arbiter>/main` (which the
  *      lock just published `work/slicing/<slug>.md` onto), and the produced backlog
- *      slices + the PRD lifecycle move (`work/slicing/ → work/prd/` + the `sliced:`
- *      marker) integrate via the band honoring `--propose` (push the branch + open a
+ *      slices + the PRD lifecycle move (`work/slicing/ → work/prd-sliced/` + the
+ *      derived `sliced:` marker) integrate via the band honoring `--propose` (push the branch + open a
  *      PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
  *      args resolve ONCE in the shared core, EVERY `do slice:` integrate arg applies
  *      to `do prd:` by construction. A content-identity STALE CHECK (the lock's
@@ -312,8 +312,8 @@ export async function performSlice(
 	// 2b. ONBOARD the agent's slicing work onto a `work/<slug>` BRANCH cut from the
 	//     freshly-fetched `<arbiter>/main` (slice `slice-output-through-integration`).
 	//     The lock has just published `work/slicing/<slug>.md` to `<arbiter>/main`, so
-	//     the branch's base HOLDS the held PRD — the lifecycle stage below restores it
-	//     `slicing/ → prd/` ON THIS BRANCH and the shared integrate core (`--propose`
+	//     the branch's base HOLDS the held PRD — the lifecycle stage below moves it
+	//     `slicing/ → prd-sliced/` ON THIS BRANCH and the shared integrate core (`--propose`
 	//     PR / `--merge` main) lands the whole transition, WITHOUT the lock release
 	//     committing slices straight to `main`. The agent runs IN-PLACE on this branch
 	//     (branch ≠ worktree; the isolation seam upgrades it). The HUMAN path stays on
@@ -411,7 +411,7 @@ export async function performSlice(
 	}
 
 	// 4. The RUNNER commits the COMPLETING transition: drop the produced backlog
-	//    slices IN + restore the PRD slicing/ -> prd/ + mark the PRD `sliced:` — now
+	//    slices IN + move the PRD slicing/ -> prd-sliced/ + write the derived `sliced:` — now
 	//    through the SHARED integrate core (`--propose` PR / `--merge` main), NOT a
 	//    direct commit to `main`. The agent never does git. (The backlog snapshot is
 	//    taken AFTER any loop edits, so the runner integrates the IMPROVED slices,
@@ -620,8 +620,8 @@ function integrationToSliceResult(
 		const message =
 			`Sliced '${slug}' -> ${emitted.length} backlog slice` +
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +
-			`through the shared core (restored work/slicing/ -> work/prd/, marked the PRD ` +
-			`sliced) and ${landed}.`;
+			`through the shared core (moved work/slicing/ -> work/prd-sliced/, marked the ` +
+			`PRD sliced) and ${landed}.`;
 		return {exitCode: 0, outcome: 'sliced', slug, emitted, loop, message};
 	}
 	if (core.outcome === 'rebase-conflict') {
@@ -649,8 +649,8 @@ function integrationToSliceResult(
  * ONBOARD the slicing work onto a `work/<slug>` branch cut from the freshly-
  * fetched `<arbiter>/main` (slice `slice-output-through-integration`). Called
  * AFTER the lock published `work/slicing/<slug>.md` to `<arbiter>/main`, so the
- * branch's base HOLDS the locked PRD — the lifecycle stage then restores it
- * `slicing/ -> prd/` ON THIS BRANCH and the shared integrate core lands it. A
+ * branch's base HOLDS the locked PRD — the lifecycle stage then moves it
+ * `slicing/ -> prd-sliced/` ON THIS BRANCH and the shared integrate core lands it. A
  * pre-existing local `work/<slug>` (a re-run) is force-recreated off fresh main.
  * The agent runs in-place on this branch (branch ≠ worktree).
  */
@@ -706,13 +706,21 @@ async function heldPrdIsStale(
 
 /**
  * STAGE the slicing lifecycle into the index on the `work/<slug>` branch (the
- * {@link performIntegration} lifecycle seam): restore the held PRD
- * `git mv work/slicing/<slug>.md -> work/prd/<slug>.md`, stamp its `sliced:`
- * marker, and write+`git add` the produced `work/backlog/*.md` files. The band's
- * subsequent `git add -A` + atomic commit folds this AND the agent's uncommitted
- * backlog writes into ONE runner-owned commit (the agent never does git). Keeps
- * the CURRENT `slicing/ -> prd/` restore + `sliced:` marker UNCHANGED (the folder
- * destination is the separate `prd-sliced-folder-step-a` slice).
+ * {@link performIntegration} lifecycle seam): move the held PRD
+ * `git mv work/slicing/<slug>.md -> work/prd-sliced/<slug>.md` (the SLICED resting
+ * state — the build-machine `done/` analogue, the SOURCE OF TRUTH for sliced-ness),
+ * stamp its `sliced:` DERIVED COPY, and write+`git add` the produced
+ * `work/backlog/*.md` files. The band's subsequent `git add -A` + atomic commit
+ * folds this AND the agent's uncommitted backlog writes into ONE runner-owned commit
+ * (the agent never does git).
+ *
+ * SLICE `prd-sliced-folder-step-a` (PRD `slicing-coherence` US #8): the lifecycle
+ * destination is now `work/prd-sliced/` (NOT back to `work/prd/`) — `prd-sliced/`
+ * residence IS sliced-ness (like `done/` for slices, with no `done:` marker). The
+ * `sliced:` marker is kept here as a DERIVED COPY written by THIS same single
+ * release-transition owner in the SAME commit (no drift), so nothing that still
+ * reads the marker breaks; its removal is the separate `remove-sliced-marker-step-b`
+ * slice (sequenced last).
  */
 async function stageSlicingLifecycle(params: {
 	cwd: string;
@@ -723,16 +731,18 @@ async function stageSlicingLifecycle(params: {
 }): Promise<void> {
 	const {cwd, slug, today, emitSlices, env} = params;
 	const slicing = `work/slicing/${slug}.md`;
-	const prd = `work/prd/${slug}.md`;
-	// Restore the held PRD slicing/ -> prd/ (release the lock as part of THIS
-	// transition's commit, not the lock release's own commit-to-main).
-	mkdirSync(dirname(join(cwd, prd)), {recursive: true});
-	await gitHard(['mv', slicing, prd], cwd, env);
-	// Stamp the derived `sliced:` marker on the restored PRD (kept during the
-	// migration; the folder becomes source-of-truth in a later sequenced slice).
-	const prdAbs = join(cwd, prd);
+	const prdSliced = `work/prd-sliced/${slug}.md`;
+	// Move the held PRD slicing/ -> prd-sliced/ (the SLICED resting state — folder =
+	// source of truth, like done/ for slices). This releases the lock as part of THIS
+	// transition's commit, not the lock release's own commit-to-main.
+	mkdirSync(dirname(join(cwd, prdSliced)), {recursive: true});
+	await gitHard(['mv', slicing, prdSliced], cwd, env);
+	// Stamp the DERIVED `sliced:` marker on the resting PRD (kept during Step A as a
+	// back-compat copy; the FOLDER is the source of truth. Its removal is the
+	// separate `remove-sliced-marker-step-b` slice).
+	const prdAbs = join(cwd, prdSliced);
 	writeFileSync(prdAbs, setSlicedMarker(readFileSync(prdAbs, 'utf8'), today));
-	await gitHard(['add', '--', prd], cwd, env);
+	await gitHard(['add', '--', prdSliced], cwd, env);
 	// Drop the produced backlog slices IN (write + stage; the band's `git add -A`
 	// also catches them, but staging here keeps the transition explicit + atomic).
 	for (const [relPath, content] of Object.entries(emitSlices)) {
@@ -904,22 +914,22 @@ function gateRefusalReason(
 }
 
 /**
- * Read the set of slugs whose PRDs are already SLICED in this checkout — a PRD's
- * `sliced:` frontmatter marker (NOT residence in any folder). Reads both
- * `work/prd/` and `work/slicing/` (a PRD mid-slice still occupies its slug); a
- * `sliced:` marker is what counts. Missing folders read as empty.
+ * Read the set of slugs whose PRDs are already SLICED in this checkout — RESIDENCE
+ * in `work/prd-sliced/` (the sliced resting state, slice `prd-sliced-folder-step-a`
+ * / PRD `slicing-coherence` US #9), the build-machine `done/` analogue. The FOLDER
+ * is the source of truth; the `sliced:` frontmatter marker is now a derived copy and
+ * is NOT consulted here. So `sliceAfter` resolves against `prd-sliced/` residence
+ * (mirroring `blockedBy` -> `done/`). A missing folder reads as empty. The slug is
+ * read from each file's frontmatter `slug:`, falling back to the filename — the same
+ * shape the slice readers use.
  */
 function readSlicedSlugs(cwd: string): Set<string> {
 	const slugs = new Set<string>();
-	for (const folder of ['prd', 'slicing'] as const) {
-		const dir = join(cwd, 'work', folder);
-		for (const file of listMarkdown(dir)) {
-			const content = readFileSync(join(dir, file), 'utf8');
-			const fm = parseFrontmatter(content);
-			if (fm.sliced !== undefined) {
-				slugs.add(fm.slug ?? file.replace(/\.md$/i, ''));
-			}
-		}
+	const dir = join(cwd, 'work', 'prd-sliced');
+	for (const file of listMarkdown(dir)) {
+		const content = readFileSync(join(dir, file), 'utf8');
+		const fm = parseFrontmatter(content);
+		slugs.add(fm.slug ?? file.replace(/\.md$/i, ''));
 	}
 	return slugs;
 }

@@ -131,14 +131,20 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
-		// The produced slice + the PRD restore + the `sliced:` marker all landed on
-		// the arbiter main, through the shared core (not the lock's direct commit).
+		// The produced slice + the PRD lifecycle move (slicing/ -> prd-sliced/) + the
+		// derived `sliced:` marker all landed on the arbiter main, through the shared
+		// core (not the lock's direct commit). The PRD now rests in prd-sliced/ (the
+		// source of truth), NOT back in prd/.
 		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
-		const prd = run('git', ['show', `${ARBITER}/main:work/prd/it.md`], repo, {
-			env: gitEnv(),
-		}).stdout;
+		const prd = run(
+			'git',
+			['show', `${ARBITER}/main:work/prd-sliced/it.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
 		expect(prd).toMatch(/sliced: 2026-06-08/);
 		// It is the shared core's integrate commit (`slicing(<slug>): …; sliced`),
 		// not the lock's `slicing: release …` direct commit.
@@ -184,6 +190,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		// The slices are NOT on main (propose does not land them); the PRD is still
 		// HELD in slicing/ on main (the lock release rides the PR, not main).
 		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(true);
 		// The OUTPUT never advanced main past the lock's `prd → slicing/` move: the
@@ -194,7 +201,10 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(onArbiterBranch(repo, 'work/it', 'work/backlog/child.md')).toBe(
 			true,
 		);
-		expect(onArbiterBranch(repo, 'work/it', 'work/prd/it.md')).toBe(true);
+		expect(onArbiterBranch(repo, 'work/it', 'work/prd-sliced/it.md')).toBe(
+			true,
+		);
+		expect(onArbiterBranch(repo, 'work/it', 'work/prd/it.md')).toBe(false);
 
 		// A PR was opened (the recording gh stub captured a `pr create`).
 		const args = readFileSync(argsFile, 'utf8');

@@ -132,8 +132,9 @@ rule:
   PRDs" error.
 - This mirrors a distinction the contract ALREADY makes by field: slice
   `blockedBy` resolves against slices (`work/done/`), PRD `sliceAfter` against PRDs
-  (the `sliced:` marker). The `slice:`/`prd:` prefixes are the command-line form of
-  that same namespace split — one coherent rule, not two.
+  (residence in `work/prd-sliced/` — the folder is the source of truth for
+  sliced-ness, mirroring `blockedBy` → `done/`). The `slice:`/`prd:` prefixes are
+  the command-line form of that same namespace split — one coherent rule, not two.
 
 ## 4. The human face — do work yourself (optionally with your AI)
 

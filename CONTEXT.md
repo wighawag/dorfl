@@ -24,7 +24,8 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **PRD** — a north-star doc in `work/prd/<slug>.md` a slice's `prd:` field points
   at. (The launch/framing doc; may be a hand-off snapshot.) Frontmatter: `slug`,
   `issue` (optional), `humanOnly`/`needsAnswers` (the slicing gate), `sliceAfter`
-  (PRD slicing-order), `sliced`.
+  (PRD slicing-order), `sliced` (a DERIVED copy — the source of truth for
+  sliced-ness is residence in `work/prd-sliced/`; see *PRD lifecycle* below).
 - **ADR** — a decision record in `docs/adr/<slug>.md` (the *why* of OUR technical
   choices; durable). The substrate decisions are in
   `docs/adr/execution-substrate-decisions.md` (§1–§12). Carries a **`status:`**
@@ -59,11 +60,18 @@ dogfooding itself (it tracks its own work in its own `work/`).
   is not `true` AND `humanOnly` is not `true` AND `allowAgents` is `true`; it is
   **eligible now** iff also every `blockedBy` slug is present in the SAME repo's
   `work/done/`. Deps never cross repos.
+- **PRD lifecycle (folders)** — a PRD flows through the SAME folder state machine
+  as a slice, minus `done/`: **`work/prd/`** (ready to slice) → **`work/slicing/`**
+  (the held LOCK, being sliced) → **`work/prd-sliced/`** (sliced, resting). The
+  FOLDER is the source of truth for sliced-ness, exactly as `done/` is for slices
+  (the `sliced:` frontmatter is a derived copy, written by the release transition).
+  Re-slice = `work/prd-sliced/ → work/prd/` (reopen-to-ready, mirroring
+  `done/ → backlog/`).
 - **sliceAfter** (`sliceAfter`, PRD-only) — PRD slugs that must already be
-  **sliced** (resolved against the `sliced:` marker, NOT `done/`) before the
-  auto-slicer may slice this PRD — so its emitted slices can reference the real
-  slugs of those PRDs' slices in `blockedBy`. Distinct verb/signal from slice
-  `blockedBy` (which gates *building*, against `done/`).
+  **sliced** (resolved against `work/prd-sliced/` residence, mirroring
+  `blockedBy` → `done/`) before the auto-slicer may slice this PRD — so its emitted
+  slices can reference the real slugs of those PRDs' slices in `blockedBy`. Distinct
+  verb/signal from slice `blockedBy` (which gates *building*, against `done/`).
 - **needs-attention** — the post-claim **stuck** state (`work/needs-attention/`):
   a claimed item that couldn't finish (red gate, conflict, ambiguity, timeout,
   rejected review). The runner `git mv`s it here with a reason; a human resolves

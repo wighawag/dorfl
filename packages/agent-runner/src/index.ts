@@ -224,6 +224,9 @@ export type {
 } from './slicing.js';
 export {performSlice} from './slicing.js';
 
+export type {BackfilledPrd, BackfillResult} from './prd-sliced-migration.js';
+export {backfillSlicedPrds} from './prd-sliced-migration.js';
+
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {
 	encodeRepoKey,
