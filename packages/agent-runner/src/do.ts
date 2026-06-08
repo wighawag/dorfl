@@ -17,7 +17,11 @@ import {PiHarness} from './pi-harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {ledgerWrite} from './ledger-write.js';
-import {jobWorktreeStrategy, type IsolatedTree} from './isolation.js';
+import {
+	jobWorktreeStrategy,
+	selectIsolationStrategy,
+	type IsolatedTree,
+} from './isolation.js';
 import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
@@ -35,22 +39,34 @@ import {
  * **This is the CI command** (CI has a checkout, is one repo, is one triggered
  * invocation, exits) and it ABSORBS the manual `ar-run.sh` test-driver.
  *
- * The in-place `do` is exactly `ar-run.sh`'s composition — `start` →
- * (autonomous prompt-fed harness run) → `complete` — guarded by a DIRTY-TREE
- * REFUSAL. It does NOT fork a third pipeline: it COMPOSES the existing human
- * verbs (which already do the dirty-guard-adjacent onboarding, branch switch,
- * gate, integrate, and branch tidy), with the autonomous agent invocation as the
- * ONLY new middle step. The runner owns EVERY git-state transition (claim,
- * done-move, completion commit, integration); the agent only edits code.
+ * In-place `do` is on the ISOLATION SEAM (`do-run-share-isolation-seam`): it is
+ * the FIRST production consumer of `selectIsolationStrategy`/`inPlaceStrategy`,
+ * so all THREE `do`/`run` forms (in-place `do`, `do --remote`, `run`) share the
+ * ONE `IsolatedTree`-handle post-claim shape. The composition mirrors
+ * `do --remote`/`run` exactly: keep the two in-place GUARDS (dirty-tree refusal
+ * + pre-flight diverged-main guard) in this driver BEFORE onboarding, CLAIM
+ * explicitly via the CAS (`performClaim`), then let
+ * `selectIsolationStrategy({checkout}).prepare()` do the ONBOARDING half (fetch +
+ * continue-detection + fresh-main `work/<slug>` switch, incl. the §14
+ * continue/rebase + §10 conflict path) WITHOUT re-claiming. The agent run is the
+ * ONLY new middle step (the one `ar-run.sh` shelled out for, `prompt | pi`). The
+ * runner owns EVERY git-state transition (claim, done-move, completion commit,
+ * integration); the agent only edits code.
  *
  * The in-place ISOLATION (ADR §3): the current checkout / CI container IS the
- * isolation — no hub mirror, no external worktree. `performStart` puts the
- * checkout on `work/<slug>` cut from the freshly-fetched `<arbiter>/main` (the
- * isolation-strategy-seam's in-place strategy is the seam form of this same
- * "switch the checkout to work/<slug>" step; composing `start` reuses it
- * directly with the claim + dirty-aware onboarding already wired). `do --remote`
- * (the job-worktree strategy) is the SEPARATE `do-remote` slice; auto-pick /
- * multi-arg / `-n` is `do-autopick`.
+ * isolation — no hub mirror, no external worktree. `inPlaceStrategy.prepare()`
+ * puts the checkout on `work/<slug>` cut from the freshly-fetched
+ * `<arbiter>/main`; its handle's `teardown` is a NO-OP (the checkout is left in a
+ * defined state on `work/<slug>`, NEVER reaped). `do --remote` (the job-worktree
+ * strategy) is the SEPARATE `do-remote` slice; auto-pick / multi-arg / `-n` is
+ * `do-autopick`.
+ *
+ * CLAIM SEMANTICS (autonomous, same as `do --remote`/`run`): the claim is
+ * explicit and claim-or-lose. An item that is NOT in backlog on the arbiter
+ * (already in-progress / done / absent) is not claimable, so the CAS returns
+ * `lost` (exit 2) and the run skips cleanly — `do`, the unattended CI worker,
+ * never re-claims an item someone else holds and never silently picks up a
+ * needs-attention item (a human does that through the human face).
  *
  * **CRITICAL — `do` is AUTONOMOUS, so its failure path is `run`'s, NOT
  * `complete`'s.** On a red gate / rebase conflict, `performComplete` routes the
@@ -472,58 +488,103 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		}
 	}
 
-	// 4. Onboard like `start`: claim (only if needed) AND switch the checkout to
-	//    work/<slug> off the freshly-fetched <arbiter>/main (the agent edits ON
-	//    the work branch). A lost/contended claim is propagated verbatim and
-	//    skipped cleanly — `do` never re-claims an in-progress item.
-	const started = await performStart({slug, cwd, arbiter, env, note});
-	if (started.outcome === 'lost') {
-		return {exitCode: 2, outcome: 'lost', slug, message: started.message};
+	// 4. Onboard via the ISOLATION SEAM (`selectIsolationStrategy`/`inPlaceStrategy`)
+	//    with the SAME claim-first composition `do --remote` (and `run`) use — this
+	//    is the consumer that finally puts in-place `do` on the seam, so all THREE
+	//    `do`/`run` forms share the one `IsolatedTree`-handle post-claim shape:
+	//
+	//      a. CLAIM explicitly via the CAS (the claim is the `do` driver's job,
+	//         BEFORE prepare). A lost/contended/usage claim is propagated verbatim
+	//         and NOTHING is onboarded — the same clean skip `run`/`do --remote` do.
+	//         An already-in-progress / done / absent item is NOT claimable, so the
+	//         CAS returns `lost` (exit 2): `do` (the autonomous CI worker) never
+	//         re-claims an item someone else holds, exactly like its siblings.
+	//      b. `selectIsolationStrategy({checkout})` → `inPlaceStrategy`, whose
+	//         `prepare` does the ONBOARDING half (fetch + continue-detection +
+	//         fresh-main `work/<slug>` switch, incl. the §14 continue/rebase path)
+	//         WITHOUT re-claiming — the split the seam mandates (claim → driver,
+	//         onboarding → strategy).
+	const claim = await performClaim({slug, cwd, arbiter, env, note});
+	if (claim.outcome === 'lost') {
+		return {exitCode: 2, outcome: 'lost', slug, message: claim.message};
 	}
-	if (started.outcome === 'contended') {
-		return {exitCode: 3, outcome: 'contended', slug, message: started.message};
+	if (claim.outcome === 'contended') {
+		return {exitCode: 3, outcome: 'contended', slug, message: claim.message};
 	}
-	if (started.outcome === 'needs-attention') {
-		// A CONTINUE rebase conflict (kept branch did not replay onto the current
-		// main) was routed to needs-attention by `start` (the §10 path). Surface it
-		// verbatim — the work did NOT onboard; the runner owns the bounce.
+	if (claim.exitCode !== 0) {
+		// usage/environment error (not inside a repo, no arbiter remote, dirty
+		// index, …): surface verbatim. NOTHING was onboarded.
+		return {exitCode: 1, outcome: 'usage-error', slug, message: claim.message};
+	}
+
+	// The claim landed (the item is now in-progress on the arbiter). Onboard the
+	// checkout onto its work branch THROUGH the seam — the in-place strategy puts
+	// `cwd` on `work/<slug>` off the freshly-fetched `<arbiter>/main` (or continues
+	// a kept requeue branch + rebases it, §14/§10). `prepare` can throw on a genuine
+	// plumbing failure (unreachable arbiter, …) — surface that as a usage error,
+	// never a false success.
+	let tree: IsolatedTree;
+	try {
+		tree = selectIsolationStrategy({checkout: cwd, arbiter}).prepare({
+			slug,
+			env,
+		});
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return {exitCode: 1, outcome: 'usage-error', slug, message};
+	}
+	const branch = tree.branch;
+
+	// 4a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a `work/<slug>`
+	//     that did not replay onto the current main at onboard-time (aborted, never
+	//     auto-resolved). Route to needs-attention via the SAME seam `run`/
+	//     `do --remote` use (surfaced on the arbiter; the kept branch is already on
+	//     the arbiter) instead of running the agent — the §10 path. The work did NOT
+	//     onboard; the runner owns the bounce.
+	if (tree.continueRebaseConflict) {
+		const reason =
+			`continuing the kept work/${slug}: rebase onto the latest main ` +
+			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
+			'main, or `requeue --reset` to discard and start fresh';
+		ledgerWrite.applyNeedsAttentionTransition({
+			cwd: tree.dir,
+			slug,
+			reason,
+			arbiter: tree.arbiterRemote,
+			env,
+			note,
+		});
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
 			slug,
-			branch: started.branch,
-			message: started.message,
+			branch,
+			message: reason,
 		};
 	}
-	if (started.exitCode !== 0) {
-		// refused (in-progress without --resume, done/absent, not-ready) or a
-		// usage/environment error: surface verbatim. `do` does not force-resume an
-		// already-claimed item.
-		const outcome: DoOutcome =
-			started.outcome === 'refused' ? 'refused' : 'usage-error';
-		return {exitCode: 1, outcome, slug, message: started.message};
-	}
-	const branch = started.branch;
 
 	// 5. Run the agent autonomously in the checkout, ON the work branch — the
 	//    SAME prompt assembly `agent-runner prompt` emits (canonical wrapper +
 	//    source PRD + the slice's ## Prompt). The agent only edits code (it does
 	//    no git). This is the one NEW middle step `ar-run.sh` shelled out for
 	//    (`prompt | pi`).
+	//    The post-claim pipeline reads the uniform `IsolatedTree` handle (`tree.dir`)
+	//    — in-place that IS `cwd`, but reading the handle keeps the shared shape the
+	//    future advance-loop tick wraps (no in-place-only special case).
 	let prompt: string;
 	try {
-		const slice = resolveSlice(cwd, slug);
+		const slice = resolveSlice(tree.dir, slug);
 		// CONTINUE-mode (the `agent-prompt-continue-context` slice): if the arbiter
 		// holds a kept `work/<slug>` ahead of main (a requeue) the checkout was
 		// CONTINUED onto it — inject the continue block (prior diff + reason + note).
 		// REUSE the SAME continue-detection the onboarding path used (in-place clone
 		// refs: `<arbiter>/work/<slug>` vs `<arbiter>/main`).
 		const continueContext = resolveContinueContext({
-			cwd,
+			cwd: tree.dir,
 			slug,
-			arbiter,
-			branchRef: `${arbiter}/work/${slug}`,
-			mainRef: `${arbiter}/main`,
+			arbiter: tree.arbiterRemote,
+			branchRef: `${tree.arbiterRemote}/work/${slug}`,
+			mainRef: `${tree.arbiterRemote}/main`,
 			content: readFileSync(slice.path, 'utf8'),
 			env,
 		});
@@ -535,8 +596,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			return await saveAgentFailure({
 				slug,
 				branch,
-				cwd,
-				arbiter,
+				cwd: tree.dir,
+				arbiter: tree.arbiterRemote,
 				detail: err.message,
 				env,
 				note,
@@ -547,14 +608,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	let agent: {ok: boolean; detail?: string; output?: string};
 	try {
-		agent = await runDoAgent(options, cwd, prompt, slug);
+		agent = await runDoAgent(options, tree.dir, prompt, slug);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		return await saveAgentFailure({
 			slug,
 			branch,
-			cwd,
-			arbiter,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
 			detail: message,
 			env,
 			note,
@@ -565,8 +626,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return await saveAgentFailure({
 			slug,
 			branch,
-			cwd,
-			arbiter,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
 			detail,
 			env,
 			note,
@@ -584,16 +645,16 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	const stopReason = await resolveStopReason({
 		output: agent.output,
 		slug,
-		cwd,
-		arbiter,
+		cwd: tree.dir,
+		arbiter: tree.arbiterRemote,
 		env,
 	});
 	if (stopReason !== undefined) {
 		return await saveAgentStop({
 			slug,
 			branch,
-			cwd,
-			arbiter,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
 			reason: stopReason,
 			env,
 			note,
@@ -608,8 +669,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    machinery unchanged.
 	const completed = await performComplete({
 		slug,
-		cwd,
-		arbiter,
+		cwd: tree.dir,
+		arbiter: tree.arbiterRemote,
 		integration: options.integration,
 		// `do` already ran the pre-flight divergence guard UP FRONT (step 3b), before
 		// the claim + agent; skip `complete`'s redundant re-check. When `do` was run
@@ -642,7 +703,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		sessionsDir: options.sessionsDir,
 		// The autonomous failure-surfacing: route stuck items to the arbiter's
 		// main (the `run` semantics), NOT local-only (the human `complete`).
-		surfaceArbiter: arbiter,
+		surfaceArbiter: tree.arbiterRemote,
 		color: options.color,
 		note,
 		noteBlock: options.noteBlock,
