@@ -157,3 +157,7 @@ cannot re-fork the term.
 ## Needs attention
 
 agent failed: Connection error.
+
+## Requeue 2026-06-08
+
+Routed to needs-attention by a transient 'agent failed: Connection error.' (pi harness lost model connection mid-build), NOT a slice/gate defect. The partial work branch was never pushed to origin (the connection error killed the push). Re-claiming fresh; the local stale branch is discarded. Slice premises unchanged.
