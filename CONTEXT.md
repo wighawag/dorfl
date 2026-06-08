@@ -189,6 +189,22 @@ human). The full model + rationale is the ADR; this is the glossary view.
   the source of truth, so `scan`/`status` fetch-first (warn + fall back offline).
   (Supersedes the older roots-local "scan is always offline" framing.)
 
+## Coherence (a first-class quality)
+
+**Consistency and conceptual coherence are a stated quality of this project**, not a
+nicety. THIS glossary + the ADRs are the single source of truth for what each term
+means. A new flag / config key / status / verb / named concept MUST NOT silently
+re-mean an existing term, mean two different things in two places, sit at the wrong
+conceptual layer, or duplicate an existing concept under a new name. Before adding a
+concept, check it against this glossary + the ADRs + the code; if it conflicts,
+re-means, or overlaps, REUSE or RENAME rather than fork (or surface it). This is
+enforced by the `review` skill's **conceptual-coherence lens** and the Gate-2 review
+prompt, and prevented up-front by the CLAIM-PROTOCOL coherence check. Rationale: a
+muddled concept that compiles is far more expensive than the question — every later
+artifact that reuses the muddled term inherits the debt (the `autoSlice`-gated-the-
+VERB-not-the-SELECTION miss is the worked example;
+`work/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md`).
+
 ## House style
 
 pnpm monorepo (CLI in `packages/agent-runner/`), `type: module`, NodeNext, tsc,

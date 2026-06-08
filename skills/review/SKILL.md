@@ -123,7 +123,41 @@ Do the artifacts COMPOSE, and do they obey the contract?
   - **a slice's `## Prompt`** is self-contained (an AFK agent could start from the
     file alone) and includes the drift-check.
 
-### 4. The destination check (the final, highest-value move)
+### 4. Conceptual coherence (does it fit the system's LANGUAGE?)
+
+The artifact may be internally correct yet INCOHERENT against the concepts the
+system already has. This lens catches the conflation that mechanical conformance
+(lens 3) and claim-checking (lens 1) miss — it is how, in practice, a single
+concept got applied at the WRONG LAYER and the inconsistency survived multiple
+slices + PRDs (the `autoSlice` gate that gated the `do prd:` VERB when it should
+have gated only the autonomous SELECTION — see
+`work/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md`).
+
+For each concept / flag / config key / verb / status the artifact introduces or
+touches, ask three questions:
+
+- **(a) Consistent meaning?** Is the term used the SAME way it is already defined
+  elsewhere (the project's `CONTEXT.md` glossary is the source of truth, plus the
+  ADRs, other slices, the code)? A term that silently RE-MEANS an existing word —
+  or means two different things in two places — is incoherent.
+- **(b) Right layer?** Is the concept placed at the conceptual layer it actually
+  belongs to? (A policy gate on the autonomous-SELECTION step vs on the explicit
+  VERB; a knob on the loop vs on the one-shot; a check on "who invoked" when the
+  system cannot even distinguish the invokers.) A correct mechanism at the wrong
+  layer is incoherent.
+- **(c) Duplicate / overlap?** Does it FORK an existing concept under a new name
+  instead of reusing or renaming the one that already exists? (Two flags meaning
+  "isolate"; a new status that is really an existing one; a second lock primitive.)
+  If it overlaps, the artifact should reuse/rename, not add.
+
+A concept that is coherent in ISOLATION but incoherent against the system's
+existing language is a `block` (or, for a slice/PRD not yet built, a
+`needsAnswers` / re-scope). Coherence is a first-class quality, not a nicety: an
+incoherent concept is debt that compounds silently across every artifact that
+later reuses the muddled term. When you spot the muddle, also check whether the
+GLOSSARY (`CONTEXT.md`) needs the term pinned so the next author cannot re-fork it.
+
+### 5. The destination check (the final, highest-value move)
 
 *"If every slice is built / the code is merged exactly as written, do we END UP
 WITH the system the PRD/ADR describes?"* — distinct from per-piece correctness, and

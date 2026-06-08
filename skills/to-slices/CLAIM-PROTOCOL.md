@@ -162,6 +162,21 @@ the build; it makes the choice visible so the reviewer + the human can ratify or
 reverse it. The bar is "would another slice / a user / a reviewer be surprised this
 was decided here?" — if yes, record it. A real ambiguity or stale premise, STOP.
 
+COHERENCE CHECK (before you introduce a new concept). Consistency and coherence
+with the system's existing LANGUAGE is a first-class quality. Before you add a new
+flag / config key / status / verb / named concept, check it against the project's
+`CONTEXT.md` glossary + the ADRs + the existing code: (1) does the name already
+MEAN something — are you silently re-meaning it or making it mean two things? (2)
+is the concept at the RIGHT LAYER (e.g. a policy gate on the autonomous-selection
+step vs the explicit verb a human typed)? (3) does it DUPLICATE/overlap an existing
+concept you should reuse or rename instead of forking? If a new concept conflicts
+with, re-means, or duplicates an existing one — or sits at the wrong layer — that is
+NOT a "small factual gap": STOP if it is load-bearing/hard-to-reverse, else RECORD
+it in `## Decisions` (what concept, what it overlaps, why your placement). This is
+the prevention half of the review's conceptual-coherence lens — a muddled concept
+that compiles is far more expensive than the question, because every later artifact
+that reuses the muddled term inherits the debt.
+
 Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
 move any files between work/ folders, and do not touch work/in-progress/<slug>.md.
 The runner (or human) owns every git-state transition. (Your TESTS may freely

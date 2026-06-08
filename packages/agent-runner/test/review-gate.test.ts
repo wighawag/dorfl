@@ -323,6 +323,18 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 		// Non-blocking by DEFAULT (the build proceeds; the human ratifies/reverses).
 		expect(p).toMatch(/non-blocking/i);
 	});
+
+	it('checks CONCEPTUAL COHERENCE — concept used consistently, at the right layer, not duplicating an existing one', () => {
+		const p = buildReviewPrompt('my-slice');
+		// The reviewer must check the diff fits the system's existing LANGUAGE.
+		expect(p).toMatch(/coheren/i);
+		// The three coherence questions: consistent meaning, right layer, no duplicate.
+		expect(p).toMatch(/consistent|re-?mean/i);
+		expect(p).toMatch(/layer/i);
+		expect(p).toMatch(/duplicate|overlap|fork/i);
+		// It leans on the glossary as the source of truth for term meaning.
+		expect(p).toMatch(/CONTEXT\.md|glossary/i);
+	});
 });
 
 describe('harnessReviewGate — reviewModel reaches the launch via the existing seam', () => {
