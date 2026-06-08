@@ -52,6 +52,11 @@ function seedPrd(
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
 		sliceAfter?: string[];
+		/**
+		 * Emit an INERT `sliced:` line (the marker was removed in
+		 * remove-sliced-marker-step-b — the parser ignores it). Only used to PROVE a
+		 * leftover marker does NOT count toward sliced-ness (residence does).
+		 */
 		sliced?: string;
 		/** Seed into `work/prd-sliced/` (the sliced resting state) instead of `prd/`. */
 		inPrdSliced?: boolean;
@@ -220,10 +225,12 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		expect(result.outcome).toBe('sliced');
 	});
 
-	it('STILL refuses when the sliceAfter PRD only carries a `sliced:` marker in prd/ (folder, not marker)', async () => {
+	it('STILL refuses when the sliceAfter PRD only carries an INERT `sliced:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` sits in work/prd/ with a `sliced:` MARKER but is NOT in prd-sliced/.
-		// Folder is the source of truth, so the marker alone does NOT satisfy sliceAfter.
+		// `dep` sits in work/prd/ with a leftover (INERT) `sliced:` line but is NOT in
+		// prd-sliced/. Folder residence is the SOLE source of truth — the marker was
+		// removed in remove-sliced-marker-step-b, so the line is ignored and does NOT
+		// satisfy sliceAfter.
 		seedPrd(repo, 'dep', {sliced: '2026-06-01'});
 		seedPrd(repo, 'it', {sliceAfter: ['dep']});
 		const result = await performSlice({
@@ -269,7 +276,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 // --- The completing transition (real git, lock taken/released) -------------
 
 describe('performSlice — slices + commits the runner-owned transition', () => {
-	it('takes the lock, runs the agent, lands slices in backlog/, marks PRD sliced', async () => {
+	it('takes the lock, runs the agent, lands slices in backlog/, rests PRD in prd-sliced/', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const result = await performSlice({
@@ -280,7 +287,6 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			// `--merge`: land the produced slices on the arbiter main (the output now
 			// integrates through the shared core; propose would open a PR instead).
 			integration: 'merge',
-			today: '2026-06-07',
 			agentRunner: slicingAgent('it-first'),
 			env: gitEnv(),
 		});
@@ -296,10 +302,10 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
-		// The `sliced:` marker is kept as a DERIVED COPY on the resting PRD (Step A).
-		expect(showArbiter(repo, 'work/prd-sliced/it.md')).toMatch(
-			/sliced: 2026-06-07/,
-		);
+		// Sliced-ness is RESIDENCE in prd-sliced/ (asserted above). The `sliced:` marker
+		// was removed in remove-sliced-marker-step-b, so the resting PRD carries NO
+		// sliced: line.
+		expect(showArbiter(repo, 'work/prd-sliced/it.md')).not.toMatch(/^sliced:/m);
 	});
 
 	it('the RUNNER (not the agent) authored the commits/moves', async () => {
@@ -329,8 +335,8 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		expect(result.outcome).toBe('sliced');
 
 		// The completing commit on the arbiter is the runner's slicing INTEGRATE
-		// commit (it carries BOTH the backlog slice AND the slicing→prd-sliced move +
-		// derived marker), now landed through the shared core (`slicing(<slug>): …; sliced`).
+		// commit (it carries BOTH the backlog slice AND the slicing→prd-sliced move),
+		// now landed through the shared core (`slicing(<slug>): …; sliced`).
 		const subject = run(
 			'git',
 			['log', '-1', '--format=%s', `${ARBITER}/main`],
@@ -609,10 +615,11 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(showArbiter(repo, 'work/backlog/child.md')).toMatch(
 			/IMPROVED by the loop/,
 		);
-		// The lock was released + the PRD now rests in prd-sliced/ with the derived
-		// `sliced:` marker (the normal completing transition).
+		// The lock was released + the PRD now rests in prd-sliced/ (residence = the SOLE
+		// sliced-ness signal; the `sliced:` marker was removed in
+		// remove-sliced-marker-step-b).
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
-		expect(showArbiter(repo, 'work/prd-sliced/it.md')).toMatch(/sliced:/);
+		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
 	});
 
 	it('a persistent block hits maxReview → emits the uncertain slice needsAnswers + questions', async () => {

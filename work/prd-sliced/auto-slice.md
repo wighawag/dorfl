@@ -2,7 +2,6 @@
 title: auto-slice — slice a PRD file into backlog items as a work/-native capability
 slug: auto-slice
 humanOnly: true
-sliced: 2026-06-04
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-04** — detail trimmed to the slices.

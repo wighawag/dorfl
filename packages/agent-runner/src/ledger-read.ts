@@ -112,8 +112,6 @@ export interface LedgerPrdItem {
 	needsAnswers: boolean | undefined;
 	/** PRD-only cross-PRD order: PRD slugs that must already be SLICED first. */
 	sliceAfter: string[];
-	/** The `sliced:` marker (a date), or `undefined` when not yet sliced. */
-	sliced: string | undefined;
 }
 
 /**
@@ -122,7 +120,8 @@ export interface LedgerPrdItem {
  * the selection layer can resolve each PRD's `sliceAfter` against `work/prd-sliced/`
  * RESIDENCE (slice `prd-sliced-folder-step-a` / PRD `slicing-coherence` US #9): the
  * FOLDER is the source of truth, like `done/` for slices (the auto-slicer reads
- * folder-residence, never the `sliced:` marker, which is now a derived copy). Built
+ * folder-residence; the `sliced:` marker was removed in
+ * `remove-sliced-marker-step-b`). Built
  * through the SAME PRD read path as {@link PrdExistence}; there is no second PRD
  * reader.
  */
@@ -357,13 +356,13 @@ function findPrdFileBySlug(
  * priority's PRD source) — the SAME PRD read path {@link findPrdFileBySlug} uses,
  * widened from a single-slug existence check to a full enumeration. Each PRD's
  * slug is resolved from frontmatter `slug:` (falling back to the filename) and
- * its gate axes (`humanOnly`/`needsAnswers`/`sliceAfter`/`sliced`) parsed. The
+ * its gate axes (`humanOnly`/`needsAnswers`/`sliceAfter`) parsed. The
  * already-SLICED set is RESIDENCE in `work/prd-sliced/` (slice
  * `prd-sliced-folder-step-a` / PRD `slicing-coherence` US #9): the FOLDER is the
  * source of truth (the build-machine `done/` analogue), so `sliceAfter` resolves
- * against `prd-sliced/` residence (mirroring `blockedBy` -> `done/`), NOT the
- * `sliced:` marker (now a derived copy). This matches `slicing.ts`'s
- * `readSlicedSlugs`. Missing folders read as empty.
+ * against `prd-sliced/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
+ * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
+ * matches `slicing.ts`'s `readSlicedSlugs`. Missing folders read as empty.
  */
 function readLocalPrdPool(repoPath: string): LocalPrdPool {
 	const dir = join(repoPath, 'work', 'prd');
@@ -377,14 +376,14 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
 			sliceAfter: fm.sliceAfter,
-			sliced: fm.sliced,
 		});
 	}
 	prds.sort((a, b) => a.slug.localeCompare(b.slug));
 
-	// Sliced-ness is RESIDENCE in `work/prd-sliced/`, NOT the `sliced:` marker (now a
-	// derived copy) — the FOLDER is the source of truth, like `done/` for slices,
-	// mirroring slicing.ts's readSlicedSlugs. Missing folder reads as empty.
+	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
+	// truth, like `done/` for slices (the `sliced:` marker was removed in
+	// `remove-sliced-marker-step-b`), mirroring slicing.ts's readSlicedSlugs. Missing
+	// folder reads as empty.
 	const slicedSlugs = new Set<string>();
 	const slicedDir = join(repoPath, 'work', 'prd-sliced');
 	for (const file of listMarkdown(slicedDir)) {

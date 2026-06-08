@@ -1329,8 +1329,9 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 				{env: gitEnv()},
 			).status,
 		).not.toBe(0);
-		// slicing/ is empty (the lock was released), and the derived `sliced:` marker
-		// is kept on the resting PRD (Step A).
+		// slicing/ is empty (the lock was released). Sliced-ness is RESIDENCE in
+		// prd-sliced/ (asserted above); the `sliced:` marker was removed entirely in
+		// remove-sliced-marker-step-b, so the resting PRD carries NO sliced: line.
 		expect(
 			run(
 				'git',
@@ -1345,7 +1346,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(prd).toMatch(/sliced:/);
+		expect(prd).not.toMatch(/^sliced:/m);
 	});
 
 	it('a bare slug that collides (a slice AND a PRD share it) ERRORS loudly', async () => {

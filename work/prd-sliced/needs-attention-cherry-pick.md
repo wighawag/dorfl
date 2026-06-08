@@ -2,7 +2,6 @@
 title: needs-attention surfacing on main via cherry-pick (built against the ledger-transition seam)
 slug: needs-attention-cherry-pick
 sliceAfter: [ledger-transition-seam]
-sliced: 2026-06-04
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-04** — detail trimmed to the slice +

@@ -1,7 +1,6 @@
 ---
 title: review-skill — a standalone, protocol-native review discipline (thorough + easy review of slices/PRDs/code/notes); emits verdicts, callers route
 slug: review-skill
-sliced: 2026-06-06
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-06** — detail trimmed to the slice

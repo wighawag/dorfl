@@ -103,17 +103,7 @@ describe('parseFrontmatter', () => {
 		expect(parseFrontmatter(md).sliceAfter).toEqual([]);
 	});
 
-	it('parses the PRD sliced: marker', () => {
-		const md = ['---', 'slug: my-prd', 'sliced: 2026-06-03', '---'].join('\n');
-		expect(parseFrontmatter(md).sliced).toBe('2026-06-03');
-	});
-
-	it('returns undefined sliced when omitted', () => {
-		const md = ['---', 'slug: my-prd', '---'].join('\n');
-		expect(parseFrontmatter(md).sliced).toBeUndefined();
-	});
-
-	it('reads a full PRD frontmatter block (humanOnly/needsAnswers/sliceAfter/sliced)', () => {
+	it('reads a full PRD frontmatter block (humanOnly/needsAnswers/sliceAfter)', () => {
 		const md = [
 			'---',
 			'title: Historical Store',
@@ -121,7 +111,6 @@ describe('parseFrontmatter', () => {
 			'humanOnly: true',
 			'needsAnswers: true',
 			'sliceAfter: [foundations]',
-			'sliced: 2026-06-03',
 			'---',
 		].join('\n');
 		const fm = parseFrontmatter(md);
@@ -129,7 +118,16 @@ describe('parseFrontmatter', () => {
 		expect(fm.humanOnly).toBe(true);
 		expect(fm.needsAnswers).toBe(true);
 		expect(fm.sliceAfter).toEqual(['foundations']);
-		expect(fm.sliced).toBe('2026-06-03');
+	});
+
+	it('ignores a stale `sliced:` line (the marker was removed in remove-sliced-marker-step-b)', () => {
+		// `sliced:` is no longer a parsed frontmatter axis — sliced-ness is RESIDENCE in
+		// `work/prd-sliced/`. A leftover `sliced:` line is just inert text the parser
+		// neither recognises nor trips over.
+		const md = ['---', 'slug: my-prd', 'sliced: 2026-06-03', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.slug).toBe('my-prd');
+		expect('sliced' in fm).toBe(false);
 	});
 
 	it('strips quotes from quoted scalar values', () => {
@@ -156,7 +154,6 @@ describe('parseFrontmatter', () => {
 		expect(fm.needsAnswers).toBeUndefined();
 		expect(fm.blockedBy).toEqual([]);
 		expect(fm.sliceAfter).toEqual([]);
-		expect(fm.sliced).toBeUndefined();
 	});
 
 	it('ignores keys appearing after the frontmatter block', () => {

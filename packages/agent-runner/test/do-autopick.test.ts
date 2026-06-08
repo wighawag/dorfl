@@ -61,7 +61,6 @@ function seedPrd(
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
 		sliceAfter?: string[];
-		sliced?: string;
 	} = {},
 ): void {
 	const dir = join(repo, 'work', 'prd');
@@ -70,7 +69,6 @@ function seedPrd(
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
 	if (fm.sliceAfter) lines.push(`sliceAfter: [${fm.sliceAfter.join(', ')}]`);
-	if (fm.sliced) lines.push(`sliced: ${fm.sliced}`);
 	lines.push('---', '', '# PRD');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
@@ -78,8 +76,8 @@ function seedPrd(
 /**
  * Seed a SLICED PRD as RESIDENCE in `work/prd-sliced/` (the source of truth for
  * sliced-ness, slice `prd-sliced-folder-step-a`) — it has left the to-slice pool
- * (`work/prd/`) and now resolves another PRD's `sliceAfter` by FOLDER residence,
- * not the `sliced:` marker.
+ * (`work/prd/`) and now resolves another PRD's `sliceAfter` by FOLDER residence
+ * (the `sliced:` marker was removed in `remove-sliced-marker-step-b`).
  */
 function seedSlicedPrd(slug: string): void {
 	const fromDir = join(repo, 'work', 'prd');
@@ -89,9 +87,7 @@ function seedSlicedPrd(slug: string): void {
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
-		['---', `slug: ${slug}`, 'sliced: 2026-01-01', '---', '', '# PRD'].join(
-			'\n',
-		),
+		['---', `slug: ${slug}`, '---', '', '# PRD'].join('\n'),
 	);
 }
 

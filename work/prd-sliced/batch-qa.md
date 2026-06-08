@@ -2,7 +2,6 @@
 title: batch-qa — gather every open question across work/ into ONE file, answer in one sitting, apply + iterate
 slug: batch-qa
 sliceAfter: [review-skill]
-sliced: 2026-06-06
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-06** — detail trimmed to the slice

@@ -2,7 +2,6 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
-import {setSlicedMarker} from './frontmatter.js';
 
 /**
  * The **slicing concurrency lock** (PRD `auto-slice`, slice `autoslice-lock`).
@@ -46,9 +45,10 @@ import {setSlicedMarker} from './frontmatter.js';
  *   push," which detects the edit a textual rebase conflict would miss.
  *
  * `work/slicing/` is a TRANSIENT HELD LOCK, never a resting/post-slice state:
- * after a successful slice the PRD is back in `work/prd/` and `work/slicing/` is
- * empty. Sliced-ness is recorded by the PRD's `sliced:` frontmatter marker, never
- * by residence in `work/slicing/`.
+ * after a successful slice the PRD rests in `work/prd-sliced/` and `work/slicing/`
+ * is empty. Sliced-ness is recorded by RESIDENCE in `work/prd-sliced/` (the
+ * build-machine `done/` analogue), never by residence in `work/slicing/` (the
+ * `sliced:` frontmatter marker was removed in `remove-sliced-marker-step-b`).
  *
  * This module provides the lock + release PRIMITIVES only. The orchestrating
  * `do prd:<slug>` slicing command — which acquires, drives the agent's slicing,
@@ -389,18 +389,11 @@ export interface ReleaseSlicingLockOptions {
 	 * `autoslice-command`): the produced backlog slice files to drop INTO the same
 	 * release commit, keyed by repo-relative path (e.g.
 	 * `work/backlog/<slug>.md`) → file content. The runner commits these alongside
-	 * the `slicing/ → prd/` restore so the emitted backlog, the lock release, and
-	 * the `sliced:` marker are ONE runner-owned transition (never the agent's git).
+	 * the `slicing/ → prd/` restore so the emitted backlog and the lock release are
+	 * ONE runner-owned transition (never the agent's git).
 	 * Omitted ⇒ a bare lock release (no slices emitted).
 	 */
 	emitSlices?: Record<string, string>;
-	/**
-	 * When set (the `do prd:` completing transition), stamp the restored PRD's
-	 * frontmatter with `sliced: <markSliced>` (a `YYYY-MM-DD` date) in the SAME
-	 * release commit — recording sliced-ness on the durable PRD marker, not on
-	 * residence in `slicing/`. Omitted ⇒ the PRD frontmatter is restored unchanged.
-	 */
-	markSliced?: string;
 	/**
 	 * The slicer review→edit LOOP's **decomposition-unclear** verdict
 	 * (`slicer-review-edit-loop`): instead of restoring the held PRD
@@ -409,8 +402,8 @@ export interface ReleaseSlicingLockOptions {
 	 * open questions), emitting NO guessed slices. The lock is still released (the
 	 * PRD leaves `work/slicing/`), but it lands in needs-attention rather than back
 	 * in `work/prd/`, so it is NOT re-sliceable until a human resolves it. When set,
-	 * `emitSlices`/`markSliced` are IGNORED (no slices land, the PRD is not marked
-	 * sliced). Omitted ⇒ the normal `slicing/ → prd/` restore. The CONTENT-IDENTITY
+	 * `emitSlices` is IGNORED (no slices land). Omitted ⇒ the normal `slicing/ →
+	 * prd/` restore. The CONTENT-IDENTITY
 	 * stale check still runs first (a concurrent edit under the lock is still `stale`).
 	 */
 	routeToNeedsAttention?: {reason: string};
@@ -452,10 +445,9 @@ export interface ReleaseSlicingLockResult {
  * footgun the lock forbids. Pass the acquire-time `lockedBlob` (the `do prd:`
  * command always does).
  *
- * The COMPLETING `do prd:` transition (`emitSlices` / `markSliced`) folds the
- * produced backlog slices + the PRD's `sliced:` marker INTO the same release
- * commit, so the emitted backlog, the lock release, and the marker are ONE
- * runner-owned transition (the agent never does git).
+ * The COMPLETING `do prd:` transition (`emitSlices`) folds the produced backlog
+ * slices INTO the same release commit, so the emitted backlog and the lock release
+ * are ONE runner-owned transition (the agent never does git).
  *
  * Outcomes:
  *   - `released` (0): the PRD is back in `work/prd/`, `work/slicing/` empty.
@@ -548,7 +540,6 @@ async function runRelease(
 				releaseBranch,
 				lockedBlob,
 				emitSlices: options.emitSlices,
-				markSliced: options.markSliced,
 				routeToNeedsAttention: options.routeToNeedsAttention,
 				note,
 			});
@@ -587,7 +578,6 @@ interface ReleaseAttemptContext {
 	releaseBranch: string;
 	lockedBlob: string | undefined;
 	emitSlices: Record<string, string> | undefined;
-	markSliced: string | undefined;
 	routeToNeedsAttention: {reason: string} | undefined;
 	note: (m: string) => void;
 }
@@ -629,7 +619,6 @@ async function releaseAttempt(
 		releaseBranch,
 		lockedBlob,
 		emitSlices,
-		markSliced,
 		routeToNeedsAttention,
 		cwd,
 		env,
@@ -728,15 +717,11 @@ async function releaseAttempt(
 			);
 		}
 
-		// COMPLETING `do prd:` transition: fold the produced backlog slices + the
-		// PRD's `sliced:` marker INTO this SAME release commit, so the emitted backlog,
-		// the lock release, and the marker are ONE runner-owned transition (the agent
-		// never does git). A bare release (no emitSlices/markSliced) is unchanged.
-		if (markSliced !== undefined) {
-			const current = readFileSync(prdAbs, 'utf8');
-			writeFileSync(prdAbs, setSlicedMarker(current, markSliced));
-			await gitHard(['add', '--', prd], cwd, env);
-		}
+		// COMPLETING `do prd:` transition: fold the produced backlog slices INTO this
+		// SAME release commit, so the emitted backlog and the lock release are ONE
+		// runner-owned transition (the agent never does git). Sliced-ness is RESIDENCE
+		// in `work/prd-sliced/` (the `sliced:` marker was removed in
+		// `remove-sliced-marker-step-b`); a bare release (no emitSlices) is unchanged.
 		if (emitSlices) {
 			for (const [relPath, content] of Object.entries(emitSlices)) {
 				const abs = join(cwd, relPath);

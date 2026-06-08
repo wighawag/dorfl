@@ -37,7 +37,7 @@ export type {EnvMap} from './env-config.js';
 export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 
 export type {Frontmatter} from './frontmatter.js';
-export {parseFrontmatter, setSlicedMarker} from './frontmatter.js';
+export {parseFrontmatter} from './frontmatter.js';
 
 export {isParticipatingRepo, findParticipatingRepos} from './detect.js';
 
@@ -223,9 +223,6 @@ export type {
 	PerformSliceOptions,
 } from './slicing.js';
 export {performSlice} from './slicing.js';
-
-export type {BackfilledPrd, BackfillResult} from './prd-sliced-migration.js';
-export {backfillSlicedPrds} from './prd-sliced-migration.js';
 
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {

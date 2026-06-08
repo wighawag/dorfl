@@ -1,7 +1,6 @@
 ---
 title: Ledger-transition seam — route the three work/ transitions through a read+write seam (pure refactor)
 slug: ledger-transition-seam
-sliced: 2026-06-04
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-04** — detail trimmed to the slices +

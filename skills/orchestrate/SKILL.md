@@ -68,9 +68,10 @@ to advance ONE rung:
   slice/PRD/ADR? keep as a note? delete? (a judgement rung — compose `review`).
 - **`work/ideas/`** — incubating. Any matured enough to become a PRD (`to-prd`)? Most
   are left alone (no readiness to force) — note them, don't push.
-- **`work/prd/`** — for each PRD: is it `sliced:` already? `humanOnly`/`needsAnswers`?
-  `sliceAfter:` satisfied? → **sliceable now**, **blocked on a dep**, or **blocked on
-  a human answer**.
+- **`work/prd/`** — for each PRD: is it already sliced (does it RESIDE in
+  `work/prd-sliced/`)? `humanOnly`/`needsAnswers`? `sliceAfter:` satisfied? →
+  **sliceable now**, **blocked on a dep**, or **blocked on a human answer**.
+  (Sliced-ness is folder residence, not a `sliced:` marker.)
 - **`work/backlog/`** — the slice dependency graph (READY / BLOCKED / GATED), AND each
   ready slice's **freshness** (drifted vs current `done/`+code — same check
   `drive-backlog` step 1 does).

@@ -24,8 +24,9 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **PRD** — a north-star doc in `work/prd/<slug>.md` a slice's `prd:` field points
   at. (The launch/framing doc; may be a hand-off snapshot.) Frontmatter: `slug`,
   `issue` (optional), `humanOnly`/`needsAnswers` (the slicing gate), `sliceAfter`
-  (PRD slicing-order), `sliced` (a DERIVED copy — the source of truth for
-  sliced-ness is residence in `work/prd-sliced/`; see *PRD lifecycle* below).
+  (PRD slicing-order). Sliced-ness is RESIDENCE in `work/prd-sliced/` — there is no
+  `sliced:` frontmatter marker (it was removed in `remove-sliced-marker-step-b`);
+  see *PRD lifecycle* below.
 - **ADR** — a decision record in `docs/adr/<slug>.md` (the *why* of OUR technical
   choices; durable). The substrate decisions are in
   `docs/adr/execution-substrate-decisions.md` (§1–§12). Carries a **`status:`**
@@ -63,8 +64,10 @@ dogfooding itself (it tracks its own work in its own `work/`).
 - **PRD lifecycle (folders)** — a PRD flows through the SAME folder state machine
   as a slice, minus `done/`: **`work/prd/`** (ready to slice) → **`work/slicing/`**
   (the held LOCK, being sliced) → **`work/prd-sliced/`** (sliced, resting). The
-  FOLDER is the source of truth for sliced-ness, exactly as `done/` is for slices
-  (the `sliced:` frontmatter is a derived copy, written by the release transition).
+  FOLDER is the SOLE source of truth for sliced-ness, exactly as `done/` is for
+  slices (there is no `sliced:` frontmatter marker — it was removed in
+  `remove-sliced-marker-step-b`; the release transition records sliced-ness purely
+  by moving the PRD into `work/prd-sliced/`).
   Re-slice = `work/prd-sliced/ → work/prd/` (reopen-to-ready, mirroring
   `done/ → backlog/`).
 - **sliceAfter** (`sliceAfter`, PRD-only) — PRD slugs that must already be

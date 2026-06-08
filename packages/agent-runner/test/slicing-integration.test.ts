@@ -16,7 +16,7 @@ import {run} from '../src/git.js';
  * `slice-output-through-integration`). The KEYSTONE behaviour: the produced
  * `work/backlog/*` slices integrate through the SHARED `performIntegration` core
  * (`src/integration-core.ts`) honoring `--propose`/`--merge`, instead of
- * committing straight to `main` via the lock's `emitSlices`/`markSliced`.
+ * committing straight to `main` via the lock's `emitSlices`.
  *
  * House style (mirrors `run-integration-core.test.ts`): a throwaway checkout + a
  * local `--bare` arbiter + a STUBBED agent (writes slice files directly). The
@@ -125,16 +125,15 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
-		// The produced slice + the PRD lifecycle move (slicing/ -> prd-sliced/) + the
-		// derived `sliced:` marker all landed on the arbiter main, through the shared
-		// core (not the lock's direct commit). The PRD now rests in prd-sliced/ (the
-		// source of truth), NOT back in prd/.
+		// The produced slice + the PRD lifecycle move (slicing/ -> prd-sliced/) all
+		// landed on the arbiter main, through the shared core (not the lock's direct
+		// commit). The PRD now rests in prd-sliced/ (the source of truth for
+		// sliced-ness — residence, no marker), NOT back in prd/.
 		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
@@ -145,7 +144,10 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(prd).toMatch(/sliced: 2026-06-08/);
+		// Sliced-ness is RESIDENCE in prd-sliced/ (asserted above); the `sliced:` marker
+		// was removed entirely in remove-sliced-marker-step-b, so the resting PRD carries
+		// NO sliced: line.
+		expect(prd).not.toMatch(/^sliced:/m);
 		// It is the shared core's integrate commit (`slicing(<slug>): …; sliced`),
 		// not the lock's `slicing: release …` direct commit.
 		expect(arbiterHeadSubject(repo)).toMatch(/^slicing\(it\):/);
@@ -180,7 +182,6 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 			autoSlice: true,
 			integration: 'propose',
 			provider: 'github',
-			today: '2026-06-08',
 			agentRunner: slicingAgent('child'),
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
 		});
@@ -243,7 +244,6 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 				// The integrate-time arg — the SAME knob `do slice:`/`complete` thread into
 				// `performIntegration.mode` — with NO slicing-specific parser.
 				integration: row.mode,
-				today: '2026-06-08',
 				agentRunner: slicingAgent('child'),
 				env: gitEnv(),
 			});

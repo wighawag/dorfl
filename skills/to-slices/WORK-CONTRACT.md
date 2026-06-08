@@ -91,11 +91,11 @@ runner-owned commit that emits the backlog slices. On an **aborted / unclear**
 slice the lock release instead returns the PRD `work/slicing/ → work/prd/`
 (re-slice later) or routes it `work/slicing/ → work/needs-attention/`.
 
-- **Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER, not the marker.**
-  The `sliced:` frontmatter is a DERIVED COPY (written by the release transition
-  in the same commit); the folder is canonical. A PRD in `slicing/` is *being
-  sliced right now*; a PRD in `prd-sliced/` *has been sliced*; a PRD in `prd/` is
-  *to-slice*.
+- **Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER, the SOLE signal.**
+  There is no `sliced:` frontmatter marker (it was removed in
+  `remove-sliced-marker-step-b`); the folder is canonical. A PRD in `slicing/` is
+  *being sliced right now*; a PRD in `prd-sliced/` *has been sliced*; a PRD in
+  `prd/` is *to-slice*.
 - **`slicing/`-absence-from-`prd/` is the hands-off signal.** While the lock is
   held the PRD lives at `work/slicing/<slug>.md`, not `work/prd/` — the same
   folder-as-signal a claimed slice leaving `backlog/` gives. **Edit a PRD after it
@@ -252,7 +252,7 @@ issue: 123           # optional: the issue this PRD was spawned from (the surviv
 humanOnly: true      # optional: a human must drive the SLICING of this PRD. true | omitted.
 needsAnswers: true   # optional: open questions block AUTO-slicing this PRD. true | omitted.
 sliceAfter: []       # optional: PRD slugs that must be SLICED first (see below). [] = sliceable now.
-sliced: 2026-06-03   # DERIVED copy of sliced-ness (source of truth = residence in work/prd-sliced/); written by the release transition.
+# sliced-ness has NO frontmatter marker: it is RESIDENCE in work/prd-sliced/ (the release transition moves the PRD there).
 ---
 ```
 

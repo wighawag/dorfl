@@ -3,7 +3,7 @@
  * UP from the build gate (`eligibility.ts`). No I/O: callers pass in the PRD's
  * two autonomy axes (`humanOnly`, `needsAnswers`), the repo's `autoSlice` policy,
  * the PRD's `sliceAfter` slugs, and the set of slugs whose PRDs are already
- * SLICED (resolved against the `sliced:` marker, NOT `work/done/`).
+ * SLICED (resolved against `work/prd-sliced/` residence, NOT `work/done/`).
  *
  * This mirrors the build-gate shape deliberately (CONTEXT.md / the `auto-slice`
  * PRD): the same `needsAnswers !== true && humanOnly !== true && <repo policy>`
@@ -30,7 +30,7 @@ export interface SlicingEligibilityInput {
 	needsAnswers: HumanOnlyGate;
 	/** Cross-PRD order: PRD slugs that must already be sliced before this one. */
 	sliceAfter: string[];
-	/** Slugs of PRDs that are already SLICED (their `sliced:` marker is set). */
+	/** Slugs of PRDs that are already SLICED (residence in `work/prd-sliced/`). */
 	slicedSlugs: Set<string>;
 	/** Per-repo policy: may an agent auto-slice *undeclared* PRDs in this repo? */
 	autoSlice: boolean;
