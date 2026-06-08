@@ -148,13 +148,14 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		});
 	});
 
-	it('collects already-SLICED slugs from `work/prd-sliced/` RESIDENCE (the folder is the source of truth, not the `sliced:` marker)', () => {
+	it('collects already-SLICED slugs from `work/prd-sliced/` RESIDENCE (the folder is the SOLE source of truth; the `sliced:` marker was removed)', () => {
 		// alpha + gamma rest in prd-sliced/ (sliced); beta is still to-slice in prd/.
-		writePrd('prd-sliced', 'alpha.md', {slug: 'alpha', sliced: '2026-01-01'});
+		writePrd('prd-sliced', 'alpha.md', {slug: 'alpha'});
 		writePrd('prd', 'beta.md', {slug: 'beta'});
-		writePrd('prd-sliced', 'gamma.md', {slug: 'gamma', sliced: '2026-02-02'});
-		// A `sliced:` MARKER on a PRD still in prd/ does NOT count (folder = truth):
-		// delta carries a stale marker but resides in prd/, so it is NOT sliced.
+		writePrd('prd-sliced', 'gamma.md', {slug: 'gamma'});
+		// An INERT leftover `sliced:` line on a PRD still in prd/ does NOT count (folder
+		// = truth; the marker was removed in remove-sliced-marker-step-b, so the line is
+		// ignored): delta carries one but resides in prd/, so it is NOT sliced.
 		writePrd('prd', 'delta.md', {slug: 'delta', sliced: '2026-03-03'});
 
 		const pool = currentLedgerRead.resolvePrdPool({

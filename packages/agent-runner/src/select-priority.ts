@@ -68,7 +68,7 @@ export interface PrdCandidate {
 export interface SliceablePrdsInput {
 	/** Every PRD enumerated from `work/prd/` (the auto-slice candidate source). */
 	candidates: PrdCandidate[];
-	/** Slugs whose PRD already carries a `sliced:` marker (resolves `sliceAfter`). */
+	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `sliceAfter`). */
 	slicedSlugs: Set<string>;
 	/** The repo's resolved `autoSlice` policy (`autoslice-gate`'s per-repo key). */
 	autoSlice: boolean;

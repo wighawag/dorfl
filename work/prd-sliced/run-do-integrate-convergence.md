@@ -3,7 +3,6 @@ title: run/do integrate-path convergence — one shared gate→integrate back-ha
 slug: run-do-integrate-convergence
 humanOnly: true
 sliceAfter: []
-sliced: 2026-06-07
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-07** — Implementation/Testing/Slices

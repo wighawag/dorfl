@@ -160,7 +160,6 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			review: true,
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),
@@ -171,7 +170,8 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 		// The gate ran (before the integrate) exactly ONCE — it is one-shot.
 		expect(gate.calls).toBe(1);
 		// The approved set integrated onto main (slice + PRD slicing/ -> prd-sliced/
-		// move + derived marker). The PRD rests in prd-sliced/ (source of truth), not prd/.
+		// move). The PRD rests in prd-sliced/ (residence = source of truth for
+		// sliced-ness, no marker), not prd/.
 		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
@@ -190,7 +190,6 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			review: false, // --no-review
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),
@@ -210,7 +209,6 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			// no `review`, no `reviewGate` — the pre-gate behaviour.
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
@@ -231,7 +229,6 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			review: true,
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),
@@ -263,7 +260,6 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'propose',
-			today: '2026-06-08',
 			review: true,
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),
@@ -286,7 +282,6 @@ describe('slice acceptance gate — ONE-SHOT (single invocation, no rounds)', ()
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			review: true,
 			reviewGate: gate,
 			agentRunner: slicingAgent('child'),
@@ -321,7 +316,6 @@ describe('slice acceptance gate — --review-model de-correlates the reviewer', 
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			review: true,
 			reviewGate: gate,
 			acceptanceReviewModel: 'review/override',
@@ -352,7 +346,6 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			// BOTH seams on: the improver loop AND the acceptance gate.
 			reviewLoop: convergingLoop,
 			maxReview: 1,
@@ -376,7 +369,6 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'merge',
-			today: '2026-06-08',
 			reviewLoop: convergingLoop, // improver loop ON
 			maxReview: 1,
 			review: false, // acceptance gate OFF

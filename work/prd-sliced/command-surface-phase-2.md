@@ -2,7 +2,6 @@
 title: Command surface phase 2 — build the new surface (registry, run/do split, human face, cleanup)
 slug: command-surface-phase-2
 sliceAfter: []
-sliced: 2026-06-05
 ---
 
 > **Sliced into `work/backlog/` on 2026-06-05** — technical detail trimmed to the

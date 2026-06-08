@@ -74,8 +74,8 @@ export type IntegrationCoreOutcome =
  * IDENTICAL; only the "which item move + which file to read the title from" step
  * is caller-supplied. This is the seam the `do prd:<slug>` SLICING transition
  * rides (slice `slice-output-through-integration`): its "item move" is the PRD
- * LIFECYCLE move (`work/slicing/<slug>.md → work/prd/<slug>.md` + the `sliced:`
- * marker) plus its EMITTED backlog files — NOT a slice done-move. Supplying it
+ * LIFECYCLE move (`work/slicing/<slug>.md → work/prd-sliced/<slug>.md`, residence =
+ * sliced-ness) plus its EMITTED backlog files — NOT a slice done-move. Supplying it
  * makes every integrate-time arg (`--propose`/`--merge`, provider, title/body)
  * apply to slicing BY CONSTRUCTION, because they resolve ONCE here.
  *
@@ -98,9 +98,10 @@ export interface IntegrationLifecycle {
 	/**
 	 * STAGE the lifecycle move + emitted files into the index on the current work
 	 * branch (runner-owned git; the agent never does git). For the slicing
-	 * transition: `git mv work/slicing/<slug>.md → work/prd/<slug>.md`, stamp the
-	 * `sliced:` marker, and write+`git add` the produced `work/backlog/*.md`
-	 * files. The band's subsequent `git add -A` + atomic commit folds this staging
+	 * transition: `git mv work/slicing/<slug>.md → work/prd-sliced/<slug>.md`
+	 * (residence = sliced-ness; no marker), and write+`git add` the produced
+	 * `work/backlog/*.md` files. The band's subsequent `git add -A` + atomic commit
+	 * folds this staging
 	 * AND the agent's uncommitted backlog writes into ONE runner-owned commit. May
 	 * be async (it shells git).
 	 */

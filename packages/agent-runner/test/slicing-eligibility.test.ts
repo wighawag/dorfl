@@ -51,7 +51,7 @@ describe('resolveSliceGate — the humanOnly × needsAnswers × autoSlice matrix
 	}
 });
 
-describe('resolveSliceAfter — against the `sliced:` marker (not done/)', () => {
+describe('resolveSliceAfter — against `work/prd-sliced/` residence (not done/)', () => {
 	it('is satisfied when sliceAfter is empty', () => {
 		const r = resolveSliceAfter([], new Set());
 		expect(r.satisfied).toBe(true);

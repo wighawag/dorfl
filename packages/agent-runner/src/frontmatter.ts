@@ -28,17 +28,11 @@ export interface Frontmatter {
 	blockedBy: string[];
 	/**
 	 * PRD-only: slugs of PRDs that must already be SLICED before this PRD may be
-	 * sliced (resolved against the `sliced:` marker, NOT `done/`). `[]` when
+	 * sliced (resolved against `work/prd-sliced/` residence, NOT `done/`). `[]` when
 	 * omitted or empty. Parsed here so the auto-slicer can read it; enforcement
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
 	sliceAfter: string[];
-	/**
-	 * PRD-only: the `sliced:` marker (e.g. `2026-06-03`) set by `to-slices` after
-	 * the one-time trim — marks the PRD launched-and-sliced. `undefined` when the
-	 * PRD has not been sliced yet.
-	 */
-	sliced: string | undefined;
 }
 
 /**
@@ -96,37 +90,6 @@ function toBoolean(value: string): boolean | undefined {
 }
 
 /**
- * Stamp (insert or replace) the PRD `sliced: <date>` frontmatter marker on a
- * markdown document, returning the new content. Used by the `do prd:` completing
- * transition to record sliced-ness on the durable marker (never on residence in
- * `work/slicing/`). If a `sliced:` line already exists it is REPLACED (idempotent
- * re-slice); otherwise it is appended as the last line inside the frontmatter
- * fence. A document with no frontmatter fence is returned unchanged (the PRD the
- * lock holds always has one, so this is only a defensive no-op).
- */
-export function setSlicedMarker(content: string, date: string): string {
-	const normalized = content.replace(/\r\n/g, '\n');
-	if (!normalized.startsWith('---\n')) {
-		return content;
-	}
-	const lines = normalized.split('\n');
-	const closing = lines.indexOf('---', 1);
-	if (closing === -1) {
-		return content;
-	}
-	// Replace an existing top-level `sliced:` line in the frontmatter block.
-	for (let i = 1; i < closing; i++) {
-		if (/^sliced\s*:/.test(lines[i])) {
-			lines[i] = `sliced: ${date}`;
-			return lines.join('\n');
-		}
-	}
-	// Otherwise insert it as the last frontmatter line (just before the closing fence).
-	lines.splice(closing, 0, `sliced: ${date}`);
-	return lines.join('\n');
-}
-
-/**
  * Set (or clear) the top-level `needsAnswers:` frontmatter marker on a `work/`
  * markdown document, returning the new content. Used by the slicer review→edit
  * LOOP's verdict sink (`slicer-review-edit-loop`) to emit a specific uncertain
@@ -134,7 +97,6 @@ export function setSlicedMarker(content: string, date: string): string {
  * a human must answer them). If a `needsAnswers:` line already exists it is
  * REPLACED (idempotent); otherwise it is appended as the last line inside the
  * frontmatter fence. A document with no frontmatter fence is returned unchanged.
- * Mirrors {@link setSlicedMarker} exactly so the two markers behave identically.
  */
 export function setNeedsAnswersMarker(content: string, value: boolean): string {
 	const normalized = content.replace(/\r\n/g, '\n');
@@ -165,7 +127,6 @@ export function parseFrontmatter(content: string): Frontmatter {
 		needsAnswers: undefined,
 		blockedBy: [],
 		sliceAfter: [],
-		sliced: undefined,
 	};
 	if (block === undefined) {
 		return result;
@@ -194,8 +155,6 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.humanOnly = rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'needsAnswers') {
 			result.needsAnswers = rawValue === '' ? undefined : toBoolean(rawValue);
-		} else if (key === 'sliced') {
-			result.sliced = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'blockedBy' || key === 'sliceAfter') {
 			let list: string[];
 			if (rawValue.startsWith('[')) {
