@@ -45,6 +45,29 @@ sliceAfter: [auto-slice]
 > `orchestrate` skill (the human-in-the-loop conductor) and the `drive-backlog` skill
 > (the build loop). They are designed to converge on the SAME tick contract — keep
 > the tick shape here aligned with what those skills actually do by hand.
+>
+> **FOLD-IN: the mirror-side pool scan (from `do-remote-no-arg-and-remote-autopick`
+> part (b), routed here 2026-06-08).** A separate observation requested two
+> `do --remote` affordances for an isolated conductor: (a) `do --remote <slug>` with
+> no url (isolate-in-place) — sliced standalone as
+> `work/backlog/do-remote-no-arg-isolate-in-place.md`; and (b) remote/mirror-side
+> AUTO-PICK / `-n` over a hub-mirror pool — DEFERRED HERE on purpose. (b) needs a
+> **mirror-side eligible-pool scan**: enumerate eligible slices + sliceable PRDs from
+> the BARE hub mirror's `main` (not an in-place checkout), the isolated counterpart
+> to `do-autopick`'s in-place pool scan. This PRD's `run` driver ALREADY does
+> isolated + parallel auto-pick over exactly such a pool, and its one-shot/CI
+> `advance` driver (User Stories 7, 25, 27) wants isolated + SEQUENTIAL selection
+> over the SAME pool (`advance --remote -n <x>` / the CI matrix). So the slicer should
+> design the **mirror-side pool scan as ONE reusable unit** that BOTH the `run` loop
+> driver and the one-shot/CI `advance` driver consume — do NOT let it be invented
+> twice (once in a standalone `do --remote -n` slice and again in the advance
+> drivers). Concretely: when slicing this PRD, ensure the slice that builds the
+> mirror-side eligible-pool enumeration is shared substrate the `-n`/auto-pick rungs
+> (both `do` and `advance`, both `run`-loop and one-shot) all call; a standalone
+> `do --remote -n` then falls out as a thin caller, not a separate scan. (Note the
+> existing inline `-n`×`--remote` REFUSAL in `cli.ts` — it is the placeholder this
+> work replaces; the refusal was an un-surfaced decision, now caught by the
+> `agent-stop-signal` Decisions channel.)
 
 ## Problem Statement
 
