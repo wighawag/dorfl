@@ -50,7 +50,9 @@ sliceAfter: [auto-slice]
 > part (b), routed here 2026-06-08).** A separate observation requested two
 > `do --remote` affordances for an isolated conductor: (a) `do --remote <slug>` with
 > no url (isolate-in-place) — sliced standalone as
-> `work/backlog/do-remote-no-arg-isolate-in-place.md`; and (b) remote/mirror-side
+> `work/backlog/do-isolated-in-place.md` (the maintainer chose `do --isolated`, a
+> boolean flag orthogonal to `--remote <url>`, over overloading `--remote`); and
+> (b) remote/mirror-side
 > AUTO-PICK / `-n` over a hub-mirror pool — DEFERRED HERE on purpose. (b) needs a
 > **mirror-side eligible-pool scan**: enumerate eligible slices + sliceable PRDs from
 > the BARE hub mirror's `main` (not an in-place checkout), the isolated counterpart
