@@ -122,3 +122,7 @@ front of the `performIntegration` call the dispatcher already makes (slices 1 + 
 > same-type-both errors, unset⇒propose), the resolved mode reaches
 > `performIntegration`, ask/bounce ignore the flags, and
 > `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
+
+## Needs attention
+
+transient infra: Connection error.
