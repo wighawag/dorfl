@@ -90,3 +90,47 @@ DECISION is the advance gate family — capture here, decide there.
 - WORK-CONTRACT.md "The two autonomy axes" — the predicate whose wording
   ("auto-eligible") supports reading (A): the policy is about AUTO eligibility, not
   explicit invocation.
+
+## Update 2026-06-09 — it IS written down (reading A confirmed) + the REAL bug is a build/slice ASYMMETRY
+
+The maintainer confirmed: **`autoSlice` and `allowAgents` (→ `autoBuild`) are config
+for `run`, pick-any, and CI — they should NOT gate an explicitly-named target.** And
+it IS documented — reading (A) is the intended model, not a new decision:
+
+- **`docs/adr/methodology-and-skills.md` §4:** "Repo policy `allowAgents` (per-repo
+  config) — may agents claim *UNDECLARED* items here?" The predicate is "AUTO-eligible
+  iff … `allowAgents` is true." Framed around UNDECLARED / auto-eligibility.
+- **`work/prd-sliced/auto-slice.md` §57:** "Per-repo policy `autoSlice` — may an agent
+  **auto-slice UNDECLARED PRDs** in this repo?" — same framing for the slice gate.
+
+So the gate is contractually about the AUTO-PICK / pool-enumeration path. Verifying
+the code, the two paths DIVERGE — this is the real defect:
+
+- **BUILD path (`do <slice>`) already does the RIGHT thing:** `performDoInPlace`
+  (`src/do.ts`) does NOT check `allowAgents` at all for an explicitly-named slice —
+  it just CAS-claims (claim-or-lose) and applies the `--ignore-not-ready` readiness
+  guard. `allowAgents` only filters the AUTO-PICK pool (`do-autopick`/`run`
+  eligibility). Naming the slice IS the authorization. ✓ reading (A).
+- **SLICE path (`do prd:<slug>`) OVER-GATES:** `performSlice` (`src/slicing.ts`
+  step 1, `resolveAgentGate`) applies the `autoSlice` predicate even for an
+  EXPLICITLY-named PRD — so `do prd:advance-loop` is refused when `autoSlice` is off,
+  while `do advance-loop` (a slice) would NOT be refused. That asymmetry is the bug:
+  the slice path treats the gate as binding every agent invocation; the build path
+  (correctly) treats it as binding only auto-pick eligibility.
+
+**Corrected fix direction (sharper than the original below):** make the slice path
+MATCH the build path — `autoSlice`/`allowAgents`(→`autoBuild`) gate ONLY the auto-pick
+PRD/slice POOL (the `do-autopick` selection + the `run` eligibility filter), NOT an
+explicitly-resolved named target. Concretely: drop the `autoSlice` gate from
+`performSlice`'s explicit-named path (keep `humanOnly`/`needsAnswers` — those are the
+ITEM's readiness, which DO bind — and keep `sliceAfter`), leaving the policy on the
+auto-pick PRD-pool filter where `do-autopick` already consumes the predicate. This is
+the SLICE-path analogue of what the build path already does. The advance-loop gate
+family (`advance-drivers-and-gates`) should state this rule ONCE for build/slice/
+triage uniformly so the asymmetry can't reappear; the `do prd:` fix itself is a small
+independent slice that can land before advance-loop (it un-breaks the explicit
+slice-now ergonomic the conductor/human relies on).
+
+(Process note: this is also a case the `agent-stop-signal` Decisions channel would
+have caught — the slice path's inheritance of the gate onto the explicit form was an
+un-surfaced inline decision, divergent from the build path.)
