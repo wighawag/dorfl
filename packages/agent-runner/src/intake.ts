@@ -12,6 +12,7 @@ import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {
 	GitHubIssueProvider,
+	PROCESSING_LOCK_LABEL,
 	type Issue,
 	type IssueComment,
 	type IssueProvider,
@@ -130,6 +131,7 @@ export type IntakeRunOutcome =
 	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
 	| 'prd' // a `prd` verdict → `work/prd/<slug>.md` written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
+	| 'locked' // the `processing` lock was already held → backed off (did nothing)
 	| 'agent-failed' // the decision agent invocation itself errored
 	| 'stale' // the integrate rebase conflicted against an advanced main
 	| 'usage-error'; // usage / environment problem
@@ -365,9 +367,90 @@ export async function performIntake(
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
 
-	// 2. DECIDE: prompt → VERDICT. The agent DRAFTS only (no git, no seam ops). Tests
-	//    inject a canned verdict (the dispatcher's testable seam); production wires
-	//    the harness. The prompt's judgement is not unit-tested — only the dispatch.
+	// 2. ACQUIRE the `processing` LOCK (PRD US #10): a TRANSIENT concurrency mutex
+	//    that serialises two concurrent runs on the SAME issue. Read the labels; if
+	//    the lock is ALREADY present, BACK OFF (do nothing — another run owns it). The
+	//    winner ADDS the label and proceeds; the label is REMOVED on finish (success
+	//    OR handled failure, in the `finally` below). It is NOT a `work/` CAS and NOT a
+	//    label state-machine (ADR §12) — ONE transient lock label. A provider with no
+	//    label concept (or a missing/unauthenticated `gh`) DEGRADES to best-effort:
+	//    the run proceeds WITHOUT the lock and the degrade is surfaced honestly (CI's
+	//    per-issue concurrency group is then the only serialiser — out of scope here).
+	const labels = await issueProvider.getLabels({cwd, issueNumber, env});
+	if (labels.supported && labels.labels.includes(PROCESSING_LOCK_LABEL)) {
+		const message =
+			`Intake of issue #${issueNumber} backed off: the \`${PROCESSING_LOCK_LABEL}\` ` +
+			`lock is already held by a concurrent run; doing nothing.`;
+		note(message);
+		return {exitCode: 0, outcome: 'locked', issueNumber, message};
+	}
+	let locked = false;
+	if (labels.supported) {
+		const acquired = await issueProvider.addLabel({
+			cwd,
+			issueNumber,
+			label: PROCESSING_LOCK_LABEL,
+			env,
+		});
+		locked = acquired.applied;
+		if (!acquired.applied) {
+			// The read said the provider HAS labels but the add degraded (e.g. `gh` lost
+			// auth between the read and the add) — proceed best-effort, surfaced.
+			note(`Processing lock degraded: ${acquired.instruction}`);
+		}
+	} else {
+		// Non-label provider → best-effort degrade (proceed without the lock).
+		note(`Processing lock degraded: ${labels.instruction}`);
+	}
+
+	try {
+		return await decideAndDispatch(options, cwd, issue, comments, {
+			arbiter,
+			issueProvider,
+			note,
+		});
+	} finally {
+		// RELEASE the lock on FINISH (success OR handled failure). Only the winner that
+		// actually acquired it releases it — a degraded/best-effort run holds nothing.
+		if (locked) {
+			const released = await issueProvider.removeLabel({
+				cwd,
+				issueNumber,
+				label: PROCESSING_LOCK_LABEL,
+				env,
+			});
+			if (!released.applied) {
+				note(`Processing lock release degraded: ${released.instruction}`);
+			}
+		}
+	}
+}
+
+/**
+ * The DECIDE (prompt → verdict) + DISPATCH (the four-outcome table) band, run
+ * INSIDE the `processing` lock {@link performIntake} acquires/releases around it.
+ * Split out so the lock release is a clean `try`/`finally` in the caller (the lock
+ * MUST release on every terminal path — success or handled failure). The agent
+ * DRAFTS only; the runner owns every git/seam side-effect here.
+ */
+async function decideAndDispatch(
+	options: PerformIntakeOptions,
+	cwd: string,
+	issue: Issue,
+	comments: IssueComment[],
+	ctx: {
+		arbiter: string;
+		issueProvider: IssueProvider;
+		note: (message: string) => void;
+	},
+): Promise<IntakeResult> {
+	const {arbiter, issueProvider, note} = ctx;
+	const issueNumber = issue.number;
+	const env = options.env;
+
+	// DECIDE: prompt → VERDICT. The agent DRAFTS only (no git, no seam ops). Tests
+	// inject a canned verdict (the dispatcher's testable seam); production wires the
+	// harness. The prompt's judgement is not unit-tested — only the dispatch.
 	const prompt = buildIntakeDecisionBrief(issue, comments);
 	let verdict: IntakeVerdict;
 	try {
@@ -379,15 +462,15 @@ export async function performIntake(
 		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
 	}
 
-	// 3. DISPATCH on the verdict — the FULL four-outcome decision table (PRD
-	//    `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
-	//    git/seam side-effect below (the in-band boundary): the write + integrate
-	//    (slice/prd) and the `postIssueComment` (ask/bounce).
+	// DISPATCH on the verdict — the FULL four-outcome decision table (PRD
+	// `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
+	// git/seam side-effect below (the in-band boundary): the write + integrate
+	// (slice/prd) and the `postIssueComment` (ask/bounce).
 	//
-	//    PER-OUTCOME integration (PRD US #9): the resolved mode is keyed on the
-	//    runtime artifact TYPE — a `slice` verdict integrates with the SLICE mode, a
-	//    `prd` verdict with the PRD mode. Unset ⇒ propose for both. ask/bounce never
-	//    integrate, so the modes are no-ops for them.
+	// PER-OUTCOME integration (PRD US #9): the resolved mode is keyed on the runtime
+	// artifact TYPE — a `slice` verdict integrates with the SLICE mode, a `prd`
+	// verdict with the PRD mode. Unset ⇒ propose for both. ask/bounce never
+	// integrate, so the modes are no-ops for them.
 	const modes = options.integration ?? {slice: 'propose', prd: 'propose'};
 	switch (verdict.outcome) {
 		case 'slice':

@@ -10,6 +10,7 @@ import {
 import {performIntake, type IntakeVerdict} from '../src/intake.js';
 import {
 	GitHubIssueProvider,
+	PROCESSING_LOCK_LABEL,
 	type Issue,
 	type IssueComment,
 	type IssueProvider,
@@ -51,17 +52,39 @@ afterEach(() => {
 
 const ARBITER = 'arbiter';
 
-/** A stubbed issue seam: canned issue + thread, recording its posted comments. */
+/**
+ * A stubbed issue seam: canned issue + thread, recording its posted comments AND
+ * its label mutations (the `processing` lock). The label set is in-memory and the
+ * ops mutate it, so a test can assert the lock is present DURING the run and absent
+ * AFTER it, observe a second run backing off, and — via `noLabels` — model a
+ * non-label provider that DEGRADES to best-effort.
+ */
 function stubIssueProvider(
 	opts: {
 		issue?: Partial<Issue>;
 		comments?: IssueComment[];
+		/** Seed the issue's labels (e.g. the lock already held by a concurrent run). */
+		labels?: string[];
+		/** Model a provider with NO label concept (degrade to best-effort). */
+		noLabels?: boolean;
 	} = {},
-): IssueProvider & {readonly comments: PostIssueCommentInput[]} {
+): IssueProvider & {
+	readonly comments: PostIssueCommentInput[];
+	readonly labels: string[];
+	readonly labelOps: string[];
+} {
 	const comments: PostIssueCommentInput[] = [];
-	const provider: IssueProvider & {comments: PostIssueCommentInput[]} = {
+	const labels: string[] = [...(opts.labels ?? [])];
+	const labelOps: string[] = [];
+	const provider: IssueProvider & {
+		comments: PostIssueCommentInput[];
+		labels: string[];
+		labelOps: string[];
+	} = {
 		name: 'stub',
 		comments,
+		labels,
+		labelOps,
 		async getIssue({issueNumber}) {
 			return {
 				number: issueNumber,
@@ -78,6 +101,37 @@ function stubIssueProvider(
 		async postIssueComment(input) {
 			comments.push(input);
 			return {posted: true, instruction: `commented on #${input.issueNumber}`};
+		},
+		async getLabels() {
+			if (opts.noLabels) {
+				return {
+					supported: false,
+					labels: [],
+					instruction: 'no label support',
+				};
+			}
+			return {supported: true, labels: [...labels], instruction: 'read labels'};
+		},
+		async addLabel({label}) {
+			if (opts.noLabels) {
+				return {applied: false, instruction: 'no label support'};
+			}
+			labelOps.push(`add:${label}`);
+			if (!labels.includes(label)) {
+				labels.push(label);
+			}
+			return {applied: true, instruction: `added ${label}`};
+		},
+		async removeLabel({label}) {
+			if (opts.noLabels) {
+				return {applied: false, instruction: 'no label support'};
+			}
+			labelOps.push(`remove:${label}`);
+			const i = labels.indexOf(label);
+			if (i !== -1) {
+				labels.splice(i, 1);
+			}
+			return {applied: true, instruction: `removed ${label}`};
 		},
 	};
 	return provider;
@@ -244,6 +298,15 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			},
 			async postIssueComment() {
 				return {posted: false, instruction: 'n/a'};
+			},
+			async getLabels() {
+				return {supported: true, labels: [], instruction: 'n/a'};
+			},
+			async addLabel() {
+				return {applied: true, instruction: 'n/a'};
+			},
+			async removeLabel() {
+				return {applied: true, instruction: 'n/a'};
 			},
 		};
 		const result = await performIntake({
@@ -467,6 +530,130 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 });
 
 // ---------------------------------------------------------------------------
+// The PROCESSING LOCK (`intake-processing-lock`, PRD US #10): a TRANSIENT
+// provider-native concurrency mutex — ONE label added-on-start / removed-on-finish,
+// serialising two concurrent runs on the SAME issue. NOT a `work/` CAS and NOT a
+// label state-machine (ADR §12). The RUNNER owns the label ops (the agent stays
+// label-free). A non-label provider DEGRADES to best-effort. Asserted at the
+// STUBBED issue seam (the lock state observable on `issueProvider.labels`).
+// ---------------------------------------------------------------------------
+describe('intake <N> — the processing lock (acquire/release, back-off, degrade)', () => {
+	it('acquires the lock on START (present DURING the run) and releases it on FINISH (absent after)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider();
+		let lockHeldAtDecision = false;
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				// MID-RUN: the lock label is present (the winner acquired it on start).
+				lockHeldAtDecision = issueProvider.labels.includes(
+					PROCESSING_LOCK_LABEL,
+				);
+				return SLICE_VERDICT;
+			},
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		// The lock was HELD during the run …
+		expect(lockHeldAtDecision).toBe(true);
+		// … and is RELEASED afterwards (absent on finish, so the next run can proceed).
+		expect(issueProvider.labels).not.toContain(PROCESSING_LOCK_LABEL);
+		// The runner performed BOTH ops, in order (acquire then release).
+		expect(issueProvider.labelOps).toEqual([
+			`add:${PROCESSING_LOCK_LABEL}`,
+			`remove:${PROCESSING_LOCK_LABEL}`,
+		]);
+	});
+
+	it('releases the lock on a HANDLED FAILURE (agent-failed) — the next run is not blocked', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider();
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				throw new Error('the decision agent errored');
+			},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-failed');
+		// Even on a handled failure the lock is RELEASED (finally), so it does not leak.
+		expect(issueProvider.labels).not.toContain(PROCESSING_LOCK_LABEL);
+		expect(issueProvider.labelOps).toEqual([
+			`add:${PROCESSING_LOCK_LABEL}`,
+			`remove:${PROCESSING_LOCK_LABEL}`,
+		]);
+	});
+
+	it('a SECOND run while the lock is already PRESENT backs off (does nothing — no emit, no comment, no integrate)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// Seed the lock as already held by a concurrent run.
+		const issueProvider = stubIssueProvider({
+			labels: [PROCESSING_LOCK_LABEL],
+		});
+		let decided = false;
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return SLICE_VERDICT;
+			},
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('locked');
+		// BACK OFF: the decision never ran, nothing was emitted, no comment posted.
+		expect(decided).toBe(false);
+		expect(result.emitted).toBeUndefined();
+		expect(issueProvider.comments).toHaveLength(0);
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(gitIn(['branch', '-r'], repo)).not.toContain(
+			`${ARBITER}/work/add-quiet-flag`,
+		);
+		// The loser did NOT touch the label — it is still held (only the winner removes
+		// it on its own finish). No add/remove from this backed-off run.
+		expect(issueProvider.labels).toContain(PROCESSING_LOCK_LABEL);
+		expect(issueProvider.labelOps).toEqual([]);
+	});
+
+	it('a NON-LABEL provider DEGRADES to best-effort: the run proceeds WITHOUT the lock (no crash)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// A provider with NO label concept (getLabels reports unsupported).
+		const issueProvider = stubIssueProvider({noLabels: true});
+		const notes: string[] = [];
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+
+		// The run PROCEEDS (the slice is emitted) without a lock — no crash, no back-off.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		expect(result.emitted).toBe('work/backlog/add-quiet-flag.md');
+		// No label op happened (the provider has none) and the degrade is SURFACED.
+		expect(issueProvider.labelOps).toEqual([]);
+		expect(notes.some((n) => /lock degraded/i.test(n))).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // PER-OUTCOME integration modes threaded through performIntegration
 // (`intake-per-outcome-integration-modes`, PRD US #9). The PURE resolution table
 // lives in `intake-integration-modes.test.ts`; HERE is the ONE end-to-end check
@@ -610,15 +797,21 @@ function writeGhIssueStub(opts: {exitCode?: number} = {}): {
 			{author: {login: 'octocat'}, body: 'the >> ones'},
 		],
 	});
+	const labelsJson = JSON.stringify({
+		labels: [{name: 'bug'}, {name: PROCESSING_LOCK_LABEL}],
+	});
 	const script = [
 		'#!/usr/bin/env bash',
 		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
 		`if [ ${exit} -ne 0 ]; then exit ${exit}; fi`,
-		'# Dispatch on whether --json asks for comments vs the issue fields.',
+		'# Dispatch on the subcommand: comment / edit just exit 0; a --json read prints',
+		'# the matching canned JSON (comments, labels, or the issue fields).',
 		'for a in "$@"; do',
 		'  if [ "$a" = "comment" ]; then exit 0; fi',
+		'  if [ "$a" = "edit" ]; then exit 0; fi',
 		'done',
 		'case "$*" in',
+		`  *labels*) printf '%s\\n' ${JSON.stringify(labelsJson)} ;;`,
 		`  *comments*) printf '%s\\n' ${JSON.stringify(commentsJson)} ;;`,
 		`  *--json*) printf '%s\\n' ${JSON.stringify(issueJson)} ;;`,
 		'esac',
@@ -675,6 +868,86 @@ describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', (
 		expect(args).toMatch(/^42$/m);
 		expect(args).toMatch(/^--body$/m);
 		expect(args).toMatch(/^please clarify$/m);
+	});
+
+	it('getLabels shells out to `gh issue view <N> --json labels` and parses the names', async () => {
+		const stub = writeGhIssueStub();
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.getLabels({
+			cwd: scratch.root,
+			issueNumber: 42,
+		});
+		expect(result.supported).toBe(true);
+		expect(result.labels).toContain('bug');
+		expect(result.labels).toContain(PROCESSING_LOCK_LABEL);
+		const args = readFileSync(stub.argsFile, 'utf8');
+		expect(args).toMatch(/^issue$/m);
+		expect(args).toMatch(/^view$/m);
+		expect(args).toMatch(/^labels$/m);
+		expect(args).not.toMatch(/force/);
+	});
+
+	it('addLabel shells out to `gh issue edit <N> --add-label <label>` (the lock acquire)', async () => {
+		const stub = writeGhIssueStub();
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.addLabel({
+			cwd: scratch.root,
+			issueNumber: 42,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		expect(result.applied).toBe(true);
+		const args = readFileSync(stub.argsFile, 'utf8');
+		expect(args).toMatch(/^issue$/m);
+		expect(args).toMatch(/^edit$/m);
+		expect(args).toMatch(/^42$/m);
+		expect(args).toMatch(/^--add-label$/m);
+		expect(args).toMatch(
+			new RegExp(`^${PROCESSING_LOCK_LABEL.replace(':', ':')}$`, 'm'),
+		);
+		// The lock is a single label; the adapter NEVER --force-s anything.
+		expect(args).not.toMatch(/force/);
+	});
+
+	it('removeLabel shells out to `gh issue edit <N> --remove-label <label>` (the lock release)', async () => {
+		const stub = writeGhIssueStub();
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.removeLabel({
+			cwd: scratch.root,
+			issueNumber: 42,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		expect(result.applied).toBe(true);
+		const args = readFileSync(stub.argsFile, 'utf8');
+		expect(args).toMatch(/^--remove-label$/m);
+	});
+
+	it('getLabels DEGRADES (supported: false, no throw) when gh exits non-zero — lock best-effort', async () => {
+		const stub = writeGhIssueStub({exitCode: 1});
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.getLabels({
+			cwd: scratch.root,
+			issueNumber: 42,
+		});
+		expect(result.supported).toBe(false);
+		expect(result.labels).toEqual([]);
+	});
+
+	it('addLabel/removeLabel DEGRADE (applied: false, no throw) when gh is missing', async () => {
+		const provider = new GitHubIssueProvider({
+			ghBin: join(scratch.root, 'no-such-gh'),
+		});
+		const added = await provider.addLabel({
+			cwd: scratch.root,
+			issueNumber: 42,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		const removed = await provider.removeLabel({
+			cwd: scratch.root,
+			issueNumber: 42,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		expect(added.applied).toBe(false);
+		expect(removed.applied).toBe(false);
 	});
 
 	it('a read THROWS on a non-zero gh (intake cannot decide without the issue)', async () => {

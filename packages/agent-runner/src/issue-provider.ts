@@ -1,5 +1,17 @@
 import {run, type RunResult} from './git.js';
 import {DEFAULT_GH_BIN} from './github.js';
+import {brand} from './brand.js';
+
+/**
+ * The single provider-native PROCESSING LOCK label (slice `intake-processing-lock`,
+ * PRD `issue-intake` US #10): a TRANSIENT concurrency mutex — added on start (the
+ * winner only), removed on finish — that serialises two concurrent `intake` runs on
+ * the SAME issue. It is namespaced under the brand (`agent-runner:processing`) so it
+ * cannot collide with a user's own labels. It carries NO `work/` state — it is NOT a
+ * label STATE-MACHINE (ADR §12) and NOT a `work/`-file CAS; it is ONE transient lock
+ * label and nothing more.
+ */
+export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
 
 /**
  * The **issue seam** (PRD `issue-intake`, slice `intake-tracer-slice-outcome`):
@@ -9,10 +21,18 @@ import {DEFAULT_GH_BIN} from './github.js';
  * GitHub-backed surface behind a seam, and both keep the CORE free of any `gh`
  * import — ONLY the adapter shells out (the same discipline `github.ts` documents).
  *
- * This slice wires the READ methods (`getIssue`, `listComments`) + the issue
- * comment (`postIssueComment`); the label ops (the `processing` lock) + `closeIssue`
- * (CI's close-job) are LATER slices (`intake-processing-lock` / `runner-in-ci`) and
- * are deliberately NOT on this interface yet.
+ * The READ methods (`getIssue`, `listComments`) + the issue comment
+ * (`postIssueComment`) landed with the keystone slice; the LABEL ops
+ * (`addLabel`/`removeLabel`/`getLabels` — the transient `processing` LOCK, slice
+ * `intake-processing-lock`) extend it here. `closeIssue` (CI's close-job) is a
+ * LATER slice (`runner-in-ci`) and is deliberately NOT on this interface yet.
+ *
+ * The label ops are a TRANSIENT CONCURRENCY MUTEX carrying NO `work/` state — ONE
+ * lock label, added-on-start / removed-on-finish. They are NOT a label
+ * STATE-MACHINE (ADR §12 forbids modelling `work/` lifecycle in labels) and NOT a
+ * `work/`-file CAS (the contended thing is the ISSUE; the output slug is unknown
+ * pre-run). A provider with no label concept DEGRADES to best-effort (it reports
+ * `supported: false` / `applied: false` and the run proceeds WITHOUT the lock).
  *
  * Why `postIssueComment` is a DISTINCT method from `ReviewProvider.postPRComment`
  * (renamed from `postComment` in this same slice): the PR-comment surface is keyed
@@ -80,6 +100,57 @@ export interface PostIssueCommentResult {
 	instruction: string;
 }
 
+export interface LabelInput {
+	cwd: string;
+	/** The issue number to label / read labels FROM. */
+	issueNumber: number;
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface AddLabelInput extends LabelInput {
+	/** The single label to add (e.g. the `processing` lock). */
+	label: string;
+}
+
+export interface RemoveLabelInput extends LabelInput {
+	/** The single label to remove (e.g. the `processing` lock). */
+	label: string;
+}
+
+/**
+ * The result of a label MUTATION (`addLabel` / `removeLabel`). The lock ops are
+ * a CONCURRENCY mutex, so the caller needs to know whether the provider actually
+ * applied the change:
+ *
+ * - `applied: true` — the provider made the change on the real surface (the
+ *   winner acquired / released the lock label).
+ * - `applied: false` — the provider DEGRADED (no label support, or a
+ *   missing/unauthenticated `gh`): the mutation was a no-op and the caller falls
+ *   back to best-effort (proceed WITHOUT the lock; CI's per-issue concurrency
+ *   group is then the only serialiser). NEVER throws — degrade is honest, not a
+ *   crash (the same discipline the comment poster / PR provider keep, ADR §6).
+ */
+export interface LabelResult {
+	/** True iff the label change was actually applied on the provider surface. */
+	applied: boolean;
+	/** Human-readable confirmation / degrade reason. */
+	instruction: string;
+}
+
+/**
+ * The result of READING an issue's labels. `supported: false` marks a provider
+ * with NO label concept (the lock then degrades to best-effort) — distinct from a
+ * supported provider that simply read an empty set.
+ */
+export interface GetLabelsResult {
+	/** False iff the provider has no label surface at all (degrade to best-effort). */
+	supported: boolean;
+	/** The labels currently on the issue (empty when none / unsupported). */
+	labels: string[];
+	/** Human-readable confirmation / degrade reason. */
+	instruction: string;
+}
+
 /**
  * The issue seam (provider-pluggable; GitHub via `gh` first). The CORE depends on
  * THIS interface only; the concrete `gh` shelling-out lives entirely in
@@ -96,6 +167,24 @@ export interface IssueProvider {
 	postIssueComment(
 		input: PostIssueCommentInput,
 	): Promise<PostIssueCommentResult>;
+	/**
+	 * Read the issue's current labels — the lock READ that decides acquire vs
+	 * back-off. A provider with no label concept returns `{supported: false}` so
+	 * the lock degrades to best-effort. NEVER throws.
+	 */
+	getLabels(input: LabelInput): Promise<GetLabelsResult>;
+	/**
+	 * ADD a single label (acquire the `processing` lock — the winner only). The
+	 * RUNNER calls this; the agent stays label-free. Degrades (no throw) on a
+	 * provider without label support or a missing/unauthenticated `gh`.
+	 */
+	addLabel(input: AddLabelInput): Promise<LabelResult>;
+	/**
+	 * REMOVE a single label (release the `processing` lock on finish — success OR
+	 * handled failure). The RUNNER calls this; the agent stays label-free.
+	 * Degrades (no throw) like {@link addLabel}.
+	 */
+	removeLabel(input: RemoveLabelInput): Promise<LabelResult>;
 }
 
 export interface GitHubIssueProviderOptions {
@@ -180,6 +269,81 @@ export class GitHubIssueProvider implements IssueProvider {
 		};
 	}
 
+	async getLabels(input: LabelInput): Promise<GetLabelsResult> {
+		const result = this.runGh(
+			['issue', 'view', String(input.issueNumber), '--json', 'labels'],
+			input.cwd,
+			input.env,
+		);
+		// A missing/unauthenticated `gh` DEGRADES (the lock then falls back to
+		// best-effort) — never throws (unlike the issue READ, which is load-bearing
+		// for the DECISION; the lock is best-effort by design).
+		if (result === undefined || result.status !== 0) {
+			return {
+				supported: false,
+				labels: [],
+				instruction:
+					`\`gh\` is unavailable or unauthenticated, so the labels on issue ` +
+					`#${input.issueNumber} could not be read; the processing lock degrades ` +
+					`to best-effort.`,
+			};
+		}
+		let labels: string[];
+		try {
+			labels = normaliseLabels(JSON.parse(result.stdout) as unknown);
+		} catch {
+			return {
+				supported: false,
+				labels: [],
+				instruction: `could not parse the labels JSON for issue #${input.issueNumber}.`,
+			};
+		}
+		return {
+			supported: true,
+			labels,
+			instruction: `Read ${labels.length} label(s) on issue #${input.issueNumber}.`,
+		};
+	}
+
+	async addLabel(input: AddLabelInput): Promise<LabelResult> {
+		return this.mutateLabel('--add-label', input);
+	}
+
+	async removeLabel(input: RemoveLabelInput): Promise<LabelResult> {
+		return this.mutateLabel('--remove-label', input);
+	}
+
+	/**
+	 * Shared `gh issue edit <N> --add-label|--remove-label <label>` runner for the
+	 * label MUTATIONS (the lock acquire/release). Both DEGRADE (no throw) on a
+	 * missing/unauthenticated `gh` — the lock is a best-effort concurrency mutex, so
+	 * a failure to apply it must not crash the run.
+	 */
+	private mutateLabel(
+		flag: '--add-label' | '--remove-label',
+		input: AddLabelInput | RemoveLabelInput,
+	): LabelResult {
+		const result = this.runGh(
+			['issue', 'edit', String(input.issueNumber), flag, input.label],
+			input.cwd,
+			input.env,
+		);
+		const verb = flag === '--add-label' ? 'add' : 'remove';
+		if (result === undefined || result.status !== 0) {
+			return {
+				applied: false,
+				instruction:
+					`\`gh\` is unavailable or unauthenticated, so the \`${input.label}\` ` +
+					`label could not be ${verb}d on issue #${input.issueNumber}; the ` +
+					`processing lock degrades to best-effort.`,
+			};
+		}
+		return {
+			applied: true,
+			instruction: `${verb === 'add' ? 'Added' : 'Removed'} the \`${input.label}\` label on issue #${input.issueNumber}.`,
+		};
+	}
+
 	/**
 	 * Run `gh <args>` in `cwd`, returning the result, or `undefined` when `gh`
 	 * cannot even be spawned (binary missing). Mirrors {@link GitHubProvider}'s
@@ -236,6 +400,18 @@ function normaliseIssue(issueNumber: number, parsed: unknown): Issue {
 				? (obj.state as string).toLowerCase()
 				: undefined,
 	};
+}
+
+/** Map a `gh issue view --json labels` object onto the bare label-name list. */
+function normaliseLabels(parsed: unknown): string[] {
+	const obj = (parsed ?? {}) as Record<string, unknown>;
+	const labels = Array.isArray(obj.labels) ? obj.labels : [];
+	return labels
+		.map((raw) => {
+			const l = (raw ?? {}) as Record<string, unknown>;
+			return typeof l.name === 'string' ? l.name : '';
+		})
+		.filter((name) => name !== '');
 }
 
 /** Map a `gh issue view --json comments` object onto the comment list. */
