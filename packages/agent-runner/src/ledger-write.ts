@@ -18,7 +18,14 @@ import {
 	type ReturnToBacklogResult,
 	type ResolveFromNeedsAttentionOptions,
 	type ResolveFromNeedsAttentionResult,
+	type BranchPushOutcome,
 } from './needs-attention.js';
+import {
+	realSleep,
+	type BackoffOptions,
+	type Sleep,
+	retryWithBackoff,
+} from './retry-backoff.js';
 
 /**
  * The **write half** of the ledger-transition seam (ADR
@@ -132,11 +139,24 @@ export type ApplyCompleteTransitionResult = IntegrateResult;
 export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
 
 /**
- * The outcome of asking the seam to apply a NEEDS-ATTENTION transition — exactly
- * the move result the folder-native mechanism produces. The seam adds NO
- * interpretation; it only relocates WHERE the call is expressed.
+ * The outcome of asking the seam to apply a NEEDS-ATTENTION transition — the
+ * move result the folder-native mechanism produces, PLUS the honest per-op
+ * outcome of the OBSERVABLE surface push (mode M) the strategy performs on top.
+ * The two halves (RECOVERABLE branch push in `branchPush`, OBSERVABLE surface in
+ * `surface`) let the caller report EXACTLY what reached the arbiter rather than
+ * assuming "surfaced + pushed" off the local move.
  */
-export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
+export type ApplyNeedsAttentionTransitionResult =
+	RouteToNeedsAttentionResult & {
+		/**
+		 * The OBSERVABLE surface push outcome (mode M): `surfaced` / `failed` (after
+		 * bounded backoff) / `nothing-to-surface`, or `not-attempted` when no arbiter
+		 * was given (local-only). Read by the report — never assumed.
+		 */
+		surface?: SurfaceOutcome | 'not-attempted';
+		/** When the surface FAILED after retries, the last git error (for the report). */
+		surfaceError?: string;
+	};
 
 /**
  * A *prepared* RETURN-TO-BACKLOG transition: re-queue a resolved
@@ -232,7 +252,7 @@ export interface LedgerWriteStrategy {
 	 */
 	applyCompleteTransition(
 		input: ApplyCompleteTransitionInput,
-	): ApplyCompleteTransitionResult;
+	): Promise<ApplyCompleteTransitionResult>;
 	/**
 	 * Apply a NEEDS-ATTENTION transition: bounce a stuck claimed item to
 	 * `work/needs-attention/` with its reason recorded in the body. The sole
@@ -242,7 +262,7 @@ export interface LedgerWriteStrategy {
 	 */
 	applyNeedsAttentionTransition(
 		input: ApplyNeedsAttentionTransitionInput,
-	): ApplyNeedsAttentionTransitionResult;
+	): Promise<ApplyNeedsAttentionTransitionResult>;
 	/**
 	 * Apply a RETURN-TO-BACKLOG transition: re-queue a resolved needs-attention
 	 * item for re-claiming. The re-queue half of the needs-attention mechanism,
@@ -261,7 +281,7 @@ export interface LedgerWriteStrategy {
 	 */
 	applyResolveNeedsAttentionTransition(
 		input: ApplyResolveNeedsAttentionTransitionInput,
-	): ApplyResolveNeedsAttentionTransitionResult;
+	): Promise<ApplyResolveNeedsAttentionTransitionResult>;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -357,7 +377,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 * provider to request review. That `merge` targets `main` is an implementation
 	 * detail of THIS strategy — the public input never names it.
 	 */
-	applyCompleteTransition({
+	async applyCompleteTransition({
 		arbiter,
 		branch,
 		mode,
@@ -366,7 +386,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		body,
 		cwd,
 		env,
-	}): ApplyCompleteTransitionResult {
+	}): Promise<ApplyCompleteTransitionResult> {
 		const integrator = new Integrator({provider});
 		return integrator.integrate({cwd, arbiter, branch, mode, title, body, env});
 	},
@@ -401,27 +421,37 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 * `complete` passes none → no surface, no push, local-only; autonomous `do`/`run`
 	 * pass it → both).
 	 */
-	applyNeedsAttentionTransition(
+	async applyNeedsAttentionTransition(
 		input: ApplyNeedsAttentionTransitionInput,
-	): ApplyNeedsAttentionTransitionResult {
+	): Promise<ApplyNeedsAttentionTransitionResult> {
 		// Route WITH the arbiter intact so the helper's (best-effort, branch-
-		// parameterised, emptiness-guarded) RECOVERABLE push fires — the one home for
-		// the push. The OBSERVABLE surface is published below from the same arbiter.
-		const result = routeToNeedsAttention(input);
+		// parameterised, emptiness-guarded, NOW outage-retried) RECOVERABLE push
+		// fires — the one home for the push. The OBSERVABLE surface is published below
+		// from the same arbiter. Both outcomes are CAPTURED so the caller reports what
+		// ACTUALLY landed (honest per-op reporting) rather than assuming success off
+		// the local move.
+		const result = await routeToNeedsAttention(input);
+		let surface: SurfaceOutcome | 'not-attempted' = 'not-attempted';
+		let surfaceError: string | undefined;
 		if (result.moved && result.moveCommit && input.arbiter) {
 			// Make the stuck state observable on the ledger (mode M): publish ONLY the
 			// move-only commit (the reason + the git mv) to the arbiter's main, so the
-			// half-finished wip below it never lands there.
-			publishSurfaceCommit({
+			// half-finished wip below it never lands there. NEVER throws on an outage —
+			// it retries with bounded backoff then gives up cleanly into 'failed'.
+			const published = await publishSurfaceCommit({
 				cwd: input.cwd,
 				arbiter: input.arbiter,
 				slug: input.slug,
 				moveCommit: result.moveCommit,
 				env: input.env,
 				note: input.note,
+				backoff: input.backoff,
+				sleep: input.sleep,
 			});
+			surface = published.outcome;
+			surfaceError = published.error;
 		}
-		return result;
+		return {...result, surface, surfaceError};
 	},
 
 	/**
@@ -446,12 +476,12 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 * never-`--force` publish. "Reverse-move on `main`" is a detail of THIS
 	 * strategy; the seam's contract is only the intent "clear the surface."
 	 */
-	applyResolveNeedsAttentionTransition(
+	async applyResolveNeedsAttentionTransition(
 		input: ApplyResolveNeedsAttentionTransitionInput,
-	): ApplyResolveNeedsAttentionTransitionResult {
+	): Promise<ApplyResolveNeedsAttentionTransitionResult> {
 		const result = resolveFromNeedsAttention(input);
 		if (result.moved && result.moveCommit && input.arbiter) {
-			publishSurfaceCommit({
+			await publishSurfaceCommit({
 				cwd: input.cwd,
 				arbiter: input.arbiter,
 				slug: input.slug,
@@ -497,14 +527,31 @@ const WORK_FOLDERS = ['backlog', 'in-progress', 'done', 'needs-attention'];
  * the seam's public contract: a future mode-P strategy would make the same stuck
  * state observable WITHOUT writing `main` (e.g. reading work-branch tips).
  */
-function publishSurfaceCommit(params: {
+/** The honest per-op outcome of the OBSERVABLE surface push. */
+export type SurfaceOutcome =
+	/** The move-only commit fast-forwarded onto `<arbiter>/main`. */
+	| 'surfaced'
+	/** Nothing to surface (no ledger file in the move commit). */
+	| 'nothing-to-surface'
+	/** Retried with backoff, then gave up — NOT surfaced (saved LOCALLY only). */
+	| 'failed';
+
+export interface PublishSurfaceResult {
+	outcome: SurfaceOutcome;
+	/** When `failed`, the last git error (for the honest report). */
+	error?: string;
+}
+
+async function publishSurfaceCommit(params: {
 	cwd: string;
 	arbiter: string;
 	slug: string;
 	moveCommit: string;
 	env?: NodeJS.ProcessEnv;
 	note?: (message: string) => void;
-}): void {
+	backoff?: BackoffOptions;
+	sleep?: Sleep;
+}): Promise<PublishSurfaceResult> {
 	const {cwd, arbiter, slug, moveCommit, env} = params;
 	const emit = params.note ?? (() => {});
 	const gx = (args: string[], input?: string): RunResult =>
@@ -525,7 +572,7 @@ function publishSurfaceCommit(params: {
 	const target = readLedgerPlacement(gx, moveCommit, slug);
 	if (!target) {
 		emit('could not resolve the surfaced ledger file from the move commit.');
-		return;
+		return {outcome: 'nothing-to-surface'};
 	}
 
 	// A scratch index so update-index/write-tree never disturb the caller's index.
@@ -549,15 +596,30 @@ function publishSurfaceCommit(params: {
 		return r;
 	};
 
-	const attempts = 5;
-	try {
-		for (let i = 0; i < attempts; i++) {
-			gxHard([
+	// ONE publish attempt: fetch the arbiter's main, rebuild the move-only effect
+	// against it, and fast-forward push. Two distinct non-success cases:
+	//   - CONTENTION (push rejected: main moved) — retried INSTANTLY in the inner
+	//     loop (refetch + rebuild against the new base), exactly as before.
+	//   - OUTAGE (fetch unreachable / push connectivity failure) — the fetch is now
+	//     SOFT (no throw) and surfaced as a failure so the OUTER backoff retries it
+	//     with a temporal delay (the remote may come back) before a clean give-up.
+	// The whole attempt NEVER throws (the failure handler must not crash on a git
+	// outage) — a soft fetch/push maps to `{ok:false}`, which the backoff drives.
+	const contentionAttempts = 5;
+	const attemptPublish = async (): Promise<
+		{ok: true; value: undefined} | {ok: false; error?: string}
+	> => {
+		for (let i = 0; i < contentionAttempts; i++) {
+			const fetched = gx([
 				'fetch',
 				'--quiet',
 				arbiter,
 				`+refs/heads/main:refs/remotes/${arbiter}/main`,
 			]);
+			if (fetched.status !== 0) {
+				// OUTAGE: surface as a failure so the OUTER backoff retries with delay.
+				return {ok: false, error: fetched.stderr.trim() || 'fetch failed'};
+			}
 			const base = gxHard(['rev-parse', `${arbiter}/main`]).stdout.trim();
 
 			// Load main's tree into the scratch index, then relocate ONLY this slug's
@@ -597,15 +659,36 @@ function publishSurfaceCommit(params: {
 				`--force-with-lease=main:${base}`,
 			]);
 			if (push.status === 0) {
-				emit(`Surfaced the stuck state on ${arbiter}/main.`);
-				return;
+				return {ok: true, value: undefined};
 			}
-			// Contended: someone advanced main. Loop to refetch + rebuild against it.
+			const stderr = push.stderr.trim();
+			// A LEASE/contention rejection means main moved — retry INSTANTLY (refetch
+			// + rebuild). Anything else (connectivity) is an OUTAGE — hand to backoff.
+			const contended =
+				/stale info|rejected|force-with-lease|non-fast-forward/i.test(stderr);
+			if (!contended) {
+				return {ok: false, error: stderr || 'push failed'};
+			}
+			// else: loop to refetch + rebuild against the advanced main.
+		}
+		return {ok: false, error: 'main kept moving (contended)'};
+	};
+
+	try {
+		const result = await retryWithBackoff(attemptPublish, {
+			sleep: params.sleep ?? realSleep,
+			...params.backoff,
+		});
+		if (result.ok) {
+			emit(`Surfaced the stuck state on ${arbiter}/main.`);
+			return {outcome: 'surfaced'};
 		}
 		emit(
-			`could not surface the stuck state on ${arbiter}/main after ${attempts} ` +
-				'attempts (main kept moving) — left unsurfaced.',
+			`could not surface the stuck state on ${arbiter}/main after ` +
+				`${result.attempts} attempt(s) (${result.lastError ?? 'unknown error'}) ` +
+				'— the work is saved LOCALLY only.',
 		);
+		return {outcome: 'failed', error: result.lastError};
 	} finally {
 		rmSync(scratchIndex, {force: true});
 	}

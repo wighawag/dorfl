@@ -93,7 +93,7 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['switch', '-q', '-c', 'work/alpha', `${ARBITER}/main`], repo);
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'alpha',
 			reason: 'gate red',

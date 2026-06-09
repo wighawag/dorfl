@@ -120,10 +120,10 @@ describe('selectProvider — auto-detect github, explicit override, graceful def
 });
 
 describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
-	it('invokes `gh pr create` for the pushed branch and records the PR URL', () => {
+	it('invokes `gh pr create` for the pushed branch and records the PR URL', async () => {
 		const stub = writeGhStub({stdout: 'https://github.com/o/r/pull/7'});
 		const provider = new GitHubProvider({ghBin: stub.bin});
-		const result = provider.openRequest({
+		const result = await provider.openRequest({
 			cwd: scratch.root,
 			branch: 'work/feat',
 			arbiter: 'origin',
@@ -144,10 +144,10 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 		expect(args).not.toMatch(/force/);
 	});
 
-	it('degrades to the none behaviour when gh exits non-zero (unauthenticated)', () => {
+	it('degrades to the none behaviour when gh exits non-zero (unauthenticated)', async () => {
 		const stub = writeGhStub({exitCode: 1, stdout: ''});
 		const provider = new GitHubProvider({ghBin: stub.bin});
-		const result = provider.openRequest({
+		const result = await provider.openRequest({
 			cwd: scratch.root,
 			branch: 'work/feat',
 			arbiter: 'origin',
@@ -159,9 +159,9 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 		expect(result.instruction).toMatch(/manually|open a/i);
 	});
 
-	it('degrades to the none behaviour when gh is missing (spawn fails)', () => {
+	it('degrades to the none behaviour when gh is missing (spawn fails)', async () => {
 		const provider = new GitHubProvider({ghBin: missingGhBin()});
-		const result = provider.openRequest({
+		const result = await provider.openRequest({
 			cwd: scratch.root,
 			branch: 'work/feat',
 			arbiter: 'origin',

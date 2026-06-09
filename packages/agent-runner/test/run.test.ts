@@ -923,6 +923,13 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 			report: scanProject(config),
 			workspace: workspacesDir,
 			env: gitEnv(),
+			// The arbiter is broken (offline), so the needs-attention route's surface +
+			// branch pushes FAIL and are retried with bounded backoff. Inject a no-op
+			// sleep + tiny cap so the (correct) bounded give-up happens with NO real
+			// wall-clock waits (the route stays fault-tolerant; the worktree is
+			// retained because the push never reached the arbiter).
+			sleep: async () => {},
+			backoff: {maxAttempts: 2, initialDelayMs: 1, maxTotalMs: 10},
 		});
 		expect(result.items[0].status).toBe('agent-failed');
 

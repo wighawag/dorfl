@@ -3,6 +3,12 @@ import {join} from 'node:path';
 import {run} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {ledgerRead} from './ledger-read.js';
+import {
+	retryWithBackoff,
+	realSleep,
+	type BackoffOptions,
+	type Sleep,
+} from './retry-backoff.js';
 
 /**
  * The folder-native **needs-attention mechanism** (ADR §12; WORK-CONTRACT
@@ -73,13 +79,43 @@ export interface RouteToNeedsAttentionOptions {
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
+	/**
+	 * Bounded-backoff bounds for the RECOVERABLE branch push (the OUTAGE-retry,
+	 * NOT the instant-contention loop). Defaults to {@link DEFAULT_BACKOFF}.
+	 */
+	backoff?: BackoffOptions;
+	/**
+	 * Injectable sleep for the backoff (tests drive the retry timeline with NO
+	 * real waits — the `run.ts` `sleep`/`realSleep` seam). Defaults to a real
+	 * `setTimeout`. Threaded into {@link backoff} when the latter omits its own.
+	 */
+	sleep?: Sleep;
 }
+
+/** The outcome of the RECOVERABLE branch push (the per-op honest report). */
+export type BranchPushOutcome =
+	/** Pushed to the arbiter (cross-machine recoverable). */
+	| 'pushed'
+	/** Skipped by the emptiness guard — nothing beyond main to recover YET. */
+	| 'skipped-empty'
+	/** Retried with backoff, then gave up — saved LOCALLY only. */
+	| 'failed'
+	/** No arbiter / surface-only — no push was attempted. */
+	| 'not-attempted';
 
 export interface RouteToNeedsAttentionResult {
 	/** True iff the item was moved + committed. */
 	moved: boolean;
 	/** When `moved`, the committed transition message (of the MOVE-ONLY commit). */
 	commitMessage?: string;
+	/**
+	 * The per-op outcome of the RECOVERABLE branch push (honest reporting — the
+	 * message reads THIS, never assumes "pushed" off the local move). Absent when
+	 * the item did not move.
+	 */
+	branchPush?: BranchPushOutcome;
+	/** When the branch push FAILED after retries, the last git error (for the report). */
+	pushError?: string;
 	/**
 	 * When `moved`, the sha of the **move-only** commit — the tip of `work/<slug>`
 	 * that carries PURELY the `git mv → needs-attention/` + the reason (the wip
@@ -224,9 +260,9 @@ export interface NeedsAttentionItem {
  * `{moved: false, reasonNotMoved}` so consumers can branch cleanly. Genuine git
  * plumbing failures still throw (they are unexpected).
  */
-export function routeToNeedsAttention(
+export async function routeToNeedsAttention(
 	options: RouteToNeedsAttentionOptions,
-): RouteToNeedsAttentionResult {
+): Promise<RouteToNeedsAttentionResult> {
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
@@ -274,15 +310,44 @@ export function routeToNeedsAttention(
 	//    bounce (so the saved wip + the move travel cross-machine and a requeue can
 	//    continue from the branch tip). Three behaviours: SURFACE-ONLY (no push)
 	//    when `pushBranch === false`; an explicit `branch` target; else the default
-	//    `work/<slug>`. BEST-EFFORT (no throw on a failed/unreachable push — parity
-	//    with the bolted-on copies this consolidates), and EMPTINESS-GUARDED (a
-	//    branch with no work beyond main / an absent branch is skipped — a
-	//    couldn't-even-start bounce has nothing to push).
+	//    `work/<slug>`. BEST-EFFORT (no throw on a failed/unreachable push), now
+	//    RETRIED with bounded backoff on an OUTAGE before a clean give-up, and
+	//    EMPTINESS-GUARDED (a branch with no work beyond main / an absent branch is
+	//    skipped — a couldn't-even-start bounce has nothing to push). The OUTCOME is
+	//    CAPTURED + RETURNED (`branchPush`) so the caller reports what ACTUALLY
+	//    landed rather than assuming "pushed" off the local move.
+	let branchPush: BranchPushOutcome = 'not-attempted';
+	let pushError: string | undefined;
 	if (options.arbiter && options.pushBranch !== false) {
 		const branch = options.branch ?? `work/${slug}`;
 		if (branchAheadOf(cwd, branch, 'main', env)) {
-			gitSoftRun(['push', options.arbiter, `${branch}:${branch}`], cwd, env);
+			const arbiter = options.arbiter;
+			const result = await retryWithBackoff(
+				async () => {
+					const r = gitSoftRun(
+						['push', arbiter, `${branch}:${branch}`],
+						cwd,
+						env,
+					);
+					return r.status === 0
+						? {ok: true as const, value: undefined}
+						: {ok: false as const, error: r.stderr.trim()};
+				},
+				{sleep: options.sleep ?? realSleep, ...options.backoff},
+			);
+			if (result.ok) {
+				branchPush = 'pushed';
+			} else {
+				branchPush = 'failed';
+				pushError = result.lastError;
+				note(
+					`Could not push ${branch} to ${arbiter} after ${result.attempts} ` +
+						`attempt(s) (${pushError ?? 'unknown error'}) — the work is saved ` +
+						'LOCALLY only; push the branch when online, then `requeue`.',
+				);
+			}
 		} else {
+			branchPush = 'skipped-empty';
 			note(
 				`Skipped pushing ${branch} (no work beyond main / branch absent) — ` +
 					'nothing to recover.',
@@ -290,7 +355,7 @@ export function routeToNeedsAttention(
 		}
 	}
 
-	return {moved: true, commitMessage, moveCommit};
+	return {moved: true, commitMessage, moveCommit, branchPush, pushError};
 }
 
 /**
@@ -379,6 +444,39 @@ export function returnToBacklog(
 		);
 		// Drop any stale LOCAL work branch too (best-effort — it may not exist here).
 		gitSoftRun(['branch', '-D', branch], cwd, env);
+	}
+
+	// DEFAULT (keep+continue) REQUEUE-SAFETY GUARD: a claimable item's continue-
+	// branch MUST be reachable by ANY worker, so before moving the item back to
+	// backlog verify the ARBITER branch `<arbiter>/work/<slug>` exists + is ahead
+	// of main — the EXACT "is the continue-branch on the arbiter?" question the
+	// continue-path asks in `isolation.ts`
+	// (`branchAheadOf(checkout, '<arbiter>/<branch>', '<arbiter>/main')`). We check
+	// the ARBITER ref, NOT the local `work/<slug>` (which SURVIVES a failed push,
+	// so testing it would pass falsely): FETCH first, then test the arbiter ref.
+	// Only when an `arbiter` is in play (the cross-machine case this protects) and
+	// NOT on `--reset` (which discards the branch by design); a purely-local
+	// requeue keeps today's behaviour.
+	if (!options.reset && options.arbiter) {
+		const branch = `work/${slug}`;
+		// Refresh the remote-tracking refs so the check sees the arbiter's truth,
+		// not a stale local copy (a failed push left the LOCAL branch standing).
+		gitSoftRun(['fetch', '--quiet', options.arbiter], cwd, env);
+		const onArbiter = branchAheadOf(
+			cwd,
+			`${options.arbiter}/${branch}`,
+			`${options.arbiter}/main`,
+			env,
+		);
+		if (!onArbiter) {
+			const message =
+				`the work branch ${branch} isn't on ${options.arbiter} (the continue ` +
+				`branch a cross-machine worker would resume from) — push it first, or ` +
+				'`requeue --reset` to discard and start fresh. Item left in ' +
+				'needs-attention (no backlog move).';
+			note(message);
+			return {moved: false, reasonNotMoved: message};
+		}
 	}
 
 	// `-m "<note>"`: APPEND a dated handoff section to the item body (append-only;

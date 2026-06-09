@@ -153,8 +153,8 @@ describe('prCreateContentArgs — gh content args (Half B)', () => {
 });
 
 describe('NoneProvider — surfaces title/body in the manual instructions (Half A + B)', () => {
-	it('echoes the suggested title + body the human should use', () => {
-		const result = new NoneProvider().openRequest({
+	it('echoes the suggested title + body the human should use', async () => {
+		const result = await new NoneProvider().openRequest({
 			cwd: '/tmp',
 			branch: 'work/widget',
 			arbiter: 'origin',
@@ -166,8 +166,8 @@ describe('NoneProvider — surfaces title/body in the manual instructions (Half 
 		expect(result.instruction).toContain('The summary.');
 	});
 
-	it('without title/body the manual instruction is unchanged (no regression)', () => {
-		const result = new NoneProvider().openRequest({
+	it('without title/body the manual instruction is unchanged (no regression)', async () => {
+		const result = await new NoneProvider().openRequest({
 			cwd: '/tmp',
 			branch: 'work/widget',
 			arbiter: 'origin',

@@ -31,6 +31,7 @@ import {
 } from './agent-stop.js';
 import {performIntegration} from './integration-core.js';
 import type {ReviewGate} from './review-gate.js';
+import type {BackoffOptions, Sleep} from './retry-backoff.js';
 import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 
@@ -237,6 +238,19 @@ export interface RunOnceOptions {
 	 * stays pure; the CLI wires this to stderr.
 	 */
 	onWarn?: (message: string) => void;
+	/**
+	 * Bounded-backoff bounds for the needs-attention route's git network ops
+	 * (surface fetch+push, branch push). Defaults to the shared `DEFAULT_BACKOFF`.
+	 * Threaded into the failure-routing seam so a degraded run gives up cleanly
+	 * rather than hanging the tick.
+	 */
+	backoff?: BackoffOptions;
+	/**
+	 * Injectable sleep for that backoff — the SAME seam {@link runLoop} uses for
+	 * its inter-tick sleep. Defaults to a real `setTimeout`. Tests inject a no-op
+	 * so a fully-offline-arbiter failure route resolves with NO real waits.
+	 */
+	sleep?: Sleep;
 }
 
 /**
@@ -310,6 +324,8 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 				openPr: options.openPr,
 				env,
 				onWarn: options.onWarn,
+				backoff: options.backoff,
+				sleep: options.sleep,
 				claimLock,
 			}),
 	});
@@ -367,6 +383,10 @@ interface OneItemContext {
 	}) => void;
 	env?: NodeJS.ProcessEnv;
 	onWarn?: (message: string) => void;
+	/** Bounded-backoff bounds for the needs-attention route's network ops. */
+	backoff?: BackoffOptions;
+	/** Injectable sleep for that backoff (tests; defaults to real `setTimeout`). */
+	sleep?: Sleep;
 	/**
 	 * Per-repo claim serialiser (shared across the tick's in-flight jobs). The claim
 	 * step mutates the repo's shared working tree, so it is serialised per repo;
@@ -473,7 +493,7 @@ async function runOneItem(
 				'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 				'main, or `requeue --reset` to discard and start fresh';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			ledgerWrite.applyNeedsAttentionTransition({
+			await ledgerWrite.applyNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
 				reason,
@@ -509,7 +529,7 @@ async function runOneItem(
 			});
 		} catch (err) {
 			if (err instanceof PromptError) {
-				return saveAgentFailure(base, tree, slug, err.message, ctx.env);
+				return await saveAgentFailure(base, tree, slug, err.message, ctx);
 			}
 			throw err;
 		}
@@ -530,21 +550,21 @@ async function runOneItem(
 				config.sessionsDir,
 			);
 		} catch (err) {
-			return saveAgentFailure(
+			return await saveAgentFailure(
 				base,
 				tree,
 				slug,
 				(err as Error).message,
-				ctx.env,
+				ctx,
 			);
 		}
 		if (!agent.ok) {
-			return saveAgentFailure(
+			return await saveAgentFailure(
 				base,
 				tree,
 				slug,
 				agent.detail ?? `the agent failed to build '${slug}'.`,
-				ctx.env,
+				ctx,
 			);
 		}
 
@@ -567,7 +587,7 @@ async function runOneItem(
 					? emptyDiffStopReason(slug)
 					: undefined;
 		if (stopReason !== undefined) {
-			return saveAgentStop(base, tree, slug, stopReason, ctx.env);
+			return await saveAgentStop(base, tree, slug, stopReason, ctx);
 		}
 
 		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
@@ -634,12 +654,12 @@ async function runOneItem(
 		} catch (err) {
 			// A thrown core error (misconfigured gate, or an unexpected plumbing
 			// failure) — SAVE the work + route to needs-attention, never crash the tick.
-			return saveAgentFailure(
+			return await saveAgentFailure(
 				base,
 				tree,
 				slug,
 				(err as Error).message,
-				ctx.env,
+				ctx,
 			);
 		}
 
@@ -752,24 +772,27 @@ function runAgent(
  * un-pushed case). The status stays `agent-failed`; only the work-preserving
  * side-effect now matches the gate-fail path.
  */
-function saveAgentFailure(
+async function saveAgentFailure(
 	base: ItemResult,
 	tree: IsolatedTree,
 	slug: string,
 	detail: string,
-	env: NodeJS.ProcessEnv | undefined,
-): ItemResult {
+	ctx: OneItemContext,
+): Promise<ItemResult> {
 	const reason = `agent failed: ${detail}`;
 	updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-	ledgerWrite.applyNeedsAttentionTransition({
+	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: tree.dir,
 		slug,
 		reason,
 		// Autonomous (`run`): surface on the arbiter's main AND push the work branch
 		// (the seam does both now), so the fleet's failed-agent work is cross-machine
-		// recoverable via requeue-continue.
+		// recoverable via requeue-continue. The route is fault-tolerant: a git outage
+		// is retried with bounded backoff then gives up cleanly (never hangs the tick).
 		arbiter: tree.arbiterRemote,
-		env,
+		env: ctx.env,
+		backoff: ctx.backoff,
+		sleep: ctx.sleep,
 	});
 	return {...base, status: 'agent-failed', detail};
 }
@@ -782,22 +805,24 @@ function saveAgentFailure(
  * The agent's STOP reason is recorded VERBATIM; the job record names it honestly.
  * The `performIntegration` band (gate + Gate-2) is NEVER reached.
  */
-function saveAgentStop(
+async function saveAgentStop(
 	base: ItemResult,
 	tree: IsolatedTree,
 	slug: string,
 	reason: string,
-	env: NodeJS.ProcessEnv | undefined,
-): ItemResult {
+	ctx: OneItemContext,
+): Promise<ItemResult> {
 	updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-	ledgerWrite.applyNeedsAttentionTransition({
+	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: tree.dir,
 		slug,
 		reason,
 		// Autonomous (`run`): surface on the arbiter's main AND push the work branch
 		// (the seam does both), so the stopped item is cross-machine visible/recoverable.
 		arbiter: tree.arbiterRemote,
-		env,
+		env: ctx.env,
+		backoff: ctx.backoff,
+		sleep: ctx.sleep,
 	});
 	return {...base, status: 'agent-stopped', detail: reason};
 }

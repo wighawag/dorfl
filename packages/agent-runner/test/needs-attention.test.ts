@@ -67,7 +67,7 @@ describe('needs-attention — the move (in-progress → needs-attention)', () =>
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
 
-		const result = routeToNeedsAttention({
+		const result = await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'alpha',
 			reason: 'acceptance gate failed (exit 1)',
@@ -105,7 +105,7 @@ describe('needs-attention — the move (in-progress → needs-attention)', () =>
 		const {repo} = await claimAndBranch('beta');
 		agentEdits(repo);
 
-		routeToNeedsAttention({
+		await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'beta',
 			reason: 'agent reported the slice too ambiguous to build',
@@ -127,7 +127,7 @@ describe('needs-attention — the move (in-progress → needs-attention)', () =>
 
 	it('refuses (does not throw) when the slug is not in-progress', async () => {
 		const {repo} = await claimAndBranch('gamma');
-		const result = routeToNeedsAttention({
+		const result = await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'nonexistent',
 			reason: 'whatever',
@@ -144,7 +144,7 @@ describe('needs-attention — not claimable, but surfaced', () => {
 		// claimed slice out to needs-attention/.
 		const {repo} = await claimAndBranch('delta', {extraSlugs: ['stays']});
 		agentEdits(repo);
-		routeToNeedsAttention({
+		await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'delta',
 			reason: 'rebase conflict against main',
@@ -171,7 +171,7 @@ describe('needs-attention — not claimable, but surfaced', () => {
 	it('readNeedsAttentionItems lists the stuck items with their reason', async () => {
 		const {repo} = await claimAndBranch('epsilon');
 		agentEdits(repo);
-		routeToNeedsAttention({
+		await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'epsilon',
 			reason: 'timeout after 30m with no progress',
@@ -194,14 +194,14 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 	it('git mvs an item back to backlog for re-claiming, committed', async () => {
 		const {repo} = await claimAndBranch('eta');
 		agentEdits(repo);
-		routeToNeedsAttention({
+		await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'eta',
 			reason: 'env was misconfigured',
 			env: gitEnv(),
 		});
 
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'eta',
 			env: gitEnv(),
@@ -221,13 +221,13 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 	it('a returned item is once again claimable by scan/eligibility', async () => {
 		const {repo} = await claimAndBranch('theta');
 		agentEdits(repo);
-		routeToNeedsAttention({
+		await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'theta',
 			reason: 'transient failure',
 			env: gitEnv(),
 		});
-		returnToBacklog({cwd: repo, slug: 'theta', env: gitEnv()});
+		await returnToBacklog({cwd: repo, slug: 'theta', env: gitEnv()});
 
 		const config: Config = {
 			maxParallel: 1,
@@ -245,7 +245,7 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 
 	it('refuses (does not throw) when the slug is not in needs-attention', async () => {
 		const {repo} = await claimAndBranch('iota');
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'iota',
 			env: gitEnv(),
@@ -260,7 +260,7 @@ describe('needs-attention — pushes the transition like the done-move', () => {
 		const {repo} = await claimAndBranch('kappa');
 		agentEdits(repo);
 
-		routeToNeedsAttention({
+		await routeToNeedsAttention({
 			cwd: repo,
 			slug: 'kappa',
 			reason: 'a reason',

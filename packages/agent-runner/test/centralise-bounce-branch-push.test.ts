@@ -76,7 +76,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		const {repo, seeded} = await claimAndBranch('alpha');
 		writeFileSync(join(repo, 'partial.txt'), 'agent work\n');
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'alpha',
 			reason: 'gate red',
@@ -114,7 +114,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		gitIn(['switch', '-q', '-c', 'work/slicing/beta', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'slice-output.md'), 'a produced slice\n');
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'beta',
 			reason: 'review rejected the produced slices',
@@ -142,7 +142,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		// exercise the guard's "branch absent / no work beyond main ⇒ skip" arm.
 		const {repo, seeded} = await claimAndBranch('gamma');
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
 			reason: 'could not even start',
@@ -164,15 +164,21 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		// FAILS — the bounce must still complete (best-effort), not throw.
 		writeRejectWorkPushHook(seeded);
 
-		expect(() =>
-			ledgerWrite.applyNeedsAttentionTransition({
-				cwd: repo,
-				slug: 'delta',
-				reason: 'gate red',
-				arbiter: ARBITER,
-				env: gitEnv(),
-			}),
-		).not.toThrow();
+		// Inject a no-op sleep + a tiny attempt cap so the bounded-backoff retry of the
+		// (rejected) push drives deterministically with NO real wall-clock waits.
+		const routed = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd: repo,
+			slug: 'delta',
+			reason: 'gate red',
+			arbiter: ARBITER,
+			env: gitEnv(),
+			sleep: async () => {},
+			backoff: {maxAttempts: 2, initialDelayMs: 1, maxTotalMs: 10},
+		});
+		// No throw escaped (the route never crashes on a push outage), and the failure
+		// is reported HONESTLY as a failed branch push (saved LOCALLY only).
+		expect(routed.moved).toBe(true);
+		expect(routed.branchPush).toBe('failed');
 		// The push failed (rejected), so the branch is NOT on the arbiter — but the
 		// move committed locally and (work/* only being rejected) the surface landed.
 		expect(arbiterHasBranch(seeded, 'work/delta')).toBe(false);
@@ -183,7 +189,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		const {repo, seeded} = await claimAndBranch('epsilon');
 		writeFileSync(join(repo, 'partial.txt'), 'work\n');
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'epsilon',
 			reason: 'temp-branch caller',
@@ -201,7 +207,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		const {repo, seeded} = await claimAndBranch('zeta');
 		writeFileSync(join(repo, 'partial.txt'), 'work\n');
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'zeta',
 			// NB: no arbiter — the human `complete` path.
@@ -261,7 +267,7 @@ describe('run agent-failure is SAVED + cross-machine recoverable (the fifth gap)
 		const human = seeded.clone('requeuer');
 		gitIn(['fetch', '-q', ARBITER], human);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], human);
-		const requeued = returnToBacklog({
+		const requeued = await returnToBacklog({
 			cwd: human,
 			slug: 'alpha',
 			arbiter: ARBITER,
@@ -302,7 +308,7 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior edits shared'], repo);
 		gitIn(['push', '-q', ARBITER, 'work/gamma:work/gamma'], repo);
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
 			reason: 'red',
@@ -316,7 +322,7 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		expect(keptTip).not.toBe('');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		returnToBacklog({
+		await returnToBacklog({
 			cwd: repo,
 			slug: 'gamma',
 			arbiter: ARBITER,
