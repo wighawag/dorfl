@@ -6,8 +6,8 @@ import {
 	type ReviewProvider,
 	type OpenRequestInput,
 	type OpenRequestResult,
-	type PostCommentInput,
-	type PostCommentResult,
+	type PostPRCommentInput,
+	type PostPRCommentResult,
 } from './integrator.js';
 
 /**
@@ -267,7 +267,7 @@ export class GitHubProvider implements ReviewProvider {
 	 * text result the `none` provider returns — NEVER throws (ADR §6). The comment
 	 * is ADVISORY: it changes no gate/verdict/merge logic. NEVER `--force`s.
 	 */
-	postComment(input: PostCommentInput): PostCommentResult {
+	postPRComment(input: PostPRCommentInput): PostPRCommentResult {
 		const result = this.runGh(
 			['pr', 'comment', input.url, '--body', input.body],
 			input.cwd,

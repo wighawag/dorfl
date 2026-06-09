@@ -224,6 +224,28 @@ export type {
 } from './slicing.js';
 export {performSlice} from './slicing.js';
 
+export type {
+	Issue,
+	IssueComment,
+	GetIssueInput,
+	ListCommentsInput,
+	PostIssueCommentInput,
+	PostIssueCommentResult,
+	IssueProvider,
+	GitHubIssueProviderOptions,
+} from './issue-provider.js';
+export {GitHubIssueProvider} from './issue-provider.js';
+
+export type {
+	IntakeOutcome,
+	IntakeVerdict,
+	IntakeRunOutcome,
+	IntakeResult,
+	IntakeDecider,
+	PerformIntakeOptions,
+} from './intake.js';
+export {performIntake, buildIntakeDecisionBrief} from './intake.js';
+
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {
 	encodeRepoKey,

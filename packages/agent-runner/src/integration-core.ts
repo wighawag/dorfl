@@ -676,11 +676,11 @@ export async function performIntegration(
 	//    — by here the verdict has ALREADY routed (block never reaches this point; it
 	//    routed to needs-attention above) and the integrate has ALREADY happened.
 	//    No PR url (merge mode, or a degraded/push-only propose) ⇒ a clean no-op:
-	//    the review stays in the run output; `postComment` is never called and never
+	//    the review stays in the run output; `postPRComment` is never called and never
 	//    throws. Because this lives in the shared core, BOTH `do`/`complete` AND
 	//    `run` post the comment — no per-caller wiring.
 	if (approvedVerdict?.review !== undefined && integration.url !== undefined) {
-		const posted = provider.postComment({
+		const posted = provider.postPRComment({
 			cwd,
 			url: integration.url,
 			body: approvedVerdict.review,
@@ -741,9 +741,9 @@ function bridgeProvider(
 			};
 		},
 		// The legacy `openPr` bridge has no comment channel (it returns no PR url),
-		// so postComment degrades: it never opens a PR url to comment on, so the
+		// so postPRComment degrades: it never opens a PR url to comment on, so the
 		// in-core poster no-ops anyway. Implemented for the seam, surfacing the text.
-		postComment(req) {
+		postPRComment(req) {
 			return {
 				posted: false,
 				instruction:

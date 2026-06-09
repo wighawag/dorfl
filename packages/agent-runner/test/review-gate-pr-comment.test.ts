@@ -14,8 +14,8 @@ import {
 	NoneProvider,
 	type ReviewProvider,
 	type OpenRequestResult,
-	type PostCommentInput,
-	type PostCommentResult,
+	type PostPRCommentInput,
+	type PostPRCommentResult,
 } from '../src/integrator.js';
 import {
 	makeScratch,
@@ -38,7 +38,7 @@ import {
  * House style (mirrors `review-nits-observation.test.ts` /
  * `integration-core.test.ts`): a throwaway checkout + a local `--bare` arbiter +
  * a STUBBED review gate (a canned verdict carrying a `review` field, no real
- * model) + a STUBBED provider that records its `postComment` calls (no real `gh`
+ * model) + a STUBBED provider that records its `postPRComment` calls (no real `gh`
  * / network). `isolatePiAgentDir` keeps the developer's real
  * `~/.pi/agent/sessions/`.
  */
@@ -109,12 +109,12 @@ function stubGate(verdict: ReviewVerdict): ReviewGate {
 	return async () => verdict;
 }
 
-/** A provider that opens a PR (returns a url) and RECORDS its postComment calls. */
+/** A provider that opens a PR (returns a url) and RECORDS its postPRComment calls. */
 function recordingProvider(opts: {url?: string} = {}): ReviewProvider & {
-	readonly comments: PostCommentInput[];
+	readonly comments: PostPRCommentInput[];
 } {
-	const comments: PostCommentInput[] = [];
-	const provider: ReviewProvider & {comments: PostCommentInput[]} = {
+	const comments: PostPRCommentInput[] = [];
+	const provider: ReviewProvider & {comments: PostPRCommentInput[]} = {
 		name: 'recording',
 		comments,
 		openRequest(): OpenRequestResult {
@@ -122,7 +122,7 @@ function recordingProvider(opts: {url?: string} = {}): ReviewProvider & {
 				? {opened: true, instruction: 'pushed (no url)'}
 				: {opened: true, url: opts.url, instruction: `Opened ${opts.url}`};
 		},
-		postComment(input: PostCommentInput): PostCommentResult {
+		postPRComment(input: PostPRCommentInput): PostPRCommentResult {
 			comments.push(input);
 			return {posted: true, instruction: `commented on ${input.url}`};
 		},
@@ -289,7 +289,7 @@ describe('review-comment-prose-field — approve + PR opened ⇒ posts `verdict.
 });
 
 describe('review-comment-prose-field — degraded provider (no PR url) ⇒ clean no-op', () => {
-	it('does NOT call postComment when openRequest opened no PR (no url)', async () => {
+	it('does NOT call postPRComment when openRequest opened no PR (no url)', async () => {
 		const {repo} = await claimAndBranch('beta');
 		const provider = recordingProvider({url: undefined}); // degraded: no url
 
@@ -361,7 +361,7 @@ describe('review-comment-prose-field — the comment is ADVISORY (decision uncha
 			env: gitEnv(),
 		});
 
-		// WITHOUT (a provider that opens a PR but whose postComment is a no-op path:
+		// WITHOUT (a provider that opens a PR but whose postPRComment is a no-op path:
 		// the none provider degrades, never posting). Fresh scratch / arbiter.
 		scratch.cleanup();
 		scratch = makeScratch('agent-runner-review-comment-');
@@ -377,7 +377,7 @@ describe('review-comment-prose-field — the comment is ADVISORY (decision uncha
 			reviewGate: stubGate(parseReviewVerdict(AGENT_OUTPUT_WITH_REVIEW_FIELD)),
 			mode: 'propose',
 			// No providerInstance ⇒ the core selects `none` for the (file://) arbiter
-			// (its postComment degrades — never posts, never throws).
+			// (its postPRComment degrades — never posts, never throws).
 			env: gitEnv(),
 		});
 
@@ -443,11 +443,11 @@ function missingGhBin(): string {
 	return join(scratch.root, 'no-such-gh-binary');
 }
 
-describe('GitHubProvider.postComment — gh pr comment (stubbed)', () => {
+describe('GitHubProvider.postPRComment — gh pr comment (stubbed)', () => {
 	it('shells out to `gh pr comment <url> --body <text>`', () => {
 		const stub = writeGhStub();
 		const provider = new GitHubProvider({ghBin: stub.bin});
-		const result = provider.postComment({
+		const result = provider.postPRComment({
 			cwd: scratch.root,
 			url: 'https://github.com/o/r/pull/7',
 			body: 'The authored review prose.',
@@ -467,7 +467,7 @@ describe('GitHubProvider.postComment — gh pr comment (stubbed)', () => {
 	it('degrades (no throw) when gh exits non-zero (unauthenticated)', () => {
 		const stub = writeGhStub({exitCode: 1});
 		const provider = new GitHubProvider({ghBin: stub.bin});
-		const result = provider.postComment({
+		const result = provider.postPRComment({
 			cwd: scratch.root,
 			url: 'https://github.com/o/r/pull/7',
 			body: 'the review',
@@ -479,7 +479,7 @@ describe('GitHubProvider.postComment — gh pr comment (stubbed)', () => {
 
 	it('degrades (no throw) when gh is missing (spawn fails)', () => {
 		const provider = new GitHubProvider({ghBin: missingGhBin()});
-		const result = provider.postComment({
+		const result = provider.postPRComment({
 			cwd: scratch.root,
 			url: 'https://github.com/o/r/pull/7',
 			body: 'the review',
@@ -489,9 +489,9 @@ describe('GitHubProvider.postComment — gh pr comment (stubbed)', () => {
 	});
 });
 
-describe('NoneProvider.postComment — degrades, surfaces the review, never throws', () => {
+describe('NoneProvider.postPRComment — degrades, surfaces the review, never throws', () => {
 	it('posts nothing but surfaces the review text', () => {
-		const result = new NoneProvider().postComment({
+		const result = new NoneProvider().postPRComment({
 			cwd: '/tmp',
 			url: 'irrelevant',
 			body: 'the review prose',

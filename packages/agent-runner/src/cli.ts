@@ -27,6 +27,7 @@ import {
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
 import {performDo, performDoRemote, type DoOptions} from './do.js';
+import {performIntake} from './intake.js';
 import {
 	performDoAuto,
 	performDoArgs,
@@ -276,6 +277,18 @@ interface DoFlags {
 	slicerLoopMax?: string;
 	/** `--slicer-loop-model <id>` — the slicer improver loop reviewer's de-correlated model (`do prd:` path). */
 	slicerLoopModel?: string;
+}
+
+interface IntakeFlags {
+	config?: string;
+	arbiter?: string;
+	merge?: boolean;
+	propose?: boolean;
+	agentCmd?: string;
+	model?: string;
+	harness?: string;
+	piBin?: string;
+	sessionsDir?: string;
 }
 
 interface GcFlags {
@@ -1624,6 +1637,109 @@ export function buildProgram(): Command {
 				? ` (--reset: deleted the remote work/${slug} branch; next claim starts fresh)`
 				: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
+		});
+
+	program
+		.command('intake')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying `Fixes #N`. GATE-FREE — your explicit invocation IS the authorization (autoSlice/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. --propose (default) / --merge resolved at integrate-time.',
+		)
+		.argument(
+			'<number>',
+			'the GitHub issue number to intake (e.g. `intake 42`)',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
+		)
+		.option(
+			'--merge',
+			'integrate the emitted slice in merge mode (mutually exclusive with --propose; overrides config)',
+		)
+		.option(
+			'--propose',
+			'integrate the emitted slice in propose mode (default; mutually exclusive with --merge)',
+		)
+		.option('--agent-cmd <cmd>', 'command to run the decision agent')
+		.option(
+			'--model <id>',
+			'model the decision agent runs on (routing intent; resolved flag > env > per-repo > global > default)',
+		)
+		.option(
+			'--harness <adapter>',
+			'harness adapter that launches the decision agent: null (default) or pi',
+		)
+		.option(
+			'--pi-bin <path>',
+			'pi CLI binary the pi harness invokes (default: pi on PATH)',
+		)
+		.option(
+			'--sessions-dir <dir>',
+			'HOST-ONLY root folder under which the pi session file is generated',
+		)
+		.action(async (rawNumber: string, flags: IntakeFlags) => {
+			const issueNumber = Number(rawNumber);
+			if (
+				rawNumber.trim() === '' ||
+				!Number.isInteger(issueNumber) ||
+				issueNumber < 1
+			) {
+				console.error(
+					`error: intake takes a positive issue NUMBER (got '${rawNumber}').`,
+				);
+				process.exit(1);
+			}
+			const cwd = process.cwd();
+			const global = loadConfig(flags.config);
+			// Resolve the integrate-time mode (--merge/--propose flag > per-repo > global
+			// > default propose) — the SAME chain `do`/`complete` use. `intake` is
+			// GATE-FREE, so autoSlice/autoBuild are NOT consulted (the explicit
+			// invocation is its own authorization).
+			let flagMode;
+			try {
+				flagMode = integrationFromFlags(flags);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
+			const resolved = resolveRepoConfig({
+				repoPath: cwd,
+				global,
+				flags: {
+					...(flagMode ? {integration: flagMode} : {}),
+					...harnessFlagOverrides(flags),
+				},
+			});
+			if (resolved.message) {
+				console.error(`>> ${resolved.message}`);
+			}
+			const config = resolved.config;
+			const harness = createHarness({
+				harness: config.harness,
+				piBin: config.piBin,
+			});
+			const result = await performIntake({
+				issueNumber,
+				cwd,
+				arbiter: flags.arbiter ?? config.defaultArbiter,
+				integration: config.integration,
+				provider: config.provider,
+				harness,
+				agentCmd: config.agentCmd,
+				model: config.model,
+				sessionsDir: config.sessionsDir,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			} else {
+				console.error(`>> ${result.message}`);
+			}
+			process.exit(result.exitCode);
 		});
 
 	// The REGISTRY command group (ADR §1): the registered set of targets IS the

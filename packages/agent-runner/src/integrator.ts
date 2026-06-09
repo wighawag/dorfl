@@ -41,21 +41,26 @@ export interface ReviewProvider {
 	 * Gate-2 review-comment poster (slice `review-gate-pr-comment`) to make the
 	 * review's verdict VISIBLE on the PR. It is the SIBLING of `openRequest` on the
 	 * "write text to the PR" surface: `openRequest` writes the creation BODY,
-	 * `postComment` writes a follow-up comment AFTER the PR exists.
+	 * `postPRComment` writes a follow-up comment AFTER the PR exists.
+	 *
+	 * Keyed by the PR `url` (the review-request surface). The issue seam's sibling
+	 * `postIssueComment` (`issue-provider.ts`) is keyed by the ISSUE NUMBER instead —
+	 * GitHub shares the comment id space, but other providers may not, so the two
+	 * comment surfaces are nominally DISTINCT seams (distinct input types).
 	 *
 	 * ADVISORY — it gates nothing; like `openRequest` it must NEVER throw (a
 	 * missing/unauthenticated `gh`, or the `none` provider, DEGRADES: it surfaces
 	 * the text in the result `instruction`, never losing the review — ADR §6).
 	 */
-	postComment(input: PostCommentInput): PostCommentResult;
+	postPRComment(input: PostPRCommentInput): PostPRCommentResult;
 }
 
-export interface PostCommentInput {
+export interface PostPRCommentInput {
 	cwd: string;
 	/**
 	 * The URL of the opened review request (the PR) to comment on — the `url`
 	 * {@link OpenRequestResult} returned. The GitHub provider passes it to
-	 * `gh pr comment <url>`; absent ⇒ the caller should not call postComment (no
+	 * `gh pr comment <url>`; absent ⇒ the caller should not call postPRComment (no
 	 * PR to comment on).
 	 */
 	url: string;
@@ -64,7 +69,7 @@ export interface PostCommentInput {
 	env?: NodeJS.ProcessEnv;
 }
 
-export interface PostCommentResult {
+export interface PostPRCommentResult {
 	/** True iff a comment was actually posted (a real, authenticated provider). */
 	posted: boolean;
 	/** Human-readable confirmation / fallback (the verdict text on degrade). */
@@ -145,7 +150,7 @@ export class NoneProvider implements ReviewProvider {
 	 * verdict stays in the run output, never lost (ADR §6). The caller treats this
 	 * as a clean no-op for the PR (nothing was posted).
 	 */
-	postComment(input: PostCommentInput): PostCommentResult {
+	postPRComment(input: PostPRCommentInput): PostPRCommentResult {
 		return {
 			posted: false,
 			instruction:
