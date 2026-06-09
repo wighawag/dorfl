@@ -869,7 +869,7 @@ export function composeProposeBody(input: {
  * — the dated `<slug>-<date>` name makes a later-abandoned run's nit-observation
  * trivially findable + deletable (lifecycle hygiene). Frontmatter mirrors the
  * `work/observations/*.md` convention (`title` / `date` / `status: open`) plus a
- * pointer to the slug it came from, so batch-qa triages it like any observation.
+ * pointer to the slug it came from, so it gets triaged like any observation.
  */
 function writeReviewNitsObservation(params: {
 	cwd: string;
@@ -905,8 +905,8 @@ function observationDate(): string {
  * Render the per-run review-nits observation file body — `observations/`-convention
  * frontmatter (`title` / `date` / `status: open`) plus a `slug:` pointer to the run
  * it came from, then each non-blocking finding (its `question` + optional
- * `context`), and a one-line note that these are review-gate nits for batch-qa
- * triage (promote-to-slice / keep / delete). Exported-free pure string builder.
+ * `context`), and a one-line note that these are review-gate nits for triage
+ * (promote-to-slice / keep / delete). Exported-free pure string builder.
  */
 function renderReviewNitsObservation(input: {
 	slug: string;
@@ -929,7 +929,7 @@ function renderReviewNitsObservation(input: {
 		'',
 		`The PR/code review gate (Gate 2) APPROVED '${input.slug}' but raised the`,
 		'following non-blocking findings (nits). They do not block integration; this',
-		'is their durable home for batch-qa triage (promote-to-slice / keep / delete).',
+		'is their durable home for triage — promote-to-slice / keep / delete.',
 		'',
 		...findingBlocks,
 		'',

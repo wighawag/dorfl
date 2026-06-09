@@ -153,6 +153,12 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 		expect(body).toContain('rename this helper for clarity');
 		expect(body).toContain('src/foo.ts:42');
 		expect(body).toContain('consider a comment on the regex');
+		// The triage note is SKILL-AGNOSTIC: action-only wording that names no skill,
+		// so the gate cannot keep a retired triage skill (batch-qa) alive on disk.
+		expect(body).toContain(
+			'is their durable home for triage — promote-to-slice / keep / delete.',
+		);
+		expect(body).not.toContain('batch-qa');
 	});
 
 	it('captures ONLY non-blocking findings even when the approve carries a blocking one', async () => {
