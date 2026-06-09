@@ -2,6 +2,7 @@ import {readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
+import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
  * **The slicer review→edit→re-review→converge LOOP** (`slicer-review-edit-loop`,
@@ -678,7 +679,7 @@ function slugPrd(slug: string): string {
  * a silent approve).
  */
 export function parseSliceReviewVerdict(output: string): SliceReviewVerdict {
-	const span = extractVerdictJsonSpan(output);
+	const span = extractJsonObjectSpan(output);
 	if (span === undefined) {
 		throw new SliceReviewParseError(
 			'slice review agent produced no parseable {verdict, …} result',
@@ -786,54 +787,4 @@ function stringList(raw: unknown): string[] {
 		return [];
 	}
 	return raw.filter((q): q is string => typeof q === 'string');
-}
-
-/**
- * Locate the first JSON object that carries a `"verdict"` key in arbitrary agent
- * output (it may be fenced, prefixed with prose, or bare), returning its `[start,
- * end)` span. Brace-matched from the `"verdict"` occurrence outward, string-aware,
- * so a surrounding fence/prose does not defeat parsing. Returns `undefined` when
- * none is found. (Mirrors the Gate-2 extractor in `review-gate.ts`.)
- */
-function extractVerdictJsonSpan(
-	output: string,
-): {start: number; end: number} | undefined {
-	const key = output.indexOf('"verdict"');
-	if (key === -1) {
-		return undefined;
-	}
-	let start = key;
-	while (start >= 0 && output[start] !== '{') {
-		start--;
-	}
-	if (start < 0) {
-		return undefined;
-	}
-	let depth = 0;
-	let inString = false;
-	let escaped = false;
-	for (let i = start; i < output.length; i++) {
-		const ch = output[i];
-		if (inString) {
-			if (escaped) {
-				escaped = false;
-			} else if (ch === '\\') {
-				escaped = true;
-			} else if (ch === '"') {
-				inString = false;
-			}
-			continue;
-		}
-		if (ch === '"') {
-			inString = true;
-		} else if (ch === '{') {
-			depth++;
-		} else if (ch === '}') {
-			depth--;
-			if (depth === 0) {
-				return {start, end: i + 1};
-			}
-		}
-	}
-	return undefined;
 }

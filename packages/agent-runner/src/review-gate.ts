@@ -1,6 +1,7 @@
 import {NullHarness, substituteModel, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {boundaryLine} from './watch-session.js';
+import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
  * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`), the
@@ -120,7 +121,7 @@ export class ReviewParseError extends Error {}
  * unparseable verdict as an error → needs-attention, never a silent approve).
  */
 export function parseReviewVerdict(output: string): ReviewVerdict {
-	const span = extractVerdictJsonSpan(output);
+	const span = extractJsonObjectSpan(output);
 	if (span === undefined) {
 		throw new ReviewParseError(
 			'review agent produced no parseable {verdict, findings} result',
@@ -170,58 +171,6 @@ function validateVerdict(parsed: unknown): ReviewVerdict {
 		...(typeof obj.review === 'string' ? {review: obj.review} : {}),
 		findings,
 	};
-}
-
-/**
- * Locate the first JSON object that carries a `"verdict"` key in arbitrary agent
- * output (it may be fenced, prefixed with prose, or bare), returning its `[start,
- * end)` span (`output.slice(start, end)` is the JSON). Brace-matched from the
- * `"verdict"` occurrence outward so a surrounding fence/prose does not defeat
- * parsing. Returns `undefined` when none is found.
- */
-function extractVerdictJsonSpan(
-	output: string,
-): {start: number; end: number} | undefined {
-	const key = output.indexOf('"verdict"');
-	if (key === -1) {
-		return undefined;
-	}
-	// Walk back to the opening brace of the object containing the key.
-	let start = key;
-	while (start >= 0 && output[start] !== '{') {
-		start--;
-	}
-	if (start < 0) {
-		return undefined;
-	}
-	// Brace-match forward from that opening brace, respecting strings.
-	let depth = 0;
-	let inString = false;
-	let escaped = false;
-	for (let i = start; i < output.length; i++) {
-		const ch = output[i];
-		if (inString) {
-			if (escaped) {
-				escaped = false;
-			} else if (ch === '\\') {
-				escaped = true;
-			} else if (ch === '"') {
-				inString = false;
-			}
-			continue;
-		}
-		if (ch === '"') {
-			inString = true;
-		} else if (ch === '{') {
-			depth++;
-		} else if (ch === '}') {
-			depth--;
-			if (depth === 0) {
-				return {start, end: i + 1};
-			}
-		}
-	}
-	return undefined;
 }
 
 /**
