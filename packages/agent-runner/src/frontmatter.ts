@@ -11,6 +11,16 @@ export interface Frontmatter {
 	/** Source PRD slug (frontmatter `prd:`); the PRD lives at `work/prd/<prd>.md`. */
 	prd: string | undefined;
 	/**
+	 * PRD-only: the GitHub issue number an `intake`-emitted PRD was transformed from
+	 * (frontmatter `issue:`). Parsed so the `issue: N` an intake PRD-emit writes is
+	 * MACHINE-READABLE — the close JOB (`runner-in-ci`'s) reaches it via
+	 * `slice.prd: → work/prd/<prd>.md → PRD issue:` (the number lives ONLY on the PRD;
+	 * there is deliberately NO slice-level `issue:` field — the `issue-intake` PRD's
+	 * Out of Scope decided against it). `undefined` when omitted (every non-intake PRD
+	 * and all slices).
+	 */
+	issue: number | undefined;
+	/**
 	 * Autonomy gate axis 1 (DECIDED). `true` when the item declares itself
 	 * human-only (a human must drive it regardless of how complete the spec is);
 	 * `undefined` when omitted (undeclared — most items). Present on both slices
@@ -123,6 +133,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 	const result: Frontmatter = {
 		slug: undefined,
 		prd: undefined,
+		issue: undefined,
 		humanOnly: undefined,
 		needsAnswers: undefined,
 		blockedBy: [],
@@ -151,6 +162,12 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'prd') {
 			result.prd = rawValue === '' ? undefined : unquote(rawValue);
+		} else if (key === 'issue') {
+			// PRD-only integer issue link (`intake` PRD-emit). A non-integer / empty
+			// value reads as undefined (the field is absent rather than malformed).
+			const n = Number(unquote(rawValue));
+			result.issue =
+				rawValue !== '' && Number.isInteger(n) && n > 0 ? n : undefined;
 		} else if (key === 'humanOnly') {
 			result.humanOnly = rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'needsAnswers') {

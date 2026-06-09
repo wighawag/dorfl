@@ -232,22 +232,6 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(result.emittedSlug).not.toContain('3');
 	});
 
-	it('a non-slice verdict (ask/prd/bounce) is NOT dispatched in this slice — no write, clean exit', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		const result = await performIntake({
-			issueNumber: 9,
-			cwd: repo,
-			arbiter: ARBITER,
-			issueProvider: stubIssueProvider({issue: {number: 9}}),
-			decide: async () => ({outcome: 'ask', question: 'what exactly?'}),
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('ask');
-		// Nothing emitted; main untouched.
-		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
-	});
-
 	it('a read failure on the issue seam surfaces as a usage error (intake cannot decide)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const failingProvider: IssueProvider = {
@@ -273,6 +257,212 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toContain('#99');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The FULL four-outcome dispatcher (ask / prd / bounce) under STUBBED verdicts
+// (`intake-decision-prompt-and-four-outcome-dispatch`). Each verdict drives the
+// right action; the prompt's JUDGEMENT is never unit-tested — only the dispatch.
+// ---------------------------------------------------------------------------
+describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => {
+	it('a stubbed `ask` verdict posts the clarifying question and emits NOTHING (no file, no integrate, issue stays open)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 9}});
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'ask',
+				question: 'Which exact notes should --quiet suppress?',
+			}),
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('asked');
+		// A comment was posted with the question text.
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].issueNumber).toBe(9);
+		expect(issueProvider.comments[0].body).toContain('Which exact notes');
+		// NO artifact emitted, NO integrate.
+		expect(result.emitted).toBeUndefined();
+		expect(result.emittedSlug).toBeUndefined();
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
+		// The issue is left OPEN: nothing closes it (intake never closes). No work
+		// branch was even pushed for the ask outcome (no integrate ran).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const remoteBranches = gitIn(['branch', '-r'], repo);
+		expect(remoteBranches).not.toContain(`${ARBITER}/work/add-quiet-flag`);
+	});
+
+	it('a stubbed `bounce` verdict posts the “file separate issues” comment, emits NOTHING, leaves the issue open', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 11}});
+		const result = await performIntake({
+			issueNumber: 11,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'bounce',
+				bounceMessage:
+					'These are unrelated — please file separate issues for each.',
+			}),
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('bounced');
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].issueNumber).toBe(11);
+		expect(issueProvider.comments[0].body).toContain('separate issues');
+		// NO artifact; main untouched; the issue stays open (no close anywhere).
+		expect(result.emitted).toBeUndefined();
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
+	});
+
+	it('a `bounce`/`ask` verdict with NO drafted message still posts a sensible default comment', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 13}});
+		const asked = await performIntake({
+			issueNumber: 13,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({outcome: 'ask'}),
+			env: gitEnv(),
+		});
+		expect(asked.outcome).toBe('asked');
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].body.trim()).not.toBe('');
+	});
+
+	it('a stubbed `prd` verdict writes work/prd/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 42}});
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes for the CLI',
+				prdHumanOnly: true,
+				prdNeedsAnswers: true,
+				prdBody: [
+					'## Problem Statement',
+					'',
+					'The CLI has no output-verbosity control.',
+					'',
+					'## Solution',
+					'',
+					'Add --quiet and --verbose, coupled under one vision.',
+					'',
+					'## User Stories',
+					'',
+					'1. As a user, I want --quiet.',
+					'2. As a user, I want --verbose.',
+				].join('\n'),
+			}),
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('prd');
+		expect(result.emittedSlug).toBe('quiet-and-verbose-modes');
+		expect(result.emitted).toBe('work/prd/quiet-and-verbose-modes.md');
+
+		// No comment posted (the prd branch never posts; only ask/bounce do).
+		expect(issueProvider.comments).toHaveLength(0);
+
+		// PROPOSE (default): the PRD rides the work/<slug> branch; main is NOT touched.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const branchTip = gitIn(
+			[
+				'rev-parse',
+				'--verify',
+				'--quiet',
+				`${ARBITER}/work/quiet-and-verbose-modes`,
+			],
+			repo,
+		).trim();
+		expect(branchTip).not.toBe('');
+
+		// The PRD file ON THAT BRANCH carries `issue: 42` (the close-JOB linkage),
+		// surfaces the gate axes the verdict judged, and is NOT sliced (no backlog
+		// slices emitted alongside it).
+		const onBranch = gitIn(
+			[
+				'show',
+				`${ARBITER}/work/quiet-and-verbose-modes:work/prd/quiet-and-verbose-modes.md`,
+			],
+			repo,
+		);
+		expect(onBranch).toContain('slug: quiet-and-verbose-modes');
+		expect(onBranch).toMatch(/^issue: 42$/m);
+		expect(onBranch).toMatch(/^humanOnly: true$/m);
+		expect(onBranch).toMatch(/^needsAnswers: true$/m);
+		expect(onBranch).toContain('## User Stories');
+		// `issue: N` lives ONLY on the PRD — there is no `Fixes #N` close marker on it
+		// (that would close on the first fanned merge; the PRD is closed by CI's JOB).
+		expect(onBranch).not.toContain('Fixes #42');
+	});
+
+	it('a `prd` verdict OMITS gate axes the verdict did not declare (undeclared = absent)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 5,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider({issue: {number: 5}}),
+			decide: async () => ({
+				outcome: 'prd',
+				prdTitle: 'A Coupled But Small Pair',
+			}),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('prd');
+		// Content-derived slug from the title (never a counter).
+		expect(result.emittedSlug).toBe('a-coupled-but-small-pair');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const onBranch = gitIn(
+			[
+				'show',
+				`${ARBITER}/work/a-coupled-but-small-pair:work/prd/a-coupled-but-small-pair.md`,
+			],
+			repo,
+		);
+		expect(onBranch).toMatch(/^issue: 5$/m);
+		expect(onBranch).not.toMatch(/^humanOnly:/m);
+		expect(onBranch).not.toMatch(/^needsAnswers:/m);
+	});
+
+	it('the AGENT does no git/seam ops on the ask/prd/bounce branches: the decider sees no commit it authored', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 8}});
+		let headAtDecision = '';
+		const result = await performIntake({
+			issueNumber: 8,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async ({cwd}) => {
+				headAtDecision = gitIn(['rev-parse', 'HEAD'], cwd).trim();
+				// The decider posts NOTHING itself — the runner owns the comment.
+				return {outcome: 'ask', question: 'clarify?'};
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(headAtDecision).not.toBe('');
+		// The runner (not the agent) posted exactly one comment AFTER the decision.
+		expect(issueProvider.comments).toHaveLength(1);
 	});
 });
 

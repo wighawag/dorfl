@@ -120,6 +120,32 @@ describe('parseFrontmatter', () => {
 		expect(fm.sliceAfter).toEqual(['foundations']);
 	});
 
+	it('parses a PRD-only `issue: N` link as a number (intake PRD-emit)', () => {
+		// `intake`'s PRD outcome writes `issue: N` on `work/prd/<slug>.md` so the close
+		// JOB can reach it via `slice.prd: → PRD issue:`. It must be machine-readable.
+		const md = [
+			'---',
+			'title: Some Feature',
+			'slug: some-feature',
+			'issue: 42',
+			'---',
+		].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.issue).toBe(42);
+	});
+
+	it('treats omitted `issue:` as undefined (every non-intake PRD and all slices)', () => {
+		const md = ['---', 'slug: a', 'prd: my-prd', '---'].join('\n');
+		expect(parseFrontmatter(md).issue).toBeUndefined();
+	});
+
+	it('treats a non-integer / non-positive `issue:` value as undefined (absent, not malformed)', () => {
+		for (const bad of ['issue: not-a-number', 'issue: 0', 'issue: -3']) {
+			const md = ['---', 'slug: a', bad, '---'].join('\n');
+			expect(parseFrontmatter(md).issue).toBeUndefined();
+		}
+	});
+
 	it('ignores a stale `sliced:` line (the marker was removed in remove-sliced-marker-step-b)', () => {
 		// `sliced:` is no longer a parsed frontmatter axis — sliced-ness is RESIDENCE in
 		// `work/prd-sliced/`. A leftover `sliced:` line is just inert text the parser
