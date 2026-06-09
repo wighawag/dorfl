@@ -25,11 +25,11 @@ A session file's first line is the header record:
 
 ```json
 {
-  "type": "session",
-  "version": 3,
-  "id": "<id>",
-  "timestamp": "<ISO-8601>",
-  "cwd": "<abs cwd>"
+	"type": "session",
+	"version": 3,
+	"id": "<id>",
+	"timestamp": "<ISO-8601>",
+	"cwd": "<abs cwd>"
 }
 ```
 

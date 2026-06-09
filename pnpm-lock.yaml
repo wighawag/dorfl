@@ -33,9 +33,6 @@ importers:
       as-soon:
         specifier: ^0.1.5
         version: 0.1.6
-      prettier:
-        specifier: ^3.8.0
-        version: 3.8.3
       tsx:
         specifier: ^4.21.0
         version: 4.22.4

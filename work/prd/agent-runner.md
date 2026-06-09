@@ -54,18 +54,18 @@ agent-runner is also the **first dogfood test** of the `work/` + `to-slices` sys
 
 ```jsonc
 {
-  "roots": [
-    "/home/wighawag/dev/github/wighawag",
-    "/home/wighawag/dev/github/jolly-roger-eth",
-  ],
-  "include": [],
-  "exclude": [],
-  "maxParallel": 4,
-  "perRepoMax": 2,
-  "defaultArbiter": "origin",
-  "integration": "propose",
-  "allowAgents": false,
-  "agentCmd": "<command to run one agent on a slice prompt>",
+	"roots": [
+		"/home/wighawag/dev/github/wighawag",
+		"/home/wighawag/dev/github/jolly-roger-eth",
+	],
+	"include": [],
+	"exclude": [],
+	"maxParallel": 4,
+	"perRepoMax": 2,
+	"defaultArbiter": "origin",
+	"integration": "propose",
+	"allowAgents": false,
+	"agentCmd": "<command to run one agent on a slice prompt>",
 }
 ```
 

@@ -99,10 +99,10 @@ The domain glossary for `<project>`. Agents and skills use THIS vocabulary when 
 
 ```json
 {
-  "verify": "<stack-appropriate command from step 3>",
-  "harness": "pi",
-  "allowAgents": false,
-  "autoSlice": false
+	"verify": "<stack-appropriate command from step 3>",
+	"harness": "pi",
+	"allowAgents": false,
+	"autoSlice": false
 }
 ```
 

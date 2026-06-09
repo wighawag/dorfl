@@ -1,6 +1,6 @@
 ---
 name: batch-qa
-description: "Gather every OPEN question across a work/ repo — observations, PRDs, and slices (ideas excluded) — into ONE file the human answers in a single sitting, then apply the answers back, advancing each item exactly one lifecycle step, and iterate. Use when open judgement is scattered across many work/ items and answering one-at-a-time across sessions is the bottleneck; when you want to batch-triage observations and clear needsAnswers in bulk. Composes the review skill (for slice/PRD/code questions) and to-slices (for the ready-PRD→slices step). Writes files into the tree but NEVER commits/moves — the human reviews and commits."
+description: 'Gather every OPEN question across a work/ repo — observations, PRDs, and slices (ideas excluded) — into ONE file the human answers in a single sitting, then apply the answers back, advancing each item exactly one lifecycle step, and iterate. Use when open judgement is scattered across many work/ items and answering one-at-a-time across sessions is the bottleneck; when you want to batch-triage observations and clear needsAnswers in bulk. Composes the review skill (for slice/PRD/code questions) and to-slices (for the ready-PRD→slices step). Writes files into the tree but NEVER commits/moves — the human reviews and commits.'
 ---
 
 # batch-qa

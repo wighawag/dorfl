@@ -20,14 +20,15 @@ import {
 import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** The canonical work-contract, at the monorepo root. */
+/** The canonical work-contract, owned by the `setup` skill at the monorepo root. */
 const CLAIM_PROTOCOL = resolve(
 	HERE,
 	'..',
 	'..',
 	'..',
 	'skills',
-	'to-slices',
+	'setup',
+	'protocol',
 	'CLAIM-PROTOCOL.md',
 );
 

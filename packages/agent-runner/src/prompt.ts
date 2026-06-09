@@ -77,8 +77,34 @@ export function resolveClaimProtocolPath(override?: string): string {
 		return override;
 	}
 	const here = dirname(fileURLToPath(import.meta.url));
-	// here = .../packages/agent-runner/{src,dist}; the skill is at the repo root.
+	// here = .../packages/agent-runner/{src,dist}; the protocol docs are OWNED by the
+	// `setup` skill (`skills/setup/protocol/`) at the monorepo root — see
+	// `docs/adr/methodology-and-skills.md` §5 and the `work/protocol/` propagation.
+	// (They moved here from `skills/to-slices/`; the old paths are kept as a fallback
+	// for any not-yet-migrated layout.)
 	const candidates = [
+		resolve(
+			here,
+			'..',
+			'..',
+			'..',
+			'skills',
+			'setup',
+			'protocol',
+			'CLAIM-PROTOCOL.md',
+		),
+		resolve(
+			here,
+			'..',
+			'..',
+			'..',
+			'..',
+			'skills',
+			'setup',
+			'protocol',
+			'CLAIM-PROTOCOL.md',
+		),
+		// legacy location (pre-move) — fallback only
 		resolve(here, '..', '..', '..', 'skills', 'to-slices', 'CLAIM-PROTOCOL.md'),
 		resolve(
 			here,

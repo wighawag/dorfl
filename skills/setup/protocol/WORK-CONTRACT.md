@@ -144,7 +144,7 @@ A finding (`work/findings/<slug>.md`) is a capture-bucket note (no status flow),
 ---
 title: Human Readable Title
 slug: etherscan-verification-api
-source: "derived from packages/rocketh-verifier/src/etherscan.ts @ <commit>" # REQUIRED: what the source is AND how current (a date for external sources). Be specific & honest — there is NO separate confidence field; the source string carries the weight.
+source: 'derived from packages/rocketh-verifier/src/etherscan.ts @ <commit>' # REQUIRED: what the source is AND how current (a date for external sources). Be specific & honest — there is NO separate confidence field; the source string carries the weight.
 ---
 ```
 

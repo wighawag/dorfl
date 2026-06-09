@@ -13,9 +13,9 @@ The `do` command **declares** `--harness`, `--agent-cmd`, `--pi-bin`, and `--mod
 
 ```ts
 const resolved = resolveRepoConfig({
-  repoPath: cwd,
-  global,
-  flags: flagMode ? { integration: flagMode } : {}, // ← harness/agentCmd/piBin/model DROPPED
+	repoPath: cwd,
+	global,
+	flags: flagMode ? {integration: flagMode} : {}, // ← harness/agentCmd/piBin/model DROPPED
 });
 ```
 
