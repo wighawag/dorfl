@@ -382,6 +382,46 @@ isolation-strategy seam, and the `batch-qa` rungs. The one genuinely-new piece i
 > Trimmed at slice-time: this detail moves into the slices (what to build) and,
 > where it is durable rationale, into an ADR. It is here only to seed the slicing.
 
+### MAINTAINER-RESOLVED SLICE-TIME DECISIONS (2026-06-09 — read FIRST; these close the last open forks so the slicer does NOT re-ask or guess)
+
+An `orchestrate` sitting surfaced the four genuine slice-time forks to the
+maintainer; all four are now RESOLVED. The slicer must treat them as DECIDED spec
+(not open questions — do NOT emit `needsAnswers` for these):
+
+1. **Sidecar answered predicate (was the one deferred byte-detail): a non-empty
+   `answer:` ⇒ ANSWERED, with an explicit `answered:` line as an OVERRIDE.** The
+   human writes the LEAST (just `answer:`); the serialiser normalises `answered:
+   true` on the next write; an explicit `answered: false` overrides a non-empty
+   answer. (Supersedes the "slicer picks one" note in Out of Scope.)
+2. **The `batch-qa` → `surface-questions` refactor (US #32–35) is a NEW skill, not an
+   in-place rename.** Author a NEW `surface-questions` skill (GATHER-only,
+   PERSIST-NEVER — mirrors `review`): it EMITS questions and writes nothing; the
+   engine spawns it fresh-context and ITSELF writes the sidecar (CAS-atomic). The OLD
+   `batch-qa` skill is RETIRED — its question-formulation judgement survives in
+   `surface-questions`, its BOUND/APPLY/ITERATE/one-file orchestration is absorbed by
+   the advance engine, and its human-batching role is replaced by `orchestrate` +
+   `surface-questions`. `surface-questions` STAYS human-invokable for the no-runner
+   path (US #34). So this PRD's slice set should emit BOTH the new `surface-questions`
+   skill AND the retirement of the `batch-qa` skill (the gate-nit text was already
+   made skill-agnostic in `gate-nit-triage-text-skill-agnostic`, so no live generator
+   re-mints the dead name). `to-slices`/`review` stay composed UNCHANGED (US #35).
+3. **The `allowAgents` → `autoBuild` rename (US #36) IS emitted as a slice IN THIS
+   SET — the FINAL, last-sequenced slice, `blockedBy` the rest of the advance family,
+   and NOT `humanOnly`.** (The maintainer overrides the earlier "slicer may mark it
+   humanOnly" latitude: it is a clean, well-specified, agent-buildable breaking-config
+   migration with an alias/deprecation window — precedent `rename-reviewpr-to-review`,
+   `remove-sliced-marker-step-b`. Keep it in-set; do not spin it into a separate PRD.)
+4. **Set granularity + sequencing (DECIDED): slice the FULL family in this set** —
+   the sidecar contract → the tick classifier + state machine → the `advancing/` lock
+   borrow → the `advance` verb + resolver → the rungs (surface / apply / triage) →
+   the agent→runner reporting channel (incl. the captured-notes fold-in) → the two
+   drivers (one-shot + loop) + `-n` (always sequential) + the per-action gates → the
+   `install-ci` workflow-template (as an in-set slice, sequenced AFTER the tick/driver,
+   NOT a separate PRD) → the `autoBuild` rename (last). DEFERRED / OUT (do NOT slice):
+   the round-counter/churn-limiter (already DEFERRED below) and the chat-driven
+   frontend (its own idea, out of scope). The keystone ordering below already encodes
+   most of this; the slicer applies it.
+
 ### The advance TICK (the contract both drivers wrap)
 
 `classify (cheap, read-only, NO model, no lock)` → `take the CAS lock for the
@@ -608,8 +648,10 @@ Build the advance work with `allowAgents` named as-is; rename alone afterwards.
 - **A round-counter that flips a churning item to needs-design after N round-trips —
   DEFERRED** (optional refinement, mirroring `reviewMaxRounds`; the manual escape exists
   today — a human answers "take this to needs-attention").
-- **The exact `answer:`-vs-`answered:` authoring micro-decision** — both shapes are
-  testable; the slicer picks one (recommended: non-empty `answer:` ⇒ answered).
+- **The exact `answer:`-vs-`answered:` authoring micro-decision** — RESOLVED
+  (2026-06-09): a non-empty `answer:` ⇒ answered, with an explicit `answered:` line as
+  an OVERRIDE. See "MAINTAINER-RESOLVED SLICE-TIME DECISIONS" §1. (No longer the
+  slicer's pick.)
 - **A dedicated `record-questions` write-skill — DEFERRED** unless hand-writing the
   sidecar proves annoying (mirrors the optional setup-convenience command).
 - **The `auto-slice` / `run-daemon-reframe` / ledger-CAS work this builds ON** — those
