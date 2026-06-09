@@ -61,9 +61,10 @@ work/
 > undocumented behaviour) — it accumulates, it does not "resolve". An *internal*
 > investigation (why a test flakes, a perf regression) is NOT a finding: it is a
 > transient `observations/` signal that drives a fix slice and/or an ADR.
-> **ADRs — the durable *why* of OUR technical decisions — live in `docs/adr/`**,
-> never in `work/findings/`. So: observation = "spotted, unverified"; finding =
-> "verified external ground truth"; ADR = "what WE decided and why".
+> **ADRs — the durable *why* of OUR technical decisions — live in `docs/adr/`**
+> (format: `ADR-FORMAT.md`, alongside this contract), never in `work/findings/`. So:
+> observation = "spotted, unverified"; finding = "verified external ground truth";
+> ADR = "what WE decided and why".
 >
 > **Every finding MUST carry a `source:` (provenance) — how, and how *currently*,
 > the finding came to be believed.** A finding is only as true as the source it

@@ -182,11 +182,12 @@ no status-flow to retire it). Three destinations:
 
 ### 4. Report + hand off (no auto-commit)
 
-- **Ask the *why* of ADR-worthy decisions while the user is present (batch them).** For
-  each ADR-worthy decision pass 3 surfaced, ASK "why was this done?". Write
-  a complete ADR for each one the user answers; for each they cannot/will not answer,
-  write **NOTHING** — the code is its own pre-ADR. (Optionally mention the un-answered
-  ones in the report below so the human knows they exist, but persist no file for them.)
+- **Resolve the ADR asks from pass 3 before finishing.** Pass 3 identifies the
+  ADR-worthy decisions and asks the user their *why*; batch any still-unasked ones into
+  a single round here rather than interrupting repeatedly. Write a complete ADR for
+  each *why* the user supplies; for each they cannot/will not answer, write **NOTHING**
+  — the code is its own pre-ADR. (Optionally mention the un-answered ones in the report
+  below so the human knows they exist, but persist no file for them.)
 - REPORT every file created, grouped by bucket, plus anything you left as
   `needsAnswers`/`observations`/`ideas` for the human to resolve, and (ephemerally, in
   the report only) any ADR-worthy decisions whose *why* went un-answered. Note any

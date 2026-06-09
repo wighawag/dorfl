@@ -39,7 +39,7 @@ converts.
 4. **`.agent-runner.json`** — per-repo config with a **stack-appropriate `verify`**
    gate (the critical field — see the stack-detection step) and conservative,
    strict-by-default autonomy. See the template at the end.
-4. **A pointer** to the contract docs + required skills (in `CONTEXT.md`'s footer):
+5. **A pointer** to the contract docs + required skills (in `CONTEXT.md`'s footer):
    required `to-prd`, `to-slices`, `setup`; recommended `migrate`, `review`,
    `grill-me`.
 
@@ -158,15 +158,15 @@ convention). Report the exact paths.
   is installed — note the `harness`/`verify` they just configured).
 - If step 1 found existing material to convert (a `tasks/` folder, design docs,
   substantial source), recommend **`migrate`** explicitly (it composes this skill's
-  output and does the judgement-heavy mapping → PRDs/slices/findings, never
-  auto-authoring ADRs).
+  output and does the judgement-heavy mapping → PRDs/slices/findings, and authors an
+  ADR only from a *human-supplied* why — never inferring one from code).
 
 ## Boundary (what setup does NOT do)
 
 - It does NOT read/convert/interpret existing docs, tasks, or code into
   PRDs/slices/ADRs/findings — that is **`migrate`** (judgement-heavy, model-driven,
-  and carries the "never auto-author ADRs" discipline). `setup` is deterministic
-  scaffolding + a light seed conversation.
+  and carries the "an ADR is written only from a human-supplied *why*, never inferred"
+  discipline). `setup` is deterministic scaffolding + a light seed conversation.
 - It does NOT install or require `agent-runner` (the contract is runner-agnostic).
 - It does NOT register an arbiter / configure CI (those are runner/CI concerns).
 
