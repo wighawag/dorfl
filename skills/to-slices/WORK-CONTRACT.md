@@ -64,6 +64,30 @@ work/
 > **ADRs — the durable *why* of OUR technical decisions — live in `docs/adr/`**,
 > never in `work/findings/`. So: observation = "spotted, unverified"; finding =
 > "verified external ground truth"; ADR = "what WE decided and why".
+>
+> **Every finding MUST carry a `source:` (provenance) — how, and how *currently*,
+> the finding came to be believed.** A finding is only as true as the source it
+> was derived from, so the source is what makes it *correctable*: if the source is
+> later shown wrong (or stale), the finding can be revised and you can trace *why*
+> it was believed. There is deliberately **no separate `confidence:` field** — a
+> bare confidence label is redundant at best and misleading at worst ("doc-
+> verified" sounds authoritative until you learn the doc was last touched ten years
+> ago). The honest signal lives IN a rich `source:` string: state *what* the source
+> is AND *how current* it is, specifically enough that a reader can judge its weight
+> themselves. Examples (weakest → strongest, by their own description):
+> - `"derived from reading packages/rocketh-verifier/src/etherscan.ts @ <commit>"`
+>   — weakest: it assumes our code is correct, so the finding inherits any bug in
+>   it. (A code-derived finding describes the *external behaviour our code assumes*,
+>   NOT our code's internal shape — that is `CONTEXT.md`/`docs/`.)
+> - `"Etherscan API docs, retrieved 2026-06-09"` — a dated external authority (the
+>   date is what stops it silently going stale).
+> - `"captured live API response 2026-06-09, trace in <path>"` — strongest.
+> - `"told by maintainer @alice, 2026-06"` / `"inferred from the test asserting it
+>   at <path>"` — whatever it actually was; write it plainly.
+>
+> Put `source:` in the finding's frontmatter (see below) and, when the provenance
+> is non-obvious, expand on it in the body. A finding without a source is an
+> `observations/` signal, not a finding.
 
 **For work items, status is the folder a file lives in — never a frontmatter
 field.** Claiming / finishing = moving the file between folders with `git mv`.
@@ -255,6 +279,28 @@ sliceAfter: []       # optional: PRD slugs that must be SLICED first (see below)
 # sliced-ness has NO frontmatter marker: it is RESIDENCE in work/prd-sliced/ (the release transition moves the PRD there).
 ---
 ```
+
+### Finding frontmatter
+
+A finding (`work/findings/<slug>.md`) is a capture-bucket note (no status flow),
+but it MUST declare its **provenance** so it stays correctable (see the findings
+box above):
+
+```yaml
+---
+title: Human Readable Title
+slug: etherscan-verification-api
+source: "derived from packages/rocketh-verifier/src/etherscan.ts @ <commit>"  # REQUIRED: what the source is AND how current (a date for external sources). Be specific & honest — there is NO separate confidence field; the source string carries the weight.
+---
+```
+
+- `source` is **required** — a finding without it is an `observations/` signal,
+  not a finding. State it specifically (a file+commit, a doc URL, a captured
+  trace), so a later "the source was wrong" can revise the finding traceably.
+- A **code-derived** finding describes the *external behaviour our code assumes*,
+  never our code's internal architecture (that is `CONTEXT.md` / a `docs/`
+  overview). If you find yourself describing our own package layout, it is not a
+  finding.
 
 ### The two autonomy axes: `humanOnly` (decided) × `needsAnswers` (discovered)
 

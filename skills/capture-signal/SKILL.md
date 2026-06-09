@@ -45,7 +45,11 @@ happening") instead of *recording* it, that is the trigger. Record it.
 Tie-breakers:
 - **observation vs finding:** internal "spotted, unverified" → observation; only
   *verified external/domain* truth → finding. An internal investigation is an
-  observation (it may spawn a fix slice / an ADR), NOT a finding.
+  observation (it may spawn a fix slice / an ADR), NOT a finding. **A finding MUST
+  carry a `source:` (provenance)** — what the source is AND how current (a captured
+  trace, a *dated* external spec, or the code you read). A would-be finding with no
+  source is really an `observation`. Describing OUR OWN code is never a finding
+  (→ `CONTEXT.md`/`docs/`); a finding records the *external* world we integrate with.
 - **observation vs ADR:** "I spotted X" → observation; "we DECIDED X because Y" →
   ADR.
 - **agent/harness conduct signals** (e.g. "the agent kept misusing a tool"): these
@@ -58,7 +62,9 @@ Tie-breakers:
 
 - **Content-derived slug**, never a counter (`agent-skipped-edit-skill`, not `note-3`).
 - **Frontmatter:** `title`, `type` (`observation`/`finding`/`idea`), `status`
-  (`spotted`/`incubating`), and a `spotted:`/`created:` date.
+  (`spotted`/`incubating`), and a `spotted:`/`created:` date. **For a `finding`, also
+  `source:` (REQUIRED provenance: what the source is + how current; no separate
+  confidence field)** — see WORK-CONTRACT.md findings box.
 - **`observations/` are APPEND-ONLY** — add an `## Update` block; don't rewrite
   what was first seen.
 - **Capture buckets do NOT flow** (they are not work items / status≠folder); they
