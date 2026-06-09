@@ -5,9 +5,14 @@ humanOnly: true
 sliceAfter: [auto-slice]
 ---
 
-> **Launch snapshot, not maintained** (source for slicing; detail moves into slices /
-> `docs/adr/` once sliced). Provenance + history at the BOTTOM (Further Notes); the
-> spec leads.
+> **Launch snapshot — SLICED** (this PRD lives in `work/prd-sliced/`; the folder is
+> its sliced-ness — there is no `sliced:` marker). The Implementation / Testing detail
+> was relocated into the slices at slice time (2026-06-09): `intake-tracer-slice-outcome`,
+> `intake-decision-prompt-and-four-outcome-dispatch`, `intake-per-outcome-integration-modes`,
+> `intake-processing-lock`, `intake-event-classification`, `prd-complete-query`. What
+> remains here is the DURABLE spec + rationale (the decision table, the scope boundary,
+> loop closure, the stories, the autonomy axes) — the source of truth the slices
+> reference. Provenance + history at the BOTTOM (Further Notes); the spec leads.
 
 ## Problem Statement
 
@@ -50,76 +55,42 @@ Decision aids the prompt must encode, stated once here:
   unrelated → BOUNCE. The size of a coupled pair never forces a bounce — only
   unrelatedness does. (This guard prevents over-bouncing a small coupled pair.)
 
-### The engine shape (the testable seam)
+### The engine shape (the testable seam) — the durable contract
 
 `intake` is **a prompt + a deterministic dispatcher**, mirroring the review gate
-(prompt → `approve|block` → dispatch) and the slicer loop:
+(prompt → `approve|block` → dispatch): acquire the `processing` lock → read the issue +
+thread via the seam → prompt returns a VERDICT (`{ask,slice,prd,bounce}` + drafted
+content / comment text) → the runner DISPATCHES on it → release the lock. **The agent
+only DRAFTS / decides — NO git, no label ops, no posting; the RUNNER owns every
+git/seam side-effect** (the in-band boundary). The seam between verdict and dispatch is
+the unit-test target: a STUBBED verdict drives the dispatcher with no model/network;
+the prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not). A
+content-derived slug is proposed (never a counter). The loop re-runs on a new comment
+OR an issue-body edit (re-evaluate the whole thread); a buried prior-comment edit is
+IGNORED.
 
-1. **acquire the `processing` lock** (below) — winner only.
-2. **read** the issue + thread via the seam.
-3. **prompt → VERDICT** — the model returns one of `{ask, slice, prd, bounce}` PLUS,
-   for `slice`/`prd`, the DRAFTED artifact content (and, for `ask`/`bounce`, the
-   comment text). The agent only DRAFTS / decides; it does NO git, no label ops, no
-   posting — it returns a verdict object.
-4. **dispatch (the runner, deterministic + testable):**
-   - `ask`/`bounce` → `postComment` the text; emit no artifact.
-   - `slice` → write `work/backlog/<slug>.md` (+ `Fixes #N`) and integrate it via
-     `performIntegration` in the slice mode (below).
-   - `prd` → write `work/prd/<slug>.md` (+ `issue: N`) and integrate it via
-     `performIntegration` in the prd mode (below).
-   - surface the artifact's own gate axes (`humanOnly`/`needsAnswers`) as the prompt
-     judged them.
-5. **release the lock.**
+The durable seam shapes (the slices carry the mechanics):
 
-The seam between (3) and (4) is the unit tests target: a STUBBED verdict drives the
-dispatcher with no model/network. The prompt's JUDGEMENT is not unit-tested (like the
-review prompt's judgement is not) — only the dispatch is.
-
-The loop re-runs on a new comment OR an issue-body edit (re-evaluate the whole thread;
-edit-vs-reply changes only the comment's framing, not the control path). Editing a
-buried PRIOR comment is IGNORED (not a new turn — re-triggering invites loops). A
-content-derived slug is proposed (never a counter). The runner owns every commit; the
-agent only drafts (the in-band git boundary).
-
-### The issue seam (CI-independent, provider-pluggable)
-
-A provider interface (GitHub adapter via `gh` first); the core never imports `gh`,
-only the adapter shells out (same discipline as the harness/integration seams). The
-methods the ENGINE needs:
-
-- `getIssue`, `listComments` — read the issue + thread (the conversation context).
-- `postComment` — the ASK / BOUNCE / outcome message on the thread.
-- label ops `addLabel`/`removeLabel`/`getLabels` — the `processing` lock.
-- (`closeIssue` is the SEAM's, but used only by CI's close-job — see Scope.)
-
-### The `processing` LOCK (provider-native, not the CAS)
-
-Two concurrent runs on issue N serialise on a single provider-native LOCK label (e.g.
-`agent-runner:processing`): added on start, removed on finish. NOT a `work/`-file CAS —
-the contended thing is the ISSUE (a system with its own arbiter), and the output slug
-is unknown pre-run. It is a transient CONCURRENCY mutex carrying NO `work/` state — NOT
-a whitesmith-style label STATE-MACHINE (ADR §12 forbids modelling `work/` lifecycle in
-labels; this is not that). A non-label provider degrades to best-effort (CI's per-issue
-concurrency group is then the only serialiser).
-
-### Per-outcome integration mode (the KNOBS; the policy is CI's)
-
-`intake` decides the artifact TYPE at runtime, so a single `--merge`/`--propose` cannot
-express a type-conditional policy ("merge a PRD but propose a slice"). `intake` exposes
-**per-outcome mode flags**; the produced artifact integrates through `performIntegration`:
-
-- **granular:** `--merge-prd`/`--propose-prd` (if the outcome is a PRD);
-  `--merge-slice`/`--propose-slice` (if a slice).
-- **aggregates:** `--merge` = both-merge; `--propose` = both-propose.
-- **resolution:** GRANULAR OVERRIDES AGGREGATE (`--merge --propose-slice` = merge a
-  PRD, propose a slice). Same type + both modes (`--merge-prd --propose-prd`) = usage
-  ERROR.
-- **default:** unset ⇒ propose for both (conservative, matches `do`).
-- ask/bounce emit no artifact → the flags are no-ops for them.
-
-`intake` provides the KNOBS only (it is gate-free — see Scope). WHICH knobs CI sets
-(from gate state + author-trust) is CI's POLICY, in `runner-in-ci`. A local operator
-passes whatever they want (default propose).
+- **issue seam** (provider-pluggable; GitHub via `gh`; core never imports `gh`):
+  `getIssue`, `listComments`, `postIssueComment` (read + post), label ops
+  `addLabel`/`removeLabel`/`getLabels` (the lock), and `closeIssue` (the SEAM's, used
+  only by CI's close-job). NOTE the rename: the existing PR-review `postComment`
+  becomes `postPRComment`; the issue seam's comment method is `postIssueComment`
+  (GitHub shares the comment id space, other providers may not).
+  → `intake-tracer-slice-outcome` (read + postIssueComment + rename),
+  `intake-processing-lock` (label ops).
+- **`processing` LOCK** — a single provider-native LOCK label, added-on-start /
+  removed-on-finish: a TRANSIENT concurrency mutex carrying NO `work/` state. NOT a
+  `work/`-file CAS (the contended thing is the ISSUE; the output slug is unknown
+  pre-run) and NOT a whitesmith-style label STATE-MACHINE (ADR §12 forbids modelling
+  `work/` lifecycle in labels). Non-label provider → best-effort degrade.
+  → `intake-processing-lock`.
+- **per-outcome integration KNOBS** — `intake` decides the TYPE at runtime, so one
+  `--merge`/`--propose` can't express a type-conditional policy. Granular
+  `--merge-prd`/`--propose-prd`/`--merge-slice`/`--propose-slice` + aggregates
+  `--merge`/`--propose`; granular-overrides-aggregate; same-type-both = usage error;
+  unset ⇒ propose. `intake` owns the KNOBS; WHICH knobs CI sets is CI's POLICY
+  (`runner-in-ci`). → `intake-per-outcome-integration-modes`.
 
 ## Scope: the engine ONLY (the boundary that makes this sliceable)
 
@@ -190,22 +161,18 @@ The engine EMITS the linkage; CI ACTS on it:
 11. As a maintainer, I want the issue seam provider-pluggable (GitHub via `gh` first),
     core never importing `gh`, so other providers can follow and CI reuses the seam.
 
-## Testing Decisions
+## Testing Decisions (the durable principle; per-test detail is in the slices)
 
-- **Dispatcher with a STUBBED verdict** (no model/network): each verdict
-  (`ask`/`slice`/`prd`/`bounce`) drives the right action — postComment-and-emit-nothing
-  vs write-`backlog/`-slice-`Fixes #N` vs commit-`prd/`-PRD-`issue:N`-and-stop vs
-  split-comment-and-emit-nothing. The prompt's JUDGEMENT is not unit-tested (like the
-  review prompt's is not); only the dispatch is.
-- **Per-outcome mode resolution** as pure logic: granular routes per type; aggregates
-  expand; granular overrides aggregate; same-type-both errors; unset ⇒ propose.
-- **`processing` lock**: a second run while the label is present backs off; label
-  added-on-start / removed-on-finish; non-label provider degrades.
-- **"PRD complete?" query** over fixture `work/` trees: complete iff ≥1 `prd:<slug>`
-  slice AND all in `done/`. (The CI close-JOB that consumes it is `runner-in-ci`'s.)
-- **Event-classification** (new-comment / issue-body-edited → re-evaluate;
-  comment-edits ignored) as pure logic.
-- Stub the seam + `gh` throughout (no network, no real GitHub).
+The load-bearing rule: **test the DISPATCH, not the model.** A STUBBED verdict drives
+the dispatcher with no model/network; the prompt's JUDGEMENT is never unit-tested (like
+the review prompt's is not). Everything else is pure logic over stubbed inputs. STUB
+the seam + `gh` throughout (no network, no real GitHub). The concrete cases live in the
+slices' acceptance criteria — the four-outcome dispatch table
+(`intake-tracer-slice-outcome` + `intake-decision-prompt-and-four-outcome-dispatch`),
+the per-outcome mode resolution table (`intake-per-outcome-integration-modes`), the
+lock back-off/degrade (`intake-processing-lock`), the event-classification table
+(`intake-event-classification`), and the "PRD complete?" fixture-tree cases
+(`prd-complete-query`).
 
 ## Autonomy notes (the gate axes)
 
