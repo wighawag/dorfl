@@ -246,6 +246,13 @@ export type {
 } from './intake.js';
 export {performIntake, buildIntakeDecisionBrief} from './intake.js';
 
+export type {
+	IntakeEventKind,
+	IntakeEventDecision,
+	IntakeEvent,
+} from './intake-event.js';
+export {classifyIntakeEvent} from './intake-event.js';
+
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {
 	encodeRepoKey,
