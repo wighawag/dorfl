@@ -55,3 +55,18 @@ the reduced set is an intentional deviation (the §5b pattern: "recorded so it i
 Spotted while reading `~/dev/github/mattpocock/skills/skills/engineering/grill-with-docs/ADR-FORMAT.md`
 (2026-06-09) against `docs/adr/methodology-and-skills.md` §5a, during work on the
 `migrate` skill.
+
+## Update (2026-06-09) — RESOLVED, safe to delete
+
+Resolved by conforming to the standard ADR format rather than reconciling the reduced
+set. We dropped ALL the earlier deviations (slug-naming, fat sectioned files, and the
+`proposed`-deciding-stage lifecycle — the latter was never used: 0 ADRs were ever
+`proposed`), and transcribed the standard format (Matt-free in content, owned) into
+**`work/protocol/ADR-FORMAT.md`**, which `setup` now copies into every repo. The status
+set is the standard `proposed | accepted | deprecated | superseded by ADR-NNNN`
+(optional). §5/§5a of `docs/adr/methodology-and-skills.md` were rewritten to record
+this decision; the two existing multi-decision files are grandfathered.
+
+The drift this note flagged no longer exists. **This observation can be deleted** once
+the change is reviewed and committed (per the agreement: keep until happy, then
+remove).

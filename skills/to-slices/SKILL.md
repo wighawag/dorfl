@@ -23,7 +23,7 @@ This skill defines the on-disk contract they share.
 - **Don't** use to *write* the PRD (that's a separate step) or to *claim/run* a
   slice (that's the runner: `agent-runner claim`/`do`/`complete`, or the
   `drive-backlog` conductor). Don't introduce a shared index file or a status field
-  — status is the folder (see [WORK-CONTRACT.md](WORK-CONTRACT.md)).
+  — status is the folder (see [WORK-CONTRACT.md](work/protocol/WORK-CONTRACT.md)).
 
 ## Process
 
@@ -60,7 +60,7 @@ a horizontal slice of one layer.
   = unresolved questions block autonomous work (the DISCOVERED axis — list the
   questions in the slice body). Omitted on either means "undeclared"; whether an
   agent may then claim is the *repo's* `allowAgents` policy. Mark `blockedBy` for
-  ordering. See [WORK-CONTRACT.md](WORK-CONTRACT.md) for the two-axis semantics,
+  ordering. See [WORK-CONTRACT.md](work/protocol/WORK-CONTRACT.md) for the two-axis semantics,
   the predicate, and the `allowAgents` precedence.
   - **A slice's `humanOnly` is decided from the nature of BUILDING THAT SLICE —
     never inherited from the PRD.** Evaluate each slice on its own merits (does
@@ -132,11 +132,11 @@ wrongly-cut slice. Only emit slices you would have gotten the human to approve.
 ### 5. Write the slice files
 
 For each approved slice, write `work/backlog/<slug>.md` using
-[slice-template.md](slice-template.md). Create `work/` and `work/backlog/` lazily
+[slice-template.md](work/protocol/slice-template.md). Create `work/` and `work/backlog/` lazily
 if absent. One file per slice. Use a content-derived slug, never a counter. Fill
 `blockedBy` with the slugs of blocking slices, and set the **required `prd`**
 field to the slug of the source `work/prd/<slug>.md` (so `covers` story numbers
-are unambiguous — see [WORK-CONTRACT.md](WORK-CONTRACT.md)).
+are unambiguous — see [WORK-CONTRACT.md](work/protocol/WORK-CONTRACT.md)).
 
 ### 6. Trim the PRD to its durable framing (one-time)
 
@@ -166,7 +166,7 @@ so the user can inspect them. Report the exact paths written (and the trimmed PR
 ## The on-disk contract
 
 The full `work/` layout, slug rules, and frontmatter are in
-[WORK-CONTRACT.md](WORK-CONTRACT.md). The claim/lifecycle protocol these files are
+[WORK-CONTRACT.md](work/protocol/WORK-CONTRACT.md). The claim/lifecycle protocol these files are
 designed to support (consumed by the runner — `agent-runner claim`/`do`/`complete`)
-is in [CLAIM-PROTOCOL.md](CLAIM-PROTOCOL.md) — read it so the files you emit are
+is in [CLAIM-PROTOCOL.md](work/protocol/CLAIM-PROTOCOL.md) — read it so the files you emit are
 claim-ready, but this skill does not itself claim or run slices.

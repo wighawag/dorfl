@@ -27,14 +27,14 @@ dogfooding itself (it tracks its own work in its own `work/`).
   (PRD slicing-order). Sliced-ness is RESIDENCE in `work/prd-sliced/` — there is no
   `sliced:` frontmatter marker (it was removed in `remove-sliced-marker-step-b`);
   see *PRD lifecycle* below.
-- **ADR** — a decision record in `docs/adr/<slug>.md` (the *why* of OUR technical
-  choices; durable). The substrate decisions are in
-  `docs/adr/execution-substrate-decisions.md` (§1–§12). Carries a **`status:`**
-  frontmatter (`proposed | accepted | superseded`): a **`proposed`** ADR captures
-  the *deciding* stage — a VERIFIED problem + options, not yet decided (the step
-  between an unverified `observations/` note and an `accepted` decision). Slug-
-  named + sectioned (a deliberate house deviation from Matt's sequential
-  numbering; see `docs/adr/methodology-and-skills.md` §5a/§5b).
+- **ADR** — a decision record in `docs/adr/` (the *why* of OUR technical choices;
+  durable). Format = the **standard** one, owned at
+  `work/protocol/ADR-FORMAT.md`: `NNNN-slug.md`, one decision per file, body = 1–3
+  sentences (context/decision/why), optional `status:`
+  (`proposed | accepted | deprecated | superseded by ADR-NNNN` — most ADRs omit it).
+  (Earlier slug-named/sectioned/`proposed`-lifecycle deviations were dropped; see
+  `docs/adr/methodology-and-skills.md` §5/§5a. The two existing multi-decision files,
+  e.g. `execution-substrate-decisions.md`, are grandfathered.)
 - **capture buckets** — the THREE note-types under `work/` that are NOT work items
   and are **exempt from status=folder** (they don't flow/move; the folder is the
   inbox; they leave only by deletion): **`ideas/`** (proposed, pre-PRD;

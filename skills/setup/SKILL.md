@@ -6,8 +6,8 @@ description: "Bootstrap a repo onto the file-based work/ contract (the protocol 
 # setup
 
 Bootstrap a repo onto the **`work/` contract** — the runner-agnostic, file-based
-protocol (defined in the `to-slices` skill's `WORK-CONTRACT.md`) that `agent-runner`
-consumes. This is the **adopt-the-contract** step (a SKILL, not a command, per
+protocol (defined in `protocol/WORK-CONTRACT.md`, which setup OWNS and copies into each
+target repo's `work/protocol/`) that `agent-runner` consumes. This is the **adopt-the-contract** step (a SKILL, not a command, per
 `docs/adr/command-surface-and-journeys.md` §8 — adoption must NOT require installing
 `agent-runner`; the contract is the protocol, the runner is one consumer).
 
@@ -24,9 +24,19 @@ converts.
    work/needs-attention/ work/done/ work/out-of-scope/ work/ideas/
    work/observations/ work/findings/`. Add a `.gitkeep` to each empty one so git
    tracks it. (Status = the folder an item lives in — never a field.)
-2. **`CONTEXT.md`** — the repo's domain glossary (the shared vocabulary agents/skills
+2. **`work/protocol/`** — the protocol reference docs, **copied VERBATIM** into the
+   target repo so every skill can read them at a stable, repo-local path (rather than
+   relying on sibling-skill folder reads, which do not exist in a foreign repo). Copy
+   from this skill's own `protocol/` directory (setup OWNS the canonical copies):
+   `WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `slice-template.md`, `prd-template.md`,
+   `ADR-FORMAT.md`. Also write `work/protocol/VERSION` stamping the protocol version
+   the repo was set up against (so staleness is detectable; re-running `setup`
+   re-syncs `work/protocol/`, never touching the repo's own `work/` items). All skills
+   read the contract from `work/protocol/<doc>`; agent-runner itself is just a repo
+   that ran `setup` on itself (it dogfoods its own `work/protocol/`).
+3. **`CONTEXT.md`** — the repo's domain glossary (the shared vocabulary agents/skills
    use). Seed it from the adoption conversation (below). See the template at the end.
-3. **`.agent-runner.json`** — per-repo config with a **stack-appropriate `verify`**
+4. **`.agent-runner.json`** — per-repo config with a **stack-appropriate `verify`**
    gate (the critical field — see the stack-detection step) and conservative,
    strict-by-default autonomy. See the template at the end.
 4. **A pointer** to the contract docs + required skills (in `CONTEXT.md`'s footer):
@@ -44,6 +54,13 @@ missing. This is what makes `setup` safe to run on a populated repo and idempote
 re-run.
 
 - If `work/` already has the folders → skip them.
+- **`work/protocol/` is the ONE exception to never-clobber — it is protocol-owned, not
+  repo-owned.** The repo's `work/` *items* (slices/PRDs/notes) are sacred and never
+  touched; but the `work/protocol/` reference docs are verbatim copies setup owns, so
+  re-running setup **re-syncs** them (overwrite with the current canonical copies +
+  bump `work/protocol/VERSION`). This is how a repo picks up protocol updates. Never
+  hand-edit `work/protocol/<doc>` in a target repo — edits belong in setup's canonical
+  `protocol/` source and propagate via re-sync.
 - If `CONTEXT.md` exists → do not overwrite; offer to APPEND a "domain terms" section
   if absent, else leave it.
 - If `.agent-runner.json` exists → do not overwrite; report its `verify`/`harness`
@@ -122,9 +139,13 @@ the one scaffolding mistake that bites later.
 
 ### 4. Write the files (create-only) + report
 
-Create the missing `work/` folders (+ `.gitkeep`), write `CONTEXT.md` and
-`.agent-runner.json` if absent (or merge-in missing keys per step 1), and REPORT
-every path written/created and every existing one left untouched.
+Create the missing `work/` folders (+ `.gitkeep`); **copy the protocol docs verbatim
+into `work/protocol/`** from this skill's `protocol/` directory (`WORK-CONTRACT.md`,
+`CLAIM-PROTOCOL.md`, `slice-template.md`, `prd-template.md`, `ADR-FORMAT.md`) and write
+`work/protocol/VERSION` — creating them if absent, RE-SYNCING (overwriting) them if
+present (protocol-owned, per step 1); write `CONTEXT.md` and `.agent-runner.json` if
+absent (or merge-in missing keys per step 1); and REPORT every path written/created,
+re-synced, and every repo-owned file left untouched.
 
 **Git etiquette:** do NOT stage/commit/push — leave the new/edited files in the
 working tree for the user to inspect and commit (the `to-prd`/`to-slices` producer
@@ -167,11 +188,14 @@ naming modules, tests, and discussing the system. Architectural rationale lives 
 ## Core domain terms
 
 - **<term>** — <meaning> (seeded from the adoption conversation; refine as you go).
-- **work/ contract** — the on-disk system this repo uses (defined in the `to-slices`
-  skill): one markdown file per item, status = the folder it lives in (never a
-  field). Capture buckets: `ideas/` (proposed), `observations/` (spotted, unverified,
-  append-only), `findings/` (verified external/domain ground truth). ADRs
-  (`docs/adr/`) record what WE decided and why.
+- **work/ contract** — the on-disk system this repo uses, defined by the reference
+  docs in **`work/protocol/`** (copied here by `setup`): `WORK-CONTRACT.md` (the
+  contract), `CLAIM-PROTOCOL.md`, `slice-template.md`, `prd-template.md`,
+  `ADR-FORMAT.md`. One markdown file per item, status = the folder it lives in (never
+  a field). Capture buckets: `ideas/` (proposed), `observations/` (spotted,
+  unverified, append-only), `findings/` (verified external/domain ground truth, each
+  with a `source:`). ADRs (`docs/adr/`, format in `work/protocol/ADR-FORMAT.md`)
+  record what WE decided and why.
 
 ## Skills this repo uses
 

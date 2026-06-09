@@ -17,6 +17,10 @@ them**. That assumption is the point — it makes the review catch real,
 protocol-specific defects (a dishonest gate axis, a wrong bucket, a missing
 isolation test, drift) instead of offering a generic checklist.
 
+> The protocol's rules live in the repo's **`work/protocol/`** (copied there by
+> `setup`): every bare "WORK-CONTRACT" / "ADR-FORMAT" mention below refers to
+> `work/protocol/<doc>` in the repo under review.
+
 You **emit a verdict; you do not act on it** — see [Your output](#your-output).
 Routing the verdict (to `needsAnswers`, `needs-attention/`, a batch file, a merge)
 is the caller's job. This skill is the *assessment*, not the disposition.

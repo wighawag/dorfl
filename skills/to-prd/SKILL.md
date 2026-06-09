@@ -62,7 +62,7 @@ Put a one-line banner at the top of every PRD you write:
    provide; with auto-slicing it must be pre-recorded here OR honestly flagged.
 
 4. **Write** the PRD to `work/prd/<slug>.md` using
-   [prd-template.md](prd-template.md), content-derived slug. Create `work/prd/`
+   [prd-template.md](work/protocol/prd-template.md), content-derived slug. Create `work/prd/`
    lazily if absent.
 
 **Do NOT** add an "update the PRD" step anywhere — the PRD is not synced (mirrors

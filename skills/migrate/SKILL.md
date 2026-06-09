@@ -15,6 +15,12 @@ It composes `setup`: run that FIRST for the scaffold, then do the three conversi
 passes below. Keep the boundary — `setup` creates the skeleton; `migrate` fills it
 from what already exists.
 
+> **Where the contract docs live:** `setup` copies the protocol reference docs into
+> the target repo's **`work/protocol/`** (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, the
+> templates, `CLAIM-PROTOCOL.md`). Every bare "WORK-CONTRACT" / "ADR-FORMAT" mention
+> below refers to `work/protocol/<doc>` in the repo you are migrating — read them
+> there, not from a sibling skill folder.
+
 ## The one discipline that matters most: an ADR is written IFF we have the WHY — else write nothing; the code is the pre-ADR
 
 An **ADR** (`docs/adr/`) records a **DECISION + its why** — the rejected options, the

@@ -10,7 +10,7 @@ bucket**, immediately — so it is not lost to the conversation. Capturing beats
 losing: do not agonise over the perfect bucket; pick the best fit and write it.
 
 The bucket *definitions* are authoritative in `to-slices`'s
-[WORK-CONTRACT.md](../to-slices/WORK-CONTRACT.md) (read it if unsure) — this skill
+[WORK-CONTRACT.md](work/protocol/WORK-CONTRACT.md) (the repo-local protocol copy setup writes; read it if unsure) — this skill
 is the **routing reflex + the discipline**, not a restatement of the contract.
 
 ## When this fires (the trigger is NOTICING)

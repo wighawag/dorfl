@@ -100,43 +100,43 @@ is already shipped (camelCase); `needsAnswers`, plus the `blocked_by`→`blocked
 rename and `sliceAfter`, are wired into the same eligibility path by a tracked
 migration slice (not an inline change), keeping the build/test gate green.
 
-## 5. ADRs live in `docs/adr/`, CONTEXT.md at root (conform to convention)
+## 5. ADRs live in `docs/adr/`, CONTEXT.md at root, and follow the STANDARD ADR format
 
 ADRs (the durable *why* of decisions) live in `docs/adr/`; the domain glossary is
-`CONTEXT.md` at the repo root — the conventional locations Matt's domain-aware
-skills (`diagnose`/`tdd`/`improve-codebase-architecture`/`zoom-out`) read. We
-conform to these defaults so those skills work with NO setup. `work/findings/`
-remains for investigation/ground-truth notes (distinct from ADRs).
+`CONTEXT.md` at the repo root — the conventional locations the domain-aware skills
+(`diagnose`/`tdd`/`improve-codebase-architecture`/`zoom-out`) read. We conform to
+these defaults so those skills work with NO setup. `work/findings/` remains for
+verified external/domain ground-truth notes (distinct from ADRs).
 
-### 5a. ADR `status:` lifecycle (the "deciding" stage has a home)
+The **ADR format we follow is the standard one**, transcribed (owned, no external
+runtime dependency) in **`work/protocol/ADR-FORMAT.md`** — sequential
+`NNNN-slug.md`, one decision per file, body = 1–3 sentences (context, decision,
+why), optional `status:`/Considered-Options/Consequences sections, and the
+three-part "when to write one" bar (hard to reverse + surprising + a real
+trade-off). `setup` copies that doc into every repo's `work/protocol/`.
 
-ADRs carry a **`status:`** frontmatter field — `proposed | accepted | superseded`
-— which is the OPTIONAL-but-blessed field of the canonical ADR format
-(`grill-with-docs/ADR-FORMAT.md`: *"Status frontmatter … useful when decisions are
-revisited"*). This fills a real gap in the lifecycle: between an **observation**
-(spotted, unverified) and an **accepted ADR** (decided) sits the *deciding* stage
-— a VERIFIED problem with candidate options, not yet resolved. That stage is a
-**`status: proposed` ADR**: it states the contradiction/forces + the considered
-options + a recommended direction, explicitly NOT yet accepted. A later design
-session flips it to `accepted` (recording the chosen option) or writes a
-superseding ADR. So the decision pipeline is:
+### 5a. We dropped the earlier ADR-format deviations (decision: conform to the standard)
 
-> observation (`work/observations/`, unverified) → **proposed ADR** (verified
-> problem + options, undecided) → **accepted ADR** (decided) → slices (build).
+Earlier iterations of this repo carried three deviations from the standard format:
+(1) **slug-named instead of `NNNN-`**, (2) **fat, multi-decision `§1–§N` files**, and
+(3) a **`proposed`-as-"deciding-stage" lifecycle** (observation → proposed ADR →
+accepted ADR). **We decided to drop all three and conform to the standard format**,
+because on inspection none earned its keep:
 
-Use a proposed ADR (not an `idea`) when it is a *problem/decision* (backward-
-looking, "the current model contradicts itself"), not a forward-looking
-opportunity (those stay `work/ideas/`).
+- The **slug-vs-`NNNN`** choice was low-value house aesthetics; the "counters
+collide" rationale that (correctly) bans counters for *slices* does NOT apply to
+ADRs (they are human-authored, low-frequency, not claimed by parallel agents). With
+no real reason either way, **compatibility wins** → use `NNNN-slug.md`.
+- The **fat sectioned files** were how this repo happened to grow, not a tested
+benefit; one-decision-per-file is the standard and is clearer to supersede/cross-
+reference. **New ADRs are one-decision-per-file.**
+- The **`proposed`-deciding-stage lifecycle was never used** — across all ADRs only
+two carry a `status:` at all, both `accepted`; zero were ever `proposed`/`superseded`.
+It was speculative machinery. `status:` remains available exactly as the standard
+blesses it (`proposed | accepted | deprecated | superseded by ADR-NNNN`, optional,
+most ADRs omit it), but we define no special pipeline around it.
 
-### 5b. Deliberate deviation from Matt's ADR numbering (recorded so it is not "fixed")
-
-Matt's `ADR-FORMAT.md` prescribes **sequential, one-decision-per-file**
-(`0001-slug.md`, …, thin, often a paragraph). **We deliberately deviate:** our
-ADRs are **slug-named** (`execution-substrate-decisions.md`,
-`claim-ledger-vs-protected-main.md`) and may be **fat + sectioned** (one file
-gathering related decisions as `§1–§N`). This is intentional house style, not an
-oversight — recorded here per Matt's own rule ("deliberate deviations from the
-obvious path… stop the next engineer from ‘fixing’ something that was
-deliberate"). The domain-aware skills read ADRs for *context* (and to not
-re-litigate); they do not hard-parse the sequential number, so this degrades
-gracefully — a cross-reference is by slug/section rather than `ADR-NNNN`.
+**Grandfathering:** the two existing multi-decision files
+(`execution-substrate-decisions.md` §1–§N, this `methodology-and-skills.md`) stay
+as-is — valid and not worth churning. The conform-to-standard rule governs ADRs
+written from here on; existing slug-named/sectioned files are not retro-renamed.
