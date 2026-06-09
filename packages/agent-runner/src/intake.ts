@@ -6,6 +6,7 @@ import {
 	performIntegration,
 	type IntegrationCoreResult,
 } from './integration-core.js';
+import {integrationFromFlags} from './complete.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
@@ -187,13 +188,16 @@ export interface PerformIntakeOptions {
 	/** The HOST-ONLY sessions root for the pi session file. */
 	sessionsDir?: string;
 	/**
-	 * The integration mode the emitted slice integrates THROUGH the shared core
-	 * with: `propose` (default — push the `work/<slug>` branch + open a PR, NO `main`
-	 * touch) or `merge`. The per-outcome KNOBS (`--merge-slice`/`--propose-slice`/…)
-	 * are a LATER slice (`intake-per-outcome-integration-modes`); this slice exposes
-	 * only the single mode, defaulting to `propose`.
+	 * The PER-OUTCOME integration modes (PRD US #9) the emitted artifact integrates
+	 * THROUGH the shared core with. Because `intake` decides the artifact TYPE at
+	 * RUNTIME, the mode is keyed per type: an emitted slice integrates with
+	 * `integration.slice`, an emitted PRD with `integration.prd` (`propose` =
+	 * push the `work/<slug>` branch + open a PR, NO `main` touch; `merge` = land on
+	 * `main`). The CLI resolves this from the granular + aggregate flags via
+	 * {@link resolveIntakeIntegrationModes}; ask/bounce emit nothing, so the modes
+	 * are no-ops for them. Unset ⇒ propose for both.
 	 */
-	integration?: IntegrationMode;
+	integration?: IntakeIntegrationModes;
 	/** The review-request provider override (propose mode); auto-detect when unset. */
 	provider?: ReviewProviderName;
 	/** Environment for child git/agent processes. */
@@ -203,6 +207,132 @@ export interface PerformIntakeOptions {
 }
 
 const DEFAULT_ARBITER = 'origin';
+
+/**
+ * The emitted artifact TYPE `intake` decides at RUNTIME — a `slice` verdict emits
+ * `work/backlog/<slug>.md`, a `prd` verdict emits `work/prd/<slug>.md`. The two
+ * granular flag axes (`--merge-slice`/`--propose-slice` vs `--merge-prd`/
+ * `--propose-prd`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
+ * no-ops for them.)
+ */
+export type IntakeArtifactType = 'slice' | 'prd';
+
+/**
+ * The PER-OUTCOME integration mode FLAG SET (PRD `issue-intake` US #9). Because
+ * `intake` decides the artifact TYPE at runtime, a single `--merge`/`--propose`
+ * cannot express a type-conditional policy ("merge a PRD but propose a slice") —
+ * hence the four GRANULAR per-type flags layered over the two AGGREGATES:
+ *
+ * - **granular:** `--merge-prd`/`--propose-prd` apply iff the outcome is a PRD;
+ *   `--merge-slice`/`--propose-slice` apply iff it is a slice.
+ * - **aggregates:** `--merge` = merge BOTH types; `--propose` = propose BOTH.
+ *
+ * `intake` owns only these KNOBS; WHICH knobs CI sets (from gate state +
+ * author-trust) is CI's POLICY, authored in `runner-in-ci` — NOT here.
+ */
+export interface IntakeIntegrationFlags {
+	/** Aggregate: merge BOTH a slice and a PRD (the broad knob, overridden per type). */
+	merge?: boolean;
+	/** Aggregate: propose BOTH a slice and a PRD. */
+	propose?: boolean;
+	/** Granular: merge a PRD (overrides the aggregate for the PRD outcome). */
+	mergePrd?: boolean;
+	/** Granular: propose a PRD (overrides the aggregate for the PRD outcome). */
+	proposePrd?: boolean;
+	/** Granular: merge a slice (overrides the aggregate for the slice outcome). */
+	mergeSlice?: boolean;
+	/** Granular: propose a slice (overrides the aggregate for the slice outcome). */
+	proposeSlice?: boolean;
+}
+
+/** Both per-type integration modes, resolved from the flag set in ONE eager pass. */
+export interface IntakeIntegrationModes {
+	/** The mode an EMITTED slice integrates with. */
+	slice: IntegrationMode;
+	/** The mode an EMITTED PRD integrates with. */
+	prd: IntegrationMode;
+}
+
+/** Default per-outcome integration mode when no flag selects one — propose (matches `do`). */
+const DEFAULT_INTEGRATION: IntegrationMode = 'propose';
+
+/**
+ * Resolve the GRANULAR per-type axis (`--merge-<t>` / `--propose-<t>`) for ONE
+ * artifact type, REUSING {@link integrationFromFlags} for its mutual-exclusion +
+ * "mutually exclusive" error message (the same-type-both usage error) — so the
+ * granular axis is NOT a forked second resolver, just `integrationFromFlags`
+ * applied to the per-type pair. Returns the granular mode, or `undefined` when
+ * neither granular flag for this type was given (the aggregate/default then
+ * decides). The error message is reworded to name the granular flag pair.
+ */
+function granularFromFlags(
+	type: IntakeArtifactType,
+	merge: boolean | undefined,
+	propose: boolean | undefined,
+): IntegrationMode | undefined {
+	try {
+		return integrationFromFlags({merge, propose});
+	} catch {
+		throw new Error(
+			`--merge-${type} and --propose-${type} are mutually exclusive; pass at most one.`,
+		);
+	}
+}
+
+/**
+ * The PURE per-outcome integration mode resolution (PRD `issue-intake` US #9 —
+ * the canonical table). Given ONLY the flag set, resolve BOTH per-type modes in
+ * one eager pass (so a usage error is caught before the runtime verdict is even
+ * known). The rules, all decided in the PRD:
+ *
+ * - **unset ⇒ propose for BOTH** (conservative default; matches `do`).
+ * - **aggregates:** `--merge` ⇒ merge both; `--propose` ⇒ propose both (this axis
+ *   COMPOSES the existing {@link integrationFromFlags}, reusing its mutual
+ *   exclusion + error message).
+ * - **granular routes per type:** `--merge-prd` merges a PRD (and leaves a slice at
+ *   the aggregate/default), etc.
+ * - **GRANULAR OVERRIDES AGGREGATE:** `--merge --propose-slice` ⇒ merge a PRD,
+ *   propose a slice.
+ * - **same type + both modes is a usage ERROR:** `--merge-prd --propose-prd` (and
+ *   `--merge-slice --propose-slice`), and the aggregate `--merge --propose`.
+ *
+ * Throws (a usage error) on any mutually-exclusive pair. The dispatcher picks the
+ * field matching the runtime verdict's type; ask/bounce never integrate, so the
+ * modes are no-ops for them.
+ *
+ * `defaultMode` is the FALLBACK when NEITHER a granular nor the aggregate flag
+ * selects a mode for a type — it defaults to `propose` (so the pure table reads
+ * "unset ⇒ propose for both"), but the CLI passes the per-repo/global
+ * config-resolved mode so the established precedence chain (flag > per-repo >
+ * global > default) is preserved, exactly as `do`/`complete` resolve it.
+ */
+export function resolveIntakeIntegrationModes(
+	flags: IntakeIntegrationFlags,
+	defaultMode: IntegrationMode = DEFAULT_INTEGRATION,
+): IntakeIntegrationModes {
+	// AGGREGATE axis — reuse the existing resolver (its mutual exclusion + the
+	// "--merge and --propose are mutually exclusive" message). `undefined` ⇒ unset.
+	const aggregate = integrationFromFlags({
+		merge: flags.merge,
+		propose: flags.propose,
+	});
+	// GRANULAR axes — `integrationFromFlags` per type (the same-type-both error).
+	const prdGranular = granularFromFlags(
+		'prd',
+		flags.mergePrd,
+		flags.proposePrd,
+	);
+	const sliceGranular = granularFromFlags(
+		'slice',
+		flags.mergeSlice,
+		flags.proposeSlice,
+	);
+	// GRANULAR OVERRIDES AGGREGATE; aggregate over the (config/propose) default.
+	return {
+		prd: prdGranular ?? aggregate ?? defaultMode,
+		slice: sliceGranular ?? aggregate ?? defaultMode,
+	};
+}
 
 /**
  * Run `intake <N>` end-to-end (the LOCAL one-shot). Never throws for the expected
@@ -253,7 +383,12 @@ export async function performIntake(
 	//    `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
 	//    git/seam side-effect below (the in-band boundary): the write + integrate
 	//    (slice/prd) and the `postIssueComment` (ask/bounce).
-	const integration = options.integration ?? 'propose';
+	//
+	//    PER-OUTCOME integration (PRD US #9): the resolved mode is keyed on the
+	//    runtime artifact TYPE — a `slice` verdict integrates with the SLICE mode, a
+	//    `prd` verdict with the PRD mode. Unset ⇒ propose for both. ask/bounce never
+	//    integrate, so the modes are no-ops for them.
+	const modes = options.integration ?? {slice: 'propose', prd: 'propose'};
 	switch (verdict.outcome) {
 		case 'slice':
 			return dispatchSlice({
@@ -261,7 +396,7 @@ export async function performIntake(
 				issueNumber,
 				cwd,
 				arbiter,
-				integration,
+				integration: modes.slice,
 				provider: options.provider,
 				env,
 				note,
@@ -272,7 +407,7 @@ export async function performIntake(
 				issueNumber,
 				cwd,
 				arbiter,
-				integration,
+				integration: modes.prd,
 				provider: options.provider,
 				env,
 				note,

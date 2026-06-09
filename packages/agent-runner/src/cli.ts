@@ -27,7 +27,7 @@ import {
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
 import {performDo, performDoRemote, type DoOptions} from './do.js';
-import {performIntake} from './intake.js';
+import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
 import {
 	performDoAuto,
 	performDoArgs,
@@ -284,6 +284,10 @@ interface IntakeFlags {
 	arbiter?: string;
 	merge?: boolean;
 	propose?: boolean;
+	mergePrd?: boolean;
+	proposePrd?: boolean;
+	mergeSlice?: boolean;
+	proposeSlice?: boolean;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -1643,7 +1647,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying `Fixes #N`. GATE-FREE — your explicit invocation IS the authorization (autoSlice/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. --propose (default) / --merge resolved at integrate-time.',
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying `Fixes #N`. GATE-FREE — your explicit invocation IS the authorization (autoSlice/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-slice/--propose-slice override per type; granular overrides the aggregate; unset ⇒ propose for both.',
 		)
 		.argument(
 			'<number>',
@@ -1656,11 +1660,27 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--merge',
-			'integrate the emitted slice in merge mode (mutually exclusive with --propose; overrides config)',
+			'integrate BOTH outcomes (slice AND PRD) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
 		)
 		.option(
 			'--propose',
-			'integrate the emitted slice in propose mode (default; mutually exclusive with --merge)',
+			'integrate BOTH outcomes (slice AND PRD) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
+		)
+		.option(
+			'--merge-prd',
+			'integrate a PRD outcome in merge mode (granular; overrides --merge/--propose for a PRD; mutually exclusive with --propose-prd)',
+		)
+		.option(
+			'--propose-prd',
+			'integrate a PRD outcome in propose mode (granular; overrides --merge/--propose for a PRD; mutually exclusive with --merge-prd)',
+		)
+		.option(
+			'--merge-slice',
+			'integrate a slice outcome in merge mode (granular; overrides --merge/--propose for a slice; mutually exclusive with --propose-slice)',
+		)
+		.option(
+			'--propose-slice',
+			'integrate a slice outcome in propose mode (granular; overrides --merge/--propose for a slice; mutually exclusive with --merge-slice)',
 		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
@@ -1693,24 +1713,10 @@ export function buildProgram(): Command {
 			}
 			const cwd = process.cwd();
 			const global = loadConfig(flags.config);
-			// Resolve the integrate-time mode (--merge/--propose flag > per-repo > global
-			// > default propose) — the SAME chain `do`/`complete` use. `intake` is
-			// GATE-FREE, so autoSlice/autoBuild are NOT consulted (the explicit
-			// invocation is its own authorization).
-			let flagMode;
-			try {
-				flagMode = integrationFromFlags(flags);
-			} catch (err) {
-				console.error(
-					`error: ${err instanceof Error ? err.message : String(err)}`,
-				);
-				process.exit(1);
-			}
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
 				flags: {
-					...(flagMode ? {integration: flagMode} : {}),
 					...harnessFlagOverrides(flags),
 				},
 			});
@@ -1718,6 +1724,23 @@ export function buildProgram(): Command {
 				console.error(`>> ${resolved.message}`);
 			}
 			const config = resolved.config;
+			// Resolve the PER-OUTCOME integration modes (PRD US #9): `intake` decides
+			// the artifact TYPE at runtime, so a single --merge/--propose can't express
+			// a type-conditional policy. The granular flags override the aggregate; an
+			// UNSET type falls back to the per-repo/global `integration` (the SAME chain
+			// `do`/`complete` use — flag > per-repo > global > default propose). `intake`
+			// is GATE-FREE, so autoSlice/autoBuild are NOT consulted (the explicit
+			// invocation is its own authorization). `intake` owns only these KNOBS; WHICH
+			// knobs CI sets is CI's POLICY (`runner-in-ci`), NOT here.
+			let modes;
+			try {
+				modes = resolveIntakeIntegrationModes(flags, config.integration);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
 			const harness = createHarness({
 				harness: config.harness,
 				piBin: config.piBin,
@@ -1726,7 +1749,7 @@ export function buildProgram(): Command {
 				issueNumber,
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
-				integration: config.integration,
+				integration: modes,
 				provider: config.provider,
 				harness,
 				agentCmd: config.agentCmd,

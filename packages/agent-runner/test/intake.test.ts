@@ -467,6 +467,120 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 });
 
 // ---------------------------------------------------------------------------
+// PER-OUTCOME integration modes threaded through performIntegration
+// (`intake-per-outcome-integration-modes`, PRD US #9). The PURE resolution table
+// lives in `intake-integration-modes.test.ts`; HERE is the ONE end-to-end check
+// that the RESOLVED mode actually reaches `performIntegration` for the emitted
+// artifact: `--merge-slice` LANDS the slice on `main`; default/`--propose-slice`
+// opens a PR (main untouched). ask/bounce ignore the modes (no integrate at all).
+// ---------------------------------------------------------------------------
+describe('intake <N> — per-outcome integration modes reach performIntegration', () => {
+	it('a `slice` verdict with integration.slice=merge LANDS the slice on arbiter main', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => SLICE_VERDICT,
+			// The SLICE mode resolves to merge (e.g. from `--merge-slice`); the PRD mode
+			// is irrelevant for a slice verdict.
+			integration: {slice: 'merge', prd: 'propose'},
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		// MERGE: the slice landed on arbiter main (no PR; main advanced).
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
+		const onMain = gitIn(
+			['show', `${ARBITER}/main:work/backlog/add-quiet-flag.md`],
+			repo,
+		);
+		expect(onMain).toContain('Fixes #42');
+	});
+
+	it('a `slice` verdict with integration.slice=propose opens a PR (main untouched)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => SLICE_VERDICT,
+			integration: {slice: 'propose', prd: 'merge'},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		// PROPOSE: main is NOT touched; the slice rides the work/<slug> branch. (The
+		// PRD mode being `merge` must NOT leak onto the slice path.)
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const branchTip = gitIn(
+			['rev-parse', '--verify', '--quiet', `${ARBITER}/work/add-quiet-flag`],
+			repo,
+		).trim();
+		expect(branchTip).not.toBe('');
+	});
+
+	it('a `prd` verdict with integration.prd=merge LANDS the PRD on arbiter main (slice mode irrelevant)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes',
+			}),
+			// The PRD mode resolves to merge; the SLICE mode must NOT route the PRD.
+			integration: {slice: 'propose', prd: 'merge'},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('prd');
+		// MERGE: the PRD landed on arbiter main under work/prd/.
+		expect(
+			existsOnArbiterMain(repo, 'backlog', 'quiet-and-verbose-modes'),
+		).toBe(false);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const prdOnMain = gitIn(
+			['cat-file', '-e', `${ARBITER}/main:work/prd/quiet-and-verbose-modes.md`],
+			repo,
+		);
+		// `cat-file -e` exits 0 (no output) when the blob exists.
+		expect(prdOnMain).toBe('');
+	});
+
+	it('ask/bounce IGNORE the modes (no integrate happens regardless of the flags)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 9}});
+		// Even with merge modes set, an ask emits NOTHING — no work branch, no main
+		// touch — because ask/bounce never integrate (the modes are no-ops for them).
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
+			integration: {slice: 'merge', prd: 'merge'},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('asked');
+		expect(result.emitted).toBeUndefined();
+		// No work branch pushed, main untouched (the merge mode did NOT integrate).
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const remoteBranches = gitIn(['branch', '-r'], repo);
+		expect(remoteBranches).not.toMatch(/arbiter\/work\//);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // The GitHub issue ADAPTER — gh confined to the adapter (stubbed via ghBin)
 // ---------------------------------------------------------------------------
 
