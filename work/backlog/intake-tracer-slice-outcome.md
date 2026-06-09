@@ -54,9 +54,15 @@ the **issue number**. These are DISTINCT seams (sibling interfaces) — in GitHu
 comment id space is shared, but other providers may not share it. So:
 
 - **Rename** the existing `ReviewProvider.postComment` → **`postPRComment`** (and its
-  input/result types accordingly), updating every call site (the Gate-2
-  review-comment poster in `integration-core.ts`, the `github`/`none` providers).
-- **Add** `postIssueComment` on the new issue seam.
+  input/result types `PostCommentInput`/`PostCommentResult` →
+  `PostPRCommentInput`/`PostPRCommentResult`), updating every call site: the Gate-2
+  review-comment poster in `integration-core.ts` (~lines 683/746), the
+  `ReviewProvider` interface + impls in `integrator.ts` (the `none` provider) and
+  `github.ts` (the GitHub provider). NO behaviour change to the PR-comment path.
+- **Add** `postIssueComment` on the new issue seam, with its OWN distinct input/result
+  types (`PostIssueCommentInput` keyed by the **issue number**, NOT the PR `url` the
+  PR-comment input carries). Do NOT reuse the PR-comment input type — the distinct
+  key (issue number vs PR url) is the whole reason these are sibling seams.
 
 This rename is a mechanical, in-scope sub-task of the tracer (it touches the seam
 surface this slice introduces). Keep it a clean rename — no behaviour change to the
@@ -75,8 +81,10 @@ PR-comment path.
       patterns).
 - [ ] The issue seam (`getIssue`, `listComments`, `postIssueComment`) is defined as
       a provider interface; the GitHub adapter is the only place that shells out to
-      `gh`; the core never imports `gh`. Tests STUB the seam (no network, no real
-      GitHub).
+      `gh`; the core never imports `gh` (the contract `github.ts` already documents).
+      Tests STUB `gh` via the injectable `ghBin` (the `GitHubProvider`'s existing test
+      seam; `DEFAULT_GH_BIN` is exported from `index.ts`) — the same mechanism the
+      PR-provider tests use — so no network, no real GitHub.
 - [ ] The agent does NO git and NO seam side-effects (it returns a verdict object
       only); the runner/dispatcher performs the write + integrate. A test asserts the
       stubbed-verdict path performs no git from the "agent" boundary.

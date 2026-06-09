@@ -51,7 +51,9 @@ acquires/releases (the in-band boundary).
 - [ ] The runner (not the agent) performs the label ops; the agent stays label-free.
 - [ ] It is NOT a `work/` CAS and NOT a label state-machine — only the single
       transient lock label is touched (no lifecycle state in labels; ADR §12).
-- [ ] Tests STUB the seam + `gh`; mirror the repo's existing style.
+- [ ] Tests STUB `gh` via the injectable `ghBin` (the `GitHubProvider`'s existing test
+      seam; `DEFAULT_GH_BIN` from `index.ts`) — the same mechanism the PR-provider
+      tests use; mirror the repo's existing style.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -93,7 +95,8 @@ acquires/releases (the in-band boundary).
 >
 > SEAM TO TEST AT: the stubbed issue seam. Assert: label present during the run /
 > absent after; a second run with the label present backs off; non-label provider
-> degrades (no crash). STUB the seam + `gh`.
+> degrades (no crash). STUB `gh` via the injectable `ghBin` (the `GitHubProvider` test
+> seam), as the PR-provider tests do.
 >
 > SCOPE FENCE: ONE transient lock label only — no lifecycle state in labels, no
 > state-machine (ADR §12). Do NOT build CI's per-issue concurrency GROUP (that is

@@ -13,6 +13,14 @@ covers: [9]
 propose a slice"). This slice adds the **per-outcome integration mode KNOBS** and the
 pure resolution logic, threading the resolved mode into `performIntegration`.
 
+**Reuse, don't fork:** the canonical aggregate resolver already exists —
+`resolveIntegrationMode({merge, propose})` in `src/complete.ts` returns the mode (or
+`undefined`) and THROWS "--merge and --propose are mutually exclusive" on both. The
+per-outcome resolver is a SUPERSET of it (it adds the slice/prd TYPE axis +
+granular-overrides-aggregate), so COMPOSE/EXTEND that function for the aggregate axis
+rather than re-deriving its mutual-exclusion + error message. The granular per-type
+resolution + the override rule layer on top.
+
 `intake` owns the KNOBS only — it is gate-free. WHICH knobs CI sets (from gate state +
 author-trust) is CI's POLICY, authored in `runner-in-ci` (NOT here).
 
@@ -83,7 +91,11 @@ front of the `performIntegration` call the dispatcher already makes (slices 1 + 
 > WHAT TO BUILD:
 > 1. A PURE resolution function over the flag set + the runtime artifact type →
 >    integration mode (`merge`/`propose`), with the override + usage-error rules
->    above. This is the unit-test target (a resolution table).
+>    above. This is the unit-test target (a resolution table). COMPOSE/EXTEND the
+>    EXISTING `resolveIntegrationMode` (`src/complete.ts`) for the aggregate
+>    `--merge`/`--propose` axis (reuse its mutual-exclusion + error message); layer
+>    the per-TYPE granular resolution + granular-overrides-aggregate on top — do NOT
+>    fork a second mode resolver.
 > 2. Flag wiring in the `intake` command grammar (`src/cli.ts`) for the four granular
 >    + two aggregate flags, consistent with agent-runner's flag style.
 > 3. Thread the resolved mode into the dispatcher's existing `performIntegration`
@@ -92,7 +104,8 @@ front of the `performIntegration` call the dispatcher already makes (slices 1 + 
 >
 > SEAM TO TEST AT: the PURE resolution function (the table above) + the throwaway-git
 > integration harness for one end-to-end check (`--merge-slice` lands on `main`;
-> default/`--propose-slice` opens a PR / no `main` touch). STUB the seam + `gh`.
+> default/`--propose-slice` opens a PR / no `main` touch). STUB `gh` via the injectable
+> `ghBin` (the `GitHubProvider` test seam), as the PR-provider tests do.
 >
 > SCOPE FENCE: build ONLY the KNOBS + resolution. Do NOT build the POLICY that decides
 > which knobs to pass (author-trust / gate-state-derived merge-vs-propose) — that is
