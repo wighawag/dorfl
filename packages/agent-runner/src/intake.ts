@@ -31,12 +31,23 @@ import {
  * prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not); only the
  * dispatch is.
  *
- * THIS slice wires the **`slice` branch end-to-end**: a stubbed `slice` verdict →
- * a content-derived slug (never a counter) → write `work/backlog/<slug>.md`
- * (`covers: []`, NO `prd:` — its own source of truth) carrying `Fixes #N` →
- * integrate via {@link performIntegration} (default `propose`). The other three
- * branches (`ask`/`prd`/`bounce`), the per-outcome integration KNOBS, the
- * processing LOCK, and event-classification are LATER slices and are NOT built here.
+ * The dispatcher implements the FULL four-outcome decision table (PRD
+ * `issue-intake` — the source of truth):
+ * - **ASK** (not clear enough to act on): `postIssueComment` the next clarifying
+ *   question; emit NOTHING; STOP.
+ * - **SLICE** (clear AND fits ONE tracer-bullet slice): write
+ *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `Fixes #N`,
+ *   integrate via {@link performIntegration} (default `propose`).
+ * - **PRD** (clear AND coherent but >1 slice — INCLUDING a coupled-but-SMALL pair,
+ *   which is NEVER bounced): write `work/prd/<slug>.md` with `issue: N` (+ the gate
+ *   axes the verdict carried), integrate, STOP (slicing is the separate `do prd:`
+ *   step).
+ * - **BOUNCE** (genuinely UNRELATED concerns — no shared vision): `postIssueComment`
+ *   "file separate issues"; emit NOTHING; leave the issue OPEN (closing is CI's
+ *   close JOB, never `intake`'s).
+ *
+ * The per-outcome integration KNOBS, the processing LOCK, and event-classification
+ * are LATER slices and are NOT built here (default `propose` is fine here).
  *
  * The AGENT only DRAFTS (returns the verdict object); the RUNNER (this dispatcher)
  * owns every git/seam side-effect — the write + integrate (and, in later slices,
@@ -73,22 +84,51 @@ export interface IntakeVerdict {
 	 * `Fixes #N` line itself; the agent never writes git-visible files.
 	 */
 	sliceBody?: string;
-	/** The drafted clarifying question (`ask` outcome) — NOT dispatched in this slice. */
+	/**
+	 * The drafted clarifying question (`ask` outcome) — the dispatcher posts it via
+	 * `postIssueComment`, emits nothing, and STOPS (a later run resumes from the
+	 * updated thread).
+	 */
 	question?: string;
-	/** The drafted PRD content (`prd` outcome) — NOT dispatched in this slice. */
+	/**
+	 * The drafted PRD's content-derived slug (`prd` outcome). The dispatcher
+	 * SANITISES it through `paramCase` (never a counter) before writing
+	 * `work/prd/<slug>.md`. Falls back to a slug derived from {@link prdTitle} when
+	 * absent/empty.
+	 */
 	prdSlug?: string;
+	/** The drafted PRD's `title:` (`prd` outcome). */
 	prdTitle?: string;
+	/**
+	 * The drafted PRD BODY (`prd` outcome) — the markdown AFTER the frontmatter
+	 * (`## Problem Statement` / `## Solution` / `## User Stories` / …). The dispatcher
+	 * writes the frontmatter (title/slug/`issue: N` + the gate axes) itself; the
+	 * agent never writes git-visible files.
+	 */
 	prdBody?: string;
-	/** The drafted bounce message (`bounce` outcome) — NOT dispatched in this slice. */
+	/**
+	 * The PRD's gate axes (`prd` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
+	 * the emitted `work/prd/<slug>.md` frontmatter (PRD US #8: "the emitted artifact
+	 * carries … its own gate axes"). Both omitted (undeclared) by default; the prompt
+	 * sets `prdHumanOnly: true` when a human should drive the SLICING and/or
+	 * `prdNeedsAnswers: true` when open questions remain.
+	 */
+	prdHumanOnly?: boolean;
+	prdNeedsAnswers?: boolean;
+	/**
+	 * The drafted bounce message (`bounce` outcome) — the dispatcher posts it via
+	 * `postIssueComment` ("please file separate issues"), emits nothing, and leaves
+	 * the issue OPEN (no close; closing is CI's close JOB).
+	 */
 	bounceMessage?: string;
 }
 
 /** The terminal status of one `intake <N>` run. */
 export type IntakeRunOutcome =
 	| 'sliced' // a `slice` verdict → backlog slice written + integrated
-	| 'ask' // an `ask` verdict (not dispatched in this slice)
-	| 'prd' // a `prd` verdict (not dispatched in this slice)
-	| 'bounce' // a `bounce` verdict (not dispatched in this slice)
+	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
+	| 'prd' // a `prd` verdict → `work/prd/<slug>.md` written + integrated
+	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
 	| 'agent-failed' // the decision agent invocation itself errored
 	| 'stale' // the integrate rebase conflicted against an advanced main
 	| 'usage-error'; // usage / environment problem
@@ -98,10 +138,12 @@ export interface IntakeResult {
 	outcome: IntakeRunOutcome;
 	/** The issue number acted on. */
 	issueNumber: number;
-	/** The slug of the emitted backlog slice (slice outcome). */
+	/** The slug of the emitted artifact (slice OR prd outcome). */
 	emittedSlug?: string;
-	/** Repo-relative path of the emitted backlog slice (slice outcome). */
+	/** Repo-relative path of the emitted artifact (slice OR prd outcome). */
 	emitted?: string;
+	/** True iff a comment was posted on the issue (ask / bounce outcomes). */
+	commented?: boolean;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -207,8 +249,11 @@ export async function performIntake(
 		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
 	}
 
-	// 3. DISPATCH on the verdict. THIS slice wires only the `slice` branch
-	//    end-to-end; the others land in `intake-decision-prompt-and-four-outcome-dispatch`.
+	// 3. DISPATCH on the verdict — the FULL four-outcome decision table (PRD
+	//    `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
+	//    git/seam side-effect below (the in-band boundary): the write + integrate
+	//    (slice/prd) and the `postIssueComment` (ask/bounce).
+	const integration = options.integration ?? 'propose';
 	switch (verdict.outcome) {
 		case 'slice':
 			return dispatchSlice({
@@ -216,28 +261,97 @@ export async function performIntake(
 				issueNumber,
 				cwd,
 				arbiter,
-				integration: options.integration ?? 'propose',
+				integration,
+				provider: options.provider,
+				env,
+				note,
+			});
+		case 'prd':
+			return dispatchPrd({
+				verdict,
+				issueNumber,
+				cwd,
+				arbiter,
+				integration,
 				provider: options.provider,
 				env,
 				note,
 			});
 		case 'ask':
-		case 'prd':
-		case 'bounce': {
-			const message =
-				`Intake decided '${verdict.outcome}' for issue #${issueNumber}; only the ` +
-				`'slice' outcome is dispatched in this slice (the ` +
-				`ask/prd/bounce branches land in ` +
-				`intake-decision-prompt-and-four-outcome-dispatch).`;
-			note(message);
-			return {
-				exitCode: 0,
-				outcome: verdict.outcome,
+			return dispatchComment({
+				outcome: 'asked',
+				cwd,
 				issueNumber,
-				message,
-			};
-		}
+				issueProvider,
+				// The drafted clarifying question; a thin fallback keeps the comment
+				// non-empty if the agent left it blank.
+				body:
+					verdict.question && verdict.question.trim() !== ''
+						? verdict.question
+						: `Could you clarify issue #${issueNumber} so it can be acted on?`,
+				env,
+				note,
+			});
+		case 'bounce':
+			return dispatchComment({
+				outcome: 'bounced',
+				cwd,
+				issueNumber,
+				issueProvider,
+				// The drafted bounce message; a thin fallback restates the "file separate
+				// issues" ask. The issue is left OPEN (no close — closing is CI's JOB).
+				body:
+					verdict.bounceMessage && verdict.bounceMessage.trim() !== ''
+						? verdict.bounceMessage
+						: `This issue looks like multiple unrelated concerns — please file ` +
+							`separate issues so each can be intaken on its own.`,
+				env,
+				note,
+			});
 	}
+}
+
+/**
+ * DISPATCH the `ask` / `bounce` outcomes: `postIssueComment` the drafted text and
+ * emit NOTHING (no `work/` file, no integrate). The issue is left OPEN in BOTH
+ * cases — `ask` waits for the thread to be answered (a later run resumes from it),
+ * and `bounce` waits for the asks to be re-filed separately; closing the issue is
+ * NEVER `intake`'s (it is CI's close JOB, `runner-in-ci`). The comment poster is
+ * advisory and DEGRADES (a missing/unauthenticated `gh` never throws — the text is
+ * surfaced), so the run still terminates cleanly.
+ */
+async function dispatchComment(params: {
+	outcome: 'asked' | 'bounced';
+	cwd: string;
+	issueNumber: number;
+	issueProvider: IssueProvider;
+	body: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<IntakeResult> {
+	const {outcome, cwd, issueNumber, issueProvider, body, env, note} = params;
+	const posted = await issueProvider.postIssueComment({
+		cwd,
+		issueNumber,
+		body,
+		env,
+	});
+	const verb =
+		outcome === 'asked' ? 'asked a clarifying question on' : 'bounced';
+	const tail = posted.posted
+		? 'the comment was posted'
+		: `the comment could NOT be posted (${posted.instruction})`;
+	const message =
+		`Intake ${verb} issue #${issueNumber}; emitted no artifact and left the issue ` +
+		`open — ${tail}.`;
+	note(message);
+	return {
+		exitCode: 0,
+		outcome,
+		issueNumber,
+		commented: posted.posted,
+		message,
+	};
 }
 
 /**
@@ -321,6 +435,84 @@ async function dispatchSlice(params: {
 }
 
 /**
+ * DISPATCH the `prd` outcome: derive a content-derived slug, write
+ * `work/prd/<slug>.md` carrying `issue: N` (the loop-closure linkage the close JOB
+ * reaches via `slice.prd: → PRD issue:`; the number lives ONLY on the PRD — there
+ * is NO slice-level `issue:` field) + the gate axes the prompt JUDGED, integrate it
+ * via {@link performIntegration}, then STOP. Slicing the emitted PRD is the SEPARATE
+ * `do prd:` step (NOT done here). A coupled-but-SMALL pair lands here too (the PRD
+ * vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The runner
+ * owns the git exactly as the slice branch does; the agent did NO git/seam ops.
+ */
+async function dispatchPrd(params: {
+	verdict: IntakeVerdict;
+	issueNumber: number;
+	cwd: string;
+	arbiter: string;
+	integration: IntegrationMode;
+	provider: ReviewProviderName | undefined;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<IntakeResult> {
+	const {verdict, issueNumber, cwd, arbiter, integration, provider, env, note} =
+		params;
+
+	// A content-derived slug — NEVER a counter (PRD US #8). Prefer the drafted
+	// `prdSlug`, else derive from the drafted title.
+	const slug = resolvePrdSlug(verdict);
+	if (slug === '') {
+		const message =
+			`Intake produced a 'prd' verdict for issue #${issueNumber} with no usable ` +
+			`slug/title to derive a content-derived slug from (never a counter).`;
+		note(message);
+		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
+	}
+	const relPath = `work/prd/${slug}.md`;
+
+	// ONBOARD onto a `work/<slug>` branch off fresh `<arbiter>/main` — the SAME
+	// runner-owns-git discipline the slice branch uses.
+	await switchToWorkBranch(cwd, arbiter, slug, env);
+
+	const prdContent = renderPrd({
+		slug,
+		title: verdict.prdTitle ?? slug,
+		body: verdict.prdBody,
+		issueNumber,
+		humanOnly: verdict.prdHumanOnly,
+		needsAnswers: verdict.prdNeedsAnswers,
+	});
+
+	const core = await performIntegration({
+		cwd,
+		arbiter,
+		slug,
+		source: 'in-progress',
+		recovering: false,
+		// An intake-emitted PRD has no `verify` floor of its own (it is a new spec,
+		// not a build), exactly as the slice branch + the slicing transition skip it.
+		skipVerify: true,
+		autoMerge: true,
+		mode: integration,
+		provider,
+		type: 'feat',
+		lifecycle: {
+			titlePath: join(cwd, relPath),
+			commitTag: 'intake',
+			stage: () => stageIntakeSlice({cwd, relPath, content: prdContent, env}),
+		},
+		env,
+		note,
+	});
+
+	return integrationToIntakeResult(core, {
+		issueNumber,
+		slug,
+		relPath,
+		kind: 'prd',
+	});
+}
+
+/**
  * Map the shared integrate band's {@link IntegrationCoreResult} onto the intake
  * {@link IntakeResult}. On `completed` the slice was written + integrated; a
  * `rebase-conflict` against an advanced `main` maps to `stale` (the analogue of
@@ -330,20 +522,32 @@ async function dispatchSlice(params: {
  */
 function integrationToIntakeResult(
 	core: IntegrationCoreResult,
-	ctx: {issueNumber: number; slug: string; relPath: string},
+	ctx: {
+		issueNumber: number;
+		slug: string;
+		relPath: string;
+		kind?: 'slice' | 'prd';
+	},
 ): IntakeResult {
 	const {issueNumber, slug, relPath} = ctx;
+	const kind = ctx.kind ?? 'slice';
+	const artifact = kind === 'prd' ? 'PRD' : 'slice';
 	if (core.outcome === 'completed') {
 		const landed =
 			core.integration?.mode === 'merge'
 				? 'landed it on the arbiter main'
 				: 'opened a PR carrying it (main untouched)';
+		// A lone slice carries `Fixes #N` (its merge closes the issue directly); a PRD
+		// carries `issue: N` (the close JOB reaches it via `slice.prd: → PRD issue:` —
+		// `intake` never closes the issue).
+		const link =
+			kind === 'prd' ? `issue: ${issueNumber}` : `Fixes #${issueNumber}`;
 		const message =
-			`Intake of issue #${issueNumber} → wrote ${relPath} (Fixes #${issueNumber}); ` +
+			`Intake of issue #${issueNumber} → wrote ${relPath} (${link}); ` +
 			`the runner integrated it through the shared core and ${landed}.`;
 		return {
 			exitCode: 0,
-			outcome: 'sliced',
+			outcome: kind === 'prd' ? 'prd' : 'sliced',
 			issueNumber,
 			emittedSlug: slug,
 			emitted: relPath,
@@ -357,7 +561,7 @@ function integrationToIntakeResult(
 			issueNumber,
 			message:
 				core.reason ??
-				`Integrating the intake slice for issue #${issueNumber} conflicted ` +
+				`Integrating the intake ${artifact} for issue #${issueNumber} conflicted ` +
 					`against the latest main; re-run intake.`,
 		};
 	}
@@ -367,7 +571,7 @@ function integrationToIntakeResult(
 		issueNumber,
 		message:
 			core.reason ??
-			`Integrating the intake slice for issue #${issueNumber} failed unexpectedly.`,
+			`Integrating the intake ${artifact} for issue #${issueNumber} failed unexpectedly.`,
 	};
 }
 
@@ -383,6 +587,19 @@ function resolveSlug(verdict: IntakeVerdict): string {
 		verdict.sliceSlug && verdict.sliceSlug.trim() !== ''
 			? verdict.sliceSlug
 			: (verdict.sliceTitle ?? '');
+	return paramCase(candidate);
+}
+
+/**
+ * Resolve a content-derived slug for the PRD outcome — NEVER a counter (PRD US #8).
+ * Prefer the drafted `prdSlug`, else derive from the drafted PRD title; both go
+ * through `paramCase`. An empty result signals the caller to refuse.
+ */
+function resolvePrdSlug(verdict: IntakeVerdict): string {
+	const candidate =
+		verdict.prdSlug && verdict.prdSlug.trim() !== ''
+			? verdict.prdSlug
+			: (verdict.prdTitle ?? '');
 	return paramCase(candidate);
 }
 
@@ -426,6 +643,60 @@ function renderBacklogSlice(params: {
 					`> Resolve issue #${issueNumber}: ${title}`,
 				].join('\n');
 	return `${frontmatter}\n\n${fixes}\n\n${drafted}\n`;
+}
+
+/**
+ * Render the emitted PRD file: the frontmatter (`title`/`slug` + the loop-closure
+ * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted PRD body.
+ * `issue: N` is the ONLY place the issue number lives (PRD decision table + Out of
+ * Scope: NO slice-level `issue:`); the close JOB reaches it via `slice.prd: → PRD
+ * issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
+ * verdict declared them `true` — an omitted axis is `undefined` (undeclared), the
+ * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
+ * default scaffold keeps the file a valid PRD that `do prd:` can later slice.
+ */
+function renderPrd(params: {
+	slug: string;
+	title: string;
+	body: string | undefined;
+	issueNumber: number;
+	humanOnly: boolean | undefined;
+	needsAnswers: boolean | undefined;
+}): string {
+	const {slug, title, body, issueNumber, humanOnly, needsAnswers} = params;
+	const lines = [
+		'---',
+		`title: ${title}`,
+		`slug: ${slug}`,
+		`issue: ${issueNumber}`,
+	];
+	// Surface the gate axes AS THE PROMPT JUDGED THEM (PRD US #8). Only emit a `true`
+	// axis — an undeclared axis stays absent (parsed as `undefined`).
+	if (humanOnly === true) {
+		lines.push('humanOnly: true');
+	}
+	if (needsAnswers === true) {
+		lines.push('needsAnswers: true');
+	}
+	lines.push('---');
+	const frontmatter = lines.join('\n');
+	const drafted =
+		body && body.trim() !== ''
+			? body.trim()
+			: [
+					'## Problem Statement',
+					'',
+					`Transformed from issue #${issueNumber}: ${title}`,
+					'',
+					'## Solution',
+					'',
+					'(to be detailed; this PRD needs slicing via `do prd:`).',
+					'',
+					'## User Stories',
+					'',
+					`1. As a user, I want issue #${issueNumber} addressed.`,
+				].join('\n');
+	return `${frontmatter}\n\n${drafted}\n`;
 }
 
 /**
@@ -524,12 +795,26 @@ async function runDecision(
 }
 
 /**
- * Build the FIRST-DRAFT intake decision BRIEF (an inline prompt builder, like
- * `buildSlicingBrief` / the reviewer prompts) — thin on purpose: the FULL prompt
- * (the four-outcome decision table, the clear?/one-slice? bars, the shared-vision
- * PRD-vs-bounce guard) is `intake-decision-prompt-and-four-outcome-dispatch`. Its
- * JUDGEMENT is NOT unit-tested (like the review prompt's is not) — only the
- * dispatch is. The agent only DRAFTS the verdict; it does NO git/seam ops.
+ * Build the intake decision BRIEF (an inline prompt builder, like `buildSlicingBrief`
+ * in `slicing.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
+ * asset/`.md` file; no such convention exists in this package). It encodes the FULL
+ * four-outcome decision table (PRD `issue-intake` — the source of truth) and the
+ * three DECISION AIDS stated once there:
+ *
+ * 1. the **"clear?" bar** = `to-slices`/`needsAnswers`' "would I build the wrong
+ *    thing if I guessed?" — if a material requirement/scope/acceptance question is
+ *    unanswered, ASK (never guess a spec from a vague issue);
+ * 2. the **"one slice?" bar** = `to-slices`' tracer-bullet test (one thin end-to-end
+ *    path, demoable on its own) — fits → SLICE, needs splitting → PRD;
+ * 3. **PRD vs BOUNCE** turns on a **SHARED VISION**: coupled (even if small) → PRD;
+ *    genuinely unrelated → BOUNCE. Size NEVER forces a bounce — only unrelatedness
+ *    (the over-bounce guard: a coupled-but-small pair gets a light PRD, never a
+ *    bounce).
+ *
+ * The prompt anchors to `to-slices`/`to-prd` for the slice/PRD SHAPES it drafts. Its
+ * JUDGEMENT is NOT unit-tested (exactly as the review prompt's is not) — only the
+ * dispatch is. The agent only DRAFTS the verdict + its content; it does NO git/seam
+ * ops (the runner owns every postComment / write / integrate — the in-band boundary).
  */
 export function buildIntakeDecisionBrief(
 	issue: Issue,
@@ -545,7 +830,9 @@ export function buildIntakeDecisionBrief(
 					)
 					.join('\n\n');
 	return [
-		`Decide what to do with GitHub issue #${issue.number}: "${issue.title}".`,
+		`You are the agent-runner INTAKE agent. Decide what to do with GitHub issue`,
+		`#${issue.number}: "${issue.title}". You read the issue + its full comment`,
+		`thread and return ONE verdict (the runner DISPATCHES on it deterministically).`,
 		'',
 		'Issue body:',
 		issue.body.trim() === '' ? '(empty)' : issue.body,
@@ -553,14 +840,52 @@ export function buildIntakeDecisionBrief(
 		'Comment thread (oldest first):',
 		thread,
 		'',
-		'Classify the issue into ONE verdict:',
-		'- ASK: not clear enough to act on — emit the next clarifying question.',
-		'- SLICE: clear AND it fits ONE tracer-bullet vertical slice — draft the slice.',
-		'- PRD: clear AND it needs >1 slice (a coupled vision) — draft the PRD.',
-		'- BOUNCE: genuinely UNRELATED concerns under one issue — ask to split.',
+		'## The decision — classify the issue into exactly ONE of four verdicts',
 		'',
-		'You only DRAFT the verdict + its content. Do NOT perform any git operations',
-		'and do NOT post any comment — the runner owns every git/seam side-effect.',
-		'(This first-draft brief is thin; the full decision prompt is a later slice.)',
+		'- **ASK** — the issue is NOT clear enough to act on: a material requirement,',
+		'  scope, or acceptance question is unanswered. Use the same bar `to-slices`',
+		'  uses for `needsAnswers`: "would I build the WRONG thing if I guessed now?"',
+		'  If yes → ASK. Draft the SINGLE next clarifying question (do NOT guess a spec',
+		'  from a vague issue). The runner posts it and stops; a later run resumes from',
+		'  the updated thread.',
+		'',
+		'- **SLICE** — the issue is CLEAR *and* it fits ONE tracer-bullet vertical slice',
+		'  (a single thin end-to-end path, demoable on its own — `to-slices`’ criterion).',
+		'  Draft that ONE slice in the `to-slices` shape (a `## What to build`,',
+		'  `## Acceptance criteria`, and `## Prompt`). The runner writes',
+		'  `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `Fixes #N` and',
+		'  integrates it.',
+		'',
+		'- **PRD** — the issue is CLEAR *and* coherent but needs MORE THAN ONE slice (it',
+		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 slice',
+		'  ⟺ a shared vision worth recording ⟺ a PRD. Draft a PRD in the `to-prd` shape',
+		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
+		'  The runner writes `work/prd/<slug>.md` with `issue: N` and integrates it;',
+		'  SLICING the PRD is a SEPARATE later step (`do prd:`) — do not slice it here.',
+		'  **INCLUDES a coupled-but-SMALL pair: if two asks share a vision they get a',
+		'  (light) PRD — they are NEVER bounced.**',
+		'',
+		'- **BOUNCE** — the issue is really MULTIPLE UNRELATED concerns wearing one issue:',
+		'  you cannot articulate a SINGLE shared vision tying them together. Draft a short',
+		'  message asking the author to file separate issues. The runner posts it and',
+		'  leaves the issue OPEN (it never closes the issue).',
+		'',
+		'## The three decision aids (apply them in order)',
+		'',
+		'1. **"clear?"** (ASK vs the rest): the `needsAnswers` bar — would acting now risk',
+		'   building the wrong thing? If yes → ASK. Otherwise it is clear; continue.',
+		'2. **"one slice?"** (SLICE vs PRD): the `to-slices` tracer-bullet test — one thin',
+		'   end-to-end path, demoable alone? Fits → SLICE; needs splitting → PRD.',
+		'3. **"shared vision?"** (PRD vs BOUNCE): coupled (even if small) → PRD; genuinely',
+		'   unrelated → BOUNCE. SIZE NEVER forces a bounce — only UNRELATEDNESS does. Do',
+		'   not over-bounce a small coupled pair: it is a light PRD.',
+		'',
+		'## Boundary',
+		'',
+		'You only DRAFT the verdict + its content (the slice/PRD body, or the comment',
+		'text). You do NOT perform ANY git operation and you do NOT post any comment — the',
+		'runner owns every git/seam side-effect (write, integrate, postComment). For a PRD',
+		'verdict, also judge its gate axes (humanOnly / needsAnswers) so the runner can',
+		'surface them on the emitted PRD.',
 	].join('\n');
 }
