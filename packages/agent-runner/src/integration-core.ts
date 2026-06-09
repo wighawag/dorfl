@@ -338,7 +338,7 @@ export async function performIntegration(
 			// reason + committing the move (with the agent's uncommitted work) as ONE
 			// atomic transition. No partial state.
 			const reason = `acceptance gate failed (exit ${gate.exitCode})`;
-			const routed = ledgerWrite.applyNeedsAttentionTransition({
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
 				slug,
 				reason,
@@ -436,7 +436,7 @@ export async function performIntegration(
 			const reason =
 				(findingsReason ? findingsReason + '\n' : '') +
 				reviewRoundsExhaustedReason(maxRounds);
-			const routed = ledgerWrite.applyNeedsAttentionTransition({
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
 				slug,
 				reason,
@@ -594,7 +594,7 @@ export async function performIntegration(
 		// commits the in-progress→needs-attention move (here done→needs-attention)
 		// as ONE transition. No partial state.
 		const reason = `rebase onto ${arbiter}/main conflicted (aborted, never auto-resolved)`;
-		const routed = ledgerWrite.applyNeedsAttentionTransition({
+		const routed = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd,
 			slug,
 			reason,
@@ -645,7 +645,7 @@ export async function performIntegration(
 					arbiterUrl: await arbiterUrl(cwd, arbiter, env),
 					provider: input.provider,
 				}));
-	const integration = ledgerWrite.applyCompleteTransition({
+	const integration = await ledgerWrite.applyCompleteTransition({
 		arbiter,
 		branch,
 		mode,
@@ -733,7 +733,7 @@ function bridgeProvider(
 ): ReviewProvider {
 	return {
 		name: 'none',
-		openRequest(req) {
+		async openRequest(req) {
 			openPr({cwd: req.cwd, branch: req.branch, env: req.env});
 			return {
 				opened: true,

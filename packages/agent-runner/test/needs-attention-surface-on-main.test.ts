@@ -79,7 +79,7 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'alpha',
 			reason: 'acceptance gate failed (exit 1)',
@@ -124,7 +124,7 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'done-move'], repo);
 
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'beta',
 			reason: 'rebase onto arbiter/main conflicted (aborted)',
@@ -146,7 +146,7 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 	it('local-only routing (no arbiter) does NOT touch main', async () => {
 		const {repo} = await claimAndBranch('gamma');
 		agentEdits(repo);
-		const result = ledgerWrite.applyNeedsAttentionTransition({
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
 			reason: 'just locally',
@@ -217,7 +217,7 @@ describe('needs-attention surface-on-main — scan/status read main', () => {
 			extraSlugs: ['stays'],
 		});
 		agentEdits(repo);
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'delta',
 			reason: 'timeout after 30m',
@@ -262,7 +262,7 @@ describe('needs-attention surface-on-main — resolve via start (no manual moves
 		// Surface a stuck item on main.
 		const {repo, seeded} = await claimAndBranch('epsilon');
 		agentEdits(repo);
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'epsilon',
 			reason: 'the agent got stuck on a flaky test',
@@ -301,7 +301,7 @@ describe('needs-attention surface-on-main — resolve via start (no manual moves
 	it('resolve leaves no half-surfaced state and no scratch branch behind', async () => {
 		const {repo, seeded} = await claimAndBranch('zeta');
 		agentEdits(repo);
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'zeta',
 			reason: 'stuck',

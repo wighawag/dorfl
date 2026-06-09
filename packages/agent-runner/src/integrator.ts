@@ -1,5 +1,6 @@
 import type {IntegrationMode} from './config.js';
 import {git, run} from './git.js';
+import type {BackoffOptions, Sleep} from './retry-backoff.js';
 
 /**
  * The **integration seam** (ADR §6): integrating a completed work branch back to
@@ -28,9 +29,12 @@ export interface ReviewProvider {
 	/**
 	 * Request review of an already-pushed branch. The branch is guaranteed to be
 	 * on the arbiter before this is called (the push is the safety guarantee), so
-	 * a provider failure never loses work.
+	 * a provider failure never loses work. ASYNC: a real provider RETRIES the
+	 * request with bounded backoff on a transient OUTAGE before degrading (a
+	 * LOW-severity mode — the branch is already safe, only the review surface is
+	 * missing), driven by an injectable sleep so tests need no real waits.
 	 */
-	openRequest(input: OpenRequestInput): OpenRequestResult;
+	openRequest(input: OpenRequestInput): Promise<OpenRequestResult>;
 	/**
 	 * Post a follow-up COMMENT on an already-opened review request (the PR the
 	 * sibling {@link openRequest} created), threaded by its `url`. Used by the
@@ -92,6 +96,17 @@ export interface OpenRequestInput {
 	 */
 	body?: string;
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Bounded-backoff bounds for the provider's review-request retry (the OUTAGE-
+	 * retry of e.g. `gh pr create`). Defaults to the shared `DEFAULT_BACKOFF`.
+	 */
+	backoff?: BackoffOptions;
+	/**
+	 * Injectable sleep for that backoff (tests drive the retry timeline with NO
+	 * real waits — the `run.ts` `sleep`/`realSleep` seam). Defaults to a real
+	 * `setTimeout`.
+	 */
+	sleep?: Sleep;
 }
 
 export interface OpenRequestResult {
@@ -114,7 +129,7 @@ export interface OpenRequestResult {
 export class NoneProvider implements ReviewProvider {
 	readonly name = 'none';
 
-	openRequest(input: OpenRequestInput): OpenRequestResult {
+	async openRequest(input: OpenRequestInput): Promise<OpenRequestResult> {
 		return {
 			opened: false,
 			instruction:
@@ -160,6 +175,10 @@ export interface IntegrateInput {
 	 */
 	body?: string;
 	env?: NodeJS.ProcessEnv;
+	/** Bounded-backoff bounds for the provider's review-request retry. */
+	backoff?: BackoffOptions;
+	/** Injectable sleep for that backoff (tests; defaults to real `setTimeout`). */
+	sleep?: Sleep;
 }
 
 export interface IntegrateResult {
@@ -209,7 +228,7 @@ export class Integrator {
 	 * non-force push); `propose` pushes the branch under its own ref + asks the
 	 * provider to request review. NEVER `--force` (and NEVER force-touches main).
 	 */
-	integrate(input: IntegrateInput): IntegrateResult {
+	async integrate(input: IntegrateInput): Promise<IntegrateResult> {
 		if (input.mode === 'merge') {
 			pushBranch(input, `${input.branch}:main`);
 			return {
@@ -236,13 +255,15 @@ export class Integrator {
 			`${input.branch}:${input.branch}`,
 			`--force-with-lease=${input.branch}`,
 		);
-		const review = this.provider.openRequest({
+		const review = await this.provider.openRequest({
 			cwd: input.cwd,
 			branch: input.branch,
 			arbiter: input.arbiter,
 			title: input.title,
 			body: input.body,
 			env: input.env,
+			backoff: input.backoff,
+			sleep: input.sleep,
 		});
 		return {
 			mode: 'propose',
@@ -261,7 +282,9 @@ export class Integrator {
 	 * aborted by `rebaseOntoArbiterMain`; we return `needs-attention` (NEVER
 	 * auto-resolve, NEVER push a half-merged tree).
 	 */
-	integrateWithRebase(input: IntegrateInput): IntegrateWithRebaseResult {
+	async integrateWithRebase(
+		input: IntegrateInput,
+	): Promise<IntegrateWithRebaseResult> {
 		const rebase = rebaseOntoArbiterMain({
 			cwd: input.cwd,
 			arbiter: input.arbiter,
@@ -277,7 +300,7 @@ export class Integrator {
 					'against the latest main, then re-integrate.',
 			};
 		}
-		return {outcome: 'integrated', integration: this.integrate(input)};
+		return {outcome: 'integrated', integration: await this.integrate(input)};
 	}
 }
 

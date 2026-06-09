@@ -36,13 +36,13 @@ function workBranch(repo: string, slug: string, file = 'x.txt'): string {
 }
 
 describe('Integrator — propose mode (push-only) with the none provider', () => {
-	it('pushes the work branch and never touches main', () => {
+	it('pushes the work branch and never touches main', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		void arbiter;
 		const branch = workBranch(repo, 'feat');
 
 		const integrator = new Integrator({provider: new NoneProvider()});
-		const result = integrator.integrate({
+		const result = await integrator.integrate({
 			cwd: repo,
 			arbiter: 'arbiter',
 			branch,
@@ -63,11 +63,11 @@ describe('Integrator — propose mode (push-only) with the none provider', () =>
 		expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true); // unchanged
 	});
 
-	it('the none provider yields a manual-request instruction (no review API)', () => {
+	it('the none provider yields a manual-request instruction (no review API)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const branch = workBranch(repo, 'feat');
 		const integrator = new Integrator({provider: new NoneProvider()});
-		const result = integrator.integrate({
+		const result = await integrator.integrate({
 			cwd: repo,
 			arbiter: 'arbiter',
 			branch,
@@ -78,7 +78,7 @@ describe('Integrator — propose mode (push-only) with the none provider', () =>
 		expect(result.instruction).toMatch(/manually|open/i);
 	});
 
-	it('calls a custom provider after the safety-bearing push', () => {
+	it('calls a custom provider after the safety-bearing push', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const branch = workBranch(repo, 'feat');
 		let sawBranch = '';
@@ -90,7 +90,7 @@ describe('Integrator — propose mode (push-only) with the none provider', () =>
 			},
 		};
 		const integrator = new Integrator({provider});
-		const result = integrator.integrate({
+		const result = await integrator.integrate({
 			cwd: repo,
 			arbiter: 'arbiter',
 			branch,
@@ -104,11 +104,11 @@ describe('Integrator — propose mode (push-only) with the none provider', () =>
 });
 
 describe('Integrator — merge mode (direct to main, never --force)', () => {
-	it('pushes the branch to arbiter main', () => {
+	it('pushes the branch to arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const branch = workBranch(repo, 'feat');
 		const integrator = new Integrator({provider: new NoneProvider()});
-		const result = integrator.integrate({
+		const result = await integrator.integrate({
 			cwd: repo,
 			arbiter: 'arbiter',
 			branch,
@@ -217,7 +217,7 @@ describe('rebaseOntoArbiterMain — clean → proceed, conflict → abort (ADR �
 });
 
 describe('Integrator — rebase-before-integrate refuses on conflict', () => {
-	it('a conflicting branch is not pushed to main; reported as needs-attention', () => {
+	it('a conflicting branch is not pushed to main; reported as needs-attention', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		gitIn(['switch', '-c', 'work/feat', 'arbiter/main'], repo);
 		writeFileSync(join(repo, 'shared.txt'), 'agent version\n');
@@ -244,7 +244,7 @@ describe('Integrator — rebase-before-integrate refuses on conflict', () => {
 		gitIn(['push', '-q', 'arbiter', 'HEAD:main'], other);
 
 		const integrator = new Integrator({provider: new NoneProvider()});
-		const result = integrator.integrateWithRebase({
+		const result = await integrator.integrateWithRebase({
 			cwd: repo,
 			arbiter: 'arbiter',
 			branch: 'work/feat',

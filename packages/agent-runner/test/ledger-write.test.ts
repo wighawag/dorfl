@@ -243,7 +243,7 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 
 	it('the strategy bounces the item to needs-attention (behaviour-identical)', async () => {
 		const repo = await claimBranchAndEdit('beta');
-		const res = ledgerWrite.applyNeedsAttentionTransition({
+		const res = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'beta',
 			reason: 'a stuck reason',
@@ -264,7 +264,7 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 
 	it('the return-to-backlog re-queue is dispatched via the seam', async () => {
 		const repo = await claimBranchAndEdit('gamma');
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
 			reason: 'resolved later',

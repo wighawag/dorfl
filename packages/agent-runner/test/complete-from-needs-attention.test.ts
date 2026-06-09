@@ -69,7 +69,7 @@ async function seedSurfacedNeedsAttention(
 	agentEdits(repo, opts.agentFile);
 
 	// The autonomous routing: wip + move-only on the branch AND surface on main.
-	const routed = ledgerWrite.applyNeedsAttentionTransition({
+	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,
 		reason: 'acceptance gate failed (exit 1) [spurious: env-polluted]',

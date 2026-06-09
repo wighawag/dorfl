@@ -363,7 +363,7 @@ async function startFromNeedsAttention(params: {
 		env,
 	);
 	try {
-		const resolved = ledgerWrite.applyResolveNeedsAttentionTransition({
+		const resolved = await ledgerWrite.applyResolveNeedsAttentionTransition({
 			cwd,
 			slug,
 			arbiter,
@@ -598,7 +598,7 @@ async function routeContinueConflict(params: {
 		env,
 	);
 	try {
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd,
 			slug,
 			reason,

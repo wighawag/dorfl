@@ -1,4 +1,5 @@
 import {run, type RunResult} from './git.js';
+import {realSleep, retryWithBackoff} from './retry-backoff.js';
 import {
 	NoneProvider,
 	manualRequestText,
@@ -184,28 +185,63 @@ export class GitHubProvider implements ReviewProvider {
 	 * the PR URL `gh` prints and surface it (recorded by the caller into the job
 	 * record / `status`).
 	 */
-	openRequest(input: OpenRequestInput): OpenRequestResult {
-		const result = this.runGh(
-			[
-				'pr',
-				'create',
-				'--base',
-				this.base,
-				'--head',
-				input.branch,
-				...prCreateContentArgs(input),
-			],
-			input.cwd,
-			input.env,
-		);
+	async openRequest(input: OpenRequestInput): Promise<OpenRequestResult> {
+		const args = [
+			'pr',
+			'create',
+			'--base',
+			this.base,
+			'--head',
+			input.branch,
+			...prCreateContentArgs(input),
+		];
 
-		// gh missing (spawn failed) OR non-zero exit (e.g. unauthenticated): the
-		// work is already pushed, so degrade gracefully to manual instructions —
-		// NEVER throw (ADR §6: a provider failure must not lose safe work).
-		if (result === undefined || result.status !== 0) {
-			return this.degrade(input);
+		// First attempt. A non-zero / missing `gh` can mean two VERY different things:
+		//   - DETERMINISTIC: `gh` is missing or unauthenticated — retrying is pointless
+		//     (every attempt fails identically); degrade IMMEDIATELY (today's
+		//     behaviour, no wasted backoff).
+		//   - TRANSIENT (OUTAGE): `gh` is present + authed but the network/API is down
+		//     — RETRY with bounded backoff (the same shared helper the push uses)
+		//     before degrading. This is a LOW-severity mode: the branch is already
+		//     pushed (the seam's safety step), so the work is safe — only the review
+		//     surface is missing. We do NOT gate requeue on it.
+		const first = this.runGh(args, input.cwd, input.env);
+		if (first !== undefined && first.status === 0) {
+			return this.parseOpened(input, first);
 		}
 
+		// Failed once — distinguish DETERMINISTIC (missing/unauth) from a TRANSIENT
+		// outage by an availability probe. Missing/unauth ⇒ degrade now (no retry).
+		if (!this.available(input.cwd, input.env)) {
+			return this.degrade(input, 'unavailable');
+		}
+
+		// `gh` IS available but the create failed — a transient outage. Retry the
+		// create with bounded backoff before a clean give-up into the OUTAGE degrade.
+		const attempt = await retryWithBackoff(
+			async () => {
+				const r = this.runGh(args, input.cwd, input.env);
+				if (r !== undefined && r.status === 0) {
+					return {ok: true as const, value: r};
+				}
+				return {
+					ok: false as const,
+					error: r?.stderr.trim() || 'gh pr create failed',
+				};
+			},
+			{sleep: input.sleep ?? realSleep, ...input.backoff},
+		);
+		if (!attempt.ok) {
+			return this.degrade(input, 'outage');
+		}
+		return this.parseOpened(input, attempt.value);
+	}
+
+	/** Map a successful `gh pr create` RunResult to an OpenRequestResult. */
+	private parseOpened(
+		input: OpenRequestInput,
+		result: RunResult,
+	): OpenRequestResult {
 		const url = parsePrUrl(result.stdout);
 		if (url === undefined) {
 			// gh succeeded but we could not parse a URL — still treat the PR as
@@ -281,19 +317,35 @@ export class GitHubProvider implements ReviewProvider {
 		}
 	}
 
-	/** The graceful-degradation result: identical to the `none` provider's. */
-	private degrade(input: OpenRequestInput): OpenRequestResult {
+	/**
+	 * The graceful-degradation result (identical SHAPE to the `none` provider's):
+	 * the branch is already pushed (safe), only the PR is missing. The `reason`
+	 * distinguishes the two LOW-severity degrade causes so the operator knows what
+	 * to do: `unavailable` (`gh` missing/unauth — fix `gh`/auth) vs `outage`
+	 * (transient network/API failure that survived the bounded retry — just re-run
+	 * / open it manually). Both print the SAME manual `gh pr create` suggestion.
+	 */
+	private degrade(
+		input: OpenRequestInput,
+		reason: 'unavailable' | 'outage',
+	): OpenRequestResult {
 		// Echo the explicit title/body in the suggested manual command when present,
 		// so a human opening the PR by hand reuses the same content the autonomous
 		// path would have set (else fall back to the bare `--fill` suggestion).
 		const contentArgs = prCreateContentArgs(input);
 		const suggestion =
 			`gh pr create --base ${this.base} --head ${input.branch} ${contentArgs.join(' ')}`.trim();
+		const cause =
+			reason === 'outage'
+				? '`gh pr create` failed after retries (a transient outage), so no PR ' +
+					'was opened — the branch is pushed and the work is SAFE; re-run or ' +
+					'open one manually, e.g. '
+				: '`gh` is unavailable or unauthenticated, so no PR was opened — open ' +
+					'one manually, e.g. ';
 		return {
 			opened: false,
 			instruction:
-				`Pushed ${input.branch} to ${input.arbiter}. \`gh\` is unavailable ` +
-				'or unauthenticated, so no PR was opened — open one manually, e.g. ' +
+				`Pushed ${input.branch} to ${input.arbiter}. ${cause}` +
 				`\`${suggestion}\`.` +
 				manualRequestText(input),
 		};

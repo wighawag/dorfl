@@ -16,7 +16,10 @@ import {NullHarness, type Harness} from './harness.js';
 import {PiHarness} from './pi-harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
-import {ledgerWrite} from './ledger-write.js';
+import {
+	ledgerWrite,
+	type ApplyNeedsAttentionTransitionResult,
+} from './ledger-write.js';
 import {
 	jobWorktreeStrategy,
 	selectIsolationStrategy,
@@ -576,7 +579,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			`continuing the kept work/${slug}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
 			reason,
@@ -774,6 +777,69 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 }
 
 /**
+ * Build the HONEST per-op fragment describing WHAT actually reached the arbiter
+ * after a needs-attention route — reading the seam's captured per-op outcomes
+ * (`surface`, `branchPush`) rather than ASSUMING "surfaced + pushed" off the
+ * local move. Shared by every save-failure / save-stop message site so they can
+ * never drift from reality (the observed bug: the report claimed "pushed" when
+ * the branch push was skipped-empty or failed). A PUSH failure (HIGH severity:
+ * work-at-risk / breaks cross-machine recovery) flips the fragment to a loud
+ * "saved LOCALLY only" with recovery guidance.
+ */
+function routeReport(
+	routed: ApplyNeedsAttentionTransitionResult,
+	arbiter: string,
+	branch: string,
+): {fragment: string; pushFailed: boolean} {
+	const surface = routed.surface ?? 'not-attempted';
+	const branchPush = routed.branchPush ?? 'not-attempted';
+	const surfaceFailed = surface === 'failed';
+	const branchFailed = branchPush === 'failed';
+	const pushFailed = surfaceFailed || branchFailed;
+
+	if (pushFailed) {
+		// HIGH severity: at least one push did not reach the arbiter — say so loudly,
+		// the work is saved LOCALLY only, and how to recover.
+		const parts: string[] = [];
+		parts.push(
+			surfaceFailed
+				? `surface to ${arbiter}/main FAILED`
+				: `surfaced on ${arbiter}/main`,
+		);
+		if (branchPush === 'skipped-empty') {
+			parts.push(`branch ${branch} skipped (nothing to recover yet)`);
+		} else if (branchFailed) {
+			parts.push(`push of ${branch} FAILED`);
+		} else if (branchPush === 'pushed') {
+			parts.push(`pushed ${branch}`);
+		}
+		return {
+			fragment:
+				`${parts.join('; ')} — the work is saved LOCALLY only; push it when ` +
+				'online, then `requeue` (continue), or `requeue --reset` to discard',
+			pushFailed: true,
+		};
+	}
+
+	// All pushes that were attempted succeeded (or were honestly skipped). Report
+	// the surface + branch state truthfully.
+	const parts: string[] = [];
+	if (surface === 'surfaced') {
+		parts.push(`surfaced on ${arbiter}/main`);
+	}
+	if (branchPush === 'pushed') {
+		parts.push(`pushed ${branch}`);
+	} else if (branchPush === 'skipped-empty') {
+		parts.push(`branch ${branch} skipped (nothing to recover yet)`);
+	}
+	const landed = parts.length > 0 ? parts.join('; ') : 'saved locally';
+	return {
+		fragment: `${landed}. Recover via \`requeue\` (continue) or \`requeue --reset\` to discard`,
+		pushFailed: false,
+	};
+}
+
+/**
  * SAVE the partial work of a FAILED agent instead of dropping it (the keystone of
  * the `agent-fail-saves-work` slice). An agent failure (`runDoAgent` returned
  * `ok:false`, threw, or the prompt could not be assembled) used to BARE-RETURN
@@ -831,7 +897,7 @@ async function saveAgentFailure(params: {
 	// visible) AND push the `work/<slug>` branch (RECOVERABLE — so a requeue-continue
 	// reading <arbiter>/work/<slug> lands on the saved wip). Both halves fire from
 	// the single `arbiter` here; no separate push to forget.
-	const routed = ledgerWrite.applyNeedsAttentionTransition({
+	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
 		slug,
 		reason,
@@ -840,11 +906,12 @@ async function saveAgentFailure(params: {
 		note,
 	});
 
+	const report = routed.moved
+		? routeReport(routed, arbiter, branch)
+		: undefined;
 	const message = routed.moved
 		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +
-			`routed it to work/needs-attention/ (surfaced on ${arbiter}/main; pushed ` +
-			`${branch}). Recover via \`requeue\` (continue) or \`requeue --reset\` to ` +
-			'discard.'
+			`routed it to work/needs-attention/ (${report!.fragment}).`
 		: `Agent failed building '${slug}' (${detail}); could not route to ` +
 			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
@@ -913,7 +980,7 @@ async function saveAgentStop(params: {
 	const {slug, cwd, arbiter, reason, env, note} = params;
 	const branch = params.branch ?? `work/${slug}`;
 
-	const routed = ledgerWrite.applyNeedsAttentionTransition({
+	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
 		slug,
 		reason,
@@ -922,10 +989,13 @@ async function saveAgentStop(params: {
 		note,
 	});
 
+	const report = routed.moved
+		? routeReport(routed, arbiter, branch)
+		: undefined;
 	const message = routed.moved
 		? `The agent STOPPED building '${slug}' (the slice drifted / is ambiguous / ` +
-			`produced no change); routed it to work/needs-attention/ (surfaced on ` +
-			`${arbiter}/main) WITHOUT running the gate or Gate-2 review. Reason: ${reason}`
+			`produced no change); routed it to work/needs-attention/ (${report!.fragment}) ` +
+			`WITHOUT running the gate or Gate-2 review. Reason: ${reason}`
 		: `The agent STOPPED building '${slug}' but it could not be routed to ` +
 			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}). Reason: ${reason}`;
 	note(message);
@@ -1246,7 +1316,7 @@ async function runRemotePipeline(
 			`continuing the kept work/${slug}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd,
 			slug,
 			reason,
@@ -1474,7 +1544,7 @@ async function saveRemoteAgentFailure(params: {
 	const branch = params.branch ?? `work/${slug}`;
 	const reason = `agent failed: ${detail}`;
 
-	const routed = ledgerWrite.applyNeedsAttentionTransition({
+	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
 		slug,
 		reason,
@@ -1483,11 +1553,12 @@ async function saveRemoteAgentFailure(params: {
 		note,
 	});
 
+	const report = routed.moved
+		? routeReport(routed, displayArbiter, branch)
+		: undefined;
 	const message = routed.moved
 		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +
-			`routed it to work/needs-attention/ (surfaced on ${displayArbiter}/main; ` +
-			`pushed ${branch}). Recover via \`requeue\` (continue) or \`requeue ` +
-			'--reset` to discard.'
+			`routed it to work/needs-attention/ (${report!.fragment}).`
 		: `Agent failed building '${slug}' (${detail}); could not route to ` +
 			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);

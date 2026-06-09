@@ -57,7 +57,7 @@ async function stuckThenRequeued(
 	gitIn(['push', '-q', ARBITER, `work/${slug}:work/${slug}`], repo);
 	// Route to needs-attention THROUGH the seam (surfaces it on the arbiter's main,
 	// mode M) so the item is in needs-attention/ on main, cross-machine visible.
-	ledgerWrite.applyNeedsAttentionTransition({
+	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,
 		reason: 'gate red on the first attempt',
@@ -68,7 +68,7 @@ async function stuckThenRequeued(
 	// human's checkout would be on main) so the requeue's push HEAD lands on main.
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-	const result = returnToBacklog({
+	const result = await returnToBacklog({
 		cwd: repo,
 		slug,
 		arbiter: ARBITER,
@@ -154,7 +154,7 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior edits shared'], repo);
 		gitIn(['push', '-q', ARBITER, 'work/gamma:work/gamma'], repo);
-		ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
 			reason: 'red',
@@ -163,7 +163,7 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		});
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		returnToBacklog({
+		await returnToBacklog({
 			cwd: repo,
 			slug: 'gamma',
 			arbiter: ARBITER,
@@ -244,7 +244,7 @@ describe('requeue --reset — discard + fresh', () => {
 		// Sanity: the kept branch IS on the arbiter before --reset.
 		expect(arbiterHasBranch(reset.seeded, 'work/zeta')).toBe(true);
 
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'zeta',
 			arbiter: ARBITER,
@@ -273,7 +273,7 @@ describe('requeue --reset — discard + fresh', () => {
 	it('a FAILED delete leaves the item in needs-attention (no backlog move)', async () => {
 		const reset = await stuckButNeedsAttention('eta-reset');
 		// Point --reset at a NON-EXISTENT arbiter remote so the delete push fails.
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'eta-reset',
 			arbiter: 'nonexistent-remote',
@@ -295,7 +295,7 @@ describe('requeue --reset — discard + fresh', () => {
 describe('requeue -m — handoff note (append-only, both modes)', () => {
 	it('appends a dated handoff section to the item body', async () => {
 		const reset = await stuckButNeedsAttention('theta-note');
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'theta-note',
 			arbiter: ARBITER,
@@ -313,7 +313,7 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 
 	it('accumulates notes across repeated requeues (append-only)', async () => {
 		const reset = await stuckButNeedsAttention('iota-note');
-		returnToBacklog({
+		await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'iota-note',
 			arbiter: ARBITER,
@@ -327,7 +327,7 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 		);
 		gitIn(['add', '-A'], reset.repo);
 		gitIn(['commit', '-q', '-m', 'back to NA'], reset.repo);
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'iota-note',
 			arbiter: ARBITER,
@@ -348,7 +348,7 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 
 	it('applies on --reset too (a steer is relevant even when discarding)', async () => {
 		const reset = await stuckButNeedsAttention('kappa-note');
-		const result = returnToBacklog({
+		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'kappa-note',
 			arbiter: ARBITER,
@@ -441,7 +441,7 @@ async function stuckButNeedsAttention(
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	gitIn(['push', '-q', ARBITER, `work/${slug}:work/${slug}`], repo);
-	ledgerWrite.applyNeedsAttentionTransition({
+	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,
 		reason: 'gate red',

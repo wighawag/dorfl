@@ -407,7 +407,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		// ledger file moves needs-attention → backlog; the pushed work branch stays.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		const requeued = returnToBacklog({
+		const requeued = await returnToBacklog({
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: ARBITER,
@@ -579,7 +579,7 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		// ledger file moves needs-attention → backlog; the pushed work branch stays.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		const requeued = returnToBacklog({
+		const requeued = await returnToBacklog({
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: ARBITER,
@@ -807,7 +807,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		// moves needs-attention → backlog; the pushed work branch stays on the arbiter.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		const requeued = returnToBacklog({
+		const requeued = await returnToBacklog({
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: ARBITER,
@@ -863,7 +863,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		// pushed work branch (with the committed feature) stays on the arbiter.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		const requeued = returnToBacklog({
+		const requeued = await returnToBacklog({
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: ARBITER,
@@ -914,7 +914,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		// Requeue (keep + continue).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		const requeued = returnToBacklog({
+		const requeued = await returnToBacklog({
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: ARBITER,
