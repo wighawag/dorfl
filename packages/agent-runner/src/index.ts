@@ -82,6 +82,13 @@ export type {
 export {currentLedgerRead, ledgerRead} from './ledger-read.js';
 
 export type {
+	PrdCompleteInput,
+	PrdSlice,
+	PrdCompleteResult,
+} from './prd-complete.js';
+export {isPrdComplete} from './prd-complete.js';
+
+export type {
 	LedgerTransitionKind,
 	ApplyTransitionInput,
 	ApplyTransitionResult,
