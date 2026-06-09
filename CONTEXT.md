@@ -70,7 +70,7 @@ Organised by two axes: **target** (the registry / one repo) × **doer** (agent /
 - **Status = folder, never a field** (conflict-safety). One file per item; no shared index; content slugs, never counters.
 - Conflicts: **rebase-or-abort, never auto-resolve** → needs-attention. (ADR §10.)
 - **Storage areas map onto the doer axis:** agent execution → agents' area (`~/.agent-runner/`, hub mirrors + job worktrees); a human doing the work → human area (`humanWorktreesDir`, never under `~/.agent-runner/`). The secrets-isolation boundary. (`command-surface-and-journeys` §2.)
-- **adopt = skill, execute = command:** adopting the contract (setup, migrate, the slicing/PRD methodology) is protocol-layer (a SKILL, runner-agnostic); executing work (claim, `run`, `do`, integration) is implementation-layer (a command). Reinforces ADR §9. (`command-surface-and-journeys` §8.)
+- **adopt = skill, execute = command:** adopting the contract (`setup` — the single onboarding/migration skill — plus the slicing/PRD methodology) is protocol-layer (a SKILL, runner-agnostic); executing work (claim, `run`, `do`, integration) is implementation-layer (a command). Reinforces ADR §9. (`command-surface-and-journeys` §8.)
 - **`scan`'s offline guarantee is RETIRED:** in the registry model the remote is the source of truth, so `scan`/`status` fetch-first (warn + fall back offline). (Supersedes the older roots-local "scan is always offline" framing.)
 
 ## Coherence (a first-class quality)
