@@ -32,7 +32,8 @@ integrate + exit). So CI never needs the registry/hub-mirror machinery; the CI
 checkout IS the isolation.
 
 This is one of three decoupled capabilities split out of a single discussion
-(`runner-in-ci`, `auto-slice`, `issue-to-prd`); this one is the simplest and
+(`runner-in-ci`, `auto-slice`, and the issue front-door `issue-intake` — which
+absorbed the former `issue-to-prd`, merged 2026-06-09); this one is the simplest and
 highest-leverage because it reuses everything that already exists.
 
 ## Solution
@@ -99,6 +100,45 @@ Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide 
 - **Auto-slice in the CI tick:** `do` slices eligible PRDs too (`do <prd>`, or the
   auto-pick step), slices-first then PRDs (per-repo toggle) — so CI can both build
   slices and decompose ready PRDs in one invocation.
+
+### The autonomous merge-vs-propose POLICY (incl. the `intake` per-outcome modes) (added 2026-06-09)
+
+When CI runs a transformation/build autonomously, IT (not the gate-free command)
+decides whether output is merged directly or proposed as a PR. This policy lives
+HERE (the CI driver), because the commands themselves are gate-free (an explicit
+invocation is its own authorization — `do`, `intake`); the per-repo config gates
+(`autoSlice`/`autoBuild`/`allowAgents`) gate the AUTONOMOUS/auto-pick path, which is
+exactly what CI is.
+
+**The deriving rule (the insight): an artifact may be MERGED directly iff a human
+checkpoint still lies AHEAD of it before anything autonomous acts on it; if the next
+step is autonomous, it needs a PR (the human checkpoint) NOW.** Applied per artifact
+by the NEXT gate:
+
+| CI emits | next gate | gate OFF (a human acts next) | gate ON (an agent acts next) |
+|---|---|---|---|
+| a **PRD** | `autoSlice` | `--merge` safe (a human must slice it; it sits inert in `prd/`) | `--propose` (an agent will auto-slice it autonomously — insert a human PR review now) |
+| a **slice** | `autoBuild`/`allowAgents` | `--merge` safe (a human must build it; it sits in `backlog/`) | `--propose` (an agent will auto-build it autonomously — insert a human PR review now) |
+
+So CI translates its gate state into the right mode and PASSES it to the command. For
+`intake` (whose output TYPE — slice vs PRD — is decided at runtime), CI passes the
+PER-OUTCOME flags `intake` exposes: e.g. `autoSlice` off + `autoBuild` on ⇒
+`intake <N> --merge-prd --propose-slice`. For `do <slice>`/`do prd:` (type known up
+front) CI passes the single `--merge`/`--propose` accordingly. The command honors the
+flags; CI owns the derivation.
+
+**Composed with AUTHOR-TRUST (the issue front-door axis).** Because anybody can file
+an issue, the merge decision also depends on WHO authored/triggered it: an UNTRUSTED
+author warrants `--propose` REGARDLESS of the gate (a human eyeballs a stranger's
+emitted artifact). So the resolved mode is: `--propose` if (downstream gate ON) **OR**
+(author untrusted); `--merge` only if (gate OFF **AND** author trusted). The exact
+author-trust resolver (issue-author association × trigger-comment-author association ×
+request channel × repo policy) is the open `needsAnswers` below.
+
+**The fully-gateless guardrail.** "All gates on AND `--merge`" (autonomous
+issue → slice → build → main, no human anywhere) is dangerous precisely because
+anybody can file issues. It MUST be a loud, deliberate, NON-DEFAULT opt-in — never
+reachable by accident. The default is conservative (propose / human-in-the-loop).
 - **`install-ci` uses the seams, never `gh` directly.** Workflow generation +
   secret-setting may shell out to `gh` *as the GitHub adapter of a CI seam*, but
   the command is structured per-capability and provider-pluggable (GitHub first),
@@ -136,9 +176,17 @@ Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide 
   `--fake`-snapshot test may well be agent-buildable; a workflow-writing /
   secret-touching slice will lean `humanOnly` — but that is `to-slices`' call,
   per-slice.)
-- **`needsAnswers`:** none at launch — the auth modes and trigger shape are
-  decided (mirror whitesmith). If a slice surfaces an open infra question, flag it
-  then.
+- **`needsAnswers`: ONE open (moved here from `issue-intake` 2026-06-09) — the
+  AUTHOR-TRUST resolver.** The merge-vs-propose policy (above) composes with WHO
+  authored/triggered an issue (untrusted author → `--propose` regardless of the gate).
+  The exact resolver — *(issue-author association) × (trigger-comment-author
+  association) × (request channel: command vs every-issue) × (repo policy)* →
+  trusted/untrusted — and where it lives in the CI wiring is OPEN. It is a CI /
+  issue-front-door concern, NOT shared with `review`'s `autoMerge` (decoupled
+  2026-06-06; the `do`-path author is the operator, no untrusted author to gate). This
+  blocks ONLY the CI author-trust + merge-policy slices, NOT the `intake` engine slices
+  (which are gate-free) nor the plain `do`-in-CI workflow slices. The auth modes and
+  trigger shape are otherwise decided (mirror whitesmith).
 
 ### Slice-readiness notes (resolved 2026-06-06, batch-qa)
 
@@ -173,7 +221,15 @@ Make the **`do`** worker runnable inside a GitHub Actions workflow, and provide 
 
 ## Out of Scope
 
-- Any GitHub-issue awareness (that is `issue-to-prd`).
+> NOTE (2026-06-09): the AUTONOMOUS merge-vs-propose policy + author-trust + the
+> fully-gateless guardrail now live HERE (the CI driver) — moved out of `issue-intake`,
+> which is gate-free and only exposes the per-outcome mode KNOBS CI sets. CI also
+> SCHEDULES `intake <N>` (the issue→slice/PRD transform) via a label-driven trigger +
+> per-issue concurrency group; the transformation engine itself is `issue-intake`'s.
+
+- Any GitHub-issue awareness (that is `issue-intake`, which absorbed `issue-to-prd`).
+  EXCEPT: CI SCHEDULES `intake` + owns the merge-vs-propose POLICY (above) — the
+  transform engine is `issue-intake`'s; the autonomous policy/trigger/auth is CI's.
 - Auto-slicing of PRDs (that is `auto-slice`).
 - A long-lived CI daemon/service; ticks stay bounded.
 - Non-GitHub CI providers (GitHub first; the command is seam-shaped so others can

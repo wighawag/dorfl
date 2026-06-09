@@ -1,326 +1,306 @@
 ---
-title: issue-intake — the issue front-door, slices-first: 1 ask → 1 slice; needs >1 slice → a PRD (in-thread conversation, stop there); unrelated → split into N issues
+title: issue-intake — one command (intake <N>) that transforms an issue into a slice OR a PRD via a question/answer loop on the issue thread; clear+small → slice, clear+big → PRD, unclear → ask, unrelated → bounce
 slug: issue-intake
 humanOnly: true
-needsAnswers: true
-sliceAfter: [auto-slice, issue-to-prd]
+sliceAfter: [auto-slice]
 ---
 
 > **Launch snapshot, not maintained.** Source material for slicing (`to-slices`);
 > once sliced, technical detail moves into the slices and durable rationale into
-> `docs/adr/`. Expect this to be outrun by the work — that is fine.
+> `docs/adr/`.
 >
-> **Provenance.** Maintainer discussion (2026-06-06), refined over several passes.
-> The original `issue-to-prd` capability assumed every issue → a PRD. Observed
-> reality: MOST issues are a bug fix / small improvement that wants **one slice, no
-> PRD** (in-contract: a `covers:[]` slice is its own source of truth, per
-> WORK-CONTRACT — `propose-pr-body` is exactly such a slice). So the front-door is
-> **slices-first**. A PRD is produced ONLY when the work genuinely needs MORE THAN
-> ONE slice — because that is precisely when there is a shared vision worth
-> recording (and a PRD is never a thin grouping stub; a >1-slice issue has real
-> cross-slice content). `issue-to-prd` is NOT dropped — it is the in-thread PRD
-> CONVERSATION this front-door routes to for the >1-slice case (and that PRD is
-> human-driven via the issue thread, the same way `to-prd` is human-driven at a
-> desk).
+> **MERGED 2026-06-09 (this PRD absorbs the former `work/prd/issue-to-prd.md`).** A
+> grilling pass collapsed two PRDs into one. The old split — `issue-to-prd` (every
+> issue → a PRD via an in-thread conversation) + `issue-intake` (a slices-first
+> front-door layered on top) — was an artifact of history, not design: once the
+> capability is ONE command whose conversation can end in EITHER a slice or a PRD,
+> "emit a PRD" and "emit a slice" are just two branches of the same advance/ask loop,
+> sharing one issue seam, one conversation, one lock, one trigger. Two PRDs with an
+> identical seam was a fork. So `issue-to-prd` is DELETED and folded in here; this is
+> the single capability. (The PRD-conversation machinery, the issue seam, slug +
+> `issue: N` linkage, and loop-closure all came from `issue-to-prd` and survive here.)
 >
-> **RESHAPE 2026-06-09 (maintainer grilling — the command IS the engine; CI is just
-> a scheduler).** A design session sharpened the execution model and DECOUPLED the
-> transformation from CI delivery. Key corrections, now load-bearing for the slicer:
-> - **One COMMAND, two callers.** The issue→slice/PRD transformation is a STANDALONE
->   `agent-runner` command (working name `intake <N>` / `from-issue <N>` — bikeshed
->   at slice time) that a maintainer runs LOCALLY one-shot AND that CI invokes — the
->   SAME binary; CI is only the scheduler (a label-driven trigger + a per-issue
->   concurrency group). There is NOT a separate "one-shot" engine; the command is the
->   engine. (This folds in the abandoned `issue-oneshot` carve-out — the
->   CI-independence is achieved by the command being runnable standalone, NOT by
->   stripping the conversation.)
-> - **It is its OWN command, NOT a `do` namespace.** Three reasons: (a) it has NO
->   review GATE (it is a transformation; the OUTPUT slice/PRD is reviewed later when
->   it is built/sliced — `do`'s defining verify+Gate-2 do not apply); (b) its LOCK is
->   provider-native, NOT the `work/` CAS (see next); (c) its question surface is the
->   ISSUE THREAD, not the `work/` tree. `do` is git-in / gated / git-out; this is
->   issue-in / (slice|PRD|comment)-out. Siblings, not the same verb.
-> - **LOCK = a GitHub issue LABEL, not the CAS ledger.** Two concurrent runs on issue
->   N serialise on a provider-native lock label (e.g. `agent-runner:processing`) +
->   the CI per-issue concurrency group — NOT a `work/`-file CAS, because the contended
->   thing is the ISSUE (which lives in a system with its own arbiter), and the output
->   slug is unknown until the agent reads the issue. MINIMAL: one `processing`-style
->   lock label for concurrency; the OUTCOME is tracked by the emitted artifact (a lone
->   slice's `Fixes #N`, a PRD's `issue: N`) — NOT a full whitesmith-style label
->   state-machine (explicitly NOT reused, per Further Notes). The label ops
->   (`addLabel`/`removeLabel`/`getLabels`) extend the ISSUE SEAM (GitHub adapter);
->   a non-label provider degrades to best-effort (the CI concurrency group is then the
->   only serialiser).
-> - **QUESTIONS go to the ISSUE THREAD** (`postComment`), NOT the advance-loop
->   question/answer sidecar. The issue IS the conversation/question surface. A run
->   either ADVANCES (emits the slice/PRD) or ASKS (posts a clarifying comment) and
->   exits — the human answers IN THE ISSUE, the next run reads the thread. This holds
->   IDENTICALLY for a local run and a CI run (no local-only terminal mode — that would
->   fork behaviour). So this PRD does NOT depend on advance-loop.
-> - **`sliceAfter` no longer waits on `runner-in-ci`.** The COMMAND/ENGINE slices
->   (the issue seam incl. label-ops, the transformation, the verb, output through
->   `performIntegration`) depend only on `[auto-slice, issue-to-prd]` and are
->   buildable now. Only the CI-DELIVERY slices (the trigger policy, the author-trust
->   resolver, `install-ci`/the workflow + the label-driven schedule) sequence behind
->   `runner-in-ci` — expressed per-slice via `blockedBy` at slice time, NOT by a
->   PRD-level `sliceAfter` on the whole PRD. The open `needsAnswers` (author-trust
->   resolver) is a CI-LAYER concern and does NOT block the command/engine slices: a
->   LOCAL run's operator IS trusted (they ran it), so it just uses `--propose`/`--merge`
->   like any `do`; the author-trust safety gate applies only to the CI front-door.
+> **The command IS the engine; CI is just a scheduler (reshape 2026-06-09).** The
+> transformation is a STANDALONE `agent-runner` command — working name **`intake <N>`**
+> — that a maintainer runs LOCALLY one-shot AND that CI invokes; the SAME binary, CI
+> only adds the scheduler (a label-driven trigger + a per-issue concurrency group).
+> It is its OWN command, NOT a `do` namespace: (a) NO review GATE (it is a
+> transformation; the OUTPUT slice/PRD is reviewed later when it is built/sliced —
+> `do`'s defining verify+Gate-2 do not apply); (b) its LOCK is a provider-native
+> GitHub `processing` LABEL, not the `work/` CAS (the contended thing is the ISSUE,
+> and the output slug is unknown until the agent reads it); (c) its question surface
+> is the ISSUE THREAD (`postComment`), not the `work/` tree / the advance-loop sidecar.
+>
+> **It is GATE-FREE like `do` (reshape 2026-06-09).** An explicitly-invoked command is
+> authorized BY THE INVOCATION — the per-repo config gates (`autoSlice`/`autoBuild`/
+> `allowAgents`) DO NOT apply to it (exactly as the `do`/explicit path is not gated by
+> them; slice `explicit-do-prd-not-gated-by-autoslice`). The autonomy POLICY — when CI
+> runs this autonomously over UNTRUSTED-author issues, what is safe to merge vs PR, and
+> author-trust — lives ENTIRELY in the CI PRD (`work/prd/runner-in-ci.md`), NOT here.
+> This PRD is purely the transformation engine + the issue seam + the Q&A loop + the
+> per-outcome integration knobs CI sets.
 
 ## Problem Statement
 
-agent-runner's front-of-funnel was designed as `issue-to-prd` (every issue → a
-committed PRD, then `auto-slice`). But most filed issues — a bug, a small
-improvement, a refactor — do not need a PRD at all; they want **a single slice**.
-There is no capability for that today, and forcing a PRD on every issue is
-ceremony the common case does not warrant.
+agent-runner has no front-of-funnel: work originates from a PRD a human writes
+(`to-prd`) and slices (`to-slices`). But real work often starts as a **GitHub issue**
+filed by anyone — sometimes a crisp small bug, sometimes a fuzzy big feature. There
+is no capability that takes an issue and turns it into the right `work/` artifact,
+clarifying it first when it is not clear enough to act on.
 
-The clean rule the discussion arrived at (a sharp trigger, not a fuzzy heuristic):
+The goal, in one line: **given an issue, transform it into a slice OR a PRD, via a
+question/answer step.** Concretely:
 
-- **One ask that fits in ONE slice → emit one slice, NO PRD.** The common case.
-- **One ask that needs MORE THAN ONE slice → a PRD.** If a single coherent ask
-  cannot be done in one slice (it splits for scope or architectural reasons), then
-  the thing tying those slices together IS a shared vision — and that vision is
-  exactly what a PRD records. So >1 slice ⟺ shared vision ⟺ PRD. The PRD here is
-  not thin: it carries *why it splits, how the pieces relate, and their order* —
-  real content each slice needs.
-- **Multiple UNRELATED slices in one issue → invalid; reply "file separate
-  issues."** If the agent cannot articulate a shared vision for a would-be
-  multi-slice set, the slices are unrelated work wearing one issue — bounce it.
-  (Reserved for genuinely unrelated concerns, NOT a legitimately-coupled pair that
-  is simply small: a coupled-but-light pair still gets a light PRD, not a bounce.)
+- **clear & small → a SLICE** (the common case; one buildable ask, no PRD ceremony);
+- **clear & big → a PRD** (a coherent ask that needs >1 slice ⟺ a shared vision worth
+  recording);
+- **not clear → ASK** a question on the issue thread, and continue the conversation
+  until the issue IS clear, then emit the slice or PRD;
+- **unrelated multi-asks → BOUNCE** ("file separate issues") — work wearing one issue.
 
-This makes **"needs a PRD" decidable by COUNT, not vibe**: can this be one slice?
-If not, it needs a PRD. And it eliminates the only case that would have required a
-new slice-grouping mechanism (multiple unrelated slices per issue) — by policy, not
-machinery.
+This makes "slice vs PRD" decidable by the agent at runtime (can the clarified ask be
+ONE slice? if not, it is a PRD) — and it means the artifact TYPE is not known until
+the agent has read the issue + thread. That runtime decision shapes the command's
+integration-mode surface (see Implementation Decisions → per-outcome modes).
 
 ## Solution
 
-A CI-installed **issue-intake** pipeline (behind the SAME issue seam `issue-to-prd`
-defines: trigger policy, authorization, the unified conversation loop). It conducts
-the clarifying conversation in the issue comments and resolves to ONE of three
-outcomes.
+A standalone command, **`intake <N>`**, behind an **issue seam**, that conducts a
+clarifying conversation in the issue's comments and resolves to ONE of four outcomes:
+ask / slice / PRD / bounce. Runnable locally one-shot; CI invokes the same command.
 
-### The three outcomes
+### The issue seam (CI-independent, provider-pluggable)
 
-1. **Single slice (default, common).** The clarified ask fits one slice → emit one
-   `work/backlog/<slug>.md` (`covers:[]`, no `prd:`, its own source of truth),
-   carrying `Fixes #N` so its merge closes the issue (a lone slice = one PR = clean
-   `Fixes`).
-2. **A PRD (needs >1 slice).** The ask is coherent but cannot be one slice → the
-   conversation continues IN-THREAD until a PRD emerges (this is exactly the
-   `issue-to-prd` conversation). Commit `work/prd/<slug>.md` with `issue: N`, then
-   **STOP** — CI does NOT also emit the slices. Slicing is a separate, gated step
-   (`auto-slice` or a human via `to-slices`); the clean cut at the committed PRD is
-   `issue-to-prd`'s existing contract.
-3. **Bounce (unrelated work).** The agent cannot find a shared vision for a
-   multi-slice set → post a comment asking the user to file separate issues, leave
-   the issue open. (Distinct from #2: #2 is coupled work with a vision; #3 is
-   unrelated work.)
+A provider interface (GitHub adapter via `gh` first); the core never imports `gh`,
+only the adapter shells out — same discipline as the harness/integration seams. The
+methods this capability needs:
 
-### Tracking / loop-closure needs NOTHING new — `prd:` presence is the switch
+- `getIssue`, `listComments` — read the issue + its thread (the conversation context).
+- `postComment` — ask a clarifying question / report the outcome on the thread.
+- label ops `addLabel`/`removeLabel`/`getLabels` — the `processing` LOCK (below).
+- `closeIssue` — used only by the CI loop-closure job (not the one-shot transform).
 
-The discriminator is already in the contract: **a slice with no `prd:` is alone;
-a PRD groups its slices.** So:
+### The Q&A conversation loop (the unified rule)
 
-- **Single-slice outcome** → the slice's PR carries `Fixes #N` → merge closes the
-  issue directly. (Safe: exactly one PR, no fan-out, so `Fixes` is correct here.)
-- **PRD outcome** → reuses `issue-to-prd`'s loop-closure UNCHANGED: PRs use
-  `Refs #N` (never `Fixes #N` — the PRD fans out to N slices = N PRs); the
-  folder-native "PRD complete?" query (all `prd:<slug>` slices in `done/`, ≥1)
-  closes `issue: N` via the seam at the merge that completes the set.
-- **No slice-level `issue:` field is introduced** — there is no vision-less
-  multi-slice case to group (outcome #3 bounces it), so the only multi-slice case
-  is the PRD case, which the existing `prd:` mechanism already tracks.
+Read the issue + whole thread and do **exactly one of**:
+- **ASK** — the spec is not yet clear: `postComment` the next clarifying question and
+  STOP (the human answers on the thread; a later run resumes from the updated thread).
+- **EMIT a SLICE** — clear & fits one slice → a `work/backlog/<slug>.md`
+  (`covers: []`, no `prd:`, its own source of truth; compose `to-slices`' slice shape),
+  carrying `Fixes #N` (a lone slice = one PR = clean close on merge).
+- **EMIT a PRD** — clear & needs >1 slice → a `work/prd/<slug>.md` with `issue: N`
+  (compose `to-prd`'s framing), then STOP (slicing is the separate `do prd:`/`to-slices`
+  step; the clean cut at the committed PRD).
+- **BOUNCE** — would-be multi-slice set with no shared vision → `postComment` "file
+  separate issues", emit nothing, leave the issue open. (Distinct from the PRD case:
+  the PRD case is coupled work WITH a vision; bounce is unrelated work.)
 
-### The slice-emission safety gate (single-slice outcome)
+The loop is the same on a new comment OR an issue-body edit (re-evaluate the whole
+thread; edit-vs-reply changes only the framing of the agent's comment, not the control
+path). Comment-edits (editing a buried prior comment) are IGNORED (not a new turn —
+re-triggering invites loops). A content-derived slug is proposed (never a counter); for
+the PRD outcome `issue: N` lives ONLY on the PRD (slices resolve the issue via
+`slice → prd: → PRD issue:`). The runner owns every commit; the agent only DRAFTS the
+slice/PRD content (the in-band git boundary). The agent surfaces the two gate axes
+(`humanOnly`/`needsAnswers`) on the emitted artifact as it judges.
 
-A slice landing in `work/backlog/` is **immediately claimable** (unlike a PRD,
-which is inert on `main`). So the single-slice outcome lands through a trust gate:
+### The `processing` LOCK (provider-native, not the CAS)
 
-- **DEFAULT: a review-PR**, not a direct `backlog/` write on `main` — a human
-  reviews the slice spec before it becomes claimable.
-- **OPT-IN: direct to `backlog/` (auto-accept) when the AUTHORIZING ACTOR is
-  trusted** — e.g. the repo owner filed the issue, OR a maintainer issued the
-  trigger command. Keyed on the **authorizing actor** (the trigger comment's
-  author, who may differ from the issue opener — so a maintainer can bless a
-  stranger's issue into a direct slice).
-- This **author-trust resolver** generalises today's binary `allowAgents` (inputs:
-  author association × request channel × repo policy). **It is a CI /
-  issue-front-door concern — NOT shared with `review`'s `autoMerge`** (decoupled
-  2026-06-06; see Autonomy notes): `review`'s merge keys on per-repo policy only
-  because the `do`-path author is the operator. Author-trust matters here solely
-  because an *untrusted issue author* can trigger work.
-- (The PRD outcome needs no such gate — a committed PRD is inert; its slicing is
-  separately gated.)
+Two concurrent runs on issue N serialise on a single provider-native LOCK label (e.g.
+`agent-runner:processing`): added on start, removed on finish. NOT a `work/`-file CAS
+(the contended thing is the ISSUE, which lives in a system with its own arbiter; the
+output slug is unknown pre-run). MINIMAL: one concurrency lock label; the OUTCOME is
+tracked by the emitted artifact (a lone slice's `Fixes #N`, a PRD's `issue: N`) — NOT
+a whitesmith-style label STATE-MACHINE (ADR §12 forbids modelling `work/` lifecycle in
+labels; a transient concurrency lock label is not that — it carries no `work/` state).
+A non-label provider degrades to best-effort (the CI per-issue concurrency group is
+then the only serialiser).
 
-### Emission mode: CI emits the artifact (mode a), gated by review-PR
+### Per-outcome integration mode (the knobs; the POLICY is CI's)
 
-CI emits the actual slice file (single-slice outcome) on a branch → review-PR (or
-direct, per trust) — NOT a triage-only comment a human then turns into files. A
-considered alternative ("triage-only": the agent posts a slice OUTLINE as a
-comment, a human runs `to-slices`) was folded out: review-PR already delivers the
-same safety (a human approves before claimable) with less human work, so it is not
-built as a separate mode (recorded here so it is not relitigated).
+Because `intake` decides the artifact TYPE at runtime (slice vs PRD), a single
+`--merge`/`--propose` cannot express a type-conditional policy ("merge a PRD but
+propose a slice"). So `intake` exposes **per-outcome mode flags**, and the produced
+artifact integrates through the existing shared core (`performIntegration`):
+
+- **granular:** `--merge-prd` / `--propose-prd` (mode if the outcome is a PRD);
+  `--merge-slice` / `--propose-slice` (mode if the outcome is a slice).
+- **aggregates (convenience):** `--merge` = `--merge-prd --merge-slice`;
+  `--propose` = `--propose-prd --propose-slice`.
+- **resolution:** GRANULAR OVERRIDES AGGREGATE (most-specific wins) — so
+  `--merge --propose-slice` = "merge a PRD, propose a slice". `--merge-prd
+  --propose-prd` (same type, both modes) is a mutually-exclusive usage ERROR.
+- **default:** unset ⇒ `--propose` for both (conservative, matches `do`).
+- The bounce/ask outcomes have no artifact, so the mode flags are no-ops for them.
+
+`intake` provides the conditional KNOBS; it does NOT decide which to set from config
+(it is gate-free). The CI driver (`runner-in-ci`) COMPUTES which flags to pass from
+the gate state + author-trust (its policy — see that PRD). A local operator just
+passes `--merge`/`--propose`/granular as they wish (default propose).
+
+### Loop closure (CI glue, NOT core; from the merged-in `issue-to-prd`)
+
+- A lone slice's PR carries `Fixes #N` → merge closes the issue directly (one PR).
+- A PRD fans out to N slices = N PRs → those PRs carry `Refs #N` (NOT `Fixes #N`); a
+  read-only **"is this PRD complete?"** query in core (a PRD is complete iff ≥1 slice
+  with `prd: <slug>` exists and ALL are in `work/done/`) drives a merge-to-main CI job
+  that `closeIssue`s `issue: N` at set completion. Provider-portable; no state labels;
+  no issue lifecycle in core (ADR §12). The "PRD complete?" query is a core deliverable
+  of this PRD's slices (it does not exist today); the close JOB is CI glue.
 
 ## User Stories
 
-1. As a user, I want to file an issue describing a bug or small improvement and get
-   **one slice** (no PRD), because most work does not need a design doc.
-2. As the maintainer, I want an issue that genuinely needs MORE THAN ONE slice to
-   produce a **PRD** (via the in-thread conversation), because >1 slice means there
-   is a shared vision worth recording — and CI then STOPS at the committed PRD.
-3. As the maintainer, I want an issue whose would-be slices are UNRELATED to be
-   bounced with a "file separate issues" comment, so unrelated work is not smuggled
-   under one issue.
-4. As the maintainer, I want a single-slice outcome to land as a **review-PR by
-   default**, NOT directly claimable, so a bad slice can never be auto-built before
-   a human reviews the spec.
-5. As the maintainer, I want **auto-accept (direct to backlog)** when the
-   authorizing actor is trusted (owner-filed issue, or a maintainer command), keyed
-   on the authorizing actor, so my own crisp issues do not need a PR round-trip.
-6. As the maintainer, I want issue closure to need NO new mechanism: a lone slice
-   closes via `Fixes #N`; a PRD closes via the existing folder-native "all slices
-   done" query — distinguished by whether the slice has a `prd:`.
-7. As the maintainer, I want the trust resolver to be the SAME one `review`'s PR
-   auto-merge uses, so trust is defined once.
+1. As a user, I want to file an issue (a bug, a small improvement, or a big feature)
+   and have `intake <N>` turn it into the right `work/` artifact, so that I do not
+   hand-write a spec.
+2. As a maintainer, I want `intake` to ASK clarifying questions on the issue thread
+   when the issue is not clear, and continue until it is, so that a fuzzy issue becomes
+   a clean artifact through conversation rather than a guess.
+3. As a maintainer, I want a clear & small ask to become ONE slice (no PRD) and a
+   clear & big ask (needs >1 slice) to become a PRD, decided by the agent at runtime,
+   so that the artifact matches the work's size.
+4. As a maintainer, I want an issue whose would-be slices are UNRELATED to be bounced
+   with a "file separate issues" comment, so unrelated work is not smuggled under one
+   issue.
+5. As a maintainer, I want `intake` to run LOCALLY one-shot AND be the SAME command CI
+   invokes (CI only schedules it), so the transformation is built once and I can test
+   it from my machine with no CI.
+6. As a maintainer, I want `intake` to be GATE-FREE (my explicit invocation is the
+   authorization, like `do`), so the per-repo `autoSlice`/`autoBuild` config does not
+   block an explicit run.
+7. As a maintainer, I want the conversation to commit a content-derived-slug artifact
+   with the issue link (`Fixes #N` on a lone slice; `issue: N` on a PRD), so it hands
+   cleanly to the existing slice/build engine and to loop-closure.
+8. As a maintainer, I want PER-OUTCOME integration modes (`--merge-prd`/`--propose-slice`
+   etc., aggregates `--merge`/`--propose`, granular-overrides-aggregate, default
+   propose), so CI can apply a type-conditional merge-vs-propose policy (e.g. merge a
+   PRD but propose a slice) over a command whose output type is decided at runtime.
+9. As a maintainer, I want two concurrent runs on one issue to serialise on a
+   provider-native `processing` LOCK label (+ CI concurrency group), not a `work/` CAS,
+   so concurrency is handled where the issue lives.
+10. As a maintainer, I want the issue auto-closed correctly — a lone slice via
+    `Fixes #N`; a PRD via `Refs #N` + the folder-native "PRD complete?" query — by CI
+    glue and the seam, never by per-PR `Fixes` on a fan-out and never by labels/issue
+    lifecycle in core (ADR §12).
+11. As a maintainer, I want the issue seam provider-pluggable (GitHub via `gh` first),
+    the core never importing `gh`, so other providers can follow and CI reuses the seam.
 
 ## Implementation Decisions
 
-(From the 2026-06-06 discussion — do not relitigate.)
+(From the 2026-06-06 + 2026-06-09 discussions — do not relitigate.)
 
-- **Slices-first; PRD only when >1 slice is needed.** Sharp trigger by COUNT: one
-  ask that fits one slice → slice (no PRD); needs splitting → PRD.
-- **>1 slice ⟺ shared vision ⟺ PRD** (not a thin grouping stub; the PRD carries why
-  it splits + how the pieces relate + order).
-- **Multiple UNRELATED slices → bounce** ("file separate issues"). Reserved for
-  unrelated concerns; a coupled-but-light pair gets a light PRD, not a bounce.
-- **PRD outcome = `issue-to-prd`'s in-thread conversation; CI STOPS at the
-  committed PRD** (the existing clean cut). CI does not also emit the slices.
-- **No slice-level `issue:` field.** The only multi-slice case is the PRD case
-  (the vision-less multi case is bounced), so `prd:` presence is the tracking
-  discriminator; nothing new is added to the contract.
-- **Closure:** lone slice → `Fixes #N`; PRD → `Refs #N` + the existing
-  "PRD complete?" query closes `issue: N`. Provider-portable, no STATE/closure
-  labels (ADR §12 — the `work/`-lifecycle status is folder-native, never an issue
-  label). NOTE the RESHAPE distinction: a single `processing`-style LOCK label
-  (concurrency only, added on start / removed on finish) is NOT a status/lifecycle
-  label — it carries no `work/` state, it is the provider-native mutex for two runs
-  on the same issue. ADR §12 forbids an issue-label STATE MACHINE for work lifecycle;
-  it does not forbid a transient concurrency lock label.
-- **Single-slice safety gate:** review-PR by default; direct-to-backlog auto-accept
-  when the AUTHORIZING ACTOR is trusted. Trust resolver generalises `allowAgents`;
-  it is a CI / issue-front-door concern, **NOT shared with `review`'s `autoMerge`**
-  (decoupled 2026-06-06).
-- **Emission mode (a)** (CI emits the file, review-PR gated); triage-only folded
-  out (review-PR subsumes it).
-- **Reuse the `issue-to-prd` seam + trigger/auth/conversation machinery.** Core
-  never imports `gh`; only the adapter shells out.
+- **One command, two callers.** `intake <N>` is standalone (local one-shot) AND what
+  CI schedules (same binary; CI adds the trigger + per-issue concurrency group).
+- **Its own command, NOT a `do` namespace** — no review gate; provider-native label
+  lock; questions to the issue thread. Gate-free (explicit invocation = authorization).
+- **Four outcomes** via one advance/ask loop: ASK (postComment, stop) / SLICE
+  (`backlog/`, `Fixes #N`) / PRD (`prd/`, `issue: N`, stop) / BOUNCE (comment, emit
+  nothing). Slices-first sizing: one slice if it fits, else a PRD; >1 slice ⟺ shared
+  vision ⟺ PRD; unrelated ⟺ bounce.
+- **Issue seam, GitHub adapter first** (`getIssue`/`listComments`/`postComment`/label
+  ops/`closeIssue`; event classification). Core never imports `gh`.
+- **`processing` LOCK label** (concurrency mutex, not the CAS; minimal, not a state
+  machine). Non-label provider → best-effort (CI concurrency group serialises).
+- **Per-outcome integration modes** (`--merge-prd`/`--propose-prd`/`--merge-slice`/
+  `--propose-slice` + `--merge`/`--propose` aggregates; granular-overrides-aggregate;
+  same-type both-modes = error; default propose). Output rides `performIntegration`.
+  `intake` owns the KNOBS; CI owns the POLICY of which to set (`runner-in-ci`).
+- **Slug content-derived (never a counter); `issue: N` on the PRD only** (slices via
+  `prd:`); lone slice carries `Fixes #N`. Runner commits; agent drafts only.
+- **Loop closure = option (iii):** lone slice `Fixes #N`; PRD `Refs #N` + the
+  read-only core "PRD complete?" query + a merge-to-main CI close job. No state labels;
+  no lifecycle in core.
+- **Gate axes surfaced on the emitted artifact** (`humanOnly`/`needsAnswers`) for the
+  downstream slicer/builder to consume — `intake` itself stays gate-free.
 
 ## Testing Decisions
 
-- **Stub the issue seam + the agent verdict** (no network, no real GitHub/model).
-  Test the OUTCOME BRANCH as pure logic: a "single-slice" verdict emits one
-  backlog slice (no `prd:`); a "needs-PRD" verdict commits a PRD (`issue: N`) and
-  STOPS (emits no slices); an "unrelated" verdict posts the split-issues comment and
-  emits nothing.
-- Test the **safety gate**: a single-slice outcome by an UNTRUSTED actor lands as a
-  review-PR (not a direct `backlog/` write); a TRUSTED authorizing actor
-  (owner-filed / maintainer command) with auto-accept on lands directly in
-  `backlog/`. The runner does the git; the agent drafts only.
-- Test the **author-trust resolver** in isolation (author association × request
-  channel × repo policy → review-PR vs direct) and that `review` consumes the SAME
-  resolver for `autoMerge` (no duplicated trust logic).
-- Test **closure**: a lone slice's PR carries `Fixes #N`; a PRD's PRs carry
-  `Refs #N` and the existing "PRD complete?" query closes `issue: N` at set
-  completion. Clean degradation on a non-GitHub arbiter (no close, no breakage).
+- **Stub the issue seam + the agent verdict** (no network, no real GitHub/model). Test
+  the OUTCOME BRANCH as pure logic: an "ask" verdict posts a comment + emits nothing;
+  a "single-slice" verdict emits one `backlog/` slice (no `prd:`, `Fixes #N`); a
+  "needs-PRD" verdict commits a PRD (`issue: N`) + STOPS (no slices); an "unrelated"
+  verdict posts the split-issues comment + emits nothing.
+- Test **per-outcome mode resolution** as pure logic: `--merge-prd --propose-slice`
+  routes each outcome to the right mode; aggregates expand; granular overrides
+  aggregate; same-type both-modes errors; unset ⇒ propose. The agent does the git via
+  `performIntegration`; the agent drafts only.
+- Test the **`processing` lock**: a second run while the label is present backs off;
+  the label is added on start and removed on finish; non-label provider degrades.
+- Test the **"PRD complete?" query** against fixture `work/` trees: complete iff ≥1
+  slice and all `prd:<slug>` slices are in `done/`; the close-glue calls `closeIssue`
+  exactly once at completion. Assert lone-slice PRs carry `Fixes #N`; PRD PRs carry
+  `Refs #N`. Clean degradation on a non-GitHub arbiter.
+- **Event-classification** (new-comment / issue-body-edited advance-or-ask;
+  comment-edits ignored) as pure logic.
 
 ## Autonomy notes (the gate axes)
 
-- **`humanOnly: true` (PRD-level, DECIDED):** reads untrusted issues, posts under
-  the project's identity, and can make work CLAIMABLE — plus it defines an
-  author-trust auto-accept policy. Security-sensitive front-door a human must drive
-  the slicing of. Per-slice: the pure outcome-branch + author-trust resolver +
-  "emit via seam" wiring is agent-buildable; the auth/seam adapter and the
-  auto-accept policy lean `humanOnly`.
-- **`needsAnswers`: true — ONE open question (raised 2026-06-06, batch-qa).** The
-  earlier decide/execute-shape question (one agent vs two-step) dissolved (see
-  below). What remains OPEN is the **author-trust resolver's shape + ownership**
-  (it ties to `review` Q4, also open):
-  - **OPEN — author-trust resolver (a CI / issue-front-door concern, now
-    DECOUPLED from `review`).** Maintainer steer (2026-06-06): the trust is
-    fundamentally about the **issue author**, BUT issue-intake must also be
-    processable when a **repo owner / maintainer issues a `/command` in an issue
-    comment** — i.e. the authorizing actor (the trigger-comment author) can differ
-    from and override the issue opener. So the resolver's inputs are at least
-    *(issue-author association) × (trigger-comment author association) × (request
-    channel: command vs every-issue) × (repo policy)*. STILL TO DECIDE: the exact
-    resolver signature, and where it lives in the issue-front-door wiring.
-    **DECOUPLING (2026-06-06, batch-qa round 2):** the earlier "SAME primitive as
-    `review`'s `autoMerge`, define once, consumed by both" is **WITHDRAWN**.
-    Author-trust matters ONLY because an *untrusted issue author* can trigger work
-    — it is purely a CI / issue-front-door concern. `review`'s `autoMerge` keys on
-    per-repo policy only (on the `do` path the author IS the operator who ran the
-    command — no untrusted author to gate). So this resolver is OWNED HERE
-    (issue-intake / CI), is NOT shared with the `do`/review gate, and does not
-    block `review` from slicing. It remains genuinely open *for this PRD* — but as
-    an issue-front-door question, settled when this PRD (or `runner-in-ci`) is
-    sliced, NOT as a cross-PRD shared primitive.
-  - *(Resolved/closed:)* the decide/execute-shape question — with slices-first + a
-    sharp count-based PRD trigger + CI stopping at the PRD, the conversation agent
-    resolves to one of three outcomes and the runner branches on the verdict (the
-    same shape `issue-to-prd` already uses).
+- **`humanOnly: true` (PRD-level, DECIDED):** it reads (possibly untrusted) issues,
+  posts under the project identity, and can make work CLAIMABLE. Security-sensitive
+  enough that a human should drive the SLICING of this PRD. Per-slice (WORK-CONTRACT
+  §3b): the pure outcome-branch + the mode-resolution + the "PRD complete?" query +
+  event-classification are agent-buildable; the issue-seam ADAPTER (shells out under
+  repo identity) leans `humanOnly`.
+- **`needsAnswers`: NONE open (cleared 2026-06-09).** The earlier open question
+  (author-trust resolver shape) is no longer THIS PRD's concern — author-trust + the
+  merge-vs-propose POLICY moved to `runner-in-ci` (the CI driver), because `intake` is
+  gate-free (explicit invocation = authorization). The transformation engine, the
+  seam, the four outcomes, the lock, the per-outcome mode KNOBS, slug/`issue:` linkage,
+  and loop-closure are all decided. (The PRD stays `humanOnly` for the seam-adapter
+  judgement, but has no open answers blocking the engine slices.)
 
-### Slice-readiness notes (RESHAPED 2026-06-09 — supersede the 2026-06-06 ordering)
+### Slice-readiness notes
 
-- **Slice ORDER (post-reshape): `sliceAfter: [auto-slice, issue-to-prd]`.** Both are
-  already sliced (`auto-slice` in `prd-sliced/`; `issue-to-prd` to be sliced with this
-  reshape — see below), so this PRD is slice-ELIGIBLE without waiting on
-  `runner-in-ci`. The COMMAND/ENGINE slices (issue seam incl. the `processing` lock
-  label + `postComment`, the transformation/outcome-branch, the verb, output through
-  `performIntegration`) are buildable now.
-- **Only the CI-DELIVERY slices wait on `runner-in-ci`** — expressed per-slice via
-  `blockedBy` (the trigger policy, the author-trust resolver, `install-ci` + the
-  label-driven schedule). Do NOT hold the whole PRD behind `runner-in-ci`.
-- **The open `needsAnswers` (author-trust resolver) blocks ONLY the CI-layer slices,
-  not the command/engine.** A LOCAL run's operator is trusted (they ran the command),
-  so the command just routes output through `performIntegration` (`--propose`/`--merge`)
-  like any `do` — no author-trust resolution needed. So the slicer marks the specific
-  CI author-trust slice `needsAnswers`, not the engine slices (and may clear the
-  PRD-level `needsAnswers`, pushing it down to that one slice).
+- **`sliceAfter: [auto-slice]` only** (already sliced) ⇒ slice-ELIGIBLE NOW. The
+  COMMAND/ENGINE slices (issue seam incl. label-ops + `postComment`, the four-outcome
+  Q&A loop, the verb, per-outcome modes through `performIntegration`, the "PRD
+  complete?" query) are buildable now and need no `runner-in-ci`.
+- **Only the CI-DELIVERY pieces sequence behind `runner-in-ci`** — the trigger policy,
+  author-trust, the merge-vs-propose POLICY, `install-ci` + the label-driven schedule,
+  the merge-to-main close JOB — expressed per-slice via `blockedBy` at slice time, NOT
+  a PRD-level wait. (Those policy/auth slices live conceptually with `runner-in-ci`;
+  decide at slice time whether they are emitted here `blockedBy` runner-in-ci slugs, or
+  authored as part of `runner-in-ci`.)
+- **The "PRD complete?" query is a core deliverable of this PRD's slices** (verified
+  2026-06-06: no PRD-complete predicate in `packages/agent-runner/src` — re-check
+  `work/done/` at slice time). Pure read-only `work/`-folder logic; agent-buildable.
 
 ## Out of Scope
 
-- The PR/code review gate + its auto-merge (that is `review`; this PRD SHARES the
-  author-trust primitive but specs the issue front-door, not the review gate).
-- Runner-in-CI packaging / `install-ci` (that is `runner-in-ci`).
-- The slicer itself (`auto-slice`); the PRD outcome hands off to it (CI stops at
-  the committed PRD).
-- Emitting the slices in CI for the PRD outcome (CI stops at the PRD — slicing is a
-  separate gated step).
-- A slice-level `issue:` grouping field (not needed — no vision-less multi-slice
-  case to group; outcome #3 bounces it).
-- Non-GitHub issue providers (GitHub adapter first; the seam allows others later).
-- Any issue-label STATE-MACHINE / issue lifecycle in core (ADR §12). (A single
-  transient `processing` LOCK label — concurrency mutex only, no `work/` state — is
-  NOT a state-machine and IS in scope per the RESHAPE; the forbidden thing is
-  modelling work lifecycle in labels.)
+- **The autonomy POLICY (merge-vs-propose derivation, author-trust, fully-gateless
+  guardrail) — `runner-in-ci`'s**, not here. `intake` is gate-free and only exposes the
+  per-outcome mode KNOBS CI sets.
+- **Trigger policy + authorization** (`command`/`every-issue`, maintainer/anyone) —
+  `runner-in-ci` (the CI scheduler). The one-shot is operator-invoked.
+- **Auth / secrets / `install-ci` / the GitHub Actions workflow + the label-driven
+  schedule** — `runner-in-ci`.
+- **Auto-slicing the emitted PRD / building the emitted slice** — the existing
+  `do prd:` / `do <slice>` engine, triggered separately.
+- **A slice-level `issue:` grouping field** — not needed (the only multi-slice case is
+  the PRD case, which `prd:` already tracks; unrelated multi is bounced).
+- **Any issue-label STATE-MACHINE / issue lifecycle in core (ADR §12)** — only the
+  single transient `processing` concurrency LOCK label is in scope (not a state
+  machine; carries no `work/` state).
+- **Non-GitHub issue providers** — GitHub adapter first; the seam allows others later.
 
 ## Further Notes
 
-- `issue-to-prd` (`work/prd/issue-to-prd.md`) is NOT dropped: it IS the in-thread
-  PRD conversation outcome #2 routes to (and the source for the issue seam shape,
-  trigger/authorization policy, the unified conversation rule, and the PRD
-  loop-closure `Refs #N` + "PRD complete?" query). This PRD adds the slices-first
-  default + the single-slice safety gate + the bounce; `issue-to-prd` provides the
-  PRD path. `sliceAfter` it so this PRD's slices can reference its slugs.
-- whitesmith (`~/dev/github/wighawag/whitesmith`) is the reference for the issue
-  provider/seam, author-association checks, and the slash-command/event workflow.
-  Do NOT reuse its label state-machine or 1-PR-per-issue model.
-- The author-trust resolver is a CI / issue-front-door concern, **NOT shared with
-  `review`'s `autoMerge`** (decoupled 2026-06-06). `review`'s merge gate keys on
-  per-repo policy only — the `do`-path author is the operator who ran the command,
-  so there is no untrusted author to resolve. Author-trust matters only where an
-  untrusted *issue author* can trigger work; it is owned here.
+- **Supersedes + absorbs `work/prd/issue-to-prd.md`** (deleted 2026-06-09): the PRD
+  conversation, the issue seam, slug + `issue: N` linkage, the unified
+  advance/ask rule, and option-(iii) loop-closure all came from there and live here as
+  the PRD branch of the one command.
+- **Reuse, don't reinvent:** `to-slices`/`to-prd` for the slice/PRD shapes;
+  `performIntegration` (`src/integration-core.ts`) for the output (the per-outcome mode
+  resolves into it); the slug-namespace resolver pattern for the `intake` verb wiring.
+  The genuinely-new pieces: the issue SEAM (read + postComment + label-ops), the
+  four-outcome transformation, the per-outcome mode resolution, and the "PRD complete?"
+  query.
+- **whitesmith** (`~/dev/github/wighawag/whitesmith`) is the reference for the issue
+  provider/seam, author-association checks, the slash-command/event workflow, and the
+  PROVEN label-as-state pattern (it uses `whitesmith:*` labels + per-issue CI
+  concurrency). Reuse the SEAM + the concurrency pattern; do NOT reuse its label
+  STATE-MACHINE or its 1-PR-per-issue model (agent-runner is 1-PR-per-slice with
+  folder-native closure + a single transient lock label).
+- **CI is just one caller:** `runner-in-ci` schedules `intake` (label-driven trigger +
+  concurrency group) and computes the per-outcome modes from its policy. No second
+  transformation engine.
