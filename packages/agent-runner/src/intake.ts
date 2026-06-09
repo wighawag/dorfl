@@ -17,6 +17,7 @@ import {
 	type IssueComment,
 	type IssueProvider,
 } from './issue-provider.js';
+import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
  * **`intake <N>`** (PRD `issue-intake`, slice `intake-tracer-slice-outcome`): the
@@ -983,9 +984,13 @@ async function runDecision(
 	if (options.decide) {
 		return options.decide({cwd, issue, comments, prompt, env: options.env});
 	}
-	// Production: launch the harness with the decision brief. The agent emits the
-	// verdict; we parse it. (Wiring the harness-backed decider's full parse is the
-	// next slice's prompt asset; this thin path keeps the production wiring honest.)
+	// PRODUCTION: launch the harness with the decision brief, then PARSE the verdict
+	// the agent emitted out of its ANSWER channel (`launched.output`) — the SAME wire
+	// the review gate runs (launch → `parseReviewVerdict(readOutput(launched.output))`;
+	// `harnessReviewGate`). The agent emits a single fenced ```json block (the OUTPUT
+	// CONTRACT {@link buildIntakeDecisionBrief} appends); {@link parseIntakeVerdict}
+	// extracts + validates it. The model's JUDGEMENT is not unit-tested — only the
+	// parse + dispatch — exactly as the review prompt's judgement is not.
 	const harness = options.harness ?? new NullHarness();
 	const launched = await launchWithOptionalWatch({
 		harness,
@@ -1001,15 +1006,99 @@ async function runDecision(
 	if (!launched.ok) {
 		throw new Error(launched.detail ?? 'the intake decision agent failed.');
 	}
-	// The harness-backed verdict PARSE (a structured block the agent emits) is the
-	// next slice's job (the full prompt asset). Until then the production path has
-	// no way to recover a verdict from a bare launch, so it is a usage error — the
-	// TESTED path injects `decide` (the dispatcher seam this slice proves).
-	throw new Error(
-		'the production intake decision parse is not wired yet (see ' +
-			'intake-decision-prompt-and-four-outcome-dispatch); inject `decide` to ' +
-			'drive the dispatcher.',
-	);
+	// Read the verdict from the agent's ANSWER channel (`output`), NOT `detail` (the
+	// failure channel, empty on success) — the SAME `output ?? ''` normalisation the
+	// review gate's `readOutput` default applies. A malformed/absent verdict throws,
+	// which `decideAndDispatch`'s try/catch already maps onto `agent-failed` (exit 1).
+	return parseIntakeVerdict(launched.output ?? '');
+}
+
+/**
+ * Parse the decision agent's emitted VERDICT out of its (possibly prose-wrapped /
+ * fenced) textual output into an {@link IntakeVerdict} — the PRODUCTION wire
+ * between the launched agent and the already-built dispatcher, modeled 1:1 on the
+ * review gate's `parseReviewVerdict` twin (`review-gate.ts`). It pulls the first
+ * JSON object carrying an `"outcome"` field via the SHARED
+ * {@link extractJsonObjectSpan} (NOT a forked second "first JSON object in agent
+ * prose" extractor — the review gates anchor on `"verdict"`, intake on
+ * `"outcome"`; same need, one implementation — coherence), `JSON.parse`s it, and
+ * validates the shape: `outcome ∈ {ask,slice,prd,bounce}`.
+ *
+ * The per-outcome fields map 1:1 onto {@link IntakeVerdict} (`slice` →
+ * sliceSlug?/sliceTitle/sliceBody, `prd` →
+ * prdSlug?/prdTitle/prdBody/prdHumanOnly?/prdNeedsAnswers?, `ask` → question,
+ * `bounce` → bounceMessage). Missing OPTIONALS are tolerated — the dispatcher
+ * already has fallbacks (slug-from-title, the thin comment/scaffold defaults).
+ *
+ * THROWS a clear error on: no JSON object present, invalid JSON, or an `outcome`
+ * not in the set. The caller (`decideAndDispatch`) maps any throw onto the
+ * `agent-failed` outcome (exit 1) — a malformed verdict degrades honestly, never
+ * a crash and never a silent dispatch.
+ */
+export function parseIntakeVerdict(output: string): IntakeVerdict {
+	const span = extractJsonObjectSpan(output, 'outcome');
+	if (span === undefined) {
+		throw new Error(
+			'intake decision agent produced no parseable {outcome, …} verdict.',
+		);
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(output.slice(span.start, span.end));
+	} catch (err) {
+		throw new Error(
+			`intake verdict was not valid JSON: ${(err as Error).message}`,
+		);
+	}
+	if (typeof parsed !== 'object' || parsed === null) {
+		throw new Error('intake verdict was not an object.');
+	}
+	const obj = parsed as Record<string, unknown>;
+	const outcome = obj.outcome;
+	if (
+		outcome !== 'ask' &&
+		outcome !== 'slice' &&
+		outcome !== 'prd' &&
+		outcome !== 'bounce'
+	) {
+		throw new Error(
+			`intake verdict 'outcome' was not one of ask|slice|prd|bounce (got ` +
+				`${JSON.stringify(outcome)}).`,
+		);
+	}
+	// Map the per-outcome fields onto the verdict shape, keeping ONLY the strings/
+	// booleans the dispatcher consumes (a missing optional stays absent — the
+	// dispatcher's fallbacks cover it). Every field is optional on the type, so the
+	// `slice`/`prd` content + the `ask`/`bounce` text are carried verbatim when present.
+	const str = (v: unknown): string | undefined =>
+		typeof v === 'string' ? v : undefined;
+	const bool = (v: unknown): boolean | undefined =>
+		typeof v === 'boolean' ? v : undefined;
+	return {
+		outcome,
+		...(str(obj.sliceSlug) !== undefined
+			? {sliceSlug: str(obj.sliceSlug)}
+			: {}),
+		...(str(obj.sliceTitle) !== undefined
+			? {sliceTitle: str(obj.sliceTitle)}
+			: {}),
+		...(str(obj.sliceBody) !== undefined
+			? {sliceBody: str(obj.sliceBody)}
+			: {}),
+		...(str(obj.question) !== undefined ? {question: str(obj.question)} : {}),
+		...(str(obj.prdSlug) !== undefined ? {prdSlug: str(obj.prdSlug)} : {}),
+		...(str(obj.prdTitle) !== undefined ? {prdTitle: str(obj.prdTitle)} : {}),
+		...(str(obj.prdBody) !== undefined ? {prdBody: str(obj.prdBody)} : {}),
+		...(bool(obj.prdHumanOnly) !== undefined
+			? {prdHumanOnly: bool(obj.prdHumanOnly)}
+			: {}),
+		...(bool(obj.prdNeedsAnswers) !== undefined
+			? {prdNeedsAnswers: bool(obj.prdNeedsAnswers)}
+			: {}),
+		...(str(obj.bounceMessage) !== undefined
+			? {bounceMessage: str(obj.bounceMessage)}
+			: {}),
+	};
 }
 
 /**
@@ -1105,5 +1194,32 @@ export function buildIntakeDecisionBrief(
 		'runner owns every git/seam side-effect (write, integrate, postComment). For a PRD',
 		'verdict, also judge its gate axes (humanOnly / needsAnswers) so the runner can',
 		'surface them on the emitted PRD.',
+		'',
+		'## Output — hand the verdict back as ONE fenced JSON block',
+		'',
+		'Emit your verdict as a SINGLE fenced ```json block (and nothing else that looks',
+		'like JSON). Its keys map 1:1 onto the verdict the runner dispatches on — always an',
+		'`"outcome"` plus ONLY the fields for that outcome:',
+		'',
+		'```json',
+		'{"outcome": "slice", "sliceSlug": "<content-derived-slug>", "sliceTitle": "<title>", "sliceBody": "<the markdown AFTER the frontmatter>"}',
+		'```',
+		'',
+		'- **slice** → `sliceTitle` + `sliceBody` (the `## What to build` / `## Acceptance',
+		'  criteria` / `## Prompt` markdown — NOT the frontmatter; the runner writes the',
+		'  frontmatter + the `Fixes #N` line) and an optional `sliceSlug` (the runner',
+		'  derives one from the title if you omit it — never a counter).',
+		'- **prd** → `prdTitle` + `prdBody` (the `## Problem Statement` / `## Solution` / …',
+		'  markdown AFTER the frontmatter; the runner writes the frontmatter + `issue: N`),',
+		'  an optional `prdSlug`, and the gate axes `prdHumanOnly` / `prdNeedsAnswers`',
+		'  (booleans — set `true` when a human should drive the SLICING and/or open',
+		'  questions remain; omit otherwise).',
+		'- **ask** → `question` (the single next clarifying question).',
+		'- **bounce** → `bounceMessage` (the “file separate issues” message).',
+		'',
+		'`outcome` MUST be exactly one of `ask` | `slice` | `prd` | `bounce`. Strings are',
+		'plain text inside the JSON (escape newlines as \\n). Do not wrap the JSON in any',
+		'other structure — the runner pulls the first `{"outcome": …}` object out and',
+		'dispatches on it.',
 	].join('\n');
 }
