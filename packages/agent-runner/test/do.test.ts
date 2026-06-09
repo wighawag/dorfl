@@ -510,6 +510,70 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 	});
 });
 
+describe('do <slug> — failure-CAUSE classification (transient-infra / config-error / generic)', () => {
+	it('a harness-surfaced model/connection outage (post-retry) → transient-infra, NOT generic agent-failed', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			// The harness already exhausted its own retries; what it SURFACES is a
+			// connection/model outage (NOT the agent producing bad output).
+			agentRunner: () => ({
+				ok: false,
+				detail:
+					'connection error: ECONNREFUSED to the model endpoint after retries',
+			}),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('transient-infra');
+		expect(result.outcome).not.toBe('agent-failed');
+		expect(result.routedToNeedsAttention).toBe(true);
+		// The cause is legible on the route reason.
+		expect(result.message).toMatch(/transient[\s-]?infra/i);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+	});
+
+	it('an agent that ran but produced bad/empty output stays the generic agent-failed (conservative default)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			agentRunner: () => ({ok: false, detail: 'the agent produced garbage'}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.outcome).not.toBe('transient-infra');
+		expect(result.outcome).not.toBe('config-error');
+	});
+
+	it('a thrown CORE wiring/config error (review on, no reviewGate) → config-error (NOT usage-error)', async () => {
+		// `review` on with NO `reviewGate` wired makes `performIntegration` throw a
+		// wiring error; `performComplete` swallows it into `usage-error`, which `do`
+		// now RECLASSIFIES onto `config-error` (the FAILURE-CAUSE axis) — so a wiring
+		// bug is not mistaken for an environment/usage problem.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			verify: PASS,
+			review: true, // but no reviewGate ⇒ the core throws the wiring error
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('config-error');
+		expect(result.outcome).not.toBe('usage-error');
+		expect(result.outcome).not.toBe('agent-failed');
+		expect(result.message).toMatch(/wiring bug|review gate/i);
+	});
+});
+
 describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push the work branch)', () => {
 	/** A stubbed agent that EDITS a file (partial work) then succeeds — so the run
 	 * reaches the GATE, which is red (the work is committed as the wip, then the

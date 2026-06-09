@@ -578,6 +578,74 @@ describe('runOnce — agent failure', () => {
 	});
 });
 
+describe('runOnce — failure-CAUSE classification (transient-infra / config-error / generic)', () => {
+	it('a harness-surfaced model/connection outage (post-retry) → transient-infra, NOT generic agent-failed', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor(scratch.root);
+		const transientAgent: AgentRunner = ({cwd}) => {
+			writeFileSync(join(cwd, 'partial.txt'), 'half-built\n');
+			// What the harness SURFACES once its own retries are exhausted.
+			return {
+				ok: false,
+				detail:
+					'connection error: ETIMEDOUT to the model endpoint after retries',
+			};
+		};
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: transientAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('transient-infra');
+		expect(result.items[0].status).not.toBe('agent-failed');
+		// Still routed + surfaced (the work-preserving seam is unchanged — only the
+		// label is more precise).
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+	});
+
+	it('an agent that ran but produced bad output stays the generic agent-failed (conservative default)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor(scratch.root);
+		const badAgent: AgentRunner = ({cwd}) => {
+			writeFileSync(join(cwd, 'partial.txt'), 'half-built\n');
+			return {ok: false, detail: 'the agent produced garbage'};
+		};
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: badAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('agent-failed');
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+	});
+
+	it('a thrown CORE wiring/config error (review on, no reviewGate) → config-error (NOT agent-failed)', async () => {
+		// review on but reviewGate UNSET ⇒ the core throws the wiring error;
+		// `runOneItem`'s catch now classifies it as `config-error` — the SAME label
+		// `do` records for the SAME error (the cross-path convergence).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor(scratch.root, {review: true});
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('config-error');
+		expect(result.items[0].status).not.toBe('agent-failed');
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+	});
+});
+
 describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gate (agent-stop-signal)', () => {
 	it('a sentinel STOP → agent-stopped, surfaced on main, NO gate (mirrors do)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
