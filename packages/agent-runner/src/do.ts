@@ -35,6 +35,11 @@ import {
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
 } from './agent-stop.js';
+import {
+	classifyFailureCause,
+	failureCauseLabel,
+	type FailureCause,
+} from './failure-cause.js';
 
 /**
  * `agent-runner do <slug>` (in-place form) — the per-repo, in-place WORKER that
@@ -92,7 +97,9 @@ export type DoOutcome =
 	| 'lost' // claim lost the race — skipped cleanly
 	| 'contended' // claim push kept being rejected
 	| 'needs-attention' // red gate / rebase conflict / review-block → surfaced (autonomous)
-	| 'agent-failed' // the agent invocation itself errored before the gate — work SAVED + surfaced
+	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown — work SAVED + surfaced
+	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
+	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the slice (FAILURE-CAUSE axis)
 	| 'agent-stopped' // the agent DELIBERATELY stopped (slice drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
@@ -770,7 +777,25 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			message: completed.message,
 		};
 	}
-	// refused (nothing to commit, wrong folder) / usage-error: surface verbatim.
+	// refused (nothing to commit, wrong folder) / usage-error: surface verbatim —
+	// BUT first reclassify a thrown CORE wiring/config error (which `performComplete`
+	// swallows into `usage-error`) onto the SAME `config-error` cause `run` records,
+	// closing the cross-path divergence (`do`: usage-error vs `run`: agent-failed for
+	// the identical thrown core error). Best-effort: a non-config usage-error stays
+	// `usage-error` (the conservative default — the classifier only re-labels what it
+	// recognises).
+	if (completed.outcome === 'usage-error') {
+		const cause = classifyFailureCause(completed.message);
+		if (cause === 'config-error') {
+			return {
+				exitCode: 1,
+				outcome: 'config-error',
+				slug,
+				branch,
+				message: completed.message,
+			};
+		}
+	}
 	const outcome: DoOutcome =
 		completed.outcome === 'refused' ? 'refused' : 'usage-error';
 	return {exitCode: 1, outcome, slug, branch, message: completed.message};
@@ -867,10 +892,12 @@ function routeReport(
  * skips the wip commit when the tree is clean, and the move-only commit (reason +
  * the `git mv`) is always non-empty, so the failure reason is still surfaced.
  *
- * The OUTCOME stays `agent-failed` (distinct from a clean success and from a red
- * `gate-failed`/`needs-attention` for reporting / exit-code purposes — `do`'s
- * exit contract stays coherent); only the WORK-PRESERVING side-effect now matches
- * the gate-failure path. We do NOT validate or "fix" the partial work — a broken
+ * The OUTCOME is the classified failure CAUSE (the FAILURE-CAUSE axis): the
+ * genuinely-new `transient-infra` / `config-error` where the surfaced detail makes
+ * the cause knowable, else the conservative generic `agent-failed` (still distinct
+ * from a clean success and from a red `gate-failed`/`needs-attention` — `do`'s exit
+ * contract stays coherent). Only the WORK-PRESERVING side-effect (unchanged here)
+ * matches the gate-failure path. We do NOT validate or "fix" the partial work — a broken
  * tree committed + surfaced (with the reason) is recoverable; the human chooses
  * `requeue` (continue) vs `requeue --reset` (discard).
  */
@@ -888,7 +915,13 @@ async function saveAgentFailure(params: {
 	// to it before the agent ran); derive it from the slug so the push target is
 	// always defined even when the caller's `branch` was not narrowed.
 	const branch = params.branch ?? `work/${slug}`;
-	const reason = `agent failed: ${detail}`;
+	// Classify the failure CAUSE (best-effort + conservative) from the surfaced
+	// detail — the SAME `classifyFailureCause` `run` uses, so `do`/`run` agree on the
+	// same error. The cause LABEL prefixes the recorded reason so the cause is legible
+	// on the needs-attention route without a second naming scheme; `agent-failed`
+	// keeps the historical "agent failed:" prefix (no reason-prose regression).
+	const cause = classifyFailureCause(detail);
+	const reason = `${failureCauseLabel(cause)}: ${detail}`;
 
 	// Route through the SAME seam the gate-fail path uses: save the agent's work as
 	// a wip commit (skipped when the tree is clean — the empty-failure case),
@@ -910,19 +943,29 @@ async function saveAgentFailure(params: {
 		? routeReport(routed, arbiter, branch)
 		: undefined;
 	const message = routed.moved
-		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +
-			`routed it to work/needs-attention/ (${report!.fragment}).`
-		: `Agent failed building '${slug}' (${detail}); could not route to ` +
-			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
+		? `Agent run failed building '${slug}' [${cause}] (${detail}); SAVED the ` +
+			`partial work and routed it to work/needs-attention/ (${report!.fragment}).`
+		: `Agent run failed building '${slug}' [${cause}] (${detail}); could not ` +
+			`route to work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
 	return {
 		exitCode: 1,
-		outcome: 'agent-failed',
+		outcome: failureCauseToDoOutcome(cause),
 		slug,
 		branch,
 		routedToNeedsAttention: routed.moved,
 		message,
 	};
+}
+
+/**
+ * Map a {@link FailureCause} onto the `do` {@link DoOutcome}. The cause names ARE
+ * the outcome names (the FAILURE-CAUSE axis reuses the terminal vocabulary), so
+ * this is identity — a single helper documents the mapping + keeps the `do`/`run`
+ * sites symmetric (`run` has the twin {@link failureCauseToItemStatus}).
+ */
+function failureCauseToDoOutcome(cause: FailureCause): DoOutcome {
+	return cause;
 }
 
 /**
@@ -1517,6 +1560,21 @@ async function runRemotePipeline(
 			message: completed.message,
 		};
 	}
+	// Reclassify a thrown CORE wiring/config error (swallowed into `usage-error` by
+	// `performComplete`) onto `config-error` — the SAME convergence in-place `do`
+	// applies, so `do --remote` agrees with `do`/`run` on the same error too.
+	if (completed.outcome === 'usage-error') {
+		const cause = classifyFailureCause(completed.message);
+		if (cause === 'config-error') {
+			return {
+				exitCode: 1,
+				outcome: 'config-error',
+				slug,
+				branch,
+				message: completed.message,
+			};
+		}
+	}
 	const outcome: DoOutcome =
 		completed.outcome === 'refused' ? 'refused' : 'usage-error';
 	return {exitCode: 1, outcome, slug, branch, message: completed.message};
@@ -1528,7 +1586,9 @@ async function runRemotePipeline(
  * against the worktree's `origin` arbiter remote. The agent's edits + the failure
  * reason are committed + surfaced on the arbiter's main AND the `work/<slug>`
  * branch is pushed (the RECOVERABLE durable artifact — the disposable worktree is
- * NOT the recovery surface). The outcome stays `agent-failed`.
+ * NOT the recovery surface). The outcome is the classified failure CAUSE
+ * (`transient-infra` / `config-error` / the generic `agent-failed`), same as the
+ * in-place form.
  */
 async function saveRemoteAgentFailure(params: {
 	slug: string;
@@ -1542,7 +1602,11 @@ async function saveRemoteAgentFailure(params: {
 }): Promise<DoResult> {
 	const {slug, cwd, arbiterRemote, displayArbiter, detail, env, note} = params;
 	const branch = params.branch ?? `work/${slug}`;
-	const reason = `agent failed: ${detail}`;
+	// Same best-effort cause classification as in-place `do`'s `saveAgentFailure`
+	// (shared `classifyFailureCause`), so the remote form labels the SAME error the
+	// SAME way too.
+	const cause = classifyFailureCause(detail);
+	const reason = `${failureCauseLabel(cause)}: ${detail}`;
 
 	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
@@ -1557,14 +1621,14 @@ async function saveRemoteAgentFailure(params: {
 		? routeReport(routed, displayArbiter, branch)
 		: undefined;
 	const message = routed.moved
-		? `Agent failed building '${slug}' (${detail}); SAVED the partial work and ` +
-			`routed it to work/needs-attention/ (${report!.fragment}).`
-		: `Agent failed building '${slug}' (${detail}); could not route to ` +
-			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
+		? `Agent run failed building '${slug}' [${cause}] (${detail}); SAVED the ` +
+			`partial work and routed it to work/needs-attention/ (${report!.fragment}).`
+		: `Agent run failed building '${slug}' [${cause}] (${detail}); could not ` +
+			`route to work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
 	return {
 		exitCode: 1,
-		outcome: 'agent-failed',
+		outcome: failureCauseToDoOutcome(cause),
 		slug,
 		branch,
 		routedToNeedsAttention: routed.moved,

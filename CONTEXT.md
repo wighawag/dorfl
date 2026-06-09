@@ -79,6 +79,37 @@ dogfooding itself (it tracks its own work in its own `work/`).
   a claimed item that couldn't finish (red gate, conflict, ambiguity, timeout,
   rejected review). The runner `git mv`s it here with a reason; a human resolves
   and moves it back to `backlog/`. Folder-native surfacing (no labels). (ADR §12.)
+- **failure cause** — the CAUSE axis recorded on a needs-attention route + the
+  `do` outcome / `run` `ItemStatus`, so a stuck item is not an undifferentiated
+  "agent failed" (the cause drives the RECOVERY). It REUSES the existing terminal
+  outcome vocabulary where it already fits and adds ONLY the two causes that
+  vocabulary lacked — there is NO parallel naming scheme, and no new name
+  duplicates an existing outcome (e.g. a red gate is the existing **`gate-failed`**,
+  NOT a new `gate-red`):
+  - **`gate-failed`** — the acceptance gate (`verify`) caught a genuine bug (fix
+    the CODE). *(existing.)*
+  - **`rebase-conflict`** — the rebase onto `<arbiter>/main` conflicted, aborted
+    (resolve against main). *(existing.)*
+  - **`review-blocked`** — Gate-2 (PR/code review) returned `block`. *(existing.)*
+  - **`agent-stopped`** — the agent DELIBERATELY stopped on a drifted/ambiguous
+    slice, or produced no change (re-scope/re-claim). *(existing.)*
+  - **`agent-failed`** — the agent RAN but produced bad/empty output, OR the cause
+    is UNKNOWN. The CONSERVATIVE GENERIC + safe default: an unrecognised cause
+    stays here (the classifier never forces a wrong specific label). *(existing
+    name, reused as the default.)*
+  - **`transient-infra`** *(NEW)* — a harness-surfaced model/connection outage the
+    harness surfaced AFTER its own retries, or a git/provider outage. RETRY the
+    SAME work (the work is fine). Model-endpoint retries are the HARNESS's job
+    (pi retries its own API); the runner only CLASSIFIES what is surfaced
+    post-retry — it does NOT add model retries.
+  - **`config-error`** *(NEW)* — a thrown CORE wiring/config error (e.g. `review`
+    on with no `reviewGate` wired). Fix the WIRING, not the slice.
+  The classification is BEST-EFFORT (lexical, from the surfaced error/detail) and
+  is performed by the SHARED `classifyFailureCause` (`failure-cause.ts`) at BOTH
+  the `do` and `run` failure-routing sites, so **`do` and `run` classify the SAME
+  error the SAME way** (closing the old divergence where a thrown core error read
+  as `usage-error` in `do` but `agent-failed` in `run`). (Slice
+  `failure-cause-classification-model-vs-git-vs-agent`.)
 
 ## Claim & integration terms
 

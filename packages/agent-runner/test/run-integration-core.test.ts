@@ -240,7 +240,7 @@ describe('run through performIntegration — per-repo, language-agnostic gate', 
 });
 
 describe('run through performIntegration — a THROWN core error is caught', () => {
-	it('review on with NO reviewGate (the core throws) is routed, the worktree handled, the run continues', async () => {
+	it('review on with NO reviewGate (the core throws) is routed as config-error, the worktree handled, the run continues', async () => {
 		// `performIntegration` THROWS a plain Error when `review` is on but no
 		// `reviewGate` is wired (a misconfiguration). `run`'s tail has no catch-all,
 		// so `runOneItem` MUST wrap the call so the throw becomes a saved/needs-
@@ -258,10 +258,12 @@ describe('run through performIntegration — a THROWN core error is caught', () 
 		});
 		// Both items were processed (the run did not crash on the first throw)…
 		expect(result.items).toHaveLength(2);
-		// …and each thrown core error was caught + routed (agent-failed reuses the
-		// work-preserving needs-attention seam), not propagated as an uncaught crash.
+		// …and each thrown core WIRING error is now classified `config-error` (the
+		// FAILURE-CAUSE axis), NOT the undifferentiated `agent-failed` — a wiring bug
+		// reads as a wiring bug, not as the agent misbehaving. (It still reuses the
+		// work-preserving needs-attention seam; never an uncaught crash.)
 		for (const item of result.items) {
-			expect(item.status).toBe('agent-failed');
+			expect(item.status).toBe('config-error');
 		}
 		// The work was surfaced (not silently dropped): each item is in
 		// needs-attention on main, and its branch was pushed.

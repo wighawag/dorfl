@@ -29,6 +29,11 @@ import {
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
 } from './agent-stop.js';
+import {
+	classifyFailureCause,
+	failureCauseLabel,
+	type FailureCause,
+} from './failure-cause.js';
 import {performIntegration} from './integration-core.js';
 import type {ReviewGate} from './review-gate.js';
 import type {BackoffOptions, Sleep} from './retry-backoff.js';
@@ -146,7 +151,9 @@ export type ItemStatus =
 	| 'claim-error' // claim exit 1 / unexpected
 	| 'tests-failed' // claimed + ran, but gate red → routed to needs-attention
 	| 'needs-attention' // rebase conflict at integrate time (ADR §10) — human must look
-	| 'agent-failed' // agentCmd itself errored before the gate
+	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown
+	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
+	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the slice (FAILURE-CAUSE axis)
 	| 'agent-stopped'; // the agent DELIBERATELY stopped (slice drifted) OR produced no change — gate + Gate-2 skipped
 
 export interface ItemResult {
@@ -361,6 +368,11 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 			i.status === 'needs-attention' ||
 			i.status === 'agent-stopped' ||
 			i.status === 'agent-failed' ||
+			// The FAILURE-CAUSE refinements of `agent-failed` count the SAME way (they
+			// are the same agent/run-failure routed to needs-attention, just labelled
+			// by cause).
+			i.status === 'transient-infra' ||
+			i.status === 'config-error' ||
 			i.status === 'claim-error',
 	).length;
 
@@ -769,8 +781,9 @@ function runAgent(
  * artifact a requeue-continue lands the next agent on; continue-detection reads
  * <arbiter>/work/<slug> ahead of main). The push is best-effort — an unreachable
  * arbiter leaves the retained worktree + the local commits standing (the genuinely
- * un-pushed case). The status stays `agent-failed`; only the work-preserving
- * side-effect now matches the gate-fail path.
+ * un-pushed case). The status is the classified failure CAUSE (`transient-infra` /
+ * `config-error` where knowable, else the conservative generic `agent-failed`);
+ * only the work-preserving side-effect now matches the gate-fail path.
  */
 async function saveAgentFailure(
 	base: ItemResult,
@@ -779,7 +792,16 @@ async function saveAgentFailure(
 	detail: string,
 	ctx: OneItemContext,
 ): Promise<ItemResult> {
-	const reason = `agent failed: ${detail}`;
+	// Classify the failure CAUSE (best-effort + conservative) from the surfaced
+	// detail via the SAME `classifyFailureCause` `do` uses — so a thrown CORE config/
+	// wiring error reads as `config-error` (NOT `agent-failed`) on BOTH paths, closing
+	// the cross-path divergence; a harness-surfaced model/connection outage reads as
+	// `transient-infra`; an unrecognised cause stays the generic `agent-failed`. The
+	// cause LABEL prefixes the recorded reason so the cause is legible on the
+	// needs-attention route; `agent-failed` keeps the historical "agent failed:"
+	// prefix (no reason-prose regression).
+	const cause = classifyFailureCause(detail);
+	const reason = `${failureCauseLabel(cause)}: ${detail}`;
 	updateJobRecord(tree.dir, {state: 'needs-attention', reason});
 	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: tree.dir,
@@ -794,7 +816,17 @@ async function saveAgentFailure(
 		backoff: ctx.backoff,
 		sleep: ctx.sleep,
 	});
-	return {...base, status: 'agent-failed', detail};
+	return {...base, status: failureCauseToItemStatus(cause), detail};
+}
+
+/**
+ * Map a {@link FailureCause} onto the `run` {@link ItemStatus}. The cause names
+ * ARE the status names (the FAILURE-CAUSE axis reuses the terminal vocabulary), so
+ * this is identity — a single helper documents the mapping + keeps the `do`/`run`
+ * sites symmetric (`do` has the twin `failureCauseToDoOutcome`).
+ */
+function failureCauseToItemStatus(cause: FailureCause): ItemStatus {
+	return cause;
 }
 
 /**
