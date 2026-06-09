@@ -8,14 +8,7 @@ covers: [7, 12, 13, 14, 18, 31]
 
 ## What to build
 
-The substrate-agnostic **TICK** classifier: given an item (`needsAnswers` + the
-sidecar's answered-state + the item type), decide the CLASSIFIED rung — purely by
-file inspection, NO model, NO lock. This is the highest-value, cheapest seam
-(mirrors `categorise.ts`/`eligibility.ts`) and the contract both drivers later
-wrap. This slice delivers the classifier + the per-type transition state machine
-as a PURE function with exhaustive table tests. It does NOT take the lock or
-execute any rung (those are later slices) — it returns "which rung, on which
-item", and the two invariants must hold.
+The substrate-agnostic **TICK** classifier: given an item (`needsAnswers` + the sidecar's answered-state + the item type), decide the CLASSIFIED rung — purely by file inspection, NO model, NO lock. This is the highest-value, cheapest seam (mirrors `categorise.ts`/`eligibility.ts`) and the contract both drivers later wrap. This slice delivers the classifier + the per-type transition state machine as a PURE function with exhaustive table tests. It does NOT take the lock or execute any rung (those are later slices) — it returns "which rung, on which item", and the two invariants must hold.
 
 ### The per-item state machine (the deterministic trigger — two signals only)
 
@@ -33,80 +26,47 @@ needsAnswers: true?
 ```
 
 Two invariants the classifier + downstream must preserve:
-1. `needsAnswers:false` ⟺ NO active sidecar (clear-flag and delete-sidecar are
-   the SAME atomic step — enforced in `advance-sidecar-contract`, asserted here).
-2. A PENDING (not-all-answered) sidecar makes the tick a clean **NO-OP** (so a
-   `run` daemon never spins hot re-surfacing the same question).
 
-"ANALYSE" ≠ "always advance" — surface-and-pause is itself a rung. A SUBSET of
-answered entries → SKIP (NO-OP). Append, never overwrite.
+1. `needsAnswers:false` ⟺ NO active sidecar (clear-flag and delete-sidecar are the SAME atomic step — enforced in `advance-sidecar-contract`, asserted here).
+2. A PENDING (not-all-answered) sidecar makes the tick a clean **NO-OP** (so a `run` daemon never spins hot re-surfacing the same question).
+
+"ANALYSE" ≠ "always advance" — surface-and-pause is itself a rung. A SUBSET of answered entries → SKIP (NO-OP). Append, never overwrite.
 
 ### What the classifier returns (the rung kinds — execution comes later)
 
 A discriminated union naming the classified rung WITHOUT executing it:
-- `build-slice` (ready slice) / `slice-prd` (ready PRD) / `triage-observation`
-  (untriaged observation) — the ANALYSE rungs;
-- `surface` (first-pass question generation when `needsAnswers` but no sidecar) —
-  transitional;
+
+- `build-slice` (ready slice) / `slice-prd` (ready PRD) / `triage-observation` (untriaged observation) — the ANALYSE rungs;
+- `surface` (first-pass question generation when `needsAnswers` but no sidecar) — transitional;
 - `apply` (all answered → apply + advance);
 - `no-op` (pending sidecar, or nothing eligible).
 
-The state machine is per-item-TYPE (slice / PRD / observation) — encode the
-per-type transition table from the PRD's "Per-item-type transitions" section as
-the source of the cells, but the EXECUTION of each cell is a later slice; this
-slice asserts the CLASSIFICATION of each cell.
+The state machine is per-item-TYPE (slice / PRD / observation) — encode the per-type transition table from the PRD's "Per-item-type transitions" section as the source of the cells, but the EXECUTION of each cell is a later slice; this slice asserts the CLASSIFICATION of each cell.
 
 ## Acceptance criteria
 
-- [ ] A pure `classifyTick(item)` returns the classified rung from EXACTLY two
-      signals (`needsAnswers` + sidecar answered-state) plus the item type — no
-      model, no lock, no file mutation (read-only).
-- [ ] Table tests drive every cell of the per-type (slice / PRD / observation)
-      transition tables: surface / pending-NO-OP / subset-SKIP / all-answered →
-      apply / append-re-pause / clear+delete / terminal-cleanup.
-- [ ] The two invariants are asserted: `needsAnswers:false ⟺ no active sidecar`,
-      and a pending sidecar ⇒ NO-OP.
-- [ ] A pending-sidecar pool classifies as STABLE/NO-OP (no thrash) and the
-      candidate pool shrinks monotonically as answers arrive (convergence test, at
-      the classifier level — read-only).
-- [ ] Tests mirror the existing `categorise.ts`/`eligibility.ts` pure-function
-      table-test style; no shared/global location touched.
+- [ ] A pure `classifyTick(item)` returns the classified rung from EXACTLY two signals (`needsAnswers` + sidecar answered-state) plus the item type — no model, no lock, no file mutation (read-only).
+- [ ] Table tests drive every cell of the per-type (slice / PRD / observation) transition tables: surface / pending-NO-OP / subset-SKIP / all-answered → apply / append-re-pause / clear+delete / terminal-cleanup.
+- [ ] The two invariants are asserted: `needsAnswers:false ⟺ no active sidecar`, and a pending sidecar ⇒ NO-OP.
+- [ ] A pending-sidecar pool classifies as STABLE/NO-OP (no thrash) and the candidate pool shrinks monotonically as answers arrive (convergence test, at the classifier level — read-only).
+- [ ] Tests mirror the existing `categorise.ts`/`eligibility.ts` pure-function table-test style; no shared/global location touched.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
 
-- `advance-sidecar-contract` — the classifier reads the sidecar's answered-state,
-  so the sidecar model must exist first.
+- `advance-sidecar-contract` — the classifier reads the sidecar's answered-state, so the sidecar model must exist first.
 
 ## Prompt
 
-> Build the pure `advance` TICK classifier + the deterministic per-type state
-> machine. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or
-> `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The advance TICK", "The
-> per-item state machine — two signals only", "Per-item-type transitions"). The
-> classifier is `classify (cheap, read-only, NO model, no lock)` — it returns WHICH
-> rung on WHICH item; it does NOT take the lock or execute (later slices). Mirror the
-> existing pure-function seams `categorise.ts` and `eligibility.ts` (same test style).
+> Build the pure `advance` TICK classifier + the deterministic per-type state machine. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The advance TICK", "The per-item state machine — two signals only", "Per-item-type transitions"). The classifier is `classify (cheap, read-only, NO model, no lock)` — it returns WHICH rung on WHICH item; it does NOT take the lock or execute (later slices). Mirror the existing pure-function seams `categorise.ts` and `eligibility.ts` (same test style).
 >
-> Two signals only: the `needsAnswers` flag + the sidecar's answered-state (from
-> `advance-sidecar-contract`). Two invariants: (1) `needsAnswers:false ⟺ no active
-> sidecar`; (2) a pending (not-all-answered) sidecar ⇒ clean NO-OP (a `run` daemon
-> must never spin hot). A subset of answered entries → SKIP. The state machine is
-> per-item-TYPE (slice / PRD / observation); encode the transition-table CELLS, but
-> only CLASSIFY them here — execution is later.
+> Two signals only: the `needsAnswers` flag + the sidecar's answered-state (from `advance-sidecar-contract`). Two invariants: (1) `needsAnswers:false ⟺ no active sidecar`; (2) a pending (not-all-answered) sidecar ⇒ clean NO-OP (a `run` daemon must never spin hot). A subset of answered entries → SKIP. The state machine is per-item-TYPE (slice / PRD / observation); encode the transition-table CELLS, but only CLASSIFY them here — execution is later.
 >
-> READ FIRST: `packages/agent-runner/src/categorise.ts` and
-> `packages/agent-runner/src/eligibility.ts` (the pure classify + table-test pattern
-> to mirror); the sidecar model from `advance-sidecar-contract` (its
-> `allAnswered`/`pendingEntries`); `packages/agent-runner/src/frontmatter.ts` (reading
-> `needsAnswers`).
+> READ FIRST: `packages/agent-runner/src/categorise.ts` and `packages/agent-runner/src/eligibility.ts` (the pure classify + table-test pattern to mirror); the sidecar model from `advance-sidecar-contract` (its `allAnswered`/`pendingEntries`); `packages/agent-runner/src/frontmatter.ts` (reading `needsAnswers`).
 >
-> FIRST, check this slice against current reality (drift). If `advance-sidecar-contract`
-> landed with a different model shape than assumed, reconcile (or route to
-> `needs-attention/`) rather than building on a stale premise.
+> FIRST, check this slice against current reality (drift). If `advance-sidecar-contract` landed with a different model shape than assumed, reconcile (or route to `needs-attention/`) rather than building on a stale premise.
 >
-> TDD with vitest. "Done" = acceptance criteria met and `pnpm -r build && pnpm -r test
-> && pnpm -r format:check` green.
+> TDD with vitest. "Done" = acceptance criteria met and `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ---
 

@@ -8,383 +8,113 @@ covers: []
 
 ## What to build
 
-Stop pinning pi's session log INTO the working directory. The pi adapter
-currently always passes `--session-dir <cwd>/.agent-runner-pi-session`, which
-causes THREE bugs, all one root cause:
+Stop pinning pi's session log INTO the working directory. The pi adapter currently always passes `--session-dir <cwd>/.agent-runner-pi-session`, which causes THREE bugs, all one root cause:
 
-1. **Dashboard blindness** — sessions land outside pi's managed sessions root
-   (`~/.pi/agent/sessions/`), so the pi-remote dashboard's
-   `SessionManager.listAll()` never sees agent-runner-driven agents.
-2. **`--watch` stale-file race** — the tailer picks "newest `.jsonl` by mtime" in
-   the shared per-cwd session dir ONCE at launch, but pi writes the new run's file
-   a moment AFTER spawn; so the watcher latches onto a PRIOR run's log and tails a
-   stale sibling forever (observed: `do --watch` dumps an old session then goes
-   silent).
-3. **In-place checkout pollution** — `.agent-runner-pi-session/` is written into
-   the real checkout, is not gitignored, shows as untracked in `git status`, and
-   `complete`'s `git add -A` can sweep it into a commit.
+1. **Dashboard blindness** — sessions land outside pi's managed sessions root (`~/.pi/agent/sessions/`), so the pi-remote dashboard's `SessionManager.listAll()` never sees agent-runner-driven agents.
+2. **`--watch` stale-file race** — the tailer picks "newest `.jsonl` by mtime" in the shared per-cwd session dir ONCE at launch, but pi writes the new run's file a moment AFTER spawn; so the watcher latches onto a PRIOR run's log and tails a stale sibling forever (observed: `do --watch` dumps an old session then goes silent).
+3. **In-place checkout pollution** — `.agent-runner-pi-session/` is written into the real checkout, is not gitignored, shows as untracked in `git status`, and `complete`'s `git add -A` can sweep it into a commit.
 
-Fix: the pi adapter generates a **deterministic FULL session-file path** and
-passes `--session <that-path>` (not `--session-dir`). pi treats `--session
-<path>` as a literal file path, CREATES + writes the session there if it does not
-exist, and it takes PRECEDENCE over `--session-dir` (verified live + against pi
-source `packages/coding-agent/src/core/session-manager.ts`).
+Fix: the pi adapter generates a **deterministic FULL session-file path** and passes `--session <that-path>` (not `--session-dir`). pi treats `--session <path>` as a literal file path, CREATES + writes the session there if it does not exist, and it takes PRECEDENCE over `--session-dir` (verified live + against pi source `packages/coding-agent/src/core/session-manager.ts`).
 
 End-to-end thin slice through every layer:
 
-- **Config:** add a new key `sessionsDir` (the ROOT folder under which session
-  files are generated). It is a **HOST-ONLY machine path** — the same class as
-  `piBin` / `workspacesDir` / `humanWorktreesDir`, NOT a repo property (a committed
-  repo file must not redirect where the host writes session logs). So:
-  - resolution is **flag (`--sessions-dir`) > env (`AGENT_RUNNER_SESSIONS_DIR`) >
-    global > default** — there is NO per-repo layer (do not put it in
-    `REPO_ALLOWED_KEYS`; ADD it to `REPO_REJECTED_KEYS` in `src/repo-config.ts` so a
-    committed `.agent-runner.json` setting it is ignored-and-reported, exactly like
-    `piBin`).
-  - the default is **pi's default sessions location** for the job's cwd (so `do`
-    "just works" with the existing dashboard, with correct repo-grouping).
-  - **Compiler-forced:** `KEY_COERCIONS` in `src/env-config.ts` is an EXHAUSTIVE
-    mapped type (`{[K in keyof Config]-?: Coercion}`), so adding `sessionsDir` to
-    `Config` will NOT COMPILE until you add `sessionsDir: 'string'` there. This also
-    auto-creates the `AGENT_RUNNER_SESSIONS_DIR` env var (the mechanical
-    camelCase→SCREAMING_SNAKE naming).
-  - **Flag wiring:** add `sessionsDir?: string` to `HarnessFlags` and map it in
-    `harnessFlagOverrides` (`src/do-config.ts`) — the SINGLE shared flag→override
-    path that both `run` and `do` fold in — then declare `--sessions-dir <dir>` on
-    both commands in `src/cli.ts`. (`harness`/`piBin`/`model` are the precedent.)
-  - **Optional, with a DYNAMIC (computed) default — NOT a `DEFAULT_CONFIG` entry:**
-    make `sessionsDir?` optional (like `piBin`/`model`); do NOT add it to
-    `DEFAULT_CONFIG` (its default is not a static value). When unset, the path
-    generator derives the pi-default per-cwd folder at LAUNCH from the job cwd
-    (below). So the resolution chain yields `undefined` for "unset", and the
-    generator's own fallback supplies the pi-default — keep that fallback in ONE
-    place (the path generator), not smeared across config defaulting.
-- **Path generation — must be UNIQUE PER LAUNCH (a real bug if not):** generate
-  `<sessionsDir>/<unique-id>.jsonl` BEFORE pi starts. The arg MUST be ABSOLUTE and
-  end in `.jsonl` (invariant #1). **The filename MUST be unique per launch — slug
-  alone is NOT enough.** Per invariant #2, pi's `setSessionFile` on an EXISTING
-  non-empty file LOADS its entries and APPENDS (it resumes that session), so a
-  second `do <slug>` in the same checkout reusing `<slug>.jsonl` would silently
-  REPLAY+continue the prior run's session (corrupt audit trail AND `--watch`
-  replays the old run). Make the id unique: e.g. `<slug>-<timestamp>` /
-  `<work-id>-<timestamp>` / a uuid (pi itself uses `uuidv7()` for this reason). The
-  STEM is otherwise free; only uniqueness + the `.jsonl` extension + absolute shape
-  are load-bearing.
-  - **The id SOURCE differs by isolation form** (do not assume a work-id exists):
-    in-place `do` runs in the checkout with **NO work-id** (`encodeWorkId(url,slug)`
-    is a JOB-WORKTREE concept needing an arbiter URL), so in-place uses
-    `slug + <unique-suffix>`; the job-worktree forms (`run` / `do --remote`) MAY use
-    the work-id + suffix. Either way the path is generated by the CALLER that knows
-    the form, then threaded in (below).
-  - The repo the session is grouped under comes from the session HEADER `cwd`, set
-    from where pi is spawned (invariant #3), NOT from the path/folder.
-- **One path, generated once, threaded to BOTH launch branches (the key wiring
-  decision):** the full session-file path must be generated in EXACTLY ONE place so
-  the adapter and the watcher cannot disagree. Caller-generates is preferred
-  because `--watch` needs the path BEFORE the launch starts (a path returned after
-  launch is too late for the tailer): `runDoAgent` (and the `run` pipeline)
-  generates it from the resolved `sessionsDir` + cwd and passes it into the adapter
-  via a new optional `LaunchInput.session` (the adapter uses it verbatim; the
-  tailer uses the same variable).
-  - **CRITICAL — `runDoAgent` has TWO launch sites:** the `--watch` branch
-    (`launchAsync` + the tailer) AND the non-watch branch (`launch`). BOTH must
-    receive the generated `session` — the non-watch path is the COMMON case
-    (including CI), so missing it would leave `do` (no `--watch`) still polluting
-    the checkout / invisible to the dashboard. Generate the path ONCE inside the
-    harness branch (AFTER the `agentRunner` early-return — injected test runners do
-    no pi launch and need no path) and feed it to whichever of the two branches
-    runs.
-  - Whichever site, `launch`/`launchAsync` pass `--session <full-path>` instead of
-    `--session-dir <dir>`, and `PiHarnessRecord.session` records that EXACT path
-    (the liveness/audit anchor `gc`/`status` already read).
-  - **PLUMBING (do not forget the bridge):** resolution produces `config.sessionsDir`,
-    but `runDoAgent` reads `DoOptions`, not `Config`. Follow the EXISTING precedent
-    for `model`/`agentCmd`: in `src/cli.ts`'s `do` action (~L795 `performDo({...})`)
-    each `Config` field is mapped onto `DoOptions` (`agentCmd: config.agentCmd`,
-    `model: config.model`). Add `sessionsDir?: string` to `DoOptions` and map
-    `sessionsDir: config.sessionsDir` there; do the equivalent in `run`'s context.
-    Resolving `sessionsDir` into `Config` but not mapping it onto `DoOptions` is the
-    easy way to ship a no-op — a test should catch it (the override redirects the
-    actual `--session` arg).
-- **Watcher:** `do --watch` tails the EXACT known path (the same variable the
-  adapter received) — no `findSessionLog` "newest by mtime" guessing. The race is
-  eliminated because the path is known before pi starts. `SessionTailer` currently
-  takes a `sessionDir` and, in `drain()`, calls `findSessionLog(this.sessionDir)`
-  to PICK a file, returning early while none exists. Switch it to a known FILE
-  path, but **PRESERVE the poll-until-it-appears behaviour**: pi creates the file
-  ASYNCHRONOUSLY after spawn, so the tailer must still "return early + retry next
-  tick" until the known path exists — do NOT `open()` it once at `start()` (that
-  throws ENOENT and reintroduces a race). The robust form: in `drain`, attempt to
-  open the KNOWN path and treat ENOENT as "not yet" (the existing `poll` try/catch
-  already swallows transient errors). The fix swaps the SELECTION (dir-scan → known
-  path), it does NOT remove the wait-for-appearance loop.
-- **No pollution, no gitignore needed:** nothing lands in the checkout by default,
-  so there is nothing to gitignore.
+- **Config:** add a new key `sessionsDir` (the ROOT folder under which session files are generated). It is a **HOST-ONLY machine path** — the same class as `piBin` / `workspacesDir` / `humanWorktreesDir`, NOT a repo property (a committed repo file must not redirect where the host writes session logs). So:
+  - resolution is **flag (`--sessions-dir`) > env (`AGENT_RUNNER_SESSIONS_DIR`) > global > default** — there is NO per-repo layer (do not put it in `REPO_ALLOWED_KEYS`; ADD it to `REPO_REJECTED_KEYS` in `src/repo-config.ts` so a committed `.agent-runner.json` setting it is ignored-and-reported, exactly like `piBin`).
+  - the default is **pi's default sessions location** for the job's cwd (so `do` "just works" with the existing dashboard, with correct repo-grouping).
+  - **Compiler-forced:** `KEY_COERCIONS` in `src/env-config.ts` is an EXHAUSTIVE mapped type (`{[K in keyof Config]-?: Coercion}`), so adding `sessionsDir` to `Config` will NOT COMPILE until you add `sessionsDir: 'string'` there. This also auto-creates the `AGENT_RUNNER_SESSIONS_DIR` env var (the mechanical camelCase→SCREAMING_SNAKE naming).
+  - **Flag wiring:** add `sessionsDir?: string` to `HarnessFlags` and map it in `harnessFlagOverrides` (`src/do-config.ts`) — the SINGLE shared flag→override path that both `run` and `do` fold in — then declare `--sessions-dir <dir>` on both commands in `src/cli.ts`. (`harness`/`piBin`/`model` are the precedent.)
+  - **Optional, with a DYNAMIC (computed) default — NOT a `DEFAULT_CONFIG` entry:** make `sessionsDir?` optional (like `piBin`/`model`); do NOT add it to `DEFAULT_CONFIG` (its default is not a static value). When unset, the path generator derives the pi-default per-cwd folder at LAUNCH from the job cwd (below). So the resolution chain yields `undefined` for "unset", and the generator's own fallback supplies the pi-default — keep that fallback in ONE place (the path generator), not smeared across config defaulting.
+- **Path generation — must be UNIQUE PER LAUNCH (a real bug if not):** generate `<sessionsDir>/<unique-id>.jsonl` BEFORE pi starts. The arg MUST be ABSOLUTE and end in `.jsonl` (invariant #1). **The filename MUST be unique per launch — slug alone is NOT enough.** Per invariant #2, pi's `setSessionFile` on an EXISTING non-empty file LOADS its entries and APPENDS (it resumes that session), so a second `do <slug>` in the same checkout reusing `<slug>.jsonl` would silently REPLAY+continue the prior run's session (corrupt audit trail AND `--watch` replays the old run). Make the id unique: e.g. `<slug>-<timestamp>` / `<work-id>-<timestamp>` / a uuid (pi itself uses `uuidv7()` for this reason). The STEM is otherwise free; only uniqueness + the `.jsonl` extension + absolute shape are load-bearing.
+  - **The id SOURCE differs by isolation form** (do not assume a work-id exists): in-place `do` runs in the checkout with **NO work-id** (`encodeWorkId(url,slug)` is a JOB-WORKTREE concept needing an arbiter URL), so in-place uses `slug + <unique-suffix>`; the job-worktree forms (`run` / `do --remote`) MAY use the work-id + suffix. Either way the path is generated by the CALLER that knows the form, then threaded in (below).
+  - The repo the session is grouped under comes from the session HEADER `cwd`, set from where pi is spawned (invariant #3), NOT from the path/folder.
+- **One path, generated once, threaded to BOTH launch branches (the key wiring decision):** the full session-file path must be generated in EXACTLY ONE place so the adapter and the watcher cannot disagree. Caller-generates is preferred because `--watch` needs the path BEFORE the launch starts (a path returned after launch is too late for the tailer): `runDoAgent` (and the `run` pipeline) generates it from the resolved `sessionsDir` + cwd and passes it into the adapter via a new optional `LaunchInput.session` (the adapter uses it verbatim; the tailer uses the same variable).
+  - **CRITICAL — `runDoAgent` has TWO launch sites:** the `--watch` branch (`launchAsync` + the tailer) AND the non-watch branch (`launch`). BOTH must receive the generated `session` — the non-watch path is the COMMON case (including CI), so missing it would leave `do` (no `--watch`) still polluting the checkout / invisible to the dashboard. Generate the path ONCE inside the harness branch (AFTER the `agentRunner` early-return — injected test runners do no pi launch and need no path) and feed it to whichever of the two branches runs.
+  - Whichever site, `launch`/`launchAsync` pass `--session <full-path>` instead of `--session-dir <dir>`, and `PiHarnessRecord.session` records that EXACT path (the liveness/audit anchor `gc`/`status` already read).
+  - **PLUMBING (do not forget the bridge):** resolution produces `config.sessionsDir`, but `runDoAgent` reads `DoOptions`, not `Config`. Follow the EXISTING precedent for `model`/`agentCmd`: in `src/cli.ts`'s `do` action (~L795 `performDo({...})`) each `Config` field is mapped onto `DoOptions` (`agentCmd: config.agentCmd`, `model: config.model`). Add `sessionsDir?: string` to `DoOptions` and map `sessionsDir: config.sessionsDir` there; do the equivalent in `run`'s context. Resolving `sessionsDir` into `Config` but not mapping it onto `DoOptions` is the easy way to ship a no-op — a test should catch it (the override redirects the actual `--session` arg).
+- **Watcher:** `do --watch` tails the EXACT known path (the same variable the adapter received) — no `findSessionLog` "newest by mtime" guessing. The race is eliminated because the path is known before pi starts. `SessionTailer` currently takes a `sessionDir` and, in `drain()`, calls `findSessionLog(this.sessionDir)` to PICK a file, returning early while none exists. Switch it to a known FILE path, but **PRESERVE the poll-until-it-appears behaviour**: pi creates the file ASYNCHRONOUSLY after spawn, so the tailer must still "return early + retry next tick" until the known path exists — do NOT `open()` it once at `start()` (that throws ENOENT and reintroduces a race). The robust form: in `drain`, attempt to open the KNOWN path and treat ENOENT as "not yet" (the existing `poll` try/catch already swallows transient errors). The fix swaps the SELECTION (dir-scan → known path), it does NOT remove the wait-for-appearance loop.
+- **No pollution, no gitignore needed:** nothing lands in the checkout by default, so there is nothing to gitignore.
 
 ### Load-bearing facts — pi `--session` invariants (verified against pi source: `core/session-manager.ts` `SessionManager.open`/`setSessionFile` + `main.ts` `resolveSessionPath`; re-confirm in the build's drift check, do NOT relitigate)
 
-These are INVARIANTS traced through pi's ACTUAL `--session` handling. Getting any
-wrong makes pi **exit 1** or **mis-group** the session:
+These are INVARIANTS traced through pi's ACTUAL `--session` handling. Getting any wrong makes pi **exit 1** or **mis-group** the session:
 
-1. **The generated arg MUST be a PATH-SHAPED string — absolute and ending in
-   `.jsonl`.** pi's `resolveSessionPath` takes the file-path branch ONLY when the
-   arg contains a slash OR ends in `.jsonl`; otherwise it treats the arg as a
-   session-ID to LOOK UP, fails `not_found`, and **pi exits 1 (the run dies).** So
-   `<sessionsDir>/<id>.jsonl` is REQUIRED — the filename STEM is free, but the
-   `.jsonl` extension + absolute-path shape are NOT (a bare work-id would kill the
-   run).
-2. **pi creates+writes a NON-EXISTENT `--session` path.** `SessionManager.open`
-   on a missing file loads no header and `setSessionFile`'s else-branch calls
-   `newSession()` then pins the explicit path — so pi writes a fresh session at
-   exactly that path (verified live AND in source).
-3. **The header `cwd` falls back to `process.cwd()` for a NEW file** (no header to
-   read). So the dashboard groups by repo correctly ONLY because the adapter spawns
-   pi with `cwd: input.dir` (it already does). PROTECT this: pi MUST be spawned
-   with cwd = the repo dir, or `listAll` groups the session under the wrong
-   project. The folder does NOT imply the repo.
-4. **`listAll` is NON-RECURSIVE — exactly ONE level.** It reads the IMMEDIATE
-   subdirectories of `~/.pi/agent/sessions/` and the `.jsonl` files DIRECTLY inside
-   each (verified: `readdir(sessionsDir).filter(isDirectory)` then
-   `readdir(dir).filter(.jsonl)`), groups by `header.cwd` (#3), and sorts by
-   timestamp. So a session is dashboard-visible (via the default `listAll()`) ONLY
-   when it is a `.jsonl` DIRECTLY inside a FIRST-LEVEL subdir of the sessions root —
-   a NESTED sub-subfolder is NOT scanned. This is why the DEFAULT must be
-   `getDefaultSessionDir(cwd)` (a direct child). It also means the fleet override is
-   deliberately NOT shoehorned under the sessions root — see the fleet-override
-   section.
-5. **Drop `--session-dir` entirely** once `--session <path>` is passed: it is
-   overridden and `open` derives its dir from the file's parent anyway, so leaving
-   it in the args is dead+misleading. Remove it from both `launch`/`launchAsync`.
+1. **The generated arg MUST be a PATH-SHAPED string — absolute and ending in `.jsonl`.** pi's `resolveSessionPath` takes the file-path branch ONLY when the arg contains a slash OR ends in `.jsonl`; otherwise it treats the arg as a session-ID to LOOK UP, fails `not_found`, and **pi exits 1 (the run dies).** So `<sessionsDir>/<id>.jsonl` is REQUIRED — the filename STEM is free, but the `.jsonl` extension + absolute-path shape are NOT (a bare work-id would kill the run).
+2. **pi creates+writes a NON-EXISTENT `--session` path.** `SessionManager.open` on a missing file loads no header and `setSessionFile`'s else-branch calls `newSession()` then pins the explicit path — so pi writes a fresh session at exactly that path (verified live AND in source).
+3. **The header `cwd` falls back to `process.cwd()` for a NEW file** (no header to read). So the dashboard groups by repo correctly ONLY because the adapter spawns pi with `cwd: input.dir` (it already does). PROTECT this: pi MUST be spawned with cwd = the repo dir, or `listAll` groups the session under the wrong project. The folder does NOT imply the repo.
+4. **`listAll` is NON-RECURSIVE — exactly ONE level.** It reads the IMMEDIATE subdirectories of `~/.pi/agent/sessions/` and the `.jsonl` files DIRECTLY inside each (verified: `readdir(sessionsDir).filter(isDirectory)` then `readdir(dir).filter(.jsonl)`), groups by `header.cwd` (#3), and sorts by timestamp. So a session is dashboard-visible (via the default `listAll()`) ONLY when it is a `.jsonl` DIRECTLY inside a FIRST-LEVEL subdir of the sessions root — a NESTED sub-subfolder is NOT scanned. This is why the DEFAULT must be `getDefaultSessionDir(cwd)` (a direct child). It also means the fleet override is deliberately NOT shoehorned under the sessions root — see the fleet-override section.
+5. **Drop `--session-dir` entirely** once `--session <path>` is passed: it is overridden and `open` derives its dir from the file's parent anyway, so leaving it in the args is dead+misleading. Remove it from both `launch`/`launchAsync`.
 
-- The DEFAULT must be **a FIRST-LEVEL (direct-child) subdir under
-  `~/.pi/agent/sessions/`** for the dashboard's non-recursive `listAll()` to scan
-  it (invariant #4) — which `getDefaultSessionDir(cwd)` gives you exactly. Prefer
-  importing pi's
-  EXPORTED `getDefaultSessionDir(cwd)` to derive the exact per-cwd folder (avoids
-  drift); the manual slug encoding is
-  `--${cwd.replace(/^[/\\]/,'').replace(/[/\\:]/g,'-')}--` if importing is
-  rejected. NOTE: a prior slice wrongly assumed agent-runner depends on
-  `@earendil-works/pi-coding-agent` (see
-  `work/observations/slice-premise-pi-coding-agent-not-a-dep.md`) — CHECK whether
-  importing the helper is acceptable (ADD the dep) or whether to replicate the tiny
-  slug function locally; either is fine, decide at build time and note the choice.
-  - **SIDE-EFFECT difference (verified in pi source):** `getDefaultSessionDir(cwd)`
-    `mkdirSync`s the folder as a side effect (returns an EXISTING dir). The pure
-    path is `getDefaultSessionDirPath` (NOT exported). So: if you IMPORT
-    `getDefaultSessionDir`, the default folder is created for you; if you REPLICATE
-    the slug to compute the path purely, the folder may NOT exist yet — ensure the
-    parent dir exists before pi writes (pi's `SessionManager.open`/the constructor
-    `mkdirSync`s the session dir too, so this is belt-and-suspenders, but the
-    WATCHER's poll must tolerate a not-yet-existent dir/file either way — see the
-    Watcher note). Pick one approach and be consistent.
+- The DEFAULT must be **a FIRST-LEVEL (direct-child) subdir under `~/.pi/agent/sessions/`** for the dashboard's non-recursive `listAll()` to scan it (invariant #4) — which `getDefaultSessionDir(cwd)` gives you exactly. Prefer importing pi's EXPORTED `getDefaultSessionDir(cwd)` to derive the exact per-cwd folder (avoids drift); the manual slug encoding is `--${cwd.replace(/^[/\\]/,'').replace(/[/\\:]/g,'-')}--` if importing is rejected. NOTE: a prior slice wrongly assumed agent-runner depends on `@earendil-works/pi-coding-agent` (see `work/observations/slice-premise-pi-coding-agent-not-a-dep.md`) — CHECK whether importing the helper is acceptable (ADD the dep) or whether to replicate the tiny slug function locally; either is fine, decide at build time and note the choice.
+  - **SIDE-EFFECT difference (verified in pi source):** `getDefaultSessionDir(cwd)` `mkdirSync`s the folder as a side effect (returns an EXISTING dir). The pure path is `getDefaultSessionDirPath` (NOT exported). So: if you IMPORT `getDefaultSessionDir`, the default folder is created for you; if you REPLICATE the slug to compute the path purely, the folder may NOT exist yet — ensure the parent dir exists before pi writes (pi's `SessionManager.open`/the constructor `mkdirSync`s the session dir too, so this is belt-and-suspenders, but the WATCHER's poll must tolerate a not-yet-existent dir/file either way — see the Watcher note). Pick one approach and be consistent.
 
 ### Existing tests + exports pin the OLD behaviour — MIGRATE them (don't just add)
 
-This is the biggest hidden cost and the most likely cause of a red gate if missed.
-The current `--session-dir`/`piSessionDir` design is locked in by EXPORTED symbols
-AND existing test assertions that must be UPDATED (not merely supplemented):
+This is the biggest hidden cost and the most likely cause of a red gate if missed. The current `--session-dir`/`piSessionDir` design is locked in by EXPORTED symbols AND existing test assertions that must be UPDATED (not merely supplemented):
 
-- **Exports (`src/index.ts`):** `piSessionDir`, `PI_SESSION_DIRNAME`,
-  `piSessionExists`, `findSessionLog`, `SessionTailerOptions` are all re-exported.
-  If you remove/replace any, update `index.ts` or the build breaks. (This is an
-  internal CLI, not a consumed library — removing dead exports is fine; just keep
-  `index.ts` in sync.)
+- **Exports (`src/index.ts`):** `piSessionDir`, `PI_SESSION_DIRNAME`, `piSessionExists`, `findSessionLog`, `SessionTailerOptions` are all re-exported. If you remove/replace any, update `index.ts` or the build breaks. (This is an internal CLI, not a consumed library — removing dead exports is fine; just keep `index.ts` in sync.)
 - **Existing assertions to MIGRATE (they assert the OLD `--session-dir` path):**
-  - `test/pi-harness.test.ts`: args contains `piSessionDir(dir)`; `record.session
-    === piSessionDir(dir)`; the session DIR exists on disk; `piSessionExists(...)`;
-    `PI_SESSION_DIRNAME` contains 'pi'. → rewrite to assert `--session <abs .jsonl
-    path>` and `record.session === <that path>`.
-  - `test/run.test.ts` (~L570): `record.harness.session === piSessionDir(dir)` →
-    the generated full path.
-  - `test/watch-session.test.ts` (~L208–222): the `findSessionLog` describe block —
-    drop or repurpose if `findSessionLog` stops being the watch selector.
-  - `test/do-watch.test.ts` (~L167): `piSessionDir(repo)` contains
-    `PI_SESSION_DIRNAME` → update to the new path scheme.
-- This is a DELIBERATE behaviour change, so red assertions here are EXPECTED and
-  must be fixed — NOT a reason to route to needs-attention. (needs-attention is for
-  pi having changed its `--session` contract, or a sibling slice having already
-  moved this code — see the drift check.)
+  - `test/pi-harness.test.ts`: args contains `piSessionDir(dir)`; `record.session === piSessionDir(dir)`; the session DIR exists on disk; `piSessionExists(...)`; `PI_SESSION_DIRNAME` contains 'pi'. → rewrite to assert `--session <abs .jsonl path>` and `record.session === <that path>`.
+  - `test/run.test.ts` (~L570): `record.harness.session === piSessionDir(dir)` → the generated full path.
+  - `test/watch-session.test.ts` (~L208–222): the `findSessionLog` describe block — drop or repurpose if `findSessionLog` stops being the watch selector.
+  - `test/do-watch.test.ts` (~L167): `piSessionDir(repo)` contains `PI_SESSION_DIRNAME` → update to the new path scheme.
+- This is a DELIBERATE behaviour change, so red assertions here are EXPECTED and must be fixed — NOT a reason to route to needs-attention. (needs-attention is for pi having changed its `--session` contract, or a sibling slice having already moved this code — see the drift check.)
 
 ### The `run` fleet override (an ARBITRARY folder — NOT under the sessions root)
 
-The `sessionsDir` override is ESPECIALLY for `run` (the AFK daemon): an operator
-can point the fleet's sessions at a dedicated folder so a dashboard can watch the
-autonomous fleet as a group, separate from manual pi work. **DECIDED (do not
-relitigate): the override is an ARBITRARY folder; it is NOT required (or expected)
-to live under `~/.pi/agent/sessions/`.** Reasoning:
+The `sessionsDir` override is ESPECIALLY for `run` (the AFK daemon): an operator can point the fleet's sessions at a dedicated folder so a dashboard can watch the autonomous fleet as a group, separate from manual pi work. **DECIDED (do not relitigate): the override is an ARBITRARY folder; it is NOT required (or expected) to live under `~/.pi/agent/sessions/`.** Reasoning:
 
-- A custom folder is NOT visible to **pi itself** regardless (pi's `--resume`/
-  `list` only ever scan the per-cwd DEFAULT folder), so placing it under the
-  sessions root buys nothing for pi — and would impose the fragile FIRST-LEVEL-only
-  constraint from invariant #4 (a nested fleet folder would silently vanish from
-  the dashboard).
-- **Dashboard visibility of a fleet folder is pi-remote's job, NOT agent-runner's.**
-  pi's `SessionManager.listAll(customDir)` already accepts an explicit dir, so
-  pi-remote can be configured to WATCH an arbitrary fleet folder (tracked in
-  pi-remote's `work/ideas/watch-agent-runner-fleet-sessions.md`). agent-runner's
-  job ends at: write `--session <path>` under the resolved `sessionsDir` and record
-  it for liveness. Where a dashboard looks is out of scope here.
+- A custom folder is NOT visible to **pi itself** regardless (pi's `--resume`/ `list` only ever scan the per-cwd DEFAULT folder), so placing it under the sessions root buys nothing for pi — and would impose the fragile FIRST-LEVEL-only constraint from invariant #4 (a nested fleet folder would silently vanish from the dashboard).
+- **Dashboard visibility of a fleet folder is pi-remote's job, NOT agent-runner's.** pi's `SessionManager.listAll(customDir)` already accepts an explicit dir, so pi-remote can be configured to WATCH an arbitrary fleet folder (tracked in pi-remote's `work/ideas/watch-agent-runner-fleet-sessions.md`). agent-runner's job ends at: write `--session <path>` under the resolved `sessionsDir` and record it for liveness. Where a dashboard looks is out of scope here.
 
-So this slice's surface is symmetric and simple: **default (unset) = the pi-default
-per-cwd dir (a direct child of the sessions root — auto-visible to pi + pi-remote);
-override (set) = any folder, full stop.** This slice ships the config key +
-resolution + the default; the exact fleet-folder PATH the daemon chooses is left to
-`run-daemon-reframe` (the fleet case is `run`'s). Do not block this slice on it,
-and do NOT add any "must be under the sessions root" validation on the override.
+So this slice's surface is symmetric and simple: **default (unset) = the pi-default per-cwd dir (a direct child of the sessions root — auto-visible to pi + pi-remote); override (set) = any folder, full stop.** This slice ships the config key + resolution + the default; the exact fleet-folder PATH the daemon chooses is left to `run-daemon-reframe` (the fleet case is `run`'s). Do not block this slice on it, and do NOT add any "must be under the sessions root" validation on the override.
 
 ### gc/reap consequence (a SIMPLIFICATION, not new work)
 
-`reapJob`/`evaluateDeletionSafety` (in `src/gc.ts`, invoked via the isolation seam
-`src/isolation.ts`, NOT `run.ts`) check ONLY (a) a clean worktree and (b) branch
-reachability on the arbiter — they NEVER reference the session. So there is no
-"session lives in the worktree" assumption to remove; do NOT go editing `gc.ts`
-looking for one. The change is purely a consequence:
+`reapJob`/`evaluateDeletionSafety` (in `src/gc.ts`, invoked via the isolation seam `src/isolation.ts`, NOT `run.ts`) check ONLY (a) a clean worktree and (b) branch reachability on the arbiter — they NEVER reference the session. So there is no "session lives in the worktree" assumption to remove; do NOT go editing `gc.ts` looking for one. The change is purely a consequence:
 
-- Moving the session OUT of the worktree means it is no longer an untracked entry
-  inside the job worktree, so it can no longer (latently) affect the clean-tree
-  check — a small improvement, not a regression.
-- Runner-driven sessions now PERSIST after a worktree is reaped (DESIRED — the
-  audit trail survives a failed job; pi's own session retention governs cleanup,
-  not agent-runner). Just NOTE this in the slice's done record; no `gc.ts` code
-  change is expected. (If the build finds `gc`/`reapJob` DOES reference the old
-  `.agent-runner-pi-session` path, that is drift — surface it.)
+- Moving the session OUT of the worktree means it is no longer an untracked entry inside the job worktree, so it can no longer (latently) affect the clean-tree check — a small improvement, not a regression.
+- Runner-driven sessions now PERSIST after a worktree is reaped (DESIRED — the audit trail survives a failed job; pi's own session retention governs cleanup, not agent-runner). Just NOTE this in the slice's done record; no `gc.ts` code change is expected. (If the build finds `gc`/`reapJob` DOES reference the old `.agent-runner-pi-session` path, that is drift — surface it.)
 
 ## Acceptance criteria
 
-- [ ] The pi adapter passes `--session <full-absolute-path-ending-in-.jsonl>` (NOT
-      `--session-dir`, which is removed); `PiHarnessRecord.session` records that
-      exact generated path. A test asserts the arg is absolute and ends `.jsonl`
-      (the path-shape invariant — a bare id would make pi exit 1).
-- [ ] pi is still spawned with `cwd` = the repo/worktree dir (so the new session's
-      header `cwd` groups correctly in the dashboard) — asserted or explicitly
-      preserved; the session path is NOT cwd-detached.
-- [ ] A new HOST-ONLY `sessionsDir` config key resolves flag > env > global >
-      default (NO per-repo layer; it is in `REPO_REJECTED_KEYS`, so a committed
-      `.agent-runner.json` setting it is ignored-and-reported). The default is pi's
-      default sessions location for the job cwd (a subdir under `~/.pi/agent/
-      sessions/`). `AGENT_RUNNER_SESSIONS_DIR` and `--sessions-dir` both work.
-- [ ] A committed-repo-file test asserts `sessionsDir` is rejected (in the
-      `rejected` list with a message), mirroring the existing `piBin` rejection test.
-- [ ] `do --watch` tails the EXACT generated path (no `findSessionLog`
-      newest-by-mtime selection); the stale-sibling race is gone (a test proves the
-      tailer reads the file at the known path, not a pre-existing sibling).
-- [ ] In-place `do` writes NOTHING into the checkout (`git status` stays clean
-      after a run); no `.agent-runner-pi-session/` directory is created in the cwd.
-- [ ] The generated session filename is UNIQUE per launch (slug+timestamp/uuid, not
-      bare slug): a test proves two launches in the same checkout get DISTINCT paths
-      (so the second never appends to / replays the first's session — invariant #2).
-- [ ] No `gc.ts`/`reapJob` code change is required (it references no session path);
-      the only behaviour change — sessions persist post-reap — is noted in the done
-      record. (If `gc` DOES reference the old session path, that is drift — surface
-      it rather than silently "fixing" it.)
-- [ ] Tests (stubbed pi binary asserting the `--session <path>` argument; temp
-      sessions root): default lands under the pi-default root; the override
-      (flag/env/global config) redirects it; the watcher tails the known path.
-- [ ] Existing assertions that pinned the OLD `--session-dir`/`piSessionDir`
-      behaviour are MIGRATED (pi-harness/run/watch-session/do-watch tests), and
-      `src/index.ts` re-exports stay in sync with any removed/renamed symbols.
+- [ ] The pi adapter passes `--session <full-absolute-path-ending-in-.jsonl>` (NOT `--session-dir`, which is removed); `PiHarnessRecord.session` records that exact generated path. A test asserts the arg is absolute and ends `.jsonl` (the path-shape invariant — a bare id would make pi exit 1).
+- [ ] pi is still spawned with `cwd` = the repo/worktree dir (so the new session's header `cwd` groups correctly in the dashboard) — asserted or explicitly preserved; the session path is NOT cwd-detached.
+- [ ] A new HOST-ONLY `sessionsDir` config key resolves flag > env > global > default (NO per-repo layer; it is in `REPO_REJECTED_KEYS`, so a committed `.agent-runner.json` setting it is ignored-and-reported). The default is pi's default sessions location for the job cwd (a subdir under `~/.pi/agent/     sessions/`). `AGENT_RUNNER_SESSIONS_DIR` and `--sessions-dir` both work.
+- [ ] A committed-repo-file test asserts `sessionsDir` is rejected (in the `rejected` list with a message), mirroring the existing `piBin` rejection test.
+- [ ] `do --watch` tails the EXACT generated path (no `findSessionLog` newest-by-mtime selection); the stale-sibling race is gone (a test proves the tailer reads the file at the known path, not a pre-existing sibling).
+- [ ] In-place `do` writes NOTHING into the checkout (`git status` stays clean after a run); no `.agent-runner-pi-session/` directory is created in the cwd.
+- [ ] The generated session filename is UNIQUE per launch (slug+timestamp/uuid, not bare slug): a test proves two launches in the same checkout get DISTINCT paths (so the second never appends to / replays the first's session — invariant #2).
+- [ ] No `gc.ts`/`reapJob` code change is required (it references no session path); the only behaviour change — sessions persist post-reap — is noted in the done record. (If `gc` DOES reference the old session path, that is drift — surface it rather than silently "fixing" it.)
+- [ ] Tests (stubbed pi binary asserting the `--session <path>` argument; temp sessions root): default lands under the pi-default root; the override (flag/env/global config) redirects it; the watcher tails the known path.
+- [ ] Existing assertions that pinned the OLD `--session-dir`/`piSessionDir` behaviour are MIGRATED (pi-harness/run/watch-session/do-watch tests), and `src/index.ts` re-exports stay in sync with any removed/renamed symbols.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
 
-- None — can start immediately. The CORE fix is independent of
-  `run-daemon-reframe` (only the fleet-folder NAMING is deferred to it).
+- None — can start immediately. The CORE fix is independent of `run-daemon-reframe` (only the fleet-folder NAMING is deferred to it).
 
 ## Prompt
 
-> Fix the pi session-location bug at its root: agent-runner's pi adapter pins
-> `--session-dir` INTO the working directory, which (1) hides sessions from the
-> pi-remote dashboard (`SessionManager.listAll()` only scans `~/.pi/agent/
-> sessions/`), (2) makes `do --watch` race onto a stale prior-run log, and (3)
-> pollutes the in-place checkout with an untracked `.agent-runner-pi-session/`.
-> The fix: generate a deterministic FULL session-file path and pass `--session
-> <that-path>` instead of `--session-dir <dir>`. pi creates+writes the session at
-> exactly that path and `--session` takes precedence over `--session-dir` (verified
-> live and against pi source `packages/coding-agent/src/core/session-manager.ts`).
+> Fix the pi session-location bug at its root: agent-runner's pi adapter pins `--session-dir` INTO the working directory, which (1) hides sessions from the pi-remote dashboard (`SessionManager.listAll()` only scans `~/.pi/agent/ sessions/`), (2) makes `do --watch` race onto a stale prior-run log, and (3) pollutes the in-place checkout with an untracked `.agent-runner-pi-session/`. The fix: generate a deterministic FULL session-file path and pass `--session <that-path>` instead of `--session-dir <dir>`. pi creates+writes the session at exactly that path and `--session` takes precedence over `--session-dir` (verified live and against pi source `packages/coding-agent/src/core/session-manager.ts`).
 >
 > READ FIRST:
-> - `work/observations/pi-session-dir-hides-sessions-from-dashboard.md` — the full
->   verified design + background. THIS IS THE SPEC — read it in full. (Where its
->   loose phrasing — "filename is free" — conflicts with the four numbered
->   INVARIANTS in this slice's body, the slice's invariants WIN: the arg must be an
->   absolute path ending `.jsonl`, and grouping comes from the header cwd set by the
->   spawn cwd.)
-> - `src/pi-harness.ts` — `piSessionDir`, `PI_SESSION_DIRNAME`, `launch`,
->   `launchAsync`, `PiHarnessRecord.session` (what to change).
-> - `src/watch-session.ts` — `findSessionLog` (the newest-by-mtime selection to
->   eliminate) + `SessionTailer` (it takes a `sessionDir` and scans it; switch it
->   to a known FILE path so it opens that exact file once it appears).
-> - `src/do.ts` `runDoAgent` — where the tailer is wired (`sessionDir:
->   piSessionDir(cwd)`). GENERATE the full session path ONCE here (caller-generates,
->   preferred — the watcher needs it BEFORE launch), pass it into the adapter via a
->   new optional `LaunchInput.session` and into the tailer (same variable), UNIQUE
->   per launch (slug+timestamp/uuid; in-place has NO work-id). `src/run.ts` calls
->   the harness at ~L438 (`ctx.harness.launch`) and tears down via the ISOLATION
->   SEAM (`src/isolation.ts`→`reapJob`), NOT inline — give `run` the same
->   generated-path treatment (its id MAY use `encodeWorkId` from
->   `src/workspace.ts`). `src/harness.ts` defines
->   `LaunchInput`/`LaunchResult`/`HarnessRecord` — add the optional `session` input
->   field there. `src/gc.ts` (`reapJob`/`evaluateDeletionSafety`): READ ONLY —
->   confirm it references NO session path (clean-tree + arbiter-reachability only);
->   no edit expected.
-> - `src/config.ts` (add `sessionsDir?` to `Config`, optional like `piBin`).
->   `src/repo-config.ts` (`sessionsDir` is HOST-ONLY — add it to
->   `REPO_REJECTED_KEYS` next to `piBin`/`humanWorktreesDir`, NOT
->   `REPO_ALLOWED_KEYS`). `src/env-config.ts` (`KEY_COERCIONS` is the EXHAUSTIVE
->   `{[K in keyof Config]-?: ...}` mapped type — it WON'T COMPILE until you add
->   `sessionsDir: 'string'`; this also creates `AGENT_RUNNER_SESSIONS_DIR`).
->   `src/do-config.ts` (`HarnessFlags` + `harnessFlagOverrides` — the shared
->   flag→override path) and `src/cli.ts`: (a) declare `--sessions-dir <dir>` on `run`
->   AND `do`, and (b) at the `do` action's `performDo({...})` call (~L795) MAP
->   `sessionsDir: config.sessionsDir` onto `DoOptions` exactly like `model`/
->   `agentCmd` are mapped — the bridge from resolved `Config` to `runDoAgent`
->   (without it the key resolves but never reaches the launch — a silent no-op). The
->   precedence is flag > env > global > default — NO per-repo layer (a host machine
->   path, exactly like `piBin`/`workspacesDir`).
-> - `work/observations/slice-premise-pi-coding-agent-not-a-dep.md` — agent-runner
->   does NOT depend on `@earendil-works/pi-coding-agent`; decide at build time
->   whether to import `getDefaultSessionDir` or replicate the small slug helper, and
->   note the choice (the do-watch slice used a local structural type for the same
->   reason).
 >
-> FIRST run the drift check (WORK-CONTRACT.md "Drift is a needs-attention
-> signal"): confirm the pi adapter still passes `--session-dir` and the tailer
-> still uses `findSessionLog`; if a sibling slice already changed this, route to
-> needs-attention rather than building on a stale premise. ALSO re-confirm the four
-> pi `--session` invariants against the pinned pi source (`core/session-manager.ts`
-> `SessionManager.open`/`setSessionFile` + `main.ts` `resolveSessionPath`) — if pi
-> has changed how `--session <path>` resolves, STOP and route to needs-attention
-> (the whole fix rests on those invariants).
+> - `work/observations/pi-session-dir-hides-sessions-from-dashboard.md` — the full verified design + background. THIS IS THE SPEC — read it in full. (Where its loose phrasing — "filename is free" — conflicts with the four numbered INVARIANTS in this slice's body, the slice's invariants WIN: the arg must be an absolute path ending `.jsonl`, and grouping comes from the header cwd set by the spawn cwd.)
+> - `src/pi-harness.ts` — `piSessionDir`, `PI_SESSION_DIRNAME`, `launch`, `launchAsync`, `PiHarnessRecord.session` (what to change).
+> - `src/watch-session.ts` — `findSessionLog` (the newest-by-mtime selection to eliminate) + `SessionTailer` (it takes a `sessionDir` and scans it; switch it to a known FILE path so it opens that exact file once it appears).
+> - `src/do.ts` `runDoAgent` — where the tailer is wired (`sessionDir: piSessionDir(cwd)`). GENERATE the full session path ONCE here (caller-generates, preferred — the watcher needs it BEFORE launch), pass it into the adapter via a new optional `LaunchInput.session` and into the tailer (same variable), UNIQUE per launch (slug+timestamp/uuid; in-place has NO work-id). `src/run.ts` calls the harness at ~L438 (`ctx.harness.launch`) and tears down via the ISOLATION SEAM (`src/isolation.ts`→`reapJob`), NOT inline — give `run` the same generated-path treatment (its id MAY use `encodeWorkId` from `src/workspace.ts`). `src/harness.ts` defines `LaunchInput`/`LaunchResult`/`HarnessRecord` — add the optional `session` input field there. `src/gc.ts` (`reapJob`/`evaluateDeletionSafety`): READ ONLY — confirm it references NO session path (clean-tree + arbiter-reachability only); no edit expected.
+> - `src/config.ts` (add `sessionsDir?` to `Config`, optional like `piBin`). `src/repo-config.ts` (`sessionsDir` is HOST-ONLY — add it to `REPO_REJECTED_KEYS` next to `piBin`/`humanWorktreesDir`, NOT `REPO_ALLOWED_KEYS`). `src/env-config.ts` (`KEY_COERCIONS` is the EXHAUSTIVE `{[K in keyof Config]-?: ...}` mapped type — it WON'T COMPILE until you add `sessionsDir: 'string'`; this also creates `AGENT_RUNNER_SESSIONS_DIR`). `src/do-config.ts` (`HarnessFlags` + `harnessFlagOverrides` — the shared flag→override path) and `src/cli.ts`: (a) declare `--sessions-dir <dir>` on `run` AND `do`, and (b) at the `do` action's `performDo({...})` call (~L795) MAP `sessionsDir: config.sessionsDir` onto `DoOptions` exactly like `model`/ `agentCmd` are mapped — the bridge from resolved `Config` to `runDoAgent` (without it the key resolves but never reaches the launch — a silent no-op). The precedence is flag > env > global > default — NO per-repo layer (a host machine path, exactly like `piBin`/`workspacesDir`).
+> - `work/observations/slice-premise-pi-coding-agent-not-a-dep.md` — agent-runner does NOT depend on `@earendil-works/pi-coding-agent`; decide at build time whether to import `getDefaultSessionDir` or replicate the small slug helper, and note the choice (the do-watch slice used a local structural type for the same reason).
 >
-> IMPLEMENT: add the HOST-ONLY `sessionsDir` config key (flag > env > global >
-> default; in `REPO_REJECTED_KEYS`, in `KEY_COERCIONS`, in `HarnessFlags`/
-> `harnessFlagOverrides`, and as `--sessions-dir` on `run`+`do`); generate
-> `<sessionsDir>/<deterministic-id>.jsonl` — ABSOLUTE and ending `.jsonl` (a bare
-> id makes pi exit 1; see invariant #1) — default `sessionsDir` = pi's default
-> sessions dir for the job cwd; pass `--session <full-path>` from both `launch` and
-> `launchAsync` and REMOVE `--session-dir`; keep spawning pi with `cwd: input.dir`
-> (invariant #3 — the header cwd groups the dashboard); record that exact path in
-> `PiHarnessRecord.session`; tail the known path in `do --watch`
-> (`findSessionLog` is no longer the selector for the watch path — keep it only if
-> something still needs dir-scanning, otherwise remove it). Note that sessions now
-> persist post-reap (no `gc.ts` change expected — it references no session path).
+> FIRST run the drift check (WORK-CONTRACT.md "Drift is a needs-attention signal"): confirm the pi adapter still passes `--session-dir` and the tailer still uses `findSessionLog`; if a sibling slice already changed this, route to needs-attention rather than building on a stale premise. ALSO re-confirm the four pi `--session` invariants against the pinned pi source (`core/session-manager.ts` `SessionManager.open`/`setSessionFile` + `main.ts` `resolveSessionPath`) — if pi has changed how `--session <path>` resolves, STOP and route to needs-attention (the whole fix rests on those invariants).
 >
-> MIGRATE the existing tests that pin the OLD behaviour (they will go red — that is
-> EXPECTED, not a needs-attention trigger): `test/pi-harness.test.ts` (asserts
-> `piSessionDir(dir)` in args + `record.session`), `test/run.test.ts` (~L570),
-> `test/watch-session.test.ts` (the `findSessionLog` block), `test/do-watch.test.ts`
-> (~L167). Keep `src/index.ts` re-exports in sync with any removed symbol
-> (`piSessionDir`/`PI_SESSION_DIRNAME`/`piSessionExists`/`findSessionLog`).
+> IMPLEMENT: add the HOST-ONLY `sessionsDir` config key (flag > env > global > default; in `REPO_REJECTED_KEYS`, in `KEY_COERCIONS`, in `HarnessFlags`/ `harnessFlagOverrides`, and as `--sessions-dir` on `run`+`do`); generate `<sessionsDir>/<deterministic-id>.jsonl` — ABSOLUTE and ending `.jsonl` (a bare id makes pi exit 1; see invariant #1) — default `sessionsDir` = pi's default sessions dir for the job cwd; pass `--session <full-path>` from both `launch` and `launchAsync` and REMOVE `--session-dir`; keep spawning pi with `cwd: input.dir` (invariant #3 — the header cwd groups the dashboard); record that exact path in `PiHarnessRecord.session`; tail the known path in `do --watch` (`findSessionLog` is no longer the selector for the watch path — keep it only if something still needs dir-scanning, otherwise remove it). Note that sessions now persist post-reap (no `gc.ts` change expected — it references no session path).
 >
-> DO NOT decide the `run` fleet-folder naming here — ship the config key + default;
-> defer naming to `run-daemon-reframe`.
+> MIGRATE the existing tests that pin the OLD behaviour (they will go red — that is EXPECTED, not a needs-attention trigger): `test/pi-harness.test.ts` (asserts `piSessionDir(dir)` in args + `record.session`), `test/run.test.ts` (~L570), `test/watch-session.test.ts` (the `findSessionLog` block), `test/do-watch.test.ts` (~L167). Keep `src/index.ts` re-exports in sync with any removed symbol (`piSessionDir`/`PI_SESSION_DIRNAME`/`piSessionExists`/`findSessionLog`).
 >
-> TDD with vitest, house style (tabs + single quotes, NodeNext, stubbed pi binary
-> that asserts the `--session <path>` argument, temp sessions root): the default
-> path lands under the pi-default root; flag/env/global-config override redirects it; the
-> in-place checkout stays clean; the watcher tails the KNOWN path (prove the
-> stale-sibling race is gone — assert the arg is absolute and ends `.jsonl`).
-> "Done" = acceptance criteria met and the gate green.
+> DO NOT decide the `run` fleet-folder naming here — ship the config key + default; defer naming to `run-daemon-reframe`.
+>
+> TDD with vitest, house style (tabs + single quotes, NodeNext, stubbed pi binary that asserts the `--session <path>` argument, temp sessions root): the default path lands under the pi-default root; flag/env/global-config override redirects it; the in-place checkout stays clean; the watcher tails the KNOWN path (prove the stale-sibling race is gone — assert the arg is absolute and ends `.jsonl`). "Done" = acceptance criteria met and the gate green.
 
 ---
 
@@ -403,31 +133,10 @@ git mv work/in-progress/session-path-pi-default.md work/done/session-path-pi-def
 
 ### Slice note (2026-06-06) — `PI_CODING_AGENT_DIR` honoured + test isolation
 
-A follow-up landed on this PR before merge, after dogfooding surfaced a real
-defect the original slice missed:
+A follow-up landed on this PR before merge, after dogfooding surfaced a real defect the original slice missed:
 
-- **Latent product bug fixed:** `session-path.ts`'s replica of pi's default-dir
-  resolution hard-coded `~/.pi/agent`, ignoring pi's actual env override
-  `PI_CODING_AGENT_DIR` (verified in pi source `config.ts` `getAgentDir()`:
-  `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`, with tilde expansion). A user/CI
-  pointing pi at a custom agent dir would have had agent-runner write sessions to
-  `~/.pi/agent/sessions` while pi read the custom dir → sessions invisible to pi
-  AND pi-remote (the very breakage this slice fixes). `piAgentDir()` now honours
-  `PI_CODING_AGENT_DIR` (else `~/.pi/agent`), read per-call. We honour ONLY the
-  agent-dir var, not pi's separate `PI_CODING_AGENT_SESSION_DIR` — agent-runner's
-  own `sessionsDir` override already plays that role.
+- **Latent product bug fixed:** `session-path.ts`'s replica of pi's default-dir resolution hard-coded `~/.pi/agent`, ignoring pi's actual env override `PI_CODING_AGENT_DIR` (verified in pi source `config.ts` `getAgentDir()`: `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`, with tilde expansion). A user/CI pointing pi at a custom agent dir would have had agent-runner write sessions to `~/.pi/agent/sessions` while pi read the custom dir → sessions invisible to pi AND pi-remote (the very breakage this slice fixes). `piAgentDir()` now honours `PI_CODING_AGENT_DIR` (else `~/.pi/agent`), read per-call. We honour ONLY the agent-dir var, not pi's separate `PI_CODING_AGENT_SESSION_DIR` — agent-runner's own `sessionsDir` override already plays that role.
 
-- **Test-hygiene bug fixed:** the `do-watch`/`pi-harness`/`run` tests launch the
-  (stubbed) pi adapter on the DEFAULT session path, which (since this slice moved
-  the default OUT of the worktree) resolved to the developer's REAL
-  `~/.pi/agent/sessions/` — leaking ~one dir per test run there, and (with a
-  fixture header missing `version`/`timestamp`) CRASHING the pi-remote dashboard's
-  `listAll()` via `new Date(undefined).toISOString()`. Fixed by a shared
-  `isolatePiAgentDir(scratchRoot)` test helper that points `PI_CODING_AGENT_DIR` at
-  a scratch dir for the test's duration (generation runs in-process, so it sets the
-  test process's own `process.env`), plus a well-formed fixture header. Verified:
-  the real sessions dir count is unchanged across a full test run (no leak).
+- **Test-hygiene bug fixed:** the `do-watch`/`pi-harness`/`run` tests launch the (stubbed) pi adapter on the DEFAULT session path, which (since this slice moved the default OUT of the worktree) resolved to the developer's REAL `~/.pi/agent/sessions/` — leaking ~one dir per test run there, and (with a fixture header missing `version`/`timestamp`) CRASHING the pi-remote dashboard's `listAll()` via `new Date(undefined).toISOString()`. Fixed by a shared `isolatePiAgentDir(scratchRoot)` test helper that points `PI_CODING_AGENT_DIR` at a scratch dir for the test's duration (generation runs in-process, so it sets the test process's own `process.env`), plus a well-formed fixture header. Verified: the real sessions dir count is unchanged across a full test run (no leak).
 
-  (Reported cross-team by pi-remote, which also added a defensive guard so a
-  malformed `created` can't crash its `listSessions()` — a band-aid for a
-  malformed-data source that this fix removes at the root.)
+  (Reported cross-team by pi-remote, which also added a defensive guard so a malformed `created` can't crash its `listSessions()` — a band-aid for a malformed-data source that this fix removes at the root.)

@@ -7,287 +7,77 @@ covers: []
 
 ## What to build
 
-> Self-contained architectural consolidation — derives from NO PRD (`covers: []`),
-> its own source of truth. Promotes the recurring-asymmetry finding captured across
-> PR #6/#8/#9 and `work/observations/needs-attention-seam-*.md` +
-> `work/observations/run-agent-failure-does-not-save-work.md`.
+> Self-contained architectural consolidation — derives from NO PRD (`covers: []`), its own source of truth. Promotes the recurring-asymmetry finding captured across PR #6/#8/#9 and `work/observations/needs-attention-seam-*.md` + `work/observations/run-agent-failure-does-not-save-work.md`.
 
-We have now patched the SAME asymmetry FOUR times (PR #8 `do` agent-fail; PR #9
-`run` gate-fail + `run` integrate-conflict + `complete` rebase-conflict), with a
-FIFTH still missing (`run` agent-failure bare-returns without saving — see the
-observation). The root cause is structural, not incidental:
+We have now patched the SAME asymmetry FOUR times (PR #8 `do` agent-fail; PR #9 `run` gate-fail + `run` integrate-conflict + `complete` rebase-conflict), with a FIFTH still missing (`run` agent-failure bare-returns without saving — see the observation). The root cause is structural, not incidental:
 
-**The push ALREADY EXISTS in the helper — the SEAM WRAPPER withholds it.** The
-underlying `routeToNeedsAttention` (`src/needs-attention.ts`) ALREADY pushes the
-branch when given an `arbiter` (its tail: `if (options.arbiter) { const branch =
-\`work/${slug}\`; gitHard(['push', arbiter, ...]) }`) — but it **hardcodes
-`work/<slug>`** and uses `gitHard` (throws on failure, not best-effort). The bug is
-in the SEAM WRAPPER `ledgerWrite.applyNeedsAttentionTransition`, which deliberately
-**STRIPS the arbiter from the move** (`const {arbiter, ...move} = input`) so the
-helper's own push NEVER fires through the seam — it uses the arbiter ONLY to publish
-the ledger surface on `main`. That strip was deliberate under a since-falsified
-assumption ("the retained job worktree is the never-lose-work signal"), which holds
-only for SINGLE-machine recovery. For CROSS-machine recovery (§14: requeue-continue
-reads `<arbiter>/work/<slug>`), every caller has had to BOLT a separate
-`pushWorkBranch` call next to the seam call — forgotten in one path (`run`
-agent-fail), and now duplicated as a `pushWorkBranch` helper in BOTH `run.ts`
-(`src/run.ts:526`) and `complete.ts` (`src/complete.ts:893`). So there are THREE
-push sites: the helper's own (unreachable via the seam) + the two bolted-on copies.
-"Record stuck" and "save the work durably" are two halves of one operation that the
-seam split apart; nothing enforces they happen together.
+**The push ALREADY EXISTS in the helper — the SEAM WRAPPER withholds it.** The underlying `routeToNeedsAttention` (`src/needs-attention.ts`) ALREADY pushes the branch when given an `arbiter` (its tail: `if (options.arbiter) { const branch = \`work/${slug}\`; gitHard(['push', arbiter, ...]) }`) — but it **hardcodes `work/<slug>`** and uses `gitHard`(throws on failure, not best-effort). The bug is in the SEAM WRAPPER`ledgerWrite.applyNeedsAttentionTransition`, which deliberately **STRIPS the arbiter from the move** (`const {arbiter, ...move} = input`) so the helper's own push NEVER fires through the seam — it uses the arbiter ONLY to publish the ledger surface on `main`. That strip was deliberate under a since-falsified assumption ("the retained job worktree is the never-lose-work signal"), which holds only for SINGLE-machine recovery. For CROSS-machine recovery (§14: requeue-continue reads `<arbiter>/work/<slug>`), every caller has had to BOLT a separate `pushWorkBranch` call next to the seam call — forgotten in one path (`run`agent-fail), and now duplicated as a`pushWorkBranch`helper in BOTH`run.ts` (`src/run.ts:526`) and `complete.ts` (`src/complete.ts:893`). So there are THREE push sites: the helper's own (unreachable via the seam) + the two bolted-on copies. "Record stuck" and "save the work durably" are two halves of one operation that the seam split apart; nothing enforces they happen together.
 
-**Fix: make a needs-attention bounce ONE complete operation — push the work branch
-INSIDE the seam, transition-kind-agnostic.**
+**Fix: make a needs-attention bounce ONE complete operation — push the work branch INSIDE the seam, transition-kind-agnostic.**
 
-1. **Stop the seam stripping the arbiter; let the (now-fixed) helper push.** The
-   fix is NOT to invent a new push — it is to STOP `applyNeedsAttentionTransition`
-   dropping the arbiter (`const {arbiter, ...move}`) so the helper's existing push
-   fires through the seam, in addition to publishing the ledger surface on `main`.
-   Then DELETE the bolted-on `pushWorkBranch` calls + the duplicated helpers in
-   `run.ts` and `complete.ts`. Every caller becomes a SINGLE seam call with no
-   tacked-on push — so the asymmetry CANNOT recur (no second step to forget). One
-   home for the push: the helper, fired through the seam.
-   - **Best-effort, not throw.** The helper's push is `gitHard` (throws on a failed
-     push). The bolted-on pushes were best-effort (an unreachable arbiter leaves
-     the local branch + main surface standing — recovery degrades, never crashes
-     the bounce). Soften the helper's push to best-effort so an offline arbiter
-     does not turn a needs-attention bounce into a hard error (parity with what the
-     bolted-on copies + `saveAgentFailure` do).
+1. **Stop the seam stripping the arbiter; let the (now-fixed) helper push.** The fix is NOT to invent a new push — it is to STOP `applyNeedsAttentionTransition` dropping the arbiter (`const {arbiter, ...move}`) so the helper's existing push fires through the seam, in addition to publishing the ledger surface on `main`. Then DELETE the bolted-on `pushWorkBranch` calls + the duplicated helpers in `run.ts` and `complete.ts`. Every caller becomes a SINGLE seam call with no tacked-on push — so the asymmetry CANNOT recur (no second step to forget). One home for the push: the helper, fired through the seam.
+   - **Best-effort, not throw.** The helper's push is `gitHard` (throws on a failed push). The bolted-on pushes were best-effort (an unreachable arbiter leaves the local branch + main surface standing — recovery degrades, never crashes the bounce). Soften the helper's push to best-effort so an offline arbiter does not turn a needs-attention bounce into a hard error (parity with what the bolted-on copies + `saveAgentFailure` do).
 
-2. **Parameterise the branch with a THIRD "surface-only" state — the helper
-   currently HARDCODES `work/<slug>` AND pushes unconditionally.**
-   `RouteToNeedsAttentionOptions` has NO `branch` field today; the helper commits on
-   whatever branch `cwd` is on and pushes the hardcoded `work/<slug>`. The push
-   target has THREE needed behaviours (not two):
-   - **default `work/<slug>`** — build bounces checked out ON the work branch
-     (`do.ts` saveAgentFailure; `run.ts` gate-fail / integrate-conflict / onboard
-     continue-conflict; `complete.ts` gate-fail / rebase-conflict). Push it.
-   - **an explicit OTHER branch** — the future PRD-SLICING transition is on
-     `work/slicing/<slug>` (per `auto-slice` — its lock is a different branch name so
-     it never collides with build claims). Push that.
-   - **SURFACE-ONLY (push NOTHING)** — a caller that only wants the ledger surface on
-     main and is NOT checked out on the work branch. **`start.ts`
-     `routeContinueConflict` is exactly this** (see the composition warning below):
-     it runs on a throwaway temp branch off main (the move-only commit lands there,
-     then the temp branch is deleted) and the real `work/<slug>` is ALREADY on the
-     arbiter from the prior requeue, untouched. Such a caller must push NOTHING.
-   So model the push target as: push iff a `branch` is supplied AND it carries work;
-   a SURFACE-ONLY caller passes NO `branch` (or an explicit `pushBranch: false`),
-   and the seam publishes only the main surface. The supplied `branch` MUST be the
-   branch the wip/move commits landed on (the cwd's current branch) — NEVER a
-   default that differs from HEAD (that is the `start.ts` bug below).
+2. **Parameterise the branch with a THIRD "surface-only" state — the helper currently HARDCODES `work/<slug>` AND pushes unconditionally.** `RouteToNeedsAttentionOptions` has NO `branch` field today; the helper commits on whatever branch `cwd` is on and pushes the hardcoded `work/<slug>`. The push target has THREE needed behaviours (not two):
+   - **default `work/<slug>`** — build bounces checked out ON the work branch (`do.ts` saveAgentFailure; `run.ts` gate-fail / integrate-conflict / onboard continue-conflict; `complete.ts` gate-fail / rebase-conflict). Push it.
+   - **an explicit OTHER branch** — the future PRD-SLICING transition is on `work/slicing/<slug>` (per `auto-slice` — its lock is a different branch name so it never collides with build claims). Push that.
+   - **SURFACE-ONLY (push NOTHING)** — a caller that only wants the ledger surface on main and is NOT checked out on the work branch. **`start.ts` `routeContinueConflict` is exactly this** (see the composition warning below): it runs on a throwaway temp branch off main (the move-only commit lands there, then the temp branch is deleted) and the real `work/<slug>` is ALREADY on the arbiter from the prior requeue, untouched. Such a caller must push NOTHING. So model the push target as: push iff a `branch` is supplied AND it carries work; a SURFACE-ONLY caller passes NO `branch` (or an explicit `pushBranch: false`), and the seam publishes only the main surface. The supplied `branch` MUST be the branch the wip/move commits landed on (the cwd's current branch) — NEVER a default that differs from HEAD (that is the `start.ts` bug below).
 
-   **Human-vs-autonomous gate is PRESERVED FOR FREE.** The push fires only when an
-   `arbiter` is given, and the human/autonomous gate is ALREADY encoded in whether
-   the arbiter is passed: `complete.ts` passes `arbiter: options.surfaceArbiter`,
-   which is `undefined` for HUMAN `complete` (→ no surface, no push — stays
-   local-only) and set for autonomous `do`. So un-stripping the seam does NOT start
-   pushing on human `complete`; the existing arbiter-presence gate keeps it
-   local-only with zero new logic. (This is the strongest evidence the
-   consolidation is correct, not merely tidier.)
+   **Human-vs-autonomous gate is PRESERVED FOR FREE.** The push fires only when an `arbiter` is given, and the human/autonomous gate is ALREADY encoded in whether the arbiter is passed: `complete.ts` passes `arbiter: options.surfaceArbiter`, which is `undefined` for HUMAN `complete` (→ no surface, no push — stays local-only) and set for autonomous `do`. So un-stripping the seam does NOT start pushing on human `complete`; the existing arbiter-presence gate keeps it local-only with zero new logic. (This is the strongest evidence the consolidation is correct, not merely tidier.)
 
-3. **Push only when the branch CARRIES WORK (emptiness-guarded).** The one genuine
-   "nothing to push" case is a couldn't-even-start bounce (no commits beyond main /
-   the branch does not exist) — guard the push with the same ahead-of-main check the
-   continue-detection uses (`branchAheadOf` in `continue-branch.ts`, or equivalent):
-   no work beyond main ⇒ skip the push (no error). NOTE this is a NEW guard the
-   helper does not have today (it pushes unconditionally when given an arbiter); the
-   move-only commit always makes the branch non-empty in the normal bounce, but the
-   guard makes the empty case safe + makes the intent explicit.
+3. **Push only when the branch CARRIES WORK (emptiness-guarded).** The one genuine "nothing to push" case is a couldn't-even-start bounce (no commits beyond main / the branch does not exist) — guard the push with the same ahead-of-main check the continue-detection uses (`branchAheadOf` in `continue-branch.ts`, or equivalent): no work beyond main ⇒ skip the push (no error). NOTE this is a NEW guard the helper does not have today (it pushes unconditionally when given an arbiter); the move-only commit always makes the branch non-empty in the normal bounce, but the guard makes the empty case safe + makes the intent explicit.
 
-4. **Route `run`'s agent-failure THROUGH the seam** (closing the fifth gap as a
-   CONSEQUENCE of the design, not a separate patch). `run.ts`'s `agent-failed`
-   bare-returns (after prompt-assembly fail / `runAgent` throw / `agent.ok ===
-   false`) currently save nothing. Make them call the seam transition (mirroring
-   `do.ts`'s `saveAgentFailure`), so the fleet's failed-agent work is saved +
-   surfaced + pushed + recoverable — for free, because the push now lives in the
-   seam.
+4. **Route `run`'s agent-failure THROUGH the seam** (closing the fifth gap as a CONSEQUENCE of the design, not a separate patch). `run.ts`'s `agent-failed` bare-returns (after prompt-assembly fail / `runAgent` throw / `agent.ok === false`) currently save nothing. Make them call the seam transition (mirroring `do.ts`'s `saveAgentFailure`), so the fleet's failed-agent work is saved + surfaced + pushed + recoverable — for free, because the push now lives in the seam.
 
-5. **Seam intent docstring rewritten as transition-kind-agnostic.** The seam's
-   contract becomes *"durably record a stuck job = OBSERVABLE (ledger surface on
-   `main`) + RECOVERABLE (push the work branch, when there is one)."* The
-   "cherry-pick to `main`" stays a mode-M implementation detail of the OBSERVABLE
-   half; "push the work branch" is mode-M's way of satisfying the RECOVERABLE half
-   (a future mode-P could satisfy it differently). Crucially the docstring must NOT
-   assume a `work/<slug>` build branch — recovery is ARTIFACT-AGNOSTIC.
+5. **Seam intent docstring rewritten as transition-kind-agnostic.** The seam's contract becomes _"durably record a stuck job = OBSERVABLE (ledger surface on `main`) + RECOVERABLE (push the work branch, when there is one)."_ The "cherry-pick to `main`" stays a mode-M implementation detail of the OBSERVABLE half; "push the work branch" is mode-M's way of satisfying the RECOVERABLE half (a future mode-P could satisfy it differently). Crucially the docstring must NOT assume a `work/<slug>` build branch — recovery is ARTIFACT-AGNOSTIC.
 
 ### What stays put (do NOT absorb)
 
-- The **onboard-time `--force-with-lease` continue-push** (in `start.ts` /
-  `isolation.ts` / `workspace.ts`) is a DIFFERENT operation — it rebases-then-pushes
-  a CONTINUED branch at onboard time, not a bounce. It stays where it is. This slice
-  absorbs ONLY the bounce-time plain push.
-- **The two continue-rebase-conflict bounces are NOT the same and must be handled
-  differently (the load-bearing composition point):**
-  - **`run.ts` onboard-time continue-conflict** (`run.ts:310`) is checked out ON
-    `work/<slug>` (the worktree was cut from the kept branch). Default-push
-    `work/<slug>` is CORRECT here — it pushes the branch HEAD is actually on.
-    **INTENDED behavioural change to call out:** the rebase was ABORTED, so the
-    branch tip == the arbiter tip (the kept branch, unchanged) — i.e. ALREADY on
-    the arbiter. The push is a no-op/ff, but it makes the §4 reap predicate (clean
-    + branch-on-arbiter) hold, so this worktree — RETAINED today — becomes REAPED.
-    That is MORE §14-aligned, not a regression: §14 says "the job worktree is a
-    disposable cache; recovery flows through the branch + folder-native surfaces,
-    NOT by editing the worktree." So UPDATE the now-stale `run.ts:310` comment
-    ("the retained worktree is the never-lose-work signal") to match (the branch on
-    the arbiter + the main surface are the signal) — the same off-model framing PR
-    #9 corrected for gate-fail. Do NOT special-case to preserve retention (that
-    re-introduces the asymmetry).
-  - **`start.ts` `routeContinueConflict`** (`start.ts:547`) is the SURFACE-ONLY
-    case: HEAD is on a throwaway temp branch off main, NOT `work/<slug>`. If the
-    seam default-pushes `work/<slug>` here it would push a ref HEAD is NOT on (a
-    stale/local `work/<slug>`, while the real continued branch is already on the
-    arbiter) — a latent wrong-branch push. So `routeContinueConflict` MUST be a
-    surface-only caller (pass NO `branch` / `pushBranch: false`). The same applies
-    to ANY temp-branch-off-main caller (cf. `startFromNeedsAttention`'s
-    `resolve-<slug>` pattern, which uses the resolve transition, not this one — but
-    audit it).
-  - The earlier framing ("safe because the branch is already on the arbiter,
-    no-op/ff") was WRONG for `start.ts`: HEAD is not on `work/<slug>`, so the push
-    is not a clean re-push of the current branch — it is a different ref entirely.
-    Surface-only is the correct treatment, not "push anyway, it's a no-op."
+- The **onboard-time `--force-with-lease` continue-push** (in `start.ts` / `isolation.ts` / `workspace.ts`) is a DIFFERENT operation — it rebases-then-pushes a CONTINUED branch at onboard time, not a bounce. It stays where it is. This slice absorbs ONLY the bounce-time plain push.
+- **The two continue-rebase-conflict bounces are NOT the same and must be handled differently (the load-bearing composition point):**
+  - **`run.ts` onboard-time continue-conflict** (`run.ts:310`) is checked out ON `work/<slug>` (the worktree was cut from the kept branch). Default-push `work/<slug>` is CORRECT here — it pushes the branch HEAD is actually on. **INTENDED behavioural change to call out:** the rebase was ABORTED, so the branch tip == the arbiter tip (the kept branch, unchanged) — i.e. ALREADY on the arbiter. The push is a no-op/ff, but it makes the §4 reap predicate (clean
+    - branch-on-arbiter) hold, so this worktree — RETAINED today — becomes REAPED. That is MORE §14-aligned, not a regression: §14 says "the job worktree is a disposable cache; recovery flows through the branch + folder-native surfaces, NOT by editing the worktree." So UPDATE the now-stale `run.ts:310` comment ("the retained worktree is the never-lose-work signal") to match (the branch on the arbiter + the main surface are the signal) — the same off-model framing PR #9 corrected for gate-fail. Do NOT special-case to preserve retention (that re-introduces the asymmetry).
+  - **`start.ts` `routeContinueConflict`** (`start.ts:547`) is the SURFACE-ONLY case: HEAD is on a throwaway temp branch off main, NOT `work/<slug>`. If the seam default-pushes `work/<slug>` here it would push a ref HEAD is NOT on (a stale/local `work/<slug>`, while the real continued branch is already on the arbiter) — a latent wrong-branch push. So `routeContinueConflict` MUST be a surface-only caller (pass NO `branch` / `pushBranch: false`). The same applies to ANY temp-branch-off-main caller (cf. `startFromNeedsAttention`'s `resolve-<slug>` pattern, which uses the resolve transition, not this one — but audit it).
+  - The earlier framing ("safe because the branch is already on the arbiter, no-op/ff") was WRONG for `start.ts`: HEAD is not on `work/<slug>`, so the push is not a clean re-push of the current branch — it is a different ref entirely. Surface-only is the correct treatment, not "push anyway, it's a no-op."
 
 ### Design note carried forward (for `auto-slice`, NOT built here)
 
-§14's recovery model ("the branch is the durable artifact; requeue continues from
-its tip") is **transition-kind-agnostic** — it applies to the SLICING branch too. A
-slicing attempt can fail AFTER producing slice files (e.g. a `review` Gate-1 spec
-rejection), and **those written slices are a valuable durable artifact** — discarding
-them re-derives the decomposition from scratch and loses the reviewer's context. So
-when PRD-slicing is built (`auto-slice`, currently `prd-not-wired`), it MUST reuse
-THIS seam: push its `work/slicing/<slug>` branch on a bounce, so a requeue continues
-from the written slices, exactly as a build continues from the code wip. This slice
-shapes the seam to RECEIVE that (branch-parameterised, emptiness-guarded,
-artifact-agnostic) and records the intent in §14 (addendum) so auto-slice reuses the
-code rather than re-discovering the asymmetry a sixth time.
+§14's recovery model ("the branch is the durable artifact; requeue continues from its tip") is **transition-kind-agnostic** — it applies to the SLICING branch too. A slicing attempt can fail AFTER producing slice files (e.g. a `review` Gate-1 spec rejection), and **those written slices are a valuable durable artifact** — discarding them re-derives the decomposition from scratch and loses the reviewer's context. So when PRD-slicing is built (`auto-slice`, currently `prd-not-wired`), it MUST reuse THIS seam: push its `work/slicing/<slug>` branch on a bounce, so a requeue continues from the written slices, exactly as a build continues from the code wip. This slice shapes the seam to RECEIVE that (branch-parameterised, emptiness-guarded, artifact-agnostic) and records the intent in §14 (addendum) so auto-slice reuses the code rather than re-discovering the asymmetry a sixth time.
 
 ## Acceptance criteria
 
-- [ ] `applyNeedsAttentionTransition` NO LONGER strips the arbiter (`const {arbiter,
-      ...move}` removed): the helper's existing push fires through the seam, so a
-      seam call with an arbiter both publishes the ledger surface AND pushes the
-      work branch. The bolted-on `pushWorkBranch` calls + duplicated helpers in
-      `run.ts` and `complete.ts` are DELETED (one home for the push: the helper).
-      All existing gate-fail / agent-fail / rebase-conflict recovery tests stay green.
-- [ ] The helper's push is BEST-EFFORT (an unreachable arbiter does not throw / does
-      not turn a bounce into a hard error) — parity with the bolted-on copies it
-      replaces. (It is `gitHard`/throwing today.)
-- [ ] `RouteToNeedsAttentionOptions` gains a `branch?` field (DEFAULT `work/<slug>`)
-      used as the push target, replacing the hardcoded `work/<slug>`. A test passes
-      a non-default branch and asserts THAT branch is pushed.
-- [ ] A SURFACE-ONLY caller (no `branch` / `pushBranch: false`) publishes the main
-      surface and pushes NOTHING. `start.ts` `routeContinueConflict` (HEAD on a temp
-      branch off main, NOT `work/<slug>`) is converted to surface-only; a test
-      asserts it does NOT push `work/<slug>` (no wrong-branch push) while still
-      surfacing the stuck state on the arbiter's main.
-- [ ] A couldn't-start bounce (branch supplied but absent / no work beyond main)
-      pushes NOTHING and does not error (NEW emptiness guard — the helper pushes
-      unconditionally today).
-- [ ] The human-vs-autonomous gate is PRESERVED with no new logic: human `complete`
-      passes no arbiter → the seam's (now-firing) push does not fire; autonomous `do`
-      passes the arbiter → it does. A test asserts human `complete` (no
-      surfaceArbiter) pushes nothing (the existing divergence test, still green).
-- [ ] (INTENDED change) `run`'s §14 continue-conflict (`run.ts:310`) worktree, which
-      RETAINS today, now REAPS — its branch is already on the arbiter (aborted
-      rebase ⇒ tip unchanged), so the push is a no-op/ff that makes the §4 predicate
-      hold (§14-aligned: the worktree is a disposable cache; the branch + surface
-      are the signal). A test asserts it reaps + the branch is on the arbiter; the
-      stale `run.ts:310` "retained worktree is the signal" comment is updated. Do
-      NOT special-case to preserve retention.
-- [ ] `run`'s agent-failure now routes through the seam (saves + surfaces + pushes),
-      cross-machine recoverable via requeue-continue — proven by a test from a FRESH
-      clone (mirrors PR #8's `do` agent-fail recovery test). NOTE the run.test.ts
-      "retains the pi harness record" test (added by PR #9) relied on the agent-fail
-      path RETAINING the worktree; once run-agent-fail pushes (⇒ reaped), that test
-      must move to a still-retained path — the SURFACE-ONLY / temp-branch callers do
-      NOT create a job worktree, so the remaining job-worktree retention is a
-      genuinely un-pushed case (e.g. a best-effort push that FAILED, offline
-      arbiter). Repoint the test to an offline-arbiter agent-fail (push fails →
-      retained) and assert the record is readable; cross-reference
-      `run-agent-failure-does-not-save-work.md`.
-- [ ] The seam's intent docstring is rewritten transition-kind-agnostic
-      (observable + recoverable; no `work/<slug>` assumption); §14 gains a short
-      addendum stating recovery covers the slicing branch too (continue-from-written-
-      slices), so `auto-slice` reuses this seam.
-- [ ] The onboard-time `--force-with-lease` continue-push is UNCHANGED (not absorbed)
-      and the HUMAN `complete` path (no `surfaceArbiter`) stays local-only (no push).
-- [ ] **Test isolation:** local `--bare` arbiter + temp dirs + stubbed agent (no real
-      pi launch); assert real shared dirs untouched.
+- [ ] `applyNeedsAttentionTransition` NO LONGER strips the arbiter (`const {arbiter,     ...move}` removed): the helper's existing push fires through the seam, so a seam call with an arbiter both publishes the ledger surface AND pushes the work branch. The bolted-on `pushWorkBranch` calls + duplicated helpers in `run.ts` and `complete.ts` are DELETED (one home for the push: the helper). All existing gate-fail / agent-fail / rebase-conflict recovery tests stay green.
+- [ ] The helper's push is BEST-EFFORT (an unreachable arbiter does not throw / does not turn a bounce into a hard error) — parity with the bolted-on copies it replaces. (It is `gitHard`/throwing today.)
+- [ ] `RouteToNeedsAttentionOptions` gains a `branch?` field (DEFAULT `work/<slug>`) used as the push target, replacing the hardcoded `work/<slug>`. A test passes a non-default branch and asserts THAT branch is pushed.
+- [ ] A SURFACE-ONLY caller (no `branch` / `pushBranch: false`) publishes the main surface and pushes NOTHING. `start.ts` `routeContinueConflict` (HEAD on a temp branch off main, NOT `work/<slug>`) is converted to surface-only; a test asserts it does NOT push `work/<slug>` (no wrong-branch push) while still surfacing the stuck state on the arbiter's main.
+- [ ] A couldn't-start bounce (branch supplied but absent / no work beyond main) pushes NOTHING and does not error (NEW emptiness guard — the helper pushes unconditionally today).
+- [ ] The human-vs-autonomous gate is PRESERVED with no new logic: human `complete` passes no arbiter → the seam's (now-firing) push does not fire; autonomous `do` passes the arbiter → it does. A test asserts human `complete` (no surfaceArbiter) pushes nothing (the existing divergence test, still green).
+- [ ] (INTENDED change) `run`'s §14 continue-conflict (`run.ts:310`) worktree, which RETAINS today, now REAPS — its branch is already on the arbiter (aborted rebase ⇒ tip unchanged), so the push is a no-op/ff that makes the §4 predicate hold (§14-aligned: the worktree is a disposable cache; the branch + surface are the signal). A test asserts it reaps + the branch is on the arbiter; the stale `run.ts:310` "retained worktree is the signal" comment is updated. Do NOT special-case to preserve retention.
+- [ ] `run`'s agent-failure now routes through the seam (saves + surfaces + pushes), cross-machine recoverable via requeue-continue — proven by a test from a FRESH clone (mirrors PR #8's `do` agent-fail recovery test). NOTE the run.test.ts "retains the pi harness record" test (added by PR #9) relied on the agent-fail path RETAINING the worktree; once run-agent-fail pushes (⇒ reaped), that test must move to a still-retained path — the SURFACE-ONLY / temp-branch callers do NOT create a job worktree, so the remaining job-worktree retention is a genuinely un-pushed case (e.g. a best-effort push that FAILED, offline arbiter). Repoint the test to an offline-arbiter agent-fail (push fails → retained) and assert the record is readable; cross-reference `run-agent-failure-does-not-save-work.md`.
+- [ ] The seam's intent docstring is rewritten transition-kind-agnostic (observable + recoverable; no `work/<slug>` assumption); §14 gains a short addendum stating recovery covers the slicing branch too (continue-from-written- slices), so `auto-slice` reuses this seam.
+- [ ] The onboard-time `--force-with-lease` continue-push is UNCHANGED (not absorbed) and the HUMAN `complete` path (no `surfaceArbiter`) stays local-only (no push).
+- [ ] **Test isolation:** local `--bare` arbiter + temp dirs + stubbed agent (no real pi launch); assert real shared dirs untouched.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
 
-- `gate-fail-pushes-work-branch` — this consolidates the pushes that slice landed
-  (so it must be merged first; this slice removes its bolted-on duplication).
+- `gate-fail-pushes-work-branch` — this consolidates the pushes that slice landed (so it must be merged first; this slice removes its bolted-on duplication).
 
 ## Prompt
 
-> Consolidate the recurring "push the work branch on a needs-attention bounce"
-> logic INTO the ledger write seam, so it is ONE operation done in ONE place
-> (transition-kind-agnostic), instead of bolted onto each caller (we have patched
-> this asymmetry FOUR times; a fifth — `run` agent-fail — is still missing).
+> Consolidate the recurring "push the work branch on a needs-attention bounce" logic INTO the ledger write seam, so it is ONE operation done in ONE place (transition-kind-agnostic), instead of bolted onto each caller (we have patched this asymmetry FOUR times; a fifth — `run` agent-fail — is still missing).
 >
-> The push ALREADY EXISTS in `routeToNeedsAttention` (`src/needs-attention.ts`: its
-> tail pushes `work/<slug>` when given `arbiter`, hardcoded + throwing) — but the
-> SEAM wrapper `applyNeedsAttentionTransition` (`src/ledger-write.ts`) STRIPS the
-> arbiter (`const {arbiter, ...move} = input`) so it never fires. THE FIX: (a) stop
-> the seam stripping the arbiter so the helper's push fires alongside the
-> ledger-surface publish; (b) give the push target THREE states via a `branch?`
-> field on `RouteToNeedsAttentionOptions`: DEFAULT `work/<slug>` (build bounces, on
-> the work branch); an explicit other branch (`work/slicing/<slug>` for slicing);
-> and SURFACE-ONLY = push NOTHING (pass no `branch` / `pushBranch: false`) for
-> callers NOT on the work branch. The supplied branch MUST be the one HEAD is on —
-> NEVER a default that differs from HEAD; (c) soften the helper's push to
-> BEST-EFFORT (no throw on
-> an unreachable arbiter — parity with the bolted-on copies); (d) add an
-> emptiness guard (no work beyond main / branch absent ⇒ skip; reuse `branchAheadOf`
-> from `continue-branch.ts`). Then DELETE the bolted-on `pushWorkBranch` calls +
-> duplicated helpers in `src/run.ts` (steps 5 + integrate-conflict) and
-> `src/complete.ts` (gate-fail + rebase-conflict). Route `src/run.ts`'s
-> `agent-failed` returns through the seam (mirror `do.ts`'s `saveAgentFailure`) so
-> the fleet's failed-agent work is saved+pushed+recoverable.
+> The push ALREADY EXISTS in `routeToNeedsAttention` (`src/needs-attention.ts`: its tail pushes `work/<slug>` when given `arbiter`, hardcoded + throwing) — but the SEAM wrapper `applyNeedsAttentionTransition` (`src/ledger-write.ts`) STRIPS the arbiter (`const {arbiter, ...move} = input`) so it never fires. THE FIX: (a) stop the seam stripping the arbiter so the helper's push fires alongside the ledger-surface publish; (b) give the push target THREE states via a `branch?` field on `RouteToNeedsAttentionOptions`: DEFAULT `work/<slug>` (build bounces, on the work branch); an explicit other branch (`work/slicing/<slug>` for slicing); and SURFACE-ONLY = push NOTHING (pass no `branch` / `pushBranch: false`) for callers NOT on the work branch. The supplied branch MUST be the one HEAD is on — NEVER a default that differs from HEAD; (c) soften the helper's push to BEST-EFFORT (no throw on an unreachable arbiter — parity with the bolted-on copies); (d) add an emptiness guard (no work beyond main / branch absent ⇒ skip; reuse `branchAheadOf` from `continue-branch.ts`). Then DELETE the bolted-on `pushWorkBranch` calls + duplicated helpers in `src/run.ts` (steps 5 + integrate-conflict) and `src/complete.ts` (gate-fail + rebase-conflict). Route `src/run.ts`'s `agent-failed` returns through the seam (mirror `do.ts`'s `saveAgentFailure`) so the fleet's failed-agent work is saved+pushed+recoverable.
 >
-> CRITICAL composition point — the two continue-conflict bounces DIFFER: `run`
-> onboard-time continue-conflict (`run.ts:310`) IS on `work/<slug>` → default-push is
-> correct; `start.ts` `routeContinueConflict` (`start.ts:547`) is on a TEMP branch
-> off main (NOT `work/<slug>`; the real continued branch is already on the arbiter)
-> → it MUST be SURFACE-ONLY (push nothing), else the seam would push a `work/<slug>`
-> ref HEAD is not on. The human/autonomous gate is PRESERVED FOR FREE: the push
-> fires only when an arbiter is given; human `complete` passes
-> `surfaceArbiter: undefined` (no push), autonomous `do` passes it (push) —
-> un-stripping does NOT start pushing on human `complete`. Audit
-> `startFromNeedsAttention`'s `resolve-<slug>` temp-branch pattern too (it uses the
-> RESOLVE transition, not this one, but confirm it is unaffected).
+> CRITICAL composition point — the two continue-conflict bounces DIFFER: `run` onboard-time continue-conflict (`run.ts:310`) IS on `work/<slug>` → default-push is correct; `start.ts` `routeContinueConflict` (`start.ts:547`) is on a TEMP branch off main (NOT `work/<slug>`; the real continued branch is already on the arbiter) → it MUST be SURFACE-ONLY (push nothing), else the seam would push a `work/<slug>` ref HEAD is not on. The human/autonomous gate is PRESERVED FOR FREE: the push fires only when an arbiter is given; human `complete` passes `surfaceArbiter: undefined` (no push), autonomous `do` passes it (push) — un-stripping does NOT start pushing on human `complete`. Audit `startFromNeedsAttention`'s `resolve-<slug>` temp-branch pattern too (it uses the RESOLVE transition, not this one, but confirm it is unaffected).
 >
-> Rewrite the seam's intent docstring: "durably record a stuck job = OBSERVABLE
-> (ledger surface on main, the mode-M cherry-pick) + RECOVERABLE (push the work
-> branch, when there is one)" — transition-kind-agnostic, NO `work/<slug>`
-> assumption. Add a short §14 addendum
-> (`docs/adr/execution-substrate-decisions.md`): recovery is artifact-agnostic and
-> covers the SLICING branch too (a slice attempt that produced slices then failed a
-> review keeps them; requeue continues from the written slices) — so `auto-slice`
-> (currently `prd-not-wired`) reuses THIS seam rather than re-inventing the push.
+> Rewrite the seam's intent docstring: "durably record a stuck job = OBSERVABLE (ledger surface on main, the mode-M cherry-pick) + RECOVERABLE (push the work branch, when there is one)" — transition-kind-agnostic, NO `work/<slug>` assumption. Add a short §14 addendum (`docs/adr/execution-substrate-decisions.md`): recovery is artifact-agnostic and covers the SLICING branch too (a slice attempt that produced slices then failed a review keeps them; requeue continues from the written slices) — so `auto-slice` (currently `prd-not-wired`) reuses THIS seam rather than re-inventing the push.
 >
-> READ FIRST: `src/needs-attention.ts` (`routeToNeedsAttention` — its tail ALREADY
-> pushes the hardcoded `work/<slug>` when given `arbiter`, via `gitHard`; this is
-> the push to parameterise + soften, NOT re-implement); `src/ledger-write.ts`
-> (`applyNeedsAttentionTransition` — the `const {arbiter, ...move} = input` strip
-> that WITHHOLDS that push is the root bug); `src/run.ts` (steps 5 +
-> integrate-conflict push + the `agent-failed` bare-returns); `src/complete.ts`
-> (gate-fail + rebase-conflict push + the `pushWorkBranch` helper); `src/do.ts`
-> (`saveAgentFailure` — the parity reference); `src/continue-branch.ts`
-> (`branchAheadOf` for the emptiness guard); `work/observations/needs-attention-seam-*.md`
-> + `run-agent-failure-does-not-save-work.md`; `work/prd/auto-slice.md` (the slicing
-> branch `work/slicing/<slug>` + lock — why the branch must not be hardcoded);
-> `docs/adr/execution-substrate-decisions.md` §14. Do NOT absorb the onboard-time
-> `--force-with-lease` continue-push (different operation). Keep the human
-> `complete` (no surfaceArbiter) local-only.
+> READ FIRST: `src/needs-attention.ts` (`routeToNeedsAttention` — its tail ALREADY pushes the hardcoded `work/<slug>` when given `arbiter`, via `gitHard`; this is the push to parameterise + soften, NOT re-implement); `src/ledger-write.ts` (`applyNeedsAttentionTransition` — the `const {arbiter, ...move} = input` strip that WITHHOLDS that push is the root bug); `src/run.ts` (steps 5 + integrate-conflict push + the `agent-failed` bare-returns); `src/complete.ts` (gate-fail + rebase-conflict push + the `pushWorkBranch` helper); `src/do.ts` (`saveAgentFailure` — the parity reference); `src/continue-branch.ts` (`branchAheadOf` for the emptiness guard); `work/observations/needs-attention-seam-*.md`
 >
-> TDD with vitest, house style (local `--bare` arbiter, temp dirs, stubbed agent):
-> the seam pushes the supplied branch when it has work + skips when empty; run's
-> agent-fail saves+pushes (fresh-clone requeue-continue recovers it); all existing
-> recovery tests stay green; the onboard-time continue-push + human-complete paths
-> are untouched. "Done" = acceptance criteria met and the gate green.
+> - `run-agent-failure-does-not-save-work.md`; `work/prd/auto-slice.md` (the slicing branch `work/slicing/<slug>` + lock — why the branch must not be hardcoded); `docs/adr/execution-substrate-decisions.md` §14. Do NOT absorb the onboard-time `--force-with-lease` continue-push (different operation). Keep the human `complete` (no surfaceArbiter) local-only.
+>
+> TDD with vitest, house style (local `--bare` arbiter, temp dirs, stubbed agent): the seam pushes the supplied branch when it has work + skips when empty; run's agent-fail saves+pushes (fresh-clone requeue-continue recovers it); all existing recovery tests stay green; the onboard-time continue-push + human-complete paths are untouched. "Done" = acceptance criteria met and the gate green.
 
 ---
 

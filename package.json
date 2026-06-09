@@ -5,6 +5,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
     "ldenv": "^0.3.16",
+    "prettier": "^3.8.3",
     "zellij-launcher": "^0.0.1"
   },
   "scripts": {

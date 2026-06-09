@@ -5,67 +5,29 @@ description: "Turn the current conversation + codebase understanding into a PRD 
 
 # to-prd
 
-Synthesize the current conversation + codebase understanding into a **PRD**
-(Product Requirements Document) written to `work/prd/<slug>.md`. Do NOT interview
-the user — synthesize what you already know.
+Synthesize the current conversation + codebase understanding into a **PRD** (Product Requirements Document) written to `work/prd/<slug>.md`. Do NOT interview the user — synthesize what you already know.
 
-This is the wighawag, file-based variant of the tracker-oriented `to-prd`. It is
-intentionally **close to that skill** (the structure works), with two deliberate
-differences: it writes a **file** (no issue tracker / no setup), and it states
-up-front that the PRD is a **launch snapshot**, not a maintained document.
+This is the wighawag, file-based variant of the tracker-oriented `to-prd`. It is intentionally **close to that skill** (the structure works), with two deliberate differences: it writes a **file** (no issue tracker / no setup), and it states up-front that the PRD is a **launch snapshot**, not a maintained document.
 
 ## A PRD here is a LAUNCH SNAPSHOT (not maintained)
 
-Write it once, fully, at launch. It captures intent + decisions *at creation
-time*. It is **not kept in sync** afterwards — current truth lives in `docs/adr/`
-(decisions) and the code; remaining work lives in `work/backlog/` slices. Every
-PRD WILL be outrun by the work; that is normal and fine — do not fight it with
-ongoing PRD maintenance. (The `to-slices` skill performs a ONE-TIME trim at
-slice-time, moving the now-redundant technical detail into slices/ADRs so the PRD
-settles to its durable framing — see that skill. After that, the PRD is stable
-*because* the stale-prone part was relocated, not because it is maintained.)
+Write it once, fully, at launch. It captures intent + decisions _at creation time_. It is **not kept in sync** afterwards — current truth lives in `docs/adr/` (decisions) and the code; remaining work lives in `work/backlog/` slices. Every PRD WILL be outrun by the work; that is normal and fine — do not fight it with ongoing PRD maintenance. (The `to-slices` skill performs a ONE-TIME trim at slice-time, moving the now-redundant technical detail into slices/ADRs so the PRD settles to its durable framing — see that skill. After that, the PRD is stable _because_ the stale-prone part was relocated, not because it is maintained.)
 
 Put a one-line banner at the top of every PRD you write:
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth:
-> `docs/adr/` + code; remaining work: `work/backlog/`.
+> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` + code; remaining work: `work/backlog/`.
 
 ## Process
 
-1. **Explore** the repo to understand current state (if not already). Use the
-   project's domain glossary (`CONTEXT.md`) throughout, and respect ADRs in
-   `docs/adr/` for the area you're touching.
+1. **Explore** the repo to understand current state (if not already). Use the project's domain glossary (`CONTEXT.md`) throughout, and respect ADRs in `docs/adr/` for the area you're touching.
 
-2. **Sketch the seams** at which the feature will be tested. Prefer existing
-   seams; use the highest seam possible. Confirm the seams match the user's
-   expectations.
+2. **Sketch the seams** at which the feature will be tested. Prefer existing seams; use the highest seam possible. Confirm the seams match the user's expectations.
 
-3. **Set the two autonomy axes (the PRD now CARRIES the gate).** Because a PRD may
-   be AUTO-sliced by an agent with no human in the loop, decide and record both:
-   - **`humanOnly` (DECIDED):** set `humanOnly: true` on the PRD ONLY to mean
-     "a human must drive the SLICING of this PRD" (its sole effect: an agent may
-     not auto-slice it). This is DISJOINT from any slice's `humanOnly` — it does
-     NOT propagate to or guide the gates of the slices it produces (a `humanOnly`
-     PRD can yield fully agent-buildable slices). Describe judgement-heavy areas in
-     prose as ordinary domain context, but do NOT treat the PRD flag as a way to
-     pre-set slice gates (the slicer decides each slice's gate from that slice's
-     own build-nature — see the `to-slices` skill §3b).
-   - **`needsAnswers` (DISCOVERED):** if the conversation did NOT fully resolve the
-     spec, set `needsAnswers: true` and **list the open questions in the PRD body**
-     — the auto-slicer refuses to slice until they are answered and the flag
-     cleared. Be honest: flag an incomplete PRD rather than let it produce
-     wrongly-cut slices. Omit both flags when everything is resolved and
-     agent-sliceable.
-   - If this PRD's slices will depend on another PRD's slices, set
-     `sliceAfter: [other-prd]` so it is sliced in the right order.
-   This is the checkpoint that `to-slices` step 4 ("quiz the user") used to
-   provide; with auto-slicing it must be pre-recorded here OR honestly flagged.
+3. **Set the two autonomy axes (the PRD now CARRIES the gate).** Because a PRD may be AUTO-sliced by an agent with no human in the loop, decide and record both:
+   - **`humanOnly` (DECIDED):** set `humanOnly: true` on the PRD ONLY to mean "a human must drive the SLICING of this PRD" (its sole effect: an agent may not auto-slice it). This is DISJOINT from any slice's `humanOnly` — it does NOT propagate to or guide the gates of the slices it produces (a `humanOnly` PRD can yield fully agent-buildable slices). Describe judgement-heavy areas in prose as ordinary domain context, but do NOT treat the PRD flag as a way to pre-set slice gates (the slicer decides each slice's gate from that slice's own build-nature — see the `to-slices` skill §3b).
+   - **`needsAnswers` (DISCOVERED):** if the conversation did NOT fully resolve the spec, set `needsAnswers: true` and **list the open questions in the PRD body** — the auto-slicer refuses to slice until they are answered and the flag cleared. Be honest: flag an incomplete PRD rather than let it produce wrongly-cut slices. Omit both flags when everything is resolved and agent-sliceable.
+   - If this PRD's slices will depend on another PRD's slices, set `sliceAfter: [other-prd]` so it is sliced in the right order. This is the checkpoint that `to-slices` step 4 ("quiz the user") used to provide; with auto-slicing it must be pre-recorded here OR honestly flagged.
 
-4. **Write** the PRD to `work/prd/<slug>.md` using
-   [prd-template.md](work/protocol/prd-template.md), content-derived slug. Create `work/prd/`
-   lazily if absent.
+4. **Write** the PRD to `work/prd/<slug>.md` using [prd-template.md](work/protocol/prd-template.md), content-derived slug. Create `work/prd/` lazily if absent.
 
-**Do NOT** add an "update the PRD" step anywhere — the PRD is not synced (mirrors
-the tracker `to-prd`, which also never updates a PRD after creation). **Git:** do
-NOT stage/commit/push — leave the file for review; report the path written.
-(Slicing it into `work/backlog/` is the separate `to-slices` step.)
+**Do NOT** add an "update the PRD" step anywhere — the PRD is not synced (mirrors the tracker `to-prd`, which also never updates a PRD after creation). **Git:** do NOT stage/commit/push — leave the file for review; report the path written. (Slicing it into `work/backlog/` is the separate `to-slices` step.)
