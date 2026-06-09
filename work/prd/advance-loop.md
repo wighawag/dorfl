@@ -32,8 +32,50 @@ sliceAfter: [auto-slice, slicing-coherence]
 > `## DECIDED 2026-06-08` section of
 > `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`.
 >
+> **PRECURSOR-LANDED UPDATE (2026-06-09, planted by an `orchestrate` sitting —
+> SUPERSEDES the "must be sliced + built FIRST" framing of the PRECURSOR NOTE
+> above for the slicer's purposes).** `slicing-coherence` is now DONE: it RESIDES in
+> `work/prd-sliced/` (the very folder lifecycle it created) and ALL its slices are in
+> `work/done/`. So this PRD's `sliceAfter: [auto-slice, slicing-coherence]` is
+> SATISFIED — the slicer must treat the entire slicing-coherence substrate as PRESENT
+> code on `main`, NOT as pending precursor work. Concretely verified on `main`
+> (2026-06-09):
+> - **`do prd:<slug>` now routes slice output through `performIntegration`** (the
+>   keystone `slice-output-through-integration`, `work/done/`): `do prd:` honors
+>   `--propose`/`--merge` with arg parity by construction (`do.ts` resolves the
+>   integrate-time args ONCE in the shared core). US #27's propose-mode PR matrix is
+>   buildable on this TODAY — the slice rung is just "call the shared `do prd:`
+>   machinery," exactly as this PRD assumed.
+> - **The slice-path review model mirrors build**: the one-shot fresh-context
+>   acceptance gate (`slice-acceptance-gate`, slice-SET prompt, NO rounds —
+>   does NOT inherit `--review-max-rounds`) AND the `--slicer-loop*` improver-loop
+>   family (`slicer-loop-flag-family`: `--slicer-loop`/`--no-slicer-loop`/
+>   `--slicer-loop-max`/`--slicer-loop-model`) with the named whole-SET review lens
+>   (`slicer-loop-set-lens-prompt`) — all in `work/done/`, all live in
+>   `do.ts`/`repo-config.ts`/`integration-core.ts`.
+> - **The PRD folder lifecycle `prd/` → `slicing/` → `prd-sliced/` is REAL and the
+>   `sliced:` marker is GONE** (`prd-sliced-folder-step-a` + `remove-sliced-marker-step-b`,
+>   `work/done/`): folder residence is the SOLE source of truth (`frontmatter.ts`,
+>   `select-priority.ts` resolve `sliceAfter` against `prd-sliced/` residence). The
+>   tick's PRD slice rung lands the PRD in `prd-sliced/` via the runner-owned release
+>   commit — there is no marker to write.
+> - **The failure-handling TRIO has LANDED** (`work/done/`, merged 2026-06-09):
+>   `failure-cause-classification-model-vs-git-vs-agent` (a stuck item's CAUSE is now
+>   classified transient-infra / agent-misbehaved / gate-failed / config-wiring, and
+>   `do`+`run` classify the SAME error the SAME way), `needs-attention-routing-resilient-honest-requeue-safe`
+>   (needs-attention routing retries pushes with bounded backoff, never crashes the
+>   failure handler, reports exactly what landed — surface / branch / PR — and refuses
+>   a keep+continue requeue when the work branch is not on the arbiter), and
+>   `gate-nit-triage-text-skill-agnostic` (the Gate-2 review-nits generator no longer
+>   hardcodes a retiring skill name). The advance tick's "a STOP/failure is a
+>   surface-a-question signal, not a build failure" posture should COMPOSE this
+>   classified-cause + honest-reporting substrate (a transient-infra cause is a retry/
+>   idle, not a needs-design; a gate-failed/agent-misbehaved cause is the surface
+>   signal) rather than re-deriving failure classification.
+>
 > **SUBSTRATE-READINESS NOTE (2026-06-08, planted by an `orchestrate` sitting — read
-> before slicing).** The three pieces this PRD declares it REUSES have now LANDED on
+> before slicing; the 2026-06-09 UPDATE above is the current truth where they differ).**
+> The three pieces this PRD declares it REUSES have now LANDED on
 > `main`, so the slicer should treat them as PRESENT substrate, not pending work:
 > - **The `do`/`run` integrate-path convergence** is DONE — both slices of
 >   `run-do-integrate-convergence` (`extract-integration-core`,
