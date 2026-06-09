@@ -13,12 +13,39 @@ transient `Connection error.` mid-build. The runner printed:
 > partial work and routed it to work/needs-attention/ (surfaced on origin/main;
 > **pushed work/prd-sliced-folder-step-a**). Recover via `requeue` …
 
-But when the conductor went to recover, **the branch did NOT exist on origin** and
-the surface had not been published either — the same network outage that failed the
-agent also failed both git pushes. The message asserted two remote effects
-(`surfaced on origin/main`, `pushed work/<slug>`) that **did not happen**. The
-operator was told the work was safe + recoverable cross-machine when it was only
-saved LOCALLY.
+But when the conductor went to recover, **the branch did NOT exist on origin** —
+even though the message said "pushed work/prd-sliced-folder-step-a".
+
+## CORRECTED mechanism (traced 2026-06-08, more precise than the first cut)
+
+The agent's `Connection error.` was the **MODEL endpoint (pi harness), NOT git** —
+GitHub was reachable the whole time. The precise sequence:
+
+1. The agent failed EARLY (before producing meaningful committed work). The
+   wip-commit step (`git add -A`; commit only if staged) found nothing meaningful
+   → the `work/<slug>` branch tip stayed at/around the claim commit.
+2. The move-only needs-attention commit was made and its SURFACE push to
+   `origin/main` **SUCCEEDED** (git was up — a later `git pull` fetched that move).
+3. The branch push was **SKIPPED by the emptiness guard**: `branchAheadOf(work/<slug>,
+   main)` was false (the branch had nothing beyond main after the surface), so the
+   code hit the `else` → `note('Skipped pushing … nothing to recover')` and did NOT
+   push.
+
+So the two halves of the message diverged from reality differently:
+- `surfaced on origin/main` → **TRUE**.
+- `pushed work/<slug>` → **FALSE — the push was SKIPPED** (not failed). The message
+  hardcodes "pushed `${branch}`" whenever `moved` is true, regardless of whether
+  the branch push actually ran, was skipped by the emptiness guard, or failed soft.
+
+The original "both pushes failed" framing below is the OTHER reachable case (a genuine
+git/provider outage); the message is wrong in BOTH cases. The fix must report what
+actually happened for EACH of: surfaced (yes/no/failed) and branch-pushed
+(yes/skipped-empty/failed).
+
+---
+
+(original framing, still valid for the git-outage case:) The operator was told the
+work was safe + recoverable cross-machine when it was only saved LOCALLY.
 
 ## Root cause (the exact seam)
 
