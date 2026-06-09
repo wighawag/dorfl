@@ -3,7 +3,7 @@ title: issue-intake — the issue front-door, slices-first: 1 ask → 1 slice; n
 slug: issue-intake
 humanOnly: true
 needsAnswers: true
-sliceAfter: [auto-slice, runner-in-ci, issue-to-prd]
+sliceAfter: [auto-slice, issue-to-prd]
 ---
 
 > **Launch snapshot, not maintained.** Source material for slicing (`to-slices`);
@@ -22,6 +22,51 @@ sliceAfter: [auto-slice, runner-in-ci, issue-to-prd]
 > CONVERSATION this front-door routes to for the >1-slice case (and that PRD is
 > human-driven via the issue thread, the same way `to-prd` is human-driven at a
 > desk).
+>
+> **RESHAPE 2026-06-09 (maintainer grilling — the command IS the engine; CI is just
+> a scheduler).** A design session sharpened the execution model and DECOUPLED the
+> transformation from CI delivery. Key corrections, now load-bearing for the slicer:
+> - **One COMMAND, two callers.** The issue→slice/PRD transformation is a STANDALONE
+>   `agent-runner` command (working name `intake <N>` / `from-issue <N>` — bikeshed
+>   at slice time) that a maintainer runs LOCALLY one-shot AND that CI invokes — the
+>   SAME binary; CI is only the scheduler (a label-driven trigger + a per-issue
+>   concurrency group). There is NOT a separate "one-shot" engine; the command is the
+>   engine. (This folds in the abandoned `issue-oneshot` carve-out — the
+>   CI-independence is achieved by the command being runnable standalone, NOT by
+>   stripping the conversation.)
+> - **It is its OWN command, NOT a `do` namespace.** Three reasons: (a) it has NO
+>   review GATE (it is a transformation; the OUTPUT slice/PRD is reviewed later when
+>   it is built/sliced — `do`'s defining verify+Gate-2 do not apply); (b) its LOCK is
+>   provider-native, NOT the `work/` CAS (see next); (c) its question surface is the
+>   ISSUE THREAD, not the `work/` tree. `do` is git-in / gated / git-out; this is
+>   issue-in / (slice|PRD|comment)-out. Siblings, not the same verb.
+> - **LOCK = a GitHub issue LABEL, not the CAS ledger.** Two concurrent runs on issue
+>   N serialise on a provider-native lock label (e.g. `agent-runner:processing`) +
+>   the CI per-issue concurrency group — NOT a `work/`-file CAS, because the contended
+>   thing is the ISSUE (which lives in a system with its own arbiter), and the output
+>   slug is unknown until the agent reads the issue. MINIMAL: one `processing`-style
+>   lock label for concurrency; the OUTCOME is tracked by the emitted artifact (a lone
+>   slice's `Fixes #N`, a PRD's `issue: N`) — NOT a full whitesmith-style label
+>   state-machine (explicitly NOT reused, per Further Notes). The label ops
+>   (`addLabel`/`removeLabel`/`getLabels`) extend the ISSUE SEAM (GitHub adapter);
+>   a non-label provider degrades to best-effort (the CI concurrency group is then the
+>   only serialiser).
+> - **QUESTIONS go to the ISSUE THREAD** (`postComment`), NOT the advance-loop
+>   question/answer sidecar. The issue IS the conversation/question surface. A run
+>   either ADVANCES (emits the slice/PRD) or ASKS (posts a clarifying comment) and
+>   exits — the human answers IN THE ISSUE, the next run reads the thread. This holds
+>   IDENTICALLY for a local run and a CI run (no local-only terminal mode — that would
+>   fork behaviour). So this PRD does NOT depend on advance-loop.
+> - **`sliceAfter` no longer waits on `runner-in-ci`.** The COMMAND/ENGINE slices
+>   (the issue seam incl. label-ops, the transformation, the verb, output through
+>   `performIntegration`) depend only on `[auto-slice, issue-to-prd]` and are
+>   buildable now. Only the CI-DELIVERY slices (the trigger policy, the author-trust
+>   resolver, `install-ci`/the workflow + the label-driven schedule) sequence behind
+>   `runner-in-ci` — expressed per-slice via `blockedBy` at slice time, NOT by a
+>   PRD-level `sliceAfter` on the whole PRD. The open `needsAnswers` (author-trust
+>   resolver) is a CI-LAYER concern and does NOT block the command/engine slices: a
+>   LOCAL run's operator IS trusted (they ran it), so it just uses `--propose`/`--merge`
+>   like any `do`; the author-trust safety gate applies only to the CI front-door.
 
 ## Problem Statement
 
@@ -158,7 +203,13 @@ built as a separate mode (recorded here so it is not relitigated).
   (the vision-less multi case is bounced), so `prd:` presence is the tracking
   discriminator; nothing new is added to the contract.
 - **Closure:** lone slice → `Fixes #N`; PRD → `Refs #N` + the existing
-  "PRD complete?" query closes `issue: N`. Provider-portable, no labels (ADR §12).
+  "PRD complete?" query closes `issue: N`. Provider-portable, no STATE/closure
+  labels (ADR §12 — the `work/`-lifecycle status is folder-native, never an issue
+  label). NOTE the RESHAPE distinction: a single `processing`-style LOCK label
+  (concurrency only, added on start / removed on finish) is NOT a status/lifecycle
+  label — it carries no `work/` state, it is the provider-native mutex for two runs
+  on the same issue. ADR §12 forbids an issue-label STATE MACHINE for work lifecycle;
+  it does not forbid a transient concurrency lock label.
 - **Single-slice safety gate:** review-PR by default; direct-to-backlog auto-accept
   when the AUTHORIZING ACTOR is trusted. Trust resolver generalises `allowAgents`;
   it is a CI / issue-front-door concern, **NOT shared with `review`'s `autoMerge`**
@@ -222,15 +273,23 @@ built as a separate mode (recorded here so it is not relitigated).
     resolves to one of three outcomes and the runner branches on the verdict (the
     same shape `issue-to-prd` already uses).
 
-### Slice-readiness notes (resolved 2026-06-06, batch-qa)
+### Slice-readiness notes (RESHAPED 2026-06-09 — supersede the 2026-06-06 ordering)
 
-- **Slice ORDER: issue-intake is sliced LAST of the chain** — after BOTH
-  `runner-in-ci` and `issue-to-prd` are sliced (its `sliceAfter` names both, plus
-  the already-sliced `auto-slice`). Not this cycle. It reuses `issue-to-prd`'s
-  seam/conversation slugs and needs `runner-in-ci`'s `install-ci` slugs.
-- **Blocked from slicing by the open author-trust question above** (not just by
-  order): the resolver is a core deliverable this PRD's slices reference, so its
-  shape + owner must be pinned (jointly with `review` Q4) first.
+- **Slice ORDER (post-reshape): `sliceAfter: [auto-slice, issue-to-prd]`.** Both are
+  already sliced (`auto-slice` in `prd-sliced/`; `issue-to-prd` to be sliced with this
+  reshape — see below), so this PRD is slice-ELIGIBLE without waiting on
+  `runner-in-ci`. The COMMAND/ENGINE slices (issue seam incl. the `processing` lock
+  label + `postComment`, the transformation/outcome-branch, the verb, output through
+  `performIntegration`) are buildable now.
+- **Only the CI-DELIVERY slices wait on `runner-in-ci`** — expressed per-slice via
+  `blockedBy` (the trigger policy, the author-trust resolver, `install-ci` + the
+  label-driven schedule). Do NOT hold the whole PRD behind `runner-in-ci`.
+- **The open `needsAnswers` (author-trust resolver) blocks ONLY the CI-layer slices,
+  not the command/engine.** A LOCAL run's operator is trusted (they ran the command),
+  so the command just routes output through `performIntegration` (`--propose`/`--merge`)
+  like any `do` — no author-trust resolution needed. So the slicer marks the specific
+  CI author-trust slice `needsAnswers`, not the engine slices (and may clear the
+  PRD-level `needsAnswers`, pushing it down to that one slice).
 
 ## Out of Scope
 
@@ -244,7 +303,10 @@ built as a separate mode (recorded here so it is not relitigated).
 - A slice-level `issue:` grouping field (not needed — no vision-less multi-slice
   case to group; outcome #3 bounces it).
 - Non-GitHub issue providers (GitHub adapter first; the seam allows others later).
-- Any issue-label state-machine / issue lifecycle in core (ADR §12).
+- Any issue-label STATE-MACHINE / issue lifecycle in core (ADR §12). (A single
+  transient `processing` LOCK label — concurrency mutex only, no `work/` state — is
+  NOT a state-machine and IS in scope per the RESHAPE; the forbidden thing is
+  modelling work lifecycle in labels.)
 
 ## Further Notes
 

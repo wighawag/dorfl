@@ -2,7 +2,7 @@
 title: issue-to-prd — turn a GitHub issue conversation into a committed PRD
 slug: issue-to-prd
 humanOnly: true
-sliceAfter: [auto-slice, runner-in-ci]
+sliceAfter: [auto-slice]
 ---
 
 > **Launch snapshot, not maintained.** Source material for slicing; once sliced,
@@ -21,6 +21,22 @@ sliceAfter: [auto-slice, runner-in-ci]
 > PRD loop-closure (`Refs #N` + the folder-native "PRD complete?" query). It is the
 > PRD-OUTCOME building block; `issue-intake` is the slices-first front-door. Slice
 > the two together (`issue-intake` is `sliceAfter` this one).
+>
+> **RESHAPE 2026-06-09 (folds in `issue-intake`'s reshape — read it there in full).**
+> The issue→PRD/slice transformation is a STANDALONE `agent-runner` command (the same
+> binary a maintainer runs LOCALLY one-shot AND that CI schedules) — NOT a `do`
+> namespace (no review gate; lock = a provider-native GitHub `processing` LABEL, not
+> the `work/` CAS; questions go to the ISSUE THREAD via `postComment`, not a sidecar).
+> CI is only the scheduler (label-driven trigger + per-issue concurrency group). The
+> consequence for THIS PRD: the PRD-CONVERSATION engine it owns is part of that
+> command and is CI-INDEPENDENT, so `sliceAfter` drops `runner-in-ci` (now just
+> `[auto-slice]`) — the engine slices are buildable now; only the CI-DELIVERY pieces
+> (trigger/auth/`install-ci`) sequence behind `runner-in-ci` via per-slice `blockedBy`.
+> The abandoned `issue-oneshot` carve-out is folded in here + in `issue-intake`: the
+> CI-independence comes from the command being runnable standalone, NOT from removing
+> the in-thread conversation (which stays — it IS the question surface). NOTE: the
+> earlier note below saying `sliceAfter` includes `runner-in-ci` / "sliced after
+> runner-in-ci" is SUPERSEDED by this.
 
 ## Problem Statement
 
@@ -164,11 +180,14 @@ ends by committing a PRD.
 
 ### Slice-readiness notes (resolved 2026-06-06, batch-qa)
 
-- **Slice ORDER (respect `sliceAfter`): `runner-in-ci` is sliced FIRST, then this
-  PRD.** `auto-slice` is already sliced; `runner-in-ci` is NOT yet sliced, so this
-  PRD is not slice-ready this cycle (its slices need runner-in-ci's
-  `install-ci`/auth slugs to exist to reference in `blockedBy`). Do not relax
-  `sliceAfter` to slice against planned slugs — order it.
+- **Slice ORDER (RESHAPED 2026-06-09 — supersedes the 2026-06-06 note):**
+  `sliceAfter: [auto-slice]` only. `auto-slice` is already sliced, so this PRD is
+  slice-ELIGIBLE NOW. The PRD-CONVERSATION engine (issue seam incl. `postComment` +
+  the `processing` lock label, the clarify→advance/ask loop, the commit-the-PRD step)
+  is part of the standalone command and is CI-INDEPENDENT — buildable now. Only the
+  CI-DELIVERY pieces (trigger/auth/`install-ci` + the label-driven schedule) need
+  `runner-in-ci`'s slugs, expressed per-slice via `blockedBy` at slice time — NOT a
+  PRD-level wait on `runner-in-ci`. (The loop-closure CI job is also CI-delivery.)
 - **The "is this PRD complete?" query is a DELIVERABLE of this PRD's slices** (it
   does not exist in the codebase today — verified 2026-06-06: no PRD-complete
   predicate in `packages/agent-runner/src`). It is a pure read-only `work/`-folder
@@ -198,8 +217,9 @@ ends by committing a PRD.
   already provided more strongly by agent-runner's job/worktree isolation — so
   there is deliberately NO 1-PRD-1-PR mode; 1-PR-per-slice is the only model (a
   PRD that slices to exactly one slice naturally yields one PR).
-- Sliced AFTER `auto-slice` and `runner-in-ci` (frontmatter `sliceAfter`): it
-  builds on their `install-ci`/auth substrate and the two-axis PRD gate +
-  PRD→backlog step, so its slices need their slugs to exist to reference them in
-  `blockedBy`. (`sliceAfter` resolves against the `sliced:` marker — those PRDs
-  must be SLICED first, not necessarily fully built.)
+- Sliced AFTER `auto-slice` only (frontmatter `sliceAfter: [auto-slice]`, RESHAPED
+  2026-06-09). The PRD-conversation engine is CI-independent (part of the standalone
+  command); only the CI-delivery slices need `runner-in-ci`'s `install-ci`/auth slugs,
+  via per-slice `blockedBy`. (`sliceAfter` resolves against `work/prd-sliced/`
+  RESIDENCE — the `sliced:` marker was removed in `remove-sliced-marker-step-b`; those
+  PRDs must be SLICED first, not necessarily fully built.)
