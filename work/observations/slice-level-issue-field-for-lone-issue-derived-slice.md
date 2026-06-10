@@ -60,6 +60,15 @@ A second adversarial review caught two defects, both DRIFT introduced by our own
 
 Slice A re-reviewed clean (approve). Lesson: when a later decision removes/changes a mechanism, grep the OTHER slices for references to it — both defects were "a slice still pointing at an obsoleted mechanism".
 
+## Update (2026-06-10) — third review pass (algorithm-level)
+
+With C's structure + grammar settled, a third pass attacked the SET-ALGORITHM itself (tracing it on a concrete multi-marker thread, not reading prose) and found a genuine under-specification earlier passes hadn't reached:
+
+- **The trap is intake's OWN comments.** The unseen-check is "is there a comment intake never read?" — but intake's own marker-comments are IN the thread, so a naive set-membership check would see them as "unseen" every run and falsely PROCEED. PINNED: `seen=` is the per-run delta of HUMAN comment ids (excluding intake's own marker-comments AND already-seen ids); the unseen-check + deletion-check range over HUMAN comments only (intake comments identified by their marker, excluded). This is now stated in C's marker semantics, triage, criteria, Decisions, and prompt.
+- **Cut `createdAt`** from the `IssueComment` seam change — it was speculative ("ordering robustness") but nothing in the triage reads a timestamp (it is id-set membership + `listComments`' documented oldest-first order). YAGNI.
+
+Lesson (for the algorithm-y slices): once the prose is consistent, TRACE the algorithm on a concrete adversarial input (here: a multi-turn thread with intake's own comments interleaved) — that is what surfaces "two valid implementations, one wrong" gaps the prose hides.
+
 ## Refs
 
 - Source: the `issue-intake` slice review session, 2026-06-09 (maintainer's challenge to B2's resolution).
