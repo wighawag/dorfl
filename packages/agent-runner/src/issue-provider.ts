@@ -24,8 +24,11 @@ export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
  * The READ methods (`getIssue`, `listComments`) + the issue comment
  * (`postIssueComment`) landed with the keystone slice; the LABEL ops
  * (`addLabel`/`removeLabel`/`getLabels` — the transient `processing` LOCK, slice
- * `intake-processing-lock`) extend it here. `closeIssue` (CI's close-job) is a
- * LATER slice (`runner-in-ci`) and is deliberately NOT on this interface yet.
+ * `intake-processing-lock`) extend it. `closeIssue` (slice
+ * `intake-closes-issue-on-bounce`) is the ATOMIC close used on a BOUNCE — a
+ * terminal outcome, so intake closes the issue directly (comment + `not planned`
+ * + close in ONE call). It is ALSO the method CI's future close-job uses for the
+ * slice/PRD path; only the BOUNCE close is intake's.
  *
  * The label ops are a TRANSIENT CONCURRENCY MUTEX carrying NO `work/` state — ONE
  * lock label, added-on-start / removed-on-finish. They are NOT a label
@@ -105,6 +108,45 @@ export interface PostIssueCommentInput {
 export interface PostIssueCommentResult {
 	/** True iff a comment was actually posted (a real, authenticated provider). */
 	posted: boolean;
+	/** Human-readable confirmation / fallback (the text on degrade). */
+	instruction: string;
+}
+
+/**
+ * The close-reason GitHub renders distinct from a "completed" close. `gh issue
+ * close --reason` accepts `completed | not planned | duplicate`; a BOUNCE is
+ * precisely `not planned` (the asks are unrelated and must be re-filed). The
+ * INTERFACE carries it provider-neutrally — a non-GitHub adapter maps or ignores
+ * it (the seam stays provider-pluggable; `reason` is a GitHub-ism on the wire).
+ */
+export type IssueCloseReason = 'completed' | 'not planned' | 'duplicate';
+
+export interface CloseIssueInput {
+	cwd: string;
+	/** The issue number to close (`gh issue close <N>`). */
+	issueNumber: number;
+	/**
+	 * An OPTIONAL closing comment posted IN THE SAME atomic operation as the close
+	 * (`gh issue close --comment <body>`). Carrying it on the close call (not a
+	 * separate `postIssueComment` then close) removes the comment-posted-but-close-
+	 * failed window — the whole point of the atomic close.
+	 */
+	comment?: string;
+	/** An OPTIONAL close reason (`gh issue close --reason "not planned"`). */
+	reason?: IssueCloseReason;
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface CloseIssueResult {
+	/** True iff the issue was actually closed (a real, authenticated provider). */
+	closed: boolean;
+	/**
+	 * The REAL underlying failure detail when `closed` is false — the actual `gh`
+	 * stderr via {@link ghFailureReason}, NOT a hard-coded "unavailable or
+	 * unauthenticated" guess (that misattribution bug was fixed in `mutateLabel`;
+	 * do not propagate it). Absent on success.
+	 */
+	reason?: string;
 	/** Human-readable confirmation / fallback (the text on degrade). */
 	instruction: string;
 }
@@ -243,6 +285,17 @@ export interface IssueProvider {
 	 * throws; returns the three-way {@link LabelResult} like {@link addLabel}.
 	 */
 	removeLabel(input: RemoveLabelInput): Promise<LabelResult>;
+	/**
+	 * CLOSE an issue, OPTIONALLY posting a closing comment and setting a close
+	 * reason IN THE SAME atomic operation (`gh issue close <N> [--comment <body>]
+	 * [--reason "not planned"]`). Used on a BOUNCE (terminal: comment + `not
+	 * planned` + close in ONE call — no post-then-close partial-failure window) and,
+	 * later, by CI's slice/PRD close-job. The RUNNER calls this; the agent stays
+	 * seam-free. NEVER throws — a missing/unauthenticated `gh` DEGRADES, surfacing
+	 * the REAL `gh` stderr via {@link CloseIssueResult.reason} (NOT a hard-coded
+	 * guess), so the terminal outcome is unchanged and the cause stays diagnosable.
+	 */
+	closeIssue(input: CloseIssueInput): Promise<CloseIssueResult>;
 }
 
 export interface GitHubIssueProviderOptions {
@@ -255,9 +308,11 @@ export interface GitHubIssueProviderOptions {
 }
 
 /**
- * The GitHub issue provider: reads an issue + thread and posts a comment by
- * shelling out to the `gh` CLI (`gh issue view` / `gh api` / `gh issue comment`).
- * It is the ONLY place in the issue-seam stack that invokes `gh` — the core never
+ * The GitHub issue provider: reads an issue + thread, posts a comment, and (on a
+ * BOUNCE) atomically closes the issue by shelling out to the `gh` CLI (`gh issue
+ * view` / `gh issue comment` / `gh issue close --comment --reason` / `gh issue
+ * edit` for labels). It is the ONLY place in the issue-seam stack that invokes
+ * `gh` — the core never
  * imports it (the same boundary `github.ts` keeps for the review-request seam).
  *
  * The READ methods THROW on a `gh` failure (a missing/unauthenticated `gh`, or an
@@ -324,6 +379,48 @@ export class GitHubIssueProvider implements IssueProvider {
 		return {
 			posted: true,
 			instruction: `Posted a comment on issue #${input.issueNumber}.`,
+		};
+	}
+
+	async closeIssue(input: CloseIssueInput): Promise<CloseIssueResult> {
+		// ATOMIC: post the closing comment AND set the reason AND close in ONE
+		// `gh issue close` call — NOT a separate post-then-close (which has a
+		// comment-posted-but-close-failed window: the dishonest open-with-bounce-comment
+		// state this slice closes TO AVOID).
+		const args = ['issue', 'close', String(input.issueNumber)];
+		if (input.comment !== undefined && input.comment !== '') {
+			args.push('--comment', input.comment);
+		}
+		if (input.reason !== undefined) {
+			args.push('--reason', input.reason);
+		}
+		const result = this.runGh(args, input.cwd, input.env);
+		// DEGRADE (never throw) on a missing/unauthenticated `gh`. Surface the REAL
+		// `gh` stderr via `ghFailureReason` — NOT a hard-coded "unavailable or
+		// unauthenticated" guess (the misattribution bug already fixed in `mutateLabel`).
+		if (result === undefined) {
+			const reason = '`gh` is not available (binary missing).';
+			return {
+				closed: false,
+				reason,
+				instruction:
+					`could not close issue #${input.issueNumber}: ${reason}` +
+					(input.comment ? `\nThe comment:\n${input.comment}` : ''),
+			};
+		}
+		if (result.status !== 0) {
+			const reason = ghFailureReason(result);
+			return {
+				closed: false,
+				reason,
+				instruction:
+					`could not close issue #${input.issueNumber}: ${reason}` +
+					(input.comment ? `\nThe comment:\n${input.comment}` : ''),
+			};
+		}
+		return {
+			closed: true,
+			instruction: `Closed issue #${input.issueNumber}.`,
 		};
 	}
 

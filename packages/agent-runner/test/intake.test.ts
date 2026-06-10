@@ -17,6 +17,7 @@ import {
 	type IssueComment,
 	type IssueProvider,
 	type PostIssueCommentInput,
+	type CloseIssueInput,
 } from '../src/issue-provider.js';
 import {mergeConfig} from '../src/config.js';
 import {
@@ -74,19 +75,23 @@ function stubIssueProvider(
 	readonly comments: PostIssueCommentInput[];
 	readonly labels: string[];
 	readonly labelOps: string[];
+	readonly closes: CloseIssueInput[];
 } {
 	const comments: PostIssueCommentInput[] = [];
 	const labels: string[] = [...(opts.labels ?? [])];
 	const labelOps: string[] = [];
+	const closes: CloseIssueInput[] = [];
 	const provider: IssueProvider & {
 		comments: PostIssueCommentInput[];
 		labels: string[];
 		labelOps: string[];
+		closes: CloseIssueInput[];
 	} = {
 		name: 'stub',
 		comments,
 		labels,
 		labelOps,
+		closes,
 		async getIssue({issueNumber}) {
 			return {
 				number: issueNumber,
@@ -103,6 +108,10 @@ function stubIssueProvider(
 		async postIssueComment(input) {
 			comments.push(input);
 			return {posted: true, instruction: `commented on #${input.issueNumber}`};
+		},
+		async closeIssue(input) {
+			closes.push(input);
+			return {closed: true, instruction: `closed #${input.issueNumber}`};
 		},
 		async getLabels() {
 			if (opts.noLabels) {
@@ -326,6 +335,9 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			async postIssueComment() {
 				return {posted: false, instruction: 'n/a'};
 			},
+			async closeIssue() {
+				return {closed: false, instruction: 'n/a'};
+			},
 			async getLabels() {
 				return {
 					outcome: 'ok' as const,
@@ -393,7 +405,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(remoteBranches).not.toContain(`${ARBITER}/work/add-quiet-flag`);
 	});
 
-	it('a stubbed `bounce` verdict posts the “file separate issues” comment, emits NOTHING, leaves the issue open', async () => {
+	it('a stubbed `bounce` verdict CLOSES the issue ATOMICALLY (bounce text as closing comment + reason not planned), emits NOTHING — no separate postIssueComment', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 11}});
 		const result = await performIntake({
@@ -411,12 +423,107 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('bounced');
-		expect(issueProvider.comments).toHaveLength(1);
-		expect(issueProvider.comments[0].issueNumber).toBe(11);
-		expect(issueProvider.comments[0].body).toContain('separate issues');
-		// NO artifact; main untouched; the issue stays open (no close anywhere).
+		// ONE atomic close carrying the bounce text as the closing comment + reason
+		// `not planned` — NOT a separate postIssueComment then close.
+		expect(issueProvider.closes).toHaveLength(1);
+		expect(issueProvider.closes[0].issueNumber).toBe(11);
+		expect(issueProvider.closes[0].comment).toContain('separate issues');
+		expect(issueProvider.closes[0].reason).toBe('not planned');
+		// The bounce path does NOT post a separate comment (the close carries it).
+		expect(issueProvider.comments).toHaveLength(0);
+		// The result surfaces the close (additive `closed`, mirroring `commented`).
+		expect(result.closed).toBe(true);
+		// NO artifact; main untouched.
 		expect(result.emitted).toBeUndefined();
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
+	});
+
+	it('a close DEGRADE (gh missing/unauth) on a bounce does NOT change the terminal outcome (bounced, exit 0) and surfaces the REAL cause', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const base = stubIssueProvider({issue: {number: 11}});
+		const notes: string[] = [];
+		// The close FAILS for a real reason — the REAL `gh` stderr is carried in
+		// `instruction`/`reason`, NOT a hard-coded "unauthenticated" guess.
+		const issueProvider: IssueProvider = {
+			...base,
+			async closeIssue() {
+				return {
+					closed: false,
+					reason: 'HTTP 403: Resource not accessible by integration',
+					instruction:
+						'could not close issue #11: HTTP 403: Resource not accessible by integration',
+				};
+			},
+		};
+		const result = await performIntake({
+			issueNumber: 11,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'bounce',
+				bounceMessage: 'Unrelated — file separate issues.',
+			}),
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		// The terminal outcome is UNCHANGED by the degrade.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('bounced');
+		expect(result.closed).toBe(false);
+		// The REAL cause is surfaced (diagnosable), NOT a hard-coded auth guess.
+		expect(result.message).toMatch(/403/);
+		expect(result.message).not.toMatch(/unavailable or unauthenticated/i);
+	});
+
+	it('ask / slice / prd NEVER close the issue (only bounce closes)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// ASK: posts a comment, no close.
+		const askProvider = stubIssueProvider({issue: {number: 9}});
+		const asked = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: askProvider,
+			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
+			env: gitEnv(),
+		});
+		expect(asked.outcome).toBe('asked');
+		expect(askProvider.closes).toHaveLength(0);
+		expect(askProvider.comments).toHaveLength(1);
+		expect(asked.closed).toBeUndefined();
+
+		// SLICE: emits a slice, no close.
+		const sliceProvider = stubIssueProvider({issue: {number: 9}});
+		const sliced = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: sliceProvider,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+		});
+		expect(sliced.outcome).toBe('sliced');
+		expect(sliceProvider.closes).toHaveLength(0);
+		expect(sliced.closed).toBeUndefined();
+
+		// PRD: emits a PRD, no close.
+		const prdProvider = stubIssueProvider({issue: {number: 9}});
+		const prd = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: prdProvider,
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose modes',
+			}),
+			env: gitEnv(),
+		});
+		expect(prd.outcome).toBe('prd');
+		expect(prdProvider.closes).toHaveLength(0);
+		expect(prd.closed).toBeUndefined();
 	});
 
 	it('a `bounce`/`ask` verdict with NO drafted message still posts a sensible default comment', async () => {
@@ -433,6 +540,22 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(asked.outcome).toBe('asked');
 		expect(issueProvider.comments).toHaveLength(1);
 		expect(issueProvider.comments[0].body.trim()).not.toBe('');
+
+		// A bounce with NO drafted message still closes with a sensible default closing
+		// comment + reason not planned.
+		const bounceProvider = stubIssueProvider({issue: {number: 14}});
+		const bounced = await performIntake({
+			issueNumber: 14,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: bounceProvider,
+			decide: async () => ({outcome: 'bounce'}),
+			env: gitEnv(),
+		});
+		expect(bounced.outcome).toBe('bounced');
+		expect(bounceProvider.closes).toHaveLength(1);
+		expect((bounceProvider.closes[0].comment ?? '').trim()).not.toBe('');
+		expect(bounceProvider.closes[0].reason).toBe('not planned');
 	});
 
 	it('a stubbed `prd` verdict writes work/prd/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
@@ -954,6 +1077,7 @@ function writeGhIssueStub(opts: {exitCode?: number} = {}): {
 		'for a in "$@"; do',
 		'  if [ "$a" = "comment" ]; then exit 0; fi',
 		'  if [ "$a" = "edit" ]; then exit 0; fi',
+		'  if [ "$a" = "close" ]; then exit 0; fi',
 		'done',
 		'case "$*" in',
 		`  *labels*) printf '%s\\n' ${JSON.stringify(labelsJson)} ;;`,
@@ -984,6 +1108,30 @@ function writeGhFailingEditStub(stderr: string): {
 		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
 		'for a in "$@"; do',
 		`  if [ "$a" = "edit" ]; then printf '%s\\n' ${JSON.stringify(stderr)} 1>&2; exit 1; fi`,
+		'done',
+		'exit 0',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
+/**
+ * A `gh` stub whose `issue close` ALWAYS fails with the given stderr (exit 1) —
+ * used to assert the adapter DEGRADES (no throw) and surfaces the REAL stderr
+ * (e.g. an HTTP 403) rather than a hard-coded "unauthenticated" guess.
+ */
+function writeGhFailingCloseStub(stderr: string): {
+	bin: string;
+	argsFile: string;
+} {
+	const bin = join(scratch.root, 'gh-failing-close.sh');
+	const argsFile = join(scratch.root, 'gh-failing-close-args.txt');
+	const script = [
+		'#!/usr/bin/env bash',
+		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
+		'for a in "$@"; do',
+		`  if [ "$a" = "close" ]; then printf '%s\\n' ${JSON.stringify(stderr)} 1>&2; exit 1; fi`,
 		'done',
 		'exit 0',
 	].join('\n');
@@ -1118,6 +1266,79 @@ describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', (
 		expect(result.applied).toBe(true);
 		const args = readFileSync(stub.argsFile, 'utf8');
 		expect(args).toMatch(/^--remove-label$/m);
+	});
+
+	it('closeIssue shells out to `gh issue close <N> --comment <body> --reason "not planned"` in ONE atomic call', async () => {
+		const stub = writeGhIssueStub();
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.closeIssue({
+			cwd: scratch.root,
+			issueNumber: 42,
+			comment: 'Unrelated — please file separate issues.',
+			reason: 'not planned',
+		});
+		expect(result.closed).toBe(true);
+		const args = readFileSync(stub.argsFile, 'utf8');
+		// ONE atomic `gh issue close` carrying BOTH --comment and --reason (no separate
+		// post-then-close).
+		expect(args).toMatch(/^issue$/m);
+		expect(args).toMatch(/^close$/m);
+		expect(args).toMatch(/^42$/m);
+		expect(args).toMatch(/^--comment$/m);
+		expect(args).toMatch(/^Unrelated — please file separate issues\.$/m);
+		expect(args).toMatch(/^--reason$/m);
+		expect(args).toMatch(/^not planned$/m);
+		// The adapter NEVER --force-s anything; and it does NOT post a separate comment.
+		expect(args).not.toMatch(/force/);
+		expect(args).not.toMatch(/^comment$/m); // `issue comment`, not `issue close`
+	});
+
+	it('closeIssue omits --comment / --reason when not supplied (a bare close)', async () => {
+		const stub = writeGhIssueStub();
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.closeIssue({
+			cwd: scratch.root,
+			issueNumber: 7,
+		});
+		expect(result.closed).toBe(true);
+		const args = readFileSync(stub.argsFile, 'utf8');
+		expect(args).toMatch(/^close$/m);
+		expect(args).not.toMatch(/^--comment$/m);
+		expect(args).not.toMatch(/^--reason$/m);
+	});
+
+	it('closeIssue DEGRADES (no throw) when gh exits non-zero — surfacing the REAL stderr, NOT a hard-coded auth guess', async () => {
+		const stub = writeGhFailingCloseStub('HTTP 403: Resource not accessible');
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.closeIssue({
+			cwd: scratch.root,
+			issueNumber: 40,
+			comment: 'the bounce text',
+			reason: 'not planned',
+		});
+		expect(result.closed).toBe(false);
+		// The REAL gh stderr is surfaced (diagnosable), NOT the old hard-coded
+		// "unavailable or unauthenticated" guess that postIssueComment carries.
+		expect(result.reason).toMatch(/403/);
+		expect(result.instruction).toMatch(/403/);
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/i);
+		// The closing comment text is never lost on degrade.
+		expect(result.instruction).toContain('the bounce text');
+	});
+
+	it('closeIssue DEGRADES (no throw) when the gh binary is missing — the real cause is surfaced', async () => {
+		const provider = new GitHubIssueProvider({
+			ghBin: join(scratch.root, 'no-such-gh'),
+		});
+		const result = await provider.closeIssue({
+			cwd: scratch.root,
+			issueNumber: 42,
+			reason: 'not planned',
+		});
+		expect(result.closed).toBe(false);
+		expect(result.reason).toBeTruthy();
+		expect(result.reason).toMatch(/missing/i);
+		expect(result.instruction).not.toMatch(/unauthenticated/i);
 	});
 
 	it('getLabels FAILS (outcome: failed, no throw) on a label-supporting provider when gh exits non-zero — NOT a silent degrade', async () => {
@@ -1299,7 +1520,11 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('bounced');
-		const body = issueProvider.comments[0].body;
+		// The bounce CLOSES the issue atomically; the marker rides the CLOSING COMMENT
+		// (not a separate postIssueComment).
+		expect(issueProvider.comments).toHaveLength(0);
+		expect(issueProvider.closes).toHaveLength(1);
+		const body = issueProvider.closes[0].comment ?? '';
 		expect(body).toContain(`<!-- ${NS} kind=bounced seen=20 -->`);
 		expect(body).not.toContain('terminal');
 	});
