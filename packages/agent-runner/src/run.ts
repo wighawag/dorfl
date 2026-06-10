@@ -35,6 +35,7 @@ import {
 	type FailureCause,
 } from './failure-cause.js';
 import {performIntegration} from './integration-core.js';
+import {identityEnv, assertTransportAllowed} from './identity.js';
 import type {ReviewGate} from './review-gate.js';
 import type {BackoffOptions, Sleep} from './retry-backoff.js';
 import {tmpdir} from 'node:os';
@@ -394,6 +395,14 @@ interface OneItemContext {
 		env?: NodeJS.ProcessEnv;
 	}) => void;
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * The INTEGRATION-PATH env (identity feature): the env for git/provider
+	 * operations (claim, push, needs-attention surface, `gh`), derived from
+	 * `config.identity` per-repo. Distinct from `env` (the AGENT launch env, which
+	 * stays plain ambient — the runner, not the agent, acts as the identity). Set
+	 * per-item in {@link runOneItem}; absent ⇒ falls back to `env` (no identity).
+	 */
+	gitEnv?: NodeJS.ProcessEnv;
 	onWarn?: (message: string) => void;
 	/** Bounded-backoff bounds for the needs-attention route's network ops. */
 	backoff?: BackoffOptions;
@@ -426,6 +435,30 @@ async function runOneItem(
 		ctx.onWarn?.(resolved.message);
 	}
 
+	// The IDENTITY env for this repo's GIT + provider operations (claim, push,
+	// integration, `gh`). Derived from the host-only `config.identity` (absent ⇒
+	// `ctx.env` unchanged, byte-for-byte ambient). This is the INTEGRATION-PATH
+	// env ONLY: the agent launch keeps the plain ambient `ctx.env` (the runner,
+	// not the agent, acts as the configured identity — design point 4). The push-
+	// time transport-coherence guard (`assertTransportAllowed`) fires before the
+	// integration push (where the arbiter URL is known), turning a forbidden
+	// transport into a clear error, never a silent wrong-account push.
+	let gitEnv: NodeJS.ProcessEnv;
+	try {
+		gitEnv = identityEnv(config.identity, ctx.env ?? process.env);
+	} catch (err) {
+		// A configured identity that cannot be resolved (e.g. `tokenEnv` names an
+		// unset env var) is a CONFIG error — fail THIS item cleanly (surfaced), never
+		// crash the tick or silently fall back to an ambient credential.
+		const message = (err as Error).message;
+		ctx.onWarn?.(message);
+		return {...base, status: 'config-error', detail: message};
+	}
+	// A per-ITEM context carrying `gitEnv` so the needs-attention save helpers
+	// (`saveAgentFailure`/`saveAgentStop`) push under the identity too. We rebind a
+	// COPY (never mutate the shared tick `ctx` — items run concurrently).
+	ctx = {...ctx, gitEnv};
+
 	// 1. Claim (the runner's first git-state transition) via the in-process CAS.
 	//    `claimAgainstRepo` handles BOTH discovery shapes: a working CHECKOUT (the
 	//    in-place test/`do` path — claim directly) and a BARE registry hub mirror
@@ -441,7 +474,7 @@ async function runOneItem(
 			repoPath,
 			workspace: ctx.workspace,
 			arbiter: config.defaultArbiter,
-			env: ctx.env,
+			env: gitEnv,
 		});
 	// Serialise the claim PER REPO (it prepares its micro-commit in a checkout/clone
 	// of the repo) so two in-flight jobs in the same repo do not stomp on each
@@ -482,7 +515,7 @@ async function runOneItem(
 	});
 	let tree: IsolatedTree | undefined;
 	try {
-		tree = strategy.prepare({slug, env: ctx.env});
+		tree = strategy.prepare({slug, env: gitEnv});
 		// The claim clone (bare-mirror path) has done its job: the mirror is
 		// materialised + the worktree cut. Drop it (no-op for the in-place path).
 		repoClaim.cleanup();
@@ -510,7 +543,7 @@ async function runOneItem(
 				slug,
 				reason,
 				arbiter: tree.arbiterRemote,
-				env: ctx.env,
+				env: gitEnv,
 			});
 			return {...base, status: 'needs-attention', detail: reason};
 		}
@@ -533,7 +566,7 @@ async function runOneItem(
 						branchRef: `work/${slug}`,
 						mainRef: 'main',
 						content: readFileSync(slice.path, 'utf8'),
-						env: ctx.env,
+						env: gitEnv,
 					})
 				: undefined;
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
@@ -594,7 +627,7 @@ async function runOneItem(
 				: (await isWorkBranchDiffEmpty({
 							cwd: tree.dir,
 							arbiter: tree.arbiterRemote,
-							env: ctx.env,
+							env: gitEnv,
 					  }))
 					? emptyDiffStopReason(slug)
 					: undefined;
@@ -623,6 +656,21 @@ async function runOneItem(
 		// the whole tick. We catch it and route the item through the same
 		// work-preserving needs-attention seam an agent failure uses (`saveAgentFailure`)
 		// so the worktree is handled and the run continues to the next item.
+		// Push-time transport-coherence guard (identity feature): refuse a forbidden
+		// transport for THIS arbiter's actual URL rather than silently pushing under
+		// an ambient credential. A no-op when no identity is configured.
+		try {
+			assertTransportAllowed(config.identity, tree.arbiterUrl);
+		} catch (err) {
+			return await saveAgentFailure(
+				base,
+				tree,
+				slug,
+				(err as Error).message,
+				ctx,
+			);
+		}
+
 		let core;
 		try {
 			core = await performIntegration({
@@ -661,7 +709,10 @@ async function runOneItem(
 				// header). `title` is synthesised inside the core from the slice's
 				// frontmatter; `body` is the agent output (undefined ⇒ `--fill`).
 				body: agent.output,
-				env: ctx.env,
+				env: gitEnv,
+				// The review AGENT (Gate 2) launches AMBIENT — never the identity env
+				// (an agent must not act as the bot; only the runner's git ops do).
+				agentEnv: ctx.env,
 			});
 		} catch (err) {
 			// A thrown core error (misconfigured gate, or an unexpected plumbing
@@ -812,7 +863,7 @@ async function saveAgentFailure(
 		// recoverable via requeue-continue. The route is fault-tolerant: a git outage
 		// is retried with bounded backoff then gives up cleanly (never hangs the tick).
 		arbiter: tree.arbiterRemote,
-		env: ctx.env,
+		env: ctx.gitEnv ?? ctx.env,
 		backoff: ctx.backoff,
 		sleep: ctx.sleep,
 	});
@@ -852,7 +903,7 @@ async function saveAgentStop(
 		// Autonomous (`run`): surface on the arbiter's main AND push the work branch
 		// (the seam does both), so the stopped item is cross-machine visible/recoverable.
 		arbiter: tree.arbiterRemote,
-		env: ctx.env,
+		env: ctx.gitEnv ?? ctx.env,
 		backoff: ctx.backoff,
 		sleep: ctx.sleep,
 	});

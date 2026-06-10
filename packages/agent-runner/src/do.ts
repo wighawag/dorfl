@@ -31,6 +31,11 @@ import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
 import {git, runAsync, localMainAheadCount} from './git.js';
 import {
+	identityEnv,
+	assertTransportAllowed,
+	type Identity,
+} from './identity.js';
+import {
 	parseStopSentinel,
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
@@ -150,6 +155,13 @@ export interface DoOptions {
 	cwd: string;
 	/** Name of the arbiter git remote. Defaults to `origin`. */
 	arbiter?: string;
+	/**
+	 * The optional runner IDENTITY (a bot), threaded from host-only
+	 * `config.identity`. Scopes the runner's GIT/provider ops (claim, push,
+	 * integrate, `gh`) — NEVER the agent launch (the agent stays ambient; it must
+	 * not commit as the identity). Absent ⇒ ambient. See {@link identityEnv}.
+	 */
+	identity?: Identity;
 	/**
 	 * Per-repo `autoSlice` policy (resolved by `autoslice-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
@@ -283,6 +295,15 @@ interface DoAgentLaunchOptions {
 	watchSink?: (line: string) => void;
 	color?: boolean;
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * The optional runner IDENTITY (a bot). Threaded from the host-only
+	 * `config.identity`. It scopes the runner's GIT + provider operations (claim,
+	 * push, integration, `gh`) via process-scoped env overrides — NEVER the AGENT
+	 * launch (the agent keeps the plain ambient `env`; the agent must not commit as
+	 * the identity, only the runner's own git transitions do). Absent ⇒ ambient
+	 * (today's behaviour, byte-for-byte).
+	 */
+	identity?: Identity;
 }
 
 /**
@@ -411,7 +432,22 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	const note = options.note ?? (() => {});
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	const cwd = options.cwd;
-	const env = options.env;
+	// `env` here is the runner's GIT/provider env, scoped to the configured
+	// identity (claim, push, integrate, `gh`). The AGENT launch is the ONE thing
+	// that must NOT be the identity — it stays on the ambient `options.env`
+	// (`runDoAgent` reads `options.env` directly, never this local `env`), so the
+	// agent never commits as the bot; only the runner's own transitions do. Absent
+	// identity ⇒ `options.env` unchanged (byte-for-byte ambient). A configured
+	// identity that cannot be resolved (e.g. `tokenEnv` names an unset env var) is
+	// a clean usage error here, never a crash or a silent ambient fallback.
+	let env: NodeJS.ProcessEnv;
+	try {
+		env = identityEnv(options.identity, options.env ?? process.env);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		note(message);
+		return {exitCode: 1, outcome: 'usage-error', message};
+	}
 
 	// 0. `--watch` REQUIRES the pi harness (slice `do-watch`): only the pi adapter
 	//    writes a session `.jsonl` event log to tail. The null/shell adapter has no
@@ -500,6 +536,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			reviewGate: options.sliceReviewGate,
 			acceptanceReviewModel: options.reviewModel,
 			env,
+			// The slicer + review AGENTS launch AMBIENT, never the identity env.
+			agentEnv: options.env,
 			note,
 		});
 		return sliceResultToDoResult(sliced);
@@ -720,6 +758,24 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    arbiter's main, cross-machine visible — a stuck CI `do` that only routed
 	//    locally would be invisible). The success path reuses `complete`'s
 	//    machinery unchanged.
+	//
+	// Push-time transport-coherence guard (identity): refuse a forbidden transport
+	// for THIS arbiter's actual URL rather than silently pushing under an ambient
+	// credential. A no-op when no identity is configured.
+	try {
+		assertTransportAllowed(options.identity, tree.arbiterUrl);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return await saveAgentFailure({
+			slug,
+			branch,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
+			detail: message,
+			env,
+			note,
+		});
+	}
 	const completed = await performComplete({
 		slug,
 		cwd: tree.dir,
@@ -761,6 +817,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		note,
 		noteBlock: options.noteBlock,
 		env,
+		// The review AGENT (Gate 2) launches AMBIENT — never the identity env (an
+		// agent must not act as the bot; only the runner's git ops carry identity).
+		agentEnv: options.env,
 	});
 
 	if (completed.outcome === 'completed') {
@@ -1184,8 +1243,27 @@ export async function performDoRemote(
 ): Promise<DoResult> {
 	const note = options.note ?? (() => {});
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	const env = options.env;
+	// The runner's GIT/provider env, scoped to the configured identity (claim,
+	// push, integrate, `gh`). The AGENT launch stays ambient via `options.env`
+	// (`runDoAgent` reads it directly) — the agent must not commit as the bot.
+	// Absent identity ⇒ `options.env` unchanged (byte-for-byte ambient).
 	const workspacesDir = options.workspacesDir;
+
+	// Resolve the identity env AND run the push-time transport-coherence guard:
+	// refuse a forbidden transport for THIS remote's URL (the registered remote),
+	// and fail cleanly on an unresolvable identity (e.g. `tokenEnv` unset) — never
+	// a crash or a silent ambient fallback. Both are no-ops without an identity.
+	let env: NodeJS.ProcessEnv;
+	try {
+		env = identityEnv(options.identity, options.env ?? process.env);
+		assertTransportAllowed(options.identity, options.remote);
+	} catch (err) {
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
 
 	// 0. `--watch` REQUIRES the pi harness (same guard as in-place `do`): only the
 	//    pi adapter writes a session `.jsonl` to tail. Error CLEARLY here, BEFORE
@@ -1291,6 +1369,8 @@ export async function performDoRemote(
 				reviewGate: options.sliceReviewGate,
 				acceptanceReviewModel: options.reviewModel,
 				env,
+				// The slicer + review AGENTS launch AMBIENT, never the identity env.
+				agentEnv: options.env,
 				note,
 			});
 			return sliceResultToDoResult(sliced);
@@ -1554,6 +1634,9 @@ async function runRemotePipeline(
 		note,
 		noteBlock: options.noteBlock,
 		env,
+		// The review AGENT (Gate 2) launches AMBIENT — never the identity env (an
+		// agent must not act as the bot; only the runner's git ops carry identity).
+		agentEnv: options.env,
 	});
 
 	if (completed.outcome === 'completed') {

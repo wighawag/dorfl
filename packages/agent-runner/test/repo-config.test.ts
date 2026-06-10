@@ -42,6 +42,9 @@ describe('repo-config constants', () => {
 		// `sessionsDir` is a HOST-ONLY machine path (where session logs are written),
 		// rejected per-repo exactly like `piBin` (a committed file must not redirect it).
 		expect(REPO_REJECTED_KEYS).toContain('sessionsDir');
+		// `identity` carries SECRETS (a token, an SSH key path) and is a per-machine
+		// concept (a bot's credentials), so a committed repo file must NOT supply it.
+		expect(REPO_REJECTED_KEYS).toContain('identity');
 	});
 
 	it('keeps allowed and rejected key sets disjoint', () => {
@@ -99,11 +102,15 @@ describe('loadRepoConfig', () => {
 			integration: 'merge',
 			piBin: '/x',
 			maxParallel: 9,
-		});
+			// A committed repo file must NOT supply the secret-bearing identity.
+			identity: {auth: {ssh: 'ambient', https: 'ambient'}},
+		} as never);
 		const loaded = loadRepoConfig(repo);
 		expect(loaded.config).toEqual({integration: 'merge'});
 		expect(loaded.config).not.toHaveProperty('piBin');
 		expect(loaded.config).not.toHaveProperty('maxParallel');
+		expect(loaded.config).not.toHaveProperty('identity');
+		expect(loaded.rejected).toContain('identity');
 		expect(loaded.rejected).toContain('piBin');
 		expect(loaded.rejected).toContain('maxParallel');
 	});

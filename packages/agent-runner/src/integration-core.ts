@@ -200,8 +200,17 @@ export interface IntegrationCoreInput {
 	color?: boolean;
 	/** The HOST-ONLY sessions root the review session FILE is generated under. */
 	sessionsDir?: string;
-	/** Environment for child git processes (identity etc.). */
+	/** Environment for child GIT/provider processes (the identity-scoped env). */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Environment for the REVIEW-AGENT launch (Gate 2). Distinct from {@link env}
+	 * because the review agent is an AGENT — it must NOT carry the runner identity
+	 * (the agent must not act/commit as the bot; only the runner's own git
+	 * transitions do). The caller passes the plain AMBIENT env here when an identity
+	 * is configured. Unset ⇒ falls back to {@link env} (no identity ⇒ they are the
+	 * same env, so this is byte-for-byte unchanged for every non-identity caller).
+	 */
+	agentEnv?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 	/**
@@ -413,7 +422,10 @@ export async function performIntegration(
 				watchSink: input.watchSink,
 				color: input.color,
 				sessionsDir: input.sessionsDir,
-				env,
+				// The review AGENT launches with the AMBIENT env, never the identity-
+				// scoped `env` (an agent must not act as the bot). Falls back to `env`
+				// when no identity is configured (unchanged for non-identity callers).
+				env: input.agentEnv ?? env,
 			});
 			lastVerdict = verdict;
 			if (verdict.verdict === 'approve') {
