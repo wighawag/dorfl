@@ -43,6 +43,14 @@ Sliced into:
 - `work/backlog/intake-self-awareness-resumption-tracking.md` (a SEPARATE, pre-existing gap surfaced 2026-06-10: intake has NO marker / bot-identity / cursor, and `classifyIntakeEvent` re-evaluates EVERY new comment with no self-filter — so intake's OWN comments can re-trigger intake. The maintainer specified the fix as a DETERMINISTIC pre-decision TRIAGE GATE on a MARKER (kind `ask` non-terminal / `bounced`,`created` terminal): last comment is intake's → SKIP `no-new-input`; last comment is a human but a terminal marker exists → SKIP `already-terminal`; else PROCEED to the prompt on the new human input. The triage gate is the real guard, NOT the prompt; the `classifyIntakeEvent` self-filter demotes to a scheduling optimisation. Two new named skip outcomes.).
 - `work/backlog/intake-posts-completion-comment-on-slice-prd-outcomes.md` (blocked by BOTH the above: it needs the settled closure model AND the self-awareness marker so the completion comment does not re-trigger intake).
 
+## Update (2026-06-10) — review pass + a new race
+
+Reviewing the three slices surfaced fixes (all folded in):
+
+- **Slice A:** the "read-time precedence rule + test" had NO reader to live in (`prd-complete.ts` is keyed on `prd:` only; the lone-slice-`issue:` close-job is `runner-in-ci`'s, out of scope). Reduced to: DOCUMENT the `issue:` XOR `prd:` invariant (no throwing validator); the precedence is optionally a tiny pure `resolveClosingIssue` helper for the future close-job, or deferred entirely. Also: the PRD "Loop closure" drift is on BOTH `Fixes #N` (lone) AND `Refs #N` (fanned) — nothing emits `Refs #N` either; correct both.
+- **Slice B:** "merge → link the commit" needs a commit SHA that `IntegrateResult` does NOT expose today (it has `mode`/`mergedToMain`/`url?` only). Decision (maintainer): EXTEND `IntegrateResult` with an additive optional `commit?` (the more-correct option) — acknowledged shared-seam scope, kept additive so `do`/`run`/`complete` are unaffected.
+- **Slice C — a NEW race the maintainer spotted:** a human comment that lands AFTER intake READS but BEFORE intake POSTS would be lost forever (intake's comment becomes last → `no-new-input` skip; the raced comment never read). Fix: the marker carries `seen=<K>` (a COUNT of comments intake had read); the triage, when the last comment is intake's, RACE-CHECKS `seen` vs the comments before the marker and PROCEEDS (rather than skipping) when an unseen comment raced in — feeding it to the prompt flagged as PRE-DATING intake's turn (context for a prior state, not a fresh answer). A count (not a comment id) because `IssueComment` has no id today; deletion-shift is a SAFE re-read, never a wrong skip. An id-based `seenUpTo` is an optional seam-widening upgrade.
+
 ## Refs
 
 - Source: the `issue-intake` slice review session, 2026-06-09 (maintainer's challenge to B2's resolution).

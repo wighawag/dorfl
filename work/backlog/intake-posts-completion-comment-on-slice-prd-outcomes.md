@@ -16,8 +16,8 @@ On a SUCCESSFUL terminal outcome — `sliced` (a `work/backlog/<slug>.md` was cr
 
 - says **what was created** — "Created slice `<slug>`" / "Created PRD `<slug>`" — framed as `slice created` / `prd created`, **never** "issue resolved/closed";
 - links to the right place by INTEGRATION MODE (two variants):
-  - **propose** → link the **PR** that carries the artifact (the PR URL the integrate core returns);
-  - **merge** → link the **commit** the artifact landed in on `main` (the commit the integrate core returns);
+  - **propose** → link the **PR** that carries the artifact (the PR URL the integrate core already returns: `IntegrateResult.url`);
+  - **merge** → link the **commit** the artifact landed in on `main`. NOTE (verified 2026-06-10): `IntegrateResult` (`integrator.ts`) today carries `mode` / `mergedToMain` / `url?` but NO commit SHA. So this slice must EXTEND `IntegrateResult` (+ the integrator's merge branch + `IntegrationCoreResult.integration`) to surface the landed commit SHA. This touches the SHARED integrate seam used by `do`/`run`/`complete` — acknowledged added scope; keep it additive (a new optional `commit?` field), so existing callers are unaffected.
 - does NOT reference/link the PRD beyond naming the created PRD slug (maintainer: no need to link to PRD);
 - is purely informational — it changes NO issue state (no close, no label beyond the transient processing lock that already exists);
 - carries the intake MARKER (from `intake-self-awareness-resumption-tracking`): `<!-- ${brand.base}:intake kind=created slug=<slug> -->` (today `agent-runner:intake`; namespace built from `brand.base`), so the triage's `already-terminal` branch recognises this issue as already-transformed and intake never re-triggers on its own completion comment.
@@ -32,7 +32,8 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 
 - [ ] On a `sliced` outcome, an informational comment is posted on the issue naming the created slug and framed as "slice created" (NOT "resolved"), asserted at the stubbed issue seam.
 - [ ] On a `prd` outcome, likewise for the PRD ("PRD created"); no PRD link beyond the slug.
-- [ ] PROPOSE mode → the comment links the PR; MERGE mode → the comment links the commit. Two distinct messages, both tested.
+- [ ] `IntegrateResult` gains an additive optional `commit?` (the landed commit SHA), populated on the MERGE (`mergedToMain`) path; threaded through `IntegrationCoreResult.integration`. Existing `do`/`run`/`complete` callers are unaffected (additive field). A test pins it is populated in merge mode.
+- [ ] PROPOSE mode → the comment links the PR (`url`); MERGE mode → the comment links the commit (`commit`). Two distinct messages, both tested.
 - [ ] No comment is posted on `asked` / `bounced` / `locked` / `lock-failed` / `stale` / `agent-failed` / `usage-error` (tested for at least the non-success success-adjacent ones, e.g. `locked`).
 - [ ] The comment NEVER closes the issue or changes issue state (informational only); intake still never calls any close path.
 - [ ] The completion comment carries the intake marker, and a test confirms `classifyIntakeEvent` `ignore`s it (relying on the self-filter from the blocking slice) — so it cannot re-trigger intake.
@@ -51,10 +52,10 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 >
 > DRIFT CHECK FIRST: confirm intake posts NO comment on the slice/prd success paths today (only the `note`/stdout + GitHub's own cross-reference). Confirm the blocking slice `slice-level-issue-field-for-lone-issue-derived-slice` has landed (lone slice carries `issue:`, no `Fixes #N`) — the comment wording depends on it. If intake already posts a completion comment, this slice is done.
 >
-> WHAT TO BUILD: in `dispatchSlice` / `dispatchPrd` (or right after, where the terminal `IntakeResult` is built), post ONE comment via `postIssueComment` on success: name the created slug, frame as created (not resolved), and link the PR (propose) or the commit (merge) using the resolved integrate result the local `note` already uses. No PRD link beyond the slug. The RUNNER posts it; the agent stays seam-free.
+> WHAT TO BUILD: (a) EXTEND `IntegrateResult` with an additive optional `commit?` (the landed SHA), populate it on the merge path, thread it through `IntegrationCoreResult.integration` — keep it additive so `do`/`run`/`complete` are unaffected; (b) in `dispatchSlice` / `dispatchPrd` (or right after, where the terminal `IntakeResult` is built), post ONE comment via `postIssueComment` on success: name the created slug, frame as created (not resolved), and link the PR (`url`, propose) or the commit (`commit`, merge). No PRD link beyond the slug. The RUNNER posts it; the agent stays seam-free.
 >
 > SCOPE FENCE: comment ONLY on `sliced` / `prd`. Informational only — no close, no state change, no new label. Do NOT build the CI close-job. Do NOT build the self-filter here — it is the BLOCKING slice `intake-self-awareness-resumption-tracking`; here you only STAMP the completion comment with that slice's marker so the self-filter applies. (Do NOT assume ask/bounce comments are `ignore`d today — they are not.)
 >
-> SEAM TO TEST AT: the stubbed issue seam (`postIssueComment` recorded). Assert: a comment on slice success (created wording, slug, marker present, PR link in propose); the merge variant (commit link); NO comment on `locked`/`asked`/`bounced`; degrade on a missing `gh` does not change the success outcome; the marked comment is `ignore`d by `classifyIntakeEvent`.
+> SEAM TO TEST AT: the stubbed issue seam (`postIssueComment` recorded) + `IntegrateResult.commit` populated on the merge path. Assert: a comment on slice success (created wording, slug, marker present, PR link in propose); the merge variant (commit link from the new `commit` field); NO comment on `locked`/`asked`/`bounced`; degrade on a missing `gh` does not change the success outcome; the marked comment is `ignore`d by `classifyIntakeEvent`.
 >
 > "Done" = intake confirms `slice created`/`prd created` on the issue with the right PR/commit link, never closes the issue, cannot resume its own loop, and `pnpm -r build && pnpm -r test && pnpm format:check` is green.
