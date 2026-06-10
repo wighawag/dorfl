@@ -452,6 +452,12 @@ async function runStartAction(
 		// after onboarding (slice `agent-interactive-launch`). The per-repo config
 		// root is the current checkout.
 		launchInteractive: buildInteractiveLauncher(flags, flags.config, cwd),
+		// HUMAN commands (`start` = "begin here", `resume` = "continue here"): the
+		// onboard/branch/switch is the human's, so it is NOT given the runner
+		// `config.identity` (the autonomous onboard is `do`/`run`, identity-aware).
+		// Ambient `process.env` threaded EXPLICITLY so the choice is declared here,
+		// not left to the seam's silent `?? process.env` fallback.
+		env: process.env,
 		note: (message) => console.error(`>> ${message}`),
 	});
 	if (result.exitCode !== 0) {
@@ -770,6 +776,13 @@ export function buildProgram(): Command {
 				dryRun: flags.dryRun,
 				humanPath: true,
 				override: flags.ignoreNotReady === true,
+				// HUMAN command (the `humanPath: true` above already says so): the
+				// standalone `claim` CAS micro-commit + push is the human's, so it is
+				// NOT given the runner `config.identity`. The AUTONOMOUS claim is the one
+				// inside `do`/`run`/`intake` (identity-aware). Thread the ambient
+				// `process.env` EXPLICITLY so the human-identity choice is declared at the
+				// call site, not left to the seam's silent `?? process.env` fallback.
+				env: process.env,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {
@@ -949,6 +962,10 @@ export function buildProgram(): Command {
 					configPath,
 					remote === undefined ? process.cwd() : undefined,
 				),
+				// HUMAN command (the description says so): claim + worktree + branch is
+				// the human's, NOT given the runner `config.identity`. Ambient
+				// `process.env` threaded EXPLICITLY (not the seam's silent fallback).
+				env: process.env,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

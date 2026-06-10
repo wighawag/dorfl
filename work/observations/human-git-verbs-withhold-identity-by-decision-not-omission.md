@@ -1,8 +1,8 @@
 ---
-title: `complete` and `requeue` are HUMAN-identity commands BY DECISION (not by omission) — both now thread the ambient `process.env` explicitly so the runner `identity` is deliberately withheld; the autonomous completion/recovery path is `do`, which IS identity-aware
+title: every HUMAN git-verb (`claim`/`start`/`resume`/`work-on`/`complete`/`requeue`) withholds the runner `identity` BY DECISION (not by omission) — all now thread the ambient `process.env` explicitly; the autonomous claim/onboard/complete/recover path is `do`/`run`/`intake`, which ARE identity-aware
 date: 2026-06-10
 kind: observation
-area: src/cli.ts (the `complete` + `requeue` actions), src/complete.ts, src/ledger-write.ts (the env seam)
+area: src/cli.ts (the human-verb actions), src/complete.ts, src/ledger-write.ts (the env seam)
 severity: low
 status: resolved
 ---
@@ -50,12 +50,34 @@ Both `complete` and `requeue` are **HUMAN** commands. Rationale:
 
 ## The change made
 
-To make the decision **declared, not accidental**, both CLI actions now thread
-the ambient `process.env` EXPLICITLY (`env: process.env`) with a comment stating
-the human-identity framing — instead of relying on the seam's silent
-`?? process.env` fallback. No behaviour change (ambient was already the effective
-identity); this only makes the choice visible at the call site and prevents a
-future reader from "fixing" it by wiring in `config.identity`.
+To make the decision **declared, not accidental**, the CLI actions now thread the
+ambient `process.env` EXPLICITLY (`env: process.env`) with a comment stating the
+human-identity framing — instead of relying on the seam's silent `?? process.env`
+fallback. No behaviour change (ambient was already the effective identity); this
+only makes the choice visible at the call site and prevents a future reader from
+"fixing" it by wiring in `config.identity`.
+
+## Full audit (the whole command surface, not just complete/requeue)
+
+After the `complete`/`requeue` fix, ALL git-mutating commands were audited for the
+same human-by-omission pattern. Result — the model is coherent, and every HUMAN
+verb is now EXPLICIT:
+
+| Command | Identity | Status |
+| --- | --- | --- |
+| `do`, `run`, `intake` | **bot** (`identityEnv(config.identity, …)`) | autonomous — correct |
+| `claim` (standalone CLI) | ambient (human; `humanPath: true`) | now explicit `env: process.env` |
+| `start`, `resume` | ambient (human) | now explicit `env: process.env` |
+| `work-on` | ambient (human) | now explicit `env: process.env` |
+| `complete`, `requeue` | ambient (human) | now explicit `env: process.env` |
+| `gc` | local-only worktree removal (no commit/push) | no attribution concern |
+
+Key coherence point: the AUTONOMOUS claim (the bot) is the one performed INSIDE
+`do`/`run`/`intake` (verified: those claim commits are the bot, e.g.
+`0xronan7`); the standalone `claim` CLI verb is the HUMAN claim. Same pattern as
+`complete`: the autonomous path is identity-aware, the standalone human verb is
+not. No command "fell through the cracks" behaviourally — the audit only converted
+four more human verbs from human-by-omission to human-by-declaration.
 
 ## Open follow-on (LOW — only if an autonomous recovery loop is ever built)
 
