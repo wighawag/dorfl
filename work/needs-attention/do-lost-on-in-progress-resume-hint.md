@@ -41,3 +41,7 @@ Keep the done/absent message (`claim-cas.ts:272`) AS-IS \u2014 it is already acc
 > DRIFT CHECK FIRST: confirm the in-progress message still reads "…someone claimed it. Pick another item." (no hint). If a hint is already present, this slice is done \u2014 close it.
 >
 > "Done" = the in-progress message names the correct recovery path, the done/absent message is unchanged, a test pins both, no behaviour change, and `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
