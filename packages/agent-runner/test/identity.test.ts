@@ -1,4 +1,8 @@
 import {describe, it, expect} from 'vitest';
+import {spawnSync, execSync} from 'node:child_process';
+import {mkdtempSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {
 	arbiterTransport,
 	assertTransportAllowed,
@@ -148,8 +152,11 @@ describe('identityEnv', () => {
 			{},
 		);
 		expect(pinned.GIT_SSH_COMMAND).toBe(
-			`ssh -i '/home/u/.ssh/bot' -o IdentitiesOnly=yes`,
+			`ssh -i '/home/u/.ssh/bot' -o IdentitiesOnly=yes -o IdentityAgent=none`,
 		);
+		// `IdentityAgent=none` is load-bearing: without it a running ssh-agent can
+		// offer the human's key first and silently push as the wrong account.
+		expect(pinned.GIT_SSH_COMMAND).toContain('-o IdentityAgent=none');
 		expect(identityEnv(ambientIdentity(), {}).GIT_SSH_COMMAND).toBeUndefined();
 		expect(
 			identityEnv({auth: {ssh: 'never', https: 'ambient'}}, {}).GIT_SSH_COMMAND,
@@ -235,3 +242,66 @@ describe('assertTransportAllowed', () => {
 		).not.toThrow();
 	});
 });
+
+/**
+ * BEHAVIORAL regression for the agent-hijack bug: a pinned `auth.ssh` key must be
+ * the ONLY identity the real `ssh` binary offers, even when an ssh-agent holds
+ * other keys. `IdentitiesOnly=yes` ALONE does NOT achieve this — a running agent
+ * still offers its own keys first, so a push could silently authenticate as the
+ * WRONG account (we observed a real `Hi <human>!` despite `-i <bot key>`). The fix
+ * is `IdentityAgent=none`. We prove the produced `GIT_SSH_COMMAND` is HONORED by
+ * the actual `ssh` binary (not just that our string contains the flag) by
+ * resolving it with `ssh -G` (offline; no network/server/agent needed): the
+ * resolved config must report `identityagent none` and pin the bot key first.
+ */
+const hasSsh = (() => {
+	try {
+		return spawnSync('ssh', ['-V'], {stdio: 'ignore'}).status !== null;
+	} catch {
+		return false;
+	}
+})();
+
+(hasSsh ? describe : describe.skip)(
+	'GIT_SSH_COMMAND is honored by the real ssh binary (agent-hijack regression)',
+	() => {
+		it('detaches the ssh-agent and pins the bot key (IdentityAgent=none)', () => {
+			const dir = mkdtempSync(join(tmpdir(), 'agent-runner-ssh-'));
+			try {
+				// A REAL key file so `ssh -G` pins it (a non-existent `-i` path falls
+				// back to the default identity list).
+				const keyPath = join(dir, 'botkey');
+				execSync(
+					`ssh-keygen -q -t ed25519 -N "" -C bot -f ${JSON.stringify(keyPath)}`,
+				);
+
+				const env = identityEnv({auth: {ssh: keyPath, https: 'never'}}, {});
+				const sshCommand = env.GIT_SSH_COMMAND;
+				expect(sshCommand).toBeDefined();
+
+				// Parse the GIT_SSH_COMMAND into argv (it is `ssh -i <q> -o ... -o ...`),
+				// then ask the SAME ssh to RESOLVE its effective config (`-G <host>`),
+				// which honors the `-o` flags WITHOUT connecting anywhere.
+				const argv = (sshCommand as string).split(/\s+/).map((tok) =>
+					// strip the single-quotes our shellQuote added around the key path
+					tok.startsWith("'") && tok.endsWith("'") ? tok.slice(1, -1) : tok,
+				);
+				const [bin, ...args] = argv;
+				const resolved = spawnSync(bin, [...args, '-G', 'example.test'], {
+					encoding: 'utf8',
+				});
+				expect(resolved.status).toBe(0);
+				const lines = resolved.stdout.toLowerCase().split('\n');
+
+				// The decisive assertion: the agent is detached.
+				expect(lines).toContain('identityagent none');
+				expect(lines).toContain('identitiesonly yes');
+				// And the bot key is the FIRST identity file (the pin took effect).
+				const firstIdentity = lines.find((l) => l.startsWith('identityfile '));
+				expect(firstIdentity).toBe(`identityfile ${keyPath.toLowerCase()}`);
+			} finally {
+				rmSync(dir, {recursive: true, force: true});
+			}
+		});
+	},
+);

@@ -220,9 +220,20 @@ export function resolveGitHubToken(
  *     and the commit would be authored by the ambient identity — exactly the
  *     silent-fallback this feature exists to prevent. So we pin all four to the
  *     identity, making it win UNCONDITIONALLY over any ambient git identity.
- *   - `GIT_SSH_COMMAND` — `ssh -i <path> -o IdentitiesOnly=yes` ONLY when
- *     `auth.ssh` is a key path. `"ambient"`/`"never"` set nothing (ambient ssh
- *     resolution; `"never"` is enforced by the push-time transport guard).
+ *   - `GIT_SSH_COMMAND` — `ssh -i <path> -o IdentitiesOnly=yes -o
+ *     IdentityAgent=none` ONLY when `auth.ssh` is a key path. `"ambient"`/`"never"`
+ *     set nothing (ambient ssh resolution; `"never"` is enforced by the push-time
+ *     transport guard).
+ *
+ *     `IdentityAgent=none` is LOAD-BEARING, NOT decoration: `IdentitiesOnly=yes`
+ *     ALONE does NOT stop a running ssh-agent from offering its OWN keys — it only
+ *     restricts which keys are tried to those whose public file is named, and an
+ *     agent key matching a discoverable `~/.ssh/*.pub` is still offered FIRST. So
+ *     with a personal key in the agent, the push could silently authenticate as
+ *     the HUMAN (the wrong account) despite `-i <bot key>` — the exact silent-
+ *     wrong-account failure mode this feature exists to prevent (the SSH-axis twin
+ *     of the `GIT_AUTHOR_*` pinning below). `IdentityAgent=none` detaches the
+ *     agent entirely, so ONLY the pinned key is offered — it wins unconditionally.
  *   - `GH_TOKEN` — ONLY when a GitHub provider token is configured (resolved at
  *     use-time). NEVER fed to git (the token is provider-API only).
  */
@@ -253,9 +264,12 @@ export function identityEnv(
 	env.GIT_COMMITTER_EMAIL = email;
 
 	// Git TRANSPORT auth — only a PINNED ssh key sets GIT_SSH_COMMAND.
+	// `IdentityAgent=none` is REQUIRED for the pin to actually hold: without it a
+	// running ssh-agent (e.g. with the human's personal key) can offer its own keys
+	// FIRST and silently push as the wrong account, despite `-i <bot key>`.
 	const ssh = identity.auth.ssh;
 	if (ssh !== 'ambient' && ssh !== 'never') {
-		env.GIT_SSH_COMMAND = `ssh -i ${shellQuote(ssh)} -o IdentitiesOnly=yes`;
+		env.GIT_SSH_COMMAND = `ssh -i ${shellQuote(ssh)} -o IdentitiesOnly=yes -o IdentityAgent=none`;
 	}
 
 	// Provider API auth — the gh token, NEVER a git credential.
