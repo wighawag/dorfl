@@ -46,6 +46,22 @@ const editingAgent: AgentRunner = ({cwd, slug}) => {
 };
 
 /**
+ * Assert an agent-env var is ABSENT without ever letting its value reach the
+ * assertion (and thus the test-runner's failure output). A raw
+ * `expect(env.GH_TOKEN).toBeUndefined()` PRINTS the secret on failure — so we
+ * compare a presence BOOLEAN instead: on failure the runner can only echo
+ * `true`/`false`, never the token. Defense-in-depth: even a future env-pollution
+ * regression cannot leak a secret through this test's output.
+ */
+function expectAgentEnvAbsent(
+	env: NodeJS.ProcessEnv | undefined,
+	key: string,
+): void {
+	const present = env?.[key] !== undefined;
+	expect({[`${key}_present`]: present}).toEqual({[`${key}_present`]: false});
+}
+
+/**
  * A HOSTILE ambient env: it sets a DECOY human `GIT_AUTHOR_*`/`GIT_COMMITTER_*`
  * identity (and nulls the global/system config). Crucially, `GIT_AUTHOR_*`/
  * `GIT_COMMITTER_*` take PRECEDENCE over `user.name`/`user.email` — so this is the
@@ -188,8 +204,9 @@ describe('identity attribution (end-to-end through run → merge)', () => {
 		// The agent ran with the plain AMBIENT env: no provider token leaked into the
 		// agent's environment, and no identity commit-label override. The runner
 		// (not the agent) is the one that acts as the identity (design point 4).
-		expect(agentEnv?.GH_TOKEN).toBeUndefined();
-		expect(agentEnv?.GIT_CONFIG_PARAMETERS).toBeUndefined();
+		// Asserted via presence-booleans so a secret value is NEVER echoed on failure.
+		expectAgentEnvAbsent(agentEnv, 'GH_TOKEN');
+		expectAgentEnvAbsent(agentEnv, 'GIT_CONFIG_PARAMETERS');
 		// But the integration STILL attributed to the bot (the runner's git op did
 		// get the identity).
 		expect(arbiterMainAuthor(repo)).toBe(
@@ -233,8 +250,9 @@ describe('identity attribution (end-to-end through do → merge)', () => {
 			'author=Automation Bot <bot@agents.alt> committer=Automation Bot <bot@agents.alt>',
 		);
 		// … but the AGENT ran ambient (no leaked token, no identity commit-label).
-		expect(agentEnv?.GH_TOKEN).toBeUndefined();
-		expect(agentEnv?.GIT_CONFIG_PARAMETERS).toBeUndefined();
+		// Presence-booleans only — a secret value is NEVER echoed on failure.
+		expectAgentEnvAbsent(agentEnv, 'GH_TOKEN');
+		expectAgentEnvAbsent(agentEnv, 'GIT_CONFIG_PARAMETERS');
 	});
 
 	it('fails cleanly (no crash, no ambient fallback) when tokenEnv names an unset var', async () => {
