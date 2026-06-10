@@ -69,6 +69,20 @@ With C's structure + grammar settled, a third pass attacked the SET-ALGORITHM it
 
 Lesson (for the algorithm-y slices): once the prose is consistent, TRACE the algorithm on a concrete adversarial input (here: a multi-turn thread with intake's own comments interleaved) — that is what surfaces "two valid implementations, one wrong" gaps the prose hides.
 
+## Update (2026-06-10) — fourth review pass: bounce is terminal → intake CLOSES the issue (a deliberate PRD reversal)
+
+The fourth pass surfaced a product question the triage had silently decided: `bounced` is classified TERMINAL, so after a bounce intake skips forever (`already-terminal`) — but the PRD's BOUNCE row says "leave the issue OPEN". Flagged rather than guessed. **Maintainer decision:** bounce IS terminal, AND — since terminal — an open issue is a dishonest "still in play" signal, so **intake CLOSES the issue on bounce**.
+
+This REVERSES, for the BOUNCE case only, the PRD's repeated invariant "intake never closes the issue / closing is CI's close-job" + the BOUNCE "leave the issue OPEN" line. The settled split:
+
+- **bounce** → intake closes the issue DIRECTLY (terminal, no `work/` follow-up).
+- **slice / prd** → intake does NOT close; the future CI close-job closes via the `issue:` field.
+- **ask** → never closes.
+
+Because it reverses a stated invariant AND adds a new issue-mutating power (`closeIssue`, previously deferred to `runner-in-ci`), it is its OWN slice, not folded into the self-awareness slice: `work/backlog/intake-closes-issue-on-bounce.md` (adds `closeIssue` to the seam + closes on bounce + amends the PRD + reconciles the in-code "never closes" statements). Slice C classifies `bounced` terminal (the skip side); slice D performs the close (the action side) — two halves of one decision. Slice B's "intake never closes the issue" wording was reconciled to "never closes ON THE SLICE/PRD PATH".
+
+FUTURE (noted, not now): if leaving a bounced issue open to let the user reply/push-back turns out preferable, revisit — `bounced` would move to non-terminal in C's triage and the close would drop. The data/interpretation split (marker stores `kind`, triage owns terminal-ness) keeps that cheap.
+
 ## Refs
 
 - Source: the `issue-intake` slice review session, 2026-06-09 (maintainer's challenge to B2's resolution).

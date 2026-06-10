@@ -8,7 +8,7 @@ blockedBy:
 covers: [1]
 ---
 
-> Derives from the `issue-intake` PRD. Today intake "talks back" on the ASK and BOUNCE outcomes (it posts a comment) but is SILENT on the productive outcomes (SLICE / PRD), so the issue author gets a question or a rejection narrated to them but never a confirmation when intake actually did the useful thing. This closes that loop. The completion comment is INFORMATIONAL — it reports `slice created` / `prd created`, NEVER `issue resolved`; intake never closes the issue (closing is the future CI close-job's, `runner-in-ci`).
+> Derives from the `issue-intake` PRD. Today intake "talks back" on the ASK and BOUNCE outcomes (it posts a comment) but is SILENT on the productive outcomes (SLICE / PRD), so the issue author gets a question or a rejection narrated to them but never a confirmation when intake actually did the useful thing. This closes that loop. The completion comment is INFORMATIONAL — it reports `slice created` / `prd created`, NEVER `issue resolved`; intake does NOT close the issue ON THE SLICE/PRD PATH (the future CI close-job closes those via the `issue:` field). (Intake DOES close on BOUNCE — that is the sibling slice `intake-closes-issue-on-bounce` — but the slice/prd completion comment here is purely informational and never closes.)
 
 ## What to build
 
@@ -19,7 +19,7 @@ On a SUCCESSFUL terminal outcome — `sliced` (a `work/backlog/<slug>.md` was cr
   - **propose** → link the **PR** that carries the artifact (the PR URL the integrate core already returns: `IntegrateResult.url`);
   - **merge** → link the **commit** the artifact landed in on `main`. NOTE (verified 2026-06-10): `IntegrateResult` (`integrator.ts`) today carries `mode` / `mergedToMain` / `url?` but NO commit SHA. So this slice must EXTEND `IntegrateResult` (+ the integrator's merge branch + `IntegrationCoreResult.integration`) to surface the landed commit SHA. This touches the SHARED integrate seam used by `do`/`run`/`complete` — acknowledged added scope; keep it additive (a new optional `commit?` field), so existing callers are unaffected.
 - does NOT reference/link the PRD beyond naming the created PRD slug (maintainer: no need to link to PRD);
-- is purely informational — it changes NO issue state (no close, no label beyond the transient processing lock that already exists);
+- is purely informational — it changes NO issue state (no close on the slice/prd path, no label beyond the transient processing lock that already exists; bounce-closing is the separate `intake-closes-issue-on-bounce` slice, not this one);
 - carries the intake MARKER (from `intake-self-awareness-resumption-tracking`), using that slice's SHARED stamp helper so the FULL grammar is produced: `<!-- ${brand.base}:intake kind=created slug=<slug> seen=<id>,… -->` (today `agent-runner:intake`; namespace from `brand.base`; `seen=` = the comment ids this intake run READ — the per-run delta the chain model requires). `kind=created` is TERMINAL, so the triage's `already-terminal` branch then treats the issue as already-transformed; intake never re-triggers on its own completion comment.
 
 Post the comment ONLY on `sliced` / `prd`. Do NOT post on `asked` / `bounced` (those already post their own comment), nor on `locked` / `lock-failed` / `stale` / `agent-failed` / `usage-error` (those are not "done").
@@ -35,7 +35,7 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 - [ ] `IntegrateResult` gains an additive optional `commit?` (the landed commit SHA), populated on the MERGE (`mergedToMain`) path; threaded through `IntegrationCoreResult.integration`. Existing `do`/`run`/`complete` callers are unaffected (additive field). A test pins it is populated in merge mode.
 - [ ] PROPOSE mode → the comment links the PR (`url`); MERGE mode → the comment links the commit (`commit`). Two distinct messages, both tested.
 - [ ] No comment is posted on `asked` / `bounced` / `locked` / `lock-failed` / `stale` / `agent-failed` / `usage-error` (tested for at least the non-success success-adjacent ones, e.g. `locked`).
-- [ ] The comment NEVER closes the issue or changes issue state (informational only); intake still never calls any close path.
+- [ ] The slice/prd completion comment NEVER closes the issue or changes issue state (informational only) — the close-on-bounce path (sibling slice) is NOT reachable from slice/prd; a test confirms no close happens on `sliced`/`prd`.
 - [ ] The completion comment carries the FULL intake marker (`kind=created slug=<slug> seen=<id>,…`, via the blocking slice's shared stamp helper), and a test confirms the triage SKIPS (`already-terminal`) on a thread carrying it — so the completion comment cannot re-trigger intake. (No `classifyIntakeEvent` involvement — the triage gate is the guard.)
 - [ ] The comment poster DEGRADES (a missing/unauthenticated `gh` surfaces the text, never throws) — same advisory discipline as the ask/bounce poster; a degrade does not change the run's success outcome.
 - [ ] Tests STUB the issue seam (no network); mirror the existing intake tests.
