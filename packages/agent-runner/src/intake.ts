@@ -204,6 +204,18 @@ export interface PerformIntakeOptions {
 	 * model/network) — this is the unit-test target. Production wires the harness.
 	 */
 	decide?: IntakeDecider;
+	/**
+	 * The LONE-SLICE bounded-review seam (prompt → review verdict). After a `slice`
+	 * verdict and BEFORE the write/integrate, {@link dispatchSlice} runs a bounded
+	 * (3-round, HARD-CAPPED) adversarial self-review on the SINGLE drafted slice
+	 * through this seam (observation
+	 * `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C).
+	 * Tests inject a CANNED review verdict (no model/network) — the new testable
+	 * seam; production wires the harness ({@link harnessLoneSliceReviewGate}). It
+	 * mirrors {@link decide}'s injectable shape, NOT the slicer loop (which is a
+	 * SET-level reviewer this never imports/calls).
+	 */
+	reviewSlice?: LoneSliceReviewGate;
 	/** The harness seam used when {@link decide} is omitted; defaults to the null adapter. */
 	harness?: Harness;
 	/** The configured agent command the harness shells out to (null adapter). */
@@ -647,6 +659,9 @@ async function decideAndDispatch(
 				integration: modes.slice,
 				provider: options.provider,
 				issueProvider,
+				// The bounded lone-slice review seam (tests inject a canned verdict;
+				// production wires the harness via the default below).
+				reviewSlice: resolveLoneSliceReviewGate(options),
 				seen: seenDelta,
 				env,
 				note,
@@ -827,6 +842,8 @@ async function dispatchSlice(params: {
 	provider: ReviewProviderName | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
+	/** The bounded lone-slice review seam (tests inject a canned verdict; prod: harness). */
+	reviewSlice: LoneSliceReviewGate;
 	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
 	seen: string[];
 	env: NodeJS.ProcessEnv | undefined;
@@ -840,6 +857,7 @@ async function dispatchSlice(params: {
 		integration,
 		provider,
 		issueProvider,
+		reviewSlice,
 		seen,
 		env,
 		note,
@@ -858,6 +876,72 @@ async function dispatchSlice(params: {
 	}
 	const relPath = `work/backlog/${slug}.md`;
 
+	// BOUNDED INTERNAL REVIEW (observation
+	// `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
+	// the `do prd:` path gets `runSliceReviewLoop`; the lone-SLICE path got NOTHING.
+	// AFTER the `slice` verdict and BEFORE the write/integrate, run a bounded (3-round,
+	// HARD-CAPPED) adversarial self-review on the SINGLE drafted slice. It mutates the
+	// candidate body IN MEMORY (no `work/backlog/` write pre-convergence). A launch/
+	// parse failure THROWS — `decideAndDispatch`'s try/catch maps it onto `agent-failed`
+	// (never a silent emit of the un-reviewed slice).
+	let review: LoneSliceReviewResult;
+	try {
+		review = await runLoneSliceReview({
+			slug,
+			issueNumber,
+			draftTitle: verdict.sliceTitle ?? slug,
+			draftBody: verdict.sliceBody,
+			gate: reviewSlice,
+			cwd,
+			env,
+			note,
+		});
+	} catch (err) {
+		// A review-agent launch/parse FAILURE DEGRADES honestly onto the EXISTING
+		// `agent-failed` outcome (exit 1) — NEVER a silent emit of the un-reviewed
+		// slice. The SAME try/catch discipline the decision step uses.
+		const detail = err instanceof Error ? err.message : String(err);
+		const message = `Intake lone-slice review failed for issue #${issueNumber}: ${detail}`;
+		note(message);
+		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
+	}
+
+	if (review.outcome === 'non-converge') {
+		// NON-CONVERGE (ruling C): FLIP the verdict SLICE→ASK, reusing the EXISTING
+		// `asked` outcome + `kind=ask` marker. The ASK comment carries BOTH the proposed
+		// slice DRAFT and the open question(s) in its BODY (NOT a new marker kind) — the
+		// human reacts to a concrete draft, strictly richer than a blank-question ask.
+		// NEVER write `work/backlog/<slug>.md`; NEVER silently emit the under-refined
+		// slice. The next intake run resumes via the already-built triage gate.
+		note(
+			`Intake's lone-slice review did not converge for issue #${issueNumber} ` +
+				`(${review.passes} round(s)); flipping SLICE→ASK with the draft + open ` +
+				`question(s) in the comment body.`,
+		);
+		return dispatchComment({
+			outcome: 'asked',
+			cwd,
+			issueNumber,
+			issueProvider,
+			body: composeLoneSliceAskComment({
+				issueNumber,
+				slug,
+				draftTitle: review.title,
+				draftBody: review.body,
+				questions: review.questions,
+			}),
+			markerKind: 'ask',
+			seen,
+			env,
+			note,
+		});
+	}
+
+	// CONVERGED: the (possibly edited) slice is emitted via the EXISTING write/integrate
+	// path below + the existing `slice created` completion comment. The refined body
+	// replaces the agent's first draft.
+	const reviewedBody = review.body;
+
 	// ONBOARD the slice write onto a `work/<slug>` branch cut from the freshly-
 	// fetched `<arbiter>/main` (the SAME runner-owns-git discipline the slicing path
 	// uses): the lifecycle `stage` writes the file ON THIS BRANCH and the shared
@@ -866,8 +950,8 @@ async function dispatchSlice(params: {
 
 	const sliceContent = renderBacklogSlice({
 		slug,
-		title: verdict.sliceTitle ?? slug,
-		body: verdict.sliceBody,
+		title: review.title,
+		body: reviewedBody,
 		issueNumber,
 	});
 
@@ -1527,6 +1611,444 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 		...(str(obj.bounceMessage) !== undefined
 			? {bounceMessage: str(obj.bounceMessage)}
 			: {}),
+	};
+}
+
+// ---------------------------------------------------------------------------
+// The LONE-SLICE bounded internal review (observation
+// `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C).
+//
+// Give intake's lone-SLICE outcome the adversarial refinement the `do prd:` path
+// already gets — but as a small intake-NATIVE bounded review, NOT by integrating
+// the slicer loop. This is a NEW prompt + a small loop + an injectable gate seam,
+// MIRRORING the slicer loop's verdict/output CONVENTIONS (fenced JSON
+// `{verdict, findings, edit}` parsed via the shared `extractJsonObjectSpan`) WITHOUT
+// importing or calling `runSliceReviewLoop`. The differences are load-bearing: this
+// reviews ONE drafted slice (N=1 — the SET/graph/overlap lenses are OFF), it never
+// touches disk pre-convergence (the slice has not been emitted yet), and its only
+// non-converge sink is the EXISTING `asked` outcome (verdict flips SLICE→ASK with
+// the draft + question(s) in the comment body — ruling C).
+// ---------------------------------------------------------------------------
+
+/** The HARD-CODED round cap for the lone-slice review (ruling A — a literal, no config/flag). */
+const LONE_SLICE_REVIEW_MAX_ROUNDS = 3;
+
+/**
+ * A single finding from the lone-slice review pass — mirrors the `review` SKILL's
+ * finding shape (and the slicer loop's `SliceReviewFinding`), scoped to ONE slice.
+ */
+export interface LoneSliceReviewFinding {
+	/** Whether this finding BLOCKS (keeps the slice from emitting) or is a nit. */
+	severity: 'blocking' | 'non-blocking';
+	/** The question / defect, with enough context to act. */
+	question: string;
+	/** The relevant excerpt / reasoning. */
+	context?: string;
+}
+
+/**
+ * The verdict the lone-slice review agent emits PER ROUND. Mirrors the slicer
+ * loop's `{verdict, findings, edit}` conventions but for the SINGLE drafted slice:
+ *   - `verdict` — `approve` = no NEW blocking issue (CONVERGE); `block` = a blocking
+ *     issue remains (keep iterating / flip to ASK).
+ *   - `edit` — an OPTIONAL full REPLACEMENT slice body (the markdown AFTER the
+ *     frontmatter) the runner applies IN MEMORY to the candidate before the next
+ *     round. No `work/backlog/` write happens (the slice is not emitted yet).
+ *   - `questions` — the open question(s) carried into the ASK comment body when a
+ *     blocking issue has NO clear thread answer (the non-converge sink).
+ *
+ * The SET/graph/overlap lenses are N=1 and are OFF (the prompt says so); there is
+ * no `uncertainSlices` / `decompositionUnclear` channel (those are slicer-loop
+ * SET-level sinks intake deliberately does NOT have).
+ */
+export interface LoneSliceReviewVerdict {
+	/** `approve` = converge (no new blocking issue); `block` = a blocking issue remains. */
+	verdict: 'approve' | 'block';
+	/** The findings this round surfaced. */
+	findings: LoneSliceReviewFinding[];
+	/** An OPTIONAL full replacement slice BODY applied IN MEMORY before the next round. */
+	edit?: string;
+	/** The open question(s) for the ASK comment body on a non-converge. */
+	questions?: string[];
+}
+
+/** What the lone-slice review gate needs to launch / answer ONE review round. */
+export interface LoneSliceReviewGateInput {
+	/** The drafted slice's slug (the candidate under review). */
+	slug: string;
+	/** The source issue number (the destination check's target behaviour). */
+	issueNumber: number;
+	/** The drafted slice's title (the candidate under review). */
+	title: string;
+	/** The drafted slice BODY as it stands THIS round (after any prior in-memory edits). */
+	body: string;
+	/** Which review ROUND this is (1-based, 1..{@link LONE_SLICE_REVIEW_MAX_ROUNDS}). */
+	round: number;
+	/** The working clone/checkout the review runs in. */
+	cwd: string;
+	/** Environment for the review-agent launch. */
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The lone-slice review SEAM: run ONE adversarial review round on the SINGLE
+ * drafted slice and return a parsed verdict (incl. an optional in-memory edit).
+ * Tests inject a canned verdict (no model/network) — the new testable seam, mirroring
+ * {@link IntakeDecider}. Production uses {@link harnessLoneSliceReviewGate}.
+ */
+export type LoneSliceReviewGate = (
+	input: LoneSliceReviewGateInput,
+) => Promise<LoneSliceReviewVerdict>;
+
+/** The terminal disposition of the bounded lone-slice review. */
+interface LoneSliceReviewResult {
+	/** `converge` → emit the (edited) slice; `non-converge` → flip SLICE→ASK. */
+	outcome: 'converge' | 'non-converge';
+	/** The slice TITLE after the review (unchanged today; carried for symmetry). */
+	title: string;
+	/** The slice BODY after all applied in-memory edits (the body to emit / carry). */
+	body: string | undefined;
+	/** On `non-converge`: the open question(s) to carry into the ASK comment body. */
+	questions: string[];
+	/** How many review rounds ran. */
+	passes: number;
+}
+
+/**
+ * Run the BOUNDED lone-slice adversarial self-review over the SINGLE drafted slice.
+ * Each round runs the gate (the `review` skill's per-slice + destination lenses on
+ * the ONE slice); a round may propose an EDIT (full replacement body) applied IN
+ * MEMORY and re-reviewed. The cap is the HARD-CODED literal
+ * {@link LONE_SLICE_REVIEW_MAX_ROUNDS} = 3 (ruling A — no config/flag).
+ *
+ *   - CONVERGE — a round returns `approve` with no NEW blocking issue → emit the
+ *     improved slice (the caller's existing write/integrate + completion comment).
+ *   - NON-CONVERGE — a round `block`s with an open question (no clear thread answer)
+ *     OR the cap is hit with an unresolved blocker → flip SLICE→ASK carrying the
+ *     draft + the open question(s) (ruling C).
+ *
+ * A gate launch/parse failure THROWS (the caller's try/catch maps it onto
+ * `agent-failed`) — never a silent emit of the un-reviewed slice.
+ */
+async function runLoneSliceReview(params: {
+	slug: string;
+	issueNumber: number;
+	draftTitle: string;
+	draftBody: string | undefined;
+	gate: LoneSliceReviewGate;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<LoneSliceReviewResult> {
+	const {slug, issueNumber, draftTitle, draftBody, gate, cwd, env, note} =
+		params;
+	let body = draftBody;
+	let lastVerdict: LoneSliceReviewVerdict = {verdict: 'block', findings: []};
+	let passes = 0;
+	for (let round = 1; round <= LONE_SLICE_REVIEW_MAX_ROUNDS; round++) {
+		const verdict = await gate({
+			slug,
+			issueNumber,
+			title: draftTitle,
+			// The body the reviewer sees this round (after any prior in-memory edit);
+			// fall back to the rendered scaffold-input the emit path also tolerates.
+			body: body ?? '',
+			round,
+			cwd,
+			env,
+		});
+		passes = round;
+		lastVerdict = verdict;
+		// APPLY the proposed EDIT IN MEMORY (no `work/backlog/` write pre-convergence).
+		if (verdict.edit !== undefined && verdict.edit.trim() !== '') {
+			body = verdict.edit;
+		}
+		if (verdict.verdict === 'approve') {
+			return {
+				outcome: 'converge',
+				title: draftTitle,
+				body,
+				questions: [],
+				passes,
+			};
+		}
+		note(
+			`Intake lone-slice review round ${round}/${LONE_SLICE_REVIEW_MAX_ROUNDS} ` +
+				`found ${loneSliceBlockingCount(verdict)} blocking issue(s)` +
+				`${verdict.edit !== undefined && verdict.edit.trim() !== '' ? ' (an edit was applied)' : ''}.`,
+		);
+	}
+	// The cap was hit with a still-`block` verdict → NON-CONVERGE (flip SLICE→ASK).
+	return {
+		outcome: 'non-converge',
+		title: draftTitle,
+		body,
+		questions: loneSliceBlockingQuestions(lastVerdict),
+		passes,
+	};
+}
+
+/** Count blocking findings in a lone-slice review verdict. */
+function loneSliceBlockingCount(verdict: LoneSliceReviewVerdict): number {
+	return verdict.findings.filter((f) => f.severity === 'blocking').length;
+}
+
+/**
+ * The open question(s) for the ASK comment body on a non-converge: prefer the
+ * verdict's explicit `questions`, else fall back to the blocking findings'
+ * questions (so the human always gets a concrete question, never a blank ask).
+ */
+function loneSliceBlockingQuestions(verdict: LoneSliceReviewVerdict): string[] {
+	if (verdict.questions && verdict.questions.length > 0) {
+		return verdict.questions;
+	}
+	const blocking = verdict.findings.filter((f) => f.severity === 'blocking');
+	const source = blocking.length > 0 ? blocking : verdict.findings;
+	return source.map((f) =>
+		f.context ? `${f.question} (${f.context})` : f.question,
+	);
+}
+
+/**
+ * Compose the NON-CONVERGE ASK comment BODY (ruling C): it carries BOTH the proposed
+ * slice DRAFT and the open question(s) that arose, so the human reacts to a concrete
+ * draft ("yes, yes, but…"), strictly richer than a blank-question ask. The draft
+ * rides in the comment BODY — NOT a new marker kind; {@link dispatchComment} stamps
+ * the EXISTING `kind=ask` marker around it.
+ */
+function composeLoneSliceAskComment(params: {
+	issueNumber: number;
+	slug: string;
+	draftTitle: string;
+	draftBody: string | undefined;
+	questions: string[];
+}): string {
+	const {issueNumber, slug, draftTitle, draftBody, questions} = params;
+	const draft = renderBacklogSlice({
+		slug,
+		title: draftTitle,
+		body: draftBody,
+		issueNumber,
+	});
+	const questionLines =
+		questions.length > 0
+			? questions.map((q) => `- ${q}`).join('\n')
+			: '- (the draft below needs a clarification before it can be built)';
+	return [
+		`I drafted a slice for issue #${issueNumber} but the internal review surfaced`,
+		`open question(s) it could not resolve from the thread. Please weigh in on the`,
+		`draft below — once the question(s) are answered, a later run can emit it.`,
+		'',
+		'## Open question(s)',
+		'',
+		questionLines,
+		'',
+		'## Proposed slice draft',
+		'',
+		'```markdown',
+		draft.trimEnd(),
+		'```',
+	].join('\n');
+}
+
+/**
+ * Resolve the lone-slice review GATE from the intake options: the injected
+ * {@link PerformIntakeOptions.reviewSlice} (tests' canned seam) when present, else
+ * the production harness-backed gate ({@link harnessLoneSliceReviewGate}) wired to
+ * the same harness/agent the decision step uses. Mirrors how {@link runDecision}
+ * prefers the injected `decide`.
+ */
+function resolveLoneSliceReviewGate(
+	options: PerformIntakeOptions,
+): LoneSliceReviewGate {
+	if (options.reviewSlice) {
+		return options.reviewSlice;
+	}
+	return harnessLoneSliceReviewGate({
+		harness: options.harness,
+		agentCmd: options.agentCmd,
+		model: options.model,
+		sessionsDir: options.sessionsDir,
+	});
+}
+
+/** Options for the production harness-backed lone-slice review gate. */
+export interface HarnessLoneSliceReviewGateOptions {
+	/** The harness seam used to launch the fresh-context review agent. */
+	harness?: Harness;
+	/** The configured agent command the harness shells out to. */
+	agentCmd?: string;
+	/** The model routing intent forwarded to the harness (ADR §13). */
+	model?: string;
+	/** The HOST-ONLY sessions root for the review session file. */
+	sessionsDir?: string;
+}
+
+/**
+ * The PRODUCTION lone-slice review gate: launch the `review` SKILL as an agent
+ * through the EXISTING harness seam (the SAME wire {@link runDecision} uses), then
+ * PARSE the emitted `{verdict, findings, edit, questions}` via
+ * {@link parseLoneSliceReviewVerdict}. The agent makes the review JUDGEMENT (the
+ * per-slice + destination lenses on the ONE slice); this gate launches it and parses
+ * its verdict. A launch failure THROWS (the dispatcher's try/catch maps it onto
+ * `agent-failed`). MIRRORS {@link harnessSliceReviewGate} WITHOUT importing it.
+ */
+export function harnessLoneSliceReviewGate(
+	options: HarnessLoneSliceReviewGateOptions = {},
+): LoneSliceReviewGate {
+	const harness = options.harness ?? new NullHarness();
+	return async (
+		input: LoneSliceReviewGateInput,
+	): Promise<LoneSliceReviewVerdict> => {
+		const launched = await launchWithOptionalWatch({
+			harness,
+			dir: input.cwd,
+			slug: `intake-slice-review-${input.slug}`,
+			command: options.agentCmd ?? '',
+			prompt: buildLoneSliceReviewPrompt(input),
+			model: options.model,
+			// A DISTINCT session id per round so launches never collide.
+			sessionId: `intake-slice-review-${input.slug}-r${input.round}`,
+			sessionsDir: options.sessionsDir,
+			env: input.env,
+		});
+		if (!launched.ok) {
+			throw new Error(
+				`intake lone-slice review agent launch failed${
+					launched.detail ? `: ${launched.detail}` : ''
+				}`,
+			);
+		}
+		return parseLoneSliceReviewVerdict(launched.output ?? '');
+	};
+}
+
+/**
+ * Build the LONE-SLICE review PROMPT: instruct an agent to run the `review` skill's
+ * lenses on the SINGLE drafted slice — per-slice WELL-FORMEDNESS + the DESTINATION
+ * check ("if this slice is built exactly as written, do we end up with the behaviour
+ * issue #N asks for?"). The SET/graph/overlap lenses are N=1 and are EXPLICITLY OFF
+ * (there is no set to compose). A round may propose an EDIT (the FULL replacement
+ * slice body) the runner applies IN MEMORY and re-reviews; converge when a round
+ * finds NO new blocking issue, else flag the open question(s) for the human.
+ */
+export function buildLoneSliceReviewPrompt(
+	input: LoneSliceReviewGateInput,
+): string {
+	return [
+		`You are a FRESH-CONTEXT reviewer in intake's BOUNDED lone-slice review. A`,
+		`single slice has just been drafted from GitHub issue #${input.issueNumber}.`,
+		`Review THIS ONE slice adversarially with the \`review\` skill (round`,
+		`${input.round} of at most ${LONE_SLICE_REVIEW_MAX_ROUNDS}).`,
+		'',
+		`Drafted slice slug: ${input.slug}`,
+		`Drafted slice title: ${input.title}`,
+		'',
+		'Drafted slice body (the markdown AFTER the frontmatter):',
+		'```markdown',
+		input.body.trim() === ''
+			? '(empty — only a scaffold was drafted)'
+			: input.body,
+		'```',
+		'',
+		'## Which lenses apply (N=1 — this is ONE slice, not a SET)',
+		'',
+		'Apply ONLY the per-slice lenses, ENDING in the destination check:',
+		'- **Per-slice well-formedness** — is it a single tracer-bullet vertical slice',
+		'  (one thin end-to-end path)? Are the `## What to build`, `## Acceptance',
+		'  criteria`, and `## Prompt` present, concrete, and self-contained (an AFK',
+		'  agent could start from the file alone)? Are claims/paths/“reuse X” real?',
+		'- **The DESTINATION check** — if this slice is built EXACTLY as written, do we',
+		`  end up with the behaviour issue #${input.issueNumber} asks for? A hole here is`,
+		'  the highest-value thing to flag.',
+		'',
+		'The SET / graph / overlap / goal-COMPOSITION lenses are OFF: there is only ONE',
+		'slice (N=1), so there is no dependency graph, no set-level gap, and no',
+		'duplicate/overlap to assess. Do NOT invent a decomposition.',
+		'',
+		'## How to iterate',
+		'',
+		'You do NOT edit files or run git — you EMIT a verdict and the runner applies it',
+		'in memory, then re-reviews. If a finding can be FIXED by tightening the draft,',
+		'propose an `edit` (the FULL replacement slice body — the markdown AFTER the',
+		'frontmatter; the runner writes the frontmatter + the issue link). CONVERGE',
+		'(`approve`, no blocking findings) when a round finds NO new blocking issue.',
+		'When a BLOCKING question has NO clear answer in the issue thread — it needs the',
+		'human, not another edit — `block` and put it in `questions`: the runner asks the',
+		'human, carrying this draft. Flag, do not guess.',
+		'',
+		'## Output — ONE fenced JSON block (and nothing else that looks like JSON)',
+		'',
+		'```json',
+		'{"verdict": "approve" | "block", "findings": [{"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}], "edit": "<full replacement slice body>", "questions": ["…"]}',
+		'```',
+		'',
+		'- Use `approve` with no blocking findings to CONVERGE (the natural terminator).',
+		'- Supply `edit` only when tightening the draft fixes the finding; omit it',
+		'  otherwise.',
+		'- Supply `questions` only when a blocking issue needs the HUMAN (no clear thread',
+		'  answer); omit it otherwise. `verdict` MUST be exactly `approve` or `block`.',
+	].join('\n');
+}
+
+/**
+ * Parse the lone-slice review verdict out of the review agent's textual output.
+ * Mirrors {@link parseIntakeVerdict} / `parseSliceReviewVerdict`: pull the first JSON
+ * object carrying a `"verdict"` field via the SHARED {@link extractJsonObjectSpan},
+ * `JSON.parse` it, and validate the shape. THROWS on no JSON / invalid JSON / a
+ * `verdict` not in `{approve,block}` — the caller maps any throw onto `agent-failed`
+ * (never a silent emit of the un-reviewed slice).
+ */
+export function parseLoneSliceReviewVerdict(
+	output: string,
+): LoneSliceReviewVerdict {
+	const span = extractJsonObjectSpan(output, 'verdict');
+	if (span === undefined) {
+		throw new Error(
+			'intake lone-slice review agent produced no parseable {verdict, …} result.',
+		);
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(output.slice(span.start, span.end));
+	} catch (err) {
+		throw new Error(
+			`intake lone-slice review verdict was not valid JSON: ${(err as Error).message}`,
+		);
+	}
+	if (typeof parsed !== 'object' || parsed === null) {
+		throw new Error('intake lone-slice review verdict was not an object.');
+	}
+	const obj = parsed as Record<string, unknown>;
+	const verdict = obj.verdict;
+	if (verdict !== 'approve' && verdict !== 'block') {
+		throw new Error(
+			`intake lone-slice review verdict was not 'approve' or 'block' (got ` +
+				`${JSON.stringify(verdict)}).`,
+		);
+	}
+	const rawFindings = Array.isArray(obj.findings) ? obj.findings : [];
+	const findings: LoneSliceReviewFinding[] = rawFindings.map((f) => {
+		const item = (typeof f === 'object' && f !== null ? f : {}) as Record<
+			string,
+			unknown
+		>;
+		const severity = item.severity === 'blocking' ? 'blocking' : 'non-blocking';
+		return {
+			severity,
+			question: typeof item.question === 'string' ? item.question : '',
+			...(typeof item.context === 'string' ? {context: item.context} : {}),
+		};
+	});
+	const edit = typeof obj.edit === 'string' ? obj.edit : undefined;
+	const questions = Array.isArray(obj.questions)
+		? obj.questions.filter((q): q is string => typeof q === 'string')
+		: [];
+	return {
+		verdict,
+		findings,
+		...(edit !== undefined ? {edit} : {}),
+		...(questions.length > 0 ? {questions} : {}),
 	};
 }
 
