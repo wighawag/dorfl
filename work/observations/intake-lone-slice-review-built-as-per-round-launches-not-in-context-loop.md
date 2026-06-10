@@ -23,15 +23,25 @@ A fresh-context agent cannot "build on" the prior round's refinement unless that
 
 So the built code dodges the disk problem (good) ONLY by making the 3 launches **near-pointless**: it pays for 3 cold-start model contexts to approximate what ONE warm context does better and cheaper. `prd/review.md` explicitly calls "another fresh-context pass" the INFERIOR option. The build landed on the one combination — fresh-context-per-round + in-prompt hand-off + no disk — argued against on BOTH axes. As the maintainer put it: _"one internal loop does not require writing to disk as the agent can self review in memory, but with agent running then we add the need for writing to disk or the 3 runs are meaningless."_
 
+## The dogfooding ALREADY validated the in-context loop (the authoring session, recovered)
+
+The authoring session (`~/.pi/agent/sessions/--home-wighawag-dev-github-wighawag-agent-runner--/2026-06-10T12-43-25-113Z_*.jsonl`, around commit `22b10e5`) was read back in FULL. It SETTLES the design in favour of the SINGLE in-context loop — the corrective slice's destination is the dogfood-validated one:
+
+- A fresh agent was handed a manual prompt to draft the slice AND run the bounded ≤3-round self-review on its own draft, in ONE context. **It ran the loop for real:** 3 lens-attributed rounds whose findings MATERIALISED in the final artifact (the `agent-failed` degrade criterion + the "zero new outcome/marker/flag" check were genuine round-2 additions, absent from the first draft — real refinement with fingerprints, not narrated-but-fake).
+- **The in-memory model is the NATURAL behaviour:** the agent held the candidate in context across the 3 rounds, converged, and wrote the artifact to disk ONCE, post-convergence. It did NOT write-edit-delete across rounds. This empirically CONFIRMS the slice's no-disk-before-converge / in-memory choice.
+- A mid-session doubt ("an in-context 'do 3 passes' instruction doesn't bind — the agent will one-shot it") was RAISED and then EXPLICITLY RETRACTED in the same session: the doubt came from grepping the FILE on disk (only the slice body) instead of the SESSION (which carried the round-by-round `REVIEW-NOTES` trace). Once the real session was read, the conclusion was "I was wrong to doubt it — it did loop, observably." Do NOT cite the retracted doubt as a reason to prefer per-round launches; it was withdrawn.
+
+NOTE on the dogfooded prompt: it is a REFERENCE for the loop SHAPE only, NOT a verbatim production source. It carries two dry-run-only framings that must NOT enter the production prompt: (1) it tells the agent to TREAT the observation file AS IF it were a GitHub issue thread (a simulation, because the real intake reads an ACTUAL issue); and (2) a `REVIEW-NOTES` reporting block that exists only so the human could SEE the rounds in the manual run (the real in-code loop's rounds are internal/invisible).
+
 ## Where the useful info went (the honest root cause)
 
-When the slice was AUTHORED (commit `22b10e5`, message: _"…produced + self-reviewed via the very loop it specifies"_) we discussed the in-context review-edit loop and DOGFOODED a real prompt on a real slice. But that design + the tested prompt **never made it into the slice BODY.** The slice body (`done/intake-lone-slice-bounded-internal-review.md`, "What to build") instead says:
+The in-context-loop design was dogfood-VALIDATED (above), but its tested SHAPE **never made it into the slice BODY** as the build instruction. The slice body (`done/intake-lone-slice-bounded-internal-review.md`, "What to build") instead says:
 
 - "a PROMPT + **a small loop in the dispatcher**",
 - "an **injectable gate seam** so tests drive it with a canned verdict … mirror `IntakeDecider` / `SliceReviewGate`",
 - "**Each round, the review agent** applies the `review` skill's lenses…".
 
-A **per-round injectable gate** + "each round the agent applies…" literally encodes the runner-loops / one-launch-per-round shape. So the slice already chose the wrong mechanism; the build agent implemented the slice FAITHFULLY. The drift entered at **slice-authoring**, not at build. The dogfooded in-context-loop intent lived only in the authoring CONVERSATION and was lost — a "design discussed live, never written to the artifact" failure (cf. the orchestrate/setup principle: a why discussed but not captured does not survive).
+A **per-round injectable gate** + "each round the agent applies…" literally encodes the runner-loops / one-launch-per-round shape — the OPPOSITE of the single in-context loop the dogfood run validated. So the slice BODY drifted from the validated design at slice-authoring time (the in-context-loop shape lived in the authoring conversation + session trace, but the body was written in per-round-gate language); the build agent then implemented the body FAITHFULLY. The drift entered at **slice-authoring**, not at build — a "design validated live, but the artifact's wording encoded a DIFFERENT mechanism" failure (cf. the orchestrate/setup principle: what is not written precisely into the artifact does not survive; here the imprecise words were the per-round "gate seam" / "each round the agent applies" framing).
 
 ## Why Gate-3 (conductor review) missed it
 
