@@ -52,9 +52,12 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  *   which is NEVER bounced): write `work/prd/<slug>.md` with `issue: N` (+ the gate
  *   axes the verdict carried), integrate, STOP (slicing is the separate `do prd:`
  *   step).
- * - **BOUNCE** (genuinely UNRELATED concerns — no shared vision): `postIssueComment`
- *   "file separate issues"; emit NOTHING; leave the issue OPEN (closing is CI's
- *   close JOB, never `intake`'s).
+ * - **BOUNCE** (genuinely UNRELATED concerns — no shared vision): the bounce is
+ *   TERMINAL (the asks are unrelated and must be re-filed), so intake CLOSES the
+ *   issue ATOMICALLY — the "file separate issues" text as the closing comment +
+ *   `reason: not planned` (the honest GitHub-native signal) in ONE `closeIssue`
+ *   call; emit NOTHING. Intake closes on BOUNCE (as not planned); NEVER on
+ *   slice/prd (CI's close-job closes those via the `issue:` field) / ask.
  *
  * The per-outcome integration KNOBS, the processing LOCK, and event-classification
  * are LATER slices and are NOT built here (default `propose` is fine here).
@@ -127,9 +130,10 @@ export interface IntakeVerdict {
 	prdHumanOnly?: boolean;
 	prdNeedsAnswers?: boolean;
 	/**
-	 * The drafted bounce message (`bounce` outcome) — the dispatcher posts it via
-	 * `postIssueComment` ("please file separate issues"), emits nothing, and leaves
-	 * the issue OPEN (no close; closing is CI's close JOB).
+	 * The drafted bounce message (`bounce` outcome) — the dispatcher carries it as
+	 * the CLOSING COMMENT on the atomic `closeIssue` ("please file separate issues")
+	 * with `reason: not planned`, then emits nothing. A bounce is TERMINAL, so the
+	 * issue is CLOSED (not left open).
 	 */
 	bounceMessage?: string;
 }
@@ -159,6 +163,12 @@ export interface IntakeResult {
 	emitted?: string;
 	/** True iff a comment was posted on the issue (ask / bounce outcomes). */
 	commented?: boolean;
+	/**
+	 * True iff the ISSUE was closed (the BOUNCE outcome — a terminal bounce closes
+	 * the issue atomically as `not planned`). Additive (mirrors {@link commented}),
+	 * so CI / callers can observe the close. Never set on ask/slice/prd.
+	 */
+	closed?: boolean;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -676,7 +686,8 @@ async function decideAndDispatch(
 				issueNumber,
 				issueProvider,
 				// The drafted bounce message; a thin fallback restates the "file separate
-				// issues" ask. The issue is left OPEN (no close — closing is CI's JOB).
+				// issues" ask. A bounce is TERMINAL: the issue is CLOSED atomically (this
+				// text as the closing comment + reason not planned).
 				body:
 					verdict.bounceMessage && verdict.bounceMessage.trim() !== ''
 						? verdict.bounceMessage
@@ -693,13 +704,23 @@ async function decideAndDispatch(
 }
 
 /**
- * DISPATCH the `ask` / `bounce` outcomes: `postIssueComment` the drafted text and
- * emit NOTHING (no `work/` file, no integrate). The issue is left OPEN in BOTH
- * cases — `ask` waits for the thread to be answered (a later run resumes from it),
- * and `bounce` waits for the asks to be re-filed separately; closing the issue is
- * NEVER `intake`'s (it is CI's close JOB, `runner-in-ci`). The comment poster is
- * advisory and DEGRADES (a missing/unauthenticated `gh` never throws — the text is
- * surfaced), so the run still terminates cleanly.
+ * DISPATCH the `ask` / `bounce` outcomes — the SHARED comment band, which now
+ * BRANCHES on the outcome:
+ *
+ * - **ask** (non-terminal): `postIssueComment` the drafted question, emit NOTHING,
+ *   and LEAVE THE ISSUE OPEN — it waits for the thread to be answered (a later run
+ *   resumes from it). The slice/prd path also never closes (CI's close-job does,
+ *   via the `issue:` field). Intake closes ONLY on BOUNCE.
+ * - **bounce** (TERMINAL): the asks are unrelated and must be re-filed, so an OPEN
+ *   issue is a dishonest "still in play" signal. Intake CLOSES the issue
+ *   ATOMICALLY via a single `closeIssue` carrying the bounce text as the closing
+ *   comment + `reason: not planned` (one call — no post-then-close partial-failure
+ *   window). The result's `closed` reflects it.
+ *
+ * Both the comment poster and the atomic close are advisory and DEGRADE (a
+ * missing/unauthenticated `gh` never throws — the text/real cause is surfaced via
+ * `ghFailureReason`, never a hard-coded guess), so the terminal outcome is
+ * unchanged (`asked`/`bounced`, exit 0) and the run still terminates cleanly.
  */
 async function dispatchComment(params: {
 	outcome: 'asked' | 'bounced';
@@ -729,20 +750,50 @@ async function dispatchComment(params: {
 	// own comment (the SOLE self-recognition signal — no author identity). Hidden HTML
 	// comment; renders as nothing, present in the raw markdown the TRIAGE parses.
 	const stamped = stampIntakeMarker(body, {kind: markerKind, seen});
+
+	if (outcome === 'bounced') {
+		// BOUNCE is TERMINAL: CLOSE the issue ATOMICALLY (bounce text as the closing
+		// comment + reason not planned) in ONE call — no separate postIssueComment, no
+		// post-then-close window. The close DEGRADES (never throws) on a missing/
+		// unauthenticated `gh`, surfacing the REAL cause; the terminal outcome stays
+		// `bounced`/exit 0 regardless.
+		const close = await issueProvider.closeIssue({
+			cwd,
+			issueNumber,
+			comment: stamped,
+			reason: 'not planned',
+			env,
+		});
+		const tail = close.closed
+			? 'the issue was closed (as not planned) with the bounce comment'
+			: `the issue could NOT be closed (${close.instruction})`;
+		const message =
+			`Intake bounced issue #${issueNumber}; emitted no artifact and closed the ` +
+			`issue as not planned — ${tail}.`;
+		note(message);
+		return {
+			exitCode: 0,
+			outcome,
+			issueNumber,
+			commented: close.closed,
+			closed: close.closed,
+			message,
+		};
+	}
+
+	// ASK (non-terminal): post the clarifying question and LEAVE THE ISSUE OPEN.
 	const posted = await issueProvider.postIssueComment({
 		cwd,
 		issueNumber,
 		body: stamped,
 		env,
 	});
-	const verb =
-		outcome === 'asked' ? 'asked a clarifying question on' : 'bounced';
 	const tail = posted.posted
 		? 'the comment was posted'
 		: `the comment could NOT be posted (${posted.instruction})`;
 	const message =
-		`Intake ${verb} issue #${issueNumber}; emitted no artifact and left the issue ` +
-		`open — ${tail}.`;
+		`Intake asked a clarifying question on issue #${issueNumber}; emitted no ` +
+		`artifact and left the issue open — ${tail}.`;
 	note(message);
 	return {
 		exitCode: 0,
@@ -939,9 +990,10 @@ function integrationToIntakeResult(
 				? 'landed it on the arbiter main'
 				: 'opened a PR carrying it (main untouched)';
 		// Both a lone slice and a PRD carry `issue: N` as their closure link (the slice
-		// closes its own issue; a PRD is reached via `slice.prd: → PRD issue:`). `intake`
-		// never closes the issue, and emits no `Fixes #N` (a deferred GitHub-only
-		// optimisation).
+		// closes its own issue; a PRD is reached via `slice.prd: → PRD issue:`). On the
+		// slice/prd path `intake` never closes the issue (CI's close-job does, via the
+		// `issue:` field; intake closes ONLY on BOUNCE) and emits no `Fixes #N` (a
+		// deferred GitHub-only optimisation).
 		const link = `issue: ${issueNumber}`;
 		const message =
 			`Intake of issue #${issueNumber} → wrote ${relPath} (${link}); ` +
@@ -1389,8 +1441,10 @@ export function buildIntakeDecisionBrief(
 		'',
 		'- **BOUNCE** — the issue is really MULTIPLE UNRELATED concerns wearing one issue:',
 		'  you cannot articulate a SINGLE shared vision tying them together. Draft a short',
-		'  message asking the author to file separate issues. The runner posts it and',
-		'  leaves the issue OPEN (it never closes the issue).',
+		'  message asking the author to file separate issues. A bounce is TERMINAL, so the',
+		'  runner CLOSES the issue ATOMICALLY — your message as the closing comment +',
+		'  reason "not planned" (the honest signal that the asks must be re-filed). Intake',
+		'  closes on BOUNCE only; never on slice/prd (CI’s close-job) / ask.',
 		'',
 		'## The three decision aids (apply them in order)',
 		'',

@@ -172,6 +172,9 @@ function stubIssueProvider(): IssueProvider & {
 			comments.push(input);
 			return {posted: true, instruction: `commented on #${input.issueNumber}`};
 		},
+		async closeIssue({issueNumber}) {
+			return {closed: true, instruction: `closed #${issueNumber}`};
+		},
 		async getLabels() {
 			return {supported: true, labels: [...labels], instruction: 'read labels'};
 		},
