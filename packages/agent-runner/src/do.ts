@@ -152,9 +152,12 @@ export interface DoOptions {
 	arbiter?: string;
 	/**
 	 * Per-repo `autoSlice` policy (resolved by `autoslice-gate`: flag > env >
-	 * per-repo > global > default false). Consumed ONLY by the `do prd:<slug>`
-	 * slicing path — the agent gate refuses to auto-slice an undeclared PRD unless
-	 * this is on. Ignored by the slice-build path.
+	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
+	 * (`do-autopick.ts`'s sliceable-PRD pool): "may an agent auto-slice an
+	 * UNDECLARED PRD in this repo?". An EXPLICITLY-named `do prd:<slug>` slices
+	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
+	 * `performSlice` — naming the PRD IS the authorization, exactly as `do <slice>`
+	 * builds regardless of `allowAgents`). Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
 	/**
@@ -309,8 +312,10 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	arbiter?: string;
 	/**
-	 * Per-repo `autoSlice` policy — consumed only by the `do --remote prd:<slug>`
-	 * slicing path (the agent slicing gate). Ignored by the slice-build path.
+	 * Per-repo `autoSlice` policy — gates the AUTO-PICK / pool path only. An
+	 * EXPLICITLY-named `do --remote prd:<slug>` slices regardless of it (the
+	 * dispatch passes `explicit: true`), mirroring `do <slice>` vs `allowAgents`.
+	 * Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
 	/** The slicer review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
@@ -460,6 +465,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			arbiter,
 			doer: 'agent',
 			autoSlice: options.autoSlice,
+			// EXPLICIT dispatch: a `do prd:<slug>` target was NAMED (the operator typed
+			// it, or the auto-pick POOL already filtered it on `autoSlice` before
+			// dispatching here — the single policy-enforcement point). So the slicing gate
+			// drops the `autoSlice` policy term and binds only the PRD's own readiness
+			// (`humanOnly`/`needsAnswers`) + `sliceAfter`, EXACTLY as `do <slice>` builds a
+			// named slice regardless of `allowAgents` (the pool gates the policy, not the
+			// explicit claim).
+			explicit: true,
 			// The injected agent runner (tests) writes slice files directly. The
 			// DoAgentRunner shape is a structural superset of SliceAgentRunner (its
 			// extra `output` is ignored by the slicing path), so it threads straight in.
@@ -1253,6 +1266,11 @@ export async function performDoRemote(
 				arbiter: 'origin',
 				doer: 'agent',
 				autoSlice: options.autoSlice,
+				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
+				// NAMED (typed, or pool-filtered on `autoSlice` before reaching here), so the
+				// slicing gate drops the policy term — only the PRD's own readiness +
+				// `sliceAfter` bind, mirroring the build path vs `allowAgents`.
+				explicit: true,
 				agentRunner: options.agentRunner,
 				harness: options.harness,
 				agentCmd: options.agentCmd,
