@@ -54,15 +54,18 @@ const editingAgent: DoAgentRunner = ({cwd}) => {
 };
 
 /** Seed a `work/prd/<slug>.md` in the checkout's working tree (for prd: tests). */
-function seedPrd(repo: string, slug: string): void {
+function seedPrd(
+	repo: string,
+	slug: string,
+	fm: {humanOnly?: boolean; needsAnswers?: boolean} = {},
+): void {
 	const dir = join(repo, 'work', 'prd');
 	mkdirSync(dir, {recursive: true});
-	writeFileSync(
-		join(dir, `${slug}.md`),
-		['---', `title: ${slug}`, `slug: ${slug}`, '---', '', '# PRD', ''].join(
-			'\n',
-		),
-	);
+	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
+	if (fm.humanOnly) lines.push('humanOnly: true');
+	if (fm.needsAnswers) lines.push('needsAnswers: true');
+	lines.push('---', '', '# PRD', '');
+	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 	// Commit it so the PRD lives on main (and survives the work-branch cut).
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', `prd: ${slug}`], repo);
@@ -1300,13 +1303,46 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.slug).toBe('alpha');
 	});
 
-	it('do prd:<slug> dispatches to the slicing path (gate-bound for the agent)', async () => {
+	it('do prd:<slug> dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoSlice OFF (naming IS the authorization)', async () => {
+		// The build/slice symmetry (slice `explicit-do-prd-not-gated-by-autoslice`):
+		// `do prd:<slug>` is an EXPLICIT target the operator named, so it slices
+		// REGARDLESS of the repo's `autoSlice` POLICY — EXACTLY as `do <slice>` builds a
+		// named slice regardless of `allowAgents`. autoSlice OFF (the default) no longer
+		// refuses the explicit form (the policy gates the auto-pick POOL only).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'somePrd');
 
 		let agentRan = false;
-		// autoSlice OFF (the default) → the agent gate refuses an undeclared PRD. The
-		// refusal is HONEST (names autoSlice) and runs no agent / no slicing.
+		const result = await performDo({
+			arg: 'prd:somePrd',
+			cwd: repo,
+			arbiter: ARBITER,
+			// autoSlice deliberately OMITTED (defaults off) — explicit naming authorizes.
+			integration: 'merge',
+			agentRunner: ({cwd}) => {
+				agentRan = true;
+				const dir = join(cwd, 'work', 'backlog');
+				mkdirSync(dir, {recursive: true});
+				writeFileSync(
+					join(dir, 'somePrd-explicit.md'),
+					'---\nslug: somePrd-explicit\nprd: somePrd\n---\n\n## Prompt\n\n> x\n',
+				);
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		expect(result.slug).toBe('somePrd');
+		// The agent ran (the gate did NOT refuse on the policy).
+		expect(agentRan).toBe(true);
+	});
+
+	it('do prd:<slug> on an explicitly-named humanOnly PRD STILL refuses (the readiness axis binds, only the policy dropped)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		seedPrd(repo, 'somePrd', {humanOnly: true});
+
+		let agentRan = false;
 		const result = await performDo({
 			arg: 'prd:somePrd',
 			cwd: repo,
@@ -1321,8 +1357,9 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.slug).toBe('somePrd');
-		expect(result.message).toMatch(/autoSlice/);
-		// The gate refused BEFORE running the agent / taking the lock.
+		expect(result.message).toMatch(/humanOnly/);
+		// The policy is NEVER the named reason on the explicit path.
+		expect(result.message).not.toMatch(/autoSlice/);
 		expect(agentRan).toBe(false);
 	});
 

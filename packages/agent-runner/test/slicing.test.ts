@@ -172,7 +172,10 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		expect(result.message).toMatch(/needsAnswers/);
 	});
 
-	it('refuses when autoSlice is off (names autoSlice)', async () => {
+	it('refuses when autoSlice is off on the AUTO-PICK pool path (names autoSlice)', async () => {
+		// The NON-explicit (pool) dispatch: `explicit` unset ⇒ the `autoSlice` POLICY
+		// still gates. (The pool itself never selects such a PRD; this asserts the
+		// per-invocation gate's policy term survives for the pool path.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const result = await performSlice({
@@ -186,6 +189,84 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/autoSlice/);
+	});
+
+	it('an EXPLICITLY-named PRD slices with autoSlice OFF (no config, no env) — naming IS the authorization', async () => {
+		// The slice-path mirror of `do <slice>` building regardless of `allowAgents`:
+		// `explicit: true` (the `do prd:<slug>` dispatch) drops the `autoSlice` POLICY
+		// term, so an explicit slice-now proceeds to the lock/agent with the policy
+		// unset. (A real lock is taken here — the gate does NOT refuse, so the noLock
+		// stub would throw; we let the real CAS run and assert it sliced.)
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		let agentRan = false;
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			// autoSlice deliberately OMITTED (defaults off) — explicit alone authorizes.
+			explicit: true,
+			integration: 'merge',
+			agentRunner: slicingAgent('it-explicit', () => {
+				agentRan = true;
+			}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(agentRan).toBe(true);
+		expect(onArbiter(repo, 'work/backlog/it-explicit.md')).toBe(true);
+	});
+
+	it('EXPLICIT still refuses a humanOnly PRD (the readiness axis binds regardless of explicit)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it', {humanOnly: true});
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			explicit: true,
+			lock: noLock,
+			agentRunner: slicingAgent(),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('gate-refused');
+		expect(result.message).toMatch(/humanOnly/);
+	});
+
+	it('EXPLICIT still refuses a needsAnswers PRD (the readiness axis binds regardless of explicit)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it', {needsAnswers: true});
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			explicit: true,
+			lock: noLock,
+			agentRunner: slicingAgent(),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('gate-refused');
+		expect(result.message).toMatch(/needsAnswers/);
+	});
+
+	it('EXPLICIT still refuses an unsatisfied sliceAfter (ordering binds regardless of explicit)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'dep');
+		seedPrd(repo, 'it', {sliceAfter: ['dep']});
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			explicit: true,
+			lock: noLock,
+			agentRunner: slicingAgent(),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('gate-refused');
+		expect(result.message).toMatch(/dep/);
+		expect(result.message).toMatch(/sliceAfter/);
+		// The autoSlice policy is NEVER the named reason on the explicit path.
+		expect(result.message).not.toMatch(/autoSlice/);
 	});
 
 	it('refuses when a sliceAfter PRD is not yet sliced (names it)', async () => {

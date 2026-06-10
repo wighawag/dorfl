@@ -51,6 +51,71 @@ describe('resolveSliceGate — the humanOnly × needsAnswers × autoSlice matrix
 	}
 });
 
+describe('resolveSliceGate — explicit naming satisfies the autoSlice policy term', () => {
+	// `explicit: true` mirrors `do <slice>` building regardless of `allowAgents`:
+	// naming the PRD IS the authorization, so the `autoSlice` policy term drops.
+	it('explicit + autoSlice OFF is sliceable (the policy term is satisfied by naming)', () => {
+		expect(resolveSliceGate(undefined, undefined, false, true)).toBe(true);
+	});
+
+	it('explicit defaults false (the pool path) ⇒ autoSlice still gates', () => {
+		expect(resolveSliceGate(undefined, undefined, false)).toBe(false);
+		expect(resolveSliceGate(undefined, undefined, false, false)).toBe(false);
+	});
+
+	it('explicit does NOT override the readiness axes (humanOnly / needsAnswers still block)', () => {
+		expect(resolveSliceGate(true, undefined, false, true)).toBe(false);
+		expect(resolveSliceGate(undefined, true, false, true)).toBe(false);
+		expect(resolveSliceGate(true, true, true, true)).toBe(false);
+	});
+
+	it('explicit is harmless when autoSlice is already on (both authorize)', () => {
+		expect(resolveSliceGate(undefined, undefined, true, true)).toBe(true);
+	});
+});
+
+describe('resolveSlicingEligibility — explicit drops the policy term but keeps sliceAfter', () => {
+	it('explicit + autoSlice OFF + no sliceAfter ⇒ sliceable', () => {
+		const r = resolveSlicingEligibility({
+			humanOnly: undefined,
+			needsAnswers: undefined,
+			sliceAfter: [],
+			slicedSlugs: new Set(),
+			autoSlice: false,
+			explicit: true,
+		});
+		expect(r.sliceable).toBe(true);
+		expect(r.gatePass).toBe(true);
+	});
+
+	it('explicit + autoSlice OFF but an UNSLICED sliceAfter ⇒ gate passes, still blocked', () => {
+		const r = resolveSlicingEligibility({
+			humanOnly: undefined,
+			needsAnswers: undefined,
+			sliceAfter: ['other'],
+			slicedSlugs: new Set(),
+			autoSlice: false,
+			explicit: true,
+		});
+		expect(r.gatePass).toBe(true);
+		expect(r.sliceable).toBe(false);
+		expect(r.sliceAfter.missing).toEqual(['other']);
+	});
+
+	it('explicit + humanOnly ⇒ never (the readiness axis binds)', () => {
+		const r = resolveSlicingEligibility({
+			humanOnly: true,
+			needsAnswers: undefined,
+			sliceAfter: [],
+			slicedSlugs: new Set(),
+			autoSlice: false,
+			explicit: true,
+		});
+		expect(r.gatePass).toBe(false);
+		expect(r.sliceable).toBe(false);
+	});
+});
+
 describe('resolveSliceAfter — against `work/prd-sliced/` residence (not done/)', () => {
 	it('is satisfied when sliceAfter is empty', () => {
 		const r = resolveSliceAfter([], new Set());

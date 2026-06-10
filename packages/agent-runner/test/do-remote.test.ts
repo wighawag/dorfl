@@ -277,29 +277,41 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 });
 
 describe('do --remote — slug resolution parity with do-in-place', () => {
-	it('a prd: arg dispatches to the slicing path, gate-bound for the agent (no worktree)', async () => {
+	it('a prd: arg dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoSlice OFF (no worktree)', async () => {
+		// Slug-resolution parity + the build/slice symmetry (slice
+		// `explicit-do-prd-not-gated-by-autoslice`): `do --remote prd:<slug>` is an
+		// EXPLICIT target, so it slices REGARDLESS of the repo's `autoSlice` POLICY
+		// (autoSlice OFF / default), exactly as `do <slice>` builds regardless of
+		// `allowAgents`. The agent RUNS (the policy no longer gate-refuses the explicit
+		// form); no job worktree is cut for a prd: arg (slicing is not a build pipeline).
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
 			prds: ['someprd'],
 		});
 		const ws = workspacesDir();
 
 		let agentRan = false;
-		// autoSlice OFF (default) → the agent slicing gate refuses; no worktree, no
-		// agent, no build pipeline (a prd: arg never enters the slice-build worktree).
 		const result = await performDoRemote({
 			arg: 'prd:someprd',
 			remote: remoteUrl(arbiter),
 			workspacesDir: ws,
-			verify: PASS,
-			agentRunner: () => {
+			// autoSlice deliberately OMITTED (defaults off) — explicit naming authorizes.
+			integration: 'merge',
+			agentRunner: ({cwd}) => {
 				agentRan = true;
+				const dir = join(cwd, 'work', 'backlog');
+				mkdirSync(dir, {recursive: true});
+				writeFileSync(
+					join(dir, 'someprd-explicit.md'),
+					'---\nslug: someprd-explicit\nprd: someprd\n---\n\n## Prompt\n\n> x\n',
+				);
 				return {ok: true};
 			},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('gate-refused');
+		expect(result.outcome).toBe('sliced');
 		expect(result.slug).toBe('someprd');
-		expect(agentRan).toBe(false);
+		// The agent ran (the gate did NOT refuse on the policy).
+		expect(agentRan).toBe(true);
 		// No job worktree was materialised for a prd: arg.
 		expect(existsSync(join(ws, 'work'))).toBe(false);
 	});
