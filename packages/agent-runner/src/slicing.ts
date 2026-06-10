@@ -250,8 +250,15 @@ export interface PerformSliceOptions {
 	 * acceptance gate's {@link acceptanceReviewModel} (build `--review-model`).
 	 */
 	slicerLoopModel?: string;
-	/** Environment for child git/agent processes. */
+	/** Environment for child GIT/provider processes (the identity-scoped env). */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Environment for the AGENT launches (the slicer agent + the review/improver
+	 * loop's review agent). Distinct from {@link env}: an AGENT must NOT carry the
+	 * runner identity (only the runner's git transitions do). Unset ⇒ falls back to
+	 * {@link env} (byte-for-byte unchanged for non-identity callers).
+	 */
+	agentEnv?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -270,7 +277,11 @@ export async function performSlice(
 	const note = options.note ?? (() => {});
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	const cwd = options.cwd;
+	// `env` is the runner's GIT/provider env (identity-scoped). `agentEnv` is the
+	// AMBIENT env for AGENT launches (slicer agent, review/improver agents) — an
+	// agent must not act as the bot. Falls back to `env` when no identity.
 	const env = options.env;
+	const agentEnv = options.agentEnv ?? options.env;
 	const slug = options.slug;
 	const doer = options.doer ?? 'agent';
 	const lock = options.lock ?? DEFAULT_LOCK_SEAM;
@@ -394,7 +405,8 @@ export async function performSlice(
 			executions: options.reviewExecutions,
 			slicerLoopModel: options.slicerLoopModel,
 			sessionsDir: options.sessionsDir,
-			env,
+			// The improver loop's review AGENT launches AMBIENT, never the identity.
+			env: agentEnv,
 			note,
 		});
 		// DECOMPOSITION UNCLEAR: emit NO guessed slices — route the held PRD to
@@ -532,6 +544,9 @@ export async function performSlice(
 				stage: () => stageSlicingLifecycle({cwd, slug, emitSlices, env}),
 			},
 			env,
+			// The slice-SET acceptance review AGENT launches AMBIENT, never the
+			// identity-scoped `env` (an agent must not act as the bot).
+			agentEnv,
 			note,
 		});
 
@@ -986,8 +1001,12 @@ async function runSliceAgent(
 	prompt: string,
 	slug: string,
 ): Promise<{ok: boolean; detail?: string}> {
+	// The slicer AGENT launches with the AMBIENT env (`agentEnv`), never the
+	// identity-scoped `env` (an agent must not act as the bot). Falls back to `env`
+	// when no identity is configured.
+	const agentEnv = options.agentEnv ?? options.env;
 	if (options.agentRunner) {
-		return options.agentRunner({cwd, prompt, slug, env: options.env});
+		return options.agentRunner({cwd, prompt, slug, env: agentEnv});
 	}
 	const harness = options.harness ?? new NullHarness();
 	const launched = await launchWithOptionalWatch({
@@ -999,7 +1018,7 @@ async function runSliceAgent(
 		model: options.model,
 		sessionId: `slice-${slug}`,
 		sessionsDir: options.sessionsDir,
-		env: options.env,
+		env: agentEnv,
 	});
 	return {ok: launched.ok, detail: launched.detail};
 }

@@ -128,4 +128,42 @@ describe('loadConfig', () => {
 		writeFileSync(path, '{ not json');
 		expect(() => loadConfig(path)).toThrow(/config/i);
 	});
+
+	it('loads a valid identity block', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(
+			path,
+			JSON.stringify({
+				identity: {
+					name: 'Bot',
+					email: 'bot@agents.alt',
+					auth: {ssh: '/k', https: 'never'},
+					providers: {github: {tokenEnv: 'BOT_TOK'}},
+				},
+			}),
+		);
+		const cfg = loadConfig(path);
+		expect(cfg.identity?.name).toBe('Bot');
+		expect(cfg.identity?.auth.ssh).toBe('/k');
+	});
+
+	it('throws a helpful error for an identity missing auth (load-time validation)', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(path, JSON.stringify({identity: {name: 'Bot'}}));
+		expect(() => loadConfig(path)).toThrow(/identity/i);
+	});
+
+	it('throws for an identity github with both token and tokenEnv', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(
+			path,
+			JSON.stringify({
+				identity: {
+					auth: {ssh: 'ambient', https: 'ambient'},
+					providers: {github: {token: 'x', tokenEnv: 'Y'}},
+				},
+			}),
+		);
+		expect(() => loadConfig(path)).toThrow(/identity/i);
+	});
 });

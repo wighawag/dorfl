@@ -46,12 +46,18 @@ type Coercion =
 	| {enum: readonly string[]};
 
 /**
- * The coercion to apply per {@link Config} key. The source of truth for which
- * env vars exist and how their raw strings become typed values. EVERY `Config`
- * key appears here (host-only included) — env is a per-machine source, so no key
- * is off-limits. Keys not listed have no env var.
+ * The coercion to apply per env-settable {@link Config} key. The source of truth
+ * for which env vars exist and how their raw strings become typed values. EVERY
+ * SCALAR `Config` key appears here (host-only included) — env is a per-machine
+ * source, so no scalar key is off-limits. Keys not listed have no env var.
+ *
+ * The lone EXCLUSION is `identity`: it is a NESTED structured object (with its
+ * own `auth`/`providers` sub-objects), not a scalar a single env string can
+ * carry. A `tokenEnv` indirection already covers the one secret a CI/per-machine
+ * context legitimately injects via env (the `gh` token), so there is no JSON-in-
+ * env hack here. The mapped type is `Partial` precisely to ALLOW this exclusion.
  */
-const KEY_COERCIONS: {[K in keyof Config]-?: Coercion} = {
+const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	allowAgents: 'boolean',
 	autoSlice: 'boolean',
 	prdsFirst: 'boolean',
@@ -151,12 +157,16 @@ function coerceValue(
 export function envOverrides(env: EnvMap = process.env): PartialConfig {
 	const overrides: PartialConfig = {};
 	for (const key of Object.keys(KEY_COERCIONS) as (keyof Config)[]) {
+		const coercion = KEY_COERCIONS[key];
+		if (coercion === undefined) {
+			continue;
+		}
 		const varName = envVarName(key);
 		const raw = env[varName];
 		if (raw === undefined) {
 			continue;
 		}
-		const value = coerceValue(varName, raw, KEY_COERCIONS[key]);
+		const value = coerceValue(varName, raw, coercion);
 		// Type matches by construction: each coercion yields the key's value type.
 		(overrides as Record<string, unknown>)[key] = value;
 	}

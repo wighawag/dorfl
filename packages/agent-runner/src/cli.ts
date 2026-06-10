@@ -1296,6 +1296,9 @@ export function buildProgram(): Command {
 					remote: flags.remote,
 					workspacesDir: remoteConfig.workspacesDir,
 					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
+					// Host-only runner IDENTITY — scopes git/provider ops only (not the
+					// agent launch); absent ⇒ ambient.
+					identity: remoteConfig.identity,
 					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
@@ -1379,6 +1382,10 @@ export function buildProgram(): Command {
 			const baseDoOptions: Omit<DoOptions, 'arg'> = {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
+				// The host-only runner IDENTITY (a bot): scopes the runner's git/provider
+				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
+				// ambient (today's behaviour). Mapped Config → DoOptions like model/agentCmd.
+				identity: config.identity,
 				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
 				autoSlice: config.autoSlice,
 				integration: config.integration,
@@ -1755,6 +1762,9 @@ export function buildProgram(): Command {
 				agentCmd: config.agentCmd,
 				model: config.model,
 				sessionsDir: config.sessionsDir,
+				// Host-only runner IDENTITY — scopes intake's `gh`/git ops (not the
+				// decision/review AGENT launches); absent ⇒ ambient.
+				identity: config.identity,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

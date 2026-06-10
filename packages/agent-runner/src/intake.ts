@@ -9,6 +9,11 @@ import {
 import type {IntegrateResult} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
+import {
+	identityEnv,
+	assertTransportAllowed,
+	type Identity,
+} from './identity.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {
@@ -237,7 +242,16 @@ export interface PerformIntakeOptions {
 	integration?: IntakeIntegrationModes;
 	/** The review-request provider override (propose mode); auto-detect when unset. */
 	provider?: ReviewProviderName;
-	/** Environment for child git/agent processes. */
+	/**
+	 * The optional runner IDENTITY (a bot), threaded from host-only
+	 * `config.identity`. It scopes intake's GIT + provider operations — the `gh`
+	 * issue ops (read/label/comment/close), the push, and the PR — via process-
+	 * scoped env overrides. It is NEVER applied to the intake AGENT launches (the
+	 * decision agent + the lone-slice review agent), which stay ambient: an agent
+	 * must not act as the bot. Absent ⇒ ambient (today's behaviour).
+	 */
+	identity?: Identity;
+	/** Environment for child git/agent processes (the AGENT-launch ambient env). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
@@ -383,9 +397,42 @@ export async function performIntake(
 	const note = options.note ?? (() => {});
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	const cwd = options.cwd;
-	const env = options.env;
+	// `env` is intake's GIT + provider env, scoped to the configured identity (the
+	// `gh` issue ops, the push, the PR). The intake AGENT launches (decision agent
+	// + lone-slice review agent) read `options.env` directly — they stay AMBIENT
+	// (an agent must not act as the bot). Absent identity ⇒ `options.env` unchanged.
+	// A configured identity that cannot be resolved (e.g. `tokenEnv` names an unset
+	// env var) is a clean usage error, never a crash or a silent ambient fallback.
 	const issueNumber = options.issueNumber;
+	let env: NodeJS.ProcessEnv;
+	try {
+		env = identityEnv(options.identity, options.env ?? process.env);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		note(message);
+		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
+	}
 	const issueProvider = options.issueProvider ?? new GitHubIssueProvider();
+
+	// Push-time transport-coherence guard (identity): if a configured identity
+	// forbids the arbiter's transport, fail with a clear message rather than
+	// silently pushing under an ambient credential. Resolve the arbiter URL softly
+	// (a non-zero/unknown URL is skipped — the guard is a no-op without an identity
+	// or a resolvable URL).
+	if (options.identity !== undefined) {
+		const urlRes = await runAsync('git', ['remote', 'get-url', arbiter], cwd, {
+			env,
+		});
+		if (urlRes.status === 0) {
+			try {
+				assertTransportAllowed(options.identity, urlRes.stdout.trim());
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				note(message);
+				return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
+			}
+		}
+	}
 
 	// 1. READ the issue + thread via the seam (the core never imports `gh`; only the
 	//    adapter shells out). A read failure surfaces as a usage error — `intake`
@@ -506,6 +553,9 @@ export async function performIntake(
 			arbiter,
 			issueProvider,
 			note,
+			// The identity-scoped GIT/provider env (the `gh` ops, push, PR). The AGENT
+			// launches inside dispatch read `options.env` (ambient) — not this.
+			gitEnv: env,
 		});
 	} finally {
 		// RELEASE the lock on FINISH (success OR handled failure). Only the winner that
@@ -594,11 +644,16 @@ async function decideAndDispatch(
 		arbiter: string;
 		issueProvider: IssueProvider;
 		note: (message: string) => void;
+		/** The identity-scoped GIT/provider env (the `gh` ops, push, PR). */
+		gitEnv: NodeJS.ProcessEnv | undefined;
 	},
 ): Promise<IntakeResult> {
 	const {arbiter, issueProvider, note} = ctx;
 	const issueNumber = issue.number;
-	const env = options.env;
+	// `env` here is the identity-scoped GIT/provider env (the runner's `gh`/git
+	// ops). The AGENT launches (decision agent, lone-slice review) use the AMBIENT
+	// `options.env` — an agent must not act as the bot.
+	const env = ctx.gitEnv;
 
 	// TRIAGE (deterministic, under the lock, BEFORE the prompt): decide whether to run
 	// the decision at all, built ENTIRELY on intake's own MARKER on the thread (no
@@ -664,6 +719,9 @@ async function decideAndDispatch(
 				reviewSlice: resolveLoneSliceReviewGate(options),
 				seen: seenDelta,
 				env,
+				// The lone-slice review AGENT launches AMBIENT (an agent must not act as
+				// the bot); `env` above is the identity-scoped git/provider env.
+				agentEnv: options.env,
 				note,
 			});
 		case 'prd':
@@ -846,7 +904,10 @@ async function dispatchSlice(params: {
 	reviewSlice: LoneSliceReviewGate;
 	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
 	seen: string[];
+	/** The identity-scoped GIT/provider env (push, PR, completion comment). */
 	env: NodeJS.ProcessEnv | undefined;
+	/** The AMBIENT env for the lone-slice review AGENT launch (never the identity). */
+	agentEnv: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<IntakeResult> {
 	const {
@@ -860,6 +921,7 @@ async function dispatchSlice(params: {
 		reviewSlice,
 		seen,
 		env,
+		agentEnv,
 		note,
 	} = params;
 
@@ -893,7 +955,8 @@ async function dispatchSlice(params: {
 			draftBody: verdict.sliceBody,
 			gate: reviewSlice,
 			cwd,
-			env,
+			// The review AGENT launches AMBIENT (never the identity-scoped env).
+			env: agentEnv,
 			note,
 		});
 	} catch (err) {

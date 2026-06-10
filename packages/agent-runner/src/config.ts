@@ -2,6 +2,7 @@ import {readFileSync, writeFileSync, existsSync, mkdirSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {brand} from './brand.js';
+import {type Identity, validateIdentity} from './identity.js';
 
 /**
  * How a completed item is integrated back to the arbiter's `main`. `merge` lands
@@ -244,6 +245,17 @@ export interface Config {
 	 * `--review-model`).
 	 */
 	slicerLoopModel?: string;
+	/**
+	 * The optional runner **identity** (a bot): run the runner's git + provider
+	 * operations as a configured entity via process-scoped env overrides, without
+	 * mutating the user's global git/`gh` config (see `identity.ts`). HOST-ONLY
+	 * (it carries secrets and is per-machine) ⇒ rejected in a per-repo file
+	 * (`REPO_REJECTED_KEYS`); it lives only in the global config. Optional with NO
+	 * default: unset ⇒ fully ambient (today's behaviour, byte-for-byte) — the CI
+	 * path relies on `actions/checkout`'s ambient HTTPS+`GITHUB_TOKEN`. When set,
+	 * `auth` is mandatory and validated at load time ({@link validateIdentity}).
+	 */
+	identity?: Identity;
 }
 
 /** A partial config, e.g. loaded from a JSON file or built from CLI flags. */
@@ -341,6 +353,18 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 		throw new Error(
 			`Invalid JSON in config at ${path}: ${(err as Error).message}`,
 		);
+	}
+	// Validate a present identity at LOAD time (dumb — no arbiter URL resolution;
+	// the transport-coherence check is push-time). A bad identity is a hard config
+	// error, never a silent ambient fallback.
+	if (parsed.identity !== undefined) {
+		try {
+			validateIdentity(parsed.identity);
+		} catch (err) {
+			throw new Error(
+				`Invalid identity in config at ${path}: ${(err as Error).message}`,
+			);
+		}
 	}
 	return mergeConfig(parsed);
 }

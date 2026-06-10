@@ -116,6 +116,11 @@ export const REPO_REJECTED_KEYS = [
 	// machine source — a flag (`--sessions-dir`), `AGENT_RUNNER_SESSIONS_DIR`, or
 	// the global file (exactly like `piBin`).
 	'sessionsDir',
+	// `identity` carries SECRETS (a `gh` token, an SSH key path) and is a per-
+	// MACHINE concept (a bot's credentials), never repo policy — so a committed
+	// repo file must NOT supply it. Host-only: it comes from the global config
+	// only. Rejected per-repo (ADR identity §; same class as `piBin`).
+	'identity',
 	// Reserved/future host-only keys callers may name; rejected proactively so a
 	// typo or a copy-pasted global config never silently leaks host policy into a
 	// repo. (`humanWorktreesDir` is a planned host-only path.)

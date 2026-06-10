@@ -220,8 +220,15 @@ export interface CompleteOptions {
 	 * so a stuck CI run is NOT invisible.
 	 */
 	surfaceArbiter?: string;
-	/** Environment for child git processes (identity etc.). */
+	/** Environment for child git/provider processes (the identity-scoped env). */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Environment for the REVIEW-AGENT launch (Gate 2) — the AMBIENT env, never the
+	 * identity-scoped {@link env} (an agent must not act as the bot). Threaded to
+	 * {@link performIntegration}'s `agentEnv`. Unset ⇒ falls back to {@link env}
+	 * (byte-for-byte unchanged for non-identity callers, e.g. the human `complete`).
+	 */
+	agentEnv?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 	/**
@@ -461,6 +468,7 @@ async function runComplete(
 		color: options.color,
 		sessionsDir: options.sessionsDir,
 		env,
+		agentEnv: options.agentEnv,
 		note,
 	});
 
