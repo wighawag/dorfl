@@ -18,6 +18,12 @@ import {
 	type IssueProvider,
 } from './issue-provider.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
+import {
+	stampIntakeMarker,
+	computeSeenDelta,
+	type IntakeMarkerKind,
+} from './intake-marker.js';
+import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
 
 /**
  * **`intake <N>`** (PRD `issue-intake`, slice `intake-tracer-slice-outcome`): the
@@ -134,6 +140,8 @@ export type IntakeRunOutcome =
 	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
 	| 'prd' // a `prd` verdict → `work/prd/<slug>.md` written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
+	| 'no-new-input' // the TRIAGE saw intake had the last word + nothing unseen → SKIP (ran, deliberately did nothing)
+	| 'already-terminal' // the TRIAGE saw the issue was already transformed (a `bounced`/`created` marker) → SKIP
 	| 'locked' // the `processing` lock was already held → backed off (did nothing)
 	| 'lock-failed' // the lock could not be ACQUIRED on a label-supporting provider → fail (do NOT proceed lock-less)
 	| 'agent-failed' // the decision agent invocation itself errored
@@ -569,10 +577,31 @@ async function decideAndDispatch(
 	const issueNumber = issue.number;
 	const env = options.env;
 
+	// TRIAGE (deterministic, under the lock, BEFORE the prompt): decide whether to run
+	// the decision at all, built ENTIRELY on intake's own MARKER on the thread (no
+	// sidecar/cursor/bot-identity). It SKIPS when intake has the last word
+	// (`no-new-input`) or the issue is already terminal (`already-terminal`), and runs
+	// the prompt ONLY on genuine new human input. This is also the COMPLETE fix for the
+	// self-trigger hazard: intake's own freshly-posted comment carries a marker, so it
+	// is excluded from the human-comment check by construction.
+	const triage = triageIntake(comments);
+	if (triage.action === 'skip') {
+		const message =
+			triage.outcome === 'no-new-input'
+				? `Intake of issue #${issueNumber} found nothing new: it has the last word ` +
+					`on the thread and has already seen every human comment up to it; doing ` +
+					`nothing (the decision prompt did not run).`
+				: `Intake of issue #${issueNumber} skipped: the issue was already ` +
+					`transformed (a terminal intake marker is on the thread); a later human ` +
+					`comment does not re-open it (the decision prompt did not run).`;
+		note(message);
+		return {exitCode: 0, outcome: triage.outcome, issueNumber, message};
+	}
+
 	// DECIDE: prompt → VERDICT. The agent DRAFTS only (no git, no seam ops). Tests
 	// inject a canned verdict (the dispatcher's testable seam); production wires the
 	// harness. The prompt's judgement is not unit-tested — only the dispatch.
-	const prompt = buildIntakeDecisionBrief(issue, comments);
+	const prompt = buildIntakeDecisionBrief(issue, comments, triage);
 	let verdict: IntakeVerdict;
 	try {
 		verdict = await runDecision(options, cwd, issue, comments, prompt);
@@ -593,6 +622,10 @@ async function decideAndDispatch(
 	// verdict with the PRD mode. Unset ⇒ propose for both. ask/bounce never
 	// integrate, so the modes are no-ops for them.
 	const modes = options.integration ?? {slice: 'propose', prd: 'propose'};
+	// The per-run `seen=` DELTA (the HUMAN comment ids intake READ this run, excluding
+	// its own marker-comments + already-seen ids) the marker records on every comment
+	// intake posts — the chain-model primitive the TRIAGE unions into `seenSet`.
+	const seenDelta = computeSeenDelta(comments);
 	switch (verdict.outcome) {
 		case 'slice':
 			return dispatchSlice({
@@ -628,6 +661,11 @@ async function decideAndDispatch(
 					verdict.question && verdict.question.trim() !== ''
 						? verdict.question
 						: `Could you clarify issue #${issueNumber} so it can be acted on?`,
+				// STAMP the MARKER recording `kind=ask` (non-terminal — the TRIAGE owns
+				// that) + the `seen=` delta, so a re-run recognises this as intake's own
+				// turn and resumes only on genuine new human input.
+				markerKind: 'ask',
+				seen: seenDelta,
 				env,
 				note,
 			});
@@ -644,6 +682,10 @@ async function decideAndDispatch(
 						? verdict.bounceMessage
 						: `This issue looks like multiple unrelated concerns — please file ` +
 							`separate issues so each can be intaken on its own.`,
+				// STAMP `kind=bounced` (TERMINAL — the TRIAGE then SKIPS `already-terminal`
+				// on a later human comment) + the `seen=` delta.
+				markerKind: 'bounced',
+				seen: seenDelta,
 				env,
 				note,
 			});
@@ -665,14 +707,32 @@ async function dispatchComment(params: {
 	issueNumber: number;
 	issueProvider: IssueProvider;
 	body: string;
+	/** The neutral `kind` the MARKER records (`ask` for an ask, `bounced` for a bounce). */
+	markerKind: IntakeMarkerKind;
+	/** The per-run `seen=` delta of HUMAN comment ids intake read this run. */
+	seen: string[];
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<IntakeResult> {
-	const {outcome, cwd, issueNumber, issueProvider, body, env, note} = params;
+	const {
+		outcome,
+		cwd,
+		issueNumber,
+		issueProvider,
+		body,
+		markerKind,
+		seen,
+		env,
+		note,
+	} = params;
+	// STAMP the intake MARKER onto the body so a re-run recognises this as intake's
+	// own comment (the SOLE self-recognition signal — no author identity). Hidden HTML
+	// comment; renders as nothing, present in the raw markdown the TRIAGE parses.
+	const stamped = stampIntakeMarker(body, {kind: markerKind, seen});
 	const posted = await issueProvider.postIssueComment({
 		cwd,
 		issueNumber,
-		body,
+		body: stamped,
 		env,
 	});
 	const verb =
@@ -1254,6 +1314,7 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 export function buildIntakeDecisionBrief(
 	issue: Issue,
 	comments: IssueComment[],
+	triage?: IntakeTriageDecision,
 ): string {
 	const thread =
 		comments.length === 0
@@ -1264,6 +1325,31 @@ export function buildIntakeDecisionBrief(
 							`#${i + 1} ${c.author ? `@${c.author}` : '(unknown)'}: ${c.body}`,
 					)
 					.join('\n\n');
+	// TRIAGE ENRICHMENT (PRD `issue-intake`): on the raced PROCEED path the prompt is
+	// told which comment(s) PRE-DATE intake's last turn (context for a prior state,
+	// not necessarily a fresh answer) and — only then — how many previously-SEEN
+	// comments were DELETED (a flag + count; the bodies are gone, so do not name them).
+	const triageNotes: string[] = [];
+	if (triage?.action === 'proceed' && triage.predatingIds.length > 0) {
+		triageNotes.push(
+			'',
+			'## Triage note — raced comment(s) that PRE-DATE intake’s last turn',
+			'',
+			`${triage.predatingIds.length} comment(s) landed AFTER intake last read the`,
+			'thread but BEFORE it posted its last turn, so they pre-date that turn',
+			'(possibly concurrent). Treat them as possibly-already-addressed context for a',
+			'PRIOR state — NOT necessarily a direct answer to intake’s latest question.',
+		);
+		if (triage.deletedSeenCount > 0) {
+			triageNotes.push(
+				'',
+				`ALSO: ${triage.deletedSeenCount} previously-seen comment(s) were DELETED since`,
+				'intake last read the thread. Their content is gone and not recoverable; do',
+				'NOT assume your prior reasoning’s premises still hold — reassess from the',
+				'current thread.',
+			);
+		}
+	}
 	return [
 		`You are the agent-runner INTAKE agent. Decide what to do with GitHub issue`,
 		`#${issue.number}: "${issue.title}". You read the issue + its full comment`,
@@ -1274,6 +1360,7 @@ export function buildIntakeDecisionBrief(
 		'',
 		'Comment thread (oldest first):',
 		thread,
+		...triageNotes,
 		'',
 		'## The decision — classify the issue into exactly ONE of four verdicts',
 		'',

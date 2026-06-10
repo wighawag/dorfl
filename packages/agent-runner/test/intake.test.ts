@@ -8,6 +8,8 @@ import {
 	mkdirSync,
 } from 'node:fs';
 import {performIntake, type IntakeVerdict} from '../src/intake.js';
+import {stampIntakeMarker, parseIntakeMarker} from '../src/intake-marker.js';
+import {brand} from '../src/brand.js';
 import {
 	GitHubIssueProvider,
 	PROCESSING_LOCK_LABEL,
@@ -1233,5 +1235,300 @@ describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', (
 		void mkdirSync;
 		const stray = join(scratch.root, '..', 'gh-issue-args.txt');
 		expect(existsSync(stray)).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The TRIAGE GATE + MARKER (`intake-self-awareness-resumption-tracking`): a
+// deterministic pre-decision gate, built ENTIRELY on intake's own MARKER on the
+// thread (no sidecar/cursor/bot-identity), that runs the prompt ONLY on genuine new
+// human input. Asserted at the stubbed issue seam: postIssueComment records the
+// MARKER (kind + seen=) on every comment intake posts; listComments seeds threads
+// with ids/markers; the triage branches drive the dispatch (no-new-input /
+// race-proceed / already-terminal / proceed). The prompt JUDGEMENT is not unit
+// tested (only the triage + dispatch).
+// ---------------------------------------------------------------------------
+describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
+	const NS = `${brand.base}:intake`;
+
+	it('stamps the MARKER (kind=ask + seen=<human ids read>) on a posted ASK comment', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// Two human comments in the thread (ids 11,12). The ask marker records seen=11,12.
+		const issueProvider = stubIssueProvider({
+			issue: {number: 9},
+			comments: [
+				{id: '11', author: 'octocat', body: 'first'},
+				{id: '12', author: 'octocat', body: 'second'},
+			],
+		});
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({outcome: 'ask', question: 'Which notes exactly?'}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('asked');
+		expect(issueProvider.comments).toHaveLength(1);
+		const body = issueProvider.comments[0].body;
+		// The human-readable text AND the hidden marker (kind + seen= delta) are present.
+		expect(body).toContain('Which notes exactly?');
+		expect(body).toContain(`<!-- ${NS} kind=ask seen=11,12 -->`);
+		// The marker stores kind + seen only — NOT a terminal flag.
+		expect(body).not.toContain('terminal=');
+		const marker = parseIntakeMarker(body);
+		expect(marker).toEqual({kind: 'ask', seen: ['11', '12']});
+	});
+
+	it('stamps kind=bounced (terminal — owned by the triage, NOT the marker) on a posted BOUNCE comment', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({
+			issue: {number: 11},
+			comments: [{id: '20', author: 'octocat', body: 'unrelated stuff'}],
+		});
+		const result = await performIntake({
+			issueNumber: 11,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'bounce',
+				bounceMessage: 'Please file separate issues.',
+			}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('bounced');
+		const body = issueProvider.comments[0].body;
+		expect(body).toContain(`<!-- ${NS} kind=bounced seen=20 -->`);
+		expect(body).not.toContain('terminal');
+	});
+
+	it('TRIAGE no-new-input: intake has the last word + nothing unseen → SKIP (prompt does NOT run, nothing posted)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({
+			issue: {number: 9},
+			comments: [
+				{id: '1', author: 'octocat', body: 'a human comment'},
+				// Intake's OWN ask comment is last and recorded seeing id 1.
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('what exactly?', {kind: 'ask', seen: ['1']}),
+				},
+			],
+		});
+		let decided = false;
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return {outcome: 'ask', question: 'x'};
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('no-new-input');
+		// The prompt did NOT run; nothing emitted/posted.
+		expect(decided).toBe(false);
+		expect(issueProvider.comments).toHaveLength(0);
+		expect(result.emitted).toBeUndefined();
+	});
+
+	it('SELF-TRIGGER is a no-op: intake’s own freshly-posted comment never re-triggers (no-new-input)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// Re-run reads intake's own last comment — it must NOT count as a new turn.
+		const issueProvider = stubIssueProvider({
+			issue: {number: 9},
+			comments: [
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('Created slice foo', {
+						kind: 'ask',
+						seen: [],
+					}),
+				},
+			],
+		});
+		let decided = false;
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return {outcome: 'ask', question: 'x'};
+			},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('no-new-input');
+		expect(decided).toBe(false);
+	});
+
+	it('TRIAGE race-proceed: a human comment raced in unseen → PROCEED, prompt told it PRE-DATES intake’s turn', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// Intake read [1] then human 2 raced in BEFORE intake posted its marker.
+		const issueProvider = stubIssueProvider({
+			issue: {number: 9},
+			comments: [
+				{id: '1', author: 'octocat', body: 'first'},
+				{id: '2', author: 'octocat', body: 'raced-in comment'},
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('what exactly?', {kind: 'ask', seen: ['1']}),
+				},
+			],
+		});
+		let promptSeen = '';
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async ({prompt}) => {
+				promptSeen = prompt;
+				return {outcome: 'ask', question: 'follow up'};
+			},
+			env: gitEnv(),
+		});
+		// The decision RAN (not skipped) and dispatched.
+		expect(result.outcome).toBe('asked');
+		// The prompt was flagged that 1 comment pre-dates intake's last turn.
+		expect(promptSeen).toMatch(/PRE-DATE/i);
+		expect(promptSeen).toMatch(/1 comment/);
+	});
+
+	it('TRIAGE deletion-enrichment: raced-in + a previously-seen comment deleted → prompt told N deleted; reassess', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// seenSet={1,2}; thread has human 1 (2 deleted) + a NEW unseen human 3.
+		const issueProvider = stubIssueProvider({
+			issue: {number: 9},
+			comments: [
+				{id: '1', author: 'octocat', body: 'first'},
+				{id: '3', author: 'octocat', body: 'new comment'},
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('q', {kind: 'ask', seen: ['1', '2']}),
+				},
+			],
+		});
+		let promptSeen = '';
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async ({prompt}) => {
+				promptSeen = prompt;
+				return {outcome: 'ask', question: 'follow up'};
+			},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('asked');
+		expect(promptSeen).toMatch(/PRE-DATE/i);
+		// The deletion flag + count surfaces (1 deleted), telling the prompt to reassess.
+		expect(promptSeen).toMatch(/1 previously-seen comment\(s\) were DELETED/);
+		expect(promptSeen).toMatch(/reassess/i);
+	});
+
+	it('TRIAGE deletion-only (no unseen comment) → SKIP no-new-input (a bare deletion is not a wake trigger)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// seenSet={1,2}; human 2 deleted but NO new comment.
+		const issueProvider = stubIssueProvider({
+			issue: {number: 9},
+			comments: [
+				{id: '1', author: 'octocat', body: 'first'},
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('q', {kind: 'ask', seen: ['1', '2']}),
+				},
+			],
+		});
+		let decided = false;
+		const result = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return {outcome: 'ask', question: 'x'};
+			},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('no-new-input');
+		expect(decided).toBe(false);
+	});
+
+	it('TRIAGE already-terminal: a human comment after a TERMINAL marker (bounced/created) → SKIP (decision does NOT run)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({
+			issue: {number: 11},
+			comments: [
+				{id: '1', author: 'octocat', body: 'unrelated asks'},
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('please split', {
+						kind: 'bounced',
+						seen: ['1'],
+					}),
+				},
+				{id: '2', author: 'octocat', body: 'a later human comment'},
+			],
+		});
+		let decided = false;
+		const result = await performIntake({
+			issueNumber: 11,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return SLICE_VERDICT;
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('already-terminal');
+		expect(decided).toBe(false);
+		expect(result.emitted).toBeUndefined();
+		expect(issueProvider.comments).toHaveLength(0);
+	});
+
+	it('TRIAGE proceed: a human reply after an ASK marker (non-terminal) resumes — the decision runs and dispatches', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({
+			issue: {number: 42},
+			comments: [
+				{id: '1', author: 'octocat', body: 'I want a flag'},
+				{
+					id: 'm1',
+					author: 'octocat',
+					body: stampIntakeMarker('which flag?', {kind: 'ask', seen: ['1']}),
+				},
+				{id: '2', author: 'octocat', body: 'the --quiet one'},
+			],
+		});
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+		});
+		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + slices.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		expect(result.emitted).toBe('work/backlog/add-quiet-flag.md');
 	});
 });

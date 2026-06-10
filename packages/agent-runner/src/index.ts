@@ -260,6 +260,17 @@ export type {
 } from './intake-event.js';
 export {classifyIntakeEvent} from './intake-event.js';
 
+export type {IntakeMarker, IntakeMarkerKind} from './intake-marker.js';
+export {
+	stampIntakeMarker,
+	parseIntakeMarker,
+	isIntakeComment,
+	computeSeenDelta,
+	seenSetFrom,
+} from './intake-marker.js';
+export type {IntakeTriageDecision} from './intake-triage.js';
+export {triageIntake} from './intake-triage.js';
+
 export type {EnsureMirrorOptions, EnsureMirrorResult} from './repo-mirror.js';
 export {
 	encodeRepoKey,
