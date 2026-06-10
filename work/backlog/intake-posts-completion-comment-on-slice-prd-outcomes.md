@@ -20,7 +20,7 @@ On a SUCCESSFUL terminal outcome — `sliced` (a `work/backlog/<slug>.md` was cr
   - **merge** → link the **commit** the artifact landed in on `main` (the commit the integrate core returns);
 - does NOT reference/link the PRD beyond naming the created PRD slug (maintainer: no need to link to PRD);
 - is purely informational — it changes NO issue state (no close, no label beyond the transient processing lock that already exists);
-- carries the intake MARKER (from `intake-self-awareness-resumption-tracking`), e.g. `<!-- agent-runner:intake kind=created slug=<slug> -->`, so intake recognises its OWN completion comment and never re-triggers on it.
+- carries the intake MARKER (from `intake-self-awareness-resumption-tracking`): `<!-- ${brand.base}:intake kind=created slug=<slug> -->` (today `agent-runner:intake`; namespace built from `brand.base`), so the triage's `already-terminal` branch recognises this issue as already-transformed and intake never re-triggers on its own completion comment.
 
 Post the comment ONLY on `sliced` / `prd`. Do NOT post on `asked` / `bounced` (those already post their own comment), nor on `locked` / `lock-failed` / `stale` / `agent-failed` / `usage-error` (those are not "done").
 
