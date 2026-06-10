@@ -270,8 +270,10 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		expect(onBranch).toContain('covers: []');
 		expect(onBranch).not.toMatch(/^prd:/m);
 		expect(onBranch).not.toContain('Fixes');
-		// The agent posted NOTHING (the slice branch never posts) — runner owns seams.
-		expect(issueProvider.comments).toHaveLength(0);
+		// The AGENT posted nothing itself (runner owns seams); on a SUCCESSFUL slice the
+		// RUNNER posts exactly ONE informational `slice created` completion comment.
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].body).toContain('Created slice');
 	});
 
 	it('a MALFORMED launched.output degrades to `agent-failed` (exit 1), not a crash', async () => {

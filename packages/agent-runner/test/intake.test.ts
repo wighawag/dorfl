@@ -7,7 +7,11 @@ import {
 	existsSync,
 	mkdirSync,
 } from 'node:fs';
-import {performIntake, type IntakeVerdict} from '../src/intake.js';
+import {
+	performIntake,
+	composeIntakeCompletionComment,
+	type IntakeVerdict,
+} from '../src/intake.js';
 import {stampIntakeMarker, parseIntakeMarker} from '../src/intake-marker.js';
 import {brand} from '../src/brand.js';
 import {
@@ -281,9 +285,12 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		});
 		expect(result.exitCode).toBe(0);
 
-		// The agent posted NO issue comment (the slice branch never posts; only
-		// ask/bounce do, in a later slice) — the runner owns every seam side-effect.
-		expect(issueProvider.comments).toHaveLength(0);
+		// The AGENT (decider) posted NO issue comment itself — the runner owns every
+		// seam side-effect. On a SUCCESSFUL slice the RUNNER posts exactly ONE
+		// informational completion comment AFTER the integrate (this slice); the agent
+		// stays seam-free (it returned a verdict and touched no git/seam).
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].body).toContain('Created slice');
 
 		// The decider observed a HEAD; the WRITE/commit happened only AFTER (the
 		// runner onboarded a work branch + integrated). The decider itself authored
@@ -595,8 +602,10 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(result.emittedSlug).toBe('quiet-and-verbose-modes');
 		expect(result.emitted).toBe('work/prd/quiet-and-verbose-modes.md');
 
-		// No comment posted (the prd branch never posts; only ask/bounce do).
-		expect(issueProvider.comments).toHaveLength(0);
+		// One informational completion comment posted (this slice): the runner reports
+		// `prd created` back on the issue, framed as created (not resolved).
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].body).toContain('Created PRD');
 
 		// PROPOSE (default): the PRD rides the work/<slug> branch; main is NOT touched.
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -1755,5 +1764,282 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
 		expect(result.emitted).toBe('work/backlog/add-quiet-flag.md');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The COMPLETION COMMENT on SUCCESSFUL outcomes
+// (`intake-posts-completion-comment-on-slice-prd-outcomes`, PRD `issue-intake`):
+// on a `sliced` / `prd` outcome intake posts ONE INFORMATIONAL comment back on the
+// issue — `slice created` / `prd created`, NEVER "resolved"; it links the PR
+// (propose) or the landed commit (merge), carries the FULL `created` marker (incl.
+// `seen=`) so the triage SKIPS `already-terminal` on it, and DEGRADES (a missing
+// `gh` never changes the success outcome). Asserted at the stubbed issue seam.
+// ---------------------------------------------------------------------------
+describe('intake <N> — the completion comment on slice/prd success', () => {
+	const NS = `${brand.base}:intake`;
+
+	it('a `sliced` outcome posts an informational `slice created` comment naming the slug (NOT “resolved”), with the PR link in propose + the FULL created marker (incl. seen=)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// One human comment (id 7) → the created marker records seen=7 (the per-run delta).
+		const issueProvider = stubIssueProvider({
+			issue: {number: 42},
+			comments: [{id: '7', author: 'octocat', body: 'please add it'}],
+		});
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			// propose (default) → the comment links the PR
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		expect(result.commented).toBe(true);
+		expect(issueProvider.comments).toHaveLength(1);
+		expect(issueProvider.comments[0].issueNumber).toBe(42);
+		const body = issueProvider.comments[0].body;
+		// CREATED wording + the slug, NOT “resolved/closed”.
+		expect(body).toContain('Created slice `add-quiet-flag`');
+		expect(body).not.toMatch(/resolved|closed/i);
+		// The FULL created marker (incl. `seen=` delta), via the shared stamp helper.
+		expect(body).toContain(
+			`<!-- ${NS} kind=created slug=add-quiet-flag seen=7 -->`,
+		);
+		const marker = parseIntakeMarker(body);
+		expect(marker).toEqual({
+			kind: 'created',
+			slug: 'add-quiet-flag',
+			seen: ['7'],
+		});
+		// The issue was NOT closed (informational only — intake never closes here).
+		expect(issueProvider.closes).toHaveLength(0);
+		expect(result.closed).toBeUndefined();
+	});
+
+	it('a `prd` outcome posts a `PRD created` comment naming the slug, with NO PRD link beyond the slug', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 5}});
+		const result = await performIntake({
+			issueNumber: 5,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose modes',
+			}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('prd');
+		expect(issueProvider.comments).toHaveLength(1);
+		const body = issueProvider.comments[0].body;
+		expect(body).toContain('Created PRD `quiet-and-verbose-modes`');
+		expect(body).not.toMatch(/resolved|closed/i);
+		expect(body).toContain(`kind=created slug=quiet-and-verbose-modes`);
+		// No close, no state change.
+		expect(issueProvider.closes).toHaveLength(0);
+	});
+
+	it('MERGE mode links the LANDED COMMIT (from IntegrateResult.commit), not a PR', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 42}});
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			integration: {slice: 'merge', prd: 'propose'},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		// The slice landed on main; the comment links that commit SHA.
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const landed = gitIn(['rev-parse', `${ARBITER}/main`], repo).trim();
+		expect(issueProvider.comments).toHaveLength(1);
+		const body = issueProvider.comments[0].body;
+		expect(body).toContain('Created slice `add-quiet-flag`');
+		// The MERGE variant links the landed commit (the new `commit` field), not a PR.
+		expect(body).toContain(landed);
+		expect(body).not.toMatch(/PR:/);
+	});
+
+	it('composeIntakeCompletionComment: PROPOSE links the PR `url`; MERGE links the `commit` (two distinct messages)', () => {
+		// PROPOSE → the PR url is the link (the `commit` field is irrelevant here).
+		const propose = composeIntakeCompletionComment({
+			kind: 'slice',
+			slug: 'add-quiet-flag',
+			integration: {
+				mode: 'propose',
+				mergedToMain: false,
+				pushedRef: 'work/add-quiet-flag',
+				provider: 'github',
+				requestOpened: true,
+				url: 'https://github.com/o/r/pull/7',
+			},
+			seen: ['7'],
+		});
+		expect(propose).toContain('Created slice `add-quiet-flag`');
+		expect(propose).toContain('https://github.com/o/r/pull/7');
+		expect(propose).not.toMatch(/landed on `main`/);
+		expect(propose).toContain(
+			`<!-- ${NS} kind=created slug=add-quiet-flag seen=7 -->`,
+		);
+		expect(propose).not.toMatch(/resolved|closed/i);
+
+		// MERGE → the landed commit SHA is the link (the new `commit` field).
+		const merge = composeIntakeCompletionComment({
+			kind: 'slice',
+			slug: 'add-quiet-flag',
+			integration: {
+				mode: 'merge',
+				mergedToMain: true,
+				pushedRef: 'main',
+				provider: 'none',
+				requestOpened: false,
+				commit: 'deadbeefcafe1234',
+			},
+			seen: ['7'],
+		});
+		expect(merge).toContain('Created slice `add-quiet-flag`');
+		expect(merge).toContain('deadbeefcafe1234');
+		expect(merge).not.toMatch(/pull\//);
+		expect(merge).toContain(
+			`<!-- ${NS} kind=created slug=add-quiet-flag seen=7 -->`,
+		);
+
+		// The two messages are DISTINCT (PR link vs commit link).
+		expect(propose).not.toBe(merge);
+	});
+
+	it('NO completion comment is posted on locked / asked / bounced', async () => {
+		// locked: a second run while the lock is held backs off — no comment.
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const lockedProvider = stubIssueProvider({
+			labels: [PROCESSING_LOCK_LABEL],
+		});
+		const locked = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: lockedProvider,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+		});
+		expect(locked.outcome).toBe('locked');
+		expect(lockedProvider.comments).toHaveLength(0);
+
+		// asked: posts its OWN ask comment (not a `created` completion comment).
+		const askProvider = stubIssueProvider({issue: {number: 9}});
+		const asked = await performIntake({
+			issueNumber: 9,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: askProvider,
+			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
+			env: gitEnv(),
+		});
+		expect(asked.outcome).toBe('asked');
+		expect(askProvider.comments).toHaveLength(1);
+		// It is the ASK comment, NOT a `created` completion comment.
+		expect(askProvider.comments[0].body).not.toContain('kind=created');
+
+		// bounced: closes the issue (the bounce text rides the close), posts no
+		// `created` completion comment.
+		const bounceProvider = stubIssueProvider({issue: {number: 11}});
+		const bounced = await performIntake({
+			issueNumber: 11,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: bounceProvider,
+			decide: async () => ({outcome: 'bounce', bounceMessage: 'split it'}),
+			env: gitEnv(),
+		});
+		expect(bounced.outcome).toBe('bounced');
+		expect(bounceProvider.comments).toHaveLength(0);
+	});
+
+	it('a completion-comment post DEGRADE (gh missing/unauth) does NOT change the success outcome', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const base = stubIssueProvider({issue: {number: 42}});
+		const notes: string[] = [];
+		// The post FAILS (advisory degrade) — the slice still succeeds.
+		const issueProvider: IssueProvider = {
+			...base,
+			async postIssueComment(input) {
+				base.comments.push(input);
+				return {
+					posted: false,
+					instruction: '`gh` is unavailable; the comment was not posted.',
+				};
+			},
+		};
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		// The success outcome is UNCHANGED by the degrade.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+		expect(result.emitted).toBe('work/backlog/add-quiet-flag.md');
+		// `commented` reflects the failed post (advisory), but the run still succeeded.
+		expect(result.commented).toBe(false);
+	});
+
+	it('the completion comment carries the TERMINAL `created` marker → the triage SKIPS `already-terminal` on a thread carrying it (cannot re-trigger intake)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// 1) FIRST run: slice the issue + capture the posted completion comment (with its
+		//    full `created` marker), exactly as it would land on the thread.
+		const first = stubIssueProvider({
+			issue: {number: 42},
+			comments: [{id: '7', author: 'octocat', body: 'please add it'}],
+		});
+		const sliced = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: first,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+		});
+		expect(sliced.outcome).toBe('sliced');
+		const completionBody = first.comments[0].body;
+
+		// 2) SECOND run on a thread that now carries that completion comment (intake's own
+		//    terminal `created` marker) followed by a later human comment. The triage must
+		//    SKIP `already-terminal` — the completion comment cannot re-trigger intake. The
+		//    triage runs BEFORE any git work, so reusing the same repo is fine (it skips).
+		const second = stubIssueProvider({
+			issue: {number: 42},
+			comments: [
+				{id: '7', author: 'octocat', body: 'please add it'},
+				{id: 'm1', author: 'octocat', body: completionBody},
+				{id: '8', author: 'octocat', body: 'a later human comment'},
+			],
+		});
+		let decided = false;
+		const rerun = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: second,
+			decide: async () => {
+				decided = true;
+				return SLICE_VERDICT;
+			},
+			env: gitEnv(),
+		});
+		expect(rerun.outcome).toBe('already-terminal');
+		expect(decided).toBe(false);
+		expect(rerun.emitted).toBeUndefined();
 	});
 });

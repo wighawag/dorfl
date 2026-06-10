@@ -125,6 +125,24 @@ describe('Integrator — merge mode (direct to main, never --force)', () => {
 			env: gitEnv(),
 		}).trim();
 		expect(main).toBe(tip);
+		// The additive `commit` field surfaces the SHA that LANDED on main (the merge-
+		// mode twin of propose's `url`) — exactly the work branch's tip.
+		expect(result.commit).toBe(tip);
+	});
+
+	it('PROPOSE mode does NOT populate `commit` (the PR `url` is the link there)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const branch = workBranch(repo, 'feat');
+		const integrator = new Integrator({provider: new NoneProvider()});
+		const result = await integrator.integrate({
+			cwd: repo,
+			arbiter: 'arbiter',
+			branch,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+		expect(result.mode).toBe('propose');
+		expect(result.commit).toBeUndefined();
 	});
 });
 
