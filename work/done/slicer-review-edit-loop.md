@@ -13,6 +13,9 @@ The **slicer edit loop** (RESOLVED DESIGN in `work/prd/review.md`, Shape 2 / ins
 ### The loop (resolved mechanism)
 
 - **One agent reviews AND edits in a SINGLE context** (the N in-context multipass): run the `review` skill's ordered adversarial lenses **ending in the destination/goal check** (the goal check is part of the same pass and may ITSELF trigger edits — that is why it is a loop), apply the resulting edits to the candidate slice files, then re-review. Passes accumulate (each sees prior findings + the edited slices). De-correlation by ANGLE within the context.
+
+  > ⚠️ ASPIRATION-VS-BUILT (noted 2026-06-10): the "SINGLE context" wording is the PRD's aspiration; what was BUILT (`src/slicer-review-loop.ts`) is the OPERATIVE reading of this same bullet — a runner-driven `for (pass …)` loop, ONE agent launch per pass, edits written to the candidate slice FILES between passes (disk accumulation), the next pass re-reading them. NOT a single agent looping internally. This bullet is internally contradictory ("single context" vs "apply edits to the slice files / each pass sees the edited slices"); the build followed the file/per-pass reading, which the acceptance criteria + prompt below also specify. See `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`.
+
 - **A fresh context is simply a NEW EXECUTION of that same loop in a fresh context** (the M): the M×N grid = run the (review+edit) loop N passes deep, M times in fresh contexts. `M=1,N=…` is the cheap default; `M=k` runs k independent fresh loops. Implement the loop ONCE; M is just invoking it again with a fresh harness launch (fresh context = a separate launch, like the Gate-2 reviewer).
 - **The `review` skill is REUSED** (`skills/review/SKILL.md`, built) — this slice wires the loop + edit-application + routing around it; it does NOT re-author the protocol. The lenses + destination check live in the skill.
 

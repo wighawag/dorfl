@@ -22,6 +22,19 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  *   - **N** — the in-context multipass: ONE agent reviews AND edits in a single
  *     context, accumulating findings across angle-switched passes. `slicerLoopMax` caps
  *     N so the loop can never run forever.
+ *
+ *     ⚠️ ASPIRATION-VS-BUILT (2026-06-10): the "single context" wording above is the
+ *     PRD's ASPIRATION, NOT what this module does at runtime. The ACTUAL N loop is
+ *     RUNNER-DRIVEN and PER-PASS: `runOneExecution` does `for (pass …) { gate(…);
+ *     applyEdits(…to disk…) }` — ONE agent LAUNCH per pass, the runner writing the
+ *     agent's edits to the candidate slice FILES (`work/backlog/`) between passes, the
+ *     next pass's agent re-reading the edited files. Accumulation is via DISK +
+ *     re-launch, NOT one agent retaining context. `prd/review.md` §Shape 2 is internally
+ *     contradictory on this (single-context headline vs "edit the files" operative spec);
+ *     this code implements the operative reading. See
+ *     `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`.
+ *     (Relevant to intake: PR #62's lone-slice loop mirrors this per-pass STRUCTURE but
+ *     accumulates IN-MEMORY, because intake must not write to `work/backlog/` pre-emit.)
  *   - **M** — fresh-context re-executions: a fresh context is simply a NEW EXECUTION
  *     of that same loop in a fresh harness launch (like the Gate-2 reviewer). The
  *     loop is implemented ONCE; M is invoking it again. `M=1` is the cheap default;
