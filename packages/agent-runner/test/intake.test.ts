@@ -105,33 +105,55 @@ function stubIssueProvider(
 		async getLabels() {
 			if (opts.noLabels) {
 				return {
+					outcome: 'unsupported' as const,
 					supported: false,
 					labels: [],
 					instruction: 'no label support',
 				};
 			}
-			return {supported: true, labels: [...labels], instruction: 'read labels'};
+			return {
+				outcome: 'ok' as const,
+				supported: true,
+				labels: [...labels],
+				instruction: 'read labels',
+			};
 		},
 		async addLabel({label}) {
 			if (opts.noLabels) {
-				return {applied: false, instruction: 'no label support'};
+				return {
+					outcome: 'unsupported' as const,
+					applied: false,
+					instruction: 'no label support',
+				};
 			}
 			labelOps.push(`add:${label}`);
 			if (!labels.includes(label)) {
 				labels.push(label);
 			}
-			return {applied: true, instruction: `added ${label}`};
+			return {
+				outcome: 'applied' as const,
+				applied: true,
+				instruction: `added ${label}`,
+			};
 		},
 		async removeLabel({label}) {
 			if (opts.noLabels) {
-				return {applied: false, instruction: 'no label support'};
+				return {
+					outcome: 'unsupported' as const,
+					applied: false,
+					instruction: 'no label support',
+				};
 			}
 			labelOps.push(`remove:${label}`);
 			const i = labels.indexOf(label);
 			if (i !== -1) {
 				labels.splice(i, 1);
 			}
-			return {applied: true, instruction: `removed ${label}`};
+			return {
+				outcome: 'applied' as const,
+				applied: true,
+				instruction: `removed ${label}`,
+			};
 		},
 	};
 	return provider;
@@ -300,13 +322,18 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 				return {posted: false, instruction: 'n/a'};
 			},
 			async getLabels() {
-				return {supported: true, labels: [], instruction: 'n/a'};
+				return {
+					outcome: 'ok' as const,
+					supported: true,
+					labels: [],
+					instruction: 'n/a',
+				};
 			},
 			async addLabel() {
-				return {applied: true, instruction: 'n/a'};
+				return {outcome: 'applied' as const, applied: true, instruction: 'n/a'};
 			},
 			async removeLabel() {
-				return {applied: true, instruction: 'n/a'};
+				return {outcome: 'applied' as const, applied: true, instruction: 'n/a'};
 			},
 		};
 		const result = await performIntake({
@@ -651,6 +678,116 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 		expect(issueProvider.labelOps).toEqual([]);
 		expect(notes.some((n) => /lock degraded/i.test(n))).toBe(true);
 	});
+
+	it('a lock-READ FAILURE on a label-supporting provider FAILS the run (lock-failed) — it does NOT silently proceed lock-less', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const notes: string[] = [];
+		let decided = false;
+		// A provider that SUPPORTS labels but whose READ fails for a real reason
+		// (e.g. `gh` unauthenticated) — the REAL stderr is carried in `instruction`.
+		const issueProvider: IssueProvider = {
+			...stubIssueProvider(),
+			async getLabels() {
+				return {
+					outcome: 'failed' as const,
+					supported: false,
+					labels: [],
+					reason: "'agent-runner:processing' not found",
+					instruction:
+						"could not read the labels on issue #40: 'agent-runner:processing' not found",
+				};
+			},
+		};
+		const result = await performIntake({
+			issueNumber: 40,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return SLICE_VERDICT;
+			},
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		// FAIL — not a silent best-effort proceed.
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('lock-failed');
+		expect(decided).toBe(false);
+		expect(result.emitted).toBeUndefined();
+		// The REAL cause is surfaced (diagnosable), NOT a hard-coded auth guess.
+		expect(result.message).toMatch(/not found/);
+		expect(result.message).not.toMatch(/unavailable or unauthenticated/i);
+	});
+
+	it('a lock-ACQUIRE FAILURE on a label-supporting provider FAILS the run (lock-failed) with the real cause', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		let decided = false;
+		// READ succeeds (no lock held) but the ADD fails for a real reason — the lock
+		// is meaningful but unacquirable, so the run must FAIL (not proceed lock-less).
+		const base = stubIssueProvider();
+		const issueProvider: IssueProvider = {
+			...base,
+			async addLabel() {
+				return {
+					outcome: 'failed' as const,
+					applied: false,
+					reason: 'HTTP 403: Resource not accessible by integration',
+					instruction:
+						'could not add the `agent-runner:processing` label on issue #40: HTTP 403: Resource not accessible by integration',
+				};
+			},
+		};
+		const result = await performIntake({
+			issueNumber: 40,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => {
+				decided = true;
+				return SLICE_VERDICT;
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('lock-failed');
+		expect(decided).toBe(false);
+		expect(result.message).toMatch(/403/);
+	});
+
+	it('a release FAILURE surfaces the manual recovery command so a leaked lock is recoverable AND discoverable', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const notes: string[] = [];
+		// Acquire succeeds; RELEASE fails (e.g. `gh` lost auth mid-run). The lock may be
+		// left behind — the run must surface the manual `gh issue edit --remove-label`.
+		const base = stubIssueProvider();
+		const issueProvider: IssueProvider = {
+			...base,
+			async removeLabel() {
+				return {
+					outcome: 'failed' as const,
+					applied: false,
+					reason: 'HTTP 401: Bad credentials',
+					instruction: 'could not remove the lock on issue #40: HTTP 401',
+				};
+			},
+		};
+		const result = await performIntake({
+			issueNumber: 40,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		expect(result.outcome).toBe('sliced');
+		// The release degrade is surfaced AND the manual recovery is discoverable.
+		expect(notes.some((n) => /lock release degraded/i.test(n))).toBe(true);
+		expect(notes.some((n) => /gh issue edit 40 --remove-label/.test(n))).toBe(
+			true,
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -822,6 +959,60 @@ function writeGhIssueStub(opts: {exitCode?: number} = {}): {
 	return {bin, argsFile};
 }
 
+/**
+ * A `gh` stub whose `issue edit` ALWAYS fails with the given stderr (exit 1) — used
+ * to assert the adapter surfaces the REAL stderr (e.g. an HTTP 403) rather than a
+ * hard-coded "unauthenticated" guess. `label create` (if reached) is NOT exercised
+ * here because the stderr is NOT a `not found`.
+ */
+function writeGhFailingEditStub(stderr: string): {
+	bin: string;
+	argsFile: string;
+} {
+	const bin = join(scratch.root, 'gh-failing-edit.sh');
+	const argsFile = join(scratch.root, 'gh-failing-edit-args.txt');
+	const script = [
+		'#!/usr/bin/env bash',
+		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
+		'for a in "$@"; do',
+		`  if [ "$a" = "edit" ]; then printf '%s\\n' ${JSON.stringify(stderr)} 1>&2; exit 1; fi`,
+		'done',
+		'exit 0',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
+/**
+ * A `gh` stub modelling a FRESH repo: the FIRST `issue edit --add-label` fails with
+ * `'<label>' not found` (the label has never been created); `label create` succeeds;
+ * the SECOND `issue edit --add-label` (the retry) succeeds. State is held in a
+ * sentinel file so the two `issue edit` calls differ.
+ */
+function writeGhFreshRepoLabelStub(): {bin: string; argsFile: string} {
+	const bin = join(scratch.root, 'gh-fresh-repo.sh');
+	const argsFile = join(scratch.root, 'gh-fresh-repo-args.txt');
+	const createdFlag = join(scratch.root, 'gh-fresh-repo-created');
+	const script = [
+		'#!/usr/bin/env bash',
+		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
+		'sub=""',
+		'for a in "$@"; do',
+		'  if [ "$a" = "edit" ] || [ "$a" = "create" ]; then sub="$a"; fi',
+		'done',
+		`if [ "$sub" = "create" ]; then : > ${JSON.stringify(createdFlag)}; exit 0; fi`,
+		`if [ "$sub" = "edit" ]; then`,
+		`  if [ -f ${JSON.stringify(createdFlag)} ]; then exit 0; fi`,
+		`  printf "'${PROCESSING_LOCK_LABEL}' not found\\n" 1>&2; exit 1;`,
+		'fi',
+		'exit 0',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
 describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', () => {
 	it('getIssue shells out to `gh issue view <N> --json …` and parses the issue', async () => {
 		const stub = writeGhIssueStub();
@@ -921,18 +1112,21 @@ describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', (
 		expect(args).toMatch(/^--remove-label$/m);
 	});
 
-	it('getLabels DEGRADES (supported: false, no throw) when gh exits non-zero — lock best-effort', async () => {
+	it('getLabels FAILS (outcome: failed, no throw) on a label-supporting provider when gh exits non-zero — NOT a silent degrade', async () => {
 		const stub = writeGhIssueStub({exitCode: 1});
 		const provider = new GitHubIssueProvider({ghBin: stub.bin});
 		const result = await provider.getLabels({
 			cwd: scratch.root,
 			issueNumber: 42,
 		});
+		// GitHub HAS labels, so a failed read is `failed`, NOT `unsupported` — the lock
+		// must NOT be guessed free (the caller fails rather than degrading).
+		expect(result.outcome).toBe('failed');
 		expect(result.supported).toBe(false);
 		expect(result.labels).toEqual([]);
 	});
 
-	it('addLabel/removeLabel DEGRADE (applied: false, no throw) when gh is missing', async () => {
+	it('addLabel/removeLabel FAIL (outcome: failed, no throw) when gh is missing — the real cause is surfaced', async () => {
 		const provider = new GitHubIssueProvider({
 			ghBin: join(scratch.root, 'no-such-gh'),
 		});
@@ -946,8 +1140,52 @@ describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', (
 			issueNumber: 42,
 			label: PROCESSING_LOCK_LABEL,
 		});
+		expect(added.outcome).toBe('failed');
 		expect(added.applied).toBe(false);
+		expect(removed.outcome).toBe('failed');
 		expect(removed.applied).toBe(false);
+		// The real cause (binary missing) is surfaced, NOT a hard-coded auth guess.
+		expect(added.instruction).not.toMatch(/unauthenticated/i);
+		expect(added.reason).toBeTruthy();
+	});
+
+	it('addLabel surfaces the REAL gh stderr (the original bug: a `<label> not found` is NOT reported as "unauthenticated")', async () => {
+		// A `gh` that fails for a reason OTHER than "not found" (so the create-on-first-use
+		// retry does not fire) — e.g. a permissions error — must surface that real stderr.
+		const stub = writeGhFailingEditStub('HTTP 403: Resource not accessible');
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.addLabel({
+			cwd: scratch.root,
+			issueNumber: 40,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		expect(result.outcome).toBe('failed');
+		expect(result.applied).toBe(false);
+		// The ACTUAL gh stderr is surfaced (diagnosable) — NOT the old hard-coded guess.
+		expect(result.reason).toMatch(/403/);
+		expect(result.instruction).toMatch(/403/);
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/i);
+	});
+
+	it('addLabel CREATES the lock label on first use (fresh repo) when gh reports it `not found`, then retries the add', async () => {
+		// A fresh repo: the FIRST `gh issue edit --add-label` fails with `'<label>' not
+		// found`; the adapter must `gh label create` then RETRY the add (so the lock
+		// works from the first run rather than failing).
+		const stub = writeGhFreshRepoLabelStub();
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.addLabel({
+			cwd: scratch.root,
+			issueNumber: 40,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		expect(result.outcome).toBe('applied');
+		expect(result.applied).toBe(true);
+		const args = readFileSync(stub.argsFile, 'utf8');
+		// It created the label …
+		expect(args).toMatch(/^label$/m);
+		expect(args).toMatch(/^create$/m);
+		// … and the add-label edit appears (the retry after create).
+		expect(args).toMatch(/^--add-label$/m);
 	});
 
 	it('a read THROWS on a non-zero gh (intake cannot decide without the issue)', async () => {

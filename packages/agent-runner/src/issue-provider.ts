@@ -118,36 +118,79 @@ export interface RemoveLabelInput extends LabelInput {
 }
 
 /**
- * The result of a label MUTATION (`addLabel` / `removeLabel`). The lock ops are
- * a CONCURRENCY mutex, so the caller needs to know whether the provider actually
- * applied the change:
+ * The OUTCOME of a label MUTATION (`addLabel` / `removeLabel`). The lock ops are a
+ * CONCURRENCY mutex, so the caller must distinguish THREE genuinely-different
+ * results — collapsing them (the original bug) sent a maintainer hunting an auth
+ * problem that did not exist, and made a real lock-failure proceed lock-less:
  *
- * - `applied: true` — the provider made the change on the real surface (the
- *   winner acquired / released the lock label).
- * - `applied: false` — the provider DEGRADED (no label support, or a
- *   missing/unauthenticated `gh`): the mutation was a no-op and the caller falls
- *   back to best-effort (proceed WITHOUT the lock; CI's per-issue concurrency
- *   group is then the only serialiser). NEVER throws — degrade is honest, not a
- *   crash (the same discipline the comment poster / PR provider keep, ADR §6).
+ * - **`applied`** — the provider made the change on the real surface (the winner
+ *   acquired / released the lock label).
+ * - **`unsupported`** — the provider has NO label concept at all (a non-GitHub
+ *   provider without labels). The lock LEGITIMATELY degrades to best-effort here
+ *   (the spec's provider-pluggability): there is simply nothing to lock on.
+ * - **`failed`** — the provider DOES support labels but the op failed for a REAL
+ *   reason (a missing/unauthenticated `gh`, a permissions error, an unexpected
+ *   `gh` failure). This is NOT a legitimate degrade: the lock is meaningful but
+ *   could not be taken, so the caller must FAIL / back off rather than silently
+ *   proceed lock-less (maintainer decision — see {@link LabelResult.reason}).
+ *
+ * NEVER throws — the seam reports the outcome (the caller decides fail-vs-degrade),
+ * the same never-crash discipline the comment poster / PR provider keep (ADR §6).
  */
+export type LabelOutcome = 'applied' | 'unsupported' | 'failed';
+
 export interface LabelResult {
-	/** True iff the label change was actually applied on the provider surface. */
+	/** Which of the three outcomes occurred (the caller routes fail-vs-degrade on this). */
+	outcome: LabelOutcome;
+	/**
+	 * True iff the label change was actually applied on the provider surface
+	 * (`outcome === 'applied'`). Retained as a convenience for the acquire/release
+	 * sites; the THREE-way `outcome` is the load-bearing discriminator.
+	 */
 	applied: boolean;
-	/** Human-readable confirmation / degrade reason. */
+	/**
+	 * The REAL underlying failure detail when `outcome === 'failed'` — the actual
+	 * `gh` stderr (e.g. `'agent-runner:processing' not found`), NOT a hard-coded
+	 * "unavailable or unauthenticated" guess. Surfaced so the cause is diagnosable.
+	 * Absent for `applied` / `unsupported`.
+	 */
+	reason?: string;
+	/** Human-readable confirmation / degrade-or-failure reason. */
 	instruction: string;
 }
 
 /**
- * The result of READING an issue's labels. `supported: false` marks a provider
- * with NO label concept (the lock then degrades to best-effort) — distinct from a
- * supported provider that simply read an empty set.
+ * The result of READING an issue's labels — the lock READ that decides acquire vs
+ * back-off. Like {@link LabelResult} it distinguishes the SAME three outcomes so
+ * the caller never confuses a genuinely-unsupported provider (legitimate degrade)
+ * with a real read FAILURE on a label-supporting provider (must NOT silently
+ * proceed lock-less):
+ *
+ * - **`ok`** — the labels were read (`labels` carries them; possibly empty).
+ * - **`unsupported`** — the provider has NO label concept (legitimate degrade).
+ * - **`failed`** — a label-supporting provider could not be read (e.g. `gh`
+ *   missing/unauthenticated): the lock STATE is unknown, so the caller must FAIL
+ *   rather than guess "no lock held".
  */
+export type GetLabelsOutcome = 'ok' | 'unsupported' | 'failed';
+
 export interface GetLabelsResult {
-	/** False iff the provider has no label surface at all (degrade to best-effort). */
+	/** Which of the three outcomes occurred (the caller routes fail-vs-degrade on this). */
+	outcome: GetLabelsOutcome;
+	/**
+	 * False iff the provider has no label surface at all (`outcome === 'unsupported'`)
+	 * — retained for back-compat; the three-way `outcome` is load-bearing. A `failed`
+	 * read is ALSO `supported: false` historically, but `outcome` separates them.
+	 */
 	supported: boolean;
-	/** The labels currently on the issue (empty when none / unsupported). */
+	/** The labels currently on the issue (empty when none / unsupported / failed). */
 	labels: string[];
-	/** Human-readable confirmation / degrade reason. */
+	/**
+	 * The REAL underlying failure detail when `outcome === 'failed'` — the actual
+	 * `gh` stderr, NOT a hard-coded "unavailable or unauthenticated" guess.
+	 */
+	reason?: string;
+	/** Human-readable confirmation / degrade-or-failure reason. */
 	instruction: string;
 }
 
@@ -169,20 +212,26 @@ export interface IssueProvider {
 	): Promise<PostIssueCommentResult>;
 	/**
 	 * Read the issue's current labels — the lock READ that decides acquire vs
-	 * back-off. A provider with no label concept returns `{supported: false}` so
-	 * the lock degrades to best-effort. NEVER throws.
+	 * back-off. NEVER throws; returns a three-way {@link GetLabelsResult}: `ok`
+	 * (labels read), `unsupported` (no label concept → legitimate degrade), or
+	 * `failed` (a label-supporting provider could not be read → the caller FAILS
+	 * rather than guessing the lock is free).
 	 */
 	getLabels(input: LabelInput): Promise<GetLabelsResult>;
 	/**
 	 * ADD a single label (acquire the `processing` lock — the winner only). The
-	 * RUNNER calls this; the agent stays label-free. Degrades (no throw) on a
-	 * provider without label support or a missing/unauthenticated `gh`.
+	 * RUNNER calls this; the agent stays label-free. NEVER throws — it returns a
+	 * three-way {@link LabelResult} (`applied` / `unsupported` / `failed`) so the
+	 * caller can FAIL on a real lock-acquire failure (e.g. `gh` unauthenticated)
+	 * rather than silently proceed lock-less. On a label-supporting provider where
+	 * the lock label does not exist yet (a fresh repo), it CREATES the label first
+	 * so the lock works from the first run, then adds it.
 	 */
 	addLabel(input: AddLabelInput): Promise<LabelResult>;
 	/**
 	 * REMOVE a single label (release the `processing` lock on finish — success OR
-	 * handled failure). The RUNNER calls this; the agent stays label-free.
-	 * Degrades (no throw) like {@link addLabel}.
+	 * handled failure). The RUNNER calls this; the agent stays label-free. NEVER
+	 * throws; returns the three-way {@link LabelResult} like {@link addLabel}.
 	 */
 	removeLabel(input: RemoveLabelInput): Promise<LabelResult>;
 }
@@ -275,17 +324,28 @@ export class GitHubIssueProvider implements IssueProvider {
 			input.cwd,
 			input.env,
 		);
-		// A missing/unauthenticated `gh` DEGRADES (the lock then falls back to
-		// best-effort) — never throws (unlike the issue READ, which is load-bearing
-		// for the DECISION; the lock is best-effort by design).
-		if (result === undefined || result.status !== 0) {
+		// GitHub HAS labels: a failed read is `failed`, NOT `unsupported`. Surfacing
+		// the REAL `gh` stderr (not a hard-coded "unauthenticated" guess) keeps the
+		// cause diagnosable; the caller FAILS rather than guessing the lock is free.
+		if (result === undefined) {
 			return {
+				outcome: 'failed',
 				supported: false,
 				labels: [],
+				reason: '`gh` is not available (binary missing).',
 				instruction:
-					`\`gh\` is unavailable or unauthenticated, so the labels on issue ` +
-					`#${input.issueNumber} could not be read; the processing lock degrades ` +
-					`to best-effort.`,
+					`could not read the labels on issue #${input.issueNumber}: ` +
+					'`gh` is not available (binary missing).',
+			};
+		}
+		if (result.status !== 0) {
+			const reason = ghFailureReason(result);
+			return {
+				outcome: 'failed',
+				supported: false,
+				labels: [],
+				reason,
+				instruction: `could not read the labels on issue #${input.issueNumber}: ${reason}`,
 			};
 		}
 		let labels: string[];
@@ -293,12 +353,15 @@ export class GitHubIssueProvider implements IssueProvider {
 			labels = normaliseLabels(JSON.parse(result.stdout) as unknown);
 		} catch {
 			return {
+				outcome: 'failed',
 				supported: false,
 				labels: [],
+				reason: 'could not parse the `gh` labels JSON.',
 				instruction: `could not parse the labels JSON for issue #${input.issueNumber}.`,
 			};
 		}
 		return {
+			outcome: 'ok',
 			supported: true,
 			labels,
 			instruction: `Read ${labels.length} label(s) on issue #${input.issueNumber}.`,
@@ -315,33 +378,110 @@ export class GitHubIssueProvider implements IssueProvider {
 
 	/**
 	 * Shared `gh issue edit <N> --add-label|--remove-label <label>` runner for the
-	 * label MUTATIONS (the lock acquire/release). Both DEGRADE (no throw) on a
-	 * missing/unauthenticated `gh` — the lock is a best-effort concurrency mutex, so
-	 * a failure to apply it must not crash the run.
+	 * label MUTATIONS (the lock acquire/release). NEVER throws — it reports a
+	 * three-way {@link LabelResult} so the CALLER decides fail-vs-degrade (the lock
+	 * acquire-site FAILS on `failed`; only a genuinely-unsupported provider degrades).
+	 *
+	 * On `--add-label` against a fresh repo where the lock label does NOT exist yet,
+	 * `gh` exits non-zero with `'<label>' not found`. We CREATE the label (`gh label
+	 * create`) and RETRY the add, so the lock works from the very first `intake` run
+	 * (a fresh repo is lockable without a manual `gh label create`). Label creation
+	 * is idempotent-enough for our purpose: a concurrent create loses harmlessly
+	 * (the retry add then succeeds against the now-existing label).
 	 */
 	private mutateLabel(
 		flag: '--add-label' | '--remove-label',
 		input: AddLabelInput | RemoveLabelInput,
 	): LabelResult {
-		const result = this.runGh(
+		const verb = flag === '--add-label' ? 'add' : 'remove';
+		let result = this.runGh(
 			['issue', 'edit', String(input.issueNumber), flag, input.label],
 			input.cwd,
 			input.env,
 		);
-		const verb = flag === '--add-label' ? 'add' : 'remove';
-		if (result === undefined || result.status !== 0) {
+
+		// Fresh-repo case: the label has never been created, so the add fails with
+		// `'<label>' not found`. Create it (settled decision: create-on-first-use), then
+		// retry — so the lock is usable from the first run rather than a hard failure.
+		if (
+			flag === '--add-label' &&
+			result !== undefined &&
+			result.status !== 0 &&
+			isLabelNotFound(result, input.label)
+		) {
+			const created = this.createLabel(input.label, input.cwd, input.env);
+			if (created) {
+				result = this.runGh(
+					['issue', 'edit', String(input.issueNumber), flag, input.label],
+					input.cwd,
+					input.env,
+				);
+			}
+		}
+
+		if (result === undefined) {
 			return {
+				outcome: 'failed',
 				applied: false,
+				reason: '`gh` is not available (binary missing).',
 				instruction:
-					`\`gh\` is unavailable or unauthenticated, so the \`${input.label}\` ` +
-					`label could not be ${verb}d on issue #${input.issueNumber}; the ` +
-					`processing lock degrades to best-effort.`,
+					`could not ${verb} the \`${input.label}\` label on issue ` +
+					`#${input.issueNumber}: \`gh\` is not available (binary missing).`,
+			};
+		}
+		if (result.status !== 0) {
+			const reason = ghFailureReason(result);
+			return {
+				outcome: 'failed',
+				applied: false,
+				reason,
+				// Surface the REAL `gh` stderr (e.g. `'agent-runner:processing' not found`),
+				// never a hard-coded "unavailable or unauthenticated" guess — the cause must
+				// be diagnosable.
+				instruction:
+					`could not ${verb} the \`${input.label}\` label on issue ` +
+					`#${input.issueNumber}: ${reason}`,
 			};
 		}
 		return {
+			outcome: 'applied',
 			applied: true,
 			instruction: `${verb === 'add' ? 'Added' : 'Removed'} the \`${input.label}\` label on issue #${input.issueNumber}.`,
 		};
+	}
+
+	/**
+	 * Create the lock label (`gh label create <label>`) so a fresh repo is lockable
+	 * from the first run. Returns true iff the label now exists (created here, or it
+	 * already existed — `gh` reports `already exists`, which we treat as success).
+	 * NEVER throws; a genuine create failure (e.g. no permission) returns false and
+	 * the caller surfaces the original add failure.
+	 */
+	private createLabel(
+		label: string,
+		cwd: string,
+		env: NodeJS.ProcessEnv | undefined,
+	): boolean {
+		const result = this.runGh(
+			[
+				'label',
+				'create',
+				label,
+				'--description',
+				'agent-runner intake processing lock (transient concurrency mutex)',
+			],
+			cwd,
+			env,
+		);
+		if (result === undefined) {
+			return false;
+		}
+		if (result.status === 0) {
+			return true;
+		}
+		// A concurrent run created it first — `gh` reports "already exists"; that is a
+		// success for our purpose (the label is present for the retry).
+		return /already exists/i.test(result.stderr);
 	}
 
 	/**
@@ -383,6 +523,31 @@ export class GitHubIssueProvider implements IssueProvider {
 			);
 		}
 	}
+}
+
+/**
+ * Distil the REAL reason a `gh` invocation failed from its result — the trimmed
+ * stderr (the actual cause, e.g. `'agent-runner:processing' not found`), falling
+ * back to the exit status when stderr is empty. This is what replaces the old
+ * hard-coded "unavailable or unauthenticated" guess: the cause must be diagnosable.
+ */
+function ghFailureReason(result: RunResult): string {
+	const stderr = result.stderr.trim();
+	if (stderr) {
+		return stderr;
+	}
+	return `\`gh\` exited ${result.status}.`;
+}
+
+/**
+ * True iff a failed `gh issue edit --add-label` failed because the label does not
+ * exist in the repo yet (`gh` prints `'<label>' not found`). On a fresh repo the
+ * lock label has never been created, so this is the create-on-first-use trigger —
+ * distinct from a real auth/permission failure (which must NOT be papered over).
+ */
+function isLabelNotFound(result: RunResult, label: string): boolean {
+	const stderr = result.stderr.toLowerCase();
+	return stderr.includes('not found') && stderr.includes(label.toLowerCase());
 }
 
 /** Map a `gh issue view --json …` object onto the {@link Issue} shape. */

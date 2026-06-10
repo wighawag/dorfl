@@ -133,6 +133,7 @@ export type IntakeRunOutcome =
 	| 'prd' // a `prd` verdict → `work/prd/<slug>.md` written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
 	| 'locked' // the `processing` lock was already held → backed off (did nothing)
+	| 'lock-failed' // the lock could not be ACQUIRED on a label-supporting provider → fail (do NOT proceed lock-less)
 	| 'agent-failed' // the decision agent invocation itself errored
 	| 'stale' // the integrate rebase conflicted against an advanced main
 	| 'usage-error'; // usage / environment problem
@@ -373,12 +374,30 @@ export async function performIntake(
 	//    the lock is ALREADY present, BACK OFF (do nothing — another run owns it). The
 	//    winner ADDS the label and proceeds; the label is REMOVED on finish (success
 	//    OR handled failure, in the `finally` below). It is NOT a `work/` CAS and NOT a
-	//    label state-machine (ADR §12) — ONE transient lock label. A provider with no
-	//    label concept (or a missing/unauthenticated `gh`) DEGRADES to best-effort:
-	//    the run proceeds WITHOUT the lock and the degrade is surfaced honestly (CI's
-	//    per-issue concurrency group is then the only serialiser — out of scope here).
+	//    label state-machine (ADR §12) — ONE transient lock label.
+	//
+	//    Fail-vs-degrade (maintainer decision): a lock that is MEANINGFUL but cannot
+	//    be taken must NOT silently proceed lock-less. Only a genuinely-UNSUPPORTED
+	//    provider (no label concept at all) legitimately degrades to best-effort (the
+	//    spec's provider-pluggability; CI's per-issue concurrency group is then the
+	//    only serialiser — out of scope here). A real FAILURE on a label-supporting
+	//    provider (e.g. `gh` unauthenticated) FAILS the run with the REAL cause
+	//    surfaced, rather than misattributing it or proceeding without serialisation.
 	const labels = await issueProvider.getLabels({cwd, issueNumber, env});
-	if (labels.supported && labels.labels.includes(PROCESSING_LOCK_LABEL)) {
+	if (labels.outcome === 'failed') {
+		// The provider HAS labels but we could not READ the lock state — we cannot tell
+		// whether another run holds it, so guessing "free" could let two runs proceed.
+		// FAIL with the real cause (the actual `gh` stderr), not a hard-coded guess.
+		const message =
+			`Intake of issue #${issueNumber} could not acquire the ` +
+			`\`${PROCESSING_LOCK_LABEL}\` lock: ${labels.instruction}`;
+		note(message);
+		return {exitCode: 1, outcome: 'lock-failed', issueNumber, message};
+	}
+	if (
+		labels.outcome === 'ok' &&
+		labels.labels.includes(PROCESSING_LOCK_LABEL)
+	) {
 		const message =
 			`Intake of issue #${issueNumber} backed off: the \`${PROCESSING_LOCK_LABEL}\` ` +
 			`lock is already held by a concurrent run; doing nothing.`;
@@ -386,22 +405,67 @@ export async function performIntake(
 		return {exitCode: 0, outcome: 'locked', issueNumber, message};
 	}
 	let locked = false;
-	if (labels.supported) {
+	if (labels.outcome === 'ok') {
 		const acquired = await issueProvider.addLabel({
 			cwd,
 			issueNumber,
 			label: PROCESSING_LOCK_LABEL,
 			env,
 		});
-		locked = acquired.applied;
-		if (!acquired.applied) {
-			// The read said the provider HAS labels but the add degraded (e.g. `gh` lost
-			// auth between the read and the add) — proceed best-effort, surfaced.
-			note(`Processing lock degraded: ${acquired.instruction}`);
+		if (acquired.outcome === 'failed') {
+			// The provider HAS labels but the ACQUIRE failed for a real reason (e.g. `gh`
+			// lost auth, or the label could not be created on a fresh repo). The lock is
+			// meaningful but unacquirable → FAIL with the real cause, do NOT proceed
+			// lock-less (which would let a concurrent run race us).
+			const message =
+				`Intake of issue #${issueNumber} could not acquire the ` +
+				`\`${PROCESSING_LOCK_LABEL}\` lock: ${acquired.instruction}`;
+			note(message);
+			return {exitCode: 1, outcome: 'lock-failed', issueNumber, message};
 		}
+		locked = acquired.applied;
 	} else {
-		// Non-label provider → best-effort degrade (proceed without the lock).
+		// Non-label provider (genuinely UNSUPPORTED) → the ONLY legitimate degrade:
+		// proceed without the lock, surfaced honestly.
 		note(`Processing lock degraded: ${labels.instruction}`);
+	}
+
+	// INTERRUPTION-SAFETY (maintainer point 3): the `finally` below releases on every
+	// EXCEPTION path, but a SIGINT/SIGTERM (Ctrl-C, kill) unwinds the process WITHOUT
+	// running `finally` — which would LEAK the lock label and block all future intake
+	// runs on this issue. While the lock is held we install signal handlers that
+	// release it best-effort before the process exits. A leaked lock must ALSO be
+	// recoverable by hand and that recovery must be DISCOVERABLE, so we surface the
+	// exact manual command (`gh issue edit <N> --remove-label <label>`) whenever the
+	// best-effort release does not confirm.
+	const manualRecovery =
+		`If the \`${PROCESSING_LOCK_LABEL}\` lock is left behind, release it with: ` +
+		`gh issue edit ${issueNumber} --remove-label '${PROCESSING_LOCK_LABEL}'`;
+	const releaseLock = createLockReleaser({
+		locked,
+		issueProvider,
+		cwd,
+		issueNumber,
+		env,
+		note,
+		manualRecovery,
+	});
+	const onSignal = (signal: NodeJS.Signals) => {
+		// Synchronous best-effort release on interruption, then re-raise the default
+		// disposition so the process still exits with the conventional signal code.
+		if (locked) {
+			note(
+				`Received ${signal}; releasing the \`${PROCESSING_LOCK_LABEL}\` lock on issue #${issueNumber} before exit.`,
+			);
+		}
+		releaseLock.releaseSync();
+		process.removeListener('SIGINT', onSignal);
+		process.removeListener('SIGTERM', onSignal);
+		process.kill(process.pid, signal);
+	};
+	if (locked) {
+		process.once('SIGINT', onSignal);
+		process.once('SIGTERM', onSignal);
 	}
 
 	try {
@@ -413,18 +477,72 @@ export async function performIntake(
 	} finally {
 		// RELEASE the lock on FINISH (success OR handled failure). Only the winner that
 		// actually acquired it releases it — a degraded/best-effort run holds nothing.
-		if (locked) {
-			const released = await issueProvider.removeLabel({
+		process.removeListener('SIGINT', onSignal);
+		process.removeListener('SIGTERM', onSignal);
+		await releaseLock.release();
+	}
+}
+
+/**
+ * Build the lock RELEASER for {@link performIntake}: one `release()` (the normal
+ * async finish path) and one `releaseSync()` (the signal-handler path — a
+ * best-effort synchronous release that must run inside a signal handler). Both are
+ * no-ops when the run never held the lock (a degraded/unsupported run holds
+ * nothing). When a release does not CONFIRM, the manual-recovery hint is surfaced
+ * so a leaked lock stays recoverable AND discoverable (maintainer point 3).
+ */
+function createLockReleaser(params: {
+	locked: boolean;
+	issueProvider: IssueProvider;
+	cwd: string;
+	issueNumber: number;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+	manualRecovery: string;
+}): {release: () => Promise<void>; releaseSync: () => void} {
+	const {locked, issueProvider, cwd, issueNumber, env, note, manualRecovery} =
+		params;
+	let released = false;
+	const surfaceFailure = (instruction: string) => {
+		note(`Processing lock release degraded: ${instruction}`);
+		note(manualRecovery);
+	};
+	return {
+		async release() {
+			if (!locked || released) {
+				return;
+			}
+			released = true;
+			const result = await issueProvider.removeLabel({
 				cwd,
 				issueNumber,
 				label: PROCESSING_LOCK_LABEL,
 				env,
 			});
-			if (!released.applied) {
-				note(`Processing lock release degraded: ${released.instruction}`);
+			if (!result.applied) {
+				surfaceFailure(result.instruction);
 			}
-		}
-	}
+		},
+		releaseSync() {
+			if (!locked || released) {
+				return;
+			}
+			released = true;
+			// A signal handler cannot await. The GitHub adapter's `removeLabel` shells out
+			// SYNCHRONOUSLY (spawnSync) inside its async wrapper, so firing it here still
+			// runs the `gh` call before the process exits — but we cannot READ the result
+			// synchronously through the async seam, so we ALWAYS surface the manual-recovery
+			// hint too. That keeps a leaked lock both recoverable AND discoverable even if
+			// the in-handler release did not complete (maintainer point 3).
+			void issueProvider.removeLabel({
+				cwd,
+				issueNumber,
+				label: PROCESSING_LOCK_LABEL,
+				env,
+			});
+			note(manualRecovery);
+		},
+	};
 }
 
 /**
