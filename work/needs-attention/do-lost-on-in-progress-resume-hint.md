@@ -45,3 +45,7 @@ Keep the done/absent message (`claim-cas.ts:272`) AS-IS \u2014 it is already acc
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Needs attention
+
+continuing the kept work/do-lost-on-in-progress-resume-hint: rebase onto the latest main conflicted (aborted, never auto-resolved) — resolve against the latest main, or `requeue --reset` to discard and start fresh
