@@ -39,8 +39,9 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * - **ASK** (not clear enough to act on): `postIssueComment` the next clarifying
  *   question; emit NOTHING; STOP.
  * - **SLICE** (clear AND fits ONE tracer-bullet slice): write
- *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `Fixes #N`,
- *   integrate via {@link performIntegration} (default `propose`).
+ *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
+ *   lone-slice closure link, NOT `Fixes #N`), integrate via {@link
+ *   performIntegration} (default `propose`).
  * - **PRD** (clear AND coherent but >1 slice — INCLUDING a coupled-but-SMALL pair,
  *   which is NEVER bounced): write `work/prd/<slug>.md` with `issue: N` (+ the gate
  *   axes the verdict carried), integrate, STOP (slicing is the separate `do prd:`
@@ -83,8 +84,9 @@ export interface IntakeVerdict {
 	/**
 	 * The drafted slice BODY (`slice` outcome) — the markdown AFTER the frontmatter
 	 * (the `## What to build` / `## Acceptance criteria` / `## Prompt` sections). The
-	 * dispatcher writes the frontmatter (slug/title/`covers: []`, NO `prd:`) + a
-	 * `Fixes #N` line itself; the agent never writes git-visible files.
+	 * dispatcher writes the frontmatter (slug/title/`covers: []`, NO `prd:`) carrying
+	 * the lone-slice `issue: N` closure link itself; the agent never writes
+	 * git-visible files.
 	 */
 	sliceBody?: string;
 	/**
@@ -693,8 +695,9 @@ async function dispatchComment(params: {
 
 /**
  * DISPATCH the `slice` outcome: derive a content-derived slug, write
- * `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `Fixes #N`, and
- * integrate via {@link performIntegration}. The runner owns the git: it onboards a
+ * `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
+ * lone-slice closure link, NOT `Fixes #N`), and integrate via {@link
+ * performIntegration}. The runner owns the git: it onboards a
  * `work/<slug>` branch off fresh `<arbiter>/main`, then the lifecycle `stage`
  * writes + stages the slice and the band commits + rebases + integrates it. The
  * agent did NO git/seam ops.
@@ -774,8 +777,9 @@ async function dispatchSlice(params: {
 /**
  * DISPATCH the `prd` outcome: derive a content-derived slug, write
  * `work/prd/<slug>.md` carrying `issue: N` (the loop-closure linkage the close JOB
- * reaches via `slice.prd: → PRD issue:`; the number lives ONLY on the PRD — there
- * is NO slice-level `issue:` field) + the gate axes the prompt JUDGED, integrate it
+ * reaches via `slice.prd: → PRD issue:`; on a fanned PRD the number lives ONLY on
+ * the PRD — a fanned slice uses `prd:`, NOT its own `issue:`, which is the
+ * lone-SLICE outcome's link) + the gate axes the prompt JUDGED, integrate it
  * via {@link performIntegration}, then STOP. Slicing the emitted PRD is the SEPARATE
  * `do prd:` step (NOT done here). A coupled-but-SMALL pair lands here too (the PRD
  * vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The runner
@@ -874,11 +878,11 @@ function integrationToIntakeResult(
 			core.integration?.mode === 'merge'
 				? 'landed it on the arbiter main'
 				: 'opened a PR carrying it (main untouched)';
-		// A lone slice carries `Fixes #N` (its merge closes the issue directly); a PRD
-		// carries `issue: N` (the close JOB reaches it via `slice.prd: → PRD issue:` —
-		// `intake` never closes the issue).
-		const link =
-			kind === 'prd' ? `issue: ${issueNumber}` : `Fixes #${issueNumber}`;
+		// Both a lone slice and a PRD carry `issue: N` as their closure link (the slice
+		// closes its own issue; a PRD is reached via `slice.prd: → PRD issue:`). `intake`
+		// never closes the issue, and emits no `Fixes #N` (a deferred GitHub-only
+		// optimisation).
+		const link = `issue: ${issueNumber}`;
 		const message =
 			`Intake of issue #${issueNumber} → wrote ${relPath} (${link}); ` +
 			`the runner integrated it through the shared core and ${landed}.`;
@@ -942,9 +946,13 @@ function resolvePrdSlug(verdict: IntakeVerdict): string {
 
 /**
  * Render the backlog slice file: the frontmatter (`title`/`slug`/`covers: []`, NO
- * `prd:` — its own source of truth, PRD decision table) + a `Fixes #N` line + the
- * drafted body. A lone slice carries `Fixes #N` so its PR's merge closes the issue
- * directly (PRD "Loop closure"). When the agent drafted no body, a thin default
+ * `prd:` — its own source of truth, PRD decision table) carrying the lone-slice
+ * `issue: N` closure link + the drafted body. The slice closes its source issue
+ * via its `issue:` field (the provider-agnostic link a FUTURE CI close-job reads
+ * from folder + field state); it carries NO `Fixes #N` (a deferred GitHub-only
+ * optimisation, structurally unplaceable on the `--merge` path). The number is
+ * the slice's own closure path — `issue:` XOR `prd:`; a lone slice never carries a
+ * `prd:` (PRD decision table). When the agent drafted no body, a thin default
  * scaffold keeps the file a valid slice.
  */
 function renderBacklogSlice(params: {
@@ -958,11 +966,11 @@ function renderBacklogSlice(params: {
 		'---',
 		`title: ${title}`,
 		`slug: ${slug}`,
+		`issue: ${issueNumber}`,
 		'covers: []',
 		'blockedBy: []',
 		'---',
 	].join('\n');
-	const fixes = `Fixes #${issueNumber}`;
 	const drafted =
 		body && body.trim() !== ''
 			? body.trim()
@@ -979,15 +987,17 @@ function renderBacklogSlice(params: {
 					'',
 					`> Resolve issue #${issueNumber}: ${title}`,
 				].join('\n');
-	return `${frontmatter}\n\n${fixes}\n\n${drafted}\n`;
+	return `${frontmatter}\n\n${drafted}\n`;
 }
 
 /**
  * Render the emitted PRD file: the frontmatter (`title`/`slug` + the loop-closure
  * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted PRD body.
- * `issue: N` is the ONLY place the issue number lives (PRD decision table + Out of
- * Scope: NO slice-level `issue:`); the close JOB reaches it via `slice.prd: → PRD
- * issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
+ * For a FANNED PRD the `issue: N` lives ONLY on the PRD — never duplicated across
+ * the N fanned slices, which reach it via `slice.prd: → PRD issue:` (a fanned
+ * slice carries `prd:`, NOT its own `issue:`; the lone-SLICE outcome is the only
+ * one that puts `issue:` on a slice). The close JOB reaches the PRD's number via
+ * `slice.prd: → PRD issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
  * verdict declared them `true` — an omitted axis is `undefined` (undeclared), the
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
  * default scaffold keeps the file a valid PRD that `do prd:` can later slice.
@@ -1278,8 +1288,8 @@ export function buildIntakeDecisionBrief(
 		'  (a single thin end-to-end path, demoable on its own — `to-slices`’ criterion).',
 		'  Draft that ONE slice in the `to-slices` shape (a `## What to build`,',
 		'  `## Acceptance criteria`, and `## Prompt`). The runner writes',
-		'  `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `Fixes #N` and',
-		'  integrates it.',
+		'  `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the',
+		'  lone-slice closure link, NOT `Fixes #N`) and integrates it.',
 		'',
 		'- **PRD** — the issue is CLEAR *and* coherent but needs MORE THAN ONE slice (it',
 		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 slice',
@@ -1325,7 +1335,7 @@ export function buildIntakeDecisionBrief(
 		'',
 		'- **slice** → `sliceTitle` + `sliceBody` (the `## What to build` / `## Acceptance',
 		'  criteria` / `## Prompt` markdown — NOT the frontmatter; the runner writes the',
-		'  frontmatter + the `Fixes #N` line) and an optional `sliceSlug` (the runner',
+		'  frontmatter + the `issue: N` link) and an optional `sliceSlug` (the runner',
 		'  derives one from the title if you omit it — never a counter).',
 		'- **prd** → `prdTitle` + `prdBody` (the `## Problem Statement` / `## Solution` / …',
 		'  markdown AFTER the frontmatter; the runner writes the frontmatter + `issue: N`),',

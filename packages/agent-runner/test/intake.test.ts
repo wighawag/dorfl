@@ -180,7 +180,7 @@ const SLICE_VERDICT: IntakeVerdict = {
 };
 
 describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
-	it('a stubbed `slice` verdict writes work/backlog/<slug>.md (Fixes #N, covers: [], no prd:) and proposes a PR (main untouched)', async () => {
+	it('a stubbed `slice` verdict writes work/backlog/<slug>.md (issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 
@@ -209,15 +209,18 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		).trim();
 		expect(branchTip).not.toBe('');
 
-		// The slice file ON THAT BRANCH carries Fixes #N, covers: [], and NO prd:.
+		// The slice file ON THAT BRANCH carries the lone-slice `issue: N` closure link
+		// (read by a future CI close-job), covers: [], and NO prd: — and NO `Fixes #N`
+		// (a deferred GitHub-only optimisation, dropped from intake).
 		const onBranch = gitIn(
 			['show', `${ARBITER}/work/add-quiet-flag:work/backlog/add-quiet-flag.md`],
 			repo,
 		);
 		expect(onBranch).toContain('slug: add-quiet-flag');
+		expect(onBranch).toMatch(/^issue: 42$/m);
 		expect(onBranch).toContain('covers: []');
 		expect(onBranch).not.toMatch(/^prd:/m);
-		expect(onBranch).toContain('Fixes #42');
+		expect(onBranch).not.toContain('Fixes');
 	});
 
 	it('is GATE-FREE: it proceeds with the autonomous gates (allowAgents/autoSlice) OFF', async () => {
@@ -821,7 +824,10 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			['show', `${ARBITER}/main:work/backlog/add-quiet-flag.md`],
 			repo,
 		);
-		expect(onMain).toContain('Fixes #42');
+		// The merged slice carries the `issue: N` closure link, not `Fixes #N` (which
+		// has no PR-body slot on the merge path anyway).
+		expect(onMain).toMatch(/^issue: 42$/m);
+		expect(onMain).not.toContain('Fixes');
 	});
 
 	it('a `slice` verdict with integration.slice=propose opens a PR (main untouched)', async () => {

@@ -29,7 +29,7 @@ import {
  *     unit-tested (only the parse), exactly as the review prompt's is not.
  *  2. A STUBBED-HARNESS end-to-end (NO injected `decide`): a spy harness returns
  *     `launched.output` text and `runDecision` parses it. A real-path `slice`
- *     verdict emits the backlog slice + `Fixes #N` + the propose PR; a malformed
+ *     verdict emits the backlog slice + `issue: N` + the propose PR; a malformed
  *     output degrades to `agent-failed` (exit 1), not a crash.
  */
 
@@ -211,7 +211,7 @@ function spyHarness(output: string): Harness {
 }
 
 describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no injected decide)', () => {
-	it('a real-path `slice` verdict on launched.output is PARSED + DISPATCHED (backlog slice + Fixes #N + propose PR)', async () => {
+	it('a real-path `slice` verdict on launched.output is PARSED + DISPATCHED (backlog slice + issue: N + propose PR)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 		// The agent emits a fenced verdict block wrapped in prose — the realistic shape.
@@ -263,9 +263,10 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 			repo,
 		);
 		expect(onBranch).toContain('slug: add-quiet-flag');
+		expect(onBranch).toMatch(/^issue: 42$/m);
 		expect(onBranch).toContain('covers: []');
 		expect(onBranch).not.toMatch(/^prd:/m);
-		expect(onBranch).toContain('Fixes #42');
+		expect(onBranch).not.toContain('Fixes');
 		// The agent posted NOTHING (the slice branch never posts) — runner owns seams.
 		expect(issueProvider.comments).toHaveLength(0);
 	});
