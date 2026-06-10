@@ -49,3 +49,7 @@ The review step's JUDGEMENT is NOT unit-tested (exactly as the decision prompt's
 > SEAM TO TEST AT: the new injectable review-gate seam + the stubbed issue seam (no model/network), mirroring the existing intake dispatcher tests. Assert: convergence emits the (edited) slice + completion comment; an edit is reflected in the emitted body; no `work/backlog/` write before convergence; a never-converging verdict stops after exactly 3 rounds; non-converge flips to `asked` with NO slice written, ONE comment carrying draft + question(s) and `kind=ask`; a review launch/parse failure maps to `agent-failed` (no silent emit). The review prompt's JUDGEMENT is NOT unit-tested (only the bounded flow + dispatch), exactly as the decision prompt's is not.
 >
 > "Done" = intake's lone-slice path refines its single drafted slice up to 3 hard-capped adversarial rounds, emits the improved slice on convergence, else flips to an ASK carrying the draft + open question(s) — adding no new outcome/marker/flag — and `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
