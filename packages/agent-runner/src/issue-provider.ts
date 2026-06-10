@@ -61,6 +61,15 @@ export interface Issue {
 
 /** One comment on the issue thread (oldest-first, as `listComments` returns them). */
 export interface IssueComment {
+	/**
+	 * The provider's comment id (`gh issue view --json comments` reports it). Surfaced
+	 * for the intake TRIAGE GATE (slice `intake-self-awareness-resumption-tracking`):
+	 * the triage is id-set membership + list position only — it records which comment
+	 * ids intake READ (the marker's `seen=<id>,…`) and detects raced-in / deleted
+	 * comments by id arithmetic. ADDITIVE (no existing reader breaks); NO `createdAt`
+	 * is added — nothing reads a timestamp (ordering is `listComments`' oldest-first).
+	 */
+	id?: string;
 	/** The comment author's login, when reported. */
 	author?: string;
 	/** The comment body (markdown). */
@@ -586,7 +595,17 @@ function normaliseComments(parsed: unknown): IssueComment[] {
 	return comments.map((raw) => {
 		const c = (raw ?? {}) as Record<string, unknown>;
 		const author = c.author as {login?: string} | undefined;
+		// `gh` reports the comment id as a number or a string depending on the field;
+		// normalise to a string (the triage compares ids as opaque tokens, never as
+		// numbers). ADDITIVE — absent on a provider that does not report one.
+		const id =
+			typeof c.id === 'string'
+				? c.id
+				: typeof c.id === 'number'
+					? String(c.id)
+					: undefined;
 		return {
+			...(id !== undefined ? {id} : {}),
 			author: author?.login,
 			body: typeof c.body === 'string' ? c.body : '',
 		};
