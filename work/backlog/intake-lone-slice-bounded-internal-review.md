@@ -53,3 +53,7 @@ The review step's JUDGEMENT is NOT unit-tested (exactly as the decision prompt's
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Requeue 2026-06-10
+
+Gate failure was a BASE-branch format RED (an unformatted observation file from slice 1's review gate), NOT slice work — now fixed on main via a format chore. Re-claim CONTINUES from the kept work branch tip; build the bounded internal review on dispatchSlice as specified.
