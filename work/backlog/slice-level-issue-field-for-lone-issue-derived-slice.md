@@ -17,6 +17,11 @@ Intake today writes a literal `Fixes #N` line into the body of the emitted `work
 
 **Settled model (maintainer decision):** closure is by an `issue:` FIELD + folder state, read by a FUTURE CI close-job — `Fixes #N` is dropped from intake entirely (it is a GitHub-only optimisation we are not sure works on every provider, so it is deferred; later, `do` MAY auto-inject `Fixes #N` on the build PR as an optimisation — out of scope here).
 
+TWO independent reasons `Fixes #N` is at best a propose-only OPTIMISATION, never the closure mechanism:
+
+- **Provider portability:** `Fixes #N` is a GitHub-native magic keyword; the issue seam is provider-pluggable, and a non-GitHub provider has no auto-close.
+- **`--merge` mode has no slot for it at all:** in propose mode the artifact rides a PR whose BODY can carry `Fixes #N`; in `--merge` mode the artifact lands DIRECTLY on `main` with NO PR — so there is no PR body for the keyword to live in (a commit-message `Fixes #N` is murkier still: default-branch-only, stripped by squash/rebase, fires on landing = the same premature-close problem). So even on GitHub, `Fixes #N` is structurally impossible to place cleanly on the merge path. The field + CI close-job is the ONLY model that works uniformly across propose/merge AND across providers.
+
 Build:
 
 - **Add an OPTIONAL slice-level `issue: N` frontmatter field** (the parser already reads `issue:`; today it is documented PRD-only — make it legal on a slice too). Used ONLY for the LONE issue-derived slice (the SLICE outcome, no `prd:`).
