@@ -51,6 +51,15 @@ Reviewing the three slices surfaced fixes (all folded in):
 - **Slice B:** "merge → link the commit" needs a commit SHA that `IntegrateResult` does NOT expose today (it has `mode`/`mergedToMain`/`url?` only). Decision (maintainer): EXTEND `IntegrateResult` with an additive optional `commit?` (the more-correct option) — acknowledged shared-seam scope, kept additive so `do`/`run`/`complete` are unaffected.
 - **Slice C — a NEW race the maintainer spotted:** a human comment that lands AFTER intake READS but BEFORE intake POSTS would be lost forever (intake's comment becomes last → `no-new-input` skip; the raced comment never read). Fix (final design): the marker carries the **IDS** intake read (`seen=<id>,…`), as a per-run DELTA — the full `seenSet` is the UNION of all intake markers in the thread (the CHAIN model, so each marker stays bounded by per-run new comments). The triage, when the last comment is intake's, checks for an UNSEEN comment (thread − seenSet); if one raced in → PROCEED, feeding it to the prompt flagged as PRE-DATING intake's turn. Ids (not a count) because a count cannot distinguish "new comment appeared" from "old one deleted"; this requires an ADDITIVE seam change (`IssueComment` gains `id`/`createdAt`, surfaced by `normaliseComments`). DELETION handling (maintainer): only when ALREADY proceeding for an unseen comment does the triage also compute `seenSet − thread`; a deleted previously-seen comment → flag the prompt "N previously-seen comments deleted; reassess" (the bodies are gone, so a flag+count, not content). A bare deletion with NO new comment does NOT wake intake (it resolves whenever the user next comments).
 
+## Update (2026-06-10) — second review pass
+
+A second adversarial review caught two defects, both DRIFT introduced by our own iteration (a slice referencing a mechanism a later decision obsoleted):
+
+- **Slice C:** the `classifyIntakeEvent` marker self-filter CONTRADICTED that module's deliberate design (`IntakeEvent` is `{kind}`-only by contract — "no author, no CI trigger policy") AND C itself called it non-load-bearing. DROPPED entirely: the deterministic TRIAGE GATE is the complete safety mechanism (intake is safe even if a run is scheduled); marker-aware SCHEDULING, if ever wanted, is `runner-in-ci`'s (it owns the event/trigger policy). Net simplification + a cleaner `intake-event.ts`.
+- **Slice B:** its `created` completion-comment marker OMITTED the `seen=` field C now mandates on EVERY marker (chain model) — it would have been a malformed marker breaking the `seenSet` union. Fixed: B stamps the FULL marker (`kind=created slug=<slug> seen=<ids-read>`) via C's shared stamp helper, and its safety story retargets from the (now-removed) `classifyIntakeEvent` self-filter to C's triage gate (`already-terminal`).
+
+Slice A re-reviewed clean (approve). Lesson: when a later decision removes/changes a mechanism, grep the OTHER slices for references to it — both defects were "a slice still pointing at an obsoleted mechanism".
+
 ## Refs
 
 - Source: the `issue-intake` slice review session, 2026-06-09 (maintainer's challenge to B2's resolution).
