@@ -126,6 +126,11 @@ describe('performClaim — not claimable (exit 2)', () => {
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
+		// The done/absent message stays terse (no recovery hint) — nothing of
+		// yours to continue when the slug was never in-progress here.
+		expect(result.message).toMatch(/not found on/);
+		expect(result.message).not.toMatch(/resume/);
+		expect(result.message).not.toMatch(/requeue/);
 	});
 
 	it('returns "lost" when the item is already in-progress on the arbiter', async () => {
@@ -151,6 +156,12 @@ describe('performClaim — not claimable (exit 2)', () => {
 		});
 		expect(second.exitCode).toBe(2);
 		expect(second.outcome).toBe('lost');
+		// The in-progress message points a re-runner at their OWN recovery verbs
+		// (resume / work-on / requeue) instead of just "pick another item".
+		expect(second.message).toMatch(/already in-progress/);
+		expect(second.message).toMatch(/resume/);
+		expect(second.message).toMatch(/work-on/);
+		expect(second.message).toMatch(/requeue/);
 	});
 });
 
