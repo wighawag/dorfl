@@ -31,6 +31,17 @@ Add an OPTIONAL slice-level `issue: N` field, used ONLY for the LONE issue-deriv
 
 The PRD avoided slice-level `issue:` partly to keep the issue number in ONE place (single source of truth, no drift). The mutual-exclusion invariant preserves that: the number still lives in exactly one place PER SLICE (either the slice's own `issue:` for a lone slice, or the PRD's `issue:` for a fanned slice) — never duplicated across N slices. So the drift concern applies only to the fanned case, which still uses the `prd:` hop. The lone-slice `issue:` is not a duplication (there is only one slice).
 
+## Update (2026-06-10) — decided + sliced
+
+The maintainer RATIFIED the proposed shape AND extended it: not only does a lone slice carry `issue:` (mutually exclusive with `prd:`), but **intake stops emitting `Fixes #N` entirely**. Closure becomes a FUTURE CI close-job that scans for open issues whose lone `done/` slice carries `issue: N`, OR whose PRD carries `issue: N` with all referencing slices in `done/`. `Fixes #N` is demoted to a deferred GitHub-only OPTIMISATION (possibly via `do` auto-injecting it on the build PR later) because it is not known to work on every provider.
+
+Also decided in the same session: intake should POST a completion comment on the SLICE/PRD success outcomes (`slice created` / `prd created`, never `issue resolved`).
+
+Sliced into:
+
+- `work/backlog/slice-level-issue-field-for-lone-issue-derived-slice.md` (the field + mutual-exclusion + `Fixes #N` removal + PRD drift correction).
+- `work/backlog/intake-posts-completion-comment-on-slice-prd-outcomes.md` (blocked by the above).
+
 ## Refs
 
 - Source: the `issue-intake` slice review session, 2026-06-09 (maintainer's challenge to B2's resolution).
