@@ -6,6 +6,7 @@ import {
 	performIntegration,
 	type IntegrationCoreResult,
 } from './integration-core.js';
+import type {IntegrateResult} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import {NullHarness, type Harness} from './harness.js';
@@ -645,6 +646,8 @@ async function decideAndDispatch(
 				arbiter,
 				integration: modes.slice,
 				provider: options.provider,
+				issueProvider,
+				seen: seenDelta,
 				env,
 				note,
 			});
@@ -656,6 +659,8 @@ async function decideAndDispatch(
 				arbiter,
 				integration: modes.prd,
 				provider: options.provider,
+				issueProvider,
+				seen: seenDelta,
 				env,
 				note,
 			});
@@ -820,11 +825,25 @@ async function dispatchSlice(params: {
 	arbiter: string;
 	integration: IntegrationMode;
 	provider: ReviewProviderName | undefined;
+	/** The issue seam the completion comment is posted back through (runner-owned). */
+	issueProvider: IssueProvider;
+	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
+	seen: string[];
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<IntakeResult> {
-	const {verdict, issueNumber, cwd, arbiter, integration, provider, env, note} =
-		params;
+	const {
+		verdict,
+		issueNumber,
+		cwd,
+		arbiter,
+		integration,
+		provider,
+		issueProvider,
+		seen,
+		env,
+		note,
+	} = params;
 
 	// A content-derived slug — NEVER a counter (PRD US #8). Prefer the drafted
 	// `sliceSlug`, else derive from the drafted title; sanitise either through
@@ -882,7 +901,16 @@ async function dispatchSlice(params: {
 		note,
 	});
 
-	return integrationToIntakeResult(core, {issueNumber, slug, relPath});
+	return integrationToIntakeResult(core, {
+		issueNumber,
+		slug,
+		relPath,
+		cwd,
+		issueProvider,
+		seen,
+		env,
+		note,
+	});
 }
 
 /**
@@ -903,11 +931,25 @@ async function dispatchPrd(params: {
 	arbiter: string;
 	integration: IntegrationMode;
 	provider: ReviewProviderName | undefined;
+	/** The issue seam the completion comment is posted back through (runner-owned). */
+	issueProvider: IssueProvider;
+	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
+	seen: string[];
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<IntakeResult> {
-	const {verdict, issueNumber, cwd, arbiter, integration, provider, env, note} =
-		params;
+	const {
+		verdict,
+		issueNumber,
+		cwd,
+		arbiter,
+		integration,
+		provider,
+		issueProvider,
+		seen,
+		env,
+		note,
+	} = params;
 
 	// A content-derived slug — NEVER a counter (PRD US #8). Prefer the drafted
 	// `prdSlug`, else derive from the drafted title.
@@ -961,6 +1003,11 @@ async function dispatchPrd(params: {
 		slug,
 		relPath,
 		kind: 'prd',
+		cwd,
+		issueProvider,
+		seen,
+		env,
+		note,
 	});
 }
 
@@ -972,16 +1019,24 @@ async function dispatchPrd(params: {
  * (the intake slice path passes `skipVerify` + has no review gate, so neither
  * `gate-failed` nor `review-blocked` can occur).
  */
-function integrationToIntakeResult(
+async function integrationToIntakeResult(
 	core: IntegrationCoreResult,
 	ctx: {
 		issueNumber: number;
 		slug: string;
 		relPath: string;
 		kind?: 'slice' | 'prd';
+		/** The working checkout the issue seam shells `gh` in. */
+		cwd: string;
+		/** The issue seam the completion comment is posted back through. */
+		issueProvider: IssueProvider;
+		/** The per-run `seen=` delta the completion marker records (chain model). */
+		seen: string[];
+		env: NodeJS.ProcessEnv | undefined;
+		note: (message: string) => void;
 	},
-): IntakeResult {
-	const {issueNumber, slug, relPath} = ctx;
+): Promise<IntakeResult> {
+	const {issueNumber, slug, relPath, cwd, issueProvider, seen, env, note} = ctx;
 	const kind = ctx.kind ?? 'slice';
 	const artifact = kind === 'prd' ? 'PRD' : 'slice';
 	if (core.outcome === 'completed') {
@@ -998,12 +1053,33 @@ function integrationToIntakeResult(
 		const message =
 			`Intake of issue #${issueNumber} → wrote ${relPath} (${link}); ` +
 			`the runner integrated it through the shared core and ${landed}.`;
+		// CLOSE THE LOOP (this slice): post ONE INFORMATIONAL completion comment back on
+		// the issue for the SUCCESSFUL outcome — the confirmation the ASK/BOUNCE comments
+		// already give the author. It reports `slice created` / `prd created` (NEVER
+		// "issue resolved"; intake never closes on slice/prd — CI's close-job does, via
+		// the `issue:` field) and links the artifact by integration mode: the PR `url` in
+		// propose, the landed `commit` in merge. The marker carries `kind=created` (the
+		// TRIAGE treats it as TERMINAL → `already-terminal`), so the comment cannot
+		// re-trigger intake. ADVISORY — it DEGRADES (a missing/unauthenticated `gh` never
+		// throws), so a degrade leaves the run's success outcome unchanged.
+		const posted = await postCompletionComment({
+			issueProvider,
+			issueNumber,
+			kind,
+			slug,
+			integration: core.integration,
+			seen,
+			cwd,
+			env,
+			note,
+		});
 		return {
 			exitCode: 0,
 			outcome: kind === 'prd' ? 'prd' : 'sliced',
 			issueNumber,
 			emittedSlug: slug,
 			emitted: relPath,
+			commented: posted,
 			message,
 		};
 	}
@@ -1026,6 +1102,119 @@ function integrationToIntakeResult(
 			core.reason ??
 			`Integrating the intake ${artifact} for issue #${issueNumber} failed unexpectedly.`,
 	};
+}
+
+/**
+ * Build the INFORMATIONAL completion-comment BODY (with its FULL `created` marker)
+ * for a SUCCESSFUL `slice` / `prd` outcome — the PURE, seam-free core of
+ * {@link postCompletionComment}, exported so both link variants are unit-testable
+ * without a live seam. The comment:
+ *
+ * - reports `slice created` / `prd created` framed as CREATED — NEVER "issue
+ *   resolved/closed" (intake never closes on the slice/prd path).
+ * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
+ *   `commit` (the additive {@link IntegrateResult.commit}) in merge. A degraded
+ *   propose (no `url`) or a failed merge-tip read (no `commit`) simply OMITS the
+ *   link — the comment still confirms what was created (the artifact is safe on the
+ *   branch/main regardless). No PRD link beyond the slug.
+ * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
+ *   (`kind=created slug=<slug> seen=<id>,…`) so the triage's `already-terminal`
+ *   branch consumes it — the comment cannot re-trigger intake.
+ */
+export function composeIntakeCompletionComment(params: {
+	kind: 'slice' | 'prd';
+	slug: string;
+	integration: IntegrateResult | undefined;
+	seen: string[];
+}): string {
+	const {kind, slug, integration, seen} = params;
+	const artifact = kind === 'prd' ? 'PRD' : 'slice';
+	const link =
+		integration?.mode === 'merge'
+			? integration.commit !== undefined
+				? `\n\nIt landed on \`main\` in commit ${integration.commit}.`
+				: ''
+			: integration?.url !== undefined
+				? `\n\nIt is carried by the PR: ${integration.url}`
+				: '';
+	const body =
+		`Created ${artifact} \`${slug}\` from this issue.${link}\n\n` +
+		`This is an informational update — the issue stays open (it remains in play ` +
+		`until the ${artifact} lands; intake does not change the issue's state).`;
+	// STAMP the FULL marker (incl. `seen=`) via the SHARED helper, so the triage's
+	// `already-terminal` branch recognises this terminal `created` comment.
+	return stampIntakeMarker(body, {kind: 'created', seen, slug});
+}
+
+/**
+ * Post the INFORMATIONAL completion comment for a SUCCESSFUL `slice` / `prd`
+ * outcome (this slice). It closes the loop the ASK/BOUNCE comments already close
+ * for the other outcomes: the issue author gets a confirmation when intake did the
+ * useful thing. The comment:
+ *
+ * - reports `slice created` / `prd created` — NEVER "issue resolved/closed".
+ *   Intake never closes the issue on the slice/prd path (CI's future close-job
+ *   does, via the `issue:` field); this comment changes NO issue state.
+ * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
+ *   `commit` (the additive {@link IntegrateResult.commit} this slice surfaces) in
+ *   merge. No PRD link beyond the slug.
+ * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
+ *   (`kind=created slug=<slug> seen=<id>,…`). `kind=created` is TERMINAL, so the
+ *   triage's `already-terminal` branch then treats the issue as already-transformed
+ *   — the completion comment cannot re-trigger intake.
+ *
+ * ADVISORY — it DEGRADES (a missing/unauthenticated `gh` surfaces the text, never
+ * throws), so a degrade does NOT change the run's success outcome. Returns whether
+ * a comment was actually posted (for {@link IntakeResult.commented}).
+ */
+async function postCompletionComment(params: {
+	issueProvider: IssueProvider;
+	issueNumber: number;
+	kind: 'slice' | 'prd';
+	slug: string;
+	/** The integrate result — carries the propose `url` / the merge `commit` link. */
+	integration: IntegrateResult | undefined;
+	/** The per-run `seen=` delta the marker records (the chain-model primitive). */
+	seen: string[];
+	/** The working checkout the issue seam shells `gh` in. */
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<boolean> {
+	const {
+		issueProvider,
+		issueNumber,
+		kind,
+		slug,
+		integration,
+		seen,
+		cwd,
+		env,
+		note,
+	} = params;
+	const artifact = kind === 'prd' ? 'PRD' : 'slice';
+	// Build the full stamped body (CREATED wording + mode-keyed link + the FULL
+	// `created` marker) via the exported pure builder — unit-tested directly for both
+	// link variants (propose `url` / merge `commit`).
+	const stamped = composeIntakeCompletionComment({
+		kind,
+		slug,
+		integration,
+		seen,
+	});
+	const posted = await issueProvider.postIssueComment({
+		cwd,
+		issueNumber,
+		body: stamped,
+		env,
+	});
+	note(
+		posted.posted
+			? `Posted a '${artifact} created' completion comment on issue #${issueNumber}.`
+			: `Could not post the completion comment on issue #${issueNumber} ` +
+					`(${posted.instruction}); the ${artifact} was still created.`,
+	);
+	return posted.posted;
 }
 
 /**

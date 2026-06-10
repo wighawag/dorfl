@@ -204,6 +204,15 @@ export interface IntegrateResult {
 	 * `status`. Absent in merge mode and on the push-only / degraded path.
 	 */
 	url?: string;
+	/**
+	 * The SHA that LANDED on the arbiter's `main` (the MERGE-mode twin of {@link
+	 * url}). Populated only on the merge path — the work branch's tip is exactly
+	 * what `${branch}:main` pushed. ADDITIVE + optional, so existing `do`/`run`/
+	 * `complete` callers are unaffected; intake reads it to link the landed commit
+	 * in its completion comment. Absent in propose mode (the PR `url` is the link
+	 * there) and best-effort on merge (a failed tip read simply omits it).
+	 */
+	commit?: string;
 }
 
 /** Outcome of the full rebase-then-integrate flow. */
@@ -236,12 +245,18 @@ export class Integrator {
 	async integrate(input: IntegrateInput): Promise<IntegrateResult> {
 		if (input.mode === 'merge') {
 			pushBranch(input, `${input.branch}:main`);
+			// Capture the SHA that LANDED on `main` — the work branch's tip is exactly
+			// what `${branch}:main` pushed (additive `commit?`, the merge-mode twin of
+			// propose's `url`). Best-effort: a failed read leaves `commit` absent, so a
+			// caller that links it (intake) simply omits the link rather than throwing.
+			const commit = resolveBranchTip(input);
 			return {
 				mode: 'merge',
 				mergedToMain: true,
 				pushedRef: 'main',
 				provider: 'none',
 				requestOpened: false,
+				...(commit !== undefined ? {commit} : {}),
 			};
 		}
 
@@ -379,6 +394,25 @@ function pushBranch(
 	git(['push', input.arbiter, refspec, ...extraArgs], input.cwd, {
 		env: input.env,
 	});
+}
+
+/**
+ * Resolve the SHA the merge path just pushed to `main` — the work branch's tip
+ * (`${branch}:main` pushes exactly that). BEST-EFFORT (soft `run`, never throws):
+ * on any failure it returns `undefined`, so the additive {@link
+ * IntegrateResult.commit} stays absent rather than breaking the integrate. Used to
+ * link the landed commit (intake's completion comment); the integrate's safety
+ * rides on the push above, never on this read.
+ */
+function resolveBranchTip(input: IntegrateInput): string | undefined {
+	const res = run('git', ['rev-parse', input.branch], input.cwd, {
+		env: input.env,
+	});
+	if (res.status !== 0) {
+		return undefined;
+	}
+	const sha = res.stdout.trim();
+	return sha === '' ? undefined : sha;
 }
 
 /**
