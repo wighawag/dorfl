@@ -1,8 +1,8 @@
 ---
-title: slice-level-issue-field-for-lone-issue-derived-slice — add an optional slice `issue:` field (mutually exclusive with `prd:`) and STOP intake emitting `Fixes #N`; closure becomes folder+field state read by a future CI close-job
+title: slice-level-issue-field-for-lone-issue-derived-slice — add an optional slice `issue:` field (one closure path per slice; `prd:` wins if both present) and STOP intake emitting `Fixes #N`; closure becomes folder+field state read by a future CI close-job
 slug: slice-level-issue-field-for-lone-issue-derived-slice
 prd: issue-intake
-covers: [8, 10]
+covers: [8]
 ---
 
 > Derives from the `issue-intake` PRD; it REVISES that PRD's "Out of Scope" + "Loop closure" sections, so part of this slice is a drift-correction of the PRD itself. Source signal: `work/observations/slice-level-issue-field-for-lone-issue-derived-slice.md`.
@@ -24,8 +24,8 @@ TWO independent reasons `Fixes #N` is at best a propose-only OPTIMISATION, never
 
 Build:
 
-- **Add an OPTIONAL slice-level `issue: N` frontmatter field** (the parser already reads `issue:`; today it is documented PRD-only — make it legal on a slice too). Used ONLY for the LONE issue-derived slice (the SLICE outcome, no `prd:`).
-- **INVARIANT: `prd:` and `issue:` on a slice are MUTUALLY EXCLUSIVE.** A slice with both is a contradiction the parser/validator REJECTS. (Exactly one closure path per slice: its own `issue:`, or its PRD's `issue:` via `prd:` — never both, never duplicated across N fanned slices.)
+- **Add an OPTIONAL slice-level `issue: N` frontmatter field** (the parser already reads `issue:` as a flat number — today its DOC says "PRD-only". Make it legal/documented on a slice too. NOTE: there is no separate frontmatter-validation layer today, and `covers` is not even parsed in `frontmatter.ts` — so do NOT invent a validator; see the one-closure-path rule below for how the invariant is enforced cheaply.) Used ONLY for the LONE issue-derived slice (the SLICE outcome, no `prd:`).
+- **INVARIANT: one closure path per slice — `prd:` and `issue:` should not coexist.** Enforce it as a READ-TIME PRECEDENCE RULE, NOT a throwing validator: if a slice somehow carries BOTH (only possible via a human hand-edit — intake's own `dispatchSlice`/`dispatchPrd` branches are mutually exclusive and never emit both), the closure reader IGNORES the slice's `issue:` and uses `prd: → PRD issue:`. This is lossless (the referenced PRD carries the authoritative number) and degrades gracefully on a typo instead of throwing. Document the invariant; the precedence rule is the enforcement.
 - **Intake SLICE outcome emits `issue: N` in the slice frontmatter, NOT `Fixes #N`** anywhere. Remove the `Fixes #N` body line from `renderBacklogSlice`.
 - **Intake PRD outcome is unchanged** — the PRD still carries `issue: N`; its fanned slices reach it via `prd: → PRD issue:` (no `Fixes #N`, no slice `issue:` on a fanned slice).
 - **Correct the `issue-intake` PRD drift** (`work/prd-sliced/issue-intake.md`): the "Loop closure" section's "a lone slice's PR carries `Fixes #N` → its merge closes the issue directly" premise is false; and "Out of Scope" rejects a slice-level `issue:`. Revise both to the settled model (lone slice → `issue:` field; closure is a CI close-job over folder+field state; `Fixes #N` is a deferred GitHub optimisation, not the mechanism). Since the PRD lives in `work/prd-sliced/`, follow the contract's "small factual correction you are certain of" path — fix the PRD text in place.
@@ -34,8 +34,8 @@ The actual issue-closing (the CI close-job that scans for open issues whose lone
 
 ## Acceptance criteria
 
-- [ ] A slice may carry an optional `issue: N` frontmatter field (parser + the shape that validates frontmatter); documented as lone-issue-derived-slice use, no longer "PRD-only".
-- [ ] `prd:` and `issue:` on the SAME slice are rejected as mutually exclusive (a clear validation error), with a test pinning the rejection.
+- [ ] A slice may carry an optional `issue: N` frontmatter field; the `frontmatter.ts` `issue` doc no longer says "PRD-only" (it is parsed as a flat number already — only the type/doc + the closure reader change).
+- [ ] When a slice carries BOTH `prd:` and `issue:`, the closure path PREFERS `prd:` (hops to the PRD's `issue:`) and IGNORES the slice's `issue:` — a read-time precedence rule, NOT a thrown error; a test pins the precedence (the lone-slice path uses `issue:`; the both-present path uses the PRD).
 - [ ] Intake's SLICE outcome writes `issue: N` in the emitted slice's frontmatter and emits NO `Fixes #N` anywhere (body or PR); a test asserts the emitted slice file contains `issue: N` and does NOT contain `Fixes`.
 - [ ] Intake's PRD outcome is unchanged (`issue: N` on the PRD; fanned slices use `prd:`); existing PRD-outcome tests still pass.
 - [ ] The `issue-intake` PRD's "Loop closure" + "Out of Scope" sections are corrected to the settled model (no false `Fixes #N` lone-slice-close claim; `issue:` field is in-scope; closure is the CI close-job; `Fixes #N` is a deferred optimisation).
@@ -51,10 +51,10 @@ The actual issue-closing (the CI close-job that scans for open issues whose lone
 >
 > DRIFT CHECK FIRST: confirm `renderBacklogSlice` (`src/intake.ts`) still writes a literal `Fixes #N` body line, and that `frontmatter.ts` documents `issue:` as PRD-only. If already field-based, this slice is done.
 >
-> WHAT TO BUILD: (1) make `issue: N` legal on a slice (the parser already reads it — update the type/doc + any validation); (2) enforce `prd:` XOR `issue:` on a slice (reject both, with a test); (3) intake SLICE outcome writes `issue: N` in frontmatter, NOT `Fixes #N` — remove the `Fixes` line from `renderBacklogSlice`; (4) leave the PRD outcome unchanged; (5) correct the PRD's "Loop closure" + "Out of Scope" text in place (it is in `work/prd-sliced/`; this is a certain factual correction).
+> WHAT TO BUILD: (1) make `issue: N` legal/documented on a slice (the parser already reads it as a flat number — update the type/doc; there is NO frontmatter validator today, do not add one); (2) enforce the one-closure-path invariant as a READ-TIME PRECEDENCE rule — if a slice has both `prd:` and `issue:`, the closure reader prefers `prd:` and ignores `issue:` (lossless: the PRD carries the number); a human hand-edit is the only way both appear (intake never emits both); (3) intake SLICE outcome writes `issue: N` in frontmatter, NOT `Fixes #N` — remove the `Fixes` line from `renderBacklogSlice`; (4) leave the PRD outcome unchanged; (5) correct the PRD's "Loop closure" + "Out of Scope" text in place (it is in `work/prd-sliced/`; this is a certain factual correction).
 >
-> SCOPE FENCE: do NOT build the CI close-job or `do`'s `Fixes #N` auto-injection (both `runner-in-ci` / a later optimisation). Do NOT add `issue:` to fanned slices (they use `prd:`). The mutual-exclusion invariant is the load-bearing rule — one closure path per slice.
+> SCOPE FENCE: do NOT build the CI close-job or `do`'s `Fixes #N` auto-injection (both `runner-in-ci` / a later optimisation). Do NOT add `issue:` to fanned slices (they use `prd:`). Do NOT add a throwing frontmatter validator — the precedence rule is the enforcement.
 >
-> SEAM TO TEST AT: `frontmatter.ts` parsing/validation (the `prd:` XOR `issue:` rejection) and the intake SLICE-outcome dispatcher at the stubbed seam (the emitted slice carries `issue: N`, contains no `Fixes`). Mirror the existing intake + frontmatter tests.
+> SEAM TO TEST AT: `frontmatter.ts` (the `issue` field doc/type) and the intake SLICE-outcome dispatcher at the stubbed seam (the emitted slice carries `issue: N`, contains no `Fixes`), plus a test of the both-present precedence (PRD wins). Mirror the existing intake + frontmatter tests.
 >
-> "Done" = a lone intake slice carries `issue: N` (not `Fixes #N`), `prd:`/`issue:` are mutually exclusive, the PRD drift is corrected, and `pnpm -r build && pnpm -r test && pnpm format:check` is green.
+> "Done" = a lone intake slice carries `issue: N` (not `Fixes #N`), a both-present slice resolves via `prd:` (precedence, no throw), the PRD drift is corrected, and `pnpm -r build && pnpm -r test && pnpm format:check` is green.

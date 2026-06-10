@@ -2,8 +2,10 @@
 title: intake-posts-completion-comment-on-slice-prd-outcomes — on a successful SLICE/PRD outcome, post an informational "slice created"/"prd created" comment on the issue (PR link or commit link), never closing it
 slug: intake-posts-completion-comment-on-slice-prd-outcomes
 prd: issue-intake
-blockedBy: [slice-level-issue-field-for-lone-issue-derived-slice]
-covers: [1, 6]
+blockedBy:
+  - slice-level-issue-field-for-lone-issue-derived-slice
+  - intake-self-awareness-resumption-tracking
+covers: [1]
 ---
 
 > Derives from the `issue-intake` PRD. Today intake "talks back" on the ASK and BOUNCE outcomes (it posts a comment) but is SILENT on the productive outcomes (SLICE / PRD), so the issue author gets a question or a rejection narrated to them but never a confirmation when intake actually did the useful thing. This closes that loop. The completion comment is INFORMATIONAL — it reports `slice created` / `prd created`, NEVER `issue resolved`; intake never closes the issue (closing is the future CI close-job's, `runner-in-ci`).
@@ -17,11 +19,12 @@ On a SUCCESSFUL terminal outcome — `sliced` (a `work/backlog/<slug>.md` was cr
   - **propose** → link the **PR** that carries the artifact (the PR URL the integrate core returns);
   - **merge** → link the **commit** the artifact landed in on `main` (the commit the integrate core returns);
 - does NOT reference/link the PRD beyond naming the created PRD slug (maintainer: no need to link to PRD);
-- is purely informational — it changes NO issue state (no close, no label beyond the transient processing lock that already exists).
+- is purely informational — it changes NO issue state (no close, no label beyond the transient processing lock that already exists);
+- carries the intake MARKER (from `intake-self-awareness-resumption-tracking`), e.g. `<!-- agent-runner:intake kind=created slug=<slug> -->`, so intake recognises its OWN completion comment and never re-triggers on it.
 
 Post the comment ONLY on `sliced` / `prd`. Do NOT post on `asked` / `bounced` (those already post their own comment), nor on `locked` / `lock-failed` / `stale` / `agent-failed` / `usage-error` (those are not "done").
 
-The comment must not look like a user answer that would RESUME the ASK loop: check it against `intake-event-classification` (`src/intake-event.ts`) — a slice/prd outcome is terminal, but confirm the bot's own comment cannot re-trigger intake (e.g. an `issue-comment` event for intake's own completion comment must classify as `ignore`, like it does for intake's ask/bounce comments today).
+SELF-TRIGGER SAFETY: this comment is an `issue-comment-created` event like any other. The self-trigger loop is closed by the BLOCKING slice `intake-self-awareness-resumption-tracking` (marker + author self-filter in `classifyIntakeEvent`) — NOT by this slice. (IMPORTANT: do NOT assume ask/bounce comments are `ignore`d "today" — they are NOT; `classifyIntakeEvent` currently `re-evaluate`s every new comment with no self-filter. That is exactly why this slice is blocked on the self-awareness slice.) This slice's job is only to STAMP the completion comment with the marker so the self-filter applies to it too.
 
 The integrate core already computes the propose-vs-merge wording for the LOCAL `note` (`integrationToIntakeResult`: "opened a PR carrying it" / "landed it on the arbiter main") and has the PR url / commit in `core.integration` — reuse that same resolved result to build the issue comment rather than recomputing it.
 
@@ -32,7 +35,7 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 - [ ] PROPOSE mode → the comment links the PR; MERGE mode → the comment links the commit. Two distinct messages, both tested.
 - [ ] No comment is posted on `asked` / `bounced` / `locked` / `lock-failed` / `stale` / `agent-failed` / `usage-error` (tested for at least the non-success success-adjacent ones, e.g. `locked`).
 - [ ] The comment NEVER closes the issue or changes issue state (informational only); intake still never calls any close path.
-- [ ] The completion comment cannot resume the ASK loop (classified `ignore` by `intake-event-classification`), with a test pinning it.
+- [ ] The completion comment carries the intake marker, and a test confirms `classifyIntakeEvent` `ignore`s it (relying on the self-filter from the blocking slice) — so it cannot re-trigger intake.
 - [ ] The comment poster DEGRADES (a missing/unauthenticated `gh` surfaces the text, never throws) — same advisory discipline as the ask/bounce poster; a degrade does not change the run's success outcome.
 - [ ] Tests STUB the issue seam (no network); mirror the existing intake tests.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
@@ -40,6 +43,7 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 ## Blocked by
 
 - `slice-level-issue-field-for-lone-issue-derived-slice` — the completion comment must reflect the SETTLED closure model (it says "slice/prd created", and must not imply `Fixes #N`/auto-close). Build the field/closure correction first so this slice's wording and the underlying linkage agree.
+- `intake-self-awareness-resumption-tracking` — provides the intake MARKER + the author/marker self-filter in `classifyIntakeEvent`. WITHOUT it, this completion comment (an `issue-comment-created`) would re-trigger intake (there is NO self-filter today). This slice only STAMPS the completion comment with the marker; the self-filter that makes it non-triggering is the blocking slice's.
 
 ## Prompt
 
@@ -49,8 +53,8 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 >
 > WHAT TO BUILD: in `dispatchSlice` / `dispatchPrd` (or right after, where the terminal `IntakeResult` is built), post ONE comment via `postIssueComment` on success: name the created slug, frame as created (not resolved), and link the PR (propose) or the commit (merge) using the resolved integrate result the local `note` already uses. No PRD link beyond the slug. The RUNNER posts it; the agent stays seam-free.
 >
-> SCOPE FENCE: comment ONLY on `sliced` / `prd`. Informational only — no close, no state change, no new label. Do NOT build the CI close-job. Confirm the bot's own comment classifies as `ignore` in `intake-event-classification` so it cannot resume the ASK loop.
+> SCOPE FENCE: comment ONLY on `sliced` / `prd`. Informational only — no close, no state change, no new label. Do NOT build the CI close-job. Do NOT build the self-filter here — it is the BLOCKING slice `intake-self-awareness-resumption-tracking`; here you only STAMP the completion comment with that slice's marker so the self-filter applies. (Do NOT assume ask/bounce comments are `ignore`d today — they are not.)
 >
-> SEAM TO TEST AT: the stubbed issue seam (`postIssueComment` recorded). Assert: a comment on slice success (created wording, slug, PR link in propose); the merge variant (commit link); NO comment on `locked`/`asked`/`bounced`; degrade on a missing `gh` does not change the success outcome; the comment is `ignore`d by event-classification.
+> SEAM TO TEST AT: the stubbed issue seam (`postIssueComment` recorded). Assert: a comment on slice success (created wording, slug, marker present, PR link in propose); the merge variant (commit link); NO comment on `locked`/`asked`/`bounced`; degrade on a missing `gh` does not change the success outcome; the marked comment is `ignore`d by `classifyIntakeEvent`.
 >
 > "Done" = intake confirms `slice created`/`prd created` on the issue with the right PR/commit link, never closes the issue, cannot resume its own loop, and `pnpm -r build && pnpm -r test && pnpm format:check` is green.
