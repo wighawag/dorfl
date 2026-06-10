@@ -9,8 +9,9 @@ import {parseFrontmatter} from './frontmatter.js';
  * `work/done/`**. Pure `work/`-folder logic — no seam, no git, no `gh`, no mutation.
  *
  * This is the LINKAGE the intake engine emits for CI to ACT on: a PRD fans out to N
- * slices = N PRs carrying `Refs #N`, and the issue is closed by CI's merge-to-main
- * JOB that runs THIS query + `closeIssue`. That close JOB is `runner-in-ci`'s — NOT
+ * slices = N PRs whose slices carry `prd:` ONLY (no `Refs #N` keyword is emitted),
+ * and the issue is closed by CI's merge-to-main JOB that runs THIS query +
+ * `closeIssue`. That close JOB is `runner-in-ci`'s — NOT
  * built here; this module exposes ONLY the query for the job to call. The issue
  * number lives ONLY on the PRD (`issue:`); slices link via `slice.prd: → PRD`, so
  * this query keys on the SAME `prd:` field that hop uses.

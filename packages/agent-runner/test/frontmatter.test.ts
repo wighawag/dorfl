@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import {parseFrontmatter} from '../src/frontmatter.js';
+import {parseFrontmatter, resolveClosingIssue} from '../src/frontmatter.js';
 
 describe('parseFrontmatter', () => {
 	it('extracts slug, humanOnly, needsAnswers and blockedBy from a full frontmatter block', () => {
@@ -134,7 +134,23 @@ describe('parseFrontmatter', () => {
 		expect(fm.issue).toBe(42);
 	});
 
-	it('treats omitted `issue:` as undefined (every non-intake PRD and all slices)', () => {
+	it('parses a lone-slice `issue: N` link as a number (intake SLICE-emit, no prd:)', () => {
+		// `intake`'s SLICE outcome writes `issue: N` on the lone `work/backlog/<slug>.md`
+		// (no `prd:`) as the provider-agnostic closure link a future CI close-job reads.
+		const md = [
+			'---',
+			'title: Fix the thing',
+			'slug: fix-the-thing',
+			'issue: 7',
+			'covers: []',
+			'---',
+		].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.issue).toBe(7);
+		expect(fm.prd).toBeUndefined();
+	});
+
+	it('treats omitted `issue:` as undefined (every non-intake PRD and most slices)', () => {
 		const md = ['---', 'slug: a', 'prd: my-prd', '---'].join('\n');
 		expect(parseFrontmatter(md).issue).toBeUndefined();
 	});
@@ -203,5 +219,36 @@ describe('parseFrontmatter', () => {
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('crlf');
 		expect(fm.humanOnly).toBe(true);
+	});
+});
+
+describe('resolveClosingIssue', () => {
+	it('a fanned slice (prd: only) closes via the `prd:` hop', () => {
+		expect(resolveClosingIssue({prd: 'my-prd', issue: undefined})).toEqual({
+			via: 'prd',
+			prd: 'my-prd',
+		});
+	});
+
+	it('a lone slice (issue: only) closes via its own `issue:` field', () => {
+		expect(resolveClosingIssue({prd: undefined, issue: 7})).toEqual({
+			via: 'issue',
+			issue: 7,
+		});
+	});
+
+	it('when both are present (a hand-edit contradiction), `prd:` WINS and `issue:` is ignored', () => {
+		// The one-closure-path invariant: intake never emits both; a human typo degrades
+		// to "use the PRD's number" rather than crashing (no throwing validator).
+		expect(resolveClosingIssue({prd: 'my-prd', issue: 9})).toEqual({
+			via: 'prd',
+			prd: 'my-prd',
+		});
+	});
+
+	it('neither present → no closure path (undefined)', () => {
+		expect(
+			resolveClosingIssue({prd: undefined, issue: undefined}),
+		).toBeUndefined();
 	});
 });

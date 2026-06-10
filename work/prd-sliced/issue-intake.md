@@ -26,7 +26,7 @@ The prompt classifies the issue (given its body + full thread) into one verdict:
 | Verdict | When (the criteria the prompt applies) | The runner then… |
 | --- | --- | --- |
 | **ASK** | The ask is **not clear enough to act on** — a material requirement, scope, or acceptance question is unanswered (the same "would I build the wrong thing if I guessed?" bar `to-slices` uses for `needsAnswers`). | `postComment` the next clarifying question; emit NOTHING; STOP. (A later run resumes from the updated thread.) |
-| **SLICE** | Clear, AND the ask **fits ONE slice** — a single tracer-bullet vertical slice by `to-slices`' criterion (one buildable end-to-end path). | Emit one `work/backlog/<slug>.md` (`covers: []`, no `prd:` — its own source of truth), carrying `Fixes #N`. |
+| **SLICE** | Clear, AND the ask **fits ONE slice** — a single tracer-bullet vertical slice by `to-slices`' criterion (one buildable end-to-end path). | Emit one `work/backlog/<slug>.md` (`covers: []`, no `prd:` — its own source of truth), carrying an `issue: N` closure field (NOT `Fixes #N`). |
 | **PRD** | Clear, AND the ask is **coherent but needs >1 slice** — it cannot be one slice (splits for scope/architecture). >1 slice ⟺ a shared vision worth recording ⟺ a PRD. **INCLUDES a coupled-but-SMALL pair: if two asks are genuinely related, they get a (light) PRD — they are NEVER bounced** (bounce is only for UNRELATED asks). | Emit one `work/prd/<slug>.md` with `issue: N`; STOP (slicing is the separate `do prd:` step). |
 | **BOUNCE** | The ask is really **multiple UNRELATED concerns** wearing one issue — the prompt cannot articulate a single shared vision tying them together. | `postComment` "please file separate issues", emit NOTHING, leave the issue open. |
 
@@ -61,11 +61,12 @@ The durable seam shapes (the slices carry the mechanics):
 
 ## Loop closure (the linkage this engine emits; the JOB is CI's)
 
-The engine EMITS the linkage; CI ACTS on it:
+The engine EMITS the linkage as a FIELD; CI ACTS on it (the issue is closed by a future CI close-job over folder + field state — `intake` never closes the issue on the slice/PRD path). Closure is provider-agnostic by construction: the link is a `work/`-file field, not a GitHub-native PR/commit keyword.
 
-- a lone **slice**'s PR carries **`Fixes #N`** → its merge closes the issue directly (one PR, safe);
-- a **PRD** fans out to N slices = N PRs → those PRs carry **`Refs #N`** (NOT `Fixes #N`, which would close on the first of N merges); the issue is closed by CI's merge-to-main job running the core "PRD complete?" query + `closeIssue`. Slices resolve the issue via `slice → prd: → PRD issue:` (the number lives ONLY on the PRD).
-- Degrades cleanly on a non-GitHub arbiter (no close, no breakage).
+- a lone **slice** (no `prd:`) carries an **`issue: N`** frontmatter field → the close-job closes the issue when that slice reaches `work/done/`. It carries NO `Fixes #N` (a deferred GitHub-only OPTIMISATION, not the mechanism: it is provider-specific AND has no slot on the `--merge` path, where the artifact lands directly on `main` with no PR body; `do` MAY later auto-inject it on the build PR — out of scope here).
+- a **PRD** fans out to N slices = N PRs → those slices carry **`prd:`** ONLY (NO `Fixes #N` and NO `Refs #N` — nothing emits a `Refs #N` keyword; `renderPrd` emits only `issue: N`); the issue is closed by CI's merge-to-main close-job running the core "PRD complete?" query + `closeIssue`. Slices resolve the issue via `slice → prd: → PRD issue:` (the number lives ONLY on the PRD, never duplicated across the N fanned slices).
+- **INVARIANT — one closure path per slice:** a slice uses `issue:` XOR `prd:`. A lone slice closes its own issue via `issue:`; a fanned slice contributes to a PRD that closes the issue via `prd: → PRD issue:`. This is documented on the `issue` field (no throwing validator); the precedence (`prd:` wins) is the close-job's concern.
+- Degrades cleanly on a non-GitHub arbiter: the `issue:`/`prd:` field is provider-agnostic, so the close-job works uniformly; a provider with no `closeIssue` simply does not close (no breakage).
 
 ## User Stories
 
@@ -76,7 +77,7 @@ The engine EMITS the linkage; CI ACTS on it:
 5. As a maintainer, I want an issue of genuinely UNRELATED asks BOUNCED ("file separate issues"), so unrelated work is not smuggled under one issue.
 6. As a maintainer, I want `intake` to run LOCALLY one-shot AND be the SAME command CI schedules, so the transformation is built once and I can test it with no CI.
 7. As a maintainer, I want `intake` GATE-FREE (my explicit invocation authorizes it, like `do`), so per-repo `autoSlice`/`autoBuild` config never blocks an explicit run.
-8. As a maintainer, I want the emitted artifact to carry its issue link (`Fixes #N` on a lone slice; `issue: N` on a PRD) + its own gate axes, so it hands cleanly to the slice/build engine and to CI's closure.
+8. As a maintainer, I want the emitted artifact to carry its issue link as a `work/`-file FIELD (`issue: N` on a lone slice; `issue: N` on a PRD) + its own gate axes, so it hands cleanly to the slice/build engine and to CI's closure regardless of provider (no `Fixes #N` keyword dependency).
 9. As a maintainer, I want PER-OUTCOME integration modes (granular + aggregates, granular-overrides-aggregate, default propose), so CI can apply a type-conditional merge-vs-propose policy over a command whose output type is decided at runtime.
 10. As a maintainer, I want two concurrent runs on one issue serialised by a provider-native `processing` LOCK label (not a `work/` CAS), so concurrency is handled where the issue lives.
 11. As a maintainer, I want the issue seam provider-pluggable (GitHub via `gh` first), core never importing `gh`, so other providers can follow and CI reuses the seam.
@@ -94,7 +95,7 @@ The load-bearing rule: **test the DISPATCH, not the model.** A STUBBED verdict d
 
 - **Everything CI** — trigger policy, author-trust, the merge-vs-propose POLICY, `install-ci`/the schedule/concurrency group, the merge-to-main close JOB — is `runner-in-ci`'s (see "Scope: the engine only"). `intake` is gate-free and exposes only the per-outcome mode KNOBS CI sets.
 - **Auto-slicing the emitted PRD / building the emitted slice** — the existing `do prd:` / `do <slice>` engine, triggered separately.
-- **A slice-level `issue:` field** — not needed (the only multi-slice case is the PRD, tracked by `prd:`; unrelated multi is bounced).
+- **A throwing frontmatter VALIDATOR for the `issue:`/`prd:` invariant** — out of scope (there is no frontmatter-validation layer; intake never emits both fields, so only a human hand-edit could, and the precedence rule — `prd:` wins — degrades that to "use the PRD's number" rather than crashing). The lone-slice `issue:` field itself IS in scope (it is the provider-agnostic lone-slice closure link, mutually exclusive with `prd:`; see Loop closure).
 - **Any issue-label STATE-MACHINE / issue lifecycle in core (ADR §12)** — only the single transient `processing` concurrency lock label is in scope.
 - **Non-GitHub issue providers** — GitHub adapter first; the seam allows others later.
 

@@ -1647,7 +1647,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying `Fixes #N`. GATE-FREE — your explicit invocation IS the authorization (autoSlice/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-slice/--propose-slice override per type; granular overrides the aggregate; unset ⇒ propose for both.',
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoSlice/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-slice/--propose-slice override per type; granular overrides the aggregate; unset ⇒ propose for both.',
 		)
 		.argument(
 			'<number>',
