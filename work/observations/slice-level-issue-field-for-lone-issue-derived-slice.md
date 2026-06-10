@@ -83,6 +83,15 @@ Because it reverses a stated invariant AND adds a new issue-mutating power (`clo
 
 FUTURE (noted, not now): if leaving a bounced issue open to let the user reply/push-back turns out preferable, revisit — `bounced` would move to non-terminal in C's triage and the close would drop. The data/interpretation split (marker stores `kind`, triage owns terminal-ness) keeps that cheap.
 
+## Update (2026-06-10) — review of slice D + atomic-close redesign
+
+Reviewing the new slice D against the code surfaced:
+
+- **`gh issue close --comment --reason` does comment+close ATOMICALLY** (verified). So D was redesigned from "post comment, then close" (which has a partial-failure window: comment posts, close fails → the dishonest open-with-bounce-comment state) to ONE atomic `closeIssue({issueNumber, comment?, reason?})` call. Shape decision (maintainer): the optional `comment?`/`reason?` live on `closeIssue` (the rare, mutation-about method), NOT as a `close?` flag on `postIssueComment` (the common, advisory method) — keeps the common comment-poster simple. Bounce passes `reason: 'not planned'` (the honest GitHub-native signal).
+- **BLOCKING review catch:** D said "degrade like `postIssueComment`" — but `postIssueComment` STILL hard-codes the "`gh` is unavailable or unauthenticated" misattribution that the lock fix removed from `mutateLabel`. Following it would have propagated the bug into new code. D now degrades via `ghFailureReason` (the real cause). Captured the surviving stale string as its own cleanup observation: `work/observations/issue-provider-hardcoded-gh-unauth-string-survives-in-comment-and-comment-paths.md`.
+- **Reconciliation gap:** D's "correct the never-closes statements" list was missing the bluntest one — the `dispatchComment` DOC-COMMENT ("left OPEN in BOTH cases ... never `intake`'s"), the function D modifies. Now all FOUR statements are listed.
+- **Precision:** `dispatchComment` is SHARED by ask+bounce; D now says "close conditionally on `outcome === 'bounced'` inside the shared function" (not a separate bounce fn), and adds an additive `closed?: boolean` to `IntakeResult` (mirroring `commented?`).
+
 ## Refs
 
 - Source: the `issue-intake` slice review session, 2026-06-09 (maintainer's challenge to B2's resolution).
