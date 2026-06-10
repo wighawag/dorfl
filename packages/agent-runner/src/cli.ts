@@ -1104,6 +1104,14 @@ export function buildProgram(): Command {
 				// The propose next-step block is printed verbatim (no `>> ` prefix)
 				// so its blank lines + heading stand out as the human call-to-action.
 				noteBlock: (message) => console.error(message),
+				// `complete` is a HUMAN command: a human finishing/merging the work, so
+				// the commit/push/PR is THEIRS — it is deliberately NOT given the runner
+				// `config.identity` (the autonomous completion is `do`'s own integrated
+				// complete, which IS identity-aware). Thread the ambient `process.env`
+				// EXPLICITLY so the human-identity choice is declared at the call site,
+				// not left to the seam's silent `?? process.env` fallback (parity with
+				// `requeue`).
+				env: process.env,
 			});
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
@@ -1632,12 +1640,22 @@ export function buildProgram(): Command {
 			// Route the requeue (default keep+continue / --reset discard / -m handoff)
 			// THROUGH the ledger write seam's transition (same seam the needs-attention
 			// move uses), not the helper.
+			//
+			// `requeue` is a HUMAN command (like `complete`): the human is putting a
+			// resolved item back, so the move/commit/push is THEIRS — it is NOT given
+			// the runner identity (`config.identity`). The autonomous re-attempt is
+			// `do` (which IS identity-aware), not this. We thread the ambient
+			// `process.env` EXPLICITLY so the human-identity choice is visible at the
+			// call site, rather than relying on the seam's silent `?? process.env`
+			// default by omission (the implicit fallback that made `requeue`'s human
+			// attribution accidental rather than declared).
 			const result = ledgerWrite.applyReturnToBacklogTransition({
 				cwd,
 				slug,
 				arbiter: flags.arbiter,
 				reset: flags.reset,
 				message: flags.message,
+				env: process.env,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (!result.moved) {
