@@ -255,7 +255,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(onBranch).not.toContain('suppresses the >> notes');
 	});
 
-	it('CAP = 3 HARD-CODED: a never-converging review stops after EXACTLY 3 rounds and flips to ASK (no infinite loop, no silent emit)', async () => {
+	it('CAP = 3 HARD-CODED: a never-converging review that keeps PROPOSING EDITS stops after EXACTLY 3 rounds and flips to ASK (no infinite loop, no silent emit)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 9}});
 		let rounds = 0;
@@ -265,12 +265,16 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
-			// ALWAYS blocks (never converges) — the hard cap must terminate it.
+			// ALWAYS blocks but ALWAYS proposes an edit (still tightening — never a
+			// no-edit blocking question, so the early-flip does NOT fire) — the hard cap
+			// is what must terminate it. A blocking round that proposes an `edit` is
+			// iterated; only the cap stops this one.
 			reviewSlice: async () => {
 				rounds++;
 				return {
 					verdict: 'block',
 					findings: [{severity: 'blocking', question: 'still unclear'}],
+					edit: `## What to build\n\nrevision ${rounds}\n`,
 					questions: ['What does --quiet actually suppress?'],
 				};
 			},
@@ -290,24 +294,33 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		);
 	});
 
-	it('NON-CONVERGE flips SLICE→ASK: ONE comment carrying BOTH the draft AND the open question(s), stamped kind=ask, NO slice written/integrated', async () => {
+	it('NON-CONVERGE flips SLICE→ASK EARLY (round 1, no edit) — ONE comment carrying BOTH the draft AND the open question(s), stamped kind=ask, NO slice written/integrated', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 11}});
+		let rounds = 0;
 		const result = await performIntake({
 			issueNumber: 11,
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
-			// A blocking question with no clear thread answer on round 1 → flip to ASK.
-			reviewSlice: async () => ({
-				verdict: 'block',
-				findings: [{severity: 'blocking', question: 'destination check fails'}],
-				questions: ['Should --quiet also suppress warnings, or only notes?'],
-			}),
+			// A blocking question with no clear thread answer AND no edit to apply on
+			// round 1 → flip to ASK IMMEDIATELY (early flip — does not burn rounds 2/3).
+			reviewSlice: async () => {
+				rounds++;
+				return {
+					verdict: 'block',
+					findings: [
+						{severity: 'blocking', question: 'destination check fails'},
+					],
+					questions: ['Should --quiet also suppress warnings, or only notes?'],
+				};
+			},
 			env: gitEnv(),
 		});
 
+		// It flipped on the FIRST round — it did NOT iterate to the cap (early flip).
+		expect(rounds).toBe(1);
 		expect(result.exitCode).toBe(0);
 		// Reuses the EXISTING `asked` outcome — no new IntakeRunOutcome.
 		expect(result.outcome).toBe('asked');
@@ -341,9 +354,9 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			decide: async () => SLICE_VERDICT,
 			reviewSlice: async () => {
 				round++;
-				// Round 1: tighten the draft (edit) AND block with an open question that
-				// no edit can resolve → the cap eventually flips to ASK with the tightened
-				// draft.
+				// Round 1: tighten the draft (an `edit`) AND block — because it proposes an
+				// edit it is ITERATED (no early flip). Round 2: block with an open question
+				// and NO edit → EARLY FLIP to ASK, carrying the round-1 tightened draft.
 				return {
 					verdict: 'block',
 					findings: [{severity: 'blocking', question: 'needs the human'}],
@@ -357,7 +370,8 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		});
 
 		expect(result.outcome).toBe('asked');
-		expect(round).toBe(3);
+		// Round 1 proposed an edit (iterated); round 2 blocked with no edit → early flip.
+		expect(round).toBe(2);
 		const body = issueProvider.comments[0].body;
 		// The ASK draft reflects the round-1 edit (the refined draft, not the original).
 		expect(body).toContain('TIGHTENED-DRAFT-MARKER');

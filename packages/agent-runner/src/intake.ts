@@ -1772,10 +1772,35 @@ async function runLoneSliceReview(params: {
 				passes,
 			};
 		}
+		// EARLY FLIP → ASK (the non-converge trigger the source observation names
+		// FIRST: "a blocking question with NO clear answer in the issue thread"). When a
+		// round BLOCKS, carries open `questions`, and proposes NO `edit`, the agent is
+		// saying "this needs the HUMAN, I have nothing left to tighten" — so flip to ASK
+		// NOW rather than burning the remaining rounds (which cannot resolve a question
+		// only the human can answer). Symmetric with the early CONVERGE return above; it
+		// retires the "flips only at the cap" behaviour (PR #62 review nit #1). A `block`
+		// that DID propose an `edit` is still iterated — the edit may converge it; only a
+		// no-edit blocking question short-circuits.
+		const hasEdit = verdict.edit !== undefined && verdict.edit.trim() !== '';
+		const earlyQuestions = loneSliceBlockingQuestions(verdict);
+		if (!hasEdit && earlyQuestions.length > 0) {
+			note(
+				`Intake lone-slice review round ${round}/${LONE_SLICE_REVIEW_MAX_ROUNDS} ` +
+					`surfaced a blocking question with no edit to apply; flipping SLICE→ASK ` +
+					`early (no clear thread answer — the human must decide).`,
+			);
+			return {
+				outcome: 'non-converge',
+				title: draftTitle,
+				body,
+				questions: earlyQuestions,
+				passes,
+			};
+		}
 		note(
 			`Intake lone-slice review round ${round}/${LONE_SLICE_REVIEW_MAX_ROUNDS} ` +
 				`found ${loneSliceBlockingCount(verdict)} blocking issue(s)` +
-				`${verdict.edit !== undefined && verdict.edit.trim() !== '' ? ' (an edit was applied)' : ''}.`,
+				`${hasEdit ? ' (an edit was applied)' : ''}.`,
 		);
 	}
 	// The cap was hit with a still-`block` verdict → NON-CONVERGE (flip SLICE→ASK).
