@@ -126,6 +126,9 @@ describe('performClaim — not claimable (exit 2)', () => {
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
+		// The done/absent message stays plain (no "continue your own item" hint).
+		expect(result.message).toMatch(/not found on/);
+		expect(result.message).not.toMatch(/resume/);
 	});
 
 	it('returns "lost" when the item is already in-progress on the arbiter', async () => {
@@ -151,6 +154,13 @@ describe('performClaim — not claimable (exit 2)', () => {
 		});
 		expect(second.exitCode).toBe(2);
 		expect(second.outcome).toBe('lost');
+		// The in-progress message points a user re-running on their OWN item at the
+		// real recovery verbs (resume / work-on / requeue) rather than only
+		// "pick another item".
+		expect(second.message).toMatch(/already in-progress/);
+		expect(second.message).toMatch(/resume/);
+		expect(second.message).toMatch(/work-on/);
+		expect(second.message).toMatch(/requeue/);
 	});
 });
 

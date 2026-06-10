@@ -265,7 +265,7 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 	// Is the item still claimable on the arbiter's main?
 	if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
 		if (await catFileExists(`${arbiter}/main:${inProgress}`, cwd, env)) {
-			const message = `'${slug}' is already in-progress on ${arbiter}/main — someone claimed it. Pick another item.`;
+			const message = `'${slug}' is already in-progress on ${arbiter}/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
 			note(message);
 			return {kind: 'lost', message};
 		}
