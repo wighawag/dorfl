@@ -102,6 +102,8 @@ Classify each source by what it should BECOME (this is the table you showed at A
 - **The source code itself** — B3 (generate understanding **and hunt decisions**): description of OUR code → **`CONTEXT.md` / `docs/`**; _external behaviour our code integrates with_ → a **finding** (with `source:`); AND — separately and always — the **deliberate decisions** the code embodies → B3b actively hunts these and asks the user (→ ADRs). Do not forget the decision hunt; it is the highest-value output and the easiest to skip.
 - **Loose "we should…" / "known issue" notes** → **ideas** (proposed) or **observations** (spotted, unverified).
 
+**CONVERGE sources that describe the SAME thing into ONE item — do not create one item per source.** Two different sources often point at the same feature (e.g. a one-line entry in a task list AND a detailed design doc elsewhere are the same ask at two fidelities). When that happens, produce a **single** item at the richest appropriate fidelity (here, the design doc → a PRD) and route the thinner source INTO it — do NOT also emit a separate idea/slice for the thin source that merely re-describes the same feature. One feature → one item. (A cross-reference stub that says "see the PRD" is still a redundant second item — fold the thin source's content into the one item instead.) The same applies across buckets: do not let one decision become both an ADR and an observation, or one ask become both a PRD and an idea.
+
 ### B2. Convert the task/work system → PRDs + slices + ideas
 
 - A single, clear, buildable ask → a **`work/backlog/<slug>.md`** slice (`to-slices`' slice shape; `covers: []`, no `prd:` — its own source of truth).
