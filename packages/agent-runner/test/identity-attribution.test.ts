@@ -55,8 +55,28 @@ const editingAgent: AgentRunner = ({cwd, slug}) => {
  * (CI/tooling that sets these vars), not just an artificially-clean one.
  */
 function hostileAmbientEnv(): NodeJS.ProcessEnv {
+	const env = {...process.env};
+	// STRIP any identity-bearing vars the developer's/CI's real shell may carry
+	// (e.g. a real `GH_TOKEN` from `gh auth`, or a configured runner identity).
+	// Without this the baseline is not actually "ambient with no identity": an
+	// inherited GH_TOKEN would make the "agent stays ambient" assertions assert
+	// against a polluted baseline. The test must OWN its baseline, not inherit it.
+	for (const k of [
+		'GH_TOKEN',
+		'GITHUB_TOKEN',
+		'GIT_CONFIG_PARAMETERS',
+		'GIT_SSH_COMMAND',
+		'GIT_AUTHOR_NAME',
+		'GIT_AUTHOR_EMAIL',
+		'GIT_COMMITTER_NAME',
+		'GIT_COMMITTER_EMAIL',
+	]) {
+		delete env[k];
+	}
 	return {
-		...process.env,
+		...env,
+		// Re-add the DECOY human author/committer (the adversarial case): the bot
+		// identity must still win over these.
 		GIT_AUTHOR_NAME: 'Ambient Human',
 		GIT_AUTHOR_EMAIL: 'human@corp.test',
 		GIT_COMMITTER_NAME: 'Ambient Human',
