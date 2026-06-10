@@ -174,6 +174,16 @@ function stubIssueProvider(
 	return provider;
 }
 
+/**
+ * A canned CONVERGING lone-slice review gate (the STUBBED review seam — no
+ * model/network): every round `approve`s with no blocking finding and proposes no
+ * edit, so the drafted slice is emitted unchanged. The bounded review
+ * (`intake-lone-slice-bounded-internal-review`) is ALWAYS ON (ruling B), so every
+ * slice-outcome test must drive this new seam alongside the decision seam.
+ */
+const convergingReviewGate: import('../src/intake.js').LoneSliceReviewGate =
+	async () => ({verdict: 'approve', findings: []});
+
 /** A canned `slice` verdict (the STUBBED decision seam — no model/network). */
 const SLICE_VERDICT: IntakeVerdict = {
 	outcome: 'slice',
@@ -205,6 +215,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			// default integration (propose); no provider override (file:// ⇒ none)
 			env: gitEnv(),
 		});
@@ -256,6 +267,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 7}}),
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 
@@ -281,6 +293,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 				headAtDecision = gitIn(['rev-parse', 'HEAD'], cwd).trim();
 				return SLICE_VERDICT;
 			},
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -321,6 +334,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 				sliceTitle: 'Fix the Broken Login Button',
 				sliceBody: undefined,
 			}),
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -366,6 +380,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: failingProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(1);
@@ -508,6 +523,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			arbiter: ARBITER,
 			issueProvider: sliceProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(sliced.outcome).toBe('sliced');
@@ -718,6 +734,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 				);
 				return SLICE_VERDICT;
 			},
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 
@@ -803,6 +820,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -915,6 +933,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -944,6 +963,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			// The SLICE mode resolves to merge (e.g. from `--merge-slice`); the PRD mode
 			// is irrelevant for a slice verdict.
 			integration: {slice: 'merge', prd: 'propose'},
@@ -972,6 +992,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			integration: {slice: 'propose', prd: 'merge'},
 			env: gitEnv(),
 		});
@@ -1758,6 +1779,7 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + slices.
@@ -1792,6 +1814,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			// propose (default) → the comment links the PR
 			env: gitEnv(),
 		});
@@ -1852,6 +1875,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			integration: {slice: 'merge', prd: 'propose'},
 			env: gitEnv(),
 		});
@@ -1928,6 +1952,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider: lockedProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(locked.outcome).toBe('locked');
@@ -1984,6 +2009,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -2009,6 +2035,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider: first,
 			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(sliced.outcome).toBe('sliced');

@@ -250,6 +250,12 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 			issueProvider,
 			// NO `decide` — production wires the harness; the verdict rides `output`.
 			harness: spyHarness(agentOutput),
+			// Stub the lone-slice review seam to CONVERGE (this test exercises the
+			// DECISION verdict wire, not the bounded review — the review's own
+			// production wire is tested separately). The spy harness returns an
+			// `{outcome:…}` block (not a `{verdict:…}` one), so without this stub the
+			// review parse would degrade to agent-failed.
+			reviewSlice: async () => ({verdict: 'approve', findings: []}),
 			env: gitEnv(),
 		});
 
