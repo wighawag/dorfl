@@ -68,3 +68,7 @@ git mv work/in-progress/advance-verb-resolver.md work/done/advance-verb-resolver
 ## Needs attention
 
 transient infra: {"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_011CbwpN666Kz46qPnsmf2ZY"           }
+
+## Requeue 2026-06-11
+
+Transient infra failure (Anthropic overloaded_error, req_011CbwpN666Kz46qPnsmf2ZY) — NOT a code/work problem. Partial work saved on the branch; continue from its tip and finish the slice.

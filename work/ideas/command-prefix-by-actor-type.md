@@ -87,3 +87,13 @@ LEGIBLE at the surface instead of buried in docs — both for humans onboarding 
 for an agent that emits agent-runner commands and should never accidentally reach
 for a human verb (or vice-versa). It is the naming-layer complement to the
 identity feature's RUNTIME enforcement of the same split.
+
+## Update (2026-06-11): a THIRD actor — the `assistant`
+
+This idea models TWO actor classes (human, agent). A later chat surfaced a THIRD:
+the **assistant** — an agent in conversation WITH a human (e.g. driving
+`drive-backlog`), which is neither the unattended bot nor the bare human. It needs
+its own identity AND its own authenticated verbs (`approve`/`commit`/`push`/`gh`-
+write). See `assistant-identity-and-authenticated-verbs` (the actor + verb family)
+and `approve-verb-seamed-over-host-provider` (the first verb). The prefix scheme
+here should be reconsidered for THREE actor classes, not two.
