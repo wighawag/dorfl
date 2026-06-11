@@ -37,7 +37,35 @@ export type {EnvMap} from './env-config.js';
 export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 
 export type {Frontmatter} from './frontmatter.js';
-export {parseFrontmatter} from './frontmatter.js';
+export {parseFrontmatter, setNeedsAnswersMarker} from './frontmatter.js';
+
+export type {
+	SidecarType,
+	SidecarDisposition,
+	SidecarEntry,
+	SidecarModel,
+	SidecarIdentity,
+	NewQuestion,
+} from './sidecar.js';
+export {
+	SidecarParseError,
+	isEntryAnswered,
+	pendingEntries,
+	allAnswered,
+	resolveSidecarIdentity,
+	sidecarPathFor,
+	parseSidecar,
+	serialiseSidecar,
+	appendQuestions,
+	newSidecar,
+} from './sidecar.js';
+
+export type {
+	ApplyMode,
+	ApplyAtomicOptions,
+	ApplyAtomicResult,
+} from './sidecar-apply.js';
+export {ApplyAtomicError, applyAtomic} from './sidecar-apply.js';
 
 export {isParticipatingRepo, findParticipatingRepos} from './detect.js';
 
