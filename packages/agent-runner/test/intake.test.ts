@@ -1214,6 +1214,59 @@ function writeGhFreshRepoLabelStub(): {bin: string; argsFile: string} {
 	return {bin, argsFile};
 }
 
+/**
+ * A `gh` stub modelling a fresh repo whose token CANNOT create labels: the FIRST
+ * `issue edit --add-label` fails with `'<label>' not found` (the fresh-repo SYMPTOM),
+ * and the subsequent `label create` fails with the given permission stderr (exit 1).
+ * Used to assert `mutateLabel` surfaces the CREATE's REAL cause, NOT the stale
+ * `'<label>' not found` add failure.
+ */
+function writeGhCreateForbiddenStub(stderr: string): {
+	bin: string;
+	argsFile: string;
+} {
+	const bin = join(scratch.root, 'gh-create-forbidden.sh');
+	const argsFile = join(scratch.root, 'gh-create-forbidden-args.txt');
+	const script = [
+		'#!/usr/bin/env bash',
+		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
+		'sub=""',
+		'for a in "$@"; do',
+		'  if [ "$a" = "edit" ] || [ "$a" = "create" ]; then sub="$a"; fi',
+		'done',
+		`if [ "$sub" = "create" ]; then printf '%s\\n' ${JSON.stringify(stderr)} 1>&2; exit 1; fi`,
+		`if [ "$sub" = "edit" ]; then printf "'${PROCESSING_LOCK_LABEL}' not found\\n" 1>&2; exit 1; fi`,
+		'exit 0',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
+/**
+ * A `gh` stub whose `issue comment` ALWAYS fails with the given stderr (exit 1) —
+ * used to assert `postIssueComment` DEGRADES (no throw) and surfaces the REAL
+ * stderr rather than the hard-coded "unavailable or unauthenticated" guess.
+ */
+function writeGhFailingCommentStub(stderr: string): {
+	bin: string;
+	argsFile: string;
+} {
+	const bin = join(scratch.root, 'gh-failing-comment.sh');
+	const argsFile = join(scratch.root, 'gh-failing-comment-args.txt');
+	const script = [
+		'#!/usr/bin/env bash',
+		`printf '%s\\n' "$@" >> ${JSON.stringify(argsFile)}`,
+		'for a in "$@"; do',
+		`  if [ "$a" = "comment" ]; then printf '%s\\n' ${JSON.stringify(stderr)} 1>&2; exit 1; fi`,
+		'done',
+		'exit 0',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
 describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', () => {
 	it('getIssue shells out to `gh issue view <N> --json …` and parses the issue', async () => {
 		const stub = writeGhIssueStub();
@@ -1480,6 +1533,52 @@ describe('GitHubIssueProvider — gh confined to the adapter (stubbed ghBin)', (
 		});
 		expect(result.posted).toBe(false);
 		expect(result.instruction).toContain('the question'); // text never lost
+	});
+
+	it('postIssueComment surfaces the REAL gh stderr on a non-auth failure, NOT the hard-coded "unavailable or unauthenticated" guess', async () => {
+		// A `gh issue comment` that fails for a reason OTHER than auth (e.g. a 403
+		// permissions error / a deleted issue) must surface that real stderr — the
+		// same misattribution removed from `mutateLabel`/`closeIssue`.
+		const stub = writeGhFailingCommentStub('HTTP 403: Resource not accessible');
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.postIssueComment({
+			cwd: scratch.root,
+			issueNumber: 40,
+			body: 'please clarify',
+		});
+		expect(result.posted).toBe(false);
+		// The ACTUAL gh stderr is surfaced (diagnosable) — NOT the old hard-coded guess.
+		expect(result.instruction).toMatch(/403/);
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/i);
+		// The comment text is never lost on degrade.
+		expect(result.instruction).toContain('please clarify');
+	});
+
+	it("addLabel surfaces the CREATE's REAL cause on a permission-denied `gh label create` (fresh repo), NOT the stale `not found` add failure", async () => {
+		// A fresh repo whose token cannot create labels: the add fails `'<label>' not
+		// found` (the SYMPTOM), then `gh label create` fails with a permissions error.
+		// The reported reason must be the CREATE's real stderr, NOT the `not found`.
+		const stub = writeGhCreateForbiddenStub(
+			'0xronan7 does not have the correct permissions to execute AddLabelsToLabelable',
+		);
+		const provider = new GitHubIssueProvider({ghBin: stub.bin});
+		const result = await provider.addLabel({
+			cwd: scratch.root,
+			issueNumber: 40,
+			label: PROCESSING_LOCK_LABEL,
+		});
+		expect(result.outcome).toBe('failed');
+		expect(result.applied).toBe(false);
+		// The CREATE's real cause is surfaced — NOT the stale fresh-repo `not found`.
+		expect(result.reason).toMatch(/correct permissions/);
+		expect(result.instruction).toMatch(/correct permissions/);
+		expect(result.reason).not.toMatch(/not found/i);
+		expect(result.instruction).not.toMatch(/not found/i);
+		// It DID attempt the create (the retry path), proving the surfaced cause is the
+		// create's, not the add's.
+		const args = readFileSync(stub.argsFile, 'utf8');
+		expect(args).toMatch(/^label$/m);
+		expect(args).toMatch(/^create$/m);
 	});
 
 	it('a missing gh binary degrades the comment poster (no throw)', async () => {
