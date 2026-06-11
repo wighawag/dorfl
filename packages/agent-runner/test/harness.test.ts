@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {existsSync, readFileSync} from 'node:fs';
-import {NullHarness} from '../src/harness.js';
+import {NullHarness, isBenignPromptWriteError} from '../src/harness.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -72,6 +72,58 @@ describe('NullHarness — launch', () => {
 			command: 'true',
 		});
 		expect(result.output).toBeUndefined();
+	});
+});
+
+describe('NullHarness — EPIPE on the prompt write is benign (flake fix)', () => {
+	// The null/shell adapter feeds the prompt on stdin. When the prompt is empty
+	// (the autonomous review/arbiter launches), a child that closes stdin before
+	// the parent's zero-byte write surfaces as `EPIPE` under concurrent load. That
+	// write failing is harmless — there was nothing to deliver and stdout/status
+	// are still captured — so `launch` must NOT throw, while every OTHER spawn
+	// error still throws.
+	it('classifies EPIPE as benign and any other spawn error as fatal', () => {
+		const epipe = Object.assign(new Error('spawnSync bash EPIPE'), {
+			code: 'EPIPE',
+		});
+		const enoent = Object.assign(new Error('spawnSync bash ENOENT'), {
+			code: 'ENOENT',
+		});
+		expect(isBenignPromptWriteError(epipe)).toBe(true);
+		expect(isBenignPromptWriteError(enoent)).toBe(false);
+		// No `code` at all (a plain Error) is NOT benign — only EPIPE is.
+		expect(isBenignPromptWriteError(new Error('boom'))).toBe(false);
+	});
+
+	it('does NOT throw when the prompt write hits a real EPIPE; still captures output', () => {
+		// Deterministically reproduce the race: a child that closes its stdin and
+		// exits 0 while the parent writes a large prompt forces a real `EPIPE` on the
+		// write (verified: spawnSync still reports status 0 + captured stdout).
+		const harness = new NullHarness();
+		const result = harness.launch({
+			dir: scratch.root,
+			slug: 'feat',
+			command: 'printf the-answer; exec 0<&-',
+			prompt: 'x'.repeat(8 * 1024 * 1024),
+		});
+		// The EPIPE was swallowed: we got a normal result, not a thrown error.
+		expect(result.ok).toBe(true);
+		expect(result.output).toBe('the-answer');
+	});
+
+	it('a real NON-EPIPE spawn error still throws end-to-end', () => {
+		// Exercise the fatal-error branch through `launch` itself with a REAL spawn:
+		// a command whose stdout overflows the adapter's 64MB `maxBuffer` makes
+		// spawnSync set `result.error` with code `ENOBUFS` (a non-EPIPE error) — which
+		// must still throw, proving only EPIPE is tolerated, not every error.
+		const harness = new NullHarness();
+		expect(() =>
+			harness.launch({
+				dir: scratch.root,
+				slug: 'feat',
+				command: 'yes a | head -c 70000000',
+			}),
+		).toThrow(/failed to spawn harness command/);
 	});
 });
 
