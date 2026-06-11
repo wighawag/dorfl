@@ -444,6 +444,66 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
 	});
 
+	it('REGRESSION (`do prd:` titlePath read): the commit subject carries the PRD `title:` (read from titlePath, NOT the generic fallback)', async () => {
+		// The intake lone-slice fix threads its drafted title EXPLICITLY (its output
+		// file does not exist at title-read time). The `do prd:` SLICING path is
+		// UNCHANGED: its `titlePath` is the already-existing held PRD, so the core still
+		// READS the title from the file. This guards that read path keeps deriving the
+		// subject from the PRD `title:` (never degrading to `complete work slice`).
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// A DISTINCT multi-word title (not just the slug) so the subject is provably
+		// derived from the PRD title, not a generic fallback.
+		const dir = join(repo, 'work', 'prd');
+		mkdirSync(dir, {recursive: true});
+		writeFileSync(
+			join(dir, 'it.md'),
+			[
+				'---',
+				'title: Quiet and verbose output modes for the CLI',
+				'slug: it',
+				'---',
+				'',
+				'## Problem Statement',
+				'',
+				'PRD body.',
+				'',
+			].join('\n'),
+		);
+		run('git', ['add', '-A'], repo, {env: gitEnv()});
+		run('git', ['commit', '-q', '-m', 'prd: it'], repo, {env: gitEnv()});
+		run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
+
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			integration: 'merge',
+			agentRunner: ({cwd}) => {
+				const out = join(cwd, 'work', 'backlog');
+				mkdirSync(out, {recursive: true});
+				writeFileSync(
+					join(out, 'it-a.md'),
+					'---\nslug: it-a\nprd: it\n---\n\n## Prompt\n\n> x\n',
+				);
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+
+		const subject = run(
+			'git',
+			['log', '-1', '--format=%s', `${ARBITER}/main`],
+			repo,
+			{env: gitEnv()},
+		).stdout.trim();
+		expect(subject).toBe(
+			'slicing(it): Quiet and verbose output modes for the CLI; sliced',
+		);
+		expect(subject).not.toContain('complete work slice');
+	});
+
 	it('the content-identity stale check fires on a concurrent edit of the held PRD', async () => {
 		// The OUTPUT now integrates through the shared core (not the lock release), so
 		// the read-stability backstop is owned at the integrate seam. An agent that
