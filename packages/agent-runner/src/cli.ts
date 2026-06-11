@@ -60,6 +60,7 @@ import {
 } from './do-config.js';
 import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
 import {harnessSurfaceGate} from './surface-gate.js';
+import {harnessTriageGate} from './triage-gate.js';
 import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
@@ -1763,6 +1764,14 @@ export function buildProgram(): Command {
 				// dedicated `surfaceModel` config key is introduced by this slice.
 				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
 				surfaceModel: config.model,
+				// The observation TRIAGE rung is QUESTION-GATED by default; the
+				// `autoTriage` per-repo gate (the 3rd per-action gate) enables the
+				// conservative auto-disposition EXCEPTION. Surface + apply stay always
+				// allowed regardless. The triage gate spawns fresh-context through the
+				// SAME harness seam, on the configured model.
+				autoTriage: config.autoTriage,
+				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
+				triageModel: config.model,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

@@ -30,6 +30,10 @@ describe('repo-config constants', () => {
 		// `autoSlice` is the slicing-autonomy mirror of `allowAgents` — a genuine
 		// repo property, resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoSlice');
+		// `autoTriage` is the THIRD member of the flat per-action gate family (PRD
+		// `advance-loop`) — the observation-triage mirror of `allowAgents`/`autoSlice`,
+		// resolved per-repo through the same chain.
+		expect(REPO_ALLOWED_KEYS).toContain('autoTriage');
 		// `prdsFirst` (the slices-first/PRD priority toggle, ADR §3) is a per-repo
 		// property resolved through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('prdsFirst');
@@ -243,6 +247,37 @@ describe('resolveRepoConfig — per-key layering', () => {
 				env: {AGENT_RUNNER_AUTO_SLICE: 'false'},
 				flags: {autoSlice: true},
 			}).config.autoSlice,
+		).toBe(true);
+	});
+
+	it('resolves `autoTriage` flag > env > per-repo > global > default false (the 3rd gate, like autoSlice)', () => {
+		// default false; bare global ⇒ stays the built-in default false.
+		expect(
+			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
+				.config.autoTriage,
+		).toBe(false);
+		// per-repo opts in over a false global.
+		writeRepoConfig(repo, {autoTriage: true});
+		const global = mergeConfig({autoTriage: false});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoTriage,
+		).toBe(true);
+		// env (AGENT_RUNNER_AUTO_TRIAGE) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_AUTO_TRIAGE: 'false'},
+			}).config.autoTriage,
+		).toBe(false);
+		// a flag beats env, per-repo, and global.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_AUTO_TRIAGE: 'false'},
+				flags: {autoTriage: true},
+			}).config.autoTriage,
 		).toBe(true);
 	});
 

@@ -61,6 +61,11 @@ export const REPO_ALLOWED_KEYS = [
 	// genuine repo property — the slicing-autonomy mirror of `allowAgents`
 	// (`work/prd/auto-slice.md`), resolved per-repo through the same chain.
 	'autoSlice',
+	// `autoTriage` (may an agent auto-disposition an observation in the conservative
+	// no-question cases?) is a genuine repo property — the THIRD member of the flat
+	// per-action gate family (PRD `advance-loop`), the observation-triage mirror of
+	// `allowAgents`/`autoSlice`, resolved per-repo through the same chain.
+	'autoTriage',
 	// `prdsFirst` (does an auto-pick/-n/multi selection take sliceable PRDs before
 	// eligible slices?) is a genuine repo property — the per-repo toggle ADR §3
 	// specifies for the slices-first priority, resolved per-repo like `autoSlice`.
