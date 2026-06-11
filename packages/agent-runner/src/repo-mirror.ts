@@ -1,7 +1,13 @@
 import {existsSync, mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {git, run} from './git.js';
-import {REPO_CONFIG_FILENAME} from './repo-config.js';
+import type {Config, PartialConfig} from './config.js';
+import {
+	REPO_CONFIG_FILENAME,
+	loadRepoConfigFromContent,
+	resolveRepoConfigFromLoaded,
+	type LoadedRepoConfig,
+} from './repo-config.js';
 
 /**
  * The shared **hub-mirror primitive**: one bare mirror per repo under
@@ -226,6 +232,41 @@ export function readRepoConfigFromMirrorMain(
 	throw new Error(
 		`git show ${spec} failed in ${mirrorDir} (exit ${res.status}): ${stderr.trim()}`,
 	);
+}
+
+/**
+ * Resolve a repo's effective {@link Config} for a NO-CHECKOUT path by layering its
+ * COMMITTED `.agent-runner.json` (read from the bare hub mirror's `main` via
+ * {@link readRepoConfigFromMirrorMain}) into the SAME
+ * `flag > env > per-repo > global > default` chain a working checkout uses
+ * ({@link resolveRepoConfigFromLoaded}). This is the reusable core of `do
+ * --remote`'s inline per-repo resolution (`resolveRemoteRepoConfig` in `cli.ts`):
+ * the mirror is assumed ALREADY ensured + fetched by the caller (the read paths
+ * fetch-first), so this only READS its `main` config and layers it.
+ *
+ * Resilient: a config-less repo (no file on `main`) resolves to exactly
+ * global + flags (byte-identical to the no-per-repo behaviour). A genuine
+ * read fault is propagated by {@link readRepoConfigFromMirrorMain}; a caller that
+ * must never block on a fault (a read-only scan) catches + falls back to
+ * global + flags itself.
+ */
+export function resolveRepoConfigFromMirror(options: {
+	/** The bare hub mirror directory whose `main:.agent-runner.json` to read. */
+	mirrorPath: string;
+	/** The global + default config layer (from `loadConfig`/`mergeConfig`). */
+	global: Config;
+	/** Optional flag overrides (highest precedence). */
+	flags?: PartialConfig;
+	env?: NodeJS.ProcessEnv;
+}): Config {
+	const {mirrorPath, global, flags, env} = options;
+	const content = readRepoConfigFromMirrorMain(mirrorPath, env);
+	const label = `${mirrorPath}#main:${REPO_CONFIG_FILENAME}`;
+	const loaded: LoadedRepoConfig =
+		content === undefined
+			? {path: label, config: {}, rejected: []}
+			: loadRepoConfigFromContent(content, label);
+	return resolveRepoConfigFromLoaded(loaded, {global, flags}).config;
 }
 
 /** The bare mirror's `main` tip (40-hex sha), as freshly fetched. */

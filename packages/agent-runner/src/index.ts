@@ -348,7 +348,14 @@ export {
 	ensureMirror,
 	fetchMirrorMain,
 	mirrorMainSha,
+	resolveRepoConfigFromMirror,
 } from './repo-mirror.js';
+
+export type {
+	ScanMirrorPoolOptions,
+	MirrorPoolScanResult,
+} from './mirror-pool-scan.js';
+export {scanMirrorPool} from './mirror-pool-scan.js';
 
 export type {JobRecord, JobState, CreateJobOptions, Job} from './workspace.js';
 export {
