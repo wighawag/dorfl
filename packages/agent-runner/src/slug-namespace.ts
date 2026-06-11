@@ -34,8 +34,15 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  * `slice:`/`prd:` prefixes are the command-line form of that one rule.
  */
 
-/** The two namespaces a slug can name. */
-export type SlugNamespace = 'slice' | 'prd';
+/**
+ * The namespaces a slug can name. `slice`/`prd` are the original §3a pair that
+ * `do` spans; `observation` is the NEW namespace the `advance` verb adds (PRD
+ * `advance-loop`, slice `advance-verb-resolver`) so `advance obs:<slug>` can name
+ * an observation to triage. The `do`-family resolvers (`resolveSlug`,
+ * `resolveSliceOnlyArg`) deliberately do NOT span `observation` — only the
+ * `advance` resolver does (see {@link resolveAdvanceArg}).
+ */
+export type SlugNamespace = 'slice' | 'prd' | 'observation';
 
 /**
  * The PRODUCER axis (ORTHOGONAL to {@link SlugNamespace}): WHICH lifecycle
@@ -133,6 +140,13 @@ export interface ResolvedSlug {
 /** The explicit-prefix forms the resolver understands. */
 const SLICE_PREFIX = 'slice:';
 const PRD_PREFIX = 'prd:';
+/**
+ * The observation namespace's prefixes: the short `obs:` CLI alias and the
+ * canonical `observation:` long form both parse to the `observation` namespace.
+ * Only the `advance` resolver acts on this namespace; `do` rejects it.
+ */
+const OBS_PREFIX = 'obs:';
+const OBSERVATION_PREFIX = 'observation:';
 
 /**
  * Raised when a slug argument cannot be resolved: an ambiguous bare slug
@@ -159,6 +173,15 @@ export function parseSlugArg(arg: string): ParsedSlugArg {
 	}
 	if (arg.startsWith(PRD_PREFIX)) {
 		return {explicit: 'prd', slug: arg.slice(PRD_PREFIX.length)};
+	}
+	if (arg.startsWith(OBSERVATION_PREFIX)) {
+		return {
+			explicit: 'observation',
+			slug: arg.slice(OBSERVATION_PREFIX.length),
+		};
+	}
+	if (arg.startsWith(OBS_PREFIX)) {
+		return {explicit: 'observation', slug: arg.slice(OBS_PREFIX.length)};
 	}
 	return {explicit: undefined, slug: arg};
 }
@@ -219,6 +242,16 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 	const read = input.read ?? ledgerRead;
 	const parsed = parseSlugArg(input.arg);
 
+	if (parsed.explicit === 'observation') {
+		// `do` spans the slice/PRD namespaces ONLY (build a slice OR slice a PRD).
+		// The `observation` namespace is `advance`'s alone (triage). Reject it here
+		// rather than let a `do obs:<slug>` resolve into a namespace `do` cannot act
+		// on — point the human at the verb that owns it.
+		throw new SlugResolutionError(
+			`'${input.arg}' names an observation, which \`do\` does not act on. ` +
+				`Use \`advance obs:${parsed.slug}\` to triage it.`,
+		);
+	}
 	if (parsed.explicit !== undefined) {
 		// Explicit prefix: unambiguous by construction. No existence check.
 		return {namespace: parsed.explicit, slug: parsed.slug, explicit: true};
@@ -226,6 +259,48 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 
 	// Bare slug: resolve to the slice, but ONLY after the cross-namespace check.
 	// A slice/PRD collision is a loud ERROR — never a silent guess.
+	if (prdExists(read, input.repoPath, parsed.slug)) {
+		throw new SlugResolutionError(
+			`'${parsed.slug}' is ambiguous: both a slice and a PRD share that slug. ` +
+				`Use \`slice:${parsed.slug}\` or \`prd:${parsed.slug}\` to disambiguate.`,
+		);
+	}
+	return {namespace: 'slice', slug: parsed.slug, explicit: false};
+}
+
+/**
+ * Resolve a slug argument for the `advance` verb (PRD `advance-loop`, slice
+ * `advance-verb-resolver`). `advance` is the SIBLING top-level verb (NOT a `do`
+ * subcommand) that reuses this SAME shared `prefix:arg` resolver, EXTENDED with
+ * the `observation` namespace `do` does not span:
+ *
+ *   - `slice:<slug>`       → `{namespace: 'slice'}`       — unambiguous (no check).
+ *   - `prd:<slug>`         → `{namespace: 'prd'}`         — unambiguous (no check).
+ *   - `obs:<slug>` /
+ *     `observation:<slug>`  → `{namespace: 'observation'}` — unambiguous (no check).
+ *   - `<slug>` (bare)      → the **slice**, but ONLY after the SAME cheap
+ *     cross-namespace check `do` makes (no PRD shares the slug); on a slice/PRD
+ *     collision it throws {@link SlugResolutionError}, never silently guessing.
+ *
+ * The bare-slug cross-check is intentionally IDENTICAL to {@link resolveSlug}'s
+ * (bare = slice, error on a slice/PRD collision) — the "bare slug = slice"
+ * ergonomic is preserved exactly as `do` has it. An observation is NEVER reached
+ * by a bare slug; it must be named explicitly (`obs:<slug>`), because the bare
+ * path stays the slice/PRD two-namespace check (an observation sharing a slug
+ * does not make a bare slug ambiguous — a human typing a bare slug means the
+ * slice, as everywhere else).
+ */
+export function resolveAdvanceArg(input: ResolveSlugInput): ResolvedSlug {
+	const read = input.read ?? ledgerRead;
+	const parsed = parseSlugArg(input.arg);
+
+	if (parsed.explicit !== undefined) {
+		// Explicit prefix (slice / prd / observation): unambiguous by construction.
+		return {namespace: parsed.explicit, slug: parsed.slug, explicit: true};
+	}
+
+	// Bare slug: the SAME slice/PRD cross-namespace check `do` makes — bare = slice,
+	// a slice/PRD collision is a loud ERROR, never a silent guess.
 	if (prdExists(read, input.repoPath, parsed.slug)) {
 		throw new SlugResolutionError(
 			`'${parsed.slug}' is ambiguous: both a slice and a PRD share that slug. ` +
@@ -258,6 +333,12 @@ export function resolveSliceOnlyArg(arg: string): string {
 			`this command operates on slices, not PRDs — '${arg}' names a PRD. ` +
 				`Drop the \`prd:\` prefix to act on the slice, or use \`do ${arg}\` ` +
 				`to slice the PRD.`,
+		);
+	}
+	if (parsed.explicit === 'observation') {
+		throw new SlugResolutionError(
+			`this command operates on slices, not observations — '${arg}' names an ` +
+				`observation. Use \`advance obs:${parsed.slug}\` to triage it.`,
 		);
 	}
 	// Bare or `slice:` → the slice slug. (A bare slug on a slice-only command is

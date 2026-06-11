@@ -32,6 +32,7 @@ import {
 	resolveArbiterUrlFromCheckout,
 	type DoOptions,
 } from './do.js';
+import {performAdvance} from './advance.js';
 import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
 import {
 	performDoAuto,
@@ -1670,6 +1671,93 @@ export function buildProgram(): Command {
 
 			// Exactly one named item: the single-item in-place pipeline (do-in-place).
 			const result = await performDo({...baseDoOptions, arg: args[0]});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			}
+			process.exit(result.exitCode);
+		});
+
+	// `advance` — the SIBLING top-level verb (NOT a `do` subcommand; `do`
+	// subcommands + a standalone `slice` verb are REJECTED in PRD `advance-loop`).
+	// It reuses the SAME shared `prefix:arg` resolver `do` uses, EXTENDED with the
+	// `obs:` namespace, and wires the classify → lock → execute SKELETON: classify
+	// the rung (read-only, no model, no lock), take the `advancing` CAS borrow, then
+	// dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:` (never a
+	// duplicate), surface/apply/triage dispatch to a named executor seam later
+	// slices fill. The DRIVERS (one-shot/loop) + `-n` + per-action gates and the
+	// rung BODIES are LATER slices; the bare eligible-SET form errors clearly here.
+	program
+		.command('advance')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'Advance ONE work/ item one lifecycle rung toward ready/built (PRD advance-loop). advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation). Classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only: build/slice rungs ORCHESTRATE `do`/`do prd:` (one build path, one slice path), surface/apply/triage are later slices. The drivers (-n / loop) + per-action gates and the bare eligible-set form are later slices.',
+		)
+		.argument(
+			'[slug]',
+			'the item to advance: bare (= the slice), slice:<slug>, prd:<slug>, or obs:<slug> (an observation). Omit for the eligible-SET form (needs the driver slice).',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
+		)
+		.action(async (rawSlug: string | undefined, flags: DoFlags) => {
+			const cwd = process.cwd();
+			const global = loadConfig(flags.config);
+			const resolved = resolveRepoConfig({
+				repoPath: cwd,
+				global,
+				flags: doFlagOverrides(flags, undefined),
+			});
+			if (resolved.message) {
+				console.error(`>> ${resolved.message}`);
+			}
+			const config = resolved.config;
+			const harness = createHarness({
+				harness: config.harness,
+				piBin: config.piBin,
+			});
+			// The base `do` options the build/slice rungs ORCHESTRATE `performDo` with
+			// (the ONE build path / ONE slice path). `advance` is a driver ON TOP — it
+			// hands the resolved arg to `performDo`, never re-implementing it.
+			const doOptions: Omit<DoOptions, 'arg'> = {
+				cwd,
+				arbiter: flags.arbiter ?? config.defaultArbiter,
+				identity: config.identity,
+				autoSlice: config.autoSlice,
+				integration: config.integration,
+				verify: config.verify,
+				provider: config.provider,
+				harness,
+				agentCmd: config.agentCmd,
+				model: config.model,
+				sessionsDir: config.sessionsDir,
+				review: config.review,
+				autoMerge: config.autoMerge,
+				reviewModel: config.reviewModel,
+				reviewMaxRounds: config.reviewMaxRounds,
+				reviewGate: config.review
+					? harnessReviewGate({harness, agentCmd: config.agentCmd})
+					: undefined,
+				reviewLoop: config.slicerLoop
+					? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
+					: undefined,
+				slicerLoopMax: config.slicerLoopMax,
+				slicerLoopModel: config.slicerLoopModel,
+				sliceReviewGate: config.review
+					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+					: undefined,
+				color: shouldUseColor(process.stdout),
+				note: (message) => console.error(`>> ${message}`),
+				noteBlock: (message) => console.error(message),
+			};
+			const result = await performAdvance({
+				arg: rawSlug,
+				cwd,
+				arbiter: flags.arbiter ?? config.defaultArbiter,
+				doOptions,
+				note: (message) => console.error(`>> ${message}`),
+			});
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
 			}
