@@ -33,7 +33,7 @@ import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
-import {git, runAsync, localMainAheadCount} from './git.js';
+import {git, run, runAsync, localMainAheadCount} from './git.js';
 import {
 	identityEnv,
 	assertTransportAllowed,
@@ -1257,6 +1257,28 @@ async function isDirtyTree(
  * stuck/failed run). A human recovers via the human face (`requeue` + re-claim,
  * or `work-on`), NEVER by editing the agents'-area worktree.
  */
+/**
+ * Resolve the URL of a CHECKOUT's arbiter remote — the primitive `do --isolated`
+ * needs to point the job-worktree pipeline ({@link performDoRemote}) at MY OWN
+ * arbiter (`git -C <cwd> remote get-url <arbiter>`). Returns the URL, or
+ * `undefined` when the cwd is not a git repo or has no such remote (the
+ * "isolated against what?" case the CLI turns into a clear error naming
+ * `--remote <url>`). Does NOT fork the isolation/integrate path — it only feeds
+ * the EXISTING `performDoRemote` its `remote` URL.
+ */
+export function resolveArbiterUrlFromCheckout(
+	cwd: string,
+	arbiter: string,
+	env?: NodeJS.ProcessEnv,
+): string | undefined {
+	const res = run('git', ['remote', 'get-url', arbiter], cwd, {env});
+	if (res.status !== 0) {
+		return undefined;
+	}
+	const url = res.stdout.trim();
+	return url === '' ? undefined : url;
+}
+
 export async function performDoRemote(
 	options: DoRemoteOptions,
 ): Promise<DoResult> {

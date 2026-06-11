@@ -26,7 +26,12 @@ import {
 	persistHumanWorktreesDir,
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
-import {performDo, performDoRemote, type DoOptions} from './do.js';
+import {
+	performDo,
+	performDoRemote,
+	resolveArbiterUrlFromCheckout,
+	type DoOptions,
+} from './do.js';
 import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
 import {
 	performDoAuto,
@@ -186,6 +191,33 @@ function resolveRemoteRepoConfig(options: {
 }
 
 /**
+ * Resolve the arbiter URL for `do --isolated <slug>` from the CURRENT repo (cwd).
+ *
+ * `--isolated` builds in a job worktree off MY OWN arbiter (the same isolation +
+ * integrate pipeline `do --remote <url>` uses), so it needs the URL of the cwd's
+ * arbiter remote. It uses the SAME arbiter-remote resolution in-place `do` does:
+ * `--arbiter` > the resolved cwd `defaultArbiter` (the per-repo/global config), as
+ * the remote NAME, then `git remote get-url <name>` in the checkout to get its URL.
+ * That URL is then fed into the EXISTING `performDoRemote` pipeline as `remote`.
+ *
+ * Returns the URL, or `undefined` when there is no resolvable arbiter (cwd is not
+ * a git repo, or the named arbiter remote does not exist) — the "isolated against
+ * what?" case the caller turns into a clear error naming `--remote <url>`.
+ */
+function resolveDefaultArbiterForCwd(
+	cwd: string,
+	global: Config,
+	flags: PartialConfig,
+): string {
+	// The SAME per-repo config read in-place `do` uses (`resolveRepoConfig` on the
+	// cwd), so `--isolated` resolves the arbiter remote NAME (`defaultArbiter`)
+	// through the identical `flag > env > per-repo > global > default` chain. An
+	// absent `.agent-runner.json` falls back to the global/default (`origin`).
+	return resolveRepoConfig({repoPath: cwd, global, flags}).config
+		.defaultArbiter;
+}
+
+/**
  * First-use prompt for the human worktree root (`work-on`). Offers `suggestion`
  * as the default (Enter accepts it); a blank non-interactive answer aborts. The
  * prompt goes to stderr so `--print-dir`'s stdout stays clean.
@@ -326,6 +358,8 @@ interface DoFlags {
 	config?: string;
 	arbiter?: string;
 	remote?: string;
+	/** `--isolated`: build in a job worktree off THIS repo's arbiter (no checkout takeover). */
+	isolated?: boolean;
 	/** `-n <x>`: do x eligible items in sequence (auto-pick form). */
 	number?: string;
 	merge?: boolean;
@@ -1235,6 +1269,10 @@ export function buildProgram(): Command {
 			'run against a REGISTERED repo with NO checkout: materialise a hub mirror + job worktree in the agents\u2019 area (auto-registers an unknown remote), run the pipeline there, then reap (never touches the human area)',
 		)
 		.option(
+			'--isolated',
+			"build in an ISOLATED job worktree off THIS repo's arbiter (inferred from cwd) instead of taking over the current checkout, then integrate + reap \u2014 the in-place-but-isolated form (a single named item; not for -n/auto-pick). Orthogonal to --remote (a foreign repo); with --remote, remote wins (isolation is already implied).",
+		)
+		.option(
 			'--merge',
 			'integrate in merge mode this invocation (mutually exclusive with --propose; overrides config)',
 		)
@@ -1349,33 +1387,81 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 
-			// `do --remote <r>`: run against a REGISTERED repo with NO checkout. The
-			// repo's COMMITTED `.agent-runner.json` is reachable on `<arbiter>/main`
-			// (the mirror), so we DO layer it — restoring `flag > env > per-repo >
+			// `do --remote <r>` / `do --isolated <slug>`: run the NO-CHECKOUT job-worktree
+			// pipeline. Both materialise a hub mirror + job worktree in the agents' area
+			// (`workspacesDir`) and reap per ADR §4 — the human area is NEVER touched.
+			//
+			// `--remote <r>` names the TARGETING axis (a FOREIGN repo, no checkout); the
+			// arbiter spec is the `<r>` URL. `--isolated` names the ISOLATION intent (a
+			// worktree off MY OWN arbiter, even though I am inside the repo); its arbiter
+			// URL is RESOLVED FROM THE CWD's arbiter remote (the same `--arbiter` >
+			// per-repo/global `defaultArbiter` name in-place `do` uses). The two are
+			// ORTHOGONAL: `--isolated` + `--remote` is REDUNDANT (a foreign `--remote` is
+			// already isolated), so we accept it and `--remote` WINS (see `## Decisions`).
+			//
+			// In BOTH cases the repo's COMMITTED `.agent-runner.json` is reachable on
+			// `<arbiter>/main` (the mirror), so we layer it — `flag > env > per-repo >
 			// global > default` parity with in-place `do` (slice
 			// `remote-do-reads-per-repo-config-from-arbiter-main`). Only the whitelisted
 			// `REPO_ALLOWED_KEYS` are layered (host-only keys stay global/flag/env-only,
-			// rejected by the SAME `repo-config.ts` split). The worktree + mirror live in
-			// the agents' area (`workspacesDir`); the human area is NEVER touched.
-			if (flags.remote !== undefined) {
-				// `--remote` is the single-named-item, NO-checkout form. Auto-pick / `-n`
-				// / multi-arg selection is the IN-PLACE checkout's pools (this slice); a
-				// remote auto-pick would need a mirror-side pool scan (out of scope here).
+			// rejected by the SAME `repo-config.ts` split).
+			const isolatedNoRemote =
+				flags.isolated === true && flags.remote === undefined;
+			if (flags.remote !== undefined || isolatedNoRemote) {
+				// The form's user-facing name + canonical usage, for the shared error
+				// messages below (so `--isolated` errors read in its own terms).
+				const form = isolatedNoRemote ? '--isolated' : '--remote';
+				const usage = isolatedNoRemote
+					? '`do --isolated <slug>`'
+					: '`do --remote <r> <slug>`';
+				// The no-checkout forms are SINGLE-named-item. Auto-pick / `-n` / multi-arg
+				// selection is the IN-PLACE checkout's pools (a remote/isolated auto-pick
+				// would need a mirror-side pool scan — part (b), out of scope here).
 				if (count !== undefined) {
 					console.error(
-						'error: -n/--number (auto-pick) is the in-place form; it does not ' +
-							'combine with --remote. Name a single item: `do --remote <r> <slug>`.',
+						`error: -n/--number (auto-pick) is the in-place form; it does not ` +
+							`combine with ${form}. Name a single item: ${usage}.`,
 					);
 					process.exit(1);
 				}
 				if (args.length !== 1) {
-					console.error(
-						'error: --remote needs exactly one item: `do --remote <r> <slug>`.',
-					);
+					console.error(`error: ${form} needs exactly one item: ${usage}.`);
 					process.exit(1);
 				}
 				const rawSlug = args[0];
 				const remoteFlags = doFlagOverrides(flags, flagMode);
+				// Resolve the arbiter spec the rest of the pipeline consumes as `remote`.
+				// `--remote` supplies it directly (a foreign URL). `--isolated` resolves it
+				// from the CWD's arbiter remote (`git remote get-url`); no resolvable
+				// arbiter ⇒ a CLEAR error naming `--remote <url>` as the foreign-repo
+				// alternative — NOT a confusing URL-parse failure downstream.
+				let effectiveRemote: string;
+				if (isolatedNoRemote) {
+					const bootstrapIdentity = resolveGlobalConfig(
+						global,
+						remoteFlags,
+					).identity;
+					const arbiterName =
+						flags.arbiter ??
+						resolveDefaultArbiterForCwd(cwd, global, remoteFlags);
+					const resolvedUrl = resolveArbiterUrlFromCheckout(
+						cwd,
+						arbiterName,
+						identityEnv(bootstrapIdentity, process.env),
+					);
+					if (resolvedUrl === undefined) {
+						console.error(
+							`error: --isolated builds in a worktree off this repo's arbiter ` +
+								`('${arbiterName}'), but no such arbiter remote is configured/found ` +
+								`here. Run inside a participating repo (a clone with an arbiter ` +
+								`remote), or use --remote <url> to target another repo.`,
+						);
+						process.exit(1);
+					}
+					effectiveRemote = resolvedUrl;
+				} else {
+					effectiveRemote = flags.remote as string;
+				}
 				// BOOTSTRAP resolution (global + flags, no per-repo layer) — it supplies
 				// the HOST-ONLY keys needed to even reach the arbiter's committed file:
 				// `workspacesDir` (where the mirror lives) and `identity` (the git env the
@@ -1390,7 +1476,7 @@ export function buildProgram(): Command {
 				// main, or an unreachable mirror) → exactly the bootstrap config, i.e.
 				// byte-identical to the pre-slice global+default behaviour.
 				const remoteConfig = resolveRemoteRepoConfig({
-					remote: flags.remote,
+					remote: effectiveRemote,
 					workspacesDir: bootstrap.workspacesDir,
 					global,
 					flags: remoteFlags,
@@ -1409,7 +1495,7 @@ export function buildProgram(): Command {
 				});
 				const remoteResult = await performDoRemote({
 					arg: rawSlug,
-					remote: flags.remote,
+					remote: effectiveRemote,
 					workspacesDir: remoteConfig.workspacesDir,
 					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
 					// Host-only runner IDENTITY — scopes git/provider ops only (not the
