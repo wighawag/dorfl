@@ -31,6 +31,12 @@ import {
 	type SurfacePersistOptions,
 	type SurfacePersistResult,
 } from './surface-persist.js';
+import {
+	applyAnsweredQuestions,
+	type ApplyAnsweredQuestionsOptions,
+	type ApplyAnsweredQuestionsResult,
+} from './apply-persist.js';
+import type {NewQuestion} from './sidecar.js';
 
 /**
  * The **`advance` verb SKELETON** (PRD `advance-loop`, slice
@@ -160,6 +166,24 @@ export interface AdvanceContext {
 	 * writes nothing.
 	 */
 	surfacePersist?: (options: SurfacePersistOptions) => SurfacePersistResult;
+	/**
+	 * Apply the HUMAN's answered sidecar ATOMICALLY (item body + sidecar in ONE
+	 * commit, via the sidecar contract's atomic-apply), then resolve / re-pause /
+	 * disposition to a terminal. Tests inject a spy; production uses
+	 * {@link applyAnsweredQuestions}. The engine applies ONLY human-authored answers
+	 * — it NEVER invents one.
+	 */
+	applyPersist?: (
+		options: ApplyAnsweredQuestionsOptions,
+	) => ApplyAnsweredQuestionsResult;
+	/**
+	 * Supply the NEW follow-up questions an apply discovered (so it APPENDS them and
+	 * re-pauses rather than resolving). `undefined`/empty ⇒ the apply resolves (or
+	 * dispositions) the item. The follow-up GENERATION is the surface skill's job;
+	 * this seam lets the apply rung append already-formulated follow-ups (and lets
+	 * tests drive the append-re-pause path) WITHOUT inventing an ANSWER.
+	 */
+	applyFollowups?: NewQuestion[];
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -295,7 +319,7 @@ export const defaultRungExecutor: RungExecutor = {
 		return surfaceRung(input);
 	},
 	async apply(input) {
-		return notImplemented('apply', input);
+		return applyRung(input);
 	},
 };
 
@@ -420,6 +444,62 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 			`surfaced ${result.entryCount} question(s) for ${item} → ${result.sidecarPath} ` +
 			`(needsAnswers:true, CAS-atomic).`,
 	};
+}
+
+/**
+ * The APPLY rung BODY (slice `advance-rung-apply`, US #11/14/15/29/30): when the
+ * classifier says `apply` (ALL sidecar entries answered), apply the HUMAN's
+ * answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the
+ * sidecar contract's {@link applyAtomic}) — then EITHER append newly-discovered
+ * questions (stay `needsAnswers:true`, re-pause) OR resolve fully (clear
+ * `needsAnswers` + DELETE the sidecar in the SAME commit) OR disposition the item
+ * to a terminal (advance / out-of-scope / needs-attention / keep / delete).
+ *
+ * Under the `advancing` CAS lock (held by {@link performAdvance} BEFORE this runs
+ * — so the work is POST-lock, winner-only), it delegates to the engine-owned
+ * {@link applyAnsweredQuestions} persist (sibling of the surface rung's persist).
+ * ALWAYS allowed (no gate). NEVER invents an answer — it applies ONLY the
+ * human-authored `answer:` text + `disposition:` field; a subset-answered sidecar
+ * is not even classified `apply` (the classifier NO-OPs), asserted in the persist.
+ */
+function applyRung(input: RungExecInput): RungExecResult {
+	const {item, context} = input;
+	const note = context.note ?? (() => {});
+	const cwd = context.cwd;
+
+	const itemPath = findItemPath(cwd, input.namespace, input.slug);
+	if (itemPath === undefined) {
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message:
+				`advance classified the 'apply' rung for ${item} but could not find ` +
+				`its item file under work/ — a human must reconcile the item's location.`,
+		};
+	}
+
+	const apply = context.applyPersist ?? applyAnsweredQuestions;
+	try {
+		const result = apply({
+			cwd,
+			item,
+			itemPath,
+			appendQuestions: context.applyFollowups,
+			note,
+		});
+		return {
+			exitCode: 0,
+			outcome: result.outcome === 'repaused' ? 'no-op' : 'advanced',
+			message: result.message,
+		};
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message: `apply ${item}: ${detail}`,
+		};
+	}
 }
 
 /**
@@ -576,6 +656,8 @@ export async function performAdvance(
 				surfaceGate: options.surfaceGate,
 				surfaceModel: options.surfaceModel,
 				surfacePersist: options.surfacePersist,
+				applyPersist: options.applyPersist,
+				applyFollowups: options.applyFollowups,
 				note,
 			},
 		});

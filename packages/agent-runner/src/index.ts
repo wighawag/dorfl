@@ -37,7 +37,11 @@ export type {EnvMap} from './env-config.js';
 export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 
 export type {Frontmatter} from './frontmatter.js';
-export {parseFrontmatter, setNeedsAnswersMarker} from './frontmatter.js';
+export {
+	parseFrontmatter,
+	setNeedsAnswersMarker,
+	setFrontmatterMarker,
+} from './frontmatter.js';
 
 export type {
 	SidecarType,
@@ -66,6 +70,17 @@ export type {
 	ApplyAtomicResult,
 } from './sidecar-apply.js';
 export {ApplyAtomicError, applyAtomic} from './sidecar-apply.js';
+
+export type {
+	ApplyTerminal,
+	ApplyAnsweredQuestionsOptions,
+	ApplyAnsweredQuestionsResult,
+} from './apply-persist.js';
+export {
+	ApplyPersistError,
+	applyAnsweredQuestions,
+	isTriagedKeep,
+} from './apply-persist.js';
 
 export type {
 	TickItem,
