@@ -562,15 +562,23 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'refused', slug, message};
 	}
 
-	// 3b. Refuse on a DIVERGED local `main` (sibling to the dirty-tree refusal). A
-	//     local `main` that is AHEAD of `<arbiter>/main` (unpushed commits) is the
-	//     same class of "checkout state that breaks the in-place flow": the slice is
-	//     built off `<arbiter>/main`, so the merge-back ff cannot fast-forward. Catch
-	//     it UP FRONT — before the claim + agent run — so a whole build is not wasted.
-	//     Fetch first (as the onboarding flow does), then compare. `--ignore-diverged
-	//     -main` overrides (mirrors `--ignore-not-ready`); when overridden, Part 1's
-	//     non-fatal sync handles the persisting divergence honestly at complete-time.
-	if (options.ignoreDivergedMain !== true) {
+	// 3b. Refuse on a DIVERGED local `main` (MERGE MODE ONLY — mirrors `complete`'s
+	//     guard). A local `main` AHEAD of `<arbiter>/main` (unpushed commits) breaks
+	//     ONLY the paths that fast-forward local `main`, and only merge mode ff's it:
+	//     the slice builds off `<arbiter>/main`, so a merge-back ff cannot apply over
+	//     a diverged main. Propose mode never ff's local `main` (it pushes the work
+	//     branch + opens a PR; completion only `switch`es to main, no ff), so the
+	//     guard is irrelevant there and must NOT fire. Catch it UP FRONT — before the
+	//     claim + agent run — so a whole build is not wasted. Resolve the mode the
+	//     SAME way the rest of the flow does (the `options.integration` we thread into
+	//     `complete`), then fetch (as the onboarding flow does) and compare.
+	//     `--ignore-diverged-main` overrides (mirrors `--ignore-not-ready`); when
+	//     overridden, Part 1's non-fatal sync handles the persisting divergence
+	//     honestly at complete-time.
+	if (
+		(options.integration ?? 'propose') === 'merge' &&
+		options.ignoreDivergedMain !== true
+	) {
 		await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
 		const ahead = await localMainAheadCount(cwd, arbiter, env);
 		if (ahead > 0) {

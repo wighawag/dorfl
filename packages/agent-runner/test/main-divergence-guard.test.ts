@@ -100,24 +100,40 @@ describe('PART 2 — in-place `do` REFUSES on a diverged local main', () => {
 		);
 	});
 
-	it('refuses in propose mode too (the guard is mode-agnostic at pre-flight)', async () => {
-		// The guard is about the CHECKOUT STATE (a diverged main breaks the in-place
-		// onboarding off <arbiter>/main), so it fires up front regardless of mode.
+	it('does NOT refuse in propose mode (propose never ff’s local main, so the guard is merge-mode-only)', async () => {
+		// The guard protects ONLY the paths that fast-forward local `main`, and only
+		// merge mode ff's it. Propose pushes the work branch + opens a PR (the work
+		// lands on <arbiter>/work/<slug>, NOT on main) and completion only switches to
+		// main with no ff — a diverged local main is never touched. So a diverged main
+		// must NOT block a propose-mode `do` (it would be pure friction).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		divergeLocalMain(repo);
 
+		let agentRan = false;
 		const result = await performDo({
 			arg: 'alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
 			verify: PASS,
-			agentRunner: editingAgent,
+			agentRunner: (ctx) => {
+				agentRan = true;
+				return editingAgent(ctx);
+			},
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('refused');
-		expect(result.message).toMatch(/ahead of/i);
+
+		// The pre-flight divergence guard did NOT fire: the run proceeded past it
+		// (claimed + ran the agent + completed) rather than being refused with the
+		// "ahead of" message. The propose flow leaves the diverged local main untouched.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		expect(agentRan).toBe(true);
+		// It got past the guard into the claim/onboard (the item left the backlog and
+		// is now in-progress; propose does NOT auto-land it on main).
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 });
 
