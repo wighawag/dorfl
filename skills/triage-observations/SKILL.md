@@ -17,7 +17,7 @@ Default to **alphabetical order** (the folder listing — `ls work/observations/
 2. **INVESTIGATE** its claim against *current reality* — read the actual code, slices, PRDs, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE?
 3. **RECOMMEND** exactly one disposition (below), with reasoning grounded in what you found — not a guess.
 4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this PRD's unsliced state intentional?") as an explicit question.
-5. **EXECUTE** the chosen disposition with writes, then **COMMIT** (scoped — one logical change per commit) before moving on.
+5. **EXECUTE** the chosen disposition. For light dispositions (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-slice, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
 6. **UPDATE** a running checklist of dispositions so the session has an at-a-glance summary.
 
 ## The disposition vocabulary
@@ -26,11 +26,23 @@ Default to **alphabetical order** (the folder listing — `ls work/observations/
 | --- | --- | --- |
 | **leave** | still a live, useful signal; just not acting now | nothing (note stays) |
 | **delete** | no longer a live signal — its work landed, the defect is fixed, or it was promoted into a self-contained slice/ADR | `git rm` the file |
-| **make a slice** | there is buildable residue worth promoting | write a SELF-CONTAINED slice (carries mechanism + fix shape, NOT a back-pointer), then delete the note |
-| **amend** | still live but inaccurate/stale; the *record* should be corrected | edit the note (observations are append-only in spirit — prefer an `## Update` over rewriting what was seen) |
-| **fold-into-ADR / code comment** | the durable *why* belongs in an ADR or a code comment, not the inbox | write the ADR note / comment, then delete the note |
+| **make a slice** | there is buildable residue worth promoting | hand off a fresh-context prompt (below); do NOT write the slice inline |
+| **amend** | still live but inaccurate/stale; the *record* should be corrected | edit the note (observations are append-only in spirit — prefer an `## Update` over rewriting what was seen) — small in-loop edits are fine; hand off if it needs real investigation |
+| **fold-into-ADR / code comment** | the durable *why* belongs in an ADR or a code comment, not the inbox | hand off a fresh-context prompt (below) when non-trivial; do the note + delete inline only when it is a genuine one-liner |
 
 A note's liveness test is **"is this still a useful signal?"** — NOT "has the work it points at completed?".
+
+## Hand off heavy work as a fresh-context prompt
+
+The triage loop **decides**; it does NOT carry out the follow-on build inline. When a disposition needs real work (writing a slice, a non-trivial ADR section, a substantive amend), produce a **copy-pasteable prompt** for the human to run in a FRESH context, and STOP there (don't also try to do the work).
+
+Rules for the prompt:
+
+- **Prefix-free body.** No Markdown blockquote `>` bars, no `|` sidebars, no line-number gutters — the human pastes it verbatim, so any per-line prefix has to be hand-stripped. Delimit it with a `---` rule before and after (or a fenced block if it contains no triple backticks), but keep the body itself decoration-free.
+- **Self-contained.** Name the source observation, the exact files/seams to read (verified paths), what to build/change, the acceptance criteria, and the gate. The fresh agent has none of this session's context — fold in everything it needs.
+- **Carry the discharge instruction.** End with: once the slice/ADR is written and self-contained, DELETE the source observation (it has discharged) — so the inbox is drained by the follow-on work, not left as a resolved-but-kept note.
+
+For a **make-slice** hand-off, the prompt should produce a slice that satisfies the slice template and is self-contained (mechanism + fix shape, not a back-pointer). Compose with the `to-slices` discipline if available.
 
 ## Protocol rules this loop enforces
 
