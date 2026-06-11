@@ -8,6 +8,7 @@ import {
 	type OpenRequestInput,
 	type OpenRequestResult,
 	type PostPRCommentInput,
+	type PostPRCommentOnBranchInput,
 	type PostPRCommentResult,
 } from './integrator.js';
 
@@ -295,6 +296,71 @@ export class GitHubProvider implements ReviewProvider {
 			posted: true,
 			instruction: `Posted the review as a comment on ${input.url}.`,
 		};
+	}
+
+	/**
+	 * Post the review comment by RESOLVING the PR from the pushed `work/<slug>`
+	 * BRANCH (slice `review-comment-fallback-on-unparsed-pr-url`), the FALLBACK for
+	 * when `gh pr create` opened a PR (exit 0) but its stdout url was unparseable so
+	 * {@link openRequest} returned `{opened: true}` with NO `url`. We first RESOLVE
+	 * the open PR's url from the branch (`gh pr view <branch> --json url --jq .url`):
+	 *
+	 *  - a url comes back ⇒ a PR genuinely exists — post the comment on it via the
+	 *    url-keyed {@link postPRComment} (the audit trail is preserved);
+	 *  - nothing resolvable (no PR for the branch, or `gh` missing/unauthenticated)
+	 *    ⇒ an HONEST clean no-op (`posted: false`) — but only AFTER trying. The
+	 *    "no PR ⇒ no comment" rule holds; what changes is we no longer drop the
+	 *    comment when a PR DID open.
+	 *
+	 * Resolving the url first (rather than commenting on the branch directly) keeps
+	 * the no-PR case a deterministic no-op and reuses the exact same comment
+	 * mechanics as the url path. NEVER throws, NEVER `--force`s (ADR §6).
+	 */
+	postPRCommentOnBranch(
+		input: PostPRCommentOnBranchInput,
+	): PostPRCommentResult {
+		const url = this.resolvePrUrlForBranch(input.branch, input.cwd, input.env);
+		if (url === undefined) {
+			// No PR resolvable from the branch (truly none, or `gh` unavailable): an
+			// honest no-op — but only after trying. Surface the review text so it is
+			// never lost; nothing was posted.
+			return {
+				posted: false,
+				instruction:
+					`No open PR could be resolved for ${input.branch}, so the review ` +
+					`was not posted as a comment. The review:\n${input.body}`,
+			};
+		}
+		// A PR genuinely exists for the branch — comment on it via the url path.
+		return this.postPRComment({
+			cwd: input.cwd,
+			url,
+			body: input.body,
+			env: input.env,
+		});
+	}
+
+	/**
+	 * Resolve the open PR's url for `branch` via `gh pr view <branch> --json url
+	 * --jq .url`, or `undefined` when no PR is found / `gh` is missing or
+	 * unauthenticated (a non-zero exit or a spawn failure). Read-only; mutates
+	 * nothing. The result is parsed for a PR url (any surrounding chatter ignored)
+	 * so a stray warning line never defeats the resolution.
+	 */
+	private resolvePrUrlForBranch(
+		branch: string,
+		cwd: string,
+		env: NodeJS.ProcessEnv | undefined,
+	): string | undefined {
+		const result = this.runGh(
+			['pr', 'view', branch, '--json', 'url', '--jq', '.url'],
+			cwd,
+			env,
+		);
+		if (result === undefined || result.status !== 0) {
+			return undefined; // no PR for the branch, or gh missing/unauthenticated
+		}
+		return parsePrUrl(result.stdout);
 	}
 
 	/**
