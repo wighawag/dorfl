@@ -6,6 +6,7 @@ import {currentLedgerRead} from '../src/ledger-read.js';
 import {
 	parseSlugArg,
 	resolveSlug,
+	resolveAdvanceArg,
 	resolveSliceOnlyArg,
 	workBranchRef,
 	parseWorkBranchRef,
@@ -197,6 +198,121 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 	});
 });
 
+describe('parseSlugArg — the NEW obs: / observation: namespace', () => {
+	it('strips an explicit obs: prefix to the observation namespace', () => {
+		expect(parseSlugArg('obs:foo')).toEqual({
+			explicit: 'observation',
+			slug: 'foo',
+		});
+	});
+
+	it('strips the canonical observation: long form too', () => {
+		expect(parseSlugArg('observation:foo')).toEqual({
+			explicit: 'observation',
+			slug: 'foo',
+		});
+	});
+
+	it('does NOT treat a slug that merely starts like obs as prefixed', () => {
+		expect(parseSlugArg('obsolete')).toEqual({
+			explicit: undefined,
+			slug: 'obsolete',
+		});
+	});
+});
+
+describe('resolveAdvanceArg — the advance verb resolver (slice/prd/obs, bare = slice)', () => {
+	it('resolves an explicit obs: arg to the NEW observation namespace (no existence check)', () => {
+		const resolved = resolveAdvanceArg({
+			arg: 'obs:bar',
+			repoPath: repoPath(),
+			read: currentLedgerRead,
+		});
+		expect(resolved).toEqual({
+			namespace: 'observation',
+			slug: 'bar',
+			explicit: true,
+		});
+	});
+
+	it('resolves the canonical observation: long form to the observation namespace', () => {
+		expect(
+			resolveAdvanceArg({
+				arg: 'observation:bar',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			}).namespace,
+		).toBe('observation');
+	});
+
+	it('resolves an explicit prd: arg to the prd namespace (unambiguous by construction)', () => {
+		expect(
+			resolveAdvanceArg({
+				arg: 'prd:autoslice',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			}),
+		).toEqual({namespace: 'prd', slug: 'autoslice', explicit: true});
+	});
+
+	it('a bare slug resolves to the SLICE when no PRD shares it (bare = slice, as do has it)', () => {
+		writeItem('backlog', 'feature.md', {slug: 'feature'});
+		expect(
+			resolveAdvanceArg({
+				arg: 'feature',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			}),
+		).toEqual({namespace: 'slice', slug: 'feature', explicit: false});
+	});
+
+	it('keeps the bare-slug cross-check: ERRORS on a slice/PRD collision (same as do)', () => {
+		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
+		expect(() =>
+			resolveAdvanceArg({
+				arg: 'auto-slice',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			}),
+		).toThrow(SlugResolutionError);
+	});
+
+	it('an observation sharing a slug does NOT make a bare slug ambiguous (bare stays the slice)', () => {
+		// Only a slice/PRD collision diverts a bare slug; an observation must be
+		// named explicitly (obs:<slug>) — the bare path is the slice, as everywhere.
+		writeItem('backlog', 'shared.md', {slug: 'shared'});
+		expect(
+			resolveAdvanceArg({
+				arg: 'shared',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			}).namespace,
+		).toBe('slice');
+	});
+});
+
+describe('resolveSlug — `do` does NOT span the observation namespace', () => {
+	it('REJECTS a do obs:<slug> arg, pointing the human at `advance obs:`', () => {
+		expect(() =>
+			resolveSlug({
+				arg: 'obs:bar',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			}),
+		).toThrow(SlugResolutionError);
+		try {
+			resolveSlug({
+				arg: 'obs:bar',
+				repoPath: repoPath(),
+				read: currentLedgerRead,
+			});
+		} catch (err) {
+			expect((err as Error).message).toContain('advance obs:bar');
+		}
+	});
+});
+
 describe('resolveSliceOnlyArg — the slice-only command guard', () => {
 	it('accepts a bare slug (= the slice)', () => {
 		expect(resolveSliceOnlyArg('feature')).toBe('feature');
@@ -214,6 +330,16 @@ describe('resolveSliceOnlyArg — the slice-only command guard', () => {
 			resolveSliceOnlyArg('prd:feature');
 		} catch (err) {
 			expect((err as Error).message).toContain('slices, not PRDs');
+		}
+	});
+
+	it('REJECTS an obs: argument with an "operates on slices, not observations" error', () => {
+		expect(() => resolveSliceOnlyArg('obs:bar')).toThrow(SlugResolutionError);
+		try {
+			resolveSliceOnlyArg('obs:bar');
+		} catch (err) {
+			expect((err as Error).message).toContain('slices, not observations');
+			expect((err as Error).message).toContain('advance obs:bar');
 		}
 	});
 
