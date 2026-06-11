@@ -69,6 +69,8 @@ When a slice has routed to `work/needs-attention/` (a red gate / Gate-2 block / 
 
 AFTER any requeue, re-sync (`git fetch && pull --rebase`) so the re-`do` claims off the latest main. A requeued-and-rebuilt slice then flows through the normal step-4 BUILD → REVIEW → MERGE.
 
+> **Let `do` re-drive a recovered branch — do NOT hand-roll a parallel `pr/<slug>` branch.** When a flake-recovered slice's `work/<slug>` branch already holds green work but needs only a small lifecycle fixup before its PR (move the slice `.md` `needs-attention/ → done/`, strip the runner's "aborted/needs-attention" commit subjects), the right move is `requeue` (keep+continue) + re-`do`: the re-claim continues from the kept branch tip and the runner ITSELF opens the PR — no manual PR at all. If you genuinely must fix up by hand, commit the fixup **ON the existing `work/<slug>` branch** and PR that branch (`gh pr create --head work/<slug>`). NEVER spin a separate `pr/<slug>` branch off `main` and re-apply the tree: it **orphans** the canonical `work/<slug>` branch on the remote (it then has to be remembered and hand-deleted — easy to miss) and **discards** the branch's real history for mere cosmetic single-commit tidiness. One branch, its own history, no orphan.
+
 ## The loop
 
 ### 0. ANALYSE the slice set + dependency graph
