@@ -2106,7 +2106,7 @@ export function buildProgram(): Command {
 		.command('add <target>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Register a target by creating its hub mirror (idempotent). <target> is the arbiter URL; with --local it is a WORKING REPO whose bare arbiter is provisioned under arbitersDir (~/git, precious DATA, NEVER ~/.agent-runner) and THAT arbiter is registered (absorbing `arbiter init`). The transport guard refuses registering one project (same host/org/name) under a second transport unless --force.',
+			'Register a target by creating its hub mirror (idempotent). <target> is the arbiter URL; with --local it is a WORKING REPO whose bare arbiter is provisioned under arbitersDir (~/git, precious DATA, NEVER ~/.agent-runner) and THAT arbiter is registered (absorbing `arbiter init`). The project-identity guard refuses registering one project (same projectId tail) under a second key unless --force; --force REPLACES the existing mirror but STILL refuses if a worktree of the replaced mirror holds un-pushed work (data-loss guard).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2119,7 +2119,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--force',
-			'register even though the same project is already registered under a different transport (anti-stranding guard override)',
+			'REPLACE this project’s existing mirror (re-link remote ↔ bare arbiter deliberately); overrides the registration POLICY block ONLY — still refuses if a worktree of the replaced mirror holds un-pushed work (the data-loss block is never overridden)',
 		)
 		.action((target: string, flags: RemoteAddFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});

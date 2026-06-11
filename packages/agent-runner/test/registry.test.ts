@@ -8,9 +8,12 @@ import {
 	transportForUrl,
 	projectIdFromKey,
 	RegistryError,
+	ReplaceWouldStrandWorkError,
 } from '../src/registry.js';
 import {arbiterPath} from '../src/arbiter.js';
 import {findParticipatingRepos} from '../src/detect.js';
+import {createJob, type Job} from '../src/workspace.js';
+import {git} from '../src/git.js';
 import {mirrorPath, encodeRepoKey} from '../src/repo-mirror.js';
 import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
 
@@ -301,5 +304,207 @@ describe('remote add — transport guard (anti-stranding)', () => {
 		});
 		expect(again.created).toBe(false);
 		expect(again.key).toBe(first.key);
+	});
+});
+
+describe('remote add — STRONG project-identity guard + --force replace', () => {
+	/**
+	 * A throwaway bare repo at `<root>/<label>/wighawag/agent-runner.git` (cloned
+	 * from a seeded working repo). Its hub key encodes the full filesystem path, so
+	 * two labels yield DIFFERENT keys but the SAME `projectIdFromKey` tail
+	 * (`wighawag/agent-runner`) — exactly the project-identity collision the strong
+	 * guard keys on. Returns its `file://` URL.
+	 */
+	function bareProject(label: string): string {
+		const src = seedWorkingRepo(`src-${label}`);
+		const dir = join(scratch.root, label, 'wighawag');
+		mkdirSync(dir, {recursive: true});
+		const bare = join(dir, 'agent-runner.git');
+		gitIn(['clone', '-q', '--bare', src, bare], scratch.root);
+		return `file://${bare}`;
+	}
+
+	/** Commit a new file on the job's work branch (advances the tip past main). */
+	function commitWork(job: Job): void {
+		writeFileSync(join(job.dir, 'work.txt'), 'agent work\n');
+		git(['add', '-A'], job.dir, {env: gitEnv()});
+		git(['commit', '-q', '-m', 'agent work'], job.dir, {env: gitEnv()});
+	}
+
+	/** Merge the work branch into the arbiter's main (the "merged" safe path). */
+	function mergeToArbiterMain(job: Job): void {
+		git(['push', '-q', 'origin', `${job.branch}:main`], job.dir, {
+			env: gitEnv(),
+		});
+	}
+
+	it('refuses a SECOND arbiter for an already-registered project by default (project-identity collision, not only transport)', () => {
+		const urlA = bareProject('a');
+		const urlB = bareProject('b');
+		// Same transport (both local-bare) — so this is NOT a transport mismatch; it
+		// is a pure project-identity collision the cheap transport guard would MISS.
+		expect(transportForUrl(urlA)).toBe('local-bare');
+		expect(transportForUrl(urlB)).toBe('local-bare');
+		expect(projectIdFromKey(encodeRepoKey(urlA))).toBe(
+			projectIdFromKey(encodeRepoKey(urlB)),
+		);
+		expect(encodeRepoKey(urlA)).not.toBe(encodeRepoKey(urlB));
+
+		remoteAdd({target: urlA, workspacesDir: ws(), env: gitEnv()});
+
+		expect(() =>
+			remoteAdd({target: urlB, workspacesDir: ws(), env: gitEnv()}),
+		).toThrow(RegistryError);
+		try {
+			remoteAdd({target: urlB, workspacesDir: ws(), env: gitEnv()});
+		} catch (err) {
+			expect((err as Error).message).toMatch(/already registered/);
+			expect((err as Error).message).toMatch(/--force/);
+		}
+		// Nothing was registered for B (the default block fired BEFORE any clone).
+		expect(listMirrors({workspacesDir: ws(), env: gitEnv()})).toHaveLength(1);
+	});
+
+	it('--force REPLACES the mirror when no worktree has un-pushed work', () => {
+		const urlA = bareProject('a');
+		const urlB = bareProject('b');
+		const keyA = encodeRepoKey(urlA);
+		const keyB = encodeRepoKey(urlB);
+
+		remoteAdd({target: urlA, workspacesDir: ws(), env: gitEnv()});
+
+		// A live worktree of A whose work IS saved (merged onto the arbiter) — clean
+		// AND reachable, so the replace is provably safe.
+		const job = createJob({
+			url: urlA,
+			slug: 'feat',
+			workspacesDir: ws(),
+			env: gitEnv(),
+		});
+		commitWork(job);
+		mergeToArbiterMain(job);
+
+		const forced = remoteAdd({
+			target: urlB,
+			workspacesDir: ws(),
+			force: true,
+			env: gitEnv(),
+		});
+		expect(forced.created).toBe(true);
+		expect(forced.key).toBe(keyB);
+
+		// The prior mirror (A) is GONE (replaced), only B remains for the project.
+		const keys = listMirrors({workspacesDir: ws(), env: gitEnv()}).map(
+			(m) => m.key,
+		);
+		expect(keys).toContain(keyB);
+		expect(keys).not.toContain(keyA);
+		expect(existsSync(mirrorPath(ws(), urlA))).toBe(false);
+	});
+
+	it('--force is REFUSED (data-loss) when a worktree of the replaced mirror is DIRTY (uncommitted)', () => {
+		const urlA = bareProject('a');
+		const urlB = bareProject('b');
+		const keyA = encodeRepoKey(urlA);
+
+		remoteAdd({target: urlA, workspacesDir: ws(), env: gitEnv()});
+
+		// A worktree of A with work that IS saved on the arbiter, BUT a DIRTY tree —
+		// the uncommitted change lives ONLY on disk, invisible to a mirror-refs check.
+		const job = createJob({
+			url: urlA,
+			slug: 'feat',
+			workspacesDir: ws(),
+			env: gitEnv(),
+		});
+		commitWork(job);
+		mergeToArbiterMain(job);
+		writeFileSync(join(job.dir, 'scratch.txt'), 'uncommitted\n');
+
+		expect(() =>
+			remoteAdd({
+				target: urlB,
+				workspacesDir: ws(),
+				force: true,
+				env: gitEnv(),
+			}),
+		).toThrow(ReplaceWouldStrandWorkError);
+		try {
+			remoteAdd({
+				target: urlB,
+				workspacesDir: ws(),
+				force: true,
+				env: gitEnv(),
+			});
+		} catch (err) {
+			expect((err as Error).message).toMatch(/dirty tree/);
+			expect((err as Error).message).toMatch(/feat/);
+		}
+		// --force did NOT override the data-loss block: A is untouched.
+		expect(existsSync(mirrorPath(ws(), urlA))).toBe(true);
+		expect(
+			listMirrors({workspacesDir: ws(), env: gitEnv()}).map((m) => m.key),
+		).toContain(keyA);
+	});
+
+	it('--force is REFUSED (data-loss) when a worktree has committed-but-unpushed work (mirror-refs case)', () => {
+		const urlA = bareProject('a');
+		const urlB = bareProject('b');
+		const keyA = encodeRepoKey(urlA);
+
+		remoteAdd({target: urlA, workspacesDir: ws(), env: gitEnv()});
+
+		// A worktree of A with COMMITTED work that is neither merged nor pushed — a
+		// `work/*` tip not reachable on the arbiter (the mirror-refs detectable case).
+		const job = createJob({
+			url: urlA,
+			slug: 'feat',
+			workspacesDir: ws(),
+			env: gitEnv(),
+		});
+		commitWork(job); // committed, never pushed/merged
+
+		expect(() =>
+			remoteAdd({
+				target: urlB,
+				workspacesDir: ws(),
+				force: true,
+				env: gitEnv(),
+			}),
+		).toThrow(ReplaceWouldStrandWorkError);
+		try {
+			remoteAdd({
+				target: urlB,
+				workspacesDir: ws(),
+				force: true,
+				env: gitEnv(),
+			});
+		} catch (err) {
+			expect((err as Error).message).toMatch(/unmerged commits|not pushed/);
+		}
+		// The data-loss block held: A survives.
+		expect(existsSync(mirrorPath(ws(), urlA))).toBe(true);
+		expect(
+			listMirrors({workspacesDir: ws(), env: gitEnv()}).map((m) => m.key),
+		).toContain(keyA);
+	});
+
+	it('the cheap transport-mismatch guard is NOT regressed (still refuses by default)', () => {
+		const repo = seedWorkingRepo(join('wighawag', 'agent-runner'));
+		remoteAdd({
+			target: repo,
+			local: true,
+			workspacesDir: ws(),
+			arbitersDir: arbitersDir(),
+			env: gitEnv(),
+		});
+		// A remote-host transport for the same project is still refused by default.
+		expect(() =>
+			remoteAdd({
+				target: 'git@github.com:wighawag/agent-runner.git',
+				workspacesDir: ws(),
+				env: gitEnv(),
+			}),
+		).toThrow(RegistryError);
 	});
 });

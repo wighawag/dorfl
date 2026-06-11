@@ -3,6 +3,12 @@ import {join} from 'node:path';
 import {run} from './git.js';
 import {encodeRepoKey, ensureMirror, mirrorPath} from './repo-mirror.js';
 import {arbiterInit, type ArbiterInitResult} from './arbiter.js';
+import {
+	discoverJobs,
+	evaluateDeletionSafety,
+	RETAIN_REASON_TEXT,
+	type GcJob,
+} from './gc.js';
 
 /**
  * The **registry** primitive (ADR `command-surface-and-journeys` §1): the
@@ -215,8 +221,14 @@ export interface RemoteAddOptions extends RegistryOptions {
 	/** The arbiter remote name to wire in the working repo on `--local`. */
 	arbiterRemote?: string;
 	/**
-	 * Override the transport guard: register this project even though a sibling
-	 * mirror (same `org/name` tail) already exists under a DIFFERENT transport.
+	 * Override the project-identity POLICY block: REPLACE this project's existing
+	 * mirror (re-link remote ↔ `--bare` arbiter deliberately) even though a sibling
+	 * mirror for the same project (same `projectIdFromKey` tail) already exists
+	 * under a different key. `force` overrides the POLICY block ONLY — it NEVER
+	 * overrides the DATA-LOSS block: if any worktree of the mirror being replaced
+	 * holds un-pushed work (dirty tree OR a `work/*` tip not reachable on the
+	 * arbiter — the full `gc.ts` clean-AND-reachable predicate), `force` still
+	 * REFUSES, because replacing would strand that work.
 	 */
 	force?: boolean;
 	/** Sink for human-readable progress notes. */
@@ -224,15 +236,33 @@ export interface RemoteAddOptions extends RegistryOptions {
 }
 
 /**
+ * Raised when `--force` cannot REPLACE a project's mirror because a worktree of
+ * the mirror being replaced still holds un-pushed work (a DATA-LOSS block,
+ * distinct from the POLICY block `--force` overrides). The reason names each
+ * unsafe worktree so the human can rescue the work before re-running.
+ */
+export class ReplaceWouldStrandWorkError extends RegistryError {}
+
+/**
  * Register a target by creating its hub mirror (the `ensureMirror` primitive).
  * Idempotent: an existing mirror is fetched + reused, not clobbered. With
  * `--local`, first provisions a `--bare` arbiter from the working repo
  * (`arbiterInit`, absorbing `arbiter init`) and registers THAT arbiter's mirror.
  *
- * Transport guard (anti-stranding, ADR §1 +
+ * Project-identity guard (anti-stranding, ADR §1 +
  * `work/observations/hub-mirror-key-ignores-transport.md`): if a sibling mirror
- * for the SAME project (same `org/name` tail) already exists under a DIFFERENT
- * transport, refuse with an error naming the existing transport — unless `force`.
+ * for the SAME project (same `projectIdFromKey` tail) already exists under a
+ * DIFFERENT key (a transport mismatch OR a same-transport path/host collision),
+ * refuse by default — registering the project under a second key would fork the
+ * mirror and risk stranding un-pushed `work/<slug>` work on the other mirror.
+ *
+ * `--force` REPLACES the existing mirror(s) for the project (so you can re-link
+ * a project's mirror from a remote to a `--bare` arbiter, or vice-versa,
+ * deliberately) — but `--force` overrides the POLICY block ONLY, NEVER the
+ * DATA-LOSS block: if any worktree of the mirror being replaced still holds
+ * un-pushed work (the full `gc.ts` clean-AND-reachable per-worktree predicate),
+ * the replace REFUSES with {@link ReplaceWouldStrandWorkError}. (An identical
+ * key is the idempotent reuse case, NOT a conflict — it is the same mirror.)
  */
 export function remoteAdd(options: RemoteAddOptions): RemoteAddResult {
 	const env = options.env;
@@ -268,29 +298,65 @@ export function remoteAdd(options: RemoteAddOptions): RemoteAddResult {
 	const projectId = projectIdFromKey(key);
 	const destPath = mirrorPath(options.workspacesDir, url);
 
-	// Transport guard: a sibling mirror for the SAME project under a DIFFERENT
-	// transport (a different key, same `org/name` tail) risks stranding un-pushed
-	// work. Refuse unless --force. (An identical key is the idempotent reuse case,
-	// NOT a conflict — it is the same mirror.)
-	if (!options.force) {
-		for (const existing of listMirrors({
-			workspacesDir: options.workspacesDir,
+	// Project-identity guard: a sibling mirror for the SAME project under a
+	// DIFFERENT key (same `projectIdFromKey` tail) risks stranding un-pushed work.
+	// An identical key is the idempotent reuse case, NOT a conflict (same mirror).
+	const siblings = listMirrors({
+		workspacesDir: options.workspacesDir,
+		env,
+	}).filter((m) => m.projectId === projectId && m.key !== key);
+
+	if (siblings.length > 0) {
+		if (!options.force) {
+			// POLICY block (default): refuse the project-identity collision. Name the
+			// existing mirror(s) + transport(s) so the human sees WHAT collides.
+			const existing = siblings[0];
+			throw new RegistryError(
+				`refusing: project '${projectId}' is already registered (mirror ` +
+					`${existing.key}, transport '${existing.transport}', origin ` +
+					`${existing.originUrl ?? '(unknown)'}). Registering it under a second ` +
+					`key (${key}, transport '${transport}') would fork the mirror and risk ` +
+					'stranding un-pushed work on the other mirror. Re-run with --force to ' +
+					'REPLACE the existing mirror (force replaces the mirror, but still ' +
+					'refuses if un-pushed work would be lost).',
+			);
+		}
+
+		// --force REPLACE path: force overrides the POLICY block, NEVER the
+		// DATA-LOSS block. Before replacing, run the FULL per-worktree predicate
+		// (gc.ts's clean-AND-reachable) across EVERY worktree of the sibling
+		// mirror(s) — committed-but-unpushed work lives in the mirror's refs, but
+		// UNCOMMITTED (dirty) work is only on disk, invisible to a refs-only check.
+		// A single dirty-or-unreachable worktree BLOCKS the replace.
+		const unsafe = unsafeWorktreesForMirrors(
+			options.workspacesDir,
+			new Set(siblings.map((m) => m.key)),
 			env,
-		})) {
-			if (
-				existing.projectId === projectId &&
-				existing.key !== key &&
-				existing.transport !== transport &&
-				existing.transport !== 'unknown'
-			) {
-				throw new RegistryError(
-					`refusing: project '${projectId}' is already registered under transport ` +
-						`'${existing.transport}' (mirror ${existing.key}, origin ` +
-						`${existing.originUrl ?? '(unknown)'}). Registering it under ` +
-						`'${transport}' risks stranding un-pushed work on the other mirror. ` +
-						'Re-run with --force to register anyway.',
-				);
-			}
+		);
+		if (unsafe.length > 0) {
+			const details = unsafe
+				.map((u) => `  - ${u.slug} (${u.dir}): ${u.reasonText}`)
+				.join('\n');
+			throw new ReplaceWouldStrandWorkError(
+				`refusing --force replace of project '${projectId}': the mirror being ` +
+					`replaced has worktree(s) with un-pushed work that would be stranded.\n` +
+					`${details}\n` +
+					'--force overrides the registration POLICY, never the DATA-LOSS guard. ' +
+					'Push/merge or gc --force each worktree above, then re-run.',
+			);
+		}
+
+		// Safe to replace: every sibling worktree is provably clean + reachable.
+		// Delete the sibling mirror(s) so the project re-links onto the new key.
+		for (const sibling of siblings) {
+			remoteRm({
+				target: sibling.key,
+				workspacesDir: options.workspacesDir,
+				env,
+			});
+			note(
+				`replaced: removed prior mirror '${sibling.key}' for '${projectId}'.`,
+			);
 		}
 	}
 
@@ -311,6 +377,62 @@ export function remoteAdd(options: RemoteAddOptions): RemoteAddResult {
 		created: result.created,
 		...(arbiter ? {arbiter} : {}),
 	};
+}
+
+/** One worktree the replace-guard found to hold un-pushed work (data-loss). */
+interface UnsafeWorktree {
+	/** The job worktree directory. */
+	dir: string;
+	/** The work slug (from the job record, else derived). */
+	slug: string;
+	/** Human-readable reason it is not provably safe (the `gc` retain reason). */
+	reasonText: string;
+}
+
+/**
+ * Enumerate the worktrees of the mirror(s) identified by `mirrorKeys` and run
+ * `gc.ts`'s FULL clean-AND-reachable per-worktree predicate
+ * ({@link evaluateDeletionSafety}) in each, returning the ones that are NOT
+ * provably safe (a dirty tree OR a `work/*` tip not reachable on the arbiter).
+ *
+ * Worktrees are discovered via {@link discoverJobs} (which walks
+ * `<workspacesDir>/work/*` for `.agent-runner-job.json` records, each carrying
+ * the mirror `repoKey`), so a job is attributed to its mirror by KEY. This is
+ * the DATA-LOSS guard the `--force` replace path consults: replacing a mirror
+ * that still has un-pushed work would strand it, so `--force` proceeds ONLY when
+ * this returns empty (every worktree clean + reachable).
+ */
+function unsafeWorktreesForMirrors(
+	workspacesDir: string,
+	mirrorKeys: Set<string>,
+	env: NodeJS.ProcessEnv | undefined,
+): UnsafeWorktree[] {
+	const unsafe: UnsafeWorktree[] = [];
+	for (const job of discoverJobs(workspacesDir)) {
+		if (!jobBelongsToMirror(job, mirrorKeys)) {
+			continue;
+		}
+		const verdict = evaluateDeletionSafety({
+			dir: job.dir,
+			branch: job.branch,
+			env,
+		});
+		if (!verdict.safe) {
+			const reason = verdict.reason ?? 'unmerged-commits';
+			unsafe.push({
+				dir: job.dir,
+				slug: job.slug,
+				reasonText: RETAIN_REASON_TEXT[reason],
+			});
+		}
+	}
+	return unsafe;
+}
+
+/** True iff `job`'s record attributes it to one of `mirrorKeys`. */
+function jobBelongsToMirror(job: GcJob, mirrorKeys: Set<string>): boolean {
+	const key = job.record?.repoKey;
+	return key !== undefined && mirrorKeys.has(key);
 }
 
 /** The result of `remote rm`. */
