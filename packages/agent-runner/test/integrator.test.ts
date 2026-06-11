@@ -27,7 +27,7 @@ afterEach(() => {
 
 /** Create + commit a `work/<slug>` branch in a clone (the agent's work). */
 function workBranch(repo: string, slug: string, file = 'x.txt'): string {
-	const branch = `work/${slug}`;
+	const branch = `work/slice-${slug}`;
 	gitIn(['switch', '-c', branch, 'arbiter/main'], repo);
 	writeFileSync(join(repo, file), `${slug}\n`);
 	gitIn(['add', '-A'], repo);

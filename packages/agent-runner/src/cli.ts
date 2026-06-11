@@ -52,7 +52,11 @@ import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
-import {resolveSliceOnlyArg, SlugResolutionError} from './slug-namespace.js';
+import {
+	resolveSliceOnlyArg,
+	workBranchRef,
+	SlugResolutionError,
+} from './slug-namespace.js';
 import {brand} from './brand.js';
 
 interface ScanFlags {
@@ -1680,7 +1684,7 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const how = result.deletedRemoteBranch
-				? ` (--reset: deleted the remote work/${slug} branch; next claim starts fresh)`
+				? ` (--reset: deleted the remote ${workBranchRef('slice', slug)} branch; next claim starts fresh)`
 				: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});

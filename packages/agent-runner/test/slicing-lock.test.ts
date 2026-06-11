@@ -65,7 +65,7 @@ describe('acquireSlicingLock — happy path', () => {
 		});
 		expect(gitIn(['branch', '--list', 'slicing/alpha'], repo).trim()).toBe('');
 		expect(gitIn(['branch', '--list', 'claim/alpha'], repo).trim()).toBe('');
-		expect(gitIn(['branch', '--list', 'work/alpha'], repo).trim()).toBe('');
+		expect(gitIn(['branch', '--list', 'work/prd-alpha'], repo).trim()).toBe('');
 	});
 
 	it('records the locker in the lock COMMIT subject', async () => {

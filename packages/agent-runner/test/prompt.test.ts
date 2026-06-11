@@ -233,17 +233,19 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 	it('frames continuing + points at the prior diff vs <arbiter>/main', () => {
 		const ctx: ContinueContext = {
 			arbiter: 'origin',
+			branch: 'work/slice-my-slug',
 			reason: '',
 			requeueNotes: [],
 		};
 		const block = buildContinueBlock('my-slug', ctx);
 		expect(block).toMatch(/CONTINUING/i);
-		expect(block).toContain('origin/main...work/my-slug');
+		expect(block).toContain('origin/main...work/slice-my-slug');
 	});
 
 	it('includes the needs-attention reason when present', () => {
 		const ctx: ContinueContext = {
 			arbiter: 'origin',
+			branch: 'work/slice-my-slug',
 			reason: 'the acceptance gate was red',
 			requeueNotes: [],
 		};
@@ -254,6 +256,7 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 	it('includes the requeue handoff note(s) when present', () => {
 		const ctx: ContinueContext = {
 			arbiter: 'origin',
+			branch: 'work/slice-my-slug',
 			reason: 'red gate',
 			requeueNotes: ['note A', 'note B'],
 		};
@@ -265,6 +268,7 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 	it('omits the reason/note sub-sections when both are empty', () => {
 		const block = buildContinueBlock('my-slug', {
 			arbiter: 'origin',
+			branch: 'work/slice-my-slug',
 			reason: '',
 			requeueNotes: [],
 		});
@@ -290,6 +294,7 @@ describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
 			continueContext: {
 				arbiter: 'origin',
+				branch: 'work/slice-example',
 				reason: 'the gate was red',
 				requeueNotes: ['use the v2 helper'],
 			},
@@ -298,7 +303,7 @@ describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
 		expect(out).toContain(wrapper('example', 'my-prd'));
 		expect(out).toContain('SLICE-BODY');
 		expect(out).toMatch(/CONTINUING/i);
-		expect(out).toContain('origin/main...work/example');
+		expect(out).toContain('origin/main...work/slice-example');
 		expect(out).toContain('the gate was red');
 		expect(out).toContain('use the v2 helper');
 		// The block precedes the slice body in the assembly.
@@ -324,9 +329,9 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 		writeFileSync(join(repo, 'README.md'), '# x\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'seed'], repo);
-		gitIn(['branch', `work/${slug}`], repo);
+		gitIn(['branch', `work/slice-${slug}`], repo);
 		if (ahead) {
-			gitIn(['switch', '-q', `work/${slug}`], repo);
+			gitIn(['switch', '-q', `work/slice-${slug}`], repo);
 			writeFileSync(join(repo, 'prior.txt'), 'prior work\n');
 			gitIn(['add', '-A'], repo);
 			gitIn(['commit', '-q', '-m', 'prior attempt'], repo);
@@ -356,13 +361,16 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: 'origin',
-			branchRef: 'work/alpha',
+			branchRef: 'work/slice-alpha',
 			mainRef: 'main',
 			content: BODY,
 			env: gitEnv(),
 		});
 		expect(ctx).toBeDefined();
 		expect(ctx!.arbiter).toBe('origin');
+		// The namespaced branch is recovered from branchRef (no `<arbiter>/` prefix
+		// to strip here) — the continue-block prose points the agent at it.
+		expect(ctx!.branch).toBe('work/slice-alpha');
 		expect(ctx!.reason).toBe('the acceptance gate was red');
 		expect(ctx!.requeueNotes).toEqual(['try the other approach']);
 	});
@@ -373,7 +381,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 			cwd: repo,
 			slug: 'beta',
 			arbiter: 'origin',
-			branchRef: 'work/beta',
+			branchRef: 'work/slice-beta',
 			mainRef: 'main',
 			content: BODY,
 			env: gitEnv(),
@@ -387,7 +395,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 			cwd: repo,
 			slug: 'absent-slug',
 			arbiter: 'origin',
-			branchRef: 'work/absent-slug',
+			branchRef: 'work/slice-absent-slug',
 			mainRef: 'main',
 			content: BODY,
 			env: gitEnv(),

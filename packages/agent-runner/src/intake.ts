@@ -15,6 +15,7 @@ import {
 	type Identity,
 } from './identity.js';
 import {NullHarness, type Harness} from './harness.js';
+import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {
 	GitHubIssueProvider,
@@ -1005,11 +1006,13 @@ async function dispatchSlice(params: {
 	// replaces the agent's first draft.
 	const reviewedBody = review.body;
 
-	// ONBOARD the slice write onto a `work/<slug>` branch cut from the freshly-
-	// fetched `<arbiter>/main` (the SAME runner-owns-git discipline the slicing path
-	// uses): the lifecycle `stage` writes the file ON THIS BRANCH and the shared
-	// integrate core (`--propose` PR / `--merge` main) lands it. The agent ran no git.
-	await switchToWorkBranch(cwd, arbiter, slug, env);
+	// ONBOARD the slice write onto a `work/intake-slice-<slug>` branch cut from the
+	// freshly-fetched `<arbiter>/main` (the SAME runner-owns-git discipline the
+	// slicing path uses): the lifecycle `stage` writes the file ON THIS BRANCH and
+	// the shared integrate core (`--propose` PR / `--merge` main) lands it. The
+	// intake- producer prefix keeps it distinct from a later `do slice:<slug>`
+	// build branch for the same slug. The agent ran no git.
+	await switchToWorkBranch(cwd, arbiter, 'slice', slug, env);
 
 	const sliceContent = renderBacklogSlice({
 		slug,
@@ -1110,9 +1113,10 @@ async function dispatchPrd(params: {
 	}
 	const relPath = `work/prd/${slug}.md`;
 
-	// ONBOARD onto a `work/<slug>` branch off fresh `<arbiter>/main` — the SAME
-	// runner-owns-git discipline the slice branch uses.
-	await switchToWorkBranch(cwd, arbiter, slug, env);
+	// ONBOARD onto a `work/intake-prd-<slug>` branch off fresh `<arbiter>/main` —
+	// the SAME runner-owns-git discipline the slice branch uses; the intake-
+	// producer prefix keeps it distinct from a `do prd:<slug>` slicing branch.
+	await switchToWorkBranch(cwd, arbiter, 'prd', slug, env);
 
 	const prdContent = renderPrd({
 		slug,
@@ -1515,17 +1519,23 @@ async function stageIntakeSlice(params: {
 }
 
 /**
- * ONBOARD the intake slice write onto a `work/<slug>` branch cut from the freshly-
- * fetched `<arbiter>/main` (the SAME discipline `slicing.ts` uses). A pre-existing
- * local `work/<slug>` (a re-run) is force-recreated off fresh main.
+ * ONBOARD the intake write onto a NAMESPACED, INTAKE-PRODUCED branch
+ * (`work/intake-slice-<slug>` / `work/intake-prd-<slug>`) cut from the freshly-
+ * fetched `<arbiter>/main` (the SAME discipline `slicing.ts` uses). The
+ * `intake-` PRODUCER prefix keeps this short-lived "create the item" branch
+ * DISTINCT from the later build branch (`work/slice-<slug>`) for the same slug
+ * — the firing `intake` × `do slice:` collision the observation traced. The
+ * slice-emit path passes `'slice'`, the PRD-emit path `'prd'`. A pre-existing
+ * local branch (a re-run) is force-recreated off fresh main.
  */
 async function switchToWorkBranch(
 	cwd: string,
 	arbiter: string,
+	type: SlugNamespace,
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
-	const branch = `work/${slug}`;
+	const branch = workBranchRef(type, slug, {producer: 'intake'});
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(
 		['switch', '--quiet', '-C', branch, `${arbiter}/main`],

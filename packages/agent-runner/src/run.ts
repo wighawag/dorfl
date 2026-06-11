@@ -534,7 +534,7 @@ async function runOneItem(
 		//     retained) — more §14-aligned, not a regression.
 		if (tree.continueRebaseConflict) {
 			const reason =
-				`continuing the kept work/${slug}: rebase onto the latest main ` +
+				`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 				'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 				'main, or `requeue --reset` to discard and start fresh';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
@@ -563,7 +563,7 @@ async function runOneItem(
 						cwd: tree.dir,
 						slug,
 						arbiter: tree.arbiterRemote,
-						branchRef: `work/${slug}`,
+						branchRef: tree.branch,
 						mainRef: 'main',
 						content: readFileSync(slice.path, 'utf8'),
 						env: gitEnv,

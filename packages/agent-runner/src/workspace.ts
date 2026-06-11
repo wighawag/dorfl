@@ -12,6 +12,7 @@ import {
 } from './continue-branch.js';
 import {type HarnessRecord} from './harness.js';
 import {brand} from './brand.js';
+import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
 
 /**
  * The workspace manager (ADR §2): one git worktree per **job** (a claimed work
@@ -112,8 +113,14 @@ export interface CreateJobOptions {
 	fromRepo?: string;
 	/** Remote name in `fromRepo` whose URL to mirror (default `origin`). */
 	arbiter?: string;
-	/** The work slug being processed (→ branch `work/<slug>` + work-id). */
+	/** The work slug being processed (→ branch `work/<type>-<slug>` + work-id). */
 	slug: string;
+	/**
+	 * The item TYPE — `'slice'` (build) or `'prd'` (slicing) — namespacing the
+	 * work branch via {@link workBranchRef} so a same-slug slice and PRD never
+	 * collide. Defaults to `'slice'`.
+	 */
+	type?: SlugNamespace;
 	/** The execution working area (config `workspacesDir`, default `~/.agent-runner`). */
 	workspacesDir: string;
 	/** The initial harness block to persist in the record (default: null adapter). */
@@ -187,7 +194,7 @@ export function createJob(options: CreateJobOptions): Job {
 	});
 
 	const slug = options.slug;
-	const branch = `work/${slug}`;
+	const branch = workBranchRef(options.type ?? 'slice', slug);
 	const dir = jobWorktreePath(options.workspacesDir, mirror.url, slug);
 
 	// CONTINUE-detection (shared with the in-place path, ADR §14 keystone): after

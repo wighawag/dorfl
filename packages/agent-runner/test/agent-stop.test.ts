@@ -158,7 +158,7 @@ describe('isWorkBranchDiffEmpty — the branch-commit-aware empty-diff predicate
 		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		// Cut the work branch off the arbiter main + add the claim commit (work/ only).
-		gitIn(['switch', '-q', '-c', `work/${slug}`, 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', `work/slice-${slug}`, 'arbiter/main'], repo);
 		const ip = join(repo, 'work', 'in-progress');
 		mkdirSync(ip, {recursive: true});
 		writeFileSync(join(ip, `${slug}.md`), `claim: ${slug}\n`);

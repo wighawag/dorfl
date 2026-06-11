@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {run} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {ledgerRead} from './ledger-read.js';
+import {workBranchRef} from './slug-namespace.js';
 import {
 	retryWithBackoff,
 	realSleep,
@@ -319,7 +320,9 @@ export async function routeToNeedsAttention(
 	let branchPush: BranchPushOutcome = 'not-attempted';
 	let pushError: string | undefined;
 	if (options.arbiter && options.pushBranch !== false) {
-		const branch = options.branch ?? `work/${slug}`;
+		// DEFAULT to the slice-namespaced build-bounce branch; a non-slice caller
+		// (the slicing bounce) passes its own `work/prd-<slug>` via `branch`.
+		const branch = options.branch ?? workBranchRef('slice', slug);
 		if (branchAheadOf(cwd, branch, 'main', env)) {
 			const arbiter = options.arbiter;
 			const result = await retryWithBackoff(
@@ -414,7 +417,7 @@ export function returnToBacklog(
 					'work branch from; nothing deleted, item left in needs-attention.',
 			};
 		}
-		const branch = `work/${slug}`;
+		const branch = workBranchRef('slice', slug);
 		// Plain provider-agnostic delete — works against a local `--bare` arbiter.
 		// Explicit/guarded departure from the "never delete the remote branch"
 		// invariant; only on the `--reset` path, never the default.
@@ -458,7 +461,7 @@ export function returnToBacklog(
 	// NOT on `--reset` (which discards the branch by design); a purely-local
 	// requeue keeps today's behaviour.
 	if (!options.reset && options.arbiter) {
-		const branch = `work/${slug}`;
+		const branch = workBranchRef('slice', slug);
 		// Refresh the remote-tracking refs so the check sees the arbiter's truth,
 		// not a stale local copy (a failed push left the LOCAL branch standing).
 		gitSoftRun(['fetch', '--quiet', options.arbiter], cwd, env);

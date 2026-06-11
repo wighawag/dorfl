@@ -3,6 +3,7 @@ import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveReadiness} from './readiness.js';
+import {workBranchRef} from './slug-namespace.js';
 
 /**
  * In-process TypeScript implementation of the atomic compare-and-swap claim from
@@ -75,6 +76,15 @@ export interface ClaimCasResult {
 	outcome: ClaimCasOutcome;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
+	/**
+	 * The sha of the CLAIM COMMIT (`claim: <slug>`) that landed on the arbiter,
+	 * on a SUCCESSFUL claim (`outcome === 'claimed'`, `exitCode === 0`) only.
+	 * Surfaced so in-place onboarding can branch the work branch from the EXACT
+	 * claim commit (and HARD-FAIL if it is not reachable) rather than a stale
+	 * same-named branch or a not-yet-advanced local `<arbiter>/main`. Absent on a
+	 * dry-run, lost/contended, or usage-error result.
+	 */
+	claimCommit?: string;
 }
 
 /** Raised for usage/environment errors (exit 1). */
@@ -89,7 +99,7 @@ class ClaimNotReady extends Error {}
 
 /** Internal: the result of a single claim attempt. */
 type AttemptResult =
-	| {kind: 'claimed'; message: string}
+	| {kind: 'claimed'; message: string; claimCommit?: string}
 	| {kind: 'lost'; message: string}
 	| {kind: 'rejected'; message: string};
 
@@ -223,7 +233,12 @@ async function runClaim(
 				note,
 			});
 			if (result.kind === 'claimed') {
-				return {exitCode: 0, outcome: 'claimed', message: result.message};
+				return {
+					exitCode: 0,
+					outcome: 'claimed',
+					message: result.message,
+					claimCommit: result.claimCommit,
+				};
 			}
 			if (result.kind === 'lost') {
 				return {exitCode: 2, outcome: 'lost', message: result.message};
@@ -364,12 +379,20 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		note,
 	});
 	if (result.kind === 'published') {
+		// Advance the LOCAL remote-tracking `<arbiter>/main` so it now INCLUDES the
+		// claim commit (the push only moved the arbiter's main; the local tracking
+		// ref stayed at the pre-claim sha). Onboarding then branches the work branch
+		// off an `<arbiter>/main` that reaches the claim, and the printed "Start
+		// work" hint is correct. Best-effort: a failed fetch leaves onboarding's own
+		// fetch to advance it.
+		await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
+		const branch = workBranchRef('slice', slug);
 		const message = `CLAIMED '${slug}' -> work/in-progress/ on ${arbiter}/main.`;
 		note(message);
 		note(
-			`Start work:  git fetch ${arbiter} && git switch -c work/${slug} ${arbiter}/main`,
+			`Start work:  git fetch ${arbiter} && git switch -C ${branch} ${head}`,
 		);
-		return {kind: 'claimed', message};
+		return {kind: 'claimed', message, claimCommit: head};
 	}
 	return {kind: 'rejected', message: result.message};
 }

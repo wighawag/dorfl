@@ -5,6 +5,7 @@ import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
 } from './continue-branch.js';
+import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
 
 /**
  * The **isolation-strategy seam** (`docs/adr/command-surface-and-journeys.md`
@@ -45,7 +46,7 @@ export interface IsolatedTree {
 	 * strategy) or the current checkout (in-place strategy).
 	 */
 	dir: string;
-	/** The work branch checked out there (`work/<slug>`). */
+	/** The work branch checked out there (`work/<type>-<slug>`). */
 	branch: string;
 	/**
 	 * The git remote NAME, VALID INSIDE `dir`, that tracks the arbiter — the
@@ -86,8 +87,25 @@ export interface IsolatedTree {
 
 /** What a strategy needs to prepare an isolated tree for one work item. */
 export interface PrepareInput {
-	/** The work slug being processed (→ branch `work/<slug>`). */
+	/** The work slug being processed (→ branch `work/<type>-<slug>`). */
 	slug: string;
+	/**
+	 * The item TYPE — `'slice'` for a build (intake/`do slice:`), `'prd'` for a
+	 * PRD-slicing run (`do prd:`). It NAMESPACES the work branch via
+	 * {@link workBranchRef} so a same-slug slice and PRD never collide on the
+	 * arbiter branch. Defaults to `'slice'` (the overwhelmingly-common build
+	 * path); the PRD-slicing path passes `'prd'` explicitly.
+	 */
+	type?: SlugNamespace;
+	/**
+	 * The sha of the claim commit (`claim: <slug>`) just landed on the arbiter,
+	 * surfaced out of `performClaim`. The in-place FRESH path branches the work
+	 * branch from THIS exact commit (and HARD-FAILS if it is unreachable from
+	 * `<arbiter>/main`) — never a stale same-named branch or a not-yet-advanced
+	 * local main. Absent on a resume/continue or when the caller has no claim
+	 * commit (the job-worktree strategy ignores it).
+	 */
+	claimCommit?: string;
 	/** Environment for child git/agent processes. */
 	env?: NodeJS.ProcessEnv;
 }
@@ -129,11 +147,12 @@ export function jobWorktreeStrategy(options: {
 }): IsolationStrategy {
 	return {
 		name: 'job-worktree',
-		prepare({slug, env}): IsolatedTree {
+		prepare({slug, type, env}): IsolatedTree {
 			const job: Job = createJob({
 				fromRepo: options.fromRepo,
 				arbiter: options.arbiter,
 				slug,
+				type: type ?? 'slice',
 				workspacesDir: options.workspacesDir,
 				env,
 			});
@@ -200,8 +219,8 @@ export function inPlaceStrategy(options: {
 	const checkout = options.checkout;
 	return {
 		name: 'in-place',
-		prepare({slug, env}): IsolatedTree {
-			const branch = `work/${slug}`;
+		prepare({slug, type, claimCommit, env}): IsolatedTree {
+			const branch = workBranchRef(type ?? 'slice', slug);
 			const arbiterUrl = git(['remote', 'get-url', arbiter], checkout, {
 				env,
 			}).trim();
@@ -251,17 +270,37 @@ export function inPlaceStrategy(options: {
 					);
 				}
 			} else {
-				// FRESH: put the checkout on `work/<slug>` cut from the freshly-fetched
-				// `<arbiter>/main` (the same fresh-main guarantee as the job worktree).
-				// If the branch already exists locally (resume / re-run), switch to it
-				// instead of re-creating.
-				const created = gitSoftSwitch(
-					['switch', '--quiet', '-c', branch, `${arbiter}/main`],
-					checkout,
-					env,
-				);
-				if (!created) {
-					git(['switch', '--quiet', branch], checkout, {env});
+				// FRESH: put the checkout on the namespaced work branch cut from the
+				// EXACT claim commit (the defensive onboarding guard). When a
+				// `claimCommit` is threaded in (the normal `do` build path), assert it is
+				// reachable from the freshly-fetched `<arbiter>/main` and force-RESET the
+				// branch onto it with `-C` — so a stale same-named local branch (e.g. one
+				// `intake` left behind, or a prior re-run) is RE-POINTED at the claim
+				// commit, NEVER silently reused on a pre-claim base (the "nothing to
+				// complete" defect). Mirrors the CONTINUE path's `-C`. A missing /
+				// unreachable claim commit FAILS LOUDLY — never a silent stale-base build.
+				if (claimCommit !== undefined) {
+					assertClaimCommitReachable(
+						checkout,
+						claimCommit,
+						`${arbiter}/main`,
+						env,
+					);
+					git(['switch', '--quiet', '-C', branch, claimCommit], checkout, {
+						env,
+					});
+				} else {
+					// No claim commit (a bare resume / re-run with no claim in hand): cut
+					// off the freshly-fetched `<arbiter>/main`; plain-switch a pre-existing
+					// local branch.
+					const created = gitSoftSwitch(
+						['switch', '--quiet', '-c', branch, `${arbiter}/main`],
+						checkout,
+						env,
+					);
+					if (!created) {
+						git(['switch', '--quiet', branch], checkout, {env});
+					}
 				}
 			}
 
@@ -279,6 +318,34 @@ export function inPlaceStrategy(options: {
 			};
 		},
 	};
+}
+
+/**
+ * Assert the claim commit is reachable from `<arbiter>/main` (an ancestor),
+ * throwing a CLEAR error if not — the LOUD-failure guard the FRESH onboarding
+ * path uses before force-resetting the work branch onto the claim commit. A
+ * not-yet-fetched or rolled-back arbiter main that does NOT reach the claim must
+ * fail fast here, never silently build on a stale base.
+ */
+function assertClaimCommitReachable(
+	checkout: string,
+	claimCommit: string,
+	mainRef: string,
+	env: NodeJS.ProcessEnv | undefined,
+): void {
+	const reachable = gitSoftSwitch(
+		['merge-base', '--is-ancestor', claimCommit, mainRef],
+		checkout,
+		env,
+	);
+	if (!reachable) {
+		throw new Error(
+			`onboarding '${claimCommit}' failed: the claim commit is not reachable ` +
+				`from ${mainRef} (the claim push did not land, or local ${mainRef} is ` +
+				'stale). Refusing to build on a stale base — re-fetch the arbiter and ' +
+				'retry, or `requeue` the item.',
+		);
+	}
 }
 
 /** Try a git switch; return true on success, false on non-zero (no throw). */

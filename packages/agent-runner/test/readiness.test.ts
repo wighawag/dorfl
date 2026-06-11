@@ -239,7 +239,7 @@ describe('readiness guard — start path inherits it', () => {
 		expect(result.message).toMatch(/dep-a/);
 		// User untouched; NO work branch.
 		expect(currentBranch(seeded.repo)).toBe(before);
-		expect(localBranchExists(seeded.repo, 'work/feature')).toBe(false);
+		expect(localBranchExists(seeded.repo, 'work/slice-feature')).toBe(false);
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
 	});
 
@@ -258,8 +258,8 @@ describe('readiness guard — start path inherits it', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('started');
-		expect(result.branch).toBe('work/feature');
-		expect(currentBranch(seeded.repo)).toBe('work/feature');
+		expect(result.branch).toBe('work/slice-feature');
+		expect(currentBranch(seeded.repo)).toBe('work/slice-feature');
 		expect(notes.some((n) => /OVERRIDDEN/.test(n))).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'feature')).toBe(
 			true,
@@ -280,7 +280,7 @@ describe('readiness guard — start path inherits it', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('started');
-		expect(currentBranch(seeded.repo)).toBe('work/questions');
+		expect(currentBranch(seeded.repo)).toBe('work/slice-questions');
 		expect(notes.some((n) => /WARNING/.test(n))).toBe(true);
 	});
 
@@ -295,9 +295,9 @@ describe('readiness guard — start path inherits it', () => {
 		expect(result).toEqual({
 			exitCode: 0,
 			outcome: 'started',
-			branch: 'work/ready',
+			branch: 'work/slice-ready',
 			message: expect.stringContaining('Started'),
 		});
-		expect(currentBranch(seeded.repo)).toBe('work/ready');
+		expect(currentBranch(seeded.repo)).toBe('work/slice-ready');
 	});
 });

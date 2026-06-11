@@ -16,6 +16,7 @@ import {
 	type Config,
 } from './config.js';
 import {brand} from './brand.js';
+import {workBranchRef} from './slug-namespace.js';
 import type {InteractiveLauncher} from './harness.js';
 
 /**
@@ -410,7 +411,8 @@ function createHumanWorktree(params: {
 	}
 
 	const key = encodeRepoKey(mirrorUrl);
-	const branch = `work/${slug}`;
+	// `work-on` builds a SLICE in a worktree — the slice-namespaced work branch.
+	const branch = workBranchRef('slice', slug);
 	const dir = join(root, key, slug);
 
 	// Clear any stale worktree/branch for this slug (idempotent re-run).

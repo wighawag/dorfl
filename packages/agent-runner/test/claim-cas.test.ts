@@ -35,6 +35,46 @@ describe('performClaim — happy path', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
 	});
 
+	it('surfaces the claim commit sha AND advances local <arbiter>/main past the push (Part 2)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performClaim({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('claimed');
+		// (1) The claim commit sha is returned in the SUCCESS result.
+		expect(result.claimCommit).toMatch(/^[0-9a-f]{40}$/);
+		// It is the claim move on the arbiter's main (`claim: <slug>`), and it
+		// carries the in-progress move.
+		const arbiterMain = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		expect(result.claimCommit).toBe(arbiterMain);
+		const subject = gitIn(
+			['log', '-1', '--format=%s', result.claimCommit!],
+			repo,
+		).trim();
+		expect(subject).toBe('claim: alpha');
+
+		// (2) Local `arbiter/main` was fetch-advanced AFTER the push so it now
+		// REACHES the claim commit (the masking second defect): a fresh onboarding
+		// cut off `arbiter/main` includes the claim.
+		const isAncestor = gitIn(
+			[
+				'merge-base',
+				'--is-ancestor',
+				result.claimCommit!,
+				'arbiter/main',
+				'&&',
+				'echo',
+				'ok',
+			].slice(0, 4),
+			repo,
+		);
+		// `gitIn` throws on non-zero; reaching here means the ancestor check passed.
+		expect(isAncestor).toBe('');
+	});
+
 	it('does NOT introduce claimed_by / claimed_at (WORK-CONTRACT rule 6)', async () => {
 		// Contract: claim state is the folder + git history, never frontmatter.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);

@@ -47,14 +47,14 @@ async function stuckThenRequeued(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	// The build agent left work; commit it (the prior attempt's commit) and push
 	// the branch to the arbiter (the durable artifact requeue keeps).
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
-	gitIn(['push', '-q', ARBITER, `work/${slug}:work/${slug}`], repo);
+	gitIn(['push', '-q', ARBITER, `work/slice-${slug}:work/slice-${slug}`], repo);
 	// Route to needs-attention THROUGH the seam (surfaces it on the arbiter's main,
 	// mode M) so the item is in needs-attention/ on main, cross-machine visible.
 	await ledgerWrite.applyNeedsAttentionTransition({
@@ -91,7 +91,7 @@ describe('requeue default — keep + continue (in-place / start path)', () => {
 			env: gitEnv(),
 		});
 		expect(started.exitCode).toBe(0);
-		expect(started.branch).toBe('work/alpha');
+		expect(started.branch).toBe('work/slice-alpha');
 		// The prior attempt's commit is present on the branch the claim landed on
 		// (built ON the kept branch, NOT force-cut fresh off main). The continue
 		// REBASES onto the current main, so the prior commit's CONTENT is present and
@@ -149,11 +149,11 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'shared.txt'), 'branch version\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior edits shared'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/gamma:work/gamma'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/slice-gamma:work/slice-gamma'], repo);
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
@@ -209,7 +209,7 @@ describe('requeue default — force-with-lease on the WORK branch only (never ma
 		gitIn(['push', '-q', ARBITER, 'mv-main:main'], mover);
 		const mainAfterMove = arbiterRef(seeded, 'refs/heads/main');
 
-		const beforeWork = arbiterRef(seeded, 'refs/heads/work/delta');
+		const beforeWork = arbiterRef(seeded, 'refs/heads/work/slice-delta');
 		const fresh = seeded.clone('continuer');
 		const started = await performStart({
 			slug: 'delta',
@@ -219,9 +219,9 @@ describe('requeue default — force-with-lease on the WORK branch only (never ma
 		});
 		expect(started.exitCode).toBe(0);
 
-		// The arbiter's work/delta tip was UPDATED to the rebased tip (a lease-guarded
+		// The arbiter's work/slice-delta tip was UPDATED to the rebased tip (a lease-guarded
 		// non-fast-forward), and it equals the local work tip after onboarding.
-		const afterWork = arbiterRef(seeded, 'refs/heads/work/delta');
+		const afterWork = arbiterRef(seeded, 'refs/heads/work/slice-delta');
 		expect(afterWork).not.toBe(beforeWork);
 		expect(afterWork).toBe(gitIn(['rev-parse', 'HEAD'], fresh).trim());
 
@@ -242,7 +242,7 @@ describe('requeue --reset — discard + fresh', () => {
 	it('deletes the remote branch FIRST, then moves to backlog; next claim is FRESH', async () => {
 		const reset = await stuckButNeedsAttention('zeta');
 		// Sanity: the kept branch IS on the arbiter before --reset.
-		expect(arbiterHasBranch(reset.seeded, 'work/zeta')).toBe(true);
+		expect(arbiterHasBranch(reset.seeded, 'work/slice-zeta')).toBe(true);
 
 		const result = await returnToBacklog({
 			cwd: reset.repo,
@@ -254,7 +254,7 @@ describe('requeue --reset — discard + fresh', () => {
 		expect(result.moved).toBe(true);
 		expect(result.deletedRemoteBranch).toBe(true);
 		// The remote branch is GONE.
-		expect(arbiterHasBranch(reset.seeded, 'work/zeta')).toBe(false);
+		expect(arbiterHasBranch(reset.seeded, 'work/slice-zeta')).toBe(false);
 		// The item is in backlog (the move happened AFTER the delete).
 		expect(existsOnArbiterMain(reset.repo, 'backlog', 'zeta')).toBe(true);
 
@@ -384,7 +384,7 @@ describe('requeue continue — JOB-WORKTREE path (createJob)', () => {
 		expect(existsSync(join(job.dir, 'prior.txt'))).toBe(true);
 		// clearStale did not nuke the continued branch: it is checked out + present.
 		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], job.dir).trim()).toBe(
-			'work/lambda',
+			'work/slice-lambda',
 		);
 	});
 
@@ -436,11 +436,11 @@ async function stuckButNeedsAttention(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
-	gitIn(['push', '-q', ARBITER, `work/${slug}:work/${slug}`], repo);
+	gitIn(['push', '-q', ARBITER, `work/slice-${slug}:work/slice-${slug}`], repo);
 	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,

@@ -172,8 +172,8 @@ describe('resume behaviour — switches to an in-progress branch WITHOUT claimin
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('resumed');
-		expect(result.branch).toBe('work/beta');
-		expect(currentBranch(repo)).toBe('work/beta');
+		expect(result.branch).toBe('work/slice-beta');
+		expect(currentBranch(repo)).toBe('work/slice-beta');
 		// It did NOT (re-)claim: the item stays in-progress, never re-moved.
 		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
 	});

@@ -5,6 +5,7 @@ import {
 	rebaseContinuedBranchOntoMain,
 } from './continue-branch.js';
 import {runAsync, type RunResult} from './git.js';
+import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import type {InteractiveLauncher} from './harness.js';
 
 /**
@@ -315,7 +316,7 @@ async function continueConflictResult(params: {
 	return {
 		exitCode: 1,
 		outcome: 'needs-attention',
-		branch: `work/${params.slug}`,
+		branch: workBranchRef('slice', params.slug),
 		message,
 	};
 }
@@ -472,7 +473,9 @@ async function switchToWorkBranch(params: {
 	note: (m: string) => void;
 }): Promise<SwitchResult> {
 	const {slug, arbiter, cwd, env, note} = params;
-	const branch = `work/${slug}`;
+	// `start` is a SLICE-only command: the branch is the slice-namespaced
+	// `work/slice-<slug>` (distinct from a same-slug PRD-slicing branch).
+	const branch = workBranchRef('slice', slug);
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 
@@ -523,7 +526,7 @@ async function continueFromKeptBranch(params: {
 	note: (m: string) => void;
 }): Promise<SwitchResult> {
 	const {slug, arbiter, cwd, env, note} = params;
-	const branch = `work/${slug}`;
+	const branch = workBranchRef('slice', slug);
 	note(`Continuing '${slug}' from the kept ${arbiter}/${branch} (requeue).`);
 
 	// Land the local work branch ON the kept arbiter tip (force-reset a stale
@@ -581,9 +584,9 @@ async function routeContinueConflict(params: {
 }): Promise<void> {
 	const {slug, arbiter, cwd, env, note} = params;
 	const reason =
-		`continuing the kept ${arbiter}/work/${slug}: rebase onto ${arbiter}/main ` +
-		'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
-		'main, or `requeue --reset` to discard and start fresh';
+		`continuing the kept ${arbiter}/${workBranchRef('slice', slug)}: rebase onto ` +
+		`${arbiter}/main conflicted (aborted, never auto-resolved) — resolve ` +
+		'against the latest main, or `requeue --reset` to discard and start fresh';
 	note(reason);
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const startRef =
@@ -616,7 +619,7 @@ async function routeContinueConflict(params: {
 	}
 }
 
-/** If HEAD is a `work/<slug>` branch, return `<slug>`; else ''. */
+/** If HEAD is a `work/<type>-<slug>` branch, return `<slug>`; else ''. */
 async function inferSlugFromBranch(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
@@ -629,9 +632,7 @@ async function inferSlugFromBranch(
 	if (sym.status !== 0) {
 		return '';
 	}
-	const branch = sym.stdout.trim();
-	const match = /^work\/(.+)$/.exec(branch);
-	return match ? match[1] : '';
+	return parseWorkBranchRef(sym.stdout.trim())?.slug ?? '';
 }
 
 /** Which work/ folder the slug currently lives in on `<arbiter>/main`. */

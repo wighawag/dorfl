@@ -6,6 +6,7 @@ import {
 	readJobRecord,
 	type JobRecord,
 } from './workspace.js';
+import {workBranchRef} from './slug-namespace.js';
 
 /**
  * The **reaper** for job worktrees, governed by the **provably-safe deletion
@@ -304,7 +305,12 @@ export function discoverJobs(workspacesDir: string): GcJob[] {
 		}
 		const record = readJobRecord(dir);
 		const slug = record?.slug ?? deriveSlug(entry);
-		const branch = record?.branch ?? `work/${slug}`;
+		// The job record carries the (already-namespaced) branch — the SOURCE OF
+		// TRUTH. Only when a record is missing/legacy do we synthesise a fallback;
+		// the flat work-id dir name cannot recover the type, so default to the
+		// overwhelmingly-common `slice` namespace (a recordless worktree is a rare
+		// legacy/corrupt case).
+		const branch = record?.branch ?? workBranchRef('slice', slug);
 		jobs.push({dir, slug, branch, record});
 	}
 	return jobs;

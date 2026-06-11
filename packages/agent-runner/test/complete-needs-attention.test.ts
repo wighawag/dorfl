@@ -50,7 +50,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -126,7 +126,7 @@ describe('complete — failed gate routes to needs-attention', () => {
 		const wip = gitIn(['show', '--name-status', '--format=', 'HEAD~1'], repo);
 		expect(wip).toMatch(/feature\.txt/);
 		// Not mid-rebase, not detached.
-		expect(currentBranch(repo)).toBe('work/beta');
+		expect(currentBranch(repo)).toBe('work/slice-beta');
 	});
 
 	it('--skip-verify is unchanged: completes, no needs-attention move', async () => {
@@ -220,6 +220,6 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 		});
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
-		expect(currentBranch(repo)).toBe('work/kappa');
+		expect(currentBranch(repo)).toBe('work/slice-kappa');
 	});
 });

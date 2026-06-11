@@ -273,7 +273,7 @@ describe('run through performIntegration — a THROWN core error is caught', () 
 		gitIn(['fetch', '-q', 'arbiter'], join(scratch.root, 'project'));
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
 				join(scratch.root, 'project'),
 			).trim(),
 		).not.toBe('');

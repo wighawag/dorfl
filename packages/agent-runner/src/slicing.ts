@@ -28,6 +28,7 @@ import {
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {setNeedsAnswersMarker} from './frontmatter.js';
+import {workBranchRef} from './slug-namespace.js';
 import {
 	runSliceReviewLoop,
 	type SliceReviewGate,
@@ -702,7 +703,9 @@ async function switchToWorkBranch(
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
-	const branch = `work/${slug}`;
+	// The slicing path is the PRD namespace (`do prd:<slug>`): the branch is
+	// `work/prd-<slug>`, distinct from a same-slug slice-build's `work/slice-<slug>`.
+	const branch = workBranchRef('prd', slug);
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(
 		['switch', '--quiet', '-C', branch, `${arbiter}/main`],

@@ -71,7 +71,7 @@ async function claimAndBranch(slug: string) {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	// Simulate the build agent: leave UNCOMMITTED work (it does no git).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return {seeded, repo};
@@ -94,7 +94,7 @@ describe('integration-core — approve ⇒ completed', () => {
 
 		expect(core.outcome).toBe('completed');
 		expect(core.routedToNeedsAttention).toBe(false);
-		expect(core.branch).toBe('work/alpha');
+		expect(core.branch).toBe('work/slice-alpha');
 		expect(core.commitMessage).toMatch(/^feat\(alpha\):.*; done$/);
 		// The integration result carries the EFFECTIVE mode (the tail reads it here).
 		expect(core.integration?.mode).toBe('propose');
@@ -173,7 +173,7 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 
 		expect(core.outcome).toBe('gate-failed');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/delta');
+		expect(core.branch).toBe('work/slice-delta');
 		expect(core.reason).toMatch(/acceptance gate failed/i);
 		// Bounced from in-progress/ straight to needs-attention/, never done/.
 		expect(existsSync(join(repo, 'work', 'in-progress', 'delta.md'))).toBe(
@@ -207,7 +207,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 
 		expect(core.outcome).toBe('review-blocked');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/epsilon');
+		expect(core.branch).toBe('work/slice-epsilon');
 		expect(core.reason).toMatch(/review.*blocked/i);
 		expect(core.integration).toBeUndefined();
 		// Routed to needs-attention/, never reached done/.
@@ -245,7 +245,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 
 		expect(core.outcome).toBe('rebase-conflict');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/theta');
+		expect(core.branch).toBe('work/slice-theta');
 		expect(core.reason).toMatch(/conflict/i);
 		// The commit was authored (done-move happened) before the rebase conflicted.
 		expect(core.commitMessage).toMatch(/^feat\(theta\):.*; done$/);

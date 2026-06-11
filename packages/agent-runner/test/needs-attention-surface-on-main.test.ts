@@ -65,7 +65,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -88,7 +88,7 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 		});
 		expect(result.moved).toBe(true);
 
-		// TWO commits on work/alpha: the MOVE-ONLY tip is purely the git mv (no
+		// TWO commits on work/slice-alpha: the MOVE-ONLY tip is purely the git mv (no
 		// agent file); the wip below it holds the aborted work.
 		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
 		expect(tip).toMatch(/work\/needs-attention\/alpha\.md/);
@@ -285,11 +285,11 @@ describe('needs-attention surface-on-main — resolve via start (no manual moves
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('resolved');
-		expect(result.branch).toBe('work/epsilon');
+		expect(result.branch).toBe('work/slice-epsilon');
 		// The recorded reason was printed for the human.
 		expect(notes.join('\n')).toMatch(/flaky test/i);
 		// The human landed ON the work branch.
-		expect(currentBranch(human)).toBe('work/epsilon');
+		expect(currentBranch(human)).toBe('work/slice-epsilon');
 		// The main surface is CLEARED: the item is back in in-progress, no longer
 		// in needs-attention (truthful surface).
 		expect(existsOnArbiterMain(human, 'needs-attention', 'epsilon')).toBe(

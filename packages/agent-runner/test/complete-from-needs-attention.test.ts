@@ -63,7 +63,7 @@ async function seedSurfacedNeedsAttention(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 
 	// The agent produced work, but the gate failed spuriously.
 	agentEdits(repo, opts.agentFile);
@@ -86,7 +86,7 @@ async function seedSurfacedNeedsAttention(
 		false,
 	);
 	expect(existsOnArbiterMain(repo, 'needs-attention', slug)).toBe(true);
-	expect(currentBranch(repo)).toBe(`work/${slug}`);
+	expect(currentBranch(repo)).toBe(`work/slice-${slug}`);
 	return {repo, seeded};
 }
 
@@ -241,7 +241,7 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(result.outcome).toBe('completed');
 		// propose does not land on main; the branch is pushed with the done-move.
 		const branchHead = gitIn(
-			['show', `${ARBITER}/work/zeta:work/done/zeta.md`],
+			['show', `${ARBITER}/work/slice-zeta:work/done/zeta.md`],
 			repo,
 		);
 		expect(branchHead).toMatch(/Needs attention/i);
@@ -260,7 +260,7 @@ describe('complete — the in-progress → done path is unchanged', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/omega', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-omega', `${ARBITER}/main`], repo);
 		agentEdits(repo);
 
 		const result = await performComplete({
@@ -284,7 +284,10 @@ describe('complete — the in-progress → done path is unchanged', () => {
 		const repo = seeded.repo;
 		// Never claim — just sit on a work branch with no ledger file present.
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/nonexistent', `${ARBITER}/main`], repo);
+		gitIn(
+			['switch', '-q', '-c', 'work/slice-nonexistent', `${ARBITER}/main`],
+			repo,
+		);
 
 		const result = await performComplete({
 			slug: 'nonexistent',

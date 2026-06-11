@@ -199,13 +199,13 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(arbiterHeadSubject(repo)).toMatch(/^slicing: lock it/);
 
 		// The work branch was PUSHED carrying the slices + the PRD restore.
-		expect(onArbiterBranch(repo, 'work/it', 'work/backlog/child.md')).toBe(
+		expect(onArbiterBranch(repo, 'work/prd-it', 'work/backlog/child.md')).toBe(
 			true,
 		);
-		expect(onArbiterBranch(repo, 'work/it', 'work/prd-sliced/it.md')).toBe(
+		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prd-sliced/it.md')).toBe(
 			true,
 		);
-		expect(onArbiterBranch(repo, 'work/it', 'work/prd/it.md')).toBe(false);
+		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prd/it.md')).toBe(false);
 
 		// A PR was opened (the recording gh stub captured a `pr create`).
 		const args = readFileSync(argsFile, 'utf8');
@@ -257,9 +257,9 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 			if (!row.landsOnMain) {
 				// Propose pushed the work branch carrying the slices (the SAME branch
 				// `performIntegration` integrates on the build path).
-				expect(onArbiterBranch(repo, 'work/it', 'work/backlog/child.md')).toBe(
-					true,
-				);
+				expect(
+					onArbiterBranch(repo, 'work/prd-it', 'work/backlog/child.md'),
+				).toBe(true);
 			}
 		});
 	}

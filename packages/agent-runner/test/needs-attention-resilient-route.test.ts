@@ -58,7 +58,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	if (opts.commitWork) {
 		writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 		gitIn(['add', '-A'], repo);
@@ -149,7 +149,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 			slug: 'delta',
 			reason: 'gate red',
 			arbiter: ARBITER,
-			branch: 'work/never-created',
+			branch: 'work/slice-never-created',
 			env: gitEnv(),
 			...FAST,
 		});
@@ -163,7 +163,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/never-created^{commit}`,
+				`${ARBITER}/work/slice-never-created^{commit}`,
 			],
 			repo,
 			{env: gitEnv()},
@@ -194,7 +194,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 			slug: 'zeta',
 			reason: 'gate red',
 			arbiter: ARBITER,
-			branch: 'work/never-created',
+			branch: 'work/slice-never-created',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 			...FAST,
@@ -202,7 +202,9 @@ describe('needs-attention route — honest per-op reporting', () => {
 		expect(routed.branchPush).toBe('skipped-empty');
 		// A note explicitly says the branch push was SKIPPED (nothing to recover) —
 		// not "pushed".
-		expect(notes.join('\n')).toMatch(/Skipped pushing work\/never-created/);
+		expect(notes.join('\n')).toMatch(
+			/Skipped pushing work\/slice-never-created/,
+		);
 	});
 });
 
@@ -221,7 +223,7 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 			...FAST,
 		});
 		// Restore the arbiter so the requeue's FETCH works — but the branch was
-		// never pushed, so `<arbiter>/work/eta` is absent (the local one survives,
+		// never pushed, so `<arbiter>/work/slice-eta` is absent (the local one survives,
 		// which is exactly why we must check the ARBITER ref, not the local one).
 		gitIn(
 			['remote', 'set-url', ARBITER, `file://${seededArbiter(repo)}`],
@@ -336,7 +338,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		const delays: number[] = [];
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/feat',
+			branch: 'work/slice-feat',
 			arbiter: 'origin',
 			sleep: async (ms: number) => {
 				delays.push(ms);
@@ -346,7 +348,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 
 		// LOW severity: the branch is reported SAFE/pushed; only the PR is missing.
 		expect(result.opened).toBe(false);
-		expect(result.instruction).toMatch(/Pushed work\/feat/);
+		expect(result.instruction).toMatch(/Pushed work\/slice-feat/);
 		expect(result.instruction).toMatch(/gh pr create/);
 		expect(result.instruction).toMatch(/after retries|transient outage|SAFE/i);
 		// It RETRIED (an authed-but-failing create) before degrading.
@@ -361,7 +363,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		const delays: number[] = [];
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/feat',
+			branch: 'work/slice-feat',
 			arbiter: 'origin',
 			sleep: async (ms: number) => {
 				delays.push(ms);

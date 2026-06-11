@@ -81,7 +81,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	return {seeded, repo};
 }
 
@@ -214,7 +214,7 @@ describe('complete — done-move + commit', () => {
 		// "move" cannot stage content. We instead test the guard directly by
 		// completing twice: the second run finds nothing in-progress.
 		agentEdits(repo);
-		// --no-switch keeps us on work/empty so the SECOND run still infers the
+		// --no-switch keeps us on work/slice-empty so the SECOND run still infers the
 		// slug from the branch and hits the "nothing in-progress" refusal (rather
 		// than landing on main where slug inference would fail).
 		const first = await performComplete({
@@ -266,7 +266,10 @@ describe('complete — done-move + commit', () => {
 			env: gitEnv(),
 		});
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/theslug', `${ARBITER}/main`], repo);
+		gitIn(
+			['switch', '-q', '-c', 'work/slice-theslug', `${ARBITER}/main`],
+			repo,
+		);
 		agentEdits(repo);
 
 		// Default type+message. --no-switch keeps HEAD on the work branch so the
@@ -394,7 +397,7 @@ describe('complete — propose integration', () => {
 		// Deletion-safety is unaffected: the branch was pushed to the arbiter.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const pushed = gitIn(
-			['rev-parse', '--verify', `${ARBITER}/work/gh-degrade`],
+			['rev-parse', '--verify', `${ARBITER}/work/slice-gh-degrade`],
 			repo,
 		).trim();
 		expect(pushed).not.toBe('');
@@ -420,7 +423,7 @@ describe('complete — propose integration', () => {
 		// The work branch was pushed to the arbiter…
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const pushed = gitIn(
-			['rev-parse', '--verify', `${ARBITER}/work/zeta`],
+			['rev-parse', '--verify', `${ARBITER}/work/slice-zeta`],
 			repo,
 		).trim();
 		expect(pushed).not.toBe('');
@@ -447,8 +450,8 @@ describe('complete — propose integration', () => {
 		expect(result.exitCode).toBe(0);
 		const block = blocks.join('\n');
 		// Surrounded by blank lines, names the pushed branch, and carries ANSI color.
-		expect(block).toContain('work/zeta-tty');
-		expect(block).toContain(`${ARBITER}/work/zeta-tty`);
+		expect(block).toContain('work/slice-zeta-tty');
+		expect(block).toContain(`${ARBITER}/work/slice-zeta-tty`);
 		expect(block).toContain('\u001b['); // ANSI escape ⇒ color present
 	});
 
@@ -468,7 +471,7 @@ describe('complete — propose integration', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		const block = blocks.join('\n');
-		expect(block).toContain('work/zeta-plain');
+		expect(block).toContain('work/slice-zeta-plain');
 		expect(block).not.toContain('\u001b['); // no ANSI escapes when plain
 		// Still surrounded by blank lines (stands out without color too).
 		const lines = block.split('\n');
@@ -582,7 +585,7 @@ describe('complete — rebase conflict (ADR §10)', () => {
 		expect(result.message).toMatch(/aborted/i);
 		expect(result.routedToNeedsAttention).toBe(true);
 		// The rebase was aborted: we are back on the work branch, not mid-rebase.
-		expect(currentBranch(repo)).toBe('work/theta');
+		expect(currentBranch(repo)).toBe('work/slice-theta');
 		expect(existsSync(join(repo, '.git', 'rebase-merge'))).toBe(false);
 		expect(existsSync(join(repo, '.git', 'rebase-apply'))).toBe(false);
 		// Nothing landed on arbiter main — and the item is routed to
@@ -606,7 +609,7 @@ describe('complete — slug inference + environment', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.branch).toBe('work/inferred');
+		expect(result.branch).toBe('work/slice-inferred');
 	});
 
 	it('errors when not on a work/<slug> branch and no slug given', async () => {
@@ -634,7 +637,7 @@ describe('complete — slug inference + environment', () => {
 		});
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
-		expect(result.message).toMatch(/not on work\/mismatch/);
+		expect(result.message).toMatch(/not on work\/slice-mismatch/);
 	});
 
 	it('errors when the arbiter remote does not exist', async () => {
@@ -702,7 +705,7 @@ describe('complete — switch back to main (both modes)', () => {
 		// No ff happened: local main must NOT contain the completion commit (the
 		// work lives on the pushed branch, never on main in propose mode).
 		const completionCommit = gitIn(
-			['rev-parse', `${ARBITER}/work/p-switch`],
+			['rev-parse', `${ARBITER}/work/slice-p-switch`],
 			repo,
 		).trim();
 		const containsCompletion =
@@ -730,7 +733,7 @@ describe('complete — local work-branch deletion (provably on arbiter)', () => 
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.deletedLocalBranch).toBe(true);
-		expect(localBranchExists(repo, 'work/m-del')).toBe(false);
+		expect(localBranchExists(repo, 'work/slice-m-del')).toBe(false);
 	});
 
 	it('propose: deletes the LOCAL work branch (pushed & up-to-date) but NEVER the remote', async () => {
@@ -747,9 +750,9 @@ describe('complete — local work-branch deletion (provably on arbiter)', () => 
 		expect(result.exitCode).toBe(0);
 		expect(result.deletedLocalBranch).toBe(true);
 		// Local branch gone…
-		expect(localBranchExists(repo, 'work/p-del')).toBe(false);
+		expect(localBranchExists(repo, 'work/slice-p-del')).toBe(false);
 		// …but the REMOTE branch (which a propose PR is built from) survives.
-		expect(remoteBranchExists(repo, 'work/p-del')).toBe(true);
+		expect(remoteBranchExists(repo, 'work/slice-p-del')).toBe(true);
 	});
 
 	it('keeps the LOCAL branch under --no-switch even when provably on arbiter', async () => {
@@ -766,7 +769,7 @@ describe('complete — local work-branch deletion (provably on arbiter)', () => 
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.deletedLocalBranch).toBeFalsy();
-		expect(localBranchExists(repo, 'work/keep-noswitch')).toBe(true);
+		expect(localBranchExists(repo, 'work/slice-keep-noswitch')).toBe(true);
 	});
 });
 
@@ -777,12 +780,12 @@ describe('complete — isLocalBranchProvablyOnArbiter predicate (ADR §4)', () =
 		// Commit + push the branch tip onto arbiter main (a merge would do this).
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'work'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/pred-merged:main'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/slice-pred-merged:main'], repo);
 		expect(
 			await isLocalBranchProvablyOnArbiter(
 				repo,
 				ARBITER,
-				'work/pred-merged',
+				'work/slice-pred-merged',
 				gitEnv(),
 			),
 		).toBe(true);
@@ -793,12 +796,15 @@ describe('complete — isLocalBranchProvablyOnArbiter predicate (ADR §4)', () =
 		agentEdits(repo);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'work'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/pred-pushed:work/pred-pushed'], repo);
+		gitIn(
+			['push', '-q', ARBITER, 'work/slice-pred-pushed:work/slice-pred-pushed'],
+			repo,
+		);
 		expect(
 			await isLocalBranchProvablyOnArbiter(
 				repo,
 				ARBITER,
-				'work/pred-pushed',
+				'work/slice-pred-pushed',
 				gitEnv(),
 			),
 		).toBe(true);
@@ -814,7 +820,7 @@ describe('complete — isLocalBranchProvablyOnArbiter predicate (ADR §4)', () =
 			await isLocalBranchProvablyOnArbiter(
 				repo,
 				ARBITER,
-				'work/pred-unmerged',
+				'work/slice-pred-unmerged',
 				gitEnv(),
 			),
 		).toBe(false);
@@ -826,7 +832,15 @@ describe('complete — isLocalBranchProvablyOnArbiter predicate (ADR §4)', () =
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'work'], repo);
 		// Push the branch (a remote branch now exists)…
-		gitIn(['push', '-q', ARBITER, 'work/pred-diverge:work/pred-diverge'], repo);
+		gitIn(
+			[
+				'push',
+				'-q',
+				ARBITER,
+				'work/slice-pred-diverge:work/slice-pred-diverge',
+			],
+			repo,
+		);
 		// …then advance the LOCAL tip WITHOUT pushing (the un-pushed amend).
 		writeFileSync(join(repo, 'more.txt'), 'unpushed\n');
 		gitIn(['add', '-A'], repo);
@@ -836,7 +850,7 @@ describe('complete — isLocalBranchProvablyOnArbiter predicate (ADR §4)', () =
 			await isLocalBranchProvablyOnArbiter(
 				repo,
 				ARBITER,
-				'work/pred-diverge',
+				'work/slice-pred-diverge',
 				gitEnv(),
 			),
 		).toBe(false);
@@ -857,10 +871,10 @@ describe('complete — --no-switch opt-out (both modes)', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.switchedTo).toBe('work/m-stay');
-		expect(currentBranch(repo)).toBe('work/m-stay');
+		expect(result.switchedTo).toBe('work/slice-m-stay');
+		expect(currentBranch(repo)).toBe('work/slice-m-stay');
 		expect(result.deletedLocalBranch).toBeFalsy();
-		expect(localBranchExists(repo, 'work/m-stay')).toBe(true);
+		expect(localBranchExists(repo, 'work/slice-m-stay')).toBe(true);
 		// The work still landed on arbiter main (integration is unaffected).
 		expect(existsOnArbiterMain(repo, 'done', 'm-stay')).toBe(true);
 	});
@@ -878,11 +892,11 @@ describe('complete — --no-switch opt-out (both modes)', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.switchedTo).toBe('work/p-stay');
-		expect(currentBranch(repo)).toBe('work/p-stay');
+		expect(result.switchedTo).toBe('work/slice-p-stay');
+		expect(currentBranch(repo)).toBe('work/slice-p-stay');
 		expect(result.deletedLocalBranch).toBeFalsy();
-		expect(localBranchExists(repo, 'work/p-stay')).toBe(true);
+		expect(localBranchExists(repo, 'work/slice-p-stay')).toBe(true);
 		// The branch was still pushed for review (integration is unaffected).
-		expect(remoteBranchExists(repo, 'work/p-stay')).toBe(true);
+		expect(remoteBranchExists(repo, 'work/slice-p-stay')).toBe(true);
 	});
 });

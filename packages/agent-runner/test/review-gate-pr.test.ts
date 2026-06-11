@@ -147,7 +147,7 @@ describe('Gate 2 — approve proceeds to integrate (autoMerge gates the merge)',
 		// The work branch was pushed (the propose safety-bearing step).
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -245,7 +245,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -426,7 +426,7 @@ describe('Gate 2 — review on with no gate wired is a loud usage error', () => 
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 
 		const result = await performComplete({

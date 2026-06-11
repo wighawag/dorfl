@@ -211,11 +211,18 @@ export function wrapper(
  */
 export interface ContinueContext {
 	/**
-	 * The arbiter remote name the prior `work/<slug>` lives on (e.g. `origin` /
-	 * `arbiter`). Used only to point the agent at the right diff base
+	 * The arbiter remote name the prior `work/<type>-<slug>` lives on (e.g.
+	 * `origin` / `arbiter`). Used only to point the agent at the right diff base
 	 * (`<arbiter>/main`) — the block is prose, not a git op.
 	 */
 	arbiter: string;
+	/**
+	 * The NAMESPACED work branch the prior attempt's work lives on
+	 * (`work/<type>-<slug>`), derived from the resolved `branchRef`. The block
+	 * prose names it VERBATIM (the agent's `git diff` pointer must hit the real
+	 * branch, not a bare `work/<slug>`).
+	 */
+	branch: string;
 	/**
 	 * The needs-attention reason (runner-written: WHY the prior attempt stalled),
 	 * read from the item BODY. Empty string when none was recorded.
@@ -299,9 +306,24 @@ export function resolveContinueContext(options: {
 	}
 	return {
 		arbiter: options.arbiter,
+		// Strip any `<arbiter>/` remote prefix off the ref to recover the bare
+		// `work/<type>-<slug>` branch name the prose points at.
+		branch: stripRemotePrefix(options.branchRef, options.arbiter),
 		reason: extractReason(options.content),
 		requeueNotes: extractRequeueNotes(options.content),
 	};
+}
+
+/**
+ * Recover the bare `work/<type>-<slug>` branch from a resolved ref: drop a
+ * leading `<arbiter>/` (the in-place remote-tracking form `<arbiter>/work/...`);
+ * the bare hub-mirror form (`work/...`) is returned as-is.
+ */
+function stripRemotePrefix(branchRef: string, arbiter: string): string {
+	const prefix = `${arbiter}/`;
+	return branchRef.startsWith(prefix)
+		? branchRef.slice(prefix.length)
+		: branchRef;
 }
 
 /**
@@ -316,9 +338,9 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
 	lines.push('');
 	lines.push(
 		`This is NOT a fresh start. A prior attempt at '${slug}' was requeued, and ` +
-			`you have landed on its \`work/${slug}\` branch — it ALREADY carries that ` +
+			`you have landed on its \`${ctx.branch}\` branch — it ALREADY carries that ` +
 			'work. Before you implement anything, REVIEW what the prior attempt did ' +
-			`(\`git diff ${ctx.arbiter}/main...work/${slug}\`) and BUILD ON what is ` +
+			`(\`git diff ${ctx.arbiter}/main...${ctx.branch}\`) and BUILD ON what is ` +
 			'good — do NOT blindly restart or undo it.',
 	);
 	if (ctx.reason.trim() !== '') {

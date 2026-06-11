@@ -230,7 +230,12 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const branchTip = gitIn(
-			['rev-parse', '--verify', '--quiet', `${ARBITER}/work/add-quiet-flag`],
+			[
+				'rev-parse',
+				'--verify',
+				'--quiet',
+				`${ARBITER}/work/intake-slice-add-quiet-flag`,
+			],
 			repo,
 		).trim();
 		expect(branchTip).not.toBe('');
@@ -239,7 +244,10 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		// (read by a future CI close-job), covers: [], and NO prd: — and NO `Fixes #N`
 		// (a deferred GitHub-only optimisation, dropped from intake).
 		const onBranch = gitIn(
-			['show', `${ARBITER}/work/add-quiet-flag:work/backlog/add-quiet-flag.md`],
+			[
+				'show',
+				`${ARBITER}/work/intake-slice-add-quiet-flag:work/backlog/add-quiet-flag.md`,
+			],
 			repo,
 		);
 		expect(onBranch).toContain('slug: add-quiet-flag');
@@ -315,7 +323,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			[
 				'rev-list',
 				'--count',
-				`${ARBITER}/main..${ARBITER}/work/add-quiet-flag`,
+				`${ARBITER}/main..${ARBITER}/work/intake-slice-add-quiet-flag`,
 			],
 			repo,
 		).trim();
@@ -424,7 +432,9 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		// branch was even pushed for the ask outcome (no integrate ran).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const remoteBranches = gitIn(['branch', '-r'], repo);
-		expect(remoteBranches).not.toContain(`${ARBITER}/work/add-quiet-flag`);
+		expect(remoteBranches).not.toContain(
+			`${ARBITER}/work/intake-slice-add-quiet-flag`,
+		);
 	});
 
 	it('a stubbed `bounce` verdict CLOSES the issue ATOMICALLY (bounce text as closing comment + reason not planned), emits NOTHING — no separate postIssueComment', async () => {
@@ -630,7 +640,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/quiet-and-verbose-modes`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
 			],
 			repo,
 		).trim();
@@ -642,7 +652,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/quiet-and-verbose-modes:work/prd/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/prd/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -677,7 +687,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/a-coupled-but-small-pair:work/prd/a-coupled-but-small-pair.md`,
+				`${ARBITER}/work/intake-prd-a-coupled-but-small-pair:work/prd/a-coupled-but-small-pair.md`,
 			],
 			repo,
 		);
@@ -801,7 +811,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(gitIn(['branch', '-r'], repo)).not.toContain(
-			`${ARBITER}/work/add-quiet-flag`,
+			`${ARBITER}/work/intake-slice-add-quiet-flag`,
 		);
 		// The loser did NOT touch the label — it is still held (only the winner removes
 		// it on its own finish). No add/remove from this backed-off run.
@@ -1003,7 +1013,12 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const branchTip = gitIn(
-			['rev-parse', '--verify', '--quiet', `${ARBITER}/work/add-quiet-flag`],
+			[
+				'rev-parse',
+				'--verify',
+				'--quiet',
+				`${ARBITER}/work/intake-slice-add-quiet-flag`,
+			],
 			repo,
 		).trim();
 		expect(branchTip).not.toBe('');
@@ -1900,7 +1915,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			integration: {
 				mode: 'propose',
 				mergedToMain: false,
-				pushedRef: 'work/add-quiet-flag',
+				pushedRef: 'work/intake-slice-add-quiet-flag',
 				provider: 'github',
 				requestOpened: true,
 				url: 'https://github.com/o/r/pull/7',

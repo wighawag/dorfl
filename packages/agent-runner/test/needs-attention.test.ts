@@ -53,7 +53,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	return {repo};
 }
 
@@ -269,9 +269,9 @@ describe('needs-attention — pushes the transition like the done-move', () => {
 		});
 
 		// The work branch carries the move; push it and confirm the arbiter has it.
-		gitIn(['push', '-q', ARBITER, 'work/kappa:work/kappa'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/slice-kappa:work/slice-kappa'], repo);
 		const res = gitIn(
-			['cat-file', '-e', 'work/kappa:work/needs-attention/kappa.md'],
+			['cat-file', '-e', 'work/slice-kappa:work/needs-attention/kappa.md'],
 			repo,
 		);
 		expect(res).toBe('');

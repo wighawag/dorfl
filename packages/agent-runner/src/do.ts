@@ -3,7 +3,11 @@ import {dirname, join} from 'node:path';
 import {performStart} from './start.js';
 import {performComplete} from './complete.js';
 import {performClaim} from './claim-cas.js';
-import {resolveSlug, SlugResolutionError} from './slug-namespace.js';
+import {
+	resolveSlug,
+	SlugResolutionError,
+	workBranchRef,
+} from './slug-namespace.js';
 import {performSlice, type SliceResult} from './slicing.js';
 import type {SliceReviewGate} from './slicer-review-loop.js';
 import {
@@ -618,6 +622,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	try {
 		tree = selectIsolationStrategy({checkout: cwd, arbiter}).prepare({
 			slug,
+			// The slice-build path: namespace the branch `work/slice-<slug>`, and
+			// branch it from the EXACT claim commit (the defensive guard) so a stale
+			// same-named branch (e.g. one `intake` left) is re-pointed, never reused.
+			type: 'slice',
+			claimCommit: claim.claimCommit,
 			env,
 		});
 	} catch (err) {
@@ -634,7 +643,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     onboard; the runner owns the bounce.
 	if (tree.continueRebaseConflict) {
 		const reason =
-			`continuing the kept work/${slug}: rebase onto the latest main ` +
+			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
 		await ledgerWrite.applyNeedsAttentionTransition({
@@ -674,7 +683,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			cwd: tree.dir,
 			slug,
 			arbiter: tree.arbiterRemote,
-			branchRef: `${tree.arbiterRemote}/work/${slug}`,
+			branchRef: `${tree.arbiterRemote}/${tree.branch}`,
 			mainRef: `${tree.arbiterRemote}/main`,
 			content: readFileSync(slice.path, 'utf8'),
 			env,
@@ -983,10 +992,11 @@ async function saveAgentFailure(params: {
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiter, detail, env, note} = params;
-	// The work branch is always `work/<slug>` (the onboarding switched the checkout
-	// to it before the agent ran); derive it from the slug so the push target is
-	// always defined even when the caller's `branch` was not narrowed.
-	const branch = params.branch ?? `work/${slug}`;
+	// The work branch is the namespaced build branch (`work/slice-<slug>`; the
+	// onboarding switched the checkout to it before the agent ran); derive it from
+	// the slug so the push target is always defined even when the caller's `branch`
+	// was not narrowed.
+	const branch = params.branch ?? workBranchRef('slice', slug);
 	// Classify the failure CAUSE (best-effort + conservative) from the surfaced
 	// detail — the SAME `classifyFailureCause` `run` uses, so `do`/`run` agree on the
 	// same error. The cause LABEL prefixes the recorded reason so the cause is legible
@@ -1093,7 +1103,7 @@ async function saveAgentStop(params: {
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiter, reason, env, note} = params;
-	const branch = params.branch ?? `work/${slug}`;
+	const branch = params.branch ?? workBranchRef('slice', slug);
 
 	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
@@ -1414,7 +1424,7 @@ export async function performDoRemote(
 		});
 		let tree: IsolatedTree | undefined;
 		try {
-			tree = strategy.prepare({slug, env});
+			tree = strategy.prepare({slug, type: 'slice', env});
 			return await runRemotePipeline(options, tree, slug, arbiter, note, env);
 		} finally {
 			// 7. Teardown via the strategy handle: reap iff clean AND on the arbiter,
@@ -1454,7 +1464,7 @@ async function runRemotePipeline(
 	//     agent — the §10 path `run` uses.
 	if (tree.continueRebaseConflict) {
 		const reason =
-			`continuing the kept work/${slug}: rebase onto the latest main ` +
+			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
 		await ledgerWrite.applyNeedsAttentionTransition({
@@ -1484,7 +1494,12 @@ async function runRemotePipeline(
 	//    `gc.fetchTracking` use against a bare-mirror worktree). After this the
 	//    existing `performStart` runs UNCHANGED against the worktree.
 	await primeWorktreeTrackingRef(cwd, arbiterRemote, 'main', env);
-	await primeWorktreeTrackingRef(cwd, arbiterRemote, `work/${slug}`, env);
+	await primeWorktreeTrackingRef(
+		cwd,
+		arbiterRemote,
+		workBranchRef('slice', slug),
+		env,
+	);
 
 	// Onboard onto the work branch like in-place `do` — but the item is ALREADY
 	// CLAIMED (step 3), so `performStart` runs with `resume: true`: it
@@ -1527,7 +1542,7 @@ async function runRemotePipeline(
 			cwd,
 			slug,
 			arbiter: arbiterRemote,
-			branchRef: `${arbiterRemote}/work/${slug}`,
+			branchRef: `${arbiterRemote}/${branch}`,
 			mainRef: `${arbiterRemote}/main`,
 			content: readFileSync(slice.path, 'utf8'),
 			env,
@@ -1702,7 +1717,7 @@ async function saveRemoteAgentFailure(params: {
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiterRemote, displayArbiter, detail, env, note} = params;
-	const branch = params.branch ?? `work/${slug}`;
+	const branch = params.branch ?? workBranchRef('slice', slug);
 	// Same best-effort cause classification as in-place `do`'s `saveAgentFailure`
 	// (shared `classifyFailureCause`), so the remote form labels the SAME error the
 	// SAME way too.

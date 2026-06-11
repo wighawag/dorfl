@@ -10,6 +10,7 @@ import {
 	PR_TITLE_MAX,
 } from './integration-core.js';
 import {ledgerWrite} from './ledger-write.js';
+import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
 import {runAsync, localMainAheadCount, type RunResult} from './git.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
@@ -370,20 +371,33 @@ async function runComplete(
 		);
 	}
 
-	// Resolve the slug: explicit wins; otherwise infer from a `work/<slug>` branch.
-	const slug = options.slug || (await inferSlugFromBranch(cwd, env));
+	// Resolve the slug + work branch. `complete` runs ON the work branch (it
+	// rebases + pushes it), and the branch carries the namespaced `work/<type>-
+	// <slug>` identity. So PREFER the branch HEAD is on (recovering BOTH the type
+	// and the slug from it); only when an explicit slug is given AND HEAD is not on
+	// a work branch do we synthesise the slice-namespaced branch (`complete` is a
+	// slice command).
+	const headBranch = await currentBranch(cwd, env);
+	const headParsed = parseWorkBranchRef(headBranch);
+	const slug = options.slug || headParsed?.slug || '';
 	if (!slug) {
 		throw new CompleteUsageError(
-			'missing <slug> and the current branch is not a work/<slug> branch. ' +
-				'usage: agent-runner complete [<slug>] [--skip-verify] [--type t] ' +
-				'[--message s] [--arbiter remote]',
+			'missing <slug> and the current branch is not a work/<type>-<slug> ' +
+				'branch. usage: agent-runner complete [<slug>] [--skip-verify] ' +
+				'[--type t] [--message s] [--arbiter remote]',
 		);
 	}
-	const branch = `work/${slug}`;
+	// The branch HEAD is on when it IS a work branch for this slug (so an explicit
+	// `prd:`-style recovery still completes the branch it is standing on); else
+	// synthesise the slice branch.
+	const branch =
+		headParsed && headParsed.slug === slug
+			? headBranch
+			: workBranchRef('slice', slug);
 
 	// We must be ON the work branch — that is where the agent's work lives and
 	// what we rebase + push. (Unlike `start`, `complete` mutates the checkout.)
-	const head = await currentBranch(cwd, env);
+	const head = headBranch;
 	if (head !== branch) {
 		throw new CompleteUsageError(
 			`not on ${branch} (HEAD is '${head}'). ` +
@@ -447,6 +461,9 @@ async function runComplete(
 		cwd,
 		arbiter,
 		slug,
+		// The namespaced work branch HEAD is on (resolved above) — pass it through
+		// so the integrate core pushes the EXACT branch, not a re-synthesised default.
+		branch,
 		source,
 		recovering,
 		verify: options.verify,
@@ -732,16 +749,6 @@ export async function isLocalBranchProvablyOnArbiter(
 		)
 	).stdout.trim();
 	return remoteTip !== '' && remoteTip === localTip;
-}
-
-/** If HEAD is a `work/<slug>` branch, return `<slug>`; else ''. */
-async function inferSlugFromBranch(
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string> {
-	const branch = await currentBranch(cwd, env);
-	const match = /^work\/(.+)$/.exec(branch);
-	return match ? match[1] : '';
 }
 
 /** The short symbolic name of HEAD, or '' for a detached HEAD. */

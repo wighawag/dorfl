@@ -64,8 +64,8 @@ describe('start — backlog item, winning claim', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('started');
-		expect(result.branch).toBe('work/alpha');
-		expect(currentBranch(repo)).toBe('work/alpha');
+		expect(result.branch).toBe('work/slice-alpha');
+		expect(currentBranch(repo)).toBe('work/slice-alpha');
 		// The claim landed: item moved to in-progress on the arbiter.
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
@@ -105,7 +105,7 @@ describe('start — backlog item, losing/contended claim', () => {
 		expect(result.outcome).toBe('refused');
 		// User untouched; NO work branch created.
 		expect(currentBranch(repo)).toBe(before);
-		expect(localBranchExists(repo, 'work/alpha')).toBe(false);
+		expect(localBranchExists(repo, 'work/slice-alpha')).toBe(false);
 	});
 
 	it('a two-claimer race: the loser creates no branch, the winner lands on its work branch', async () => {
@@ -135,9 +135,9 @@ describe('start — backlog item, losing/contended claim', () => {
 		const winnerRepo = aWon ? a : b;
 		const loserRepo = aWon ? b : a;
 		const loserBefore = aWon ? beforeB : beforeA;
-		expect(currentBranch(winnerRepo)).toBe('work/solo');
+		expect(currentBranch(winnerRepo)).toBe('work/slice-solo');
 		expect(currentBranch(loserRepo)).toBe(loserBefore);
-		expect(localBranchExists(loserRepo, 'work/solo')).toBe(false);
+		expect(localBranchExists(loserRepo, 'work/slice-solo')).toBe(false);
 
 		// The arbiter agrees: claimed exactly once.
 		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(true);
@@ -176,7 +176,7 @@ describe('start — in-progress item', () => {
 		expect(result.message).not.toMatch(/\bby \w/);
 		// User untouched; no work branch.
 		expect(currentBranch(repo)).toBe(before);
-		expect(localBranchExists(repo, 'work/beta')).toBe(false);
+		expect(localBranchExists(repo, 'work/slice-beta')).toBe(false);
 	});
 
 	it('--resume switches to the work branch WITHOUT claiming', async () => {
@@ -199,8 +199,8 @@ describe('start — in-progress item', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('resumed');
-		expect(result.branch).toBe('work/beta');
-		expect(currentBranch(repo)).toBe('work/beta');
+		expect(result.branch).toBe('work/slice-beta');
+		expect(currentBranch(repo)).toBe('work/slice-beta');
 		// Still in-progress (we did NOT re-claim / move it).
 		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
 		// The work branch carries the in-progress file.
@@ -236,7 +236,7 @@ describe('start — done / absent item', () => {
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/already done/);
 		expect(currentBranch(repo)).toBe(before);
-		expect(localBranchExists(repo, 'work/gamma')).toBe(false);
+		expect(localBranchExists(repo, 'work/slice-gamma')).toBe(false);
 	});
 
 	it('refuses an absent item', async () => {
@@ -250,7 +250,7 @@ describe('start — done / absent item', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/not present/);
-		expect(localBranchExists(repo, 'work/does-not-exist')).toBe(false);
+		expect(localBranchExists(repo, 'work/slice-does-not-exist')).toBe(false);
 	});
 });
 
@@ -266,7 +266,7 @@ describe('start — slug inference from branch', () => {
 			env: gitEnv(),
 		});
 		expect(first.exitCode).toBe(0);
-		expect(currentBranch(repo)).toBe('work/delta');
+		expect(currentBranch(repo)).toBe('work/slice-delta');
 
 		// Now, sitting on work/delta with the item in-progress, re-run start with
 		// NO slug and --resume — the slug is inferred from the branch.
@@ -278,8 +278,8 @@ describe('start — slug inference from branch', () => {
 		});
 		expect(again.exitCode).toBe(0);
 		expect(again.outcome).toBe('resumed');
-		expect(again.branch).toBe('work/delta');
-		expect(currentBranch(repo)).toBe('work/delta');
+		expect(again.branch).toBe('work/slice-delta');
+		expect(currentBranch(repo)).toBe('work/slice-delta');
 	});
 
 	it('errors when no slug is given and not on a work/<slug> branch', async () => {
@@ -323,7 +323,7 @@ describe('start — environment errors', () => {
 		expect(result).toEqual({
 			exitCode: 0,
 			outcome: 'started',
-			branch: 'work/alpha',
+			branch: 'work/slice-alpha',
 			message: expect.stringContaining('Started'),
 		});
 	});

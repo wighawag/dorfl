@@ -101,7 +101,9 @@ describe('do <slug> — in-place happy path → exit', () => {
 
 		// Like `complete`: switched back to main, branch tidied (provably on arbiter).
 		expect(currentBranch(repo)).toBe('main');
-		expect(gitIn(['branch', '--list', 'work/alpha'], repo).trim()).toBe('');
+		expect(gitIn(['branch', '--list', 'work/slice-alpha'], repo).trim()).toBe(
+			'',
+		);
 	});
 
 	it('the AGENT does no git — the runner owns claim + done-move + commit', async () => {
@@ -109,7 +111,7 @@ describe('do <slug> — in-place happy path → exit', () => {
 		// An agent that ASSERTS the tree is already on the work branch + claimed
 		// (the runner onboarded) and only edits code.
 		const assertingAgent: DoAgentRunner = ({cwd, slug}) => {
-			expect(currentBranch(cwd)).toBe(`work/${slug}`);
+			expect(currentBranch(cwd)).toBe(`work/slice-${slug}`);
 			// in-progress (claimed) in the tree; the agent never moved it.
 			expect(existsSync(join(cwd, 'work', 'in-progress', `${slug}.md`))).toBe(
 				true,
@@ -204,7 +206,9 @@ describe('do <slug> — lost claim race is skipped cleanly', () => {
 		expect(result.exitCode).not.toBe(0);
 		expect(['lost', 'refused']).toContain(result.outcome);
 		expect(agentRan).toBe(false);
-		expect(gitIn(['branch', '--list', 'work/solo'], repo).trim()).toBe('');
+		expect(gitIn(['branch', '--list', 'work/slice-solo'], repo).trim()).toBe(
+			'',
+		);
 		expect(currentBranch(repo)).toBe('main');
 	});
 
@@ -295,7 +299,7 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/beta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-beta', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -376,13 +380,13 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		// The agent's partial edit is on that pushed branch (not dropped).
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
 		).toBe('');
 		// But it never reached main (no auto-merge of a failed build).
 		expect(gitIn(['ls-tree', 'arbiter/main', 'partial.txt'], repo).trim()).toBe(
@@ -428,7 +432,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 			env: gitEnv(),
 		});
 		expect(restarted.exitCode).toBe(0);
-		expect(restarted.branch).toBe('work/alpha');
+		expect(restarted.branch).toBe('work/slice-alpha');
 		// The partial work the failed agent left is present on the continued branch.
 		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
 	});
@@ -476,7 +480,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
 		).toBe('');
 	});
 
@@ -503,12 +507,12 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		gitIn(['fetch', '-q', ARBITER], job);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				job,
 			).trim(),
 		).not.toBe('');
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], job),
+			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], job),
 		).toBe('');
 	});
 });
@@ -612,13 +616,13 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		// The partial edit is on the pushed branch (not dropped).
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/alpha:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
 		).toBe('');
 		// But it never reached main (no auto-merge of failing work).
 		expect(gitIn(['ls-tree', 'arbiter/main', 'partial.txt'], repo).trim()).toBe(
@@ -665,7 +669,7 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 			env: gitEnv(),
 		});
 		expect(restarted.exitCode).toBe(0);
-		expect(restarted.branch).toBe('work/alpha');
+		expect(restarted.branch).toBe('work/slice-alpha');
 		// The partial work the gate-failed run left is present on the continued branch.
 		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
 	});
@@ -684,7 +688,7 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/beta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-beta', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'partial.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -700,10 +704,10 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'beta.md'))).toBe(
 			true,
 		);
-		// No `<arbiter>/work/beta` ref exists (the human path never pushes it).
+		// No `<arbiter>/work/slice-beta` ref exists (the human path never pushes it).
 		// `git ls-remote` is a soft check: it lists nothing for an absent ref.
 		const remoteRefs = gitIn(
-			['ls-remote', '--heads', ARBITER, 'work/beta'],
+			['ls-remote', '--heads', ARBITER, 'work/slice-beta'],
 			repo,
 		).trim();
 		expect(remoteRefs).toBe('');
@@ -854,7 +858,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		const repo = seeded.repo;
 
 		// First attempt: the agent edits a file, the gate is RED → `do` saves the
-		// partial work + pushes `work/alpha` to the arbiter (the durable artifact a
+		// partial work + pushes `work/slice-alpha` to the arbiter (the durable artifact a
 		// requeue continues from).
 		const first = await performDo({
 			arg: 'alpha',
@@ -910,7 +914,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		const repo = seeded.repo;
 
 		// First attempt: the agent produces real source work, but the gate is RED →
-		// `do` saves the partial work + pushes `work/alpha` to the arbiter (a chain of
+		// `do` saves the partial work + pushes `work/slice-alpha` to the arbiter (a chain of
 		// COMMITTED commits ahead of main — the durable artifact a requeue continues).
 		const first = await performDo({
 			arg: 'alpha',
@@ -962,7 +966,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const repo = seeded.repo;
 
-		// First attempt edits a SHARED file then the gate fails → the kept work/alpha
+		// First attempt edits a SHARED file then the gate fails → the kept work/slice-alpha
 		// (with that edit) is pushed to the arbiter.
 		const first = await performDo({
 			arg: 'alpha',
@@ -1023,13 +1027,13 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		// and the run did NOT complete — byte-parity with `run`'s onboard-conflict.
 		expect(agentRan).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		// The durable artifact — the kept work/alpha branch — is still on the arbiter
+		// The durable artifact — the kept work/slice-alpha branch — is still on the arbiter
 		// (the rebase was aborted; recovery flows through the branch + the surface the
 		// prior bounce already published).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -1115,7 +1119,7 @@ describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 		// The work branch was pushed to the arbiter (the safety-bearing step).
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');

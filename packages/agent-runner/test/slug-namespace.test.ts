@@ -7,6 +7,8 @@ import {
 	parseSlugArg,
 	resolveSlug,
 	resolveSliceOnlyArg,
+	workBranchRef,
+	parseWorkBranchRef,
 	SlugResolutionError,
 } from '../src/slug-namespace.js';
 
@@ -274,5 +276,86 @@ describe('ledger-read seam — resolvePrdExistence (the NEW PRD read path)', () 
 		expect(r.exists).toBe(false);
 		expect(r.prdFile).toBeUndefined();
 		expect(r.slicingFile).toBeUndefined();
+	});
+});
+
+describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivation', () => {
+	it('namespaces the branch by item type (slice vs prd) — same slug, DISTINCT refs', () => {
+		// The structural bug: a same-slug slice and PRD collided on `work/<slug>`.
+		const slice = workBranchRef('slice', 'advance-loop');
+		const prd = workBranchRef('prd', 'advance-loop');
+		expect(slice).toBe('work/slice-advance-loop');
+		expect(prd).toBe('work/prd-advance-loop');
+		expect(slice).not.toBe(prd);
+	});
+
+	it('prefixes an intake-produced branch so it never collides with a build/slicing branch for the same slug', () => {
+		// The FIRING collision: `intake` left a branch a later `do slice:` reused.
+		const intakeSlice = workBranchRef('slice', 'add-quiet-flag', {
+			producer: 'intake',
+		});
+		const intakePrd = workBranchRef('prd', 'add-quiet-flag', {
+			producer: 'intake',
+		});
+		const build = workBranchRef('slice', 'add-quiet-flag');
+		const slicing = workBranchRef('prd', 'add-quiet-flag');
+		expect(intakeSlice).toBe('work/intake-slice-add-quiet-flag');
+		expect(intakePrd).toBe('work/intake-prd-add-quiet-flag');
+		// All four forms for ONE slug are mutually distinct (the full collision set).
+		const all = [intakeSlice, intakePrd, build, slicing];
+		expect(new Set(all).size).toBe(4);
+	});
+
+	it('round-trips every form back to {producer?, namespace, slug}', () => {
+		expect(parseWorkBranchRef('work/slice-foo')).toEqual({
+			namespace: 'slice',
+			slug: 'foo',
+		});
+		expect(parseWorkBranchRef('work/prd-foo')).toEqual({
+			namespace: 'prd',
+			slug: 'foo',
+		});
+		expect(parseWorkBranchRef('work/intake-slice-foo')).toEqual({
+			producer: 'intake',
+			namespace: 'slice',
+			slug: 'foo',
+		});
+		expect(parseWorkBranchRef('work/intake-prd-foo')).toEqual({
+			producer: 'intake',
+			namespace: 'prd',
+			slug: 'foo',
+		});
+	});
+
+	it('a slug that literally starts with a type/producer token is NOT mis-parsed', () => {
+		// The `slug` group must never swallow the `slice-`/`intake-` prefixes.
+		expect(parseWorkBranchRef('work/slice-intake-slice-foo')).toEqual({
+			namespace: 'slice',
+			slug: 'intake-slice-foo',
+		});
+		expect(parseWorkBranchRef('work/intake-prd-slice-bar')).toEqual({
+			producer: 'intake',
+			namespace: 'prd',
+			slug: 'slice-bar',
+		});
+	});
+
+	it('returns undefined for a non-work / pre-rename un-namespaced branch (the breaking cutover)', () => {
+		expect(parseWorkBranchRef('main')).toBeUndefined();
+		expect(parseWorkBranchRef('work/foo')).toBeUndefined(); // pre-rename form
+		expect(parseWorkBranchRef('claim/foo')).toBeUndefined();
+		expect(parseWorkBranchRef('feature/x')).toBeUndefined();
+	});
+
+	it('workBranchRef and parseWorkBranchRef are inverses (no second derivation)', () => {
+		for (const ns of ['slice', 'prd'] as const) {
+			for (const producer of [undefined, 'intake'] as const) {
+				const ref = workBranchRef(ns, 'my-slug', {producer});
+				const parsed = parseWorkBranchRef(ref);
+				expect(parsed?.namespace).toBe(ns);
+				expect(parsed?.slug).toBe('my-slug');
+				expect(parsed?.producer).toBe(producer);
+			}
+		}
 	});
 });

@@ -12,7 +12,8 @@ import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
-import {runAsync, type RunResult} from './git.js';
+import {git, runAsync, type RunResult} from './git.js';
+import {workBranchRef} from './slug-namespace.js';
 
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
@@ -120,8 +121,17 @@ export interface IntegrationCoreInput {
 	cwd: string;
 	/** Name of the arbiter git remote (valid in `cwd`). */
 	arbiter: string;
-	/** The slug being integrated (its work branch is `work/<slug>`). */
+	/** The slug being integrated (its work branch is `work/<type>-<slug>`). */
 	slug: string;
+	/**
+	 * The work BRANCH being integrated. The caller is ALWAYS on it (the agent
+	 * built there / the lifecycle stage wrote there), so it carries the namespaced
+	 * `work/<type>-<slug>` identity. When omitted, the core derives it from the
+	 * branch HEAD is on (the robust default — the type is encoded IN the name). A
+	 * caller that knows the type explicitly may pass it (e.g. the slicing path
+	 * passes its `work/prd-<slug>`).
+	 */
+	branch?: string;
 	/**
 	 * Which folder the item is being completed FROM: `in-progress` (the normal,
 	 * freshly-built path) or `needs-attention` (the runner-owned recovery path).
@@ -292,7 +302,11 @@ export async function performIntegration(
 	const source = input.source;
 	const recovering = input.recovering;
 	const note = input.note ?? (() => {});
-	const branch = `work/${slug}`;
+	// The work branch: the caller is on it (it carries the namespaced identity).
+	// Prefer the explicit `branch`; else read the branch HEAD is on; only fall
+	// back to a synthesised `work/slice-<slug>` if HEAD is detached (a degenerate
+	// case that the on-branch invariant should preclude).
+	const branch = input.branch ?? resolveWorkBranch(cwd, slug, env);
 	// Captured from the Gate-2 review (when it runs + approves) so that AFTER the
 	// propose integrate — where the opened PR url is finally in scope — we can post
 	// the agent's deliberately-authored `review` prose as a PR comment (slice
@@ -708,6 +722,32 @@ export async function performIntegration(
 		commitMessage,
 		integration,
 	};
+}
+
+/**
+ * Resolve the work branch the integration runs on: the branch HEAD is currently
+ * on (the caller is ALWAYS on the work branch — the agent built there / the
+ * lifecycle stage wrote there), which carries the namespaced `work/<type>-<slug>`
+ * identity. Falls back to a synthesised `work/slice-<slug>` ONLY for a detached
+ * HEAD (a degenerate case the on-branch invariant precludes), so the push target
+ * is always defined.
+ */
+function resolveWorkBranch(
+	cwd: string,
+	slug: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string {
+	try {
+		const head = git(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, {
+			env,
+		}).trim();
+		if (head.startsWith('work/')) {
+			return head;
+		}
+	} catch {
+		// detached HEAD or plumbing failure — fall through to the synthesised default
+	}
+	return workBranchRef('slice', slug);
 }
 
 /**

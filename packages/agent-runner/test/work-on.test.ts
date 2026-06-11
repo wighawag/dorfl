@@ -52,10 +52,10 @@ describe('work-on — in-repo form (work-on <slug>)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('created');
-		expect(result.branch).toBe('work/alpha');
+		expect(result.branch).toBe('work/slice-alpha');
 		expect(result.dir).toBeDefined();
 		expect(existsSync(result.dir!)).toBe(true);
-		expect(branchOf(result.dir!)).toBe('work/alpha');
+		expect(branchOf(result.dir!)).toBe('work/slice-alpha');
 
 		// The worktree lives UNDER the configured human root, never ~/.agent-runner.
 		expect(result.dir!.startsWith(humanRoot())).toBe(true);
@@ -88,7 +88,7 @@ describe('work-on — remote form (work-on <remote> <slug>)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('created');
-		expect(result.branch).toBe('work/beta');
+		expect(result.branch).toBe('work/slice-beta');
 		expect(existsSync(result.dir!)).toBe(true);
 		expect(result.dir!.startsWith(humanRoot())).toBe(true);
 

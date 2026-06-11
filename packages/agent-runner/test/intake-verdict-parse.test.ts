@@ -268,7 +268,10 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
-			['show', `${ARBITER}/work/add-quiet-flag:work/backlog/add-quiet-flag.md`],
+			[
+				'show',
+				`${ARBITER}/work/intake-slice-add-quiet-flag:work/backlog/add-quiet-flag.md`,
+			],
 			repo,
 		);
 		expect(onBranch).toContain('slug: add-quiet-flag');

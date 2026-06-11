@@ -67,7 +67,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -87,12 +87,15 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 
 		// The work branch is on the arbiter at the local tip (the move-only commit),
 		// carrying the wip below it — a requeue-continue can land on it.
-		expect(arbiterHasBranch(seeded, 'work/alpha')).toBe(true);
-		expect(arbiterRef(seeded, 'refs/heads/work/alpha')).toBe(
+		expect(arbiterHasBranch(seeded, 'work/slice-alpha')).toBe(true);
+		expect(arbiterRef(seeded, 'refs/heads/work/slice-alpha')).toBe(
 			gitIn(['rev-parse', 'HEAD'], repo).trim(),
 		);
 		expect(
-			gitIn(['cat-file', '-e', `${ARBITER}/work/alpha:partial.txt`], repo),
+			gitIn(
+				['cat-file', '-e', `${ARBITER}/work/slice-alpha:partial.txt`],
+				repo,
+			),
 		).toBe('');
 		// And the surface still lands on main.
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
@@ -124,10 +127,10 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		});
 		expect(result.moved).toBe(true);
 
-		// THAT branch was pushed (not the default work/beta) — the written slices
+		// THAT branch was pushed (not the default work/slice-beta) — the written slices
 		// travel cross-machine so a requeue continues from them.
 		expect(arbiterHasBranch(seeded, 'work/slicing/beta')).toBe(true);
-		expect(arbiterHasBranch(seeded, 'work/beta')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/slice-beta')).toBe(false);
 		expect(
 			gitIn(
 				['cat-file', '-e', `${ARBITER}/work/slicing/beta:slice-output.md`],
@@ -148,12 +151,12 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 			reason: 'could not even start',
 			arbiter: ARBITER,
 			// An absent branch ⇒ the emptiness guard skips the push (no error).
-			branch: 'work/never-created',
+			branch: 'work/slice-never-created',
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
 		// Nothing was pushed for the absent branch; the surface still landed.
-		expect(arbiterHasBranch(seeded, 'work/never-created')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/slice-never-created')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(true);
 	});
 
@@ -181,7 +184,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		expect(routed.branchPush).toBe('failed');
 		// The push failed (rejected), so the branch is NOT on the arbiter — but the
 		// move committed locally and (work/* only being rejected) the surface landed.
-		expect(arbiterHasBranch(seeded, 'work/delta')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/slice-delta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
 	});
 
@@ -199,7 +202,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		});
 		expect(result.moved).toBe(true);
 		// No branch push at all (surface-only), but the on-main surface still lands.
-		expect(arbiterHasBranch(seeded, 'work/epsilon')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/slice-epsilon')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'epsilon')).toBe(true);
 	});
 
@@ -215,7 +218,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		});
 		expect(result.moved).toBe(true);
 		// Local-only: nothing pushed, main untouched (still shows in-progress).
-		expect(arbiterHasBranch(seeded, 'work/zeta')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/slice-zeta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'zeta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'zeta')).toBe(false);
 	});
@@ -258,7 +261,7 @@ describe('run agent-failure is SAVED + cross-machine recoverable (the fifth gap)
 		});
 		expect(result.items[0].status).toBe('agent-failed');
 		// Saved + surfaced + pushed (the seam did all three).
-		expect(arbiterHasBranch(seeded, 'work/alpha')).toBe(true);
+		expect(arbiterHasBranch(seeded, 'work/slice-alpha')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'alpha')).toBe(
 			true,
 		);
@@ -285,7 +288,7 @@ describe('run agent-failure is SAVED + cross-machine recoverable (the fifth gap)
 			env: gitEnv(),
 		});
 		expect(restarted.exitCode).toBe(0);
-		expect(restarted.branch).toBe('work/alpha');
+		expect(restarted.branch).toBe('work/slice-alpha');
 		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
 	});
 });
@@ -303,11 +306,11 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'shared.txt'), 'branch version\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior edits shared'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/gamma:work/gamma'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/slice-gamma:work/slice-gamma'], repo);
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
@@ -315,10 +318,10 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// The arbiter's work/gamma tip AFTER the prior bounce (the seam pushed the
+		// The arbiter's work/slice-gamma tip AFTER the prior bounce (the seam pushed the
 		// move-only tip). The onboard continue-conflict aborts the rebase, leaving the
 		// worktree on THIS tip — it must stay unchanged on the arbiter.
-		const keptTip = arbiterRef(seeded, 'refs/heads/work/gamma');
+		const keptTip = arbiterRef(seeded, 'refs/heads/work/slice-gamma');
 		expect(keptTip).not.toBe('');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
@@ -356,8 +359,8 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		// The kept branch is on the arbiter at its UNCHANGED tip (the aborted rebase
 		// left the tip == the kept tip == the arbiter tip) — the durable artifact, not
 		// the worktree. (The seam's default-push here is a no-op/ff at most.)
-		expect(arbiterHasBranch(seeded, 'work/gamma')).toBe(true);
-		expect(arbiterRef(seeded, 'refs/heads/work/gamma')).toBe(keptTip);
+		expect(arbiterHasBranch(seeded, 'work/slice-gamma')).toBe(true);
+		expect(arbiterRef(seeded, 'refs/heads/work/slice-gamma')).toBe(keptTip);
 		// Because the branch is provably on the arbiter, the §4 reap predicate HOLDS
 		// ⇒ the worktree is REAPED (the §14-aligned outcome: the worktree is a
 		// disposable cache; recovery flows through the branch + surface). No special

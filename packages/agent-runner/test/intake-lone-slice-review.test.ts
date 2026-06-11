@@ -179,7 +179,10 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
-			['show', `${ARBITER}/work/add-quiet-flag:work/backlog/add-quiet-flag.md`],
+			[
+				'show',
+				`${ARBITER}/work/intake-slice-add-quiet-flag:work/backlog/add-quiet-flag.md`,
+			],
 			repo,
 		);
 		expect(onBranch).toMatch(/^issue: 42$/m);
@@ -248,7 +251,10 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		// The EMITTED slice reflects the edit (the body differs from the first draft).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
-			['show', `${ARBITER}/work/add-quiet-flag:work/backlog/add-quiet-flag.md`],
+			[
+				'show',
+				`${ARBITER}/work/intake-slice-add-quiet-flag:work/backlog/add-quiet-flag.md`,
+			],
 			repo,
 		);
 		expect(onBranch).toContain('REVIEW-EDITED-MARKER');
@@ -290,7 +296,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(gitIn(['branch', '-r'], repo)).not.toContain(
-			`${ARBITER}/work/add-quiet-flag`,
+			`${ARBITER}/work/intake-slice-add-quiet-flag`,
 		);
 	});
 
@@ -401,7 +407,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(gitIn(['branch', '-r'], repo)).not.toContain(
-			`${ARBITER}/work/add-quiet-flag`,
+			`${ARBITER}/work/intake-slice-add-quiet-flag`,
 		);
 		// No comment posted (no draft, no question) — it degraded honestly.
 		expect(issueProvider.comments).toHaveLength(0);

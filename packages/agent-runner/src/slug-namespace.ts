@@ -37,6 +37,80 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 /** The two namespaces a slug can name. */
 export type SlugNamespace = 'slice' | 'prd';
 
+/**
+ * The PRODUCER axis (ORTHOGONAL to {@link SlugNamespace}): WHICH lifecycle
+ * created the branch, when that matters for collision isolation. `'intake'` is
+ * the only producer today — an `intake N` run that CREATES a brand-new backlog
+ * item (`work/backlog/<slug>.md`) or PRD (`work/prd/<slug>.md`). Its branch is a
+ * short-lived "create the item" branch, a SEPARATE lifecycle from the later
+ * claim→build→complete of `do slice:<slug>` — so it gets its own branch ref and
+ * never reuses (or is reused by) the build branch for the same slug. Absent for
+ * the build/slicing paths (the common case), which carry no producer prefix.
+ */
+export type BranchProducer = 'intake';
+
+/**
+ * The **ONE** construction of the work-BRANCH ref from the namespaced identity.
+ * The branch ref is the last identity to join the `<type>-<slug>` scheme the
+ * advance sidecar filename (`work/questions/<type>-<slug>.md`) and the
+ * `advancing/` lock entry already use — so a PRD `<slug>` and a slice `<slug>`
+ * sharing a slug NEVER collide on the arbiter branch (the structural bug this
+ * fixes: `intake`, `do slice:<slug>`, and `do prd:<slug>` all built on the SAME
+ * un-namespaced `work/<slug>` branch).
+ *
+ * Spelling: `work/<type>-<slug>` (i.e. `work/slice-<slug>`, `work/prd-<slug>`),
+ * matching the lock-entry + sidecar-filename `<type>-<slug>` form EXACTLY. The
+ * optional {@link BranchProducer} prefixes it (`work/<producer>-<type>-<slug>`,
+ * e.g. `work/intake-slice-<slug>`, `work/intake-prd-<slug>`) so a branch that
+ * CREATES an item (intake) never collides with the branch that later BUILDS the
+ * same-slug slice. One consistent rule, not a second derivation. EVERY site
+ * that builds or reads a work-branch ref MUST call this (or
+ * {@link parseWorkBranchRef}); none may hand-build `work/${slug}`.
+ */
+export function workBranchRef(
+	namespace: SlugNamespace,
+	slug: string,
+	opts?: {producer?: BranchProducer},
+): string {
+	const producer = opts?.producer;
+	return producer === undefined
+		? `work/${namespace}-${slug}`
+		: `work/${producer}-${namespace}-${slug}`;
+}
+
+/**
+ * The inverse of {@link workBranchRef}: parse a namespaced work-branch ref back
+ * into its `{producer?, namespace, slug}`. Returns `undefined` for any ref that
+ * is NOT a `work/[<producer>-]<type>-<slug>` branch (e.g. `main`, a detached
+ * HEAD, or — after the clean breaking cutover — a pre-rename un-namespaced
+ * `work/<slug>`). This is how `complete`/`integration` recover the type carried
+ * IN the branch name they are already standing on, rather than re-deriving it
+ * inconsistently. The regex anchors the optional producer prefix BEFORE the
+ * type alternation, so `work/intake-slice-foo` resolves to
+ * `{producer:'intake', namespace:'slice', slug:'foo'}` (the `slug` never
+ * swallows the `intake-`/`slice-` prefixes).
+ */
+export function parseWorkBranchRef(
+	branch: string,
+):
+	| {producer?: BranchProducer; namespace: SlugNamespace; slug: string}
+	| undefined {
+	const match = /^work\/(?:(intake)-)?(slice|prd)-(.+)$/.exec(branch);
+	if (!match) {
+		return undefined;
+	}
+	const producer = match[1] as BranchProducer | undefined;
+	const result: {
+		producer?: BranchProducer;
+		namespace: SlugNamespace;
+		slug: string;
+	} = {namespace: match[2] as SlugNamespace, slug: match[3]};
+	if (producer !== undefined) {
+		result.producer = producer;
+	}
+	return result;
+}
+
 /** A slug argument's parsed namespace + bare slug (before any existence check). */
 export interface ParsedSlugArg {
 	/**

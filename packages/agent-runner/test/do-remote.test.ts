@@ -145,7 +145,7 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 		// the worktree's tree (claimed + onboarded by the runner, NOT the agent).
 		const assertingAgent: DoAgentRunner = ({cwd, slug}) => {
 			expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).trim()).toBe(
-				`work/${slug}`,
+				`work/slice-${slug}`,
 			);
 			expect(existsSync(join(cwd, 'work', 'in-progress', `${slug}.md`))).toBe(
 				true,
@@ -190,7 +190,7 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');

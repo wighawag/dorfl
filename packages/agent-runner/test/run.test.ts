@@ -175,13 +175,16 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		// The agent's aborted wip is on the pushed branch (not dropped)…
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/feat:agent-output.txt'], repo),
+			gitIn(
+				['cat-file', '-e', 'arbiter/work/slice-feat:agent-output.txt'],
+				repo,
+			),
 		).toBe('');
 		// …but it never reached main (no auto-merge of failing work).
 		expect(
@@ -443,7 +446,7 @@ describe('runOnce — integration modes', () => {
 		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
 		expect(item.integration?.requestOpened).toBe(true);
-		expect(prBranch).toBe('work/feat');
+		expect(prBranch).toBe('work/slice-feat');
 		// PR mode never moves done/ onto main; the slice stays in-progress on main.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
@@ -492,7 +495,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		// per-repo `propose` won over global `merge`.
 		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
-		expect(prBranch).toBe('work/feat');
+		expect(prBranch).toBe('work/slice-feat');
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
@@ -536,7 +539,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		// Repo B: own file propose → pushed branch, NOT on main.
 		expect(itemB?.integration?.mode).toBe('propose');
 		expect(itemB?.integration?.mergedToMain).toBe(false);
-		expect(bBranch).toBe('work/fb');
+		expect(bBranch).toBe('work/slice-fb');
 		expect(existsOnArbiterMain(b.repo, 'done', 'fb')).toBe(false);
 	});
 });
@@ -568,12 +571,12 @@ describe('runOnce — agent failure', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/feat:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/slice-feat:partial.txt'], repo),
 		).toBe('');
 	});
 });
@@ -774,12 +777,15 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/feat:agent-output.txt'], repo),
+			gitIn(
+				['cat-file', '-e', 'arbiter/work/slice-feat:agent-output.txt'],
+				repo,
+			),
 		).toBe('');
 	});
 });
@@ -835,7 +841,7 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		// The work branch + the agent's (un-rebased) work are on the arbiter. Read the
 		// bare arbiter DIRECTLY via ls-remote (provider-agnostic; does not depend on a
 		// fetch refspec populating a remote-tracking ref).
-		expect(arbiterHasBranch(arbiter, repo, 'work/feat')).toBe(true);
+		expect(arbiterHasBranch(arbiter, repo, 'work/slice-feat')).toBe(true);
 		// The needs-attention surface is on the arbiter's main (mode-M), where it is
 		// observable to scan/status/another machine.
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
