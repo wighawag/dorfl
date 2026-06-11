@@ -420,18 +420,22 @@ describe('review-comment-prose-field — the comment is ADVISORY (decision uncha
  * Write an executable shell STUB standing in for the `gh` CLI (mirrors
  * `github.test.ts`): it records the args, prints stdout, and exits `exitCode`.
  */
-function writeGhStub(opts: {stdout?: string; exitCode?: number} = {}): {
+function writeGhStub(
+	opts: {stdout?: string; stderr?: string; exitCode?: number} = {},
+): {
 	bin: string;
 	argsFile: string;
 } {
 	const bin = join(scratch.root, 'gh-stub.sh');
 	const argsFile = join(scratch.root, 'gh-args.txt');
 	const stdout = opts.stdout ?? '';
+	const stderr = opts.stderr ?? '';
 	const exit = opts.exitCode ?? 0;
 	const script = [
 		'#!/usr/bin/env bash',
 		`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
 		`printf '%s\\n' ${JSON.stringify(stdout)}`,
+		`printf '%s\\n' ${JSON.stringify(stderr)} 1>&2`,
 		`exit ${exit}`,
 	].join('\n');
 	writeFileSync(bin, script + '\n');
@@ -477,7 +481,27 @@ describe('GitHubProvider.postPRComment — gh pr comment (stubbed)', () => {
 		expect(result.instruction).toContain('the review');
 	});
 
-	it('degrades (no throw) when gh is missing (spawn fails)', () => {
+	it('surfaces the REAL gh stderr on a non-auth failure, NOT the hard-coded "unavailable or unauthenticated" guess', () => {
+		// A rate-limit (NOT an auth problem): the operator must be told the truth.
+		const realCause =
+			'API rate limit exceeded for installation. Retry after 2026-06-11T12:00:00Z';
+		const stub = writeGhStub({exitCode: 1, stderr: realCause});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = provider.postPRComment({
+			cwd: scratch.root,
+			url: 'https://github.com/o/r/pull/7',
+			body: 'the review',
+		});
+		expect(result.posted).toBe(false);
+		// The REAL cause is surfaced verbatim, NOT misattributed to auth.
+		expect(result.instruction).toContain(realCause);
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/);
+		// The manual-fallback guidance + the review text are still intact.
+		expect(result.instruction).toContain('https://github.com/o/r/pull/7');
+		expect(result.instruction).toContain('the review');
+	});
+
+	it('reads as the clear "binary missing" string when gh is missing (spawn fails) — never crashes', () => {
 		const provider = new GitHubProvider({ghBin: missingGhBin()});
 		const result = provider.postPRComment({
 			cwd: scratch.root,
@@ -485,6 +509,9 @@ describe('GitHubProvider.postPRComment — gh pr comment (stubbed)', () => {
 			body: 'the review',
 		});
 		expect(result.posted).toBe(false);
+		expect(result.instruction).toContain('binary missing');
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/);
+		// The review text is surfaced in the fallback (never lost).
 		expect(result.instruction).toContain('the review');
 	});
 });
