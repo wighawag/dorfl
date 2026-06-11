@@ -48,6 +48,8 @@ Derive the **project name** from the repo (folder/remote name) for the CONTEXT t
 - **Empty/near-empty repo (no material to read):** you have nothing to propose, so ASK: **"What is this repo about? (one or two sentences — or skip and I'll scaffold a stub you fill in later.)"** If they describe it, put it in `CONTEXT.md`'s "What <repo> is" and ask 1–3 **refining** questions to seed the glossary (core domain nouns, actors, what it integrates with). If they say nothing/"skip", scaffold `CONTEXT.md` with a `<!-- TODO: describe the project -->` stub + placeholder glossary entries — don't block; the repo is still fully set up.
 - **Populated repo (you read it in A1):** do NOT cold-open. Form a **proposed one-to-two-sentence description** (+ core domain nouns) from the README/docs/code, and CONFIRM it: **"Here is what I think this repo is: <proposed description>. Correct/refine, or accept?"** The human still ratifies; you just spare them a blank prompt. (This confirmation is part of the PLAN you present at A4.)
 
+**Nudge for a per-change convention (language-agnostic — never tool-specific).** Many repos require something extra on every change: a changeset, a `CHANGELOG` entry, a news fragment, etc. setup does NOT detect or assume any of these — there is no generic signal and guessing one (e.g. keying off `.changeset/`) would smuggle ecosystem favouritism into a deliberately language-agnostic skill (the A3 rule). Instead, ASK once, generically: **"Any standing per-change rule agents must follow in this repo — e.g. a changeset, a CHANGELOG entry, a news fragment? I'll note it under `## Conventions` in CONTEXT.md."** If they give one, record it in the CONTEXT.md `## Conventions` section (fold this into the A4 plan, do NOT make it a separate question round); if they skip, leave the commented stub. Mention the homes a convention can live in: **CONTEXT.md** (the in-band slot agents read), **their own agent config** (e.g. an `AGENTS.md` their harness reads), and — if they want it _enforced_ rather than merely stated — **their own check wired into the `verify` gate** (their command, e.g. `changeset status --since=main`; setup never injects one, per A3 — it only points out that `verify` is where enforcement would go).
+
 ### A3. Discover the real `verify` gate FROM THE REPO (detect, never assume)
 
 The `.agent-runner.json` `verify` gate is the protocol's per-project, **language-agnostic** acceptance gate (build + test + format/lint, all green). The single rule: **discover the gate from THIS repo; never write a canned, stack-shaped guess.**
@@ -166,6 +168,12 @@ The domain glossary for `<project>`. Agents and skills use THIS vocabulary when 
 
 - **<term>** — <meaning> (seeded from the adoption conversation; refine as you go).
 - **work/ contract** — the on-disk system this repo uses, defined by the reference docs in **`work/protocol/`** (copied here by `setup`): `WORK-CONTRACT.md` (the contract), `CLAIM-PROTOCOL.md`, `slice-template.md`, `prd-template.md`, `ADR-FORMAT.md`. One markdown file per item, status = the folder it lives in (never a field). Capture buckets: `ideas/` (proposed), `observations/` (spotted, unverified, append-only), `findings/` (verified external/domain ground truth, each with a `source:`). ADRs (`docs/adr/`, format in `work/protocol/ADR-FORMAT.md`) record what WE decided and why.
+
+## Conventions
+
+Standing per-change rules agents must follow in this repo.
+
+<!-- e.g. "Every change requires a changeset (`pnpm changeset`)" / a CHANGELOG fragment / a news entry. Add yours here, or delete this section. For enforcement, wire your own check into the `.agent-runner.json` `verify` gate. -->
 
 ## Skills this repo uses
 
