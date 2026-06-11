@@ -157,6 +157,85 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
 	});
+
+	it('continue-conflict re-surface: item ALREADY in needs-attention/ on the branch (re)publishes the stale main surface, idempotently', async () => {
+		// The continue-conflict shape (run.ts ~541): the worktree is cut from the kept
+		// work/<slug> branch, whose tree ALREADY holds the item in needs-attention/
+		// (from a prior bounce). Build that exact state, then make main STALE (showing
+		// the item in in-progress/ after a re-claim), and prove the re-route
+		// (re)publishes the needs-attention surface on main rather than being a NO-OP.
+		const {repo, seeded} = await claimAndBranch('delta');
+		agentEdits(repo);
+
+		// 1. First bounce: the item lands in needs-attention/ on the branch AND on main.
+		const first = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd: repo,
+			slug: 'delta',
+			reason: 'rebase onto arbiter/main conflicted (aborted)',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(first.moved).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
+		// The branch tree now holds the item in needs-attention/ (the continue source).
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'delta.md'))).toBe(
+			true,
+		);
+		const branchTipAfterFirst = gitIn(['rev-parse', 'HEAD'], repo).trim();
+
+		// 2. Make main STALE: a re-claim moved the item back to in-progress/ on main
+		//    (the surface no longer matches the branch's needs-attention/ reality).
+		const mover = seeded.clone('staler');
+		gitIn(['fetch', '-q', ARBITER], mover);
+		gitIn(['switch', '-q', '-C', 'stale-main', `${ARBITER}/main`], mover);
+		// git mv needs the destination dir to exist (git tracks no empty dirs); its
+		// "No such file" error otherwise points (misleadingly) at the source.
+		mkdirSync(join(mover, 'work', 'in-progress'), {recursive: true});
+		gitIn(
+			['mv', 'work/needs-attention/delta.md', 'work/in-progress/delta.md'],
+			mover,
+		);
+		gitIn(['add', '-A'], mover);
+		gitIn(['commit', '-q', '-m', 're-claim: back to in-progress'], mover);
+		gitIn(['push', '-q', ARBITER, 'stale-main:main'], mover);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
+
+		// 3. The continue-conflict re-route: the worktree is STILL on work/slice-delta
+		//    with the item in needs-attention/ (the kept branch). Routing again must NOT
+		//    be {moved:false} — it must (re)publish the surface on main.
+		const second = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd: repo,
+			slug: 'delta',
+			reason: 'rebase onto arbiter/main conflicted (aborted)',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(second.moved).toBe(true);
+		// The stale main surface is (re)published to needs-attention/.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(false);
+		const onMain = gitIn(
+			['show', `${ARBITER}/main:work/needs-attention/delta.md`],
+			repo,
+		);
+		expect(onMain).toMatch(/conflict/i);
+
+		// IDEMPOTENT: re-surfacing an item whose reason is UNCHANGED does not thrash
+		// the file body — the move-only commit carried no folder change (it was a
+		// no-op-content self-move, --allow-empty), so the branch file is unchanged from
+		// the first bounce's content (one reason block, not two).
+		const branchFile = gitIn(
+			['show', `HEAD:work/needs-attention/delta.md`],
+			repo,
+		);
+		const firstFile = gitIn(
+			['show', `${branchTipAfterFirst}:work/needs-attention/delta.md`],
+			repo,
+		);
+		expect(branchFile).toBe(firstFile);
+		expect((branchFile.match(/## Needs attention/g) ?? []).length).toBe(1);
+	});
 });
 
 const editingAgent: AgentRunner = ({cwd}) => {

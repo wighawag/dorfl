@@ -320,7 +320,7 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		});
 		// The arbiter's work/slice-gamma tip AFTER the prior bounce (the seam pushed the
 		// move-only tip). The onboard continue-conflict aborts the rebase, leaving the
-		// worktree on THIS tip — it must stay unchanged on the arbiter.
+		// worktree on THIS tip.
 		const keptTip = arbiterRef(seeded, 'refs/heads/work/slice-gamma');
 		expect(keptTip).not.toBe('');
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -356,11 +356,25 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('needs-attention');
-		// The kept branch is on the arbiter at its UNCHANGED tip (the aborted rebase
-		// left the tip == the kept tip == the arbiter tip) — the durable artifact, not
-		// the worktree. (The seam's default-push here is a no-op/ff at most.)
+		// The kept branch is still on the arbiter (the durable artifact). The worktree
+		// was cut from it with the item ALREADY in needs-attention/, so the re-route is
+		// now an IDEMPOTENT RE-SURFACE (not the old silent NO-OP): the branch's tip
+		// keeps the item in needs-attention/ and the on-main surface is (re)published.
+		// (Before the fix this yielded {moved:false} and the on-main surface went
+		// stale.) The re-route is a fast-forward of keptTip (the prior bounce commit is
+		// still in the branch's history).
 		expect(arbiterHasBranch(seeded, 'work/slice-gamma')).toBe(true);
-		expect(arbiterRef(seeded, 'refs/heads/work/slice-gamma')).toBe(keptTip);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const newTip = arbiterRef(seeded, 'refs/heads/work/slice-gamma');
+		expect(
+			gitIn(
+				['cat-file', '-e', `${newTip}:work/needs-attention/gamma.md`],
+				repo,
+			),
+		).toBe('');
+		gitIn(['merge-base', '--is-ancestor', keptTip, newTip], repo);
+		// The on-main surface is (re)published as needs-attention (the fix's point).
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(true);
 		// Because the branch is provably on the arbiter, the §4 reap predicate HOLDS
 		// ⇒ the worktree is REAPED (the §14-aligned outcome: the worktree is a
 		// disposable cache; recovery flows through the branch + surface). No special
