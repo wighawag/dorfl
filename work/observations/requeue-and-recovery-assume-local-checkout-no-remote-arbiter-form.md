@@ -22,12 +22,22 @@ So the recovery worked, but ONLY by first manually re-syncing the local checkout
 
 Worse, it RACES the local/arbiter split: between the `do --remote` that routed the item and the local `requeue`, the local checkout can be arbitrarily behind (another build merged, the human committed). The conductor has to `git fetch && pull --ff-only` and hope for a clean fast-forward before `requeue` sees the right state. On a dirty or diverged local tree (which `--remote` was meant to make irrelevant) this is fragile.
 
-## What would fix it
+## What would fix it (the maintainer's sharper model — fetch-from-arbiter-first, NOT a new `--remote` form)
 
-A no-checkout recovery form symmetric with `do --remote`:
+The cleaner fix is NOT "add a `requeue --remote` twin of `do --remote`". It is to make the recovery verbs **arbiter-truth-first** so they work from ANY checkout regardless of where the build ran:
 
-- **`requeue <slug> --remote <url> [--reset] [-m …]`** — resolve/refresh the hub mirror for `<url>`, perform the `needs-attention/ → backlog/` move (default keep+continue) or the branch-delete (`--reset` discard) DIRECTLY against the mirror's main via the same CAS/throwaway-clone mechanics `do --remote` already uses, and push. No local checkout, no pre-sync, no race. (Same for `work-on`/any other recovery verb the conductor leans on.)
-- At minimum: when `requeue` is run with `--arbiter` and the local work tree does NOT have the item in `needs-attention/` but the ARBITER does, say so explicitly ("item is in needs-attention on <arbiter> but your local checkout is behind — `git pull` first, or use `requeue --remote <url>` once it exists") instead of the bare "not found".
+> A `requeue`/`complete`/etc. run from a checked-out repo should ALREADY just work by FETCHING the remote branch + the arbiter's `work/` state and continuing from there. The arbiter is the source of truth; WHERE the work was built (in-place, `--isolated`, `--remote`) is irrelevant to recovery — the durable artifacts (the `needs-attention/` item, the `work/<slug>` branch) all live on the arbiter.
+
+Concretely, recovery verbs should, given an `--arbiter`/configured arbiter:
+
+1. **`git fetch <arbiter>` first**, then reconcile the LOCAL `work/` view against the arbiter's `main` (the item may be in `needs-attention/` on the arbiter while the stale local checkout shows it elsewhere / not at all) — instead of reading ONLY the local `cwd` work tree and failing "not found".
+2. Operate on that reconciled, arbiter-truth state (the `needs-attention/ → backlog/` move for `requeue`; the gate+integrate for `complete`), then push.
+
+This makes `requeue`/`complete` LOCATION-AGNOSTIC: the conductor (and `drive-backlog --isolated`) can lean on plain `requeue`/`complete` from its checkout WITHOUT pre-syncing or owning a worktree that happens to mirror the arbiter. It is the same property `do --remote` already gives the BUILD step, extended to the RECOVERY steps.
+
+**Where `--isolated` on the recovery verbs IS still useful (the narrow residue):** work that is **NOT yet pushed** to the arbiter — a purely-local `work/<slug>` branch. For anything already on the arbiter (the normal case after a surfaced needs-attention), fetch-then-continue suffices and no `--isolated`/`--remote` recovery flag is needed at all. So: make recovery fetch-from-arbiter-first (covers the common case), and OPTIONALLY add `--isolated` to `requeue`/`complete` only for the unpushed-local-work case.
+
+At minimum, until that lands: when `requeue` is run with `--arbiter` and the local work tree does NOT have the item where expected but the ARBITER does, say so explicitly ("item is in needs-attention on <arbiter> but your local checkout is behind — `git fetch && pull` first") instead of the bare "not found".
 
 ## Interaction with the rebase-conflict-on-continue bug
 
