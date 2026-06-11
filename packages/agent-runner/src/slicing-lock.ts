@@ -385,25 +385,14 @@ export interface ReleaseSlicingLockOptions {
 	/** Cap on push retries when main merely advanced. Default 3. */
 	retries?: number;
 	/**
-	 * The COMPLETING slicing transition (the `do prd:` command, slice
-	 * `autoslice-command`): the produced backlog slice files to drop INTO the same
-	 * release commit, keyed by repo-relative path (e.g.
-	 * `work/backlog/<slug>.md`) → file content. The runner commits these alongside
-	 * the `slicing/ → prd/` restore so the emitted backlog and the lock release are
-	 * ONE runner-owned transition (never the agent's git).
-	 * Omitted ⇒ a bare lock release (no slices emitted).
-	 */
-	emitSlices?: Record<string, string>;
-	/**
 	 * The slicer review→edit LOOP's **decomposition-unclear** verdict
 	 * (`slicer-review-edit-loop`): instead of restoring the held PRD
 	 * `work/slicing/<slug>.md → work/prd/<slug>.md`, restore it to
 	 * `work/needs-attention/<slug>.md` with this reason recorded as body prose (the
 	 * open questions), emitting NO guessed slices. The lock is still released (the
 	 * PRD leaves `work/slicing/`), but it lands in needs-attention rather than back
-	 * in `work/prd/`, so it is NOT re-sliceable until a human resolves it. When set,
-	 * `emitSlices` is IGNORED (no slices land). Omitted ⇒ the normal `slicing/ →
-	 * prd/` restore. The CONTENT-IDENTITY
+	 * in `work/prd/`, so it is NOT re-sliceable until a human resolves it. Omitted ⇒
+	 * the normal `slicing/ → prd/` restore. The CONTENT-IDENTITY
 	 * stale check still runs first (a concurrent edit under the lock is still `stale`).
 	 */
 	routeToNeedsAttention?: {reason: string};
@@ -444,10 +433,6 @@ export interface ReleaseSlicingLockResult {
  * unchecked restore would silently carry a concurrent edit into `prd/`, the exact
  * footgun the lock forbids. Pass the acquire-time `lockedBlob` (the `do prd:`
  * command always does).
- *
- * The COMPLETING `do prd:` transition (`emitSlices`) folds the produced backlog
- * slices INTO the same release commit, so the emitted backlog and the lock release
- * are ONE runner-owned transition (the agent never does git).
  *
  * Outcomes:
  *   - `released` (0): the PRD is back in `work/prd/`, `work/slicing/` empty.
@@ -539,7 +524,6 @@ async function runRelease(
 				slicing,
 				releaseBranch,
 				lockedBlob,
-				emitSlices: options.emitSlices,
 				routeToNeedsAttention: options.routeToNeedsAttention,
 				note,
 			});
@@ -577,7 +561,6 @@ interface ReleaseAttemptContext {
 	slicing: string;
 	releaseBranch: string;
 	lockedBlob: string | undefined;
-	emitSlices: Record<string, string> | undefined;
 	routeToNeedsAttention: {reason: string} | undefined;
 	note: (m: string) => void;
 }
@@ -618,7 +601,6 @@ async function releaseAttempt(
 		slicing,
 		releaseBranch,
 		lockedBlob,
-		emitSlices,
 		routeToNeedsAttention,
 		cwd,
 		env,
@@ -715,20 +697,6 @@ async function releaseAttempt(
 			throw new SlicingLockUsageError(
 				`git mv failed for '${slicing}' (unexpected — aborting release)`,
 			);
-		}
-
-		// COMPLETING `do prd:` transition: fold the produced backlog slices INTO this
-		// SAME release commit, so the emitted backlog and the lock release are ONE
-		// runner-owned transition (the agent never does git). Sliced-ness is RESIDENCE
-		// in `work/prd-sliced/` (the `sliced:` marker was removed in
-		// `remove-sliced-marker-step-b`); a bare release (no emitSlices) is unchanged.
-		if (emitSlices) {
-			for (const [relPath, content] of Object.entries(emitSlices)) {
-				const abs = join(cwd, relPath);
-				mkdirSync(dirname(abs), {recursive: true});
-				writeFileSync(abs, content);
-				await gitHard(['add', '--', relPath], cwd, env);
-			}
 		}
 
 		await gitHard(
