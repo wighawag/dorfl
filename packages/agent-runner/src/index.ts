@@ -67,6 +67,13 @@ export type {
 } from './sidecar-apply.js';
 export {ApplyAtomicError, applyAtomic} from './sidecar-apply.js';
 
+export type {
+	TickItem,
+	TickRungKind,
+	TickClassification,
+} from './advance-classify.js';
+export {classifyTick, isAdvanceable} from './advance-classify.js';
+
 export {isParticipatingRepo, findParticipatingRepos} from './detect.js';
 
 export type {
