@@ -72,3 +72,7 @@ acceptance gate failed (exit 1)
 ## Requeue 2026-06-11
 
 False gate red: 1564/1565 passed; the ONE failure is the KNOWN flake 'a same-slug new-item race ⇒ exactly one promote creates' (test/advance-triage.test.ts CAS-race timing under full parallel suite — see work/observations/advance-triage-same-slug-race-flaky-under-full-suite.md; passes deterministically in isolation; pre-existing from the triage slice, NOT this slice's work). Re-run.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
