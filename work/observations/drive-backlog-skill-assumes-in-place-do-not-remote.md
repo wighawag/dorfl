@@ -42,6 +42,27 @@ Arguments AGAINST / caveats:
 
 Suggested resolution shape: make the skill `--remote`-AWARE now (document both modes, caveat the in-place-only rules), and make `--remote` the RECOMMENDED conductor mode once `remote-do-ignores-per-repo-config` is resolved — but keep in-place as the fallback for local-only slices / offline / single-checkout convenience. Decide explicitly rather than silently flipping the default.
 
+## The precise mechanism of the entanglement — and it is NOT just `do`
+
+Follow-up investigation (2026-06-11) into HOW the sweeping commit happened pins it on **`requeue`, not `do`**, and surfaces a broader gap than the `do`-isolation one above.
+
+- **`--isolated` is a `do`-ONLY flag.** It is defined exclusively in the `do` command block (`cli.ts` ~L1272, part of `DoFlags`). `requeue`'s options are only `--config`/`--cwd`/`--arbiter`/`--reset`/`-m`. So the runner's requeue COULD NOT have passed `--isolated` — there is no such flag on `requeue`.
+- **`requeue` does its `git mv` + commit DIRECTLY in `--cwd` (default `process.cwd()`).** It is a pure file/git transition (no build): `git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md`, commit, optionally push to `--arbiter`. That commit, made in the SHARED working tree, is what swept up the assistant's uncommitted `work/ideas/` files into `8c92f63`.
+- **Contrast `claim`** (`performClaim`, "in-process; mirrors scripts/claim.sh"): it builds the transition as an atomic **compare-and-swap push to the ARBITER ref** and does NOT stage/commit in the cwd working tree. The cwd is its repo context (to find the arbiter), not a write target. `claim` is already "cwd = origin source, not a write target"; `requeue` is the outlier that writes the cwd tree.
+
+### The correction (do not mis-state the cause)
+
+The cause is **NOT "requeue is a human verb so it writes the cwd"** — that conflates two ORTHOGONAL things. Human-vs-agent is about commit ATTRIBUTION (identity); it does NOT dictate WHERE the write lands. `requeue` writing the cwd working tree is an IMPLEMENTATION choice, not a consequence of being a human verb. It could isolate its write exactly like the build path does:
+
+- **(a) Tree-less CAS push, like `claim`.** The move is a single file rename — it does not need a working tree at all; construct the commit and CAS-push it to the arbiter. This is the cleanest fix and makes `requeue` consistent with `claim`.
+- **(b) Ephemeral worktree.** Even from inside a repo, `requeue` could create a throwaway worktree off the arbiter, do the `git mv` + commit + push there, and reap it — never touching the cwd working tree.
+
+The `claim`/`requeue` inconsistency (one is tree-less, the other writes the cwd) is itself worth fixing: a backlog-folder transition should have ONE mechanism, and the safe one (no cwd write) is the one `claim` already uses.
+
+### The broader gap
+
+It is not ONLY `do` that must leave the cwd working tree alone. ANY runner-driven transition an autonomous driver invokes in a shared checkout (`requeue` today; potentially others) must not commit in that working tree, or it can collide with whatever a human/assistant is editing there. The `do`-isolation work above is necessary but not SUFFICIENT — the tree-less / isolated-write discipline must extend to the folder-move verbs too.
+
 ## Where
 
-`skills/drive-backlog/SKILL.md` — the "Selection + isolation" section, golden rules 1 + 5, steps 4a/4d, and the "When to use vs. not" line that opposes `--remote` to the conductor. Cross-ref: `remote-do-ignores-per-repo-config.md` (the per-repo-config gap that gates making `--remote` the default).
+`skills/drive-backlog/SKILL.md` — the "Selection + isolation" section, golden rules 1 + 5, steps 4a/4d, and the "When to use vs. not" line that opposes `--remote` to the conductor. PLUS the runner itself: `requeue` (`cli.ts` ~L1808 → `ledgerWrite.applyReturnToBacklogTransition`) should move to a tree-less CAS push (like `performClaim`) or an ephemeral worktree, so it never commits in a shared cwd working tree. Cross-ref: `review-nits-remote-do-reads-per-repo-config-from-arbiter-main-2026-06-11.md` (the per-repo-config read that gates making isolated/`--remote` the default) and `work/ideas/make-isolated-the-default-build-mode.md`.
