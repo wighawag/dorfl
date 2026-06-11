@@ -370,7 +370,69 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 			},
 		});
 		expect(result.opened).toBe(false);
-		expect(result.instruction).toMatch(/unavailable or unauthenticated/);
+		// The unavailable arm degrades to a manual `gh pr create` instruction, but it
+		// surfaces the REAL cause (here an empty-stderr exit 1) — NOT a hard-coded
+		// "unavailable or unauthenticated" auth guess.
+		expect(result.instruction).toMatch(/gh pr create/);
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/);
+		expect(delays).toEqual([]); // deterministic failure → no backoff
+	});
+
+	it('the unavailable arm surfaces the REAL gh stderr (a non-auth permissions error), NOT a hard-coded auth guess', async () => {
+		const realCause =
+			'GraphQL: 0xronan7 does not have the correct permissions (createPullRequest)';
+		const bin = join(scratch.root, 'gh-perm.sh');
+		// `pr create` fails with a real permissions stderr; `auth status` also fails
+		// (so the availability probe reads unavailable → the `unavailable` arm).
+		writeFileSync(
+			bin,
+			[
+				'#!/usr/bin/env bash',
+				'if [ "$1" = "pr" ] && [ "$2" = "create" ]; then',
+				`  echo ${JSON.stringify(realCause)} 1>&2`,
+				'  exit 1',
+				'fi',
+				'exit 1',
+			].join('\n'),
+		);
+		chmodSync(bin, 0o755);
+		const provider = new GitHubProvider({ghBin: bin});
+		const delays: number[] = [];
+		const result = await provider.openRequest({
+			cwd: scratch.root,
+			branch: 'work/slice-feat',
+			arbiter: 'origin',
+			sleep: async (ms: number) => {
+				delays.push(ms);
+			},
+		});
+		expect(result.opened).toBe(false);
+		// The TRUE cause is surfaced verbatim, NOT misattributed to auth.
+		expect(result.instruction).toContain(realCause);
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/);
+		// The manual-fallback guidance + the safe-pushed posture stay intact.
+		expect(result.instruction).toMatch(/Pushed work\/slice-feat/);
+		expect(result.instruction).toMatch(/gh pr create/);
+		expect(delays).toEqual([]); // deterministic (unavailable) → no backoff
+	});
+
+	it('the unavailable arm reads as the clear "binary missing" string when gh is missing — never crashes', async () => {
+		const provider = new GitHubProvider({
+			ghBin: join(scratch.root, 'no-such-gh-binary'),
+		});
+		const delays: number[] = [];
+		const result = await provider.openRequest({
+			cwd: scratch.root,
+			branch: 'work/slice-feat',
+			arbiter: 'origin',
+			sleep: async (ms: number) => {
+				delays.push(ms);
+			},
+		});
+		expect(result.opened).toBe(false);
+		expect(result.instruction).toContain('binary missing');
+		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/);
+		expect(result.instruction).toMatch(/gh pr create/);
 		expect(delays).toEqual([]); // deterministic failure → no backoff
 	});
 });

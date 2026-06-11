@@ -1,5 +1,6 @@
 import {run, type RunResult} from './git.js';
 import {DEFAULT_GH_BIN} from './github.js';
+import {ghFailureReason} from './gh-failure.js';
 import {brand} from './brand.js';
 
 /**
@@ -666,20 +667,6 @@ export class GitHubIssueProvider implements IssueProvider {
 			);
 		}
 	}
-}
-
-/**
- * Distil the REAL reason a `gh` invocation failed from its result — the trimmed
- * stderr (the actual cause, e.g. `'agent-runner:processing' not found`), falling
- * back to the exit status when stderr is empty. This is what replaces the old
- * hard-coded "unavailable or unauthenticated" guess: the cause must be diagnosable.
- */
-function ghFailureReason(result: RunResult): string {
-	const stderr = result.stderr.trim();
-	if (stderr) {
-		return stderr;
-	}
-	return `\`gh\` exited ${result.status}.`;
 }
 
 /**

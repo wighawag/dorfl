@@ -1,4 +1,5 @@
 import {run, type RunResult} from './git.js';
+import {ghFailureDetail} from './gh-failure.js';
 import {realSleep, retryWithBackoff} from './retry-backoff.js';
 import {
 	NoneProvider,
@@ -212,8 +213,10 @@ export class GitHubProvider implements ReviewProvider {
 
 		// Failed once — distinguish DETERMINISTIC (missing/unauth) from a TRANSIENT
 		// outage by an availability probe. Missing/unauth ⇒ degrade now (no retry).
+		// Thread the FAILED first attempt so the degrade surfaces the REAL `gh` cause
+		// (its stderr / the missing-binary detail), not a hard-coded auth guess.
 		if (!this.available(input.cwd, input.env)) {
-			return this.degrade(input, 'unavailable');
+			return this.degrade(input, 'unavailable', first);
 		}
 
 		// `gh` IS available but the create failed — a transient outage. Retry the
@@ -277,11 +280,15 @@ export class GitHubProvider implements ReviewProvider {
 		// already exists and the review is in the run output, so degrade gracefully
 		// — NEVER throw (the comment is advisory; a failure must not lose work).
 		if (result === undefined || result.status !== 0) {
+			// Surface the REAL `gh` cause (its stderr, with the missing-binary special
+			// case) — NOT a hard-coded "unavailable or unauthenticated" guess that sends
+			// the operator chasing a phantom auth problem (mirrors `issue-provider.ts`).
+			const reason = ghFailureDetail(result);
 			return {
 				posted: false,
 				instruction:
-					`\`gh\` is unavailable or unauthenticated, so the review was not ` +
-					`posted as a comment on ${input.url}. The review:\n${input.body}`,
+					`${reason} The review was not posted as a comment on ` +
+					`${input.url}. The review:\n${input.body}`,
 			};
 		}
 		return {
@@ -328,6 +335,14 @@ export class GitHubProvider implements ReviewProvider {
 	private degrade(
 		input: OpenRequestInput,
 		reason: 'unavailable' | 'outage',
+		/**
+		 * The FAILED `gh pr create` result that triggered the `unavailable` degrade
+		 * (`undefined` = `gh` binary missing). Threaded in so the `unavailable` arm
+		 * surfaces the REAL cause rather than a hard-coded auth guess. The `outage`
+		 * arm does not need it (its wording is already honest about the retried
+		 * transient failure).
+		 */
+		result?: RunResult,
 	): OpenRequestResult {
 		// Echo the explicit title/body in the suggested manual command when present,
 		// so a human opening the PR by hand reuses the same content the autonomous
@@ -340,8 +355,10 @@ export class GitHubProvider implements ReviewProvider {
 				? '`gh pr create` failed after retries (a transient outage), so no PR ' +
 					'was opened — the branch is pushed and the work is SAFE; re-run or ' +
 					'open one manually, e.g. '
-				: '`gh` is unavailable or unauthenticated, so no PR was opened — open ' +
-					'one manually, e.g. ';
+				: // Surface the REAL `gh` cause (its stderr, with the missing-binary
+					// special case) — NOT a hard-coded "unavailable or unauthenticated"
+					// guess (mirrors `issue-provider.ts`).
+					`${ghFailureDetail(result)} No PR was opened — open one manually, e.g. `;
 		return {
 			opened: false,
 			instruction:
