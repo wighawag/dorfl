@@ -22,6 +22,15 @@ pnpm -r build && pnpm -r test && pnpm -r format:check
 
 So a normal finish is: `pnpm format` → confirm `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
 
+## Protocol docs — edit the SOURCE, never `work/protocol/`
+
+This repo is special: it is both a **user** of the agent-runner protocol (it has its own `work/` tree) AND the **author** of it. The protocol docs therefore exist in two places:
+
+- **`skills/setup/protocol/*`** — the **SOURCE OF TRUTH**. `setup` copies these into every target repo's `work/protocol/`. Edit the protocol HERE.
+- **`work/protocol/*`** — a **propagated COPY** for this repo's own use. Treat it as generated; do NOT edit it directly.
+
+When you change a protocol doc (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, `CLAIM-PROTOCOL.md`, the templates, `VERSION`), edit `skills/setup/protocol/` and mirror the same change into `work/protocol/` so the two stay byte-identical (`diff -r skills/setup/protocol work/protocol` should be clean apart from files that legitimately only live in one). Editing `work/protocol/` alone silently drifts the copy from the source, and the next `setup` run will propagate the OLD source text — losing your change everywhere else.
+
 ## Git transitions (reminder only — not the source of truth)
 
 When you are dispatched to build a work slice, you do NOT perform git operations on this repo: no stage/commit/push, and do not move files between `work/` folders. The runner/human owns every git-state transition (claim, done-move, commit, integration). Your tests MAY use their own throwaway git repos.
