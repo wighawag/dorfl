@@ -123,6 +123,25 @@ function toBoolean(value: string): boolean | undefined {
  * frontmatter fence. A document with no frontmatter fence is returned unchanged.
  */
 export function setNeedsAnswersMarker(content: string, value: boolean): string {
+	return setFrontmatterMarker(content, 'needsAnswers', String(value));
+}
+
+/**
+ * Set (or replace) a top-level scalar `<key>: <value>` frontmatter marker on a
+ * `work/` markdown document, returning the new content. The generalised form of
+ * {@link setNeedsAnswersMarker} the advance APPLY rung uses to stamp a
+ * `triaged: keep` marker (US #30) on an item a human answered "keep" — so a
+ * settled observation drops out of the candidate pool and is never re-asked. If a
+ * `<key>:` line already exists it is REPLACED (idempotent); otherwise it is
+ * appended as the last line inside the frontmatter fence. A document with no
+ * frontmatter fence is returned unchanged (state stays the folder — this is a
+ * tooling-owned axis marker, never prose).
+ */
+export function setFrontmatterMarker(
+	content: string,
+	key: string,
+	value: string,
+): string {
 	const normalized = content.replace(/\r\n/g, '\n');
 	if (!normalized.startsWith('---\n')) {
 		return content;
@@ -132,13 +151,14 @@ export function setNeedsAnswersMarker(content: string, value: boolean): string {
 	if (closing === -1) {
 		return content;
 	}
+	const pattern = new RegExp(`^${key}\\s*:`);
 	for (let i = 1; i < closing; i++) {
-		if (/^needsAnswers\s*:/.test(lines[i])) {
-			lines[i] = `needsAnswers: ${value}`;
+		if (pattern.test(lines[i])) {
+			lines[i] = `${key}: ${value}`;
 			return lines.join('\n');
 		}
 	}
-	lines.splice(closing, 0, `needsAnswers: ${value}`);
+	lines.splice(closing, 0, `${key}: ${value}`);
 	return lines.join('\n');
 }
 
