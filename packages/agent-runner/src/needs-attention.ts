@@ -199,12 +199,27 @@ export interface ResolveFromNeedsAttentionResult {
 	reasonNotMoved?: string;
 }
 
-/** The folder a pre-needs-attention item could currently live in. */
+/**
+ * The folder the item to route currently lives in. Probes `in-progress/` (the
+ * test-gate path, before the done-move) and `done/` (the rebase-conflict path,
+ * after it) FIRST, then `needs-attention/` itself.
+ *
+ * The `needs-attention/` arm makes the route an IDEMPOTENT RE-SURFACE: on an
+ * onboard-time CONTINUE rebase-conflict the worktree is cut from the kept
+ * `work/<slug>` branch, whose tree ALREADY holds the item in
+ * `needs-attention/<slug>.md` (from the prior bounce). Without this arm the probe
+ * returned `undefined` ⇒ `{moved: false}` ⇒ no surface re-publish, so a `main`
+ * that currently shows the item elsewhere (e.g. `in-progress/` after a re-claim)
+ * went STALE. Recognising `needs-attention/` lets the route re-publish the
+ * surface (the move becomes a no-op-content self-move the caller handles). It is
+ * probed LAST so a real pre-needs-attention source (`in-progress/`/`done/`) still
+ * wins when the item is mid-transition.
+ */
 function findSourceFolder(
 	cwd: string,
 	slug: string,
 ): {rel: string; abs: string} | undefined {
-	for (const folder of ['in-progress', 'done']) {
+	for (const folder of ['in-progress', 'done', 'needs-attention']) {
 		const rel = join('work', folder, `${slug}.md`);
 		const abs = join(cwd, rel);
 		if (existsSync(abs)) {
@@ -267,18 +282,23 @@ export async function routeToNeedsAttention(
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
-	// The item could be either in-progress (test-gate path, before the done-move)
-	// or already moved to done/ (rebase-conflict path, after it). Bounce from
-	// whichever folder holds it.
+	// The item could be in-progress (test-gate path, before the done-move), already
+	// moved to done/ (rebase-conflict path, after it), or ALREADY in
+	// needs-attention/ (the continue-conflict RE-SURFACE: the kept work/<slug>
+	// branch's tree still holds the prior bounce). Route from whichever folder holds
+	// it; a needs-attention/ source is a no-op-content re-surface (see below).
 	const source = findSourceFolder(cwd, slug);
 	if (!source) {
 		return {
 			moved: false,
 			reasonNotMoved:
-				`work/in-progress/${slug}.md (nor work/done/${slug}.md) found — ` +
-				'nothing to route to needs-attention (wrong slug, or not in-progress?).',
+				`work/in-progress/${slug}.md (nor work/done/ nor ` +
+				`work/needs-attention/${slug}.md) not found — nothing to route to ` +
+				'needs-attention (wrong slug, or not claimed?).',
 		};
 	}
+	const destRel = join('work', 'needs-attention', `${slug}.md`);
+	const alreadyInNeedsAttention = source.rel === destRel;
 
 	// 1. WIP commit: save whatever the agent left uncommitted FIRST, so it sits
 	//    BELOW the move-only tip and a tip-only surface never carries it. Skip when
@@ -299,11 +319,25 @@ export async function routeToNeedsAttention(
 	appendReasonBlock(source.abs, options.reason, options.questions);
 	const destDir = join(cwd, 'work', 'needs-attention');
 	mkdirSync(destDir, {recursive: true});
-	const destRel = join('work', 'needs-attention', `${slug}.md`);
-	gitHard(['mv', source.rel, destRel], cwd, env);
+	// When the item is ALREADY in needs-attention/ (the continue-conflict
+	// re-surface), source.rel === destRel: there is no folder change, so `git mv
+	// A A` would ERROR. Skip the mv; the file is in place and any reason-block
+	// refresh staged below carries the re-surface. The move-only commit may then be
+	// EMPTY (reason already present, idempotent) — `--allow-empty` keeps a stable
+	// tip to (re)publish without thrashing.
+	if (!alreadyInNeedsAttention) {
+		gitHard(['mv', source.rel, destRel], cwd, env);
+	}
 	gitHard(['add', '-A'], cwd, env);
 	const commitMessage = `chore(${slug}): route to needs-attention; ${options.reason}`;
-	gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
+	// On a re-surface the reason block may already be present (idempotent append),
+	// leaving NOTHING staged — a plain commit would error. `--allow-empty` keeps a
+	// stable move-only tip to (re)publish, so re-surfacing never thrashes nor fails.
+	const commitArgs = ['commit', '-q', '-m', commitMessage];
+	if (alreadyInNeedsAttention) {
+		commitArgs.push('--allow-empty');
+	}
+	gitHard(commitArgs, cwd, env);
 	const moveCommit = revParseHead(cwd, env);
 	note(`Routed '${slug}' to needs-attention: ${options.reason}`);
 
@@ -606,14 +640,30 @@ function appendReasonBlock(
 	questions: string[] | undefined,
 ): void {
 	const current = readFileSync(path, 'utf8');
-	const lines: string[] = [];
 	// Ensure a clear separation from whatever the body ended with.
 	const base = current.replace(/\s*$/, '');
-	lines.push(base);
-	lines.push('');
-	lines.push(REASON_HEADING);
-	lines.push('');
-	lines.push(reason);
+	const block = reasonBlockText(reason, questions);
+	// IDEMPOTENT re-surface: if the body ALREADY ends with this exact reason block
+	// (the continue-conflict re-route of an item already in needs-attention with an
+	// unchanged reason), do NOT append a duplicate — re-surfacing must not thrash the
+	// file. The move-only commit then carries no content change (handled by
+	// `--allow-empty` upstream).
+	if (base.endsWith(block.replace(/\s*$/, ''))) {
+		return;
+	}
+	writeFileSync(path, `${base}\n${block}`);
+}
+
+/**
+ * The body block text for a reason (+ any surfaced questions), without the
+ * leading separator. Shared by the append + the idempotent-re-surface guard so
+ * the two agree byte-for-byte on what "the same reason block" is.
+ */
+function reasonBlockText(
+	reason: string,
+	questions: string[] | undefined,
+): string {
+	const lines: string[] = ['', REASON_HEADING, '', reason];
 	if (questions && questions.length > 0) {
 		lines.push('');
 		lines.push('### Surfaced questions');
@@ -623,7 +673,7 @@ function appendReasonBlock(
 		}
 	}
 	lines.push('');
-	writeFileSync(path, lines.join('\n'));
+	return lines.join('\n');
 }
 
 /**
