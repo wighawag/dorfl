@@ -366,14 +366,21 @@ export class GitHubIssueProvider implements IssueProvider {
 			input.cwd,
 			input.env,
 		);
-		// Advisory: a missing/unauthenticated `gh` DEGRADES (surface the text), never
-		// throws — mirroring the PR-comment poster (ADR §6).
+		// Advisory: a failed `gh` DEGRADES (surface the text), never throws — mirroring
+		// the PR-comment poster (ADR §6). Surface the REAL `gh` cause via
+		// `ghFailureReason` (or the missing-binary detail) — NOT a hard-coded
+		// "unavailable or unauthenticated" guess (the misattribution already removed
+		// from `mutateLabel`/`closeIssue`; this was the last contagion source).
 		if (result === undefined || result.status !== 0) {
+			const reason =
+				result === undefined
+					? '`gh` is not available (binary missing).'
+					: ghFailureReason(result);
 			return {
 				posted: false,
 				instruction:
-					`\`gh\` is unavailable or unauthenticated, so the comment was not ` +
-					`posted on issue #${input.issueNumber}. The comment:\n${input.body}`,
+					`could not post the comment on issue #${input.issueNumber}: ` +
+					`${reason}. The comment:\n${input.body}`,
 			};
 		}
 		return {
@@ -516,12 +523,26 @@ export class GitHubIssueProvider implements IssueProvider {
 			isLabelNotFound(result, input.label)
 		) {
 			const created = this.createLabel(input.label, input.cwd, input.env);
-			if (created) {
+			if (created.ok) {
 				result = this.runGh(
 					['issue', 'edit', String(input.issueNumber), flag, input.label],
 					input.cwd,
 					input.env,
 				);
+			} else if (created.reason !== undefined) {
+				// The CREATE failed for a real reason (e.g. a token without label-create
+				// permission). Surface the CREATE's REAL cause — NOT the original
+				// `'<label>' not found` add failure, which is merely the fresh-repo SYMPTOM
+				// (the misattribution this fix removes). A missing-`gh` create degrades to
+				// the original `result` (handled below) like the rest of the seam.
+				return {
+					outcome: 'failed',
+					applied: false,
+					reason: created.reason,
+					instruction:
+						`could not ${verb} the \`${input.label}\` label on issue ` +
+						`#${input.issueNumber}: ${created.reason}`,
+				};
 			}
 		}
 
@@ -558,16 +579,25 @@ export class GitHubIssueProvider implements IssueProvider {
 
 	/**
 	 * Create the lock label (`gh label create <label>`) so a fresh repo is lockable
-	 * from the first run. Returns true iff the label now exists (created here, or it
-	 * already existed — `gh` reports `already exists`, which we treat as success).
-	 * NEVER throws; a genuine create failure (e.g. no permission) returns false and
-	 * the caller surfaces the original add failure.
+	 * from the first run. Returns a three-way result rather than a bare boolean so the
+	 * caller can surface the CREATE's REAL cause (the original bug threw the stderr
+	 * away, leaving `mutateLabel` to report the fresh-repo SYMPTOM `'<label>' not
+	 * found` even on a permission-denied create):
+	 *
+	 * - **`{ok: true}`** — the label now exists (created here, or it already existed —
+	 *   `gh` reports `already exists`, which we treat as success).
+	 * - **`{ok: false}`** (no `reason`) — `gh` is MISSING (binary absent): degrade to
+	 *   the caller's existing missing-`gh` handling (the never-hard-fail posture).
+	 * - **`{ok: false, reason}`** — the create FAILED for a real reason (e.g. no
+	 *   permission): the caller surfaces `reason` (the create's REAL `gh` stderr).
+	 *
+	 * NEVER throws.
 	 */
 	private createLabel(
 		label: string,
 		cwd: string,
 		env: NodeJS.ProcessEnv | undefined,
-	): boolean {
+	): {ok: boolean; reason?: string} {
 		const result = this.runGh(
 			[
 				'label',
@@ -579,15 +609,22 @@ export class GitHubIssueProvider implements IssueProvider {
 			cwd,
 			env,
 		);
+		// Missing `gh`: no reason to surface — degrade to the caller's missing-`gh`
+		// handling (keeps the never-hard-fail posture unchanged).
 		if (result === undefined) {
-			return false;
+			return {ok: false};
 		}
 		if (result.status === 0) {
-			return true;
+			return {ok: true};
 		}
 		// A concurrent run created it first — `gh` reports "already exists"; that is a
 		// success for our purpose (the label is present for the retry).
-		return /already exists/i.test(result.stderr);
+		if (/already exists/i.test(result.stderr)) {
+			return {ok: true};
+		}
+		// A genuine create failure (e.g. no permission): surface its REAL `gh` stderr so
+		// `mutateLabel` reports the create's TRUE cause, not the fresh-repo `not found`.
+		return {ok: false, reason: ghFailureReason(result)};
 	}
 
 	/**
