@@ -53,6 +53,30 @@ export interface ReviewProvider {
 	 * the text in the result `instruction`, never losing the review — ADR §6).
 	 */
 	postPRComment(input: PostPRCommentInput): PostPRCommentResult;
+	/**
+	 * Post a follow-up COMMENT on the PR opened for an already-pushed `work/<slug>`
+	 * BRANCH, RESOLVING the PR from that branch instead of being handed its `url`.
+	 * This is the FALLBACK for the audit-trail gap where `gh pr create` opened a PR
+	 * (exit 0) but agent-runner could not PARSE the PR url out of its stdout: the
+	 * sibling {@link openRequest} then returns `{opened: true}` with NO `url`, so the
+	 * url-keyed {@link postPRComment} has nothing to thread on. Given the branch, a
+	 * real provider resolves its open PR (`gh pr comment <branch>` / `gh pr view
+	 * <branch>`) and comments — closing the gap where a genuinely-opened PR's review
+	 * was silently dropped.
+	 *
+	 * It is the BRANCH-keyed twin of {@link postPRComment} (which is URL-keyed); the
+	 * core prefers the url path when it HAS a url and only falls back here when a PR
+	 * was opened without a parseable url. The `posted` flag reports whether a comment
+	 * was actually posted; when NO PR can be resolved from the branch at all it is a
+	 * clean no-op (`posted: false`) — the honest "no PR ⇒ no comment" outcome, but
+	 * only AFTER trying to resolve one.
+	 *
+	 * ADVISORY — it gates nothing; like the others it must NEVER throw (a
+	 * missing/unauthenticated `gh`, the `none` provider, or no resolvable PR all
+	 * DEGRADE: surface the text in the result `instruction`, never losing the
+	 * review — ADR §6).
+	 */
+	postPRCommentOnBranch(input: PostPRCommentOnBranchInput): PostPRCommentResult;
 }
 
 export interface PostPRCommentInput {
@@ -64,6 +88,20 @@ export interface PostPRCommentInput {
 	 * PR to comment on).
 	 */
 	url: string;
+	/** The comment body (the verbatim review prose, JSON block stripped). */
+	body: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface PostPRCommentOnBranchInput {
+	cwd: string;
+	/**
+	 * The pushed `work/<slug>` branch whose open PR to RESOLVE and comment on — the
+	 * branch {@link OpenRequestInput.branch} opened a PR for. The GitHub provider
+	 * passes it to `gh pr view <branch>` / `gh pr comment <branch>`; a provider that
+	 * cannot resolve a PR from it cleanly no-ops (nothing to comment on).
+	 */
+	branch: string;
 	/** The comment body (the verbatim review prose, JSON block stripped). */
 	body: string;
 	env?: NodeJS.ProcessEnv;
@@ -151,6 +189,22 @@ export class NoneProvider implements ReviewProvider {
 	 * as a clean no-op for the PR (nothing was posted).
 	 */
 	postPRComment(input: PostPRCommentInput): PostPRCommentResult {
+		return {
+			posted: false,
+			instruction:
+				'No review provider configured — the review was not posted as a PR ' +
+				`comment. The review:\n${input.body}`,
+		};
+	}
+
+	/**
+	 * No API to resolve a PR from a branch (a local `--bare` arbiter has no review
+	 * concept), so DEGRADE exactly like {@link postPRComment}: surface the review
+	 * text, post nothing, never throw. A clean no-op for the PR.
+	 */
+	postPRCommentOnBranch(
+		input: PostPRCommentOnBranchInput,
+	): PostPRCommentResult {
 		return {
 			posted: false,
 			instruction:

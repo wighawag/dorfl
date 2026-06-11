@@ -15,6 +15,7 @@ import {
 	type ReviewProvider,
 	type OpenRequestResult,
 	type PostPRCommentInput,
+	type PostPRCommentOnBranchInput,
 	type PostPRCommentResult,
 } from '../src/integrator.js';
 import {
@@ -109,14 +110,32 @@ function stubGate(verdict: ReviewVerdict): ReviewGate {
 	return async () => verdict;
 }
 
-/** A provider that opens a PR (returns a url) and RECORDS its postPRComment calls. */
-function recordingProvider(opts: {url?: string} = {}): ReviewProvider & {
+/**
+ * A provider that opens a PR and RECORDS its comment calls.
+ *
+ *  - `url` present ⇒ `openRequest` reports a parseable PR url (the normal path:
+ *    the in-core poster comments via the url-keyed `postPRComment`).
+ *  - `url` absent ⇒ `openRequest` reports `{opened: true}` with NO url (the
+ *    `gh pr create` exit-0-but-unparseable-stdout degradation): the in-core
+ *    poster must FALL BACK to the branch-resolved `postPRCommentOnBranch`.
+ *  - `branchPrUrl` is what that branch-resolved fallback resolves: a url ⇒ a PR
+ *    genuinely exists (it posts); `undefined` ⇒ NO PR resolvable (a clean no-op).
+ */
+function recordingProvider(
+	opts: {url?: string; branchPrUrl?: string} = {},
+): ReviewProvider & {
 	readonly comments: PostPRCommentInput[];
+	readonly branchComments: PostPRCommentOnBranchInput[];
 } {
 	const comments: PostPRCommentInput[] = [];
-	const provider: ReviewProvider & {comments: PostPRCommentInput[]} = {
+	const branchComments: PostPRCommentOnBranchInput[] = [];
+	const provider: ReviewProvider & {
+		comments: PostPRCommentInput[];
+		branchComments: PostPRCommentOnBranchInput[];
+	} = {
 		name: 'recording',
 		comments,
+		branchComments,
 		openRequest(): OpenRequestResult {
 			return opts.url === undefined
 				? {opened: true, instruction: 'pushed (no url)'}
@@ -125,6 +144,22 @@ function recordingProvider(opts: {url?: string} = {}): ReviewProvider & {
 		postPRComment(input: PostPRCommentInput): PostPRCommentResult {
 			comments.push(input);
 			return {posted: true, instruction: `commented on ${input.url}`};
+		},
+		postPRCommentOnBranch(
+			input: PostPRCommentOnBranchInput,
+		): PostPRCommentResult {
+			branchComments.push(input);
+			// Resolve the branch's PR from `branchPrUrl`: a url ⇒ posts; none ⇒ no-op.
+			if (opts.branchPrUrl === undefined) {
+				return {
+					posted: false,
+					instruction: `no PR resolvable for ${input.branch}`,
+				};
+			}
+			return {
+				posted: true,
+				instruction: `commented on ${opts.branchPrUrl} (resolved from branch)`,
+			};
 		},
 	};
 	return provider;
@@ -288,10 +323,15 @@ describe('review-comment-prose-field — approve + PR opened ⇒ posts `verdict.
 	});
 });
 
-describe('review-comment-prose-field — degraded provider (no PR url) ⇒ clean no-op', () => {
-	it('does NOT call postPRComment when openRequest opened no PR (no url)', async () => {
+describe('review-comment-fallback-on-unparsed-pr-url — PR opened but url unparseable', () => {
+	it('FALLS BACK to the branch-resolved comment when a PR opened with no parseable url but one is resolvable', async () => {
 		const {repo} = await claimAndBranch('beta');
-		const provider = recordingProvider({url: undefined}); // degraded: no url
+		// openRequest opened a PR (exit 0) but its url was unparseable (url: undefined);
+		// the branch DOES resolve to an open PR (branchPrUrl set).
+		const provider = recordingProvider({
+			url: undefined,
+			branchPrUrl: 'https://github.com/o/r/pull/77',
+		});
 
 		const core = await performIntegration({
 			cwd: repo,
@@ -307,10 +347,44 @@ describe('review-comment-prose-field — degraded provider (no PR url) ⇒ clean
 			env: gitEnv(),
 		});
 
-		// The work still completed (the review stays in the run output) \u2014 no throw,
-		// no lost work \u2014 but nothing was posted (no PR to comment on).
+		expect(core.outcome).toBe('completed');
+		// No parseable url on the integration result (it degraded) ...
+		expect(core.integration?.url).toBeUndefined();
+		// ... so the review was posted via the BRANCH-resolved fallback, NOT dropped.
+		expect(provider.comments).toHaveLength(0); // not the url path
+		expect(provider.branchComments).toHaveLength(1);
+		expect(provider.branchComments[0].branch).toBe('work/slice-beta');
+		expect(provider.branchComments[0].body).toBe(REVIEW_PROSE);
+	});
+
+	it('clean no-op (no comment) when a PR opened with no parseable url AND none is resolvable from the branch', async () => {
+		const {repo} = await claimAndBranch('beta2');
+		// openRequest opened a PR (exit 0) but url unparseable, AND the branch resolves
+		// to NO PR (branchPrUrl undefined) \u2014 the honest no-op, but only AFTER trying.
+		const provider = recordingProvider({
+			url: undefined,
+			branchPrUrl: undefined,
+		});
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'beta2',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			review: true,
+			reviewGate: stubGate(parseReviewVerdict(AGENT_OUTPUT_WITH_REVIEW_FIELD)),
+			mode: 'propose',
+			providerInstance: provider,
+			env: gitEnv(),
+		});
+
 		expect(core.outcome).toBe('completed');
 		expect(core.integration?.url).toBeUndefined();
+		// The fallback WAS tried (branch-keyed call made) ...
+		expect(provider.branchComments).toHaveLength(1);
+		// ... but resolved no PR, so nothing was posted on the url path either.
 		expect(provider.comments).toHaveLength(0);
 	});
 
@@ -335,20 +409,29 @@ describe('review-comment-prose-field — degraded provider (no PR url) ⇒ clean
 
 		expect(core.outcome).toBe('completed');
 		expect(core.integration?.mode).toBe('merge');
-		// merge mode does not consult the provider for a request, so no url, no comment.
+		// merge mode does not consult the provider for a request, so no url, no comment
+		// \u2014 and NO branch-resolved fallback either (no PR was opened at all).
 		expect(provider.comments).toHaveLength(0);
+		expect(provider.branchComments).toHaveLength(0);
 	});
 });
 
 describe('review-comment-prose-field — the comment is ADVISORY (decision unchanged)', () => {
-	it('the integration outcome is identical with and without commenting', async () => {
-		// WITH a commenting provider.
-		const withProvider = recordingProvider({
-			url: 'https://github.com/o/r/pull/1',
-		});
-		const withRepo = (await claimAndBranch('delta')).repo;
-		const withCore = await performIntegration({
-			cwd: withRepo,
+	it('the integration outcome is identical with the SAME GitHub provider, commenting ON vs OFF', async () => {
+		// The control isolates COMMENTING: BOTH arms use the SAME provider type (a
+		// `GitHubProvider` over a stubbed `gh`), so the only difference is whether a
+		// comment is posted at all. Commenting is driven by the gate carrying a
+		// `review` field — ON = a verdict WITH `review` (a comment posts), OFF = the
+		// SAME approve verdict WITHOUT `review` (nothing to post). If the outcome /
+		// effective mode match across the two, the comment changed no gate/verdict/
+		// merge logic.
+
+		// WITH commenting: a GitHubProvider whose stubbed `gh pr create` returns a
+		// parseable url (so the url-keyed post fires) and records the `gh pr comment`.
+		const onStub = writeGhStub({stdout: 'https://github.com/o/r/pull/1'});
+		const onRepo = (await claimAndBranch('delta')).repo;
+		const onCore = await performIntegration({
+			cwd: onRepo,
 			arbiter: ARBITER,
 			slug: 'delta',
 			source: 'in-progress',
@@ -357,35 +440,43 @@ describe('review-comment-prose-field — the comment is ADVISORY (decision uncha
 			review: true,
 			reviewGate: stubGate(parseReviewVerdict(AGENT_OUTPUT_WITH_REVIEW_FIELD)),
 			mode: 'propose',
-			providerInstance: withProvider,
+			providerInstance: new GitHubProvider({ghBin: onStub.bin}),
 			env: gitEnv(),
 		});
+		// The commenting arm actually shelled `gh pr comment` (capture BEFORE the
+		// scratch is recycled for the OFF arm below).
+		const onArgs = readFileSync(onStub.argsFile, 'utf8');
 
-		// WITHOUT (a provider that opens a PR but whose postPRComment is a no-op path:
-		// the none provider degrades, never posting). Fresh scratch / arbiter.
+		// WITHOUT commenting: the SAME GitHubProvider type over a fresh stub, but the
+		// approve verdict carries NO `review` field — so the core posts nothing.
+		// Fresh scratch / arbiter.
 		scratch.cleanup();
 		scratch = makeScratch('agent-runner-review-comment-');
-		const withoutRepo = (await claimAndBranch('delta')).repo;
-		const withoutCore = await performIntegration({
-			cwd: withoutRepo,
+		const offStub = writeGhStub({stdout: 'https://github.com/o/r/pull/1'});
+		const offRepo = (await claimAndBranch('delta')).repo;
+		const offCore = await performIntegration({
+			cwd: offRepo,
 			arbiter: ARBITER,
 			slug: 'delta',
 			source: 'in-progress',
 			recovering: false,
 			verify: PASS,
 			review: true,
-			reviewGate: stubGate(parseReviewVerdict(AGENT_OUTPUT_WITH_REVIEW_FIELD)),
+			// SAME approve verdict, but with NO `review` field ⇒ commenting OFF.
+			reviewGate: stubGate({verdict: 'approve', findings: []}),
 			mode: 'propose',
-			// No providerInstance ⇒ the core selects `none` for the (file://) arbiter
-			// (its postPRComment degrades — never posts, never throws).
+			providerInstance: new GitHubProvider({ghBin: offStub.bin}),
 			env: gitEnv(),
 		});
 
 		// Same outcome + effective mode: the comment changed nothing about the gate.
-		expect(withCore.outcome).toBe(withoutCore.outcome);
-		expect(withCore.integration?.mode).toBe(withoutCore.integration?.mode);
-		// Only the commenting provider recorded a comment.
-		expect(withProvider.comments).toHaveLength(1);
+		expect(onCore.outcome).toBe(offCore.outcome);
+		expect(onCore.integration?.mode).toBe(offCore.integration?.mode);
+		expect(onCore.integration?.url).toBe(offCore.integration?.url);
+		// The commenting arm shelled `gh pr comment`; the non-commenting arm's last
+		// `gh` call was the `pr create`, NOT a comment.
+		expect(onArgs).toMatch(/^comment$/m);
+		expect(readFileSync(offStub.argsFile, 'utf8')).not.toMatch(/^comment$/m);
 	});
 
 	it('a stubbed review gate with NO `review` field posts nothing (clean no-op)', async () => {
@@ -445,6 +536,40 @@ function writeGhStub(
 
 function missingGhBin(): string {
 	return join(scratch.root, 'no-such-gh-binary');
+}
+
+/**
+ * A RICHER `gh` stub that answers `pr view` and `pr comment` DIFFERENTLY (the
+ * branch-resolved fallback resolves the PR url via `gh pr view <branch> --json
+ * url --jq .url`, THEN comments via `gh pr comment <url>`):
+ *   - `gh pr view …`    → prints `viewUrl` (empty + exit `viewExit` for "no PR");
+ *   - `gh pr comment …` → records its args, exits 0.
+ * Records the LAST `gh pr comment` invocation's args so a test can assert the
+ * comment targeted the resolved url.
+ */
+function writeBranchResolveGhStub(opts: {
+	viewUrl?: string;
+	viewExit?: number;
+}): {bin: string; commentArgsFile: string} {
+	const bin = join(scratch.root, 'gh-branch-stub.sh');
+	const commentArgsFile = join(scratch.root, 'gh-comment-args.txt');
+	const viewUrl = opts.viewUrl ?? '';
+	const viewExit = opts.viewExit ?? 0;
+	const script = [
+		'#!/usr/bin/env bash',
+		'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then',
+		`  printf '%s\\n' ${JSON.stringify(viewUrl)}`,
+		`  exit ${viewExit}`,
+		'fi',
+		'if [ "$1" = "pr" ] && [ "$2" = "comment" ]; then',
+		`  printf '%s\\n' "$@" > ${JSON.stringify(commentArgsFile)}`,
+		'  exit 0',
+		'fi',
+		'exit 0',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, commentArgsFile};
 }
 
 describe('GitHubProvider.postPRComment — gh pr comment (stubbed)', () => {
@@ -516,11 +641,74 @@ describe('GitHubProvider.postPRComment — gh pr comment (stubbed)', () => {
 	});
 });
 
+describe('GitHubProvider.postPRCommentOnBranch — branch-resolved fallback (stubbed)', () => {
+	it('resolves the PR from the branch and POSTS the comment on it', () => {
+		const stub = writeBranchResolveGhStub({
+			viewUrl: 'https://github.com/o/r/pull/77',
+		});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = provider.postPRCommentOnBranch({
+			cwd: scratch.root,
+			branch: 'work/slice-feat',
+			body: 'The authored review prose.',
+		});
+
+		expect(result.posted).toBe(true);
+		// It commented on the URL it RESOLVED from the branch (not the branch directly).
+		const args = readFileSync(stub.commentArgsFile, 'utf8');
+		expect(args).toMatch(/^pr$/m);
+		expect(args).toMatch(/^comment$/m);
+		expect(args).toMatch(/^https:\/\/github\.com\/o\/r\/pull\/77$/m);
+		expect(args).toMatch(/^--body$/m);
+		expect(args).toMatch(/^The authored review prose\.$/m);
+		expect(args).not.toMatch(/force/);
+	});
+
+	it('clean no-op (posts nothing) when NO PR resolves from the branch', () => {
+		// `gh pr view` exits non-zero (no PR for the branch) — the honest no-op, but
+		// only AFTER trying.
+		const stub = writeBranchResolveGhStub({viewUrl: '', viewExit: 1});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = provider.postPRCommentOnBranch({
+			cwd: scratch.root,
+			branch: 'work/slice-feat',
+			body: 'the review',
+		});
+
+		expect(result.posted).toBe(false);
+		// Nothing was posted (no `gh pr comment` invocation recorded) ...
+		expect(existsSync(stub.commentArgsFile)).toBe(false);
+		// ... and the review text is surfaced in the fallback (never lost).
+		expect(result.instruction).toContain('the review');
+	});
+
+	it('degrades (no throw) when gh is missing (spawn fails)', () => {
+		const provider = new GitHubProvider({ghBin: missingGhBin()});
+		const result = provider.postPRCommentOnBranch({
+			cwd: scratch.root,
+			branch: 'work/slice-feat',
+			body: 'the review',
+		});
+		expect(result.posted).toBe(false);
+		expect(result.instruction).toContain('the review');
+	});
+});
+
 describe('NoneProvider.postPRComment — degrades, surfaces the review, never throws', () => {
 	it('posts nothing but surfaces the review text', () => {
 		const result = new NoneProvider().postPRComment({
 			cwd: '/tmp',
 			url: 'irrelevant',
+			body: 'the review prose',
+		});
+		expect(result.posted).toBe(false);
+		expect(result.instruction).toContain('the review prose');
+	});
+
+	it('postPRCommentOnBranch posts nothing but surfaces the review text', () => {
+		const result = new NoneProvider().postPRCommentOnBranch({
+			cwd: '/tmp',
+			branch: 'work/slice-feat',
 			body: 'the review prose',
 		});
 		expect(result.posted).toBe(false);

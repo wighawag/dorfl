@@ -736,18 +736,39 @@ export async function performIntegration(
 	//    The comment is ADVISORY: it changes no gate/verdict/merge/integration logic
 	//    — by here the verdict has ALREADY routed (block never reaches this point; it
 	//    routed to needs-attention above) and the integrate has ALREADY happened.
-	//    No PR url (merge mode, or a degraded/push-only propose) ⇒ a clean no-op:
-	//    the review stays in the run output; `postPRComment` is never called and never
-	//    throws. Because this lives in the shared core, BOTH `do`/`complete` AND
-	//    `run` post the comment — no per-caller wiring.
-	if (approvedVerdict?.review !== undefined && integration.url !== undefined) {
-		const posted = provider.postPRComment({
-			cwd,
-			url: integration.url,
-			body: approvedVerdict.review,
-			env,
-		});
-		note(posted.instruction);
+	//    The PR identity is resolved in PRECEDENCE: a parsed `integration.url` wins
+	//    (the normal path — post on it directly); else, when a PR WAS opened but its
+	//    url was unparseable (`integration.requestOpened` true, `url` undefined — the
+	//    `gh pr create` exit-0-but-unparseable-stdout degradation), FALL BACK to the
+	//    BRANCH-resolved comment (slice `review-comment-fallback-on-unparsed-pr-url`):
+	//    the provider resolves the branch's open PR and comments on it, instead of
+	//    silently dropping a review on a PR that genuinely exists. Only when NO PR was
+	//    opened at all (merge mode, or a degraded/push-only propose ⇒ `requestOpened`
+	//    false) is it the honest clean no-op — and the branch-resolved fallback's own
+	//    "no PR resolvable" path is a clean no-op too (it tries first). Either way
+	//    `postPRComment*` never throws; the review stays in the run output. Because
+	//    this lives in the shared core, BOTH `do`/`complete` AND `run` post the
+	//    comment — no per-caller wiring.
+	if (approvedVerdict?.review !== undefined) {
+		if (integration.url !== undefined) {
+			const posted = provider.postPRComment({
+				cwd,
+				url: integration.url,
+				body: approvedVerdict.review,
+				env,
+			});
+			note(posted.instruction);
+		} else if (integration.requestOpened) {
+			// A PR opened but its url was unparseable — resolve it from the branch
+			// rather than dropping the review (the audit-trail fallback).
+			const posted = provider.postPRCommentOnBranch({
+				cwd,
+				branch,
+				body: approvedVerdict.review,
+				env,
+			});
+			note(posted.instruction);
+		}
 	}
 
 	return {
@@ -831,6 +852,15 @@ function bridgeProvider(
 		// so postPRComment degrades: it never opens a PR url to comment on, so the
 		// in-core poster no-ops anyway. Implemented for the seam, surfacing the text.
 		postPRComment(req) {
+			return {
+				posted: false,
+				instruction:
+					'The legacy review bridge cannot post a comment; the review:\n' +
+					req.body,
+			};
+		},
+		// Likewise the bridge cannot resolve a PR from a branch — a clean no-op.
+		postPRCommentOnBranch(req) {
 			return {
 				posted: false,
 				instruction:
