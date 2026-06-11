@@ -75,6 +75,38 @@ describe('NullHarness — launch', () => {
 	});
 });
 
+describe('NullHarness — empty-command BACKSTOP (the seam refuses, not just the CLI)', () => {
+	// A fresh repo with no config + no --harness resolves the null adapter with an
+	// empty agentCmd; without this guard `launch` would `bash -c ''` ⇒ exit 0, no
+	// output ⇒ a "successful" build that ran NOTHING. The CLI sites already refuse
+	// up-front, but this seam can be reached by OTHER callers, so it must refuse too.
+	it("throws (config-error voice) on an empty command instead of spawning bash -c ''", () => {
+		const harness = new NullHarness();
+		expect(() =>
+			harness.launch({dir: scratch.root, slug: 'feat', command: ''}),
+		).toThrow(/agentCmd/);
+	});
+
+	it('throws on an all-whitespace command too', () => {
+		const harness = new NullHarness();
+		expect(() =>
+			harness.launch({dir: scratch.root, slug: 'feat', command: '   \t\n '}),
+		).toThrow(/agentCmd/);
+	});
+
+	it('a configured null harness WITH a real agentCmd still launches normally', () => {
+		// The footgun is null-AND-empty only; a real command is untouched.
+		const harness = new NullHarness();
+		const result = harness.launch({
+			dir: scratch.root,
+			slug: 'feat',
+			command: `printf '%s' ok`,
+		});
+		expect(result.ok).toBe(true);
+		expect(result.output).toBe('ok');
+	});
+});
+
 describe('NullHarness — EPIPE on the prompt write is benign (flake fix)', () => {
 	// The null/shell adapter feeds the prompt on stdin. When the prompt is empty
 	// (the autonomous review/arbiter launches), a child that closes stdin before
