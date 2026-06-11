@@ -22,7 +22,17 @@ Worked around for the drive by passing `--harness pi` explicitly on each invocat
 
 ## Why it is (arguably) by design
 
-`--remote` is built for a REGISTERED FOREIGN repo with NO local checkout — a bare hub mirror in the agents' area. In that model there is genuinely no working tree to read `.agent-runner.json` from at dispatch time, so resolving from global + flags is internally consistent. The `verify` gate even degrades gracefully: unset global `verify` → `DEFAULT_VERIFY_COMMAND` (`pnpm -r build && pnpm -r test && pnpm -r format:check`), which happens to equal this repo's declared gate, so the acceptance floor was unaffected this time. Only `harness` (and `agentCmd`/`provider`/`model`/`reviewModel`) bit us.
+`--remote` is built for a REGISTERED FOREIGN repo with NO local checkout — a bare hub mirror in the agents' area. In that model there is genuinely no working tree to read `.agent-runner.json` from at dispatch time, so resolving from global + flags is internally consistent.
+
+## The `verify` gate divergence is NOT benign here (correcting an earlier assumption)
+
+I initially assumed the unset-global `verify` fallback `DEFAULT_VERIFY_COMMAND` (`pnpm -r build && pnpm -r test && pnpm -r format:check`) was equivalent to this repo's declared gate. It is NOT. This repo's per-repo `verify` is `pnpm format:check && pnpm build && pnpm test` — note `format:check` is run at the ROOT (no `-r`), because the `format:check` script lives only in the ROOT `package.json`, not in the workspace packages. The default uses `pnpm -r format:check`, which recurses into `packages/*` and fails:
+
+```
+ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT  None of the selected packages has a "format:check" script
+```
+
+So on the SECOND `--remote` build (`null-harness-prompt-write-epipe-tolerant`), the actual WORK was fine (build + 1327 tests all passed), but the gate's `pnpm -r format:check` step failed purely on the command-shape mismatch, and the slice was routed to `work/needs-attention/` — a FALSE red. This makes the per-repo-config gap materially harmful, not just confusing: `--remote` ran a DIFFERENT (and for this repo, broken) acceptance gate than the repo declares. Both `harness` (→ "no agentCmd") AND `verify` (→ false gate red) bit us; only `--harness pi` + an explicit `--verify`/per-repo read would fix it.
 
 ## Why it is still a gap worth closing
 
