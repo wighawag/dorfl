@@ -36,3 +36,7 @@ Make the null adapter's piped-prompt write ROBUST to an early-closed child stdin
 > DRIFT CHECK FIRST: confirm `NullHarness.launch` still uses `spawnSync` with `input:` and throws unconditionally on `result.error`. If it already tolerates EPIPE, close this slice.
 >
 > "Done" = the flake is gone (full suite stable across repeated runs), EPIPE is tolerated on the empty-prompt write, other errors still throw, pi/interactive untouched, and `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
