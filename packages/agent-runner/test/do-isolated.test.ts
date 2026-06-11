@@ -320,19 +320,71 @@ describe('do --isolated + --remote — REDUNDANT: remote wins (isolation implied
 	});
 });
 
-describe('do --isolated — refuses -n/auto-pick (part (b) is out of scope)', () => {
-	it('rejects `-n` combined with --isolated (single-named-item only)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		const {captured, code} = await runDo(['--isolated', '-n', '2'], repo);
-		expect(code).toBe(1);
-		expect(captured).toMatch(/-n\/--number/);
-		expect(captured).toMatch(/--isolated/);
+describe('do --isolated — -n/auto-pick now SELECTS over the mirror-side pool (refusal removed)', () => {
+	// The inline `-n`×isolated/remote REFUSAL is GONE — the mirror-side pool scan
+	// backs it now (US #25). `--isolated -n` / `--isolated <a> <b>` reach the
+	// mirror-side auto-pick path; they NO LONGER hit the old "does not combine" /
+	// "needs exactly one item" refusals. We assert the refusal text is ABSENT and a
+	// hermetic run reaches the pool path instead.
+	//
+	// `--isolated` resolves the arbiter URL from the cwd's arbiter remote (named
+	// `arbiter` in the fixture), so we pass `--arbiter arbiter` + a hermetic config
+	// (scratch workspacesDir so the mirror materialises in scratch, never the real
+	// ~/.agent-runner). With `allowAgents` off (the default) the mirror scan selects
+	// NOTHING — calm-at-rest, exit 0 — proving the refusal is gone and the auto-pick
+	// path ran.
+	function hermeticConfig(): string {
+		const cfg = join(
+			scratch.root,
+			`hermetic-${Math.random().toString(36).slice(2)}.json`,
+		);
+		writeFileSync(
+			cfg,
+			JSON.stringify({workspacesDir: join(scratch.root, 'agents-area')}) + '\n',
+		);
+		return cfg;
+	}
+
+	it('`--isolated -n <x>` no longer refuses — it reaches the mirror-side auto-pick path', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha', 'beta']);
+		const {captured} = await runDo(
+			[
+				'--isolated',
+				'-n',
+				'2',
+				'--arbiter',
+				'arbiter',
+				'--config',
+				hermeticConfig(),
+			],
+			repo,
+		);
+		// NOT the old refusal — `-n`×isolated is supported now.
+		expect(captured).not.toMatch(/does not.*combine|needs exactly one item/i);
+		// It got PAST the refusal: either the agentCmd guard (hermetic config has no
+		// agentCmd) or the mirror-side auto-pick's "nothing eligible" — both prove the
+		// refusal is gone and the auto-pick branch was reached.
+		expect(captured).toMatch(/agentCmd|nothing eligible/i);
 	});
 
-	it('rejects multiple named items with --isolated (exactly one)', async () => {
+	it('`--isolated <a> <b>` no longer refuses — multi-arg is supported now', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha', 'beta']);
-		const {captured, code} = await runDo(['--isolated', 'alpha', 'beta'], repo);
-		expect(code).toBe(1);
-		expect(captured).toMatch(/--isolated needs exactly one item/);
+		const {captured} = await runDo(
+			[
+				'--isolated',
+				'alpha',
+				'beta',
+				'--arbiter',
+				'arbiter',
+				'--config',
+				hermeticConfig(),
+			],
+			repo,
+		);
+		// NOT the old "needs exactly one item" / "does not combine" refusals — the
+		// no-checkout forms now share the variadic grammar.
+		expect(captured).not.toMatch(/--isolated needs exactly one item/);
+		expect(captured).not.toMatch(/does not.*combine/i);
+		expect(captured).toMatch(/agentCmd|nothing eligible|did \d+ remote/i);
 	});
 });

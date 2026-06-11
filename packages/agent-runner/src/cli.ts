@@ -31,8 +31,15 @@ import {
 	performDoRemote,
 	resolveArbiterUrlFromCheckout,
 	type DoOptions,
+	type DoRemoteOptions,
 } from './do.js';
-import {performAdvance} from './advance.js';
+import {performDoRemoteAuto, performDoRemoteArgs} from './do-remote-auto.js';
+import {performAdvance, type AdvanceContext} from './advance.js';
+import {
+	performAdvanceAuto,
+	performAdvanceArgs,
+	type AdvanceMultiResult,
+} from './advance-drivers.js';
 import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
 import {
 	performDoAuto,
@@ -1417,21 +1424,13 @@ export function buildProgram(): Command {
 				const usage = isolatedNoRemote
 					? '`do --isolated <slug>`'
 					: '`do --remote <r> <slug>`';
-				// The no-checkout forms are SINGLE-named-item. Auto-pick / `-n` / multi-arg
-				// selection is the IN-PLACE checkout's pools (a remote/isolated auto-pick
-				// would need a mirror-side pool scan — part (b), out of scope here).
-				if (count !== undefined) {
-					console.error(
-						`error: -n/--number (auto-pick) is the in-place form; it does not ` +
-							`combine with ${form}. Name a single item: ${usage}.`,
-					);
-					process.exit(1);
-				}
-				if (args.length !== 1) {
-					console.error(`error: ${form} needs exactly one item: ${usage}.`);
-					process.exit(1);
-				}
-				const rawSlug = args[0];
+				// The no-checkout forms now support the SAME variadic grammar the in-place
+				// form does: a single NAMED item, MULTIPLE named items (sequential), and
+				// AUTO-PICK / `-n <x>` (sequential) over the MIRROR-SIDE eligible-pool scan
+				// (`mirror-side-eligible-pool-scan`). The old inline `-n`×`--remote` REFUSAL
+				// is GONE — the mirror scan backs it now (US #25); `-n` stays ALWAYS
+				// SEQUENTIAL (parallelism is `run` / the CI matrix). `-n` is still mutually
+				// exclusive with naming items (validated above, shared with the in-place form).
 				const remoteFlags = doFlagOverrides(flags, flagMode);
 				// Resolve the arbiter spec the rest of the pipeline consumes as `remote`.
 				// `--remote` supplies it directly (a foreign URL). `--isolated` resolves it
@@ -1494,8 +1493,10 @@ export function buildProgram(): Command {
 					harness: remoteConfig.harness,
 					piBin: remoteConfig.piBin,
 				});
-				const remoteResult = await performDoRemote({
-					arg: rawSlug,
+				// The per-item `DoRemoteOptions` (everything BUT `arg`) — built ONCE and
+				// reused for the single-item path AND threaded by the mirror-side auto-pick
+				// driver (`performDoRemoteAuto`) to each sequential `performDoRemote`.
+				const baseRemoteOptions: Omit<DoRemoteOptions, 'arg'> = {
 					remote: effectiveRemote,
 					workspacesDir: remoteConfig.workspacesDir,
 					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
@@ -1545,6 +1546,49 @@ export function buildProgram(): Command {
 					color: shouldUseColor(process.stdout),
 					note: (message) => console.error(`>> ${message}`),
 					noteBlock: (message) => console.error(message),
+				};
+
+				// DISPATCH the variadic grammar (the NO-CHECKOUT forms):
+				//   zero args        -> AUTO-PICK `count` (default 1) over the MIRROR-SIDE
+				//                       eligible-pool scan, run SEQUENTIALLY.
+				//   one named arg     -> the single-item remote pipeline (unchanged).
+				//   many named args   -> those, IN SEQUENCE (operator's order; no pool).
+				// `--watch` tails ONE session, so it only fits the single-named-item form;
+				// the auto/`-n`/multi forms run many ticks and do not stream a single log.
+				const remoteMulti =
+					args.length === 0 || count !== undefined || args.length > 1;
+				if (remoteMulti && flags.watch === true) {
+					console.error(
+						`error: --watch streams ONE session; it does not combine with the ` +
+							`${form} auto-pick / -n / multi-item forms. Name a single item: ${usage}.`,
+					);
+					process.exit(1);
+				}
+				if (args.length === 0 || count !== undefined) {
+					// AUTO-PICK / `-n <x>` over the MIRROR-SIDE eligible-pool scan, SEQUENTIAL.
+					const multi = await performDoRemoteAuto({
+						...baseRemoteOptions,
+						config: remoteConfig,
+						count,
+						warn: (message) => console.error(`>> ${message}`),
+					});
+					console.error(`>> ${multi.message}`);
+					process.exit(multi.exitCode);
+				}
+				if (args.length > 1) {
+					// EXPLICIT named items, IN SEQUENCE (the operator's order; no pool).
+					const multi = await performDoRemoteArgs(args, {
+						...baseRemoteOptions,
+						config: remoteConfig,
+					});
+					console.error(`>> ${multi.message}`);
+					process.exit(multi.exitCode);
+				}
+
+				// Exactly one named item: the single-item remote pipeline.
+				const remoteResult = await performDoRemote({
+					...baseRemoteOptions,
+					arg: args[0],
 				});
 				if (remoteResult.exitCode !== 0) {
 					console.error(`error: ${remoteResult.message}`);
@@ -1688,18 +1732,48 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance ONE work/ item one lifecycle rung toward ready/built (PRD advance-loop). advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation). Classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only: build/slice rungs ORCHESTRATE `do`/`do prd:` (one build path, one slice path), surface/apply/triage are later slices. The drivers (-n / loop) + per-action gates and the bare eligible-set form are later slices.',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects autoTriage. The bare/`-n` selection respects the per-action gates (build→allowAgents, slice→autoSlice); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
-			'[slug]',
-			'the item to advance: bare (= the slice), slice:<slug>, prd:<slug>, or obs:<slug> (an observation). Omit for the eligible-SET form (needs the driver slice).',
+			'[slugs...]',
+			'the item(s) to advance: bare (= the slice), slice:<slug>, prd:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--arbiter <remote>',
 			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
 		)
-		.action(async (rawSlug: string | undefined, flags: DoFlags) => {
+		.option(
+			'-n, --number <x>',
+			'AUTO-PICK x eligible items and advance them IN SEQUENCE (slices-first then PRDs-to-slice; per-repo prdsFirst flips). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
+		)
+		.action(async (rawSlugs: string[], flags: DoFlags) => {
+			// Variadic grammar (mirrors `do`): zero args = AUTO-PICK; one = the single
+			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count
+			// (ALWAYS sequential, US #25).
+			const args = rawSlugs ?? [];
+
+			// `-n <x>` parse + validation — the AUTO-PICK count (sequential), mutually
+			// exclusive with NAMING items (the SAME contract `do -n` enforces).
+			let count: number | undefined;
+			if (flags.number !== undefined) {
+				const n = Number(flags.number);
+				if (flags.number.trim() === '' || !Number.isInteger(n) || n < 1) {
+					console.error(
+						`error: -n/--number must be a positive integer (got '${flags.number}').`,
+					);
+					process.exit(1);
+				}
+				if (args.length > 0) {
+					console.error(
+						'error: -n/--number auto-picks a COUNT of eligible items; do not also ' +
+							'name items. Use `advance -n <x>` OR `advance <a> <b> ...`, not both.',
+					);
+					process.exit(1);
+				}
+				count = n;
+			}
+
 			const cwd = process.cwd();
 			const global = loadConfig(flags.config);
 			const resolved = resolveRepoConfig({
@@ -1749,27 +1823,54 @@ export function buildProgram(): Command {
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),
 			};
-			const result = await performAdvance({
-				arg: rawSlug,
+			// The shared per-item advance CONTEXT (everything BUT `arg`) — built ONCE
+			// and threaded by the one-shot DRIVER to each sequential tick. The SURFACE
+			// rung spawns `surface-questions` fresh-context through the SAME harness seam
+			// the review gate uses (the engine then PERSISTS); the TRIAGE rung is
+			// question-gated by default with the `autoTriage` gate enabling the
+			// conservative auto-disposition exception. Surface + apply stay ALWAYS
+			// allowed regardless of the gate family.
+			const advanceContext: AdvanceContext = {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				doOptions,
-				// The SURFACE rung spawns the `surface-questions` skill fresh-context
-				// through the SAME harness seam the review gate uses (the engine then
-				// PERSISTS what it emits). It runs on the configured agent model — no
-				// dedicated `surfaceModel` config key is introduced by this slice.
 				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
 				surfaceModel: config.model,
-				// The observation TRIAGE rung is QUESTION-GATED by default; the
-				// `autoTriage` per-repo gate (the 3rd per-action gate) enables the
-				// conservative auto-disposition EXCEPTION. Surface + apply stay always
-				// allowed regardless. The triage gate spawns fresh-context through the
-				// SAME harness seam, on the configured model.
 				autoTriage: config.autoTriage,
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.model,
 				note: (message) => console.error(`>> ${message}`),
-			});
+			};
+
+			// DISPATCH the variadic grammar (the one-shot SEQUENTIAL driver):
+			//   zero args       -> AUTO-PICK `count` (default 1) over the eligible pool
+			//                      (slices-first then PRDs-to-slice; per-action gates
+			//                      respected by the SELECTION layer; prdsFirst flips).
+			//   one named arg   -> the single-item tick (the always-allowed surface/apply
+			//                      path runs regardless of the gate family).
+			//   many named args -> those, IN SEQUENCE (operator's order; no pool).
+			// `-n` / auto-pick / multi-arg all run the EXISTING tick per item,
+			// SEQUENTIALLY (parallelism is `run` / the CI matrix, never `-n`).
+			if (args.length === 0) {
+				const multi: AdvanceMultiResult = await performAdvanceAuto({
+					...advanceContext,
+					config,
+					count,
+				});
+				console.error(`>> ${multi.message}`);
+				process.exit(multi.exitCode);
+			}
+			if (args.length > 1) {
+				const multi: AdvanceMultiResult = await performAdvanceArgs(args, {
+					...advanceContext,
+					config,
+				});
+				console.error(`>> ${multi.message}`);
+				process.exit(multi.exitCode);
+			}
+
+			// Exactly one named item: the single-item tick.
+			const result = await performAdvance({...advanceContext, arg: args[0]});
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
 			}

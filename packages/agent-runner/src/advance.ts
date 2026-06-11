@@ -739,12 +739,15 @@ export async function performAdvance(
 	const repoPath = options.repoPath ?? cwd;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 
-	// The bare `advance` (eligible-SET) form needs the pool scan / driver — a LATER
-	// slice. Error CLEARLY here rather than silently no-op (recorded in `## Decisions`).
+	// {@link performAdvance} is the SINGLE-item tick. The bare `advance`
+	// (eligible-SET) form is the DRIVER's job ({@link performAdvanceAuto} in
+	// `advance-drivers.ts`, which selects over the pool + runs THIS tick per item) —
+	// the tick itself REQUIRES a named item, so an empty arg here is a usage error
+	// (the CLI dispatches the bare form to the driver before reaching here).
 	if (options.arg === undefined || options.arg.trim() === '') {
 		const message =
-			'`advance` with no item is the eligible-SET form, which needs the ' +
-			'driver slice (advance-drivers-and-gates). Name a single item: ' +
+			'`advance` with no item is the eligible-SET form (the one-shot driver). ' +
+			'The single-item tick needs a named item: ' +
 			'`advance <slug>` / `advance prd:<slug>` / `advance obs:<slug>`.';
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', message};

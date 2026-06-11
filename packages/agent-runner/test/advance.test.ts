@@ -287,12 +287,15 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 	});
 });
 
-describe('advance \u2014 the bare eligible-SET form needs the driver slice', () => {
-	it('errors CLEARLY (no item = the driver slice) rather than silently no-op', async () => {
+describe('advance \u2014 the single-item tick requires a named item (the bare form is the driver)', () => {
+	it('errors CLEARLY on an empty arg (the eligible-SET form is the one-shot driver, not the tick)', async () => {
+		// The bare/eligible-SET form is now `performAdvanceAuto`'s job (it selects over
+		// the pool + runs THIS tick per item). The single-item tick itself REQUIRES a
+		// named item, so an empty arg here is a clear usage error.
 		const result = await performAdvance({cwd: repoPath()});
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
-		expect(result.message).toContain('driver slice');
+		expect(result.message).toContain('one-shot driver');
 	});
 });
 
