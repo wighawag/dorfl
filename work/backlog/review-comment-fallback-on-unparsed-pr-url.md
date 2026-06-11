@@ -63,3 +63,7 @@ git mv work/in-progress/review-comment-fallback-on-unparsed-pr-url.md work/done/
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Requeue 2026-06-11
+
+False gate red: 1544/1546 passed; the 2 failures are the KNOWN same-slug-race CAS flake (triage-persist.test.ts + advance-triage.test.ts) under full parallel load — NOT this slice's work. Re-run after the flake is fixed.
