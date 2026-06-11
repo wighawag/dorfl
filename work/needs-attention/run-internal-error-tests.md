@@ -62,3 +62,19 @@ agent-runner claim run-internal-error-tests --arbiter origin
 git fetch origin && git switch -c work/run-internal-error-tests origin/main
 git mv work/in-progress/run-internal-error-tests.md work/done/run-internal-error-tests.md
 ```
+
+## Needs attention
+
+The slice's internal-error-classification path (Acceptance criterion #2 + its entire "Open question") has DRIFTED: it pins behaviour the code replaced after the slice was written.
+
+WHAT IS FALSE, AND WHERE:
+- Criterion #2 / Prompt §(2) assert: thrown `performIntegration` error (review on, no `reviewGate`) → `runOneItem` catch → `saveAgentFailure` → `status: 'agent-failed'`. FALSE today. `saveAgentFailure` (packages/agent-runner/src/run.ts:855) classifies the detail via `classifyFailureCause`; the core's throw message contains "wiring bug" (packages/agent-runner/src/integration-core.ts, the `review on, no reviewGate` branch), which matches `CONFIG_ERROR_SIGNATURES` (`/wiring bug/i`, packages/agent-runner/src/failure-cause.ts), so the status is `config-error`, NOT `agent-failed`. The twin `do` path already pins exactly this: packages/agent-runner/test/do.test.ts:561 asserts `outcome === 'config-error'` and `.not.toBe('agent-failed')`.
+- The slice's "Open question" frames two things as still-open that are already CLOSED in code: (a) whether the thrown core/wiring error should carry a DISTINCT status — it does: `config-error` is a live `ItemStatus` (run.ts:157); (b) the `do`-vs-`run` cross-path divergence (`usage-error` vs `agent-failed`) — both paths now classify identically through `classifyFailureCause`, so the divergence the observation flagged is closed.
+
+PROVENANCE: the slice was added to backlog in b95e732 (2026-06-08); the failure-cause-classification work that introduced `config-error`/`transient-infra` and routed `run`'s `saveAgentFailure` through the classifier landed in 3e7df84 (2026-06-09) — AFTER the slice. The source observation `run-thrown-core-error-labeled-agent-failed.md` says "Decide in a later pass (no fix now)"; that later pass already happened.
+
+WHY STOP (not silently proceed): criterion #2 is load-bearing and hard-to-reverse. A test asserting `agent-failed` fails against current code; "correcting" it to `config-error` silently decides the slice's explicitly-deferred Open Question ("DO NOT decide in code — surface it") and sets/ratifies a user-visible status — a DESIGN decision, not a small factual gap. The slice's instruction to delete both observations "once this lands" is also unsafe on this stale basis (it would discard now-answered history).
+
+SUGGESTED RE-SCOPE:
+1. Split path (1) — the claim-CAS retry idempotent-branch-reset unit test (force a CAS rejection on the first attempt, assert the second succeeds; must fail if the `git checkout --detach <arbiter>/main` in claim-cas.ts `attempt()` is removed). It is NOT drifted and is buildable as written; give it its own slice.
+2. Re-baseline path (2) to PIN TODAY's behaviour: no-`reviewGate` misconfig → `status: 'config-error'` (mirroring do.test.ts:561), and the `runOnce` settled-slot fallback (run.ts ~line 327) → `status: 'claim-error'` with the captured message in `detail`. Drop the Open question (resolved), and re-point the "delete the observation" instruction to instead mark `run-thrown-core-error-labeled-agent-failed.md` RESOLVED (its divergence is closed) rather than delete-on-stale-basis.
