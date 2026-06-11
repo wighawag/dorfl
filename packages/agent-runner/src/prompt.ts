@@ -66,23 +66,50 @@ export function extractPromptSection(content: string): string | undefined {
 }
 
 /**
- * Locate the canonical work-contract document (`CLAIM-PROTOCOL.md`). The
- * contract is the `to-slices` skill bundled at the monorepo root
- * (`skills/to-slices/`), reached relatively from this module so the lookup works
- * both from `src/` (tsx) and `dist/` (built). An explicit override is honoured
- * for tests / unusual layouts.
+ * Locate the canonical work-contract document (`CLAIM-PROTOCOL.md`) the prompt
+ * assembly reads at RUNTIME. Resolution order, highest authority first:
+ *
+ *   1. `override` — explicit, for tests / unusual layouts (short-circuits).
+ *   2. `<cwd>/work/protocol/CLAIM-PROTOCOL.md` — the TARGET repo's adopted copy.
+ *      `setup` copies the doc verbatim into every repo's `work/protocol/` (ADR
+ *      `methodology-and-skills.md` §5, the `work/protocol/` propagation), so a
+ *      set-up repo carries the protocol VERSION it adopted; that copy wins.
+ *   3. `dist/protocol/CLAIM-PROTOCOL.md` — a copy VENDORED inside this package
+ *      (by the `vendor-protocol` build step). The published-CLI fallback: an
+ *      installed CLI has no sibling `skills/` tree, and the target repo may not
+ *      be set up yet (no `work/protocol/`), so the package ships its own copy.
+ *   4. the legacy monorepo-relative `skills/...` paths — DEV-only, kept LAST
+ *      (they only resolve inside this dev monorepo; an installed CLI's walks
+ *      escape into the consumer's filesystem → ENOENT, which is why they cannot
+ *      be the primary source).
+ *
+ * `cwd` is the target repo root (threaded from `renderPrompt`/`do`/`run`/the
+ * `render-prompt` CLI). When omitted, the target-repo step is simply skipped.
  */
-export function resolveClaimProtocolPath(override?: string): string {
+export function resolveClaimProtocolPath(
+	cwd?: string,
+	override?: string,
+): string {
 	if (override) {
 		return override;
 	}
 	const here = dirname(fileURLToPath(import.meta.url));
-	// here = .../packages/agent-runner/{src,dist}; the protocol docs are OWNED by the
-	// `setup` skill (`skills/setup/protocol/`) at the monorepo root — see
-	// `docs/adr/methodology-and-skills.md` §5 and the `work/protocol/` propagation.
-	// (They moved here from `skills/to-slices/`; the old paths are kept as a fallback
-	// for any not-yet-migrated layout.)
-	const candidates = [
+	// here = .../packages/agent-runner/{src,dist}.
+	const candidates: string[] = [];
+	// 2. The target repo's adopted copy (authoritative when present).
+	if (cwd) {
+		candidates.push(resolve(cwd, 'work', 'protocol', 'CLAIM-PROTOCOL.md'));
+	}
+	// 3. The copy vendored inside this package (published-CLI fallback). From
+	//    `src/` (tsx) `dist/` is a sibling; from `dist/` it is the dir itself.
+	candidates.push(
+		resolve(here, '..', 'dist', 'protocol', 'CLAIM-PROTOCOL.md'),
+		resolve(here, 'protocol', 'CLAIM-PROTOCOL.md'),
+	);
+	// 4. The legacy monorepo-relative `skills/...` paths — DEV-only, LAST. The
+	//    docs are OWNED by the `setup` skill (`skills/setup/protocol/`); the old
+	//    `to-slices/` paths are kept as a fallback for a not-yet-migrated layout.
+	candidates.push(
 		resolve(
 			here,
 			'..',
@@ -116,7 +143,7 @@ export function resolveClaimProtocolPath(override?: string): string {
 			'to-slices',
 			'CLAIM-PROTOCOL.md',
 		),
-	];
+	);
 	for (const candidate of candidates) {
 		if (existsSync(candidate)) {
 			return candidate;
@@ -193,9 +220,12 @@ export function extractCanonicalWrapperTemplate(protocol: string): string {
 export function wrapper(
 	slug: string,
 	prd: string | undefined,
-	options: {protocolPath?: string} = {},
+	options: {protocolPath?: string; cwd?: string} = {},
 ): string {
-	const protocolPath = resolveClaimProtocolPath(options.protocolPath);
+	const protocolPath = resolveClaimProtocolPath(
+		options.cwd,
+		options.protocolPath,
+	);
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
 	return template.replace(/<slug>/g, slug).replace(/<prd>/g, prd ?? '<prd>');
@@ -375,7 +405,11 @@ export function buildAgentPrompt(
 	slug: string,
 	prd: string | undefined,
 	slicePrompt: string,
-	options: {protocolPath?: string; continueContext?: ContinueContext} = {},
+	options: {
+		protocolPath?: string;
+		cwd?: string;
+		continueContext?: ContinueContext;
+	} = {},
 ): string {
 	const head = wrapper(slug, prd, options);
 	if (options.continueContext) {
@@ -478,5 +512,6 @@ export function renderPrompt(options: PromptOptions): string {
 	const slice = resolveSlice(options.cwd, slug);
 	return buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 		protocolPath: options.protocolPath,
+		cwd: options.cwd,
 	});
 }

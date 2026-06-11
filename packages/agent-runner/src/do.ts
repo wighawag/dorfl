@@ -689,6 +689,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			env,
 		});
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+			cwd: tree.dir,
 			continueContext,
 		});
 	} catch (err) {
@@ -1548,6 +1549,7 @@ async function runRemotePipeline(
 			env,
 		});
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+			cwd,
 			continueContext,
 		});
 	} catch (err) {

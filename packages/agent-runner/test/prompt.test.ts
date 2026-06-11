@@ -166,6 +166,96 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 	});
 });
 
+describe('resolveClaimProtocolPath — packaged-CLI-safe resolution order', () => {
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('agent-runner-protocol-resolve-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	/** The vendored in-package copy the build step writes (`dist/protocol/`). */
+	const VENDORED = resolve(HERE, '..', 'dist', 'protocol', 'CLAIM-PROTOCOL.md');
+
+	it('prefers the TARGET repo work/protocol/ copy when present', () => {
+		// A set-up target repo carries its adopted copy; it must WIN over the
+		// bundled/dev fallbacks (it reflects the protocol version that repo adopted).
+		const protoDir = join(scratch.root, 'work', 'protocol');
+		mkdirSync(protoDir, {recursive: true});
+		const target = join(protoDir, 'CLAIM-PROTOCOL.md');
+		writeFileSync(target, 'TARGET-REPO PROTOCOL COPY\n');
+
+		const resolved = resolveClaimProtocolPath(scratch.root);
+		expect(resolved).toBe(target);
+		expect(readFileSync(resolved, 'utf8')).toContain(
+			'TARGET-REPO PROTOCOL COPY',
+		);
+	});
+
+	it('falls back to the VENDORED in-package copy in a simulated installed layout', () => {
+		// Installed-CLI shape: the target repo has NO work/protocol/ and there is no
+		// reachable sibling skills/ tree. The resolver must pick the bundled copy
+		// (ranked above the dev-only skills/ walk) so prompt assembly never ENOENTs.
+		const resolved = resolveClaimProtocolPath(scratch.root);
+		expect(resolved).toBe(VENDORED);
+		expect(readFileSync(resolved, 'utf8')).toContain(
+			'prompt handed to the work agent',
+		);
+	});
+
+	it('the override short-circuits ahead of every other source', () => {
+		const protoDir = join(scratch.root, 'work', 'protocol');
+		mkdirSync(protoDir, {recursive: true});
+		writeFileSync(join(protoDir, 'CLAIM-PROTOCOL.md'), 'TARGET\n');
+		const override = join(scratch.root, 'explicit.md');
+		writeFileSync(override, 'OVERRIDE\n');
+		expect(resolveClaimProtocolPath(scratch.root, override)).toBe(override);
+	});
+});
+
+describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('agent-runner-protocol-build-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	it('builds a prompt from the VENDORED copy when no work/protocol/ exists (no ENOENT)', () => {
+		// The regression guard: against a temp dir with no work/protocol/ (and no
+		// sibling skills/), buildAgentPrompt must return a prompt, not throw ENOENT.
+		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+			cwd: scratch.root,
+		});
+		expect(out).toContain('work/in-progress/example.md');
+		expect(out).toContain('SLICE-BODY');
+		expect(out).not.toContain('<slug>');
+	});
+
+	it('builds a prompt from the TARGET repo work/protocol/ copy when present', () => {
+		// Seed a target-repo copy whose canonical wrapper carries a UNIQUE marker so
+		// we can prove THAT copy (not the bundled one) was the source.
+		// 'complete brief' is inside the canonical wrapper template; tagging it in the
+		// target copy proves THAT copy (not the bundled one) was the prompt source.
+		const bundled = readFileSync(resolveClaimProtocolPath(), 'utf8');
+		expect(bundled).toContain('complete brief');
+		const tagged = bundled.replace(
+			'complete brief',
+			'TARGET-MARKER complete brief',
+		);
+		const protoDir = join(scratch.root, 'work', 'protocol');
+		mkdirSync(protoDir, {recursive: true});
+		writeFileSync(join(protoDir, 'CLAIM-PROTOCOL.md'), tagged);
+
+		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+			cwd: scratch.root,
+		});
+		expect(out).toContain('TARGET-MARKER complete brief');
+	});
+});
+
 describe('buildAgentPrompt', () => {
 	it('is the canonical wrapper followed by the slice prompt body verbatim', () => {
 		const prompt = buildAgentPrompt('example', 'my-prd', 'UNIQUE-MARKER-123');

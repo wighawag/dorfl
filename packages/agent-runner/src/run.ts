@@ -570,6 +570,7 @@ async function runOneItem(
 					})
 				: undefined;
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+				cwd: tree.dir,
 				continueContext,
 			});
 		} catch (err) {

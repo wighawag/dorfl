@@ -32,7 +32,7 @@
 		"vitest": "^4.0.18"
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc && node scripts/vendor-protocol.mjs",
 		"dev": "as-soon -w src pnpm build",
 		"cli": "tsx src/cli.ts",
 		"test": "vitest run",
