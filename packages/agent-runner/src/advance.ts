@@ -26,6 +26,16 @@ import {
 	toNewQuestions,
 	type SurfaceGate,
 } from './surface-gate.js';
+import {harnessTriageGate, type TriageGate} from './triage-gate.js';
+import {
+	autoDispositionObservation,
+	promoteObservation,
+	type AutoDispositionOptions,
+	type AutoDispositionResult,
+	type PromoteObservationOptions,
+	type PromoteObservationResult,
+} from './triage-persist.js';
+import {isEntryAnswered} from './sidecar.js';
 import {
 	persistSurfacedQuestions,
 	type SurfacePersistOptions,
@@ -61,14 +71,16 @@ import type {NewQuestion} from './sidecar.js';
  *   3. **execute** — WINNER ONLY: dispatch the classified rung to the
  *      {@link RungExecutor} seam, then release the borrow.
  *
- * What this slice does NOT do (LATER slices):
- *   - The **rung BODIES** for `surface` / `apply` / `triage-observation` — they
- *     dispatch to a clearly-named executor SEAM ({@link RungExecutor}) those
- *     slices fill. The default executor returns a clean `not-implemented` result
- *     (never a crash) so the skeleton is observable end-to-end today.
- *   - The two **DRIVERS** (one-shot sequential / loop) + `-n` + the per-action
- *     gates (`allowAgents`/`autoSlice`/`autoTriage`) — slice
- *     `advance-drivers-and-gates`.
+ * The **rung BODIES** are now ALL filled (their own slices): `surface`
+ * (`advance-rung-surface`), `apply` (`advance-rung-apply`), and
+ * `triage-observation` (`advance-rung-triage`) dispatch through the clearly-named
+ * executor SEAM ({@link RungExecutor}); the build/slice rungs ORCHESTRATE
+ * `do`/`do prd:`. What this verb does NOT do (LATER slices):
+ *   - The two **DRIVERS** (one-shot sequential / loop) + `-n` + the gate-FAMILY
+ *     WIRING that resolves `allowAgents`/`autoSlice`/`autoTriage` and threads them
+ *     into the build/slice gate composition — slice `advance-drivers-and-gates`.
+ *     (This verb already RESPECTS `autoTriage` in the triage rung — the gate's
+ *     resolution chain + the build/slice gate composition is the drivers slice.)
  *   - The bare `advance` (eligible-SET) form — it needs the pool scan / driver, so
  *     the verb here is a SINGLE named-item tick; the bare form errors clearly
  *     ("needs the driver slice"). See the `## Decisions` block in the slice.
@@ -184,6 +196,46 @@ export interface AdvanceContext {
 	 * tests drive the append-re-pause path) WITHOUT inventing an ANSWER.
 	 */
 	applyFollowups?: NewQuestion[];
+	/**
+	 * The per-repo `autoTriage` policy (PRD `advance-loop`, US #17/23): may the
+	 * triage rung AUTO-DISPOSITION an observation in the conservative no-question
+	 * cases (exact-duplicate / unambiguous-map) WITHOUT surfacing a question?
+	 * `false`/`undefined` (default, strict) ⇒ EVERY untriaged observation surfaces a
+	 * promote/keep/delete question and WAITS. The triage rung RESPECTS this; SURFACE
+	 * + APPLY stay ALWAYS allowed (this gate ONLY governs the auto-disposition
+	 * exception, never the always-allowed question loop).
+	 */
+	autoTriage?: boolean;
+	/**
+	 * The TRIAGE auto-disposition gate seam — the fresh-context spawn the triage
+	 * rung asks (ONLY when `autoTriage` is on) whether an observation is a
+	 * no-question case. The skill JUDGES; the engine ACTS. Production wires
+	 * {@link harnessTriageGate}; tests inject a stub decision. `undefined` ⇒ the
+	 * triage rung defaults to {@link harnessTriageGate} (a NullHarness, no real
+	 * model) so the seam is never a crash.
+	 */
+	triageGate?: TriageGate;
+	/** The model the TRIAGE agent runs on (de-correlated, like `surfaceModel`). */
+	triageModel?: string;
+	/**
+	 * Execute the conservative auto-disposition ATOMICALLY (record + marker, one
+	 * commit). Tests inject a spy; production uses {@link autoDispositionObservation}.
+	 */
+	autoDisposition?: (options: AutoDispositionOptions) => AutoDispositionResult;
+	/**
+	 * Promote an answered observation: CAS-create a new backlog stub keyed on the
+	 * NEW item's identity, then record + resolve the observation. Tests inject a
+	 * spy; production uses {@link promoteObservation}.
+	 */
+	promote?: (
+		options: PromoteObservationOptions,
+	) => Promise<PromoteObservationResult>;
+	/**
+	 * The NEW backlog slug an answered promote drafts. `undefined` ⇒ the promote
+	 * defaults to the observation's own slug. Lets a test (or a future driver) steer
+	 * the promoted item's identity WITHOUT inventing the answer.
+	 */
+	promoteSlug?: string;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -299,8 +351,9 @@ function readNeedsAnswers(
 
 /**
  * The PRODUCTION rung executor: build/slice rungs ORCHESTRATE the existing
- * `do`/`do prd:` machinery ({@link performDo}); surface/apply/triage rungs return
- * a clean `not-implemented` result (their bodies are LATER slices). It NEVER
+ * `do`/`do prd:` machinery ({@link performDo}); the `surface`/`apply`/
+ * `triage-observation` rung bodies are filled by their own slices
+ * ({@link surfaceRung} / {@link applyRung} / {@link triageRung}). It NEVER
  * re-implements the build/slice path — it hands the resolved arg to `performDo`,
  * which spans both namespaces (the slice path is the `do prd:` rung the PRD's
  * 2026-06-09 UPDATE confirms routes through `performIntegration`).
@@ -313,7 +366,7 @@ export const defaultRungExecutor: RungExecutor = {
 		return orchestrateDo(input);
 	},
 	async triageObservation(input) {
-		return notImplemented('triage-observation', input);
+		return triageRung(input);
 	},
 	async surface(input) {
 		return surfaceRung(input);
@@ -447,6 +500,89 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 }
 
 /**
+ * The observation TRIAGE rung BODY (slice `advance-rung-triage`, US #16/17/23):
+ * the rung the classifier picks for an UNTRIAGED observation (`needsAnswers` not
+ * set, no sidecar). It is QUESTION-GATED BY DEFAULT: it surfaces a promote/keep/
+ * delete question and WAITS — so "is this worth building?" is NEVER decided
+ * autonomously. A CONSERVATIVE `autoTriage`-gated EXCEPTION (US #17, high bar) may
+ * auto-disposition ONLY the no-question cases:
+ *
+ *   - **default (question-gated):** delegate to {@link surfaceRung} — spawn the
+ *     `surface-questions` agent (it emits the triage promote/keep/delete question
+ *     with a `disposition`) and the ENGINE persists the sidecar + `needsAnswers`.
+ *     The disposition routing is then executed by the APPLY rung when the human
+ *     answers. Surface stays ALWAYS allowed (US #23) — this path runs regardless of
+ *     `autoTriage`.
+ *   - **`autoTriage` exception:** ONLY when `autoTriage` is on, ask the
+ *     {@link TriageGate} whether the observation is a no-question case. If it emits
+ *     `auto: true` (`duplicate` → suggest delete; `map` → unambiguous map onto an
+ *     existing item), the engine auto-dispositions it WITHOUT a question
+ *     ({@link autoDispositionObservation}). It NEVER auto-deletes a non-duplicate
+ *     (a `duplicate` only RECOMMENDS deletion — the human deletes) and NEVER
+ *     auto-promotes a judgement call (`auto: false` ⇒ fall back to the surface
+ *     question). Promotion is ALWAYS a human answer (the apply path).
+ *
+ * Under the `advancing` CAS lock (held by {@link performAdvance} BEFORE this runs),
+ * so the expensive spawn is POST-lock, winner-only.
+ */
+async function triageRung(input: RungExecInput): Promise<RungExecResult> {
+	const {item, context} = input;
+	const note = context.note ?? (() => {});
+	const cwd = context.cwd;
+
+	// The CONSERVATIVE auto-disposition EXCEPTION — ONLY when `autoTriage` is on.
+	// With it off (the default), EVERY untriaged observation surfaces the question
+	// (the always-allowed path), so "worth building?" is never decided autonomously.
+	if (context.autoTriage === true) {
+		const itemPath = findItemPath(cwd, input.namespace, input.slug);
+		if (itemPath === undefined) {
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message:
+					`advance classified the 'triage' rung for ${item} but could not find ` +
+					`its item file under work/ — a human must reconcile the item's location.`,
+			};
+		}
+		const gate = context.triageGate ?? harnessTriageGate();
+		let decision;
+		try {
+			decision = await gate({item, cwd, triageModel: context.triageModel});
+		} catch (err) {
+			// A gate failure is NOT a reason to auto-dispose — fall back to the SAFE
+			// question-gated path (surface the question), never the reverse.
+			const detail = err instanceof Error ? err.message : String(err);
+			note(
+				`triage ${item}: the auto-triage gate produced no usable emit (${detail}); ` +
+					'falling back to the question-gated surface path.',
+			);
+			decision = {auto: false as const};
+		}
+		if (decision.auto === true) {
+			// A no-question case (duplicate / map) — auto-disposition WITHOUT a
+			// question. NEVER auto-deletes a non-duplicate; NEVER auto-promotes.
+			const dispose = context.autoDisposition ?? autoDispositionObservation;
+			const result = dispose({
+				cwd,
+				item,
+				itemPath,
+				kind: decision.kind,
+				existing: decision.existing,
+				reason: decision.reason,
+				note,
+			});
+			return {exitCode: 0, outcome: 'advanced', message: result.message};
+		}
+		// `auto: false` ⇒ a judgement call. Fall through to the surface question.
+	}
+
+	// DEFAULT (question-gated): surface the promote/keep/delete question + WAIT.
+	// This REUSES the surface rung verbatim (the `surface-questions` skill emits the
+	// triage question with a `disposition`); the apply rung executes the answer.
+	return surfaceRung(input);
+}
+
+/**
  * The APPLY rung BODY (slice `advance-rung-apply`, US #11/14/15/29/30): when the
  * classifier says `apply` (ALL sidecar entries answered), apply the HUMAN's
  * answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the
@@ -462,7 +598,7 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
  * human-authored `answer:` text + `disposition:` field; a subset-answered sidecar
  * is not even classified `apply` (the classifier NO-OPs), asserted in the persist.
  */
-function applyRung(input: RungExecInput): RungExecResult {
+async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 	const {item, context} = input;
 	const note = context.note ?? (() => {});
 	const cwd = context.cwd;
@@ -476,6 +612,47 @@ function applyRung(input: RungExecInput): RungExecResult {
 				`advance classified the 'apply' rung for ${item} but could not find ` +
 				`its item file under work/ — a human must reconcile the item's location.`,
 		};
+	}
+
+	// OBSERVATION → an answered "promote" is the triage rung's new-item creation
+	// (US #24): the apply-persist deliberately does NOT treat `promote-*` as a
+	// terminal (it would plain-resolve THIS item) — the promotion is a NEW item's
+	// creation through the CAS, keyed on the new item's identity. Route it here.
+	if (
+		input.namespace === 'observation' &&
+		!(context.applyFollowups && context.applyFollowups.length > 0) &&
+		isPromoteAnswered(cwd, item)
+	) {
+		const promote = context.promote ?? promoteObservation;
+		try {
+			const result = await promote({
+				cwd,
+				item,
+				itemPath,
+				newSlug: context.promoteSlug,
+				arbiter: context.arbiter,
+				note,
+			});
+			return {
+				exitCode: result.exitCode,
+				outcome:
+					result.outcome === 'promoted'
+						? 'advanced'
+						: result.outcome === 'lost'
+							? 'lost'
+							: result.outcome === 'contended'
+								? 'contended'
+								: 'usage-error',
+				message: result.message,
+			};
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `promote ${item}: ${detail}`,
+			};
+		}
 	}
 
 	const apply = context.applyPersist ?? applyAnsweredQuestions;
@@ -522,16 +699,30 @@ function findItemPath(
 	return undefined;
 }
 
-/** A clean "this rung's body is a LATER slice" result (never a crash). */
-function notImplemented(rung: string, input: RungExecInput): RungExecResult {
-	return {
-		exitCode: 1,
-		outcome: 'not-implemented',
-		message:
-			`advance classified the '${rung}' rung for ${input.item} and HELD the ` +
-			`advancing lock, but this rung's body is a later slice ` +
-			`(advance-rungs). Skeleton wired; executor seam not yet filled.`,
-	};
+/**
+ * Does the OBSERVATION's answered sidecar carry a `promote-slice`/`promote-adr`
+ * disposition on an ANSWERED entry? The signal the apply rung uses to route to the
+ * triage rung's new-item-creation CAS (US #24) instead of the plain resolve. Read
+ * from disk (the classifier already confirmed all-answered; this only reads the
+ * disposition). Absent/unreadable sidecar ⇒ not a promote (the plain apply path).
+ */
+function isPromoteAnswered(cwd: string, item: string): boolean {
+	const sidecarAbs = join(cwd, sidecarPathFor(item));
+	if (!existsSync(sidecarAbs)) {
+		return false;
+	}
+	let model;
+	try {
+		model = parseSidecar(readFileSync(sidecarAbs, 'utf8'));
+	} catch {
+		return false;
+	}
+	return model.entries.some(
+		(entry) =>
+			isEntryAnswered(entry) &&
+			(entry.disposition === 'promote-slice' ||
+				entry.disposition === 'promote-adr'),
+	);
 }
 
 /**
@@ -658,6 +849,12 @@ export async function performAdvance(
 				surfacePersist: options.surfacePersist,
 				applyPersist: options.applyPersist,
 				applyFollowups: options.applyFollowups,
+				autoTriage: options.autoTriage,
+				triageGate: options.triageGate,
+				triageModel: options.triageModel,
+				autoDisposition: options.autoDisposition,
+				promote: options.promote,
+				promoteSlug: options.promoteSlug,
 				note,
 			},
 		});

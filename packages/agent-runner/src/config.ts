@@ -62,6 +62,21 @@ export interface Config {
 	 */
 	autoSlice: boolean;
 	/**
+	 * Per-repo policy: may an agent AUTO-DISPOSITION an observation in the
+	 * conservative no-question cases (exact-duplicate ⇒ suggest delete; an
+	 * unambiguous map onto an existing item) WITHOUT surfacing a triage question?
+	 * `false` (default, strict, human-first) ⇒ EVERY untriaged observation surfaces
+	 * a promote/keep/delete question and waits — "is this worth building?" is never
+	 * decided autonomously; `true` ⇒ the triage rung may auto-disposition ONLY the
+	 * no-question cases (it still NEVER auto-deletes a non-duplicate signal and
+	 * NEVER auto-promotes a judgement call). Resolved like `allowAgents`/`autoSlice`:
+	 * flag > `AGENT_RUNNER_AUTO_TRIAGE` env > per-repo > global > default false. The
+	 * THIRD member of the flat per-action gate family (PRD `advance-loop`,
+	 * "Repo-config: a FLAT per-action gate family"); surfacing a question and
+	 * applying a human's answer stay ALWAYS allowed.
+	 */
+	autoTriage: boolean;
+	/**
 	 * Per-repo toggle: when an auto-pick / `-n` / multi-item selection draws from
 	 * BOTH pools (eligible slices + sliceable PRDs), which pool comes FIRST?
 	 * `false` (default) ⇒ **slices first, then PRDs to slice** — drain ready work
@@ -272,6 +287,10 @@ export const DEFAULT_CONFIG: Config = {
 	// Auto-slicing is human-first by default: an agent slices nothing unless a
 	// repo opts in via `autoSlice` (mirrors `allowAgents`, one level up).
 	autoSlice: false,
+	// Observation auto-disposition is human-first by default: the triage rung
+	// surfaces a promote/keep/delete question and WAITS unless a repo opts in via
+	// `autoTriage` (the third per-action gate, mirrors `allowAgents`/`autoSlice`).
+	autoTriage: false,
 	// Slices-first by default (ADR §3): a selection drains ready slices before it
 	// creates more work by slicing PRDs. `prdsFirst: true` flips the two pools.
 	prdsFirst: false,
