@@ -55,7 +55,7 @@ Today (`src/cli.ts`, the `do` action body ~L1224): only two shapes exist — in-
 
 ## Follow-up (capture, do not build here)
 
-- The ADR `docs/adr/command-surface-and-journeys.md` frames the targeting axis as "bare = current repo; `--remote` = anywhere". `--isolated` adds a THIRD point (isolated-but-same-repo). Worth a one-line ADR note so the surface doc stays coherent — additive, maintainer-owned (do NOT edit the ADR in this slice; leave an observation if not already captured).
+- The ADR `docs/adr/command-surface-and-journeys.md` (§3, the "Isolation strategy by form" bullet) ALREADY records the three-point axis including `--isolated`, marked **"pending build (slice `do-isolated-in-place`)"**. When THIS slice lands, flip that marker to present tense — drop the "pending build" caveat so the bullet reads `--isolated` as a shipped form alongside in-place / `--remote`. (One small edit; the table itself is already correct.)
 - A sibling `work-on --isolated` (the human counterpart) is a plausible later slice — not in scope here.
 
 ## Prompt

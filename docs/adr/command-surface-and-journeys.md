@@ -52,6 +52,15 @@ A sharp boundary, NOT two flavours of one thing:
   - `do <arg>` — that one named item (see §3a for slug resolution). `do` (no arg) — auto-pick one eligible thing. `do <arg> <arg> …` — those, in sequence. `do -n <x>` — x eligible things, in sequence.
   - **`--propose` (default) / `--merge`.** Propose (PR) is the CI norm.
   - **Isolation strategy by form:** `do <slug>` in a checkout works **in-place** (the checkout / CI container IS the isolation — no mirror). `do --remote <r>` (no checkout) materialises a **hub mirror + job worktree in the agents' area** — the SAME isolation `run` uses (agent execution → agents' area, never the human area).
+    - The targeting/isolation surface is really **two orthogonal questions** — WHICH repo (current vs a foreign `--remote`) and, for the current repo, WHERE to build (in the checkout vs in a worktree). So there are three forms, not a binary:
+
+      | form | repo | build location |
+      | --- | --- | --- |
+      | `do <slug>` | current | in the checkout (in-place; refuses on a dirty tree) |
+      | `do --isolated <slug>` | current | a job worktree off THIS repo's arbiter |
+      | `do --remote <r> <slug>` | foreign | a job worktree (isolation implied — no checkout exists) |
+
+      `--remote` names the targeting axis (a foreign repo; isolation there is incidental); `--isolated` names the isolation intent (a worktree off my own arbiter) — the affordance an isolated supervised conductor needs without forcing a foreign URL. The two are orthogonal and `--isolated` is purely additive. **Decided 2026-06-08; the `--isolated` form is pending build (slice `do-isolated-in-place`) — the in-place and `--remote` forms ship today.**
   - **Auto-slice priority within a tick:** eligible **slices first, then PRDs to slice** (drain ready work before creating more), with a per-repo toggle to flip it.
 
 CI uses **`do`** (wired by the future `install-ci`), never `run --once`.
