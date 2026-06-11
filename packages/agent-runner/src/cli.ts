@@ -59,6 +59,7 @@ import {
 	reviewFlagOverrides,
 } from './do-config.js';
 import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
+import {harnessSurfaceGate} from './surface-gate.js';
 import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
@@ -1756,6 +1757,12 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				doOptions,
+				// The SURFACE rung spawns the `surface-questions` skill fresh-context
+				// through the SAME harness seam the review gate uses (the engine then
+				// PERSISTS what it emits). It runs on the configured agent model — no
+				// dedicated `surfaceModel` config key is introduced by this slice.
+				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
+				surfaceModel: config.model,
 				note: (message) => console.error(`>> ${message}`),
 			});
 			if (result.exitCode !== 0) {

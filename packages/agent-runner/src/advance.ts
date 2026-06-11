@@ -21,6 +21,16 @@ import {
 	type ReleaseAdvancingLockResult,
 } from './advancing-lock.js';
 import {performDo, type DoOptions, type DoResult} from './do.js';
+import {
+	harnessSurfaceGate,
+	toNewQuestions,
+	type SurfaceGate,
+} from './surface-gate.js';
+import {
+	persistSurfacedQuestions,
+	type SurfacePersistOptions,
+	type SurfacePersistResult,
+} from './surface-persist.js';
 
 /**
  * The **`advance` verb SKELETON** (PRD `advance-loop`, slice
@@ -129,6 +139,27 @@ export interface AdvanceContext {
 	arbiter?: string;
 	/** The base `do` options the build/slice rungs orchestrate `performDo` with. */
 	doOptions?: Omit<DoOptions, 'arg'>;
+	/**
+	 * The SURFACE gate seam — the fresh-context `surface-questions` spawn the
+	 * surface rung uses (slice `advance-rung-surface`). The skill JUDGES (emits
+	 * questions); the engine PERSISTS. Production wires {@link harnessSurfaceGate};
+	 * tests inject a stub emit. `undefined` ⇒ the surface rung defaults to
+	 * {@link harnessSurfaceGate} (a NullHarness, no real model) so the seam is never
+	 * a crash — but the CLI threads the real harness-backed gate.
+	 */
+	surfaceGate?: SurfaceGate;
+	/**
+	 * The model the SURFACE agent runs on (de-correlated from the builder, like
+	 * `reviewModel`). Flows to the gate's launch through `LaunchInput.model`.
+	 */
+	surfaceModel?: string;
+	/**
+	 * Persist the surfaced questions ATOMICALLY (append-or-create the sidecar + set
+	 * `needsAnswers:true` in ONE commit). Tests inject a spy; production uses
+	 * {@link persistSurfacedQuestions}. The ENGINE owns ALL persistence — the skill
+	 * writes nothing.
+	 */
+	surfacePersist?: (options: SurfacePersistOptions) => SurfacePersistResult;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -261,7 +292,7 @@ export const defaultRungExecutor: RungExecutor = {
 		return notImplemented('triage-observation', input);
 	},
 	async surface(input) {
-		return notImplemented('surface', input);
+		return surfaceRung(input);
 	},
 	async apply(input) {
 		return notImplemented('apply', input);
@@ -307,6 +338,108 @@ function mapDoOutcome(result: DoResult): AdvanceOutcome {
 		default:
 			return 'usage-error';
 	}
+}
+
+/**
+ * The SURFACE rung BODY (slice `advance-rung-surface`, US #32/33): the FIRST rung
+ * filling the executor seam, establishing the spawn→emit→persist pattern the
+ * other rung bodies reuse. Under the `advancing` CAS lock (held by
+ * {@link performAdvance} BEFORE this runs — so the expensive spawn is POST-lock,
+ * winner-only), it:
+ *
+ *   1. spawns a FRESH-CONTEXT agent with `surface-questions` loaded (the
+ *      {@link SurfaceGate} seam, mirroring the review gate's `review` spawn) and
+ *      collects the EMITTED questions — the skill JUDGES, writes nothing; and
+ *   2. has the ENGINE ITSELF write/append them to the sidecar CAS-atomically AND
+ *      set `needsAnswers:true` in the SAME commit
+ *      ({@link persistSurfacedQuestions}) — the engine PERSISTS.
+ *
+ * Append-never-overwrite: a re-surface ADDS `qN+1` and flips a previously-all-
+ * answered sidecar back to not-all-answered (the persist owns that). An EMPTY
+ * emit (the skill's honest "no open judgement") writes nothing and reports it.
+ */
+async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
+	const {item, context} = input;
+	const note = context.note ?? (() => {});
+	const cwd = context.cwd;
+
+	// Locate the item file (the only thing the persist needs beyond the questions:
+	// the file to set `needsAnswers:true` on). The sidecar path is identity-derived,
+	// not folder-derived, so only the ITEM file's folder must be found.
+	const itemPath = findItemPath(cwd, input.namespace, input.slug);
+	if (itemPath === undefined) {
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message:
+				`advance classified the 'surface' rung for ${item} but could not find ` +
+				`its item file under work/ — a human must reconcile the item's location.`,
+		};
+	}
+
+	// 1. SPAWN the fresh-context `surface-questions` agent (the skill JUDGES). The
+	//    expensive model work is POST-lock (the lock is held by `performAdvance`).
+	const gate = context.surfaceGate ?? harnessSurfaceGate();
+	let emit;
+	try {
+		emit = await gate({
+			item,
+			cwd,
+			surfaceModel: context.surfaceModel,
+		});
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message: `surface ${item}: the surface-questions agent produced no usable emit (${detail}).`,
+		};
+	}
+
+	// 2. The ENGINE persists (the skill wrote nothing): append-or-create the sidecar
+	//    + set `needsAnswers:true` in ONE commit (CAS-atomic under the held lock).
+	const persist = context.surfacePersist ?? persistSurfacedQuestions;
+	const result = persist({
+		cwd,
+		item,
+		itemPath,
+		questions: toNewQuestions(emit),
+		note,
+	});
+	if (result.outcome === 'nothing') {
+		return {
+			exitCode: 0,
+			outcome: 'no-op',
+			message: `surface ${item}: no open judgement — nothing surfaced.`,
+		};
+	}
+	return {
+		exitCode: 0,
+		outcome: 'advanced',
+		message:
+			`surfaced ${result.entryCount} question(s) for ${item} → ${result.sidecarPath} ` +
+			`(needsAnswers:true, CAS-atomic).`,
+	};
+}
+
+/**
+ * Find the item file `work/<folder>/<slug>.md` for a type, across the lifecycle
+ * folders it may rest in (the SAME folder set {@link readNeedsAnswers} searches).
+ * Returns the path RELATIVE to `cwd`, or `undefined` when no file exists.
+ */
+function findItemPath(
+	cwd: string,
+	namespace: SlugNamespace,
+	slug: string,
+): string | undefined {
+	const type = sidecarTypeFor(namespace);
+	for (const folder of FOLDERS_FOR_TYPE[type]) {
+		const rel = `work/${folder}/${slug}.md`;
+		if (existsSync(join(cwd, rel))) {
+			return rel;
+		}
+	}
+	return undefined;
 }
 
 /** A clean "this rung's body is a LATER slice" result (never a crash). */
@@ -436,7 +569,15 @@ export async function performAdvance(
 			namespace: resolved.namespace,
 			slug: resolved.slug,
 			classification,
-			context: {cwd, arbiter, doOptions: options.doOptions, note},
+			context: {
+				cwd,
+				arbiter,
+				doOptions: options.doOptions,
+				surfaceGate: options.surfaceGate,
+				surfaceModel: options.surfaceModel,
+				surfacePersist: options.surfacePersist,
+				note,
+			},
 		});
 		return {
 			exitCode: exec.exitCode,
