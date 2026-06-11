@@ -271,6 +271,12 @@ export function registerMirrorWithWork(
 		backlog?: Record<string, string>;
 		done?: Record<string, string>;
 		needsAttention?: Record<string, string>;
+		/** PRDs to slice, committed under `work/prd/` on the mirror's `main`. */
+		prd?: Record<string, string>;
+		/** Already-SLICED PRDs, committed under `work/prd-sliced/` (sliced-ness residence). */
+		prdSliced?: Record<string, string>;
+		/** A `.agent-runner.json` committed at the repo root (travels onto the mirror's `main`). */
+		repoConfig?: Record<string, unknown>;
 	},
 ): RegisteredMirrorFixture {
 	// 1. A throwaway working repo (the would-be arbiter source) with the work/ tree.
@@ -293,6 +299,14 @@ export function registerMirrorWithWork(
 	writeAll('backlog', work.backlog);
 	writeAll('done', work.done);
 	writeAll('needs-attention', work.needsAttention);
+	writeAll('prd', work.prd);
+	writeAll('prd-sliced', work.prdSliced);
+	if (work.repoConfig) {
+		writeFileSync(
+			join(src, '.agent-runner.json'),
+			JSON.stringify(work.repoConfig, null, 2) + '\n',
+		);
+	}
 	writeFileSync(join(src, 'README.md'), `# ${name}\n`);
 	gx(['add', '-A'], src);
 	gx(['commit', '-q', '-m', 'seed work tree'], src);

@@ -204,6 +204,19 @@ export interface ResolveMirrorStateInput {
 	env?: NodeJS.ProcessEnv;
 }
 
+/**
+ * What the MIRROR-ref PRD-pool method needs: which bare hub mirror's committed
+ * `work/prd/`+`work/prd-sliced/` tree to enumerate.
+ */
+export interface ResolveMirrorPrdPoolInput {
+	/** The bare hub mirror directory (`<workspacesDir>/repos/<key>.git`). */
+	mirrorPath: string;
+	/** The mirror-LOCAL ref whose `work/prd*` tree to read (default `main`). */
+	ref?: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+}
+
 /** What the ARBITER resolve method needs to read committed `work/` state. */
 export interface ResolveArbiterStateInput {
 	/** The slug whose slice file to resolve (`work/{backlog,in-progress}/<slug>.md`). */
@@ -237,6 +250,20 @@ export interface LedgerReadStrategy {
 	 * mechanism the arbiter method uses for `done/`, widened to the full set).
 	 */
 	resolveMirrorState(input: ResolveMirrorStateInput): Promise<LocalLedgerState>;
+	/**
+	 * Enumerate the repo's PRD pool from a BARE hub mirror's committed `work/prd/`
+	 * tree (+ already-SLICED slugs from `work/prd-sliced/` residence) — the
+	 * mirror-ref counterpart of {@link LedgerReadStrategy.resolvePrdPool}, for the
+	 * NO-CHECKOUT mirror-side auto-pick (`run`'s isolated loop + the one-shot/CI
+	 * `advance --remote -n`). A mirror is bare, so this reads the committed tree via
+	 * `git ls-tree`/`git show` (the SAME mechanism {@link resolveMirrorState} uses),
+	 * not a working-tree `readdirSync`. Returns the SAME {@link LedgerPrdPool} shape
+	 * the working-tree reader returns, so the slicing-eligibility predicate
+	 * (`sliceablePrds`) applies byte-identically to either source.
+	 */
+	resolveMirrorPrdPool(
+		input: ResolveMirrorPrdPoolInput,
+	): Promise<LedgerPrdPool>;
 	/**
 	 * Resolve whether a PRD named `<slug>` exists in the LOCAL working tree's
 	 * `work/prd/` (the PRD source), `work/slicing/` (a transient held lock while the
@@ -515,6 +542,52 @@ async function readBacklogFromTree(
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
+/**
+ * Parse `<ref>:work/prd/*.md` into the auto-slice PRD pool, sorted by slug, plus
+ * the already-SLICED slugs from `<ref>:work/prd-sliced/` RESIDENCE (the folder is
+ * the source of truth, mirroring the working-tree {@link readLocalPrdPool}). Reads
+ * a committed tree (bare-mirror or any ref) via `ls-tree`/`show`. Missing folders
+ * read as empty.
+ */
+async function readPrdPoolFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerPrdPool> {
+	const prdBase = `${ref}:work/prd`;
+	const prds: LedgerPrdItem[] = [];
+	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
+		const content = await showInTree(prdBase, file, cwd, env);
+		if (content === undefined) {
+			continue;
+		}
+		const fm = parseFrontmatter(content);
+		prds.push({
+			file,
+			slug: fm.slug ?? basename(file, '.md'),
+			humanOnly: fm.humanOnly,
+			needsAnswers: fm.needsAnswers,
+			sliceAfter: fm.sliceAfter,
+		});
+	}
+	prds.sort((a, b) => a.slug.localeCompare(b.slug));
+
+	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
+	// truth (the `sliced:` marker was removed in `remove-sliced-marker-step-b`),
+	// exactly as the working-tree reader resolves it.
+	const slicedBase = `${ref}:work/prd-sliced`;
+	const slicedSlugs = new Set<string>();
+	for (const file of await listMarkdownInTree(slicedBase, cwd, env)) {
+		const content = await showInTree(slicedBase, file, cwd, env);
+		if (content === undefined) {
+			continue;
+		}
+		const fm = parseFrontmatter(content);
+		slicedSlugs.add(fm.slug ?? basename(file, '.md'));
+	}
+	return {prds, slicedSlugs};
+}
+
 /** Parse `<ref>:work/needs-attention/*.md` into items, sorted by filename. */
 async function readNeedsAttentionFromTree(
 	ref: string,
@@ -580,6 +653,12 @@ export const currentLedgerRead: LedgerReadStrategy = {
 			readNeedsAttentionFromTree(ref, mirrorPath, env),
 		]);
 		return {backlog, doneSlugs, needsAttention};
+	},
+	async resolveMirrorPrdPool({mirrorPath, ref = 'main', env}) {
+		// The PRD pool from the bare mirror's committed `<ref>:work/prd*` tree — the
+		// mirror-ref counterpart of `resolvePrdPool` (a working-tree read). Same shape,
+		// so `sliceablePrds` applies identically to either source.
+		return readPrdPoolFromTree(ref, mirrorPath, env);
 	},
 };
 

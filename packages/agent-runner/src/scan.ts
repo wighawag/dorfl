@@ -61,9 +61,11 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
  * Resolve a per-repo `ScannedItem[]` from an already-resolved `work/` state +
  * the repo's `allowAgents` policy. The shared core of BOTH the registry scan
  * (mirror-ref state) and the working-tree scan (`run`/in-place) — neither learns
- * how the `work/` state was read; they just hand it here.
+ * how the `work/` state was read; they just hand it here. Exported so the
+ * MIRROR-SIDE pool scan (`mirror-pool-scan.ts`) scores the bare-mirror slice pool
+ * through the EXACT same eligibility path as in-place (`do-autopick`), not a fork.
  */
-function scoreItems(
+export function scoreItems(
 	state: Pick<LocalLedgerState, 'backlog' | 'doneSlugs'>,
 	allowAgents: boolean,
 	counts: {totalItems: number; totalEligible: number},
