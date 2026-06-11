@@ -59,3 +59,7 @@ agent-runner claim review-comment-fallback-on-unparsed-pr-url --arbiter origin
 git fetch origin && git switch -c work/review-comment-fallback-on-unparsed-pr-url origin/main
 git mv work/in-progress/review-comment-fallback-on-unparsed-pr-url.md work/done/review-comment-fallback-on-unparsed-pr-url.md
 ```
+
+## Needs attention
+
+acceptance gate failed (exit 1)
