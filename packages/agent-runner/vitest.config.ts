@@ -30,6 +30,12 @@ const RACE_SENSITIVE = [
 	// release-rebase-conflict test that writes main; keep it out of file-parallel
 	// pressure for the same deterministic claim/main-CAS reasoning as claim-cas.
 	'test/slicing-lock.test.ts',
+	// The advancing-lock BORROW (`advancing-lock-borrow`): a SHORT borrow shaped
+	// like slicing-lock, reusing the same CAS ledger-write seam against a --bare
+	// arbiter, with an in-process two-tick race + a new-item-creation race + a
+	// marker-delete release that writes main; keep it out of file-parallel pressure
+	// for the same deterministic claim/main-CAS reasoning as slicing-lock.test.ts.
+	'test/advancing-lock.test.ts',
 	// The `do prd:<slug>` slicing path (`performSlice`): drives the lock CAS
 	// (prd → slicing → prd) against a --bare arbiter AND writes main (the
 	// runner-owned completing transition that emits backlog slices + marks the PRD

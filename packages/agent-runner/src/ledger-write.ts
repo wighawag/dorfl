@@ -76,12 +76,25 @@ import {
  * self-documenting and uses a non-colliding branch name (see
  * `slicing-lock.ts`). `work/slicing/` is a TRANSIENT held lock, not a resting
  * state — release returns the PRD to `work/prd/`.
+ *
+ * `advancing` is the **advancing-lock** BORROW (PRD `advance-loop`, slice
+ * `advancing-lock-borrow`): the surface/apply/triage phase's SHORT borrow. Like
+ * `slicing` it rides {@link applyTransition} (the publish/lease is identical) and
+ * is a distinct KIND only so the lock is self-documenting and uses a
+ * non-colliding branch name (`advancing/<type>-<slug>`). Unlike `slicing` /
+ * `claim` it does NOT move the item's lifecycle file: it races a PRESENCE-MARKER
+ * micro-commit (`work/advancing/<type>-<slug>.md`) to the arbiter — the
+ * lock-FOLDER encodes the ACTION, the entry name the IDENTITY — so a slice, a
+ * PRD, and an observation sharing a slug never collide on the CAS ref (see
+ * `advancing-lock.ts`). `work/advancing/` is a TRANSIENT held lock, not a resting
+ * state — release deletes the marker and the item never moved.
  */
 export type LedgerTransitionKind =
 	| 'claim'
 	| 'complete'
 	| 'needs-attention'
-	| 'slicing';
+	| 'slicing'
+	| 'advancing';
 
 /**
  * A *prepared* COMPLETE transition the caller asks the seam to publish: a
