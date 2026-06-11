@@ -40,3 +40,7 @@ Make the null adapter's piped-prompt write ROBUST to an early-closed child stdin
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Requeue 2026-06-11
+
+False gate red: the WORK is green (build + 1327 tests pass on the job worktree). The gate failed only because do --remote ignored this repo's per-repo verify ('pnpm format:check && pnpm build && pnpm test') and used the default 'pnpm -r format:check', which errors (no format:check script in workspace packages). Re-driven with AGENT_RUNNER_VERIFY + AGENT_RUNNER_HARNESS set. See work/observations/remote-do-ignores-per-repo-config.md.
