@@ -178,11 +178,30 @@ export function loadRepoConfig(repoPath: string): LoadedRepoConfig {
 		throw new Error(`Failed to read ${path}: ${(err as Error).message}`);
 	}
 
+	return loadRepoConfigFromContent(raw, path);
+}
+
+/**
+ * The content-based half of {@link loadRepoConfig}: parse + apply the SAME
+ * allow/reject split to ALREADY-READ `.agent-runner.json` bytes, labelling the
+ * source as `sourceLabel` (a path, or e.g. `<arbiter>/main:.agent-runner.json`)
+ * in the rejected-key message. Used wherever the committed repo file is sourced
+ * from somewhere OTHER than a working-tree path — notably `do --remote`, which
+ * reads it from the arbiter's `main` (`git show`) since there is no checkout.
+ * Reuses the allow/reject SET verbatim (no parallel split), so a host-only key
+ * is rejected identically however the bytes were sourced. Invalid JSON throws.
+ */
+export function loadRepoConfigFromContent(
+	content: string,
+	sourceLabel: string,
+): LoadedRepoConfig {
 	let parsed: Record<string, unknown>;
 	try {
-		parsed = JSON.parse(raw) as Record<string, unknown>;
+		parsed = JSON.parse(content) as Record<string, unknown>;
 	} catch (err) {
-		throw new Error(`Invalid JSON in ${path}: ${(err as Error).message}`);
+		throw new Error(
+			`Invalid JSON in ${sourceLabel}: ${(err as Error).message}`,
+		);
 	}
 
 	const config: PartialConfig = {};
@@ -204,12 +223,12 @@ export function loadRepoConfig(repoPath: string): LoadedRepoConfig {
 	const message =
 		rejected.length > 0
 			? `Ignoring runner/host-only key(s) in ${REPO_CONFIG_FILENAME} ` +
-				`(${path}): ${rejected.join(', ')}. ` +
+				`(${sourceLabel}): ${rejected.join(', ')}. ` +
 				`These describe the runner/host, not a single repo, and belong in ` +
 				`the global config or a CLI flag.`
 			: undefined;
 
-	return {path, config, rejected, ...(message ? {message} : {})};
+	return {path: sourceLabel, config, rejected, ...(message ? {message} : {})};
 }
 
 function isRejectedKey(key: string): boolean {
@@ -275,6 +294,27 @@ export function resolveRepoConfig(
 ): ResolvedRepoConfig {
 	const {repoPath, global, flags, env} = options;
 	const repo = loadRepoConfig(repoPath);
+	return resolveRepoConfigFromLoaded(repo, {global, flags, env});
+}
+
+/**
+ * Layer an ALREADY-LOADED {@link LoadedRepoConfig} (the honoured subset + its
+ * rejected-key diagnostics) into the SAME precedence chain {@link resolveRepoConfig}
+ * applies:
+ *
+ *   flag > ENV (AGENT_RUNNER_*) > per-repo > global > built-in default
+ *
+ * This is the source-agnostic core: {@link resolveRepoConfig} feeds it a
+ * working-tree read ({@link loadRepoConfig}); `do --remote` feeds it the arbiter's
+ * committed file read from `main` via {@link loadRepoConfigFromContent}. EITHER
+ * way the layering + the rejected-key passthrough are IDENTICAL — only the bytes'
+ * origin differs (the slice's one genuinely-new seam).
+ */
+export function resolveRepoConfigFromLoaded(
+	repo: LoadedRepoConfig,
+	options: {global: Config; flags?: PartialConfig; env?: EnvMap},
+): ResolvedRepoConfig {
+	const {global, flags, env} = options;
 	// mergeConfig copies `global` (spreads DEFAULT_CONFIG then assigns) so the
 	// shared global object is never mutated. Layer per-repo, then env (a
 	// per-machine source — may set host-only keys), then flags on top.

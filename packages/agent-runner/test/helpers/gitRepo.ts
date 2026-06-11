@@ -95,6 +95,14 @@ export function seedRepoWithArbiter(
 		promptBody?: string;
 		/** PRD slugs to seed under `work/prd/<slug>.md` (for the slicing lock). */
 		prds?: string[];
+		/**
+		 * Commit a `.agent-runner.json` at the repo root (so it travels onto
+		 * `<arbiter>/main`) — the per-repo config the no-checkout `do --remote` reads
+		 * from the arbiter. The object is JSON-stringified verbatim, so a test can
+		 * seed BOTH allowed keys (`harness`/`verify`/…) and rejected host-only keys
+		 * (`agentCmd`/`piBin`/…) to exercise the allow/reject split.
+		 */
+		repoConfig?: Record<string, unknown>;
 	} = {},
 ): SeededRepo {
 	const repo = join(root, 'project');
@@ -112,6 +120,12 @@ export function seedRepoWithArbiter(
 		for (const slug of opts.prds) {
 			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
 		}
+	}
+	if (opts.repoConfig) {
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify(opts.repoConfig, null, 2) + '\n',
+		);
 	}
 	writeFileSync(join(repo, 'README.md'), '# project\n');
 	gx(['add', '-A'], repo);

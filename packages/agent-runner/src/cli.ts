@@ -37,7 +37,15 @@ import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
 import type {InteractiveLauncher} from './harness.js';
 import {shouldUseColor} from './output.js';
-import {resolveRepoConfig} from './repo-config.js';
+import {
+	resolveRepoConfig,
+	resolveRepoConfigFromLoaded,
+	loadRepoConfigFromContent,
+	REPO_CONFIG_FILENAME,
+	type LoadedRepoConfig,
+} from './repo-config.js';
+import {ensureMirror, readRepoConfigFromMirrorMain} from './repo-mirror.js';
+import {identityEnv, type Identity} from './identity.js';
 import {
 	harnessFlagOverrides,
 	doFlagOverrides,
@@ -117,6 +125,64 @@ function resolveGlobalConfig(
 	flags: PartialConfig,
 ): Config {
 	return mergeConfig({...fileConfig, ...envOverrides(), ...flags});
+}
+
+/**
+ * Resolve the effective config for a `do --remote <r>` run, layering the target
+ * repo's COMMITTED `.agent-runner.json` (read from `<arbiter>/main` via the hub
+ * mirror) into the SAME `flag > env > per-repo > global > default` chain in-place
+ * `do` uses. This is the no-checkout analogue of {@link resolveRepoConfig}: there
+ * is no working tree, so the bytes come from the arbiter's `main` instead of the
+ * cwd — but the parse + allow/reject FILTER (`loadRepoConfigFromContent`) and the
+ * layering (`resolveRepoConfigFromLoaded`) are the EXISTING per-repo machinery,
+ * reused verbatim. Host-only keys in the committed file are rejected + reported
+ * exactly as the in-place read rejects them.
+ *
+ * Resilient by design: a config-less repo (no file on main) OR an unreachable
+ * mirror falls back to global+default (the pre-slice behaviour), with a warning
+ * on a genuine fetch/read fault — a `--remote` build must not be blocked because
+ * the arbiter was momentarily offline. `ensureMirror` here is idempotent with the
+ * one `performDoRemote` runs (it fetches + reuses the same bare mirror).
+ */
+function resolveRemoteRepoConfig(options: {
+	remote: string;
+	workspacesDir: string;
+	global: Config;
+	flags: PartialConfig;
+	identity: Identity | undefined;
+	note: (message: string) => void;
+}): Config {
+	const {remote, workspacesDir, global, flags, identity, note} = options;
+	let loaded: LoadedRepoConfig;
+	try {
+		const env = identityEnv(identity, process.env);
+		const mirror = ensureMirror({url: remote, workspacesDir, env});
+		const content = readRepoConfigFromMirrorMain(mirror.path, env);
+		loaded =
+			content === undefined
+				? {
+						path: `${remote}#main:${REPO_CONFIG_FILENAME}`,
+						config: {},
+						rejected: [],
+					}
+				: loadRepoConfigFromContent(
+						content,
+						`${remote}#main:${REPO_CONFIG_FILENAME}`,
+					);
+	} catch (err) {
+		// A fetch/read fault (offline arbiter, corrupt mirror) must NOT block the
+		// build: warn + fall back to global+default (today's no-per-repo behaviour).
+		note(
+			`could not read the target repo's ${REPO_CONFIG_FILENAME} from ` +
+				`${remote}/main; resolving config from global + flags only. ` +
+				`${err instanceof Error ? err.message : String(err)}`,
+		);
+		loaded = {path: `${remote}#main`, config: {}, rejected: []};
+	}
+	if (loaded.message) {
+		note(loaded.message);
+	}
+	return resolveRepoConfigFromLoaded(loaded, {global, flags}).config;
 }
 
 /**
@@ -1283,10 +1349,13 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 
-			// `do --remote <r>`: run against a REGISTERED repo with NO checkout. There
-			// is no per-repo `.agent-runner.json` to layer (the registered repo is a
-			// bare mirror), so config resolves from global + the SAME `do` flag
-			// overrides (flag > env > global > default). The worktree + mirror live in
+			// `do --remote <r>`: run against a REGISTERED repo with NO checkout. The
+			// repo's COMMITTED `.agent-runner.json` is reachable on `<arbiter>/main`
+			// (the mirror), so we DO layer it — restoring `flag > env > per-repo >
+			// global > default` parity with in-place `do` (slice
+			// `remote-do-reads-per-repo-config-from-arbiter-main`). Only the whitelisted
+			// `REPO_ALLOWED_KEYS` are layered (host-only keys stay global/flag/env-only,
+			// rejected by the SAME `repo-config.ts` split). The worktree + mirror live in
 			// the agents' area (`workspacesDir`); the human area is NEVER touched.
 			if (flags.remote !== undefined) {
 				// `--remote` is the single-named-item, NO-checkout form. Auto-pick / `-n`
@@ -1306,10 +1375,28 @@ export function buildProgram(): Command {
 					process.exit(1);
 				}
 				const rawSlug = args[0];
-				const remoteConfig = resolveGlobalConfig(
+				const remoteFlags = doFlagOverrides(flags, flagMode);
+				// BOOTSTRAP resolution (global + flags, no per-repo layer) — it supplies
+				// the HOST-ONLY keys needed to even reach the arbiter's committed file:
+				// `workspacesDir` (where the mirror lives) and `identity` (the git env the
+				// mirror fetch runs under). These are host-only by definition (rejected
+				// per-repo), so reading them from global+flags first is correct and stable.
+				const bootstrap = resolveGlobalConfig(global, remoteFlags);
+				// Source the committed `.agent-runner.json` from `<arbiter>/main` via the
+				// hub mirror, then layer ONLY its whitelisted keys through the EXISTING
+				// per-repo machinery. `ensureMirror` here is idempotent with the one
+				// `performDoRemote` runs (it fetches + reuses the same bare mirror), so
+				// this adds a fetch, never a re-clone. A config-less repo (no file on
+				// main, or an unreachable mirror) → exactly the bootstrap config, i.e.
+				// byte-identical to the pre-slice global+default behaviour.
+				const remoteConfig = resolveRemoteRepoConfig({
+					remote: flags.remote,
+					workspacesDir: bootstrap.workspacesDir,
 					global,
-					doFlagOverrides(flags, flagMode),
-				);
+					flags: remoteFlags,
+					identity: bootstrap.identity,
+					note: (message) => console.error(`>> ${message}`),
+				});
 				if (doNeedsAgentCmd(remoteConfig)) {
 					console.error(
 						'error: no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',

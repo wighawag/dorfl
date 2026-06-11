@@ -1,6 +1,7 @@
 import {existsSync, mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
-import {git} from './git.js';
+import {git, run} from './git.js';
+import {REPO_CONFIG_FILENAME} from './repo-config.js';
 
 /**
  * The shared **hub-mirror primitive**: one bare mirror per repo under
@@ -180,6 +181,51 @@ export function fetchMirrorMain(
 		env,
 	});
 	return mirrorMainSha(mirrorDir, env);
+}
+
+/**
+ * Read the target repo's COMMITTED `.agent-runner.json` from the bare hub
+ * mirror's `main` (`git show main:.agent-runner.json`) — the per-repo config
+ * layer for the NO-CHECKOUT paths (`do --remote`). The committed file is a
+ * tracked file on `<arbiter>/main`, so it is reachable from the mirror without a
+ * worktree. Returns the raw file CONTENT, or `undefined` when the repo has no
+ * `.agent-runner.json` on `main` (a config-less repo — the caller then resolves to
+ * exactly global + default, byte-identical to before this layer existed).
+ *
+ * This is the slice's ONE genuinely-new seam: sourcing the bytes from the arbiter
+ * instead of the cwd. The parse / allow-reject filtering stays in
+ * {@link loadRepoConfigFromContent} (the existing per-repo machinery), so the
+ * host-only key rejection is identical however the bytes were sourced.
+ *
+ * A `git show` failure that is NOT "path missing on main" (a corrupt mirror, an
+ * absent `main`) is propagated — it is a genuine plumbing fault, not a
+ * config-less repo. The missing-path case (`git show` exit ≠ 0 naming the path)
+ * is read as `undefined` (no file = no per-repo layer).
+ */
+export function readRepoConfigFromMirrorMain(
+	mirrorDir: string,
+	env?: NodeJS.ProcessEnv,
+): string | undefined {
+	const spec = `main:${REPO_CONFIG_FILENAME}`;
+	const res = run('git', ['show', spec], mirrorDir, {env});
+	if (res.status === 0) {
+		return res.stdout;
+	}
+	// `git show main:<path>` exits non-zero both when the PATH is absent on main
+	// (the config-less repo — expected, → undefined) and when `main`/the object is
+	// unresolvable (a genuine fault — propagate). git words the former as
+	// "...does not exist in 'main'" / "exists on disk, but not in" / "path ...
+	// does not exist"; the latter as an invalid-object/unknown-revision error.
+	const stderr = res.stderr;
+	const pathMissing =
+		/does not exist in|exists on disk, but not in|fatal: path/i.test(stderr) ||
+		/did not match any file/i.test(stderr);
+	if (pathMissing) {
+		return undefined;
+	}
+	throw new Error(
+		`git show ${spec} failed in ${mirrorDir} (exit ${res.status}): ${stderr.trim()}`,
+	);
 }
 
 /** The bare mirror's `main` tip (40-hex sha), as freshly fetched. */
