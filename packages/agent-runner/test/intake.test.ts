@@ -398,6 +398,166 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The DRAFTED title reaches the COMMIT SUBJECT + the propose-PR TITLE
+// (`intake-propose-title-from-drafted-slice`). The bug: `integration-core`
+// read the title from `lifecycle.titlePath` BEFORE `dispatchSlice`'s `stage()`
+// WROTE that file, so for the intake lone-slice path the output
+// `work/backlog/<slug>.md` did not exist yet at read time → the commit subject
+// degraded to `complete work slice` and the propose-PR title to a generic
+// `feat(<slug>)`. The fix threads the drafted title EXPLICITLY (no file read).
+// Nothing asserted either string before — the missing coverage that let the bug
+// ship green.
+// ---------------------------------------------------------------------------
+describe('intake <N> — the drafted title reaches the commit subject + propose-PR title', () => {
+	/**
+	 * A recording `gh` stub on PATH: it writes its args to a file and prints a PR url
+	 * (so the propose pipeline opens "a PR" with no real GitHub). The synthesised
+	 * propose-PR `--title` lands in the args file, where the test asserts it carries
+	 * the DRAFTED title. Mirrors the `complete`/`do` PR-title tests' house style.
+	 */
+	function recordingGh(tag: string): {
+		binDir: string;
+		readArgs(): string;
+	} {
+		const binDir = join(scratch.root, `gh-stub-${tag}`);
+		mkdirSync(binDir, {recursive: true});
+		const argsFile = join(binDir, 'gh-args.txt');
+		const gh = join(binDir, 'gh');
+		writeFileSync(
+			gh,
+			[
+				'#!/usr/bin/env bash',
+				`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+				"printf '%s\\n' 'https://github.com/o/r/pull/1'",
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(gh, 0o755);
+		return {
+			binDir,
+			readArgs: () =>
+				existsSync(argsFile) ? readFileSync(argsFile, 'utf8') : '',
+		};
+	}
+
+	/** Read the subject line of the tip commit on a ref (the runner-owned commit). */
+	function commitSubject(ref: string, repo: string): string {
+		return gitIn(['log', '-1', '--format=%s', ref], repo).trim();
+	}
+
+	it('a lone-SLICE outcome: the COMMIT SUBJECT and the propose-PR TITLE both carry the drafted title (not `complete work slice` / `feat(<slug>)`)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider();
+		const gh = recordingGh('intake-slice-title');
+
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
+			// `propose` (default) through the `github` provider so the synthesised
+			// PR `--title` reaches the recording `gh` stub on PATH.
+			provider: 'github',
+			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.outcome).toBe('sliced');
+
+		// COMMIT SUBJECT: read from the runner-owned commit on the pushed work branch.
+		// It carries the DRAFTED title (`<type>(<slug>): <title>; <tag>`) — NOT the
+		// generic `complete work slice` fallback the file-read race produced.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const subject = commitSubject(
+			`${ARBITER}/work/intake-slice-add-quiet-flag`,
+			repo,
+		);
+		expect(subject).toContain('Add a --quiet flag to suppress progress notes');
+		expect(subject).not.toContain('complete work slice');
+
+		// PROPOSE-PR TITLE: the synthesised `--title` reaching `gh pr create` carries
+		// the drafted title — NOT a bare generic `feat(add-quiet-flag)`, and never --fill.
+		const args = gh.readArgs();
+		expect(args).toMatch(/^--title$/m);
+		expect(args).toMatch(
+			/^feat\(add-quiet-flag\): Add a --quiet flag to suppress progress notes$/m,
+		);
+		expect(args).not.toMatch(/^--fill$/m);
+
+		// The slice file's OWN frontmatter `title:` is unchanged (rendered correctly all
+		// along — only the derived subject/PR title were lost).
+		const onBranch = gitIn(
+			[
+				'show',
+				`${ARBITER}/work/intake-slice-add-quiet-flag:work/backlog/add-quiet-flag.md`,
+			],
+			repo,
+		);
+		expect(onBranch).toContain(
+			'title: Add a --quiet flag to suppress progress notes',
+		);
+	});
+
+	it('MERGE mode: the COMMIT SUBJECT landed on main carries the drafted title', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider();
+
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
+			integration: {slice: 'merge', prd: 'propose'},
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const subject = commitSubject(`${ARBITER}/main`, repo);
+		expect(subject).toContain('Add a --quiet flag to suppress progress notes');
+		expect(subject).not.toContain('complete work slice');
+	});
+
+	it('a PRD outcome: the COMMIT SUBJECT and propose-PR TITLE carry the drafted PRD title', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 5}});
+		const gh = recordingGh('intake-prd-title');
+
+		const result = await performIntake({
+			issueNumber: 5,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes',
+			}),
+			provider: 'github',
+			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.outcome).toBe('prd');
+
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const subject = commitSubject(
+			`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
+			repo,
+		);
+		expect(subject).toContain('Quiet and verbose output modes');
+		expect(subject).not.toContain('complete work slice');
+
+		const args = gh.readArgs();
+		expect(args).toMatch(/^--title$/m);
+		expect(args).toMatch(
+			/^feat\(quiet-and-verbose-modes\): Quiet and verbose output modes$/m,
+		);
+		expect(args).not.toMatch(/^--fill$/m);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // The FULL four-outcome dispatcher (ask / prd / bounce) under STUBBED verdicts
 // (`intake-decision-prompt-and-four-outcome-dispatch`). Each verdict drives the
 // right action; the prompt's JUDGEMENT is never unit-tested — only the dispatch.

@@ -93,9 +93,21 @@ export interface IntegrationLifecycle {
 	 * Absolute path to the item file whose `title:` frontmatter seeds the default
 	 * commit summary AND the synthesised propose-mode PR title. For the slicing
 	 * transition this is the held PRD (`work/slicing/<slug>.md`) — read BEFORE
-	 * {@link stage} moves it.
+	 * {@link stage} moves it. IGNORED when {@link title} is supplied (the explicit
+	 * title wins — no file read).
 	 */
 	titlePath: string;
+	/**
+	 * The drafted item TITLE, supplied EXPLICITLY (no file read). When set, the band
+	 * uses THIS as the title source for the default commit summary AND the synthesised
+	 * propose-mode PR title, INSTEAD of reading {@link titlePath}. This is the seam for
+	 * a lifecycle whose output file does NOT yet exist at title-read time — the intake
+	 * lone-slice / PRD path WRITES `work/backlog/<slug>.md` / `work/prd/<slug>.md` in
+	 * {@link stage}, which runs AFTER the title read, so a `titlePath` read would race
+	 * the write and fall back to a generic subject. The `do prd:` slicing transition
+	 * leaves this unset (its `titlePath` is an already-existing held PRD, read fine).
+	 */
+	title?: string;
 	/**
 	 * STAGE the lifecycle move + emitted files into the index on the current work
 	 * branch (runner-owned git; the agent never does git). For the slicing
@@ -532,8 +544,19 @@ export async function performIntegration(
 	// away). The PR title is a SINGLE, capped line built runner-side from the
 	// slice's `title:` frontmatter + the slug (`<type>(<slug>): <title>`) so it can
 	// never be the multi-line commit-subject run-on `--fill` would derive.
-	const defaultMessage = defaultSummary(sourcePath, slug);
-	const sliceTitle = readSliceTitle(sourcePath);
+	//
+	// When the lifecycle supplies an EXPLICIT `title`, use it DIRECTLY (no file read):
+	// the intake lone-slice / PRD path writes its output file in `stage()`, which runs
+	// AFTER this point, so a `titlePath` read would race the write and degrade the
+	// subject/PR title to the generic fallback. The `do prd:` slicing path leaves
+	// `title` unset and keeps reading its already-existing held PRD (unchanged).
+	const explicitTitle = lifecycle?.title;
+	const sliceTitle =
+		explicitTitle !== undefined ? explicitTitle : readSliceTitle(sourcePath);
+	const defaultMessage =
+		explicitTitle !== undefined
+			? summaryFromTitle(explicitTitle, slug)
+			: defaultSummary(sourcePath, slug);
 	const prTitle = synthesiseProposeTitle({
 		type: (input.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE,
 		slug,
@@ -819,6 +842,17 @@ function defaultSummary(inProgressPath: string, slug: string): string {
 	} catch {
 		title = undefined;
 	}
+	return summaryFromTitle(title, slug);
+}
+
+/**
+ * The PURE commit-summary derivation from a (possibly absent) item title — the
+ * shared core of {@link defaultSummary} (file-read path) and the lifecycle's
+ * EXPLICIT-title path (intake, whose output file is not written until {@link
+ * IntegrationLifecycle.stage}, AFTER the title read). Strips a leading `slug — `
+ * prefix; falls back to the generic summary when the title is missing/empty.
+ */
+function summaryFromTitle(title: string | undefined, slug: string): string {
 	if (!title) {
 		return 'complete work slice';
 	}

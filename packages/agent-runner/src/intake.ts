@@ -1041,9 +1041,13 @@ async function dispatchSlice(params: {
 		provider,
 		type: 'feat',
 		lifecycle: {
-			// The emitted slice IS the title source — read it from the path the stage
-			// writes (before nothing moves it; the file persists).
+			// The emitted slice IS the title source. Pass the DRAFTED title EXPLICITLY
+			// (not a read-from-path): `stage()` WRITES `work/backlog/<slug>.md` AFTER the
+			// core reads the title, so a `titlePath` read would race the write and degrade
+			// the commit subject / PR title to the generic fallback. `titlePath` stays set
+			// (the lifecycle contract requires it) but is IGNORED while `title` is present.
 			titlePath: join(cwd, relPath),
+			title: review.title,
 			commitTag: 'intake',
 			stage: () => stageIntakeSlice({cwd, relPath, content: sliceContent, env}),
 		},
@@ -1141,7 +1145,11 @@ async function dispatchPrd(params: {
 		provider,
 		type: 'feat',
 		lifecycle: {
+			// The emitted PRD IS the title source. Pass the DRAFTED title EXPLICITLY (same
+			// race as the slice path: `stage()` writes `work/prd/<slug>.md` AFTER the title
+			// read). `titlePath` stays set but is IGNORED while `title` is present.
 			titlePath: join(cwd, relPath),
+			title: verdict.prdTitle ?? slug,
 			commitTag: 'intake',
 			stage: () => stageIntakeSlice({cwd, relPath, content: prdContent, env}),
 		},
