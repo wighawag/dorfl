@@ -64,3 +64,7 @@ agent-runner claim advance-drivers-and-gates --arbiter origin
 git fetch origin && git switch -c work/advance-drivers-and-gates origin/main
 git mv work/in-progress/advance-drivers-and-gates.md work/done/advance-drivers-and-gates.md
 ```
+
+## Needs attention
+
+acceptance gate failed (exit 1)
