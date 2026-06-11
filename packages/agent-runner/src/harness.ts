@@ -212,6 +212,21 @@ export interface Harness {
 }
 
 /**
+ * Is this `spawnSync.error` a BENIGN failure of the prompt write, safe to
+ * ignore? The null/shell adapter feeds `input.prompt` to the child on stdin
+ * (`spawnSync('bash', …, {input})`). When the prompt is EMPTY — the autonomous
+ * review/arbiter launches that just shell out and capture stdout — a child that
+ * closes its stdin before the parent's (zero-byte) write surfaces as `EPIPE`
+ * under concurrent test load. That write failing is harmless: there was nothing
+ * to deliver, and the child's stdout/exit status are still captured normally.
+ * So we treat ONLY `EPIPE` as benign and let every OTHER spawn error (`ENOENT`,
+ * `EACCES`, buffer overflow, …) throw — those are real launch failures.
+ */
+export function isBenignPromptWriteError(error: Error): boolean {
+	return (error as NodeJS.ErrnoException).code === 'EPIPE';
+}
+
+/**
  * The **null adapter**: runs the configured command synchronously to completion
  * in the job dir, recording the PID. Liveness is `process.kill(pid, 0)` against
  * the recorded PID (the OS process table) — explicitly NOT a file mtime. Because
@@ -232,7 +247,7 @@ export class NullHarness implements Harness {
 			env: input.env ?? process.env,
 			maxBuffer: 64 * 1024 * 1024,
 		});
-		if (result.error) {
+		if (result.error && !isBenignPromptWriteError(result.error)) {
 			throw new Error(
 				`failed to spawn harness command: ${result.error.message}`,
 			);
