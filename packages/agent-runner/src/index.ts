@@ -220,6 +220,26 @@ export type {
 } from './claim-cas.js';
 export {performClaim} from './claim-cas.js';
 
+export type {
+	AcquireAdvancingLockOutcome,
+	AcquireAdvancingLockExitCode,
+	AcquireAdvancingLockOptions,
+	AcquireAdvancingLockResult,
+	ReleaseAdvancingLockOutcome,
+	ReleaseAdvancingLockExitCode,
+	ReleaseAdvancingLockOptions,
+	ReleaseAdvancingLockResult,
+	CreateItemOutcome,
+	CreateItemExitCode,
+	CreateItemThroughCasOptions,
+	CreateItemThroughCasResult,
+} from './advancing-lock.js';
+export {
+	acquireAdvancingLock,
+	releaseAdvancingLock,
+	createItemThroughCas,
+} from './advancing-lock.js';
+
 export type {StartOutcome, StartOptions, StartResult} from './start.js';
 export {performStart} from './start.js';
 
