@@ -589,6 +589,18 @@ export async function performIntegration(
 				'(Did the agent produce changes? Is the slice already done?)',
 		);
 	}
+	// SCOOP + REPORT agent-authored CAPTURED NOTES (slice `runner-scoops-captured-notes`,
+	// advance-loop's reporting-channel fold-in). A rung's agent may write capture-bucket
+	// files (`work/observations/*`, `work/findings/*`) during its run — its `capture-signal`
+	// reflex — but it does NO git (Rule A). The `git add -A` above already SWEEPS them into
+	// THIS one runner-owned commit (the same way the review-nits observation rides it), so
+	// they are TRACKED, not dropped/untracked. Rule B is extended HERE: the runner REPORTS
+	// exactly which note files landed (honest reporting — what actually reached the commit,
+	// read from the staged set, not assumed). This is the ONE shared place — BOTH the build
+	// path (`do <slice>`/`run`/`complete`) and the slicing path (`do prd:`, via the
+	// `lifecycle` seam) route through it, so the channel is NOT forked. Zero notes ⇒ no
+	// report (the no-note case is byte-for-byte unchanged).
+	await reportScoopedNotes(cwd, env, note);
 	const summary = input.message ?? defaultMessage;
 	const type = (input.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE;
 	// The trailing transition tag: a build is `; done`, a SLICING transition is
@@ -1064,6 +1076,70 @@ async function nothingStaged(
 	// `diff --cached --quiet` exits 0 when there is NOTHING staged, 1 when there is.
 	const res = await gitSoft(['diff', '--cached', '--quiet'], cwd, env);
 	return res.status === 0;
+}
+
+/**
+ * The capture-bucket folders a rung's agent may write notes into (its
+ * `capture-signal` reflex). REPORTED by {@link reportScoopedNotes} when the
+ * runner's atomic commit scoops them. Deliberately NARROW (only the two capture
+ * buckets) so accidental scratch files the agent left elsewhere are not announced
+ * as captured signals — matching the observation's recommended scope.
+ */
+const CAPTURE_NOTE_DIRS = ['work/observations/', 'work/findings/'] as const;
+
+/**
+ * SCOOP + REPORT the agent-authored CAPTURED NOTES this run's atomic commit is
+ * landing (slice `runner-scoops-captured-notes`). A rung's agent writes
+ * capture-bucket files (`work/observations/*`, `work/findings/*`) but does NO git
+ * (Rule A); the caller's `git add -A` already STAGED them into THIS commit, so
+ * they are tracked, not dropped. This extends Rule B: the runner REPORTS exactly
+ * which note files landed — read from the STAGED set (`git diff --cached`), so it
+ * reports what ACTUALLY reached the commit, never an assumption.
+ *
+ * It is honest reporting, the same model as the review-nits observation report:
+ * a PLAIN read + `note(...)`, no extra git (the commit owns the files). Zero
+ * captured notes ⇒ NOTHING is reported (the no-note case is byte-for-byte
+ * unchanged). Read-only / best-effort: a failed status read reports nothing
+ * rather than crashing the integrate. Because it lives in the shared core, BOTH
+ * the build path AND the slicing path report identically — the channel is not
+ * forked.
+ */
+async function reportScoopedNotes(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+	note: (message: string) => void,
+): Promise<void> {
+	const notes = await stagedCaptureNotes(cwd, env);
+	if (notes.length === 0) {
+		return;
+	}
+	note(
+		`Scooped ${notes.length} agent-authored captured note` +
+			`${notes.length === 1 ? '' : 's'} into this commit: ${notes.join(', ')}.`,
+	);
+}
+
+/**
+ * The repo-relative paths of the capture-bucket files (`work/observations/*`,
+ * `work/findings/*`) STAGED for THIS commit — i.e. new-or-changed vs HEAD, exactly
+ * what the runner is about to land. Read via `git diff --cached --name-only` so it
+ * reflects the real staged set (`git add -A` already ran), filtered to the capture
+ * buckets and sorted for a deterministic report. Best-effort: a non-zero status
+ * reads as no notes (never crashes the integrate). Exported-free; pure read.
+ */
+async function stagedCaptureNotes(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string[]> {
+	const res = await gitSoft(['diff', '--cached', '--name-only'], cwd, env);
+	if (res.status !== 0) {
+		return [];
+	}
+	return res.stdout
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((path) => CAPTURE_NOTE_DIRS.some((dir) => path.startsWith(dir)))
+		.sort();
 }
 
 /**
