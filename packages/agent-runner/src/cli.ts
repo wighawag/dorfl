@@ -56,6 +56,7 @@ import {
 	harnessFlagOverrides,
 	doFlagOverrides,
 	doNeedsAgentCmd,
+	NO_AGENT_CMD_MESSAGE,
 	reviewFlagOverrides,
 } from './do-config.js';
 import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
@@ -744,10 +745,9 @@ export function buildProgram(): Command {
 			);
 			// The null adapter shells out to agentCmd, so it is required there; the
 			// pi adapter invokes the pi CLI directly and does not consume agentCmd.
-			if (config.harness !== 'pi' && config.agentCmd.trim() === '') {
-				throw new Error(
-					'no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
-				);
+			// Share the ONE predicate (doNeedsAgentCmd) with `do`/`--remote`.
+			if (doNeedsAgentCmd(config)) {
+				throw new Error(NO_AGENT_CMD_MESSAGE);
 			}
 			const workspace = flags.workspace ?? config.workspacesDir;
 			// Gate 2 (PR/code review): wire the PRODUCTION harness-backed gate ONLY when
@@ -1487,9 +1487,7 @@ export function buildProgram(): Command {
 					note: (message) => console.error(`>> ${message}`),
 				});
 				if (doNeedsAgentCmd(remoteConfig)) {
-					console.error(
-						'error: no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
-					);
+					console.error(`error: ${NO_AGENT_CMD_MESSAGE}`);
 					process.exit(1);
 				}
 				const remoteHarness = createHarness({
@@ -1572,9 +1570,7 @@ export function buildProgram(): Command {
 			// The null adapter shells out to agentCmd, so it is required there; the
 			// pi adapter invokes the pi CLI directly and does not consume agentCmd.
 			if (doNeedsAgentCmd(config)) {
-				console.error(
-					'error: no agentCmd configured — set `agentCmd` in config or pass --agent-cmd.',
-				);
+				console.error(`error: ${NO_AGENT_CMD_MESSAGE}`);
 				process.exit(1);
 			}
 			const harness = createHarness({

@@ -170,10 +170,20 @@ export function slicerLoopFlagOverrides(flags: SlicerLoopFlags): PartialConfig {
  * The null-default guard: the `null` adapter shells out to `agentCmd`, so it is
  * required there; the `pi` adapter invokes the pi CLI directly and does not
  * consume `agentCmd`. Returns `true` when the resolved config selects the null
- * adapter with no `agentCmd` — the case `do`/`run` must reject with a clear
- * "no agentCmd configured" error. (Same predicate both commands inline; named
- * here so the fix's no-regression test can pin it.)
+ * adapter with no `agentCmd` — the case `do`/`run`/`--remote` must reject with a
+ * clear error ({@link NO_AGENT_CMD_MESSAGE}). All three CLI sites call THIS one
+ * predicate (named here so the fix's no-regression test can pin it).
  */
 export function doNeedsAgentCmd(config: Config): boolean {
 	return config.harness !== 'pi' && config.agentCmd.trim() === '';
 }
+
+/**
+ * The shared up-front message for the {@link doNeedsAgentCmd} refusal. Names BOTH
+ * escape hatches: the `--harness pi` adapter (which needs no agentCmd) and
+ * setting `harness`/`agentCmd` in config. Shared so `do`/`run`/`--remote` speak
+ * with one voice (and the test that pins `--harness pi` only has to pin it once).
+ */
+export const NO_AGENT_CMD_MESSAGE =
+	'no harness configured and no agentCmd set — nothing would run. Pass ' +
+	'--harness pi (or set harness/agentCmd in .agent-runner.json or global config).';

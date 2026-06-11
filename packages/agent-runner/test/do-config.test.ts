@@ -4,7 +4,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {mergeConfig} from '../src/config.js';
 import {resolveRepoConfig} from '../src/repo-config.js';
-import {doFlagOverrides, doNeedsAgentCmd} from '../src/do-config.js';
+import {
+	doFlagOverrides,
+	doNeedsAgentCmd,
+	NO_AGENT_CMD_MESSAGE,
+} from '../src/do-config.js';
 
 /**
  * The `do-threads-harness-flags` slice: `do` DECLARES `--harness`,
@@ -129,5 +133,14 @@ describe('do — null-default guard (no regression)', () => {
 		expect(resolved.config.harness).not.toBe('pi');
 		expect(resolved.config.agentCmd.trim()).toBe('');
 		expect(doNeedsAgentCmd(resolved.config)).toBe(true);
+	});
+});
+
+describe('NO_AGENT_CMD_MESSAGE — the shared up-front refusal message', () => {
+	it('names the --harness pi escape hatch (alongside setting harness/agentCmd)', () => {
+		// The message `do`/`run`/`--remote` all emit must point at BOTH escape
+		// hatches: the pi adapter (no agentCmd needed) and config.
+		expect(NO_AGENT_CMD_MESSAGE).toContain('--harness pi');
+		expect(NO_AGENT_CMD_MESSAGE).toMatch(/harness\/agentCmd|harness.*agentCmd/);
 	});
 });

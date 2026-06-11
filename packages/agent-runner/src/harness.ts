@@ -237,6 +237,20 @@ export class NullHarness implements Harness {
 	readonly adapter = 'null';
 
 	launch(input: LaunchInput): LaunchResult {
+		// BACKSTOP (config error, NOT a spawn failure): an empty/whitespace command
+		// resolves the null adapter to `bash -c ''`, which exits 0 with no output — a
+		// "successful" build that ran NOTHING. The `do`/`run`/`--remote` CLI sites
+		// already refuse this up-front (doNeedsAgentCmd), but THIS seam can be reached
+		// by other callers (tests, embeddings, future paths), so it must refuse too.
+		// Distinct from the `result.error` spawn-failure throw below: this names the
+		// config cause + the fix, in the voice of `launchInteractive`/`substituteModel`.
+		if (input.command.trim() === '') {
+			throw new Error(
+				'no command to run: the null/shell adapter was launched with an empty ' +
+					'agentCmd — nothing would run. Set `agentCmd` (--agent-cmd, per-repo, or ' +
+					'global config) or configure `harness: pi`.',
+			);
+		}
 		// Inject the model routing intent into the shell command via the `{model}`
 		// placeholder (ADR §13) — offered, never forced (see substituteModel).
 		const command = substituteModel(input.command, input.model);
