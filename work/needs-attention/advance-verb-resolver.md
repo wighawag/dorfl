@@ -64,3 +64,7 @@ agent-runner claim advance-verb-resolver --arbiter origin
 git fetch origin && git switch -c work/advance-verb-resolver origin/main
 git mv work/in-progress/advance-verb-resolver.md work/done/advance-verb-resolver.md
 ```
+
+## Needs attention
+
+transient infra: {"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_011CbwpN666Kz46qPnsmf2ZY"           }
