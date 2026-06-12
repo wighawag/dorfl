@@ -1,0 +1,19 @@
+---
+title: review-gate non-blocking nits for 'work-branch-push-retry-on-stale-lease' (Gate 2 approve)
+date: 2026-06-12
+status: open
+slug: work-branch-push-retry-on-stale-lease
+---
+
+## Non-blocking review findings
+
+The PR/code review gate (Gate 2) APPROVED 'work-branch-push-retry-on-stale-lease' but raised the
+following non-blocking findings (nits). They do not block integration; this
+is their durable home for triage — promote-to-slice / keep / delete.
+
+- Ratify the implicit→explicit lease change: the original continue-path push used `--force-with-lease=<branch>` (implicit, git infers the expected value from the remote-tracking ref); the new helper uses `--force-with-lease=<branch>:<expectedTip>` (explicit). This is a behaviour change to the lease form on this path, not just an addition. Is the explicit form the intended permanent shape here?
+  (The doc justifies it: a bare-hub-mirror worktree has no `refs/remotes/origin/*` upstream for git to imply the lease from, so the explicit `<branch>:<sha>` is required for the CAS to be meaningful. `expectedTip` is sourced from the mirror's local `work/<slug>` head read before the onboard rebase (the value the arbiter held at mirror-fetch time) — a sound choice. It is now exercised by both the new `pushContinuedBranchWithStaleLeaseRetry` tests and the existing `createJob` continue flow (`requeue-continue-and-reset.test.ts`), and is consistent with `ledger-write.ts`'s explicit `--force-with-lease=main:<base>`. Flagging only so a human ratifies that the continue path deliberately moves to the explicit lease form (the sibling reconcile sites in `start.ts`/`isolation.ts` still use the implicit `--force-with-lease=<branch>`).)
+- On retry-cap exhaustion (and on any non-stale push failure) the helper THROWS out of `createJob`; in `run.ts` the `try` wrapping `strategy.prepare()` has only a `finally`, so the throw is NOT caught and the item surfaces as `claim-error`, NOT routed through the needs-attention seam. The slice's acceptance criterion says the terminal failure should leave the item "routed to needs-attention as today." Should the terminal throw be routed through the needs-attention seam (ledger surface + best-effort branch push) rather than surfacing as `claim-error`?
+  (The green work IS still committed on the local work branch in the retained job worktree (recoverable by hand or on the next claim), and a CLEAR terminal message is produced — so never-lose-work holds and this is strictly better than the prior behaviour (the original `run(...)` push swallowed the failure silently, returning as if pushed: the actual incident). But `claim-error` is a different terminal label than the slice's "needs-attention," and the helper's own doc-comment ("so the caller's needs-attention route keeps it recoverable") overstates the wiring. A human should decide whether to wrap `strategy.prepare()` in a catch that routes through `saveAgentFailure`/the needs-attention seam, or to accept `claim-error` as the honest terminal state and correct the doc-comment.)
+- The same single `--force-with-lease=<branch>` continue-path push exists at two sibling sites left untouched (`isolation.ts` in-place checkout strategy, and `start.ts` `switchToWorkBranch`), which share the identical latent stale-lease failure mode but were not routed through the new helper. Ratify that deferring them is acceptable.
+  (This is correctly OUT of this slice's scope (the slice targets only the `createJob` job-worktree path — the observed `advance-verb-resolver` incident), and the agent recorded it in `work/observations/stale-lease-retry-only-on-job-worktree-path.md` plus there is a related consolidation slice (`centralise-bounce-branch-push`). Flagged so a human can decide whether to spin a follow-up slice factoring those two pushes through `pushContinuedBranchWithStaleLeaseRetry`.)
