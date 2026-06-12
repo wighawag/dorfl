@@ -671,6 +671,36 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		};
 	}
 
+	// 4b. CONTINUE reconcile-push TERMINAL failure (the stale-lease-strand bug):
+	//     the onboard reconcile push of the kept (already-committed) work branch
+	//     FAILED terminally (stale-lease cap exhausted, or a non-stale-lease
+	//     rejection / unreachable arbiter). The push helper THROWS; the strategy
+	//     CATCHES it and flags `continuePushFailure` so the run does NOT crash
+	//     leaving the slice silently in-progress. Route to needs-attention via the
+	//     SAME seam — the kept branch already on the arbiter (recoverable).
+	if (tree.continuePushFailure !== undefined) {
+		const reason =
+			`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
+			`to the arbiter failed terminally (${tree.continuePushFailure}) — the kept ` +
+			'branch is left intact on the arbiter (recoverable); `requeue` to retry ' +
+			'once the churn settles, or `requeue --reset` to discard and start fresh';
+		await ledgerWrite.applyNeedsAttentionTransition({
+			cwd: tree.dir,
+			slug,
+			reason,
+			arbiter: tree.arbiterRemote,
+			env,
+			note,
+		});
+		return {
+			exitCode: 1,
+			outcome: 'needs-attention',
+			slug,
+			branch,
+			message: reason,
+		};
+	}
+
 	// 5. Run the agent autonomously in the checkout, ON the work branch — the
 	//    SAME prompt assembly `agent-runner prompt` emits (canonical wrapper +
 	//    source PRD + the slice's ## Prompt). The agent only edits code (it does
@@ -1498,6 +1528,39 @@ async function runRemotePipeline(
 			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
+		await ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			arbiter: arbiterRemote,
+			env,
+			note,
+		});
+		return {
+			exitCode: 1,
+			outcome: 'needs-attention',
+			slug,
+			branch: tree.branch,
+			message: reason,
+		};
+	}
+
+	// 4b. CONTINUE reconcile-push TERMINAL failure (the stale-lease-strand bug this
+	//     fix kills): the onboard reconcile push of the kept (already-committed)
+	//     work branch to the arbiter FAILED terminally (the stale-lease retry cap
+	//     exhausted, or a non-stale-lease rejection / unreachable arbiter). The push
+	//     helper THROWS; `createJob` CATCHES it and flags `continuePushFailure`
+	//     rather than letting the throw escape (which crashed the run and left the
+	//     slice silently in `work/in-progress/` on the arbiter, the work stranded in
+	//     the worktree). Route to needs-attention via the SAME seam the conflict path
+	//     uses — surfaced on the arbiter, the kept branch already on the arbiter from
+	//     the prior requeue (recoverable) — instead of running the agent.
+	if (tree.continuePushFailure !== undefined) {
+		const reason =
+			`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
+			`to the arbiter failed terminally (${tree.continuePushFailure}) — the kept ` +
+			'branch is left intact on the arbiter (recoverable); `requeue` to retry ' +
+			'once the churn settles, or `requeue --reset` to discard and start fresh';
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd,
 			slug,
