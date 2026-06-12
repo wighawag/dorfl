@@ -1,8 +1,10 @@
 ---
 title: the drive-backlog skill is written for IN-PLACE `do` only — it needs a `--remote` mode (and an open question whether `--remote` should be the ONLY way the conductor builds, leaving local main alone)
 date: 2026-06-11
-status: open
+status: resolved
 ---
+
+> RESOLVED 2026-06-12 (maintainer decision). The open question — "should `--remote`/`--isolated` be the ONLY way the conductor builds?" — was answered **YES**: `drive-backlog` now ALWAYS builds `--isolated` (a worktree off the arbiter), with NO in-place fallback. A local-only/un-pushed slice is pushed to the arbiter first rather than built in-place. The skill also no longer hardcodes `--review`/`--propose`: `--isolated` is the one pinned flag, review/integration mode is left to config (the autonomy-gate family — `review`/`allowAgents`/`autoSlice`/`autoTriage` — stays human-first off-by-default; `--propose` is already `do`'s default), and the conductor CONFIRMS the run mode with the user at the start of a drive. Implemented in `skills/drive-backlog/SKILL.md`. Kept for provenance.
 
 ## The signal
 
