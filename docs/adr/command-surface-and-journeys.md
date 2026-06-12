@@ -60,7 +60,7 @@ A sharp boundary, NOT two flavours of one thing:
       | `do --isolated <slug>` | current | a job worktree off THIS repo's arbiter |
       | `do --remote <r> <slug>` | foreign | a job worktree (isolation implied — no checkout exists) |
 
-      `--remote` names the targeting axis (a foreign repo; isolation there is incidental); `--isolated` names the isolation intent (a worktree off my own arbiter) — the affordance an isolated supervised conductor needs without forcing a foreign URL. The two are orthogonal and `--isolated` is purely additive. **Decided 2026-06-08; the `--isolated` form is pending build (slice `do-isolated-in-place`) — the in-place and `--remote` forms ship today.**
+      `--remote` names the targeting axis (a foreign repo; isolation there is incidental); `--isolated` names the isolation intent (a worktree off my own arbiter) — the affordance an isolated supervised conductor needs without forcing a foreign URL. The two are orthogonal and `--isolated` is purely additive. **Decided 2026-06-08; all three forms ship today.**
   - **Auto-slice priority within a tick:** eligible **slices first, then PRDs to slice** (drain ready work before creating more), with a per-repo toggle to flip it.
 
 CI uses **`do`** (wired by the future `install-ci`), never `run --once`.
