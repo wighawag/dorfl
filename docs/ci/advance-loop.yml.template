@@ -1,11 +1,18 @@
-# agent-runner — the `advance` loop in CI (the `install-ci` notion, PRD advance-loop, US #27/28)
+# agent-runner — the `advance` loop in CI (the advance-loop capability, PRD advance-loop, US #27/28)
 #
 # ────────────────────────────────────────────────────────────────────────────
-# ONE-STEP ADOPTION ("install-ci"): copy THIS file to `.github/workflows/advance-loop.yml`
+# ONE-STEP ADOPTION: copy THIS file to `.github/workflows/advance-loop.yml`
 # in your target repo, set the secrets it references, and you are wired. It is a
 # `.template` here ON PURPOSE so it NEVER self-triggers inside the agent-runner
 # repo itself (a live `.github/workflows/*.yml` here would loop the tool on its own
 # work — see docs/ci/README.md "Why a `.template`").
+#
+# THIS IS ONE CAPABILITY, not the whole CI story. The unified per-capability
+# `install-ci` CLI (auth/secrets wizard + GitHub adapter; auto-build/auto-slice,
+# this advance loop, issue intake, the close-job, the gc sweep) is owned by the
+# `runner-in-ci` PRD (work/prd/runner-in-ci.md); when built it EMITS this template
+# as its advance-loop capability. Edit the workflow shape HERE to change what that
+# CLI emits. See docs/ci/README.md "Relationship to the `install-ci` CLI".
 # ────────────────────────────────────────────────────────────────────────────
 #
 # WHAT IT DOES. It only INVOKES the existing `advance` driver (the substrate-agnostic

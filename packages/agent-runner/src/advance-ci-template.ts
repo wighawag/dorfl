@@ -4,11 +4,18 @@ import {fileURLToPath} from 'node:url';
 
 /**
  * The CI-integration deliverable for the `advance` loop (PRD `advance-loop`,
- * slice `advance-install-ci`, US #27/28) — the **`install-ci` notion** as a
+ * slice `advance-install-ci`, US #27/28): the advance-loop CAPABILITY as a
  * DOCUMENTED workflow TEMPLATE (not a CLI subcommand; see the slice's `##
  * Decisions`). The template at `docs/ci/advance-loop.yml.template` wires "on cron
- * / on-answer-committed → run the RIGHT shape" and only INVOKES the existing
- * `advance` driver — it is NOT entangled with the tick.
+ * / on-answer-committed, run the RIGHT shape" and only INVOKES the existing
+ * `advance` driver; it is NOT entangled with the tick.
+ *
+ * The unified, per-capability `install-ci` CLI (auth/secrets wizard + GitHub
+ * adapter) is owned by the separate `runner-in-ci` PRD
+ * (`work/prd/runner-in-ci.md`); when built it EMITS this template as its
+ * advance-loop capability. This module's job is unchanged either way: locate +
+ * STRUCTURALLY VALIDATE the template, so its shape is a contract the CLI can
+ * safely emit (see `docs/ci/README.md` "Relationship to the `install-ci` CLI").
  *
  * This module locates + reads that template and STRUCTURALLY VALIDATES it. The
  * package depends on NO YAML library (see `frontmatter.ts` for the same

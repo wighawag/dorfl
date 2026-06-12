@@ -1,10 +1,18 @@
 # CI integration for the `advance` loop (the `install-ci` notion)
 
 This directory holds the **GitHub Actions workflow TEMPLATE** that wires the
-`advance` loop into CI — "on cron / on-answer-committed → run the right shape"
-(PRD `advance-loop`, US #27/28). It is the lightweight `install-ci` deliverable:
-CI adoption is **one step** and is **not entangled with the tick** (the workflow
-only INVOKES the existing `advance` driver).
+`advance` loop into CI: "on cron / on-answer-committed, run the right shape"
+(PRD `advance-loop`, US #27/28). It is the lightweight, advance-loop-specific CI
+deliverable: CI adoption is **one step** and is **not entangled with the tick**
+(the workflow only INVOKES the existing `advance` driver).
+
+> **This template is the advance-loop CAPABILITY, not the whole CI story.** The
+> unified, per-capability `install-ci` CLI (auth/secrets wizard, GitHub adapter,
+> issue intake, the close-job, the gc sweep, and this advance loop, each
+> independently selectable) is owned by the separate **`runner-in-ci`** PRD
+> (`work/prd/runner-in-ci.md`). That command will EMIT this very template as its
+> advance-loop capability. Until then, copy this template by hand (below). See
+> "Relationship to the `install-ci` CLI" at the bottom.
 
 ## One-step adoption
 
@@ -90,16 +98,31 @@ the agent-runner repo itself would self-trigger and loop the tool on its OWN
 `work/` tree unintentionally. The `.template` suffix keeps it inert here; it only
 becomes live when a consumer copies it into their own `.github/workflows/`.
 
-## Why a documented copy, not a CLI `install-ci` subcommand
+## Relationship to the `install-ci` CLI (a documented copy, for now)
 
-The PRD calls this "the `install-ci` notion", not a hard CLI surface, and lets the
-slice pick the lighter option. A documented template copy is chosen because:
+The `advance-loop` slice shipped this as a **documented template copy**, not a CLI
+verb, on purpose:
 
 - it is the lighter deliverable (a file + this doc, no new CLI verb, no wizard);
-- the **`install-ci` CLI surface is already owned by the separate `runner-in-ci`
-  PRD** (a per-capability scaffolder that also wires auth/secrets for the BUILD
-  `do` path). Minting an `install-ci` CLI verb HERE would collide with that
-  concept at a broader layer and fork it. Keeping this an advance-specific
-  documented template lets `runner-in-ci` later own the unified `install-ci`
-  command (which can emit this very template as its advance-loop capability)
-  without this slice pre-claiming the name.
+- the **`install-ci` CLI surface is owned by the separate `runner-in-ci` PRD**
+  (`work/prd/runner-in-ci.md`): a per-capability, provider-pluggable scaffolder
+  (auth/secrets wizard + GitHub adapter) that wires EVERY autonomous CI rung
+  (auto-build / auto-slice via `do`/`advance`, the advance answer loop, issue
+  `intake`, the issue close-job, and the `gc` merged-branch sweep), each
+  independently selectable and independently integration-moded. Minting an
+  `install-ci` CLI verb HERE would fork that broader concept.
+
+So the division of labour is settled:
+
+- **This directory** owns the advance-loop workflow SHAPE (the cron +
+  answer-committed triggers, the `integrationMode`-drives-both discipline, the
+  propose-matrix / merge-sequential split). It is validated by shipped code
+  (`src/advance-ci-template.ts` + `test/advance-ci-template.test.ts`), so its
+  structure is a contract, not a sketch.
+- **`runner-in-ci`'s `install-ci`** will, when built, **EMIT this template**
+  (parameterised with the auth/setup block) as its advance-loop capability,
+  rather than hand-rolling a second advance workflow. Editing the workflow shape
+  here is therefore the way to change what `install-ci` emits for that capability.
+
+Until `install-ci` lands, adopt the advance loop by the manual copy at the top of
+this doc.
