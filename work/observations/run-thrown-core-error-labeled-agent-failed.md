@@ -1,8 +1,22 @@
 ---
 title: run labels a THROWN core error (e.g. Gate-2 wiring misconfig) as ItemStatus 'agent-failed' — imprecise; a wiring/config error reads as if the agent misbehaved
 date: 2026-06-07
-status: open
+status: resolved
 ---
+
+## RESOLVED (2026-06-12)
+
+The divergence this observation flagged is CLOSED. Commit `3e7df84` (2026-06-09)
+routed `run`'s `saveAgentFailure` through `classifyFailureCause`, so a thrown CORE
+wiring/config error (the `review`-on-no-`reviewGate` misconfig, message containing
+"wiring bug") is now `ItemStatus: 'config-error'` (NOT `agent-failed`) — the SAME
+label `do` records for the SAME error (the `do`-vs-`run` cross-path divergence the
+"question to think through" below described is gone; both classify identically via
+the one `classifyFailureCause`). The slice `run-internal-error-tests` PINS that
+current behaviour with a regression test (`test/run-internal-error-tests.test.ts`,
+the `run`-side mirror of `test/do.test.ts`'s twin). Kept (not deleted) for
+provenance: the open question below is now answered IN CODE (a distinct
+`config-error` status), so treat the prose below as historical.
 
 ## The signal
 
