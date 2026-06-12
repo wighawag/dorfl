@@ -67,3 +67,23 @@ agent-runner claim recover-stranded-green-work --arbiter origin
 git fetch origin && git switch -c work/recover-stranded-green-work origin/main
 git mv work/in-progress/recover-stranded-green-work.md work/done/recover-stranded-green-work.md
 ```
+
+## Needs attention
+
+The slice's load-bearing premise is FALSE and was verified empirically against current code (packages/agent-runner). The slice claims: "`complete` already does the recovery OPERATION (gate → done-move → commit → rebase → performIntegration) ... The only missing piece is pointing it at the retained job worktree ... the ONLY new code is: resolve `--isolated <slug>` → the existing worktree dir, set complete's cwd to it."
+
+That is not true for the stranded-green state. In `integration-core.ts` `performIntegration` runs in this ORDER: (1) gate, (2) done-move `git mv work/<source>/<slug>.md → work/done/<slug>.md`, (3) `git add -A` + commit, (4) rebase, (5) integrate/PUSH. A TERMINAL push failure happens at step 5 — AFTER the done-move and commit. So the retained worktree the reaper keeps is in this state (reproduced via a throwaway-git fixture: an offlining agent that breaks `origin` after editing, exactly like `test/do-remote.test.ts`'s retain test):
+  - `work/done/<slug>.md` PRESENT; `work/in-progress/<slug>.md` and `work/needs-attention/<slug>.md` ABSENT
+  - the green work ALREADY committed on `work/slice-<slug>` (`feat(<slug>): ...; done`), tip NOT on the arbiter
+  - `do`'s outcome was `usage-error` (the push throw is swallowed by `performComplete`'s try/catch, NOT routed to needs-attention)
+
+Running `complete` against that worktree (cwd = worktree, arbiter = `origin`, even with `--skip-verify`) therefore returns `refused`, NOT `completed`: `runComplete`/`performIntegration` resolve the source folder as `in-progress` || `needs-attention` (never `done/`), find neither, and `IntegrationNothingStaged` fires (the done-move + commit already happened, so nothing is left to stage). I confirmed this directly: `performComplete({slug, cwd: worktree, arbiter:'origin', integration:'merge', skipVerify:true})` → `outcome: 'refused'`, exit 1, work NOT on the arbiter.
+
+So "locate the worktree + set complete's cwd" is necessary but NOT sufficient — it does not integrate the stranded commit; it refuses. Genuine recovery requires a NEW capability the slice does not scope: integrate an ALREADY-committed, already-done-moved work branch (item already in `done/`) by SKIPPING the done-move/commit and running only (rebase →) integrate/push. That is a new source-state path through the SHARED `integration-core.ts` (consumed by `do`, `run`, AND `complete`) plus a change to `complete.ts`'s source-folder resolution — load-bearing, hard-to-reverse, and touching other commands' integration machinery. This is the exact "design decision that no longer matches the code" STOP criterion, not a small self-contained factual gap.
+
+Suggested re-scope (for a human to ratify before re-dispatch):
+1. Add an explicit "recover already-committed work" source state to the shared integration core: when the item is already in `work/done/<slug>.md` AND the work branch tip is already committed but not on the arbiter, SKIP steps 2–3 (done-move + commit) and run only step 4 (rebase onto `<arbiter>/main`) → step 5 (integrate/push) — reusing `performIntegration`'s tail, never `--force` to main. Decide the surface: a new internal `source: 'done'` / `recovering: 'committed'` mode threaded through `IntegrationCoreInput`, or a dedicated thin recovery entry that calls only the rebase+integrate tail.
+2. THEN add the `--isolated <slug>` locate-existing resolver (resolve arbiter URL from cwd via `resolveArbiterUrlFromCheckout` → `jobWorktreePath`/`encodeWorkId` → require a present worktree with a job record) and point that recovery path's `cwd` at it (arbiter remote inside the worktree = `origin`), plus `resume --isolated` and the `do`-integration-failure recovery-command surfacing.
+3. Note a secondary discrepancy to resolve in the same pass: the incident/slice say the failed-push leaves a clean stranded-green worktree, but the current `do` path returns `usage-error` (push throw swallowed) WITHOUT routing to needs-attention or pushing the branch — so cross-machine the only artifact is the LOCAL retained worktree. Confirm that is the intended recovery surface for `--isolated` (it is local-only), and whether the `do` push-failure path should also surface the recovery command (the slice's 5th acceptance criterion) given it currently lands in the `usage-error` tail, not a needs-attention/`pushFailed` route.
+
+No source changes were made; the working tree is clean and `work/in-progress/recover-stranded-green-work.md` is untouched.
