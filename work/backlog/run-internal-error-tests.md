@@ -69,3 +69,7 @@ The original slice's criterion #2 + Open question asserted `status: 'agent-faile
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Requeue 2026-06-12
+
+False gate red: 1605/1606 passed; the ONE failure is the KNOWN same-slug-race CAS flake (test/advance-triage.test.ts 'a same-slug new-item race ⇒ exactly one promote creates' — '2 winners' under full parallel suite load). PR #90's distinct-committer-identity fix (racerEnv/raceClone) is present and correct on main; this is a residual timing window in the path-exists/lease CAS under heavy parallel load, NOT this tests-only slice's work (it touches claim-cas + run paths, not the triage CAS). Re-run.
