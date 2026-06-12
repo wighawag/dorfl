@@ -1,5 +1,0 @@
-2026-06-11 — `test/advance-triage.test.ts`'s "a same-slug new-item race ⇒ exactly one promote creates, the loser fails CAS" flakes under the FULL parallel suite (`pnpm -r test`): it expected exactly one CAS winner but saw 2 (both exit 0). It passes deterministically in isolation (`vitest run test/advance-triage.test.ts`), so this is a concurrency/timing flake in the test's two-racing-promotes setup under load, not a product bug. Spotted while landing `mirror-side-eligible-pool-scan` (which touches no advancing-lock/CAS code).
-
-## RESOLVED 2026-06-12 (slice `triage-cas-race-test-models-real-contention`)
-
-Test-fixture sha-collision (both racers' identical-identity, identical-content create commits got the SAME sha, so the post-push verify passed for both). Fixed test-only via distinct per-racer committer identities (`racerEnv`/`raceClone` in `test/helpers/gitRepo.ts`); product CAS unchanged, one-winner assertion intact, full suite green ×8. See `advance-triage-cas-race-flaky.md` for the full diagnosis.
