@@ -19,6 +19,8 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
+	raceClone,
+	racerEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -214,8 +216,11 @@ describe('do <slug> — lost claim race is skipped cleanly', () => {
 
 	it('a genuine two-doer race: the loser skips, the winner completes', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['race']);
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer so the two claim commits get DISTINCT
+		// shas (as two real doers would) and the loser loses through the genuine CAS,
+		// not a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 
 		const [ra, rb] = await Promise.all([
 			performDo({
@@ -225,7 +230,7 @@ describe('do <slug> — lost claim race is skipped cleanly', () => {
 				integration: 'merge',
 				verify: PASS,
 				agentRunner: editingAgent,
-				env: gitEnv(),
+				env: racerEnv('a'),
 			}),
 			performDo({
 				arg: 'race',
@@ -234,7 +239,7 @@ describe('do <slug> — lost claim race is skipped cleanly', () => {
 				integration: 'merge',
 				verify: PASS,
 				agentRunner: editingAgent,
-				env: gitEnv(),
+				env: racerEnv('b'),
 			}),
 		]);
 

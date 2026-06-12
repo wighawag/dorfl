@@ -13,6 +13,8 @@ import {
 	seedRepoWithArbiter,
 	gitEnv,
 	gitIn,
+	raceClone,
+	racerEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
@@ -207,21 +209,24 @@ describe('acquireAdvancingLock — usage / env errors (exit 1)', () => {
 describe('advancing-lock race — exactly one winner', () => {
 	it('two simultaneous ticks ⇒ one acquires, the loser gets exit-2', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer so the two lock micro-commits get
+		// DISTINCT shas (as two real ticks would) and the loser loses through the
+		// genuine path-exists/lease CAS, not a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 
 		const [ra, rb] = await Promise.all([
 			acquireAdvancingLock({
 				item: 'slice:solo',
 				cwd: a,
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('a'),
 			}),
 			acquireAdvancingLock({
 				item: 'slice:solo',
 				cwd: b,
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('b'),
 			}),
 		]);
 
@@ -365,8 +370,11 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 
 	it('a same-path new-item race ⇒ exactly one creates, the loser loses (no special case)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer so the two create commits get
+		// DISTINCT shas (as two real machines would) and the loser loses through the
+		// genuine path-exists/lease CAS, not a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 		const content = '---\ntitle: dup\nslug: dup\nblockedBy: []\n---\n';
 
 		const [ra, rb] = await Promise.all([
@@ -375,14 +383,14 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 				content,
 				cwd: a,
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('a'),
 			}),
 			createItemThroughCas({
 				path: 'work/backlog/dup.md',
 				content,
 				cwd: b,
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('b'),
 			}),
 		]);
 

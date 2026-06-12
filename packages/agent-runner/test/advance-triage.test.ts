@@ -23,6 +23,7 @@ import {
 	gitEnv,
 	gitIn,
 	seedRepoWithArbiter,
+	raceClone,
 	existsOnArbiterMain,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -378,9 +379,12 @@ describe('advance — answered triage dispositions flow through the apply path',
 	it('a same-slug new-item race ⇒ exactly one promote creates, the loser fails CAS', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		// Two clones each carrying the SAME answered observation, racing the same
-		// promoted backlog slug through the create CAS.
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// promoted backlog slug through the create CAS. Each clone gets a DISTINCT
+		// committer identity (raceClone) so the two create commits get DISTINCT shas
+		// (as two real machines would) and the loser loses through the genuine
+		// path-exists/lease CAS — NOT via a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 		for (const dir of [a, b]) {
 			seedAnsweredObservation(dir, 'dupprom', 'promote-slice');
 			gitIn(['add', '-A'], dir);

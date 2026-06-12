@@ -9,6 +9,8 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
+	raceClone,
+	racerEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -110,15 +112,28 @@ describe('start — backlog item, losing/contended claim', () => {
 
 	it('a two-claimer race: the loser creates no branch, the winner lands on its work branch', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer so the two claim commits get DISTINCT
+		// shas (as two real claimers would) and the loser loses through the genuine
+		// CAS, not a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 		const beforeA = currentBranch(a);
 		const beforeB = currentBranch(b);
 
 		// Genuinely concurrent: the arbiter ref-CAS picks the single winner.
 		const [ra, rb] = await Promise.all([
-			performStart({slug: 'solo', cwd: a, arbiter: 'arbiter', env: gitEnv()}),
-			performStart({slug: 'solo', cwd: b, arbiter: 'arbiter', env: gitEnv()}),
+			performStart({
+				slug: 'solo',
+				cwd: a,
+				arbiter: 'arbiter',
+				env: racerEnv('a'),
+			}),
+			performStart({
+				slug: 'solo',
+				cwd: b,
+				arbiter: 'arbiter',
+				env: racerEnv('b'),
+			}),
 		]);
 
 		const winners = [ra, rb].filter((r) => r.exitCode === 0);
