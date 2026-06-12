@@ -18,9 +18,15 @@ import {fileURLToPath} from 'node:url';
  *   - triggers on a CRON schedule AND on-answer-committed (a push touching
  *     `work/questions/**`);
  *   - `propose` mode → a MATRIX of independent jobs enumerated via the
- *     mirror-side pool scan (`agent-runner scan --json`), one `advance` per item;
- *   - `merge` mode → a SINGLE SEQUENTIAL job invoking the `-n` driver
- *     (`agent-runner advance -n …`, always sequential);
+ *     mirror-side pool scan (`agent-runner scan --json`), one `advance … --propose`
+ *     per item (the `--propose` flag TIES the integration mode to the matrix shape,
+ *     so a leg can never merge to main);
+ *   - `merge` mode → a SINGLE SEQUENTIAL job invoking the `-n` driver with
+ *     `--merge` (`agent-runner advance -n … --merge`, always sequential — `--merge`
+ *     rides ONLY this job, so parallel merge-to-main is structurally impossible);
+ *   - the dispatch input is `integrationMode` (ONE word, ONE meaning): it drives
+ *     BOTH the integration flag the legs pass AND the job shape, so they cannot
+ *     desync;
  *   - it references the EXISTING `advance` driver only (no new execution model);
  *   - it is a `.template` (so it never self-triggers in THIS repo).
  *
@@ -121,12 +127,36 @@ export function validateAdvanceCiTemplate(
 		text,
 	), 'each matrix leg must run one `agent-runner advance <matrix item>` ' +
 		'(one PR per item).');
+	// The matrix leg must carry `--propose` so the integration mode is TIED to the
+	// matrix shape (it cannot desync from the dispatch `integrationMode` input nor
+	// fall back to a repo config default of `merge`). Scoped to the `advance-propose`
+	// job so it is the LEG that carries it, not merely the file somewhere.
+	require('propose-leg-carries-propose-flag', /advance-propose:[\s\S]*?agent-runner advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
+		text,
+	), 'each `propose` matrix leg must pass `--propose` so the integration mode is ' +
+		'TIED to the matrix shape (a leg can never merge to main / desync from the ' +
+		'dispatch mode).');
 
 	// --- merge ⇒ a SINGLE SEQUENTIAL job invoking the `-n` driver ----------------
 	require('merge-sequential-n-driver', /agent-runner advance -n\b/.test(
 		text,
 	), '`merge` mode must run a SINGLE SEQUENTIAL job invoking the `-n` driver ' +
 		'(`agent-runner advance -n <x>`).');
+	// The sequential merge job must carry `--merge` so the integration mode is TIED
+	// to the single-sequential shape (it cannot desync from the dispatch
+	// `integrationMode` input nor fall back to a repo config default of `propose`).
+	require('merge-job-carries-merge-flag', /agent-runner advance -n\b[^\n]*--merge\b/.test(
+		text,
+	), 'the `merge` job must pass `--merge` on its `advance -n` driver so the ' +
+		'integration mode is TIED to the single-sequential shape (it cannot desync ' +
+		'from the dispatch mode / a repo config default).');
+	// And `--merge` must NOT appear on any matrix leg — a parallel merge-to-main
+	// would thrash the main-CAS. Guard that the `--merge` flag rides ONLY the
+	// sequential job, never an `advance "${{ matrix.* }}"` leg.
+	require('merge-flag-not-on-matrix-leg', !/agent-runner advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(
+		text,
+	), '`--merge` must NOT ride a matrix leg (parallel merge-to-main would thrash ' +
+		'the main-CAS); it belongs ONLY on the single sequential `advance -n` job.');
 	// A matrix must NOT appear in the merge job — guard against parallel merge
 	// (which would thrash the main-CAS). The merge job is identified by its name.
 	require('merge-no-matrix', !/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(

@@ -54,7 +54,23 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		expect(/agent-runner advance "?\$\{\{\s*matrix\./.test(text)).toBe(true);
 	});
 
-	it('merge mode is a SINGLE SEQUENTIAL job invoking the -n driver (no matrix)', () => {
+	it('each propose matrix leg carries --propose, tying integration mode to the matrix shape', () => {
+		const text = loadAdvanceCiTemplate();
+		// The fix for the Gate-2 desync bug: the matrix leg must pass `--propose` so
+		// the integration mode is TIED to the matrix shape the dispatch input picked
+		// (it can never fall back to a repo config default of `merge`).
+		expect(
+			/advance-propose:[\s\S]*?agent-runner advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
+				text,
+			),
+		).toBe(true);
+		// And `--merge` must NEVER ride a matrix leg (parallel merge-to-main thrash).
+		expect(
+			/agent-runner advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(text),
+		).toBe(false);
+	});
+
+	it('merge mode is a SINGLE SEQUENTIAL job invoking the -n driver with --merge (no matrix)', () => {
 		const text = loadAdvanceCiTemplate();
 		// The `-n` driver is always sequential; the merge job must not use a matrix
 		// (parallel merge jobs would thrash the main-CAS).
@@ -62,6 +78,19 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		expect(/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(
 			false,
 		);
+		// The sequential job carries `--merge` so its integration mode is TIED to the
+		// single-sequential shape (cannot desync from the dispatch mode / config).
+		expect(/agent-runner advance -n\b[^\n]*--merge\b/.test(text)).toBe(true);
+	});
+
+	it('uses ONE word (integrationMode) for the dispatch input that drives BOTH flag and shape', () => {
+		const text = loadAdvanceCiTemplate();
+		// Vocabulary reconciliation: the dispatch input is `integrationMode` (the same
+		// vocabulary as `.agent-runner.json`'s `integration` and `advance --propose`/
+		// `--merge`), driving BOTH the flag the legs pass and the derived job shape —
+		// not a second, independent `mode` knob that could disagree with the flag.
+		expect(text).toContain('integrationMode:');
+		expect(/github\.event\.inputs\.integrationMode/.test(text)).toBe(true);
 	});
 
 	it('only INVOKES the existing advance driver (not entangled with the tick)', () => {
@@ -120,6 +149,43 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			expect(result.ok).toBe(false);
 			expect(result.problems.map((p) => p.id)).toContain(
 				'merge-sequential-n-driver',
+			);
+		});
+
+		it('flags a propose matrix leg missing the --propose flag', () => {
+			// Drop `--propose` from the matrix leg only: the integration mode would then
+			// fall back to config and could desync from the matrix shape.
+			const broken = base.replace(
+				/(agent-runner advance "?\$\{\{\s*matrix\.item\s*\}\}"?) --propose/,
+				'$1',
+			);
+			const result = withTmpTemplate(broken);
+			expect(result.ok).toBe(false);
+			expect(result.problems.map((p) => p.id)).toContain(
+				'propose-leg-carries-propose-flag',
+			);
+		});
+
+		it('flags a merge -n job missing the --merge flag', () => {
+			const broken = base.replace(/(agent-runner advance -n 10) --merge/, '$1');
+			const result = withTmpTemplate(broken);
+			expect(result.ok).toBe(false);
+			expect(result.problems.map((p) => p.id)).toContain(
+				'merge-job-carries-merge-flag',
+			);
+		});
+
+		it('flags --merge riding a matrix leg (parallel merge-to-main thrash)', () => {
+			// Inject a forbidden `--merge` onto the matrix leg: the validator must catch
+			// that a parallel matrix could merge to main concurrently.
+			const broken = base.replace(
+				/(agent-runner advance "?\$\{\{\s*matrix\.item\s*\}\}"?) --propose/,
+				'$1 --merge',
+			);
+			const result = withTmpTemplate(broken);
+			expect(result.ok).toBe(false);
+			expect(result.problems.map((p) => p.id)).toContain(
+				'merge-flag-not-on-matrix-leg',
 			);
 		});
 	});

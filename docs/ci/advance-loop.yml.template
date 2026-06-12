@@ -14,23 +14,33 @@
 # question (a commit touching `work/questions/*`, so a freshly-answered sidecar is
 # applied promptly), plus a manual `workflow_dispatch`.
 #
-# THE TWO CI SHAPES (US #27 — each mode uses the RIGHT shape):
+# ONE WORD, ONE MEANING — `integrationMode` drives BOTH (US #27). The dispatch
+# input is the INTEGRATION MODE (propose | merge, the same vocabulary as
+# `.agent-runner.json`'s `integration` and `advance --propose`/`--merge`). The job
+# SHAPE is DERIVED from it — it is NOT a second, independent knob. So the shape the
+# legs run in and the integration mode they pass to `advance` can NEVER desync:
 #
-#   * `propose` mode  → a MATRIX of independent jobs (one per eligible item, each
-#                       opens its OWN PR). propose-mode items are independent PRs,
-#                       so a matrix is true parallelism and `-n` is not even needed.
+#   * `integrationMode: propose` → a MATRIX of independent jobs (one per eligible
+#                       item), each leg running `advance <item> --propose` so it
+#                       opens its OWN PR. propose-mode items are independent PRs, so
+#                       a matrix is true parallelism and `-n` is not even needed.
 #                       The matrix items are ENUMERATED via the mirror-side pool
 #                       scan (`agent-runner scan --json`, the registry/hub-mirror
 #                       enumeration), so CI fans out over exactly the eligible pool.
 #
-#   * `merge` mode    → a SINGLE SEQUENTIAL job. merge-mode items chain via rebase
+#   * `integrationMode: merge` → a SINGLE SEQUENTIAL job running
+#                       `advance -n <x> --merge`. merge-mode items chain via rebase
 #                       (rebase-before-integrate, ADR §10); parallel merge jobs would
-#                       THRASH the main-CAS, so merge mode runs one sequential driver
-#                       (`agent-runner advance -n <x>`, `-n` ALWAYS sequential).
+#                       THRASH the main-CAS, so merge mode runs ONE sequential driver
+#                       (`-n` is ALWAYS sequential). The `--merge` flag can ONLY ride
+#                       this sequential job — no matrix leg ever carries it — so a
+#                       parallel merge-to-main is structurally impossible.
 #
-# Pick your mode with the `mode` dispatch input (default below) or pin it in the
-# repo's `.agent-runner.json` (`integration: propose | merge`). Only the job for the
-# chosen mode runs; the other is skipped by its `if:` guard.
+# Pick the mode with the `integrationMode` dispatch input (default below). It rides
+# `advance` as `--propose`/`--merge`, which sits at the TOP of the precedence chain
+# (flag > per-repo `.agent-runner.json` `integration` > global > default), so the
+# WORKFLOW mode always wins over a repo's config default — they cannot disagree.
+# Only the job for the chosen mode runs; the other is skipped by its `if:` guard.
 
 name: advance-loop
 
@@ -46,8 +56,8 @@ on:
       - 'work/questions/**'
   workflow_dispatch:
     inputs:
-      mode:
-        description: 'Integration shape: propose (matrix, one PR per item) or merge (single sequential job).'
+      integrationMode:
+        description: 'Integration mode (drives BOTH the integration flag passed to `advance` AND the job shape): propose ⇒ a matrix, each leg `advance --propose` (one PR per item); merge ⇒ a single sequential `advance -n --merge` (rebase-chains to main).'
         required: false
         default: 'propose'
         type: choice
@@ -66,9 +76,11 @@ permissions:
   pull-requests: write
 
 env:
-  # The resolved mode: the dispatch input when present, else `propose` (the
-  # conservative default — one PR per item, a human merges).
-  ADVANCE_MODE: ${{ github.event.inputs.mode || 'propose' }}
+  # The resolved integration mode: the dispatch input when present, else `propose`
+  # (the conservative default — one PR per item, a human merges). This single value
+  # selects BOTH the job shape (via the `if:` guards below) AND the integration flag
+  # the `advance` legs pass (`--propose`/`--merge`), so they can never desync.
+  INTEGRATION_MODE: ${{ github.event.inputs.integrationMode || 'propose' }}
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
@@ -77,7 +89,7 @@ jobs:
   # and emits eligible items; `jq` shapes them into a GitHub Actions matrix list.
   # Skipped entirely in merge mode.
   enumerate:
-    if: ${{ (github.event.inputs.mode || 'propose') == 'propose' }}
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
     outputs:
       items: ${{ steps.scan.outputs.items }}
@@ -112,7 +124,7 @@ jobs:
   # error would halt the job (ADR command-surface-and-journeys §"CI uses prefixes").
   advance-propose:
     needs: enumerate
-    if: ${{ (github.event.inputs.mode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       # Independent PRs: one failing item must NOT cancel the others.
@@ -125,13 +137,16 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
       - name: advance one item (propose ⇒ opens a PR)
-        run: agent-runner advance "${{ matrix.item }}" --arbiter origin
+        # `--propose` ties the integration mode to THIS (matrix) shape: it sits at
+        # the top of the precedence chain, so the workflow mode always wins over the
+        # repo's `.agent-runner.json` default and a leg can NEVER merge to main.
+        run: agent-runner advance "${{ matrix.item }}" --propose --arbiter origin
 
   # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
   # merge-mode items chain via rebase; parallel jobs would thrash the main-CAS.
   # One sequential driver (`advance -n <x>`, ALWAYS sequential) drains the pool.
   advance-merge:
-    if: ${{ (github.event.inputs.mode || 'propose') == 'merge' }}
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -139,4 +154,8 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
       - name: advance the eligible pool sequentially (merge ⇒ rebase-chains to main)
-        run: agent-runner advance -n 10 --arbiter origin
+        # `--merge` rides ONLY this single sequential job (never a matrix leg), so
+        # rebase-chained merges to main happen one at a time — no parallel main-CAS
+        # thrash. The flag ties the integration mode to this shape; it overrides the
+        # repo config default, so the workflow mode and the integration mode agree.
+        run: agent-runner advance -n 10 --merge --arbiter origin
