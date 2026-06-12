@@ -548,6 +548,33 @@ async function runOneItem(
 			return {...base, status: 'needs-attention', detail: reason};
 		}
 
+		// 2b. CONTINUE reconcile-push TERMINAL failure (the stale-lease-strand bug):
+		//     the onboard reconcile push of the kept (already-committed) work branch
+		//     FAILED terminally (stale-lease cap exhausted, or a non-stale-lease
+		//     rejection / unreachable arbiter). The push helper THROWS; `createJob`
+		//     CATCHES it and flags `continuePushFailure` so the tick does NOT crash
+		//     leaving the slice silently in-progress on the arbiter. Route to
+		//     needs-attention via the SAME seam — the kept branch already on the
+		//     arbiter from the prior requeue (recoverable) — instead of running the
+		//     agent.
+		if (tree.continuePushFailure !== undefined) {
+			const reason =
+				`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
+				`to the arbiter failed terminally (${tree.continuePushFailure}) — the ` +
+				'kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
+				'retry once the churn settles, or `requeue --reset` to discard and start ' +
+				'fresh';
+			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
+			await ledgerWrite.applyNeedsAttentionTransition({
+				cwd: tree.dir,
+				slug,
+				reason,
+				arbiter: tree.arbiterRemote,
+				env: gitEnv,
+			});
+			return {...base, status: 'needs-attention', detail: reason};
+		}
+
 		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
 		//    emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
 		let prompt: string;

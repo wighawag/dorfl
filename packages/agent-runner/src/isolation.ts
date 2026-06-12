@@ -1,9 +1,10 @@
-import {git, run} from './git.js';
+import {git} from './git.js';
 import {createJob, type Job} from './workspace.js';
 import {reapJob} from './gc.js';
 import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
+	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
 import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
 
@@ -75,6 +76,17 @@ export interface IsolatedTree {
 	 * false on a fresh cut and on a clean continue.
 	 */
 	continueRebaseConflict?: boolean;
+	/**
+	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY at
+	 * onboard-time (the stale-lease retry cap exhausted, or a non-stale-lease
+	 * rejection / unreachable arbiter) — the push helper THROWS, caught so the run
+	 * does NOT crash leaving the slice silently in-progress on the arbiter (the
+	 * stale-lease-strand bug). The pipeline routes the item to needs-attention,
+	 * the kept work left committed + recoverable on the branch. Absent on a fresh
+	 * cut, a clean continue that pushed, and a rebase conflict (which sets
+	 * {@link continueRebaseConflict} instead).
+	 */
+	continuePushFailure?: string;
 	/**
 	 * Tear the isolated tree down per the strategy. Job-worktree: re-apply the §4
 	 * deletion-safety predicate and `git worktree remove`/prune the worktree ONLY
@@ -178,6 +190,7 @@ export function jobWorktreeHandle(
 		arbiterUrl: job.mirror.url,
 		continued: job.continued,
 		continueRebaseConflict: job.continueRebaseConflict,
+		continuePushFailure: job.continuePushFailure,
 		teardown(): void {
 			// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
 			// predicate and remove the worktree ONLY if it holds (clean tree AND the
@@ -233,15 +246,31 @@ export function inPlaceStrategy(options: {
 			// `<arbiter>/work/<slug>` and `<arbiter>/main`.
 			let continued = false;
 			let continueRebaseConflict = false;
+			let continuePushFailure: string | undefined;
 			if (
 				branchAheadOf(checkout, `${arbiter}/${branch}`, `${arbiter}/main`, env)
 			) {
 				continued = true;
+				// The arbiter `work/<slug>` tip the fetch above brought down, READ BEFORE
+				// the onboard rebase rewrites the local branch — the value the
+				// --force-with-lease push expects the arbiter to still hold. In a normal
+				// clone this lives in the remote-tracking ref `<arbiter>/<branch>` (the
+				// rebase below rewrites only the LOCAL `<branch>`, so the tracking ref keeps
+				// the pre-rebase arbiter sha). Captured here, threaded into the stale-lease
+				// retry below so a requeue-continue that churns the ref after our fetch is
+				// re-leased against the freshly-fetched tip rather than stranding the work.
+				const expectedRemoteTip = git(
+					['rev-parse', `${arbiter}/${branch}`],
+					checkout,
+					{env},
+				).trim();
 				// CONTINUE: land on the kept arbiter tip (force-reset a stale local copy
 				// so we continue the SAME single branch), then REBASE onto fresh main at
 				// onboard-time (ADR §10: rebase, not merge). A CLEAN rebase updates the
 				// already-pushed tip with --force-with-lease on the WORK branch ONLY
-				// (a requeued item is unshared) — NEVER --force, NEVER to main (§11). A
+				// (a requeued item is unshared) — NEVER --force, NEVER to main (§11),
+				// SURVIVING a stale-lease ("stale info") rejection by re-fetching +
+				// re-rebasing + retrying (the SAME helper `workspace.ts` uses). A
 				// CONFLICT is aborted (never auto-resolved) + flagged for the caller to
 				// route to needs-attention.
 				git(
@@ -257,17 +286,27 @@ export function inPlaceStrategy(options: {
 				if (rebase.kind === 'conflict') {
 					continueRebaseConflict = true;
 				} else {
-					run(
-						'git',
-						[
-							'push',
+					// The helper THROWS on a terminal failure (the stale-lease retry cap, or
+					// a non-stale-lease rejection / unreachable arbiter). CATCH it and flag
+					// `continuePushFailure` so the caller routes the item to needs-attention
+					// — the kept work stays committed + recoverable — rather than crashing
+					// the run and stranding it silently in-progress (the stale-lease bug).
+					try {
+						const pushed = pushContinuedBranchWithStaleLeaseRetry({
+							cwd: checkout,
+							branch,
 							arbiter,
-							`${branch}:${branch}`,
-							`--force-with-lease=${branch}`,
-						],
-						checkout,
-						{env},
-					);
+							mainRef: `${arbiter}/main`,
+							expectedRemoteTip,
+							env,
+						});
+						if (pushed.kind === 'conflict') {
+							continueRebaseConflict = true;
+						}
+					} catch (err) {
+						continuePushFailure =
+							err instanceof Error ? err.message : String(err);
+					}
 				}
 			} else {
 				// FRESH: put the checkout on the namespaced work branch cut from the
@@ -311,6 +350,7 @@ export function inPlaceStrategy(options: {
 				arbiterUrl,
 				continued,
 				continueRebaseConflict,
+				continuePushFailure,
 				// NO-OP teardown: the checkout is the human's / CI's tree — left on
 				// `work/<slug>` in a defined state, NEVER reaped (ADR §2/§4). The
 				// human's `complete` (or the runner) owns the branch lifecycle.

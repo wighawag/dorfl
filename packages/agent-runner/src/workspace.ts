@@ -164,6 +164,17 @@ export interface Job {
 	 */
 	continueRebaseConflict: boolean;
 	/**
+	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY (the
+	 * stale-lease retry cap was exhausted, or a non-stale-lease rejection such as
+	 * a protected ref / an unreachable arbiter) — the helper THROWS, and we catch
+	 * it here so the run does NOT crash leaving the slice silently in-progress on
+	 * the arbiter (the stale-lease-strand bug). The caller routes the item to
+	 * needs-attention, the kept work left committed + recoverable on the branch.
+	 * Absent on a fresh cut, a clean continue that pushed, and a rebase conflict
+	 * (which sets {@link continueRebaseConflict} instead).
+	 */
+	continuePushFailure?: string;
+	/**
 	 * Remove the job's worktree + work branch from the hub (`git worktree remove`
 	 * + prune; never a bare `rm -rf`, ADR §4). NOTE: the SAFE-to-delete predicate
 	 * (ADR §4) is owned by the `gc` slice — this is only the mechanical teardown
@@ -207,6 +218,7 @@ export function createJob(options: CreateJobOptions): Job {
 	const continueFromKept = branchAheadOf(mirror.path, branch, 'main', env);
 	let continued = false;
 	let continueRebaseConflict = false;
+	let continuePushFailure: string | undefined;
 
 	if (continueFromKept) {
 		// The arbiter `work/<slug>` tip the mirror fetched, READ BEFORE the onboard
@@ -240,16 +252,29 @@ export function createJob(options: CreateJobOptions): Job {
 			// re-rebase onto current main, and retry (bounded) instead of stranding the
 			// committed green work in the worktree. A rebase CONFLICT on a retry is the
 			// SAME abort → needs-attention path (never auto-resolved).
-			const pushed = pushContinuedBranchWithStaleLeaseRetry({
-				cwd: dir,
-				branch,
-				arbiter: 'origin',
-				mainRef: 'main',
-				expectedRemoteTip,
-				env,
-			});
-			if (pushed.kind === 'conflict') {
-				continueRebaseConflict = true;
+			//
+			// The helper THROWS on a terminal failure (the stale-lease retry cap, or a
+			// non-stale-lease rejection / unreachable arbiter). BEFORE this slice that
+			// throw ESCAPED `createJob` uncaught, crashing the run and leaving the
+			// already-committed kept work silently in `work/in-progress/` on the arbiter
+			// (the stale-lease-strand incident). We now CATCH it and flag
+			// `continuePushFailure` so the caller (`runRemotePipeline`) routes the item
+			// to needs-attention — the kept work stays committed + recoverable on the
+			// branch — instead of stranding it.
+			try {
+				const pushed = pushContinuedBranchWithStaleLeaseRetry({
+					cwd: dir,
+					branch,
+					arbiter: 'origin',
+					mainRef: 'main',
+					expectedRemoteTip,
+					env,
+				});
+				if (pushed.kind === 'conflict') {
+					continueRebaseConflict = true;
+				}
+			} catch (err) {
+				continuePushFailure = err instanceof Error ? err.message : String(err);
 			}
 		}
 	} else {
@@ -284,6 +309,7 @@ export function createJob(options: CreateJobOptions): Job {
 		mirror,
 		continued,
 		continueRebaseConflict,
+		continuePushFailure,
 		dispose() {
 			git(['worktree', 'remove', '--force', dir], mirror.path, {env});
 			pruneAndDropBranch(mirror.path, branch, env);

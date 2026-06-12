@@ -103,3 +103,7 @@ The prior `do` built this green (gate-1 1613/1613, Gate-2 approved) and the code
 4. **Add the createJob-path end-to-end assertion**: the job-worktree/createJob Part-B path (the EXACT path the original `--isolated` incident hit) must assert the item LANDS in `needs-attention/` and is NO LONGER in `in-progress/` on the arbiter — start.ts's path already has its equivalent ('zeta'); add the matching assertion for the createJob path.
 
 "Done" = clean-scoped diff on current main + the Decisions block + the follow-up observation + the createJob e2e assertion + the gate green.
+
+## Needs attention
+
+agent failed: no slice 'stale-lease-retry-all-push-sites-and-treeless-surface' found in work/in-progress/ or work/backlog/

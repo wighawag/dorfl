@@ -3,6 +3,7 @@ import {ledgerWrite} from './ledger-write.js';
 import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
+	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
 import {runAsync, type RunResult} from './git.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
@@ -288,6 +289,16 @@ async function startFromBacklog(params: {
 	if (switched.rebaseConflict) {
 		return continueConflictResult({slug, arbiter, cwd, env, note});
 	}
+	if (switched.pushFailure !== undefined) {
+		return continuePushFailureResult({
+			slug,
+			arbiter,
+			cwd,
+			pushFailure: switched.pushFailure,
+			env,
+			note,
+		});
+	}
 	const branch = switched.branch;
 	const message = switched.continued
 		? `Started '${slug}': claimed and continued ${branch} from the kept branch.`
@@ -313,6 +324,37 @@ async function continueConflictResult(params: {
 		`cleanly onto ${params.arbiter}/main; routed to work/needs-attention/ ` +
 		'(surfaced by status). Resolve against the latest main, or `requeue --reset` ' +
 		'to discard and start fresh.';
+	return {
+		exitCode: 1,
+		outcome: 'needs-attention',
+		branch: workBranchRef('slice', params.slug),
+		message,
+	};
+}
+
+/**
+ * Build the terminal StartResult for a CONTINUE reconcile-push that FAILED
+ * TERMINALLY (the stale-lease retry cap exhausted, or a non-connectivity
+ * rejection like a protected ref) \u2014 NOT a tolerated offline arbiter. Route the
+ * item to needs-attention (the SAME \u00a712 surface the conflict path uses) so the
+ * already-committed kept work is NOT left silently in-progress (the
+ * stale-lease-strand bug this slice kills), then return the 'needs-attention'
+ * outcome with a message naming the push failure.
+ */
+async function continuePushFailureResult(params: {
+	slug: string;
+	arbiter: string;
+	cwd: string;
+	pushFailure: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<StartResult> {
+	await routeContinuePushFailure(params);
+	const message =
+		`Could not continue '${params.slug}': publishing the rebased work branch to ` +
+		`${params.arbiter} failed terminally (${params.pushFailure}); routed to ` +
+		'work/needs-attention/ (surfaced by status), the kept branch left intact on ' +
+		'the arbiter (recoverable). `requeue` to retry once the churn settles.';
 	return {
 		exitCode: 1,
 		outcome: 'needs-attention',
@@ -390,6 +432,16 @@ async function startFromNeedsAttention(params: {
 	if (switched.rebaseConflict) {
 		return continueConflictResult({slug, arbiter, cwd, env, note});
 	}
+	if (switched.pushFailure !== undefined) {
+		return continuePushFailureResult({
+			slug,
+			arbiter,
+			cwd,
+			pushFailure: switched.pushFailure,
+			env,
+			note,
+		});
+	}
 	const branch = switched.branch;
 	const message = `Started '${slug}': resolved from needs-attention and switched to ${branch}.`;
 	note(message);
@@ -427,6 +479,16 @@ async function startFromInProgress(params: {
 	if (switched.rebaseConflict) {
 		return continueConflictResult({slug, arbiter, cwd, env, note});
 	}
+	if (switched.pushFailure !== undefined) {
+		return continuePushFailureResult({
+			slug,
+			arbiter,
+			cwd,
+			pushFailure: switched.pushFailure,
+			env,
+			note,
+		});
+	}
 	const branch = switched.branch;
 	const message = `Resumed '${slug}': switched to ${branch} (no claim).`;
 	note(message);
@@ -445,6 +507,17 @@ interface SwitchResult {
 	 * never auto-resolved). The caller routes the item to needs-attention (§10).
 	 */
 	rebaseConflict: boolean;
+	/**
+	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY (the
+	 * stale-lease retry cap was exhausted, or a non-connectivity rejection such as
+	 * a protected ref) — NOT a tolerated offline/unreachable arbiter (which leaves
+	 * the local rebased branch standing for `complete`'s later push, exactly as
+	 * before). When present, the caller routes the item to needs-attention so the
+	 * already-committed kept work is NOT left silently in-progress (the
+	 * stale-lease-strand bug). Absent on a fresh cut, a clean continue that pushed,
+	 * and the tolerated-offline case.
+	 */
+	pushFailure?: string;
 }
 
 /**
@@ -544,17 +617,89 @@ async function continueFromKeptBranch(params: {
 		return {branch, continued: true, rebaseConflict: true};
 	}
 
+	// The arbiter `work/<slug>` tip the fetch above brought down, READ AFTER the
+	// rebase — the rebase rewrote only the LOCAL branch, so the remote-tracking ref
+	// `<arbiter>/<branch>` still holds the PRE-rebase arbiter sha (the value the
+	// --force-with-lease push expects the arbiter to still hold). It is non-empty
+	// here: `branchAheadOf` proved the ref resolves (the CONTINUE precondition).
+	const expectedRemoteTip = (
+		await gitHard(['rev-parse', `${arbiter}/${branch}`], cwd, env)
+	).stdout.trim();
+
 	// The rebase may have rewritten SHAs vs the already-pushed tip, so updating it
 	// is a non-fast-forward. Reconcile with --force-with-lease on the WORK branch
-	// ONLY (a requeued item is unshared) — NEVER --force, and NEVER to main (§11).
-	// Best-effort: an unreachable arbiter leaves the local rebased branch (the
-	// agent still works on a current base; complete's push handles it later).
-	await gitSoft(
-		['push', arbiter, `${branch}:${branch}`, `--force-with-lease=${branch}`],
-		cwd,
-		env,
-	);
+	// ONLY (a requeued item is unshared) — NEVER --force, and NEVER to main (§11),
+	// SURVIVING a stale-lease ("stale info") rejection by re-fetching + re-rebasing
+	// + retrying (the SAME helper `workspace.ts`/`isolation.ts` use).
+	//
+	// BEST-EFFORT, but DISCRIMINATING (NOT a blanket swallow — the silent-strand
+	// bug this guard kills): the helper THROWS, so we catch it and split the cause.
+	// An OFFLINE / unreachable-arbiter throw is TOLERATED exactly as the bare
+	// `gitSoft` push was — the local rebased branch is left, and `complete`'s push
+	// handles it later. A REAL terminal failure (the stale-lease retry cap, or a
+	// non-connectivity rejection like a protected ref) is NOT swallowed: it is
+	// reported up as `pushFailure` so the caller surfaces the item to
+	// needs-attention rather than leaving the committed kept work silently
+	// in-progress.
+	try {
+		const pushed = pushContinuedBranchWithStaleLeaseRetry({
+			cwd,
+			branch,
+			arbiter,
+			mainRef: `${arbiter}/main`,
+			expectedRemoteTip,
+			env,
+			note,
+		});
+		if (pushed.kind === 'conflict') {
+			return {branch, continued: true, rebaseConflict: true};
+		}
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (isOfflinePushFailure(message)) {
+			// Tolerated (today's behaviour): the arbiter is unreachable, so the local
+			// rebased branch is left and `complete`'s later push handles it.
+			note(
+				`Could not push ${branch} to ${arbiter} (arbiter unreachable) — the ` +
+					'local rebased branch is left; `complete` pushes it later.',
+			);
+		} else {
+			// A REAL terminal failure — surface it (do NOT silently strand the work).
+			return {
+				branch,
+				continued: true,
+				rebaseConflict: false,
+				pushFailure: message,
+			};
+		}
+	}
 	return {branch, continued: true, rebaseConflict: false};
+}
+
+/**
+ * Discriminate the THROW from {@link pushContinuedBranchWithStaleLeaseRetry} at
+ * the `start` continue-push site: is it a TOLERATED offline/unreachable-arbiter
+ * outage (the existing best-effort case — `complete` pushes later), or a REAL
+ * terminal failure that must SURFACE (the stale-lease retry cap exhausted, or a
+ * non-connectivity rejection like a protected ref)?
+ *
+ * The helper throws ONLY two shapes: a `(not a stale lease)` push failure
+ * carrying the raw git stderr, or a `kept failing with a stale --force-with-lease`
+ * cap-exhausted message. The cap message is ALWAYS a real give-up. A non-stale
+ * push failure is OFFLINE only when its stderr matches a git connectivity
+ * signature (unable to access / could not read from remote / connection refused /
+ * could not resolve host / ssh connect) — anything else (a protected ref, a hook
+ * rejection) is a real failure that must surface. Conservative: an unmatched
+ * cause is treated as a REAL failure (surface), never silently swallowed.
+ */
+function isOfflinePushFailure(message: string): boolean {
+	// The retry-cap give-up is never "offline" — it is a real terminal failure.
+	if (/kept failing with a stale --force-with-lease/i.test(message)) {
+		return false;
+	}
+	return /unable to access|could not read from remote repository|connection (?:refused|reset|timed out)|could not resolve host|ssh: connect to host|network is unreachable|\bECONN(?:REFUSED|RESET)\b|\bENOTFOUND\b|\bETIMEDOUT\b/i.test(
+		message,
+	);
 }
 
 /**
@@ -608,6 +753,66 @@ async function routeContinueConflict(params: {
 			// Surface on the arbiter's main (OBSERVABLE, cross-machine visible), the
 			// §10 path — but SURFACE-ONLY: push NO branch (HEAD is the temp branch off
 			// main, not work/<slug>; the kept work/<slug> is already on the arbiter).
+			arbiter,
+			pushBranch: false,
+			env,
+			note,
+		});
+	} finally {
+		await gitSoft(['switch', '--quiet', startRef], cwd, env);
+		await gitSoft(['branch', '-D', tempBranch], cwd, env);
+	}
+}
+
+/**
+ * Route a CONTINUE reconcile-push TERMINAL failure to needs-attention (the §12
+ * surface): the rebased work branch could not be published to the arbiter (the
+ * stale-lease retry cap exhausted, or a non-connectivity rejection) — so rather
+ * than leave the committed kept work silently in-progress, surface it on the
+ * arbiter's main. Mirrors {@link routeContinueConflict}'s temp-branch pattern.
+ *
+ * SURFACE-ONLY (`pushBranch: false`): the recoverable artifact — the kept
+ * `work/<slug>` — is ALREADY on the arbiter from the prior requeue (our local
+ * rebased tip is what FAILED to push, so it is not the cross-machine truth). We
+ * cut a throwaway temp branch off `<arbiter>/main` (which holds the item in
+ * `in-progress/` after the claim) to publish the ledger move only, push NO
+ * branch, and restore. A `requeue` then continues from the kept arbiter tip.
+ */
+async function routeContinuePushFailure(params: {
+	slug: string;
+	arbiter: string;
+	cwd: string;
+	pushFailure: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<void> {
+	const {slug, arbiter, cwd, pushFailure, env, note} = params;
+	const reason =
+		`continuing the kept ${arbiter}/${workBranchRef('slice', slug)}: publishing ` +
+		`the rebased work branch to ${arbiter} failed terminally (${pushFailure}) — ` +
+		'the kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
+		'retry once the churn settles, or `requeue --reset` to discard and start fresh';
+	note(reason);
+	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+	const startRef =
+		(
+			await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
+		).stdout.trim() ||
+		(await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
+	const tempBranch = `agent-runner/continue-push-failure-${slug}`;
+	await gitHard(
+		['switch', '--quiet', '-C', tempBranch, `${arbiter}/main`],
+		cwd,
+		env,
+	);
+	try {
+		await ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			// Surface on the arbiter's main (OBSERVABLE, cross-machine visible) — but
+			// SURFACE-ONLY: push NO branch (HEAD is the temp branch off main; the
+			// recoverable kept work/<slug> is already on the arbiter).
 			arbiter,
 			pushBranch: false,
 			env,
