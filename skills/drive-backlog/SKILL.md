@@ -26,7 +26,12 @@ That is the whole difference; the loop, the selection, and the stuck-set are ide
 
 ### Selection + isolation
 
-This skill does its OWN intelligent per-slice selection (graph order + freshness + diff review) and dispatches `do` **per chosen slug** — it never uses `do`'s auto-pick (that is `run`'s daemon mechanism, not a conductor's). Builds run **in-place** (`do slice:<slug>` in the current checkout): one slice end-to-end, visible, with trivial rebases between merges. (`do` refuses on a dirty tree, so keep the tree clean between builds — golden rule 5.)
+This skill does its OWN intelligent per-slice selection (graph order + freshness + diff review) and dispatches `do` **per chosen slug** — it never uses `do`'s auto-pick (that is `run`'s daemon mechanism, not a conductor's). It builds **one slice at a time, end-to-end** — but it can drive `do` in either of two isolation modes:
+
+- **In-place** (`do slice:<slug> --review --propose`) — builds in the CURRENT checkout. Simplest; sees local-only slices; but `do` refuses on a dirty tree, so keep the tree clean between builds (golden rule 5) and the conductor's own checkout is mutated (claim moves, done-moves) between merges, with trivial rebases.
+- **Isolated** (`do slice:<slug> --isolated --review --propose`) — builds in a per-job worktree off THIS repo's arbiter (the SAME isolation `run` uses), inferring the arbiter from cwd. The human checkout is **never touched**: no dirty-tree refusal, no claim/done-move churn in your tree, no entanglement with uncommitted work, no rebuild-the-dist-mid-drive dance. **Prefer `--isolated` when the conductor shares a working checkout with a human (or with its own uncommitted notes)** — it makes the conductor a pure observer of the arbiter. The price: the slice + its `blockedBy` deps must be ON the arbiter (`origin/main`) to be visible, so a **local-only / un-pushed slice is invisible to `--isolated`** — build those in-place (or push them first). (`do --remote <url>` is the same isolation against a FOREIGN repo with no checkout; `--isolated` is its same-repo sibling.)
+
+Either way it is one slice end-to-end. The loop, selection, freshness check, Gate-3 review, and stuck-set are identical; only the per-build command and the inter-build housekeeping differ (see step 4).
 
 ## When to use vs. not
 
@@ -39,7 +44,7 @@ This skill does its OWN intelligent per-slice selection (graph order + freshness
 2. **Never force a failed slice.** A red gate / Gate-2 block / rebase conflict routes the item to `work/needs-attention/` — leave it there, branch preserved, skip its dependents, continue with independent ready slices, report it at the end.
 3. **Capture, don't fix-in-place, off-path findings.** Spot drift outside a slice's scope → write a `work/observations/` note (and COMMIT it — see rule 5), don't expand the slice.
 4. **You merge the approval.** GitHub refuses `gh pr review --approve` on a PR whose commits are under your own identity — so post the verdict as a PR **comment** (`gh pr comment <n> --body-file …`, lead with `APPROVE ✅` / `BLOCK`), then `gh pr merge <n> --squash --delete-branch`. The comment + merge IS the approval.
-5. **Clean tree before every `do`** (`do` refuses on a dirty tree) — so COMMIT your own `work/observations/` notes (they are contract-native, append-only, low-risk) before the next `do`, rather than leaving them uncommitted/stashed. Report what you committed in the summary. **What a conductor commits:** its own `work/observations/` notes; a load-bearing **forward-note it plants in a slice body** (step 2 — it MUST be committed to take effect before that slice's `do`, and it is a small protocol-mechanical edit, not authored content); and the protocol's own moves the runner/`do`/`complete` make (claim reverts, done-moves, PR merges). It does NOT hand-author-and-commit a full PRD or a fresh slice SET — producing those is `to-prd`/`to-slices`' job and they are left for human review. Report every commit in the summary.
+5. **Clean tree before every IN-PLACE `do`** (`do` refuses on a dirty tree) — so COMMIT your own `work/observations/` notes (they are contract-native, append-only, low-risk) before the next in-place `do`, rather than leaving them uncommitted/stashed. (Under `--isolated`/`--remote` the build never reads your checkout, so a dirty tree does NOT block dispatch — but still commit your notes for hygiene, and remember an un-pushed note/slice is invisible to an isolated build until it lands on the arbiter.) Report what you committed in the summary. **What a conductor commits:** its own `work/observations/` notes; a load-bearing **forward-note it plants in a slice body** (step 2 — it MUST be committed to take effect before that slice's `do`, and it is a small protocol-mechanical edit, not authored content); and the protocol's own moves the runner/`do`/`complete` make (claim reverts, done-moves, PR merges). It does NOT hand-author-and-commit a full PRD or a fresh slice SET — producing those is `to-prd`/`to-slices`' job and they are left for human review. Report every commit in the summary.
 6. **Accumulate, don't stall.** When ONE slice is stuck or needs a judgement call, write it into the stuck-set and move to the next INDEPENDENT ready slice — never block the whole loop on one item. When nothing more can advance, surface the stuck-set: ask the human if one is present, else report it. See [the rule](#the-accumulate-dont-block-rule).
 
 ## The accumulate-don't-block rule
@@ -109,13 +114,15 @@ From the READY set, order by: (a) **dependency** (a slice that unlocks others fi
 
 ### 4. For EACH fresh, ready slice, in order — BUILD → REVIEW → MERGE
 
-**4a. Build it (clean tree first):**
+**4a. Build it** (pick the isolation mode per [Selection + isolation](#selection--isolation)):
 
 ```sh
+agent-runner do slice:<slug> --isolated --review --propose   # isolated: worktree off this repo's arbiter (human checkout untouched)
+# or, in the current checkout (commit/clean the tree first):
 agent-runner do slice:<slug> --review --propose
 ```
 
-(The harness + model + acceptance gate are resolved from agent-runner config — flag > env > per-repo > global. Pass an explicit `--harness`/`--model` only to override config for this run; otherwise let config drive it.) Use a **generous timeout** — `do` runs a build agent + the full gate + the Gate-2 review and can take well over an hour for a big slice. If you interrupt it, KILL the spawned `do`/agent process tree explicitly (an abort of your wrapper does NOT stop the child); then discard its partial edits and revert the claim before retrying.
+(The harness + model + acceptance gate are resolved from agent-runner config — flag > env > per-repo > global. Pass an explicit `--harness`/`--model` only to override config for this run; otherwise let config drive it.) **`--isolated` reads the target repo's committed `.agent-runner.json` from the arbiter's main**, so per-repo `harness`/`verify`/`provider` apply automatically — no `--harness`/env workaround needed. After a failed/aborted isolated run, a stale job worktree can linger and block the next build's mirror fetch — run `agent-runner gc` (or `gc --force --yes` once you've confirmed the work is safe on the arbiter) to reap it before continuing. Use a **generous timeout** — `do` runs a build agent + the full gate + the Gate-2 review and can take well over an hour for a big slice. If you interrupt it, KILL the spawned `do`/agent process tree explicitly (an abort of your wrapper does NOT stop the child); then discard its partial edits and revert the claim before retrying.
 
 - **Non-zero exit** (red gate / Gate-2 block / rebase conflict) → the item is now in `work/needs-attention/` with its reason in the body and its branch preserved on the arbiter. STOP that slice (golden rule 2), skip its dependents, move to the next INDEPENDENT ready slice. If the reason is a FIXABLE problem (not a human-decision block), it is recoverable IN-LOOP via `requeue` + re-`do` (continues from the kept branch) — see [Recovering a needs-attention item](#recovering-a-needs-attention-item-requeue); otherwise it becomes a stuck-set question.
 
@@ -142,10 +149,10 @@ Use `--body-file` (PR bodies are backtick-heavy and break inline `--body` shell 
 **4d. Re-sync + re-evaluate:**
 
 ```sh
-git checkout main && git fetch origin && git pull --rebase origin main
+git checkout main && git fetch origin && git pull --ff-only origin main   # or --rebase if you carry local commits
 ```
 
-If the next `do` runs from a BUILT copy of agent-runner (e.g. a local checkout of this very repo), rebuild it so the merge you just made is in the binary the next `do` invokes. The merge landed `work/done/<slug>.md` on `main`; any slice blocked only by it is now unlocked. Recompute the READY set (steps 0–1, including a fresh freshness check on newly-unlocked slices) and continue.
+Under `--isolated`/`--remote` the build ran on the arbiter, NOT your checkout, so you only need to `git fetch` (and fast-forward) to RECOMPUTE the READY set — there is no local rebase dance and no clean-tree precondition for the next dispatch. (In-place builds DO mutate your checkout, so the full sync matters more there.) If the next `do` runs from a BUILT copy of agent-runner (e.g. a local checkout of this very repo), rebuild it so the merge you just made is in the binary the next `do` invokes. The merge landed `work/done/<slug>.md` on `main`; any slice blocked only by it is now unlocked. Recompute the READY set (steps 0–1, including a fresh freshness check on newly-unlocked slices) and continue.
 
 ### 5. CONTINUE until nothing can advance
 
