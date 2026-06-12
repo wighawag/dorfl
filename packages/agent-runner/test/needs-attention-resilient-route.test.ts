@@ -210,10 +210,10 @@ describe('needs-attention route — honest per-op reporting', () => {
 
 describe('requeue-safe — default keep+continue refuses a missing arbiter branch', () => {
 	it('REFUSES when the work branch is NOT on the arbiter (push first / --reset)', async () => {
-		// Route to needs-attention but DO NOT let the branch reach the arbiter (the
-		// push fails): the local branch survives, the arbiter branch is absent.
-		const {repo} = await claimAndBranch('eta', {commitWork: true});
-		breakArbiter(repo);
+		// Surface to needs-attention on the arbiter NORMALLY (so the item IS on
+		// <arbiter>/main and the tree-less requeue reaches the continue-branch guard),
+		// then DELETE the work branch from the arbiter so the guard sees it absent.
+		const {repo, seeded} = await claimAndBranch('eta', {commitWork: true});
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'eta',
@@ -222,13 +222,11 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 			env: gitEnv(),
 			...FAST,
 		});
-		// Restore the arbiter so the requeue's FETCH works — but the branch was
-		// never pushed, so `<arbiter>/work/slice-eta` is absent (the local one survives,
-		// which is exactly why we must check the ARBITER ref, not the local one).
-		gitIn(
-			['remote', 'set-url', ARBITER, `file://${seededArbiter(repo)}`],
-			repo,
-		);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(true);
+		// Remove the continue-branch from the arbiter (the local one survives, which
+		// is exactly why the guard must check the ARBITER ref, not the local one).
+		gitIn(['push', '-q', ARBITER, '--delete', 'work/slice-eta'], repo);
+		void seeded;
 
 		const result = await returnToBacklog({
 			cwd: repo,
@@ -240,7 +238,8 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 		expect(result.reasonNotMoved).toMatch(/isn't on/);
 		expect(result.reasonNotMoved).toMatch(/push it first|--reset/);
 		// The item stayed in needs-attention (no backlog move).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(false);
 	});
 
 	it('REQUEUES when the arbiter branch IS present', async () => {
@@ -290,8 +289,10 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 		expect(result.moved).toBe(true);
 	});
 
-	it('a purely-LOCAL requeue (no arbiter) keeps today behaviour (no guard)', async () => {
-		// No arbiter supplied → the guard does not apply; the move is committed locally.
+	it('REFUSES a requeue with NO arbiter (tree-less CAS needs a ref to push to)', async () => {
+		// Tree-less requeue is published as a CAS to the arbiter ref (parity with
+		// claim) — there is no purely-local mode any more, so omitting --arbiter is a
+		// refusal (NOT a silent cwd-tree commit that could sweep a concurrent writer).
 		const {repo} = await claimAndBranch('kappa', {commitWork: false});
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
@@ -304,10 +305,11 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'kappa',
-			// NO arbiter → purely-local requeue.
+			// NO arbiter.
 			env: gitEnv(),
 		});
-		expect(result.moved).toBe(true);
+		expect(result.moved).toBe(false);
+		expect(result.reasonNotMoved).toMatch(/--arbiter/);
 	});
 });
 
@@ -436,9 +438,3 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		expect(delays).toEqual([]); // deterministic failure → no backoff
 	});
 });
-
-/** Resolve the bare arbiter path for a working clone (its `arbiter` remote URL). */
-function seededArbiter(repo: string): string {
-	const url = gitIn(['remote', 'get-url', ARBITER], repo).trim();
-	return url.replace(/^file:\/\//, '');
-}

@@ -331,6 +331,11 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
+		// The tree-less requeue moved gamma → backlog ON THE ARBITER (it never wrote
+		// the cwd tree); sync the project checkout so the local-tree scan sees the
+		// backlog item the next `run` claims.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 
 		// main edits the same file differently (conflict on replay at onboard-time).
 		const mover = seeded.clone('mover');

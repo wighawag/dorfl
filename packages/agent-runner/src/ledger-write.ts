@@ -93,6 +93,7 @@ export type LedgerTransitionKind =
 	| 'claim'
 	| 'complete'
 	| 'needs-attention'
+	| 'requeue'
 	| 'slicing'
 	| 'advancing';
 
@@ -179,8 +180,13 @@ export type ApplyNeedsAttentionTransitionResult =
  */
 export type ApplyReturnToBacklogTransitionInput = ReturnToBacklogOptions;
 
-/** The outcome of asking the seam to apply a RETURN-TO-BACKLOG transition. */
-export type ApplyReturnToBacklogTransitionResult = ReturnToBacklogResult;
+/**
+ * The outcome of asking the seam to apply a RETURN-TO-BACKLOG transition. It is
+ * a Promise: like `claim`, the tree-less strategy fetches + CAS-pushes to the
+ * arbiter (async).
+ */
+export type ApplyReturnToBacklogTransitionResult =
+	Promise<ReturnToBacklogResult>;
 
 /**
  * A *prepared* RESOLVE-NEEDS-ATTENTION transition: a human is picking up a stuck
@@ -279,7 +285,8 @@ export interface LedgerWriteStrategy {
 	/**
 	 * Apply a RETURN-TO-BACKLOG transition: re-queue a resolved needs-attention
 	 * item for re-claiming. The re-queue half of the needs-attention mechanism,
-	 * routed through the SAME seam.
+	 * routed through the SAME seam. Like `claim`, it is TREE-LESS — the move is a
+	 * compare-and-swap push to the arbiter ref (it never writes the cwd tree).
 	 */
 	applyReturnToBacklogTransition(
 		input: ApplyReturnToBacklogTransitionInput,
@@ -469,9 +476,11 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 
 	/**
 	 * The return-to-backlog transition under the SAME strategy: re-queue the
-	 * resolved item exactly as before by delegating to {@link returnToBacklog}
-	 * (`git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md`, commit,
-	 * optional push).
+	 * resolved item by delegating to {@link returnToBacklog}, which moves
+	 * `work/needs-attention/<slug>.md → work/backlog/<slug>.md` TREE-LESSLY — it
+	 * builds the move off `<arbiter>/main` with plumbing and CAS-publishes it back
+	 * THROUGH this same write seam (`applyTransition`, the very push+lease+verify
+	 * `claim` uses), never staging/committing in the cwd working tree.
 	 */
 	applyReturnToBacklogTransition(
 		input: ApplyReturnToBacklogTransitionInput,
