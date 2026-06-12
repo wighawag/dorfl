@@ -65,3 +65,7 @@ git mv work/in-progress/run-internal-error-tests.md work/done/run-internal-error
 ### Drift history (provenance — kept, not active)
 
 The original slice's criterion #2 + Open question asserted `status: 'agent-failed'` for the thrown core error and asked whether it should get a distinct status. The build agent (2026-06-11) STOPPED, correctly: commit `3e7df84` (2026-06-09, after this slice was authored) already routed `run`'s `saveAgentFailure` through `classifyFailureCause`, making the status `config-error` and closing the `do`-vs-`run` divergence the source observation flagged. Re-scoping (above) PINS the current `config-error`/`claim-error` labels and drops the resolved Open question; the source observation is to be marked RESOLVED on landing, not deleted on the stale basis.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
