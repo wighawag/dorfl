@@ -14,6 +14,8 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
+	raceClone,
+	racerEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -386,9 +388,12 @@ describe('runOnce — lost race is skipped cleanly', () => {
 describe('runOnce — simultaneous two-runner race (exactly one winner)', () => {
 	it('two runners racing the same single item produce exactly one claimed-done', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
-		// Two independent working clones of the arbiter, each its own scan root.
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Two independent working clones of the arbiter, each its own scan root AND a
+		// DISTINCT committer identity so the two claim commits get DISTINCT shas (as
+		// two real runners would) and the loser loses through the genuine CAS, not a
+		// fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'A');
+		const b = raceClone(seeded, 'B');
 
 		const configFrom = () =>
 			mergeConfig({
@@ -408,7 +413,7 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 				report: scanRepoPaths([clone], config),
 				workspace: join(scratch.root, `ws-${agentId}`),
 				agentRunner: editingAgent,
-				env: gitEnv(),
+				env: racerEnv(agentId),
 				agentId: () => agentId,
 			});
 		};

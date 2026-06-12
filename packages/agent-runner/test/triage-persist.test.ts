@@ -17,6 +17,8 @@ import {
 	gitEnv,
 	gitIn,
 	seedRepoWithArbiter,
+	raceClone,
+	racerEnv,
 	existsOnArbiterMain,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -200,8 +202,12 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 
 	it('a same-slug new-item race ⇒ exactly one promotes, the loser fails CAS (no special case)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer (raceClone + racerEnv) so the two
+		// create commits get DISTINCT shas — as two real machines would — and the
+		// loser loses through the genuine path-exists/lease CAS, not a fixture
+		// sha-collision. See racerEnv for the full why.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 		for (const dir of [a, b]) {
 			seedAnsweredPromote(dir, 'dup');
 			gitIn(['add', '-A'], dir);
@@ -214,14 +220,14 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 				item: 'observation:dup',
 				itemPath: 'work/observations/dup.md',
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('a'),
 			}),
 			promoteObservation({
 				cwd: b,
 				item: 'observation:dup',
 				itemPath: 'work/observations/dup.md',
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('b'),
 			}),
 		]);
 

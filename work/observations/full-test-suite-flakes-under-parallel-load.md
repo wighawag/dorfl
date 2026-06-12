@@ -1,7 +1,7 @@
 ---
 title: the full `pnpm -r test` suite occasionally fails ONE test under heavy parallel load, then passes clean on re-run
 date: 2026-06-12
-status: open
+status: resolved
 ---
 
 ## The signal
@@ -11,3 +11,7 @@ While building `requeue-treeless-transition`, a `pnpm -r test` run (1574 tests, 
 ## Where
 
 Whole `packages/agent-runner` vitest suite under `pnpm -r test`. Not reproduced deterministically; surfaced once, vanished on re-run. Worth a future pass to harden whichever test is timing-sensitive (capture the failing test name when it recurs — this run did not preserve it).
+
+## RESOLVED 2026-06-12 (slice `triage-cas-race-test-models-real-contention`)
+
+The unnamed single-test flake was almost certainly the same-slug CAS-race test (`advance-triage`/`triage-persist`) — the only test that reproduced "2 winners" under full parallel load. Root cause: a test-fixture sha-collision between the two racers' identical-identity create commits (see `advance-triage-cas-race-flaky.md`). Fixed test-only by giving each racer a distinct committer identity (`racerEnv`/`raceClone`), applied as a shared helper across every two-racer CAS test. Full `pnpm -r test` is now stable across 8 consecutive runs. (If a DIFFERENT test ever flakes under load, re-open with the captured name — this fix addresses the known same-slug-race exposure.)

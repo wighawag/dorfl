@@ -28,6 +28,64 @@ export function gitEnv(): NodeJS.ProcessEnv {
 	};
 }
 
+/**
+ * A DISTINCT-committer git env for ONE racer in a two-racer CAS test — the test
+ * harness's model of REAL arbiter contention.
+ *
+ * WHY this exists (the same-slug-race flake, RESOLVED here): the two-racer CAS
+ * tests (`promoteObservation` / `createItemThroughCas` / `acquireSlicingLock` /
+ * `acquireAdvancingLock` / `performClaim` racing each other via `Promise.all`)
+ * intermittently saw "2 winners" under full-suite parallel load. The product CAS
+ * is SOUND — the cause was a TEST-FIXTURE artifact: both racers used the SAME
+ * fixed {@link gitEnv} identity and committed the SAME tree change (same path +
+ * blob) with the SAME message off the SAME base, so git produced BYTE-IDENTICAL
+ * commit objects with the SAME sha. Whichever racer pushed second then
+ * fast-forwarded `main` to a sha it ALREADY equalled, and `applyTransition`'s
+ * post-push verify (`<arbiter>/main === head`) passed for BOTH → two winners.
+ *
+ * In PRODUCTION two racers are distinct principals on distinct machines, so their
+ * commits carry distinct identities/timestamps ⇒ distinct shas, and the real
+ * lease / path-exists CAS serialises them to exactly one winner. {@link racerEnv}
+ * restores that reality in the test: each racer gets a DISTINCT author/committer
+ * identity, so the two create/lock commits get DISTINCT shas and the loser loses
+ * through the genuine CAS (the path-exists / lease check), never via the
+ * SHA-equality coincidence. It does NOT weaken the one-winner invariant — it
+ * removes the fixture coincidence that defeated it. Pair it with a distinct `by`
+ * where the API takes one (the `(by ...)` commit-subject suffix is part of what
+ * made the shas collide).
+ */
+export function racerEnv(who: string): NodeJS.ProcessEnv {
+	return {
+		...gitEnv(),
+		GIT_AUTHOR_NAME: `Racer ${who}`,
+		GIT_AUTHOR_EMAIL: `racer-${who}@example.com`,
+		GIT_COMMITTER_NAME: `Racer ${who}`,
+		GIT_COMMITTER_EMAIL: `racer-${who}@example.com`,
+	};
+}
+
+/**
+ * Clone the arbiter into a racer working clone AND stamp it with a DISTINCT local
+ * committer identity (`user.name`/`user.email`) — the companion of {@link racerEnv}
+ * for two-racer CAS tests whose racer calls pass NO explicit `env` (so git reads
+ * identity from the clone's LOCAL config, e.g. the `performAdvance`/engine path
+ * which threads no env).
+ *
+ * Use this (one distinct `who` per racer) wherever two clones race the SAME CAS
+ * so their commits carry DISTINCT identities and therefore DISTINCT shas — the
+ * real-contention condition that lets the genuine lease / path-exists CAS pick
+ * exactly one winner deterministically (see {@link racerEnv} for the full why).
+ * For racer calls that DO pass an explicit `env`, pass {@link racerEnv}(who)
+ * instead (env-vars override local config), and use the SAME distinct `who` for
+ * any `by` argument so the `(by ...)` commit-subject suffix differs too.
+ */
+export function raceClone(seeded: SeededRepo, who: string): string {
+	const dir = seeded.clone(who);
+	gx(['config', 'user.name', `Racer ${who}`], dir);
+	gx(['config', 'user.email', `racer-${who}@example.com`], dir);
+	return dir;
+}
+
 /** A scratch workspace that cleans itself up. */
 export interface Scratch {
 	root: string;

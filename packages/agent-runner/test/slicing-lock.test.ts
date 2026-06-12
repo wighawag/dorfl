@@ -8,6 +8,8 @@ import {
 	gitEnv,
 	gitIn,
 	prdFile,
+	raceClone,
+	racerEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
@@ -165,8 +167,11 @@ describe('acquireSlicingLock — usage / env errors (exit 1)', () => {
 describe('slicing-lock race — exactly one winner', () => {
 	it('two simultaneous slicers ⇒ one acquires, the loser gets exit-2', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['solo']});
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer so the two slicing-lock commits get
+		// DISTINCT shas (as two real slicers would) and the loser loses through the
+		// genuine path-exists/lease CAS, not a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 
 		// Genuinely concurrent: the arbiter's ref-CAS picks the single winner.
 		const [ra, rb] = await Promise.all([
@@ -174,13 +179,13 @@ describe('slicing-lock race — exactly one winner', () => {
 				slug: 'solo',
 				cwd: a,
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('a'),
 			}),
 			acquireSlicingLock({
 				slug: 'solo',
 				cwd: b,
 				arbiter: 'arbiter',
-				env: gitEnv(),
+				env: racerEnv('b'),
 			}),
 		]);
 

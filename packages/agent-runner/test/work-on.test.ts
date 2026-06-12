@@ -9,6 +9,8 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
+	raceClone,
+	racerEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -320,8 +322,11 @@ describe('work-on — clean failure on a lost claim (no worktree)', () => {
 
 	it('a two-claimer race: the loser creates no worktree, the winner gets one', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
-		const a = seeded.clone('a');
-		const b = seeded.clone('b');
+		// Distinct committer identity per racer so the two claim commits get DISTINCT
+		// shas (as two real claimers would) and the loser loses through the genuine
+		// CAS, not a fixture sha-collision. See racerEnv.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
 
 		const [ra, rb] = await Promise.all([
 			performWorkOn({
@@ -330,7 +335,7 @@ describe('work-on — clean failure on a lost claim (no worktree)', () => {
 				arbiter: 'arbiter',
 				workspacesDir: join(scratch.root, '.agent-runner-a'),
 				humanWorktreesDir: join(scratch.root, 'worktrees-a'),
-				env: gitEnv(),
+				env: racerEnv('a'),
 			}),
 			performWorkOn({
 				slug: 'solo',
@@ -338,7 +343,7 @@ describe('work-on — clean failure on a lost claim (no worktree)', () => {
 				arbiter: 'arbiter',
 				workspacesDir: join(scratch.root, '.agent-runner-b'),
 				humanWorktreesDir: join(scratch.root, 'worktrees-b'),
-				env: gitEnv(),
+				env: racerEnv('b'),
 			}),
 		]);
 
