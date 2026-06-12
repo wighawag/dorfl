@@ -413,6 +413,36 @@ describe('requeue continue — JOB-WORKTREE path (createJob)', () => {
 		expect(existsSync(join(job.dir, 'mainmoved.txt'))).toBe(true);
 		expect(existsSync(join(job.dir, 'prior.txt'))).toBe(true);
 	});
+
+	it('pushes the rebased continued tip to the arbiter (the green work lands, PR can open)', async () => {
+		const {seeded} = await stuckThenRequeued('nu');
+		// Main moves on the arbiter while requeued, so the onboard rebase rewrites the
+		// work-branch SHAs and the continue path must reconcile the arbiter tip.
+		const mover = seeded.clone('mover');
+		gitIn(['fetch', '-q', ARBITER], mover);
+		gitIn(['switch', '-q', '-C', 'mv-main', `${ARBITER}/main`], mover);
+		writeFileSync(join(mover, 'mainmoved.txt'), 'moved\n');
+		gitIn(['add', '-A'], mover);
+		gitIn(['commit', '-q', '-m', 'main moved'], mover);
+		gitIn(['push', '-q', ARBITER, 'mv-main:main'], mover);
+
+		const beforeWork = arbiterRef(seeded, 'refs/heads/work/slice-nu');
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const job = createJob({
+			fromRepo: seeded.repo,
+			arbiter: ARBITER,
+			slug: 'nu',
+			workspacesDir,
+			env: gitEnv(),
+		});
+		expect(job.continued).toBe(true);
+		expect(job.continueRebaseConflict).toBe(false);
+		// The arbiter's work tip was UPDATED to the rebased worktree HEAD (a
+		// lease-guarded reconcile) — the green work is on the arbiter, not stranded.
+		const afterWork = arbiterRef(seeded, 'refs/heads/work/slice-nu');
+		expect(afterWork).not.toBe(beforeWork);
+		expect(afterWork).toBe(gitIn(['rev-parse', 'HEAD'], job.dir).trim());
+	});
 });
 
 // --- helpers ---------------------------------------------------------------

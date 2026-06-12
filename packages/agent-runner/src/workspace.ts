@@ -1,6 +1,6 @@
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {git, run} from './git.js';
+import {git} from './git.js';
 import {
 	encodeRepoKey,
 	ensureMirror,
@@ -9,6 +9,7 @@ import {
 import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
+	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
 import {type HarnessRecord} from './harness.js';
 import {brand} from './brand.js';
@@ -208,6 +209,16 @@ export function createJob(options: CreateJobOptions): Job {
 	let continueRebaseConflict = false;
 
 	if (continueFromKept) {
+		// The arbiter `work/<slug>` tip the mirror fetched, READ BEFORE the onboard
+		// rebase rewrites the local branch — the value the --force-with-lease push
+		// expects the arbiter to still hold. A requeue-continue can CHURN this ref
+		// after the mirror fetch, making the lease stale; the retry below re-leases
+		// against the freshly-fetched tip (the WORK branch is unshared, so re-observing
+		// + replaying is correct).
+		const expectedRemoteTip = git(['rev-parse', branch], mirror.path, {
+			env,
+		}).trim();
+
 		// Clear ONLY a stale worktree DIR (never the branch we are continuing), then
 		// cut the worktree FROM the kept branch (not fresh off main).
 		clearStaleWorktreeOnly(mirror.path, dir, env);
@@ -224,17 +235,22 @@ export function createJob(options: CreateJobOptions): Job {
 		if (rebase.kind === 'conflict') {
 			continueRebaseConflict = true;
 		} else {
-			run(
-				'git',
-				[
-					'push',
-					'origin',
-					`${branch}:${branch}`,
-					`--force-with-lease=${branch}`,
-				],
-				dir,
-				{env},
-			);
+			// Push the rebased tip with --force-with-lease, SURVIVING a stale-lease
+			// ("stale info") rejection: re-fetch the arbiter `work/<slug>` + main,
+			// re-rebase onto current main, and retry (bounded) instead of stranding the
+			// committed green work in the worktree. A rebase CONFLICT on a retry is the
+			// SAME abort → needs-attention path (never auto-resolved).
+			const pushed = pushContinuedBranchWithStaleLeaseRetry({
+				cwd: dir,
+				branch,
+				arbiter: 'origin',
+				mainRef: 'main',
+				expectedRemoteTip,
+				env,
+			});
+			if (pushed.kind === 'conflict') {
+				continueRebaseConflict = true;
+			}
 		}
 	} else {
 		// Clear any stale registration for this work-id (idempotent re-create): a
