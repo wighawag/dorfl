@@ -76,3 +76,10 @@ False gate red: 1564/1565 passed; the ONE failure is the KNOWN flake 'a same-slu
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Needs attention
+
+PR/code review (Gate 2) blocked this work:
+- The loop driver (advanceOnce in advance-loop-driver.ts) is built and unit-tested but wired into NOTHING — `grep advanceOnce` finds no consumer outside its own module/test, run.ts is untouched, and the `run` command still drives only the build tick (runOnce/runLoop). The slice is titled 'the TWO drivers (one-shot + loop)' and AC #1 explicitly requires 'a loop (`run`, ... parallel ...). `run` ≡ CI (same tick).' Should this be blocked until advanceOnce is actually wired into `run`/CI with an integration test, or should the slice be reshaped to put the loop driver out of scope? (advance-loop-driver.ts:108 (advanceOnce); run.ts untouched on this branch (git diff --stat shows no run.ts); advanceOnce's signature (AdvanceOnceOptions→AdvanceBatchResult) does not match the existing RunTick swap seam (RunOnceOptions→RunOnceResult). The slice's 'demoable verb' / 'eligible pool drains autonomously' claim is unreachable for the loop path; only `advance -n` (one-shot sequential) drains.)
+- The sole commit is 'chore(advance-drivers-and-gates): save aborted work (wip)' with no PR description and no `## Decisions` block — the agent's own signal that the work is incomplete. Is this branch actually finished, or was it landed for review prematurely? (git log main..HEAD shows exactly one commit, message 'save aborted work (wip)'. Gate-1 (build/test/format) passing on a WIP-titled commit is precisely the situation where a green gate masks an unfinished deliverable.)
+PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
