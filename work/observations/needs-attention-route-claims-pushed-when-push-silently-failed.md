@@ -1,8 +1,21 @@
 ---
 title: On a network failure, the needs-attention route REPORTS "surfaced on main; pushed work/<slug>" even though BOTH pushes silently failed — moved:true reflects only the LOCAL move, so the operator is told the branch+surface are on the arbiter when they are not
 date: 2026-06-08
-status: open
+status: resolved
 ---
+
+> RESOLVED 2026-06-12 by slice
+> `stale-lease-retry-all-push-sites-and-treeless-surface`. The specific
+> silent-strand failure mode this note captured (a continue-path push that
+> ultimately FAILS after the work is committed leaving the slice silently in
+> `work/in-progress/` on the arbiter) now SURFACES to `needs-attention/` with the
+> push-failure cause recorded and the green branch left intact + recoverable:
+> `createJob` / the in-place strategy / `start.ts` CATCH the helper's terminal
+> throw and route to needs-attention (the `continuePushFailure` signal + the
+> `routeContinuePushFailure` surface), instead of letting it escape uncaught.
+> Combined with the earlier honest-reporting fix (`routeToNeedsAttention` already
+> captures `branchPush`/`pushError`), the operator is no longer told the work is
+> cross-machine-safe when a push failed — and the stuck item is now observable.
 
 ## The signal
 

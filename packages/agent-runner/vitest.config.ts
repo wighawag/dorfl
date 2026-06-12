@@ -93,6 +93,13 @@ const RACE_SENSITIVE = [
 	// Drives real git against a --bare arbiter AND writes main (the consolidated
 	// bounce push + on-main surface); same determinism reasoning as above.
 	'test/centralise-bounce-branch-push.test.ts',
+	// The stale-lease all-push-sites + tree-less-surface tests: drive real git
+	// against a --bare arbiter, continue a kept work branch, AND write main (the
+	// after-commit push-failure needs-attention surfacing, incl. an end-to-end
+	// `performDoRemote` mirror+worktree run); keep them out of file-parallel
+	// pressure for the same deterministic claim/main-CAS reasoning as
+	// do-remote.test.ts.
+	'test/stale-lease-all-push-sites.test.ts',
 	// Gate 2 (PR/code review) on the do/complete path: drives real git against a
 	// --bare arbiter, integrates/merges on approve, AND writes main (the autonomous
 	// needs-attention surfacing on a block); keep it out of file-parallel pressure

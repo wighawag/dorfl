@@ -380,6 +380,7 @@ describe('selectIsolationStrategy — by "is there a checkout", not a hardcoded 
 				'arbiterRemote',
 				'arbiterUrl',
 				'branch',
+				'continuePushFailure',
 				'continueRebaseConflict',
 				'continued',
 				'dir',
