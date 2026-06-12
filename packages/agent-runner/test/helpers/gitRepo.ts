@@ -318,7 +318,7 @@ export interface RegisteredMirrorFixture {
 }
 
 /** The throwaway source repo (the mirror's origin) for `name`. */
-function mirrorSrc(workspacesDir: string, name: string): string {
+export function mirrorSrc(workspacesDir: string, name: string): string {
 	return join(workspacesDir, '..', `mirror-src-${name}`);
 }
 
