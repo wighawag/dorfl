@@ -56,3 +56,9 @@ agent-runner claim advance-install-ci --arbiter origin
 git fetch origin && git switch -c work/advance-install-ci origin/main
 git mv work/in-progress/advance-install-ci.md work/done/advance-install-ci.md
 ```
+
+## Needs attention
+
+PR/code review (Gate 2) blocked this work:
+- The workflow_dispatch `mode` input (propose/merge) only selects WHICH CI job runs (matrix vs single sequential); it does NOT pass any --integration flag to `advance`, so the actual propose/merge integration behaviour (open PR vs merge-to-main) is decided solely by the repo's .agent-runner.json default and can DESYNC from the workflow mode. Concretely: dispatch `mode: propose` (the default) with config `integration: merge` produces a parallel matrix where every leg merges to main concurrently - exactly the main-CAS thrash the slice says merge mode must avoid. Tie shape-selection and integration-mode together (pass --merge/--propose or --integration ${ADVANCE_MODE} on the advance invocations driven by the same input) and reconcile the vocabulary so 'mode' is not two different concepts sharing one word. (docs/ci/advance-loop.yml.template: matrix leg runs `agent-runner advance "${{ matrix.item }}" --arbiter origin` and merge job runs `agent-runner advance -n 10 --arbiter origin`, neither with an integration flag; ADVANCE_MODE / the `if:` guards only gate job selection. CONTEXT.md:38 defines 'integration mode' = propose (open PR) / merge (to main), DEFAULT_INTEGRATION='propose' (complete.ts:290, config.ts:302). Slice criterion: merge mode must be a SINGLE SEQUENTIAL job because 'parallel merge jobs would thrash the main-CAS'.)
+PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
