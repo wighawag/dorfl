@@ -92,3 +92,14 @@ agent-runner claim stale-lease-retry-all-push-sites-and-treeless-surface --arbit
 git fetch origin && git switch -c work/stale-lease-retry-all-push-sites-and-treeless-surface origin/main
 git mv work/in-progress/stale-lease-retry-all-push-sites-and-treeless-surface.md work/done/stale-lease-retry-all-push-sites-and-treeless-surface.md
 ```
+
+## Rebuild handoff 2026-06-12 (PR #93 was STALE — closed without merge)
+
+The prior `do` built this green (gate-1 1613/1613, Gate-2 approved) and the code is correct + safe, BUT its PR (#93) was cut 9 commits behind main, so its diff would have REVERTED advance-install-ci (#94) / rename-allowagents-to-autobuild (#96) / retire-batch-qa-skill (#95) and resurrected `skills/batch-qa/`. PR #93 was CLOSED without merging. This re-claim CONTINUES from the kept `work/slice-<slug>` branch but rebases onto CURRENT main — that drops the staleness. Do these FOUR things:
+
+1. **REBUILD on current main.** Verify the final diff touches ONLY the stale-lease code + tests (src/isolation.ts, src/start.ts, src/do.ts, src/run.ts, src/workspace.ts, the new test) — it must NOT revert advance-install-ci / rename-allowagents-to-autobuild / retire-batch-qa-skill, and must NOT re-add `skills/batch-qa/`. Run `git diff --stat origin/main..HEAD` before finishing and confirm the scope is clean. NOTE: `allowAgents` was renamed to `autoBuild` on current main (config-alias) — if the kept branch references the old config surface, reconcile to current main's names.
+2. **Add the `## Decisions` block** the three ACs require: PIN the current per-site push-failure before-state (helper-throw-after-cap vs bare-push non-zero exit; does it surface or sit in-progress?), record the start.ts offline-vs-terminal catch discrimination, and record the option-(a)-vs-(b) surface choice.
+3. **Part B took option (b)** (cwd-bound surface, not the tree-less #89 CAS) — the slice permits (b) ONLY IF a follow-up observation is filed for the tree-less surface; FILE that follow-up observation (work/observations/) now.
+4. **Add the createJob-path end-to-end assertion**: the job-worktree/createJob Part-B path (the EXACT path the original `--isolated` incident hit) must assert the item LANDS in `needs-attention/` and is NO LONGER in `in-progress/` on the arbiter — start.ts's path already has its equivalent ('zeta'); add the matching assertion for the createJob path.
+
+"Done" = clean-scoped diff on current main + the Decisions block + the follow-up observation + the createJob e2e assertion + the gate green.
