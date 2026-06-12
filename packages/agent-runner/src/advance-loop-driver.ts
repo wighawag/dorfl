@@ -5,6 +5,13 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {selectPrioritised, type SelectedItem} from './select-priority.js';
 import {runConcurrent} from './concurrency.js';
 import type {Config} from './config.js';
+import type {
+	RunTick,
+	RunOnceOptions,
+	RunOnceResult,
+	ItemResult,
+	ItemStatus,
+} from './run.js';
 
 /**
  * The **`advance` LOOP DRIVER** (PRD `advance-loop`, slice
@@ -218,4 +225,121 @@ export function advanceBatchSummary(
 export function isBatchCalmAtRest(result: AdvanceBatchResult): boolean {
 	const s = advanceBatchSummary(result);
 	return s.total > 0 && s.advanced === 0 && s.stuck === 0;
+}
+
+/**
+ * The advance-specific dependencies the {@link RunTick} adapter closes over —
+ * everything the {@link advanceOnce} batch needs that is NOT carried by the
+ * generic per-tick {@link RunOnceOptions} (which describe the BUILD tick's
+ * checkout-scan world). The CLI builds these ONCE (the mirror to drain, the
+ * resolved remote config, the per-item advance context) and hands them to
+ * {@link advanceRunTick}; the loop ({@link runLoop}) then drives the resulting
+ * tick exactly as it drives the build tick.
+ */
+export interface AdvanceRunTickDeps extends Omit<
+	AdvanceOnceOptions,
+	'maxParallel' | 'perRepoMax' | 'warn' | 'env'
+> {
+	/**
+	 * Override the per-batch caps. Defaults to `config.maxParallel` /
+	 * `config.perRepoMax` (the SAME knobs the build tick's scheduler uses), so a
+	 * `run` daemon caps advance ticks identically.
+	 */
+	maxParallel?: number;
+	perRepoMax?: number;
+}
+
+/**
+ * Adapt the {@link advanceOnce} LOOP DRIVER to the {@link RunTick} swap SEAM so
+ * `run` (≡ CI, US #7) drives the ADVANCE tick over the mirror-side eligible pool
+ * instead of the build tick. `run.ts` deliberately writes {@link runLoop} against
+ * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop PRD can
+ * swap the tick WITHOUT re-architecting the loop — this is that swap.
+ *
+ * The seam is `(RunOnceOptions) => Promise<RunOnceResult>`; one advance batch is
+ * `(AdvanceOnceOptions) => Promise<AdvanceBatchResult>`. The deps the advance
+ * batch needs that the generic per-tick options do NOT carry (the mirror to
+ * drain, the remote config, the per-item advance context) are CLOSED OVER here;
+ * the per-tick `RunOnceOptions` contribute only the cross-cutting seams that DO
+ * generalise — `onWarn` (the warning sink) and `env` (the git env). The batch's
+ * own item-level pool scan supersedes `RunOnceOptions.report` (the build tick's
+ * checkout scan), so that field is ignored for the advance tick.
+ *
+ * The {@link AdvanceBatchResult} is projected onto {@link RunOnceResult} so the
+ * loop's aggregation/reporting (`claimedAndDone` / `skipped` / `failed` /
+ * `needsAttention`) works UNCHANGED — an `advanced` item is `claimed-done`, an
+ * idling pending-sidecar `no-op` is `lost-race` (skipped, calm-at-rest), a CAS
+ * loser is `claim-contended` (skipped), and any error is `needs-attention`. So
+ * the loop's existing convergence signal (`claimedAndDone` falls to 0 once the
+ * pool is all idle) doubles as the advance loop's drain/idle signal (US #31).
+ */
+export function advanceRunTick(deps: AdvanceRunTickDeps): RunTick {
+	return async (options: RunOnceOptions): Promise<RunOnceResult> => {
+		const batch = await advanceOnce({
+			mirrorPath: deps.mirrorPath,
+			config: deps.config,
+			ref: deps.ref,
+			context: deps.context,
+			run: deps.run,
+			read: deps.read,
+			maxParallel: deps.maxParallel,
+			perRepoMax: deps.perRepoMax,
+			// Cross-cutting seams that DO generalise come from the per-tick options
+			// (the SAME ones the build tick receives) — so a `run` daemon threads its
+			// warning sink + git env to the advance tick identically.
+			warn: options.onWarn,
+			env: options.env,
+		});
+		return batchToRunOnceResult(batch, deps.mirrorPath);
+	};
+}
+
+/**
+ * Project one advance batch onto a {@link RunOnceResult} so the existing run loop
+ * aggregates + reports it with NO advance-specific code. The `repoPath` is the
+ * mirror (the one repo this batch drains); the `slug` is the advanced arg.
+ */
+function batchToRunOnceResult(
+	batch: AdvanceBatchResult,
+	mirrorPath: string,
+): RunOnceResult {
+	const items: ItemResult[] = batch.items.map(({arg, result}) => ({
+		repoPath: mirrorPath,
+		slug: arg,
+		status: advanceOutcomeToItemStatus(result),
+		detail: result.message,
+	}));
+	const claimedAndDone = items.filter(
+		(i) => i.status === 'claimed-done',
+	).length;
+	const skipped = items.filter(
+		(i) => i.status === 'lost-race' || i.status === 'claim-contended',
+	).length;
+	const needsAttention = items.filter(
+		(i) => i.status === 'needs-attention',
+	).length;
+	const failed = needsAttention;
+	return {claimedAndDone, skipped, failed, needsAttention, items};
+}
+
+/**
+ * Map one advance tick's outcome onto the run loop's {@link ItemStatus} so the
+ * loop's counters carry the convergence semantics: an item that ADVANCED a rung
+ * is `claimed-done`; a `no-op` (an idling pending sidecar — the calm-at-rest
+ * population) is `lost-race` (skipped, NOT a failure — the loop does no work on
+ * it and does not retry); a CAS `lost`/`contended` is `lost-race`/
+ * `claim-contended` (a parallel sibling won; back off); anything else (a
+ * usage/invariant error or a captured throw) is `needs-attention`.
+ */
+function advanceOutcomeToItemStatus(result: AdvanceResult): ItemStatus {
+	if (result.exitCode === 0) {
+		return result.outcome === 'no-op' ? 'lost-race' : 'claimed-done';
+	}
+	if (result.exitCode === 2 || result.outcome === 'lost') {
+		return 'lost-race';
+	}
+	if (result.exitCode === 3 || result.outcome === 'contended') {
+		return 'claim-contended';
+	}
+	return 'needs-attention';
 }
