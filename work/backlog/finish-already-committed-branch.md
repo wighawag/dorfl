@@ -1,0 +1,80 @@
+---
+title: finish-already-committed-branch — integrate an ALREADY-committed, already-done-moved work branch (item in `work/done/` on the branch, tip not on the arbiter) by running ONLY the rebase→integrate tail (skip the done-move + commit), threaded through the shared integration core and reachable by do/run/complete
+slug: finish-already-committed-branch
+blockedBy: []
+covers: []
+---
+
+> DRAFT 2026-06-12 — re-scope of the parked `recover-stranded-green-work` (still in `work/needs-attention/`, NOT deleted; its empirical analysis is the source of this slice). The original slice's load-bearing premise was proven FALSE by the build agent (and independently confirmed): it claimed `complete` already does the recovery operation and the only new code is "locate the worktree + set complete's cwd". It does NOT — see below. This slice scopes the ACTUAL missing capability. **Human-review before claiming.**
+
+## Why the original was wrong (verified empirically)
+
+`performIntegration` (`integration-core.ts`, consumed by `do`/`run`/`complete`) runs in ORDER: (1) gate, (2) done-move `git mv work/<src>/<slug>.md → work/done/`, (3) `git add -A` + commit, (4) rebase onto `<arbiter>/main`, (5) integrate/push. A terminal push failure happens at **step 5 — AFTER the done-move + commit**. So a stranded-green worktree is in this state:
+
+- `work/done/<slug>.md` PRESENT; `in-progress/` + `needs-attention/` ABSENT (the done-move already ran);
+- the green work ALREADY committed on `work/slice-<slug>` (`feat(<slug>): …; done`), tip NOT on the arbiter.
+
+Running `complete` against it returns **`refused`**, not `completed`: `runComplete`/`performIntegration` resolve the source folder as `in-progress` || `needs-attention` (never `done/`), find neither, and `IntegrationNothingStaged` fires (the done-move + commit already happened → nothing left to stage). Confirmed directly: `performComplete({slug, cwd: worktree, arbiter:'origin', integration:'merge', skipVerify:true})` → `outcome: 'refused'`, exit 1, work NOT on the arbiter.
+
+> **This same blind spot bit the drive directly.** Re-driving a kept branch whose slice was already done-moved made `do`'s onboard fail with `no slice '<slug>' found in work/in-progress/ or work/backlog/` (`prompt.ts:458` looks only in those two folders, on the BRANCH tree — which has the slice in `done/`). The conductor had to hand-fix the branch (move the slice `done/ → in-progress/` on the branch) to make the continue claimable. So the "already-committed, already-done-moved branch" state is unreachable by BOTH the integration tail (`complete` refuses) AND the re-claim/continue onboard (can't find the slice) — this slice fixes the former; the latter is a sibling observation (see Decisions/Open).
+
+## What to build
+
+A first-class way to FINISH an already-committed, already-done-moved work branch — integrate from the commit already on it by running ONLY the rebase→integrate tail (steps 4–5), SKIPPING the done-move + commit (steps 2–3) because they already happened. No new verb if avoidable, no rebuild of the agent, no orphan/parallel branch, never `--force` to main.
+
+> **TRACER-BULLET CORE vs DEFERRABLE (right-size this).** The load-bearing core is **item 1** (the integration-core recover-already-committed path) — that is the capability the parked incident actually needs, and it should land as a vertical slice end-to-end with tests. Items **2–3** (the `--isolated <slug>` locate-EXISTING resolver + `resume --isolated`) are the OPERATOR SURFACE on top; if building reveals they balloon the slice, split them into a sibling slice (`isolated-locate-existing-resolver`) and keep THIS slice to the core + a minimal programmatic entry the tests drive. Do NOT let the surface work block or bloat the core. State the split (or non-split) in `## Decisions`.
+
+### Precise scope
+
+1. **Add an explicit "recover already-committed work" source state to the shared integration core.** When the item is already in `work/done/<slug>.md` AND the work-branch tip is committed-but-not-on-the-arbiter, SKIP steps 2–3 and run only step 4 (rebase onto `<arbiter>/main`) → step 5 (integrate/push), reusing `performIntegration`'s existing tail. Decide the surface (record in `## Decisions`): a new internal `source: 'done'` / `recovering: 'committed'` mode threaded through `IntegrationCoreInput`, OR a dedicated thin recovery entry that calls only the rebase+integrate tail. It MUST remain reachable by the three callers (`do`/`run`/`complete`) without duplicating the tail.
+2. **Add the `--isolated <slug>` locate-EXISTING resolver** (the inverse of `do --isolated`, which CREATES a worktree): resolve the arbiter URL from cwd via `resolveArbiterUrlFromCheckout` → `jobWorktreePath`/`encodeWorkId`/`encodeRepoKey` → require a PRESENT job worktree (do NOT glob `workspacesDir` by slug — two repos can share a slug). Point the recovery path's `cwd` at it. Add `resume --isolated <slug>` for symmetry (re-engage the same retained worktree without claiming).
+3. **`do`'s integration-failure path emits the exact recovery one-liner** so the operator is handed it instead of reverse-engineering the encoded worktree path.
+4. **Idempotent / honest:** `complete --isolated <slug>` (or whatever surface is chosen) with no retained worktree → a CLEAR "nothing to recover / already integrated" message (no crash, no fresh worktree). After a successful recovery the work is on the arbiter, so a re-run finding it gone/already-integrated is the CORRECT no-op, not an error.
+
+### Relationship to `stale-lease-retry-all-push-sites-and-treeless-surface` (Part B) — COMPOSE, do not merge
+
+These two are circling the SAME incident from opposite ends; keep them as SEPARATE slices that COMPOSE:
+
+- **stale-lease Part B** = "on ultimate after-commit push failure, SURFACE the stranded slice to `needs-attention/` (branch + green work intact, recoverable)" — the honest *failure* exit.
+- **this slice** = "FINISH the already-committed branch" — the *recovery* that re-integrates from the kept commit.
+
+Together: **try-to-finish, else surface.** A push failure surfaces (Part B); the operator (or a future autonomous retry) then FINISHES the stranded branch with this slice's capability. Note the composition in `## Decisions`; do NOT fold the two slices together, and do NOT re-implement Part B's surface here.
+
+### Secondary discrepancy (UPDATED — stale-lease Part B has now LANDED, #97)
+
+The parked analysis §3 noted `do`'s after-commit push-failure used to return `usage-error` (throw swallowed) WITHOUT surfacing — so the only artifact was the LOCAL retained worktree. **That is now resolved on main: `stale-lease-retry-all-push-sites-and-treeless-surface` (#97, merged) makes an after-commit terminal push failure SURFACE to `needs-attention/` (branch + green work intact, recoverable).** So re-confirm against CURRENT main, then build on that reality: the stranded item is now in `work/needs-attention/` on the arbiter (surfaced by Part B) with the work committed + the slice in `done/` ON THE BRANCH — and THIS slice integrates from that kept branch. Record in `## Decisions` whether the recover surface is LOCAL-worktree-only or also drivable from the surfaced needs-attention state (the latter composes better with Part B). Do NOT re-implement Part B's surfacing here.
+
+## Acceptance criteria
+
+- [ ] The shared integration core gains a "recover already-committed work" source state: an item in `work/done/<slug>.md` with a committed-but-unpushed work-branch tip integrates by running ONLY rebase→integrate (steps 4–5), SKIPPING the done-move + commit, reusing `performIntegration`'s tail, never `--force` to main, no orphan branch — and it stays reachable by `do`/`run`/`complete` without duplicating the tail.
+- [ ] SAFETY — the recover path's source-state detection is UNSPOOFABLE and refuses cleanly when not genuinely recoverable: BEFORE doing anything it VERIFIES the work-branch tip is genuinely AHEAD of `<arbiter>/main` (the work is NOT already integrated) AND the slice is genuinely stranded (in `done/` on the branch, item not yet integrated on the arbiter). A slice that is ALREADY integrated (tip reachable on `<arbiter>/main`) → a clean "already integrated, nothing to recover" no-op, NEVER a re-push/double-integrate. (A test asserts an already-integrated slice is a no-op, not a re-integration.)
+- [ ] A `--isolated <slug>` locate-EXISTING resolver finds the slug's retained job worktree via the existing naming (`jobWorktreePath`/`encodeWorkId`, arbiter-URL-keyed — NOT a slug glob) and runs the recovery from it; `--skip-verify` skips the already-passed gate; `--propose`/`--merge`/`--arbiter` resolve identically to a normal integrate.
+- [ ] `resume --isolated <slug>` re-engages the same retained worktree without claiming.
+- [ ] `complete --isolated <slug>` (or the chosen surface) with nothing retained → a clear "nothing to recover / already integrated" message (no crash, no fresh worktree). A re-run after success is a clean no-op.
+- [ ] `do`'s integration-failure path prints the exact recovery one-liner.
+- [ ] Tests reproduce "green build, integration fails terminally → worktree retained, item in `done/` on the branch, tip not on the arbiter" in a throwaway-git fixture and assert the recovery integrates from the retained commit (PR opened / work landed) with NO rebuild, NO orphan branch, NO `--force` to main; plus the idempotent/nothing-to-recover cases.
+- [ ] `## Decisions` records: the chosen integration-core surface (source-state mode vs thin recovery entry); the compose-not-merge relationship to stale-lease Part B; the local-only-vs-surface decision for the secondary discrepancy.
+- [ ] OUT OF SCOPE / fenced: this slice does NOT modify `src/prompt.ts` `resolveSlice` (the onboard find-slice). Teaching onboard to accept a `done/` source is a SEPARATE slice (see Open questions) and is HAZARDOUS to fold in here — a slice in `done/` because it is genuinely COMPLETE is indistinguishable by folder from one in `done/` because of a strand, so a careless change could make `do` re-onboard a completed slice. Leave `prompt.ts` untouched.
+- [ ] No shared/global location touched outside temp fixtures (point `workspacesDir` at a temp dir).
+- [ ] `pnpm format:check && pnpm build && pnpm test` green (this repo's gate).
+
+## Open questions (for the human, before claim)
+
+- **Surface choice:** is `complete --isolated <slug>` the right operator surface (symmetric with `do --isolated`), or should the recovery be a distinct verb? (The parked analysis and the original slice both leaned `complete --isolated`; confirm.)
+- **The onboard sibling:** should THIS slice also fix `prompt.ts`'s find-slice (so a continue/re-claim onto an already-done-moved branch doesn't fail with "no slice found in in-progress/backlog"), or is that a SEPARATE slice? (It is the same root state from the re-claim side; the conductor hand-worked around it this drive. Recommend a separate small slice, noted here so it isn't lost.)
+
+## Prompt
+
+> Build the capability to FINISH an already-committed, already-done-moved work branch: integrate from the commit already on `work/slice-<slug>` by running ONLY the rebase→integrate tail (skip the done-move + commit, which already happened), threaded through the SHARED `integration-core.ts` (so `do`/`run`/`complete` all reach it without duplicating the tail), plus a `--isolated <slug>` locate-EXISTING resolver and the `do`-integration-failure recovery one-liner. This re-scopes the parked `recover-stranded-green-work` (whose "complete already does it, just point cwd" premise was proven FALSE: `complete` resolves its source folder as in-progress||needs-attention, never `done/`, so it `refused`s a stranded worktree via `IntegrationNothingStaged`). COMPOSE with `stale-lease-retry-…` Part B (surface-on-failure) — they are try-to-finish/else-surface; keep them SEPARATE.
+>
+> SCOPE: the TRACER-BULLET CORE is item 1 (the integration-core recover-already-committed path) — land that end-to-end with tests. Items 2–3 (the `--isolated <slug>` locate-EXISTING resolver + `resume --isolated`) are the operator surface; split them into a sibling slice if they balloon the core (record in `## Decisions`). Do NOT modify `src/prompt.ts` `resolveSlice` — teaching onboard to accept a `done/` source is a SEPARATE, hazardous slice (a genuinely-complete slice in `done/` is folder-indistinguishable from a stranded one), noted in Open questions; leave it untouched here.
+>
+> SAFETY: the recover path's detection MUST be unspoofable — verify the work-branch tip is genuinely AHEAD of `<arbiter>/main` (not already integrated) before acting; an already-integrated slice is a clean "nothing to recover" no-op, NEVER a re-push/double-integrate. Never `--force` to main; reuse `performIntegration`'s existing rebase→integrate tail (no duplication, no orphan branch).
+>
+> NOTE — stale-lease Part B has LANDED (#97): an after-commit terminal push failure now SURFACES to `needs-attention/` (work committed + slice in `done/` on the kept branch). So re-confirm against CURRENT main and build THIS slice as the FINISH of that surfaced state (try-to-finish / else-surface — compose, do not re-implement Part B).
+>
+> READ FIRST: the parked `work/needs-attention/recover-stranded-green-work.md` (the full empirical analysis + the 3-point re-scope); `src/integration-core.ts` (`performIntegration` step order: done-move→commit→rebase→integrate — add the recover-already-committed source state on the rebase→integrate tail); `src/complete.ts` (the cwd-parameterised path + `--skip-verify`/source-folder resolution — it currently resolves source as in-progress||needs-attention, never `done/`); `src/gc.ts` `reapJob` (the retain predicate — the retained-worktree guarantee); `src/workspace.ts` + `isolation.ts` (`createJob` + `jobWorktreePath`/`encodeWorkId` to RESOLVE the existing dir; `resolveArbiterUrlFromCheckout` in `do.ts`); `src/do.ts` (the integration-failure path to surface the recovery one-liner); `src/prompt.ts` `resolveSlice` (the onboard find-slice that looks only in in-progress/backlog — the sibling blind spot; READ for context, do NOT modify).
+>
+> FIRST, re-confirm the premises against current code (the reaper still RETAINS unpushed-green worktrees; `performIntegration` still does done-move+commit BEFORE push; `complete` still refuses a `done/`-source). If anything changed, reconcile or route to `needs-attention/`.
+>
+> TDD with vitest, house style (throwaway git repos; point `workspacesDir` at a temp dir; real shared dirs untouched). "Done" = the recover-already-committed integration path (core) + its unspoofable detection + the idempotent/already-integrated no-op + (if not split out) the `--isolated <slug>` locate-existing resolver + the recovery one-liner, the `## Decisions` block, `prompt.ts` left untouched, and the gate green.
