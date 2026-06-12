@@ -62,7 +62,7 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 		expect(out.map((p) => p.slug)).toEqual(['ok']);
 	});
 
-	it('autoSlice off ⇒ nothing is sliceable (mirrors allowAgents off)', () => {
+	it('autoSlice off ⇒ nothing is sliceable (mirrors autoBuild off)', () => {
 		const out = sliceablePrds({
 			candidates: [prd('ok')],
 			slicedSlugs: new Set(),

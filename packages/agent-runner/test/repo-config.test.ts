@@ -22,16 +22,16 @@ describe('repo-config constants', () => {
 		expect(REPO_CONFIG_FILENAME).toBe('.agent-runner.json');
 	});
 
-	it('treats integration, verify, defaultArbiter, allowAgents as repo-appropriate keys', () => {
+	it('treats integration, verify, defaultArbiter, autoBuild as repo-appropriate keys', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('integration');
 		expect(REPO_ALLOWED_KEYS).toContain('verify');
 		expect(REPO_ALLOWED_KEYS).toContain('defaultArbiter');
-		expect(REPO_ALLOWED_KEYS).toContain('allowAgents');
-		// `autoSlice` is the slicing-autonomy mirror of `allowAgents` — a genuine
+		expect(REPO_ALLOWED_KEYS).toContain('autoBuild');
+		// `autoSlice` is the slicing-autonomy mirror of `autoBuild` — a genuine
 		// repo property, resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoSlice');
 		// `autoTriage` is the THIRD member of the flat per-action gate family (PRD
-		// `advance-loop`) — the observation-triage mirror of `allowAgents`/`autoSlice`,
+		// `advance-loop`) — the observation-triage mirror of `autoBuild`/`autoSlice`,
 		// resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoTriage');
 		// `prdsFirst` (the slices-first/PRD priority toggle, ADR §3) is a per-repo
@@ -201,12 +201,12 @@ describe('resolveRepoConfig — per-key layering', () => {
 		expect(resolved.config.verify).toBe('make test');
 	});
 
-	it('per-repo file overrides the global for `allowAgents` (flag > per-repo > global > default)', () => {
+	it('per-repo file overrides the global for `autoBuild` (flag > per-repo > global > default)', () => {
 		// default false; global false; per-repo opts in ⇒ per-repo wins.
-		writeRepoConfig(repo, {allowAgents: true});
-		const global = mergeConfig({allowAgents: false});
+		writeRepoConfig(repo, {autoBuild: true});
+		const global = mergeConfig({autoBuild: false});
 		expect(
-			resolveRepoConfig({repoPath: repo, global, env: {}}).config.allowAgents,
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoBuild,
 		).toBe(true);
 		// a flag beats the per-repo file.
 		expect(
@@ -214,12 +214,31 @@ describe('resolveRepoConfig — per-key layering', () => {
 				repoPath: repo,
 				global,
 				env: {},
-				flags: {allowAgents: false},
-			}).config.allowAgents,
+				flags: {autoBuild: false},
+			}).config.autoBuild,
 		).toBe(false);
 	});
 
-	it('resolves `autoSlice` flag > env > per-repo > global > default false (like allowAgents)', () => {
+	it('accepts the deprecated `allowAgents` per-repo key, mapping it to `autoBuild` with a deprecation message', () => {
+		writeRepoConfig(repo, {allowAgents: true});
+		const loaded = loadRepoConfig(repo);
+		expect(loaded.config.autoBuild).toBe(true);
+		expect('allowAgents' in loaded.config).toBe(false);
+		expect(loaded.message).toMatch(/allowAgents/);
+		expect(loaded.message).toMatch(/autoBuild/);
+		// And it resolves through the chain like the canonical key.
+		const global = mergeConfig({autoBuild: false});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoBuild,
+		).toBe(true);
+	});
+
+	it('lets the canonical `autoBuild` WIN over the deprecated `allowAgents` per-repo key', () => {
+		writeRepoConfig(repo, {allowAgents: true, autoBuild: false});
+		expect(loadRepoConfig(repo).config.autoBuild).toBe(false);
+	});
+
+	it('resolves `autoSlice` flag > env > per-repo > global > default false (like autoBuild)', () => {
 		// default false; bare global ⇒ stays the built-in default false.
 		expect(
 			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})

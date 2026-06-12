@@ -69,7 +69,7 @@ function recordingRunner(
 	return {run, args};
 }
 
-const config = () => mergeConfig({allowAgents: true, autoSlice: true});
+const config = () => mergeConfig({autoBuild: true, autoSlice: true});
 
 const context = {cwd: scratchCwd()};
 function scratchCwd(): string {
@@ -108,7 +108,7 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 		const {run, args} = recordingRunner();
 		const result = await advanceOnce({
 			mirrorPath,
-			config: mergeConfig({allowAgents: false, autoSlice: false}),
+			config: mergeConfig({autoBuild: false, autoSlice: false}),
 			context,
 			run,
 			env: gitEnv(),
@@ -139,7 +139,7 @@ describe('advanceOnce — genuine PARALLELISM, each item lock-guarded in the tic
 		await advanceOnce({
 			mirrorPath,
 			config: mergeConfig({
-				allowAgents: true,
+				autoBuild: true,
 				autoSlice: true,
 				maxParallel: 3,
 				perRepoMax: 3,

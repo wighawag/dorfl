@@ -193,7 +193,7 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: PASS,
-			allowAgents: true,
+			autoBuild: true,
 		});
 
 		// No injected report ⇒ each tick scans the REGISTRY (the hub-mirror set),
@@ -231,7 +231,7 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: PASS,
-			allowAgents: true,
+			autoBuild: true,
 		});
 		const result = await runOnce({
 			config,
@@ -259,7 +259,7 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: FAIL, // red gate → the item routes to needs-attention via the seam
-			allowAgents: true,
+			autoBuild: true,
 		});
 
 		let ticksRun = 0;
@@ -309,7 +309,7 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: PASS,
-			allowAgents: true,
+			autoBuild: true,
 		});
 		// `run --once` calls runOnce directly (the debug/test affordance). Scanning
 		// the registry, it claims + integrates the one item in a single tick.

@@ -22,7 +22,7 @@ import {mergeConfig, type Config} from '../src/config.js';
  * is sufficient.
  *
  * Proves: one-shot sequential `-n`; the bare/`-n` selection respects the FLAT
- * per-action gates (build→`allowAgents`, slice→`autoSlice`) by SELECTION; surface/
+ * per-action gates (build→`autoBuild`, slice→`autoSlice`) by SELECTION; surface/
  * apply are ALWAYS allowed even with every flag off (the named path); and the
  * drain/idle convergence (US #31).
  */
@@ -95,7 +95,7 @@ function recordingRunner(
 function cfg(over: Partial<Config> = {}): Config {
 	// Both gates default OFF (the per-action gate family); the tests opt in
 	// explicitly to assert the gate composition.
-	return mergeConfig({allowAgents: true, autoSlice: true, ...over});
+	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
 }
 
 describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
@@ -196,17 +196,17 @@ describe('advance <a> <b> — explicit named items, IN SEQUENCE', () => {
 });
 
 describe('advance — the FLAT per-action gate family (US #23) by SELECTION', () => {
-	it('with allowAgents OFF, the bare/-n selection picks NO slice (build gated)', async () => {
+	it('with autoBuild OFF, the bare/-n selection picks NO slice (build gated)', async () => {
 		seedSlice('alpha');
 		seedSlice('beta');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
 			run,
-			config: cfg({allowAgents: false}),
+			config: cfg({autoBuild: false}),
 			count: 5,
 		});
-		// build→allowAgents: off ⇒ no slice surfaces in the autonomous pool.
+		// build→autoBuild: off ⇒ no slice surfaces in the autonomous pool.
 		expect(args).toEqual([]);
 		expect(result.exitCode).toBe(0);
 	});
@@ -234,7 +234,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 		const bare = await performAdvanceAuto({
 			cwd: repo,
 			run: bareRun,
-			config: cfg({allowAgents: false, autoSlice: false, autoTriage: false}),
+			config: cfg({autoBuild: false, autoSlice: false, autoTriage: false}),
 			count: 5,
 		});
 		expect(bareArgs).toEqual([]);
@@ -247,7 +247,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 		await performAdvanceArgs(['feature'], {
 			cwd: repo,
 			run: namedRun,
-			config: cfg({allowAgents: false, autoSlice: false, autoTriage: false}),
+			config: cfg({autoBuild: false, autoSlice: false, autoTriage: false}),
 		});
 		expect(namedArgs).toEqual(['feature']);
 	});

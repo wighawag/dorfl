@@ -144,7 +144,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 	});
 
 	it('surfacing is ALWAYS allowed — no gate, proven with NO autonomy flags threaded', async () => {
-		// No doOptions / autoSlice / allowAgents / autoTriage anywhere — surface still
+		// No doOptions / autoSlice / autoBuild / autoTriage anywhere — surface still
 		// runs. (Surfacing + applying are the always-allowed rungs, US #23.)
 		const {repo} = seedGatedItem('bar');
 		const {gate, spawns} = spyGate({

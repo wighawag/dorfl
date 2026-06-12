@@ -42,10 +42,10 @@ import type {Config} from './config.js';
  *
  * **The FLAT per-action gate family (US #23)** falls out of the SELECTION layer,
  * exactly as it does for `do`: the eligible-pool scan only SURFACES a build item
- * when `allowAgents` is on and a slice-a-PRD item when `autoSlice` is on (the gate
+ * when `autoBuild` is on and a slice-a-PRD item when `autoSlice` is on (the gate
  * is a policy on the autonomous-SELECTION step, NOT on the explicit verb a human
  * typed — an explicitly-NAMED `advance <slug>` builds regardless, mirroring
- * `do <slice>` vs `allowAgents`). SURFACE + APPLY are ALWAYS allowed — they run
+ * `do <slice>` vs `autoBuild`). SURFACE + APPLY are ALWAYS allowed — they run
  * through the tick on any named item and are never pool-gated, so a repo with
  * EVERY flag off still gets the QUESTION LOOP (surface + apply) but no autonomous
  * build/slice in the bare/`-n` selection ("question loop with zero autonomy").
@@ -74,7 +74,7 @@ type SharedAdvanceContext = AdvanceContext;
 
 export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
-	 * The resolved repo config — provides `allowAgents` (the build gate for the
+	 * The resolved repo config — provides `autoBuild` (the build gate for the
 	 * slice pool), `autoSlice` (the slice-a-PRD gate for the PRD pool), and
 	 * `prdsFirst` (the priority toggle). The per-action gate family is APPLIED
 	 * HERE, at the selection layer (the policy-on-autonomous-selection point).
@@ -117,7 +117,7 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Run the BARE / `-n <x>` form: build the two ELIGIBLE pools for `cwd` (eligible
- * SLICES gated by `allowAgents`, sliceable PRDs gated by `autoSlice`), order them
+ * SLICES gated by `autoBuild`, sliceable PRDs gated by `autoSlice`), order them
  * (slices-first, or flipped by `prdsFirst`), take `count` (default 1), and run the
  * EXISTING advance tick per selected item, SEQUENTIALLY. The pools are the EXACT
  * `do-autopick` pools (the SAME `scoreItems`/`sliceablePrds` predicates), so the
@@ -139,8 +139,8 @@ export async function performAdvanceAuto(
 	const count = options.count ?? 1;
 
 	// Pool 1 — eligible SLICES via the EXISTING scan/select path. `scoreItems`
-	// inside `scanRepoPaths` gates eligibility on `allowAgents` (the build gate), so
-	// with `allowAgents` off NO slice is selected — the build rung is never reached
+	// inside `scanRepoPaths` gates eligibility on `autoBuild` (the build gate), so
+	// with `autoBuild` off NO slice is selected — the build rung is never reached
 	// by the bare/`-n` selection.
 	const report = scanRepoPaths([cwd], options.config);
 

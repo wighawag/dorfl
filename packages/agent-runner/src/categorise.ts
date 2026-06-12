@@ -1,7 +1,7 @@
 /**
  * Pure categorisation of backlog items into the "who can take it" groups used by
  * the human decision dashboard. Grouping is deliberately INDEPENDENT of the
- * repo's `allowAgents` policy: a human always sees the full picture, and the
+ * repo's `autoBuild` policy: a human always sees the full picture, and the
  * policy only changes the eligibility *verdict* / summary counts elsewhere —
  * never which group an item lands in.
  */
@@ -11,9 +11,9 @@ import type {ScannedItem} from './scan.js';
 /**
  * Which group an item belongs to, derived from its two autonomy axes
  * (`humanOnly`, `needsAnswers`) and its dependency readiness (NOT the runner's
- * `allowAgents` policy):
+ * `autoBuild` policy):
  *   - `agent-claimable` — neither axis gated AND deps satisfied: an agent can
- *     claim it now (provided this repo's `allowAgents` policy is on).
+ *     claim it now (provided this repo's `autoBuild` policy is on).
  *   - `human-only` — `humanOnly: true`: a human decides/builds it; an agent never
  *     claims it, regardless of policy or deps.
  *   - `needs-answers` — not `humanOnly` but `needsAnswers: true`: open questions
@@ -42,7 +42,7 @@ export const CATEGORY_ORDER: Category[] = [
 /** Human-facing section headings for each group. */
 export const CATEGORY_LABELS: Record<Category, string> = {
 	'agent-claimable':
-		'Agent-claimable now (not human-only, no open questions, deps satisfied; needs --allow-agents)',
+		'Agent-claimable now (not human-only, no open questions, deps satisfied; needs --auto-build)',
 	'human-only': 'Human-only (humanOnly: true — a human decides/builds)',
 	'needs-answers':
 		'Needs answers (needsAnswers: true — open questions block autonomous work)',
@@ -61,7 +61,7 @@ export interface CategorisedItem {
  * Map an item's autonomy axes (`humanOnly`, `needsAnswers`) + dependency
  * readiness to its dashboard category. Policy-independent by design: the
  * category reflects what the author declared and whether its deps are met, not
- * the runner's `allowAgents` policy. `humanOnly` is shown before `needsAnswers`
+ * the runner's `autoBuild` policy. `humanOnly` is shown before `needsAnswers`
  * when both are set, so the REASON is always visible.
  */
 export function categoriseItem(item: ScannedItem): CategorisedItem {

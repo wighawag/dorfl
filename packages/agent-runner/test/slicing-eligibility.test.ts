@@ -52,7 +52,7 @@ describe('resolveSliceGate — the humanOnly × needsAnswers × autoSlice matrix
 });
 
 describe('resolveSliceGate — explicit naming satisfies the autoSlice policy term', () => {
-	// `explicit: true` mirrors `do <slice>` building regardless of `allowAgents`:
+	// `explicit: true` mirrors `do <slice>` building regardless of `autoBuild`:
 	// naming the PRD IS the authorization, so the `autoSlice` policy term drops.
 	it('explicit + autoSlice OFF is sliceable (the policy term is satisfied by naming)', () => {
 		expect(resolveSliceGate(undefined, undefined, false, true)).toBe(true);

@@ -37,8 +37,8 @@ export interface SlicingEligibilityInput {
 	/**
 	 * The target was named EXPLICITLY by the operator (`do prd:<slug>`), so the
 	 * `autoSlice` POLICY is already satisfied — naming the PRD IS the authorization,
-	 * exactly as `do <slice>` builds a named slice regardless of `allowAgents` (the
-	 * `allowAgents` precedent: the pool/scan gates the policy, the explicit claim path
+	 * exactly as `do <slice>` builds a named slice regardless of `autoBuild` (the
+	 * `autoBuild` precedent: the pool/scan gates the policy, the explicit claim path
 	 * never re-checks it). When `true`, the policy term drops from the gate and ONLY
 	 * the PRD's own readiness axes (`humanOnly`/`needsAnswers`) + `sliceAfter` bind.
 	 * Defaults `false` (the AUTO-PICK pool path, where the `autoSlice` policy DOES
@@ -62,7 +62,7 @@ export interface SlicingEligibilityResult {
  * satisfied — where the policy is satisfied either by the repo's `autoSlice`
  * toggle being on (the AUTO-PICK pool path) OR by the target being named
  * EXPLICITLY (`explicit: true` — `do prd:<slug>`, where naming IS the
- * authorization, mirroring `do <slice>` vs `allowAgents`). Both readiness axes
+ * authorization, mirroring `do <slice>` vs `autoBuild`). Both readiness axes
  * block orthogonally and are never agent-sliceable regardless of policy; a human
  * is never bound by either. The exact mirror of `resolveGate` (the build gate),
  * one level up.
@@ -76,7 +76,7 @@ export function resolveSliceGate(
 	if (needsAnswers === true || humanOnly === true) {
 		return false;
 	}
-	// EXPLICIT naming satisfies the policy term (the build path's allowAgents
+	// EXPLICIT naming satisfies the policy term (the build path's autoBuild
 	// precedent); otherwise the repo's autoSlice toggle gates the auto-pick pool.
 	return explicit || autoSlice;
 }

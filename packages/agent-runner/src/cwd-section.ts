@@ -91,7 +91,7 @@ export interface CwdSection {
 export interface ResolveCwdSectionOptions {
 	/** The current working directory to inspect (the candidate cwd repo). */
 	cwd: string;
-	/** Resolved global config (for `workspacesDir` + per-repo `allowAgents`). */
+	/** Resolved global config (for `workspacesDir` + per-repo `autoBuild`). */
 	config: Config;
 	/**
 	 * The arbiter remote name to fetch + diff against. Defaults to the same remote

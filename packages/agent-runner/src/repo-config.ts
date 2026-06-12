@@ -2,6 +2,7 @@ import {readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {mergeConfig, type Config, type PartialConfig} from './config.js';
 import {envOverrides, type EnvMap} from './env-config.js';
+import {applyConfigKeyAliases} from './config-alias.js';
 import {brand} from './brand.js';
 
 /**
@@ -56,15 +57,19 @@ export const REPO_ALLOWED_KEYS = [
 	'provider',
 	'verify',
 	'defaultArbiter',
-	'allowAgents',
+	// `autoBuild` (may an agent auto-BUILD undeclared, not-`humanOnly` slices in
+	// this repo?) is a genuine repo property — the build member of the symmetric
+	// per-action gate family. The OLD name `allowAgents` is still accepted as a
+	// DEPRECATED ALIAS (mapped here with a warning, see `config-alias.ts`).
+	'autoBuild',
 	// `autoSlice` (may an agent auto-slice undeclared PRDs in this repo?) is a
-	// genuine repo property — the slicing-autonomy mirror of `allowAgents`
+	// genuine repo property — the slicing-autonomy mirror of `autoBuild`
 	// (`work/prd/auto-slice.md`), resolved per-repo through the same chain.
 	'autoSlice',
 	// `autoTriage` (may an agent auto-disposition an observation in the conservative
 	// no-question cases?) is a genuine repo property — the THIRD member of the flat
 	// per-action gate family (PRD `advance-loop`), the observation-triage mirror of
-	// `allowAgents`/`autoSlice`, resolved per-repo through the same chain.
+	// `autoBuild`/`autoSlice`, resolved per-repo through the same chain.
 	'autoTriage',
 	// `prdsFirst` (does an auto-pick/-n/multi selection take sliceable PRDs before
 	// eligible slices?) is a genuine repo property — the per-repo toggle ADR §3
@@ -77,7 +82,7 @@ export const REPO_ALLOWED_KEYS = [
 	'model',
 	'harness',
 	// Gate 2 (PR/code review) policy is a genuine repo property (GATES PRD
-	// `work/prd/review.md`), resolved per-repo like `integration`/`allowAgents`:
+	// `work/prd/review.md`), resolved per-repo like `integration`/`autoBuild`:
 	// whether this repo runs Gate 2 (`review`), whether an approve may auto-merge
 	// (`autoMerge`), which model the review agent runs on (`reviewModel`), and the
 	// revise↔review loop bound (`reviewMaxRounds`). `reviewModel` is routing intent
@@ -209,6 +214,16 @@ export function loadRepoConfigFromContent(
 		);
 	}
 
+	// Migrate any DEPRECATED old key (e.g. `allowAgents` → `autoBuild`) to its
+	// current name BEFORE the allow/reject split, so a committed repo file keeps
+	// resolving across a rename. Each deprecation is collected and surfaced through
+	// the same `message` channel as a rejected key (callers `note`/`warn` it).
+	const deprecations: string[] = [];
+	applyConfigKeyAliases(parsed, {
+		source: sourceLabel,
+		warn: (m) => deprecations.push(m),
+	});
+
 	const config: PartialConfig = {};
 	const rejected: string[] = [];
 	for (const key of Object.keys(parsed)) {
@@ -225,13 +240,20 @@ export function loadRepoConfigFromContent(
 		// else: unknown key ⇒ silently ignored.
 	}
 
-	const message =
+	const rejectedMessage =
 		rejected.length > 0
 			? `Ignoring runner/host-only key(s) in ${REPO_CONFIG_FILENAME} ` +
 				`(${sourceLabel}): ${rejected.join(', ')}. ` +
 				`These describe the runner/host, not a single repo, and belong in ` +
 				`the global config or a CLI flag.`
 			: undefined;
+
+	// Combine the deprecation warning(s) and the rejected-key message into the one
+	// `message` channel callers already surface (deprecations first).
+	const message =
+		[...deprecations, ...(rejectedMessage ? [rejectedMessage] : [])].join(
+			'\n',
+		) || undefined;
 
 	return {path: sourceLabel, config, rejected, ...(message ? {message} : {})};
 }

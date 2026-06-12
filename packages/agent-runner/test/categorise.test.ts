@@ -16,7 +16,7 @@ function item(
 	humanOnly: boolean | undefined,
 	blockedBy: string[],
 	doneSlugs: Set<string>,
-	allowAgents = false,
+	autoBuild = false,
 	needsAnswers: boolean | undefined = undefined,
 ): ScannedItem {
 	return {
@@ -30,7 +30,7 @@ function item(
 			needsAnswers,
 			blockedBy,
 			doneSlugs,
-			allowAgents,
+			autoBuild,
 		}),
 	};
 }
@@ -45,7 +45,7 @@ function needsAnswersItem(
 }
 
 describe('categoriseItem — every humanOnly×needsAnswers×deps combination', () => {
-	// Grouping is gate + readiness, INDEPENDENT of allowAgents.
+	// Grouping is gate + readiness, INDEPENDENT of autoBuild.
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
@@ -149,7 +149,7 @@ describe('categoriseItems', () => {
 		expect(groups['blocked'].map((g) => g.item.slug)).toEqual(['blocked']);
 	});
 
-	it('is independent of allowAgents (groups identical either way)', () => {
+	it('is independent of autoBuild (groups identical either way)', () => {
 		const items = [
 			item('claimable', undefined, [], new Set()),
 			item('human', true, [], new Set()),

@@ -257,14 +257,14 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(onBranch).not.toContain('Fixes');
 	});
 
-	it('is GATE-FREE: it proceeds with the autonomous gates (allowAgents/autoSlice) OFF', async () => {
+	it('is GATE-FREE: it proceeds with the autonomous gates (autoBuild/autoSlice) OFF', async () => {
 		// Prove `intake` does not consult the autonomous-selection gates: even with a
-		// per-repo config that turns the build gate (allowAgents) AND the slice gate
+		// per-repo config that turns the build gate (autoBuild) AND the slice gate
 		// (autoSlice) OFF, the explicit invocation authorizes the run and the slice is
 		// emitted. (`intake` takes NO autonomy config at all — the explicit invocation
 		// IS the authorization, exactly as `do`; the gates are the autonomous path's.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		const config = mergeConfig({allowAgents: false, autoSlice: false});
+		const config = mergeConfig({autoBuild: false, autoSlice: false});
 		// `intake` never reads these; we assert the run SUCCEEDS regardless — the
 		// gate-free property (PRD US #7).
 		void config;

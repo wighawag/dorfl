@@ -217,7 +217,7 @@ function configFor(root: string, overrides = {}) {
 		// The gate is now the per-repo `verify` (the converged core), injected as a
 		// string command; green for these provider end-to-end tests.
 		verify: 'exit 0',
-		allowAgents: true,
+		autoBuild: true,
 		...overrides,
 	});
 }

@@ -282,7 +282,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 		// `explicit-do-prd-not-gated-by-autoslice`): `do --remote prd:<slug>` is an
 		// EXPLICIT target, so it slices REGARDLESS of the repo's `autoSlice` POLICY
 		// (autoSlice OFF / default), exactly as `do <slice>` builds regardless of
-		// `allowAgents`. The agent RUNS (the policy no longer gate-refuses the explicit
+		// `autoBuild`. The agent RUNS (the policy no longer gate-refuses the explicit
 		// form); no job worktree is cut for a prd: arg (slicing is not a build pipeline).
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
 			prds: ['someprd'],

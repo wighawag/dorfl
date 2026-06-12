@@ -77,7 +77,7 @@ import type {NewQuestion} from './sidecar.js';
  * executor SEAM ({@link RungExecutor}); the build/slice rungs ORCHESTRATE
  * `do`/`do prd:`. What this verb does NOT do (LATER slices):
  *   - The two **DRIVERS** (one-shot sequential / loop) + `-n` + the gate-FAMILY
- *     WIRING that resolves `allowAgents`/`autoSlice`/`autoTriage` and threads them
+ *     WIRING that resolves `autoBuild`/`autoSlice`/`autoTriage` and threads them
  *     into the build/slice gate composition — slice `advance-drivers-and-gates`.
  *     (This verb already RESPECTS `autoTriage` in the triage rung — the gate's
  *     resolution chain + the build/slice gate composition is the drivers slice.)

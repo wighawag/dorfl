@@ -192,7 +192,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 	});
 
 	it('an EXPLICITLY-named PRD slices with autoSlice OFF (no config, no env) — naming IS the authorization', async () => {
-		// The slice-path mirror of `do <slice>` building regardless of `allowAgents`:
+		// The slice-path mirror of `do <slice>` building regardless of `autoBuild`:
 		// `explicit: true` (the `do prd:<slug>` dispatch) drops the `autoSlice` POLICY
 		// term, so an explicit slice-now proceeds to the lock/agent with the policy
 		// unset. (A real lock is taken here — the gate does NOT refuse, so the noLock

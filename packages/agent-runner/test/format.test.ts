@@ -8,7 +8,7 @@ function item(
 	humanOnly: boolean | undefined,
 	blockedBy: string[],
 	doneSlugs: Set<string>,
-	allowAgents: boolean,
+	autoBuild: boolean,
 	needsAnswers: boolean | undefined = undefined,
 ): ScannedItem {
 	return {
@@ -22,7 +22,7 @@ function item(
 			needsAnswers,
 			blockedBy,
 			doneSlugs,
-			allowAgents,
+			autoBuild,
 		}),
 	};
 }
@@ -32,9 +32,9 @@ function needsAnswersItem(
 	slug: string,
 	blockedBy: string[],
 	doneSlugs: Set<string>,
-	allowAgents: boolean,
+	autoBuild: boolean,
 ): ScannedItem {
-	return item(slug, undefined, blockedBy, doneSlugs, allowAgents, true);
+	return item(slug, undefined, blockedBy, doneSlugs, autoBuild, true);
 }
 
 /** Build a one-repo report, computing eligibility totals like scan() does. */
@@ -104,7 +104,7 @@ describe('formatReport — grouped dashboard', () => {
 			reportOf([item('maybe', undefined, [], new Set(), false)]),
 		);
 		expect(out).toContain('Agent-claimable now');
-		expect(out).toContain('--allow-agents');
+		expect(out).toContain('--auto-build');
 	});
 
 	it('places undeclared blocked items under Blocked', () => {
@@ -128,7 +128,7 @@ describe('formatReport — grouped dashboard', () => {
 		expect(out).toContain('waiting on dep');
 	});
 
-	it('shows the SAME groups regardless of --allow-agents', () => {
+	it('shows the SAME groups regardless of --auto-build', () => {
 		const items = [
 			item('claimable', undefined, [], new Set(), false),
 			item('human', true, [], new Set(), false),
@@ -166,7 +166,7 @@ describe('formatReport — grouped dashboard', () => {
 		expect(out).toContain('3 ready');
 	});
 
-	it('verdict count reflects the allowAgents policy for undeclared items', () => {
+	it('verdict count reflects the autoBuild policy for undeclared items', () => {
 		const strict = formatReport(
 			reportOf([item('maybe', undefined, [], new Set(), false)]),
 		);

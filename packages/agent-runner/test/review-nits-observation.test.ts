@@ -373,7 +373,7 @@ describe('review-nits-observation — the fleet (`run`) path also writes it', ()
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: PASS,
-			allowAgents: true,
+			autoBuild: true,
 			...overrides,
 		});
 	}

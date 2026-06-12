@@ -25,8 +25,8 @@ export interface EligibilityInput {
 	blockedBy: string[];
 	/** Slugs present in this repo's `work/done/`. */
 	doneSlugs: Set<string>;
-	/** Per-repo policy: may agents claim *undeclared* (not human-only) slices? */
-	allowAgents: boolean;
+	/** Per-repo policy: may agents auto-BUILD *undeclared* (not human-only) slices? */
+	autoBuild: boolean;
 }
 
 export interface EligibilityResult {
@@ -39,19 +39,19 @@ export interface EligibilityResult {
 
 /**
  * Resolve the autonomy gate: agent-claimable iff `needsAnswers` is not `true`
- * AND `humanOnly` is not `true` AND the repo's `allowAgents` policy is on. Both
+ * AND `humanOnly` is not `true` AND the repo's `autoBuild` policy is on. Both
  * axes block orthogonally and are never claimable by an agent regardless of
  * policy; a human is never bound by either.
  */
 export function resolveGate(
 	humanOnly: HumanOnlyGate,
 	needsAnswers: HumanOnlyGate,
-	allowAgents: boolean,
+	autoBuild: boolean,
 ): boolean {
 	if (needsAnswers === true || humanOnly === true) {
 		return false;
 	}
-	return allowAgents;
+	return autoBuild;
 }
 
 /** Resolve `blockedBy` against the slugs present in `work/done/`. */
@@ -68,7 +68,7 @@ export function resolveEligibility(input: EligibilityInput): EligibilityResult {
 	const gatePass = resolveGate(
 		input.humanOnly,
 		input.needsAnswers,
-		input.allowAgents,
+		input.autoBuild,
 	);
 	const blockedBy = resolveBlockedBy(input.blockedBy, input.doneSlugs);
 	return {

@@ -3,6 +3,7 @@ import {homedir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {brand} from './brand.js';
 import {type Identity, validateIdentity} from './identity.js';
+import {applyConfigKeyAliases} from './config-alias.js';
 
 /**
  * How a completed item is integrated back to the arbiter's `main`. `merge` lands
@@ -44,21 +45,24 @@ export type VerifyConfig = string | string[];
  */
 export interface Config {
 	/**
-	 * Per-repo policy: may agents claim *undeclared* (not `humanOnly`) slices in
-	 * this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
+	 * Per-repo policy: may agents auto-BUILD *undeclared* (not `humanOnly`) slices
+	 * in this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
 	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
-	 * like `integration`: flag (`--allow-agents`/`--no-allow-agents`) > per-repo >
-	 * global > default.
+	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > per-repo >
+	 * global > default. The build member of the symmetric per-action gate family
+	 * (`autoBuild`/`autoSlice`/`autoTriage`). The OLD name `allowAgents` (key/flag/
+	 * env) is still accepted as a DEPRECATED ALIAS for a migration window (it maps
+	 * here with a deprecation warning); see `config-alias.ts`.
 	 */
-	allowAgents: boolean;
+	autoBuild: boolean;
 	/**
 	 * Per-repo policy: may an agent auto-slice *undeclared* (not `humanOnly`,
 	 * no open questions) PRDs in this repo? `false` (default, strict, human-first)
 	 * ⇒ a human must drive every PRD's slicing; `true` ⇒ an agent may auto-slice
 	 * any PRD that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
-	 * `allowAgents`: flag > `AGENT_RUNNER_AUTO_SLICE` env > per-repo > global >
+	 * `autoBuild`: flag > `AGENT_RUNNER_AUTO_SLICE` env > per-repo > global >
 	 * default. The two-axis slicing gate (`work/prd/auto-slice.md`), one level up
-	 * from the build gate's `allowAgents`.
+	 * from the build gate's `autoBuild`.
 	 */
 	autoSlice: boolean;
 	/**
@@ -69,7 +73,7 @@ export interface Config {
 	 * a promote/keep/delete question and waits — "is this worth building?" is never
 	 * decided autonomously; `true` ⇒ the triage rung may auto-disposition ONLY the
 	 * no-question cases (it still NEVER auto-deletes a non-duplicate signal and
-	 * NEVER auto-promotes a judgement call). Resolved like `allowAgents`/`autoSlice`:
+	 * NEVER auto-promotes a judgement call). Resolved like `autoBuild`/`autoSlice`:
 	 * flag > `AGENT_RUNNER_AUTO_TRIAGE` env > per-repo > global > default false. The
 	 * THIRD member of the flat per-action gate family (PRD `advance-loop`,
 	 * "Repo-config: a FLAT per-action gate family"); surfacing a question and
@@ -83,7 +87,7 @@ export interface Config {
 	 * before creating more (ADR `command-surface-and-journeys` §3). `true` ⇒ flip
 	 * the order (PRDs to slice first). It ONLY reorders the two pools relative to
 	 * each other; it never changes WHICH items are eligible. Resolved per-repo like
-	 * `allowAgents`/`autoSlice`: flag > `AGENT_RUNNER_PRDS_FIRST` env > per-repo >
+	 * `autoBuild`/`autoSlice`: flag > `AGENT_RUNNER_PRDS_FIRST` env > per-repo >
 	 * global > default false. The shared selection helper (`select-priority.ts`)
 	 * reads it; `run`'s tick can adopt the same helper later.
 	 */
@@ -278,18 +282,18 @@ export type PartialConfig = Partial<Config>;
 
 /**
  * Built-in defaults. Chosen so that zero-config is useful: stay strict about the
- * autonomy gate (agents claim nothing unless a repo opts in via `allowAgents`).
+ * autonomy gate (agents claim nothing unless a repo opts in via `autoBuild`).
  * Discovery has no default `roots` — it is the registered hub-mirror set (empty
  * until `remote add`/`remote find` registers a target).
  */
 export const DEFAULT_CONFIG: Config = {
-	allowAgents: false,
+	autoBuild: false,
 	// Auto-slicing is human-first by default: an agent slices nothing unless a
-	// repo opts in via `autoSlice` (mirrors `allowAgents`, one level up).
+	// repo opts in via `autoSlice` (mirrors `autoBuild`, one level up).
 	autoSlice: false,
 	// Observation auto-disposition is human-first by default: the triage rung
 	// surfaces a promote/keep/delete question and WAITS unless a repo opts in via
-	// `autoTriage` (the third per-action gate, mirrors `allowAgents`/`autoSlice`).
+	// `autoTriage` (the third per-action gate, mirrors `autoBuild`/`autoSlice`).
 	autoTriage: false,
 	// Slices-first by default (ADR §3): a selection drains ready slices before it
 	// creates more work by slicing PRDs. `prdsFirst: true` flips the two pools.
@@ -352,8 +356,15 @@ export function saveConfig(config: PartialConfig, path: string): void {
 /**
  * Load config from `path`, merged over defaults. A missing file is not an error
  * (defaults make the tool work out of the box); invalid JSON is.
+ *
+ * Deprecated key aliases (e.g. `allowAgents` → `autoBuild`, see `config-alias.ts`)
+ * are migrated in-place with a deprecation `warn` (default: stderr) so an upgrade
+ * never breaks a committed global config.
  */
-export function loadConfig(path: string = defaultConfigPath()): Config {
+export function loadConfig(
+	path: string = defaultConfigPath(),
+	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
+): Config {
 	if (!existsSync(path)) {
 		return mergeConfig({});
 	}
@@ -373,6 +384,12 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 			`Invalid JSON in config at ${path}: ${(err as Error).message}`,
 		);
 	}
+	// Migrate any deprecated old key (e.g. `allowAgents` → `autoBuild`) to its
+	// current name so a committed global config keeps resolving across a rename.
+	applyConfigKeyAliases(parsed as Record<string, unknown>, {
+		source: path,
+		warn,
+	});
 	// Validate a present identity at LOAD time (dumb — no arbiter URL resolution;
 	// the transport-coherence check is push-time). A bad identity is a hard config
 	// error, never a silent ambient fallback.

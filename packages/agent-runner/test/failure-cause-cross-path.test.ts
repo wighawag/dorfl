@@ -56,7 +56,7 @@ function runConfig(overrides = {}) {
 		integration: 'merge',
 		agentCmd: 'true',
 		verify: PASS,
-		allowAgents: true,
+		autoBuild: true,
 		...overrides,
 	});
 }

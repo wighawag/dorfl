@@ -177,9 +177,9 @@ export function formatCwdSection(section: CwdSection): string[] {
  * Human-only / Blocked), with empty groups shown as `(none)`. Within a group,
  * ready (deps-satisfied) items sort above blocked ones.
  *
- * The set of groups shown is INDEPENDENT of `allowAgents`; only the eligibility
+ * The set of groups shown is INDEPENDENT of `autoBuild`; only the eligibility
  * *verdict* line reflects the policy (`report.totalEligible` counts an
- * agent-claimable item only when `allowAgents` is on).
+ * agent-claimable item only when `autoBuild` is on).
  */
 export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 	const lines: string[] = [];
@@ -239,7 +239,7 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 	);
 	lines.push(
 		`Runner verdict: ${registryEligible}/${registryItems} item(s) eligible now ` +
-			`(under the current --allow-agents policy).`,
+			`(under the current --auto-build policy).`,
 	);
 
 	return lines.join('\n');
