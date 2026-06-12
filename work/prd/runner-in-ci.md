@@ -100,6 +100,21 @@ So CI translates its gate state into the right mode and PASSES it to the command
 
 **The fully-gateless guardrail.** "All gates on AND `--merge` everywhere" (autonomous issue → slice → build → main, no human anywhere) is dangerous precisely because anybody can file issues. It MUST be a loud, deliberate, NON-DEFAULT opt-in, never reachable by accident. The default is conservative (propose / human-in-the-loop).
 
+### Config & gate model in CI (no `autoAdvance` gate; CI policy = the existing gate family via the workflow env block) (ADR `ci-config-policy-and-gate-family`)
+
+CI does NOT get a new "enable advanced features" config gate. The autonomous lifecycle decomposes FULLY into the existing flat per-action gate family (`autoBuild` / `autoSlice` / `autoTriage`), so there is no ungated rung for an `autoAdvance` flag to guard:
+
+- **`autoBuild`** gates auto-building an undeclared slice; off ⇒ the rung does not run autonomously.
+- **`autoSlice`** gates auto-slicing an undeclared PRD; off ⇒ the rung does not run autonomously.
+- **`autoTriage`** does NOT gate "whether triage happens" but "whether the no-question cases are decided silently." OFF ⇒ the triage rung STILL runs, but it **surfaces a promote/keep/delete question every time** and waits (it never auto-decides); ON ⇒ it auto-dispositions ONLY the unambiguous cases (still never auto-deletes a non-duplicate / auto-promotes a judgement call).
+- **surface a question / apply a committed answer** are ALWAYS allowed (they never auto-decide), so they need no gate.
+
+So "auto-advance the lifecycle" is already expressible as a combination of these three plus the always-on surface/apply rungs. A fourth `autoAdvance` name would be a redundant alias over a set already fully covered, and re-introduces the slice-by-slice incoherence the command-surface ADR removed.
+
+**"Enable the advance loop at all" is CAPABILITY SELECTION, not a gate** (capability C above): the advance-specific rungs + the `on: push work/questions/**` trigger are selected by WHETHER `install-ci` emits the advance-loop workflow. (A finer `do`-vs-`advance` per-workflow knob is deferred; for now CI workflows use `advance` + the gate family.)
+
+**CI-vs-laptop gate DIVERGENCE is the workflow ENV block, NOT a new config axis.** The gates resolve `flag > ENV (AGENT_RUNNER_*) > per-repo > global > default` (`env-config.ts`, the per-machine source CI has without committing a file). So "laptop auto-builds nothing (I drive it), but CI auto-builds + auto-slices" needs no CI-specific config field: the generated workflow sets an env block (`AGENT_RUNNER_AUTO_BUILD: 'true'`, `AGENT_RUNNER_AUTO_SLICE: 'true'`, `AGENT_RUNNER_AUTO_TRIAGE: 'false'`, …) while the committed `.agent-runner.json` keeps laptop-strict defaults. `install-ci` WRITES that env block from the wizard's per-capability answers. The single "enable advanced/lifecycle CI?" UX, if wanted, is a WIZARD PRESET that expands to (emit the advance workflow + the answer trigger + the env block), never a new `Config` field.
+
 ### `install-ci` is a SCAFFOLDER; the CI job NEVER edits workflows (safety boundary)
 
 `install-ci` is a **human-run, one-time scaffolder** (like whitesmith's): it WRITES `.github/workflows/**` + the composite action + secrets, and the human commits them. The **running CI job is forbidden from touching `.github/workflows/**`**. This is a real safety line: the default `GITHUB_TOKEN` cannot push changes under `.github/workflows/` without the `workflows` permission, and an autonomous run must never need (or be granted) the ability to rewrite its own triggers. Stated as US #9; composes with `humanOnly: true`. (A slice that builds work touching workflow files is a human-reviewed PR like any other: the prohibition is on the CI JOB self-editing its triggers, not on the engine ever proposing workflow changes.)
@@ -146,6 +161,7 @@ The agent-runner workflow surface is ONE workflow per ENABLED capability (build 
 - The "PRD complete?" QUERY (already done, `prd-complete-query`). CI's close-job CONSUMES it.
 - Dependency-aware `-n` scheduling (a cross-verb engine enhancement, `work/observations/do-autopick-no-dependency-aware-scheduling.md`).
 - `--isolated` / `--remote` / the registry / hub mirrors: laptop-only; CI is in-place.
+- A new `autoAdvance` (or equivalent) CONFIG GATE. The lifecycle decomposes fully into the existing `autoBuild`/`autoSlice`/`autoTriage` family (ADR `ci-config-policy-and-gate-family`); CI-vs-laptop divergence is the workflow env block, not a new config field.
 - A long-lived CI daemon/service; ticks stay bounded.
 - Non-GitHub CI providers (GitHub first; the command is seam-shaped so others can follow, but only GitHub is built here).
 
@@ -153,4 +169,5 @@ The agent-runner workflow surface is ONE workflow per ENABLED capability (build 
 
 - whitesmith (`~/dev/github/wighawag/whitesmith`, `src/providers/github-ci.ts`) is the reference for the `install-ci` wizard, the `models.json`/`auth.json` auth modes, the `GitHubCIContext` adapter seam, the composite setup action, the `--fake` snapshot, the `--config`/`--export-config` non-interactive path, and the OAuth-refresh sharp edge. Reuse its patterns; do **NOT** reuse its label state-machine or issue lifecycle (out of scope here).
 - The existing seed (`docs/ci/advance-loop.yml.template`, `docs/ci/README.md`, `src/advance-ci-template.ts`) is THIS PRD's starting point for the advance-loop capability: absorb it, do not duplicate it.
+- ADR `ci-config-policy-and-gate-family` records the decision (no `autoAdvance` gate; CI policy = the existing gate family resolved via the generated workflow's `AGENT_RUNNER_*` env block). See "Config & gate model in CI" above.
 - Slice this PRD with `to-slices`. A natural first slice is the provider-agnostic `install-ci` core + the GitHub adapter + auth (`--fake`-tested); then one slice per capability's workflow wiring (build tick, advance loop, intake, close-job, gc sweep), each independently selectable.
