@@ -1878,6 +1878,14 @@ export function buildProgram(): Command {
 			'-n, --number <x>',
 			'AUTO-PICK x eligible items and advance them IN SEQUENCE (slices-first then PRDs-to-slice; per-repo prdsFirst flips). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
 		)
+		.option(
+			'--merge',
+			'integrate the advanced item(s) in merge mode this invocation (mutually exclusive with --propose; overrides config). The CI merge shape is a SINGLE SEQUENTIAL job, so this rides the `-n`/named-sequence path, never the matrix.',
+		)
+		.option(
+			'--propose',
+			'integrate the advanced item(s) in propose mode this invocation (default; mutually exclusive with --merge; overrides config). The CI propose shape is the parallel matrix (one PR per item).',
+		)
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			// Variadic grammar (mirrors `do`): zero args = AUTO-PICK; one = the single
 			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count
@@ -1907,10 +1915,27 @@ export function buildProgram(): Command {
 
 			const cwd = process.cwd();
 			const global = loadConfig(flags.config);
+			// Resolve the integration mode this invocation asks for, highest first:
+			//   --merge/--propose flag > per-repo .agent-runner.json > global > default.
+			// The SAME chain `do`/`complete` use (via `integrationFromFlags`), so the
+			// human, the autonomous runner, and the CI workflow all resolve the SAME
+			// order. This is what ties the CI dispatch `integrationMode` to the actual
+			// open-PR-vs-merge-to-main behaviour: the propose-matrix legs pass
+			// `--propose` and the single sequential merge job passes `--merge`, so the
+			// integration mode can never DESYNC from the job shape the input selected.
+			let flagMode;
+			try {
+				flagMode = integrationFromFlags(flags);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
-				flags: doFlagOverrides(flags, undefined),
+				flags: doFlagOverrides(flags, flagMode),
 			});
 			if (resolved.message) {
 				console.error(`>> ${resolved.message}`);

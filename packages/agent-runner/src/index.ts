@@ -552,3 +552,13 @@ export {
 	CATEGORY_ORDER,
 	CATEGORY_LABELS,
 } from './categorise.js';
+
+export type {
+	AdvanceCiTemplateProblem,
+	AdvanceCiTemplateValidation,
+} from './advance-ci-template.js';
+export {
+	resolveAdvanceCiTemplatePath,
+	loadAdvanceCiTemplate,
+	validateAdvanceCiTemplate,
+} from './advance-ci-template.js';

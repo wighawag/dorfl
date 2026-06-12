@@ -1,0 +1,161 @@
+# agent-runner — the `advance` loop in CI (the `install-ci` notion, PRD advance-loop, US #27/28)
+#
+# ────────────────────────────────────────────────────────────────────────────
+# ONE-STEP ADOPTION ("install-ci"): copy THIS file to `.github/workflows/advance-loop.yml`
+# in your target repo, set the secrets it references, and you are wired. It is a
+# `.template` here ON PURPOSE so it NEVER self-triggers inside the agent-runner
+# repo itself (a live `.github/workflows/*.yml` here would loop the tool on its own
+# work — see docs/ci/README.md "Why a `.template`").
+# ────────────────────────────────────────────────────────────────────────────
+#
+# WHAT IT DOES. It only INVOKES the existing `advance` driver (the substrate-agnostic
+# tick wrapped by the one-shot driver) — it is NOT entangled with the tick and adds
+# NO new execution model. Triggers: a cron schedule AND a push that ANSWERS a
+# question (a commit touching `work/questions/*`, so a freshly-answered sidecar is
+# applied promptly), plus a manual `workflow_dispatch`.
+#
+# ONE WORD, ONE MEANING — `integrationMode` drives BOTH (US #27). The dispatch
+# input is the INTEGRATION MODE (propose | merge, the same vocabulary as
+# `.agent-runner.json`'s `integration` and `advance --propose`/`--merge`). The job
+# SHAPE is DERIVED from it — it is NOT a second, independent knob. So the shape the
+# legs run in and the integration mode they pass to `advance` can NEVER desync:
+#
+#   * `integrationMode: propose` → a MATRIX of independent jobs (one per eligible
+#                       item), each leg running `advance <item> --propose` so it
+#                       opens its OWN PR. propose-mode items are independent PRs, so
+#                       a matrix is true parallelism and `-n` is not even needed.
+#                       The matrix items are ENUMERATED via the mirror-side pool
+#                       scan (`agent-runner scan --json`, the registry/hub-mirror
+#                       enumeration), so CI fans out over exactly the eligible pool.
+#
+#   * `integrationMode: merge` → a SINGLE SEQUENTIAL job running
+#                       `advance -n <x> --merge`. merge-mode items chain via rebase
+#                       (rebase-before-integrate, ADR §10); parallel merge jobs would
+#                       THRASH the main-CAS, so merge mode runs ONE sequential driver
+#                       (`-n` is ALWAYS sequential). The `--merge` flag can ONLY ride
+#                       this sequential job — no matrix leg ever carries it — so a
+#                       parallel merge-to-main is structurally impossible.
+#
+# Pick the mode with the `integrationMode` dispatch input (default below). It rides
+# `advance` as `--propose`/`--merge`, which sits at the TOP of the precedence chain
+# (flag > per-repo `.agent-runner.json` `integration` > global > default), so the
+# WORKFLOW mode always wins over a repo's config default — they cannot disagree.
+# Only the job for the chosen mode runs; the other is skipped by its `if:` guard.
+
+name: advance-loop
+
+on:
+  schedule:
+    # Cron tick: drain whatever the human has answered since the last run.
+    # Adjust the cadence to taste (here: hourly).
+    - cron: '0 * * * *'
+  push:
+    # On-answer-committed: a push that touches an answered question sidecar
+    # (`work/questions/*`) re-runs the loop so the answer is applied promptly.
+    paths:
+      - 'work/questions/**'
+  workflow_dispatch:
+    inputs:
+      integrationMode:
+        description: 'Integration mode (drives BOTH the integration flag passed to `advance` AND the job shape): propose ⇒ a matrix, each leg `advance --propose` (one PR per item); merge ⇒ a single sequential `advance -n --merge` (rebase-chains to main).'
+        required: false
+        default: 'propose'
+        type: choice
+        options:
+          - propose
+          - merge
+
+# Serialise overlapping ticks of the same shape; the claim CAS is the real
+# cross-run serialiser, this just avoids redundant concurrent ticks.
+concurrency:
+  group: advance-loop-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  # The resolved integration mode: the dispatch input when present, else `propose`
+  # (the conservative default — one PR per item, a human merges). This single value
+  # selects BOTH the job shape (via the `if:` guards below) AND the integration flag
+  # the `advance` legs pass (`--propose`/`--merge`), so they can never desync.
+  INTEGRATION_MODE: ${{ github.event.inputs.integrationMode || 'propose' }}
+
+jobs:
+  # ── ENUMERATE (propose only) ────────────────────────────────────────────────
+  # Build the matrix from the mirror-side eligible-pool scan. `scan --json` reads
+  # the hub-mirror pool (the mirror-side enumeration the loop driver also consumes)
+  # and emits eligible items; `jq` shapes them into a GitHub Actions matrix list.
+  # Skipped entirely in merge mode.
+  enumerate:
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
+    runs-on: ubuntu-latest
+    outputs:
+      items: ${{ steps.scan.outputs.items }}
+      any: ${{ steps.scan.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/agent-runner-setup
+      - id: scan
+        # The mirror-side pool scan: enumerate eligible items as namespaced ids.
+        # `scan --json` reports the hub-mirror queue as `repos[].items[]`, each
+        # carrying `.slug` and `.eligibility.eligible`; we take the eligible ones
+        # as explicit `slice:<slug>` ids (CI MUST use explicit prefixes). Each
+        # becomes one matrix leg → one independent `advance` → one PR. (Eligible
+        # SLICES; sliceable PRDs are driven via the sequential/named path — see
+        # docs/ci/README.md "Matrix enumeration scope".)
+        run: |
+          items="$(agent-runner scan --json \
+            | jq -c '[.repos[].items[] | select(.eligibility.eligible == true) | "slice:" + .slug]')"
+          echo "items=${items}" >> "$GITHUB_OUTPUT"
+          if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── PROPOSE: a MATRIX of independent jobs (one PR per item) ──────────────────
+  # True parallelism — each item is an independent PR, so a matrix is the right
+  # parallel shape and `-n` is NOT needed. CI / automation MUST use explicit
+  # prefixes (`advance slice:foo` / `advance prd:foo`), never bare — an ambiguity
+  # error would halt the job (ADR command-surface-and-journeys §"CI uses prefixes").
+  advance-propose:
+    needs: enumerate
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Independent PRs: one failing item must NOT cancel the others.
+      fail-fast: false
+      matrix:
+        item: ${{ fromJson(needs.enumerate.outputs.items) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/agent-runner-setup
+      - name: advance one item (propose ⇒ opens a PR)
+        # `--propose` ties the integration mode to THIS (matrix) shape: it sits at
+        # the top of the precedence chain, so the workflow mode always wins over the
+        # repo's `.agent-runner.json` default and a leg can NEVER merge to main.
+        run: agent-runner advance "${{ matrix.item }}" --propose --arbiter origin
+
+  # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
+  # merge-mode items chain via rebase; parallel jobs would thrash the main-CAS.
+  # One sequential driver (`advance -n <x>`, ALWAYS sequential) drains the pool.
+  advance-merge:
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/agent-runner-setup
+      - name: advance the eligible pool sequentially (merge ⇒ rebase-chains to main)
+        # `--merge` rides ONLY this single sequential job (never a matrix leg), so
+        # rebase-chained merges to main happen one at a time — no parallel main-CAS
+        # thrash. The flag ties the integration mode to this shape; it overrides the
+        # repo config default, so the workflow mode and the integration mode agree.
+        run: agent-runner advance -n 10 --merge --arbiter origin
