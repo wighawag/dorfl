@@ -10,11 +10,13 @@ import {join} from 'node:path';
 import {inPlaceStrategy} from '../src/isolation.js';
 import {createJob} from '../src/workspace.js';
 import {performStart} from '../src/start.js';
+import {performDoRemote, type DoAgentRunner} from '../src/do.js';
 import {performClaim} from '../src/claim-cas.js';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
 import {
 	makeScratch,
+	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	gitEnv,
@@ -36,10 +38,15 @@ import {
 const ARBITER = 'arbiter';
 
 let scratch: Scratch;
+let restorePiAgentDir: () => void;
 beforeEach(() => {
 	scratch = makeScratch('agent-runner-stale-lease-sites-');
+	// Isolate pi's session storage to scratch so the createJob/performDoRemote e2e
+	// path never writes into the developer's real ~/.pi/agent/sessions/.
+	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
+	restorePiAgentDir();
 	scratch.cleanup();
 });
 
@@ -49,7 +56,11 @@ afterEach(() => {
  * push the branch → route to needs-attention → requeue (keep) back to backlog.
  * Returns the seeded handle (its `repo` is the human checkout, on main).
  */
-async function stuckThenRequeued(slug: string): Promise<{seeded: SeededRepo}> {
+async function stuckThenRequeued(
+	slug: string,
+	opts: {reclaim?: boolean} = {},
+): Promise<{seeded: SeededRepo}> {
+	const reclaim = opts.reclaim ?? true;
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
 	const repo = seeded.repo;
 	const claim = await performClaim({
@@ -81,15 +92,20 @@ async function stuckThenRequeued(slug: string): Promise<{seeded: SeededRepo}> {
 		env: gitEnv(),
 	});
 	expect(result.moved).toBe(true);
-	// Re-claim so the item is in-progress on the arbiter (the continue precondition
-	// the start/createJob paths assume after their own claim).
-	const reclaim = await performClaim({
-		slug,
-		cwd: repo,
-		arbiter: ARBITER,
-		env: gitEnv(),
-	});
-	expect(reclaim.exitCode).toBe(0);
+	// The item is now back in BACKLOG on the arbiter with its kept work/<slug>
+	// branch still present (the requeue durable artifact). The `start`/`isolation`
+	// continue paths assume the item is already IN-PROGRESS (they onboard AFTER
+	// their own claim), so by default re-claim. The `performDoRemote` e2e path
+	// CLAIMS itself, so it needs the item left in backlog (`reclaim: false`).
+	if (reclaim) {
+		const reclaimed = await performClaim({
+			slug,
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(reclaimed.exitCode).toBe(0);
+	}
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 	return {seeded};
@@ -482,6 +498,69 @@ describe('Part B — after-commit push failure surfaces to needs-attention (job-
 		expect(existsSync(join(job.dir, 'prior.txt'))).toBe(true);
 		job.dispose();
 	});
+
+	it('END-TO-END (performDoRemote, the EXACT --isolated incident path): an after-commit continue push-failure SURFACES to needs-attention on the arbiter, NOT silently in-progress, the agent NEVER runs, the kept branch recoverable', async () => {
+		// The job-worktree/createJob path the original `--isolated` incident hit, end
+		// to end: leave the kept work/<slug> in BACKLOG (performDoRemote claims it
+		// itself), move main + protect the arbiter so the onboard continue reconcile
+		// push of the rebased (already-committed) work branch is a non-ff the lease
+		// forces — denyNonFastForwards REJECTS it with a NON-"stale info" error → a
+		// REAL terminal push failure. The pipeline must SURFACE the slice to
+		// needs-attention (step 2b in runOneItem / the Part-B fix), NOT crash + strand
+		// it silently in work/in-progress/ on the arbiter (the observed bug).
+		const {seeded} = await stuckThenRequeued('theta', {reclaim: false});
+		gitIn(['config', 'receive.denyNonFastForwards', 'true'], seeded.arbiter);
+		const mover = seeded.clone('mover-theta');
+		gitIn(['fetch', '-q', ARBITER], mover);
+		gitIn(['switch', '-q', '-C', 'mv-main', `${ARBITER}/main`], mover);
+		writeFileSync(join(mover, 'mainmoved.txt'), 'moved\n');
+		gitIn(['add', '-A'], mover);
+		gitIn(['commit', '-q', '-m', 'main moved'], mover);
+		gitIn(['push', '-q', ARBITER, 'mv-main:main'], mover);
+
+		const ws = join(scratch.root, 'agents-area-theta');
+		let agentRan = false;
+		const neverAgent: DoAgentRunner = () => {
+			agentRan = true;
+			return {ok: true};
+		};
+		const result = await performDoRemote({
+			arg: 'theta',
+			remote: `file://${seeded.arbiter}`,
+			workspacesDir: ws,
+			integration: 'merge',
+			// A gate that would EXPLODE if reached — proves the agent + gate are SKIPPED
+			// (the push failed at onboard-time, before the agent ran).
+			verify: 'echo GATE-RAN >&2; exit 1',
+			agentRunner: neverAgent,
+			env: gitEnv(),
+		});
+
+		// SURFACED, not swallowed nor crashed: the run reports needs-attention.
+		expect(result.outcome).toBe('needs-attention');
+		expect(result.exitCode).toBe(1);
+		// The agent NEVER ran (the onboard push failed first; the build is skipped).
+		expect(agentRan).toBe(false);
+		// The item LANDS in needs-attention/ on the arbiter and is NO LONGER in
+		// in-progress/ (the observed silent-strand bug, now closed on the incident's
+		// own path).
+		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'theta')).toBe(
+			true,
+		);
+		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'theta')).toBe(
+			false,
+		);
+		expect(existsOnArbiterMain(seeded.repo, 'done', 'theta')).toBe(false);
+		// The recorded reason names the push-failure cause.
+		expect(result.message).toMatch(
+			/publishing the rebased work branch|failed/i,
+		);
+		// RECOVERABLE: the kept green work branch is left intact on the arbiter.
+		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-theta')).not.toBe('');
+		// performDoRemote materialises a hub mirror + job worktree (a real clone) and
+		// drives the whole pipeline, so this e2e is genuinely slower than the
+		// strategy-level tests above — give it headroom past the 5s default.
+	}, 30000);
 });
 
 /** Current branch (short name) of a checkout. */
