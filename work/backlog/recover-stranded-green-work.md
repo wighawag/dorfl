@@ -1,66 +1,61 @@
 ---
-title: a first-class verb to recover GREEN-BUT-UNINTEGRATED work (built + committed in a job worktree, but the PR/integration step failed) — open its PR from the existing branch, never a hand-rebuild-and-force-push
+title: recover GREEN-BUT-UNINTEGRATED work via `complete --isolated <slug>` (integrate from the retained job worktree) — no new verb, no hand-rebuild, no orphan branch
 slug: recover-stranded-green-work
-needsAnswers: true
 blockedBy: []
 covers: []
 ---
 
 ## What to build
 
-A first-class runner path to recover a build whose WORK is green and COMMITTED but whose INTEGRATION did not complete — the residual "stranded green work" case: `do` ran the build agent, the gate passed, the commit was made in the job worktree, but the PR/branch push (or the propose/merge step) then failed terminally. Today there is no clean verb for "this branch already holds green, gate-passed work — just open its PR / integrate it from where it is." The operator is forced into a manual **rebuild-a-clean-branch-off-main + force-push** dance.
+Let an operator recover a build whose WORK is green + committed but whose INTEGRATION did not complete (the "stranded green work" case) with **`complete --isolated <slug>`** — `complete` resolves the slug's RETAINED job worktree and integrates from the commit already in it, reusing the existing integration tail. No new verb, no rebuild of the build agent, no parallel/orphan branch, never `--force` to main.
 
-### Why this is its own gap (and not closed by the stale-lease retry)
+### The two facts that make this small (verified against the code)
 
-`work-branch-push-retry-on-stale-lease` (#88) made the stranding RARER — the continue-branch push now re-fetches + re-rebases + retries on a stale lease instead of failing on the first rejection. But it did NOT add a RECOVERY path for when integration still fails terminally (retry cap exhausted, a non-stale push failure, a propose-step `gh` failure, an interrupted `do`). In all those cases the green commit sits in the job worktree (e.g. `~/.agent-runner/work/<encoded>/...`) and the item is in `needs-attention/`, recoverable only by hand.
+This started as a big `needsAnswers` slice; investigating the code collapsed it:
 
-The existing recovery verbs don't cover it cleanly:
+- **The retained worktree is GUARANTEED to hold the green commit.** The reaper (`reapJob`, `gc.ts`) removes a job worktree ONLY when it is clean AND its branch tip is reachable on the arbiter (merged or pushed). When the push FAILED (the whole incident), the tip is NOT on the arbiter (`unmerged-commits`), so the predicate fails CLOSED and **KEEPS the worktree** — its docstring: *"a successful-but-unpushed job is retained… a retained worktree is a reliable 'needs attention' signal."* So the green commit (`64b9501` in the incident) is intact in the job worktree, by design. There is NOTHING to fix on the `do`/reaper side — the recovery SOURCE already exists.
+- **`complete` already does the recovery OPERATION.** `complete` takes a `cwd` ("the working clone/checkout the work branch lives in") and runs (gate →) done-move → commit → rebase-onto-`<arbiter>/main` → integrate THERE, reusing `performIntegration`/`integration-core` — integrating from the existing branch in place, never `--force` to main, with `--skip-verify` to skip the (already-passed) gate and `--propose`/`--merge` honoured. That IS the recovery. The only missing piece is pointing it at the retained job worktree.
 
-- `requeue` (keep+continue) + re-`do` REBUILDS from the kept branch's tip — correct when the work needs more building, WASTEFUL when the work is already green and only the PR is missing (it re-runs the whole build agent + gate).
-- `resume` / `complete` operate "in the CURRENT checkout" on a `work/<slug>` branch. The stranded commit is in a JOB WORKTREE (the agents' area, isolated/`--remote` builds), which is reaped/foreign to the human checkout — so there is no in-checkout branch to `resume` onto without first reconstructing it by hand.
+### Precise scope
 
-### The observed incident (the motivating evidence)
+- **Teach `complete` (and `resume`, for symmetry) a `--isolated <slug>` form that RESOLVES the slug's existing job worktree** in the agents' area (`workspacesDir`) and runs against it (sets the operation's `cwd` to that worktree dir). This is a **LOCATE-EXISTING** handle — the inverse of `do --isolated`, which CREATES a fresh worktree. Reuse the same worktree-naming/`workspacesDir` resolution `createJob`/`reapJob` use to FIND the dir (do not re-derive the encoding).
+  - `--isolated` (not `--cwd <dir>`) is the right surface: it keeps the flag SYMMETRIC with `do --isolated` (and the planned `--isolated`-as-default / `--in-place` direction), and — decisively — the operator must NOT have to know the encoded worktree path (`~/.agent-runner/work/<host>__<org>__<repo>__<slug>`). The runner locates it from the slug.
+- **`do`'s integration-failure path emits the exact recovery command** — when a green build fails to integrate (push/PR step failed terminally), print a copy-pasteable `agent-runner complete --isolated <slug> --skip-verify` (mode flags as appropriate) so the operator is handed the one-liner instead of reverse-engineering it.
+- **Idempotent / honest when there is nothing to recover:** `complete --isolated <slug>` when no retained worktree exists for the slug → a CLEAR message (already integrated / nothing retained), not a crash or a fresh worktree. When the worktree IS there but its work is already on the arbiter, the existing reachable-on-arbiter logic makes integration a clean no-op.
+- **Do NOT** add a new verb, a new integration path, or a `do`-side keep-vs-reap change (the reaper already keeps unpushed work). Do NOT rebuild the agent or re-cut a branch off main (the orphan anti-pattern `drive-backlog`'s golden-rule sidebar warns against).
 
-`advance-verb-resolver` built green (1467 tests, Gate-2 approved, commit `64b9501` in the job worktree) but the `--force-with-lease` push failed ("stale info"); the origin tip stayed the stale `f75ff55`, no PR opened. Recovery was a hand-driven `git switch -C work/<slug> origin/main` + re-applying the files from the commit object + re-running the gate + force-pushing — the EXACT manual dance this slice should make a verb. (And note: `drive-backlog`'s own golden-rule sidebar WARNS that spinning a parallel branch off main and re-applying the tree ORPHANS the canonical `work/<slug>` branch on the remote — so the manual dance is not just tedious, it is the anti-pattern the skill explicitly cautions against.)
+### The observed incident (motivation)
 
-### Shape (to confirm — see Open questions)
+`advance-verb-resolver` built green (1467 tests, Gate-2 approved, commit `64b9501` in the job worktree) but the `--force-with-lease` push failed; no PR opened, and recovery was a manual `git switch -C work/<slug> origin/main` + re-apply-from-the-commit + re-gate + force-push — the orphan-prone dance this slice replaces with one command. (`work-branch-push-retry-on-stale-lease` / #88 made the stranding RARER by retrying a stale lease, but a terminal integration failure still strands green work with no first-class recovery — this slice is that recovery.)
 
-The likely-right shape: a verb (or a flag on an existing one) that, given a slug whose green commit is on the `work/<slug>` branch (in a job worktree OR already on the arbiter), **integrates from that existing branch** — reuse the SAME `performIntegration` / `integration-core` tail `do`/`complete` use (rebase-onto-main if needed → propose=open PR / merge=land), with NO rebuild, NO orphan branch, NEVER `--force` to main. It should be idempotent (safe to re-run) and detect "already integrated" as a clean no-op.
+## Acceptance criteria
 
-## Open questions (resolve before building — this is why `needsAnswers: true`)
-
-1. **New verb vs. flag on an existing one.** Is this a new verb (e.g. `integrate <slug>` / `land <slug>` / `recover <slug>`), or a mode of `complete` (e.g. `complete --from-worktree` / `complete --no-rebuild`), or a `requeue` sibling? It must NOT re-run the build agent + gate, which is the line that separates it from `requeue`+`do`.
-2. **Finding the green commit.** How does the verb locate the green commit when the job worktree was REAPED (the common case — `do` reaps on exit)? Does recovery require the branch to be on the ARBITER (so a reaped worktree is fine because the branch was pushed), or must it also handle "committed locally in a since-removed worktree, never pushed" (the `64b9501` case — the push FAILED, so the branch tip is ONLY in the worktree)? This is the crux: if the worktree is gone and the push failed, the commit may be unreachable except via reflog/dangling — does the verb guarantee the worktree is KEPT on integration-failure (so recovery always has a source), rather than reaped?
-3. **Does `do` change on integration-failure?** A cleaner fix may be upstream: when `do`'s build is green but integration fails, DON'T reap the job worktree, and emit a precise "recover with `<verb> <slug>`" instruction (the worktree + branch are the recovery source). Is the fix "keep the worktree + add a recovery verb", or "push the branch on green BEFORE attempting the PR so the arbiter always has it" (making the branch the durable artifact, worktree reapable)?
-4. **Gate re-run policy.** The work was already gate-passed in the worktree, but against the worktree's tree, not necessarily the rebased-onto-current-main tree (the known Gate-1-vs-pushed-branch divergence, `gate1-could-run-in-fresh-worktree-...`). Does recovery RE-run the gate after a recovery-time rebase, or trust the prior green? (Cheap-but-maybe-stale vs slow-but-honest.)
-5. **Relationship to `--propose` vs `--merge`.** Recovery should honour the same integration-mode resolution. Confirm it routes through `performIntegration` so mode/arbiter args resolve once, identically to `do`/`complete`.
-
-## Acceptance criteria (subject to the answers above)
-
-- [ ] A green-but-unintegrated item can be integrated FROM ITS EXISTING `work/<slug>` branch with NO rebuild of the build agent and NO gate re-run of the agent's work (gate re-run policy per Q4), via the SAME `performIntegration`/`integration-core` tail (rebase→propose/merge).
-- [ ] The recovery NEVER creates a parallel/orphan branch off main and NEVER `--force`es to main; it integrates the canonical `work/<slug>` branch in place.
-- [ ] Recovery is idempotent: re-running after a successful integration is a clean no-op ("already integrated"), not a duplicate PR / error.
-- [ ] The green commit is reliably LOCATABLE on integration-failure (per Q2/Q3 — the worktree is kept, or the branch is pushed-on-green, so recovery always has a source); a build that goes green never becomes unrecoverable.
-- [ ] `do`'s integration-failure path emits a precise, copy-pasteable recovery instruction naming the verb + slug.
-- [ ] Tests reproduce "green build, integration fails" in a throwaway-git fixture and assert recovery opens the PR / lands the work from the existing branch (no rebuild, no orphan branch, no `--force` to main); plus the idempotent re-run no-op.
-- [ ] No shared/global location touched outside temp fixtures.
+- [ ] `complete --isolated <slug>` resolves the slug's RETAINED job worktree (from `workspacesDir`, reusing the existing naming/resolution — not a re-derived encoding) and integrates from the commit in it, via the SAME `performIntegration`/`integration-core` tail (rebase-onto-`<arbiter>/main` → propose/merge), never `--force` to main, no orphan/parallel branch.
+- [ ] `--skip-verify` skips the already-passed gate; `--propose`/`--merge` and `--arbiter` resolve identically to a normal `complete`.
+- [ ] `resume --isolated <slug>` re-engages the same retained job worktree (the "continue here, but in the isolated tree" symmetric counterpart) without claiming.
+- [ ] `complete --isolated <slug>` with no retained worktree for the slug → a clear "nothing to recover / already integrated" message (no crash, no fresh worktree created); re-running after a successful recovery is a clean no-op.
+- [ ] `do`'s integration-failure path prints the exact `complete --isolated <slug> --skip-verify` recovery command.
+- [ ] Tests reproduce "green build, integration fails terminally → worktree retained" in a throwaway-git fixture and assert `complete --isolated <slug>` integrates from the retained worktree (PR opened / work landed), with NO rebuild, NO orphan branch, NO `--force` to main; plus the idempotent/nothing-to-recover cases.
+- [ ] No shared/global location touched outside temp fixtures (the agents'-area `workspacesDir` is pointed at a temp dir).
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
 
-- None to START the design conversation — but it is `needsAnswers: true`: the open questions (especially Q2/Q3 — worktree-reaped-vs-kept and where the durable commit lives) must be resolved by a human before building, because they decide the whole shape.
+- None — can start immediately. (The reaper already retains unpushed green work, and `complete` already owns the integration tail; this slice only adds the locate-existing `--isolated` resolution + the recovery-command surfacing.)
 
 ## Prompt
 
-> DO NOT BUILD YET — this slice is `needsAnswers: true`. First resolve the Open questions in the body (the verb-vs-flag choice, and crucially how the green commit is located when the job worktree is reaped and/or the push failed — Q2/Q3). Building before those are answered risks the wrong shape (e.g. a recovery verb that can't find the commit it's meant to recover).
+> Add `complete --isolated <slug>` (and `resume --isolated <slug>` for symmetry) to recover GREEN-BUT-UNINTEGRATED work: integrate from the slug's RETAINED job worktree, reusing the existing integration tail — no new verb, no rebuild, no orphan branch, never `--force` to main. This replaces the manual rebuild-and-force-push dance the `advance-verb-resolver` incident required (commit `64b9501` stranded after a failed push).
 >
-> The goal: a first-class path to integrate GREEN-BUT-UNINTEGRATED work (built + gate-passed + committed, but the PR/integration step failed) from its EXISTING `work/<slug>` branch — reusing `performIntegration`/`integration-core` (rebase→propose/merge), with NO rebuild of the build agent, NO orphan branch off main, NEVER `--force` to main. It replaces the manual rebuild-and-force-push dance the `advance-verb-resolver` incident required (commit `64b9501` stranded in the job worktree after a failed push).
+> TWO facts make this small (CONFIRM both still hold, then build): (1) the reaper (`reapJob`, `gc.ts`) RETAINS a worktree whose work is committed-but-not-on-the-arbiter — so a failed-push green build's worktree is intact (the recovery source already exists; do NOT add a keep-vs-reap change). (2) `complete` already does the integration FROM a given `cwd` (gate → done-move → commit → rebase → `performIntegration`), with `--skip-verify` to skip the already-passed gate. So the ONLY new code is: resolve `--isolated <slug>` → the EXISTING job worktree dir (a LOCATE-EXISTING handle — inverse of `do --isolated` which CREATES one; reuse `createJob`/`reapJob`'s `workspacesDir` naming to find it, don't re-derive), set `complete`'s `cwd` to it, and emit the recovery command from `do`'s integration-failure path.
 >
-> READ FIRST: `packages/agent-runner/src/integration-core.ts` (`performIntegration` — the shared rebase→integrate tail `do`/`complete` reuse), `packages/agent-runner/src/complete.ts` (the in-checkout completion path), `packages/agent-runner/src/do.ts` + `workspace.ts` (the job-worktree lifecycle + where it reaps), `packages/agent-runner/src/continue-branch.ts` (`pushContinuedBranchWithStaleLeaseRetry` — the #88 retry that made stranding rarer but not impossible), and the observations `work/observations/drive-backlog-skill-assumes-in-place-do-not-remote.md` + `gate1-could-run-in-fresh-worktree-to-match-pushed-branch.md`. Also re-read `drive-backlog`'s golden-rule sidebar on why a parallel `pr/<slug>` branch orphans the canonical `work/<slug>`.
+> `--isolated` (NOT `--cwd <dir>`) is the surface: symmetric with `do --isolated` (and the planned `--isolated`-default/`--in-place` direction), and the operator must not have to know the encoded worktree path. Make `complete --isolated <slug>` with nothing retained a clear no-op message; re-running after success a clean no-op.
 >
-> FIRST, check this slice against current reality (drift): confirm the job-worktree reap behaviour, the `do` integration-failure path, and whether #88's retry already keeps the worktree or pushes-on-green. Reconcile the Open questions against what the code ACTUALLY does now, then propose the shape for human ratification before building.
+> READ FIRST: `packages/agent-runner/src/complete.ts` (the `cwd`-parameterised integration path + `--skip-verify`/`--propose`/`--merge`), `packages/agent-runner/src/integration-core.ts` (`performIntegration`), `packages/agent-runner/src/gc.ts` (`reapJob` + the retain predicate — the retained-worktree guarantee), `packages/agent-runner/src/workspace.ts` + `isolation.ts` (`createJob` + `workspacesDir` worktree naming to RESOLVE the existing dir), `packages/agent-runner/src/cli.ts` (the `do --isolated` resolution to mirror, and the `complete`/`resume` commands to extend), and `packages/agent-runner/src/do.ts` (the integration-failure path to surface the recovery command). Cross-ref observations `drive-backlog-skill-assumes-in-place-do-not-remote.md` (orphan-branch warning) + `gate1-could-run-in-fresh-worktree-to-match-pushed-branch.md` (gate-vs-pushed-tree, re: whether to re-gate on recovery — default: trust the prior green via `--skip-verify`).
 >
-> TDD with vitest, house style (throwaway git repos). "Done" = the answered open questions are reflected, the acceptance criteria met, and the gate green.
+> FIRST, check this slice against current reality (drift): confirm the reaper still RETAINS unpushed-green worktrees and `complete` still integrates from `cwd` via `performIntegration`. If either changed, reconcile or route to `needs-attention/` with the discrepancy.
+>
+> TDD with vitest, house style (throwaway git repos; point `workspacesDir` at a temp dir). "Done" = acceptance criteria met and the gate green.
 
 ---
 
