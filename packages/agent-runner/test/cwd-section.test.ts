@@ -22,7 +22,7 @@ function workspacesDir(): string {
 }
 
 function config() {
-	return mergeConfig({workspacesDir: workspacesDir(), allowAgents: true});
+	return mergeConfig({workspacesDir: workspacesDir(), autoBuild: true});
 }
 
 /** A minimal slice body for `work/backlog/<slug>.md`. */

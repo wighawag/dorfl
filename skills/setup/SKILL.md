@@ -187,12 +187,12 @@ Standing per-change rules agents must follow in this repo.
 {
 	"verify": "<stack-appropriate command from A3>",
 	"harness": "pi",
-	"allowAgents": false,
+	"autoBuild": false,
 	"autoSlice": false
 }
 ```
 
-> `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `allowAgents` / `autoSlice` — strict-by-default (off). Add `defaultArbiter`, `integration`, `provider`, `model` only as the repo needs them.
+> `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoSlice` — strict-by-default (off; `autoBuild` is the build-gate, renamed from `allowAgents` which still works as a deprecated alias). Add `defaultArbiter`, `integration`, `provider`, `model` only as the repo needs them.
 
 ```
 

@@ -41,7 +41,7 @@ import {sliceablePrds, type PrdCandidate} from './select-priority.js';
  * Per-repo policy parity: a bare mirror has no checked-out `.agent-runner.json`,
  * but the COMMITTED one is reachable on `main` (the `do --remote` per-repo seam).
  * We layer it via {@link resolveRepoConfigFromMirror} so the same logical `work/`
- * state yields the SAME `allowAgents`/`autoSlice` decision an in-place checkout
+ * state yields the SAME `autoBuild`/`autoSlice` decision an in-place checkout
  * would — that is what makes the mirror scan PARITY-equal to the in-place one.
  */
 
@@ -51,7 +51,7 @@ export interface ScanMirrorPoolOptions {
 	mirrorPath: string;
 	/**
 	 * The global + default config layer. The repo's COMMITTED `.agent-runner.json`
-	 * (read from the mirror's `main`) is layered on top, so `allowAgents`/`autoSlice`
+	 * (read from the mirror's `main`) is layered on top, so `autoBuild`/`autoSlice`
 	 * resolve per-repo exactly as the in-place scan resolves them from the checkout.
 	 */
 	config: Config;
@@ -132,7 +132,7 @@ export async function scanMirrorPool(
 	// scored through the EXACT same `scoreItems` the in-place/registry scans use.
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
 	const counts = {totalItems: 0, totalEligible: 0};
-	const items = scoreItems(state, repoConfig.allowAgents, counts);
+	const items = scoreItems(state, repoConfig.autoBuild, counts);
 	const repo: RepoReport = {path: mirrorPath, items};
 	const report: ScanReport = {
 		repos: [repo],

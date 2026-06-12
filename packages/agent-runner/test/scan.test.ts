@@ -128,7 +128,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		});
 		const config = mergeConfig({
 			workspacesDir: workspacesDir(),
-			allowAgents: true,
+			autoBuild: true,
 		});
 
 		const report = await scan(config);
@@ -153,7 +153,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 			},
 		});
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
 		);
 		const repo = report.repos[0];
 
@@ -172,7 +172,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		});
 		const config = mergeConfig({
 			workspacesDir: workspacesDir(),
-			allowAgents: true,
+			autoBuild: true,
 		});
 		let report = await scan(config);
 		let b = report.repos[0].items[0];
@@ -199,7 +199,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 			backlog: {'needs.md': slice({slug: 'needs', blockedBy: '[dep]'})},
 		});
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
 		);
 		const needs = report.repos
 			.flatMap((r) => r.items)
@@ -209,18 +209,18 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		expect(needs.eligibility.eligible).toBe(false);
 	});
 
-	it('honours allowAgents for undeclared (no humanOnly) items', async () => {
+	it('honours autoBuild for undeclared (no humanOnly) items', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {'u.md': slice({slug: 'u', blockedBy: '[]'})},
 		});
 
 		const strict = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: false}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: false}),
 		);
 		expect(strict.repos[0].items[0].eligibility.eligible).toBe(false);
 
 		const permissive = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
 		);
 		expect(permissive.repos[0].items[0].eligibility.eligible).toBe(true);
 	});
@@ -240,7 +240,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 			},
 		});
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
 		);
 		expect(report.totalItems).toBe(3);
 		expect(report.totalEligible).toBe(2);
@@ -263,7 +263,7 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 		);
 
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
 		);
 		// Fetch-first ⇒ the second item (pushed after mirror creation) is visible.
 		const slugs = report.repos[0].items.map((i) => i.slug).sort();
@@ -286,7 +286,7 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 
 		const warnings: string[] = [];
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), allowAgents: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
 			{warn: (m) => warnings.push(m)},
 		);
 
@@ -299,17 +299,17 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 });
 
 describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
-	it('reads eligibility from a working checkout and honours per-repo allowAgents', () => {
+	it('reads eligibility from a working checkout and honours per-repo autoBuild', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
 		writeFileSync(
 			join(root, 'repo', '.agent-runner.json'),
-			JSON.stringify({allowAgents: true}),
+			JSON.stringify({autoBuild: true}),
 		);
 		// Global is strict, but the per-repo file opts in ⇒ eligible (the working-tree
 		// scan CAN read a checked-out .agent-runner.json; the mirror scan cannot).
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
-			mergeConfig({allowAgents: false}),
+			mergeConfig({autoBuild: false}),
 		);
 		expect(report.repos[0].items[0].eligibility.eligible).toBe(true);
 	});

@@ -193,7 +193,7 @@ describe('ledger-read seam — readers route THROUGH it', () => {
 		readDoneSlugs(join(root, 'repo'));
 		// The working-tree scan (run / in-place) routes through the local method;
 		// the registry `scan` routes through resolveMirrorState (covered below).
-		scanRepoPaths([join(root, 'repo')], mergeConfig({allowAgents: true}));
+		scanRepoPaths([join(root, 'repo')], mergeConfig({autoBuild: true}));
 
 		expect(spy).toHaveBeenCalled();
 		// Every call carried the storage-agnostic input (a repoPath only).

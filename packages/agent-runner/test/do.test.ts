@@ -1316,7 +1316,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		// The build/slice symmetry (slice `explicit-do-prd-not-gated-by-autoslice`):
 		// `do prd:<slug>` is an EXPLICIT target the operator named, so it slices
 		// REGARDLESS of the repo's `autoSlice` POLICY — EXACTLY as `do <slice>` builds a
-		// named slice regardless of `allowAgents`. autoSlice OFF (the default) no longer
+		// named slice regardless of `autoBuild`. autoSlice OFF (the default) no longer
 		// refuses the explicit form (the policy gates the auto-pick POOL only).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'somePrd');

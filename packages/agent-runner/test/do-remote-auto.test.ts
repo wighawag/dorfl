@@ -78,7 +78,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 			remote: originUrl,
 			workspacesDir: ws,
 			run,
-			config: mergeConfig({allowAgents: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoSlice: true}),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -98,7 +98,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 			remote: originUrl,
 			workspacesDir: ws,
 			run,
-			config: mergeConfig({allowAgents: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoSlice: true}),
 			count: 3,
 			env: gitEnv(),
 		});
@@ -117,7 +117,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 			remote: originUrl,
 			workspacesDir: ws,
 			run,
-			config: mergeConfig({allowAgents: false, autoSlice: false}),
+			config: mergeConfig({autoBuild: false, autoSlice: false}),
 			count: 5,
 			env: gitEnv(),
 		});
@@ -147,7 +147,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 			remote: originUrl,
 			workspacesDir: ws,
 			run,
-			config: mergeConfig({allowAgents: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoSlice: true}),
 			count: 2,
 			env: gitEnv(),
 		});

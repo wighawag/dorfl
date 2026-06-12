@@ -53,7 +53,7 @@ import type {ReviewGate} from './review-gate.js';
  *      The repo's `autoSlice` POLICY also refuses on the AUTO-PICK pool path, but
  *      NOT when the PRD was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
  *      naming it IS the authorization, exactly as `do <slice>` builds regardless of
- *      `allowAgents` (the pool, not the explicit claim, gates the policy). The HUMAN
+ *      `autoBuild` (the pool, not the explicit claim, gates the policy). The HUMAN
  *      path is unbound by the gate entirely.
  *   2. **Acquire the lock** (agent path) via the seam CAS — serialising concurrent
  *      slicers (`prd → work/slicing/`). The HUMAN path with no contention may slice
@@ -157,8 +157,8 @@ export interface PerformSliceOptions {
 	/**
 	 * The PRD was named EXPLICITLY by the operator (`do prd:<slug>`), so the
 	 * `autoSlice` POLICY is already satisfied — naming the PRD IS the authorization,
-	 * EXACTLY as `do <slice>` builds a named slice regardless of `allowAgents` (the
-	 * build path's precedent: `allowAgents` gates the scan/selection POOL only, never
+	 * EXACTLY as `do <slice>` builds a named slice regardless of `autoBuild` (the
+	 * build path's precedent: `autoBuild` gates the scan/selection POOL only, never
 	 * `performDo`'s explicit claim). When `true`, the agent slicing gate drops the
 	 * `autoSlice` policy term and binds ONLY the PRD's own readiness axes
 	 * (`humanOnly`/`needsAnswers`) + `sliceAfter`. Defaults `false`. Both the
@@ -936,7 +936,7 @@ function gateRefusalReason(
 	}
 	// The autoSlice POLICY only refuses on the NON-explicit (auto-pick pool) path:
 	// an explicitly-named `do prd:<slug>` is authorized by the naming itself (the
-	// build path's allowAgents precedent), so the policy is never the reason there.
+	// build path's autoBuild precedent), so the policy is never the reason there.
 	if (
 		options.explicit !== true &&
 		prdFm.humanOnly !== true &&

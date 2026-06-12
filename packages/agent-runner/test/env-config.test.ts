@@ -55,13 +55,13 @@ describe('envOverrides — string coercion', () => {
 
 describe('envOverrides — boolean coercion', () => {
 	it('accepts true and false', () => {
-		expect(envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'true'})).toEqual({
-			allowAgents: true,
+		expect(envOverrides({AGENT_RUNNER_AUTO_BUILD: 'true'})).toEqual({
+			autoBuild: true,
 		});
-		expect(envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'false'})).toEqual({
-			allowAgents: false,
+		expect(envOverrides({AGENT_RUNNER_AUTO_BUILD: 'false'})).toEqual({
+			autoBuild: false,
 		});
-		// `autoSlice` coerces as a boolean exactly like `allowAgents`.
+		// `autoSlice` coerces as a boolean exactly like `autoBuild`.
 		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'true'})).toEqual({
 			autoSlice: true,
 		});
@@ -84,19 +84,57 @@ describe('envOverrides — boolean coercion', () => {
 	});
 
 	it('rejects anything else LOUDLY, naming the variable', () => {
-		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'yes'})).toThrow(
-			/AGENT_RUNNER_ALLOW_AGENTS/,
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_BUILD: 'yes'})).toThrow(
+			/AGENT_RUNNER_AUTO_BUILD/,
 		);
-		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'yes'})).toThrow(
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_BUILD: 'yes'})).toThrow(
 			/true.*false/i,
 		);
 		// Case matters: `True`/`1` are NOT accepted (avoids silent ambiguity).
-		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'True'})).toThrow(
-			/AGENT_RUNNER_ALLOW_AGENTS/,
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_BUILD: 'True'})).toThrow(
+			/AGENT_RUNNER_AUTO_BUILD/,
 		);
-		expect(() => envOverrides({AGENT_RUNNER_ALLOW_AGENTS: '1'})).toThrow(
-			/AGENT_RUNNER_ALLOW_AGENTS/,
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_BUILD: '1'})).toThrow(
+			/AGENT_RUNNER_AUTO_BUILD/,
 		);
+	});
+});
+
+describe('envOverrides — the deprecated AGENT_RUNNER_ALLOW_AGENTS alias', () => {
+	it('maps the legacy env var to autoBuild and warns (deprecation window)', () => {
+		const warnings: string[] = [];
+		expect(
+			envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'true'}, (m) =>
+				warnings.push(m),
+			),
+		).toEqual({autoBuild: true});
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toMatch(/AGENT_RUNNER_ALLOW_AGENTS/);
+		expect(warnings[0]).toMatch(/autoBuild/);
+	});
+
+	it('coerces the legacy alias exactly like the canonical var (false)', () => {
+		expect(
+			envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'false'}, () => {}),
+		).toEqual({autoBuild: false});
+	});
+
+	it('rejects an invalid legacy-alias value LOUDLY, naming the variable', () => {
+		expect(() =>
+			envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'yes'}, () => {}),
+		).toThrow(/AGENT_RUNNER_ALLOW_AGENTS/);
+	});
+
+	it('lets the canonical AGENT_RUNNER_AUTO_BUILD WIN when both are set', () => {
+		expect(
+			envOverrides(
+				{
+					AGENT_RUNNER_AUTO_BUILD: 'false',
+					AGENT_RUNNER_ALLOW_AGENTS: 'true',
+				},
+				() => {},
+			),
+		).toEqual({autoBuild: false});
 	});
 });
 

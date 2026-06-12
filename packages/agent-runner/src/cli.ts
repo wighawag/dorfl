@@ -12,6 +12,7 @@ import {
 	type PartialConfig,
 } from './config.js';
 import {envOverrides} from './env-config.js';
+import {aliasDeprecationMessage} from './config-alias.js';
 import {scan} from './scan.js';
 import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
 import {findParticipatingRepos} from './detect.js';
@@ -92,6 +93,8 @@ import {brand} from './brand.js';
 
 interface ScanFlags {
 	config?: string;
+	autoBuild?: boolean;
+	/** DEPRECATED alias of `autoBuild` (`--allow-agents`/`--no-allow-agents`). */
 	allowAgents?: boolean;
 	json?: boolean;
 	cwd?: boolean;
@@ -99,35 +102,47 @@ interface ScanFlags {
 }
 
 /**
- * Whether `--allow-agents` / `--no-allow-agents` was explicitly passed on the
- * command line. Commander gives a negatable boolean option a default of `true`,
- * so we must check the value SOURCE to distinguish "user set it" from "default";
- * only an explicit flag becomes a config override (so config/defaults still win
- * otherwise).
+ * Whether `--auto-build` / `--no-auto-build` (or its DEPRECATED alias
+ * `--allow-agents` / `--no-allow-agents`) was explicitly passed on the command
+ * line. Commander gives a negatable boolean option a default of `true`, so we
+ * must check the value SOURCE to distinguish "user set it" from "default"; only an
+ * explicit flag becomes a config override (so config/defaults still win
+ * otherwise). The canonical flag WINS if both were passed; using the legacy alias
+ * emits a deprecation warning.
  */
-function allowAgentsFromCli(
+function autoBuildFromCli(
 	command: Commander | undefined,
+	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
 ): boolean | undefined {
 	if (!command) {
 		return undefined;
 	}
-	const source = command.getOptionValueSource('allowAgents');
-	if (source !== 'cli') {
-		return undefined;
+	if (command.getOptionValueSource('autoBuild') === 'cli') {
+		return command.getOptionValue('autoBuild') as boolean;
 	}
-	return command.getOptionValue('allowAgents') as boolean;
+	if (command.getOptionValueSource('allowAgents') === 'cli') {
+		warn(
+			aliasDeprecationMessage(
+				{oldKey: 'allowAgents', newKey: 'autoBuild'},
+				'--allow-agents',
+			),
+		);
+		return command.getOptionValue('allowAgents') as boolean;
+	}
+	return undefined;
 }
 
 /**
  * Build the overrides a user supplied via CLI flags. Discovery is the registry
  * (the hub-mirror set, ADR §1), so there are no `--root`/`--include`/`--exclude`
- * flags any more — only the autonomy-gate `--allow-agents` toggle.
+ * flags any more — only the autonomy-gate `--auto-build` toggle (with the
+ * deprecated `--allow-agents` alias).
  */
 function flagOverrides(flags: ScanFlags, command?: Commander): PartialConfig {
 	const overrides: PartialConfig = {};
-	const allowAgents = allowAgentsFromCli(command);
-	if (allowAgents !== undefined) {
-		overrides.allowAgents = allowAgents;
+	const autoBuild = autoBuildFromCli(command);
+	if (autoBuild !== undefined) {
+		overrides.autoBuild = autoBuild;
 	}
 	return overrides;
 }
@@ -220,7 +235,7 @@ function resolveRemoteRepoConfig(options: {
  * build/slice path IN-PLACE in the cwd checkout (`run`'s cross-repo
  * mirror→worktree build substrate is the separate `run-daemon-reframe` work this
  * does NOT duplicate — see this slice's `## Decisions`). The per-action gate
- * family is honoured at the SELECTION layer by the mirror scan (build→`allowAgents`,
+ * family is honoured at the SELECTION layer by the mirror scan (build→`autoBuild`,
  * slice→`autoSlice`); surface/apply/triage gating lives inside the tick.
  */
 function buildAdvanceRunTick(options: {
@@ -716,12 +731,24 @@ export function buildProgram(): Command {
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
-			'--allow-agents',
-			'allow agents to claim undeclared (not humanOnly) slices',
+			'--auto-build',
+			'allow agents to auto-build undeclared (not humanOnly) slices',
 		)
 		.option(
-			'--no-allow-agents',
-			'forbid agents from claiming undeclared slices (default)',
+			'--no-auto-build',
+			'forbid agents from auto-building undeclared slices (default)',
+		)
+		.addOption(
+			new Option(
+				'--allow-agents',
+				'DEPRECATED alias of --auto-build (still works; will be removed)',
+			).hideHelp(),
+		)
+		.addOption(
+			new Option(
+				'--no-allow-agents',
+				'DEPRECATED alias of --no-auto-build',
+			).hideHelp(),
 		)
 		.option(
 			'--arbiter-remote <name>',
@@ -793,12 +820,24 @@ export function buildProgram(): Command {
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
-			'--allow-agents',
-			'allow agents to claim undeclared (not humanOnly) slices',
+			'--auto-build',
+			'allow agents to auto-build undeclared (not humanOnly) slices',
 		)
 		.option(
-			'--no-allow-agents',
-			'forbid agents from claiming undeclared slices (default)',
+			'--no-auto-build',
+			'forbid agents from auto-building undeclared slices (default)',
+		)
+		.addOption(
+			new Option(
+				'--allow-agents',
+				'DEPRECATED alias of --auto-build (still works; will be removed)',
+			).hideHelp(),
+		)
+		.addOption(
+			new Option(
+				'--no-allow-agents',
+				'DEPRECATED alias of --no-auto-build',
+			).hideHelp(),
 		)
 		.option('--max-parallel <n>', 'global cap on items claimed+run this tick')
 		.option('--per-repo-max <n>', 'per-repo cap on concurrent claims')
@@ -1863,7 +1902,7 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects autoTriage. The bare/`-n` selection respects the per-action gates (build→allowAgents, slice→autoSlice); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects autoTriage. The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoSlice); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',

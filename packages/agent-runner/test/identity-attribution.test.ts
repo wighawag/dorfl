@@ -144,7 +144,7 @@ describe('identity attribution (end-to-end through run → merge)', () => {
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: 'exit 0',
-			allowAgents: true,
+			autoBuild: true,
 			identity,
 		});
 
@@ -181,7 +181,7 @@ describe('identity attribution (end-to-end through run → merge)', () => {
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: 'exit 0',
-			allowAgents: true,
+			autoBuild: true,
 			identity,
 		});
 

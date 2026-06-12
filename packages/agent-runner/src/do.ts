@@ -173,7 +173,7 @@ export interface DoOptions {
 	 * UNDECLARED PRD in this repo?". An EXPLICITLY-named `do prd:<slug>` slices
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
 	 * `performSlice` — naming the PRD IS the authorization, exactly as `do <slice>`
-	 * builds regardless of `allowAgents`). Ignored by the slice-build path.
+	 * builds regardless of `autoBuild`). Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
 	/**
@@ -339,7 +339,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	/**
 	 * Per-repo `autoSlice` policy — gates the AUTO-PICK / pool path only. An
 	 * EXPLICITLY-named `do --remote prd:<slug>` slices regardless of it (the
-	 * dispatch passes `explicit: true`), mirroring `do <slice>` vs `allowAgents`.
+	 * dispatch passes `explicit: true`), mirroring `do <slice>` vs `autoBuild`.
 	 * Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
@@ -510,7 +510,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// dispatching here — the single policy-enforcement point). So the slicing gate
 			// drops the `autoSlice` policy term and binds only the PRD's own readiness
 			// (`humanOnly`/`needsAnswers`) + `sliceAfter`, EXACTLY as `do <slice>` builds a
-			// named slice regardless of `allowAgents` (the pool gates the policy, not the
+			// named slice regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
 			explicit: true,
 			// The injected agent runner (tests) writes slice files directly. The
@@ -1388,7 +1388,7 @@ export async function performDoRemote(
 				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoSlice` before reaching here), so the
 				// slicing gate drops the policy term — only the PRD's own readiness +
-				// `sliceAfter` bind, mirroring the build path vs `allowAgents`.
+				// `sliceAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
 				agentRunner: options.agentRunner,
 				harness: options.harness,

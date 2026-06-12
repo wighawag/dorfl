@@ -5,13 +5,13 @@ import {
 	resolveEligibility,
 } from '../src/eligibility.js';
 
-describe('resolveGate — the humanOnly × needsAnswers × allowAgents matrix', () => {
-	it('humanOnly: true is never claimable regardless of allowAgents', () => {
+describe('resolveGate — the humanOnly × needsAnswers × autoBuild matrix', () => {
+	it('humanOnly: true is never claimable regardless of autoBuild', () => {
 		expect(resolveGate(true, undefined, false)).toBe(false);
 		expect(resolveGate(true, undefined, true)).toBe(false);
 	});
 
-	it('needsAnswers: true is never claimable regardless of allowAgents', () => {
+	it('needsAnswers: true is never claimable regardless of autoBuild', () => {
 		expect(resolveGate(undefined, true, false)).toBe(false);
 		expect(resolveGate(undefined, true, true)).toBe(false);
 	});
@@ -22,14 +22,14 @@ describe('resolveGate — the humanOnly × needsAnswers × allowAgents matrix', 
 		expect(resolveGate(false, true, true)).toBe(false);
 	});
 
-	it('undeclared on both axes is claimable iff allowAgents is on', () => {
+	it('undeclared on both axes is claimable iff autoBuild is on', () => {
 		expect(resolveGate(undefined, undefined, false)).toBe(false);
 		expect(resolveGate(undefined, undefined, true)).toBe(true);
 	});
 
 	// An explicit `false` on either axis is treated as "not gated" (undeclared),
 	// per the binary model: the only meaningful declaration is `true`.
-	it('explicit false on both axes behaves like undeclared (claimable iff allowAgents)', () => {
+	it('explicit false on both axes behaves like undeclared (claimable iff autoBuild)', () => {
 		expect(resolveGate(false, false, false)).toBe(false);
 		expect(resolveGate(false, false, true)).toBe(true);
 	});
@@ -61,61 +61,61 @@ describe('resolveBlockedBy', () => {
 	});
 });
 
-describe('resolveEligibility — full matrix (humanOnly × needsAnswers × allowAgents × deps)', () => {
+describe('resolveEligibility — full matrix (humanOnly × needsAnswers × autoBuild × deps)', () => {
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
-		allowAgents: boolean;
+		autoBuild: boolean;
 		deps: string[];
 		done: Set<string>;
 		eligible: boolean;
 		gatePass: boolean;
 	}> = [
-		// undeclared + allowAgents on + deps satisfied ⇒ eligible
+		// undeclared + autoBuild on + deps satisfied ⇒ eligible
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			allowAgents: true,
+			autoBuild: true,
 			deps: [],
 			done: new Set(),
 			eligible: true,
 			gatePass: true,
 		},
-		// undeclared + allowAgents on + deps NOT satisfied ⇒ gate passes but blocked
+		// undeclared + autoBuild on + deps NOT satisfied ⇒ gate passes but blocked
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			allowAgents: true,
+			autoBuild: true,
 			deps: ['dep'],
 			done: new Set(),
 			eligible: false,
 			gatePass: true,
 		},
-		// undeclared + allowAgents off ⇒ never (gate fails)
+		// undeclared + autoBuild off ⇒ never (gate fails)
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			allowAgents: false,
+			autoBuild: false,
 			deps: [],
 			done: new Set(),
 			eligible: false,
 			gatePass: false,
 		},
-		// humanOnly + allowAgents on ⇒ never (gate fails regardless)
+		// humanOnly + autoBuild on ⇒ never (gate fails regardless)
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
-			allowAgents: true,
+			autoBuild: true,
 			deps: [],
 			done: new Set(),
 			eligible: false,
 			gatePass: false,
 		},
-		// needsAnswers + allowAgents on ⇒ never (the discovered axis blocks)
+		// needsAnswers + autoBuild on ⇒ never (the discovered axis blocks)
 		{
 			humanOnly: undefined,
 			needsAnswers: true,
-			allowAgents: true,
+			autoBuild: true,
 			deps: [],
 			done: new Set(),
 			eligible: false,
@@ -125,37 +125,37 @@ describe('resolveEligibility — full matrix (humanOnly × needsAnswers × allow
 		{
 			humanOnly: false,
 			needsAnswers: true,
-			allowAgents: true,
+			autoBuild: true,
 			deps: [],
 			done: new Set(),
 			eligible: false,
 			gatePass: false,
 		},
-		// both axes set + allowAgents on ⇒ never
+		// both axes set + autoBuild on ⇒ never
 		{
 			humanOnly: true,
 			needsAnswers: true,
-			allowAgents: true,
+			autoBuild: true,
 			deps: [],
 			done: new Set(),
 			eligible: false,
 			gatePass: false,
 		},
-		// humanOnly + allowAgents off ⇒ never
+		// humanOnly + autoBuild off ⇒ never
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
-			allowAgents: false,
+			autoBuild: false,
 			deps: [],
 			done: new Set(),
 			eligible: false,
 			gatePass: false,
 		},
-		// undeclared + allowAgents on + deps satisfied via done ⇒ eligible
+		// undeclared + autoBuild on + deps satisfied via done ⇒ eligible
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			allowAgents: true,
+			autoBuild: true,
 			deps: ['dep'],
 			done: new Set(['dep']),
 			eligible: true,
@@ -166,7 +166,7 @@ describe('resolveEligibility — full matrix (humanOnly × needsAnswers × allow
 	for (const c of cases) {
 		const label =
 			`humanOnly=${String(c.humanOnly)} needsAnswers=${String(c.needsAnswers)} ` +
-			`allowAgents=${c.allowAgents} ` +
+			`autoBuild=${c.autoBuild} ` +
 			`deps=${c.deps.length === 0 ? 'none' : c.done.size ? 'satisfied' : 'blocked'}`;
 		it(`${label} → eligible=${c.eligible}`, () => {
 			const r = resolveEligibility({
@@ -174,7 +174,7 @@ describe('resolveEligibility — full matrix (humanOnly × needsAnswers × allow
 				needsAnswers: c.needsAnswers,
 				blockedBy: c.deps,
 				doneSlugs: c.done,
-				allowAgents: c.allowAgents,
+				autoBuild: c.autoBuild,
 			});
 			expect(r.eligible).toBe(c.eligible);
 			expect(r.gatePass).toBe(c.gatePass);
@@ -187,7 +187,7 @@ describe('resolveEligibility — full matrix (humanOnly × needsAnswers × allow
 			needsAnswers: undefined,
 			blockedBy: ['dep'],
 			doneSlugs: new Set(),
-			allowAgents: true,
+			autoBuild: true,
 		});
 		expect(r.blockedBy.satisfied).toBe(false);
 		expect(r.blockedBy.missing).toEqual(['dep']);

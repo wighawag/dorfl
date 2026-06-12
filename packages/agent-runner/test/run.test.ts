@@ -96,7 +96,7 @@ function configFor(root: string, overrides = {}) {
 		verify: PASS,
 		// Seeded slices are undeclared (not humanOnly) — agents may claim them only
 		// when this per-repo/global policy is on.
-		allowAgents: true,
+		autoBuild: true,
 		...overrides,
 	});
 }
@@ -247,7 +247,7 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: PASS,
-			allowAgents: true,
+			autoBuild: true,
 		});
 		const result = await runOnce({
 			config,
@@ -403,7 +403,7 @@ describe('runOnce — simultaneous two-runner race (exactly one winner)', () => 
 				integration: 'merge',
 				agentCmd: 'true',
 				verify: PASS,
-				allowAgents: true,
+				autoBuild: true,
 			});
 
 		const runFrom = (clone: string, agentId: string) => {
@@ -520,7 +520,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 			integration: 'merge',
 			agentCmd: 'true',
 			verify: PASS,
-			allowAgents: true,
+			autoBuild: true,
 		});
 		let bBranch = '';
 		const result = await runOnce({

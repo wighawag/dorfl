@@ -106,7 +106,7 @@ This is the generalisation of the git-config isolation tests already do (`GIT_CO
 
 ## Field-naming convention
 
-All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAnswers`, `blockedBy`, `sliceAfter`, `allowAgents`) — matching the JSON config and the TypeScript that parses them (1:1 property mapping, no snake↔camel translation layer). No exceptions.
+All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAnswers`, `blockedBy`, `sliceAfter`, `autoBuild`) — matching the JSON config and the TypeScript that parses them (1:1 property mapping, no snake↔camel translation layer). No exceptions.
 
 ## Frontmatter (YAML)
 
@@ -155,15 +155,15 @@ source: 'derived from packages/rocketh-verifier/src/etherscan.ts @ <commit>' # R
 
 ### The two autonomy axes: `humanOnly` (decided) × `needsAnswers` (discovered)
 
-The autonomy gate is TWO orthogonal binary fields (both default to omitted = false), present on BOTH slices and PRDs, plus the repo's `allowAgents` policy (see `docs/adr/methodology-and-skills.md` §4, authoritative):
+The autonomy gate is TWO orthogonal binary fields (both default to omitted = false), present on BOTH slices and PRDs, plus the repo's `autoBuild` policy (see `docs/adr/methodology-and-skills.md` §4, authoritative):
 
 - **`humanOnly: true` — the DECIDED axis.** _Should a human drive this, regardless of how complete the spec is?_ A product/design/security/judgement call, or an `AGENTS.md`-type rule. Driven by a decision (in the PRD conversation, or the slicer's own judgement). On a PRD it means "a human must drive the slicing"; on a slice it means "a human must drive the build".
 - **`needsAnswers: true` — the DISCOVERED axis.** _Are there unresolved questions blocking autonomous progress?_ The spec is incomplete; **the open questions live in the body**. Once answered, the flag is cleared and an agent may proceed.
 - They are **orthogonal** — four honest states. e.g. `humanOnly:true, needsAnswers:false` = fully specified but a human must own it; `humanOnly:false, needsAnswers:true` = anyone can do it once the questions are answered.
-- **Repo policy `allowAgents`** answers the question the _repo_ owns: _may agents claim undeclared items here?_ Per-repo config key (`.agent-runner.json`), resolved like `integration`: \*\*CLI flag (`--allow-agents` / `--no-allow-agents`)
-  > per-repo config > global config > built-in default (`false`)\*\*.
+- **Repo policy `autoBuild`** answers the question the _repo_ owns: _may agents auto-build undeclared items here?_ The build member of the symmetric per-action gate family (`autoBuild`/`autoSlice`/`autoTriage`). Per-repo config key (`.agent-runner.json`), resolved like `integration`: \*\*CLI flag (`--auto-build` / `--no-auto-build`)
+  > env (`AGENT_RUNNER_AUTO_BUILD`) > per-repo config > global config > built-in default (`false`)\*\*. The OLD name `allowAgents` (key/flag `--allow-agents`/env `AGENT_RUNNER_ALLOW_AGENTS`) is still accepted as a DEPRECATED ALIAS for a migration window (it maps to `autoBuild` with a deprecation warning).
 
-**Predicate (same shape at both levels):** an item is **auto-eligible** iff `needsAnswers` is not `true` AND `humanOnly` is not `true` AND `allowAgents` is `true`. A human is never bound by it (a human may slice/build a flagged item — the gate binds the agent, like the runner-vs-human stance on `verify`).
+**Predicate (same shape at both levels):** an item is **auto-eligible** iff `needsAnswers` is not `true` AND `humanOnly` is not `true` AND `autoBuild` is `true`. A human is never bound by it (a human may slice/build a flagged item — the gate binds the agent, like the runner-vs-human stance on `verify`).
 
 (This supersedes the older single `humanOnly`-only gate, which itself replaced the three-state `afk` field + `allowUnspecifiedGate`.)
 

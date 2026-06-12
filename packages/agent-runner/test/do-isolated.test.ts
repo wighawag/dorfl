@@ -330,7 +330,7 @@ describe('do --isolated — -n/auto-pick now SELECTS over the mirror-side pool (
 	// `--isolated` resolves the arbiter URL from the cwd's arbiter remote (named
 	// `arbiter` in the fixture), so we pass `--arbiter arbiter` + a hermetic config
 	// (scratch workspacesDir so the mirror materialises in scratch, never the real
-	// ~/.agent-runner). With `allowAgents` off (the default) the mirror scan selects
+	// ~/.agent-runner). With `autoBuild` off (the default) the mirror scan selects
 	// NOTHING — calm-at-rest, exit 0 — proving the refusal is gone and the auto-pick
 	// path ran.
 	function hermeticConfig(): string {

@@ -9,9 +9,9 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({})).toEqual(DEFAULT_CONFIG);
 	});
 
-	it('defaults allowAgents to false (strict)', () => {
-		expect(DEFAULT_CONFIG.allowAgents).toBe(false);
-		expect(mergeConfig({}).allowAgents).toBe(false);
+	it('defaults autoBuild to false (strict)', () => {
+		expect(DEFAULT_CONFIG.autoBuild).toBe(false);
+		expect(mergeConfig({}).autoBuild).toBe(false);
 	});
 
 	it('defaults autoSlice to false (human-first slicing)', () => {
@@ -25,8 +25,8 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({prdsFirst: true}).prdsFirst).toBe(true);
 	});
 
-	it('defaults the autonomy gate to strict (allowAgents false)', () => {
-		expect(mergeConfig({}).allowAgents).toBe(false);
+	it('defaults the autonomy gate to strict (autoBuild false)', () => {
+		expect(mergeConfig({}).autoBuild).toBe(false);
 	});
 
 	it('defaults the execution fields (maxParallel, perRepoMax, arbiter, integration)', () => {
@@ -76,8 +76,8 @@ describe('mergeConfig', () => {
 	});
 
 	it('overrides individual fields while keeping the rest as defaults', () => {
-		const merged = mergeConfig({allowAgents: true});
-		expect(merged.allowAgents).toBe(true);
+		const merged = mergeConfig({autoBuild: true});
+		expect(merged.autoBuild).toBe(true);
 		expect(merged.maxParallel).toBe(DEFAULT_CONFIG.maxParallel);
 	});
 
@@ -91,10 +91,10 @@ describe('mergeConfig', () => {
 	it('ignores undefined override values', () => {
 		const merged = mergeConfig({
 			maxParallel: undefined,
-			allowAgents: true,
+			autoBuild: true,
 		});
 		expect(merged.maxParallel).toEqual(DEFAULT_CONFIG.maxParallel);
-		expect(merged.allowAgents).toBe(true);
+		expect(merged.autoBuild).toBe(true);
 	});
 });
 
@@ -116,10 +116,10 @@ describe('loadConfig', () => {
 
 	it('loads and merges a config file over the defaults', () => {
 		const path = join(dir, 'config.json');
-		writeFileSync(path, JSON.stringify({maxParallel: 7, allowAgents: true}));
+		writeFileSync(path, JSON.stringify({maxParallel: 7, autoBuild: true}));
 		const cfg = loadConfig(path);
 		expect(cfg.maxParallel).toEqual(7);
-		expect(cfg.allowAgents).toBe(true);
+		expect(cfg.autoBuild).toBe(true);
 		expect(cfg.perRepoMax).toEqual(DEFAULT_CONFIG.perRepoMax);
 	});
 
@@ -127,6 +127,24 @@ describe('loadConfig', () => {
 		const path = join(dir, 'broken.json');
 		writeFileSync(path, '{ not json');
 		expect(() => loadConfig(path)).toThrow(/config/i);
+	});
+
+	it('migrates the deprecated `allowAgents` key to `autoBuild` and warns', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(path, JSON.stringify({allowAgents: true}));
+		const warnings: string[] = [];
+		const cfg = loadConfig(path, (m) => warnings.push(m));
+		expect(cfg.autoBuild).toBe(true);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toMatch(/allowAgents/);
+		expect(warnings[0]).toMatch(/autoBuild/);
+	});
+
+	it('lets `autoBuild` WIN over the deprecated `allowAgents` when both are set', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(path, JSON.stringify({allowAgents: true, autoBuild: false}));
+		const cfg = loadConfig(path, () => {});
+		expect(cfg.autoBuild).toBe(false);
 	});
 
 	it('loads a valid identity block', () => {

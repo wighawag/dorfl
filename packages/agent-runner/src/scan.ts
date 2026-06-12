@@ -59,7 +59,7 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
 
 /**
  * Resolve a per-repo `ScannedItem[]` from an already-resolved `work/` state +
- * the repo's `allowAgents` policy. The shared core of BOTH the registry scan
+ * the repo's `autoBuild` policy. The shared core of BOTH the registry scan
  * (mirror-ref state) and the working-tree scan (`run`/in-place) — neither learns
  * how the `work/` state was read; they just hand it here. Exported so the
  * MIRROR-SIDE pool scan (`mirror-pool-scan.ts`) scores the bare-mirror slice pool
@@ -67,7 +67,7 @@ export function readBacklogItems(repoPath: string): BacklogItem[] {
  */
 export function scoreItems(
 	state: Pick<LocalLedgerState, 'backlog' | 'doneSlugs'>,
-	allowAgents: boolean,
+	autoBuild: boolean,
 	counts: {totalItems: number; totalEligible: number},
 ): ScannedItem[] {
 	return state.backlog.map((item) => {
@@ -76,7 +76,7 @@ export function scoreItems(
 			needsAnswers: item.needsAnswers,
 			blockedBy: item.blockedBy,
 			doneSlugs: state.doneSlugs,
-			allowAgents,
+			autoBuild,
 		});
 		counts.totalItems++;
 		if (eligibility.eligible) {
@@ -108,7 +108,7 @@ export function scoreItems(
  * no `roots`/`remotes` field). `scan`/`status` share the {@link listMirrors}
  * primitive; the per-repo `work/` read goes through the seam's mirror-ref method.
  *
- * The autonomy gate's `allowAgents` policy is resolved PER REPO. NOTE: a bare
+ * The autonomy gate's `autoBuild` policy is resolved PER REPO. NOTE: a bare
  * mirror has no checked-out `.agent-runner.json`, so the per-repo file cannot be
  * read from it — the global/env-resolved policy applies (the per-repo override is
  * a working-checkout concern, served by {@link scanRepoPaths}).
@@ -140,13 +140,13 @@ export async function scan(
 			mirrorPath: mirror.path,
 			env: options.env,
 		});
-		const allowAgents = resolveRepoConfig({
+		const autoBuild = resolveRepoConfig({
 			repoPath: mirror.path,
 			global: config,
-		}).config.allowAgents;
+		}).config.autoBuild;
 		repos.push({
 			path: mirror.path,
-			items: scoreItems(state, allowAgents, counts),
+			items: scoreItems(state, autoBuild, counts),
 		});
 	}
 
@@ -164,7 +164,7 @@ export async function scan(
  * checkout IS the local state); the fetch-first contract (ADR §5/§6) applies to
  * the REGISTRY `scan` above, which refreshes each bare mirror before reading.
  * Reads each repo's `work/` via the read seam's local-tree method and honours its
- * per-repo `.agent-runner.json` `allowAgents`. The registry `scan` above is the
+ * per-repo `.agent-runner.json` `autoBuild`. The registry `scan` above is the
  * mirror-ref counterpart; this is its working-tree sibling.
  */
 export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
@@ -173,9 +173,9 @@ export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
 
 	for (const path of repoPaths) {
 		const state = ledgerRead.resolveLocalState({repoPath: path});
-		const allowAgents = resolveRepoConfig({repoPath: path, global: config})
-			.config.allowAgents;
-		repos.push({path, items: scoreItems(state, allowAgents, counts)});
+		const autoBuild = resolveRepoConfig({repoPath: path, global: config}).config
+			.autoBuild;
+		repos.push({path, items: scoreItems(state, autoBuild, counts)});
 	}
 
 	return {

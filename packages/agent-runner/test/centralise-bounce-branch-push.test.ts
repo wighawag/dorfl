@@ -238,7 +238,7 @@ function configFor(overrides = {}) {
 		perRepoMax: 2,
 		integration: 'merge',
 		agentCmd: 'true',
-		allowAgents: true,
+		autoBuild: true,
 		// Gate unified on the per-repo `verify` (the deleted `defaultTestGate`/
 		// `TestGate` are gone). Both tests here route BEFORE the gate is reached
 		// (agent-failed / onboard-conflict), so this green stub is never actually

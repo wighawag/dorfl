@@ -259,7 +259,7 @@ function configFor(root: string, overrides = {}) {
 		perRepoMax: 2,
 		integration: 'merge',
 		agentCmd: 'true',
-		allowAgents: true,
+		autoBuild: true,
 		...overrides,
 	});
 }

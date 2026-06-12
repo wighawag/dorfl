@@ -107,9 +107,9 @@ function recordingRunner(): {run: DoRunner; args: string[]} {
 }
 
 function cfg(over: Partial<Config> = {}): Config {
-	// allowAgents on so seeded slices are eligible; autoSlice on so PRDs are
+	// autoBuild on so seeded slices are eligible; autoSlice on so PRDs are
 	// sliceable. Both default OFF, so the tests opt in explicitly.
-	return mergeConfig({allowAgents: true, autoSlice: true, ...over});
+	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
 }
 
 /** The minimal shared `DoOptions` base the layer threads to each run. */
