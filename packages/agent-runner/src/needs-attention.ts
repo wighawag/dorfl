@@ -1,8 +1,16 @@
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	writeFileSync,
+	rmSync,
+} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {run} from './git.js';
+import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {ledgerRead} from './ledger-read.js';
+import {ledgerWrite} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
 import {
 	retryWithBackoff,
@@ -420,43 +428,80 @@ export async function routeToNeedsAttention(
  *
  * Like the move, NEVER throws for the expected "not in needs-attention" case.
  */
-export function returnToBacklog(
+export async function returnToBacklog(
 	options: ReturnToBacklogOptions,
-): ReturnToBacklogResult {
+): Promise<ReturnToBacklogResult> {
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
-	const naRel = join('work', 'needs-attention', `${slug}.md`);
-	const naAbs = join(cwd, naRel);
-	if (!existsSync(naAbs)) {
+	// Tree-less CAS, EXACTLY like `claim` (`performClaim`): the move is published
+	// to the arbiter ref via the shared `ledger-write` write seam — it NEVER stages
+	// or commits in the cwd working tree (so a `requeue` in a shared checkout can no
+	// longer sweep up a concurrent writer's uncommitted files — the `8c92f63`
+	// incident, see
+	// `work/observations/drive-backlog-skill-assumes-in-place-do-not-remote.md`).
+	// `--cwd` is purely the ORIGIN SOURCE (it resolves the arbiter remote + holds
+	// the object store the plumbing writes into), never a write TARGET. A tree-less
+	// CAS needs a ref to push to, so an `arbiter` is REQUIRED (parity with `claim`).
+	if (!options.arbiter) {
 		return {
 			moved: false,
 			reasonNotMoved:
-				`work/needs-attention/${slug}.md not found — nothing to return to ` +
-				'backlog (wrong slug, or not in needs-attention?).',
+				`requeue for '${slug}' needs an --arbiter: the move is published as a ` +
+				'tree-less compare-and-swap to the arbiter ref (like claim), so there ' +
+				'is no local-only mode — pass --arbiter.',
+		};
+	}
+	const arbiter = options.arbiter;
+
+	if (
+		(await gitSoftAsync(['remote', 'get-url', arbiter], cwd, env)).status !== 0
+	) {
+		return {
+			moved: false,
+			reasonNotMoved: `no git remote named '${arbiter}' (set one, or pass --arbiter).`,
+		};
+	}
+
+	// Refresh the remote-tracking refs so every check below (the item's residence,
+	// the continue-branch guard, the CAS base) sees the arbiter's TRUTH, not a stale
+	// local copy. This is a fetch, not a checkout — the working tree is untouched.
+	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+
+	// Is the item actually in `needs-attention/` ON THE ARBITER? (We read the
+	// arbiter ref, NOT the cwd tree — the cwd may be on a branch that never checked
+	// out the surfaced state.) Absent ⇒ nothing to requeue.
+	const naRel = `work/needs-attention/${slug}.md`;
+	if (
+		(
+			await gitSoftAsync(
+				['cat-file', '-e', `${arbiter}/main:${naRel}`],
+				cwd,
+				env,
+			)
+		).status !== 0
+	) {
+		return {
+			moved: false,
+			reasonNotMoved:
+				`work/needs-attention/${slug}.md not found on ${arbiter}/main — nothing ` +
+				'to return to backlog (wrong slug, or not in needs-attention?).',
 		};
 	}
 
 	// `--reset`: DELETE the remote work branch FIRST (before the backlog move).
 	// Delete-before-move closes the claim-race window. A FAILED delete ABORTS the
 	// requeue (no backlog move) — the item stays in needs-attention rather than
-	// become claimable while continuing from a branch we meant to discard.
+	// become claimable while continuing from a branch we meant to discard. This is
+	// a remote ref op (provider-agnostic; works against a local `--bare` arbiter) —
+	// it never touches the cwd working tree.
 	let deletedRemoteBranch = false;
 	if (options.reset) {
-		if (!options.arbiter) {
-			return {
-				moved: false,
-				reasonNotMoved:
-					`requeue --reset for '${slug}' needs an --arbiter to delete the remote ` +
-					'work branch from; nothing deleted, item left in needs-attention.',
-			};
-		}
 		const branch = workBranchRef('slice', slug);
-		// Plain provider-agnostic delete — works against a local `--bare` arbiter.
 		// Explicit/guarded departure from the "never delete the remote branch"
 		// invariant; only on the `--reset` path, never the default.
-		const del = gitSoftRun(
-			['push', options.arbiter, '--delete', branch],
+		const del = await gitSoftAsync(
+			['push', arbiter, '--delete', branch],
 			cwd,
 			env,
 		);
@@ -469,18 +514,16 @@ export function returnToBacklog(
 			if (!alreadyGone) {
 				const message =
 					`requeue --reset for '${slug}': failed to delete the remote branch ` +
-					`${branch} on ${options.arbiter} (${stderr || 'unknown error'}); ` +
+					`${branch} on ${arbiter} (${stderr || 'unknown error'}); ` +
 					'aborting the requeue — item left in needs-attention (no backlog move).';
 				note(message);
 				return {moved: false, reasonNotMoved: message};
 			}
 		}
 		deletedRemoteBranch = true;
-		note(
-			`Deleted the remote branch ${branch} on ${options.arbiter} (--reset).`,
-		);
+		note(`Deleted the remote branch ${branch} on ${arbiter} (--reset).`);
 		// Drop any stale LOCAL work branch too (best-effort — it may not exist here).
-		gitSoftRun(['branch', '-D', branch], cwd, env);
+		await gitSoftAsync(['branch', '-D', branch], cwd, env);
 	}
 
 	// DEFAULT (keep+continue) REQUEUE-SAFETY GUARD: a claimable item's continue-
@@ -489,25 +532,20 @@ export function returnToBacklog(
 	// of main — the EXACT "is the continue-branch on the arbiter?" question the
 	// continue-path asks in `isolation.ts`
 	// (`branchAheadOf(checkout, '<arbiter>/<branch>', '<arbiter>/main')`). We check
-	// the ARBITER ref, NOT the local `work/<slug>` (which SURVIVES a failed push,
-	// so testing it would pass falsely): FETCH first, then test the arbiter ref.
-	// Only when an `arbiter` is in play (the cross-machine case this protects) and
-	// NOT on `--reset` (which discards the branch by design); a purely-local
-	// requeue keeps today's behaviour.
-	if (!options.reset && options.arbiter) {
+	// the ARBITER ref (already fetched above), NOT the local `work/<slug>` (which
+	// SURVIVES a failed push, so testing it would pass falsely). NOT on `--reset`
+	// (which discards the branch by design).
+	if (!options.reset) {
 		const branch = workBranchRef('slice', slug);
-		// Refresh the remote-tracking refs so the check sees the arbiter's truth,
-		// not a stale local copy (a failed push left the LOCAL branch standing).
-		gitSoftRun(['fetch', '--quiet', options.arbiter], cwd, env);
 		const onArbiter = branchAheadOf(
 			cwd,
-			`${options.arbiter}/${branch}`,
-			`${options.arbiter}/main`,
+			`${arbiter}/${branch}`,
+			`${arbiter}/main`,
 			env,
 		);
 		if (!onArbiter) {
 			const message =
-				`the work branch ${branch} isn't on ${options.arbiter} (the continue ` +
+				`the work branch ${branch} isn't on ${arbiter} (the continue ` +
 				`branch a cross-machine worker would resume from) — push it first, or ` +
 				'`requeue --reset` to discard and start fresh. Item left in ' +
 				'needs-attention (no backlog move).';
@@ -516,52 +554,163 @@ export function returnToBacklog(
 		}
 	}
 
-	// `-m "<note>"`: APPEND a dated handoff section to the item body (append-only;
-	// accumulates across requeues). Done BEFORE the move so it is committed as part
-	// of the same transition. Applies to BOTH modes.
-	if (options.message && options.message.trim() !== '') {
-		appendRequeueNote(naAbs, options.message.trim());
-	}
-
-	const destDir = join(cwd, 'work', 'backlog');
-	mkdirSync(destDir, {recursive: true});
-	const destRel = join('work', 'backlog', `${slug}.md`);
-	gitHard(['mv', naRel, destRel], cwd, env);
-
-	gitHard(['add', '-A'], cwd, env);
 	const commitMessage = `chore(${slug}): return to backlog for re-claiming`;
-	gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
-	note(`Returned '${slug}' to backlog.`);
+	const message =
+		options.message && options.message.trim() !== ''
+			? options.message.trim()
+			: undefined;
 
-	if (options.arbiter) {
-		gitHard(['push', options.arbiter, 'HEAD'], cwd, env);
+	// Build + CAS-push the move tree-lessly. Reuses the SHARED write-seam CAS
+	// (`ledgerWrite.applyTransition`, the very push+lease+verify `claim` uses) —
+	// NOT a second hand-rolled one. On a CONTENTION rejection (main advanced under
+	// us) we refetch + rebuild against the new base and retry, exactly as `claim`
+	// and the surface publish do.
+	const contentionAttempts = 5;
+	for (let i = 0; i < contentionAttempts; i++) {
+		if (i > 0) {
+			await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+		}
+		const base = (
+			await gitHardAsync(['rev-parse', `${arbiter}/main`], cwd, env)
+		).stdout.trim();
+
+		// Prepare the move as a commit OFF the arbiter's main, with PLUMBING on a
+		// SCRATCH INDEX — never the caller's index/HEAD/working tree. One file is
+		// relocated needs-attention/ → backlog/ (with the optional handoff note
+		// appended to its BODY first). The commit lands under a throwaway local ref.
+		const prepared = prepareReturnToBacklogCommit({
+			cwd,
+			slug,
+			base,
+			naRel,
+			commitMessage,
+			message,
+			env,
+		});
+
+		// Publish THROUGH the shared seam (the same `:main` push + force-with-lease +
+		// verify `claim` uses). The transition's WHO stays the caller's ambient env
+		// (threaded by `commit-tree` above) — tree-less is orthogonal to attribution.
+		const result = await ledgerWrite.applyTransition({
+			kind: 'requeue',
+			arbiter,
+			localBranch: prepared.ref,
+			expectedBase: base,
+			head: prepared.commit,
+			cwd,
+			env,
+			note,
+		});
+		// Drop the throwaway ref either way (it served only as the push source).
+		await gitSoftAsync(['update-ref', '-d', prepared.ref], cwd, env);
+
+		if (result.kind === 'published') {
+			// Advance the LOCAL remote-tracking `<arbiter>/main` so it INCLUDES the
+			// move (the push only moved the arbiter's main). Best-effort.
+			await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+			note(`Returned '${slug}' to backlog.`);
+			return {moved: true, commitMessage, deletedRemoteBranch};
+		}
+		// rejected: main moved under us — refetch + rebuild against the new base.
+		note(
+			`main advanced under us — refetch and retry (${i + 1}/${contentionAttempts})...`,
+		);
 	}
 
-	return {moved: true, commitMessage, deletedRemoteBranch};
+	const message2 =
+		`requeue for '${slug}': the arbiter's main kept moving (contended) after ` +
+		`${contentionAttempts} attempts — item left in needs-attention (no move). ` +
+		'Try again shortly.';
+	note(message2);
+	return {moved: false, reasonNotMoved: message2};
+}
+
+/**
+ * Build the return-to-backlog MOVE as a commit off the arbiter's `main`, using
+ * PLUMBING on a SCRATCH INDEX — it never touches the caller's index, HEAD, or
+ * working tree (so a concurrent writer's uncommitted cwd files can never be swept
+ * in). It loads `base`'s tree into a throwaway index, relocates ONLY this slug's
+ * ledger file from `work/needs-attention/<slug>.md` to `work/backlog/<slug>.md`
+ * (appending the optional `-m` handoff note to its BODY first — read from the
+ * blob on `main`, NOT from any cwd file), writes the tree, commits it parented on
+ * `base`, and points a throwaway local ref at the commit. Returns that ref + the
+ * commit sha for the seam's CAS push.
+ */
+function prepareReturnToBacklogCommit(params: {
+	cwd: string;
+	slug: string;
+	base: string;
+	naRel: string;
+	commitMessage: string;
+	message: string | undefined;
+	env: NodeJS.ProcessEnv | undefined;
+}): {ref: string; commit: string} {
+	const {cwd, slug, base, naRel, commitMessage, message, env} = params;
+	const backlogRel = `work/backlog/${slug}.md`;
+
+	// The item's body on `main`, optionally with the dated handoff note appended.
+	const original = catBlob(`${base}:${naRel}`, cwd, env);
+	const content =
+		message !== undefined ? appendRequeueNoteText(original, message) : original;
+	// Hash the (possibly note-appended) blob INTO the cwd's object store. A blob
+	// write does not touch the working tree.
+	const blob = hashObject(content, cwd, env);
+
+	// A scratch index so read-tree/update-index never disturb the caller's index.
+	const scratchIndex = join(
+		tmpdir(),
+		`agent-runner-requeue-${process.pid}-${Date.now()}.index`,
+	);
+	const withIndex: NodeJS.ProcessEnv = {
+		...(env ?? process.env),
+		GIT_INDEX_FILE: scratchIndex,
+	};
+	try {
+		gitHard(['read-tree', base], cwd, withIndex);
+		// Remove the item from needs-attention/, add it under backlog/ (one file).
+		gitHard(['update-index', '--force-remove', naRel], cwd, withIndex);
+		gitHard(
+			['update-index', '--add', '--cacheinfo', `100644,${blob},${backlogRel}`],
+			cwd,
+			withIndex,
+		);
+		const tree = runHard(['write-tree'], cwd, withIndex).stdout.trim();
+		// commit-tree threads the caller's ambient identity (env) — the WHO is
+		// unchanged from before (the human's, for `requeue`); tree-less only changed
+		// the WHERE-it-writes (the arbiter ref, not the cwd tree).
+		const commit = runHard(
+			['commit-tree', tree, '-p', base, '-m', commitMessage],
+			cwd,
+			env,
+		).stdout.trim();
+		// A throwaway local ref the seam's push uses as its source (`<ref>:main`).
+		const ref = `refs/agent-runner/requeue/${slug}`;
+		gitHard(['update-ref', ref, commit], cwd, env);
+		return {ref, commit};
+	} finally {
+		rmSync(scratchIndex, {force: true});
+	}
 }
 
 /** The heading that opens an appended requeue handoff note in the item body. */
 const REQUEUE_HEADING_PREFIX = '## Requeue';
 
 /**
- * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item file's BODY
+ * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
  * (append-only — never overwrites; repeated requeues accumulate a handoff log).
  * Body prose only (never a frontmatter field — WORK-CONTRACT rule 3). The date is
  * UTC `YYYY-MM-DD`; multiple notes on the same day are distinct appended blocks.
+ *
+ * A PURE string transform (it operates on the body CONTENT, not a file path) so
+ * the tree-less requeue can apply it to the blob read from `<arbiter>/main`
+ * without touching the cwd working tree.
  */
-function appendRequeueNote(path: string, message: string): void {
-	const current = readFileSync(path, 'utf8');
+function appendRequeueNoteText(content: string, message: string): string {
 	const date = new Date().toISOString().slice(0, 10);
-	const base = current.replace(/\s*$/, '');
-	const block = [
-		base,
-		'',
-		`${REQUEUE_HEADING_PREFIX} ${date}`,
-		'',
-		message,
-		'',
-	].join('\n');
-	writeFileSync(path, block);
+	const base = content.replace(/\s*$/, '');
+	return [base, '', `${REQUEUE_HEADING_PREFIX} ${date}`, '', message, ''].join(
+		'\n',
+	);
 }
 
 /**
@@ -716,12 +865,73 @@ function gitHard(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): void {
+	runHard(args, cwd, env);
+}
+
+/** Like {@link gitHard} but returns the raw result (for plumbing that emits stdout). */
+function runHard(
+	args: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): RunResult {
 	const result = run('git', args, cwd, {env});
 	if (result.status !== 0) {
 		throw new Error(
 			`git ${args.join(' ')} failed (exit ${result.status}): ${result.stderr.trim()}`,
 		);
 	}
+	return result;
+}
+
+/** Async soft git (no throw) — for the tree-less requeue's remote checks. */
+function gitSoftAsync(
+	args: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<RunResult> {
+	return runAsync('git', args, cwd, {env});
+}
+
+/** Async git; throw on non-zero (unexpected plumbing failures). */
+async function gitHardAsync(
+	args: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<RunResult> {
+	const result = await runAsync('git', args, cwd, {env});
+	if (result.status !== 0) {
+		throw new Error(
+			`git ${args.join(' ')} failed (exit ${result.status}): ${result.stderr.trim()}`,
+		);
+	}
+	return result;
+}
+
+/** Read an object's content (`git cat-file -p <object>`) from the cwd's store. */
+function catBlob(
+	object: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string {
+	return runHard(['cat-file', '-p', object], cwd, env).stdout;
+}
+
+/** Write a blob into the cwd's object store (`git hash-object -w`), return its sha. */
+function hashObject(
+	content: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string {
+	const result = run('git', ['hash-object', '-w', '--stdin'], cwd, {
+		env,
+		input: content,
+	});
+	if (result.status !== 0) {
+		throw new Error(
+			`git hash-object failed (exit ${result.status}): ${result.stderr.trim()}`,
+		);
+	}
+	return result.stdout.trim();
 }
 
 /**

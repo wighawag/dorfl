@@ -1908,16 +1908,16 @@ export function buildProgram(): Command {
 		.command('requeue <slug>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Requeue a needs-attention item to the backlog for re-claiming (ADR §12/§14). DEFAULT = keep + continue: git mv work/needs-attention/<slug>.md → work/backlog/<slug>.md and commit it, leaving the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time). --reset = discard + fresh: delete the remote work/<slug> branch FIRST (then the move) so the next claim starts fresh (guarded; never the default). -m/--message appends a dated handoff note to the item body (both modes; append-only). The recorded reason stays in the body as a durable note.',
+			'Requeue a needs-attention item to the backlog for re-claiming (ADR §12/§14). The move (work/needs-attention/<slug>.md → work/backlog/<slug>.md) is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time). --reset = discard + fresh: delete the remote work/<slug> branch FIRST (then the move) so the next claim starts fresh (guarded; never the default). -m/--message appends a dated handoff note to the item body (both modes; append-only). The recorded reason stays in the body as a durable note.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--cwd <dir>',
-			'the repo/working clone whose work/ tree holds the item (default: cwd)',
+			'the repo/working clone whose work/ tree the arbiter remote is resolved FROM (default: cwd) — an ORIGIN SOURCE only; the move is published to the arbiter, never to this tree',
 		)
 		.option(
 			'--arbiter <remote>',
-			'also push the transition to this arbiter remote (like the done-move); REQUIRED with --reset (the branch to delete lives there)',
+			'the arbiter git remote the tree-less move is CAS-published to (default: origin). --cwd resolves this remote; the move is never written to the cwd tree.',
 		)
 		.option(
 			'--reset',
@@ -1927,7 +1927,7 @@ export function buildProgram(): Command {
 			'-m, --message <note>',
 			'append a dated handoff note to the item body for the next agent (append-only; applies to both default and --reset)',
 		)
-		.action((rawSlug: string, flags: RequeueFlags) => {
+		.action(async (rawSlug: string, flags: RequeueFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
@@ -1943,10 +1943,13 @@ export function buildProgram(): Command {
 			// call site, rather than relying on the seam's silent `?? process.env`
 			// default by omission (the implicit fallback that made `requeue`'s human
 			// attribution accidental rather than declared).
-			const result = ledgerWrite.applyReturnToBacklogTransition({
+			const result = await ledgerWrite.applyReturnToBacklogTransition({
 				cwd,
 				slug,
-				arbiter: flags.arbiter,
+				// Tree-less CAS needs a ref to push to (parity with `claim`): default the
+				// arbiter to `origin` so the common case Just Works; `--arbiter` overrides.
+				// `--cwd` is purely the ORIGIN SOURCE the remote is resolved from.
+				arbiter: flags.arbiter ?? 'origin',
 				reset: flags.reset,
 				message: flags.message,
 				env: process.env,

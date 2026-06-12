@@ -6,6 +6,7 @@ import {
 	returnToBacklog,
 	readNeedsAttentionItems,
 } from '../src/needs-attention.js';
+import {ledgerWrite} from '../src/ledger-write.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
@@ -38,7 +39,7 @@ const ARBITER = 'arbiter';
 async function claimAndBranch(
 	slug: string,
 	opts: {promptBody?: string; extraSlugs?: string[]} = {},
-): Promise<{repo: string}> {
+): Promise<{repo: string; seeded: ReturnType<typeof seedRepoWithArbiter>}> {
 	const seeded = seedRepoWithArbiter(
 		scratch.root,
 		[slug, ...(opts.extraSlugs ?? [])],
@@ -54,7 +55,7 @@ async function claimAndBranch(
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
-	return {repo};
+	return {repo, seeded};
 }
 
 /** Simulate the build agent: leave UNCOMMITTED work in the tree (no git). */
@@ -191,43 +192,52 @@ describe('needs-attention — not claimable, but surfaced', () => {
 });
 
 describe('needs-attention — return path (needs-attention → backlog)', () => {
-	it('git mvs an item back to backlog for re-claiming, committed', async () => {
+	it('moves an item back to backlog for re-claiming on the arbiter (tree-less)', async () => {
 		const {repo} = await claimAndBranch('eta');
 		agentEdits(repo);
-		await routeToNeedsAttention({
+		// Surface to needs-attention ON THE ARBITER (wip + move + branch push +
+		// surface on main) so the tree-less requeue has an arbiter item + continue-
+		// branch to act on.
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'eta',
 			reason: 'env was misconfigured',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'eta',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 
 		expect(result.moved).toBe(true);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'eta.md'))).toBe(
-			false,
-		);
-		expect(existsSync(join(repo, 'work', 'backlog', 'eta.md'))).toBe(true);
-		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
-		expect(files).toMatch(/work\/backlog\/eta\.md/);
-		expect(files).toMatch(/work\/needs-attention\/eta\.md/);
-		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+		// The move landed on the arbiter (needs-attention → backlog), tree-less.
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(true);
 	});
 
 	it('a returned item is once again claimable by scan/eligibility', async () => {
 		const {repo} = await claimAndBranch('theta');
 		agentEdits(repo);
-		await routeToNeedsAttention({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'theta',
 			reason: 'transient failure',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		await returnToBacklog({cwd: repo, slug: 'theta', env: gitEnv()});
+		await returnToBacklog({
+			cwd: repo,
+			slug: 'theta',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		// Bring the arbiter's backlog move into the cwd so the local scan sees it.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 
 		const config: Config = {
 			maxParallel: 1,
@@ -248,6 +258,7 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'iota',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(false);

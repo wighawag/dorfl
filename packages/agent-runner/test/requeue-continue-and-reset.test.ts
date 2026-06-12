@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, readFileSync, existsSync} from 'node:fs';
+import {writeFileSync, readFileSync, existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
@@ -272,7 +272,9 @@ describe('requeue --reset — discard + fresh', () => {
 
 	it('a FAILED delete leaves the item in needs-attention (no backlog move)', async () => {
 		const reset = await stuckButNeedsAttention('eta-reset');
-		// Point --reset at a NON-EXISTENT arbiter remote so the delete push fails.
+		// Point --reset at a NON-EXISTENT arbiter remote. A tree-less requeue
+		// CAS-publishes to the arbiter, so a missing remote is refused up front — the
+		// item never moves (the no-backlog-move outcome this test guards is preserved).
 		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'eta-reset',
@@ -281,14 +283,13 @@ describe('requeue --reset — discard + fresh', () => {
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/failed to delete|aborting/i);
-		// The item is STILL in needs-attention locally (no backlog move happened).
+		// A missing arbiter remote is refused up front (it is the CAS push target).
+		expect(result.reasonNotMoved).toMatch(/no git remote named/i);
+		// The item is STILL in needs-attention on the arbiter (no backlog move).
 		expect(
-			existsSync(join(reset.repo, 'work', 'needs-attention', 'eta-reset.md')),
+			existsOnArbiterMain(reset.repo, 'needs-attention', 'eta-reset'),
 		).toBe(true);
-		expect(
-			existsSync(join(reset.repo, 'work', 'backlog', 'eta-reset.md')),
-		).toBe(false);
+		expect(existsOnArbiterMain(reset.repo, 'backlog', 'eta-reset')).toBe(false);
 	});
 });
 
@@ -303,10 +304,8 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		const body = readFileSync(
-			join(reset.repo, 'work', 'backlog', 'theta-note.md'),
-			'utf8',
-		);
+		// The body lives on the arbiter (the tree-less move never wrote the cwd).
+		const body = arbiterBacklogBody(reset.seeded, 'theta-note');
 		expect(body).toMatch(/## Requeue \d{4}-\d{2}-\d{2}/);
 		expect(body).toMatch(/watch out for the flaky integration test/);
 	});
@@ -320,13 +319,9 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 			message: 'first steer',
 			env: gitEnv(),
 		});
-		// Re-route back to needs-attention, then requeue again with a second note.
-		gitIn(
-			['mv', 'work/backlog/iota-note.md', 'work/needs-attention/iota-note.md'],
-			reset.repo,
-		);
-		gitIn(['add', '-A'], reset.repo);
-		gitIn(['commit', '-q', '-m', 'back to NA'], reset.repo);
+		// Re-route back to needs-attention ON THE ARBITER (the move lives there now,
+		// not in the cwd tree), then requeue again with a second note.
+		rerouteToNeedsAttentionOnArbiter(reset.seeded, 'iota-note');
 		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'iota-note',
@@ -335,10 +330,7 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		const body = readFileSync(
-			join(reset.repo, 'work', 'backlog', 'iota-note.md'),
-			'utf8',
-		);
+		const body = arbiterBacklogBody(reset.seeded, 'iota-note');
 		expect(body).toMatch(/first steer/);
 		expect(body).toMatch(/second steer/);
 		// TWO requeue sections (append-only, never overwritten).
@@ -358,10 +350,7 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 		});
 		expect(result.moved).toBe(true);
 		expect(result.deletedRemoteBranch).toBe(true);
-		const body = readFileSync(
-			join(reset.repo, 'work', 'backlog', 'kappa-note.md'),
-			'utf8',
-		);
+		const body = arbiterBacklogBody(reset.seeded, 'kappa-note');
 		expect(body).toMatch(/reset because the approach was wrong/);
 	});
 });
@@ -499,4 +488,37 @@ function arbiterRef(seeded: SeededRepo, ref: string): string {
 /** Does the arbiter currently have the given branch? */
 function arbiterHasBranch(seeded: SeededRepo, branch: string): boolean {
 	return arbiterRef(seeded, `refs/heads/${branch}`) !== '';
+}
+
+/**
+ * Read a backlog item's body from the ARBITER's `main` (the durable home the
+ * tree-less requeue writes — never the cwd tree), via a fresh clone.
+ */
+function arbiterBacklogBody(seeded: SeededRepo, slug: string): string {
+	const reader = seeded.clone(`read-${slug}`);
+	return readFileSync(join(reader, 'work', 'backlog', `${slug}.md`), 'utf8');
+}
+
+/**
+ * Re-route a requeued item BACK to needs-attention/ on the arbiter's `main`
+ * (backlog → needs-attention), in a throwaway clone so the cwd tree under test is
+ * untouched — the cross-machine analogue of "it got stuck again". Used to drive a
+ * second requeue and prove the handoff notes ACCUMULATE.
+ */
+function rerouteToNeedsAttentionOnArbiter(
+	seeded: SeededRepo,
+	slug: string,
+): void {
+	const mover = seeded.clone(`reroute-${slug}`);
+	gitIn(['fetch', '-q', ARBITER], mover);
+	gitIn(['checkout', '-q', '-B', 'reroute', `${ARBITER}/main`], mover);
+	// `git mv` needs the destination dir to exist (it does not auto-create).
+	mkdirSync(join(mover, 'work', 'needs-attention'), {recursive: true});
+	gitIn(
+		['mv', `work/backlog/${slug}.md`, `work/needs-attention/${slug}.md`],
+		mover,
+	);
+	gitIn(['add', '-A'], mover);
+	gitIn(['commit', '-q', '-m', `back to NA: ${slug}`], mover);
+	gitIn(['push', '-q', ARBITER, 'reroute:main'], mover);
 }

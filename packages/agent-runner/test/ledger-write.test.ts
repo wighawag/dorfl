@@ -264,24 +264,32 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 
 	it('the return-to-backlog re-queue is dispatched via the seam', async () => {
 		const repo = await claimBranchAndEdit('gamma');
+		// Commit + push the work branch (the continue-branch the default requeue's
+		// safety guard checks for) and surface to needs-attention ON THE ARBITER.
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'wip gamma'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/slice-gamma:work/slice-gamma'], repo);
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',
 			reason: 'resolved later',
+			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		const spy = vi.spyOn(
 			ledgerWriteModule.ledgerWrite,
 			'applyReturnToBacklogTransition',
 		);
-		const res = ledgerWrite.applyReturnToBacklogTransition({
+		// The re-queue is now a TREE-LESS CAS to the arbiter (parity with claim).
+		const res = await ledgerWrite.applyReturnToBacklogTransition({
 			cwd: repo,
 			slug: 'gamma',
+			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(res.moved).toBe(true);
 		expect(spy).toHaveBeenCalledTimes(1);
-		expect(existsSync(`${repo}/work/needs-attention/gamma.md`)).toBe(false);
-		expect(existsSync(`${repo}/work/backlog/gamma.md`)).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 	});
 });
