@@ -101,6 +101,20 @@ dropping failed work is never acceptable; it shares no flag with the two gates a
 is left exactly as it is. The clean line: gateable = "don't make noise"; never
 gateable = "don't discard the human's work / don't hide a failure."
 
+**Per-SUB-STEP, not per-rung (the apply-followup edge).** `apply` has a re-pause
+sub-step that can APPEND NEW follow-up questions (`appendQuestions`/`applyFollowups`,
+`apply-persist.ts`) when answering one question raises more judgement. That is a
+CREATE act. So the principle is applied per sub-step: writing the human's answer +
+resolve/disposition is CONSUME (always on); MINTING fresh bot follow-ups is CREATE
+(respects the create-gate, so gate-off ⇒ apply the answer and RESOLVE, do not spawn
+the surface skill to mint new questions). VERIFIED 2026-06-12: follow-up generation
+is NOT wired in production today (`applyFollowups` is set only by tests; `cli.ts`/
+`advance-drivers.ts` never thread it), so apply is pure consume now and the invariant
+holds as-is. The gating obligation lands only IF/WHEN follow-up generation is wired.
+Open at that point: the `NewQuestion[]` seam carries no provenance, so it cannot yet
+distinguish a HUMAN-authored follow-up (consume, still honoured) from a BOT-minted
+one (create, gated), that distinction must be added before apply mints followups.
+
 ### 5. These are engine `Config` fields (per-repo + env + flag), not CI-only knobs
 
 `observationTriage` and `surfaceBlockers` join the gate family as first-class
