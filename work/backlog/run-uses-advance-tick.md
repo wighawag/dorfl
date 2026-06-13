@@ -1,7 +1,7 @@
 ---
 title: unify run onto the advance tick - make the laptop daemon's per-item unit the advance lifecycle tick (not the build-only do tick), behaviour-preserving under calm gate defaults
 slug: run-uses-advance-tick
-blockedBy: [observation-triage-tri-state-gate, surface-blockers-gate]
+blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate, surface-blockers-gate]
 covers: []
 ---
 
@@ -27,7 +27,8 @@ WHY this slice (the test-leverage point): `run` is locally unit-testable, wherea
 
 ## Blocked by
 
-- `observation-triage-tri-state-gate` AND `surface-blockers-gate`: the calm defaults (`off`/`off`) are what make this unification behaviour-preserving; build it on top of both so the gates-off-equivalence and gates-on-lifecycle tests reference the real gates.
+- `advance-autopick-lifecycle-pools`: the foundation that puts observations + `needsAnswers` items into the auto-pick selection, without it, `run` unifying onto the advance tick would still never reach the lifecycle rungs (nothing to advance beyond build/slice), so the gates-on-lifecycle test would be vacuous.
+- `observation-triage-tri-state-gate` AND `surface-blockers-gate`: the calm defaults (`off`/`off`) are what make this unification behaviour-preserving; build on both so the gates-off-equivalence and gates-on-lifecycle tests reference the real gates.
 
 ## Prompt
 
