@@ -100,6 +100,13 @@ const RACE_SENSITIVE = [
 	// pressure for the same deterministic claim/main-CAS reasoning as
 	// do-remote.test.ts.
 	'test/stale-lease-all-push-sites.test.ts',
+	// The REGISTRY-SET advance driver with per-mirror job-worktree isolation
+	// (`advance-loop-driver-registry-set-job-worktrees`): discovers the registry via
+	// `scan(config)`, materialises a hub mirror + job worktree per mirror, builds +
+	// integrates against a --bare arbiter (writes main), and runs an in-process
+	// two-batch CAS race over one mirror; keep it out of file-parallel pressure for
+	// the same deterministic claim/main-CAS reasoning as do-remote.test.ts.
+	'test/advance-registry-set.test.ts',
 	// Gate 2 (PR/code review) on the do/complete path: drives real git against a
 	// --bare arbiter, integrates/merges on approve, AND writes main (the autonomous
 	// needs-attention surfacing on a block); keep it out of file-parallel pressure

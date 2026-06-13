@@ -1373,11 +1373,18 @@ export async function performDoRemote(
 	);
 
 	// 2. A throwaway claim clone of the mirror (the CAS context). Slug resolution
-	//    + the claim both run here against `origin` (the arbiter URL).
+	//    + the claim both run here against `origin` (the arbiter URL). Keyed PER
+	//    ARG (not a single fixed `__remote` path per mirror) so two CONCURRENT
+	//    `do --remote` calls on the SAME mirror — the registry-set advance batch's
+	//    per-mirror concurrency (`perRepoMax > 1`) — get DISTINCT claim clones rather
+	//    than racing one shared dir (the SAME per-job-clone keying `run`'s
+	//    `claimAgainstRepo` uses; the prior single-shot caller never raced, so this
+	//    is a pure concurrency hardening, not a behaviour change for it).
+	const claimKey = options.arg.replace(/[^a-zA-Z0-9._-]/g, '_');
 	const claimDir = join(
 		workspacesDir,
 		'claim',
-		`${encodeRepoKey(mirror.url).split('/').join('__')}__remote`,
+		`${encodeRepoKey(mirror.url).split('/').join('__')}__${claimKey}`,
 	);
 	rmSync(claimDir, {recursive: true, force: true});
 	mkdirSync(dirname(claimDir), {recursive: true});
@@ -1880,4 +1887,79 @@ async function primeWorktreeTrackingRef(
 		cwd,
 		{env},
 	);
+}
+
+/**
+ * Adapt the IN-PLACE {@link DoOptions} build/slice driver onto the WORKTREE-
+ * ISOLATED {@link performDoRemote} pipeline (slice
+ * `advance-loop-driver-registry-set-job-worktrees`) — the per-mirror job-worktree
+ * `doDriver` the registry-set advance driver threads into the advance tick.
+ *
+ * The advance tick's build/slice rung ORCHESTRATES `do` by calling the
+ * {@link AdvanceContext.doDriver} seam with a resolved {@link DoOptions} (whose
+ * `cwd` is the per-mirror in-place checkout). The DEFAULT driver is
+ * {@link performDo} (in-place, the cwd checkout IS the isolation — the human-local
+ * one-shot `advance` + today's `run --advance`). The DAEMON/CI registry-set path
+ * wants the SAME per-job-worktree isolation `run`'s build tick gives `runOneItem`,
+ * so it injects THIS driver instead: it re-routes the orchestration onto
+ * {@link performDoRemote}, which materialises a hub mirror + job worktree off the
+ * mirror's arbiter via the EXISTING `jobWorktreeStrategy` (no second isolation
+ * mechanism), runs the SAME `do` pipeline there, and reaps per the §4 predicate.
+ * The cwd checkout is NEVER touched (the equivalence the slice asserts vs plain
+ * `run`).
+ *
+ * The pipeline knobs (verify / integration / review family / agent launch /
+ * identity) ride VERBATIM from the threaded `DoOptions` onto the structurally-
+ * matching {@link DoRemoteOptions} fields; `cwd` is DROPPED (the worktree replaces
+ * it) and `remote` + `workspacesDir` are supplied from this driver's closure (the
+ * mirror's arbiter URL + the agents' execution area). A `prd:` arg flows through
+ * unchanged — `performDoRemote` slices it against the claim clone with NO build
+ * worktree (the slicing/surface/triage/apply rungs are tree-less ledger moves, the
+ * substrate the slice's criterion 4 preserves).
+ */
+export function jobWorktreeDoDriver(closure: {
+	/** The mirror's arbiter URL (`git -C <mirror> remote get-url origin`) — `performDoRemote`'s `remote`. */
+	remote: string;
+	/** The agents' execution area (config `workspacesDir`) where the hub mirror + worktree live. */
+	workspacesDir: string;
+}): (options: DoOptions) => Promise<DoResult> {
+	return (options: DoOptions): Promise<DoResult> => {
+		// Map the in-place DoOptions onto the worktree DoRemoteOptions. `cwd` is
+		// intentionally DROPPED (the worktree is the isolation, not the checkout);
+		// every other pipeline knob rides verbatim onto its structural twin.
+		const remoteOptions: DoRemoteOptions = {
+			arg: options.arg,
+			remote: closure.remote,
+			workspacesDir: closure.workspacesDir,
+			arbiter: options.arbiter,
+			identity: options.identity,
+			autoSlice: options.autoSlice,
+			reviewLoop: options.reviewLoop,
+			slicerLoopMax: options.slicerLoopMax,
+			slicerLoopModel: options.slicerLoopModel,
+			reviewExecutions: options.reviewExecutions,
+			integration: options.integration,
+			verify: options.verify,
+			provider: options.provider,
+			review: options.review,
+			autoMerge: options.autoMerge,
+			reviewModel: options.reviewModel,
+			reviewMaxRounds: options.reviewMaxRounds,
+			reviewGate: options.reviewGate,
+			sliceReviewGate: options.sliceReviewGate,
+			agentRunner: options.agentRunner,
+			harness: options.harness,
+			agentCmd: options.agentCmd,
+			model: options.model,
+			sessionsDir: options.sessionsDir,
+			watch: options.watch,
+			watchSink: options.watchSink,
+			color: options.color,
+			read: options.read,
+			env: options.env,
+			note: options.note,
+			noteBlock: options.noteBlock,
+		};
+		return performDoRemote(remoteOptions);
+	};
 }

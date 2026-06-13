@@ -1,10 +1,17 @@
-import {performAdvance, type AdvanceResult} from './advance.js';
+import {
+	performAdvance,
+	type AdvanceResult,
+	type AdvanceContext,
+} from './advance.js';
 import type {AdvanceTickRunner, AdvanceTickOptions} from './advance-drivers.js';
 import {scanMirrorPool} from './mirror-pool-scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {selectPrioritised, type SelectedItem} from './select-priority.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
 import {runConcurrent} from './concurrency.js';
+import {scan, type ScanReport} from './scan.js';
+import {run as runProcess} from './git.js';
+import {jobWorktreeDoDriver} from './do.js';
 import type {Config} from './config.js';
 import type {
 	RunTick,
@@ -203,6 +210,223 @@ function argForSelected(item: SelectedItem): string {
 		return `obs:${item.slug}`;
 	}
 	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
+}
+
+/**
+ * Read a bare hub mirror's `origin` URL (`git -C <mirror> remote get-url
+ * origin`) — the arbiter URL the per-mirror job-worktree `do` driver
+ * ({@link jobWorktreeDoDriver}) materialises its worktree off (the SAME URL
+ * `run`'s `claimAgainstRepo` resolves; `registry.ts readOriginUrl` reads it for
+ * the registry view). Falls back to a `file://<path>` URL when the remote is
+ * unreadable, so a malformed/origin-less mirror still resolves to SOMETHING
+ * addressable rather than throwing mid-batch.
+ */
+function mirrorOriginUrl(
+	mirrorPath: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string {
+	const result = runProcess(
+		'git',
+		['remote', 'get-url', 'origin'],
+		mirrorPath,
+		{env},
+	);
+	const url = result.status === 0 ? result.stdout.trim() : '';
+	return url !== '' ? url : `file://${mirrorPath}`;
+}
+
+/**
+ * One mirror's slot in a {@link advanceRegistrySet} batch: which mirror drained,
+ * and that mirror's batch result (or a captured throw mapped to a usage-error
+ * batch — one mirror can never abort the whole registry sweep).
+ */
+export interface AdvanceRegistryMirrorResult {
+	/** The bare hub mirror that was drained this batch. */
+	mirrorPath: string;
+	/** That mirror's {@link advanceOnce} batch result. */
+	batch: AdvanceBatchResult;
+}
+
+/** The aggregate outcome of ONE registry-set advance batch (every mirror's batch). */
+export interface AdvanceRegistrySetResult {
+	/** Each drained mirror's batch, in registry-discovery order. */
+	mirrors: AdvanceRegistryMirrorResult[];
+}
+
+/**
+ * What {@link advanceRegistrySet} needs: the global config (the registry +
+ * caps), the per-mirror advance CONTEXT factory, and the execution workspace.
+ */
+export interface AdvanceRegistrySetOptions {
+	/**
+	 * The global config. Its `workspacesDir` IS the registry (the hub-mirror set
+	 * {@link scan} enumerates); `maxParallel`/`perRepoMax` are the SAME caps the
+	 * build tick's scheduler uses.
+	 */
+	config: Config;
+	/**
+	 * Build the per-mirror advance CONTEXT (everything BUT `arg` and the build/slice
+	 * `doDriver`). The driver INJECTS the per-mirror job-worktree `doDriver`
+	 * ({@link jobWorktreeDoDriver}) on top of what this returns, so the build/slice
+	 * rungs run isolated off THAT mirror's arbiter — the caller supplies the gate
+	 * seams + `doOptions` base (harness, verify, review, …), exactly as the CLI
+	 * wires them for the single-mirror path. `cwd` here is irrelevant to the
+	 * build/slice rungs (the worktree driver replaces it); the tree-less
+	 * surface/triage/apply rungs use it as their ledger-write cwd.
+	 */
+	contextFor: (input: {
+		mirrorPath: string;
+		originUrl: string;
+	}) => Omit<AdvanceTickOptions, 'arg' | 'doDriver'>;
+	/**
+	 * The execution working area (bare hub mirrors + per-job worktrees). Defaults
+	 * to `config.workspacesDir`. The per-mirror worktree `doDriver` materialises its
+	 * worktree under here — the agents' area, the SAME isolation `run` uses.
+	 */
+	workspace?: string;
+	/** Pre-computed registry scan (tests); omitted ⇒ the live `scan(config)`. */
+	report?: ScanReport;
+	/** Override the single-tick runner (tests). Defaults to {@link performAdvance}. */
+	run?: AdvanceTickRunner;
+	/** Override the read seam (mirror pool); defaults to the active {@link ledgerRead}. */
+	read?: LedgerReadStrategy;
+	/** Sink for non-fatal warnings (mirror-config read; forwarded to scan + pool scan). */
+	warn?: (message: string) => void;
+	/** The git env the registry scan + per-mirror pool scans run under. */
+	env?: NodeJS.ProcessEnv;
+	/**
+	 * The LIFECYCLE-POOL create-gates, forwarded to each mirror's
+	 * {@link advanceOnce}. INTERIM, born OFF (omitted ⇒ both off). The CLI wires
+	 * this to `observationTriage`/`surfaceBlockers`, exactly as the single-mirror
+	 * path does.
+	 */
+	lifecycleGates?: LifecyclePoolGates;
+}
+
+/**
+ * The **registry-set advance DRIVER** with **per-mirror job-worktree isolation**
+ * (slice `advance-loop-driver-registry-set-job-worktrees`) — the advance-tick TWIN
+ * of `runOnce`/`runOneItem`'s build substrate, the substrate `run-uses-advance-tick`
+ * needs to become a clean tick swap. Where {@link advanceOnce} drains ONE named
+ * mirror's pool IN-PLACE (the single-mirror path), this driver:
+ *
+ *   1. **discovers the REGISTRY SET** the SAME way `runOnce` does — via
+ *      {@link scan} over `config.workspacesDir`'s hub mirrors (NOT a single
+ *      `--advance <mirror>` arg); and
+ *   2. loops {@link advanceOnce}'s batch over that set, GENUINELY CONCURRENT
+ *      ACROSS REPOS under {@link runConcurrent} (`maxParallel` global /
+ *      `perRepoMax` per repo — the SAME scheduler `run`'s build tick uses), each
+ *      mirror's pool itself drained concurrently by `advanceOnce` (reusing the
+ *      per-item `advancing` borrow INSIDE {@link performAdvance} — no new lock,
+ *      no new scheduler); and
+ *   3. threads a **per-mirror job-worktree `doDriver`** ({@link jobWorktreeDoDriver})
+ *      into each mirror's advance context, so the build/slice rungs run isolated
+ *      in their OWN worktree off THAT mirror's arbiter (the SAME isolation
+ *      `runOneItem` gives the build tick) instead of in `process.cwd()`. The
+ *      surface/triage/apply rungs stay on their tree-less ledger-write moves
+ *      (no build worktree needed) — the worktree driver governs ONLY the
+ *      build/slice orchestration target.
+ *
+ * Under calm gates (both lifecycle create-gates off) this is the OBSERVABLE-
+ * OUTCOME equivalent of plain `run`'s build tick over the same registry: build
+ * ready slices / slice ready PRDs, each per-job-worktree-isolated off the
+ * mirror's arbiter, same integration result — two callers of one
+ * `performIntegration` band (the advance build rung reaches it via `performDo`
+ * → `performDoRemote`; `runOneItem` reaches it directly), NOT a shared code path.
+ */
+export async function advanceRegistrySet(
+	options: AdvanceRegistrySetOptions,
+): Promise<AdvanceRegistrySetResult> {
+	const config = options.config;
+	const workspace = options.workspace ?? config.workspacesDir;
+	// DISCOVERY = the registry (the hub-mirror set, ADR §1) — the SAME `scan(config)`
+	// `runOnce` uses. Each row's `path` is a bare hub mirror to drain.
+	const report =
+		options.report ??
+		(await scan(config, {warn: options.warn, env: options.env}));
+	const mirrors = report.repos.map((repo) => repo.path);
+
+	// GENUINELY CONCURRENT ACROSS REPOS (the registry-set point) under the SAME
+	// bounded scheduler `run`'s build tick uses: `maxParallel` bounds the whole
+	// registry sweep, one `advanceOnce` per mirror in flight.
+	//
+	// WITHIN one mirror the batch is SERIALISED (`perRepoMax: 1` into `advanceOnce`).
+	// WHY: the per-item `advancing` borrow + the tree-less surface/triage/apply rungs
+	// commit in the per-mirror `context.cwd` working tree, and the borrow's CAS is
+	// race-correct ONLY when each contender holds its OWN clone (the distinct-clone
+	// model `advancing-lock.ts` is built + tested against — two contenders sharing
+	// one checkout corrupt each other's HEAD/index, the SAME reason `run` serialises
+	// the per-repo CLAIM via `createKeyedLock`). A bare mirror has no per-item cwd, so
+	// the build/slice rungs already get their OWN job worktree (via `jobWorktreeDoDriver`
+	// → `performDoRemote`) but the lock + tree-less rungs share the one cwd — so within
+	// ONE mirror they must run one-at-a-time. Cross-mirror concurrency (distinct
+	// arbiters → distinct cwds, no contention) stays GENUINE, which is the
+	// registry-set point. Per-item-cwd isolation (to also parallelise WITHIN a
+	// mirror) is a follow-up; this slice keeps the borrow reused unchanged + correct.
+	const settled = await runConcurrent({
+		items: mirrors,
+		maxInFlight: Math.max(1, config.maxParallel),
+		keyFor: (mirrorPath) => mirrorPath,
+		perKeyMax: 1,
+		worker: (mirrorPath) => {
+			const originUrl = mirrorOriginUrl(mirrorPath, options.env);
+			// The per-mirror context the CLI shaped (gates + doOptions base) PLUS the
+			// per-mirror job-worktree `doDriver` injected here, so the build/slice rungs
+			// build isolated off THIS mirror's arbiter (cwd untouched).
+			const baseContext = options.contextFor({mirrorPath, originUrl});
+			const context: Omit<AdvanceTickOptions, 'arg'> = {
+				...baseContext,
+				doDriver: jobWorktreeDoDriver({
+					remote: originUrl,
+					workspacesDir: workspace,
+				}),
+			};
+			return advanceOnce({
+				mirrorPath,
+				config,
+				context,
+				run: options.run,
+				read: options.read,
+				warn: options.warn,
+				env: options.env,
+				lifecycleGates: options.lifecycleGates,
+				// SERIALISE within the mirror (one tick at a time over the shared cwd) —
+				// the borrow + tree-less rungs commit in `context.cwd` and are race-correct
+				// only per distinct clone (see the block above). Cross-mirror concurrency
+				// is genuine (the outer `runConcurrent`).
+				maxParallel: 1,
+				perRepoMax: 1,
+			});
+		},
+	});
+
+	// One mirror can never abort the registry sweep: a captured throw becomes an
+	// empty batch (mirrors `advanceOnce`'s per-item settled-slot contract one layer up).
+	const mirrorResults: AdvanceRegistryMirrorResult[] = settled.map(
+		(slot, i) => ({
+			mirrorPath: mirrors[i],
+			batch: 'ok' in slot ? slot.ok : {items: []},
+		}),
+	);
+	return {mirrors: mirrorResults};
+}
+
+/** Project a whole registry-set batch onto the convergence counts (a pure sum). */
+export function advanceRegistrySetSummary(
+	result: AdvanceRegistrySetResult,
+): AdvanceBatchSummary {
+	let advanced = 0;
+	let idle = 0;
+	let stuck = 0;
+	let total = 0;
+	for (const {batch} of result.mirrors) {
+		const s = advanceBatchSummary(batch);
+		advanced += s.advanced;
+		idle += s.idle;
+		stuck += s.stuck;
+		total += s.total;
+	}
+	return {advanced, idle, stuck, total};
 }
 
 /** The convergence counts of one batch (the drain/idle signal US #31 asserts on). */
