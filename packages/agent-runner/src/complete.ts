@@ -91,6 +91,7 @@ export {synthesiseProposeTitle, composeProposeBody, PR_TITLE_MAX};
 
 export type CompleteOutcome =
 	| 'completed' // gated, moved, committed, integrated
+	| 'prepare-failed' // the env-prep step (prepare) was red — env not ready, verify not run
 	| 'gate-failed' // the acceptance gate was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
@@ -122,6 +123,9 @@ export interface CompleteOptions {
 	 * For "I'll keep iterating on this branch" (e.g. addressing review feedback).
 	 */
 	noSwitch?: boolean;
+	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
+	 * first `verify` to make the env ready. Unset ⇒ a no-op (NO default install). */
+	prepare?: VerifyConfig;
 	/** The declared per-repo gate (string | list). Unset ⇒ the default command. */
 	verify?: VerifyConfig;
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
@@ -475,6 +479,7 @@ async function runComplete(
 		branch,
 		source,
 		recovering,
+		prepare: options.prepare,
 		verify: options.verify,
 		skipVerify: options.skipVerify,
 		review: options.review,
@@ -498,8 +503,17 @@ async function runComplete(
 		note,
 	});
 
-	// The three FAILURE outcomes map 1:1 onto `complete`'s — the core already
-	// note()'d the reason and did any routing; the tail never runs for them.
+	// The FAILURE outcomes map 1:1 onto `complete`'s — the core already note()'d
+	// the reason and did any routing; the tail never runs for them.
+	if (core.outcome === 'prepare-failed') {
+		return {
+			exitCode: 1,
+			outcome: 'prepare-failed',
+			routedToNeedsAttention: core.routedToNeedsAttention,
+			branch: core.branch,
+			message: core.reason ?? '',
+		};
+	}
 	if (core.outcome === 'gate-failed') {
 		return {
 			exitCode: 1,

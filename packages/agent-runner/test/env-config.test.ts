@@ -214,6 +214,14 @@ describe('envOverrides — list coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_VERIFY: ''})).toEqual({verify: []});
 	});
 
+	it('AGENT_RUNNER_PREPARE coerces as a list (the env-prep sibling of verify)', () => {
+		expect(
+			envOverrides({
+				AGENT_RUNNER_PREPARE: 'pnpm install,git submodule update --init',
+			}),
+		).toEqual({prepare: ['pnpm install', 'git submodule update --init']});
+	});
+
 	it('selectionOrder coerces as a `list` (explicit pool order)', () => {
 		expect(
 			envOverrides({

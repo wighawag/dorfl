@@ -478,6 +478,22 @@ export {
 } from './verify.js';
 
 export type {
+	PrepareConfig,
+	RunPrepareOptions,
+	RunPrepareResult,
+	EnsurePreparedOptions,
+} from './prepare.js';
+export {
+	runPrepare,
+	resolvePrepareCommands,
+	ensurePrepared,
+	isPrepared,
+	markPrepared,
+	preparedMarkerPath,
+	PREPARE_MARKER_BASENAME,
+} from './prepare.js';
+
+export type {
 	ReviewFinding,
 	ReviewVerdict,
 	ReviewGateInput,

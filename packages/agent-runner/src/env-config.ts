@@ -85,6 +85,10 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	harness: {enum: ['null', 'pi']},
 	piBin: 'string',
 	sessionsDir: 'string',
+	// `prepare` coerces as a `'list'` (comma form
+	// `AGENT_RUNNER_PREPARE=pnpm install,git submodule update --init`), exactly
+	// like `verify` — the SAME precedence chain, the sibling env-prep step.
+	prepare: 'list',
 	verify: 'list',
 	review: 'boolean',
 	autoMerge: 'boolean',

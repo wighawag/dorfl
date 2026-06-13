@@ -55,6 +55,13 @@ export const REPO_ALLOWED_KEYS = [
 	'integration',
 	'provider',
 	'verify',
+	// `prepare` (the env-prep / install step run ONCE before the first `verify` on
+	// a fresh worktree) is a genuine repo property exactly like `verify` — how this
+	// repo's environment is made ready (install deps / submodules / codegen) is
+	// agreed by all collaborators + travels with the repo. Resolved per-repo
+	// through the SAME chain as `verify`. Install belongs HERE, never baked into
+	// `verify`.
+	'prepare',
 	'defaultArbiter',
 	// `autoBuild` (may an agent auto-BUILD undeclared, not-`humanOnly` slices in
 	// this repo?) is a genuine repo property — the build member of the symmetric

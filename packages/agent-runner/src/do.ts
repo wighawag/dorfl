@@ -203,6 +203,9 @@ export interface DoOptions {
 	 * to rebase). Loud, never the default.
 	 */
 	ignoreDivergedMain?: boolean;
+	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
+	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
+	prepare?: VerifyConfig;
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
 	/** Review-request provider override (propose mode); auto-detect when unset. */
@@ -353,6 +356,9 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
+	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
+	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
+	prepare?: VerifyConfig;
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
 	/** Review-request provider override (propose mode); auto-detect when unset. */
@@ -834,6 +840,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// with --ignore-diverged-main the guard was bypassed there too, so either way
 		// the (now non-fatal) local-main sync handles any persisting divergence.
 		ignoreDivergedMain: true,
+		prepare: options.prepare,
 		verify: options.verify,
 		provider: options.provider,
 		// Half B (propose-mode PR body): the build agent's FINAL SUMMARY, captured
@@ -880,15 +887,16 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		};
 	}
 	if (
+		completed.outcome === 'prepare-failed' ||
 		completed.outcome === 'gate-failed' ||
 		completed.outcome === 'review-blocked' ||
 		completed.outcome === 'rebase-conflict'
 	) {
-		// Red gate / Gate-2 review block / rebase conflict — routed to needs-attention
-		// (surfaced on the arbiter). A `review-blocked` is mapped HERE the SAME way
-		// `gate-failed` is (the slice's "add a review-blocked terminal the same way /
-		// fold into the existing needs-attention mapping"). The work did NOT complete;
-		// the runner owns the bounce.
+		// Failed env-prep / red gate / Gate-2 review block / rebase conflict — routed
+		// to needs-attention (surfaced on the arbiter). A `prepare-failed` (the env
+		// could not be made ready, so verify was NOT run) and a `review-blocked` are
+		// mapped HERE the SAME way `gate-failed` is. The work did NOT complete; the
+		// runner owns the bounce.
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
@@ -1735,6 +1743,7 @@ async function runRemotePipeline(
 		// the bare mirror and never ff's the operator's local main, so the guard does
 		// not apply here — opt out explicitly (the slice: do NOT touch do --remote/run).
 		ignoreDivergedMain: true,
+		prepare: options.prepare,
 		verify: options.verify,
 		provider: options.provider,
 		body: agent.output,
@@ -1766,6 +1775,7 @@ async function runRemotePipeline(
 		};
 	}
 	if (
+		completed.outcome === 'prepare-failed' ||
 		completed.outcome === 'gate-failed' ||
 		completed.outcome === 'review-blocked' ||
 		completed.outcome === 'rebase-conflict'
@@ -1939,6 +1949,7 @@ export function jobWorktreeDoDriver(closure: {
 			slicerLoopModel: options.slicerLoopModel,
 			reviewExecutions: options.reviewExecutions,
 			integration: options.integration,
+			prepare: options.prepare,
 			verify: options.verify,
 			provider: options.provider,
 			review: options.review,
