@@ -1,7 +1,7 @@
 ---
 title: observationTriage - replace the autoTriage boolean with a 3-state gate (off | ask | auto), adding the "off = skip observations" state (clean replacement, NO alias)
 slug: observation-triage-tri-state-gate
-blockedBy: [advance-autopick-lifecycle-pools]
+blockedBy: [advance-autopick-lifecycle-pools, remove-deprecated-config-aliases]
 covers: []
 ---
 
@@ -35,6 +35,7 @@ ALSO (the invariant that resolves the sibling slice's apply question): the two q
 ## Blocked by
 
 - `advance-autopick-lifecycle-pools`: the FOUNDATION that adds the observation pool to the advance auto-pick selection. Without it there is NO observation pool to gate (observations are explicit-invocation-only today), so this gate's selection-layer `off` would have nothing to act on. Build the pool first; this slice gates it.
+- `remove-deprecated-config-aliases` (FILE-SERIALISATION): both rewrite `config-alias.ts` + the same config-chain regions (`config.ts` `Config`/`DEFAULT_CONFIG`, `repo-config.ts` `REPO_ALLOWED_KEYS`, `env-config.ts` `KEY_COERCIONS`, `cli.ts`). Land the alias removal FIRST so this slice migrates `autoTriage -> observationTriage` against an already-shrunk alias surface (and the two don't conflict-edit the same lines).
 
 ## Prompt
 

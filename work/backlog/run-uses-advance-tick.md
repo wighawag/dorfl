@@ -1,7 +1,7 @@
 ---
 title: unify run onto the advance tick - make the laptop daemon's per-item unit the advance lifecycle tick (not the build-only do tick), behaviour-preserving under calm gate defaults
 slug: run-uses-advance-tick
-blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate, surface-blockers-gate]
+blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate, surface-blockers-gate, atomic-done-move-one-slug-one-folder, requeue-from-in-progress]
 covers: []
 ---
 
@@ -29,6 +29,7 @@ WHY this slice (the test-leverage point): `run` is locally unit-testable, wherea
 
 - `advance-autopick-lifecycle-pools`: the foundation that puts observations + `needsAnswers` items into the auto-pick selection, without it, `run` unifying onto the advance tick would still never reach the lifecycle rungs (nothing to advance beyond build/slice), so the gates-on-lifecycle test would be vacuous.
 - `observation-triage-tri-state-gate` AND `surface-blockers-gate`: the calm defaults (`off`/`off`) are what make this unification behaviour-preserving; build on both so the gates-off-equivalence and gates-on-lifecycle tests reference the real gates.
+- `atomic-done-move-one-slug-one-folder` AND `requeue-from-in-progress` (SOUNDNESS, ledger-integrity): this slice makes plain `run` drive the FULL lifecycle autonomously through `performIntegration` (verified: `run.ts` imports it). That AMPLIFIES the transition/recovery bugs the `ledger-integrity` cluster fixes (ghost slug in two folders, items stranded in `in-progress/`), more autonomous transitions = more strand chances. Harden the transition (atomic done-move) + the recovery verb (requeue-from-in-progress) BEFORE scaling autonomy onto them. (The other ledger-integrity slices are recommended-first too, but these two are the load-bearing pair `run` hits directly.)
 
 ## Prompt
 

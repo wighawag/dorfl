@@ -1,7 +1,7 @@
 ---
 title: advance auto-pick draws the LIFECYCLE pools (untriaged observations + needsAnswers-blocked slices/PRDs) into the selection, so the gates have a pool to govern
 slug: advance-autopick-lifecycle-pools
-blockedBy: []
+blockedBy: [ledger-one-slug-one-folder-lint-and-sweep]
 covers: []
 ---
 
@@ -30,15 +30,30 @@ Extend the advance auto-pick SELECTION (both the in-place `performAdvanceAuto` a
 
 This slice does NOT add the gates (those are the two gate slices that depend on THIS) and does NOT change the classifier or the rung bodies (they already handle these item types); it ONLY widens the SELECTION/scan so the lifecycle items ENTER the pool. The gates then govern these new pools at the selection layer, making the "`autoBuild` drops the build pool" analogy actually TRUE for the lifecycle pools.
 
-NOTE on ordering vs the gates: this slice should land the pools in their SAFE default state. Since the gates default CALM (`observationTriage: off`, `surfaceBlockers: off`) and DO NOT EXIST YET when this lands, this slice must decide its interim default (see Decisions): the pools must NOT start auto-triaging/auto-surfacing on every repo the moment this lands, or it changes behaviour before the gates can calm it. Safest: gate the NEW pools behind the SAME calm-default the gate slices will introduce, OR land this slice and the `observationTriage`/`surfaceBlockers` gates together so the pools are born gated-off.
+### CRITICAL: do NOT contaminate `do` (the shared selection helper)
+
+`performDoAuto` (`do-autopick.ts`) and `performAdvanceAuto` (`advance-drivers.ts`) BOTH call the SAME `selectPrioritised` + `sliceablePrds` (`select-priority.ts`). `do` has NO triage/surface/apply rungs, so if the lifecycle pools were added INSIDE `selectPrioritised` unconditionally, `do` auto-pick would start selecting observations / `needsAnswers` items and try to BUILD them (a bug). The lifecycle pools MUST be:
+
+- **constructed by the `advance` caller only** (`performAdvanceAuto` / the mirror-side advance path), exactly as `sliceablePrds` is built by each caller and passed in, NOT baked into `selectPrioritised`;
+- the shared helper may be EXTENDED to ACCEPT extra pools, but it must DEFAULT to none, so `performDoAuto` (which passes only its two pools) is provably UNCHANGED. A test asserts `do` auto-pick still selects ONLY slices + sliceable PRDs (never an observation or a `needsAnswers` item) after this slice.
+
+### CRITICAL: the SelectedItem discriminator + per-item dispatch are NEW work
+
+`SelectedItem.namespace` is today `'slice' | 'prd'` and the caller switches on it (`slice` -> build pipeline, `prd` -> `do prd:` dispatch). The lifecycle pools need the selected item to carry WHICH RUNG to run, so this slice must EXTEND the discriminator and `performAdvanceAuto`'s per-item dispatch to map: an untriaged observation -> the `obs:<slug>` triage arg; a `needsAnswers`-blocked slice/PRD -> the surface path; an answered-sidecar item -> the apply path. "The classifier already handles these types" is true but the classifier runs INSIDE `performAdvance` per resolved ARG, the SELECTION->ARG mapping (which pool -> which tick arg) is genuinely NEW here. "Rung bodies unchanged" does NOT mean "no new dispatch": the dispatch from a selected lifecycle item to the right tick arg is part of this slice.
+
+### Interim safety (DECIDED, not a coin-flip): the pools are born OFF
+
+The gate slices (`observationTriage`/`surfaceBlockers`) are `blockedBy` THIS slice, so they land AFTER it. Therefore THIS slice must be SAFE STANDALONE: the lifecycle pools are enumerated but guarded behind a hardcoded internal OFF (the lifecycle pools contribute NOTHING to the `advance` selection by default), so landing this slice ALONE changes NO repo's behaviour. The gate slices then REPLACE that hardcoded OFF with the real `observationTriage`/`surfaceBlockers` config read. (This is the chosen path; do NOT instead leave it as "maybe land together" or "maybe hardcode", it IS hardcoded-off here, flipped on by the gates.)
 
 ## Acceptance criteria
 
-- [ ] The advance auto-pick selection enumerates untriaged observations (`work/observations/`, excluding `triaged:`-settled ones) AND `needsAnswers`-blocked slices/PRDs, in BOTH the in-place path (`performAdvanceAuto`) and the mirror-side path (`scanMirrorPool`), via the shared scan/select layer, NOT two divergent enumerations.
-- [ ] A bare `advance` / `advance -n <x>` (and a `run --advance` batch) can now reach the `triage-observation` rung on an untriaged observation and the `surface` rung on a `needsAnswers` slice/PRD WITHOUT explicit naming, proven by a test that auto-picks each (today such a test would select NOTHING from these pools).
-- [ ] INTERIM SAFETY (see Decisions): the new pools do NOT cause autonomous triage/surface on a repo that has not opted in. Either born gated-off behind the calm-default gate, or this slice lands together with the gate slices. A test asserts the calm/default state does NOT auto-triage or auto-surface.
-- [ ] The classifier (`advance-classify.ts`) and the rung bodies (`triageRung`/`surfaceRung`/`applyRung`) are UNCHANGED: this slice only widens enumeration. (If a real classifier gap is found, record it; do not silently change rung behaviour.)
-- [ ] `apply` of an already-answered sidecar continues to work (it is already classified `apply`); the new enumeration must surface answered-sidecar items into the pool so `apply` runs autonomously too (the CONSUME phase, always allowed). A test covers an answered-sidecar item being auto-picked and applied.
+- [ ] The advance auto-pick enumerates untriaged observations (`work/observations/`, excluding `triaged:`-settled ones) AND `needsAnswers`-blocked slices/PRDs + answered-sidecar items, built by the `advance` CALLER (`performAdvanceAuto`) and the mirror-side advance path, NOT inside `selectPrioritised`. ONE shared enumeration UNIT reused across in-place + mirror-side advance (not two divergent ones), but constructed caller-side and passed in.
+- [ ] **`do` IS PROVABLY UNCHANGED (F-SHARE):** the lifecycle pools are NOT added to `selectPrioritised` unconditionally. `selectPrioritised` may be extended to ACCEPT extra pools but DEFAULTS to none, so `performDoAuto` (passing only its two pools) selects EXACTLY as before. A test asserts `do` auto-pick / `-n` never selects an observation or a `needsAnswers` item.
+- [ ] **The SelectedItem discriminator + dispatch are extended (F-NAMESPACE):** `SelectedItem.namespace` (today `slice|prd`) is widened so a selected lifecycle item carries which rung to run, and `performAdvanceAuto`'s per-item dispatch maps observation -> `obs:<slug>` triage arg, `needsAnswers`-blocked -> surface path, answered-sidecar -> apply path. A test asserts each pool's selected item dispatches to the correct tick arg/rung.
+- [ ] A bare `advance` / `advance -n <x>` (and a `run --advance` batch) reaches the `triage-observation` rung on an untriaged observation and the `surface` rung on a `needsAnswers` slice/PRD WITHOUT explicit naming, proven by a test (today such a test selects NOTHING from these pools). NOTE: with the interim hardcoded-OFF (below), these tests must FORCE the pools on (the same internal hook the gate slices will wire to config) to exercise the path.
+- [ ] **INTERIM SAFETY, born OFF (F-INTERIM, DECIDED):** the lifecycle pools are guarded behind a hardcoded internal OFF, so landing THIS slice alone contributes NOTHING to the advance selection and changes NO repo's behaviour. A test asserts the default (no gate yet) auto-triages/auto-surfaces NOTHING. The gate slices replace the hardcoded OFF with the `observationTriage`/`surfaceBlockers` config read.
+- [ ] The classifier (`advance-classify.ts`) and the rung BODIES (`triageRung`/`surfaceRung`/`applyRung`) are UNCHANGED: this slice widens ENUMERATION + adds the selection->arg DISPATCH, but does not touch rung behaviour. (If a real classifier gap is found, record it; do not silently change rung behaviour.)
+- [ ] `apply` of an already-answered sidecar runs autonomously: the new enumeration surfaces answered-sidecar items into the pool and dispatches them to apply (the CONSUME phase, always allowed even when the create-side pools are off, see the create-vs-consume invariant). A test covers an answered-sidecar item being auto-picked and applied.
 - [ ] The `triaged: keep` / settled marker correctly DROPS a settled observation from the pool (it is never re-picked): a test asserts a settled observation is not re-enumerated.
 - [ ] Selection ORDER across the now-FOUR pools has a SIMPLE INTERIM default (drain buildable work first, then lifecycle, generalizing today's slices-first), tested. The CONFIGURABLE order (presets + explicit list + `apply`-pinned-first, subsuming `prdsFirst`) is the SEPARATE slice `advance-selection-order-config` (`blockedBy` this one), so do NOT build the config field here, just leave a sane fixed order this slice's tests pin, which that slice then generalizes.
 - [ ] Tests in the repo's vitest style (throwaway git repos, `GIT_CONFIG_GLOBAL=/dev/null`-style isolation, temp workspace dirs). No shared/global location written outside temp fixtures.
@@ -46,7 +61,7 @@ NOTE on ordering vs the gates: this slice should land the pools in their SAFE de
 
 ## Blocked by
 
-- None, can start immediately. (It is the FOUNDATION the gate slices depend on; build it FIRST.)
+- `ledger-one-slug-one-folder-lint-and-sweep` (FILE-SERIALISATION + SOUNDNESS): it edits `scan.ts` (the lint of folder residence) and this slice ALSO edits `scan.ts` (enumerating `work/observations/` + needsAnswers items into the pool), so serialise to avoid a merge conflict. It also pulls this slice AFTER the `ledger-integrity` cluster, which is the right soundness order: do not scale autonomous lifecycle transitions onto an un-hardened ledger. (This is the FOUNDATION the GATE slices depend on; it just sits after ledger-integrity.)
 
 ## Decisions (to record while building)
 
