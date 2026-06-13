@@ -1,0 +1,61 @@
+---
+title: the registry-set / loop advance driver must PERSIST its tree-less rung results (surface/apply/triage) to the arbiter - today it commits them in a per-tick re-cloned cwd that is wiped next tick, so a surfaced sidecar never reaches main
+slug: loop-advance-persists-treeless-rungs-to-arbiter
+blockedBy: []
+covers: []
+---
+
+> Self-contained CORRECTNESS slice (`covers: []`, no `prd:`). Source: a build-time finding during `advance-isolated-one-shot` (2026-06-13), captured in `work/observations/advance-treeless-rungs-dont-push-to-arbiter-in-loop-and-registry-paths.md` and verified against the merged loop driver. The one-shot `advance --isolated` path already SOLVED this (its `pushTreelessResult` ff-push); this slice brings the loop/registry path (the autonomous daemon / CI substrate) to parity.
+
+## The gap this fixes (verified 2026-06-13 against the merged code)
+
+The tree-less advance rungs (surface / apply / triage-observation) commit their sidecar / `needsAnswers` / `triaged:` marker LOCALLY in their `cwd` working tree (`surface-persist.ts persistSurfacedQuestions` + `apply-persist.ts` do a local `git commit`); only the `advancing` borrow + `createItemThroughCas` (the promote) go through the CAS to the arbiter. So a tree-less rung's RESULT reaches the arbiter only if something publishes that local commit.
+
+- **One-shot `advance --isolated`** publishes it: after a tick whose `result.rung` is in `TREELESS_RUNGS = {surface, apply, triage-observation}` it calls `pushTreelessResult` (`advance-isolated.ts` ~L408) - an ff-push `HEAD:main` to the arbiter with a bounded re-fetch+rebase retry, never `--force`, push-fail non-fatal. So the one-shot path's surfaced sidecar DOES land on `main`.
+- **The registry-set / loop driver** does NOT. `cli.ts buildRegistrySetAdvanceTick`'s `contextFor` creates a per-mirror `treelessCwd` (a `git clone` of the bare mirror) and `rmSync`s + RE-CLONES it FRESH EACH TICK (the comment: "re-created fresh each tick"). The per-item tick (`advance-loop-driver.ts advanceOnce`'s `worker` runs `performAdvance` in that `treelessCwd`) commits the surface/apply/triage result LOCALLY but nothing ff-pushes it, and the next tick wipes the clone. **Net: a surfaced sidecar / answered-apply / triage marker committed by the loop/CI advance NEVER reaches the arbiter's `main`** - it is silently lost on the next tick.
+
+This does NOT affect the calm-default (`observationTriage: off`, `surfaceBlockers: off`) behaviour `run-uses-advance-tick` / the precursor were tested for: under calm gates only the build/slice rungs run, and those go through the per-mirror job worktree + the `performIntegration` band (which DO persist - they push the work branch / integrate). The gap bites ONLY when a lifecycle gate is flipped ON in the loop/CI path (opt-in, not yet the default) - but then it is a real soundness hole: the autonomous daemon appears to surface a question and silently drops it.
+
+## What to build
+
+Make the loop / registry-set advance driver PERSIST its tree-less rung results to the arbiter, reusing the one-shot path's proven pattern. Pick ONE of these (decide + record in `## Decisions`, the first is the lean default):
+
+1. **ff-push tree-less results (parity with the one-shot path).** After each per-item tick in the loop whose `result.rung` is tree-less, ff-push the `treelessCwd`'s `HEAD:main` to the mirror's arbiter with the SAME bounded re-fetch+rebase, never-`--force`, push-fail-non-fatal semantics `pushTreelessResult` already implements. To avoid forking the logic, EXTRACT `pushTreelessResult` out of `advance-isolated.ts` into a shared module (e.g. `advance-treeless-publish.ts` or alongside the loop driver) and call it from BOTH the one-shot and the loop path (one implementation, two callers - the same discipline the slices have followed). The per-mirror within-tick serialization (`perRepoMax:1`, the precursor's decision) means two ticks on ONE mirror do not race the push; the bounded retry still covers a `main` that advanced between the rung's commit and the push.
+2. **OR stop re-cloning the `treelessCwd` each tick + push.** If the clone PERSISTS across ticks (not `rmSync`'d), its committed sidecars survive - but they STILL must reach the arbiter (a local clone is not the ledger), so this option does NOT remove the push; it only removes the wipe. Option 1 (push, keep the cheap re-clone) is simpler and is the proven one-shot shape; prefer it unless the re-clone cost is shown to matter.
+3. **OR route surface/apply/triage through a shared integrate band** (like the build/slice rungs go through `performIntegration`). This is the most uniform but the largest change; only take it if options 1/2 prove insufficient - record why.
+
+WHICHEVER option: a tree-less rung result produced by a bare/`-n`/`run`/CI advance with the relevant gate ON must be OBSERVABLE on the arbiter's `main` after the tick (a `scan`/`status`/another machine sees the surfaced sidecar), exactly as the one-shot `advance --isolated` already guarantees. Do NOT change the calm-default behaviour (gates off ⇒ no tree-less rung runs ⇒ nothing to push ⇒ byte-for-byte unchanged).
+
+## Acceptance criteria
+
+- [ ] A tree-less advance rung (surface / apply / triage-observation) run by the LOOP / registry-set driver (the `run` daemon / CI substrate) PUBLISHES its result to the mirror's arbiter `main` - a surfaced `needsAnswers` sidecar (and an applied answer, and a `triaged:` marker) is present on `<arbiter>/main` after the tick, NOT lost when the per-mirror cwd is next re-created. A test asserts the surfaced sidecar is on the arbiter ref after a gate-on loop batch (today it is silently dropped).
+- [ ] The publish reuses the one-shot path's `pushTreelessResult` semantics (ff `HEAD:main`, bounded re-fetch+rebase retry, NEVER `--force`, a persistent push failure is reported but does not crash the batch - the work stays saved locally for the next pass). If extracted to a shared module, the one-shot path is migrated onto it and its behaviour is UNCHANGED (its existing tests still pass).
+- [ ] CALM-DEFAULT NO-OP: with `observationTriage: off` + `surfaceBlockers: off`, no tree-less rung runs, so there is nothing to publish and the loop/CI behaviour is byte-for-byte unchanged. A test asserts a calm-default loop batch pushes no tree-less result (the build/slice integration path is untouched).
+- [ ] The `advancing` borrow + promote-CAS path is UNCHANGED (they already reach the arbiter); this slice only adds the publish for the LOCALLY-committed tree-less rungs (surface/apply/triage), and does not double-publish the promote.
+- [ ] No regression: the existing one-shot `advance --isolated` tree-less publish tests, the registry-set driver tests (PR #107), and `run-uses-advance-tick` (PR #108) all still pass (or are migrated with intent intact).
+- [ ] Tests in the repo's vitest style (bare mirrors, throwaway repos, `GIT_CONFIG_GLOBAL=/dev/null`-style isolation, temp workspace dirs). If the new test drives real per-mirror CAS/main writes, add it to `RACE_SENSITIVE` (the precedent the registry-set + CAS-nonce tests set). No shared/global location written outside temp fixtures.
+- [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+
+## Blocked by
+
+- None - the loop / registry-set driver (PR #107 `advance-loop-driver-registry-set-job-worktrees`), `run-uses-advance-tick` (PR #108), and the one-shot `pushTreelessResult` (PR #112 `advance-isolated-one-shot`) are all LANDED in `work/done/`. This slice hardens what they left.
+
+## Decisions (to record while building)
+
+- WHICH option (1 ff-push parity / 2 persist-the-clone+push / 3 shared integrate band). Lean: option 1 (extract + reuse `pushTreelessResult`), the proven one-shot shape with the least change.
+- WHERE the shared publish lives if extracted (a new `advance-treeless-publish.ts`, or exported from the loop driver / `advance-isolated.ts`). Keep it ONE implementation called by both paths.
+- Whether the per-mirror push needs the bounded-rebase retry at all given the within-mirror `perRepoMax:1` serialization (a mirror's own `main` only moves from THIS driver's prior tick) - keep the retry anyway for robustness (cheap; matches the one-shot path), but record the reasoning.
+
+## Prompt
+
+> Make the registry-set / loop advance driver PERSIST its tree-less rung results (surface / apply / triage-observation) to the arbiter, reaching parity with the one-shot `advance --isolated` path. Source: `work/observations/advance-treeless-rungs-dont-push-to-arbiter-in-loop-and-registry-paths.md` (a build-time finding, verified). The one-shot path already ff-pushes tree-less results (`advance-isolated.ts pushTreelessResult`, ~L408, gated on `TREELESS_RUNGS = {surface, apply, triage-observation}`); the loop/registry path commits them in a `treelessCwd` that `cli.ts buildRegistrySetAdvanceTick` `rmSync`s + RE-CLONES fresh each tick, so a surfaced sidecar never reaches `main`.
+>
+> FIRST, drift-check against the code: confirm `surface-persist.ts`/`apply-persist.ts` still `git commit` the tree-less result LOCALLY (no arbiter push); confirm `advance-loop-driver.ts advanceOnce`'s `worker` runs `performAdvance` in the per-mirror `treelessCwd`; confirm `cli.ts buildRegistrySetAdvanceTick`'s `contextFor` still `rmSync`s + re-clones that cwd each tick; confirm `AdvanceResult.rung` carries the rung kind (so a tree-less rung is detectable) and that `pushTreelessResult` lives only in `advance-isolated.ts`. If anything landed differently, reconcile or route to `needs-attention/`.
+>
+> DOMAIN: the arbiter is the source of truth for the ledger; a local commit in a per-tick clone is NOT on the ledger until pushed. The tree-less lifecycle rungs (surface/apply/triage) commit locally; only the `advancing` borrow + promote-CAS reach the arbiter today. Calm defaults (`observationTriage: off`, `surfaceBlockers: off`) ⇒ no tree-less rung runs ⇒ this slice is a no-op there (must stay byte-for-byte unchanged). `needs-attention` is separate + always-on.
+>
+> BUILD (lean = option 1): EXTRACT `pushTreelessResult` from `advance-isolated.ts` into ONE shared module and call it from BOTH the one-shot and the loop path; in the loop driver, after each per-item tick whose `result.rung` is tree-less, ff-push the `treelessCwd`'s `HEAD:main` to the mirror's arbiter (bounded re-fetch+rebase retry, NEVER `--force`, push-fail non-fatal). Keep the promote-CAS / advancing-borrow path untouched (no double-publish). Record the option chosen + where the shared publish lives in `## Decisions`.
+>
+> TEST (TDD, vitest, house style - bare mirrors, throwaway repos, temp workspace dirs; add to `RACE_SENSITIVE` if it drives real main writes): a gate-ON loop batch's surfaced sidecar (and applied answer, and triage marker) is on `<arbiter>/main` after the tick (today it is dropped); a calm-default loop batch publishes nothing (build/slice path unchanged); the one-shot path's existing publish tests still pass after the extraction. Isolate all shared/global locations.
+>
+> "Done" = the loop/registry advance driver publishes its tree-less rung results to the arbiter (parity with the one-shot path, via the shared `pushTreelessResult`), calm defaults remain a byte-for-byte no-op, the promote/borrow path is untouched, the one-shot tests still pass, and the gate is green.
