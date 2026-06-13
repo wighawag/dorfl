@@ -52,3 +52,7 @@ ALSO (the invariant that resolves the sibling slice's apply question): the two q
 > TEST (TDD, vitest, house style): the three states end-to-end (`off` = observation untouched / no sidecar; `ask` = question surfaced; `auto` = duplicate/map auto-disposed + question for the rest); the explicit-bypass; apply-still-runs-under-off (a committed answer is honoured regardless of the gate); the enum-coercion loud-failure on a bad value. Isolate all shared/global locations to temp fixtures.
 >
 > "Done" = `observationTriage` resolves through the full chain, the triage rung honours off/ask/auto, `autoTriage` is fully removed (no alias, both cli.ts sites migrated), explicit `obs:` bypasses, apply still runs under `off`, and the gate is green.
+
+## Needs attention
+
+acceptance gate failed (exit 1)
