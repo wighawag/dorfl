@@ -106,6 +106,15 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 			/--observation-triage/,
 		);
 	});
+
+	it('maps --surface-blockers / --no-surface-blockers (the boolean blocked-work gate)', () => {
+		expect(doFlagOverrides({surfaceBlockers: true}).surfaceBlockers).toBe(true);
+		expect(doFlagOverrides({surfaceBlockers: false}).surfaceBlockers).toBe(
+			false,
+		);
+		// absent flag ⇒ absent key (lower layers / default decide).
+		expect(doFlagOverrides({}).surfaceBlockers).toBeUndefined();
+	});
 });
 
 describe('do — flags resolve through resolveRepoConfig (the bug fix)', () => {

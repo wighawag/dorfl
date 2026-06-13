@@ -293,11 +293,16 @@ function buildAdvanceRunTick(options: {
 		mirrorPath: mirrorHandle.path,
 		config,
 		context,
-		// The SELECTION-layer gate for the loop/CI path: `observationTriage != off`
-		// enumerates the observation (triage) pool; `off` drops it. `surface` stays
-		// born-OFF (its `surfaceBlockers` gate is a sibling slice). Mirrors the
-		// in-place one-shot auto-pick wiring so loop/CI agrees with the laptop.
-		lifecycleGates: {triage: config.observationTriage !== 'off'},
+		// The SELECTION-layer gates for the loop/CI path: `observationTriage != off`
+		// enumerates the observation (triage) pool; `surfaceBlockers` enumerates the
+		// `needsAnswers`-blocked (surface) pool. `off`/`false` drops the respective
+		// pool (the item is left silently blocked / untouched). The two gates are
+		// orthogonal peers. Mirrors the in-place one-shot auto-pick wiring so loop/CI
+		// agrees with the laptop. Apply (consume) is always-on (never gated here).
+		lifecycleGates: {
+			triage: config.observationTriage !== 'off',
+			surface: config.surfaceBlockers,
+		},
 	});
 }
 
@@ -487,6 +492,8 @@ interface DoFlags {
 	selectionOrder?: string;
 	/** `--observation-triage <off|ask|auto>`: the observation-inbox gate (`advance`). */
 	observationTriage?: string;
+	/** `--surface-blockers` / `--no-surface-blockers`: the declared-blocked-work gate (`advance`). */
+	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
 	ignoreDivergedMain?: boolean;
@@ -1900,6 +1907,14 @@ export function buildProgram(): Command {
 			'the observation-inbox gate (off|ask|auto): off (default) leaves observations untouched (the triage pool is dropped from auto-pick); ask surfaces a promote/keep/delete question for each untriaged observation; auto auto-disposes the no-question cases (duplicate/map) and asks about the rest. Resolved flag > env > per-repo > global > default. An explicit `advance obs:<slug>` bypasses the selection gate and runs in ask-mode (auto-disposes only under `auto`).',
 		)
 		.option(
+			'--surface-blockers',
+			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a slice/PRD carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance prd:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
+		)
+		.option(
+			'--no-surface-blockers',
+			'leave a needsAnswers:true slice/PRD silently blocked (default; the blocked pool is dropped from auto-pick)',
+		)
+		.option(
 			'--merge',
 			'integrate the advanced item(s) in merge mode this invocation (mutually exclusive with --propose; overrides config). The CI merge shape is a SINGLE SEQUENTIAL job, so this rides the `-n`/named-sequence path, never the matrix.',
 		)
@@ -2045,12 +2060,17 @@ export function buildProgram(): Command {
 					...advanceContext,
 					config,
 					count,
-					// The SELECTION-layer gate: `observationTriage != off` enumerates the
-					// observation (triage) pool into auto-pick; `off` drops it (observations
-					// untouched). `surface` stays born-OFF here — its `surfaceBlockers` gate
-					// is a sibling slice. The ask-vs-auto distinction is read inside the tick
-					// from `observationTriage` (threaded on `advanceContext`).
-					lifecycleGates: {triage: config.observationTriage !== 'off'},
+					// The SELECTION-layer gates: `observationTriage != off` enumerates the
+					// observation (triage) pool into auto-pick; `surfaceBlockers` enumerates
+					// the `needsAnswers`-blocked (surface) pool. `off`/`false` drops the
+					// respective pool (its item is left untouched / silently blocked). The
+					// two gates are orthogonal peers. The triage rung's ask-vs-auto
+					// distinction is read inside the tick from `observationTriage` (threaded
+					// on `advanceContext`). Apply (consume) is always-on (never gated here).
+					lifecycleGates: {
+						triage: config.observationTriage !== 'off',
+						surface: config.surfaceBlockers,
+					},
 				});
 				console.error(`>> ${multi.message}`);
 				process.exit(multi.exitCode);

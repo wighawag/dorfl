@@ -103,6 +103,27 @@ export interface Config {
 	 */
 	observationTriage: ObservationTriage;
 	/**
+	 * Per-repo policy governing DECLARED blocked work — the BOOLEAN member of the
+	 * question-surfacing gate family (its orthogonal PEER is `observationTriage`,
+	 * which governs the raw observation INBOX; ADR `ci-config-policy-and-gate-family`
+	 * §2). It gates whether a slice/PRD carrying `needsAnswers: true` is rendered
+	 * into an answerable question sidecar (`on`) or left silently blocked in the
+	 * backlog (`off`). `false` (default, calm) ⇒ the `needsAnswers`-blocked pool is
+	 * dropped from the auto-pick SELECTION, so a bare `advance` does NOT proactively
+	 * surface a declared blocker; `true` ⇒ the blocked pool IS enumerated and
+	 * `advance`'s surface rung renders the declared blocker into a sidecar the human
+	 * can answer + unblock in-repo. This is a DIFFERENT job from `observationTriage`:
+	 * it is about committed work items, not the raw inbox (so
+	 * `observationTriage: ask|auto` + `surfaceBlockers: off` — "groom my inbox, leave
+	 * my blocked work alone" — is expressible). Resolved like `autoBuild`: flag
+	 * (`--surface-blockers`/`--no-surface-blockers`) > `AGENT_RUNNER_SURFACE_BLOCKERS`
+	 * env > per-repo > global > default `false`. Gates the CREATE (surface) phase
+	 * only; APPLY (consume a committed answer) stays ALWAYS allowed, and
+	 * `needs-attention` (a stuck build) is a SEPARATE always-on mechanism this gate
+	 * does NOT touch.
+	 */
+	surfaceBlockers: boolean;
+	/**
 	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
 	 * eligible slices, `slice` = sliceable PRDs, `surface` = `needsAnswers`
 	 * blockers, `triage` = untriaged observations). `apply` (consume a committed
@@ -324,6 +345,12 @@ export const DEFAULT_CONFIG: Config = {
 	// opts in via `observationTriage` (`ask` ⇒ surface a question for each; `auto` ⇒
 	// auto-dispose the no-question cases). ADR `ci-config-policy-and-gate-family` §3.
 	observationTriage: 'off',
+	// DECLARED blocked work is calm by default (`false`): the `needsAnswers`-blocked
+	// pool is dropped from the auto-pick selection, so `advance` does NOT proactively
+	// render a declared blocker into a question sidecar unless a repo opts in via
+	// `surfaceBlockers`. Orthogonal PEER to `observationTriage`; `needs-attention`
+	// (a stuck build) is separate + always-on. ADR `ci-config-policy-and-gate-family` §3.
+	surfaceBlockers: false,
 	// The `drain` selection-order preset by default (ADR `ci-config-policy-and-gate-
 	// family`, selection-order section): drain ready work (build eligible slices →
 	// slice sliceable PRDs) before creating/asking (surface → triage); `apply` is

@@ -35,6 +35,10 @@ describe('repo-config constants', () => {
 		// policy-and-gate-family`), resolved per-repo through the same chain. It
 		// REPLACES the old `autoTriage` boolean (no alias).
 		expect(REPO_ALLOWED_KEYS).toContain('observationTriage');
+		// `surfaceBlockers` (the boolean gate over DECLARED blocked work) is the
+		// orthogonal peer of `observationTriage` — a genuine repo property resolved
+		// per-repo through the same chain (ADR `ci-config-policy-and-gate-family`).
+		expect(REPO_ALLOWED_KEYS).toContain('surfaceBlockers');
 		// `selectionOrder` (the configurable cross-pool order; subsumes the removed
 		// `prdsFirst`) is a per-repo property resolved through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('selectionOrder');
@@ -296,6 +300,38 @@ describe('resolveRepoConfig — per-key layering', () => {
 				flags: {observationTriage: 'auto'},
 			}).config.observationTriage,
 		).toBe('auto');
+	});
+
+	it('resolves `surfaceBlockers` flag > env > per-repo > global > default false (the boolean blocked-work gate)', () => {
+		// default false; bare global ⇒ stays the built-in default false.
+		expect(
+			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
+				.config.surfaceBlockers,
+		).toBe(false);
+		// per-repo opts in over a false global.
+		writeRepoConfig(repo, {surfaceBlockers: true});
+		const global = mergeConfig({surfaceBlockers: false});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.surfaceBlockers,
+		).toBe(true);
+		// env (AGENT_RUNNER_SURFACE_BLOCKERS) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_SURFACE_BLOCKERS: 'false'},
+			}).config.surfaceBlockers,
+		).toBe(false);
+		// a flag beats env, per-repo, and global.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_SURFACE_BLOCKERS: 'false'},
+				flags: {surfaceBlockers: true},
+			}).config.surfaceBlockers,
+		).toBe(true);
 	});
 
 	it('keeps runner/host-only keys from the GLOBAL (per-repo cannot touch them)', () => {
