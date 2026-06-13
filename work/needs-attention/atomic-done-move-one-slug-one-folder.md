@@ -46,3 +46,9 @@ The arbiter-resolved source folder must also flow into `complete.ts`'s source re
 > TEST (TDD, vitest, house style — throwaway git repos, `GIT_CONFIG_GLOBAL=/dev/null`-style isolation, temp workspace dirs, real shared dirs untouched): reproduce the ghost — claim publishes `in-progress/<slug>` to the arbiter, an integrating branch computed against a DIFFERENT base does the done-move, assert the merged ledger has the slug in `done/` ONLY (no `in-progress/` ghost); and assert the invariant guard FAILS LOUD when a slug pre-exists in two status folders.
 >
 > "Done" = the arbiter-resolved atomic done-move + the one-slug-one-folder loud-fail guard, both in the shared integration core reusing the #89 CAS, with `complete`'s source resolution aligned, the ghost-reproduction + invariant tests, and the gate green.
+
+## Needs attention
+
+PR/code review (Gate 2) blocked this work:
+- run.ts does not handle the new 'invariant-violation' core outcome: it falls through to the SUCCESS branch and records the job as state:'done' / status:'claimed-done' with no prUrl. So when the one-slug-one-folder guard FAILS LOUD (the corrupt-ledger refusal that integrates nothing), the autonomous `run` daemon misreports it as a completed job — the opposite of fail-loud, and on the least-supervised caller. Route 'invariant-violation' to needs-attention (like 'rebase-conflict') or a distinct failed status, never claimed-done. (packages/agent-runner/src/run.ts:762-783 maps only 'gate-failed', 'review-blocked', 'rebase-conflict'; the call at line 704 passes no `lifecycle`, so the guard at integration-core.ts:671-684 can return 'invariant-violation' to it. complete.ts:531 handles the variant correctly; run.ts does not.)
+PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
