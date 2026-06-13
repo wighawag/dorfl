@@ -275,15 +275,16 @@ function buildAdvanceRunTick(options: {
 		noteBlock: (message) => console.error(message),
 	};
 	// The per-item advance CONTEXT (everything BUT `arg`): the SAME context the
-	// one-shot driver threads, surface/apply ALWAYS allowed, triage gated by
-	// `autoTriage`.
+	// one-shot driver threads, surface/apply ALWAYS allowed, triage's ask-vs-auto
+	// distinction read from `observationTriage` (the SELECTION-layer `off` gate is
+	// applied earlier by the lifecycle pool gate).
 	const context: AdvanceContext = {
 		cwd,
 		arbiter: arbiter ?? config.defaultArbiter,
 		doOptions,
 		surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
 		surfaceModel: config.model,
-		autoTriage: config.autoTriage,
+		observationTriage: config.observationTriage,
 		triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 		triageModel: config.model,
 		note: (message) => console.error(`>> ${message}`),
@@ -292,6 +293,11 @@ function buildAdvanceRunTick(options: {
 		mirrorPath: mirrorHandle.path,
 		config,
 		context,
+		// The SELECTION-layer gate for the loop/CI path: `observationTriage != off`
+		// enumerates the observation (triage) pool; `off` drops it. `surface` stays
+		// born-OFF (its `surfaceBlockers` gate is a sibling slice). Mirrors the
+		// in-place one-shot auto-pick wiring so loop/CI agrees with the laptop.
+		lifecycleGates: {triage: config.observationTriage !== 'off'},
 	});
 }
 
@@ -479,6 +485,8 @@ interface DoFlags {
 	number?: string;
 	/** `--selection-order <order>`: a preset keyword (drain/groom) or comma-separated pool order. */
 	selectionOrder?: string;
+	/** `--observation-triage <off|ask|auto>`: the observation-inbox gate (`advance`). */
+	observationTriage?: string;
 	merge?: boolean;
 	propose?: boolean;
 	ignoreDivergedMain?: boolean;
@@ -1868,7 +1876,7 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects autoTriage. The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoSlice); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoSlice, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
@@ -1886,6 +1894,10 @@ export function buildProgram(): Command {
 		.option(
 			'--selection-order <order>',
 			'order the auto-pick pools (build/slice/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list. Resolved flag > env > per-repo > global > default.',
+		)
+		.option(
+			'--observation-triage <mode>',
+			'the observation-inbox gate (off|ask|auto): off (default) leaves observations untouched (the triage pool is dropped from auto-pick); ask surfaces a promote/keep/delete question for each untriaged observation; auto auto-disposes the no-question cases (duplicate/map) and asks about the rest. Resolved flag > env > per-repo > global > default. An explicit `advance obs:<slug>` bypasses the selection gate and runs in ask-mode (auto-disposes only under `auto`).',
 		)
 		.option(
 			'--merge',
@@ -1941,10 +1953,22 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+			// Build the flag overrides (the `--observation-triage` enum FAILS LOUDLY on a
+			// typo, like the env coercion) before resolving — a bad gate value is a clean
+			// usage error, never silently dropped.
+			let doOverrides;
+			try {
+				doOverrides = doFlagOverrides(flags, flagMode);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
-				flags: doFlagOverrides(flags, flagMode),
+				flags: doOverrides,
 			});
 			if (resolved.message) {
 				console.error(`>> ${resolved.message}`);
@@ -1992,16 +2016,16 @@ export function buildProgram(): Command {
 			// and threaded by the one-shot DRIVER to each sequential tick. The SURFACE
 			// rung spawns `surface-questions` fresh-context through the SAME harness seam
 			// the review gate uses (the engine then PERSISTS); the TRIAGE rung is
-			// question-gated by default with the `autoTriage` gate enabling the
-			// conservative auto-disposition exception. Surface + apply stay ALWAYS
-			// allowed regardless of the gate family.
+			// question-gated by default; `observationTriage: 'auto'` enables the
+			// conservative auto-disposition exception (`ask`/`off` surface the question).
+			// Surface + apply stay ALWAYS allowed regardless of the gate family.
 			const advanceContext: AdvanceContext = {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				doOptions,
 				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
 				surfaceModel: config.model,
-				autoTriage: config.autoTriage,
+				observationTriage: config.observationTriage,
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.model,
 				note: (message) => console.error(`>> ${message}`),
@@ -2021,6 +2045,12 @@ export function buildProgram(): Command {
 					...advanceContext,
 					config,
 					count,
+					// The SELECTION-layer gate: `observationTriage != off` enumerates the
+					// observation (triage) pool into auto-pick; `off` drops it (observations
+					// untouched). `surface` stays born-OFF here — its `surfaceBlockers` gate
+					// is a sibling slice. The ask-vs-auto distinction is read inside the tick
+					// from `observationTriage` (threaded on `advanceContext`).
+					lifecycleGates: {triage: config.observationTriage !== 'off'},
 				});
 				console.error(`>> ${multi.message}`);
 				process.exit(multi.exitCode);

@@ -234,7 +234,11 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 		const bare = await performAdvanceAuto({
 			cwd: repo,
 			run: bareRun,
-			config: cfg({autoBuild: false, autoSlice: false, autoTriage: false}),
+			config: cfg({
+				autoBuild: false,
+				autoSlice: false,
+				observationTriage: 'off',
+			}),
 			count: 5,
 		});
 		expect(bareArgs).toEqual([]);
@@ -247,7 +251,11 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 		await performAdvanceArgs(['feature'], {
 			cwd: repo,
 			run: namedRun,
-			config: cfg({autoBuild: false, autoSlice: false, autoTriage: false}),
+			config: cfg({
+				autoBuild: false,
+				autoSlice: false,
+				observationTriage: 'off',
+			}),
 		});
 		expect(namedArgs).toEqual(['feature']);
 	});

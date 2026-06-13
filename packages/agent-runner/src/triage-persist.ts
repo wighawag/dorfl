@@ -26,7 +26,7 @@ import type {TriageAutoKind} from './triage-gate.js';
  * question-gated surface path (which reuses `surface-persist.ts` verbatim):
  *
  *   1. **the conservative auto-disposition** ({@link autoDispositionObservation},
- *      US #17, `autoTriage`-gated): record the no-question disposition on the
+ *      US #17, `observationTriage: 'auto'`-gated): record the no-question disposition on the
  *      UNTRIAGED observation in ONE local commit —
  *        - `duplicate` → APPEND a delete RECOMMENDATION (the human deletes per the
  *          capture-bucket contract; the agent NEVER auto-deletes a signal) + stamp

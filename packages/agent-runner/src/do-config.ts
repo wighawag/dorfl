@@ -1,4 +1,9 @@
-import type {Config, IntegrationMode, PartialConfig} from './config.js';
+import type {
+	Config,
+	IntegrationMode,
+	ObservationTriage,
+	PartialConfig,
+} from './config.js';
 
 /**
  * The CLI flags that select WHICH agent runs and HOW it is launched — shared,
@@ -60,11 +65,18 @@ export function harnessFlagOverrides(flags: HarnessFlags): PartialConfig {
  * default).
  */
 export function doFlagOverrides(
-	flags: HarnessFlags & ReviewFlags & SlicerLoopFlags & SelectionOrderFlags,
+	flags: HarnessFlags &
+		ReviewFlags &
+		SlicerLoopFlags &
+		SelectionOrderFlags &
+		ObservationTriageFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
 	const overrides = {
 		...harnessFlagOverrides(flags),
+		// `--observation-triage <off|ask|auto>` rides the SAME flag-override chain
+		// (flag > env > per-repo > global > default): the observation-inbox gate.
+		...observationTriageFlagOverrides(flags),
 		// `--selection-order <order>` rides the SAME flag-override chain (flag > env >
 		// per-repo > global > default): a comma-separated value becomes a list (an
 		// explicit pool order), otherwise the verbatim string (a preset keyword). The
@@ -203,6 +215,48 @@ export function selectionOrderFlagOverrides(
 					.map((s) => s.trim())
 					.filter((s) => s !== '')
 			: raw;
+	}
+	return overrides;
+}
+
+/**
+ * The observation-triage CLI flag (`advance`): `--observation-triage
+ * <off|ask|auto>`, the 3-state gate over the observation INBOX (ADR
+ * `ci-config-policy-and-gate-family`). Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain as the other gate flags.
+ */
+export interface ObservationTriageFlags {
+	/** `--observation-triage <off|ask|auto>` — the observation-inbox gate state. */
+	observationTriage?: string;
+}
+
+/** The valid `--observation-triage` values (mirrors the env enum coercion). */
+const OBSERVATION_TRIAGE_VALUES: readonly ObservationTriage[] = [
+	'off',
+	'ask',
+	'auto',
+];
+
+/**
+ * Map the `--observation-triage` flag into a {@link PartialConfig} override. Only
+ * a present flag contributes (absent ⇒ absent key). An INVALID value FAILS LOUDLY
+ * (the same loud-failure contract the env enum coercion enforces) rather than
+ * silently falling through to a lower layer — a typo on an autonomy gate must
+ * never be quietly ignored.
+ */
+export function observationTriageFlagOverrides(
+	flags: ObservationTriageFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.observationTriage !== undefined) {
+		const raw = flags.observationTriage;
+		if (!OBSERVATION_TRIAGE_VALUES.includes(raw as ObservationTriage)) {
+			throw new Error(
+				`Invalid value for --observation-triage: '${raw}'. ` +
+					`Expected one of: ${OBSERVATION_TRIAGE_VALUES.join(', ')}.`,
+			);
+		}
+		overrides.observationTriage = raw as ObservationTriage;
 	}
 	return overrides;
 }

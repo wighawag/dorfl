@@ -33,20 +33,23 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * `advance-rung-triage` slice — the observation TRIAGE rung + the `autoTriage`
- * gate, WIRED through the engine tick. Acceptance criteria pinned at the engine
+ * `advance-rung-triage` slice — the observation TRIAGE rung + the
+ * `observationTriage` gate, WIRED through the engine tick. Acceptance criteria
+ * pinned at the engine
  * seam:
  *
  *   - QUESTION-GATED by DEFAULT: an untriaged observation surfaces a promote/keep/
  *     delete question and WAITS (no autonomous "worth building?" decision);
- *   - `autoTriage` gates a CONSERVATIVE auto-disposition — only duplicate→suggest-
- *     delete / unambiguous-map; NEVER auto-deletes a non-duplicate, NEVER
- *     auto-promotes a judgement call (an `auto:false` falls back to the question);
+ *   - `observationTriage: 'auto'` gates a CONSERVATIVE auto-disposition — only
+ *     duplicate→suggest-delete / unambiguous-map; NEVER auto-deletes a
+ *     non-duplicate, NEVER auto-promotes a judgement call (an `auto:false` falls
+ *     back to the question);
  *   - an answered "promote" CAS-creates a new backlog item keyed on the new
  *     identity; a same-slug new-item race ⇒ the loser fails CAS;
  *   - "keep" → `triaged:keep` marker, drops out of the pool; "delete" → recommends
  *     deletion (the human deletes — never the agent);
- *   - surface + apply remain ALWAYS allowed even with `autoTriage` off.
+ *   - surface + apply remain ALWAYS allowed even with `observationTriage` in the
+ *     question-gated `ask`/`off` modes.
  *
  * House CAS-seam + throwaway-repo style: the gates + the lock are injected; the
  * promote-via-CAS race runs against a REAL local arbiter (the only arbiter race).
@@ -116,7 +119,7 @@ function spySurface(emit: SurfaceEmit): {gate: SurfaceGate; spawns: string[]} {
 }
 
 describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
-	it('an untriaged observation surfaces a promote/keep/delete question and WAITS (no autoTriage)', async () => {
+	it('an untriaged observation surfaces a promote/keep/delete question and WAITS (observationTriage ask)', async () => {
 		const {repo, itemPath} = seedObservation('foo');
 		const {gate: surface, spawns} = spySurface({
 			item: 'observation:foo',
@@ -128,7 +131,7 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 				},
 			],
 		});
-		// A triage gate is provided but MUST NOT be consulted (autoTriage off).
+		// A triage gate is provided but MUST NOT be consulted (not in `auto` mode).
 		const {gate: triage, spawns: triageSpawns} = spyTriage({auto: false});
 
 		const result = await performAdvance({
@@ -136,7 +139,7 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 			cwd: repo,
 			surfaceGate: surface,
 			triageGate: triage,
-			// autoTriage NOT set ⇒ the question-gated default.
+			// observationTriage NOT set ⇒ the question-gated default (like `ask`/`off`).
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
@@ -154,7 +157,7 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 		).toBe(true);
 	});
 
-	it('surface stays ALWAYS allowed even with autoTriage OFF (the question loop with zero autonomy)', async () => {
+	it('surface stays ALWAYS allowed in the question-gated ask mode (the question loop with zero autonomy)', async () => {
 		const {repo} = seedObservation('bar');
 		const {gate: surface, spawns} = spySurface({
 			item: 'observation:bar',
@@ -164,7 +167,7 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 			arg: 'obs:bar',
 			cwd: repo,
 			surfaceGate: surface,
-			autoTriage: false,
+			observationTriage: 'ask',
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
@@ -176,8 +179,8 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 	});
 });
 
-describe('advance — the autoTriage exception bounds (high bar)', () => {
-	it('autoTriage on + a DUPLICATE → auto-disposition WITHOUT a question (recommend delete, never auto-delete)', async () => {
+describe('advance — the observationTriage:auto exception bounds (high bar)', () => {
+	it('observationTriage auto + a DUPLICATE → auto-disposition WITHOUT a question (recommend delete, never auto-delete)', async () => {
 		const {repo, itemPath} = seedObservation('dup');
 		const {gate: triage, spawns} = spyTriage({
 			auto: true,
@@ -194,7 +197,7 @@ describe('advance — the autoTriage exception bounds (high bar)', () => {
 		const result = await performAdvance({
 			arg: 'obs:dup',
 			cwd: repo,
-			autoTriage: true,
+			observationTriage: 'auto',
 			triageGate: triage,
 			surfaceGate: surface,
 			acquireLock: async () => ACQUIRED,
@@ -218,7 +221,7 @@ describe('advance — the autoTriage exception bounds (high bar)', () => {
 		expect(/^triaged:\s*duplicate/m.test(body)).toBe(true);
 	});
 
-	it('autoTriage on + a MAP → record the mapping + triaged:keep (drops out of the pool)', async () => {
+	it('observationTriage auto + a MAP → record the mapping + triaged:keep (drops out of the pool)', async () => {
 		const {repo, itemPath} = seedObservation('map');
 		const {gate: triage} = spyTriage({
 			auto: true,
@@ -229,7 +232,7 @@ describe('advance — the autoTriage exception bounds (high bar)', () => {
 		const result = await performAdvance({
 			arg: 'obs:map',
 			cwd: repo,
-			autoTriage: true,
+			observationTriage: 'auto',
 			triageGate: triage,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
@@ -241,7 +244,7 @@ describe('advance — the autoTriage exception bounds (high bar)', () => {
 		expect(isTriagedKeep(body)).toBe(true);
 	});
 
-	it('autoTriage on but the gate says auto:false (a judgement call) → falls back to the QUESTION (no auto-promote)', async () => {
+	it('observationTriage auto but the gate says auto:false (a judgement call) → falls back to the QUESTION (no auto-promote)', async () => {
 		const {repo} = seedObservation('judge');
 		// The gate refuses to auto-dispose (it is a promote/judgement call).
 		const {gate: triage, spawns: triageSpawns} = spyTriage({
@@ -255,14 +258,14 @@ describe('advance — the autoTriage exception bounds (high bar)', () => {
 		const result = await performAdvance({
 			arg: 'obs:judge',
 			cwd: repo,
-			autoTriage: true,
+			observationTriage: 'auto',
 			triageGate: triage,
 			surfaceGate: surface,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.exitCode).toBe(0);
-		// The gate WAS asked (autoTriage on) but said no — so we surfaced the question.
+		// The gate WAS asked (observationTriage auto) but said no — so we surfaced the question.
 		expect(triageSpawns).toEqual(['observation:judge']);
 		expect(surfaceSpawns).toEqual(['observation:judge']);
 		expect(
@@ -290,7 +293,7 @@ describe('advance — the autoTriage exception bounds (high bar)', () => {
 		await performAdvance({
 			arg: 'obs:seam',
 			cwd: repo,
-			autoTriage: true,
+			observationTriage: 'auto',
 			triageGate: triage,
 			autoDisposition: dispose,
 			acquireLock: async () => ACQUIRED,

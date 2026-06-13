@@ -60,7 +60,10 @@ type Coercion =
 const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	autoBuild: 'boolean',
 	autoSlice: 'boolean',
-	autoTriage: 'boolean',
+	// The observation-triage gate is a 3-state ENUM coercion (like `integration`),
+	// so `AGENT_RUNNER_OBSERVATION_TRIAGE=off|ask|auto` works and a typo FAILS
+	// LOUDLY naming the variable + the valid options.
+	observationTriage: {enum: ['off', 'ask', 'auto']},
 	// `selectionOrder` coerces as a `'list'` (comma form
 	// `AGENT_RUNNER_SELECTION_ORDER=build,slice,surface,triage`); a single-element
 	// list whose one entry is a preset keyword (`=drain`) is expanded by the

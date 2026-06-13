@@ -30,10 +30,11 @@ describe('repo-config constants', () => {
 		// `autoSlice` is the slicing-autonomy mirror of `autoBuild` — a genuine
 		// repo property, resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoSlice');
-		// `autoTriage` is the THIRD member of the flat per-action gate family (PRD
-		// `advance-loop`) — the observation-triage mirror of `autoBuild`/`autoSlice`,
-		// resolved per-repo through the same chain.
-		expect(REPO_ALLOWED_KEYS).toContain('autoTriage');
+		// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
+		// INBOX) is the observation-side question-surfacing gate (ADR `ci-config-
+		// policy-and-gate-family`), resolved per-repo through the same chain. It
+		// REPLACES the old `autoTriage` boolean (no alias).
+		expect(REPO_ALLOWED_KEYS).toContain('observationTriage');
 		// `selectionOrder` (the configurable cross-pool order; subsumes the removed
 		// `prdsFirst`) is a per-repo property resolved through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('selectionOrder');
@@ -265,35 +266,36 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe(true);
 	});
 
-	it('resolves `autoTriage` flag > env > per-repo > global > default false (the 3rd gate, like autoSlice)', () => {
-		// default false; bare global ⇒ stays the built-in default false.
+	it('resolves `observationTriage` flag > env > per-repo > global > default off (the enum gate)', () => {
+		// default off; bare global ⇒ stays the built-in default off.
 		expect(
 			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
-				.config.autoTriage,
-		).toBe(false);
-		// per-repo opts in over a false global.
-		writeRepoConfig(repo, {autoTriage: true});
-		const global = mergeConfig({autoTriage: false});
+				.config.observationTriage,
+		).toBe('off');
+		// per-repo opts in over an off global.
+		writeRepoConfig(repo, {observationTriage: 'auto'});
+		const global = mergeConfig({observationTriage: 'off'});
 		expect(
-			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoTriage,
-		).toBe(true);
-		// env (AGENT_RUNNER_AUTO_TRIAGE) beats the per-repo file.
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.observationTriage,
+		).toBe('auto');
+		// env (AGENT_RUNNER_OBSERVATION_TRIAGE) beats the per-repo file.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_AUTO_TRIAGE: 'false'},
-			}).config.autoTriage,
-		).toBe(false);
+				env: {AGENT_RUNNER_OBSERVATION_TRIAGE: 'ask'},
+			}).config.observationTriage,
+		).toBe('ask');
 		// a flag beats env, per-repo, and global.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_AUTO_TRIAGE: 'false'},
-				flags: {autoTriage: true},
-			}).config.autoTriage,
-		).toBe(true);
+				env: {AGENT_RUNNER_OBSERVATION_TRIAGE: 'ask'},
+				flags: {observationTriage: 'auto'},
+			}).config.observationTriage,
+		).toBe('auto');
 	});
 
 	it('keeps runner/host-only keys from the GLOBAL (per-repo cannot touch them)', () => {

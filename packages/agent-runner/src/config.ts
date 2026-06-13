@@ -17,6 +17,24 @@ import {
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
+ * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
+ * 3-state ENUM governing the observation INBOX (raw captured signal). It REPLACES
+ * the old `autoTriage` boolean, whose name read like "is triage on?" but only
+ * gated the auto-DISPOSITION exception (the resolved naming trap). The three
+ * states say what they gate:
+ *   - `off` (default): the triage rung is dropped from the auto-pick SELECTION —
+ *     observations are left untouched (the NEW state the boolean could not
+ *     express, "leave my observations alone entirely");
+ *   - `ask`: the observation pool IS selected; surface a promote/keep/delete
+ *     question for every untriaged observation (the old `autoTriage:false`);
+ *   - `auto`: the observation pool is selected; auto-dispose ONLY the no-question
+ *     cases (exact-duplicate ⇒ recommend delete; unambiguous map) and surface a
+ *     question for the rest (the old `autoTriage:true`). It still NEVER
+ *     auto-deletes a non-duplicate or auto-promotes a judgement call.
+ */
+export type ObservationTriage = 'off' | 'ask' | 'auto';
+
+/**
  * Which harness adapter (ADR §5) launches a job's agent and reports its
  * liveness: `null` (shell out to `agentCmd`) or `pi` (the pi CLI). Selected via
  * the `harness` config field; defaults to `null`.
@@ -52,8 +70,9 @@ export interface Config {
 	 * in this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
 	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
 	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > per-repo >
-	 * global > default. The build member of the symmetric per-action gate family
-	 * (`autoBuild`/`autoSlice`/`autoTriage`).
+	 * global > default. The build member of the per-action gate family
+	 * (`autoBuild`/`autoSlice` + the question-surfacing gates `observationTriage`/
+	 * `surfaceBlockers`).
 	 */
 	autoBuild: boolean;
 	/**
@@ -67,20 +86,22 @@ export interface Config {
 	 */
 	autoSlice: boolean;
 	/**
-	 * Per-repo policy: may an agent AUTO-DISPOSITION an observation in the
-	 * conservative no-question cases (exact-duplicate ⇒ suggest delete; an
-	 * unambiguous map onto an existing item) WITHOUT surfacing a triage question?
-	 * `false` (default, strict, human-first) ⇒ EVERY untriaged observation surfaces
-	 * a promote/keep/delete question and waits — "is this worth building?" is never
-	 * decided autonomously; `true` ⇒ the triage rung may auto-disposition ONLY the
-	 * no-question cases (it still NEVER auto-deletes a non-duplicate signal and
-	 * NEVER auto-promotes a judgement call). Resolved like `autoBuild`/`autoSlice`:
-	 * flag > `AGENT_RUNNER_AUTO_TRIAGE` env > per-repo > global > default false. The
-	 * THIRD member of the flat per-action gate family (PRD `advance-loop`,
-	 * "Repo-config: a FLAT per-action gate family"); surfacing a question and
-	 * applying a human's answer stay ALWAYS allowed.
+	 * Per-repo policy governing the OBSERVATION INBOX (raw captured signal) — the
+	 * 3-state member of the question-surfacing gate family (its sibling is
+	 * `surfaceBlockers`, which governs DECLARED blocked work; the two are orthogonal
+	 * peers, ADR `ci-config-policy-and-gate-family` §2). It REPLACES the old
+	 * `autoTriage` boolean (cleanly, no alias — this repo has no external users yet,
+	 * decided 2026-06-12). `off` (default) ⇒ the triage pool is dropped from the
+	 * auto-pick SELECTION (observations untouched); `ask` ⇒ surface a
+	 * promote/keep/delete question for every untriaged observation; `auto` ⇒
+	 * auto-dispose ONLY the no-question cases (duplicate ⇒ recommend delete /
+	 * unambiguous map) and surface a question for the rest (still NEVER auto-deletes
+	 * a non-duplicate or auto-promotes). Resolved like `integration`/`autoBuild`:
+	 * flag (`--observation-triage`) > `AGENT_RUNNER_OBSERVATION_TRIAGE` env >
+	 * per-repo > global > default `off`. Gates the CREATE phase only; APPLY (consume
+	 * a committed answer) stays ALWAYS allowed.
 	 */
-	autoTriage: boolean;
+	observationTriage: ObservationTriage;
 	/**
 	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
 	 * eligible slices, `slice` = sliceable PRDs, `surface` = `needsAnswers`
@@ -298,10 +319,11 @@ export const DEFAULT_CONFIG: Config = {
 	// Auto-slicing is human-first by default: an agent slices nothing unless a
 	// repo opts in via `autoSlice` (mirrors `autoBuild`, one level up).
 	autoSlice: false,
-	// Observation auto-disposition is human-first by default: the triage rung
-	// surfaces a promote/keep/delete question and WAITS unless a repo opts in via
-	// `autoTriage` (the third per-action gate, mirrors `autoBuild`/`autoSlice`).
-	autoTriage: false,
+	// The observation INBOX is calm by default (`off`): the triage pool is dropped
+	// from the auto-pick selection, so observations are left untouched unless a repo
+	// opts in via `observationTriage` (`ask` ⇒ surface a question for each; `auto` ⇒
+	// auto-dispose the no-question cases). ADR `ci-config-policy-and-gate-family` §3.
+	observationTriage: 'off',
 	// The `drain` selection-order preset by default (ADR `ci-config-policy-and-gate-
 	// family`, selection-order section): drain ready work (build eligible slices →
 	// slice sliceable PRDs) before creating/asking (surface → triage); `apply` is

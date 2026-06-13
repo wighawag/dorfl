@@ -79,6 +79,33 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 				.selectionOrder,
 		).toEqual(['build', 'slice', 'surface', 'triage']);
 	});
+
+	it('maps --observation-triage: each valid enum value', () => {
+		expect(doFlagOverrides({observationTriage: 'off'}).observationTriage).toBe(
+			'off',
+		);
+		expect(doFlagOverrides({observationTriage: 'ask'}).observationTriage).toBe(
+			'ask',
+		);
+		expect(doFlagOverrides({observationTriage: 'auto'}).observationTriage).toBe(
+			'auto',
+		);
+		// absent flag ⇒ absent key (lower layers / default decide).
+		expect(doFlagOverrides({}).observationTriage).toBeUndefined();
+	});
+
+	it('--observation-triage FAILS LOUDLY on an invalid value (naming the flag + options)', () => {
+		expect(() => doFlagOverrides({observationTriage: 'maybe'})).toThrow(
+			/--observation-triage/,
+		);
+		expect(() => doFlagOverrides({observationTriage: 'maybe'})).toThrow(
+			/off.*ask.*auto/,
+		);
+		// the old boolean values are NOT silently accepted (no boolean→enum alias).
+		expect(() => doFlagOverrides({observationTriage: 'true'})).toThrow(
+			/--observation-triage/,
+		);
+	});
 });
 
 describe('do — flags resolve through resolveRepoConfig (the bug fix)', () => {
