@@ -173,10 +173,11 @@ export type ApplyNeedsAttentionTransitionResult =
 	};
 
 /**
- * A *prepared* RETURN-TO-BACKLOG transition: re-queue a resolved
- * needs-attention item so it can be re-claimed (the `needs-attention → backlog`
- * re-queue half of the needs-attention mechanism). Storage-agnostic, mirroring
- * {@link ReturnToBacklogOptions}.
+ * A *prepared* RETURN-TO-BACKLOG transition: re-queue a STUCK item so it can be
+ * re-claimed — recovered from EITHER `needs-attention/` (the resolved-surface
+ * path) OR `in-progress/` (a claim that never surfaced), the slug's actual
+ * current folder resolved on the arbiter and moved to `backlog/`.
+ * Storage-agnostic, mirroring {@link ReturnToBacklogOptions}.
  */
 export type ApplyReturnToBacklogTransitionInput = ReturnToBacklogOptions;
 
@@ -283,10 +284,11 @@ export interface LedgerWriteStrategy {
 		input: ApplyNeedsAttentionTransitionInput,
 	): Promise<ApplyNeedsAttentionTransitionResult>;
 	/**
-	 * Apply a RETURN-TO-BACKLOG transition: re-queue a resolved needs-attention
-	 * item for re-claiming. The re-queue half of the needs-attention mechanism,
-	 * routed through the SAME seam. Like `claim`, it is TREE-LESS — the move is a
-	 * compare-and-swap push to the arbiter ref (it never writes the cwd tree).
+	 * Apply a RETURN-TO-BACKLOG transition: re-queue a STUCK item (in
+	 * `needs-attention/` OR `in-progress/` — resolved on the arbiter) for
+	 * re-claiming, routed through the SAME seam. Like `claim`, it is TREE-LESS —
+	 * the move is a compare-and-swap push to the arbiter ref (it never writes the
+	 * cwd tree).
 	 */
 	applyReturnToBacklogTransition(
 		input: ApplyReturnToBacklogTransitionInput,
@@ -476,8 +478,9 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 
 	/**
 	 * The return-to-backlog transition under the SAME strategy: re-queue the
-	 * resolved item by delegating to {@link returnToBacklog}, which moves
-	 * `work/needs-attention/<slug>.md → work/backlog/<slug>.md` TREE-LESSLY — it
+	 * stuck item by delegating to {@link returnToBacklog}, which moves the slug's
+	 * current `work/<needs-attention|in-progress>/<slug>.md → work/backlog/<slug>.md`
+	 * TREE-LESSLY — it
 	 * builds the move off `<arbiter>/main` with plumbing and CAS-publishes it back
 	 * THROUGH this same write seam (`applyTransition`, the very push+lease+verify
 	 * `claim` uses), never staging/committing in the cwd working tree.
