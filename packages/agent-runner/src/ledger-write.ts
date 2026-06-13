@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -255,6 +256,15 @@ export interface ApplyTransitionResult {
 	kind: 'published' | 'rejected';
 	/** Human-readable summary of the terminal condition. */
 	message: string;
+	/**
+	 * The sha that ACTUALLY landed on the ledger when `published`. The seam stamps
+	 * each attempt's tip with a fresh `CAS-Nonce` trailer (so the pushed sha is
+	 * unique), so the landed commit is NOT the caller's pre-nonce `head` — it is
+	 * this nonce'd descendant-in-content. Callers that branch/track/report off the
+	 * landed commit (e.g. `claim`'s work-branch hint) MUST use this, not their
+	 * input `head`. Absent on `rejected` and on `dryRun`.
+	 */
+	publishedHead?: string;
 }
 
 /**
@@ -332,6 +342,103 @@ async function gitHard(
 	return result;
 }
 
+/** The git trailer key the per-attempt CAS nonce rides in (greppable, round-trips). */
+export const CAS_NONCE_TRAILER = 'CAS-Nonce';
+
+/**
+ * Rebuild the transition tip ({@link localBranch}'s commit, whose sha is {@link
+ * head}) into a NEW commit object that is byte-for-byte identical EXCEPT for a
+ * freshly-appended `CAS-Nonce: <uuid>` trailer, and return the new sha. This is
+ * the ONE chokepoint that makes EVERY {@link
+ * LedgerWriteStrategy.applyTransition} caller's CAS commit unique — create,
+ * claim, slicing-lock, advancing-lock, and the needs-attention/requeue surface
+ * all route their publish through `applyTransition`, so stamping HERE (the seam
+ * AMENDING the tip's message just before the push) covers all of them WITHOUT a
+ * shared commit-building helper and WITHOUT touching each commit site.
+ *
+ * It is built with `commit-tree` plumbing on the same tree + parent + ambient
+ * env identity as the tip, so it NEVER mutates the caller's working tree, index,
+ * or HEAD (safe from a job worktree mid-flight), and it preserves WHO/WHAT — it
+ * ONLY appends the trailer to the original message. The author/committer
+ * identity is pinned from the original commit so the stamp does not silently
+ * re-attribute the transition.
+ *
+ * A FRESH nonce is generated on EACH call — and `applyTransition` calls this once
+ * per ATTEMPT (each retry of a caller's outer refetch loop re-enters
+ * `applyTransition`), so two concurrent same-identity racers, and any single
+ * racer across its own retries, ALWAYS get distinct shas.
+ */
+async function stampNonce(params: {
+	localBranch: string;
+	head: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<string> {
+	const {localBranch, head, cwd, env} = params;
+	const nonce = randomUUID();
+
+	// Read the tip's tree + parents + author/committer identity + original message
+	// in ONE `git log` (one git subprocess, not four) — the body (%B, multi-line)
+	// MUST be last. Fields are NUL-separated (%x00); the trailing field is the raw
+	// body so its embedded newlines do not confuse the split.
+	const FIELD_SEP = '\u0000';
+	const raw = (
+		await gitHard(
+			[
+				'log',
+				'-1',
+				`--format=%T%x00%P%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%B`,
+				head,
+			],
+			cwd,
+			env,
+		)
+	).stdout;
+	const fields = raw.split(FIELD_SEP);
+	const tree = (fields[0] ?? '').trim();
+	const parents = (fields[1] ?? '')
+		.trim()
+		.split(/\s+/)
+		.filter((p) => p.length > 0); // the tip's parents (usually exactly one)
+	const authorName = fields[2] ?? '';
+	const authorEmail = fields[3] ?? '';
+	const authorDate = fields[4] ?? '';
+	const committerName = fields[5] ?? '';
+	const committerEmail = fields[6] ?? '';
+	// The body is the last field; strip trailing whitespace before we append.
+	const message = (fields[7] ?? '').replace(/\s+$/, '');
+
+	// Pin the original author/committer so the stamp re-attributes nothing; we are
+	// only appending a trailer to the message.
+	const stampEnv: NodeJS.ProcessEnv = {
+		...(env ?? process.env),
+		GIT_AUTHOR_NAME: authorName,
+		GIT_AUTHOR_EMAIL: authorEmail,
+		GIT_AUTHOR_DATE: authorDate,
+		GIT_COMMITTER_NAME: committerName,
+		GIT_COMMITTER_EMAIL: committerEmail,
+		// Deliberately do NOT pin GIT_COMMITTER_DATE: even two stamps with identical
+		// everything-else would still differ by the nonce, but leaving the committer
+		// date current is the honest "when this attempt was published".
+	};
+
+	// Append the trailer as its own block so it round-trips as a real git trailer.
+	const noncedMessage = `${message}\n\n${CAS_NONCE_TRAILER}: ${nonce}\n`;
+	const parentArgs = parents.flatMap((p) => ['-p', p]);
+	const result = await runAsync(
+		'git',
+		['commit-tree', tree, ...parentArgs, '-m', noncedMessage],
+		cwd,
+		{env: stampEnv},
+	);
+	if (result.status !== 0) {
+		throw new Error(
+			`git commit-tree (CAS nonce stamp) failed (exit ${result.status}): ${result.stderr.trim()} — localBranch=${localBranch}`,
+		);
+	}
+	return result.stdout.trim();
+}
+
 /**
  * The ONLY ledger-write strategy: current behaviour. It CAS-publishes the
  * prepared transition commit to the arbiter's `main` — the `main` push and the
@@ -360,30 +467,60 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			return {kind: 'published', message};
 		}
 
+		// Stamp this ATTEMPT's transition commit with a FRESH random nonce (a real
+		// `CAS-Nonce: <uuid>` git trailer) so the pushed sha is UNIQUE per attempt.
+		// This is what makes the lease authoritative even for SAME-IDENTITY,
+		// SAME-CONTENT racers: without it, two racers who build an identical tree +
+		// message off the same base within git's 1-second timestamp resolution
+		// produce an IDENTICAL sha X. The first push ff's main to X; the second
+		// push of the SAME X degrades to "Everything up-to-date" (git exits 0, the
+		// lease has nothing to reject), and the post-push verify X === X passes — so
+		// BOTH would return `published`. The nonce gives each attempt a DISTINCT sha,
+		// so the loser's push finds main moved past <base> and is GENUINELY rejected
+		// by the lease, and the verify below correctly fails for it. The stamp is
+		// built with `commit-tree` plumbing (no checkout/HEAD mutation), reusing the
+		// tip's tree + parent + author/committer identity — it ONLY appends the
+		// trailer, leaving WHO/WHAT/the original message intact. Called per ATTEMPT
+		// (each retry of the caller's outer refetch loop re-enters here), so every
+		// attempt gets a fresh nonce, not one per process.
+		const nonced = await stampNonce({localBranch, head, cwd, env});
+
 		// The atomic compare-and-swap. --force-with-lease=main:<base> asserts the
 		// arbiter's main is STILL <base> (unchanged since our fetch); the push then
-		// fast-forwards main to our commit. If main moved, the lease fails → rejected.
+		// fast-forwards main to our (nonce'd, thus unique) commit. If main moved, the
+		// lease fails → rejected.
 		const push = await gitSoft(
 			[
 				'push',
 				arbiter,
-				`${localBranch}:main`,
+				`${nonced}:main`,
 				`--force-with-lease=main:${expectedBase}`,
 			],
 			cwd,
 			env,
 		);
 		if (push.status === 0) {
-			// Verify the arbiter main now points at OUR commit (not merely "up-to-date").
+			// Verify the arbiter main now points at OUR (nonce'd) commit. INVARIANT:
+			// because the nonce makes our sha unique, a successful push can ONLY mean
+			// either (a) we genuinely ff'd main to our nonce'd commit (published), or
+			// (b) someone else's commit (a DIFFERENT nonce ⇒ a DIFFERENT sha) is already
+			// there and ours did NOT land — i.e. an "up-to-date / no change of our
+			// making" no-op, which is a LOSS. The nonce makes the two naturally
+			// distinguishable: `arbiterHead === nonced` iff WE won. So an up-to-date
+			// no-op can never satisfy this and is classified REJECTED, never published.
 			await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 			const arbiterHead = (
 				await gitHard(['rev-parse', `${arbiter}/main`], cwd, env)
 			).stdout.trim();
-			if (arbiterHead === head) {
-				return {kind: 'published', message: 'transition published'};
+			if (arbiterHead === nonced) {
+				return {
+					kind: 'published',
+					message: 'transition published',
+					publishedHead: nonced,
+				};
 			}
 			emit(
-				`push reported success but ${arbiter}/main is not our commit — treating as rejected.`,
+				`push reported up-to-date / no change of our making — ${arbiter}/main is not our commit — treating as rejected.`,
 			);
 		}
 		return {kind: 'rejected', message: 'push rejected / lease failed'};

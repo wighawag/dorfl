@@ -29,30 +29,33 @@ export function gitEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * A DISTINCT-committer git env for ONE racer in a two-racer CAS test — the test
- * harness's model of REAL arbiter contention.
+ * A DISTINCT-committer git env for ONE racer in a two-racer CAS test, modelling
+ * two DISTINCT PRINCIPALS contending for the same ledger ref.
  *
- * WHY this exists (the same-slug-race flake, RESOLVED here): the two-racer CAS
- * tests (`promoteObservation` / `createItemThroughCas` / `acquireSlicingLock` /
- * `acquireAdvancingLock` / `performClaim` racing each other via `Promise.all`)
- * intermittently saw "2 winners" under full-suite parallel load. The product CAS
- * is SOUND — the cause was a TEST-FIXTURE artifact: both racers used the SAME
- * fixed {@link gitEnv} identity and committed the SAME tree change (same path +
- * blob) with the SAME message off the SAME base, so git produced BYTE-IDENTICAL
- * commit objects with the SAME sha. Whichever racer pushed second then
- * fast-forwarded `main` to a sha it ALREADY equalled, and `applyTransition`'s
- * post-push verify (`<arbiter>/main === head`) passed for BOTH → two winners.
+ * IMPORTANT — this is a CONVENIENCE, not the thing that makes the CAS correct.
+ * The CAS is authoritative ON ITS OWN, even when two racers share ONE identity
+ * and build a BYTE-IDENTICAL tree + message off the SAME base within git's
+ * 1-second timestamp resolution: `applyTransition` (`src/ledger-write.ts`) stamps
+ * EACH attempt's transition commit with a fresh per-attempt `CAS-Nonce` trailer,
+ * so the two racers' commits ALWAYS get DISTINCT shas. The loser's
+ * `--force-with-lease=main:<base>` push then finds `main` advanced past `<base>`
+ * and is GENUINELY rejected (not an "Everything up-to-date" no-op), and the
+ * post-push verify (`<arbiter>/main === <our nonce'd sha>`) correctly fails for
+ * it. So exactly-one-winner holds with NO identity distinctness — see the
+ * identical-identity regression tests in `advance-triage.test.ts` /
+ * `triage-persist.test.ts`.
  *
- * In PRODUCTION two racers are distinct principals on distinct machines, so their
- * commits carry distinct identities/timestamps ⇒ distinct shas, and the real
- * lease / path-exists CAS serialises them to exactly one winner. {@link racerEnv}
- * restores that reality in the test: each racer gets a DISTINCT author/committer
- * identity, so the two create/lock commits get DISTINCT shas and the loser loses
- * through the genuine CAS (the path-exists / lease check), never via the
- * SHA-equality coincidence. It does NOT weaken the one-winner invariant — it
- * removes the fixture coincidence that defeated it. Pair it with a distinct `by`
- * where the API takes one (the `(by ...)` commit-subject suffix is part of what
- * made the shas collide).
+ * HISTORY: an earlier flake ("2 winners" under full-suite parallel load) was once
+ * pinned on a TEST-FIXTURE coincidence — both racers using the SAME {@link
+ * gitEnv} identity + SAME tree + SAME message + SAME base produced BYTE-IDENTICAL
+ * shas, and the pre-nonce verify (`<arbiter>/main === head`) passed for BOTH.
+ * `racerEnv` was added to give racers distinct shas. But that only HID the
+ * product defect (it removed the fixture's sha-collision, not the product's
+ * exposure to one): the same collision is reachable in PRODUCTION whenever one
+ * bot identity advances two same-slug items. The nonce fixes the PRODUCT, so
+ * `racerEnv`/{@link raceClone} are now purely for tests that WANT to model
+ * distinct principals — NOT a precondition for CAS correctness. It does NOT weaken
+ * the one-winner invariant.
  */
 export function racerEnv(who: string): NodeJS.ProcessEnv {
 	return {
@@ -71,13 +74,12 @@ export function racerEnv(who: string): NodeJS.ProcessEnv {
  * identity from the clone's LOCAL config, e.g. the `performAdvance`/engine path
  * which threads no env).
  *
- * Use this (one distinct `who` per racer) wherever two clones race the SAME CAS
- * so their commits carry DISTINCT identities and therefore DISTINCT shas — the
- * real-contention condition that lets the genuine lease / path-exists CAS pick
- * exactly one winner deterministically (see {@link racerEnv} for the full why).
- * For racer calls that DO pass an explicit `env`, pass {@link racerEnv}(who)
- * instead (env-vars override local config), and use the SAME distinct `who` for
- * any `by` argument so the `(by ...)` commit-subject suffix differs too.
+ * Like {@link racerEnv} this models two DISTINCT PRINCIPALS; it is NOT what makes
+ * the CAS correct. The CAS is authoritative even under IDENTICAL identity via the
+ * per-attempt `CAS-Nonce` the write seam stamps (see {@link racerEnv}); use this
+ * only when a test WANTS distinct principals. For racer calls that DO pass an
+ * explicit `env`, pass {@link racerEnv}(who) instead (env-vars override local
+ * config), and use the SAME distinct `who` for any `by` argument.
  */
 export function raceClone(seeded: SeededRepo, who: string): string {
 	const dir = seeded.clone(who);

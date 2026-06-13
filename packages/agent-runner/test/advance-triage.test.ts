@@ -418,6 +418,50 @@ describe('advance — answered triage dispositions flow through the apply path',
 		expect(lost[0].outcome).toBe('lost');
 	});
 
+	it('a same-slug new-item race with IDENTICAL committer identity ⇒ STILL exactly one promote creates (CAS serialises via the per-attempt nonce, not via sha-distinctness)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		// The INVERSE of the distinct-identity race above and the product-layer
+		// regression: both racers commit under the SAME committer identity (same
+		// user.name/user.email), build the SAME tree + message off the SAME base, so
+		// WITHOUT the seam's per-attempt CAS-Nonce their create commits would be
+		// byte-identical (one sha) and BOTH would spuriously verify as won. The nonce
+		// makes the two shas DISTINCT, so the loser's lease is genuinely rejected.
+		const a = seeded.clone('same-id-a');
+		const b = seeded.clone('same-id-b');
+		for (const dir of [a, b]) {
+			// IDENTICAL identity in both clones (NOT raceClone's distinct identities).
+			gitIn(['config', 'user.name', 'One Bot'], dir);
+			gitIn(['config', 'user.email', 'one-bot@example.com'], dir);
+			seedAnsweredObservation(dir, 'dupprom', 'promote-slice');
+			gitIn(['add', '-A'], dir);
+			gitIn(['commit', '-q', '-m', 'answered promote'], dir);
+		}
+
+		const [ra, rb] = await Promise.all([
+			performAdvance({
+				arg: 'obs:dupprom',
+				cwd: a,
+				arbiter: 'arbiter',
+				acquireLock: async () => ACQUIRED,
+				releaseLock: async () => RELEASED,
+			}),
+			performAdvance({
+				arg: 'obs:dupprom',
+				cwd: b,
+				arbiter: 'arbiter',
+				acquireLock: async () => ACQUIRED,
+				releaseLock: async () => RELEASED,
+			}),
+		]);
+
+		const won = [ra, rb].filter((r) => r.exitCode === 0);
+		const lost = [ra, rb].filter((r) => r.exitCode === 2);
+		expect(won).toHaveLength(1);
+		expect(lost).toHaveLength(1);
+		expect(lost[0].outcome).toBe('lost');
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'dupprom')).toBe(true);
+	});
+
 	it('the promote new-item creation is routed THROUGH the injected CAS seam, keyed on the new identity', async () => {
 		const {repo} = seedObservation('seamprom');
 		seedAnsweredObservation(repo, 'seamprom', 'promote-slice');

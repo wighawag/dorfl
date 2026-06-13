@@ -116,6 +116,103 @@ describe('ledger-write seam — claim is dispatched THROUGH it', () => {
 	});
 });
 
+describe('ledger-write seam — the per-attempt CAS nonce (authoritative for same-identity racers)', () => {
+	/** Build a real claim micro-commit on a fresh local branch off arbiter/main. */
+	async function prepareClaim(
+		repo: string,
+		slug: string,
+		branch: string,
+	): Promise<{base: string; head: string}> {
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['checkout', '-q', '-B', branch, 'arbiter/main'], repo);
+		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
+		gitIn(
+			['mv', `work/backlog/${slug}.md`, `work/in-progress/${slug}.md`],
+			repo,
+		);
+		gitIn(['commit', '-q', '-m', `claim: ${slug}`], repo);
+		const base = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		const head = gitIn(['rev-parse', 'HEAD'], repo).trim();
+		return {base, head};
+	}
+
+	it('stamps a CAS-Nonce trailer so the LANDED sha is unique (publishedHead !== the input head)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['delta']);
+		const {base, head} = await prepareClaim(repo, 'delta', 'claim/delta');
+
+		const res = await currentLedgerWrite.applyTransition({
+			kind: 'claim',
+			arbiter: 'arbiter',
+			localBranch: 'claim/delta',
+			expectedBase: base,
+			head,
+			cwd: repo,
+			env: gitEnv(),
+		});
+		expect(res.kind).toBe('published');
+		// The landed sha is the nonce'd descendant-in-content, NOT the pre-nonce head.
+		expect(res.publishedHead).toBeTruthy();
+		expect(res.publishedHead).not.toBe(head);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const arbiterMain = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		expect(arbiterMain).toBe(res.publishedHead);
+		// The trailer round-trips as a real git trailer on the landed commit, and the
+		// original subject/tree are preserved (same tree, subject still `claim: delta`).
+		const trailer = gitIn(
+			['log', '-1', '--format=%(trailers:key=CAS-Nonce)', arbiterMain],
+			repo,
+		).trim();
+		expect(trailer).toMatch(/^CAS-Nonce: \S+/);
+		expect(gitIn(['log', '-1', '--format=%s', arbiterMain], repo).trim()).toBe(
+			'claim: delta',
+		);
+		expect(gitIn(['rev-parse', `${arbiterMain}^{tree}`], repo).trim()).toBe(
+			gitIn(['rev-parse', `${head}^{tree}`], repo).trim(),
+		);
+	});
+
+	it('a SECOND publish of byte-identical content/identity off the SAME base is REJECTED, not a spurious up-to-date publish', async () => {
+		// The PRODUCT defect (#90 only fixed the TEST): two same-identity racers build
+		// an identical claim commit off the same base. The FIRST lands; the SECOND,
+		// WITHOUT the nonce, would push the SAME sha, degrade to "Everything
+		// up-to-date", and verify X === X ⇒ spuriously published. With the per-attempt
+		// nonce the second attempt's sha is DISTINCT, its lease (base now stale) is
+		// genuinely rejected, and the verify correctly fails ⇒ rejected.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['epsilon']);
+		const {base, head} = await prepareClaim(repo, 'epsilon', 'claim/epsilon');
+
+		const first = await currentLedgerWrite.applyTransition({
+			kind: 'claim',
+			arbiter: 'arbiter',
+			localBranch: 'claim/epsilon',
+			expectedBase: base,
+			head,
+			cwd: repo,
+			env: gitEnv(),
+		});
+		expect(first.kind).toBe('published');
+
+		// Re-publish the SAME prepared branch (same identity, same tree, same message,
+		// same stale base) — the loser's situation. Must be rejected.
+		const second = await currentLedgerWrite.applyTransition({
+			kind: 'claim',
+			arbiter: 'arbiter',
+			localBranch: 'claim/epsilon',
+			expectedBase: base,
+			head,
+			cwd: repo,
+			env: gitEnv(),
+		});
+		expect(second.kind).toBe('rejected');
+		expect(second.publishedHead).toBeUndefined();
+		// The first publish's commit is still the tip — the second changed nothing.
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		expect(gitIn(['rev-parse', 'arbiter/main'], repo).trim()).toBe(
+			first.publishedHead,
+		);
+	});
+});
+
 describe('ledger-write seam — shape (complete transition)', () => {
 	it('exposes the complete transition on the SAME strategy', () => {
 		expect(typeof currentLedgerWrite.applyCompleteTransition).toBe('function');
