@@ -13,6 +13,8 @@ import {
 	resolveArbiterUrlFromCheckout,
 	type DoAgentRunner,
 } from '../src/do.js';
+import {performDoRemoteAuto} from '../src/do-remote-auto.js';
+import {mergeConfig} from '../src/config.js';
 import {buildProgram} from '../src/cli.js';
 import {mirrorPath} from '../src/repo-mirror.js';
 import {
@@ -269,6 +271,39 @@ describe('do --isolated — CLI surface (additive on the shared block)', () => {
 	});
 });
 
+describe('do --isolated — help text is HONEST about -n/auto-pick (doc-drift guard)', () => {
+	// The `--isolated` form ALREADY supports a single named item, multiple named
+	// items (in sequence), AND `-n`/auto-pick over the mirror-side eligible-pool
+	// scan (the old inline `-n`\u00d7`--isolated`/`--remote` refusal was removed in
+	// `advance-drivers-and-gates` once `mirror-side-eligible-pool-scan` landed; the
+	// forms route through `performDoRemoteAuto`/`performDoRemoteArgs`). The help
+	// text once STILL said "a single named item; not for -n/auto-pick", contradicted
+	// by the code AND by the "refusal removed" tests below. This guard pins the
+	// corrected doc so the stale phrasing cannot silently regress.
+	function isolatedDescription(): string {
+		const isolated = doCommand().options.find((o) => o.long === '--isolated');
+		if (!isolated) {
+			throw new Error('no --isolated option registered');
+		}
+		return isolated.description;
+	}
+
+	it('NO LONGER claims "a single named item; not for -n/auto-pick"', () => {
+		const desc = isolatedDescription();
+		expect(desc).not.toMatch(/not for -n\/auto-pick/i);
+		expect(desc).not.toMatch(/a single named item; not for/i);
+	});
+
+	it('accurately states it supports single + multi + -n/auto-pick, always SEQUENTIAL', () => {
+		const desc = isolatedDescription();
+		// It names the auto-pick / -n affordance...
+		expect(desc).toMatch(/-n\/auto-pick/);
+		expect(desc).toMatch(/mirror-side/i);
+		// ...and is explicit that it is sequential (parallelism is `run`/the matrix).
+		expect(desc).toMatch(/sequential/i);
+	});
+});
+
 describe('do --isolated — the no-arbiter error (isolated against what?)', () => {
 	it('errors CLEARLY when the cwd has no resolvable arbiter, naming --remote <url>', async () => {
 		// A plain git repo with NO arbiter remote (and the default arbiter name).
@@ -386,5 +421,105 @@ describe('do --isolated — -n/auto-pick now SELECTS over the mirror-side pool (
 		expect(captured).not.toMatch(/--isolated needs exactly one item/);
 		expect(captured).not.toMatch(/does not.*combine/i);
 		expect(captured).toMatch(/agentCmd|nothing eligible|did \d+ remote/i);
+	});
+});
+
+describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebases onto item N-1’s merge)', () => {
+	// The CONTRACT this pins (NOT the "refusal removed" negative above): an
+	// `--isolated -n` drain over the mirror-side pool runs the FROZEN selected set
+	// SEQUENTIALLY, and EACH per-item `performDoRemote` re-`ensureMirror`s + RE-FETCHES
+	// the SAME bare mirror before cutting its job worktree (`do.ts` step 4: the job
+	// worktree is materialised off the POST-CLAIM fresh main). So item 2's worktree
+	// branches off a `<arbiter>/main` that ALREADY CONTAINS item 1's merge — FRESHNESS
+	// / rebase-onto-latest. We drive the REAL `performDoRemoteAuto` (the shared
+	// `do --isolated`/`do --remote` auto-pick driver) with `autoBuild` ON + two
+	// GENUINELY-BUILDABLE, INDEPENDENT slices (NO `blockedBy` chain — the pool is
+	// scanned + selected ONCE up front and never re-scanned, so this proves freshness,
+	// NOT dependency-aware scheduling, which is deliberately out of scope here).
+	//
+	// The ORDER is made OBSERVABLE by having each item's stubbed agent SNAPSHOT what
+	// its OWN job worktree (`cwd`) carries under `work/done/` at agent-launch time:
+	// item 1 sees an empty done set; item 2, branched off the refetched main, sees
+	// item 1 ALREADY in `work/done/` — the load-bearing proof that the per-item
+	// refetch happened (a stale pre-run base would show item 1 absent).
+	it('integrates item 1 THEN item 2, with item 2’s worktree branched off a main containing item 1’s merge', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(
+			scratch.root,
+			['alpha', 'beta'],
+			{
+				// `autoBuild` must travel onto `<arbiter>/main` so the MIRROR scan (which
+				// layers the committed `.agent-runner.json`) enumerates the two slices as
+				// eligible — exactly as an in-place checkout would resolve it.
+				repoConfig: {autoBuild: true},
+			},
+		);
+		const ws = workspacesDir();
+		const isolatedRemote = resolveArbiterUrlFromCheckout(
+			repo,
+			'arbiter',
+			gitEnv(),
+		) as string;
+
+		// Per-item record of what each agent's OWN worktree carried under work/done/
+		// at launch (the freshness witness), in run order.
+		const doneSeenAtLaunch: Array<{slug: string; done: string[]}> = [];
+		const recordingAgent: DoAgentRunner = ({cwd, slug}) => {
+			const doneDir = join(cwd, 'work', 'done');
+			const done = existsSync(doneDir)
+				? readdirSync(doneDir)
+						.filter((f) => f.endsWith('.md'))
+						.sort()
+				: [];
+			doneSeenAtLaunch.push({slug, done});
+			// Make the commit non-empty so the build genuinely integrates.
+			writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
+			return {ok: true};
+		};
+
+		const multi = await performDoRemoteAuto({
+			remote: isolatedRemote,
+			workspacesDir: ws,
+			// `autoBuild` ON in the passed config too (belt-and-braces with the
+			// committed file): the mirror scan must see the slices as eligible.
+			config: mergeConfig({
+				autoBuild: true,
+				integration: 'merge',
+				verify: PASS,
+			}),
+			integration: 'merge',
+			verify: PASS,
+			count: 2,
+			agentRunner: recordingAgent,
+			env: gitEnv(),
+		});
+
+		// Both items ran and integrated cleanly, in SEQUENCE.
+		expect(multi.exitCode).toBe(0);
+		expect(multi.results).toHaveLength(2);
+		expect(multi.results.every((r) => r.outcome === 'completed')).toBe(true);
+
+		// BOTH landed in done/ on the arbiter (the drain emptied the pool).
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(true);
+
+		// ORDER + FRESHNESS: two items ran; the FIRST saw an empty done set, the
+		// SECOND saw the FIRST already in work/done/ in its OWN worktree — i.e. item
+		// 2's worktree was branched off a main that already contained item 1's merge
+		// (the per-item ensureMirror+refetch is load-bearing).
+		expect(doneSeenAtLaunch).toHaveLength(2);
+		const [first, second] = doneSeenAtLaunch;
+		expect(first.done).toEqual([]);
+		expect(second.done).toEqual([`${first.slug}.md`]);
+		// And the two items were DISTINCT (a genuine drain of both, not item 1 twice).
+		expect(new Set([first.slug, second.slug]).size).toBe(2);
+
+		// The human checkout was never taken over (still on main, no agent output).
+		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim()).toBe(
+			'main',
+		);
+		expect(existsSync(join(repo, 'agent-output.txt'))).toBe(false);
+		// The mirror materialised in the agents' area, off the cwd arbiter.
+		expect(existsSync(mirrorPath(ws, isolatedRemote))).toBe(true);
+		void arbiter;
 	});
 });

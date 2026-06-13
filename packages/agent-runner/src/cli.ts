@@ -1470,7 +1470,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--isolated',
-			"build in an ISOLATED job worktree off THIS repo's arbiter (inferred from cwd) instead of taking over the current checkout, then integrate + reap \u2014 the in-place-but-isolated form (a single named item; not for -n/auto-pick). Orthogonal to --remote (a foreign repo); with --remote, remote wins (isolation is already implied).",
+			"build in an ISOLATED job worktree off THIS repo's arbiter (inferred from cwd) instead of taking over the current checkout, then integrate + reap \u2014 the in-place-but-isolated form. Shares the same grammar as the no-checkout forms: a single named item, multiple named items (in sequence), AND -n/auto-pick over the mirror-side eligible-pool scan. Always SEQUENTIAL (parallelism is `run` / the CI matrix). Orthogonal to --remote (a foreign repo); with --remote, remote wins (isolation is already implied).",
 		)
 		.option(
 			'--merge',
