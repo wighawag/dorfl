@@ -69,7 +69,8 @@ export function doFlagOverrides(
 		ReviewFlags &
 		SlicerLoopFlags &
 		SelectionOrderFlags &
-		ObservationTriageFlags,
+		ObservationTriageFlags &
+		SurfaceBlockersFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
 	const overrides = {
@@ -77,6 +78,10 @@ export function doFlagOverrides(
 		// `--observation-triage <off|ask|auto>` rides the SAME flag-override chain
 		// (flag > env > per-repo > global > default): the observation-inbox gate.
 		...observationTriageFlagOverrides(flags),
+		// `--surface-blockers`/`--no-surface-blockers` rides the SAME chain: the
+		// boolean gate over DECLARED blocked work (the orthogonal peer of
+		// `--observation-triage`).
+		...surfaceBlockersFlagOverrides(flags),
 		// `--selection-order <order>` rides the SAME flag-override chain (flag > env >
 		// per-repo > global > default): a comma-separated value becomes a list (an
 		// explicit pool order), otherwise the verbatim string (a preset keyword). The
@@ -257,6 +262,36 @@ export function observationTriageFlagOverrides(
 			);
 		}
 		overrides.observationTriage = raw as ObservationTriage;
+	}
+	return overrides;
+}
+
+/**
+ * The surface-blockers CLI flag (`advance`): `--surface-blockers` /
+ * `--no-surface-blockers`, the BOOLEAN gate over DECLARED blocked work (whether a
+ * `needsAnswers:true` slice/PRD is rendered into a question sidecar; ADR
+ * `ci-config-policy-and-gate-family`). The orthogonal PEER of
+ * `--observation-triage`. Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain as the other gate flags.
+ */
+export interface SurfaceBlockersFlags {
+	/** `--surface-blockers` ⇒ true, `--no-surface-blockers` ⇒ false, absent ⇒ undefined. */
+	surfaceBlockers?: boolean;
+}
+
+/**
+ * Map the `--surface-blockers` flag into a {@link PartialConfig} override. Only a
+ * present flag contributes (absent ⇒ absent key), so the override layer never
+ * clobbers a lower-precedence source with `undefined`. A negatable boolean, so the
+ * caller leaves `surfaceBlockers` UNDEFINED unless the user explicitly passed
+ * `--surface-blockers`/`--no-surface-blockers` (see the cli's option-source read).
+ */
+export function surfaceBlockersFlagOverrides(
+	flags: SurfaceBlockersFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.surfaceBlockers !== undefined) {
+		overrides.surfaceBlockers = flags.surfaceBlockers;
 	}
 	return overrides;
 }

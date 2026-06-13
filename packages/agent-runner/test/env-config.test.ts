@@ -68,6 +68,22 @@ describe('envOverrides — boolean coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'false'})).toEqual({
 			autoSlice: false,
 		});
+		// `surfaceBlockers` (the blocked-work gate) coerces as a boolean too.
+		expect(envOverrides({AGENT_RUNNER_SURFACE_BLOCKERS: 'true'})).toEqual({
+			surfaceBlockers: true,
+		});
+		expect(envOverrides({AGENT_RUNNER_SURFACE_BLOCKERS: 'false'})).toEqual({
+			surfaceBlockers: false,
+		});
+	});
+
+	it('rejects an invalid surfaceBlockers value LOUDLY, naming the variable', () => {
+		expect(() => envOverrides({AGENT_RUNNER_SURFACE_BLOCKERS: 'on'})).toThrow(
+			/AGENT_RUNNER_SURFACE_BLOCKERS/,
+		);
+		expect(() => envOverrides({AGENT_RUNNER_SURFACE_BLOCKERS: 'on'})).toThrow(
+			/true.*false/i,
+		);
 	});
 
 	it('rejects an invalid autoSlice value LOUDLY, naming the variable', () => {

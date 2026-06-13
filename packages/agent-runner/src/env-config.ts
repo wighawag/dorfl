@@ -64,6 +64,9 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// so `AGENT_RUNNER_OBSERVATION_TRIAGE=off|ask|auto` works and a typo FAILS
 	// LOUDLY naming the variable + the valid options.
 	observationTriage: {enum: ['off', 'ask', 'auto']},
+	// The surface-blockers gate is a BOOLEAN coercion (like `autoBuild`), so
+	// `AGENT_RUNNER_SURFACE_BLOCKERS=true|false` works and a typo FAILS LOUDLY.
+	surfaceBlockers: 'boolean',
 	// `selectionOrder` coerces as a `'list'` (comma form
 	// `AGENT_RUNNER_SELECTION_ORDER=build,slice,surface,triage`); a single-element
 	// list whose one entry is a preset keyword (`=drain`) is expanded by the

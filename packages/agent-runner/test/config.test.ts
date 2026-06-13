@@ -19,6 +19,11 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).autoSlice).toBe(false);
 	});
 
+	it('defaults surfaceBlockers to false (declared blocked work stays calm)', () => {
+		expect(DEFAULT_CONFIG.surfaceBlockers).toBe(false);
+		expect(mergeConfig({}).surfaceBlockers).toBe(false);
+	});
+
 	it('defaults selectionOrder to the `drain` preset (slices-first; subsumes prdsFirst)', () => {
 		expect(DEFAULT_CONFIG.selectionOrder).toBe('drain');
 		expect(mergeConfig({}).selectionOrder).toBe('drain');

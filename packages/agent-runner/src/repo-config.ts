@@ -70,6 +70,12 @@ export const REPO_ALLOWED_KEYS = [
 	// same chain as `integration`/`autoBuild`. It REPLACES the old `autoTriage`
 	// boolean (no alias; no external users owed a migration window, 2026-06-12).
 	'observationTriage',
+	// `surfaceBlockers` (the BOOLEAN gate over DECLARED blocked work — whether a
+	// slice/PRD carrying `needsAnswers:true` is rendered into a question sidecar) is a
+	// genuine repo property — the blocked-work side of the question-surfacing gate
+	// family (ADR `ci-config-policy-and-gate-family`), the orthogonal peer of
+	// `observationTriage`, resolved per-repo through the same chain as `autoBuild`.
+	'surfaceBlockers',
 	// `selectionOrder` (the configurable order across the four orderable auto-pick
 	// pools — build/slice/surface/triage; `apply` is pinned first) is a genuine repo
 	// property — the per-repo selection-order field ADR `ci-config-policy-and-gate-
