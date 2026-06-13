@@ -12,6 +12,10 @@ import {runConcurrent} from './concurrency.js';
 import {scan, type ScanReport} from './scan.js';
 import {run as runProcess} from './git.js';
 import {jobWorktreeDoDriver} from './do.js';
+import {
+	pushTreelessResult,
+	TREELESS_RUNGS,
+} from './advance-treeless-publish.js';
 import type {Config} from './config.js';
 import type {
 	RunTick,
@@ -178,8 +182,40 @@ export async function advanceOnce(
 		// bounds the whole batch (matching `run`'s per-repo cap semantics).
 		keyFor: () => options.mirrorPath,
 		perKeyMax: Math.max(1, perRepoMax),
-		worker: (item) =>
-			run({...options.context, arg: argForSelected(item), read}),
+		worker: async (item) => {
+			const result = await run({
+				...options.context,
+				arg: argForSelected(item),
+				read,
+			});
+			// A TREE-LESS rung (surface/apply/triage) committed its sidecar / marker
+			// LOCALLY in the shared per-mirror `treelessCwd` (`context.cwd`); ff-push
+			// it to the mirror's arbiter so the result LANDS on `main` (the CLI wipes +
+			// re-clones that cwd EACH TICK, so an un-pushed local commit is lost). The
+			// build/slice rungs already pushed via the job-worktree `doDriver`.
+			//
+			// The bounded re-fetch+rebase retry inside `pushTreelessResult` is
+			// LOAD-BEARING here: the `treelessCwd` is cloned ONCE per mirror at tick
+			// start and SHARED across the mirror's SERIAL batch, so a `build`/`slice`
+			// rung EARLIER in the batch can integrate to the mirror's `main` mid-tick
+			// and a LATER tree-less push is non-fast-forward BY CONSTRUCTION — the
+			// retry rebases the slug-only commit onto the advanced `main` and lands it.
+			if (
+				result.exitCode === 0 &&
+				result.rung !== undefined &&
+				TREELESS_RUNGS.has(result.rung) &&
+				options.context.cwd !== undefined
+			) {
+				await pushTreelessResult({
+					cwd: options.context.cwd,
+					arbiter: options.context.arbiter ?? 'origin',
+					retries: 3,
+					env: options.env,
+					note: options.context.note ?? (() => {}),
+				});
+			}
+			return result;
+		},
 	});
 
 	const items: AdvanceBatchItem[] = settled.map((slot, i) => {

@@ -22,6 +22,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	pathOnArbiterMain,
 	gitEnv,
 	gitIn,
 	racerEnv,
@@ -391,6 +392,171 @@ describe('advanceRegistrySet — a lifecycle rung fires under a gate-on batch', 
 		},
 	);
 });
+
+describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the arbiter (loop parity)', () => {
+	// The gap this slice closes: the loop/registry driver commits a tree-less rung
+	// (surface/apply/triage) result in the per-mirror `treelessCwd` (cloned + wiped
+	// each tick by the CLI), so an UN-PUSHED local commit is lost on the next tick.
+	// After this slice the driver ff-pushes a tree-less result to the mirror's
+	// arbiter `main` (parity with the one-shot `advance --isolated` path), so a
+	// surfaced sidecar is OBSERVABLE on `<arbiter>/main` after the tick.
+	it(
+		'surfaceBlockers on ⇒ the surfaced sidecar lands on `<arbiter>/main` (not just the local cwd)',
+		{timeout: 30000},
+		async () => {
+			const blockedSlug = 'pub-blocked';
+			const {seed} = seedAndRegister('publish', [blockedSlug], {
+				needsAnswers: true,
+			});
+
+			const surfaceGate: SurfaceGate = async () => ({
+				item: `slice:${blockedSlug}`,
+				questions: [{question: 'which approach?'}],
+			});
+
+			const result = await advanceRegistrySet({
+				config: config(),
+				workspace: workspacesDir(),
+				contextFor: contextForFactory({surfaceGate}),
+				env: gitEnv(),
+				lifecycleGates: {surface: true},
+			});
+
+			expect(advanceRegistrySetSummary(result).advanced).toBe(1);
+
+			// THE SLICE'S POINT: the surfaced sidecar + the `needsAnswers:true` flip are
+			// on the ARBITER's `main` (ff-pushed from the treeless cwd), so another
+			// machine / a `scan` sees them — NOT lost when the cwd is next re-cloned.
+			expect(
+				pathOnArbiterMain(seed.repo, `work/questions/slice-${blockedSlug}.md`),
+			).toBe(true);
+		},
+	);
+
+	it(
+		'calm-default loop batch publishes NO tree-less result (build/slice path byte-for-byte unchanged)',
+		{timeout: 30000},
+		async () => {
+			// Calm gates (observationTriage off + surfaceBlockers off): no tree-less rung
+			// runs, so there is nothing to publish. A ready slice still builds + integrates
+			// through the job-worktree band (unchanged), but NO question sidecar appears on
+			// the arbiter — the publish path is a no-op under calm defaults.
+			const {seed} = seedAndRegister('calm', ['calm1']);
+
+			const result = await advanceRegistrySet({
+				config: config(),
+				workspace: workspacesDir(),
+				contextFor: contextForFactory({}),
+				env: gitEnv(),
+				// No lifecycleGates ⇒ both create-gates off (the calm default).
+			});
+
+			// The build rung advanced + integrated (the unchanged path).
+			expect(advanceRegistrySetSummary(result).advanced).toBe(1);
+			expect(existsOnArbiterMain(seed.repo, 'done', 'calm1')).toBe(true);
+			// NOTHING tree-less was published: no question sidecar on the arbiter.
+			expect(
+				pathOnArbiterMain(seed.repo, 'work/questions/slice-calm1.md'),
+			).toBe(false);
+		},
+	);
+
+	it(
+		'MIXED BATCH (build THEN surface in ONE mirror): the build advances `main`, the tree-less push is non-fast-forward, the rebase retry lands BOTH on the arbiter',
+		{timeout: 30000},
+		async () => {
+			// The LOAD-BEARING case the shared per-mirror `treelessCwd` (cloned ONCE at
+			// tick start, before any item runs) makes routine: a single mirror's SERIAL
+			// batch holds a ready slice (built FIRST per the `drain` order = build before
+			// surface) AND a needsAnswers slice. The build integrates `work/<slug>` to the
+			// mirror's `main` mid-tick, so the later surface push (from a cwd cloned BEFORE
+			// that integration) is non-fast-forward BY CONSTRUCTION — the bounded
+			// re-fetch+rebase retry rebases the slug-only sidecar commit onto the advanced
+			// `main` and lands it. BOTH the build's merge AND the sidecar end up on the
+			// arbiter.
+			const buildSlug = 'mix-build';
+			const blockedSlug = 'mix-blocked';
+			const seed = seedMixedReadyAndBlocked('mixed', buildSlug, blockedSlug);
+
+			const surfaceGate: SurfaceGate = async (input) => ({
+				item: input.item,
+				questions: [{question: 'which approach for the blocked item?'}],
+			});
+
+			const result = await advanceRegistrySet({
+				config: config(),
+				workspace: workspacesDir(),
+				contextFor: contextForFactory({surfaceGate}),
+				env: gitEnv(),
+				lifecycleGates: {surface: true},
+			});
+
+			// Both items advanced this batch (the build built, the blocked surfaced).
+			expect(advanceRegistrySetSummary(result).advanced).toBe(2);
+
+			// THE LOAD-BEARING ASSERTION: BOTH landed on the arbiter. The build's merge
+			// (the slice moved to done/) advanced `main`; the surface push was then
+			// non-fast-forward and the retry rebased the sidecar commit onto that advanced
+			// `main` and pushed it.
+			expect(existsOnArbiterMain(seed.repo, 'done', buildSlug)).toBe(true);
+			expect(
+				pathOnArbiterMain(seed.repo, `work/questions/slice-${blockedSlug}.md`),
+			).toBe(true);
+		},
+	);
+});
+
+/**
+ * Seed ONE mirror carrying a READY slice (`buildSlug`) AND a needsAnswers slice
+ * (`blockedSlug`) on `main`, registered as a hub mirror — the mixed-batch fixture.
+ * Seeds the ready slice via {@link seedAndRegister} (which builds the arbiter +
+ * registers the mirror), then pushes the needsAnswers slice onto the SAME arbiter
+ * via a throwaway clone, and RE-mirrors so the bare mirror's `main` carries both.
+ */
+function seedMixedReadyAndBlocked(
+	name: string,
+	buildSlug: string,
+	blockedSlug: string,
+): SeededRepo {
+	const root = join(scratch.root, name);
+	const seed = seedRepoWithArbiter(root, [buildSlug]);
+	// Push a needsAnswers slice onto the arbiter's `main` via a throwaway clone
+	// (leaving the source checkout untouched), mirroring `seedDoneOnArbiter`.
+	const dest = join(root, 'seed-blocked');
+	gitIn(['clone', '-q', `file://${seed.arbiter}`, dest], root);
+	const blockedBody = [
+		'---',
+		`title: ${blockedSlug}`,
+		`slug: ${blockedSlug}`,
+		'needsAnswers: true',
+		'blockedBy: []',
+		'---',
+		'',
+		'## What to build',
+		'',
+		'thing',
+		'',
+		'## Acceptance criteria',
+		'',
+		'- [ ] works',
+		'',
+		'## Prompt',
+		'',
+		`> Implement ${blockedSlug}.`,
+		'',
+	].join('\n');
+	writeFileSync(
+		join(dest, 'work', 'backlog', `${blockedSlug}.md`),
+		blockedBody,
+	);
+	gitIn(['add', '-A'], dest);
+	gitIn(['commit', '-q', '-m', `seed blocked ${blockedSlug}`], dest);
+	gitIn(['push', '-q', 'origin', 'HEAD:main'], dest);
+	// Register the mirror NOW (after both slices are on the arbiter's `main`).
+	const originUrl = remoteUrl(seed.arbiter);
+	ensureMirror({url: originUrl, workspacesDir: workspacesDir(), env: gitEnv()});
+	return seed;
+}
 
 describe('advanceRegistrySet — the advancing borrow is RACE-CORRECT across batches', () => {
 	it(

@@ -107,6 +107,16 @@ const RACE_SENSITIVE = [
 	// two-batch CAS race over one mirror; keep it out of file-parallel pressure for
 	// the same deterministic claim/main-CAS reasoning as do-remote.test.ts.
 	'test/advance-registry-set.test.ts',
+	// `run` driven by the REGISTRY-SET advance tick (`run-uses-advance-tick`): wraps
+	// the SAME registry-set driver as advance-registry-set.test.ts in the run loop, so
+	// it materialises hub mirrors + job worktrees, builds + integrates against a
+	// --bare arbiter (writes main), AND — since
+	// `loop-advance-persists-treeless-rungs-to-arbiter` — ff-pushes tree-less rung
+	// results to the arbiter `main` (real per-mirror main writes + git pushes). The
+	// multi-mirror drain is right at the 5s timeout boundary under file-parallel
+	// pressure; keep it out of that pressure for the same deterministic claim/main-CAS
+	// reasoning as advance-registry-set.test.ts.
+	'test/run-uses-advance-tick.test.ts',
 	// Gate 2 (PR/code review) on the do/complete path: drives real git against a
 	// --bare arbiter, integrates/merges on approve, AND writes main (the autonomous
 	// needs-attention surfacing on a block); keep it out of file-parallel pressure

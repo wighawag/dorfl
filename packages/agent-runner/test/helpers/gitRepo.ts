@@ -304,6 +304,20 @@ export function existsOnArbiterMain(
 }
 
 /**
+ * Does `<arbiter>/main` currently track an ARBITRARY repo-relative `path` (e.g. a
+ * sidecar `work/questions/slice-<slug>.md`)? The path-keyed sibling of
+ * {@link existsOnArbiterMain} for the tree-less rungs' results, which live outside
+ * the `work/<status>/<slug>.md` shape.
+ */
+export function pathOnArbiterMain(cwd: string, path: string): boolean {
+	run('git', ['fetch', '-q', 'arbiter'], cwd, {env: gitEnv()});
+	const res = run('git', ['cat-file', '-e', `arbiter/main:${path}`], cwd, {
+		env: gitEnv(),
+	});
+	return res.status === 0;
+}
+
+/**
  * Register a BARE hub mirror under `<workspacesDir>/repos/<key>.git` whose
  * `main` ref carries the given `work/` content — the registry-model fixture for
  * `scan`/`status` (which read each mirror's bare `main` ref, NOT a working tree).
