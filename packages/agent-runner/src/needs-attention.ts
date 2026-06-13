@@ -140,7 +140,10 @@ export interface RouteToNeedsAttentionResult {
 export interface ReturnToBacklogOptions {
 	/** The working clone the `work/` tree lives in. */
 	cwd: string;
-	/** The slug of the needs-attention item to re-queue. */
+	/**
+	 * The slug of the stuck item to re-queue — recovered from `needs-attention/`
+	 * OR `in-progress/` (the actual current folder is resolved on the arbiter).
+	 */
 	slug: string;
 	/** The arbiter remote to push the transition to. Optional (see above). */
 	arbiter?: string;
@@ -181,7 +184,7 @@ export interface ReturnToBacklogResult {
 	commitMessage?: string;
 	/** True iff `--reset` deleted the remote `work/<slug>` branch on the arbiter. */
 	deletedRemoteBranch?: boolean;
-	/** When NOT moved, why (e.g. the slug was not in needs-attention, or a failed --reset delete). */
+	/** When NOT moved, why (e.g. the slug was in neither needs-attention/ nor in-progress/, or a failed --reset delete). */
 	reasonNotMoved?: string;
 }
 
@@ -405,10 +408,15 @@ export async function routeToNeedsAttention(
 
 /**
  * The clean re-queue (ADR §12 / WORK-CONTRACT return path): once the human has
- * resolved the cause, `git mv work/needs-attention/<slug>.md
- * work/backlog/<slug>.md` and commit it so the item can be re-claimed (it must
- * not rot in needs-attention). The recorded reason block stays in the body as a
- * durable note of what happened; the resolution itself is the human's.
+ * resolved the cause, move the stuck item back to `work/backlog/<slug>.md` and
+ * commit it so the item can be re-claimed (it must not rot stuck). It recovers a
+ * slice stuck in EITHER `work/needs-attention/<slug>.md` (the resolved-surface
+ * path) OR `work/in-progress/<slug>.md` (a claim that never surfaced — an
+ * un-surfaced abort, a killed run, or an in-place requeue note; defect 2, story
+ * 4): the slug's ACTUAL current folder is resolved on the arbiter and moved to
+ * `backlog/` via the SAME tree-less CAS. Any recorded reason/handoff block stays
+ * in the body as a durable note of what happened; the resolution itself is the
+ * human's.
  *
  * The `requeue` verb's THREE behaviours (ADR §14 / slice
  * `requeue-continue-and-reset`) are realised here:
@@ -468,24 +476,24 @@ export async function returnToBacklog(
 	// local copy. This is a fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	// Is the item actually in `needs-attention/` ON THE ARBITER? (We read the
-	// arbiter ref, NOT the cwd tree — the cwd may be on a branch that never checked
-	// out the surfaced state.) Absent ⇒ nothing to requeue.
-	const naRel = `work/needs-attention/${slug}.md`;
-	if (
-		(
-			await gitSoftAsync(
-				['cat-file', '-e', `${arbiter}/main:${naRel}`],
-				cwd,
-				env,
-			)
-		).status !== 0
-	) {
+	// Where is the item ON THE ARBITER? (We read the arbiter ref, NOT the cwd tree
+	// — the cwd may be on a branch that never checked out the surfaced state.)
+	// `requeue` recovers from BOTH `needs-attention/` (the resolved-surface path)
+	// AND `in-progress/` (a claim that never surfaced: an un-surfaced abort, a
+	// killed run, or an in-place requeue note — defect 2, story 4): both are
+	// legitimate stuck states the conductor's recovery verb must recover from, via
+	// the SAME tree-less CAS. We resolve the slug's ACTUAL current folder on the
+	// arbiter (arbiter-is-truth) rather than assuming needs-attention/. Absent from
+	// BOTH ⇒ nothing to requeue.
+	const sourceRel = await resolveRequeueSourceRel(arbiter, slug, cwd, env);
+	if (!sourceRel) {
 		return {
 			moved: false,
 			reasonNotMoved:
-				`work/needs-attention/${slug}.md not found on ${arbiter}/main — nothing ` +
-				'to return to backlog (wrong slug, or not in needs-attention?).',
+				`'${slug}' is neither in work/needs-attention/ nor work/in-progress/ on ` +
+				`${arbiter}/main — nothing to return to backlog (wrong slug, or already ` +
+				'in backlog/done?). requeue recovers a slice stuck in needs-attention/ or ' +
+				'in-progress/.',
 		};
 	}
 
@@ -582,7 +590,7 @@ export async function returnToBacklog(
 			cwd,
 			slug,
 			base,
-			naRel,
+			sourceRel,
 			commitMessage,
 			message,
 			env,
@@ -626,30 +634,66 @@ export async function returnToBacklog(
 }
 
 /**
+ * Resolve the slug's ACTUAL current folder ON THE ARBITER for a requeue source
+ * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). `requeue`
+ * recovers a slice stuck in `needs-attention/` (the resolved-surface path) OR in
+ * `in-progress/` (a claim that never surfaced — an un-surfaced abort, a killed
+ * run, or an in-place requeue note; defect 2, story 4). Returns the source
+ * `work/<folder>/<slug>.md` rel path the move should relocate FROM, or
+ * `undefined` when the slug is in NEITHER (nothing to requeue). `needs-attention/`
+ * is probed first so a slice mid-transition that briefly appears in both resolves
+ * to its surfaced state; in practice the one-slug-one-folder invariant means at
+ * most one holds it.
+ */
+async function resolveRequeueSourceRel(
+	arbiter: string,
+	slug: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string | undefined> {
+	for (const folder of ['needs-attention', 'in-progress']) {
+		const rel = `work/${folder}/${slug}.md`;
+		if (
+			(
+				await gitSoftAsync(
+					['cat-file', '-e', `${arbiter}/main:${rel}`],
+					cwd,
+					env,
+				)
+			).status === 0
+		) {
+			return rel;
+		}
+	}
+	return undefined;
+}
+
+/**
  * Build the return-to-backlog MOVE as a commit off the arbiter's `main`, using
  * PLUMBING on a SCRATCH INDEX — it never touches the caller's index, HEAD, or
  * working tree (so a concurrent writer's uncommitted cwd files can never be swept
  * in). It loads `base`'s tree into a throwaway index, relocates ONLY this slug's
- * ledger file from `work/needs-attention/<slug>.md` to `work/backlog/<slug>.md`
- * (appending the optional `-m` handoff note to its BODY first — read from the
- * blob on `main`, NOT from any cwd file), writes the tree, commits it parented on
- * `base`, and points a throwaway local ref at the commit. Returns that ref + the
- * commit sha for the seam's CAS push.
+ * ledger file from its CURRENT folder (`sourceRel` — `needs-attention/` OR
+ * `in-progress/`, resolved on the arbiter) to `work/backlog/<slug>.md` (appending
+ * the optional `-m` handoff note to its BODY first — read from the blob on `main`,
+ * NOT from any cwd file), writes the tree, commits it parented on `base`, and
+ * points a throwaway local ref at the commit. Returns that ref + the commit sha
+ * for the seam's CAS push.
  */
 function prepareReturnToBacklogCommit(params: {
 	cwd: string;
 	slug: string;
 	base: string;
-	naRel: string;
+	sourceRel: string;
 	commitMessage: string;
 	message: string | undefined;
 	env: NodeJS.ProcessEnv | undefined;
 }): {ref: string; commit: string} {
-	const {cwd, slug, base, naRel, commitMessage, message, env} = params;
+	const {cwd, slug, base, sourceRel, commitMessage, message, env} = params;
 	const backlogRel = `work/backlog/${slug}.md`;
 
 	// The item's body on `main`, optionally with the dated handoff note appended.
-	const original = catBlob(`${base}:${naRel}`, cwd, env);
+	const original = catBlob(`${base}:${sourceRel}`, cwd, env);
 	const content =
 		message !== undefined ? appendRequeueNoteText(original, message) : original;
 	// Hash the (possibly note-appended) blob INTO the cwd's object store. A blob
@@ -667,8 +711,9 @@ function prepareReturnToBacklogCommit(params: {
 	};
 	try {
 		gitHard(['read-tree', base], cwd, withIndex);
-		// Remove the item from needs-attention/, add it under backlog/ (one file).
-		gitHard(['update-index', '--force-remove', naRel], cwd, withIndex);
+		// Remove the item from its current folder (needs-attention/ OR in-progress/),
+		// add it under backlog/ (one file).
+		gitHard(['update-index', '--force-remove', sourceRel], cwd, withIndex);
 		gitHard(
 			['update-index', '--add', '--cacheinfo', `100644,${blob},${backlogRel}`],
 			cwd,

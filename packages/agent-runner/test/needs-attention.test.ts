@@ -253,16 +253,49 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 		expect(all.find((i) => i.slug === 'theta')).toBeDefined();
 	});
 
-	it('refuses (does not throw) when the slug is not in needs-attention', async () => {
-		const {repo} = await claimAndBranch('iota');
+	it('refuses (does not throw) with a CLEAR message when the slug is in NEITHER needs-attention/ nor in-progress/', async () => {
+		// `iota` is seeded only in backlog/ (never claimed): it is in neither
+		// legitimate requeue source. requeue must refuse gracefully, naming BOTH
+		// recoverable folders — never a bare "not found".
+		const seeded = seedRepoWithArbiter(scratch.root, ['iota']);
 		const result = await returnToBacklog({
-			cwd: repo,
+			cwd: seeded.repo,
 			slug: 'iota',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/not found|not in needs-attention/i);
+		expect(result.reasonNotMoved).toMatch(/needs-attention/);
+		expect(result.reasonNotMoved).toMatch(/in-progress/);
+	});
+
+	it('recovers a slug stuck in in-progress/ (a claim that never surfaced), not only needs-attention/', async () => {
+		// A claim leaves the slug in in-progress/ on the arbiter; with its work branch
+		// pushed (keep+continue artifact), requeue recovers it to backlog/ via the same
+		// tree-less CAS as the needs-attention path.
+		const {repo} = await claimAndBranch('iota-stuck');
+		agentEdits(repo, 'prior.txt', 'prior attempt work\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
+		gitIn(
+			['push', '-q', ARBITER, 'work/slice-iota-stuck:work/slice-iota-stuck'],
+			repo,
+		);
+		// Leave the cwd on a clean main: the requeue resolves the source from the
+		// arbiter, never the cwd tree.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-f', 'main'], repo);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'iota-stuck')).toBe(true);
+
+		const result = await returnToBacklog({
+			cwd: repo,
+			slug: 'iota-stuck',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(result.moved).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'iota-stuck')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'iota-stuck')).toBe(false);
 	});
 });
 
