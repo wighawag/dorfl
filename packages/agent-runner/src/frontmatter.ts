@@ -48,6 +48,16 @@ export interface Frontmatter {
 	 * and PRDs.
 	 */
 	needsAnswers: boolean | undefined;
+	/**
+	 * The triage SETTLED marker (US #30). A non-empty `triaged:` value (e.g.
+	 * `keep` / `duplicate`) means a human (or the conservative auto-disposition)
+	 * has SETTLED this observation, so it DROPS OUT of the triage candidate pool
+	 * and is never re-asked. `undefined` when omitted (an UNTRIAGED observation,
+	 * still in the pool). Carried so the lifecycle-pool enumeration
+	 * (`advance-autopick-lifecycle-pools`) can exclude settled observations from
+	 * the triage selection.
+	 */
+	triaged: string | undefined;
 	/** Slugs this item is blocked by; `[]` when omitted or empty. */
 	blockedBy: string[];
 	/**
@@ -170,6 +180,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		issue: undefined,
 		humanOnly: undefined,
 		needsAnswers: undefined,
+		triaged: undefined,
 		blockedBy: [],
 		sliceAfter: [],
 	};
@@ -207,6 +218,11 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.humanOnly = rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'needsAnswers') {
 			result.needsAnswers = rawValue === '' ? undefined : toBoolean(rawValue);
+		} else if (key === 'triaged') {
+			// The SETTLED marker: a non-empty value (`keep`/`duplicate`) drops the
+			// observation out of the triage pool. An empty value reads as undefined
+			// (undeclared — still untriaged).
+			result.triaged = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'blockedBy' || key === 'sliceAfter') {
 			let list: string[];
 			if (rawValue.startsWith('[')) {

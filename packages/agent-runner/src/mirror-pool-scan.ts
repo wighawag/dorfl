@@ -7,7 +7,13 @@ import {
 	type ScanReport,
 	type RepoReport,
 } from './scan.js';
-import {sliceablePrds, type PrdCandidate} from './select-priority.js';
+import {
+	sliceablePrds,
+	type PrdCandidate,
+	type SelectedLifecyclePools,
+} from './select-priority.js';
+import {gatherLifecycleMirror} from './lifecycle-gather.js';
+import type {LifecyclePoolGates} from './lifecycle-pools.js';
 
 /**
  * The MIRROR-SIDE eligible-pool scan — the isolated counterpart to
@@ -73,6 +79,14 @@ export interface ScanMirrorPoolOptions {
 	 */
 	warn?: (message: string) => void;
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * The LIFECYCLE-POOL create-gates (slice `advance-autopick-lifecycle-pools`),
+	 * the internal hook the gate slices will wire to `observationTriage` /
+	 * `surfaceBlockers`. INTERIM, born OFF: omitted ⇒ BOTH create-gates OFF, so the
+	 * mirror-side triage + surface sub-pools contribute NOTHING (the apply sub-pool
+	 * is always-on). The mirror enumeration mirrors the in-place one exactly.
+	 */
+	lifecycleGates?: LifecyclePoolGates;
 }
 
 /**
@@ -99,6 +113,16 @@ export interface MirrorPoolScanResult {
 	 * does not re-gate it.
 	 */
 	prds: PrdCandidate[];
+	/**
+	 * The LIFECYCLE pools (slice `advance-autopick-lifecycle-pools`): untriaged
+	 * observations (triage), `needsAnswers`-blocked items with no all-answered
+	 * sidecar (surface), and answered-sidecar items (apply). Built through the SAME
+	 * shared {@link buildLifecyclePools} unit the in-place caller uses (NOT a second
+	 * enumeration), so the in-place + mirror-side selections AGREE. The create-gates
+	 * default OFF (interim); apply is always present. The drivers feed this straight
+	 * into {@link selectPrioritised}'s `lifecycle` slot.
+	 */
+	lifecycle: SelectedLifecyclePools;
 }
 
 /**
@@ -159,10 +183,24 @@ export async function scanMirrorPool(
 		autoSlice: repoConfig.autoSlice,
 	});
 
+	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
+	// `needsAnswers` backlog/PRDs + their sidecars + `work/observations/`) and built
+	// through the SHARED enumeration unit the in-place caller uses — so the in-place
+	// + mirror-side selections AGREE. Create-gates default OFF (interim); apply
+	// (consume) is always present.
+	const lifecycle = await gatherLifecycleMirror({
+		mirrorPath,
+		ref,
+		read,
+		gates: options.lifecycleGates,
+		env,
+	});
+
 	return {
 		report,
 		slices: items,
 		eligibleSlices: items.filter((i) => i.eligibility.eligible),
 		prds,
+		lifecycle,
 	};
 }

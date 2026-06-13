@@ -13,6 +13,8 @@ import {
 	type PrdCandidate,
 	type SelectedItem,
 } from './select-priority.js';
+import {gatherLifecycleInPlace} from './lifecycle-gather.js';
+import type {LifecyclePoolGates} from './lifecycle-pools.js';
 import type {Config} from './config.js';
 
 /**
@@ -90,6 +92,18 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	run?: AdvanceTickRunner;
 	/** Override the read seam (PRD pool); defaults to the active {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
+	/**
+	 * The LIFECYCLE-POOL create-gates (slice `advance-autopick-lifecycle-pools`),
+	 * the internal hook the gate slices (`observation-triage-tri-state-gate` /
+	 * `surface-blockers-gate`) will wire to the `observationTriage` /
+	 * `surfaceBlockers` config read. INTERIM, born OFF: omitted ⇒ BOTH create-gates
+	 * OFF, so the triage + surface sub-pools contribute NOTHING and a bare/`-n`
+	 * `advance` auto-triages / auto-surfaces nothing (it changes no repo's
+	 * behaviour). The apply sub-pool is NOT gated (consume is always-on), so an
+	 * answered sidecar applies regardless. Tests FORCE the create-gates on through
+	 * this same hook to exercise the triage/surface paths.
+	 */
+	lifecycleGates?: LifecyclePoolGates;
 }
 
 /** The aggregate result of a multi-item `advance` invocation. */
@@ -161,13 +175,27 @@ export async function performAdvanceAuto(
 		autoSlice: options.config.autoSlice,
 	});
 
-	// Order across both pools (slices-first / flipped) + bound by count — the SAME
-	// shared, pure `selectPrioritised` the `do` auto-pick driver uses.
+	// Pools 3 + 4 — the LIFECYCLE pools (untriaged observations + `needsAnswers`-
+	// blocked slices/PRDs + answered-sidecar items), built CALLER-SIDE (here, the
+	// `advance` caller) through the SHARED enumeration unit and passed in — NOT baked
+	// into `selectPrioritised` (so `do` is provably unchanged). The create-gates
+	// default OFF (interim hardcoded-off): triage + surface contribute nothing; the
+	// apply sub-pool is always-on (consume), so an answered sidecar still applies.
+	const lifecycle = gatherLifecycleInPlace({
+		repoPath: cwd,
+		read,
+		gates: options.lifecycleGates,
+	});
+
+	// Order across the FOUR pools (buildable first, then lifecycle) + bound by count
+	// — the SAME shared, pure `selectPrioritised` the `do` auto-pick driver uses
+	// (which passes NO lifecycle pools, so it is unchanged).
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
 		prds: eligiblePrds,
 		prdsFirst: options.config.prdsFirst,
+		lifecycle,
 		count,
 	});
 
@@ -226,11 +254,7 @@ async function runSelectedInSequence(
 	const shared = sharedAdvanceContext(options);
 	const results: AdvanceResult[] = [];
 	for (const item of selected) {
-		const arg = mode.verbatimArg
-			? item.slug
-			: item.namespace === 'prd'
-				? `prd:${item.slug}`
-				: item.slug;
+		const arg = mode.verbatimArg ? item.slug : argForSelectedItem(item);
 		const result = await run({...shared, arg, read: options.read});
 		results.push(result);
 	}
@@ -244,6 +268,31 @@ async function runSelectedInSequence(
 	return {results, exitCode, message};
 }
 
+/**
+ * The advance TICK arg for a pool-selected item — the SELECTION->ARG dispatch
+ * (slice `advance-autopick-lifecycle-pools`, F-NAMESPACE). The `namespace`
+ * discriminator the selection carried maps to the tick arg the tick then
+ * classifies into the right rung:
+ *   - `observation` → `obs:<slug>` (the triage rung; bare would resolve to a
+ *     slice, so the `obs:` prefix is required);
+ *   - `prd` → `prd:<slug>` (a sliceable PRD's slice rung, OR a `needsAnswers` PRD
+ *     the tick surfaces/applies);
+ *   - `slice` → bare `<slug>` (an eligible slice's build rung, OR a `needsAnswers`
+ *     slice the tick surfaces/applies).
+ * The tick re-classifies each arg, so a `needsAnswers`-blocked slice/PRD reaches
+ * surface/apply and an untriaged observation reaches triage — the classifier +
+ * rung bodies are unchanged; only this selection->arg mapping is new.
+ */
+function argForSelectedItem(item: SelectedItem): string {
+	if (item.namespace === 'observation') {
+		return `obs:${item.slug}`;
+	}
+	if (item.namespace === 'prd') {
+		return `prd:${item.slug}`;
+	}
+	return item.slug;
+}
+
 /** Strip the multi-only fields, leaving exactly the per-item {@link AdvanceContext}. */
 function sharedAdvanceContext(
 	options: PerformAdvanceMultiOptions,
@@ -253,12 +302,14 @@ function sharedAdvanceContext(
 		count: _count,
 		run: _run,
 		read: _read,
+		lifecycleGates: _lifecycleGates,
 		...rest
 	} = options;
 	void _config;
 	void _count;
 	void _run;
 	void _read;
+	void _lifecycleGates;
 	return rest;
 }
 

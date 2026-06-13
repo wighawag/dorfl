@@ -3,6 +3,7 @@ import type {AdvanceTickRunner, AdvanceTickOptions} from './advance-drivers.js';
 import {scanMirrorPool} from './mirror-pool-scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {selectPrioritised, type SelectedItem} from './select-priority.js';
+import type {LifecyclePoolGates} from './lifecycle-pools.js';
 import {runConcurrent} from './concurrency.js';
 import type {Config} from './config.js';
 import type {
@@ -89,6 +90,14 @@ export interface AdvanceOnceOptions {
 	warn?: (message: string) => void;
 	/** The git env the mirror scan's read ops run under (identity/non-interactive). */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * The LIFECYCLE-POOL create-gates (slice `advance-autopick-lifecycle-pools`),
+	 * forwarded to {@link scanMirrorPool}. INTERIM, born OFF: omitted ⇒ BOTH
+	 * create-gates off, so the loop/CI advance auto-triages / auto-surfaces nothing
+	 * (the apply sub-pool is always-on). The gate slices wire this to
+	 * `observationTriage` / `surfaceBlockers`.
+	 */
+	lifecycleGates?: LifecyclePoolGates;
 }
 
 /** One advanced item's result + the identity it was for (input order preserved). */
@@ -129,10 +138,13 @@ export async function advanceOnce(
 		read,
 		warn: options.warn,
 		env: options.env,
+		lifecycleGates: options.lifecycleGates,
 	});
 
-	// Order across both pools (slices-first / flipped) — ALL eligible items (the
-	// loop drains the whole pool each batch; `count` is the one-shot/`-n` concern).
+	// Order across the FOUR pools (buildable first, then lifecycle) — ALL eligible
+	// items (the loop drains the whole pool each batch; `count` is the one-shot/`-n`
+	// concern). The lifecycle pools come from the SHARED mirror enumeration, so the
+	// loop/CI selection agrees with the in-place one-shot selection.
 	const selected = selectPrioritised({
 		report: scan.report,
 		caps: {
@@ -141,6 +153,7 @@ export async function advanceOnce(
 		},
 		prds: scan.prds,
 		prdsFirst: options.config.prdsFirst,
+		lifecycle: scan.lifecycle,
 	});
 
 	if (selected.length === 0) {
@@ -179,8 +192,16 @@ export async function advanceOnce(
 	return {items};
 }
 
-/** The advance arg for a selected item: `prd:<slug>` for a PRD, bare slug for a slice. */
+/**
+ * The advance arg for a selected item (the SELECTION->ARG dispatch): `obs:<slug>`
+ * for an observation (the triage rung), `prd:<slug>` for a PRD, bare slug for a
+ * slice. The tick re-classifies each arg into the right rung (surface/apply for a
+ * `needsAnswers`-blocked slice/PRD; triage for an observation).
+ */
 function argForSelected(item: SelectedItem): string {
+	if (item.namespace === 'observation') {
+		return `obs:${item.slug}`;
+	}
 	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
 }
 
@@ -240,6 +261,7 @@ export interface AdvanceRunTickDeps extends Omit<
 	AdvanceOnceOptions,
 	'maxParallel' | 'perRepoMax' | 'warn' | 'env'
 > {
+	/* `lifecycleGates` is inherited from {@link AdvanceOnceOptions} (born OFF). */
 	/**
 	 * Override the per-batch caps. Defaults to `config.maxParallel` /
 	 * `config.perRepoMax` (the SAME knobs the build tick's scheduler uses), so a
@@ -282,6 +304,7 @@ export function advanceRunTick(deps: AdvanceRunTickDeps): RunTick {
 			context: deps.context,
 			run: deps.run,
 			read: deps.read,
+			lifecycleGates: deps.lifecycleGates,
 			maxParallel: deps.maxParallel,
 			perRepoMax: deps.perRepoMax,
 			// Cross-cutting seams that DO generalise come from the per-tick options
