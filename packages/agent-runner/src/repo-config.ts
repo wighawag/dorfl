@@ -2,7 +2,6 @@ import {readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {mergeConfig, type Config, type PartialConfig} from './config.js';
 import {envOverrides, type EnvMap} from './env-config.js';
-import {applyConfigKeyAliases} from './config-alias.js';
 import {brand} from './brand.js';
 
 /**
@@ -59,8 +58,7 @@ export const REPO_ALLOWED_KEYS = [
 	'defaultArbiter',
 	// `autoBuild` (may an agent auto-BUILD undeclared, not-`humanOnly` slices in
 	// this repo?) is a genuine repo property — the build member of the symmetric
-	// per-action gate family. The OLD name `allowAgents` is still accepted as a
-	// DEPRECATED ALIAS (mapped here with a warning, see `config-alias.ts`).
+	// per-action gate family.
 	'autoBuild',
 	// `autoSlice` (may an agent auto-slice undeclared PRDs in this repo?) is a
 	// genuine repo property — the slicing-autonomy mirror of `autoBuild`
@@ -214,16 +212,6 @@ export function loadRepoConfigFromContent(
 		);
 	}
 
-	// Migrate any DEPRECATED old key (e.g. `allowAgents` → `autoBuild`) to its
-	// current name BEFORE the allow/reject split, so a committed repo file keeps
-	// resolving across a rename. Each deprecation is collected and surfaced through
-	// the same `message` channel as a rejected key (callers `note`/`warn` it).
-	const deprecations: string[] = [];
-	applyConfigKeyAliases(parsed, {
-		source: sourceLabel,
-		warn: (m) => deprecations.push(m),
-	});
-
 	const config: PartialConfig = {};
 	const rejected: string[] = [];
 	for (const key of Object.keys(parsed)) {
@@ -248,12 +236,7 @@ export function loadRepoConfigFromContent(
 				`the global config or a CLI flag.`
 			: undefined;
 
-	// Combine the deprecation warning(s) and the rejected-key message into the one
-	// `message` channel callers already surface (deprecations first).
-	const message =
-		[...deprecations, ...(rejectedMessage ? [rejectedMessage] : [])].join(
-			'\n',
-		) || undefined;
+	const message = rejectedMessage;
 
 	return {path: sourceLabel, config, rejected, ...(message ? {message} : {})};
 }

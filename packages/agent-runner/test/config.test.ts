@@ -129,21 +129,12 @@ describe('loadConfig', () => {
 		expect(() => loadConfig(path)).toThrow(/config/i);
 	});
 
-	it('migrates the deprecated `allowAgents` key to `autoBuild` and warns', () => {
-		const path = join(dir, 'config.json');
-		writeFileSync(path, JSON.stringify({allowAgents: true}));
-		const warnings: string[] = [];
-		const cfg = loadConfig(path, (m) => warnings.push(m));
-		expect(cfg.autoBuild).toBe(true);
-		expect(warnings).toHaveLength(1);
-		expect(warnings[0]).toMatch(/allowAgents/);
-		expect(warnings[0]).toMatch(/autoBuild/);
-	});
-
-	it('lets `autoBuild` WIN over the deprecated `allowAgents` when both are set', () => {
+	it('no longer treats `allowAgents` as an alias: it is inert and `autoBuild` is untouched (no crash)', () => {
 		const path = join(dir, 'config.json');
 		writeFileSync(path, JSON.stringify({allowAgents: true, autoBuild: false}));
-		const cfg = loadConfig(path, () => {});
+		// `allowAgents` is no longer a recognised alias: loading does not throw and
+		// never maps onto `autoBuild`, which stands on its own value.
+		const cfg = loadConfig(path);
 		expect(cfg.autoBuild).toBe(false);
 	});
 

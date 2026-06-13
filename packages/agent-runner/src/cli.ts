@@ -12,7 +12,6 @@ import {
 	type PartialConfig,
 } from './config.js';
 import {envOverrides} from './env-config.js';
-import {aliasDeprecationMessage} from './config-alias.js';
 import {scan} from './scan.js';
 import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
 import {findParticipatingRepos} from './detect.js';
@@ -94,40 +93,24 @@ import {brand} from './brand.js';
 interface ScanFlags {
 	config?: string;
 	autoBuild?: boolean;
-	/** DEPRECATED alias of `autoBuild` (`--allow-agents`/`--no-allow-agents`). */
-	allowAgents?: boolean;
 	json?: boolean;
 	cwd?: boolean;
 	arbiterRemote?: string;
 }
 
 /**
- * Whether `--auto-build` / `--no-auto-build` (or its DEPRECATED alias
- * `--allow-agents` / `--no-allow-agents`) was explicitly passed on the command
+ * Whether `--auto-build` / `--no-auto-build` was explicitly passed on the command
  * line. Commander gives a negatable boolean option a default of `true`, so we
  * must check the value SOURCE to distinguish "user set it" from "default"; only an
  * explicit flag becomes a config override (so config/defaults still win
- * otherwise). The canonical flag WINS if both were passed; using the legacy alias
- * emits a deprecation warning.
+ * otherwise).
  */
-function autoBuildFromCli(
-	command: Commander | undefined,
-	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
-): boolean | undefined {
+function autoBuildFromCli(command: Commander | undefined): boolean | undefined {
 	if (!command) {
 		return undefined;
 	}
 	if (command.getOptionValueSource('autoBuild') === 'cli') {
 		return command.getOptionValue('autoBuild') as boolean;
-	}
-	if (command.getOptionValueSource('allowAgents') === 'cli') {
-		warn(
-			aliasDeprecationMessage(
-				{oldKey: 'allowAgents', newKey: 'autoBuild'},
-				'--allow-agents',
-			),
-		);
-		return command.getOptionValue('allowAgents') as boolean;
 	}
 	return undefined;
 }
@@ -135,8 +118,7 @@ function autoBuildFromCli(
 /**
  * Build the overrides a user supplied via CLI flags. Discovery is the registry
  * (the hub-mirror set, ADR §1), so there are no `--root`/`--include`/`--exclude`
- * flags any more — only the autonomy-gate `--auto-build` toggle (with the
- * deprecated `--allow-agents` alias).
+ * flags any more — only the autonomy-gate `--auto-build` toggle.
  */
 function flagOverrides(flags: ScanFlags, command?: Commander): PartialConfig {
 	const overrides: PartialConfig = {};
@@ -738,18 +720,6 @@ export function buildProgram(): Command {
 			'--no-auto-build',
 			'forbid agents from auto-building undeclared slices (default)',
 		)
-		.addOption(
-			new Option(
-				'--allow-agents',
-				'DEPRECATED alias of --auto-build (still works; will be removed)',
-			).hideHelp(),
-		)
-		.addOption(
-			new Option(
-				'--no-allow-agents',
-				'DEPRECATED alias of --no-auto-build',
-			).hideHelp(),
-		)
 		.option(
 			'--arbiter-remote <name>',
 			`the current repo's arbiter remote to fetch + diff its local section against (default: ${DEFAULT_ARBITER_REMOTE})`,
@@ -826,18 +796,6 @@ export function buildProgram(): Command {
 		.option(
 			'--no-auto-build',
 			'forbid agents from auto-building undeclared slices (default)',
-		)
-		.addOption(
-			new Option(
-				'--allow-agents',
-				'DEPRECATED alias of --auto-build (still works; will be removed)',
-			).hideHelp(),
-		)
-		.addOption(
-			new Option(
-				'--no-allow-agents',
-				'DEPRECATED alias of --no-auto-build',
-			).hideHelp(),
 		)
 		.option('--max-parallel <n>', 'global cap on items claimed+run this tick')
 		.option('--per-repo-max <n>', 'per-repo cap on concurrent claims')

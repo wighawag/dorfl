@@ -161,7 +161,7 @@ The autonomy gate is TWO orthogonal binary fields (both default to omitted = fal
 - **`needsAnswers: true` — the DISCOVERED axis.** _Are there unresolved questions blocking autonomous progress?_ The spec is incomplete; **the open questions live in the body**. Once answered, the flag is cleared and an agent may proceed.
 - They are **orthogonal** — four honest states. e.g. `humanOnly:true, needsAnswers:false` = fully specified but a human must own it; `humanOnly:false, needsAnswers:true` = anyone can do it once the questions are answered.
 - **Repo policy `autoBuild`** answers the question the _repo_ owns: _may agents auto-build undeclared items here?_ The build member of the symmetric per-action gate family (`autoBuild`/`autoSlice`/`autoTriage`). Per-repo config key (`.agent-runner.json`), resolved like `integration`: \*\*CLI flag (`--auto-build` / `--no-auto-build`)
-  > env (`AGENT_RUNNER_AUTO_BUILD`) > per-repo config > global config > built-in default (`false`)\*\*. The OLD name `allowAgents` (key/flag `--allow-agents`/env `AGENT_RUNNER_ALLOW_AGENTS`) is still accepted as a DEPRECATED ALIAS for a migration window (it maps to `autoBuild` with a deprecation warning).
+  > env (`AGENT_RUNNER_AUTO_BUILD`) > per-repo config > global config > built-in default (`false`)\*\*. (Renamed from the old name `allowAgents`, now fully removed with no alias since there are no external users owed a migration window.)
 
 **Predicate (same shape at both levels):** an item is **auto-eligible** iff `needsAnswers` is not `true` AND `humanOnly` is not `true` AND `autoBuild` is `true`. A human is never bound by it (a human may slice/build a flagged item — the gate binds the agent, like the runner-vs-human stance on `verify`).
 

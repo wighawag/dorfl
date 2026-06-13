@@ -3,7 +3,6 @@ import {homedir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {brand} from './brand.js';
 import {type Identity, validateIdentity} from './identity.js';
-import {applyConfigKeyAliases} from './config-alias.js';
 
 /**
  * How a completed item is integrated back to the arbiter's `main`. `merge` lands
@@ -50,9 +49,7 @@ export interface Config {
 	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
 	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > per-repo >
 	 * global > default. The build member of the symmetric per-action gate family
-	 * (`autoBuild`/`autoSlice`/`autoTriage`). The OLD name `allowAgents` (key/flag/
-	 * env) is still accepted as a DEPRECATED ALIAS for a migration window (it maps
-	 * here with a deprecation warning); see `config-alias.ts`.
+	 * (`autoBuild`/`autoSlice`/`autoTriage`).
 	 */
 	autoBuild: boolean;
 	/**
@@ -356,15 +353,8 @@ export function saveConfig(config: PartialConfig, path: string): void {
 /**
  * Load config from `path`, merged over defaults. A missing file is not an error
  * (defaults make the tool work out of the box); invalid JSON is.
- *
- * Deprecated key aliases (e.g. `allowAgents` → `autoBuild`, see `config-alias.ts`)
- * are migrated in-place with a deprecation `warn` (default: stderr) so an upgrade
- * never breaks a committed global config.
  */
-export function loadConfig(
-	path: string = defaultConfigPath(),
-	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
-): Config {
+export function loadConfig(path: string = defaultConfigPath()): Config {
 	if (!existsSync(path)) {
 		return mergeConfig({});
 	}
@@ -384,12 +374,6 @@ export function loadConfig(
 			`Invalid JSON in config at ${path}: ${(err as Error).message}`,
 		);
 	}
-	// Migrate any deprecated old key (e.g. `allowAgents` → `autoBuild`) to its
-	// current name so a committed global config keeps resolving across a rename.
-	applyConfigKeyAliases(parsed as Record<string, unknown>, {
-		source: path,
-		warn,
-	});
 	// Validate a present identity at LOAD time (dumb — no arbiter URL resolution;
 	// the transport-coherence check is push-time). A bad identity is a hard config
 	// error, never a silent ambient fallback.
