@@ -48,6 +48,12 @@ import {
 	performAdvanceArgs,
 	type AdvanceMultiResult,
 } from './advance-drivers.js';
+import {
+	performAdvanceIsolated,
+	performAdvanceIsolatedAuto,
+	performAdvanceIsolatedArgs,
+	type IsolatedAdvanceContext,
+} from './advance-isolated.js';
 import {advanceRegistrySetRunTick} from './advance-loop-driver.js';
 import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
 import {
@@ -1939,6 +1945,10 @@ export function buildProgram(): Command {
 			'AUTO-PICK x eligible items and advance them IN SEQUENCE (ordered by selectionOrder, default drain = slices-first then PRDs-to-slice). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
 		)
 		.option(
+			'--isolated',
+			"advance in an ISOLATED worktree off THIS repo's arbiter (inferred from cwd) instead of taking over the current checkout, then integrate + reap — the in-place-but-isolated form. Shares the same grammar: a single named item, multiple named items (in sequence), AND -n/auto-pick over the mirror-side eligible-pool scan. Always SEQUENTIAL (parallelism is `run` / the CI matrix). Lets you advance from a busy/dirty checkout or anywhere with a participating arbiter.",
+		)
+		.option(
 			'--selection-order <order>',
 			'order the auto-pick pools (build/slice/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list. Resolved flag > env > per-repo > global > default.',
 		)
@@ -2020,6 +2030,167 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+
+			// `advance --isolated`: run the advance TICK in an ISOLATED worktree off
+			// THIS repo's arbiter (resolved from cwd), then integrate + reap — the
+			// in-place-but-isolated form, the SAME ergonomic `do --isolated` has. We
+			// REUSE `do --isolated`'s arbiter-from-cwd resolver + the isolation substrate
+			// (`ensureMirror` + the job-worktree `doDriver` + reap), threading the
+			// arbiter URL into the NEW isolated advance-tick runner. `--isolated` is the
+			// only ISOLATION axis here: `advance --remote <url>` is a SEPARATE concern
+			// (the action already TYPES `flags.remote` via `DoFlags`, but no `--remote`
+			// plumbing exists on `advance` — see `## Decisions`), so `--isolated` always
+			// resolves the arbiter from the CWD.
+			if (flags.isolated === true) {
+				// BOOTSTRAP resolution (global + flags, no per-repo layer) supplies the
+				// host-only keys needed to even reach the arbiter (`workspacesDir`,
+				// `identity`), exactly as `do --isolated` bootstraps them.
+				const bootstrap = resolveGlobalConfig(global, doOverrides);
+				const arbiterName =
+					flags.arbiter ??
+					resolveDefaultArbiterForCwd(cwd, global, doOverrides);
+				const arbiterUrl = resolveArbiterUrlFromCheckout(
+					cwd,
+					arbiterName,
+					identityEnv(bootstrap.identity, process.env),
+				);
+				if (arbiterUrl === undefined) {
+					// The SAME clear "isolated against what?" error `do --isolated` gives —
+					// naming `--remote <url>` as the foreign-repo alternative, NOT a
+					// downstream URL-parse failure.
+					console.error(
+						`error: --isolated advances in a worktree off this repo's arbiter ` +
+							`('${arbiterName}'), but no such arbiter remote is configured/found ` +
+							`here. Run inside a participating repo (a clone with an arbiter ` +
+							`remote), or use --remote <url> to target another repo.`,
+					);
+					process.exit(1);
+				}
+				// Source the arbiter's COMMITTED `.agent-runner.json` from `<arbiter>/main`
+				// via the hub mirror + layer ONLY its whitelisted keys — the SAME
+				// resolution `do --isolated` uses, so the gate family (autoBuild/autoSlice/
+				// observationTriage/surfaceBlockers) + selectionOrder + integration resolve
+				// off the arbiter exactly as the in-place advance resolves them off cwd.
+				const remoteConfig = resolveRemoteRepoConfig({
+					remote: arbiterUrl,
+					workspacesDir: bootstrap.workspacesDir,
+					global,
+					flags: doOverrides,
+					identity: bootstrap.identity,
+					note: (message) => console.error(`>> ${message}`),
+				});
+				if (doNeedsAgentCmd(remoteConfig)) {
+					console.error(`error: ${NO_AGENT_CMD_MESSAGE}`);
+					process.exit(1);
+				}
+				const isoHarness = createHarness({
+					harness: remoteConfig.harness,
+					piBin: remoteConfig.piBin,
+				});
+				// The base `do` options the build/slice rungs ORCHESTRATE through the
+				// INJECTED job-worktree driver (the isolated advance-tick runner wires it).
+				const isoDoOptions: Omit<DoOptions, 'arg'> = {
+					cwd,
+					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
+					identity: remoteConfig.identity,
+					autoSlice: remoteConfig.autoSlice,
+					integration: remoteConfig.integration,
+					prepare: remoteConfig.prepare,
+					verify: remoteConfig.verify,
+					provider: remoteConfig.provider,
+					harness: isoHarness,
+					agentCmd: remoteConfig.agentCmd,
+					model: remoteConfig.model,
+					sessionsDir: remoteConfig.sessionsDir,
+					review: remoteConfig.review,
+					autoMerge: remoteConfig.autoMerge,
+					reviewModel: remoteConfig.reviewModel,
+					reviewMaxRounds: remoteConfig.reviewMaxRounds,
+					reviewGate: remoteConfig.review
+						? harnessReviewGate({
+								harness: isoHarness,
+								agentCmd: remoteConfig.agentCmd,
+							})
+						: undefined,
+					reviewLoop: remoteConfig.slicerLoop
+						? harnessSliceReviewGate({
+								harness: isoHarness,
+								agentCmd: remoteConfig.agentCmd,
+							})
+						: undefined,
+					slicerLoopMax: remoteConfig.slicerLoopMax,
+					slicerLoopModel: remoteConfig.slicerLoopModel,
+					sliceReviewGate: remoteConfig.review
+						? harnessSliceAcceptanceGate({
+								harness: isoHarness,
+								agentCmd: remoteConfig.agentCmd,
+							})
+						: undefined,
+					color: shouldUseColor(process.stdout),
+					note: (message) => console.error(`>> ${message}`),
+					noteBlock: (message) => console.error(message),
+				};
+				// The shared per-item ISOLATED advance CONTEXT (everything BUT `arg` and
+				// `cwd`/`doDriver`, which the runner supplies from the isolated clone).
+				const isoContext: IsolatedAdvanceContext & {
+					env: NodeJS.ProcessEnv;
+				} = {
+					remote: arbiterUrl,
+					workspacesDir: remoteConfig.workspacesDir,
+					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
+					doOptions: isoDoOptions,
+					surfaceGate: harnessSurfaceGate({
+						harness: isoHarness,
+						agentCmd: remoteConfig.agentCmd,
+					}),
+					surfaceModel: remoteConfig.model,
+					observationTriage: remoteConfig.observationTriage,
+					triageGate: harnessTriageGate({
+						harness: isoHarness,
+						agentCmd: remoteConfig.agentCmd,
+					}),
+					triageModel: remoteConfig.model,
+					note: (message) => console.error(`>> ${message}`),
+					env: process.env,
+				};
+
+				// DISPATCH the variadic grammar, ISOLATED + SEQUENTIAL (mirrors
+				// `do --isolated`): zero args / `-n` -> AUTO-PICK over the mirror-side
+				// eligible-pool scan; many named -> those in sequence; one named -> the
+				// single isolated tick. `-n` stays ALWAYS SEQUENTIAL (US #25).
+				if (args.length === 0 || count !== undefined) {
+					const multi = await performAdvanceIsolatedAuto({
+						...isoContext,
+						config: remoteConfig,
+						count,
+						warn: (message) => console.error(`>> ${message}`),
+						lifecycleGates: {
+							triage: remoteConfig.observationTriage !== 'off',
+							surface: remoteConfig.surfaceBlockers,
+						},
+					});
+					console.error(`>> ${multi.message}`);
+					process.exit(multi.exitCode);
+				}
+				if (args.length > 1) {
+					const multi = await performAdvanceIsolatedArgs(args, {
+						...isoContext,
+						config: remoteConfig,
+					});
+					console.error(`>> ${multi.message}`);
+					process.exit(multi.exitCode);
+				}
+				// Exactly one named item: the single ISOLATED advance tick.
+				const result = await performAdvanceIsolated({
+					...isoContext,
+					arg: args[0],
+				});
+				if (result.exitCode !== 0) {
+					console.error(`error: ${result.message}`);
+				}
+				process.exit(result.exitCode);
+			}
+
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
