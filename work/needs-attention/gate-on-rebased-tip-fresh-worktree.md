@@ -76,3 +76,26 @@ git fetch origin && git switch -c work/gate-on-rebased-tip-fresh-worktree origin
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/gate-on-rebased-tip-fresh-worktree.md work/done/gate-on-rebased-tip-fresh-worktree.md
 ```
+
+## Needs attention
+
+The slice's load-bearing premise — that the fresh-worktree gate can land in the SHARED gate→integrate band (`integration-core.ts`) and "benefit `run`" while default-ON, without regression — does NOT hold for `run`'s CONCURRENT merge-mode integration. Implementing it exactly as specified breaks these existing, deterministic contracts (confirmed by repeated runs; base is green, the change is red):
+
+- `test/run.test.ts` › "claims at most maxParallel items then stops"
+- `test/run.test.ts` › "two same-repo jobs both integrate under the merge path (claim + integration safe under concurrency)"
+- `test/run-loop.test.ts` › "runs TWO same-repo items via the bare mirror CONCURRENTLY (merge)"
+- `test/advance-registry-set.test.ts` and `test/run-uses-advance-tick.test.ts` › the calm-gates run-tick OUTCOME-equivalence tests
+
+Root cause (verified by instrumenting the merge push): `run` integrates concurrent same-repo jobs to `main` with a PLAIN, non-retried `${branch}:main` push (`src/integrator.ts` `integrate`, merge mode) and NO per-repo integrate serialization (only the CLAIM is serialized via `claimLock` in `src/run.ts` ~L300-306; the comment at ~L312-320 explicitly says integration is "fully concurrent"). Today this only works because each job's step-4 rebase + sync push happen tightly enough that the second job rebases onto the first's already-pushed merge and fast-forwards. The fresh-worktree gate necessarily inserts pre-integrate work (a `git worktree add` off the shared bare mirror + a rebase + `prepare`+`verify` in the throwaway worktree) BETWEEN the agent and the integrate, which widens the rebase→push window so BOTH concurrent jobs rebase onto the SAME pre-merge base, then the loser's `${branch}:main` push is rejected non-fast-forward.
+
+Why the two obvious in-band fixes do not work:
+1. Re-rebase-and-retry on a stale merge push (the principled fix) re-rebases the loser onto the winner's merge, which legitimately CONFLICTS on the test fixtures' shared `agent-output.txt` (each slice writes different content to the same file via the `editingAgent`), so the loser routes to `needs-attention` (rebase-conflict) → `claimedAndDone=1`, still failing the "both reach done" assertion.
+2. Per-repo integrate serialization (mirroring `claimLock`) makes it deterministic but gives the same `claimedAndDone=1` for genuinely-conflicting slices — and it changes `run`'s settled "integration is fully concurrent" model.
+
+Both fixes touch a SEPARATE, settled component (`src/integrator.ts` / `src/run.ts` concurrency model) and STILL cannot satisfy the existing contract that two genuinely-conflicting concurrent merges both reach `done` (a property the base only achieves by benign timing). That is a maintainer-level design decision, not a self-contained factual gap, and the slice neither mentions nor sanctions it. The slice's own "Done" bar (`pnpm -r build && pnpm -r test && pnpm -r format:check` green) is therefore unreachable as specified.
+
+Suggested re-scope (pick one, human decision):
+(a) Make `run`'s merge-to-main integration genuinely concurrency-safe FIRST — either a per-repo integrate lock or a bounded rebase-retry on a non-fast-forward `${branch}:main` push — AND update the "two concurrent same-repo merges both reach done" tests to reflect that two slices which genuinely conflict route one to needs-attention (only non-conflicting concurrent merges both land). Then this slice's default-ON shared-band gate lands cleanly. Make that a `blockedBy:` of this slice.
+(b) Narrow this slice: keep the fresh-worktree gate default-ON for the SINGLE-job paths (`do` in-place / `--isolated` / `--remote` / `complete`, all of which pass with the implemented design) but DEFAULT IT OFF (or gate it off) for the concurrent `run` fleet path until (a) is done — explicitly carving `run` out of "all paths benefit by default", which contradicts the slice's current text and so needs maintainer sign-off.
+
+Everything else in the slice was implemented and green against the implemented design (the `freshWorktreeGate` config field + full precedence chain modelled on `slicerLoop`; the read-only rebased-tip gate via a throwaway detached worktree that never touches `cwd`; reaping with no leak; prepare-before-verify in the fresh worktree; gate-failed/prepare-failed/rebase-conflict routing; the OFF-path byte-for-byte; the drive-backlog Gate-3-subsumption note; new + updated tests). The blocker is solely the `run` concurrent-merge regression above, which is out of this slice's scope to resolve.
