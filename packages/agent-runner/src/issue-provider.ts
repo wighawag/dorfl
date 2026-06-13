@@ -1,6 +1,10 @@
 import {run, type RunResult} from './git.js';
 import {DEFAULT_GH_BIN} from './github.js';
-import {ghFailureReason} from './gh-failure.js';
+import {
+	GH_BINARY_MISSING,
+	ghFailureDetail,
+	ghFailureReason,
+} from './gh-failure.js';
 import {brand} from './brand.js';
 
 /**
@@ -373,10 +377,7 @@ export class GitHubIssueProvider implements IssueProvider {
 		// "unavailable or unauthenticated" guess (the misattribution already removed
 		// from `mutateLabel`/`closeIssue`; this was the last contagion source).
 		if (result === undefined || result.status !== 0) {
-			const reason =
-				result === undefined
-					? '`gh` is not available (binary missing).'
-					: ghFailureReason(result);
+			const reason = ghFailureDetail(result);
 			return {
 				posted: false,
 				instruction:
@@ -407,7 +408,7 @@ export class GitHubIssueProvider implements IssueProvider {
 		// `gh` stderr via `ghFailureReason` — NOT a hard-coded "unavailable or
 		// unauthenticated" guess (the misattribution bug already fixed in `mutateLabel`).
 		if (result === undefined) {
-			const reason = '`gh` is not available (binary missing).';
+			const reason = GH_BINARY_MISSING;
 			return {
 				closed: false,
 				reason,
@@ -446,10 +447,10 @@ export class GitHubIssueProvider implements IssueProvider {
 				outcome: 'failed',
 				supported: false,
 				labels: [],
-				reason: '`gh` is not available (binary missing).',
+				reason: GH_BINARY_MISSING,
 				instruction:
 					`could not read the labels on issue #${input.issueNumber}: ` +
-					'`gh` is not available (binary missing).',
+					GH_BINARY_MISSING,
 			};
 		}
 		if (result.status !== 0) {
@@ -551,10 +552,10 @@ export class GitHubIssueProvider implements IssueProvider {
 			return {
 				outcome: 'failed',
 				applied: false,
-				reason: '`gh` is not available (binary missing).',
+				reason: GH_BINARY_MISSING,
 				instruction:
 					`could not ${verb} the \`${input.label}\` label on issue ` +
-					`#${input.issueNumber}: \`gh\` is not available (binary missing).`,
+					`#${input.issueNumber}: ${GH_BINARY_MISSING}`,
 			};
 		}
 		if (result.status !== 0) {
@@ -648,9 +649,7 @@ export class GitHubIssueProvider implements IssueProvider {
 	/** Parse a `gh --json` read, THROWING a clear error on any failure. */
 	private parseJson(result: RunResult | undefined, action: string): unknown {
 		if (result === undefined) {
-			throw new Error(
-				`failed to ${action}: \`gh\` is not available (binary missing).`,
-			);
+			throw new Error(`failed to ${action}: ${GH_BINARY_MISSING}`);
 		}
 		if (result.status !== 0) {
 			throw new Error(
