@@ -3,7 +3,9 @@ import {Command, Option} from 'commander';
 import type {Command as Commander} from 'commander';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
-import {realpathSync} from 'node:fs';
+import {realpathSync, mkdirSync, rmSync} from 'node:fs';
+import {join as joinPath} from 'node:path';
+import {git} from './git.js';
 import {
 	loadConfig,
 	mergeConfig,
@@ -46,7 +48,7 @@ import {
 	performAdvanceArgs,
 	type AdvanceMultiResult,
 } from './advance-drivers.js';
-import {advanceRunTick} from './advance-loop-driver.js';
+import {advanceRegistrySetRunTick} from './advance-loop-driver.js';
 import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
 import {
 	performDoAuto,
@@ -64,7 +66,11 @@ import {
 	REPO_CONFIG_FILENAME,
 	type LoadedRepoConfig,
 } from './repo-config.js';
-import {ensureMirror, readRepoConfigFromMirrorMain} from './repo-mirror.js';
+import {
+	ensureMirror,
+	readRepoConfigFromMirrorMain,
+	encodeRepoKey,
+} from './repo-mirror.js';
 import {identityEnv, type Identity} from './identity.js';
 import {
 	harnessFlagOverrides,
@@ -207,101 +213,114 @@ function resolveRemoteRepoConfig(options: {
 }
 
 /**
- * Build the {@link RunTick} that `run --advance <mirror>` loops: the ADVANCE tick
- * over the given hub mirror's eligible pool, wired through the deliberate
- * {@link RunTick} swap seam so the loop machinery (`runLoop`) is UNCHANGED.
+ * Build the {@link RunTick} that **plain `run`** (no flag) loops: the REGISTRY-SET
+ * ADVANCE tick (slice `run-uses-advance-tick`). This points the deliberate
+ * {@link RunTick} swap seam at the precursor's registry-set advance driver
+ * ({@link advanceRegistrySetRunTick}) instead of the build-only `runOnce` tick, so
+ * plain `run` ≡ advance with calm-default gates: behaviour-preserving today
+ * (both lifecycle gates default off ⇒ build ready slices / slice ready PRDs /
+ * route failures to needs-attention, over the SAME registry-set discovery +
+ * per-mirror job-worktree isolation the build tick used), lifecycle-capable the
+ * moment a gate is flipped (triage / surface / apply).
  *
- * The mirror-side eligible-pool SCAN reads the bare mirror's committed `main`
- * (read-only, the `mirror-side-eligible-pool-scan` substrate); each selected item
- * is run through {@link advanceRunTick}, which holds the per-item `advancing`
- * borrow inside `performAdvance` and orchestrates the EXISTING `do`/`do prd:`
- * build/slice path IN-PLACE in the cwd checkout (`run`'s cross-repo
- * mirror→worktree build substrate is the separate `run-daemon-reframe` work this
- * does NOT duplicate — see this slice's `## Decisions`). The per-action gate
- * family is honoured at the SELECTION layer by the mirror scan (build→`autoBuild`,
- * slice→`autoSlice`); surface/apply/triage gating lives inside the tick.
+ * Where the deprecated single-mirror advance wiring drained ONE named mirror
+ * IN-PLACE in the cwd checkout (the library {@link advanceRunTick}, now reached
+ * only by the precursor's single-mirror tests, no longer the CLI), this discovers
+ * the WHOLE registry via
+ * `scan(config)` (the SAME discovery the build tick uses) and the registry-set
+ * driver threads a PER-MIRROR job-worktree `doDriver` so each mirror's build/slice
+ * rungs run isolated off THAT mirror's arbiter (NOT `process.cwd()`). The
+ * tree-less surface/triage/apply rungs commit in a per-mirror working CLONE of the
+ * mirror's arbiter (materialised lazily under the agents' workspace), since a bare
+ * hub mirror has no work tree to `git mv`/`git commit` in.
  */
-function buildAdvanceRunTick(options: {
-	mirror: string;
+function buildRegistrySetAdvanceTick(options: {
 	config: Config;
 	workspace: string;
 	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
 }): RunTick {
-	const {mirror, config, workspace, arbiter, env} = options;
-	// Ensure (create/fetch) the bare hub mirror ONCE up front so the per-batch pool
-	// scan reads the freshest committed `main`. Idempotent with the one each tick's
-	// orchestrated `do` may run (a fetch, never a re-clone).
+	const {config, workspace, arbiter, env} = options;
 	const gitEnv = identityEnv(config.identity, env);
-	const mirrorHandle = ensureMirror({
-		url: mirror,
-		workspacesDir: workspace,
-		env: gitEnv,
-	});
-	const cwd = process.cwd();
 	const harness = createHarness({harness: config.harness, piBin: config.piBin});
-	// The base `do` options the build/slice rungs ORCHESTRATE `performDo` with
-	// (the ONE build path / ONE slice path), IN-PLACE in the cwd checkout — the SAME
-	// shape the in-place `advance` command builds.
-	const doOptions: Omit<DoOptions, 'arg'> = {
-		cwd,
-		arbiter: arbiter ?? config.defaultArbiter,
-		identity: config.identity,
-		autoSlice: config.autoSlice,
-		integration: config.integration,
-		verify: config.verify,
-		provider: config.provider,
-		harness,
-		agentCmd: config.agentCmd,
-		model: config.model,
-		sessionsDir: config.sessionsDir,
-		review: config.review,
-		autoMerge: config.autoMerge,
-		reviewModel: config.reviewModel,
-		reviewMaxRounds: config.reviewMaxRounds,
-		reviewGate: config.review
-			? harnessReviewGate({harness, agentCmd: config.agentCmd})
-			: undefined,
-		reviewLoop: config.slicerLoop
-			? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
-			: undefined,
-		slicerLoopMax: config.slicerLoopMax,
-		slicerLoopModel: config.slicerLoopModel,
-		sliceReviewGate: config.review
-			? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
-			: undefined,
-		color: shouldUseColor(process.stdout),
-		note: (message) => console.error(`>> ${message}`),
-		noteBlock: (message) => console.error(message),
-	};
-	// The per-item advance CONTEXT (everything BUT `arg`): the SAME context the
-	// one-shot driver threads, surface/apply ALWAYS allowed, triage's ask-vs-auto
-	// distinction read from `observationTriage` (the SELECTION-layer `off` gate is
-	// applied earlier by the lifecycle pool gate).
-	const context: AdvanceContext = {
-		cwd,
-		arbiter: arbiter ?? config.defaultArbiter,
-		doOptions,
-		surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
-		surfaceModel: config.model,
-		observationTriage: config.observationTriage,
-		triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
-		triageModel: config.model,
-		note: (message) => console.error(`>> ${message}`),
-	};
-	return advanceRunTick({
-		mirrorPath: mirrorHandle.path,
+	return advanceRegistrySetRunTick({
 		config,
-		context,
-		// The SELECTION-layer gates for the loop/CI path: `observationTriage != off`
-		// enumerates the observation (triage) pool; `surfaceBlockers` enumerates the
-		// `needsAnswers`-blocked (surface) pool. `off`/`false` drops the respective
-		// pool (the item is left silently blocked / untouched). The two gates are
-		// orthogonal peers. Mirrors the in-place one-shot auto-pick wiring so loop/CI
-		// agrees with the laptop. Apply (consume) is always-on (never gated here).
+		workspace,
+		// The SELECTION-layer gates for the loop/CI path, IDENTICAL to the
+		// single-mirror wiring above: `observationTriage != off` enumerates the
+		// observation (triage) pool; `surfaceBlockers` enumerates the `needsAnswers`-
+		// blocked (surface) pool. `off`/`false` drops the respective pool. Apply
+		// (consume) is always-on (never gated here). Both default to their calm state,
+		// so plain `run` out of the box is behaviour-identical to the old build tick.
 		lifecycleGates: {
 			triage: config.observationTriage !== 'off',
 			surface: config.surfaceBlockers,
+		},
+		// Build the per-mirror advance CONTEXT the registry-set driver injects its
+		// per-mirror job-worktree `doDriver` on top of: the build/slice `doOptions`
+		// base + the surface/triage gate seams + a tree-less working clone of THIS
+		// mirror's arbiter (the ledger-write cwd the surface/triage/apply rungs commit
+		// in — a bare mirror cannot `git mv`/`git commit`).
+		contextFor: ({mirrorPath, originUrl}) => {
+			// A per-mirror working clone of the mirror's arbiter for the tree-less
+			// lifecycle rungs (surface/triage/apply). Keyed by the mirror's repo key so
+			// distinct mirrors get distinct clones; re-created fresh each tick so the
+			// rungs always commit onto the latest mirror `main` (idempotent, cheap
+			// local clone). The build/slice rungs DO NOT use this cwd (the worktree
+			// `doDriver` replaces it); it serves ONLY the tree-less moves.
+			const treelessCwd = joinPath(
+				workspace,
+				'advance-cwd',
+				encodeRepoKey(originUrl).split('/').join('__'),
+			);
+			rmSync(treelessCwd, {recursive: true, force: true});
+			mkdirSync(joinPath(treelessCwd, '..'), {recursive: true});
+			git(['clone', '--quiet', mirrorPath, treelessCwd], workspace, {
+				env: gitEnv,
+			});
+			const doOptions: Omit<DoOptions, 'arg'> = {
+				cwd: treelessCwd,
+				arbiter: arbiter ?? config.defaultArbiter,
+				identity: config.identity,
+				autoSlice: config.autoSlice,
+				integration: config.integration,
+				verify: config.verify,
+				provider: config.provider,
+				harness,
+				agentCmd: config.agentCmd,
+				model: config.model,
+				sessionsDir: config.sessionsDir,
+				review: config.review,
+				autoMerge: config.autoMerge,
+				reviewModel: config.reviewModel,
+				reviewMaxRounds: config.reviewMaxRounds,
+				reviewGate: config.review
+					? harnessReviewGate({harness, agentCmd: config.agentCmd})
+					: undefined,
+				reviewLoop: config.slicerLoop
+					? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
+					: undefined,
+				slicerLoopMax: config.slicerLoopMax,
+				slicerLoopModel: config.slicerLoopModel,
+				sliceReviewGate: config.review
+					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+					: undefined,
+				color: shouldUseColor(process.stdout),
+				note: (message) => console.error(`>> ${message}`),
+				noteBlock: (message) => console.error(message),
+			};
+			const context: AdvanceContext = {
+				cwd: treelessCwd,
+				arbiter: arbiter ?? config.defaultArbiter,
+				doOptions,
+				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
+				surfaceModel: config.model,
+				observationTriage: config.observationTriage,
+				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
+				triageModel: config.model,
+				note: (message) => console.error(`>> ${message}`),
+			};
+			return context;
 		},
 	});
 }
@@ -356,15 +375,16 @@ function promptForWorktreesRoot(suggestion: string): Promise<string> {
 interface RunFlags extends ScanFlags {
 	once?: boolean;
 	/**
-	 * `run --advance <mirror>` SWAPS the looped tick from the BUILD tick to the
-	 * ADVANCE tick (PRD `advance-loop`, slice `advance-drivers-and-gates`, US #7):
-	 * loop the advance tick over the mirror-side eligible pool, each item
-	 * `advancing`-lock-guarded inside the tick, until a stop bound. `run` ≡ CI —
-	 * the SAME tick, a different substrate; the loop machinery (`runLoop`) is
-	 * unchanged (the deliberate {@link RunTick} swap seam). The value is the bare
-	 * hub mirror URL/path whose committed `main` carries the pool to drain.
+	 * `run --advance` is a DEPRECATED NO-OP ALIAS (slice `run-uses-advance-tick`).
+	 * Plain `run` (no flag) now ALREADY drives the registry-set ADVANCE tick with
+	 * calm-default gates, so there is no longer a separate advance MODE to opt into:
+	 * passing `--advance` warns + is otherwise ignored (it does NOT change the tick,
+	 * which is already advance). Kept so an existing `run --advance` invocation does
+	 * not break; it carries NO value (the old `--advance <mirror>` single-mirror
+	 * form is gone — the daemon discovers the WHOLE registry via `scan(config)`, the
+	 * SAME discovery the build tick used).
 	 */
-	advance?: string;
+	advance?: boolean;
 	maxIterations?: string;
 	maxDuration?: string;
 	interval?: string;
@@ -792,8 +812,8 @@ export function buildProgram(): Command {
 			'run a SINGLE supervised tick then stop — the debug/test affordance on the daemon (NOT the CI path; CI uses `do`)',
 		)
 		.option(
-			'--advance <mirror>',
-			'SWAP the looped tick from BUILD to ADVANCE: loop the advance tick over the given hub-mirror`s eligible pool (mirror-side scan), each item `advancing`-lock-guarded, until a stop bound. `run` ≡ CI (same tick, different substrate); the loop machinery is unchanged. The value is the bare hub mirror URL/path to drain.',
+			'--advance',
+			'DEPRECATED no-op alias: plain `run` ALREADY drives the registry-set advance tick (build/slice with calm-default gates; flip observationTriage / surfaceBlockers for the lifecycle). Passing this warns and is otherwise ignored. The old `--advance <mirror>` single-mirror form is gone — the daemon discovers the whole registry via scan.',
 		)
 		.option(
 			'--max-iterations <n>',
@@ -890,21 +910,32 @@ export function buildProgram(): Command {
 			const reviewGate = config.review ? harnessReviewGate() : undefined;
 			const onWarn = (message: string) => console.error(`>> ${message}`);
 
-			// `run --advance <mirror>` SWAPS the looped tick from the BUILD tick
-			// (`runOnce`) to the ADVANCE tick via the deliberate {@link RunTick} swap
-			// seam: loop the advance tick over the mirror-side eligible pool, each item
-			// `advancing`-lock-guarded inside `performAdvance`. The loop machinery
-			// (`runLoop`) is UNCHANGED — `run` ≡ CI, same tick, different substrate.
-			// Default (no flag) ⇒ undefined ⇒ the build tick (`runOnce`) as today.
-			const advanceTick = flags.advance
-				? buildAdvanceRunTick({
-						mirror: flags.advance,
-						config,
-						workspace,
-						arbiter: flags.arbiter,
-						env: process.env,
-					})
-				: undefined;
+			// Plain `run` (no flag) NOW drives the REGISTRY-SET ADVANCE tick as its
+			// per-item unit (slice `run-uses-advance-tick`), via the deliberate
+			// {@link RunTick} swap seam: the loop machinery (`runLoop`) is UNCHANGED, the
+			// tick it loops is the precursor's registry-set advance driver instead of the
+			// build-only `runOnce`. With BOTH lifecycle gates at their calm defaults
+			// (observationTriage off, surfaceBlockers off) the advance tick degrades to
+			// EXACTLY the old build tick's behaviour over the SAME substrate (registry-set
+			// discovery + per-mirror job-worktree isolation) — behaviour-preserving today;
+			// flip a gate and the SAME tick performs the lifecycle (triage/surface/apply).
+			// `run` ≡ CI: the same advance tick, a different cadence.
+			const advanceTick = buildRegistrySetAdvanceTick({
+				config,
+				workspace,
+				arbiter: flags.arbiter,
+				env: process.env,
+			});
+			// `--advance` is now a DEPRECATED NO-OP ALIAS: plain `run` already IS advance,
+			// so there is no separate mode to opt into. Warn (but do not fail) so an
+			// existing `run --advance` invocation keeps working without surprise.
+			if (flags.advance) {
+				onWarn(
+					'`run --advance` is deprecated and ignored: plain `run` already runs the ' +
+						'advance tick (build/slice with calm-default gates; set observationTriage ' +
+						'/ surfaceBlockers for the lifecycle).',
+				);
+			}
 
 			const printTick = (result: RunOnceResult): void => {
 				if (flags.json) {
@@ -922,9 +953,9 @@ export function buildProgram(): Command {
 			// `run --once` = ONE debug tick (NOT the CI path; CI is `do`). The existing
 			// `runOnce` IS this tick.
 			if (flags.once) {
-				// The advance tick (when `--advance`) IS a RunTick, so `run --once`
-				// debug-ticks it identically to the build tick.
-				const result = await (advanceTick ?? runOnce)({
+				// The advance tick IS a RunTick, so `run --once` debug-ticks it (one
+				// registry-set advance batch) identically to how it looped.
+				const result = await advanceTick({
 					config,
 					workspace,
 					reviewGate,
@@ -956,8 +987,8 @@ export function buildProgram(): Command {
 					workspace,
 					reviewGate,
 					onWarn,
-					// The swap seam: when `--advance` is set, the loop drives the ADVANCE
-					// tick (over the mirror pool); otherwise the default BUILD tick.
+					// The swap seam: plain `run` ALWAYS drives the registry-set ADVANCE tick
+					// (build/slice with calm-default gates; the lifecycle when a gate is on).
 					tick: advanceTick,
 					maxIterations:
 						flags.maxIterations !== undefined

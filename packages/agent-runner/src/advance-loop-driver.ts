@@ -542,6 +542,108 @@ export function advanceRunTick(deps: AdvanceRunTickDeps): RunTick {
 }
 
 /**
+ * The deps the {@link advanceRegistrySetRunTick} adapter closes over — everything
+ * the {@link advanceRegistrySet} batch needs that the generic per-tick
+ * {@link RunOnceOptions} does NOT carry. This is the REGISTRY-SET twin of
+ * {@link AdvanceRunTickDeps}: where that adapter drives ONE named mirror in-place
+ * ({@link advanceRunTick}), this one discovers the WHOLE registry via
+ * `scan(config)` and runs each mirror's pool in a per-mirror job worktree — the
+ * substrate `run` needs so plain `run` (no flag) ≡ advance with calm-default gates.
+ * The CLI builds these ONCE (the resolved config, the per-mirror advance-context
+ * factory, the execution workspace) and hands them to {@link advanceRegistrySetRunTick};
+ * the loop ({@link runLoop}) then drives the resulting tick exactly as it drove the
+ * build tick.
+ */
+export interface AdvanceRegistrySetRunTickDeps extends Omit<
+	AdvanceRegistrySetOptions,
+	'warn' | 'env' | 'report'
+> {
+	/* `contextFor`/`config`/`workspace`/`run`/`read`/`lifecycleGates` are inherited
+	 * from {@link AdvanceRegistrySetOptions} (lifecycle gates born OFF). */
+}
+
+/**
+ * Adapt the REGISTRY-SET advance DRIVER ({@link advanceRegistrySet}) onto the
+ * {@link RunTick} swap SEAM so plain `run` (no flag) drives the ADVANCE tick over
+ * the WHOLE registry instead of the build tick (`runOnce`) — the slice
+ * `run-uses-advance-tick`. `run.ts` deliberately writes {@link runLoop} against
+ * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop design can
+ * swap the tick WITHOUT re-architecting the loop; this is that swap, now pointing
+ * the seam at the REGISTRY-SET advance driver the precursor built (registry-set
+ * discovery + per-mirror job-worktree isolation — the SAME substrate plain `run`'s
+ * build tick uses).
+ *
+ * Under calm gates (both lifecycle create-gates off) this is the OBSERVABLE-
+ * OUTCOME equivalent of plain `run`'s build tick over the same registry: build
+ * ready slices / slice ready PRDs, each per-job-worktree-isolated off the
+ * mirror's arbiter, same integration result; touch no observations, surface no
+ * questions. Flip a gate and the SAME tick performs the lifecycle
+ * (triage / surface / apply) for free — no separate `--advance` mode to discover.
+ *
+ * The seam is `(RunOnceOptions) => Promise<RunOnceResult>`; one registry-set
+ * batch is `(AdvanceRegistrySetOptions) => Promise<AdvanceRegistrySetResult>`. The
+ * deps the batch needs that the generic per-tick options do NOT carry (the config,
+ * the per-mirror context factory, the workspace) are CLOSED OVER here; the
+ * per-tick `RunOnceOptions` contribute only the cross-cutting seams that DO
+ * generalise — `onWarn` (the warning sink) and `env` (the git env). The batch's
+ * own registry discovery supersedes `RunOnceOptions.report` (the build tick's
+ * checkout scan), so that field is ignored for the advance tick.
+ */
+export function advanceRegistrySetRunTick(
+	deps: AdvanceRegistrySetRunTickDeps,
+): RunTick {
+	return async (options: RunOnceOptions): Promise<RunOnceResult> => {
+		const result = await advanceRegistrySet({
+			config: deps.config,
+			contextFor: deps.contextFor,
+			workspace: deps.workspace,
+			run: deps.run,
+			read: deps.read,
+			lifecycleGates: deps.lifecycleGates,
+			// Cross-cutting seams that DO generalise come from the per-tick options
+			// (the SAME ones the build tick receives) — so the `run` daemon threads its
+			// warning sink + git env to the advance tick identically.
+			warn: options.onWarn,
+			env: options.env,
+		});
+		return registrySetToRunOnceResult(result);
+	};
+}
+
+/**
+ * Project a whole REGISTRY-SET advance batch onto a {@link RunOnceResult} so the
+ * existing run loop aggregates + reports it with NO advance-specific code. Each
+ * mirror's per-item results are flattened (the `repoPath` is that mirror; the
+ * `slug` is the advanced arg), reusing the SAME per-item status mapping the
+ * single-mirror {@link batchToRunOnceResult} uses — so the loop's convergence
+ * signal (`claimedAndDone` falls to 0 once every pool idles) holds across the
+ * registry exactly as it does for one mirror.
+ */
+function registrySetToRunOnceResult(
+	result: AdvanceRegistrySetResult,
+): RunOnceResult {
+	const items: ItemResult[] = result.mirrors.flatMap(({mirrorPath, batch}) =>
+		batch.items.map(({arg, result: r}) => ({
+			repoPath: mirrorPath,
+			slug: arg,
+			status: advanceOutcomeToItemStatus(r),
+			detail: r.message,
+		})),
+	);
+	const claimedAndDone = items.filter(
+		(i) => i.status === 'claimed-done',
+	).length;
+	const skipped = items.filter(
+		(i) => i.status === 'lost-race' || i.status === 'claim-contended',
+	).length;
+	const needsAttention = items.filter(
+		(i) => i.status === 'needs-attention',
+	).length;
+	const failed = needsAttention;
+	return {claimedAndDone, skipped, failed, needsAttention, items};
+}
+
+/**
  * Project one advance batch onto a {@link RunOnceResult} so the existing run loop
  * aggregates + reports it with NO advance-specific code. The `repoPath` is the
  * mirror (the one repo this batch drains); the `slug` is the advanced arg.

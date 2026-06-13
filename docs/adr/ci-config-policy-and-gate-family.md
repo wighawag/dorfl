@@ -32,9 +32,11 @@ to expose a `do`-vs-`advance` choice in CI: the generated workflow ALWAYS invoke
 the most confusing decision from the user's head.
 
 (The same logic applies to the laptop daemon `run`; unifying `run` onto the
-advance tick is a sibling engine change, captured as its own work item, not part of
-this ADR. The advance loop driver already reuses `run`'s parallel scheduler, so the
-swap is the one the advance-loop design explicitly anticipated.)
+advance tick is a sibling engine change, LANDED as slice `run-uses-advance-tick`
+(plain `run` now drives the registry-set advance tick, `run --advance` is a
+deprecated no-op alias), not part of this ADR. The advance loop driver reuses
+`run`'s parallel scheduler + per-mirror job-worktree isolation, so the swap is the
+one the advance-loop design explicitly anticipated.)
 
 ### 2. No `autoAdvance` gate. Question-surfacing is TWO independent gate-family members
 
@@ -144,10 +146,17 @@ one (create, gated), that distinction must be added before apply mints followups
 `observationTriage` is an ENUM coercion like `integration`), the CLI flags
 (`do-config.ts`/`cli.ts`), and the read site at the advance lifecycle rungs.
 
-They govern the ADVANCE LIFECYCLE path (advance auto-pick, `advance -n`,
-`run --advance`). Plain `run` (build-only) and `do` have no triage/surface/apply
-rungs, so the two gates are no-ops there, correctly the calm build-only shape by
-construction.
+They govern the ADVANCE LIFECYCLE path. As of slice `run-uses-advance-tick`, that
+INCLUDES PLAIN `run`: the laptop daemon's per-item unit is now the registry-set
+ADVANCE tick (not the old build-only `runOnce`), so plain `run` ≡ advance and
+honours both gates. With them at their calm defaults (`observationTriage: off`,
+`surfaceBlockers: off`) the advance tick degrades to EXACTLY the old build-only
+shape over the SAME substrate (registry-set discovery + per-mirror job-worktree
+isolation) — behaviour-preserving — and flipping either gate lights up the
+lifecycle (triage / surface / apply) for free, with no separate mode to discover
+(`run --advance` is now a deprecated no-op alias). The path is thus: plain `run`,
+`advance` auto-pick, `advance -n`. `do` has no triage/surface/apply rungs, so the
+two gates are no-ops there, correctly the calm build-only shape by construction.
 
 Because they are normal `Config` fields, CI gets env-controllability for FREE: the
 generated workflow's `AGENT_RUNNER_*` env block (or a GitHub repo variable) sets
