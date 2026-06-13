@@ -768,8 +768,17 @@ async function runOneItem(
 		}
 		if (
 			core.outcome === 'review-blocked' ||
-			core.outcome === 'rebase-conflict'
+			core.outcome === 'rebase-conflict' ||
+			core.outcome === 'invariant-violation'
 		) {
+			// `invariant-violation`: the one-slug-one-folder guard FAILED LOUD (the
+			// arbiter already holds the slug in >1 status folder — a corrupt ledger).
+			// The core integrated NOTHING. On the LEAST-supervised caller this MUST
+			// NOT fall through to the SUCCESS branch (state:'done' / 'claimed-done'
+			// with no prUrl) — that would misreport a refusal as a completed job, the
+			// opposite of fail-loud. Route it to needs-attention like a rebase conflict
+			// (a human resolves the duplicate, then re-runs); `complete.ts` mirrors this
+			// refusal with exit 1.
 			updateJobRecord(tree.dir, {
 				state: 'needs-attention',
 				reason: core.reason,
