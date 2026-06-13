@@ -1,8 +1,12 @@
 import {mkdirSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
-import {git, runAsync} from './git.js';
+import {git} from './git.js';
 import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
 import {jobWorktreeDoDriver} from './do.js';
+import {
+	pushTreelessResult,
+	TREELESS_RUNGS,
+} from './advance-treeless-publish.js';
 import {
 	performAdvance,
 	type AdvanceContext,
@@ -379,78 +383,6 @@ export async function performAdvanceIsolatedArgs(
 		results.push(result);
 	}
 	return aggregate(results);
-}
-
-/**
- * The TREE-LESS rung kinds (slice `advance-isolated-one-shot` `## Decisions` #2)
- * — the rungs that commit the sidecar / `needsAnswers` / triage marker LOCALLY in
- * the tick cwd (a working clone of the arbiter) rather than going through `do`'s
- * build/slice integration. After one of these advances, the isolated runner
- * fast-forward-pushes the clone's `main` to the arbiter so the result LANDS on the
- * arbiter (a one-shot `advance --isolated` surface from a busy checkout would
- * otherwise commit only into the reaped clone and vanish). The `advancing` borrow
- * already serialised the item, and the surface/apply persist appends/clears under
- * the held lock, so this is a true fast-forward; we re-fetch + retry a bounded few
- * times if `main` advanced under us, mirroring the lock CAS's retry shape. The
- * build/slice rungs already pushed via the job-worktree `doDriver`, so they are NOT
- * in this set. NO new isolation MECHANISM — just a git ff-push of an already-
- * committed `main`.
- */
-const TREELESS_RUNGS = new Set(['surface', 'apply', 'triage-observation']);
-
-/**
- * Fast-forward-push the isolated clone's `main` to the arbiter after a tree-less
- * rung committed locally, so the sidecar / marker LANDS on the arbiter. Re-fetches
- * + retries a bounded few times if `main` advanced under us (NEVER `--force`); a
- * push that keeps failing is reported but does not crash the tick (the work is
- * still saved in the clone for the next pass / a human).
- */
-async function pushTreelessResult(params: {
-	cwd: string;
-	arbiter: string;
-	retries: number;
-	env: NodeJS.ProcessEnv | undefined;
-	note: (m: string) => void;
-}): Promise<void> {
-	const {cwd, arbiter, retries, env, note} = params;
-	for (let i = 0; i <= retries; i++) {
-		const push = await runAsync(
-			'git',
-			['push', '--quiet', arbiter, 'HEAD:main'],
-			cwd,
-			{env},
-		);
-		if (push.status === 0) {
-			return;
-		}
-		const contended = /non-fast-forward|rejected|fetch first|stale info/i.test(
-			push.stderr,
-		);
-		if (!contended || i === retries) {
-			note(
-				`advance --isolated: could not publish the tree-less result to ` +
-					`${arbiter}/main (${push.stderr.trim() || 'push failed'}); the work is ` +
-					`saved in the isolated clone and will re-apply on the next pass.`,
-			);
-			return;
-		}
-		// `main` advanced under us — re-fetch + rebase our (one) commit onto it, retry.
-		await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
-		const rebase = await runAsync(
-			'git',
-			['rebase', '--quiet', `${arbiter}/main`],
-			cwd,
-			{env},
-		);
-		if (rebase.status !== 0) {
-			await runAsync('git', ['rebase', '--abort'], cwd, {env});
-			note(
-				`advance --isolated: the tree-less result conflicted with ${arbiter}/main; ` +
-					`the work is saved in the isolated clone for the next pass / a human.`,
-			);
-			return;
-		}
-	}
 }
 
 /** The advance arg for a pool-selected item (the SELECTION->ARG dispatch). */
