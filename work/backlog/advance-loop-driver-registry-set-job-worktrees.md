@@ -1,0 +1,62 @@
+---
+title: advance loop driver over the REGISTRY SET with per-mirror job-worktree isolation - the substrate run's daemon needs before its per-item unit can become the advance tick
+slug: advance-loop-driver-registry-set-job-worktrees
+blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate, surface-blockers-gate]
+covers: []
+---
+
+> Self-contained ENGINE slice (`covers: []`, no `prd:`). Source: the build-time STOP on `run-uses-advance-tick` (2026-06-13), which found that slice's "plain run and run --advance share a substrate, so just swap the tick" premise is FALSE post-`run-daemon-reframe`. This slice builds the MISSING substrate so `run-uses-advance-tick` can become the clean drop-in tick swap it was designed to be. `run-uses-advance-tick` is re-pointed to `blockedBy` THIS slice.
+
+## The gap this fixes (verified 2026-06-13 against the code)
+
+Plain `run`'s daemon and the existing advance loop driver run over DIFFERENT substrates:
+
+- **Plain `run`** (`run.ts` `runOnce`, ~L281): discovers the **REGISTRY SET** of bare hub mirrors via `scan(config)` and builds each item in a **per-job worktree** via `jobWorktreeStrategy` (`run.ts` ~L509), genuinely concurrent ACROSS repos (`runConcurrent`, `maxParallel`/`perRepoMax`, claim serialised per repo). This is what `run-daemon-reframe` (now `work/done/`) shipped.
+- **The advance loop driver** (`advance-loop-driver.ts` `advanceOnce` / `advanceRunTick`, fed by `cli.ts buildAdvanceRunTick`): scans ONE named mirror's pool (`scanMirrorPool`, single `mirrorPath`) and orchestrates the build/slice rungs via `performDo` **IN-PLACE in `process.cwd()`** (the `doOptions.cwd = process.cwd()` at `cli.ts buildAdvanceRunTick`). One mirror, one in-place checkout.
+
+So the advance tick today has NO registry-set discovery and NO per-job-worktree isolation: it is the single-mirror, in-place-cwd shape. Routing plain `run`'s per-item unit through it (the naive reading of `run-uses-advance-tick`) would SILENTLY REGRESS plain `run`'s registry-set discovery + worktree isolation. That is the substrate gap this slice closes.
+
+## What to build
+
+An advance loop driver that runs the advance TICK over the **registry set of mirrors** with **per-mirror job-worktree isolation** - i.e. the advance-tick twin of `runOnce`/`runOneItem`'s build substrate, reusing the EXISTING seams rather than inventing new ones:
+
+1. **Registry-set discovery.** Drive the advance batch over the SAME mirror set `runOnce` uses (`scan(config)` / the registry of bare hub mirrors), not a single `--advance <mirror>` arg. Per mirror, run `advanceOnce`'s existing pool-scan + select + concurrent-tick batch (do NOT re-invent `advanceOnce`; loop it over the discovered set, exactly as `runOnce` loops `runOneItem` over the candidate set).
+2. **Per-mirror job-worktree isolation for the build/slice rungs.** The advance tick orchestrates the build/slice rungs through `performDo`, which ALREADY supports the isolation seam (`selectIsolationStrategy`/`jobWorktreeStrategy`, do.ts ~L631). Thread a per-mirror job worktree into the advance tick's `doOptions` (instead of `cwd = process.cwd()`), so an advance-driven build runs in its OWN worktree off that mirror's arbiter - the SAME isolation `runOneItem` gives the build tick. Reuse `jobWorktreeStrategy` + `createJob`; do NOT fork a second isolation mechanism.
+3. **Preserve the surface/triage/apply rungs' substrate.** Those rungs are tree-less/CAS lifecycle moves on the mirror (no agent build), so they do not need a build worktree; confirm they remain correct when the build/slice rungs gain worktree isolation (the lifecycle moves already go through the ledger-write seam against the arbiter).
+4. **Reuse the scheduler + the borrow.** Parallelism stays `runConcurrent` (`maxParallel` global / `perRepoMax` per repo); the per-item `advancing` borrow stays INSIDE `performAdvance` (classify -> lock -> execute, winner-only). This slice adds NO new lock and NO new scheduler - it adds registry-set discovery + per-mirror worktree isolation to the advance tick's substrate.
+
+This slice does NOT change plain `run`'s per-item unit yet (that is `run-uses-advance-tick`, re-pointed to depend on this). It builds the SUBSTRATE so that swap becomes behaviour-preserving: an advance batch over the registry set with worktree isolation is the gates-off equivalent of today's plain `run`.
+
+## Acceptance criteria
+
+- [ ] A registry-set advance driver runs `advanceOnce`'s batch over EVERY mirror in the registry (the SAME discovery `runOnce` uses via `scan(config)`), concurrent across repos under `runConcurrent` (`maxParallel`/`perRepoMax`), reusing the existing `advancing` borrow - no new lock, no new scheduler. A test asserts it drains a multi-mirror registry fixture (each mirror's eligible pool advanced), not just a single named mirror.
+- [ ] The build/slice rungs run in a PER-MIRROR JOB WORKTREE (via the existing `selectIsolationStrategy`/`jobWorktreeStrategy` seam threaded into the advance tick's `doOptions`), NOT in `process.cwd()`. A test asserts an advance-driven build executes in an isolated worktree off the mirror's arbiter (the cwd checkout is untouched), exactly as `runOneItem` does for the build tick.
+- [ ] With BOTH lifecycle gates at their calm defaults (`observationTriage: off`, `surfaceBlockers: off`), a registry-set advance batch is BEHAVIOUR-EQUIVALENT to today's plain `run` build tick over the same fixture (build ready slices / slice ready PRDs / route failures to needs-attention; touch no observations, surface no questions; same per-job worktree isolation + integration). A test asserts this equivalence directly (it is the proof `run-uses-advance-tick` will rely on).
+- [ ] The surface/triage/apply lifecycle rungs remain correct under the new substrate (their tree-less ledger moves go through the existing ledger-write seam against the mirror's arbiter; they need no build worktree). A test covers a lifecycle rung firing in a registry-set batch with a gate on.
+- [ ] The parallel `advancing`-borrow is race-correct across mirrors AND within a mirror's pool: a CAS loser backs off having spent only the free classification (no double-advance). Reuse the loop driver's existing borrow; a concurrency test asserts it.
+- [ ] No regression: the existing single-mirror `advanceOnce`/`advanceRunTick`/`run --advance` paths still pass (this slice ADDS the registry-set+worktree driver; it does not delete the single-mirror one unless the re-scoped `run-uses-advance-tick` later subsumes it - that is the next slice's call, not this one).
+- [ ] Tests in the repo's vitest style (throwaway git repos / bare mirrors, `GIT_CONFIG_GLOBAL=/dev/null`-style isolation, temp workspace dirs). No shared/global location written outside temp fixtures.
+- [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+
+## Blocked by
+
+- `advance-autopick-lifecycle-pools`, `observation-triage-tri-state-gate`, `surface-blockers-gate` (all in `work/done/`): the lifecycle pools + their gates must exist so the registry-set advance batch's gates-off-equivalence and gates-on-lifecycle behaviour reference the real gates (not a vacuous pool). The ledger-integrity pair (`atomic-done-move-one-slug-one-folder`, `requeue-from-in-progress`, both done) hardened the transitions this substrate drives autonomously - the soundness order is preserved.
+
+## Decisions (to record while building)
+
+- Whether the registry-set advance driver is a NEW function (e.g. `advanceRegistrySet` / a `runLoop`-shaped advance loop) or an extension of `advanceRunTick` to accept a mirror SET + an isolation strategy. Lean: a thin new driver that loops `advanceOnce` over the `scan(config)` set with the worktree strategy threaded in, mirroring `runOnce`'s shape, so `run-uses-advance-tick` can later point plain `run`'s tick at it with no further substrate work.
+- Whether to thread the isolation strategy as a parameter on the advance tick context (so the single-mirror in-place path stays for `advance` the one-shot command, and the registry-set path uses worktrees) vs making worktree isolation the only advance-build substrate. Lean: parameterise (the one-shot in-place `advance` command is a legitimate human-local mode; the daemon/CI path wants worktrees), so both coexist.
+
+## Prompt
+
+> Build an advance loop driver that runs the advance TICK over the REGISTRY SET of bare hub mirrors with PER-MIRROR job-worktree isolation - the advance-tick twin of `runOnce`/`runOneItem`'s build substrate. This is the MISSING substrate the build-time STOP on `run-uses-advance-tick` (2026-06-13) found: plain `run` (`run.ts` `runOnce`) discovers the registry set via `scan(config)` and builds each item in a `jobWorktreeStrategy` worktree, whereas the existing advance loop driver (`advance-loop-driver.ts` `advanceOnce`, fed by `cli.ts buildAdvanceRunTick`) scans ONE mirror and builds `performDo` IN-PLACE in `process.cwd()`. Routing plain `run` through the latter would regress its discovery + isolation; this slice closes that gap so `run-uses-advance-tick` becomes a clean tick swap.
+>
+> FIRST, drift-check against the code: confirm `run.ts runOnce` still uses `scan(config)` + `jobWorktreeStrategy` (the registry-set, per-job-worktree build substrate); confirm `advance-loop-driver.ts advanceOnce` still takes a single `mirrorPath` and `cli.ts buildAdvanceRunTick` still sets `doOptions.cwd = process.cwd()` (single-mirror, in-place); confirm `performDo` onboards through `selectIsolationStrategy`/`jobWorktreeStrategy` (do.ts ~L631) so the seam to thread already exists. If anything landed differently, reconcile or route to `needs-attention/`.
+>
+> DOMAIN: `run` is the cross-repo daemon over the REGISTRY (the hub-mirror set, ADR §1/§3), each item isolated in its OWN job worktree (`run-daemon-reframe`, done). The advance TICK is substrate-agnostic (the loop driver doc: "swap the tick without re-architecting the loop"), but its current loop driver only drives ONE mirror in-place. Reuse the EXISTING seams: `scan(config)` for discovery, `runConcurrent` for parallelism, `jobWorktreeStrategy`/`selectIsolationStrategy` for isolation, the `advancing` borrow inside `performAdvance` for the per-item lock. Add NO new lock, NO new scheduler, NO second isolation mechanism.
+>
+> BUILD: (1) a registry-set advance driver that loops `advanceOnce`'s batch over the `scan(config)` mirror set, concurrent across repos; (2) thread a per-mirror job worktree into the advance tick's `doOptions` (instead of `cwd = process.cwd()`) so the build/slice rungs run isolated off each mirror's arbiter; (3) keep surface/triage/apply on their tree-less ledger-write-seam moves (no build worktree needed); (4) reuse `runConcurrent` + the `advancing` borrow unchanged. Parameterise the isolation strategy so the human-local one-shot `advance` (in-place) and the daemon/CI registry-set path (worktrees) coexist (record the call).
+>
+> TEST (TDD, vitest, house style - bare mirrors, throwaway repos, `GIT_CONFIG_GLOBAL=/dev/null`, temp workspace dirs): a multi-mirror registry batch drains every mirror's pool; an advance-driven build runs in an isolated worktree off the mirror's arbiter (cwd untouched); the gates-off registry-set batch is behaviour-equivalent to today's plain `run` build tick over the same fixture; a lifecycle rung fires under a gate-on registry-set batch; the `advancing` borrow is race-correct; the single-mirror `advanceOnce`/`run --advance` path still passes. Isolate all shared/global locations.
+>
+> "Done" = a registry-set advance driver with per-mirror job-worktree isolation, behaviour-equivalent to plain `run`'s build tick under calm gates, lifecycle-capable when a gate is flipped, reusing the existing scheduler/borrow/isolation seams (no new machinery), the single-mirror path intact, and the gate green.
