@@ -234,11 +234,32 @@ export interface Config {
 	 */
 	sessionsDir?: string;
 	/**
+	 * The per-repo ENV-PREP step (install deps, fetch submodules, run codegen) —
+	 * the SIBLING of `verify`, NOT part of it. `prepare` makes a freshly-
+	 * materialised worktree's environment READY; `verify` checks the tree is
+	 * GREEN. The runner sequences `prepare` THEN `verify`: `prepare` runs ONCE,
+	 * before the FIRST `verify`, on a worktree that needs deps but does not have
+	 * them (a fresh job worktree off the hub mirror). Install MUST NOT be baked
+	 * into `verify` — that would make `verify` stop being a pure, cheaply-re-
+	 * runnable acceptance check and make every gate run pay the install cost.
+	 * `prepare` is where install belongs. A deterministic shell command (or an
+	 * ordered list, all must pass); no model in the loop. Same shape and the SAME
+	 * resolution/precedence as `verify` (flag > env > per-repo > global > default).
+	 * The ONE difference from `verify`: unset (omitted) ⇒ NO prepare step (a
+	 * no-op) — there is NO default install (a repo with no deps needs none; we
+	 * never invent a default that would run `pnpm install` in a repo that has no
+	 * lockfile). See `prepare.ts`.
+	 */
+	prepare?: VerifyConfig;
+	/**
 	 * The per-repo acceptance gate run by `agent-runner verify` (a deterministic
 	 * shell command, or an ordered list of commands). NOT per-slice and NOT model-
 	 * interpreted — it is declared, auditable config (ADR §8). Unset (omitted) ⇒
 	 * a sensible `pnpm -r build && test && format:check` default; the field is
-	 * intentionally optional so "unset" is distinguishable from "empty".
+	 * intentionally optional so "unset" is distinguishable from "empty". Install
+	 * must NOT be baked into `verify` — env-prep belongs in the sibling `prepare`
+	 * field, which the runner runs ONCE before the first `verify` on a fresh
+	 * worktree (the prepare=env-ready / verify=tree-green split).
 	 */
 	verify?: VerifyConfig;
 	/**

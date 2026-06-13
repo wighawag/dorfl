@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "The ONE skill to onboard ANY repo onto the file-based work/ contract (the protocol agent-runner consumes); it auto-detects repo state and does the right DEPTH. Empty/near-empty repo: just scaffolds (work/ skeleton, work/protocol/ docs verbatim, CONTEXT.md, stack-appropriate .agent-runner.json verify gate) after a short adoption chat. Populated/legacy repo: ALSO converts existing material — task tracker/TODOs/design docs into PRDs, slices, or ideas (a vague wish is an idea, NOT a needsAnswers slice); codebase split by polarity (EXTERNAL behaviour it integrates with into work/findings/ with provenance, our own code's shape into CONTEXT.md/docs — NOT findings); decisions into ADRs by ELICITING the why from the human (asked live, NEVER inferred; no why, no ADR). Always presents an inventory + plan and STOPS for confirmation before judgement-heavy writes. Never clobbers or auto-commits. Use to set up / adopt / onboard / migrate a repo to the work/ contract or agent-runner — empty or full, the single entry point."
+description: "The ONE skill to onboard ANY repo onto the file-based work/ contract (the protocol agent-runner consumes); it auto-detects repo state and does the right DEPTH. Empty/near-empty repo: just scaffolds (work/ skeleton, work/protocol/ docs verbatim, CONTEXT.md, stack-appropriate .agent-runner.json verify gate + a detected/asked prepare env-prep step) after a short adoption chat. Populated/legacy repo: ALSO converts existing material — task tracker/TODOs/design docs into PRDs, slices, or ideas (a vague wish is an idea, NOT a needsAnswers slice); codebase split by polarity (EXTERNAL behaviour it integrates with into work/findings/ with provenance, our own code's shape into CONTEXT.md/docs — NOT findings); decisions into ADRs by ELICITING the why from the human (asked live, NEVER inferred; no why, no ADR). Always presents an inventory + plan and STOPS for confirmation before judgement-heavy writes. Never clobbers or auto-commits. Use to set up / adopt / onboard / migrate a repo to the work/ contract or agent-runner — empty or full, the single entry point."
 ---
 
 # setup
@@ -57,7 +57,7 @@ The `.agent-runner.json` `verify` gate is the protocol's per-project, **language
 **Two shape rules for the gate you write (independent of which stack):**
 
 - **Cheapest checks FIRST, for fail-fast.** Order the gate so the quick, deterministic checks run before the expensive ones: **format/lint → typecheck/build → test**. A formatting nit should fail in seconds, not after a full build+test. So prefer `pnpm format:check && pnpm build && pnpm test` over `… && pnpm test && pnpm format:check`.
-- **The gate is ACCEPTANCE, not environment-prep.** Do NOT bake dependency install / submodule fetch / codegen into `verify` (e.g. do not write `pnpm install --ignore-scripts && …` even if CI does it as a separate step). `verify` answers "is the working tree green?", assuming deps are already present; the runner prepares the environment separately (see the fresh-clone/prepare gap noted in `work/observations/`). Strip any install/bootstrap prefix CI wraps around its real build/test steps — keep only the build/test/lint commands themselves.
+- **The gate is ACCEPTANCE, not environment-prep.** Do NOT bake dependency install / submodule fetch / codegen into `verify` (e.g. do not write `pnpm install --ignore-scripts && …` even if CI does it as a separate step). `verify` answers "is the working tree green?", assuming deps are already present. **Install now has a sanctioned home: the sibling `prepare` field** (see A3b) — the runner runs `prepare` ONCE before the first `verify` on a fresh worktree. So **MOVE any install/bootstrap prefix CI wraps around its build/test steps into `prepare`, do not delete it**: keep `verify` to the build/test/lint commands themselves, and put the install/submodule/codegen step in `prepare`. The clean split is **`prepare` = env-ready, `verify` = tree-green.**
 
 The built-in fallback happens to be Node-shaped, which is SILENTLY WRONG for any other stack — so do not rely on it, and do not swing the other way and template a language's "usual" command blind. The protocol names no toolchain; neither should the gate you write. Find what THIS repo actually uses, in this order of reliability:
 
@@ -69,12 +69,26 @@ The built-in fallback happens to be Node-shaped, which is SILENTLY WRONG for any
 
 If you cannot determine it, **leave `verify` with a `TODO` comment and ASK the user** for the exact build/test/lint command — never invent one. The final gate is part of the PLAN you present at A4 and must be CONFIRMED (one line) before you write it: a wrong `verify` gate is the one scaffolding mistake that bites later.
 
+### A3b. Detect (or ASK for) the `prepare` env-prep step — the sibling of `verify`
+
+`prepare` is the protocol's per-repo **env-prep / install** step: the runner runs it ONCE before the FIRST `verify` on a freshly-materialised worktree (a fresh clone/worktree off the hub mirror has no `node_modules` / submodules / generated code, so `verify` would fail for lack of deps). It is **deliberately distinct from — and NOT baked into — `verify`** (`prepare` = env-ready; `verify` = tree-green), so the gate stays a pure, cheaply-re-runnable acceptance check. It is the home the "strip install from `verify`" rule (A3) points install AT.
+
+**DETECT a likely `prepare` from THIS repo (same detect-never-assume discipline as A3), then SET it or ASK to confirm:**
+
+- **A lockfile ⇒ the matching install.** `pnpm-lock.yaml` ⇒ `pnpm install`; `package-lock.json` ⇒ `npm ci`; `yarn.lock` ⇒ `yarn install --frozen-lockfile`; `Cargo.lock` is fetched by the build (often no separate step); `go.sum` ⇒ usually none (the build fetches). Read the REAL install CI uses (the install prefix you stripped from `verify` in A3 is exactly what belongs here).
+- **Submodules ⇒ `git submodule update --init --recursive`** (if `.gitmodules` exists).
+- **A codegen step ⇒ include it** (e.g. a `prebuild`/`codegen` script CI runs before build).
+- **Compose** when more than one applies (e.g. `git submodule update --init && pnpm install`), as an ordered list or a `&&` chain (all must pass), exactly like `verify`.
+
+**Unset is a valid answer — do NOT invent a default.** A repo with no deps to install needs NO `prepare`: leave the field absent (unset ⇒ a no-op; the runner installs nothing). Never write a default `pnpm install` into a repo that has no lockfile. If you detect a likely command, propose it in the A4 plan for one-line confirmation; if you are unsure whether the repo needs env-prep at all, ASK rather than guess. `prepare` is part of the PLAN you present at A4 alongside `verify`.
+
 ### A4. Present the PLAN and STOP for confirmation (the hard checkpoint)
 
 Present, in one message:
 
 - the **proposed description** (A2) — "correct/refine or accept?";
 - the **detected `verify` gate** (A3) — "confirm?";
+- the **detected `prepare` env-prep step** (A3b), if any — "confirm?" (or "none needed?" when the repo has no deps to install);
 - **IF Phase-B material was detected (A1): the inventory → bucket mapping table** (see B1) — "is this routing right?".
 
 Then **STOP and WAIT for the user's reply.** Do not write `CONTEXT.md`/`.agent-runner.json` with an unconfirmed description/gate, and do not start Phase-B conversion, until they answer. (You MAY create the deterministic skeleton — empty `work/` folders + `work/protocol/` copies — without waiting, since those are content-free; but anything carrying judgement waits.) Narrating "I'll show the plan first" and then barrelling ahead in the same turn defeats the checkpoint — the STOP is real.
@@ -83,7 +97,7 @@ Then **STOP and WAIT for the user's reply.** Do not write `CONTEXT.md`/`.agent-r
 
 Once description + gate are confirmed: create the missing `work/` folders (+ `.gitkeep`); **copy the protocol docs verbatim into `work/protocol/`** from this skill's `protocol/` directory (`WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `slice-template.md`, `prd-template.md`, `ADR-FORMAT.md`) and write `work/protocol/VERSION` — creating them if absent, RE-SYNCING (overwriting) them if present (protocol-owned, per A1); write `CONTEXT.md` and `.agent-runner.json` if absent (or merge-in missing keys per A1).
 
-**Run the gate ONCE and report (catch a wrong `verify` immediately).** After writing `.agent-runner.json`, actually EXECUTE the `verify` command once and report green/red — the cheapest moment to discover the gate is wrong (a typo, a missing script, deps not installed), instead of at first build. If red, say WHY (e.g. "`format:check` failed — run `format` first" / "`build` needs deps installed") and offer to adjust the gate or note the prep step; do NOT silently leave a red gate. (Deps clearly not installed = the fresh-clone/prepare gap, not a wrong gate — note it, don't contort `verify` to hide it.)
+**Run the gate ONCE and report (catch a wrong `verify` immediately).** After writing `.agent-runner.json`, actually EXECUTE the `verify` command once and report green/red — the cheapest moment to discover the gate is wrong (a typo, a missing script, deps not installed), instead of at first build. If red, say WHY (e.g. "`format:check` failed — run `format` first" / "`build` needs deps installed") and offer to adjust the gate or note the prep step; do NOT silently leave a red gate. (Deps clearly not installed = the env-prep gap — that is what the `prepare` field is FOR: put the install in `prepare` (A3b), do NOT contort `verify` to hide it.)
 
 If **no Phase-B material** was detected, skip to **Report + hand off**. Otherwise continue to Phase B.
 
@@ -185,6 +199,7 @@ Standing per-change rules agents must follow in this repo.
 
 ```json
 {
+	"prepare": "<install/env-prep from A3b, or OMIT if the repo has no deps>",
 	"verify": "<stack-appropriate command from A3>",
 	"harness": "pi",
 	"autoBuild": false,
@@ -192,7 +207,7 @@ Standing per-change rules agents must follow in this repo.
 }
 ```
 
-> `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoSlice` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). Add `defaultArbiter`, `integration`, `provider`, `model` only as the repo needs them.
+> `prepare` — the env-prep / install step the runner runs ONCE before the first `verify` on a fresh worktree (install deps / submodules / codegen, from A3b). The sibling of `verify`, NOT baked into it (`prepare` = env-ready, `verify` = tree-green). **OMIT it entirely if the repo has no deps to install** (unset ⇒ a no-op; never write a default `pnpm install` into a repo with no lockfile). `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep — that lives in `prepare`). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoSlice` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). Add `defaultArbiter`, `integration`, `provider`, `model` only as the repo needs them.
 
 ```
 

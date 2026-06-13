@@ -717,6 +717,10 @@ async function runOneItem(
 				// fix: `run` now honours `config.verify` instead of the deleted
 				// `defaultTestGate`'s hardcoded `pnpm -r test`.
 				verify: config.verify,
+				// The per-repo ENV-PREP step (`prepare`), sequenced ONCE before the first
+				// `verify` on the fresh job worktree so it has deps (a fresh worktree off
+				// the mirror has no `node_modules`). Unset ⇒ a no-op; never baked into verify.
+				prepare: config.prepare,
 				// Gate 2 (PR/code review): the per-repo resolved flags ride from `config`;
 				// only the gate SEAM is threaded through `ctx` (the CLI wires the prod
 				// `harnessReviewGate()` only when `config.review` is on).
@@ -767,10 +771,15 @@ async function runOneItem(
 			return {...base, status: 'tests-failed', detail: core.reason};
 		}
 		if (
+			core.outcome === 'prepare-failed' ||
 			core.outcome === 'review-blocked' ||
 			core.outcome === 'rebase-conflict' ||
 			core.outcome === 'invariant-violation'
 		) {
+			// `prepare-failed`: the env-prep (install) step was red, so the env could
+			// not be made ready and `verify` was NOT run — distinct from a `tests-failed`
+			// red gate. Route it to needs-attention like the others (a human fixes the
+			// prepare command, then re-runs); the core already surfaced the bounce.
 			// `invariant-violation`: the one-slug-one-folder guard FAILED LOUD (the
 			// arbiter already holds the slug in >1 status folder — a corrupt ledger).
 			// The core integrated NOTHING. On the LEAST-supervised caller this MUST

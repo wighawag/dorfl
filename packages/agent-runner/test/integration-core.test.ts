@@ -156,6 +156,86 @@ describe('integration-core — approve ⇒ completed', () => {
 	});
 });
 
+describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)', () => {
+	it('a fresh worktree runs prepare THEN verify on the green path', async () => {
+		const {repo} = await claimAndBranch('prep-alpha');
+		const order = join(repo, 'order.log');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'prep-alpha',
+			source: 'in-progress',
+			recovering: false,
+			// prepare appends `prepare`, verify appends `verify` — the file proves order.
+			prepare: `echo prepare >> ${JSON.stringify(order)}`,
+			verify: `echo verify >> ${JSON.stringify(order)}`,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(readFileSync(order, 'utf8').trim().split('\n')).toEqual([
+			'prepare',
+			'verify',
+		]);
+	});
+
+	it('a FAILING prepare ⇒ prepare-failed, NEVER runs verify, routes to needs-attention', async () => {
+		const {repo} = await claimAndBranch('prep-beta');
+		const ranVerify = join(repo, 'verify-ran.txt');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'prep-beta',
+			source: 'in-progress',
+			recovering: false,
+			prepare: 'exit 4',
+			// If verify ever ran it would create this file — it must NOT.
+			verify: `touch ${JSON.stringify(ranVerify)}`,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		// Distinct from gate-failed: a `prepare-failed` outcome + a message that names
+		// env-prep, NOT the acceptance gate.
+		expect(core.outcome).toBe('prepare-failed');
+		expect(core.routedToNeedsAttention).toBe(true);
+		expect(core.reason).toMatch(/prepare/i);
+		expect(core.reason).not.toMatch(/acceptance gate failed/i);
+		// verify NEVER ran (the env could not be made ready).
+		expect(existsSync(ranVerify)).toBe(false);
+		// Bounced from in-progress/ straight to needs-attention/, never done/.
+		expect(existsSync(join(repo, 'work', 'in-progress', 'prep-beta.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'done', 'prep-beta.md'))).toBe(false);
+		expect(
+			existsSync(join(repo, 'work', 'needs-attention', 'prep-beta.md')),
+		).toBe(true);
+	});
+
+	it('UNSET prepare ⇒ no-op: the green gate path is byte-for-byte unchanged', async () => {
+		const {repo} = await claimAndBranch('prep-gamma');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'prep-gamma',
+			source: 'in-progress',
+			recovering: false,
+			// prepare UNSET — a repo with no deps step is unaffected.
+			verify: PASS,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(existsSync(join(repo, 'work', 'done', 'prep-gamma.md'))).toBe(true);
+	});
+});
+
 describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 	it('routes to needs-attention (local-only, no surfaceArbiter) with the gate reason', async () => {
 		const {repo} = await claimAndBranch('delta');

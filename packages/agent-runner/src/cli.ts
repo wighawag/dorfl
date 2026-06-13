@@ -284,6 +284,7 @@ function buildRegistrySetAdvanceTick(options: {
 				identity: config.identity,
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				prepare: config.prepare,
 				verify: config.verify,
 				provider: config.provider,
 				harness,
@@ -1031,6 +1032,12 @@ export function buildProgram(): Command {
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.action(async (flags: VerifyFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
+			// DELIBERATELY verify-ONLY: the standalone `verify` command does NOT run the
+			// `prepare` env-prep step first. `verify` is the PURE acceptance gate (env-
+			// ready is a separate concern); a human invoking it prepares their own
+			// checkout. `prepare` runs only in the runner's fresh-worktree lifecycle
+			// (`do`/`run`/`complete` → `performIntegration`), where a fresh job worktree
+			// off the hub mirror genuinely needs deps before the gate can be trusted.
 			const result = await runVerify({
 				cwd: process.cwd(),
 				verify: config.verify,
@@ -1393,6 +1400,7 @@ export function buildProgram(): Command {
 				provider: config.provider,
 				noSwitch: flags.switch === false,
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
+				prepare: config.prepare,
 				verify: config.verify,
 				skipVerify: flags.skipVerify,
 				// Gate 2 (PR/code review): when `review` resolves on, run the `review`
@@ -1818,6 +1826,7 @@ export function buildProgram(): Command {
 				integration: config.integration,
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
+				prepare: config.prepare,
 				verify: config.verify,
 				provider: config.provider,
 				harness,
@@ -2033,6 +2042,7 @@ export function buildProgram(): Command {
 				identity: config.identity,
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				prepare: config.prepare,
 				verify: config.verify,
 				provider: config.provider,
 				harness,

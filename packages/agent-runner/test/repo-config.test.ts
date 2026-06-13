@@ -42,6 +42,9 @@ describe('repo-config constants', () => {
 		// `selectionOrder` (the configurable cross-pool order; subsumes the removed
 		// `prdsFirst`) is a per-repo property resolved through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('selectionOrder');
+		// `prepare` (the env-prep / install step) is a per-repo property like `verify`,
+		// resolved through the SAME chain. Install belongs here, never baked into verify.
+		expect(REPO_ALLOWED_KEYS).toContain('prepare');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
@@ -104,6 +107,18 @@ describe('loadRepoConfig', () => {
 		expect(loadRepoConfig(repo).config.verify).toBe('make check');
 		writeRepoConfig(repo, {verify: ['a', 'b']});
 		expect(loadRepoConfig(repo).config.verify).toEqual(['a', 'b']);
+	});
+
+	it('reads a prepare step (string or list), like verify', () => {
+		writeRepoConfig(repo, {prepare: 'pnpm install'});
+		expect(loadRepoConfig(repo).config.prepare).toBe('pnpm install');
+		writeRepoConfig(repo, {
+			prepare: ['pnpm install', 'git submodule update --init'],
+		});
+		expect(loadRepoConfig(repo).config.prepare).toEqual([
+			'pnpm install',
+			'git submodule update --init',
+		]);
 	});
 
 	it('rejects runner/host-only keys and reports them (does not honour them)', () => {

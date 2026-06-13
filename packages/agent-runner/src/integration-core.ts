@@ -7,6 +7,7 @@ import {
 } from 'node:fs';
 import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
+import {ensurePrepared} from './prepare.js';
 import {
 	type ReviewGate,
 	type ReviewFinding,
@@ -62,6 +63,7 @@ import {workBranchRef} from './slug-namespace.js';
  */
 export type IntegrationCoreOutcome =
 	| 'completed' // gated, reviewed, moved, committed, rebased, integrated
+	| 'prepare-failed' // the env-prep step (prepare) was red — env not ready, verify untrusted
 	| 'gate-failed' // the acceptance gate (verify) was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
@@ -165,6 +167,19 @@ export interface IntegrationCoreInput {
 	 * surfaced state on main.
 	 */
 	recovering: boolean;
+	/**
+	 * The declared per-repo ENV-PREP step (string | list), run ONCE before the
+	 * FIRST `verify` on a fresh worktree to make the env ready (install deps,
+	 * submodules, codegen). Unset ⇒ a no-op (NO default install — the deliberate
+	 * difference from `verify`). Sequenced BEFORE `verify`; a failing prepare
+	 * surfaces as `prepare-failed` and NEVER proceeds to `verify`/integrate. Skip
+	 * is gated by a NON-COMMITTED prepared-ness marker in the worktree's git
+	 * control area (`prepare.ts`), so it does not re-install per gate within one
+	 * worktree. Honoured on the build paths (`do`/`run` fresh worktrees) +
+	 * `complete`; the standalone `agent-runner verify` CLI does NOT run it (the
+	 * pure gate — a human prepares their own checkout).
+	 */
+	prepare?: VerifyConfig;
 	/** The declared per-repo gate (string | list). Unset ⇒ the default command. */
 	verify?: VerifyConfig;
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
@@ -346,6 +361,71 @@ export async function performIntegration(
 		: source === 'in-progress'
 			? join(cwd, 'work', 'in-progress', `${slug}.md`)
 			: join(cwd, 'work', 'needs-attention', `${slug}.md`);
+
+	// 0. Prepare: make the worktree's ENV READY before the gate (install deps,
+	//    submodules, codegen). A fresh job worktree off the hub mirror has no
+	//    `node_modules`, so `verify` would fail for lack of deps unless prepare
+	//    runs FIRST. `prepare` is the SIBLING of `verify`, NOT baked into it: it
+	//    runs ONCE before the first verify, gated by a NON-COMMITTED prepared-ness
+	//    marker in the worktree's git control area (so it does not re-install per
+	//    gate within one persistent worktree). Unset ⇒ a no-op (no default install).
+	//    A FAILING prepare is a HARD STOP distinct from a red gate (`prepare-failed`):
+	//    the env could not be made ready, so `verify` cannot be trusted — it NEVER
+	//    proceeds to verify/integrate, and routes the item the SAME way a red gate
+	//    does. (`--skip-verify` skips only the gate, not env-prep: a verify-skipped
+	//    finish still needs a ready env; the marker keeps an already-prepared tree
+	//    a no-op.)
+	{
+		const prep = await ensurePrepared({cwd, prepare: input.prepare, env});
+		if (!prep.noop && !prep.skipped) {
+			note('Running the env-prep step (prepare)…');
+		}
+		if (!prep.passed) {
+			const reason = `prepare (env-prep) failed (exit ${prep.exitCode})`;
+			if (recovering) {
+				// RECOVERY path, RED prepare: the item is ALREADY in needs-attention/.
+				// A still-broken env keeps it there (no re-route, no double reason), just
+				// like a still-red gate.
+				const message =
+					`Env-prep (prepare) still failed (exit ${prep.exitCode}); '${slug}' stays ` +
+					'in work/needs-attention/ (the environment could not be made ready, so ' +
+					'the acceptance gate cannot be trusted). Fix the prepare command, then ' +
+					'retry.';
+				note(message);
+				return {
+					outcome: 'prepare-failed',
+					routedToNeedsAttention: false,
+					branch,
+					reason: message,
+				};
+			}
+			// Bounce from in-progress/ straight to needs-attention/ (the SAME seam a red
+			// gate uses) — recording the prepare-failed reason + committing the move
+			// (with the agent's uncommitted work) as ONE atomic transition. We NEVER
+			// run `verify` on an env that could not be made ready.
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
+				cwd,
+				slug,
+				reason,
+				arbiter: input.surfaceArbiter,
+				env,
+				note,
+			});
+			return {
+				outcome: 'prepare-failed',
+				routedToNeedsAttention: routed.moved,
+				branch,
+				reason: routed.moved
+					? `Env-prep (prepare) failed (exit ${prep.exitCode}); routed '${slug}' ` +
+						'to work/needs-attention/ (the environment could not be made ready, ' +
+						'so the acceptance gate was NOT run). Fix the prepare command, then ' +
+						'return it to backlog/.'
+					: `Env-prep (prepare) failed (exit ${prep.exitCode}); not completing ` +
+						`'${slug}' (the environment could not be made ready, so the ` +
+						'acceptance gate was NOT run). Fix the prepare command, then retry.',
+			};
+		}
+	}
 
 	// 1. Gate: bad work never proceeds to done. Default-on; --skip-verify is a
 	//    human-only escape hatch (the autonomous runner never skips — ADR §8).
