@@ -8,6 +8,7 @@ import {
 	readDoneSlugs,
 	readBacklogItems,
 } from '../src/scan.js';
+import {formatReport} from '../src/format.js';
 import {mergeConfig} from '../src/config.js';
 import {
 	registerMirrorWithWork,
@@ -312,5 +313,62 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 			mergeConfig({autoBuild: false}),
 		);
 		expect(report.repos[0].items[0].eligibility.eligible).toBe(true);
+	});
+});
+
+describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () => {
+	it('surfaces a slug present in two status folders on the mirror, naming both', async () => {
+		// A corrupt ledger: the SAME slug in BOTH in-progress/ and done/ (the orphan
+		// class hand-cleaned in 279b542 — the read-side belt-and-suspenders for it).
+		const m = registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'live.md': slice({slug: 'live'})},
+			inProgress: {'ghost.md': slice({slug: 'ghost'})},
+			done: {'ghost.md': slice({slug: 'ghost'})},
+		});
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
+		);
+		const repo = report.repos.find((r) => r.path === m.mirrorPath)!;
+		expect(repo.ledgerDuplicates).toHaveLength(1);
+		expect(repo.ledgerDuplicates[0].slug).toBe('ghost');
+		expect(repo.ledgerDuplicates[0].folders).toContain('in-progress');
+		expect(repo.ledgerDuplicates[0].folders).toContain('done');
+
+		const out = formatReport(report);
+		expect(out).toMatch(/one-slug-one-folder VIOLATED/);
+		expect(out).toMatch(/ghost/);
+		expect(out).toContain('work/in-progress/');
+		expect(out).toContain('work/done/');
+	});
+
+	it('a CLEAN mirror ledger reports no duplicates (no false positives; buckets excluded)', async () => {
+		const m = registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {'a.md': slice({slug: 'a'})},
+			inProgress: {'b.md': slice({slug: 'b'})},
+			done: {'c.md': slice({slug: 'c'})},
+			outOfScope: {'d.md': slice({slug: 'd'})},
+		});
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
+		);
+		const repo = report.repos.find((r) => r.path === m.mirrorPath)!;
+		expect(repo.ledgerDuplicates).toEqual([]);
+		expect(formatReport(report)).not.toMatch(/one-slug-one-folder VIOLATED/);
+	});
+});
+
+describe('scanRepoPaths — one-slug-one-folder LINT (working tree)', () => {
+	it('surfaces a slug in two status folders of a working checkout', () => {
+		writeItem('repo', 'in-progress', 'dup.md', {slug: 'dup'});
+		writeItem('repo', 'done', 'dup.md', {slug: 'dup'});
+		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
+		expect(report.repos[0].ledgerDuplicates).toHaveLength(1);
+		expect(report.repos[0].ledgerDuplicates[0].slug).toBe('dup');
+	});
+
+	it('reports clean for a checkout with no duplicate', () => {
+		writeItem('repo', 'backlog', 'a.md', {slug: 'a'});
+		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
+		expect(report.repos[0].ledgerDuplicates).toEqual([]);
 	});
 });

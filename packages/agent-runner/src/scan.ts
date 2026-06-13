@@ -8,6 +8,11 @@ import {
 import {listMirrors} from './registry.js';
 import {fetchMirrorMainOrWarn} from './repo-mirror.js';
 import {resolveRepoConfig} from './repo-config.js';
+import {
+	lintLocalLedger,
+	lintRefLedger,
+	type DuplicateSlug,
+} from './ledger-lint.js';
 
 /**
  * A backlog item with its parsed gate/deps, before eligibility resolution. This
@@ -30,6 +35,14 @@ export interface RepoReport {
 	 */
 	path: string;
 	items: ScannedItem[];
+	/**
+	 * The one-slug-one-folder LINT result (PRD `ledger-integrity` story 3): any
+	 * slug present in MORE THAN ONE `work/` status folder in THIS repo's ledger.
+	 * Empty ⇒ a clean ledger. Non-empty ⇒ a corrupt ledger the formatter WARNS
+	 * about loudly and a human must resolve (never auto-fixed). Derived by listing
+	 * folder residence, not from any index.
+	 */
+	ledgerDuplicates: DuplicateSlug[];
 }
 
 /** The full cross-repo scan result. */
@@ -144,9 +157,14 @@ export async function scan(
 			repoPath: mirror.path,
 			global: config,
 		}).config.autoBuild;
+		// The one-slug-one-folder LINT (PRD story 3): derive any slug residing in >1
+		// status folder from the mirror's committed `main` tree (the SAME `ls-tree`
+		// read the seam uses), so a corrupt ledger is surfaced LOUDLY by the formatter.
+		const ledgerDuplicates = lintRefLedger('main', mirror.path, options.env);
 		repos.push({
 			path: mirror.path,
 			items: scoreItems(state, autoBuild, counts),
+			ledgerDuplicates,
 		});
 	}
 
@@ -175,7 +193,13 @@ export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
 		const state = ledgerRead.resolveLocalState({repoPath: path});
 		const autoBuild = resolveRepoConfig({repoPath: path, global: config}).config
 			.autoBuild;
-		repos.push({path, items: scoreItems(state, autoBuild, counts)});
+		// The one-slug-one-folder LINT over THIS working tree's `work/` ledger.
+		const ledgerDuplicates = lintLocalLedger(path);
+		repos.push({
+			path,
+			items: scoreItems(state, autoBuild, counts),
+			ledgerDuplicates,
+		});
 	}
 
 	return {

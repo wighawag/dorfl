@@ -80,6 +80,7 @@ import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
+import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
@@ -519,6 +520,7 @@ interface GcFlags {
 	force?: boolean;
 	yes?: boolean;
 	json?: boolean;
+	ledger?: string;
 }
 
 interface StatusFlags {
@@ -2046,10 +2048,32 @@ export function buildProgram(): Command {
 			'OVERRIDE the predicate: remove worktrees even with un-saved work (requires --yes; never the default)',
 		)
 		.option('--yes', 'confirm a destructive --force sweep non-interactively')
+		.option(
+			'--ledger [repoPath]',
+			'SWEEP the work/ lifecycle LEDGER instead of job worktrees: REPORT (never delete) every slug present in more than one work/ status folder (the one-slug-one-folder belt-and-suspenders), with its folders + candidate canonical folder, for a HUMAN to resolve. Defaults to the cwd repo.',
+		)
 		.option('--json', 'output the raw result as JSON')
 		.action((flags: GcFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
+
+			// The `gc`-STYLE ledger SWEEP (PRD `ledger-integrity` story 3): a SEPARATE
+			// surface from the worktree reaper below — it REPORTS one-slug-one-folder
+			// violations in a repo's `work/` lifecycle ledger and NEVER deletes (a human
+			// resolves each). Distinct `work/`: the ledger, not the execution substrate.
+			if (flags.ledger !== undefined) {
+				const repoPath =
+					typeof flags.ledger === 'string' ? flags.ledger : process.cwd();
+				const result = sweepLedgerDuplicates(repoPath);
+				if (flags.json) {
+					console.log(JSON.stringify(result, null, 2));
+				} else {
+					console.log(formatLedgerSweep(result));
+				}
+				// A corrupt ledger is a fail-loud condition: exit non-zero so a human
+				// (or a script) cannot miss it, mirroring the integration core's refusal.
+				process.exit(result.duplicates.length > 0 ? 1 : 0);
+			}
 
 			// `--force` discards un-saved work, so it is gated behind an explicit
 			// confirmation (`--yes`) — loud + intentional, NEVER the default (ADR §4).

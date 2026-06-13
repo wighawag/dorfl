@@ -327,8 +327,10 @@ export function registerMirrorWithWork(
 	name: string,
 	work: {
 		backlog?: Record<string, string>;
+		inProgress?: Record<string, string>;
 		done?: Record<string, string>;
 		needsAttention?: Record<string, string>;
+		outOfScope?: Record<string, string>;
 		/** PRDs to slice, committed under `work/prd/` on the mirror's `main`. */
 		prd?: Record<string, string>;
 		/** Already-SLICED PRDs, committed under `work/prd-sliced/` (sliced-ness residence). */
@@ -355,8 +357,10 @@ export function registerMirrorWithWork(
 		}
 	};
 	writeAll('backlog', work.backlog);
+	writeAll('in-progress', work.inProgress);
 	writeAll('done', work.done);
 	writeAll('needs-attention', work.needsAttention);
+	writeAll('out-of-scope', work.outOfScope);
 	writeAll('prd', work.prd);
 	writeAll('prd-sliced', work.prdSliced);
 	if (work.repoConfig) {

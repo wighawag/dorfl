@@ -11,6 +11,11 @@ import {type NeedsAttentionItem} from './needs-attention.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {formatCwdSection} from './format.js';
 import type {CwdSection} from './cwd-section.js';
+import {
+	lintRefLedger,
+	formatDuplicateWarnings,
+	type DuplicateSlug,
+} from './ledger-lint.js';
 
 /**
  * `agent-runner status` — the **operational dashboard of jobs** (ADR §4/§5/§12
@@ -87,6 +92,14 @@ export interface RepoNeedsAttention {
 	items: NeedsAttentionItem[];
 }
 
+/** One repo's one-slug-one-folder LINT result, surfaced for the dashboard. */
+export interface RepoLedgerDuplicates {
+	/** The repo path whose `work/` ledger was linted (a hub-mirror path). */
+	repoPath: string;
+	/** The slugs present in more than one status folder (non-empty here). */
+	duplicates: DuplicateSlug[];
+}
+
 /** The operational groups `status` reports. */
 export interface StatusReport {
 	/** Running jobs the harness reports still alive. */
@@ -102,6 +115,15 @@ export interface StatusReport {
 	 * literals stay valid; `status()` always populates it (possibly empty).
 	 */
 	needsAttention?: RepoNeedsAttention[];
+	/**
+	 * The one-slug-one-folder LINT (PRD `ledger-integrity` story 3): per registered
+	 * hub mirror, any slug present in MORE THAN ONE `work/` status folder (a corrupt
+	 * ledger). Read from the mirror's bare `main` ref (the SAME `ls-tree` source the
+	 * needs-attention surface uses). Only repos WITH a duplicate appear. `status`
+	 * WARNS loudly about each (never a silent pass); a human resolves it. Empty when
+	 * no `mirrorPaths` were given or every ledger is clean.
+	 */
+	ledgerDuplicates?: RepoLedgerDuplicates[];
 	/**
 	 * The current repo's arbiter state (folded in from the old `arbiter status`,
 	 * ADR §1/§7): which remote, URL/path, exists/bare, main reachable, and the
@@ -196,6 +218,7 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 	// The folder-native needs-attention surface (ADR §12), read from each hub
 	// mirror's BARE `main` ref THROUGH the read seam (mirrors have no working tree).
 	const needsAttention: RepoNeedsAttention[] = [];
+	const ledgerDuplicates: RepoLedgerDuplicates[] = [];
 	for (const mirrorPath of options.mirrorPaths ?? []) {
 		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the surface
 		// reflects the remote truth. Never fatal — a failed fetch WARNS and falls
@@ -213,13 +236,21 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 		if (items.length > 0) {
 			needsAttention.push({repoPath: mirrorPath, items});
 		}
+		// The one-slug-one-folder LINT (PRD story 3): derive any slug residing in >1
+		// status folder from the SAME freshly-fetched `main` ref, surfaced LOUDLY.
+		const dups = lintRefLedger('main', mirrorPath, options.env);
+		if (dups.length > 0) {
+			ledgerDuplicates.push({repoPath: mirrorPath, duplicates: dups});
+		}
 	}
 	needsAttention.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
+	ledgerDuplicates.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 
 	return {
 		active,
 		attention,
 		needsAttention,
+		ledgerDuplicates,
 		...(options.arbiter ? {arbiter: options.arbiter} : {}),
 		...(options.cwd ? {cwd: options.cwd} : {}),
 	};
@@ -275,10 +306,16 @@ export function formatStatus(report: StatusReport): string {
 
 	const needsAttention = report.needsAttention ?? [];
 	const naCount = needsAttention.reduce((sum, r) => sum + r.items.length, 0);
+	const ledgerDuplicates = report.ledgerDuplicates ?? [];
+	const dupCount = ledgerDuplicates.reduce(
+		(sum, r) => sum + r.duplicates.length,
+		0,
+	);
 	if (
 		report.active.length === 0 &&
 		report.attention.length === 0 &&
 		naCount === 0 &&
+		dupCount === 0 &&
 		report.arbiter === undefined &&
 		cwdLines.length === 0
 	) {
@@ -325,10 +362,25 @@ export function formatStatus(report: StatusReport): string {
 		}
 	}
 
+	// The one-slug-one-folder LINT (PRD `ledger-integrity` story 3): WARN LOUDLY
+	// about every slug residing in >1 status folder of a registered mirror's ledger
+	// (a corrupt ledger — never a silent pass). A human must resolve each.
+	if (dupCount > 0) {
+		lines.push('');
+		for (const repo of ledgerDuplicates) {
+			lines.push(`  ${repo.repoPath}`);
+			for (const w of formatDuplicateWarnings(repo.duplicates)) {
+				lines.push(`  ${w}`);
+			}
+		}
+	}
+
 	lines.push('');
 	lines.push(
 		`Summary: ${report.active.length} active, ${report.attention.length} failed/retained job(s)` +
-			(naCount > 0 ? `, ${naCount} needs-attention item(s).` : '.'),
+			(naCount > 0 ? `, ${naCount} needs-attention item(s)` : '') +
+			(dupCount > 0 ? `, ${dupCount} one-slug-one-folder violation(s)` : '') +
+			'.',
 	);
 
 	// The folded-in arbiter state (ADR §1/§7, the old `arbiter status`).
