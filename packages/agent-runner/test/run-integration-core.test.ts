@@ -1,6 +1,12 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {writeFileSync, mkdirSync, chmodSync, readFileSync} from 'node:fs';
+import {
+	writeFileSync,
+	mkdirSync,
+	chmodSync,
+	readFileSync,
+	rmSync,
+} from 'node:fs';
 import {runOnce, type AgentRunner} from '../src/run.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
@@ -236,6 +242,60 @@ describe('run through performIntegration — per-repo, language-agnostic gate', 
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+	});
+});
+
+describe('run through performIntegration — one-slug-one-folder invariant FAILS LOUD', () => {
+	/**
+	 * The ledger-integrity hardening (PRD `work/prd-sliced/ledger-integrity.md`):
+	 * when the core's one-slug-one-folder guard fires it returns the
+	 * `invariant-violation` outcome and integrates NOTHING (a corrupt ledger — the
+	 * arbiter already holds the slug in >1 status folder). On the LEAST-supervised
+	 * caller (`run`, the autonomous daemon) this MUST route to needs-attention, NOT
+	 * fall through to the success branch and misreport the refusal as a completed
+	 * job (state:'done' / 'claimed-done' with no prUrl) — the opposite of fail-loud.
+	 * This mirrors `complete.ts`'s exit-1 refusal of the same outcome.
+	 */
+	it("an 'invariant-violation' core outcome records needs-attention, NEVER claimed-done", async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['feat']);
+		const {repo} = seeded;
+		// Corrupt the arbiter BEFORE the tick: add a stale needs-attention/feat.md
+		// (DISTINCT content from the live backlog copy, so the "provably-safe
+		// identical-content" auto-clean escape hatch does NOT apply) alongside the
+		// slug the run is about to claim. After the claim the arbiter holds 'feat' in
+		// TWO non-done status folders (in-progress/ from the claim + the planted
+		// needs-attention/) — the PR #86 corruption. The local done-move
+		// in-progress→done still has a clean `done/` destination, so it succeeds; the
+		// step-4 arbiter-resolved guard then reads `<arbiter>/main`, sees the slug in
+		// two folders with differing content, and returns `invariant-violation` (it
+		// integrates NOTHING). We assert `run` ROUTES that refusal to needs-attention
+		// rather than mis-recording a completed job.
+		const corrupt = seeded.clone('corrupt');
+		gitIn(['switch', '-q', '-c', 'corrupt/feat', 'arbiter/main'], corrupt);
+		mkdirSync(join(corrupt, 'work', 'needs-attention'), {recursive: true});
+		writeFileSync(
+			join(corrupt, 'work', 'needs-attention', 'feat.md'),
+			'---\ntitle: feat\nslug: feat\n---\n\nA DIFFERENT, stale copy.\n',
+		);
+		gitIn(['add', '-A'], corrupt);
+		gitIn(['commit', '-q', '-m', 'corrupt: feat in two folders'], corrupt);
+		gitIn(['push', '-q', 'arbiter', 'corrupt/feat:main'], corrupt);
+		rmSync(corrupt, {recursive: true, force: true});
+
+		const config = configFor();
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		// FAIL LOUD on the autonomous caller: needs-attention, NOT claimed-done.
+		expect(result.items[0].status).toBe('needs-attention');
+		expect(result.claimedAndDone).toBe(0);
+		// The refusal integrated NOTHING of ours: 'feat' never reached done/ on main.
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 });
 
