@@ -117,6 +117,7 @@ export {
 export type {
 	LedgerBacklogItem,
 	LedgerNeedsAttentionItem,
+	LedgerObservationItem,
 	LedgerPrdItem,
 	LedgerPrdPool,
 	PrdExistence,
@@ -221,6 +222,8 @@ export {selectCandidates} from './select.js';
 export type {
 	SelectedNamespace,
 	SelectedItem,
+	LifecycleSelectedItem,
+	SelectedLifecyclePools,
 	PrdCandidate,
 	SliceablePrdsInput,
 	SelectPrioritisedInput,
@@ -356,6 +359,18 @@ export type {
 	MirrorPoolScanResult,
 } from './mirror-pool-scan.js';
 export {scanMirrorPool} from './mirror-pool-scan.js';
+
+export type {
+	LifecyclePoolGates,
+	LifecyclePools,
+	LifecyclePoolsInput,
+	NeedsAnswersCandidate,
+} from './lifecycle-pools.js';
+export {buildLifecyclePools} from './lifecycle-pools.js';
+export {
+	gatherLifecycleInPlace,
+	gatherLifecycleMirror,
+} from './lifecycle-gather.js';
 
 export type {JobRecord, JobState, CreateJobOptions, Job} from './workspace.js';
 export {

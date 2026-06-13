@@ -38,8 +38,16 @@ import {
  * `-n <x>` = x). It is NOT a parallelism knob.
  */
 
-/** Which namespace a selected item names (mirrors the slug-namespace split). */
-export type SelectedNamespace = 'slice' | 'prd';
+/**
+ * Which namespace a selected item names (mirrors the slug-namespace split). The
+ * `do` selection only ever produces `slice`/`prd`; the `advance` selection ALSO
+ * produces `observation` (the lifecycle triage pool, slice
+ * `advance-autopick-lifecycle-pools`), so a selected lifecycle item carries which
+ * rung the driver dispatches to. The widening is BACKWARD-COMPATIBLE: `do` never
+ * emits `observation` (its lifecycle pools default to none, see
+ * {@link selectPrioritised}).
+ */
+export type SelectedNamespace = 'slice' | 'prd' | 'observation';
 
 /** One item the selection layer picked, in run order. */
 export interface SelectedItem {
@@ -50,10 +58,20 @@ export interface SelectedItem {
 	/**
 	 * `'slice'` ⇒ run the slice-build `do` pipeline; `'prd'` ⇒ dispatch to the
 	 * `do prd:<slug>` slicing path (slicing itself is `autoslice-command`, not
-	 * here). The caller turns this into the right `do` arg/dispatch.
+	 * here); `'observation'` ⇒ (advance only) the triage rung via `obs:<slug>`. The
+	 * caller turns this into the right `do`/`advance` arg/dispatch.
 	 */
 	namespace: SelectedNamespace;
 }
+
+/**
+ * A lifecycle-pool selected item (slice `advance-autopick-lifecycle-pools`). It is
+ * a {@link SelectedItem} — the same shape — carrying the lifecycle namespace
+ * (`observation` for triage; `slice`/`prd` for a `needsAnswers`-blocked item the
+ * tick will surface/apply). A distinct alias names the lifecycle pools at the
+ * call sites WITHOUT a structural difference (the discriminator is `namespace`).
+ */
+export type LifecycleSelectedItem = SelectedItem;
 
 /** A PRD candidate for the slicing pool, before the eligibility gate runs. */
 export interface PrdCandidate {
@@ -117,11 +135,36 @@ export interface SelectPrioritisedInput {
 	 */
 	prdsFirst?: boolean;
 	/**
-	 * How many items to take across BOTH pools, in priority order. Auto-pick = 1;
+	 * How many items to take across ALL pools, in priority order. Auto-pick = 1;
 	 * `do -n <x>` = x. Unset ⇒ take ALL eligible items (the priority order is still
 	 * applied). Sequential — NOT a parallelism knob.
 	 */
 	count?: number;
+	/**
+	 * The OPTIONAL lifecycle pools (slice `advance-autopick-lifecycle-pools`),
+	 * constructed CALLER-SIDE (the `advance` callers only) and passed in — exactly
+	 * as {@link prds} is. DEFAULTS to none, so `performDoAuto` (which passes only
+	 * its two pools) is provably UNCHANGED: `do` auto-pick never selects an
+	 * observation or a `needsAnswers` item. ONLY the `advance` callers
+	 * (`performAdvanceAuto` / the mirror-side advance path) supply these.
+	 *
+	 * The INTERIM four-pool order (this slice; the configurable order is the sibling
+	 * `advance-selection-order-config`): drain BUILDABLE work first (eligible slices
+	 * → sliceable PRDs, today's slices-first generalized), THEN the lifecycle pools
+	 * (apply → surface → triage — consume before the two create rungs). `prdsFirst`
+	 * still only flips the slice/PRD pair within the buildable group.
+	 */
+	lifecycle?: SelectedLifecyclePools;
+}
+
+/** The (optional) lifecycle pools handed to {@link selectPrioritised}, pre-built. */
+export interface SelectedLifecyclePools {
+	/** `apply` items (answered sidecars; CONSUME, always present when supplied). */
+	apply: LifecycleSelectedItem[];
+	/** `surface` items (blocked, no all-answered sidecar; already gate-filtered). */
+	surface: LifecycleSelectedItem[];
+	/** `triage` items (untriaged observations; already gate-filtered). */
+	triage: LifecycleSelectedItem[];
 }
 
 /**
@@ -152,9 +195,20 @@ export function selectPrioritised(
 		namespace: 'prd' as const,
 	}));
 
-	const ordered = input.prdsFirst
+	const buildable = input.prdsFirst
 		? [...prdItems, ...sliceItems]
 		: [...sliceItems, ...prdItems];
+
+	// The INTERIM four-pool order: BUILDABLE work first (the buildable group above),
+	// THEN the lifecycle pools (apply → surface → triage — consume before the two
+	// create rungs). The lifecycle pools default to none, so `do` is unchanged. The
+	// CONFIGURABLE order (presets / explicit list / apply-pinned-first, subsuming
+	// `prdsFirst`) is the sibling slice `advance-selection-order-config`.
+	const lifecycle = input.lifecycle;
+	const lifecycleItems: SelectedItem[] = lifecycle
+		? [...lifecycle.apply, ...lifecycle.surface, ...lifecycle.triage]
+		: [];
+	const ordered = [...buildable, ...lifecycleItems];
 
 	if (input.count === undefined) {
 		return ordered;

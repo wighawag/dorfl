@@ -335,6 +335,10 @@ export function registerMirrorWithWork(
 		prd?: Record<string, string>;
 		/** Already-SLICED PRDs, committed under `work/prd-sliced/` (sliced-ness residence). */
 		prdSliced?: Record<string, string>;
+		/** Observations committed under `work/observations/` (the triage candidate pool). */
+		observations?: Record<string, string>;
+		/** Sidecars committed under `work/questions/` (`<type>-<slug>.md`). */
+		questions?: Record<string, string>;
 		/** A `.agent-runner.json` committed at the repo root (travels onto the mirror's `main`). */
 		repoConfig?: Record<string, unknown>;
 	},
@@ -363,6 +367,8 @@ export function registerMirrorWithWork(
 	writeAll('out-of-scope', work.outOfScope);
 	writeAll('prd', work.prd);
 	writeAll('prd-sliced', work.prdSliced);
+	writeAll('observations', work.observations);
+	writeAll('questions', work.questions);
 	if (work.repoConfig) {
 		writeFileSync(
 			join(src, '.agent-runner.json'),

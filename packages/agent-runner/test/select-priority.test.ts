@@ -3,6 +3,7 @@ import {
 	selectPrioritised,
 	sliceablePrds,
 	type PrdCandidate,
+	type SelectedLifecyclePools,
 } from '../src/select-priority.js';
 import {selectCandidates} from '../src/select.js';
 import type {ScanReport, ScannedItem} from '../src/scan.js';
@@ -194,6 +195,108 @@ describe('selectPrioritised — per-repo toggle FLIPS the order', () => {
 		});
 		expect(slicesFirst[0]).toMatchObject({namespace: 'slice', slug: 'a'});
 		expect(prdsFirst[0]).toMatchObject({namespace: 'prd', slug: 'p1'});
+	});
+});
+
+describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-pools)', () => {
+	function lifecycle(
+		over: Partial<SelectedLifecyclePools> = {},
+	): SelectedLifecyclePools {
+		return {apply: [], surface: [], triage: [], ...over};
+	}
+
+	it('DEFAULTS to none — `do`-shaped calls (no `lifecycle`) select ONLY slices + PRDs (F-SHARE)', () => {
+		// This is the `do` auto-pick shape: no lifecycle pools passed. Proves the
+		// widening is backward-compatible — `do` never selects an observation or a
+		// needsAnswers item.
+		const r = report('/repo', [sliceItem('a', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [prd('p1')],
+		});
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'slice:a',
+			'prd:p1',
+		]);
+		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
+	});
+
+	it('orders the FOUR pools: buildable (slices → PRDs) FIRST, then lifecycle (apply → surface → triage)', () => {
+		const r = report('/repo', [sliceItem('s', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [prd('p')],
+			lifecycle: lifecycle({
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
+				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
+			}),
+		});
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'slice:s', // buildable: eligible slice
+			'prd:p', // buildable: sliceable PRD
+			'slice:ap', // lifecycle: apply (consume first)
+			'prd:su', // lifecycle: surface
+			'observation:tr', // lifecycle: triage
+		]);
+	});
+
+	it('count bounds ACROSS all four pools in priority order (buildable drains first)', () => {
+		const r = report('/repo', [sliceItem('s', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [],
+			count: 2,
+			lifecycle: lifecycle({
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
+				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
+			}),
+		});
+		// the eligible slice first, then apply (count 2 stops before triage).
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'slice:s',
+			'slice:ap',
+		]);
+	});
+
+	it('lifecycle-only selection (no buildable work) drains the lifecycle pools in order', () => {
+		const r = report('/repo', []);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [],
+			lifecycle: lifecycle({
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'slice'}],
+				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
+			}),
+		});
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'slice:ap',
+			'slice:su',
+			'observation:tr',
+		]);
+	});
+
+	it('prdsFirst flips ONLY the buildable pair, lifecycle stays after', () => {
+		const r = report('/repo', [sliceItem('s', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [prd('p')],
+			prdsFirst: true,
+			lifecycle: lifecycle({
+				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
+			}),
+		});
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'prd:p', // buildable flipped
+			'slice:s',
+			'observation:tr', // lifecycle still last
+		]);
 	});
 });
 
