@@ -94,6 +94,7 @@ export type CompleteOutcome =
 	| 'gate-failed' // the acceptance gate was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
+	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
 	| 'refused' // nothing to complete (nothing to commit, wrong folder, …)
 	| 'usage-error'; // usage / environment problem
 
@@ -414,6 +415,14 @@ async function runComplete(
 	// GREEN to complete (recovery never trusts the human blindly — the existing
 	// human-only --skip-verify stays the loud override); the surfaced on-`main`
 	// needs-attention state is reconciled by the done-move (it supersedes it).
+	//
+	// This LOCAL source resolution is now only a PRE-FLIGHT (which folder the
+	// checkout holds + the `recovering` re-gate decision) and the content FALLBACK:
+	// the integration core's done-move RESOLVES THE ACTUAL SOURCE FOLDER FROM THE
+	// ARBITER (arbiter-is-truth) and removes it from THERE, so the move can never
+	// disagree with what the arbiter holds even when the local tree diverges
+	// (ledger-integrity defect 1). The `source` we pass is the arbiter-content
+	// fallback for the degenerate "arbiter holds nothing" case, not the authority.
 	const inProgress = join(cwd, 'work', 'in-progress', `${slug}.md`);
 	const needsAttention = join(cwd, 'work', 'needs-attention', `${slug}.md`);
 	const source: 'in-progress' | 'needs-attention' = existsSync(inProgress)
@@ -516,6 +525,19 @@ async function runComplete(
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
 			commitMessage: core.commitMessage,
+			message: core.reason ?? '',
+		};
+	}
+	if (core.outcome === 'invariant-violation') {
+		// The one-slug-one-folder guard FAILED LOUD: the arbiter already holds the
+		// slug in >1 status folder (a corrupt ledger). Nothing was committed/moved;
+		// refuse rather than publish corruption (the human resolves the duplicate —
+		// `scan`/`gc` surfaces it — then re-runs). Exit 1, never routed.
+		return {
+			exitCode: 1,
+			outcome: 'invariant-violation',
+			routedToNeedsAttention: false,
+			branch: core.branch,
 			message: core.reason ?? '',
 		};
 	}

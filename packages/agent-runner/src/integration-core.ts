@@ -1,4 +1,10 @@
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import {join} from 'node:path';
 import {runVerify, type VerifyConfig} from './verify.js';
 import {
@@ -12,7 +18,7 @@ import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode, ReviewProviderName} from './config.js';
-import {git, runAsync, type RunResult} from './git.js';
+import {git, run, runAsync, type RunResult} from './git.js';
 import {workBranchRef} from './slug-namespace.js';
 
 /**
@@ -58,7 +64,8 @@ export type IntegrationCoreOutcome =
 	| 'completed' // gated, reviewed, moved, committed, rebased, integrated
 	| 'gate-failed' // the acceptance gate (verify) was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
-	| 'rebase-conflict'; // rebase onto arbiter/main conflicted (aborted; human resolves)
+	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
+	| 'invariant-violation'; // one-slug-one-folder would break (slug in two folders on the arbiter)
 
 /**
  * The CORE's input — everything the band needs, nothing caller-shaped. Every
@@ -564,11 +571,25 @@ export async function performIntegration(
 	});
 
 	// 2. STAGE the item move into the index. For a build that is the slice done-move
-	//    (`git mv work/<source>/<slug>.md → work/done/<slug>.md`); for a SLICING
+	//    (`work/<source>/<slug>.md → work/done/<slug>.md`); for a SLICING
 	//    transition (a non-slice `lifecycle`) it is the caller-supplied PRD
 	//    lifecycle move + emitted backlog files (the runner stages them, the agent
 	//    never does git). Either way the subsequent `git add -A` folds the agent's
 	//    uncommitted work + this staging into ONE atomic commit.
+	//
+	//    The slice done-move is ATOMIC AGAINST THE ARBITER (ledger-integrity
+	//    defect 1 + its root defect 2). The LOCAL move here is the legacy clean
+	//    `git mv work/<source>/<slug>.md → work/done/<slug>.md` (one folder, no
+	//    fetch — every existing path is byte-for-byte unchanged); the ARBITER
+	//    resolution + the one-slug-one-folder enforcement happen AFTER the rebase
+	//    (step 4b, `reconcileDoneMoveAgainstArbiter`), against the freshly-fetched
+	//    `<arbiter>/main`. That ordering is deliberate: a NEW fetch in THIS step
+	//    would race a sibling job's integration on the SHARED bare-mirror refs (the
+	//    very regression that orphaned this work, ADR §2), so we reuse the existing
+	//    step-4 fetch's result instead. The reconciliation REMOVES any divergent
+	//    `in-progress/`/`needs-attention/` ghost the merge would otherwise leave (so
+	//    the move is a MOVE, not a COPY) and FAILS LOUD if the arbiter holds the slug
+	//    in two folders with differing content.
 	if (lifecycle) {
 		await lifecycle.stage();
 	} else {
@@ -639,6 +660,32 @@ export async function performIntegration(
 		cwd,
 		env,
 	);
+	// ONE-SLUG-ONE-FOLDER guard + divergent-base PRE-CHECK, read from the
+	// freshly-fetched `<arbiter>/main` (a READ of the tracking ref the fetch above
+	// just populated — NO new fetch, so no shared-mirror race). It (a) FAILS LOUD if
+	// the arbiter already holds the slug in >1 status folder with differing content
+	// (a corrupt ledger; never publish over it), and (b) detects the DIVERGENT base
+	// — the arbiter holds the slug's source in a DIFFERENT folder than our local
+	// done-move removed — which is the case that turns the rebased "move" into a
+	// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
+	// done-move).
+	if (!lifecycle) {
+		const arbiterPlacement = readArbiterLedgerPlacement(
+			cwd,
+			arbiter,
+			slug,
+			env,
+		);
+		if (arbiterPlacement.error) {
+			note(arbiterPlacement.error);
+			return {
+				outcome: 'invariant-violation',
+				routedToNeedsAttention: false,
+				branch,
+				reason: arbiterPlacement.error,
+			};
+		}
+	}
 	// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
 	// needs-attention move, so it always uses the plain rebase.
 	const rebase =
@@ -646,8 +693,45 @@ export async function performIntegration(
 			? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
 			: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
 	if (rebase.status !== 0) {
-		// NEVER auto-resolve: abort the rebase (back to a clean work-branch tip).
+		// NEVER auto-resolve a genuine CODE conflict: abort the rebase. But FIRST, a
+		// DIVERGENT-LEDGER conflict (the arbiter holds the slug's source in a folder
+		// our local done-move did not remove — PR #86) is auto-RECONCILABLE without
+		// any semantic judgement: redo the done-move arbiter-resolved (remove the
+		// arbiter's actual source folder, add `done/`) on top of `<arbiter>/main`. We
+		// only do this when the post-abort tree's ONLY divergence is the slug's ledger
+		// file; a real code conflict still routes to needs-attention untouched.
 		await gitSoft(['rebase', '--abort'], cwd, env);
+		if (!lifecycle) {
+			const recovered = await reconcileDivergentDoneMove({
+				cwd,
+				arbiter,
+				slug,
+				branch,
+				localSource: source,
+				env,
+				note,
+			});
+			if (recovered) {
+				// The branch is now cleanly on top of `<arbiter>/main` with the slug in
+				// `done/` ONLY — fall through to integrate (skip the needs-attention
+				// route below).
+				note(
+					`Reconciled the done-move against ${arbiter}/main: '${slug}' is in ` +
+						'work/done/ ONLY (the divergent source folder was removed; the move ' +
+						'is a move, not a copy).',
+				);
+			} else {
+				return rebaseConflictRoute();
+			}
+		} else {
+			return rebaseConflictRoute();
+		}
+	}
+
+	// The rebase-conflict needs-attention route, factored so the divergent-ledger
+	// recovery above can fall through to integrate while a genuine code conflict
+	// still routes here.
+	async function rebaseConflictRoute(): Promise<IntegrationCoreResult> {
 		// Then route the item to needs-attention/ with the conflict reason (ADR
 		// §12) THROUGH the ledger write seam's needs-attention transition, rather
 		// than leaving it dangling in done/. The done-move was already committed
@@ -1252,6 +1336,205 @@ function dropMoveOnlySequenceEditor(slug: string): string {
 	// Escape any sed-special characters in the slug before embedding it.
 	const escaped = slug.replace(/[\\/&.[\]*^$]/g, '\\$&');
 	return `sed -i -e '/^pick [0-9a-f]* chore(${escaped}): route to needs-attention/d'`;
+}
+
+/**
+ * The `work/` status folders a slug's ledger file can resting-live in (the
+ * one-slug-one-folder set the invariant is asserted over). `done/` is the
+ * canonical destination of the done-move; the rest are the legitimate SOURCE
+ * folders a build/recovery completes FROM. Mirrors `ledger-write.ts`'s
+ * `WORK_FOLDERS` (the surface mechanism's probe) — the same ledger model, not a
+ * second one.
+ */
+const LEDGER_STATUS_FOLDERS = [
+	'backlog',
+	'in-progress',
+	'needs-attention',
+	'done',
+] as const;
+
+/** The result of {@link readArbiterLedgerPlacement}. */
+/** The result of {@link readArbiterLedgerPlacement}. */
+interface ArbiterLedgerPlacement {
+	/**
+	 * Set when the ONE-SLUG-ONE-FOLDER guard FAILED LOUD: the arbiter already holds
+	 * the slug in >1 status folder with DIFFERING content (a corrupt ledger). The
+	 * caller maps it to the `invariant-violation` outcome and refuses — nothing is
+	 * published over the corruption.
+	 */
+	error?: string;
+	/**
+	 * The NON-`done` status folders the ARBITER currently holds the slug in (e.g.
+	 * `['in-progress']` or `['needs-attention']`). Empty when the arbiter holds it
+	 * only in `done/`, holds it nowhere, or the tracking ref could not be read.
+	 */
+	sourceFolders: string[];
+}
+
+/**
+ * Read WHICH `work/<folder>/<slug>.md` the ARBITER currently holds the slug in,
+ * from the `<arbiter>/main` TRACKING REF (the source of truth). It is a pure READ
+ * of the ref the caller has ALREADY fetched (the step-4 rebase fetch) — it does
+ * NOT fetch, so it never races a sibling job's integration on the shared
+ * bare-mirror refs (ADR §2; a new fetch here was the regression that orphaned
+ * this very work).
+ *
+ * It ENFORCES the one-slug-one-folder invariant: if the arbiter already holds the
+ * slug in MORE THAN ONE status folder it is a pre-existing corrupt ledger — it
+ * FAILS LOUD (returns an `error`) rather than silently pick one, UNLESS it is
+ * PROVABLY SAFE (every copy is byte-identical, so the canonical `done/`
+ * destination is unambiguous), mirroring the manual `279b542` cleanup.
+ */
+function readArbiterLedgerPlacement(
+	cwd: string,
+	arbiter: string,
+	slug: string,
+	env: NodeJS.ProcessEnv | undefined,
+): ArbiterLedgerPlacement {
+	const arbiterRef = `${arbiter}/main`;
+	const placements: {folder: string; blob: string}[] = [];
+	for (const folder of LEDGER_STATUS_FOLDERS) {
+		const path = `work/${folder}/${slug}.md`;
+		const ls = run('git', ['ls-tree', arbiterRef, path], cwd, {env});
+		const line = ls.stdout.trim();
+		if (ls.status !== 0 || line === '') {
+			continue;
+		}
+		const match = /^\d+ blob ([0-9a-f]+)\t/.exec(line);
+		if (match) {
+			placements.push({folder, blob: match[1]});
+		}
+	}
+	const sourceFolders = placements
+		.filter((p) => p.folder !== 'done')
+		.map((p) => p.folder);
+
+	if (placements.length > 1) {
+		const uniqueBlobs = new Set(placements.map((p) => p.blob));
+		const folders = placements.map((p) => `work/${p.folder}/`).join(', ');
+		if (uniqueBlobs.size !== 1) {
+			return {
+				error:
+					`one-slug-one-folder invariant violated: '${slug}' is present in more ` +
+					`than one status folder on ${arbiterRef} (${folders}) with DIFFERING ` +
+					`content — refusing to publish a corrupt ledger. Resolve the duplicate ` +
+					`(keep the correct copy, delete the stale one) and re-run; ` +
+					`'agent-runner scan'/'gc' surfaces such duplicates.`,
+				sourceFolders,
+			};
+		}
+		// Provably safe (byte-identical copies): the duplicate is auto-cleaned by the
+		// divergent-done-move reconciliation, which moves the slug to `done/` ONLY.
+	}
+	return {sourceFolders};
+}
+
+/**
+ * Recover a DIVERGENT-BASE done-move whose plain rebase CONFLICTED (ledger-
+ * integrity defect 1, the PR #86 ghost). The arbiter holds the slug's source in a
+ * DIFFERENT folder than our local done-move removed, so replaying the local
+ * `-work/<localsrc>/<slug>.md +work/done/<slug>.md` patch onto `<arbiter>/main`
+ * (which lacks `<localsrc>`) conflicts on the ledger file.
+ *
+ * It reconciles WITHOUT any semantic judgement (so it is safe automatically,
+ * unlike a real code conflict): RESET the work branch onto `<arbiter>/main` (the
+ * working tree kept), then redo the done-move ARBITER-RESOLVED — remove the slug
+ * from EVERY non-`done` folder the arbiter holds it in, write `work/done/<slug>.md`
+ * — and commit ONE done commit on top of `<arbiter>/main`. The branch ends cleanly
+ * on the arbiter with the slug in `done/` ONLY (the move is a MOVE, not a copy);
+ * no further rebase is needed.
+ *
+ * Returns `true` on success (the caller falls through to integrate). Returns
+ * `false` when this is NOT the divergent-ledger case (the arbiter holds the slug
+ * only in `done/`/nowhere, or the placement read failed) so the caller routes the
+ * genuine conflict to needs-attention unchanged.
+ */
+async function reconcileDivergentDoneMove(params: {
+	cwd: string;
+	arbiter: string;
+	slug: string;
+	branch: string;
+	/** The folder the LOCAL done-move removed the slug from (its `git mv` source). */
+	localSource: 'in-progress' | 'needs-attention';
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<boolean> {
+	const {cwd, arbiter, slug, localSource, env} = params;
+	const arbiterRef = `${arbiter}/main`;
+
+	// The arbiter's current placement (read from the already-fetched ref — no
+	// fetch). This recovery applies ONLY to the divergent-LEDGER conflict: the
+	// arbiter holds the slug's source in a DIFFERENT folder than our local done-move
+	// removed it from. When the arbiter's source folder MATCHES our local source (or
+	// the arbiter holds it only in `done/`/nowhere), the rebase conflict is a
+	// genuine CODE conflict (e.g. the agent's edits vs an advanced main) — NEVER
+	// auto-resolved; defer to the needs-attention route.
+	const placement = readArbiterLedgerPlacement(cwd, arbiter, slug, env);
+	if (placement.error || placement.sourceFolders.length === 0) {
+		return false;
+	}
+	if (placement.sourceFolders.includes(localSource)) {
+		// The arbiter still holds the slug in the SAME source folder we moved from —
+		// the ledger placement agrees, so the conflict is NOT a divergent-ledger one.
+		return false;
+	}
+
+	// Capture the slug's ledger content (our tip's done/ copy, or any source copy)
+	// BEFORE we reset — it is what lands in `done/`.
+	let ledgerContent: string | undefined;
+	for (const folder of ['done', ...LEDGER_STATUS_FOLDERS]) {
+		const abs = join(cwd, 'work', folder, `${slug}.md`);
+		if (existsSync(abs)) {
+			ledgerContent = readFileSync(abs, 'utf8');
+			break;
+		}
+	}
+
+	// Re-point the branch onto `<arbiter>/main`, KEEPING the working tree (the
+	// agent's edits + our done/ file): a mixed reset moves HEAD + the index to the
+	// arbiter base but leaves the working tree intact. We then fix only the LEDGER
+	// placement against the arbiter and commit one clean done commit.
+	const reset = await gitSoft(
+		['reset', '--mixed', '--quiet', arbiterRef],
+		cwd,
+		env,
+	);
+	if (reset.status !== 0) {
+		return false;
+	}
+
+	// Arbiter-resolved ledger placement: write `done/` from the captured content,
+	// and remove every non-`done` copy (the arbiter's source folder is now checked
+	// out by the reset; any stale local source is swept too).
+	mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
+	const donePath = join(cwd, 'work', 'done', `${slug}.md`);
+	if (ledgerContent !== undefined) {
+		writeFileSync(donePath, ledgerContent);
+	}
+	for (const folder of LEDGER_STATUS_FOLDERS) {
+		if (folder === 'done') {
+			continue;
+		}
+		const abs = join(cwd, 'work', folder, `${slug}.md`);
+		if (existsSync(abs)) {
+			rmSync(abs, {force: true});
+		}
+	}
+
+	// Stage everything (agent work + the arbiter-aligned ledger move) and commit a
+	// single done commit on top of `<arbiter>/main`. Nothing staged ⇒ the slug is
+	// already done on the arbiter (an already-integrated no-op) — treat as cleanly
+	// reconciled.
+	await gitSoft(['add', '-A'], cwd, env);
+	if ((await gitSoft(['diff', '--cached', '--quiet'], cwd, env)).status === 0) {
+		return true;
+	}
+	await gitHard(
+		['commit', '-q', '-m', `feat(${slug}): reconcile done-move; done`],
+		cwd,
+		env,
+	);
+	return true;
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
