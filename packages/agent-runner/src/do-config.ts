@@ -60,11 +60,16 @@ export function harnessFlagOverrides(flags: HarnessFlags): PartialConfig {
  * default).
  */
 export function doFlagOverrides(
-	flags: HarnessFlags & ReviewFlags & SlicerLoopFlags,
+	flags: HarnessFlags & ReviewFlags & SlicerLoopFlags & SelectionOrderFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
 	const overrides = {
 		...harnessFlagOverrides(flags),
+		// `--selection-order <order>` rides the SAME flag-override chain (flag > env >
+		// per-repo > global > default): a comma-separated value becomes a list (an
+		// explicit pool order), otherwise the verbatim string (a preset keyword). The
+		// resolver (`select-order.ts`) validates/expands it at selection time.
+		...selectionOrderFlagOverrides(flags),
 		// Gate 2 (PR/code review) flags ride the SAME flag-override path so
 		// `--review`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
 		// flag > env > per-repo > global > default, exactly like the harness flags.
@@ -162,6 +167,42 @@ export function slicerLoopFlagOverrides(flags: SlicerLoopFlags): PartialConfig {
 	}
 	if (flags.slicerLoopModel !== undefined) {
 		overrides.slicerLoopModel = flags.slicerLoopModel;
+	}
+	return overrides;
+}
+
+/**
+ * The selection-order CLI flag (`do` AND `advance`): `--selection-order <order>`
+ * (a preset keyword like `drain`/`groom`, or a comma-separated explicit pool
+ * order like `build,slice,surface,triage`). Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain as the other `do` flags.
+ */
+export interface SelectionOrderFlags {
+	/** `--selection-order <order>` — a preset keyword or comma-separated pool list. */
+	selectionOrder?: string;
+}
+
+/**
+ * Map the `--selection-order` flag into a {@link PartialConfig} override. Only a
+ * present flag contributes (absent ⇒ absent key). A value CONTAINING a comma is
+ * parsed into a trimmed, non-empty list (an explicit pool order, mirroring the
+ * env `'list'` coercion); otherwise it is the verbatim string (a preset keyword
+ * or a single pool name). The resolver (`select-order.ts`) does the
+ * validation/expansion + loud failure at selection time — this only normalises
+ * the flag's surface syntax.
+ */
+export function selectionOrderFlagOverrides(
+	flags: SelectionOrderFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.selectionOrder !== undefined) {
+		const raw = flags.selectionOrder;
+		overrides.selectionOrder = raw.includes(',')
+			? raw
+					.split(',')
+					.map((s) => s.trim())
+					.filter((s) => s !== '')
+			: raw;
 	}
 	return overrides;
 }

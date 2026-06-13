@@ -34,9 +34,9 @@ describe('repo-config constants', () => {
 		// `advance-loop`) — the observation-triage mirror of `autoBuild`/`autoSlice`,
 		// resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoTriage');
-		// `prdsFirst` (the slices-first/PRD priority toggle, ADR §3) is a per-repo
-		// property resolved through the same chain.
-		expect(REPO_ALLOWED_KEYS).toContain('prdsFirst');
+		// `selectionOrder` (the configurable cross-pool order; subsumes the removed
+		// `prdsFirst`) is a per-repo property resolved through the same chain.
+		expect(REPO_ALLOWED_KEYS).toContain('selectionOrder');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {

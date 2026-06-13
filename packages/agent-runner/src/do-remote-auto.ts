@@ -40,7 +40,7 @@ type SharedRemoteOptions = Omit<DoRemoteOptions, 'arg'>;
 export interface PerformDoRemoteAutoOptions extends SharedRemoteOptions {
 	/**
 	 * The resolved (remote) repo config — provides `autoBuild`/`autoSlice` (the
-	 * mirror scan applies them) and `prdsFirst` (the priority toggle). The
+	 * mirror scan applies them) and `selectionOrder` (the cross-pool order). The
 	 * per-action gates are applied at the SELECTION layer, exactly as in-place.
 	 */
 	config: Config;
@@ -106,8 +106,8 @@ export async function performDoRemoteAuto(
 		env: options.env,
 	});
 
-	// Order across both pools (slices-first / flipped) + bound by count — the SAME
-	// shared, pure `selectPrioritised` the in-place + `run` drivers use.
+	// Order across both pools per the resolved `selectionOrder` + bound by count — the
+	// SAME shared, pure `selectPrioritised` the in-place + `run` drivers use.
 	const selected = selectPrioritised({
 		report: scan.report,
 		caps: {
@@ -115,7 +115,7 @@ export async function performDoRemoteAuto(
 			perRepoMax: Number.MAX_SAFE_INTEGER,
 		},
 		prds: scan.prds,
-		prdsFirst: options.config.prdsFirst,
+		selectionOrder: options.config.selectionOrder,
 		count,
 	});
 

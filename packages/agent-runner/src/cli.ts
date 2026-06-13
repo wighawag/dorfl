@@ -477,6 +477,8 @@ interface DoFlags {
 	isolated?: boolean;
 	/** `-n <x>`: do x eligible items in sequence (auto-pick form). */
 	number?: string;
+	/** `--selection-order <order>`: a preset keyword (drain/groom) or comma-separated pool order. */
+	selectionOrder?: string;
 	merge?: boolean;
 	propose?: boolean;
 	ignoreDivergedMain?: boolean;
@@ -1384,7 +1386,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws SLICES-FIRST then PRDs-to-slice (per-repo prdsFirst flips it). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws SLICES-FIRST then PRDs-to-slice by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
 		// EXTENSIBLE argument grammar (the three do-* slices grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -1402,7 +1404,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'-n, --number <x>',
-			'AUTO-PICK x eligible items and do them IN SEQUENCE (slices-first then PRDs-to-slice; per-repo prdsFirst flips). Sequential — never a parallelism knob (that is `run`). Mutually exclusive with naming items.',
+			'AUTO-PICK x eligible items and do them IN SEQUENCE (ordered by selectionOrder, default drain = slices-first then PRDs-to-slice). Sequential — never a parallelism knob (that is `run`). Mutually exclusive with naming items.',
+		)
+		.option(
+			'--selection-order <order>',
+			'order the auto-pick pools (build/slice/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list (e.g. build,slice,surface,triage). Resolved flag > env > per-repo > global > default.',
 		)
 		.option(
 			'--remote <r>',
@@ -1818,7 +1824,7 @@ export function buildProgram(): Command {
 
 			// DISPATCH the variadic grammar (in-place forms):
 			//   zero args         -> AUTO-PICK `count` (default 1) across the two pools
-			//                        (slices-first then PRDs-to-slice; prdsFirst flips)
+			//                        (ordered by selectionOrder; default drain = slices-first)
 			//   one named arg     -> the single-item pipeline (unchanged from do-in-place)
 			//   many named args   -> those, IN SEQUENCE (operator's order; no pool)
 			// Auto-pick / multi-arg run the EXISTING `performDo` pipeline per item,
@@ -1875,7 +1881,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'-n, --number <x>',
-			'AUTO-PICK x eligible items and advance them IN SEQUENCE (slices-first then PRDs-to-slice; per-repo prdsFirst flips). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
+			'AUTO-PICK x eligible items and advance them IN SEQUENCE (ordered by selectionOrder, default drain = slices-first then PRDs-to-slice). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
+		)
+		.option(
+			'--selection-order <order>',
+			'order the auto-pick pools (build/slice/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list. Resolved flag > env > per-repo > global > default.',
 		)
 		.option(
 			'--merge',
@@ -2000,7 +2010,7 @@ export function buildProgram(): Command {
 			// DISPATCH the variadic grammar (the one-shot SEQUENTIAL driver):
 			//   zero args       -> AUTO-PICK `count` (default 1) over the eligible pool
 			//                      (slices-first then PRDs-to-slice; per-action gates
-			//                      respected by the SELECTION layer; prdsFirst flips).
+			//                      respected by the SELECTION layer; ordered by selectionOrder).
 			//   one named arg   -> the single-item tick (the always-allowed surface/apply
 			//                      path runs regardless of the gate family).
 			//   many named args -> those, IN SEQUENCE (operator's order; no pool).

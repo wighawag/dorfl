@@ -189,10 +189,10 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 			lifecycle: pool.lifecycle,
 		});
 		expect(selected.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:build-me', // buildable
-			'slice:answered-slice', // lifecycle apply
-			'slice:blocked-slice', // lifecycle surface
-			'observation:triage-me', // lifecycle triage
+			'slice:answered-slice', // apply: PINNED FIRST (consume-always-wins)
+			'slice:build-me', // build
+			'slice:blocked-slice', // surface
+			'observation:triage-me', // triage
 		]);
 	});
 });

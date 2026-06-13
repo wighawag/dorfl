@@ -19,10 +19,14 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).autoSlice).toBe(false);
 	});
 
-	it('defaults prdsFirst to false (slices-first priority, ADR §3)', () => {
-		expect(DEFAULT_CONFIG.prdsFirst).toBe(false);
-		expect(mergeConfig({}).prdsFirst).toBe(false);
-		expect(mergeConfig({prdsFirst: true}).prdsFirst).toBe(true);
+	it('defaults selectionOrder to the `drain` preset (slices-first; subsumes prdsFirst)', () => {
+		expect(DEFAULT_CONFIG.selectionOrder).toBe('drain');
+		expect(mergeConfig({}).selectionOrder).toBe('drain');
+		// A preset string OR an explicit list overrides it.
+		expect(mergeConfig({selectionOrder: 'groom'}).selectionOrder).toBe('groom');
+		expect(
+			mergeConfig({selectionOrder: ['slice', 'build']}).selectionOrder,
+		).toEqual(['slice', 'build']);
 	});
 
 	it('defaults the autonomy gate to strict (autoBuild false)', () => {

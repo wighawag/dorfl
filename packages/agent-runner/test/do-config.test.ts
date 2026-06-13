@@ -64,6 +64,20 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 		expect(overrides.piBin).toBeUndefined();
 		expect(overrides.model).toBeUndefined();
 		expect(overrides.integration).toBeUndefined();
+		expect(overrides.selectionOrder).toBeUndefined();
+	});
+
+	it('maps --selection-order: a preset keyword stays a string', () => {
+		expect(doFlagOverrides({selectionOrder: 'groom'}).selectionOrder).toBe(
+			'groom',
+		);
+	});
+
+	it('maps --selection-order: a comma form becomes a trimmed list (explicit order)', () => {
+		expect(
+			doFlagOverrides({selectionOrder: 'build, slice ,surface,triage'})
+				.selectionOrder,
+		).toEqual(['build', 'slice', 'surface', 'triage']);
 	});
 });
 

@@ -57,8 +57,8 @@ export interface AdvanceOnceOptions {
 	mirrorPath: string;
 	/**
 	 * The resolved (remote) repo config — `autoBuild`/`autoSlice` gate the pool
-	 * scan, `prdsFirst` the priority. The per-action gate family is applied at the
-	 * SELECTION layer, exactly as the one-shot driver applies it.
+	 * scan, `selectionOrder` the cross-pool order. The per-action gate family is
+	 * applied at the SELECTION layer, exactly as the one-shot driver applies it.
 	 */
 	config: Config;
 	/**
@@ -141,10 +141,10 @@ export async function advanceOnce(
 		lifecycleGates: options.lifecycleGates,
 	});
 
-	// Order across the FOUR pools (buildable first, then lifecycle) — ALL eligible
-	// items (the loop drains the whole pool each batch; `count` is the one-shot/`-n`
-	// concern). The lifecycle pools come from the SHARED mirror enumeration, so the
-	// loop/CI selection agrees with the in-place one-shot selection.
+	// Order across the (up to) FIVE pools per the resolved `selectionOrder` (apply
+	// pinned first) — ALL eligible items (the loop drains the whole pool each batch;
+	// `count` is the one-shot/`-n` concern). The lifecycle pools come from the SHARED
+	// mirror enumeration, so the loop/CI selection agrees with the in-place one-shot.
 	const selected = selectPrioritised({
 		report: scan.report,
 		caps: {
@@ -152,7 +152,7 @@ export async function advanceOnce(
 			perRepoMax: Number.MAX_SAFE_INTEGER,
 		},
 		prds: scan.prds,
-		prdsFirst: options.config.prdsFirst,
+		selectionOrder: options.config.selectionOrder,
 		lifecycle: scan.lifecycle,
 	});
 

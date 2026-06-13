@@ -4,30 +4,39 @@ import {
 	resolveSlicingEligibility,
 	type HumanOnlyGate,
 } from './slicing-eligibility.js';
+import {
+	resolveSelectionOrder,
+	DEFAULT_SELECTION_ORDER,
+	type SelectionPool,
+	type SelectionOrderConfig,
+} from './select-order.js';
 
 /**
- * The SHARED, PURE selection-and-ordering helper for the multi-item `do` forms
- * (`do` auto-pick / `do -n <x>` / `do <a> <b> …`) and the slices-first priority
- * (ADR `command-surface-and-journeys` §3 — "eligible slices first, then PRDs to
- * slice (drain ready work before creating more), with a per-repo toggle to flip
- * it").
+ * The SHARED, PURE selection-and-ordering helper for the multi-item `do`/`advance`
+ * forms (auto-pick / `-n <x>` / `<a> <b> …`) and the CONFIGURABLE selection ORDER
+ * (slice `advance-selection-order-config`; ADR `ci-config-policy-and-gate-family`,
+ * selection-order section). `apply` is PINNED FIRST (consume-always-wins); the
+ * other four pools (`build` / `slice` / `surface` / `triage`) are ranked by the
+ * per-repo `selectionOrder` field (a PRESET keyword or an explicit pool-name
+ * list), whose `drain` default reproduces today's slices-first "drain ready work
+ * before creating more".
  *
- * It is the ONE place the two-pool priority lives, so it is not duplicated when
- * `run`'s tick later adopts the SAME "slices-first, then PRDs to slice" priority
+ * It is the ONE place the cross-pool ordering lives, so it is not duplicated when
+ * `run`'s tick later adopts the SAME priority
  * (ADR §3: "the `run`/`do` auto-slice step"). This slice (`do-autopick`) OWNS and
  * builds this helper; it does NOT retro-wire `run` to call it (at `do-autopick`
  * time `run`'s tick is slice-only — concurrent + looped — and adopting this
  * helper, so `run` also auto-slices eligible PRDs, is a noted FOLLOW-UP once both
  * land). Build it standalone; do not assume `run` already calls it.
  *
- * **Two POOLS, not one.** The `scan`/`selectCandidates`/eligibility model is
+ * **Up to FIVE pools.** The `scan`/`selectCandidates`/eligibility model is
  * SLICE-ONLY (there is no PRD candidate). So this helper composes:
  *
- *   - the **slices pool** — the EXISTING {@link selectCandidates} path (round-robin
- *     across repos, capped). This is the EXACT slice-selection primitive `run`
- *     uses, so `run` and this helper SHARE it (the criterion "the shared helper is
- *     the one `run` uses" — they share `selectCandidates`, the slice-pool core).
- *   - the **PRD-to-slice pool** — a NEW pool the caller builds from the PRD reader
+ *   - the **`build` pool** (eligible SLICES) — the EXISTING {@link selectCandidates}
+ *     path (round-robin across repos, capped). This is the EXACT slice-selection
+ *     primitive `run` uses, so `run` and this helper SHARE it (they share
+ *     `selectCandidates`, the slice-pool core).
+ *   - the **`slice` pool** (PRD-to-slice) — a pool the caller builds from the PRD reader
  *     (`ledgerRead.resolvePrdPool`) filtered by `autoslice-gate`'s pure predicate
  *     ({@link resolveSlicingEligibility}); see {@link sliceablePrds}. The helper
  *     does NOT reinvent PRD eligibility.
@@ -112,7 +121,7 @@ export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
 	);
 }
 
-/** Inputs to {@link selectPrioritised}: the two pools + ordering + count. */
+/** Inputs to {@link selectPrioritised}: the pools + ordering + count. */
 export interface SelectPrioritisedInput {
 	/**
 	 * The slice pool source — a `scan` report (slice-only, the existing model) +
@@ -129,11 +138,16 @@ export interface SelectPrioritisedInput {
 	 */
 	prds: PrdCandidate[];
 	/**
-	 * Pool order: `false` (default) ⇒ **slices first, then PRDs to slice** (ADR §3,
-	 * "drain ready work before creating more"); `true` ⇒ flip (PRDs to slice
-	 * first). The per-repo `prdsFirst` toggle.
+	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
+	 * `slice` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
+	 * list (slice `advance-selection-order-config`; the `selectionOrder` config
+	 * field). Resolved through {@link resolveSelectionOrder} (apply is pinned first
+	 * and NOT nameable here). OMITTED ⇒ the `drain` default (`[build, slice,
+	 * surface, triage]`), which reproduces today's slices-first "drain before
+	 * create" two-pool default. `[slice, build, ...]` reproduces the old
+	 * `prdsFirst: true`. An unknown name/keyword FAILS LOUDLY.
 	 */
-	prdsFirst?: boolean;
+	selectionOrder?: SelectionOrderConfig;
 	/**
 	 * How many items to take across ALL pools, in priority order. Auto-pick = 1;
 	 * `do -n <x>` = x. Unset ⇒ take ALL eligible items (the priority order is still
@@ -148,11 +162,12 @@ export interface SelectPrioritisedInput {
 	 * observation or a `needsAnswers` item. ONLY the `advance` callers
 	 * (`performAdvanceAuto` / the mirror-side advance path) supply these.
 	 *
-	 * The INTERIM four-pool order (this slice; the configurable order is the sibling
-	 * `advance-selection-order-config`): drain BUILDABLE work first (eligible slices
-	 * → sliceable PRDs, today's slices-first generalized), THEN the lifecycle pools
-	 * (apply → surface → triage — consume before the two create rungs). `prdsFirst`
-	 * still only flips the slice/PRD pair within the buildable group.
+	 * Ordered per the resolved {@link selectionOrder}: `apply` is ALWAYS prepended
+	 * (pinned first — consume-always-wins), then the four orderable pools (`build` /
+	 * `slice` / `surface` / `triage`) in the configured order, truncated to
+	 * {@link count}. A pool NAMED in the order but absent here (gated off — empty)
+	 * is simply a no-op (it contributes no items), so the gates (what is PRESENT)
+	 * and `selectionOrder` (what runs first) compose ORTHOGONALLY.
 	 */
 	lifecycle?: SelectedLifecyclePools;
 }
@@ -168,11 +183,20 @@ export interface SelectedLifecyclePools {
 }
 
 /**
- * Build the ordered, counted list of items to do across the two pools, applying
- * the slices-first (or flipped) priority and the count bound. The slice pool is
- * selected via the EXISTING {@link selectCandidates} (the shared primitive `run`
- * uses); the PRD pool is the pre-filtered {@link sliceablePrds} output. The two
- * are concatenated in the priority order, then truncated to `count`.
+ * Build the ordered, counted list of items to do across the (up to) FIVE pools,
+ * applying the configurable {@link selectionOrder} with `apply` PINNED FIRST and
+ * the count bound. The slice pool is selected via the EXISTING
+ * {@link selectCandidates} (the shared primitive `run` uses); the PRD pool is the
+ * pre-filtered {@link sliceablePrds} output; the lifecycle pools (`apply` /
+ * `surface` / `triage`) are caller-built (none for `do`).
+ *
+ * Ordering: `apply` is always prepended (consume-always-wins; not orderable),
+ * then the four orderable pools (`build` = eligible slices, `slice` = sliceable
+ * PRDs, `surface`, `triage`) interleaved in the resolved {@link selectionOrder}
+ * (default `drain` = `[build, slice, surface, triage]`, which reproduces today's
+ * slices-first two-pool default). A pool named in the order but EMPTY (gated off)
+ * contributes nothing — a no-op, not an error (gates decide what is PRESENT,
+ * `selectionOrder` ranks what is present). Then truncated to `count`.
  *
  * Deterministic + pure. The caller runs the existing `do` pipeline per returned
  * item, SEQUENTIALLY.
@@ -180,7 +204,7 @@ export interface SelectedLifecyclePools {
 export function selectPrioritised(
 	input: SelectPrioritisedInput,
 ): SelectedItem[] {
-	const sliceItems: SelectedItem[] = selectCandidates(
+	const buildItems: SelectedItem[] = selectCandidates(
 		input.report,
 		input.caps,
 	).map((candidate: Candidate) => ({
@@ -189,26 +213,39 @@ export function selectPrioritised(
 		namespace: 'slice' as const,
 	}));
 
-	const prdItems: SelectedItem[] = input.prds.map((prd) => ({
+	const sliceItems: SelectedItem[] = input.prds.map((prd) => ({
 		repoPath: prd.repoPath,
 		slug: prd.slug,
 		namespace: 'prd' as const,
 	}));
 
-	const buildable = input.prdsFirst
-		? [...prdItems, ...sliceItems]
-		: [...sliceItems, ...prdItems];
-
-	// The INTERIM four-pool order: BUILDABLE work first (the buildable group above),
-	// THEN the lifecycle pools (apply → surface → triage — consume before the two
-	// create rungs). The lifecycle pools default to none, so `do` is unchanged. The
-	// CONFIGURABLE order (presets / explicit list / apply-pinned-first, subsuming
-	// `prdsFirst`) is the sibling slice `advance-selection-order-config`.
 	const lifecycle = input.lifecycle;
-	const lifecycleItems: SelectedItem[] = lifecycle
-		? [...lifecycle.apply, ...lifecycle.surface, ...lifecycle.triage]
-		: [];
-	const ordered = [...buildable, ...lifecycleItems];
+
+	// The per-pool item lists, keyed by the orderable pool name. NOTE the
+	// vocabulary bridge: `build` = the eligible-SLICE pool (namespace `slice`),
+	// `slice` = the sliceable-PRD pool (namespace `prd`) — the action names, not the
+	// item namespaces (slice `advance-selection-order-config`).
+	const byPool: Record<SelectionPool, SelectedItem[]> = {
+		build: buildItems,
+		slice: sliceItems,
+		surface: lifecycle?.surface ?? [],
+		triage: lifecycle?.triage ?? [],
+	};
+
+	// Resolve the configured order (preset or explicit list; unknown name/keyword
+	// FAILS LOUDLY here). OMITTED ⇒ the `drain` default.
+	const order = resolveSelectionOrder(
+		input.selectionOrder ?? DEFAULT_SELECTION_ORDER,
+	);
+
+	// `apply` is ALWAYS first (pinned, not orderable), then the four orderable
+	// pools in the resolved order. An absent (gated-off) pool's list is empty, so it
+	// drops out cleanly — no special-casing.
+	const applyItems = lifecycle?.apply ?? [];
+	const ordered: SelectedItem[] = [
+		...applyItems,
+		...order.flatMap((pool) => byPool[pool]),
+	];
 
 	if (input.count === undefined) {
 		return ordered;

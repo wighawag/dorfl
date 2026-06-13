@@ -226,7 +226,7 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('the four-pool ORDER: buildable first, then lifecycle (apply → surface → triage)', async () => {
+	it('the five-pool ORDER: apply PINNED first, then the drain order (build → slice → surface → triage)', async () => {
 		// buildable
 		seedSlice('build-me');
 		seedPrd('slice-me');
@@ -244,11 +244,11 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 			count: 99,
 		});
 		expect(args).toEqual([
-			'build-me', // buildable: eligible slice
-			'prd:slice-me', // buildable: sliceable PRD
-			'apply-me', // lifecycle: apply (consume)
-			'surface-me', // lifecycle: surface
-			'obs:triage-me', // lifecycle: triage
+			'apply-me', // apply: PINNED FIRST (consume-always-wins)
+			'build-me', // build: eligible slice
+			'prd:slice-me', // slice: sliceable PRD
+			'surface-me', // surface
+			'obs:triage-me', // triage
 		]);
 	});
 });
