@@ -56,3 +56,7 @@ ALSO (the invariant that resolves the sibling slice's apply question): the two q
 ## Needs attention
 
 acceptance gate failed (exit 1)
+
+## Requeue 2026-06-13
+
+Gate red was a KNOWN FLAKE, not a regression — continue from the kept branch, do NOT restart. The single failing test was advance-triage.test.ts 'a same-slug new-item race => exactly one promote creates, the loser fails CAS' (expected 1 winner, got 2) — the exact 2-winners-under-parallel-load flake PR #90 (commit 15c00ac, triage-cas-race-test-models-real-contention) documented. Verified this session: the slice only changed that test's doc-comment terminology (autoTriage->observationTriage), NOT the race-test body; the file passes 11/11 in isolation and the FULL suite passed green on two consecutive re-runs of this branch. The slice work is sound. On re-do: just re-run the gate (pnpm -r build && pnpm -r test && pnpm -r format:check); it should pass. See work/observations/triage-cas-race-test-still-flakes-under-parallel-load.md. Do NOT weaken the one-winner CAS invariant to make it pass.
