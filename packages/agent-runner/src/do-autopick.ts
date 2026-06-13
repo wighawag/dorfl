@@ -20,12 +20,13 @@ import type {Config} from './config.js';
  *   - **`do -n <x>`** — do x eligible things, in sequence.
  *   - **`do <a> <b> …`** — do those NAMED items, in sequence.
  *
- * Auto-pick / `-n` draw from TWO POOLS with the slices-first priority (the
- * shared, pure {@link selectPrioritised} helper): eligible SLICES (the existing
- * `scan`/`selectCandidates`/eligibility path) first, then SLICEABLE PRDs (the NEW
- * pool built from the PRD reader + `autoslice-gate`'s predicate), with a per-repo
- * `prdsFirst` toggle to flip the order. A selected PRD dispatches to the
- * `do prd:<slug>` path (slicing itself is `autoslice-command`, not built here).
+ * Auto-pick / `-n` draw from TWO POOLS ordered by the configurable
+ * `selectionOrder` (the shared, pure {@link selectPrioritised} helper): eligible
+ * SLICES (the `build` pool — the existing `scan`/`selectCandidates`/eligibility
+ * path) and SLICEABLE PRDs (the `slice` pool — built from the PRD reader +
+ * `autoslice-gate`'s predicate), in the per-repo `selectionOrder` (default `drain`
+ * = slices-first). A selected PRD dispatches to the `do prd:<slug>` path (slicing
+ * itself is `autoslice-command`, not built here).
  *
  * Explicit multi-arg (`do <a> <b>`) bypasses the pools/priority entirely — the
  * named items are resolved + run in the given order (the operator chose them).
@@ -39,9 +40,10 @@ type SharedDoOptions = Omit<DoOptions, 'arg'>;
 
 export interface PerformDoMultiOptions extends SharedDoOptions {
 	/**
-	 * The resolved repo config (provides `autoSlice` for the PRD gate, `prdsFirst`
-	 * for the toggle, and the slice-pool selection caps). The per-item runs still
-	 * receive `autoSlice`/`integration`/etc. via the spread `SharedDoOptions`.
+	 * The resolved repo config (provides `autoSlice` for the PRD gate,
+	 * `selectionOrder` for the pool order, and the slice-pool selection caps). The
+	 * per-item runs still receive `autoSlice`/`integration`/etc. via the spread
+	 * `SharedDoOptions`.
 	 */
 	config: Config;
 	/**
@@ -83,8 +85,8 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Run the AUTO-PICK / `-n <x>` form: build the two pools for `cwd`, order them
- * (slices-first, or flipped by `prdsFirst`), take `count` (default 1), and run
- * the existing `do` pipeline per selected item, SEQUENTIALLY.
+ * per the resolved `selectionOrder` (default `drain` = slices-first), take `count`
+ * (default 1), and run the existing `do` pipeline per selected item, SEQUENTIALLY.
  */
 export async function performDoAuto(
 	options: PerformDoMultiOptions,
@@ -114,13 +116,13 @@ export async function performDoAuto(
 		autoSlice: options.config.autoSlice,
 	});
 
-	// Order across both pools (slices-first / flipped) + bound by count. The slice
-	// pool is selected via the SHARED `selectCandidates` primitive `run` uses.
+	// Order across both pools per the resolved `selectionOrder` + bound by count. The
+	// slice pool is selected via the SHARED `selectCandidates` primitive `run` uses.
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
 		prds: eligiblePrds,
-		prdsFirst: options.config.prdsFirst,
+		selectionOrder: options.config.selectionOrder,
 		count,
 	});
 

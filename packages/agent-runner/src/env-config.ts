@@ -61,7 +61,11 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	autoBuild: 'boolean',
 	autoSlice: 'boolean',
 	autoTriage: 'boolean',
-	prdsFirst: 'boolean',
+	// `selectionOrder` coerces as a `'list'` (comma form
+	// `AGENT_RUNNER_SELECTION_ORDER=build,slice,surface,triage`); a single-element
+	// list whose one entry is a preset keyword (`=drain`) is expanded by the
+	// resolver (`select-order.ts`). Subsumes the removed `prdsFirst` boolean.
+	selectionOrder: 'list',
 	maxParallel: 'number',
 	perRepoMax: 'number',
 	defaultArbiter: 'string',

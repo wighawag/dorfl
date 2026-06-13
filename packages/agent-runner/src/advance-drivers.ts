@@ -78,8 +78,9 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
 	 * The resolved repo config — provides `autoBuild` (the build gate for the
 	 * slice pool), `autoSlice` (the slice-a-PRD gate for the PRD pool), and
-	 * `prdsFirst` (the priority toggle). The per-action gate family is APPLIED
-	 * HERE, at the selection layer (the policy-on-autonomous-selection point).
+	 * `selectionOrder` (the configurable cross-pool order). The per-action gate
+	 * family is APPLIED HERE, at the selection layer (the policy-on-autonomous-
+	 * selection point).
 	 */
 	config: Config;
 	/**
@@ -132,8 +133,9 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
 /**
  * Run the BARE / `-n <x>` form: build the two ELIGIBLE pools for `cwd` (eligible
  * SLICES gated by `autoBuild`, sliceable PRDs gated by `autoSlice`), order them
- * (slices-first, or flipped by `prdsFirst`), take `count` (default 1), and run the
- * EXISTING advance tick per selected item, SEQUENTIALLY. The pools are the EXACT
+ * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
+ * pinned first, take `count` (default 1), and run the EXISTING advance tick per
+ * selected item, SEQUENTIALLY. The pools are the EXACT
  * `do-autopick` pools (the SAME `scoreItems`/`sliceablePrds` predicates), so the
  * per-action gate family is honoured by construction.
  *
@@ -187,14 +189,14 @@ export async function performAdvanceAuto(
 		gates: options.lifecycleGates,
 	});
 
-	// Order across the FOUR pools (buildable first, then lifecycle) + bound by count
-	// — the SAME shared, pure `selectPrioritised` the `do` auto-pick driver uses
-	// (which passes NO lifecycle pools, so it is unchanged).
+	// Order across the (up to) FIVE pools per the resolved `selectionOrder` (apply
+	// pinned first) + bound by count — the SAME shared, pure `selectPrioritised` the
+	// `do` auto-pick driver uses (which passes NO lifecycle pools, so it is unchanged).
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
 		prds: eligiblePrds,
-		prdsFirst: options.config.prdsFirst,
+		selectionOrder: options.config.selectionOrder,
 		lifecycle,
 		count,
 	});

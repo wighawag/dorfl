@@ -3,6 +3,10 @@ import {homedir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {brand} from './brand.js';
 import {type Identity, validateIdentity} from './identity.js';
+import {
+	DEFAULT_SELECTION_ORDER,
+	type SelectionOrderConfig,
+} from './select-order.js';
 
 /**
  * How a completed item is integrated back to the arbiter's `main`. `merge` lands
@@ -78,17 +82,23 @@ export interface Config {
 	 */
 	autoTriage: boolean;
 	/**
-	 * Per-repo toggle: when an auto-pick / `-n` / multi-item selection draws from
-	 * BOTH pools (eligible slices + sliceable PRDs), which pool comes FIRST?
-	 * `false` (default) ⇒ **slices first, then PRDs to slice** — drain ready work
-	 * before creating more (ADR `command-surface-and-journeys` §3). `true` ⇒ flip
-	 * the order (PRDs to slice first). It ONLY reorders the two pools relative to
-	 * each other; it never changes WHICH items are eligible. Resolved per-repo like
-	 * `autoBuild`/`autoSlice`: flag > `AGENT_RUNNER_PRDS_FIRST` env > per-repo >
-	 * global > default false. The shared selection helper (`select-priority.ts`)
-	 * reads it; `run`'s tick can adopt the same helper later.
+	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
+	 * eligible slices, `slice` = sliceable PRDs, `surface` = `needsAnswers`
+	 * blockers, `triage` = untriaged observations). `apply` (consume a committed
+	 * answer) is PINNED FIRST and is NOT orderable (consume-always-wins). The value
+	 * is EITHER a PRESET keyword (`drain` (default) ⇒ `[build, slice, surface,
+	 * triage]`, drain ready work then create then ask; `groom` ⇒ `[surface, triage,
+	 * build, slice]`) OR an explicit ordered pool-name list (the env comma form
+	 * `build,slice,surface,triage`); the preset is sugar over the list. It only
+	 * REORDERS pools; the gates decide what is PRESENT (a gated-off pool named in
+	 * the order is a no-op). SUBSUMES the old `prdsFirst` boolean: `drain`
+	 * reproduces its default, `[slice, build, ...]` reproduces `prdsFirst: true`.
+	 * Resolved per-repo like `autoBuild`/`autoSlice`: flag
+	 * (`--selection-order`) > `AGENT_RUNNER_SELECTION_ORDER` env (the `'list'`
+	 * coercion) > per-repo > global > default (`drain`). An unknown name/keyword
+	 * FAILS LOUDLY (`select-order.ts` `resolveSelectionOrder`).
 	 */
-	prdsFirst: boolean;
+	selectionOrder: SelectionOrderConfig;
 	/** Global cap on how many items the runner claims+runs in one tick. */
 	maxParallel: number;
 	/** Per-repo cap on concurrent claims (≤ maxParallel in effect). */
@@ -292,9 +302,12 @@ export const DEFAULT_CONFIG: Config = {
 	// surfaces a promote/keep/delete question and WAITS unless a repo opts in via
 	// `autoTriage` (the third per-action gate, mirrors `autoBuild`/`autoSlice`).
 	autoTriage: false,
-	// Slices-first by default (ADR §3): a selection drains ready slices before it
-	// creates more work by slicing PRDs. `prdsFirst: true` flips the two pools.
-	prdsFirst: false,
+	// The `drain` selection-order preset by default (ADR `ci-config-policy-and-gate-
+	// family`, selection-order section): drain ready work (build eligible slices →
+	// slice sliceable PRDs) before creating/asking (surface → triage); `apply` is
+	// always first. Reproduces today's slices-first two-pool default. Subsumes the
+	// removed `prdsFirst` boolean (`[slice, build, ...]` reproduces `prdsFirst: true`).
+	selectionOrder: DEFAULT_SELECTION_ORDER,
 	maxParallel: 4,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',

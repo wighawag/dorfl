@@ -163,14 +163,37 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 	});
 });
 
-describe('selectPrioritised — per-repo toggle FLIPS the order', () => {
-	it('prdsFirst=true puts PRDs-to-slice BEFORE eligible slices', () => {
+describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFirst)', () => {
+	it('the `drain` DEFAULT (omitted selectionOrder) == the old prdsFirst:false order', () => {
+		// The default preserved: omitting selectionOrder reproduces today's
+		// slices-first two-pool default (the prdsFirst:false behaviour).
 		const r = report('/repo', [sliceItem('a', true)]);
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
 			prds: [prd('p1')],
-			prdsFirst: true,
+		});
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'slice:a',
+			'prd:p1',
+		]);
+		// And an EXPLICIT `drain` preset gives the same as omitting it.
+		const viaPreset = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [prd('p1')],
+			selectionOrder: 'drain',
+		});
+		expect(viaPreset).toEqual(picked);
+	});
+
+	it('[slice, build, ...] puts PRDs-to-slice BEFORE eligible slices (== old prdsFirst:true)', () => {
+		const r = report('/repo', [sliceItem('a', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [prd('p1')],
+			selectionOrder: ['slice', 'build', 'surface', 'triage'],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'prd:p1',
@@ -178,7 +201,7 @@ describe('selectPrioritised — per-repo toggle FLIPS the order', () => {
 		]);
 	});
 
-	it('prdsFirst flips which item auto-pick (count 1) takes', () => {
+	it('selectionOrder flips which item auto-pick (count 1) takes', () => {
 		const r = report('/repo', [sliceItem('a', true)]);
 		const slicesFirst = selectPrioritised({
 			report: r,
@@ -190,11 +213,44 @@ describe('selectPrioritised — per-repo toggle FLIPS the order', () => {
 			report: r,
 			caps: CAPS,
 			prds: [prd('p1')],
-			prdsFirst: true,
+			selectionOrder: ['slice', 'build', 'surface', 'triage'],
 			count: 1,
 		});
 		expect(slicesFirst[0]).toMatchObject({namespace: 'slice', slug: 'a'});
 		expect(prdsFirst[0]).toMatchObject({namespace: 'prd', slug: 'p1'});
+	});
+
+	it('the `groom` preset puts surface+triage AHEAD of build+slice', () => {
+		const r = report('/repo', [sliceItem('s', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [prd('p')],
+			selectionOrder: 'groom',
+			lifecycle: {
+				apply: [],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
+				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
+			},
+		});
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
+			'prd:su', // surface
+			'observation:tr', // triage
+			'slice:s', // build
+			'prd:p', // slice (PRD)
+		]);
+	});
+
+	it('an UNKNOWN pool name FAILS LOUDLY at selection time', () => {
+		const r = report('/repo', [sliceItem('a', true)]);
+		expect(() =>
+			selectPrioritised({
+				report: r,
+				caps: CAPS,
+				prds: [prd('p1')],
+				selectionOrder: ['build', 'nope'],
+			}),
+		).toThrow(/unknown pool 'nope'/);
 	});
 });
 
@@ -222,7 +278,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
 	});
 
-	it('orders the FOUR pools: buildable (slices → PRDs) FIRST, then lifecycle (apply → surface → triage)', () => {
+	it('apply is PINNED FIRST, then the drain order (build → slice → surface → triage)', () => {
 		const r = report('/repo', [sliceItem('s', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -235,15 +291,15 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:s', // buildable: eligible slice
-			'prd:p', // buildable: sliceable PRD
-			'slice:ap', // lifecycle: apply (consume first)
-			'prd:su', // lifecycle: surface
-			'observation:tr', // lifecycle: triage
+			'slice:ap', // apply: PINNED FIRST (consume-always-wins)
+			'slice:s', // build: eligible slice
+			'prd:p', // slice: sliceable PRD
+			'prd:su', // surface
+			'observation:tr', // triage
 		]);
 	});
 
-	it('count bounds ACROSS all four pools in priority order (buildable drains first)', () => {
+	it('count bounds ACROSS all five pools in priority order (apply first, then drain)', () => {
 		const r = report('/repo', [sliceItem('s', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -255,14 +311,14 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
-		// the eligible slice first, then apply (count 2 stops before triage).
+		// apply first (pinned), then the eligible slice (count 2 stops before triage).
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:s',
 			'slice:ap',
+			'slice:s',
 		]);
 	});
 
-	it('lifecycle-only selection (no buildable work) drains the lifecycle pools in order', () => {
+	it('lifecycle-only selection (no buildable work) drains apply-first then the order', () => {
 		const r = report('/repo', []);
 		const picked = selectPrioritised({
 			report: r,
@@ -275,28 +331,46 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:ap',
-			'slice:su',
-			'observation:tr',
+			'slice:ap', // apply pinned first
+			'slice:su', // surface (drain order)
+			'observation:tr', // triage
 		]);
 	});
 
-	it('prdsFirst flips ONLY the buildable pair, lifecycle stays after', () => {
+	it('selectionOrder reorders ONLY the four orderable pools; apply stays pinned first', () => {
 		const r = report('/repo', [sliceItem('s', true)]);
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
 			prds: [prd('p')],
-			prdsFirst: true,
+			selectionOrder: ['slice', 'build', 'surface', 'triage'],
 			lifecycle: lifecycle({
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'prd:p', // buildable flipped
-			'slice:s',
-			'observation:tr', // lifecycle still last
+			'slice:ap', // apply STILL first (not orderable)
+			'prd:p', // slice (PRD) flipped ahead of build
+			'slice:s', // build
+			'observation:tr', // triage (still last)
 		]);
+	});
+
+	it('a gated-off pool NAMED in the order drops out cleanly (no error)', () => {
+		// `observationTriage: off` ⇒ no triage items even though the order names
+		// `triage`. The gates decide what is PRESENT; selectionOrder ranks what is.
+		const r = report('/repo', [sliceItem('s', true)]);
+		const picked = selectPrioritised({
+			report: r,
+			caps: CAPS,
+			prds: [],
+			selectionOrder: ['triage', 'build', 'slice', 'surface'],
+			// triage pool EMPTY (gated off); naming it is a no-op, never an error.
+			lifecycle: lifecycle({triage: []}),
+		});
+		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual(['slice:s']);
 	});
 });
 

@@ -208,8 +208,8 @@ describe('do <a> <b> — explicit multi-arg, in the GIVEN order', () => {
 	});
 });
 
-describe('slices-first PRIORITY + the per-repo toggle FLIP', () => {
-	it('default (prdsFirst off): an eligible SLICE outranks a sliceable PRD', async () => {
+describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
+	it('default (drain): an eligible SLICE outranks a sliceable PRD', async () => {
 		seedSlice('alpha');
 		seedPrd('gamma');
 		const {run, args} = recordingRunner();
@@ -217,19 +217,19 @@ describe('slices-first PRIORITY + the per-repo toggle FLIP', () => {
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('prdsFirst toggle: a sliceable PRD outranks an eligible slice', async () => {
+	it('[slice, build, ...] (== old prdsFirst:true): a sliceable PRD outranks an eligible slice', async () => {
 		seedSlice('alpha');
 		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({
 			...base(run),
-			config: cfg({prdsFirst: true}),
+			config: cfg({selectionOrder: ['slice', 'build', 'surface', 'triage']}),
 			count: 1,
 		});
 		expect(args).toEqual(['prd:gamma']);
 	});
 
-	it('the FULL ordering flips with the toggle (all slices vs all PRDs)', async () => {
+	it('the FULL ordering flips with the order (all slices vs all PRDs)', async () => {
 		seedSlice('alpha');
 		seedPrd('gamma');
 		const off = recordingRunner();
@@ -239,7 +239,7 @@ describe('slices-first PRIORITY + the per-repo toggle FLIP', () => {
 		const on = recordingRunner();
 		await performDoAuto({
 			...base(on.run),
-			config: cfg({prdsFirst: true}),
+			config: cfg({selectionOrder: ['slice', 'build', 'surface', 'triage']}),
 			count: 9,
 		});
 		expect(on.args).toEqual(['prd:gamma', 'alpha']);

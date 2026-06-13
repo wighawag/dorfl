@@ -68,10 +68,6 @@ describe('envOverrides — boolean coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'false'})).toEqual({
 			autoSlice: false,
 		});
-		// `prdsFirst` (the slices-first toggle) coerces as a boolean too.
-		expect(envOverrides({AGENT_RUNNER_PRDS_FIRST: 'true'})).toEqual({
-			prdsFirst: true,
-		});
 	});
 
 	it('rejects an invalid autoSlice value LOUDLY, naming the variable', () => {
@@ -179,6 +175,23 @@ describe('envOverrides — list coercion', () => {
 
 	it('an empty list var clears the list (explicit empty)', () => {
 		expect(envOverrides({AGENT_RUNNER_VERIFY: ''})).toEqual({verify: []});
+	});
+
+	it('selectionOrder coerces as a `list` (explicit pool order)', () => {
+		expect(
+			envOverrides({
+				AGENT_RUNNER_SELECTION_ORDER: 'build,slice,surface,triage',
+			}),
+		).toEqual({selectionOrder: ['build', 'slice', 'surface', 'triage']});
+	});
+
+	it('selectionOrder env SINGLE-keyword form yields a one-element list (the resolver expands it)', () => {
+		// `AGENT_RUNNER_SELECTION_ORDER=drain` ⇒ the `'list'` coercion gives `['drain']`;
+		// `resolveSelectionOrder` then expands the lone preset keyword (asserted in
+		// select-order.test.ts). Here we pin the env-layer half: a one-element list.
+		expect(envOverrides({AGENT_RUNNER_SELECTION_ORDER: 'drain'})).toEqual({
+			selectionOrder: ['drain'],
+		});
 	});
 
 	it('ignores a removed list key env var (roots is gone)', () => {

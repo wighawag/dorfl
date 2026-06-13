@@ -69,10 +69,12 @@ export const REPO_ALLOWED_KEYS = [
 	// per-action gate family (PRD `advance-loop`), the observation-triage mirror of
 	// `autoBuild`/`autoSlice`, resolved per-repo through the same chain.
 	'autoTriage',
-	// `prdsFirst` (does an auto-pick/-n/multi selection take sliceable PRDs before
-	// eligible slices?) is a genuine repo property — the per-repo toggle ADR §3
-	// specifies for the slices-first priority, resolved per-repo like `autoSlice`.
-	'prdsFirst',
+	// `selectionOrder` (the configurable order across the four orderable auto-pick
+	// pools — build/slice/surface/triage; `apply` is pinned first) is a genuine repo
+	// property — the per-repo selection-order field ADR `ci-config-policy-and-gate-
+	// family` specifies, resolved per-repo like `autoSlice`. SUBSUMES the removed
+	// `prdsFirst` boolean (a preset keyword or an explicit pool-name list).
+	'selectionOrder',
 	// `model` (which model this repo's work runs on) and `harness` (which adapter)
 	// are legitimate repo properties (ADR §13) — model is routing intent, not auth,
 	// and a repo may prefer a given harness. `piBin`/`agentCmd` stay host-only
