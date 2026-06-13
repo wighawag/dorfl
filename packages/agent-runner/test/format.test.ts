@@ -40,7 +40,7 @@ function needsAnswersItem(
 /** Build a one-repo report, computing eligibility totals like scan() does. */
 function reportOf(items: ScannedItem[], path = '/repos/alpha'): ScanReport {
 	return {
-		repos: [{path, items}],
+		repos: [{path, items, ledgerDuplicates: []}],
 		totalItems: items.length,
 		totalEligible: items.filter((i) => i.eligibility.eligible).length,
 	};

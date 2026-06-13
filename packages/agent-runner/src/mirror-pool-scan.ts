@@ -133,7 +133,11 @@ export async function scanMirrorPool(
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
 	const counts = {totalItems: 0, totalEligible: 0};
 	const items = scoreItems(state, repoConfig.autoBuild, counts);
-	const repo: RepoReport = {path: mirrorPath, items};
+	// The one-slug-one-folder LINT is a HUMAN-FACING surface (`scan`/`status`); this
+	// mirror-side pool scan exists only to SCORE the slice/PRD candidate pools for
+	// autonomous selection, never to render a dashboard, so it carries an empty lint
+	// (the duplicate surface is the user-facing `scan`/`status`, per the slice).
+	const repo: RepoReport = {path: mirrorPath, items, ledgerDuplicates: []};
 	const report: ScanReport = {
 		repos: [repo],
 		totalItems: counts.totalItems,

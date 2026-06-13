@@ -519,3 +519,45 @@ describe('status — arbiter fold-in (the old `arbiter status`, ADR §1/§7)', (
 		expect(formatStatus(report).toLowerCase()).toMatch(/unsafe|non-bare/);
 	});
 });
+
+describe('status — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () => {
+	it('WARNS loudly when a slug resides in two status folders on the mirror, naming both', async () => {
+		// A corrupt ledger: the SAME slug present in BOTH in-progress/ and done/ (the
+		// orphan class the integration core now refuses, hand-cleaned in 279b542).
+		const {mirrorPath} = registerMirrorWithWork(workspacesDir(), 'project', {
+			inProgress: {'ghost.md': '---\nslug: ghost\n---\nbody'},
+			done: {'ghost.md': '---\nslug: ghost\n---\nbody'},
+		});
+		const report = await status({
+			workspacesDir: workspacesDir(),
+			mirrorPaths: [mirrorPath],
+		});
+		expect(report.ledgerDuplicates).toHaveLength(1);
+		expect(report.ledgerDuplicates?.[0].repoPath).toBe(mirrorPath);
+		const dup = report.ledgerDuplicates?.[0].duplicates[0];
+		expect(dup?.slug).toBe('ghost');
+		expect(dup?.folders).toContain('in-progress');
+		expect(dup?.folders).toContain('done');
+
+		const out = formatStatus(report);
+		expect(out).toMatch(/one-slug-one-folder VIOLATED/);
+		expect(out).toMatch(/ghost/);
+		expect(out).toContain('work/in-progress/');
+		expect(out).toContain('work/done/');
+	});
+
+	it('a CLEAN mirror ledger reports no duplicates (no false positives)', async () => {
+		const {mirrorPath} = registerMirrorWithWork(workspacesDir(), 'project', {
+			backlog: {'a.md': '---\nslug: a\n---\nbody'},
+			inProgress: {'b.md': '---\nslug: b\n---\nbody'},
+			done: {'c.md': '---\nslug: c\n---\nbody'},
+			outOfScope: {'d.md': '---\nslug: d\n---\nbody'},
+		});
+		const report = await status({
+			workspacesDir: workspacesDir(),
+			mirrorPaths: [mirrorPath],
+		});
+		expect(report.ledgerDuplicates).toEqual([]);
+		expect(formatStatus(report)).not.toMatch(/one-slug-one-folder VIOLATED/);
+	});
+});

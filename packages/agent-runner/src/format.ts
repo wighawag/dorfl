@@ -1,5 +1,6 @@
 import type {ScanReport, ScannedItem} from './scan.js';
 import type {CwdSection} from './cwd-section.js';
+import {formatDuplicateWarnings} from './ledger-lint.js';
 import {
 	categoriseItems,
 	summariseGroups,
@@ -222,6 +223,14 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 		const groups = categoriseItems(repo.items);
 		allGroups.push(groups);
 		lines.push(...formatRepo(repo.path, groups));
+		// The one-slug-one-folder LINT (PRD `ledger-integrity` story 3): WARN LOUDLY
+		// when any slug in this repo's ledger resides in >1 status folder (a corrupt
+		// ledger — never a silent pass). Clean ledgers add no lines.
+		const warnings = formatDuplicateWarnings(repo.ledgerDuplicates ?? []);
+		if (warnings.length > 0) {
+			lines.push(...warnings.map((w) => `  ${w}`));
+			lines.push('');
+		}
 	}
 
 	const s = summariseGroups(allGroups);
