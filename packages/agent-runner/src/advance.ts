@@ -159,6 +159,22 @@ export interface AdvanceContext {
 	/** The base `do` options the build/slice rungs orchestrate `performDo` with. */
 	doOptions?: Omit<DoOptions, 'arg'>;
 	/**
+	 * The build/slice ORCHESTRATION DRIVER seam (slice
+	 * `advance-loop-driver-registry-set-job-worktrees`). The build-slice / slice-prd
+	 * rungs ORCHESTRATE `do` by handing the resolved arg + the threaded
+	 * {@link doOptions} to THIS driver. `undefined` ⇒ {@link performDo} (the IN-PLACE
+	 * substrate — the human-local one-shot `advance` command + today's
+	 * single-mirror `run --advance`, which build in the cwd checkout). The
+	 * registry-set advance driver injects a PER-MIRROR JOB-WORKTREE driver
+	 * ({@link jobWorktreeDoDriver}) so the daemon/CI path builds isolated off each
+	 * mirror's arbiter (the SAME isolation `run`'s build tick gives `runOneItem`),
+	 * NOT in `process.cwd()`. This is the parameterised isolation strategy the
+	 * slice's `## Decisions` records: in-place and worktree COEXIST behind one seam,
+	 * reusing the EXISTING `selectIsolationStrategy`/`jobWorktreeStrategy` (no second
+	 * isolation mechanism). The DEFAULT keeps in-place behaviour byte-for-byte.
+	 */
+	doDriver?: (options: DoOptions) => Promise<DoResult>;
+	/**
 	 * The SURFACE gate seam — the fresh-context `surface-questions` spawn the
 	 * surface rung uses (slice `advance-rung-surface`). The skill JUDGES (emits
 	 * questions); the engine PERSISTS. Production wires {@link harnessSurfaceGate};
@@ -404,7 +420,13 @@ async function orchestrateDo(input: RungExecInput): Promise<RungExecResult> {
 				`options were threaded into the tick (the driver slice wires them).`,
 		};
 	}
-	const result: DoResult = await performDo({...base, arg: item});
+	// The ORCHESTRATION TARGET is `performDo` by DEFAULT (in-place, the cwd checkout
+	// IS the isolation), or the injected {@link AdvanceContext.doDriver} — the
+	// registry-set advance driver threads a PER-MIRROR JOB-WORKTREE driver so the
+	// daemon/CI build runs isolated off the mirror's arbiter. Either way `advance`
+	// ORCHESTRATES `do` (the ONE build path / ONE slice path) — it does NOT duplicate it.
+	const driver = context.doDriver ?? performDo;
+	const result: DoResult = await driver({...base, arg: item});
 	return {
 		exitCode: result.exitCode,
 		outcome: result.exitCode === 0 ? 'advanced' : mapDoOutcome(result),
@@ -856,6 +878,7 @@ export async function performAdvance(
 				cwd,
 				arbiter,
 				doOptions: options.doOptions,
+				doDriver: options.doDriver,
 				surfaceGate: options.surfaceGate,
 				surfaceModel: options.surfaceModel,
 				surfacePersist: options.surfacePersist,
