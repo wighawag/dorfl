@@ -145,6 +145,16 @@ describe('envOverrides — enum coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_PROVIDER: 'github'})).toEqual({
 			provider: 'github',
 		});
+		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
+		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'off'})).toEqual({
+			observationTriage: 'off',
+		});
+		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'ask'})).toEqual({
+			observationTriage: 'ask',
+		});
+		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'auto'})).toEqual({
+			observationTriage: 'auto',
+		});
 	});
 
 	it('rejects a value outside the union LOUDLY, naming the variable + options', () => {
@@ -157,6 +167,17 @@ describe('envOverrides — enum coercion', () => {
 		expect(() => envOverrides({AGENT_RUNNER_HARNESS: 'docker'})).toThrow(
 			/AGENT_RUNNER_HARNESS/,
 		);
+		// The observation-triage enum FAILS LOUDLY on a typo (incl. the old boolean
+		// `false` — the deliberate non-alias TRAP the slice avoids by not aliasing).
+		expect(() =>
+			envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'yes'}),
+		).toThrow(/AGENT_RUNNER_OBSERVATION_TRIAGE/);
+		expect(() =>
+			envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'yes'}),
+		).toThrow(/off.*ask.*auto/);
+		expect(() =>
+			envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'false'}),
+		).toThrow(/AGENT_RUNNER_OBSERVATION_TRIAGE/);
 	});
 });
 

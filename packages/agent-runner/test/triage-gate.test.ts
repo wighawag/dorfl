@@ -7,7 +7,7 @@ import {
 
 /**
  * `advance-rung-triage` slice — the TRIAGE auto-disposition GATE parse (US #17).
- * The gate is the conservative `autoTriage`-gated exception: it judges whether an
+ * The gate is the conservative `observationTriage: 'auto'`-gated exception: it judges whether an
  * observation is a NO-QUESTION case and emits `{auto, …}`. These tests pin the
  * parse + the HIGH BAR safety fallback (a malformed `auto:true` ⇒ surface the
  * question, never auto-dispose on a half-baked emit). The gate WRITE is exercised

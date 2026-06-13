@@ -27,6 +27,7 @@ import {
 	type SurfaceGate,
 } from './surface-gate.js';
 import {harnessTriageGate, type TriageGate} from './triage-gate.js';
+import type {ObservationTriage} from './config.js';
 import {
 	autoDispositionObservation,
 	promoteObservation,
@@ -77,9 +78,9 @@ import type {NewQuestion} from './sidecar.js';
  * executor SEAM ({@link RungExecutor}); the build/slice rungs ORCHESTRATE
  * `do`/`do prd:`. What this verb does NOT do (LATER slices):
  *   - The two **DRIVERS** (one-shot sequential / loop) + `-n` + the gate-FAMILY
- *     WIRING that resolves `autoBuild`/`autoSlice`/`autoTriage` and threads them
- *     into the build/slice gate composition — slice `advance-drivers-and-gates`.
- *     (This verb already RESPECTS `autoTriage` in the triage rung — the gate's
+ *     WIRING that resolves `autoBuild`/`autoSlice`/`observationTriage` and threads
+ *     them into the build/slice gate composition — slice `advance-drivers-and-gates`.
+ *     (This verb already RESPECTS `observationTriage` in the triage rung — the gate's
  *     resolution chain + the build/slice gate composition is the drivers slice.)
  *   - The bare `advance` (eligible-SET) form — it needs the pool scan / driver, so
  *     the verb here is a SINGLE named-item tick; the bare form errors clearly
@@ -197,19 +198,25 @@ export interface AdvanceContext {
 	 */
 	applyFollowups?: NewQuestion[];
 	/**
-	 * The per-repo `autoTriage` policy (PRD `advance-loop`, US #17/23): may the
-	 * triage rung AUTO-DISPOSITION an observation in the conservative no-question
-	 * cases (exact-duplicate / unambiguous-map) WITHOUT surfacing a question?
-	 * `false`/`undefined` (default, strict) ⇒ EVERY untriaged observation surfaces a
-	 * promote/keep/delete question and WAITS. The triage rung RESPECTS this; SURFACE
-	 * + APPLY stay ALWAYS allowed (this gate ONLY governs the auto-disposition
-	 * exception, never the always-allowed question loop).
+	 * The 3-state `observationTriage` policy (ADR `ci-config-policy-and-gate-
+	 * family` §2) read at the triage rung. It governs the rung-internal
+	 * ask-vs-auto distinction (the SELECTION-layer `off` gate is applied EARLIER, in
+	 * the driver, by dropping the observation pool — so a rung that runs was either
+	 * `ask`/`auto`-selected OR explicitly named, which BYPASSES the selection gate):
+	 *   - `'auto'` ⇒ the conservative auto-disposition EXCEPTION is live (ask the
+	 *     {@link TriageGate}; auto-dispose ONLY the no-question cases);
+	 *   - `'ask'` / `'off'` / `undefined` ⇒ surface the promote/keep/delete question
+	 *     and WAIT (the question-gated path). Under `off` + an EXPLICIT `obs:<slug>`
+	 *     (which bypasses the selection gate) the rung runs in `ask`-mode — the
+	 *     conservative, question-surfacing default (slice `## Decisions`). SURFACE +
+	 *     APPLY stay ALWAYS allowed; this gate ONLY governs the auto-disposition
+	 *     exception, never the always-allowed question loop.
 	 */
-	autoTriage?: boolean;
+	observationTriage?: ObservationTriage;
 	/**
 	 * The TRIAGE auto-disposition gate seam — the fresh-context spawn the triage
-	 * rung asks (ONLY when `autoTriage` is on) whether an observation is a
-	 * no-question case. The skill JUDGES; the engine ACTS. Production wires
+	 * rung asks (ONLY when `observationTriage` is `'auto'`) whether an observation
+	 * is a no-question case. The skill JUDGES; the engine ACTS. Production wires
 	 * {@link harnessTriageGate}; tests inject a stub decision. `undefined` ⇒ the
 	 * triage rung defaults to {@link harnessTriageGate} (a NullHarness, no real
 	 * model) so the seam is never a crash.
@@ -504,16 +511,16 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
  * the rung the classifier picks for an UNTRIAGED observation (`needsAnswers` not
  * set, no sidecar). It is QUESTION-GATED BY DEFAULT: it surfaces a promote/keep/
  * delete question and WAITS — so "is this worth building?" is NEVER decided
- * autonomously. A CONSERVATIVE `autoTriage`-gated EXCEPTION (US #17, high bar) may
- * auto-disposition ONLY the no-question cases:
+ * autonomously. A CONSERVATIVE `observationTriage: 'auto'`-gated EXCEPTION (US #17,
+ * high bar) may auto-disposition ONLY the no-question cases:
  *
  *   - **default (question-gated):** delegate to {@link surfaceRung} — spawn the
  *     `surface-questions` agent (it emits the triage promote/keep/delete question
  *     with a `disposition`) and the ENGINE persists the sidecar + `needsAnswers`.
  *     The disposition routing is then executed by the APPLY rung when the human
- *     answers. Surface stays ALWAYS allowed (US #23) — this path runs regardless of
- *     `autoTriage`.
- *   - **`autoTriage` exception:** ONLY when `autoTriage` is on, ask the
+ *     answers. Surface stays ALWAYS allowed (US #23) — this path runs under
+ *     `ask`/`off` (and `off` + an explicit `obs:` runs in this `ask`-mode).
+ *   - **`auto` exception:** ONLY under `observationTriage: 'auto'`, ask the
  *     {@link TriageGate} whether the observation is a no-question case. If it emits
  *     `auto: true` (`duplicate` → suggest delete; `map` → unambiguous map onto an
  *     existing item), the engine auto-dispositions it WITHOUT a question
@@ -530,10 +537,12 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 	const note = context.note ?? (() => {});
 	const cwd = context.cwd;
 
-	// The CONSERVATIVE auto-disposition EXCEPTION — ONLY when `autoTriage` is on.
-	// With it off (the default), EVERY untriaged observation surfaces the question
-	// (the always-allowed path), so "worth building?" is never decided autonomously.
-	if (context.autoTriage === true) {
+	// The CONSERVATIVE auto-disposition EXCEPTION — ONLY under `observationTriage:
+	// 'auto'`. Under `'ask'`/`'off'`/unset (including `off` + an EXPLICIT obs:<slug>
+	// that bypassed the selection gate), EVERY untriaged observation surfaces the
+	// question (the always-allowed path), so "worth building?" is never decided
+	// autonomously — `off` + explicit runs in the conservative `ask`-mode.
+	if (context.observationTriage === 'auto') {
 		const itemPath = findItemPath(cwd, input.namespace, input.slug);
 		if (itemPath === undefined) {
 			return {
@@ -852,7 +861,7 @@ export async function performAdvance(
 				surfacePersist: options.surfacePersist,
 				applyPersist: options.applyPersist,
 				applyFollowups: options.applyFollowups,
-				autoTriage: options.autoTriage,
+				observationTriage: options.observationTriage,
 				triageGate: options.triageGate,
 				triageModel: options.triageModel,
 				autoDisposition: options.autoDisposition,

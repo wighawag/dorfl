@@ -51,7 +51,8 @@ import type {Config} from './config.js';
  * through the tick on any named item and are never pool-gated, so a repo with
  * EVERY flag off still gets the QUESTION LOOP (surface + apply) but no autonomous
  * build/slice in the bare/`-n` selection ("question loop with zero autonomy").
- * The triage rung's `autoTriage` gate is wired inside the tick already.
+ * The triage rung's ask-vs-auto distinction (`observationTriage`) is read inside
+ * the tick; its SELECTION-layer `off` gate drops the observation pool here.
  *
  * **Isolation + chaining FALL OUT (US #26):** this driver builds NO new isolation
  * or chaining machinery — it threads the SAME `AdvanceContext` the tick already

@@ -64,11 +64,12 @@ export const REPO_ALLOWED_KEYS = [
 	// genuine repo property — the slicing-autonomy mirror of `autoBuild`
 	// (`work/prd/auto-slice.md`), resolved per-repo through the same chain.
 	'autoSlice',
-	// `autoTriage` (may an agent auto-disposition an observation in the conservative
-	// no-question cases?) is a genuine repo property — the THIRD member of the flat
-	// per-action gate family (PRD `advance-loop`), the observation-triage mirror of
-	// `autoBuild`/`autoSlice`, resolved per-repo through the same chain.
-	'autoTriage',
+	// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
+	// INBOX) is a genuine repo property — the observation-side question-surfacing
+	// gate (ADR `ci-config-policy-and-gate-family`), resolved per-repo through the
+	// same chain as `integration`/`autoBuild`. It REPLACES the old `autoTriage`
+	// boolean (no alias; no external users owed a migration window, 2026-06-12).
+	'observationTriage',
 	// `selectionOrder` (the configurable order across the four orderable auto-pick
 	// pools — build/slice/surface/triage; `apply` is pinned first) is a genuine repo
 	// property — the per-repo selection-order field ADR `ci-config-policy-and-gate-

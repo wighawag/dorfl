@@ -4,9 +4,10 @@ import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
  * The **TRIAGE auto-disposition GATE** (PRD `advance-loop`, slice
- * `advance-rung-triage`, US #17) — the CONSERVATIVE, `autoTriage`-gated exception
- * to the question-gated default. On `classify=triage-observation` AND `autoTriage`
- * on, the engine asks this gate whether the observation is a NO-QUESTION case (one
+ * `advance-rung-triage`, US #17) — the CONSERVATIVE, `observationTriage: 'auto'`-
+ * gated exception to the question-gated default. On `classify=triage-observation`
+ * AND `observationTriage` resolved to `'auto'`, the engine asks this gate whether
+ * the observation is a NO-QUESTION case (one
  * a human would not plausibly disagree with): an EXACT DUPLICATE of an existing
  * item (→ suggest delete) or an UNAMBIGUOUS MAP onto an existing item. If so, the
  * engine auto-dispositions it WITHOUT surfacing a question; otherwise it falls back
