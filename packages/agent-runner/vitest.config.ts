@@ -123,6 +123,18 @@ const RACE_SENSITIVE = [
 	// routes failures (the needs-attention surfacing); keep it out of file-parallel
 	// pressure for the same deterministic claim/main-CAS reasoning as run.test.ts.
 	'test/run-integration-core.test.ts',
+	// The observation-promote create-CAS races (`performAdvance` / `promoteObservation`
+	// via `Promise.all`) against a --bare arbiter, INCLUDING the identical-identity
+	// variants added by `cas-create-nonce-authoritative-same-identity`: those assert
+	// EXACTLY one winner DETERMINISTICALLY even when both racers share one committer
+	// identity (so without the seam's per-attempt CAS-Nonce the two create commits
+	// would be byte-identical and BOTH would spuriously verify as won). The nonce
+	// makes the shas distinct so the loser's lease is genuinely rejected; registering
+	// here keeps the in-process race out of cross-file `file://` parallel pressure so
+	// the exactly-one-winner invariant is gated without the harness-timing confound
+	// (same deterministic claim/main-CAS reasoning as advancing-lock.test.ts).
+	'test/advance-triage.test.ts',
+	'test/triage-persist.test.ts',
 	// NOT a git-CAS race — a spawn-stdin race: `NullHarness.launch`'s captured path
 	// (`spawnSync('bash', ['-c', printf ...])`) intermittently throws `spawnSync
 	// bash EPIPE` when the `printf` child closes stdin before the parent writes the

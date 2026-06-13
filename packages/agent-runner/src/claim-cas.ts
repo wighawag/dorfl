@@ -379,6 +379,12 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		note,
 	});
 	if (result.kind === 'published') {
+		// The seam stamps the claim commit with a per-attempt `CAS-Nonce` trailer, so
+		// the sha that ACTUALLY landed on the arbiter is the nonce'd one the seam
+		// reports back — NOT our pre-nonce `head` (its un-stamped sibling, which is
+		// NOT on `<arbiter>/main`). Branch the work branch + report off the LANDED
+		// sha so onboarding builds on the ledger tip, not a detached sibling.
+		const landed = result.publishedHead ?? head;
 		// Advance the LOCAL remote-tracking `<arbiter>/main` so it now INCLUDES the
 		// claim commit (the push only moved the arbiter's main; the local tracking
 		// ref stayed at the pre-claim sha). Onboarding then branches the work branch
@@ -390,9 +396,9 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 		const message = `CLAIMED '${slug}' -> work/in-progress/ on ${arbiter}/main.`;
 		note(message);
 		note(
-			`Start work:  git fetch ${arbiter} && git switch -C ${branch} ${head}`,
+			`Start work:  git fetch ${arbiter} && git switch -C ${branch} ${landed}`,
 		);
-		return {kind: 'claimed', message, claimCommit: head};
+		return {kind: 'claimed', message, claimCommit: landed};
 	}
 	return {kind: 'rejected', message: result.message};
 }

@@ -239,6 +239,52 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(lost[0].outcome).toBe('lost');
 	});
 
+	it('a same-slug new-item race with IDENTICAL committer identity ⇒ STILL exactly one promotes (CAS serialises via the per-attempt nonce, not via sha-distinctness)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		// The product-layer INVERSE of the distinct-identity race above: both racers
+		// promote under the SAME committer identity (the SAME gitEnv()), building the
+		// SAME tree + message off the SAME base. WITHOUT the write seam's per-attempt
+		// CAS-Nonce their create commits would be byte-identical (one sha) and the
+		// loser's push would degrade to a no-op "Everything up-to-date" that the
+		// post-push verify spuriously accepts → two winners. With the nonce the two
+		// shas are DISTINCT, so the loser's --force-with-lease push is genuinely
+		// rejected and the verify correctly fails for it — exactly one winner, with NO
+		// identity distinctness.
+		const a = raceClone(seeded, 'a');
+		const b = raceClone(seeded, 'b');
+		for (const dir of [a, b]) {
+			seedAnsweredPromote(dir, 'dup');
+			gitIn(['add', '-A'], dir);
+			gitIn(['commit', '-q', '-m', 'answered'], dir);
+		}
+
+		const [ra, rb] = await Promise.all([
+			promoteObservation({
+				cwd: a,
+				item: 'observation:dup',
+				itemPath: 'work/observations/dup.md',
+				arbiter: 'arbiter',
+				// IDENTICAL identity for BOTH racers (the SAME gitEnv()), NOT racerEnv.
+				env: gitEnv(),
+			}),
+			promoteObservation({
+				cwd: b,
+				item: 'observation:dup',
+				itemPath: 'work/observations/dup.md',
+				arbiter: 'arbiter',
+				env: gitEnv(),
+			}),
+		]);
+
+		const won = [ra, rb].filter((r) => r.exitCode === 0);
+		const lost = [ra, rb].filter((r) => r.exitCode === 2);
+		expect(won).toHaveLength(1);
+		expect(lost).toHaveLength(1);
+		expect(won[0].outcome).toBe('promoted');
+		expect(lost[0].outcome).toBe('lost');
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'dup')).toBe(true);
+	});
+
 	it('a LOST race leaves the observation UNRESOLVED for a retry (the loser backs off)', async () => {
 		// Pre-create the target path on the arbiter so the promote always loses.
 		const seeded = seedRepoWithArbiter(scratch.root, ['taken']);

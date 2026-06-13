@@ -818,8 +818,13 @@ async function createAttempt(
 
 	// Publish through the SAME seam (kind `advancing`) — keyed on the new item's
 	// identity (its path). The lease guards the CAS: a concurrent creator that
-	// landed first advanced main, so our lease fails → rejected; the outer loop
-	// refetches and the next attempt finds the path TAKEN → lost (no special case).
+	// landed first advanced main past our base, so our lease fails → rejected; the
+	// outer loop refetches and the next attempt finds the path TAKEN → lost (no
+	// special case). This holds EVEN for a same-identity racer who built an
+	// identical create commit within git's 1-second timestamp resolution: the seam
+	// stamps each attempt with a per-attempt `CAS-Nonce`, so the two racers'
+	// commits have DISTINCT shas — the loser's push is a genuine lease rejection,
+	// NOT an "Everything up-to-date" no-op that would spuriously verify as won.
 	if (ctx.dryRun) {
 		const result = await ledgerWrite.applyTransition({
 			kind: 'advancing',
