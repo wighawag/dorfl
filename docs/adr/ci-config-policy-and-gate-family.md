@@ -83,12 +83,23 @@ Both new gates default to their quiet state (`observationTriage: off`,
 in. Because calm is the default, no global "shut up" master switch is needed; the
 single-switch convenience it would provide is already the default state.
 
-### 4. `needs-attention` is separate and ALWAYS on (not a "question")
+### 4. The gates govern CREATE only; CONSUME and REPORT are always-on
 
-A build that hits a wall (red gate, drift, ambiguity) routes to `needs-attention/`
-and surfaces on the arbiter REGARDLESS of any gate. It is failure reporting, not a
-proactive question; silently dropping failed work is never acceptable. It shares no
-flag with `observationTriage`/`surfaceBlockers` and is left exactly as it is.
+Questions have three lifecycle phases, and only the FIRST is gateable:
+
+| phase | what it is | gated by |
+| --- | --- | --- |
+| **surface / triage** | the bot CREATES a question | `observationTriage` / `surfaceBlockers` |
+| **apply** | the bot CONSUMES the human's committed answer | ALWAYS on (never gate) |
+| **needs-attention** | the bot REPORTS a failure (red gate, drift, ambiguity) | ALWAYS on (separate mechanism) |
+
+The gates only ever touch CREATE ("don't make noise"). `apply` is always-allowed,
+gating it would STRAND a human's committed answer (they answered; nothing happens),
+violating the "human is the clock" model. So an already-answered sidecar applies
+even when its create-gate is off. `needs-attention` is likewise always-on, silently
+dropping failed work is never acceptable; it shares no flag with the two gates and
+is left exactly as it is. The clean line: gateable = "don't make noise"; never
+gateable = "don't discard the human's work / don't hide a failure."
 
 ### 5. These are engine `Config` fields (per-repo + env + flag), not CI-only knobs
 
@@ -158,10 +169,18 @@ unchanged by this ADR.
 `autoTriage` READ like "is triage on?" but actually gated the auto-DISPOSITION
 exception, so `autoTriage: off` surprisingly still surfaced a question for every
 observation. Splitting it into `observationTriage` (with an explicit `off`) +
-`surfaceBlockers` resolves the trap: the names now say what they gate. The old
-`autoTriage` key keeps working as a DEPRECATED ALIAS for a migration window
-(`config-alias.ts`, mirroring `allowAgents -> autoBuild`): `autoTriage:false` maps to
-`observationTriage:ask`, `autoTriage:true` to `observationTriage:auto`.
+`surfaceBlockers` resolves the trap: the names now say what they gate.
+
+## No deprecation aliases while there are no external users
+
+This repo has NO external users yet (decided 2026-06-12), so config RENAMES are
+CLEAN REPLACEMENTS, not aliased migrations. `autoTriage` is DELETED outright (not
+aliased to `observationTriage`); the existing `allowAgents -> autoBuild` alias is
+ALSO removed (slice `remove-deprecated-config-aliases`). A value-migrating alias
+would additionally have been a trap here: the env legacy-alias path coerces the OLD
+var with the NEW key's coercion, so `AGENT_RUNNER_AUTO_TRIAGE=false` against an enum
+coercion would THROW. Avoided by not aliasing. Reinstate the alias discipline only
+once the tool has real downstream users owed a migration window.
 
 ## Consequences
 
