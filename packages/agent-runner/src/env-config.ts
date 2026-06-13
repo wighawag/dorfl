@@ -1,10 +1,5 @@
 import type {Config, PartialConfig} from './config.js';
 import {brand, constantCase} from './brand.js';
-import {
-	CONFIG_KEY_ALIASES,
-	aliasDeprecationMessage,
-	type ConfigKeyAlias,
-} from './config-alias.js';
 
 /**
  * The environment-variable config layer.
@@ -96,16 +91,6 @@ export function envVarName(key: keyof Config): string {
 	return ENV_PREFIX + constantCase(key);
 }
 
-/**
- * The DEPRECATED `AGENT_RUNNER_*` env var name for a retired config key alias
- * (`allowAgents` -> `AGENT_RUNNER_ALLOW_AGENTS`). Same mechanical mapping as
- * {@link envVarName} but keyed by the OLD name; used only for the legacy-alias
- * read in {@link envOverrides}.
- */
-function legacyEnvVarName(oldKey: string): string {
-	return ENV_PREFIX + constantCase(oldKey);
-}
-
 /** A raw env map (defaults to `process.env`). */
 export type EnvMap = Record<string, string | undefined>;
 
@@ -170,10 +155,7 @@ function coerceValue(
  * Env may set ANY key — host-only included — because env is a per-machine
  * source, NOT the committed repo file (see this module's doc + ADR §13).
  */
-export function envOverrides(
-	env: EnvMap = process.env,
-	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
-): PartialConfig {
+export function envOverrides(env: EnvMap = process.env): PartialConfig {
 	const overrides: PartialConfig = {};
 	for (const key of Object.keys(KEY_COERCIONS) as (keyof Config)[]) {
 		const coercion = KEY_COERCIONS[key];
@@ -189,30 +171,5 @@ export function envOverrides(
 		// Type matches by construction: each coercion yields the key's value type.
 		(overrides as Record<string, unknown>)[key] = value;
 	}
-	// Legacy-alias env vars (e.g. `AGENT_RUNNER_ALLOW_AGENTS` -> `autoBuild`): read
-	// under the OLD name, coerce with the NEW key's coercion, and warn. The current
-	// var WINS if both are set (a half-migrated env must not silently revert).
-	for (const alias of CONFIG_KEY_ALIASES) {
-		const legacyVar = legacyEnvVarName(alias.oldKey);
-		const raw = env[legacyVar];
-		if (raw === undefined) {
-			continue;
-		}
-		warn(aliasDeprecationMessage(alias, legacyVar));
-		if (alias.newKey in overrides) {
-			continue;
-		}
-		const coercion = coercionForAlias(alias);
-		if (coercion === undefined) {
-			continue;
-		}
-		const value = coerceValue(legacyVar, raw, coercion);
-		(overrides as Record<string, unknown>)[alias.newKey] = value;
-	}
 	return overrides;
-}
-
-/** The coercion for an alias's NEW key (so the legacy env var coerces identically). */
-function coercionForAlias(alias: ConfigKeyAlias): Coercion | undefined {
-	return KEY_COERCIONS[alias.newKey as keyof Config];
 }

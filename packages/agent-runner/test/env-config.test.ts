@@ -100,40 +100,16 @@ describe('envOverrides — boolean coercion', () => {
 	});
 });
 
-describe('envOverrides — the deprecated AGENT_RUNNER_ALLOW_AGENTS alias', () => {
-	it('maps the legacy env var to autoBuild and warns (deprecation window)', () => {
-		const warnings: string[] = [];
+describe('envOverrides — the retired AGENT_RUNNER_ALLOW_AGENTS env var', () => {
+	it('no longer maps to autoBuild: it is ignored like any unknown var (no crash)', () => {
+		// `AGENT_RUNNER_ALLOW_AGENTS` is no longer a recognised legacy alias; it is
+		// simply an unknown env var, so it contributes nothing and never throws.
+		expect(envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'true'})).toEqual({});
 		expect(
-			envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'true'}, (m) =>
-				warnings.push(m),
-			),
-		).toEqual({autoBuild: true});
-		expect(warnings).toHaveLength(1);
-		expect(warnings[0]).toMatch(/AGENT_RUNNER_ALLOW_AGENTS/);
-		expect(warnings[0]).toMatch(/autoBuild/);
-	});
-
-	it('coerces the legacy alias exactly like the canonical var (false)', () => {
-		expect(
-			envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'false'}, () => {}),
-		).toEqual({autoBuild: false});
-	});
-
-	it('rejects an invalid legacy-alias value LOUDLY, naming the variable', () => {
-		expect(() =>
-			envOverrides({AGENT_RUNNER_ALLOW_AGENTS: 'yes'}, () => {}),
-		).toThrow(/AGENT_RUNNER_ALLOW_AGENTS/);
-	});
-
-	it('lets the canonical AGENT_RUNNER_AUTO_BUILD WIN when both are set', () => {
-		expect(
-			envOverrides(
-				{
-					AGENT_RUNNER_AUTO_BUILD: 'false',
-					AGENT_RUNNER_ALLOW_AGENTS: 'true',
-				},
-				() => {},
-			),
+			envOverrides({
+				AGENT_RUNNER_ALLOW_AGENTS: 'true',
+				AGENT_RUNNER_AUTO_BUILD: 'false',
+			}),
 		).toEqual({autoBuild: false});
 	});
 });

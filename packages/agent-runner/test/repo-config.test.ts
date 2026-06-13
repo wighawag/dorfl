@@ -219,23 +219,19 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe(false);
 	});
 
-	it('accepts the deprecated `allowAgents` per-repo key, mapping it to `autoBuild` with a deprecation message', () => {
-		writeRepoConfig(repo, {allowAgents: true});
+	it('treats a per-repo `allowAgents` key as an unknown key: ignored, `autoBuild` untouched (no crash)', () => {
+		// `allowAgents` is no longer a recognised alias; it falls through to the
+		// normal unknown-key path (silently ignored), so it never appears in the
+		// loaded config and never maps onto `autoBuild`.
+		writeRepoConfig(repo, {allowAgents: true, autoBuild: false});
 		const loaded = loadRepoConfig(repo);
-		expect(loaded.config.autoBuild).toBe(true);
+		expect(loaded.config.autoBuild).toBe(false);
 		expect('allowAgents' in loaded.config).toBe(false);
-		expect(loaded.message).toMatch(/allowAgents/);
-		expect(loaded.message).toMatch(/autoBuild/);
-		// And it resolves through the chain like the canonical key.
-		const global = mergeConfig({autoBuild: false});
+		// And it resolves through the chain on the canonical key alone.
+		const global = mergeConfig({autoBuild: true});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoBuild,
-		).toBe(true);
-	});
-
-	it('lets the canonical `autoBuild` WIN over the deprecated `allowAgents` per-repo key', () => {
-		writeRepoConfig(repo, {allowAgents: true, autoBuild: false});
-		expect(loadRepoConfig(repo).config.autoBuild).toBe(false);
+		).toBe(false);
 	});
 
 	it('resolves `autoSlice` flag > env > per-repo > global > default false (like autoBuild)', () => {
