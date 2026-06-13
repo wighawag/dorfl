@@ -75,6 +75,26 @@ hierarchy: all four corners are meaningful (notably "groom my observation inbox 
 leave my blocked work alone" = `observationTriage: ask|auto` + `surfaceBlockers:
 off`, the case a single global switch could not express).
 
+**Gates decide what is PRESENT; selection order decides what runs FIRST (separate
+axes).** A gate set OFF removes its pool from the auto-pick enumeration entirely
+(`autoBuild`/`autoSlice` already work this way; `observationTriage`/`surfaceBlockers`
+extend it to the lifecycle pools, once `advance-autopick-lifecycle-pools` adds them).
+What to do across the pools that ARE present is a separate config axis,
+`selectionOrder` (slice `advance-selection-order-config`):
+
+- **`apply` is PINNED FIRST, not configurable** (consuming a human's committed
+  answer is highest-value, cheap, and someone is waiting, deprioritizing it is never
+  a real want; the create-vs-consume principle again).
+- **`selectionOrder` ranks the other four** (`build` / `slice` / `surface` /
+  `triage`) and accepts EITHER a preset keyword OR an explicit pool-order list (the
+  preset is sugar over a list; canonical form is the list). `drain` (default) =
+  `[build, slice, surface, triage]` (drain ready work, then create, then ask,
+  generalizing today's slices-first "drain before create"); `groom` =
+  `[surface, triage, build, slice]`. It SUBSUMES the old `prdsFirst` boolean
+  ("slices before PRDs" is just `build` before `slice`), which is removed.
+- A pool named in the order but gated OFF is simply absent (a no-op, not an error):
+  order ranks what the gates left present.
+
 ### 3. Calm defaults; no master switch needed
 
 Both new gates default to their quiet state (`observationTriage: off`,

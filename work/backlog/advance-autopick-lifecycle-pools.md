@@ -40,7 +40,7 @@ NOTE on ordering vs the gates: this slice should land the pools in their SAFE de
 - [ ] The classifier (`advance-classify.ts`) and the rung bodies (`triageRung`/`surfaceRung`/`applyRung`) are UNCHANGED: this slice only widens enumeration. (If a real classifier gap is found, record it; do not silently change rung behaviour.)
 - [ ] `apply` of an already-answered sidecar continues to work (it is already classified `apply`); the new enumeration must surface answered-sidecar items into the pool so `apply` runs autonomously too (the CONSUME phase, always allowed). A test covers an answered-sidecar item being auto-picked and applied.
 - [ ] The `triaged: keep` / settled marker correctly DROPS a settled observation from the pool (it is never re-picked): a test asserts a settled observation is not re-enumerated.
-- [ ] Selection ORDER across the now-FOUR pools is defined and tested (slices / PRDs / observations / blocked-items; how `prdsFirst` and the lifecycle pools interleave). Default: drain buildable work first, then lifecycle. RECORD the chosen order.
+- [ ] Selection ORDER across the now-FOUR pools has a SIMPLE INTERIM default (drain buildable work first, then lifecycle, generalizing today's slices-first), tested. The CONFIGURABLE order (presets + explicit list + `apply`-pinned-first, subsuming `prdsFirst`) is the SEPARATE slice `advance-selection-order-config` (`blockedBy` this one), so do NOT build the config field here, just leave a sane fixed order this slice's tests pin, which that slice then generalizes.
 - [ ] Tests in the repo's vitest style (throwaway git repos, `GIT_CONFIG_GLOBAL=/dev/null`-style isolation, temp workspace dirs). No shared/global location written outside temp fixtures.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
@@ -51,7 +51,7 @@ NOTE on ordering vs the gates: this slice should land the pools in their SAFE de
 ## Decisions (to record while building)
 
 - **Interim gating before the gate slices exist.** The cleanest path: land THIS slice TOGETHER with `observation-triage-tri-state-gate` + `surface-blockers-gate` (one coherent change) so the new pools are born gated-off (calm). Alternative: land this with a temporary hardcoded "off" so it changes no behaviour until the gates arrive. Decide and record; do NOT ship a version that auto-triages every repo on upgrade.
-- **Selection order across four pools** (slices, PRDs, observations, needsAnswers-blocked). Likely: buildable slices → sliceable PRDs → lifecycle (surface blocked, triage observations), i.e. drain ready work before grooming. Confirm against the `advance-loop` north star (the human-is-the-clock drain) and `prdsFirst`.
+- **Interim selection order across four pools** (slices, PRDs, observations, needsAnswers-blocked). Leave a SIMPLE fixed order here (likely buildable slices → sliceable PRDs → surface blocked → triage observations, i.e. drain before groom); the CONFIGURABLE version (presets / list / `apply`-first / subsume `prdsFirst`) is the sibling slice `advance-selection-order-config`. Do not pre-build the config field here.
 - **What "untriaged" means precisely** for the observation pool (no `triaged:` marker? no active sidecar? both?). Pin it against `frontmatter.ts`'s `triaged: keep` drop-out + the sidecar `allAnswered`/pending model in `advance-classify.ts`.
 
 ## Prompt
