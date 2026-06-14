@@ -281,6 +281,16 @@ export type {
 export {performComplete} from './complete.js';
 
 export type {
+	RecoverIsolatedOutcome,
+	RecoverIsolatedOptions,
+	RecoverIsolatedResult,
+} from './recover-isolated.js';
+export {
+	performRecoverIsolated,
+	locateIsolatedRecovery,
+} from './recover-isolated.js';
+
+export type {
 	DoOutcome,
 	DoResult,
 	DoAgentRunner,
