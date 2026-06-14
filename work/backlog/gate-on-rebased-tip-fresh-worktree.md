@@ -1,7 +1,7 @@
 ---
 title: gate-on-rebased-tip-fresh-worktree — run the acceptance gate (`verify`) in a CLEAN worktree cut from the REBASED tip (the tree that actually integrates), not the agent's pre-rebase working checkout, so a green gate provably describes the merged artifact; ON by default (`freshWorktreeGate: true`, `--no-fresh-worktree-gate` to opt out for install cost); subsumes the dropped Gate-3 re-verify
 slug: gate-on-rebased-tip-fresh-worktree
-blockedBy: [prepare-config-step]
+blockedBy: [prepare-config-step, run-merge-integration-concurrency-safe]
 covers: []
 ---
 
@@ -10,7 +10,9 @@ covers: []
 > MAINTAINER DECISIONS (settled 2026-06-12 — implement, do not re-open):
 > - The fresh-worktree gate is **ON by default** (`freshWorktreeGate: true`): most CI/tooling caches deps and `pnpm install` is fast in that case, so correctness-first (the gate tests what merges) is the right default.
 > - **Opt-out knob** `freshWorktreeGate` (POSITIVE boolean, default true, mirroring `slicerLoop`): set `freshWorktreeGate: false` / pass `--no-fresh-worktree-gate` to run `verify` directly in the agent's build worktree (today's behaviour) when per-gate install cost is too high.
-> - **BLOCKED ON `prepare-config-step`:** a fresh worktree has no installed deps, so the `prepare` step (that slice) MUST run in the fresh gate worktree before `verify`. This slice cannot land until `prepare` exists.
+> - **BLOCKED ON `prepare-config-step`:** a fresh worktree has no installed deps, so the `prepare` step (that slice) MUST run in the fresh gate worktree before `verify`. This slice cannot land until `prepare` exists. (`prepare-config-step` is now in `work/done/`.)
+>
+> RE-POINT (2026-06-14): the original STOP (in `## Needs attention` below) found that the default-ON shared-band gate breaks `run`'s CONCURRENT merge-mode integration, because `run` serialises only the CLAIM (not integration) and the merge push is plain non-retried, so widening the rebase-to-push window made both concurrent same-repo jobs rebase onto the same base and the loser's push fail non-fast-forward. The maintainer chose STOP option (a): land a run-concurrency precursor FIRST. That precursor now EXISTS as `run-merge-integration-concurrency-safe` (a per-repo INTEGRATE lock mirroring the claim lock). This slice's `blockedBy` now includes it, and this slice is moved back to `work/backlog/`. Once the precursor merges, `run` serialises same-repo integration so the widened window no longer races, and this slice's default-ON shared-band gate lands cleanly. The precursor also updated the `run`/`run-loop` concurrency tests to the new contract (two NON-conflicting concurrent same-repo merges both land; two GENUINELY-conflicting ones route one to needs-attention), so this slice does NOT need to re-litigate that test change.
 
 ## The gap (verify against current code)
 
@@ -50,7 +52,7 @@ Make the acceptance gate run against the artifact that will actually LAND, by ru
 - [ ] A `gate-failed` (or `prepare-failed`) in the fresh worktree routes the item exactly as today (only the source of the gate tree changed, not the failure routing); a rebase CONFLICT still routes to `rebase-conflict` (the gate does not run on an un-integratable tree).
 - [ ] The change lands in the SHARED gate→integrate band (`src/integration-core.ts`) so in-place `do`, `--isolated`/`--remote`, and `run` all gate the rebased tip when on — verified by inspection (not a per-path patch).
 - [ ] `skills/drive-backlog/SKILL.md` notes that `freshWorktreeGate` makes dropping Gate-3 sound (Gate-1 now tests the merged artifact by default).
-- [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
+- [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green (note: `format:check` is ROOT-only, NOT `-r`).
 
 ## Blocked by
 
@@ -64,7 +66,7 @@ Make the acceptance gate run against the artifact that will actually LAND, by ru
 >
 > READ FIRST: `src/integration-core.ts` (~L24/L74 band doc, ~L349 `runVerify` call + the rebase step after — re-home the gate after the rebase, behind the flag); `src/config.ts` (~L234-241/L314-317 `slicerLoop` — the on-by-default positive-flag pattern to mirror for `freshWorktreeGate`); `src/verify.ts` (`runVerify`); the `prepare`-before-`verify` seam from `work/backlog/prepare-config-step.md` (reuse it; do NOT reimplement install); `src/do.ts`/`src/workspace.ts`/`src/isolation.ts` (job-worktree materialise + reap — the throwaway gate worktree create/reap mechanics + predicate); `src/gc.ts` (reap). Source signal: `work/observations/gate1-could-run-in-fresh-worktree-to-match-pushed-branch.md`. Cross-ref the worktree-hygiene/reap discipline in `work/backlog/isolated-config-read-main-only-fetch-and-reap-on-failure.md`.
 >
-> SCOPE FENCE: do NOT build the `prepare`/install mechanism here (it is `prepare-config-step`, the blocker — reuse its seam); do NOT change what `verify` checks; do NOT re-introduce a separate Gate-3; the OFF path (`freshWorktreeGate:false`) keeps today's pre-rebase gate (its small divergence is consciously accepted, NOT fixed here); never leak the throwaway gate worktree. "Done" = with the default the gate runs prepare+verify on a clean rebased-tip worktree (the falsely-green-leak + rebase-divergence are closed), `--no-fresh-worktree-gate` restores today's gate byte-for-byte, the throwaway worktree is reaped, the change is in the shared band, drive-backlog notes the Gate-3 subsumption, and `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
+> SCOPE FENCE: do NOT build the `prepare`/install mechanism here (it is `prepare-config-step`, the blocker — reuse its seam); do NOT change what `verify` checks; do NOT re-introduce a separate Gate-3; the OFF path (`freshWorktreeGate:false`) keeps today's pre-rebase gate (its small divergence is consciously accepted, NOT fixed here); never leak the throwaway gate worktree. "Done" = with the default the gate runs prepare+verify on a clean rebased-tip worktree (the falsely-green-leak + rebase-divergence are closed), `--no-fresh-worktree-gate` restores today's gate byte-for-byte, the throwaway worktree is reaped, the change is in the shared band, drive-backlog notes the Gate-3 subsumption, and `pnpm -r build && pnpm -r test && pnpm format:check` is green (note: `format:check` is ROOT-only, NOT `-r`).
 
 ---
 
@@ -78,6 +80,8 @@ git mv work/in-progress/gate-on-rebased-tip-fresh-worktree.md work/done/gate-on-
 ```
 
 ## Needs attention
+
+> RESOLVED 2026-06-14 (option a chosen): the run-concurrency premise gap below is addressed by the new precursor slice `run-merge-integration-concurrency-safe` (a per-repo INTEGRATE lock mirroring the claim lock, which also updates the `run`/`run-loop` concurrency tests to the deterministic non-conflicting-both-land / conflicting-one-needs-attention contract). This slice now `blockedBy: [prepare-config-step, run-merge-integration-concurrency-safe]` and is moved back to `work/backlog/`. The historical STOP analysis is kept below for the record.
 
 The slice's load-bearing premise — that the fresh-worktree gate can land in the SHARED gate→integrate band (`integration-core.ts`) and "benefit `run`" while default-ON, without regression — does NOT hold for `run`'s CONCURRENT merge-mode integration. Implementing it exactly as specified breaks these existing, deterministic contracts (confirmed by repeated runs; base is green, the change is red):
 
