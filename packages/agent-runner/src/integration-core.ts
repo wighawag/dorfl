@@ -28,12 +28,22 @@ import {isAncestor} from './gc.js';
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
  * of `performComplete` (`complete.ts`) so BOTH the human `do`/`complete` path and
- * (a later slice) the autonomous `run` path share ONE implementation of:
+ * (a later slice) the autonomous `run` path share ONE implementation of the
+ * gate→integrate band. The exact ORDER depends on the fresh-worktree gate
+ * (`freshWorktreeGate`, slice `gate-on-rebased-tip-fresh-worktree`):
  *
- *   verify gate → review gate (Gate 2) → effective-integration-mode decision →
- *   done-move → atomic commit → rebase-onto-arbiter → integrate
- *   (via `ledgerWrite.applyCompleteTransition`) → needs-attention routing on ANY
- *   failure.
+ *   - fresh gate OFF (the pre-rebase gate, today byte-for-byte):
+ *       verify (cwd) → review (cwd) → effective-mode decision → done-move →
+ *       atomic commit → rebase-onto-arbiter → integrate.
+ *   - fresh gate ON (the default; gate the tree that MERGES):
+ *       done-move → atomic commit → rebase-onto-arbiter → verify (rebased tip) →
+ *       review (rebased tip) → effective-mode decision → integrate.
+ *
+ * Either way `verify` is the deterministic FLOOR and runs FIRST, with the Gate-2
+ * REVIEW (judgement) layered ON TOP and only on `verify`'s green — and (ON path,
+ * MAINTAINER DECISION 2) BOTH run on the SAME rebased tip (the tree that actually
+ * integrates), so verify-then-review holds on the merged tree, never split across
+ * two trees. Any failure routes to needs-attention.
  *
  * It is the CORE in the head / core / tail decomposition (PRD
  * `work/prd/run-do-integrate-convergence.md`): the caller-specific HEAD
@@ -596,134 +606,53 @@ export async function performIntegration(
 		}
 	}
 
-	// 1b. Gate 2 — the PR/code REVIEW gate (GATES PRD `work/prd/review.md`),
-	//     INSERTED BETWEEN the green `verify` and the done-move. It is a JUDGEMENT
-	//     gate layered ON TOP of the deterministic `verify` floor (ADR §8) — NEVER a
-	//     replacement: `verify` already ran (and is non-skippable), and only on its
-	//     GREEN does control reach here. Runs ONLY when `review` resolves on.
+	// 1b. Gate 2 — the PR/code REVIEW gate (GATES PRD `work/prd/review.md`). It is a
+	//     JUDGEMENT gate layered ON TOP of the deterministic `verify` floor (ADR §8)
+	//     — NEVER a replacement, and ALWAYS verify-THEN-review on the SAME tree.
 	//
-	//     The `review` SKILL runs as a FRESH-CONTEXT agent (its own harness launch,
-	//     the injectable `reviewGate` seam), returning `{verdict, findings}`:
+	//     WHERE it runs depends on the fresh-worktree gate (MAINTAINER DECISION 2):
+	//       - OFF: `verify` ran HERE on the pre-rebase `cwd`, so the review runs HERE
+	//         too, on `cwd`, BEFORE the done-move — byte-for-byte today's order.
+	//       - ON: the front `verify` was SKIPPED here and runs LATER on the rebased
+	//         tip (step 4c). So the review is RELOCATED to run there too, AFTER the
+	//         rebased-tip `verify` passes, inside the same fresh gate worktree — so
+	//         verify-then-review holds on the SAME merged tree (the tree that lands),
+	//         not split across two trees. (Letting verify move to the rebased tip
+	//         while review stayed on the pre-rebase `cwd` would deliver the
+	//         gate-the-merged-tree guarantee for verify but BREAK it for review,
+	//         incoherent with this slice's own goal.)
+	//
+	//     Either way the verdict routes IDENTICALLY:
 	//       approve → fall through to the done-move/commit/integrate unchanged;
 	//       block   → route to needs-attention via the SAME machinery the red gate
 	//                 uses (`applyNeedsAttentionTransition`, surfaced on
 	//                 `surfaceArbiter` for the autonomous `do` path), with the
 	//                 blocking findings recorded as the reason, no integrate.
-	//     `reviewMaxRounds` bounds the revise↔review loop: the gate is invoked per
-	//     round; a persistent `block` exhausts the rounds and ERRORS OUT to
-	//     needs-attention (never silently merges or loops).
-	if (input.review) {
-		const reviewGate = input.reviewGate;
-		if (!reviewGate) {
-			// `review` on with no gate wired is a usage error — the floor must never
-			// be silently skipped. (Production always wires `harnessReviewGate`.) The
-			// caller's try/catch maps a thrown error to its usage-error outcome.
-			throw new Error(
-				`review is on but no review gate is configured — cannot run Gate 2 ` +
-					`for '${slug}' (this is a wiring bug; the gate must not be skipped).`,
-			);
+	if (input.review && !freshWorktreeGate) {
+		const reviewOutcome = await runGate2Review({
+			reviewCwd: cwd,
+			input,
+			slug,
+			branch,
+			cwd,
+			env,
+			note,
+		});
+		if (reviewOutcome.kind === 'blocked') {
+			return reviewOutcome.result;
 		}
-		const maxRounds = Math.max(1, input.reviewMaxRounds ?? 2);
-		note('Running the PR/code review gate (Gate 2)…');
-		let approved = false;
-		let lastVerdict: ReviewVerdict | undefined;
-		for (let round = 1; round <= maxRounds; round++) {
-			const verdict = await reviewGate({
-				slug,
-				cwd,
-				reviewModel: input.reviewModel,
-				round,
-				// `--watch` threading (slice `watch-review-session`): when on, the
-				// production gate tails the review session live (after the build stream,
-				// with a build→review boundary). OFF ⇒ the gate does its plain sync
-				// launch, unchanged. The stub gate (tests / non-harness) ignores these.
-				watch: input.watch,
-				watchSink: input.watchSink,
-				color: input.color,
-				sessionsDir: input.sessionsDir,
-				// The review AGENT launches with the AMBIENT env, never the identity-
-				// scoped `env` (an agent must not act as the bot). Falls back to `env`
-				// when no identity is configured (unchanged for non-identity callers).
-				env: input.agentEnv ?? env,
-			});
-			lastVerdict = verdict;
-			if (verdict.verdict === 'approve') {
-				approved = true;
-				break;
-			}
-			// A `block`: re-review up to `reviewMaxRounds` (a future builder-revise
-			// step plugs in here). A persistent block exhausts the loop → routed below.
-		}
-		if (!approved) {
-			// NON-approve verdict: route to needs-attention via the SAME seam the red
-			// gate uses, NEVER integrate. The reason records the blocking findings AND
-			// (since the loop ran every allowed round without an approve) notes the
-			// `reviewMaxRounds` bound was hit — a single block IS exhaustion when
-			// maxRounds=1, satisfying both "block → findings" and "exhaustion → forced
-			// needs-attention" criteria with one route.
-			// The blocking findings (the slice-path caller records exactly this as the
-			// item body; the build path appends the rounds-exhaustion note below).
-			const findingsReason = lastVerdict ? formatBlockReason(lastVerdict) : '';
-			const reason =
-				(findingsReason ? findingsReason + '\n' : '') +
-				reviewRoundsExhaustedReason(maxRounds);
-			const routed = await ledgerWrite.applyNeedsAttentionTransition({
-				cwd,
-				slug,
-				reason,
-				// Same autonomous-vs-human gate as the red-gate path: `do` passes the
-				// arbiter (surface on main + push the branch), the human `complete`
-				// leaves it unset (local-only).
-				arbiter: input.surfaceArbiter,
-				env,
-				note,
-			});
-			const message = routed.moved
-				? `PR/code review (Gate 2) blocked '${slug}'; routed it to ` +
-					'work/needs-attention/ (surfaced by status; the blocking findings are ' +
-					'recorded in the item body). NOT integrated.'
-				: `PR/code review (Gate 2) blocked '${slug}'; NOT integrating.`;
-			note(message);
-			return {
-				outcome: 'review-blocked',
-				routedToNeedsAttention: routed.moved,
-				branch,
-				reason: message,
-				// The structured block reason (the blocking findings ONLY — no
-				// rounds-exhaustion note, which is a build-gate concept) for a caller doing
-				// its OWN routing (the slicing path); the build path ignores it.
-				reviewBlockReason: findingsReason || message,
-			};
-		}
-		note(`PR/code review (Gate 2) approved '${slug}'.`);
-		// Carry the approved verdict (with its authored `review` prose) past the review
-		// block so that AFTER the propose integrate — once the opened PR url is in
-		// scope — we can post it as a PR comment (see the post-integrate block below).
-		approvedVerdict = lastVerdict;
-		// APPROVE-with-non-blocking-findings: give the reviewer's NITS a durable,
-		// contract-native home (GATES PRD `work/prd/review.md`;
-		// `work/findings/review-nonblocking-findings-disposition.md`). On a BLOCK the
-		// blocking findings already land in needs-attention/; on an APPROVE the parsed
-		// non-blocking findings would otherwise EVAPORATE (terminal/session log only).
-		// So — post-decision, the verdict/routing UNCHANGED — the RUNNER (not the
-		// write-free review agent) writes ONE per-run observation of this run's
-		// non-blocking findings. It is written to disk HERE, BEFORE the done-move
-		// (step 2) + the atomic `git add -A` commit (step 3), so it is swept into that
-		// SAME done-commit on EVERY path (merge / propose / CI, `do` AND `run`) — NO
-		// separate commit/move/surface (that is the BLOCK path's heavier
-		// `applyNeedsAttentionTransition`, the WRONG model here). Zero non-blocking
-		// findings ⇒ nothing is written (no empty-file spam).
+		// approve: carry the verdict (post-integrate PR comment), write the per-run
+		// non-blocking-nits observation INTO `cwd` BEFORE the done-move + atomic commit
+		// (so it is swept into that SAME done-commit), and honour the autoMerge-off
+		// merge→propose downgrade. All UNCHANGED from today's OFF-path order.
+		approvedVerdict = reviewOutcome.verdict;
 		writeReviewNitsObservation({
 			cwd,
 			slug,
-			findings: lastVerdict?.findings ?? [],
+			findings: reviewOutcome.verdict?.findings ?? [],
 			note,
 		});
-		// approve + `autoMerge` OFF → DOWNGRADE a resolved `merge` to `propose`: review
-		// gated (approve), but the autonomous merge is opt-in repo policy, so a human
-		// does the merge (`--propose` semantics). With `autoMerge` ON, the resolved
-		// `merge` proceeds autonomously below. A non-approve never reaches here.
-		if (mode === 'merge' && !input.autoMerge) {
+		if (reviewOutcome.downgradeMerge && mode === 'merge') {
 			note(
 				`autoMerge is off — leaving the merge to a human (proposing '${slug}' ` +
 					'instead of auto-merging an approved review).',
@@ -991,6 +920,23 @@ export async function performIntegration(
 				verify: input.verify,
 				env,
 				note,
+				// GATE-2 REVIEW relocation (MAINTAINER DECISION 2): when `review` is ON,
+				// the fresh gate runs it AFTER the rebased-tip verify, against the rebased
+				// tip (the gate worktree) — so verify-THEN-review holds on the SAME merged
+				// tree. The needs-attention ROUTING still targets `cwd` (the work branch +
+				// ledger), so the verdict handling is identical to the OFF path.
+				review: input.review
+					? (reviewCwd) =>
+							runGate2Review({
+								reviewCwd,
+								input,
+								slug,
+								branch,
+								cwd,
+								env,
+								note,
+							})
+					: undefined,
 			});
 			if (!gated.passed) {
 				// prepare-failed or gate-failed on the rebased tip: route the item to
@@ -1042,6 +988,49 @@ export async function performIntegration(
 						: `${what} on the rebased tip; not completing '${slug}'. Fix the ` +
 							'work, or use --skip-verify to override.',
 				};
+			}
+			// GATE-2 REVIEW outcome on the rebased tip (MAINTAINER DECISION 2): the
+			// rebased-tip verify PASSED, so the review ran AFTER it (verify-then-review on
+			// the merged tree). Route a BLOCK exactly as the OFF-path front review does
+			// (only the reviewed tree moved, not the routing). On APPROVE: carry the
+			// verdict (post-integrate PR comment), write the per-run non-blocking-nits
+			// observation, and honour the autoMerge-off merge→propose downgrade.
+			if (gated.review) {
+				if (gated.review.kind === 'blocked') {
+					// The done-move was already committed (steps 2–3), so the slug sits in
+					// work/done/; the routing bounced it from there to needs-attention/.
+					return gated.review.result;
+				}
+				approvedVerdict = gated.review.verdict;
+				// The done-move + atomic commit already happened (steps 2–3, before this
+				// rebased-tip gate), so — unlike the OFF path where the nits write rides the
+				// upcoming commit — we write the observation into `cwd` and FOLD it into the
+				// existing done-commit via `commit --amend` (the branch is not yet
+				// integrated). The observation still lands in the SAME done-commit that
+				// integrates, preserving the no-separate-commit/surface model.
+				const nitsBefore = await stagedCaptureNotes(cwd, env);
+				writeReviewNitsObservation({
+					cwd,
+					slug,
+					findings: gated.review.verdict?.findings ?? [],
+					note,
+				});
+				// Only amend when the write actually produced a new staged file (zero
+				// non-blocking findings ⇒ no write ⇒ no amend, the done-commit unchanged).
+				await gitHard(['add', '-A'], cwd, env);
+				if (!(await nothingStaged(cwd, env))) {
+					const nitsAfter = await stagedCaptureNotes(cwd, env);
+					if (nitsAfter.length > nitsBefore.length) {
+						await gitHard(['commit', '-q', '--amend', '--no-edit'], cwd, env);
+					}
+				}
+				if (gated.review.downgradeMerge && mode === 'merge') {
+					note(
+						`autoMerge is off — leaving the merge to a human (proposing '${slug}' ` +
+							'instead of auto-merging an approved review).',
+					);
+					mode = 'propose';
+				}
 			}
 		}
 
@@ -1968,6 +1957,141 @@ async function reconcileDivergentDoneMove(params: {
 	return true;
 }
 
+/**
+ * The outcome of the Gate-2 review run ({@link runGate2Review}): either it BLOCKED
+ * (a ready-to-return {@link IntegrationCoreResult}) or it APPROVED (the verdict to
+ * carry + whether the autoMerge-off merge→propose downgrade applies).
+ */
+type Gate2ReviewOutcome =
+	| {kind: 'blocked'; result: IntegrationCoreResult}
+	| {
+			kind: 'approved';
+			verdict: ReviewVerdict | undefined;
+			downgradeMerge: boolean;
+	  };
+
+/**
+ * Run the Gate-2 PR/code REVIEW gate against a given tree ({@param reviewCwd}) and
+ * route a BLOCK to needs-attention, returning DATA the caller acts on. Factored out
+ * of {@link performIntegration} so the SAME gate can run in TWO places without
+ * forking its logic (MAINTAINER DECISION 2, slice `gate-on-rebased-tip-fresh-worktree`):
+ *
+ *   - fresh-worktree gate OFF: the caller invokes it at the FRONT on the pre-rebase
+ *     `cwd`, right after the front `verify` (today's order, byte-for-byte);
+ *   - fresh-worktree gate ON: the caller invokes it on the REBASED TIP (the fresh
+ *     gate worktree), right AFTER the rebased-tip `verify` passes — so
+ *     verify-THEN-review holds on the SAME merged tree.
+ *
+ * The review AGENT inspects {@param reviewCwd} (the tree under review); the
+ * needs-attention ROUTING always targets `params.cwd` (where the work branch +
+ * ledger live), so the routing is identical whichever tree was reviewed — ONLY the
+ * source of the reviewed tree moved, not the verdict handling.
+ *
+ * It NEVER mutates `mode` or writes the nits observation itself (those are the
+ * caller's concern, because WHEN they happen differs by path — pre-commit on OFF,
+ * post-commit-amend on ON); it returns the verdict + the downgrade flag and lets
+ * the caller place those effects correctly for its band position.
+ */
+async function runGate2Review(params: {
+	/** The tree the review AGENT inspects (pre-rebase `cwd` OFF; rebased tip ON). */
+	reviewCwd: string;
+	input: IntegrationCoreInput;
+	slug: string;
+	branch: string;
+	/** Where the work branch + ledger live (the needs-attention routing target). */
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<Gate2ReviewOutcome> {
+	const {reviewCwd, input, slug, branch, cwd, env, note} = params;
+	const reviewGate = input.reviewGate;
+	if (!reviewGate) {
+		// `review` on with no gate wired is a usage error — the floor must never be
+		// silently skipped. (Production always wires `harnessReviewGate`.) The caller's
+		// try/catch maps a thrown error to its usage-error outcome.
+		throw new Error(
+			`review is on but no review gate is configured — cannot run Gate 2 ` +
+				`for '${slug}' (this is a wiring bug; the gate must not be skipped).`,
+		);
+	}
+	const maxRounds = Math.max(1, input.reviewMaxRounds ?? 2);
+	note('Running the PR/code review gate (Gate 2)…');
+	let approved = false;
+	let lastVerdict: ReviewVerdict | undefined;
+	for (let round = 1; round <= maxRounds; round++) {
+		const verdict = await reviewGate({
+			slug,
+			cwd: reviewCwd,
+			reviewModel: input.reviewModel,
+			round,
+			// `--watch` threading (slice `watch-review-session`): when on, the production
+			// gate tails the review session live. OFF ⇒ the plain sync launch, unchanged.
+			watch: input.watch,
+			watchSink: input.watchSink,
+			color: input.color,
+			sessionsDir: input.sessionsDir,
+			// The review AGENT launches with the AMBIENT env, never the identity-scoped
+			// `env` (an agent must not act as the bot). Falls back to `env` when no
+			// identity is configured (unchanged for non-identity callers).
+			env: input.agentEnv ?? env,
+		});
+		lastVerdict = verdict;
+		if (verdict.verdict === 'approve') {
+			approved = true;
+			break;
+		}
+		// A `block`: re-review up to `reviewMaxRounds` (a future builder-revise step
+		// plugs in here). A persistent block exhausts the loop → routed below.
+	}
+	if (!approved) {
+		// NON-approve verdict: route to needs-attention via the SAME seam the red gate
+		// uses, NEVER integrate. The reason records the blocking findings AND (since the
+		// loop ran every allowed round without an approve) notes the `reviewMaxRounds`
+		// bound was hit — a single block IS exhaustion when maxRounds=1.
+		const findingsReason = lastVerdict ? formatBlockReason(lastVerdict) : '';
+		const reason =
+			(findingsReason ? findingsReason + '\n' : '') +
+			reviewRoundsExhaustedReason(maxRounds);
+		const routed = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			// Same autonomous-vs-human gate as the red-gate path: `do` passes the arbiter
+			// (surface on main + push the branch), the human `complete` leaves it unset.
+			arbiter: input.surfaceArbiter,
+			env,
+			note,
+		});
+		const message = routed.moved
+			? `PR/code review (Gate 2) blocked '${slug}'; routed it to ` +
+				'work/needs-attention/ (surfaced by status; the blocking findings are ' +
+				'recorded in the item body). NOT integrated.'
+			: `PR/code review (Gate 2) blocked '${slug}'; NOT integrating.`;
+		note(message);
+		return {
+			kind: 'blocked',
+			result: {
+				outcome: 'review-blocked',
+				routedToNeedsAttention: routed.moved,
+				branch,
+				reason: message,
+				// The structured block reason (the blocking findings ONLY) for a caller
+				// doing its OWN routing (the slicing path); the build path ignores it.
+				reviewBlockReason: findingsReason || message,
+			},
+		};
+	}
+	note(`PR/code review (Gate 2) approved '${slug}'.`);
+	return {
+		kind: 'approved',
+		verdict: lastVerdict,
+		// approve + `autoMerge` OFF → the caller DOWNGRADEs a resolved `merge` to
+		// `propose` (review gated, but the autonomous merge is opt-in repo policy, so a
+		// human does the merge). With `autoMerge` ON the resolved `merge` proceeds.
+		downgradeMerge: !input.autoMerge,
+	};
+}
+
 /** The result of {@link runFreshWorktreeGate}. */
 interface FreshGateResult {
 	/** True iff BOTH `prepare` and `verify` passed on the rebased-tip worktree. */
@@ -1976,6 +2100,14 @@ interface FreshGateResult {
 	kind?: 'prepare' | 'verify';
 	/** The non-zero exit code of the failing step (when `!passed`). */
 	exitCode?: number;
+	/**
+	 * The Gate-2 REVIEW outcome, present ONLY when a review gate was supplied to the
+	 * fresh gate AND `verify` passed (so the review ran AFTER it on the rebased tip).
+	 * The caller routes a `blocked` and acts on an `approved` (carry the verdict,
+	 * write the nits observation, honour the autoMerge-off downgrade). Absent when no
+	 * review was requested or `verify` failed (the review never ran).
+	 */
+	review?: Gate2ReviewOutcome;
 }
 
 /**
@@ -1997,6 +2129,14 @@ interface FreshGateResult {
  * before `verify` (forced — `useMarker: false` — since it is per-gate); a failing
  * `prepare` short-circuits and never runs `verify` (the env could not be made
  * ready), surfaced distinctly as `kind: 'prepare'`.
+ *
+ * GATE-2 REVIEW (MAINTAINER DECISION 2): when a `review` callback is supplied (the
+ * caller resolved `review` ON), the review runs HERE — AFTER the rebased-tip
+ * `verify` passes, against THIS fresh gate worktree (the rebased tip) — so
+ * verify-THEN-review holds on the SAME merged tree. The review runs INSIDE the
+ * worktree's lifetime (before it is reaped), so the review agent inspects the
+ * rebased tip. Its outcome is returned in {@link FreshGateResult.review} for the
+ * caller to route/act on; the worktree is reaped regardless of the verdict.
  */
 async function runFreshWorktreeGate(params: {
 	cwd: string;
@@ -2005,6 +2145,13 @@ async function runFreshWorktreeGate(params: {
 	verify?: VerifyConfig;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
+	/**
+	 * Run the Gate-2 review on the rebased-tip worktree AFTER `verify` passes
+	 * (verify-then-review on the merged tree). Supplied ONLY when `review` resolved
+	 * ON; absent ⇒ the fresh gate runs prepare+verify only (no review). Receives the
+	 * gate worktree dir (the tree to review) and returns the routed outcome.
+	 */
+	review?: (reviewCwd: string) => Promise<Gate2ReviewOutcome>;
 }): Promise<FreshGateResult> {
 	const {cwd, commit, env, note} = params;
 	// A throwaway gate-sandbox dir OUTSIDE any tracked tree (the OS temp area), so it
@@ -2044,7 +2191,12 @@ async function runFreshWorktreeGate(params: {
 		if (!gate.passed) {
 			return {passed: false, kind: 'verify', exitCode: gate.exitCode};
 		}
-		return {passed: true};
+		// GATE-2 REVIEW on the rebased tip, AFTER the green verify (verify-then-review
+		// on the SAME merged tree). Runs while the worktree is still live (the review
+		// agent inspects the rebased tip). The outcome is returned for the caller to
+		// route/act on.
+		const review = params.review ? await params.review(worktreeDir) : undefined;
+		return {passed: true, review};
 	} finally {
 		// REAP the throwaway fresh-gate worktree (pass or fail) — never leak it. Remove the
 		// git-registered worktree first (so the common dir has no dangling

@@ -27,6 +27,13 @@ import {
  * and is never replaced by the review; review is a JUDGEMENT gate ON TOP. The
  * real `~/.agent-runner/` + `~/.pi/agent/sessions/` are untouched (the stubbed
  * gate runs no real launch; the do/complete machinery already isolates state).
+ *
+ * These tests run with the fresh-worktree gate at its CORE default (OFF), so they
+ * exercise the OFF-path order — `verify (cwd) → review (cwd) → done-move → …`. The
+ * fresh-gate-ON order — where verify-THEN-review BOTH run on the rebased tip
+ * (MAINTAINER DECISION 2) — is covered by `fresh-worktree-gate.test.ts` ("fresh-
+ * worktree gate ON + review ON"). The verify-first / review-on-top invariant holds
+ * IDENTICALLY on both paths; only WHICH tree they judge moves.
  */
 
 let scratch: Scratch;

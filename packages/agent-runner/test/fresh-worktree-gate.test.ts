@@ -3,6 +3,7 @@ import {writeFileSync, existsSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
+import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
 	makeScratch,
@@ -328,6 +329,152 @@ describe('fresh-worktree gate — failure routing is unchanged (only the gate TR
 		// No gate sandbox was even created (the gate never ran).
 		expect(gateSandboxCount()).toBe(before);
 		expect(existsOnArbiterMain(repo, 'done', 'conflict')).toBe(false);
+	});
+});
+
+const APPROVE: ReviewVerdict = {verdict: 'approve', findings: []};
+const BLOCK: ReviewVerdict = {
+	verdict: 'block',
+	findings: [{severity: 'blocking', question: 'why is X like this?'}],
+};
+
+describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the REBASED tip (MAINTAINER DECISION 2)', () => {
+	it('the review runs AFTER the rebased-tip verify, on the SAME (rebased-tip) tree', async () => {
+		const {repo} = await claimAndBranch('vtr');
+		// verify writes a marker IN the tree it runs against; the review then observes
+		// whether that marker is present in the tree IT is handed. If both run on the
+		// SAME rebased-tip worktree in order, the review sees the marker.
+		let reviewSawVerifyMarker = false;
+		let reviewCwd: string | undefined;
+		const gate: ReviewGate = async ({cwd}) => {
+			reviewCwd = cwd;
+			reviewSawVerifyMarker = existsSync(join(cwd, 'verify-ran.marker'));
+			return APPROVE;
+		};
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'vtr',
+			source: 'in-progress',
+			recovering: false,
+			freshWorktreeGate: true,
+			verify: 'touch verify-ran.marker',
+			review: true,
+			reviewGate: gate,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		// verify ran BEFORE the review, and on the SAME tree (the marker it wrote is
+		// visible to the review).
+		expect(reviewSawVerifyMarker).toBe(true);
+		// The review inspected the THROWAWAY gate worktree (the rebased tip), NOT the
+		// agent's pre-rebase cwd.
+		expect(reviewCwd).toBeDefined();
+		expect(reviewCwd).not.toBe(repo);
+		expect(reviewCwd).toMatch(/agent-runner-fresh-gate-/);
+		expect(existsSync(join(repo, 'work', 'done', 'vtr.md'))).toBe(true);
+		// The verify marker lived only in the (reaped) gate worktree; it never touched
+		// the agent's cwd or the committed tree.
+		expect(existsSync(join(repo, 'verify-ran.marker'))).toBe(false);
+	});
+
+	it('the review inspects the rebased tip: a rebase-introduced file IS visible to it', async () => {
+		const {seeded, repo} = await claimAndBranch('vtr-rebased');
+		// arbiter/main advances with a file the branch does not have; the integration
+		// rebase brings it onto the tip the fresh gate (and so the review) is cut from.
+		const other = seeded.clone('advance');
+		writeFileSync(join(other, 'rebased-in.txt'), 'arrived via the rebase\n');
+		gitIn(['add', '-A'], other);
+		gitIn(['commit', '-q', '-m', 'advance main'], other);
+		gitIn(['push', '-q', ARBITER, 'main:main'], other);
+
+		let reviewSawRebasedFile = false;
+		const gate: ReviewGate = async ({cwd}) => {
+			reviewSawRebasedFile = existsSync(join(cwd, 'rebased-in.txt'));
+			return APPROVE;
+		};
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'vtr-rebased',
+			source: 'in-progress',
+			recovering: false,
+			freshWorktreeGate: true,
+			verify: 'exit 0',
+			review: true,
+			reviewGate: gate,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(reviewSawRebasedFile).toBe(true);
+	});
+
+	it('a review BLOCK on the ON path surfaces from the rebased tip (after the rebased-tip verify passed), routing from done/', async () => {
+		const {repo} = await claimAndBranch('vtr-block');
+		let verifyRanBeforeReview = false;
+		const gate: ReviewGate = async ({cwd}) => {
+			verifyRanBeforeReview = existsSync(join(cwd, 'verify-ran.marker'));
+			return BLOCK;
+		};
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'vtr-block',
+			source: 'in-progress',
+			recovering: false,
+			freshWorktreeGate: true,
+			verify: 'touch verify-ran.marker',
+			review: true,
+			reviewGate: gate,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('review-blocked');
+		expect(core.routedToNeedsAttention).toBe(true);
+		// verify ran (and passed) BEFORE the review blocked, on the rebased tip.
+		expect(verifyRanBeforeReview).toBe(true);
+		// The done-move already happened (the review runs after it on the ON path), so
+		// the block bounces the item from done/ to needs-attention/.
+		expect(existsSync(join(repo, 'work', 'done', 'vtr-block.md'))).toBe(false);
+		expect(
+			existsSync(join(repo, 'work', 'needs-attention', 'vtr-block.md')),
+		).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'vtr-block')).toBe(false);
+	});
+
+	it('a red rebased-tip verify short-circuits BEFORE the review (verify is the floor, runs first)', async () => {
+		const {repo} = await claimAndBranch('vtr-redverify');
+		let reviewRan = false;
+		const gate: ReviewGate = async () => {
+			reviewRan = true;
+			return APPROVE;
+		};
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'vtr-redverify',
+			source: 'in-progress',
+			recovering: false,
+			freshWorktreeGate: true,
+			verify: 'exit 1',
+			review: true,
+			reviewGate: gate,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('gate-failed');
+		// The review NEVER ran — a red verify short-circuits before the judgement gate.
+		expect(reviewRan).toBe(false);
 	});
 });
 
