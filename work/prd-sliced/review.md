@@ -133,13 +133,12 @@ The Gate-2 slice has been emitted: **`work/backlog/review-gate-pr.md`** (the PR/
 
 **The SECOND set is now being sliced (2026-06-06):** the **slicer EDIT LOOP** (insertion point A, Shape 2) on the `do prd:<slug>` path — emitted as **`work/backlog/slicer-review-edit-loop.md`** (built next, to dogfood slicing the not-yet-sliced PRDs). See the RESOLVED DESIGN section.
 
-This PRD is **deliberately NOT marked `sliced:`** because further scopes remain as named follow-ups (all REUSE the one review mechanism — see RESOLVED DESIGN insertion points):
+> **AT REST 2026-06-12 — this PRD now resides in `work/prd-sliced/` (its sliced resting state).** Its CORE is built: the slicer edit loop (A, `done/slicer-review-edit-loop.md`), Gate 2 PR review (C, `done/review-gate-pr.md`), the PR-comment audit trail (`done/review-gate-pr-comment.md` + its blocker `done/propose-pr-body.md`), run coverage (D, `done/run-through-integration-core.md`), and the intake variant (`done/intake-lone-slice-bounded-internal-review.md`). `autoslice-confidence` was folded in + deleted. The remaining named follow-ups have each been CARRIED to a durable owner, so this PRD no longer needs to be held open for them:
 
-- **pre-build slice check (B)** — a slice-review gate inside `do <slug>` before building. Later set.
-- **run coverage (D)** — its own set; converge `run` on the `do`/`performComplete` path FIRST, then review integrates. Later set.
-- **issue-thread surface (E)** — run the review/edit loop in issue-to-prd / issue-intake CI, surfacing findings as comment-thread questions/edits. Later set (issue-intake design).
-- **`review-gate-pr-comment`** — SLICED 2026-06-06 (`work/backlog/review-gate-pr-comment.md`): post the Gate-2 verdict as a PR COMMENT via a new provider `postComment` seam, **including on APPROVE** (the audit trail — maintainer decision). Shares the "write text to the PR" provider surface with `propose-pr-body` (body-at-open vs comment-after); `blockedBy: [propose-pr-body]`. (Today the verdict only hits the terminal note / the needs-attention body — nothing reaches the PR; this closes that.)
-- **remove `reviewMaxRounds` from the Gate-2 path** (orphan; the loop owns `slicerLoopMax`, the `--slicer-loop*` family) — cleanup, later. Add the `sliced:` marker (and the one-time PRD trim) only once these are sliced. Until then this PRD stays the source for them.
+- **pre-build slice check (B)** — CARRIED to `work/ideas/pre-build-slice-review-gate.md` (a speculative insertion point, parked with its YAGNI rationale + promote trigger; it is NOT owned by this PRD's resting).
+- **run coverage (D)** — BUILT: `work/done/run-through-integration-core.md` threaded the review gate into `run` and converged it on `performIntegration`. No longer pending.
+- **issue-thread surface (E)** — CARRIED to `work/prd/runner-in-ci.md` (its rightful owner: an issue-front-door delivery surface that reuses this PRD's review machinery). Sliced when `runner-in-ci` is sliced.
+- **remove `reviewMaxRounds` from the Gate-2 path** (the orphan rounds loop in `integration-core.ts`; the slicer loop owns `slicerLoopMax`) — ON MAINTAINER HOLD, recorded in `work/observations/reviewmaxrounds-on-wrong-concept.md` (re-verified live): remove it only when a real builder-revise step is designed/built (a MOVE + reframe, never a deletion-in-isolation). That standing observation, not this PRD, holds the signal.
 
 ## Out of Scope
 
