@@ -129,6 +129,15 @@ export interface CompleteOptions {
 	prepare?: VerifyConfig;
 	/** The declared per-repo gate (string | list). Unset ⇒ the default command. */
 	verify?: VerifyConfig;
+	/**
+	 * Run the acceptance gate (`prepare` then `verify`) against the REBASED tip
+	 * in a CLEAN throwaway worktree (the tree that integrates) when `true` (the
+	 * default), rather than the current checkout (the pre-rebase tree) when
+	 * `false`. `complete` is a SINGLE-JOB path, so this is the resolved flag
+	 * passed UNCONDITIONALLY (no `run`-fleet downgrade). Forwarded verbatim to
+	 * {@link performIntegration}.
+	 */
+	freshWorktreeGate?: boolean;
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
 	/**
@@ -494,6 +503,7 @@ async function runComplete(
 		recovering,
 		prepare: options.prepare,
 		verify: options.verify,
+		freshWorktreeGate: options.freshWorktreeGate,
 		skipVerify: options.skipVerify,
 		review: options.review,
 		reviewGate: options.reviewGate,

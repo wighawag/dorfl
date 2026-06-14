@@ -125,6 +125,12 @@ export const REPO_ALLOWED_KEYS = [
 	'slicerLoop',
 	'slicerLoopMax',
 	'slicerLoopModel',
+	// `freshWorktreeGate` (run the acceptance gate against the REBASED tip in a
+	// clean throwaway worktree, ON by default) is a genuine repo property exactly
+	// like `verify`/`prepare`/`review`: whether this repo's gate tests the merged
+	// artifact (and pays the per-gate install cost) is agreed by all collaborators
+	// + travels with the repo. Resolved per-repo through the SAME chain.
+	'freshWorktreeGate',
 ] as const satisfies readonly (keyof Config)[];
 
 /** A key honoured in a per-repo file. */

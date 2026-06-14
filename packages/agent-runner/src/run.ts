@@ -866,6 +866,20 @@ async function runOneItem(
 				// `verify` on the fresh job worktree so it has deps (a fresh worktree off
 				// the mirror has no `node_modules`). Unset ⇒ a no-op; never baked into verify.
 				prepare: config.prepare,
+				// FRESH-WORKTREE GATE (slice `gate-on-rebased-tip-fresh-worktree`): run the
+				// acceptance gate against the REBASED tip in a clean throwaway worktree (the
+				// tree that integrates) so a green gate provably describes the merged
+				// artifact. The `run` FLEET CONDITIONAL lives HERE (the one fleet-aware
+				// caller, not the caller-agnostic band): use the fresh gate ONLY when the
+				// resolved flag is on AND same-repo concurrency is off (`perRepoMax === 1`).
+				// At `perRepoMax > 1` it falls back to today's in-build-worktree gate, so the
+				// two PRE-EXISTING run-fleet races (claim-vs-integrate non-ff push;
+				// sibling-slug divergent-base ledger rebase — filed as
+				// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`) never fire
+				// and the existing concurrent-`run` tests stay green unchanged. Single-job
+				// callers (in-place `do`/`--isolated`/`--remote`/`complete`) pass the resolved
+				// flag UNCONDITIONALLY (no fleet concurrency, so no downgrade).
+				freshWorktreeGate: config.freshWorktreeGate && config.perRepoMax === 1,
 				// Gate 2 (PR/code review): the per-repo resolved flags ride from `config`;
 				// only the gate SEAM is threaded through `ctx` (the CLI wires the prod
 				// `harnessReviewGate()` only when `config.review` is on).
