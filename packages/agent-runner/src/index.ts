@@ -375,12 +375,14 @@ export {
 export type {JobRecord, JobState, CreateJobOptions, Job} from './workspace.js';
 export {
 	JOB_RECORD_FILENAME,
+	jobRecordPath,
 	encodeWorkId,
 	jobWorktreePath,
 	createJob,
 	writeJobRecord,
 	readJobRecord,
 	updateJobRecord,
+	removeJobRecord,
 } from './workspace.js';
 
 export type {

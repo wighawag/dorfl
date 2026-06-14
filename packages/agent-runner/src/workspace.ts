@@ -1,5 +1,5 @@
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {basename, dirname, join} from 'node:path';
 import {git} from './git.js';
 import {
 	encodeRepoKey,
@@ -24,9 +24,10 @@ import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
  * This is the single isolation primitive (ADR §1: jobs-not-agents) — both the
  * autonomous `run-once` runner and (later) the human `work-on` build on it. It
  * consumes the **`repo-mirror`** hub primitive (it does NOT reimplement mirror
- * management or the repo→key encoding) and leaves a `.agent-runner-job.json`
- * record + the worktree on disk for `gc`/`status` to read (those are SEPARATE
- * slices — this slice only provides the state they evaluate).
+ * management or the repo→key encoding) and leaves a per-job state record (a
+ * `<work-id>.json` SIBLING of the worktree, OUTSIDE the checked-out tree —
+ * {@link jobRecordPath}) + the worktree on disk for `gc`/`status` to read (those
+ * are SEPARATE slices — this slice only provides the state they evaluate).
  *
  * `<workspacesDir>` is STATE, not cache (ADR §3): it lives under a single
  * visible `~/.agent-runner/`, never `~/.cache`.
@@ -100,9 +101,46 @@ export function jobWorktreePath(
 	return join(workspacesDir, 'work', encodeWorkId(url, slug));
 }
 
-/** Filename of the per-job record inside its worktree. Derived from the single
- * brand identity (`.{base}-job.json`) so a rename flips it in lockstep. */
+/** Filename of the per-job record. Derived from the single brand identity
+ * (`.{base}-job.json`) so a rename flips it in lockstep.
+ *
+ * HISTORICAL: this used to be the name of a file written INSIDE the job worktree
+ * (`<work-id>/.agent-runner-job.json`). That in-tree location was the mistake —
+ * a runtime control file inside the checked-out worktree got swept onto the work
+ * branch by the runner's broad `git add -A` commits (and once WEDGED a
+ * continue-rebase `git switch`). The record now lives at a SIBLING path OUTSIDE
+ * the worktree ({@link jobRecordPath}); this constant survives only as the
+ * legacy in-tree read-fallback name + as the no-op-build / clean-worktree
+ * classification token in `agent-stop.ts`/`gc.ts` (now inert — the record can no
+ * longer appear in `git status`). */
 export const JOB_RECORD_FILENAME = brand.jobRecordFilename;
+
+/**
+ * The on-disk location of a job's state record: a SIBLING of its worktree dir,
+ * `<workspacesDir>/work/<work-id>.json` (NEXT TO `<workspacesDir>/work/<work-id>/`,
+ * NOT inside it).
+ *
+ * This is the structural fix for the in-tree leak: the record is still under the
+ * same `workspacesDir/work/` control area (so `discoverJobs`'s single-directory
+ * walk still finds it), but it is PHYSICALLY OUTSIDE the checked-out git
+ * worktree, so the runner's broad `git add -A` commits can NEVER stage it — in
+ * ANY repo, with no `.gitignore` entry needed. A `<work-id>.json` file name can
+ * never collide with the `<work-id>/` worktree DIR (one carries a `.json`
+ * extension, the other does not).
+ *
+ * Derived purely from the worktree `dir` (sibling = `<dir>.json`) so every
+ * existing caller that holds a worktree dir keeps the same `(dir, …)` signature.
+ */
+export function jobRecordPath(dir: string): string {
+	return join(dirname(dir), `${basename(dir)}.json`);
+}
+
+/** The LEGACY in-tree record path (`<dir>/.agent-runner-job.json`) for the
+ * read-fallback below — a job worktree materialised by an OLD binary still has
+ * its record here. */
+function legacyJobRecordPath(dir: string): string {
+	return join(dir, JOB_RECORD_FILENAME);
+}
 
 export interface CreateJobOptions {
 	/**
@@ -189,7 +227,8 @@ const DEFAULT_HARNESS: HarnessRecord = {adapter: 'null'};
  * Create (or recreate) a job: ensure the hub mirror via `repo-mirror`, then
  * `git worktree add` a per-job worktree OUTSIDE the hub at
  * `<workspacesDir>/work/<work-id>/` on `work/<slug>`, branched off the
- * freshly-fetched `<hub>/main`. Writes the `.agent-runner-job.json` record.
+ * freshly-fetched `<hub>/main`. Writes the per-job record at a SIBLING of the
+ * worktree (`<work-id>.json`, OUTSIDE the tree — {@link jobRecordPath}).
  *
  * Distinct slugs ⇒ distinct `work/<slug>` branches, so git's one-branch-per-
  * worktree constraint is naturally avoided (ADR §2). If a stale worktree/branch
@@ -296,7 +335,7 @@ export function createJob(options: CreateJobOptions): Job {
 		state: 'running',
 		harness: options.harness ?? DEFAULT_HARNESS,
 	};
-	const recordPath = join(dir, JOB_RECORD_FILENAME);
+	const recordPath = jobRecordPath(dir);
 	writeJobRecord(dir, record);
 
 	return {
@@ -312,29 +351,61 @@ export function createJob(options: CreateJobOptions): Job {
 		continuePushFailure,
 		dispose() {
 			git(['worktree', 'remove', '--force', dir], mirror.path, {env});
+			removeJobRecord(dir);
 			pruneAndDropBranch(mirror.path, branch, env);
 		},
 	};
 }
 
-/** Write (or overwrite) a job's `.agent-runner-job.json` record. */
+/**
+ * Write (or overwrite) a job's record to its SIBLING path ({@link jobRecordPath},
+ * `<work-id>.json` next to the worktree), OUTSIDE the checked-out tree. `dir` is
+ * the worktree dir, kept as the parameter so every caller is unchanged.
+ */
 export function writeJobRecord(dir: string, record: JobRecord): void {
-	writeFileSync(
-		join(dir, JOB_RECORD_FILENAME),
-		JSON.stringify(record, null, 2) + '\n',
-	);
+	writeFileSync(jobRecordPath(dir), JSON.stringify(record, null, 2) + '\n');
 }
 
-/** Read a job's record from its worktree, or `undefined` if absent/invalid. */
+/**
+ * Read a job's record given its worktree `dir`, or `undefined` if absent/invalid.
+ *
+ * Reads the NEW sibling location ({@link jobRecordPath}) first, then falls back
+ * to the LEGACY in-tree location (`<dir>/.agent-runner-job.json`) so a job
+ * worktree materialised by an OLD binary (record still inside the tree) stays
+ * discoverable/reapable until it is torn down. New jobs only ever write the
+ * sibling path, so the fallback is purely for in-flight migration.
+ */
 export function readJobRecord(dir: string): JobRecord | undefined {
-	const path = join(dir, JOB_RECORD_FILENAME);
-	if (!existsSync(path)) {
-		return undefined;
+	for (const path of [jobRecordPath(dir), legacyJobRecordPath(dir)]) {
+		if (!existsSync(path)) {
+			continue;
+		}
+		try {
+			return JSON.parse(readFileSync(path, 'utf8')) as JobRecord;
+		} catch {
+			return undefined;
+		}
 	}
-	try {
-		return JSON.parse(readFileSync(path, 'utf8')) as JobRecord;
-	} catch {
-		return undefined;
+	return undefined;
+}
+
+/**
+ * Delete a job's record on teardown — BOTH the new sibling path
+ * ({@link jobRecordPath}) and the legacy in-tree path (an old-binary worktree).
+ * Best-effort + idempotent (a missing file is fine). Called when a worktree is
+ * removed (reaped / disposed / cleared) so the relocated record does not outlive
+ * its worktree as an orphan `<work-id>.json` (when the record lived INSIDE the
+ * worktree it was deleted WITH it by `git worktree remove`; now that it is a
+ * sibling, its teardown must be explicit).
+ */
+export function removeJobRecord(dir: string): void {
+	for (const path of [jobRecordPath(dir), legacyJobRecordPath(dir)]) {
+		try {
+			rmSync(path, {force: true});
+		} catch {
+			// best-effort: an unremovable orphan record is harmless (discovery
+			// keys on the worktree DIR, which is gone).
+		}
 	}
 }
 
