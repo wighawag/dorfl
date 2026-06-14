@@ -399,8 +399,16 @@ function fetchTracking(
 	);
 }
 
-/** True iff `ancestor` is an ancestor of (or equal to) `descendant`. */
-function isAncestor(
+/**
+ * True iff `ancestor` is an ancestor of (or equal to) `descendant`, both
+ * resolved IN the local repo `dir` (`git merge-base --is-ancestor`). This is the
+ * ONE provably-merged reachability predicate in the system: the worktree reaper
+ * above uses it for `<tip> --is-ancestor <arbiter>/main`, and the remote
+ * merged-branch sweep (`reap-branches.ts`) REUSES it (not a second predicate) to
+ * decide a remote `work/<slug>` branch is provably merged before deleting it.
+ * EXPORTED so that single source of truth is shared, never forked.
+ */
+export function isAncestor(
 	dir: string,
 	ancestor: string,
 	descendant: string,

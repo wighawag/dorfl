@@ -71,6 +71,11 @@ on:
         options:
           - propose
           - merge
+      sweepMergedBranches:
+        description: 'Reap merged remote work/* branches on the scheduled tick (gc --remote-branches): delete only branches PROVABLY MERGED into <arbiter>/main, so out-of-band human/UI PR merges stop leaving their work/<slug> branches lingering on the arbiter. ON by default; set false to opt out. An in-flight (un-merged) branch is NEVER touched.'
+        required: false
+        default: true
+        type: boolean
 
 # Serialise overlapping ticks of the same shape; the claim CAS is the real
 # cross-run serialiser, this just avoids redundant concurrent ticks.
@@ -88,6 +93,12 @@ env:
   # selects BOTH the job shape (via the `if:` guards below) AND the integration flag
   # the `advance` legs pass (`--propose`/`--merge`), so they can never desync.
   INTEGRATION_MODE: ${{ github.event.inputs.integrationMode || 'propose' }}
+  # Reap merged remote work/* branches on the scheduled tick. ON by default (the
+  # empty dispatch input on a `schedule`/`push` trigger reads as the default);
+  # set the `sweepMergedBranches` dispatch input to `false` to opt out. This is
+  # the provider-agnostic hygiene sweep (`gc --remote-branches`) for out-of-band
+  # human/UI PR merges, whose work/<slug> branch nothing else deletes.
+  SWEEP_MERGED_BRANCHES: ${{ github.event.inputs.sweepMergedBranches || 'true' }}
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
@@ -166,3 +177,34 @@ jobs:
         # thrash. The flag ties the integration mode to this shape; it overrides the
         # repo config default, so the workflow mode and the integration mode agree.
         run: agent-runner advance -n 10 --merge --arbiter origin
+
+  # ── REAP merged remote work/* branches (the hygiene sweep) ───────────────────
+  # The provider-agnostic counterpart of the worktree reaper: delete remote
+  # `work/<slug>` branches that are PROVABLY MERGED into `origin/main`
+  # (`git merge-base --is-ancestor`), so an out-of-band human/UI PR merge stops
+  # leaving its branch lingering on the arbiter. Independent of the integration
+  # mode (both propose- and merge-mode repos accumulate out-of-band-merged
+  # branches), so it runs on EVERY tick regardless of `integrationMode` — gated
+  # ONLY by the `SWEEP_MERGED_BRANCHES` opt-out (ON by default). It NEVER touches
+  # an un-merged/in-flight branch (the predicate excludes it) and NEVER `--force`s.
+  # Plain git, so it works against any provider (incl. a `--bare` arbiter).
+  #
+  # OPTIONAL belt-and-suspenders for a GitHub arbiter: enable the repo-level
+  # "Automatically delete head branches" setting (`delete_branch_on_merge`) too
+  # (Settings → General, or `gh api -X PATCH repos/{owner}/{repo} -f
+  # delete_branch_on_merge=true`). That is an ADDITIVE GitHub-only convenience for
+  # PRs merged through GitHub's own UI — NOT a replacement for this sweep, which is
+  # the general home and the only thing that reaps branches on a `--bare` /
+  # non-GitHub arbiter or after a merge done outside GitHub.
+  reap-merged-branches:
+    if: ${{ (github.event.inputs.sweepMergedBranches || 'true') == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/agent-runner-setup
+      - name: reap merged remote work/* branches (gc --remote-branches)
+        # Deletes ONLY branches provably merged into origin/main; reports
+        # deleted-vs-retained-with-reason. Safe to run every tick (idempotent).
+        run: agent-runner gc --remote-branches --arbiter origin
