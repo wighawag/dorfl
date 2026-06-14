@@ -13,6 +13,7 @@ import {
 	type IntakeVerdict,
 } from '../src/intake.js';
 import {stampIntakeMarker, parseIntakeMarker} from '../src/intake-marker.js';
+import {GitHubProvider} from '../src/github.js';
 import {brand} from '../src/brand.js';
 import {
 	GitHubIssueProvider,
@@ -417,6 +418,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 	 */
 	function recordingGh(tag: string): {
 		binDir: string;
+		bin: string;
 		readArgs(): string;
 	} {
 		const binDir = join(scratch.root, `gh-stub-${tag}`);
@@ -435,6 +437,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		chmodSync(gh, 0o755);
 		return {
 			binDir,
+			bin: gh,
 			readArgs: () =>
 				existsSync(argsFile) ? readFileSync(argsFile, 'utf8') : '',
 		};
@@ -457,9 +460,9 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
 			reviewSlice: convergingReviewGate,
-			// `propose` (default) through the `github` provider so the synthesised
-			// PR `--title` reaches the recording `gh` stub on PATH.
-			provider: 'github',
+			// `propose` (default) through the GitHub provider INSTANCE (arbiter-derived
+			// now) so the synthesised PR `--title` reaches the recording `gh` stub.
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
 		});
 		expect(result.outcome).toBe('sliced');
@@ -535,7 +538,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose output modes',
 			}),
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
 		});
 		expect(result.outcome).toBe('prd');

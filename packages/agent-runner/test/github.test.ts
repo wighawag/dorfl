@@ -82,7 +82,7 @@ describe('isGitHubArbiterUrl — URL-based detection', () => {
 	});
 });
 
-describe('selectProvider — auto-detect github, explicit override, graceful default', () => {
+describe('selectProvider — purely arbiter-derived (no override axis)', () => {
 	it('auto-selects the github provider for a GitHub arbiter URL', () => {
 		const provider = selectProvider({
 			arbiterUrl: 'git@github.com:wighawag/agent-runner.git',
@@ -97,25 +97,21 @@ describe('selectProvider — auto-detect github, explicit override, graceful def
 		expect(provider.name).toBe('none');
 	});
 
-	it('an explicit `provider: none` override beats URL detection', () => {
-		const provider = selectProvider({
-			arbiterUrl: 'git@github.com:o/r.git',
-			provider: 'none',
-		});
-		expect(provider.name).toBe('none');
-	});
-
-	it('an explicit `provider: github` override forces github even off a local URL', () => {
-		const provider = selectProvider({
-			arbiterUrl: 'file:///home/me/git/o/r.git',
-			provider: 'github',
-		});
-		expect(provider.name).toBe('github');
-	});
-
 	it('an unknown arbiter URL (no detection) defaults to none', () => {
 		const provider = selectProvider({arbiterUrl: undefined});
 		expect(provider.name).toBe('none');
+	});
+
+	it('takes NO `provider` override input — the type carries only arbiterUrl/ghBin', () => {
+		// A GitHub arbiter URL ALWAYS resolves to github regardless of anything else;
+		// a non-GitHub URL ALWAYS resolves to none. There is no override that could
+		// contradict the arbiter (the whole point of the removal).
+		expect(selectProvider({arbiterUrl: 'git@github.com:o/r.git'}).name).toBe(
+			'github',
+		);
+		expect(
+			selectProvider({arbiterUrl: 'file:///home/me/git/o/r.git'}).name,
+		).toBe('none');
 	});
 });
 

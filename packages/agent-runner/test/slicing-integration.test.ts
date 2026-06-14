@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync, readFileSync, chmodSync} from 'node:fs';
 import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
+import {GitHubProvider} from '../src/github.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -159,7 +160,8 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 
-		// A recording `gh` stub on PATH (no real GitHub), driven by provider: github.
+		// A recording `gh` stub (no real GitHub), injected as the GitHub provider
+		// INSTANCE (the provider is arbiter-derived now — the instance seam drives it).
 		const binDir = join(scratch.root, 'gh-stub');
 		mkdirSync(binDir, {recursive: true});
 		const argsFile = join(binDir, 'gh-args.txt');
@@ -181,7 +183,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 			arbiter: ARBITER,
 			autoSlice: true,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh}),
 			agentRunner: slicingAgent('child'),
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
 		});

@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import {join} from 'node:path';
 import {performDo, type DoAgentRunner} from '../src/do.js';
+import {GitHubProvider} from '../src/github.js';
 import {performComplete} from '../src/complete.js';
 import {performStart} from '../src/start.js';
 import {returnToBacklog} from '../src/needs-attention.js';
@@ -1170,7 +1171,7 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh}),
 			verify: PASS,
 			agentRunner: summarisingAgent,
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
@@ -1226,7 +1227,7 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh}),
 			verify: PASS,
 			agentRunner: decidingAgent,
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
@@ -1267,7 +1268,7 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh}),
 			verify: PASS,
 			agentRunner: editingAgent,
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
@@ -1278,6 +1279,144 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 		expect(args).toMatch(/^--title$/m);
 		expect(args).toMatch(/^--body$/m);
 		expect(args).not.toMatch(/^--fill$/m);
+	});
+});
+
+describe('do <slug> — noPR (the PR-INTENT axis) + the up-front gh-probe guard', () => {
+	/** A recording `gh` stub that succeeds; returns its bin path + an args reader. */
+	function recordingGh(tag: string): {bin: string; readArgs(): string} {
+		const binDir = join(scratch.root, `gh-stub-${tag}`);
+		mkdirSync(binDir, {recursive: true});
+		const argsFile = join(binDir, 'gh-args.txt');
+		const gh = join(binDir, 'gh');
+		writeFileSync(
+			gh,
+			[
+				'#!/usr/bin/env bash',
+				`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+				"printf '%s\\n' 'https://github.com/o/r/pull/9'",
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(gh, 0o755);
+		return {
+			bin: gh,
+			readArgs: () =>
+				existsSync(argsFile) ? readFileSync(argsFile, 'utf8') : '',
+		};
+	}
+
+	it('noPR: true ⇒ propose pushes the branch but does NOT open a PR (no gh call), even with an authed GitHub provider', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const gh = recordingGh('nopr-set');
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			noPR: true,
+			// An authed GitHub provider is injected, yet noPR suppresses the PR.
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		// `gh pr create` was NEVER invoked (no args file written) — no PR opened.
+		expect(gh.readArgs()).toBe('');
+		// The branch IS pushed to the arbiter (the safety-bearing step still runs).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				repo,
+			).trim(),
+		).not.toBe('');
+	});
+
+	it('noPR unset ⇒ propose opens the PR normally (the default "I want a PR")', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const gh = recordingGh('nopr-unset');
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			// noPR omitted (the default).
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		// `gh pr create` WAS invoked — the PR opened.
+		expect(gh.readArgs()).toMatch(/^create$/m);
+	});
+
+	it('EARLY VISIBLE FAILURE: propose + GitHub arbiter + noPR unset + a failing gh PROBE ⇒ fails UP FRONT, before any build (no claim, no agent run)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// Make the arbiter remote URL read as GitHub. The guard fires BEFORE any
+		// fetch/push (it only `git remote get-url`s), so a github.com URL is safe here
+		// — no network op runs because the guard refuses first.
+		gitIn(['remote', 'set-url', ARBITER, 'https://github.com/o/r.git'], repo);
+		let agentRan = false;
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			// noPR unset (the operator INTENDS a PR). The probe says `gh` cannot open one.
+			ghCanOpenPr: () => false,
+			verify: PASS,
+			agentRunner: () => {
+				agentRan = true;
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('refused');
+		// The error names the real fixes (gh auth / providers.github token / --merge / --no-pr).
+		expect(result.message).toMatch(/gh auth login/);
+		expect(result.message).toMatch(/--no-pr/);
+		expect(result.message).toMatch(/--merge/);
+		// NO build work ran: the agent never launched, and the item is NOT in-progress.
+		expect(agentRan).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+	});
+
+	it('AMBIENT AUTH NOT BROKEN: propose + GitHub arbiter + noPR unset + a PASSING probe ⇒ the up-front guard does NOT refuse (the run gets past it)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// A GitHub arbiter URL (no `providers.github` identity — the common local-dev
+		// case: ambient `gh` auth). The probe PASSES, so the guard must NOT fire. (We
+		// can only assert the guard let it through offline — a real fetch to github.com
+		// would need the network — so we assert the outcome is NOT the up-front refusal
+		// and the guard's message is absent; the probe-passes→doesn't-fire logic is also
+		// unit-tested in do-config.test.ts.)
+		gitIn(['remote', 'set-url', ARBITER, 'https://github.com/o/r.git'], repo);
+		let probed = false;
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'propose',
+			// No `providers.github` identity, but the probe PASSES (ambient `gh` auth).
+			ghCanOpenPr: () => {
+				probed = true;
+				return true;
+			},
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		// The probe ran (the guard consulted it) but did NOT refuse — ambient auth is
+		// honoured. The outcome is whatever the (offline) onboarding produced, but it is
+		// NOT the up-front PR-intent refusal.
+		expect(probed).toBe(true);
+		expect(result.message).not.toMatch(/intends a PR, but `gh` is not/);
 	});
 });
 

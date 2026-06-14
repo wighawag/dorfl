@@ -18,7 +18,7 @@ import {
 import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
-import type {IntegrationMode, ReviewProviderName} from './config.js';
+import type {IntegrationMode} from './config.js';
 import {git, run, runAsync, type RunResult} from './git.js';
 import {workBranchRef} from './slug-namespace.js';
 
@@ -197,18 +197,23 @@ export interface IntegrationCoreInput {
 	/** Integration mode the caller REQUESTED (`propose` default, or `merge`). */
 	mode: IntegrationMode;
 	/**
-	 * The review-request provider override (config `provider`, ADR §6). Unset ⇒
-	 * auto-detect from the arbiter URL. Ignored when `openPr` is injected (the
-	 * legacy bridge wins). `merge` mode ignores it.
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6). When `true` on the `propose`
+	 * path, the branch is pushed (the safety-bearing step) but NO review request is
+	 * opened (the explicit suppress-PR intent that re-homes the old `provider: none`
+	 * use) — no warning, the no-PR outcome is intended. It does NOT pick a provider
+	 * (`selectProvider` stays purely arbiter-derived); it is an intent LAYERED on
+	 * top. Ignored in `merge` mode (it never opens a PR) and when `providerInstance`
+	 * is injected (the test/embedding seam decides its own provider). Unset/false ⇒
+	 * propose opens the PR via the arbiter-derived provider as normal.
 	 */
-	provider?: ReviewProviderName;
+	noPR?: boolean;
 	/**
 	 * Optional FULLY-FORMED review provider to use VERBATIM (highest precedence,
-	 * above `openPr` and `provider`/auto-detection). The `run` path injects a
+	 * above `openPr` and the arbiter-derived selection). The `run` path injects a
 	 * stubbed `GitHubProvider` here in tests (a custom `gh` binary path) to drive
 	 * the full propose pipeline incl. title/body/url — which the lossy `openPr`
-	 * bridge cannot carry. Unset by `do`/`complete` (they use `provider`/`openPr`),
-	 * so their behaviour is unchanged.
+	 * bridge cannot carry. Unset by `do`/`complete` (they use the arbiter-derived
+	 * selection / `openPr`), so their behaviour is unchanged.
 	 */
 	providerInstance?: ReviewProvider;
 	/** Optional injectable PR opener (legacy bridge); used in `propose` mode. */
@@ -853,28 +858,32 @@ export async function performIntegration(
 	//    already brought the branch up to date, so the seam's sole strategy uses
 	//    `integrate` (not `integrateWithRebase`) and never --forces. Provider
 	//    selection: an injected `openPr` wins (legacy bridge); otherwise pick by
-	//    the `provider` override LAYERED OVER auto-detection from the arbiter's
-	//    remote URL (a GitHub remote ⇒ `gh pr create`, else push-only `none`). A
-	//    missing/unauthenticated `gh` degrades to push-only at runtime — never a
-	//    hard failure. The seam is storage-agnostic: we hand it the work branch,
-	//    the integration mode, and the provider — `main` lives only in the strategy.
+	//    the arbiter's remote URL (a GitHub remote ⇒ `gh pr create`, else push-only
+	//    `none`) — PURELY arbiter-derived, no override axis. A missing/unauthenticated
+	//    `gh` degrades to push-only at runtime — never a hard failure (and the
+	//    start-of-run unauthed case is caught UP FRONT by the pre-flight `gh` probe).
+	//    The seam is storage-agnostic: we hand it the work branch, the integration
+	//    mode, the provider, and the PR-INTENT (`noPR`) — `main` lives only in the
+	//    strategy.
 	// Provider precedence: an injected fully-formed provider wins (the `run`
 	// stubbed-provider seam, carrying title/body/url); else the legacy `openPr`
-	// bridge; else select by the `provider` override LAYERED OVER auto-detection
-	// from the arbiter URL.
+	// bridge; else select PURELY from the arbiter URL (no override). The orthogonal
+	// `noPR` INTENT (suppress the PR) is threaded SEPARATELY — it does NOT pick a
+	// provider, the integrator simply skips `openRequest` when it is set.
 	const provider =
 		input.providerInstance ??
 		(input.openPr
 			? bridgeProvider(input.openPr)
 			: selectProvider({
 					arbiterUrl: await arbiterUrl(cwd, arbiter, env),
-					provider: input.provider,
 				}));
 	const integration = await ledgerWrite.applyCompleteTransition({
 		arbiter,
 		branch,
 		mode,
 		provider,
+		// PR-INTENT: when set (propose mode), push the branch but skip the PR.
+		noPR: input.noPR,
 		// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
 		// derives a run-on title from the commit subject via `--fill`.
 		title: prTitle,
@@ -981,8 +990,10 @@ export class IntegrationNothingStaged extends Error {}
 /**
  * The arbiter's remote URL for `arbiter` in `cwd` (for provider auto-detection),
  * or `undefined` when it cannot be resolved. Read-only; soft (never throws).
+ * Exported so the PR-INTENT pre-flight guard (`do.ts`) can resolve the arbiter
+ * URL up front to decide whether a GitHub PR is even possible for this run.
  */
-async function arbiterUrl(
+export async function arbiterUrl(
 	cwd: string,
 	arbiter: string,
 	env: NodeJS.ProcessEnv | undefined,

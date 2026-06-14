@@ -101,6 +101,37 @@ describe('Integrator — propose mode (push-only) with the none provider', () =>
 		expect(result.requestOpened).toBe(true);
 		expect(result.provider).toBe('fake');
 	});
+
+	it('noPR: true ⇒ pushes the branch but SKIPS openRequest (the suppress-PR intent), even with a real provider', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const branch = workBranch(repo, 'feat');
+		let openCalled = false;
+		const provider: ReviewProvider = {
+			name: 'fake',
+			openRequest() {
+				openCalled = true;
+				return {opened: true, instruction: 'opened #1'};
+			},
+		};
+		const integrator = new Integrator({provider});
+		const result = await integrator.integrate({
+			cwd: repo,
+			arbiter: 'arbiter',
+			branch,
+			mode: 'propose',
+			noPR: true,
+			env: gitEnv(),
+		});
+		// openRequest was NEVER called — no PR opened; provider reported as `none`.
+		expect(openCalled).toBe(false);
+		expect(result.requestOpened).toBe(false);
+		expect(result.provider).toBe('none');
+		// The branch IS pushed (the safety-bearing step still runs).
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		expect(
+			git(['rev-parse', `arbiter/${branch}`], repo, {env: gitEnv()}).trim(),
+		).toMatch(/^[0-9a-f]{40}$/);
+	});
 });
 
 describe('Integrator — merge mode (direct to main, never --force)', () => {

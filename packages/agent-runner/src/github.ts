@@ -32,16 +32,25 @@ import {
  *  - It **NEVER `--force`s** anything (the only force in the system is the claim
  *    micro-commit's `--force-with-lease` inside claim.sh).
  *
- * Selection is driven by the ARBITER URL: a GitHub remote auto-selects this
- * provider; an explicit `provider` config value overrides detection; an unknown
- * arbiter defaults to `none` (see {@link selectProvider}).
+ * Selection is driven PURELY by the ARBITER URL: a GitHub remote auto-selects
+ * this provider; any other arbiter (local `--bare`, a non-GitHub host) defaults
+ * to `none` (see {@link selectProvider}). There is NO `provider` override axis —
+ * the provider is fully determined by the arbiter; whether `gh` can actually open
+ * a PR is the IDENTITY's `providers.github` auth (or ambient `gh` auth), checked
+ * by {@link GitHubProvider.available}. The separate "suppress the PR" intent is
+ * the `noPR` config axis, layered ON TOP of this arbiter-derived provider (it
+ * does NOT pick a provider).
  *
  * The core never imports `gh`; ONLY this adapter shells out to it (the `gh`
  * invocation lives entirely behind the `ReviewProvider` seam). Tests stub `gh`
  * via the injectable `ghBin` (no network, no real GitHub).
  */
 
-/** The review-request providers agent-runner knows about (config `provider`). */
+/**
+ * The review-request providers agent-runner knows about. This is the RETURN type
+ * of {@link selectProvider} (which provider the arbiter resolves to) — NOT a
+ * config OVERRIDE axis (there is none; the provider is purely arbiter-derived).
+ */
 export type ProviderName = 'none' | 'github';
 
 /** The default `gh` CLI binary name (resolved on `PATH`). */
@@ -102,43 +111,31 @@ function stripUserAndPort(authority: string): string {
 
 export interface SelectProviderOptions {
 	/**
-	 * The arbiter remote URL (used for auto-detection). `undefined` when it
-	 * cannot be resolved — detection then yields `none` (the safe default).
+	 * The arbiter remote URL (the SOLE determinant of the provider). `undefined`
+	 * when it cannot be resolved — detection then yields `none` (the safe default).
 	 */
 	arbiterUrl?: string;
-	/**
-	 * Explicit provider override (config `provider`). When set it WINS over URL
-	 * detection: `github` forces this provider even off a local URL; `none`
-	 * forces push-only even for a GitHub arbiter.
-	 */
-	provider?: ProviderName;
 	/** The `gh` CLI binary the GitHub provider invokes (tests inject a stub). */
 	ghBin?: string;
 }
 
 /**
- * Resolve the review-request provider for an integration (ADR §6). Precedence:
+ * Resolve the review-request provider for an integration (ADR §6), PURELY from
+ * the arbiter URL — there is NO override axis:
  *
- *   1. an explicit `provider` config value (override — `github` or `none`), else
- *   2. auto-detection from the arbiter URL (`github.com` ⇒ the GitHub provider),
- *      else
- *   3. the `none` provider (the safe default for unknown / local `--bare`
- *      arbiters, which have no review concept).
+ *   - a `github.com` arbiter URL ⇒ the GitHub provider, else
+ *   - the `none` provider (the safe default for unknown / local `--bare`
+ *     arbiters, which have no review concept).
  *
  * The GitHub provider degrades to `none` behaviour at RUNTIME when `gh` is
  * absent/unauthenticated (so it is safe to select it on URL alone — the work is
  * already pushed by the seam, ADR §6); this keeps SELECTION a pure, testable
- * function of URL + config.
+ * function of the arbiter URL. The orthogonal "do not open a PR" INTENT is the
+ * `noPR` config axis (handled by the caller, layered on top — it does NOT pick a
+ * provider here), and whether `gh` is authed to actually open the PR is the
+ * identity's `providers.github` / ambient `gh` auth.
  */
 export function selectProvider(options: SelectProviderOptions): ReviewProvider {
-	const override = options.provider;
-	if (override === 'none') {
-		return new NoneProvider();
-	}
-	if (override === 'github') {
-		return new GitHubProvider({ghBin: options.ghBin});
-	}
-	// No override: auto-detect from the arbiter URL.
 	if (options.arbiterUrl && isGitHubArbiterUrl(options.arbiterUrl)) {
 		return new GitHubProvider({ghBin: options.ghBin});
 	}
@@ -216,6 +213,14 @@ export class GitHubProvider implements ReviewProvider {
 		// outage by an availability probe. Missing/unauth ⇒ degrade now (no retry).
 		// Thread the FAILED first attempt so the degrade surfaces the REAL `gh` cause
 		// (its stderr / the missing-binary detail), not a hard-coded auth guess.
+		//
+		// NOTE (degrade NARROWED): for a propose-with-PR-intent run (`noPR` unset) the
+		// start-of-run "`gh` unavailable/unauthed" case is now caught UP FRONT by the
+		// pre-flight `gh` auth probe (see `do.ts`'s pre-flight guard / `selectProvider`
+		// docs), so it never reaches this point as a silent degrade. The legitimate
+		// callers that still land here are: `noPR: true` (intended push-only — the
+		// caller does not even pass a GitHub provider, so this is moot), and a `gh`
+		// that went away AFTER a passing up-front probe (a transient mid-run loss).
 		if (!this.available(input.cwd, input.env)) {
 			return this.degrade(input, 'unavailable', first);
 		}

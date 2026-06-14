@@ -12,6 +12,7 @@ import {
 	performComplete,
 	isLocalBranchProvablyOnArbiter,
 } from '../src/complete.js';
+import {GitHubProvider} from '../src/github.js';
 import {performClaim} from '../src/claim-cas.js';
 import {run} from '../src/git.js';
 import {
@@ -98,6 +99,7 @@ function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
  */
 function recordingGhStub(stdout = 'https://github.com/o/r/pull/1'): {
 	binDir: string;
+	bin: string;
 	readArgs: () => string;
 } {
 	const binDir = join(
@@ -117,6 +119,7 @@ function recordingGhStub(stdout = 'https://github.com/o/r/pull/1'): {
 	chmodSync(gh, 0o755);
 	return {
 		binDir,
+		bin: gh,
 		readArgs: () => readFileSync(argsFile, 'utf8'),
 	};
 }
@@ -387,7 +390,9 @@ describe('complete — propose integration', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github', // explicit override → GitHubProvider selected
+			// Inject the GitHubProvider INSTANCE with the unauth stub (the provider is
+			// arbiter-derived now; tests drive the propose pipeline via the instance seam).
+			providerInstance: new GitHubProvider({ghBin: ghStub}),
 			verify: PASS,
 			env: {...gitEnv(), PATH: `${stubBin}:${process.env.PATH ?? ''}`},
 		});
@@ -491,7 +496,7 @@ describe('complete — propose integration', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			verify: PASS,
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
 		});
@@ -517,7 +522,7 @@ describe('complete — propose integration', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			verify: PASS,
 			body: 'Built the thing. Decided to inline the helper.',
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
@@ -540,7 +545,7 @@ describe('complete — propose integration', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'propose',
-			provider: 'github',
+			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			verify: PASS,
 			// no body
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},

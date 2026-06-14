@@ -118,6 +118,12 @@ export interface ApplyCompleteTransitionInput {
 	/** The review-request provider (propose mode); push-only `none` otherwise. */
 	provider: ReviewProvider;
 	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true` on the propose
+	 * path, push the branch but SKIP the review request (the explicit suppress-PR
+	 * intent). Threaded to {@link Integrator.integrate}. Ignored in `merge` mode.
+	 */
+	noPR?: boolean;
+	/**
 	 * Optional single-line review-request TITLE (propose mode), threaded straight
 	 * to the provider. Absent ⇒ the provider's `--fill` default (no regression).
 	 */
@@ -541,13 +547,23 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		branch,
 		mode,
 		provider,
+		noPR,
 		title,
 		body,
 		cwd,
 		env,
 	}): Promise<ApplyCompleteTransitionResult> {
 		const integrator = new Integrator({provider});
-		return integrator.integrate({cwd, arbiter, branch, mode, title, body, env});
+		return integrator.integrate({
+			cwd,
+			arbiter,
+			branch,
+			mode,
+			noPR,
+			title,
+			body,
+			env,
+		});
 	},
 
 	/**

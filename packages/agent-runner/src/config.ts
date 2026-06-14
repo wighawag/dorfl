@@ -43,10 +43,13 @@ export type HarnessAdapter = 'null' | 'pi';
 
 /**
  * The `propose`-mode review-request provider (ADR §6): `github` (`gh pr
- * create`) or `none` (push-only + manual instructions). Normally LEFT UNSET so
- * it auto-detects from the arbiter URL (a GitHub remote ⇒ `github`, else
- * `none`); set it to force a provider (override detection). `merge` mode is
- * provider-agnostic and ignores this.
+ * create`) or `none` (push-only). This names which provider the ARBITER URL
+ * RESOLVES to (`selectProvider`) — it is NOT a config OVERRIDE axis (there is
+ * none; the provider is purely arbiter-derived: a GitHub remote ⇒ `github`, else
+ * `none`). Whether `gh` can actually open the PR is the identity's
+ * `providers.github` / ambient `gh` auth; whether to open a PR at all is the
+ * separate `noPR` intent. `merge` mode is provider-agnostic and ignores all of
+ * this.
  */
 export type ReviewProviderName = 'none' | 'github';
 
@@ -177,14 +180,20 @@ export interface Config {
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
-	 * The `propose`-mode review-request provider (ADR §6). Optional with NO
-	 * default so "unset" is distinguishable from an explicit value: unset ⇒
-	 * auto-detect from the arbiter URL (GitHub remote ⇒ `github`, else `none`);
-	 * an explicit `github`/`none` OVERRIDES detection. `merge` mode ignores it
-	 * (provider-agnostic git). The core never imports `gh`; only the GitHub
-	 * adapter shells out to it.
+	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
+	 * request even on a GitHub arbiter with auth — push the branch (the
+	 * safety-bearing recovery point) but SKIP `openRequest`. `true` ⇒ deliberately
+	 * no PR (the explicit, no-warning "suppress the PR" intent that re-homes the old
+	 * `provider: none` use); `false`/unset (default) ⇒ "I want a PR", so propose
+	 * opens it via the arbiter-derived provider as normal. This is NOT a provider
+	 * choice — `selectProvider` stays purely arbiter-derived; `noPR` is an intent
+	 * LAYERED on top. Its honest-failure twin: when `noPR` is unset + propose + a
+	 * GitHub arbiter but a `gh` auth PROBE says `gh` cannot open a PR, the run FAILS
+	 * UP FRONT (a pre-flight guard) instead of silently degrading. `merge` mode
+	 * ignores it (it never opens a PR). Resolved per-repo like `review`: flag
+	 * (`--no-pr`) > env > per-repo > global > default `false`.
 	 */
-	provider?: ReviewProviderName;
+	noPR: boolean;
 	/**
 	 * The command the runner shells out to for one slice. The runner appends the
 	 * built prompt on stdin; the command does NO git ops on the repo (the runner
@@ -351,6 +360,54 @@ export interface Config {
 export type PartialConfig = Partial<Config>;
 
 /**
+ * The DEPRECATED config/env keys: present in an OLD config keeps working but is
+ * IGNORED with a one-line warning (never a hard error), so an existing setup is
+ * not broken by a removal. Each maps to the human-facing replacement hint. Mirrors
+ * the `allowAgents`→`autoBuild` removal-with-warning precedent.
+ *
+ * `provider` (the review-request provider OVERRIDE + `--provider` flag) was
+ * removed: the provider is purely ARBITER-derived now (a GitHub remote ⇒ the
+ * GitHub provider, else `none`), so an override could only contradict the arbiter.
+ * The legitimate `provider: none` use ("suppress the PR") is re-homed to the
+ * `noPR` intent axis.
+ */
+export const DEPRECATED_CONFIG_KEYS: Readonly<Record<string, string>> = {
+	provider:
+		'the `provider` axis was removed — the review-request provider is now purely ' +
+		'arbiter-derived (a GitHub remote ⇒ the GitHub provider, else none). To ' +
+		'deliberately suppress the PR (the old `provider: none` use), set `noPR: true` ' +
+		'(or pass `--no-pr`).',
+};
+
+/**
+ * Warn (once per offending key) for any DEPRECATED key present in a parsed config
+ * object, then DELETE it from the object so it never lingers in the resolved
+ * config. A stale key is IGNORED, not an error — an existing config keeps working.
+ * For `provider`, the warning points specifically at the `noPR` replacement when
+ * the stale value was the old `none` ("suppress the PR") use.
+ */
+export function warnDeprecatedConfigKeys(
+	parsed: Record<string, unknown>,
+	source: string,
+	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
+): void {
+	for (const key of Object.keys(DEPRECATED_CONFIG_KEYS)) {
+		if (!(key in parsed) || parsed[key] === undefined) {
+			continue;
+		}
+		const staleNone = key === 'provider' && parsed[key] === 'none';
+		const hint = DEPRECATED_CONFIG_KEYS[key];
+		warn(
+			`Ignoring deprecated key '${key}' in ${source}: ${hint}` +
+				(staleNone
+					? ' (your `provider: none` maps directly to `noPR: true`.)'
+					: ''),
+		);
+		delete parsed[key];
+	}
+}
+
+/**
  * Built-in defaults. Chosen so that zero-config is useful: stay strict about the
  * autonomy gate (agents claim nothing unless a repo opts in via `autoBuild`).
  * Discovery has no default `roots` — it is the registered hub-mirror set (empty
@@ -384,6 +441,11 @@ export const DEFAULT_CONFIG: Config = {
 	workspacesDir: join(homedir(), brand.workdirName),
 	arbitersDir: join(homedir(), 'git'),
 	integration: 'propose',
+	// The PR-INTENT axis defaults to `false` ("I want a PR"): on a GitHub arbiter,
+	// propose opens the PR via the arbiter-derived provider. Set `true` to push the
+	// branch but deliberately skip the PR (the explicit suppress-PR intent that
+	// re-homes the old `provider: none` use). NOT a provider choice.
+	noPR: false,
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8); its auto-merge sub-policy is OFF too. The loop bound is
@@ -457,6 +519,9 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 			`Invalid JSON in config at ${path}: ${(err as Error).message}`,
 		);
 	}
+	// Drop (with a one-line warning) any DEPRECATED key (e.g. the removed `provider`
+	// override) so an existing config keeps working — ignored, never a hard error.
+	warnDeprecatedConfigKeys(parsed as Record<string, unknown>, path);
 	// Validate a present identity at LOAD time (dumb — no arbiter URL resolution;
 	// the transport-coherence check is push-time). A bad identity is a hard config
 	// error, never a silent ambient fallback.
