@@ -82,11 +82,11 @@ AFTER any requeue, re-sync (`git fetch && pull --rebase`) so the re-`do` claims 
 
 ### 0. ANALYSE the slice set + dependency graph
 
-Read every `work/backlog/*.md` frontmatter (`slug`, `blockedBy`/`deps`, `needsAnswers`, `prd`, `covers`) and the `work/done/` set. Build the graph:
+Read every `work/backlog/*.md` frontmatter (`slug`, `blockedBy`/`deps`, `needsAnswers`, `humanOnly`, `prd`, `covers`) and the `work/done/` set. Build the graph:
 
-- **READY** = every `blockedBy` is in `work/done/` AND `needsAnswers !== true`.
+- **READY** = every `blockedBy` is in `work/done/` AND `needsAnswers !== true` AND `humanOnly !== true`. (BOTH gate fields exclude a slice from READY: `needsAnswers` means open questions a human must answer first; `humanOnly` means a human must DRIVE it. Check BOTH in the frontmatter scan, not just `needsAnswers`. A `humanOnly` slice dispatched to `do` will rightly STOP at build time, wasting a claim/surface cycle, so catch it UP FRONT.)
 - **BLOCKED** = a `blockedBy` is still in `backlog`/`in-progress`/`needs-attention`.
-- **GATED** = `needsAnswers: true` (needs a human first — NEVER agent-buildable; list it but do not build it, even once its deps land).
+- **GATED** = `needsAnswers: true` OR `humanOnly: true` (needs a human first, by question or by drive-ownership; NEVER agent-buildable; list it but do not build it, even once its deps land). The agent-buildable READY set is the slices that are neither blocked nor gated by EITHER field.
 
 Note which slices **unlock the most downstream work** when they land — those go first.
 
