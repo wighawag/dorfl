@@ -220,6 +220,13 @@ export interface DoOptions {
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
 	/**
+	 * Run the acceptance gate against the REBASED tip in a clean throwaway worktree
+	 * (the tree that integrates) when `true` (the default), else in the build
+	 * worktree (the pre-rebase tree). `do` is a SINGLE-JOB path, so the resolved
+	 * flag is passed UNCONDITIONALLY (no `run`-fleet downgrade).
+	 */
+	freshWorktreeGate?: boolean;
+	/**
 	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
 	 * the branch but deliberately skips the PR (the explicit suppress-PR intent).
 	 * NOT a provider choice — the provider is purely arbiter-derived. Threaded
@@ -396,6 +403,13 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	prepare?: VerifyConfig;
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
+	/**
+	 * Run the acceptance gate against the REBASED tip in a clean throwaway worktree
+	 * (the tree that integrates) when `true` (the default), else in the build
+	 * worktree. `do --remote`/`--isolated` is a SINGLE-JOB path, so the resolved
+	 * flag is passed UNCONDITIONALLY (no `run`-fleet downgrade).
+	 */
+	freshWorktreeGate?: boolean;
 	/**
 	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
 	 * the branch but skips the PR (the explicit suppress-PR intent). NOT a provider
@@ -957,6 +971,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		ignoreDivergedMain: true,
 		prepare: options.prepare,
 		verify: options.verify,
+		freshWorktreeGate: options.freshWorktreeGate,
 		noPR: options.noPR,
 		// The resolved provider INSTANCE seam (tests/embeddings inject a stubbed
 		// GitHubProvider to drive the propose pipeline offline). Unset ⇒ the core
@@ -2028,6 +2043,7 @@ async function runRemotePipeline(
 		ignoreDivergedMain: true,
 		prepare: options.prepare,
 		verify: options.verify,
+		freshWorktreeGate: options.freshWorktreeGate,
 		noPR: options.noPR,
 		providerInstance: options.providerInstance,
 		body: agent.output,

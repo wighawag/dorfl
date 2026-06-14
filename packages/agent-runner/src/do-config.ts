@@ -68,6 +68,7 @@ export function doFlagOverrides(
 	flags: HarnessFlags &
 		ReviewFlags &
 		SlicerLoopFlags &
+		FreshWorktreeGateFlags &
 		SelectionOrderFlags &
 		ObservationTriageFlags &
 		SurfaceBlockersFlags &
@@ -96,6 +97,10 @@ export function doFlagOverrides(
 		// `--slicer-loop-max`/`--slicer-loop-model`) rides the same chain — a DISTINCT
 		// family from the gate's `--review*`, never sharing a flag/key/field name.
 		...slicerLoopFlagOverrides(flags),
+		// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` (run the acceptance gate
+		// against the REBASED tip in a clean throwaway worktree, ON by default) rides
+		// the SAME chain — a DISTINCT family from `--review*`/`--slicer-loop*`.
+		...freshWorktreeGateFlagOverrides(flags),
 		// `--no-pr` (the PR-INTENT axis): suppress the PR even on an authed GitHub
 		// arbiter. Rides the SAME flag > env > per-repo > global > default chain.
 		...noPRFlagOverrides(flags),
@@ -188,6 +193,39 @@ export function slicerLoopFlagOverrides(flags: SlicerLoopFlags): PartialConfig {
 	}
 	if (flags.slicerLoopModel !== undefined) {
 		overrides.slicerLoopModel = flags.slicerLoopModel;
+	}
+	return overrides;
+}
+
+/**
+ * The fresh-worktree acceptance-gate CLI flag (`do`/`complete`/`run`):
+ * `--fresh-worktree-gate` / `--no-fresh-worktree-gate`, the POSITIVE boolean
+ * (default ON) toggling whether the acceptance gate (`prepare` then `verify`)
+ * runs against the REBASED tip in a clean throwaway worktree (the merged
+ * artifact) or in the agent's build worktree (the pre-rebase tree). Modelled
+ * EXACTLY on {@link SlicerLoopFlags}'s on/off toggle; a DISTINCT family (no
+ * flag/key/field name spans both). Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain.
+ */
+export interface FreshWorktreeGateFlags {
+	/** `--fresh-worktree-gate` ⇒ true, `--no-fresh-worktree-gate` ⇒ false, absent ⇒ undefined. */
+	freshWorktreeGate?: boolean;
+}
+
+/**
+ * Map the `--fresh-worktree-gate`/`--no-fresh-worktree-gate` flag into a
+ * {@link PartialConfig} override. Only a present flag contributes (absent ⇒
+ * absent key), so the override layer never clobbers a lower-precedence source
+ * with `undefined`. A negatable boolean (mirrors `slicerLoop`), so the caller
+ * leaves `freshWorktreeGate` UNDEFINED unless the user explicitly passed the
+ * flag (see the cli's option-source read).
+ */
+export function freshWorktreeGateFlagOverrides(
+	flags: FreshWorktreeGateFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.freshWorktreeGate !== undefined) {
+		overrides.freshWorktreeGate = flags.freshWorktreeGate;
 	}
 	return overrides;
 }

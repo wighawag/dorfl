@@ -344,6 +344,35 @@ export interface Config {
 	 */
 	slicerLoopModel?: string;
 	/**
+	 * **The fresh-worktree acceptance-gate toggle** (`--fresh-worktree-gate` /
+	 * `--no-fresh-worktree-gate`). When ON (the default), the acceptance gate
+	 * (`prepare` then `verify`) runs in a CLEAN throwaway worktree cut from the
+	 * work branch REBASED onto the latest `<arbiter>/main` — i.e. the exact tree
+	 * the arbiter will integrate — rather than the agent's pre-rebase working
+	 * checkout. So a green gate provably describes the merged artifact: a
+	 * gitignored/uncommitted file the checkout has but the committed/pushed tree
+	 * does NOT cannot leak into a falsely-green gate, and a change introduced only
+	 * by the integration rebase IS gated. When OFF (`freshWorktreeGate: false` /
+	 * `--no-fresh-worktree-gate`), `verify` runs in the agent's build worktree
+	 * exactly as before (the PRE-rebase gate) — the opt-out for when the per-gate
+	 * install cost is too high. The throwaway gate worktree is fresh (no deps), so
+	 * `prepare` runs in it before `verify` (the per-gate install cost the opt-out
+	 * exists for). Modelled EXACTLY on `slicerLoop`: a POSITIVE boolean, default
+	 * ON, `--no-` negation. Resolved per-repo like `integration`: flag
+	 * (`--fresh-worktree-gate`/`--no-fresh-worktree-gate`) > env > per-repo >
+	 * global > default (on). DISTINCT from `review`/`slicerLoop` (a separate
+	 * concern: WHICH tree the gate runs against, not whether a review runs).
+	 *
+	 * The shared gate→integrate band (`performIntegration`) simply HONOURS the
+	 * boolean it is handed (caller-agnostic). The `run` FLEET caller passes
+	 * `(resolvedFlag && perRepoMax === 1)` so the fresh gate is used only when
+	 * same-repo concurrency is OFF (two pre-existing run-fleet races would
+	 * otherwise fire at `perRepoMax > 1`; they are their own slice). Single-job
+	 * callers (`do` in-place / `--isolated` / `--remote` / `complete`) pass the
+	 * resolved flag UNCONDITIONALLY.
+	 */
+	freshWorktreeGate: boolean;
+	/**
 	 * The optional runner **identity** (a bot): run the runner's git + provider
 	 * operations as a configured entity via process-scoped env overrides, without
 	 * mutating the user's global git/`gh` config (see `identity.ts`). HOST-ONLY
@@ -461,6 +490,13 @@ export const DEFAULT_CONFIG: Config = {
 	// default so an unattended review→edit→re-review can never run forever (the
 	// natural terminator is "no new blocking issue"; this is the ceiling on top).
 	slicerLoopMax: 3,
+	// The fresh-worktree acceptance gate is ON by default: most CI/tooling caches
+	// deps so `pnpm install` is fast, so correctness-first (the gate tests what
+	// MERGES, not the agent's pre-rebase checkout) is the right default. The
+	// opt-out (`--no-fresh-worktree-gate`) runs `verify` in the build worktree as
+	// before, for when the per-gate install cost is too high. Mirrors `slicerLoop`
+	// (positive name, default-on).
+	freshWorktreeGate: true,
 };
 
 /** The conventional config location (`~/.config/agent-runner/config.json`). */

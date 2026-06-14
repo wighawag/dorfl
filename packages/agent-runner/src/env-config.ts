@@ -101,6 +101,9 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	slicerLoop: 'boolean',
 	slicerLoopMax: 'number',
 	slicerLoopModel: 'string',
+	// `freshWorktreeGate` is a BOOLEAN coercion (like `slicerLoop`), so
+	// `AGENT_RUNNER_FRESH_WORKTREE_GATE=true|false` works and a typo FAILS LOUDLY.
+	freshWorktreeGate: 'boolean',
 };
 
 /** The `AGENT_RUNNER_*` env var name for a config key (`perRepoMax` →

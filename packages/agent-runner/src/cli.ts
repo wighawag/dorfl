@@ -88,6 +88,7 @@ import {
 	doNeedsAgentCmd,
 	NO_AGENT_CMD_MESSAGE,
 	reviewFlagOverrides,
+	freshWorktreeGateFlagOverrides,
 	noPRFlagOverrides,
 } from './do-config.js';
 import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
@@ -307,6 +308,8 @@ function buildRegistrySetAdvanceTick(options: {
 				integration: config.integration,
 				prepare: config.prepare,
 				verify: config.verify,
+				// Single-job build path: gate the REBASED tip (the default) unconditionally.
+				freshWorktreeGate: config.freshWorktreeGate,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
@@ -426,6 +429,8 @@ interface RunFlags extends ScanFlags {
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
+	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
+	freshWorktreeGate?: boolean;
 }
 
 function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
@@ -457,6 +462,11 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	// flag > env > per-repo > global > default — mirroring the `do` command (the
 	// fleet inherits the review gate via the converged `performIntegration` core).
 	Object.assign(overrides, reviewFlagOverrides(flags));
+	// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` rides the SAME chain: gate
+	// the REBASED tip in a clean throwaway worktree (ON by default). The `run` fleet
+	// caller additionally downgrades it to today's gate at `perRepoMax > 1` (the
+	// fleet conditional lives in `runOnce`, not in this flag mapping).
+	Object.assign(overrides, freshWorktreeGateFlagOverrides(flags));
 	return overrides;
 }
 
@@ -529,6 +539,8 @@ interface CompleteFlags {
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
+	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
+	freshWorktreeGate?: boolean;
 	/** `--isolated`: finish the slug's retained job worktree (the stranded-branch recover). */
 	isolated?: boolean;
 	workspace?: string;
@@ -569,6 +581,8 @@ interface DoFlags {
 	slicerLoopMax?: string;
 	/** `--slicer-loop-model <id>` — the slicer improver loop reviewer's de-correlated model (`do prd:` path). */
 	slicerLoopModel?: string;
+	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
+	freshWorktreeGate?: boolean;
 }
 
 interface IntakeFlags {
@@ -970,6 +984,14 @@ export function buildProgram(): Command {
 		.option(
 			'--review-max-rounds <n>',
 			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
+		)
+		.option(
+			'--fresh-worktree-gate',
+			'run the acceptance gate (prepare then verify) against the REBASED tip in a CLEAN throwaway worktree (the tree that integrates). ON by default; the `run` fleet uses it only when same-repo concurrency is off (perRepoMax=1), else today\u2019s in-build-worktree gate.',
+		)
+		.option(
+			'--no-fresh-worktree-gate',
+			'run the acceptance gate in the build worktree (the pre-rebase tree) — the opt-out for when the per-gate install cost is too high',
 		)
 		.option('--json', 'output the raw result as JSON')
 		.action(async (flags: RunFlags, command: Commander) => {
@@ -1470,6 +1492,14 @@ export function buildProgram(): Command {
 			'--review-max-rounds <n>',
 			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
 		)
+		.option(
+			'--fresh-worktree-gate',
+			'run the acceptance gate (prepare then verify) against the REBASED tip in a CLEAN throwaway worktree (the tree that integrates). ON by default. Resolved flag > env > per-repo > global > default on.',
+		)
+		.option(
+			'--no-fresh-worktree-gate',
+			'run the acceptance gate in the current checkout (the pre-rebase tree) — the opt-out for when the per-gate install cost is too high',
+		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug);
@@ -1530,6 +1560,8 @@ export function buildProgram(): Command {
 				flags: {
 					...(flagMode ? {integration: flagMode} : {}),
 					...reviewFlagOverrides(flags),
+					// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` rides the SAME chain.
+					...freshWorktreeGateFlagOverrides(flags),
 					// `--no-pr` (the PR-INTENT axis) rides the SAME chain.
 					...noPRFlagOverrides(flags),
 				},
@@ -1558,6 +1590,11 @@ export function buildProgram(): Command {
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: config.review ? harnessReviewGate() : undefined,
+				// Run the acceptance gate against the REBASED tip in a clean throwaway
+				// worktree (the tree that integrates) when ON (the default). `complete` is
+				// a single-job path, so the resolved flag is passed UNCONDITIONALLY (no
+				// fleet downgrade).
+				freshWorktreeGate: config.freshWorktreeGate,
 				type: flags.type,
 				message: flags.message,
 				// Color the propose-mode next-step block only on an interactive
@@ -1694,6 +1731,14 @@ export function buildProgram(): Command {
 		.option(
 			'--slicer-loop-model <id>',
 			'model the slicer improver loop review agent runs on (de-correlated from the slicer; routing intent). Resolved flag > env > per-repo > global > default. DISTINCT from --review-model.',
+		)
+		.option(
+			'--fresh-worktree-gate',
+			'run the acceptance gate (prepare then verify) against the REBASED tip in a CLEAN throwaway worktree (the tree that actually integrates), so a green gate provably describes the merged artifact. ON by default. Resolved flag > env > per-repo > global > default on.',
+		)
+		.option(
+			'--no-fresh-worktree-gate',
+			"run the acceptance gate in the agent's build worktree (the pre-rebase tree) as before — the opt-out for when the per-gate install cost is too high",
 		)
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
@@ -1847,7 +1892,10 @@ export function buildProgram(): Command {
 					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
+					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
+					// Single-job build path: gate the REBASED tip (the default) unconditionally.
+					freshWorktreeGate: remoteConfig.freshWorktreeGate,
 					noPR: remoteConfig.noPR,
 					harness: remoteHarness,
 					agentCmd: remoteConfig.agentCmd,
@@ -1979,6 +2027,8 @@ export function buildProgram(): Command {
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
 				verify: config.verify,
+				// Single-job build path: gate the REBASED tip (the default) unconditionally.
+				freshWorktreeGate: config.freshWorktreeGate,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
@@ -2242,6 +2292,8 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
+					// Single-job build path: gate the REBASED tip (the default) unconditionally.
+					freshWorktreeGate: remoteConfig.freshWorktreeGate,
 					noPR: remoteConfig.noPR,
 					harness: isoHarness,
 					agentCmd: remoteConfig.agentCmd,
@@ -2360,6 +2412,8 @@ export function buildProgram(): Command {
 				integration: config.integration,
 				prepare: config.prepare,
 				verify: config.verify,
+				// Single-job build path: gate the REBASED tip (the default) unconditionally.
+				freshWorktreeGate: config.freshWorktreeGate,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
