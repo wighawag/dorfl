@@ -35,8 +35,12 @@ change with no product-code impact.
 - [ ] The test runs in the serial `RACE_SENSITIVE` vitest project (excluded from
       the file-parallel project), exactly as the sibling surface-on-main tests do.
 - [ ] The full suite (`pnpm -r test`) is green; the previously-observed
-      intermittent failure ("a moved:true surface still reports outcome
-      needs-attention") no longer reproduces across repeated full-suite runs.
+      intermittent failure no longer reproduces across repeated full-suite runs.
+      (The flaky assertion is the `moved:false` case — "a moved:false surface
+      (seam stubbed) reports surface-unmoved, NOT a clean needs-attention" —
+      which under file-parallel pressure occasionally saw `needs-attention`
+      instead of the honest `surface-unmoved`. The `moved:true` happy-path test
+      correctly EXPECTS `needs-attention`; do not mistake that for the failure.)
 - [ ] No product source changes — this is a test-scheduling-only fix.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
@@ -76,9 +80,12 @@ change with no product-code impact.
 > file-parallel load).
 >
 > Seam to verify: run the full suite (`pnpm -r test`) repeatedly and confirm the
-> previously-intermittent failure ("a moved:true surface still reports outcome
-> needs-attention") no longer reproduces, and that the file now executes within
-> the serial `RACE_SENSITIVE` project rather than the file-parallel one.
+> previously-intermittent failure no longer reproduces, and that the file now
+> executes within the serial `RACE_SENSITIVE` project rather than the
+> file-parallel one. (The flaky assertion is in the `moved:false` test — it
+> expects `surface-unmoved` but under parallel pressure occasionally saw
+> `needs-attention`; the `moved:true` happy-path test correctly EXPECTS
+> `needs-attention`, so do not read that as the failure.)
 >
 > Done = the file is in `RACE_SENSITIVE` with an explanatory comment, the full
 > suite is green across repeated runs, no `src/` changes, and
