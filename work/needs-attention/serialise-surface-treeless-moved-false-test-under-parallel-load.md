@@ -90,3 +90,7 @@ change with no product-code impact.
 > Done = the file is in `RACE_SENSITIVE` with an explanatory comment, the full
 > suite is green across repeated runs, no `src/` changes, and
 > `pnpm -r build && pnpm -r test && pnpm format:check` passes.
+
+## Needs attention
+
+acceptance gate failed (exit 1) on the rebased tip
