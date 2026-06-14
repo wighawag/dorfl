@@ -200,6 +200,7 @@ export type {
 	ResolvedSlice,
 	PromptOptions,
 	ContinueContext,
+	ContinueResolutionGate,
 } from './prompt.js';
 export {
 	extractPromptSection,

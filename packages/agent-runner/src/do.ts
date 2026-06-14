@@ -798,7 +798,16 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    future advance-loop tick wraps (no in-place-only special case).
 	let prompt: string;
 	try {
-		const slice = resolveSlice(tree.dir, slug);
+		// CONTINUE-aware resolution: on a continue (the arbiter holds a kept
+		// `work/<slug>` whose tip is STRANDED off main) the slice may already be in
+		// `work/done/`; admit `done/` ONLY behind the tip-vs-arbiter stranded gate
+		// (story 5), reusing the SAME refs the continue-detection uses.
+		const slice = resolveSlice(tree.dir, slug, {
+			cwd: tree.dir,
+			branchRef: `${tree.arbiterRemote}/${tree.branch}`,
+			mainRef: `${tree.arbiterRemote}/main`,
+			env,
+		});
 		// CONTINUE-mode (the `agent-prompt-continue-context` slice): if the arbiter
 		// holds a kept `work/<slug>` ahead of main (a requeue) the checkout was
 		// CONTINUED onto it — inject the continue block (prior diff + reason + note).
@@ -1796,7 +1805,15 @@ async function runRemotePipeline(
 	//    assembly in-place `do` uses). The agent only edits code.
 	let prompt: string;
 	try {
-		const slice = resolveSlice(cwd, slug);
+		// CONTINUE-aware resolution (job-worktree path): admit `work/done/` ONLY
+		// behind the tip-vs-arbiter stranded gate (story 5), using the worktree's
+		// primed `<origin>/work/<slug>` vs `<origin>/main` tracking refs.
+		const slice = resolveSlice(cwd, slug, {
+			cwd,
+			branchRef: `${arbiterRemote}/${branch}`,
+			mainRef: `${arbiterRemote}/main`,
+			env,
+		});
 		// CONTINUE-mode (job-worktree path): the worktree's tracking refs were primed
 		// above (`primeWorktreeTrackingRef`), so reuse the SAME continue-detection with
 		// the worktree's `<origin>/work/<slug>` vs `<origin>/main` refs.

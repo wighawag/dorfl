@@ -580,7 +580,22 @@ async function runOneItem(
 		//    emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
 		let prompt: string;
 		try {
-			const slice = resolveSlice(tree.dir, slug);
+			// CONTINUE-aware resolution: only on a continue (the job continued a kept
+			// arbiter `work/<slug>`) may the slice already be in `work/done/`; admit
+			// `done/` ONLY behind the tip-vs-arbiter stranded gate (story 5). In a bare
+			// hub mirror's worktree the refs are the LOCAL heads `work/<slug>` / `main`.
+			const slice = resolveSlice(
+				tree.dir,
+				slug,
+				tree.continued
+					? {
+							cwd: tree.dir,
+							branchRef: tree.branch,
+							mainRef: 'main',
+							env: gitEnv,
+						}
+					: undefined,
+			);
 			// CONTINUE-mode (the `agent-prompt-continue-context` slice): when the job
 			// CONTINUED a kept arbiter `work/<slug>` (a requeue), inject the continue
 			// block (prior diff + reason + handoff note). REUSE the SAME continue-

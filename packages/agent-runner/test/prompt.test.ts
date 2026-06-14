@@ -84,6 +84,27 @@ function seedSlice(
 	writeFileSync(join(dir, `${slug}.md`), content);
 }
 
+/** Slice file CONTENT (not written to disk) for the done/-continue fixtures. */
+function doneSlice(slug: string, prd = 'my-prd'): string {
+	return [
+		'---',
+		`title: ${slug}`,
+		`slug: ${slug}`,
+		`prd: ${prd}`,
+		'blockedBy: []',
+		'---',
+		'',
+		'## What to build',
+		'',
+		'thing',
+		'',
+		'## Prompt',
+		'',
+		`> Implement ${slug}.`,
+		'',
+	].join('\n');
+}
+
 describe('extractPromptSection', () => {
 	it('extracts the body under the ## Prompt heading, sans heading + quoting', () => {
 		const prompt = extractPromptSection(SLICE)!;
@@ -529,6 +550,118 @@ describe('resolveSlice — in-progress over backlog', () => {
 
 	it('throws PromptError when the slug is in neither folder', () => {
 		expect(() => resolveSlice(scratch.root, 'missing')).toThrow(PromptError);
+	});
+});
+
+describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5)', () => {
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('agent-runner-prompt-done-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	/**
+	 * Build a throwaway repo whose slice `<slug>` has been DONE-MOVED into
+	 * `work/done/` on a `work/slice-<slug>` branch, with a sibling `--bare`
+	 * arbiter. `integrated` controls the tip-vs-arbiter state under test:
+	 *   - `false` (STRANDED): the done-move commit is committed on the branch but
+	 *     NOT pushed to the arbiter — `arbiter/main` lacks it (the strand state).
+	 *   - `true`  (COMPLETE): the done-move commit IS on `arbiter/main` (integrated).
+	 * Returns the working repo path; the branch tip is left checked out, and the
+	 * remote-tracking refs (`arbiter/work/slice-<slug>`, `arbiter/main`) are
+	 * fetched — exactly the in-place-clone refs the `do` caller feeds the gate.
+	 */
+	function doneMovedRepo(slug: string, integrated: boolean): string {
+		const repo = join(scratch.root, `repo-${slug}`);
+		const arbiter = join(scratch.root, `arbiter-${slug}.git`);
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		// Seed main with the slice already claimed into in-progress/.
+		const inProgress = join(repo, 'work', 'in-progress');
+		mkdirSync(inProgress, {recursive: true});
+		writeFileSync(join(inProgress, `${slug}.md`), doneSlice(slug));
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'claim: in-progress'], repo);
+		// A bare arbiter mirroring main at the CLAIM commit.
+		gitIn(['clone', '-q', '--bare', repo, arbiter], scratch.root);
+		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
+		// The done-move commit: in-progress/ -> done/, on a work/slice-<slug> branch.
+		gitIn(['switch', '-q', '-c', `work/slice-${slug}`], repo);
+		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
+		gitIn(['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`], repo);
+		gitIn(['commit', '-q', '-m', `done: ${slug}`], repo);
+		if (integrated) {
+			// COMPLETE: the done-move tip is published to arbiter/main (integrated).
+			gitIn(['push', '-q', 'arbiter', `work/slice-${slug}:main`], repo);
+		}
+		// Else STRANDED: the done-move stays committed-but-unpushed on the branch.
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		return repo;
+	}
+
+	/** The continue gate the in-place `do` caller feeds resolveSlice. */
+	function inPlaceGate(repo: string, slug: string) {
+		return {
+			cwd: repo,
+			branchRef: `arbiter/work/slice-${slug}`,
+			mainRef: 'arbiter/main',
+			env: gitEnv(),
+		};
+	}
+
+	it('(a) STRANDED: resolves a done/ slice on a continue (tip NOT on arbiter)', () => {
+		const repo = doneMovedRepo('alpha', false);
+		// Push the work branch to the arbiter so the remote-tracking branchRef
+		// resolves (the strand keeps the branch, just NOT merged to main).
+		gitIn(['push', '-q', 'arbiter', 'work/slice-alpha:work/slice-alpha'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const slice = resolveSlice(repo, 'alpha', inPlaceGate(repo, 'alpha'));
+		expect(slice.folder).toBe('done');
+		expect(slice.slicePrompt).toContain('Implement alpha.');
+	});
+
+	it('(b) COMPLETE: does NOT resolve a done/ slice whose tip is on arbiter/main', () => {
+		const repo = doneMovedRepo('beta', true);
+		// The branch tip == arbiter/main (integrated). A continue gate must NOT admit
+		// done/ — onboard must not resurrect a finished slice — so this is "not found".
+		expect(() => resolveSlice(repo, 'beta', inPlaceGate(repo, 'beta'))).toThrow(
+			PromptError,
+		);
+	});
+
+	it('does NOT admit done/ on a FRESH claim (no continue gate), even if stranded', () => {
+		const repo = doneMovedRepo('gamma', false);
+		gitIn(['push', '-q', 'arbiter', 'work/slice-gamma:work/slice-gamma'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		// No gate => the original ['in-progress','backlog']-only resolution; done/ is
+		// unreachable, so the slug (now only in done/) is "not found".
+		expect(() => resolveSlice(repo, 'gamma')).toThrow(PromptError);
+	});
+
+	it('a continue gate leaves in-progress resolution UNCHANGED (in-progress wins)', () => {
+		// in-progress/ present AND a (stranded) work branch: in-progress still wins,
+		// because done/ is only APPENDED after in-progress/backlog in the order.
+		const repo = join(scratch.root, 'repo-inprog');
+		const arbiter = join(scratch.root, 'arbiter-inprog.git');
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		const ip = join(repo, 'work', 'in-progress');
+		mkdirSync(ip, {recursive: true});
+		writeFileSync(join(ip, 'delta.md'), doneSlice('delta'));
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed'], repo);
+		gitIn(['clone', '-q', '--bare', repo, arbiter], scratch.root);
+		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-delta'], repo);
+		writeFileSync(join(repo, 'extra.txt'), 'stranded churn\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'prior'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/slice-delta:work/slice-delta'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const slice = resolveSlice(repo, 'delta', inPlaceGate(repo, 'delta'));
+		expect(slice.folder).toBe('in-progress');
 	});
 });
 
