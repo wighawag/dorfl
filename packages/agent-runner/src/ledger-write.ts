@@ -12,11 +12,14 @@ import type {IntegrationMode} from './config.js';
 import {
 	routeToNeedsAttention,
 	returnToBacklog,
+	surfaceToNeedsAttention,
 	resolveFromNeedsAttention,
 	type RouteToNeedsAttentionOptions,
 	type RouteToNeedsAttentionResult,
 	type ReturnToBacklogOptions,
 	type ReturnToBacklogResult,
+	type SurfaceToNeedsAttentionOptions,
+	type SurfaceToNeedsAttentionResult,
 	type ResolveFromNeedsAttentionOptions,
 	type ResolveFromNeedsAttentionResult,
 	type BranchPushOutcome,
@@ -206,6 +209,29 @@ export type ApplyReturnToBacklogTransitionResult =
 	Promise<ReturnToBacklogResult>;
 
 /**
+ * A *prepared* TREE-LESS NEEDS-ATTENTION (surface) transition: surface a stuck
+ * AFTER-COMMIT, LEDGER-ONLY item (`in-progress/ → needs-attention/`, with the
+ * reason in the body) WITHOUT a checkout — the SURFACE-direction sibling of the
+ * tree-less requeue, sharing its exact mechanism. The work is ALREADY committed
+ * on the kept `work/<slug>` branch (intact on the arbiter, recoverable), so the
+ * surface is purely the one-file `.md` move + reason — no `pushBranch`, no
+ * worktree. Storage-agnostic, mirroring {@link SurfaceToNeedsAttentionOptions}.
+ * NOT for the wip-save / gate-failed / agent-failed surfaces (which may carry
+ * uncommitted work — those keep {@link applyNeedsAttentionTransition}, the
+ * cwd-bound path that can commit wip first).
+ */
+export type ApplyTreelessNeedsAttentionTransitionInput =
+	SurfaceToNeedsAttentionOptions;
+
+/**
+ * The outcome of asking the seam to apply a TREE-LESS NEEDS-ATTENTION (surface)
+ * transition. A Promise: like `requeue`/`claim`, the tree-less strategy fetches +
+ * CAS-pushes to the arbiter (async).
+ */
+export type ApplyTreelessNeedsAttentionTransitionResult =
+	Promise<SurfaceToNeedsAttentionResult>;
+
+/**
  * A *prepared* RESOLVE-NEEDS-ATTENTION transition: a human is picking up a stuck
  * item, so the seam must **clear the stuck surface** and restore the item to
  * `in-progress`. Storage-agnostic, mirroring {@link
@@ -308,6 +334,18 @@ export interface LedgerWriteStrategy {
 	applyNeedsAttentionTransition(
 		input: ApplyNeedsAttentionTransitionInput,
 	): Promise<ApplyNeedsAttentionTransitionResult>;
+	/**
+	 * Apply a TREE-LESS NEEDS-ATTENTION (surface) transition: surface a stuck
+	 * AFTER-COMMIT, LEDGER-ONLY item (`in-progress/ → needs-attention/`) WITHOUT a
+	 * checkout, reusing the SAME tree-less mechanism `requeue` uses for the reverse
+	 * direction. The sole strategy delegates to {@link surfaceToNeedsAttention}
+	 * (fetch + scratch-index move + throwaway-ref + leased fast-forward push). NOT
+	 * for the uncommitted-wip surfaces, which keep {@link
+	 * applyNeedsAttentionTransition} (the cwd-bound path that can commit wip first).
+	 */
+	applyTreelessNeedsAttentionTransition(
+		input: ApplyTreelessNeedsAttentionTransitionInput,
+	): ApplyTreelessNeedsAttentionTransitionResult;
 	/**
 	 * Apply a RETURN-TO-BACKLOG transition: re-queue a STUCK item (in
 	 * `needs-attention/` OR `in-progress/` — resolved on the arbiter) for
@@ -653,6 +691,22 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		input: ApplyReturnToBacklogTransitionInput,
 	): ApplyReturnToBacklogTransitionResult {
 		return returnToBacklog(input);
+	},
+
+	/**
+	 * The tree-less surface transition under the SAME strategy: surface the stuck
+	 * AFTER-COMMIT, LEDGER-ONLY item by delegating to {@link surfaceToNeedsAttention},
+	 * which moves `work/in-progress/<slug>.md → work/needs-attention/<slug>.md`
+	 * (reason in the body) TREE-LESSLY — it builds the move off `<arbiter>/main` with
+	 * plumbing and CAS-publishes it THROUGH this same write seam
+	 * (`applyTransition`, the very push+lease+verify `claim`/`requeue` use), never
+	 * staging/committing in the cwd working tree. The reverse of
+	 * {@link applyReturnToBacklogTransition}, the same one mechanism.
+	 */
+	applyTreelessNeedsAttentionTransition(
+		input: ApplyTreelessNeedsAttentionTransitionInput,
+	): ApplyTreelessNeedsAttentionTransitionResult {
+		return surfaceToNeedsAttention(input);
 	},
 
 	/**

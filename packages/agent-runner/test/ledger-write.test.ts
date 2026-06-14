@@ -47,6 +47,7 @@ describe('ledger-write seam — shape', () => {
 			'applyCompleteTransition',
 			'applyNeedsAttentionTransition',
 			'applyReturnToBacklogTransition',
+			'applyTreelessNeedsAttentionTransition',
 			'applyResolveNeedsAttentionTransition',
 		]);
 	});

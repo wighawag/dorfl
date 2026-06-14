@@ -10,7 +10,7 @@ import {join} from 'node:path';
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {ledgerRead} from './ledger-read.js';
-import {ledgerWrite} from './ledger-write.js';
+import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
 import {
 	retryWithBackoff,
@@ -207,6 +207,41 @@ export interface ResolveFromNeedsAttentionResult {
 	/** When `moved`, the sha of the reverse move-only commit (the new tip). */
 	moveCommit?: string;
 	/** When NOT moved, why (e.g. the slug was not in needs-attention). */
+	reasonNotMoved?: string;
+}
+
+export interface SurfaceToNeedsAttentionOptions {
+	/**
+	 * The working clone the move is ORIGINATED from — purely the ORIGIN SOURCE
+	 * (it resolves the arbiter remote + holds the object store the plumbing writes
+	 * into), NEVER a write TARGET. Tree-less: the cwd index/HEAD/working tree are
+	 * never touched (parity with {@link returnToBacklog}).
+	 */
+	cwd: string;
+	/** The slug of the in-progress item to surface to needs-attention. */
+	slug: string;
+	/** Why the item is stuck (terminal continue-push failure, rebase conflict, …). */
+	reason: string;
+	/** Any questions the agent surfaced for the human, recorded under the reason. */
+	questions?: string[];
+	/**
+	 * The arbiter remote the surface move is CAS-published to. REQUIRED — like
+	 * {@link returnToBacklog}, the move is a tree-less compare-and-swap to the
+	 * arbiter ref, so there is no local-only mode.
+	 */
+	arbiter: string;
+	/** Environment for child git processes (identity etc.). */
+	env?: NodeJS.ProcessEnv;
+	/** Sink for human-readable progress notes. */
+	note?: (message: string) => void;
+}
+
+export interface SurfaceToNeedsAttentionResult {
+	/** True iff the item was surfaced (moved + CAS-published) on the arbiter. */
+	moved: boolean;
+	/** When `moved`, the committed transition message. */
+	commitMessage?: string;
+	/** When NOT moved, why (no arbiter, item not on the arbiter, contention exhausted). */
 	reasonNotMoved?: string;
 }
 
@@ -567,40 +602,318 @@ export async function returnToBacklog(
 		options.message && options.message.trim() !== ''
 			? options.message.trim()
 			: undefined;
+	const backlogRel = `work/backlog/${slug}.md`;
 
-	// Build + CAS-push the move tree-lessly. Reuses the SHARED write-seam CAS
-	// (`ledgerWrite.applyTransition`, the very push+lease+verify `claim` uses) —
-	// NOT a second hand-rolled one. On a CONTENTION rejection (main advanced under
-	// us) we refetch + rebuild against the new base and retry, exactly as `claim`
-	// and the surface publish do.
-	const contentionAttempts = 5;
-	for (let i = 0; i < contentionAttempts; i++) {
+	// Build + CAS-push the move tree-lessly through the SHARED core (one mechanism
+	// for BOTH the requeue direction here and the surface direction — see
+	// {@link runTreelessLedgerMove}). On a CONTENTION rejection (main advanced under
+	// us) it refetches + rebuilds against the new base and retries, exactly as
+	// `claim` and the surface publish do.
+	const moved = await runTreelessLedgerMove({
+		cwd,
+		slug,
+		arbiter,
+		kind: 'requeue',
+		onContended: 'requeue',
+		// requeue runs from the project checkout + needs ALL refs (the continue-branch
+		// guard reads `<arbiter>/work/<slug>`), so a plain fetch (its own up-front
+		// fetch above + the loop's) is correct here — not a main-only refspec.
+		explicitMainRefspec: false,
+		env,
+		note,
+		// Plan FRESH per attempt: the source `work/<folder>/<slug>.md` resolved at
+		// the top may have moved if main advanced under us, so re-resolve on the
+		// current base. Already-in-backlog ⇒ a prior attempt landed (idempotent).
+		plan: (base) => {
+			if (pathInCommit(base, backlogRel, cwd, env)) {
+				return 'already-done';
+			}
+			const src = pathInCommit(base, sourceRel, cwd, env)
+				? sourceRel
+				: pathInCommit(base, `work/in-progress/${slug}.md`, cwd, env)
+					? `work/in-progress/${slug}.md`
+					: pathInCommit(base, `work/needs-attention/${slug}.md`, cwd, env)
+						? `work/needs-attention/${slug}.md`
+						: undefined;
+			if (!src) {
+				return 'missing';
+			}
+			return prepareTreelessMoveCommit({
+				cwd,
+				slug,
+				base,
+				sourceRel: src,
+				destRel: backlogRel,
+				// Append the optional dated handoff note to the item BODY before the move.
+				transformBody: (body) =>
+					message !== undefined ? appendRequeueNoteText(body, message) : body,
+				commitMessage,
+				refNamespace: 'requeue',
+				env,
+			});
+		},
+	});
+	if (moved) {
+		note(`Returned '${slug}' to backlog.`);
+		return {moved: true, commitMessage, deletedRemoteBranch};
+	}
+
+	const message2 =
+		`requeue for '${slug}': the arbiter's main kept moving (contended) after ` +
+		`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in needs-attention ` +
+		'(no move). Try again shortly.';
+	note(message2);
+	return {moved: false, reasonNotMoved: message2};
+}
+
+/**
+ * Surface a stuck in-progress item to `needs-attention/` TREE-LESSLY — the
+ * SURFACE-direction sibling of {@link returnToBacklog}, sharing its EXACT
+ * tree-less recipe ({@link runTreelessLedgerMove}): fetch `<arbiter>/main`, build
+ * the one-file `work/in-progress/<slug>.md → work/needs-attention/<slug>.md` move
+ * (with the reason appended to its BODY) on a SCRATCH INDEX, point a throwaway
+ * ref at the commit, and CAS-publish it via `ledgerWrite.applyTransition` —
+ * touching NO worktree/HEAD/index. The reverse of `requeue`'s tree-less move, the
+ * same mechanism.
+ *
+ * The home for the AFTER-COMMIT, LEDGER-ONLY surfaces (continue-push-failure +
+ * continue-rebase-conflict): the work is ALREADY committed on the kept
+ * `work/<slug>` branch (intact on the arbiter, recoverable), so the surface is
+ * PURELY the one-file ledger move + reason — it needs no `pushBranch` and no
+ * checkout. It is NOT for the wip-save / gate-failed / agent-failed surfaces,
+ * which may carry UN-committed work that needs the cwd commit path
+ * ({@link routeToNeedsAttention}); the tree-less move only relocates a committed
+ * `.md`.
+ *
+ * REQUIRES an arbiter (the tree-less CAS needs a ref to push to). NEVER throws
+ * for the expected "not on the arbiter" / contention-exhausted cases — it returns
+ * `{moved: false, reasonNotMoved}`.
+ */
+export async function surfaceToNeedsAttention(
+	options: SurfaceToNeedsAttentionOptions,
+): Promise<SurfaceToNeedsAttentionResult> {
+	const note = options.note ?? (() => {});
+	const {cwd, slug, reason, questions, env} = options;
+
+	if (!options.arbiter) {
+		return {
+			moved: false,
+			reasonNotMoved:
+				`surface for '${slug}' needs an --arbiter: the move is published as a ` +
+				'tree-less compare-and-swap to the arbiter ref (like requeue/claim), so ' +
+				'there is no local-only mode — pass --arbiter.',
+		};
+	}
+	const arbiter = options.arbiter;
+
+	if (
+		(await gitSoftAsync(['remote', 'get-url', arbiter], cwd, env)).status !== 0
+	) {
+		return {
+			moved: false,
+			reasonNotMoved: `no git remote named '${arbiter}' (set one, or pass --arbiter).`,
+		};
+	}
+
+	// Refresh the remote-tracking `<arbiter>/main` so the source-residence probe +
+	// the CAS base see the arbiter's TRUTH. EXPLICIT refspec
+	// (`+refs/heads/main:refs/remotes/<arbiter>/main`): the surface runs from a JOB
+	// WORKTREE whose remote may not map `main → refs/remotes/<arbiter>/main` under a
+	// plain fetch (a bare-mirror worktree), so we name it (mirrors
+	// `publishSurfaceCommit`). A fetch, not a checkout — the working tree is untouched.
+	await gitSoftAsync(
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/main:refs/remotes/${arbiter}/main`,
+		],
+		cwd,
+		env,
+	);
+
+	// Probe up front purely for the EARLY-EXIT message (the per-attempt `plan` is
+	// the authoritative resolution against the live base). At the after-commit
+	// surface sites the claim landed, so the item is in `in-progress/`; an
+	// `needs-attention/` source is an IDEMPOTENT re-surface. Absent from BOTH ⇒
+	// nothing to surface.
+	const sourceRel = await resolveSurfaceSourceRel(arbiter, slug, cwd, env);
+	if (!sourceRel) {
+		const message =
+			`'${slug}' is neither in work/in-progress/ nor work/needs-attention/ on ` +
+			`${arbiter}/main — nothing to surface to needs-attention (wrong slug, or ` +
+			'not claimed?).';
+		note(message);
+		return {moved: false, reasonNotMoved: message};
+	}
+	const destRel = `work/needs-attention/${slug}.md`;
+	const inProgressRel = `work/in-progress/${slug}.md`;
+
+	const commitMessage = `chore(${slug}): route to needs-attention; ${reason}`;
+	// Append the reason (+ any surfaced questions) to the item BODY before the move
+	// — the PURE-string sibling of `appendReasonBlock`, applied to the blob read off
+	// `<arbiter>/main` (never a cwd file). Idempotent on a re-surface whose body
+	// already ends with this exact reason block.
+	const transformBody = (body: string): string =>
+		appendReasonBlockText(body, reason, questions);
+	const moved = await runTreelessLedgerMove({
+		cwd,
+		slug,
+		arbiter,
+		kind: 'needs-attention',
+		onContended: 'surface',
+		// The surface runs from a job worktree; name the main refspec so
+		// `<arbiter>/main` resolves even when the remote's default refspec does not
+		// map it (a bare-mirror worktree).
+		explicitMainRefspec: true,
+		env,
+		note,
+		// Plan FRESH per attempt against the live base. If the item is ALREADY at the
+		// destination with the reason block present, a prior attempt landed (or it is
+		// an idempotent re-surface) → done, no push (never thrash the file). Otherwise
+		// move from wherever it currently is (in-progress, OR needs-attention for an
+		// idempotent reason-refresh) to needs-attention with the reason appended.
+		plan: (base) => {
+			const atDest = pathInCommit(base, destRel, cwd, env);
+			const src = atDest
+				? destRel
+				: pathInCommit(base, inProgressRel, cwd, env)
+					? inProgressRel
+					: undefined;
+			if (!src) {
+				return 'missing';
+			}
+			if (atDest) {
+				// Already surfaced: skip if the reason block is already present (the
+				// idempotent re-surface), else refresh the body in place at dest.
+				const body = catBlob(`${base}:${destRel}`, cwd, env);
+				if (transformBody(body) === body) {
+					return 'already-done';
+				}
+			}
+			return prepareTreelessMoveCommit({
+				cwd,
+				slug,
+				base,
+				sourceRel: src,
+				destRel,
+				transformBody,
+				commitMessage,
+				refNamespace: 'surface',
+				env,
+			});
+		},
+	});
+	if (moved) {
+		note(`Surfaced '${slug}' to needs-attention: ${reason}`);
+		return {moved: true, commitMessage};
+	}
+
+	const message2 =
+		`surface for '${slug}': the arbiter's main kept moving (contended) after ` +
+		`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in in-progress (no ` +
+		'surface). Try again shortly.';
+	note(message2);
+	return {moved: false, reasonNotMoved: message2};
+}
+
+/** The contention-retry cap shared by the tree-less requeue + surface moves. */
+const TREELESS_CONTENTION_ATTEMPTS = 5;
+
+/**
+ * The plan for ONE attempt of a tree-less move, computed FRESH against the
+ * current (re-fetched) base so a retry never reuses a stale source/blob:
+ *  - `{ref, commit}` — a prepared move commit on a throwaway ref, ready to CAS.
+ *  - `'already-done'` — the item is ALREADY at the destination on this base (an
+ *    idempotent re-surface, or a prior attempt that actually landed but whose CAS
+ *    verify reported rejected) — treat as success, no push needed.
+ *  - `'missing'` — the item is in NEITHER the source nor the destination folder on
+ *    this base — nothing to move.
+ */
+type TreelessAttemptPlan =
+	| {ref: string; commit: string}
+	| 'already-done'
+	| 'missing';
+
+/**
+ * The SHARED tree-less ledger-move core (ONE mechanism for BOTH directions — the
+ * requeue `needs-attention|in-progress → backlog` and the surface `in-progress →
+ * needs-attention`). It runs the contention-retry loop: fetch `<arbiter>/main`,
+ * resolve `expectedBase`, ask the caller's `plan(base)` to build the one-file move
+ * on a SCRATCH INDEX via {@link prepareTreelessMoveCommit} (so the caller's
+ * index/HEAD/working tree are NEVER touched), CAS-publish it THROUGH the shared
+ * write seam (`ledgerWrite.applyTransition`, the very push+lease+verify `claim`
+ * uses), drop the throwaway ref, and on a CONTENTION rejection refetch + REPLAN
+ * against the advanced base and retry. Re-planning per attempt is what makes the
+ * retry safe when the item itself moved under us (e.g. a prior attempt landed but
+ * the CAS verify reported rejected): the next plan sees it `already-done`.
+ */
+async function runTreelessLedgerMove(params: {
+	cwd: string;
+	slug: string;
+	arbiter: string;
+	kind: LedgerTransitionKind;
+	/** Build (or short-circuit) the move against the current base. Called per attempt. */
+	plan: (base: string) => TreelessAttemptPlan;
+	/** A label for the contention-progress note (the verb the caller surfaces). */
+	onContended: string;
+	/**
+	 * Fetch the arbiter's `main` with an EXPLICIT refspec
+	 * (`+refs/heads/main:refs/remotes/<arbiter>/main`) instead of a plain
+	 * `fetch <arbiter>`. The surface direction sets this `true` because it runs from
+	 * a JOB WORKTREE whose remote's default fetch refspec may NOT map `main →
+	 * refs/remotes/<arbiter>/main` (a bare-mirror worktree), so the plain fetch can
+	 * leave `<arbiter>/main` unresolved. The requeue direction leaves it `false`: it
+	 * needs ALL refs (the continue-branch guard reads `<arbiter>/work/<slug>`), so a
+	 * main-only refspec would be too narrow there.
+	 */
+	explicitMainRefspec: boolean;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<boolean> {
+	const {
+		cwd,
+		arbiter,
+		kind,
+		plan,
+		onContended,
+		explicitMainRefspec,
+		env,
+		note,
+	} = params;
+	const fetchArgs = explicitMainRefspec
+		? [
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+refs/heads/main:refs/remotes/${arbiter}/main`,
+			]
+		: ['fetch', '--quiet', arbiter];
+
+	for (let i = 0; i < TREELESS_CONTENTION_ATTEMPTS; i++) {
 		if (i > 0) {
-			await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+			await gitSoftAsync(fetchArgs, cwd, env);
 		}
 		const base = (
 			await gitHardAsync(['rev-parse', `${arbiter}/main`], cwd, env)
 		).stdout.trim();
 
-		// Prepare the move as a commit OFF the arbiter's main, with PLUMBING on a
-		// SCRATCH INDEX — never the caller's index/HEAD/working tree. One file is
-		// relocated needs-attention/ → backlog/ (with the optional handoff note
-		// appended to its BODY first). The commit lands under a throwaway local ref.
-		const prepared = prepareReturnToBacklogCommit({
-			cwd,
-			slug,
-			base,
-			sourceRel,
-			commitMessage,
-			message,
-			env,
-		});
+		// Plan the move FRESH against this (possibly re-fetched) base. The item may
+		// already be at the destination (idempotent / a prior landed-but-reported-
+		// rejected attempt) or absent — both are terminal, no push.
+		const prepared = plan(base);
+		if (prepared === 'already-done') {
+			return true;
+		}
+		if (prepared === 'missing') {
+			return false;
+		}
 
 		// Publish THROUGH the shared seam (the same `:main` push + force-with-lease +
 		// verify `claim` uses). The transition's WHO stays the caller's ambient env
 		// (threaded by `commit-tree` above) — tree-less is orthogonal to attribution.
 		const result = await ledgerWrite.applyTransition({
-			kind: 'requeue',
+			kind,
 			arbiter,
 			localBranch: prepared.ref,
 			expectedBase: base,
@@ -615,22 +928,27 @@ export async function returnToBacklog(
 		if (result.kind === 'published') {
 			// Advance the LOCAL remote-tracking `<arbiter>/main` so it INCLUDES the
 			// move (the push only moved the arbiter's main). Best-effort.
-			await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
-			note(`Returned '${slug}' to backlog.`);
-			return {moved: true, commitMessage, deletedRemoteBranch};
+			await gitSoftAsync(fetchArgs, cwd, env);
+			return true;
 		}
-		// rejected: main moved under us — refetch + rebuild against the new base.
+		// rejected: main moved under us — refetch + REPLAN against the new base.
 		note(
-			`main advanced under us — refetch and retry (${i + 1}/${contentionAttempts})...`,
+			`main advanced under us — ${onContended} refetch and retry (${i + 1}/${TREELESS_CONTENTION_ATTEMPTS})...`,
 		);
 	}
+	return false;
+}
 
-	const message2 =
-		`requeue for '${slug}': the arbiter's main kept moving (contended) after ` +
-		`${contentionAttempts} attempts — item left in needs-attention (no move). ` +
-		'Try again shortly.';
-	note(message2);
-	return {moved: false, reasonNotMoved: message2};
+/** True iff `path` exists in the given commit's tree (a soft cat-file probe). */
+function pathInCommit(
+	commit: string,
+	path: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	return (
+		run('git', ['cat-file', '-e', `${commit}:${path}`], cwd, {env}).status === 0
+	);
 }
 
 /**
@@ -669,41 +987,83 @@ async function resolveRequeueSourceRel(
 }
 
 /**
- * Build the return-to-backlog MOVE as a commit off the arbiter's `main`, using
+ * Resolve the slug's ACTUAL current folder ON THE ARBITER for a SURFACE source
+ * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). The after-commit
+ * surface sites have a landed claim, so the item is in `in-progress/`; an
+ * `needs-attention/` source is an IDEMPOTENT re-surface (the
+ * continue-rebase-conflict re-route of an item the arbiter already shows
+ * surfaced). Returns the source `work/<folder>/<slug>.md` rel path, or `undefined`
+ * when the slug is in NEITHER. `in-progress/` is probed FIRST (the common landed-
+ * claim case); the one-slug-one-folder invariant means at most one holds it.
+ */
+async function resolveSurfaceSourceRel(
+	arbiter: string,
+	slug: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string | undefined> {
+	for (const folder of ['in-progress', 'needs-attention']) {
+		const rel = `work/${folder}/${slug}.md`;
+		if (
+			(
+				await gitSoftAsync(
+					['cat-file', '-e', `${arbiter}/main:${rel}`],
+					cwd,
+					env,
+				)
+			).status === 0
+		) {
+			return rel;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Build a one-file ledger MOVE as a commit off the arbiter's `main`, using
  * PLUMBING on a SCRATCH INDEX — it never touches the caller's index, HEAD, or
  * working tree (so a concurrent writer's uncommitted cwd files can never be swept
  * in). It loads `base`'s tree into a throwaway index, relocates ONLY this slug's
- * ledger file from its CURRENT folder (`sourceRel` — `needs-attention/` OR
- * `in-progress/`, resolved on the arbiter) to `work/backlog/<slug>.md` (appending
- * the optional `-m` handoff note to its BODY first — read from the blob on `main`,
- * NOT from any cwd file), writes the tree, commits it parented on `base`, and
- * points a throwaway local ref at the commit. Returns that ref + the commit sha
- * for the seam's CAS push.
+ * ledger file from `sourceRel` to `destRel` (applying `transformBody` to its body
+ * first — read from the blob on `main`, NOT from any cwd file: the requeue note,
+ * or the needs-attention reason), writes the tree, commits it parented on `base`,
+ * and points a throwaway local ref at the commit. Returns that ref + the commit
+ * sha for the seam's CAS push. The SHARED prep for BOTH tree-less directions.
  */
-function prepareReturnToBacklogCommit(params: {
+function prepareTreelessMoveCommit(params: {
 	cwd: string;
 	slug: string;
 	base: string;
 	sourceRel: string;
+	destRel: string;
+	transformBody: (body: string) => string;
 	commitMessage: string;
-	message: string | undefined;
+	refNamespace: string;
 	env: NodeJS.ProcessEnv | undefined;
 }): {ref: string; commit: string} {
-	const {cwd, slug, base, sourceRel, commitMessage, message, env} = params;
-	const backlogRel = `work/backlog/${slug}.md`;
+	const {
+		cwd,
+		slug,
+		base,
+		sourceRel,
+		destRel,
+		transformBody,
+		commitMessage,
+		refNamespace,
+		env,
+	} = params;
 
-	// The item's body on `main`, optionally with the dated handoff note appended.
+	// The item's body on `main`, with the caller's body transform applied.
 	const original = catBlob(`${base}:${sourceRel}`, cwd, env);
-	const content =
-		message !== undefined ? appendRequeueNoteText(original, message) : original;
-	// Hash the (possibly note-appended) blob INTO the cwd's object store. A blob
+	const content = transformBody(original);
+	// Hash the (possibly transformed) blob INTO the cwd's object store. A blob
 	// write does not touch the working tree.
 	const blob = hashObject(content, cwd, env);
 
 	// A scratch index so read-tree/update-index never disturb the caller's index.
 	const scratchIndex = join(
 		tmpdir(),
-		`agent-runner-requeue-${process.pid}-${Date.now()}.index`,
+		`agent-runner-${refNamespace}-${process.pid}-${Date.now()}.index`,
 	);
 	const withIndex: NodeJS.ProcessEnv = {
 		...(env ?? process.env),
@@ -711,25 +1071,25 @@ function prepareReturnToBacklogCommit(params: {
 	};
 	try {
 		gitHard(['read-tree', base], cwd, withIndex);
-		// Remove the item from its current folder (needs-attention/ OR in-progress/),
-		// add it under backlog/ (one file).
+		// Remove the item from its source folder, add it under the dest folder. When
+		// source === dest (an idempotent re-surface), force-remove + re-add the same
+		// path is a no-op move that still carries any body change. One file changes.
 		gitHard(['update-index', '--force-remove', sourceRel], cwd, withIndex);
 		gitHard(
-			['update-index', '--add', '--cacheinfo', `100644,${blob},${backlogRel}`],
+			['update-index', '--add', '--cacheinfo', `100644,${blob},${destRel}`],
 			cwd,
 			withIndex,
 		);
 		const tree = runHard(['write-tree'], cwd, withIndex).stdout.trim();
-		// commit-tree threads the caller's ambient identity (env) — the WHO is
-		// unchanged from before (the human's, for `requeue`); tree-less only changed
-		// the WHERE-it-writes (the arbiter ref, not the cwd tree).
+		// commit-tree threads the caller's ambient identity (env) — tree-less only
+		// changed the WHERE-it-writes (the arbiter ref, not the cwd tree), not the WHO.
 		const commit = runHard(
 			['commit-tree', tree, '-p', base, '-m', commitMessage],
 			cwd,
 			env,
 		).stdout.trim();
 		// A throwaway local ref the seam's push uses as its source (`<ref>:main`).
-		const ref = `refs/agent-runner/requeue/${slug}`;
+		const ref = `refs/agent-runner/${refNamespace}/${slug}`;
 		gitHard(['update-ref', ref, commit], cwd, env);
 		return {ref, commit};
 	} finally {
@@ -834,18 +1194,35 @@ function appendReasonBlock(
 	questions: string[] | undefined,
 ): void {
 	const current = readFileSync(path, 'utf8');
+	writeFileSync(path, appendReasonBlockText(current, reason, questions));
+}
+
+/**
+ * Append the reason (+ any surfaced questions) to an item body's TEXT — the
+ * PURE-string sibling of {@link appendReasonBlock} (it operates on body CONTENT,
+ * not a file path), so the tree-less surface can apply it to the blob read off
+ * `<arbiter>/main` without touching the cwd working tree. IDEMPOTENT: if the body
+ * ALREADY ends with this exact reason block (a re-surface with an unchanged
+ * reason), it returns the body unchanged — re-surfacing must not thrash the file
+ * nor accrete duplicate blocks. Shared by both the cwd-bound and tree-less paths
+ * so the two agree byte-for-byte on what "the same reason block" is.
+ */
+function appendReasonBlockText(
+	content: string,
+	reason: string,
+	questions: string[] | undefined,
+): string {
 	// Ensure a clear separation from whatever the body ended with.
-	const base = current.replace(/\s*$/, '');
+	const base = content.replace(/\s*$/, '');
 	const block = reasonBlockText(reason, questions);
 	// IDEMPOTENT re-surface: if the body ALREADY ends with this exact reason block
 	// (the continue-conflict re-route of an item already in needs-attention with an
 	// unchanged reason), do NOT append a duplicate — re-surfacing must not thrash the
-	// file. The move-only commit then carries no content change (handled by
-	// `--allow-empty` upstream).
+	// file. The move-only commit then carries no content change.
 	if (base.endsWith(block.replace(/\s*$/, ''))) {
-		return;
+		return content;
 	}
-	writeFileSync(path, `${base}\n${block}`);
+	return `${base}\n${block}`;
 }
 
 /**

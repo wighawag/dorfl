@@ -705,20 +705,15 @@ function isOfflinePushFailure(message: string): boolean {
 /**
  * Route a CONTINUE rebase conflict to needs-attention (the §10 path): the kept
  * branch's commits did not replay cleanly onto the current main, so a human must
- * resolve (or `requeue --reset`). We cut a temp branch off `<arbiter>/main`
- * (which holds the item in `in-progress/` after the claim) and drive the
- * needs-attention transition through the SAME seam every bounce uses — recording
- * the reason and surfacing it on the arbiter's main — then return to a clean
- * state. Mirrors `startFromNeedsAttention`'s temp-branch pattern.
+ * resolve (or `requeue --reset`).
  *
- * SURFACE-ONLY (`pushBranch: false`): HEAD here is the throwaway temp branch off
- * main, NOT `work/<slug>` — and the REAL continued `work/<slug>` is already on the
- * arbiter from the prior requeue, untouched (the onboard rebase was ABORTED). If
- * the seam default-pushed `work/<slug>` it would push a ref HEAD is not on (a
- * stale/local one), a latent wrong-branch push. So we surface only the ledger on
- * main and push NOTHING — the recoverable artifact (the kept branch on the
- * arbiter) is already there. Contrast `run.ts`'s onboard-time continue-conflict,
- * which IS on `work/<slug>` and so default-pushes correctly.
+ * TREE-LESS (`#89` mechanism), the SAME-PROFILE sibling of
+ * {@link routeContinuePushFailure}: the rebase was ABORTED, so the REAL continued
+ * `work/<slug>` is already on the arbiter from the prior requeue, untouched
+ * (after-commit, durable, recoverable). The surface is PURELY the one-file
+ * `in-progress/ → needs-attention/` ledger `.md` move + reason — we publish it via
+ * the tree-less surface CAS (the SAME no-checkout primitive `requeue` uses for the
+ * reverse direction), NO temp-branch switch/restore, NO `pushBranch`, NO worktree.
  */
 async function routeContinueConflict(params: {
 	slug: string;
@@ -733,35 +728,14 @@ async function routeContinueConflict(params: {
 		`${arbiter}/main conflicted (aborted, never auto-resolved) — resolve ` +
 		'against the latest main, or `requeue --reset` to discard and start fresh';
 	note(reason);
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const startRef =
-		(
-			await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
-		).stdout.trim() ||
-		(await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-	const tempBranch = `agent-runner/continue-conflict-${slug}`;
-	await gitHard(
-		['switch', '--quiet', '-C', tempBranch, `${arbiter}/main`],
+	await ledgerWrite.applyTreelessNeedsAttentionTransition({
 		cwd,
+		slug,
+		reason,
+		arbiter,
 		env,
-	);
-	try {
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd,
-			slug,
-			reason,
-			// Surface on the arbiter's main (OBSERVABLE, cross-machine visible), the
-			// §10 path — but SURFACE-ONLY: push NO branch (HEAD is the temp branch off
-			// main, not work/<slug>; the kept work/<slug> is already on the arbiter).
-			arbiter,
-			pushBranch: false,
-			env,
-			note,
-		});
-	} finally {
-		await gitSoft(['switch', '--quiet', startRef], cwd, env);
-		await gitSoft(['branch', '-D', tempBranch], cwd, env);
-	}
+		note,
+	});
 }
 
 /**
@@ -771,12 +745,14 @@ async function routeContinueConflict(params: {
  * than leave the committed kept work silently in-progress, surface it on the
  * arbiter's main. Mirrors {@link routeContinueConflict}'s temp-branch pattern.
  *
- * SURFACE-ONLY (`pushBranch: false`): the recoverable artifact — the kept
- * `work/<slug>` — is ALREADY on the arbiter from the prior requeue (our local
- * rebased tip is what FAILED to push, so it is not the cross-machine truth). We
- * cut a throwaway temp branch off `<arbiter>/main` (which holds the item in
- * `in-progress/` after the claim) to publish the ledger move only, push NO
- * branch, and restore. A `requeue` then continues from the kept arbiter tip.
+ * TREE-LESS (`#89` mechanism): the recoverable artifact — the kept `work/<slug>`
+ * — is ALREADY on the arbiter from the prior requeue (our local rebased tip is
+ * what FAILED to push, so it is not the cross-machine truth), and the work is
+ * already committed. So the surface is PURELY the one-file `in-progress/ →
+ * needs-attention/` ledger `.md` move + reason: we publish it via the tree-less
+ * surface CAS (the SAME no-checkout primitive `requeue` uses for the reverse
+ * direction) — NO temp-branch switch/restore, NO `pushBranch`, NO worktree. A
+ * `requeue` then continues from the kept arbiter tip.
  */
 async function routeContinuePushFailure(params: {
 	slug: string;
@@ -793,35 +769,14 @@ async function routeContinuePushFailure(params: {
 		'the kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
 		'retry once the churn settles, or `requeue --reset` to discard and start fresh';
 	note(reason);
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const startRef =
-		(
-			await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
-		).stdout.trim() ||
-		(await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-	const tempBranch = `agent-runner/continue-push-failure-${slug}`;
-	await gitHard(
-		['switch', '--quiet', '-C', tempBranch, `${arbiter}/main`],
+	await ledgerWrite.applyTreelessNeedsAttentionTransition({
 		cwd,
+		slug,
+		reason,
+		arbiter,
 		env,
-	);
-	try {
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd,
-			slug,
-			reason,
-			// Surface on the arbiter's main (OBSERVABLE, cross-machine visible) — but
-			// SURFACE-ONLY: push NO branch (HEAD is the temp branch off main; the
-			// recoverable kept work/<slug> is already on the arbiter).
-			arbiter,
-			pushBranch: false,
-			env,
-			note,
-		});
-	} finally {
-		await gitSoft(['switch', '--quiet', startRef], cwd, env);
-		await gitSoft(['branch', '-D', tempBranch], cwd, env);
-	}
+		note,
+	});
 }
 
 /** If HEAD is a `work/<type>-<slug>` branch, return `<slug>`; else ''. */
