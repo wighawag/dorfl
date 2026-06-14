@@ -153,6 +153,52 @@ export function ensureMirror(options: EnsureMirrorOptions): EnsureMirrorResult {
 	return {path, url, created, fetched, mainSha: mirrorMainSha(path, env)};
 }
 
+/**
+ * Locate the bare hub mirror for the arbiter and refresh ONLY its `main`,
+ * WITHOUT the all-heads `--prune` fetch {@link ensureMirror} does. Clones the
+ * mirror (`git clone --bare`) if absent — a fresh clone has no local worktrees,
+ * so the all-heads clone refspec cannot collide with any checked-out branch —
+ * but on REUSE refreshes via {@link fetchMirrorMain} (main-only, no-prune).
+ *
+ * This is the MIRROR-ENSURE for the no-checkout CONFIG READ (`do --remote`/
+ * `do --isolated` per-repo `.agent-runner.json`): `git show main:.agent-runner.json`
+ * only needs `main`, and using the pruning all-heads fetch here would let a
+ * `work/<slug>` branch CHECKED OUT in some other (stale) job worktree block the
+ * fetch (`git refuses to fetch into branch … checked out`), throwing the config
+ * read into its global+default fallback. Narrowing the config-read fetch to
+ * main-only (no-prune) means a checked-out worktree branch can NEVER block it
+ * (the read-path `scan`/`status`/mirror-pool-scan already use main-only fetches
+ * for exactly this reason — ADR §6).
+ *
+ * Does NOT replace {@link ensureMirror}: the build's worktree MATERIALISATION
+ * still legitimately needs the all-heads fetch (continue-detection wants the
+ * kept `work/<slug>` head as a local mirror ref). This is only for the read.
+ */
+export function ensureMirrorMain(
+	options: EnsureMirrorOptions,
+): EnsureMirrorResult {
+	const env = options.env;
+	const url = resolveUrl(options);
+	const path = mirrorPath(options.workspacesDir, url);
+
+	let created = false;
+	let fetched = false;
+	if (existsSync(path)) {
+		// Reuse: refresh ONLY `main`, no-prune, so a `work/<slug>` branch checked
+		// out in some other worktree can never block this fetch.
+		fetchMirrorMain(path, env);
+		fetched = true;
+	} else {
+		// First time: a bare mirror clone (no local worktrees yet, so the clone's
+		// own refspec can collide with nothing).
+		mkdirSync(dirname(path), {recursive: true});
+		git(['clone', '--quiet', '--bare', url, path], dirname(path), {env});
+		created = true;
+	}
+
+	return {path, url, created, fetched, mainSha: mirrorMainSha(path, env)};
+}
+
 /** Resolve the arbiter URL from `url`, or from `fromRepo` + `arbiter` remote. */
 function resolveUrl(options: EnsureMirrorOptions): string {
 	if (options.url && options.url.trim() !== '') {

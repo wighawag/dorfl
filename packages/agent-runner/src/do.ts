@@ -29,7 +29,9 @@ import {
 	selectIsolationStrategy,
 	type IsolatedTree,
 } from './isolation.js';
-import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
+import {ensureMirror, encodeRepoKey, mirrorPath} from './repo-mirror.js';
+import {jobWorktreePath} from './workspace.js';
+import {reapJob} from './gc.js';
 import {isGitHubArbiterUrl, GitHubProvider} from './github.js';
 import type {ReviewProvider} from './integrator.js';
 import {arbiterUrl} from './integration-core.js';
@@ -1583,19 +1585,86 @@ export async function performDoRemote(
 			workspacesDir,
 		});
 		let tree: IsolatedTree | undefined;
+		let result: DoResult | undefined;
 		try {
-			tree = strategy.prepare({slug, type: 'slice', env});
-			return await runRemotePipeline(options, tree, slug, arbiter, note, env);
+			try {
+				tree = strategy.prepare({slug, type: 'slice', env});
+			} catch (err) {
+				// `prepare()`/`createJob` THREW before returning the handle (e.g. an
+				// onboard reconcile/stale-lease push surfaced as a throw). `tree` is
+				// undefined, so the normal teardown below would be skipped and a
+				// partially-created worktree could LEAK with no teardown attempt at all —
+				// and its checked-out `work/<slug>` branch would then poison the next
+				// build's fetch. Best-effort reap the deterministic worktree path for this
+				// slug (it is reaped ONLY if its branch is reachable on the arbiter —
+				// never lose work), then re-throw so the failure is still reported.
+				reapPreparedWorktreeLeak(mirror.url, slug, workspacesDir, env, note);
+				throw err;
+			}
+			result = await runRemotePipeline(options, tree, slug, arbiter, note, env);
+			return result;
 		} finally {
-			// 7. Teardown via the strategy handle: reap iff clean AND on the arbiter,
-			//    retain otherwise. NEVER --force. Always safe to call.
+			// 7. Teardown via the strategy handle. On a CLEAN completion: reap iff clean
+			//    AND on the arbiter (the standard §4 predicate). On a FAILURE return
+			//    (needs-attention / config-error / refused etc. — the seam already
+			//    surfaced the item + pushed the branch): reap on REACHABILITY ALONE, so a
+			//    churn-dirty-but-arbiter-safe worktree does not linger to poison the next
+			//    build's config-read/materialisation fetch. A worktree whose work is NOT
+			//    yet on the arbiter is RETAINED either way (never lose work). NEVER
+			//    --force.
 			if (tree) {
-				tree.teardown();
+				const reachableOnly =
+					result !== undefined && result.outcome !== 'completed';
+				tree.teardown({reachableOnly});
 			}
 		}
 	} finally {
 		// Remove the throwaway claim clone either way.
 		rmSync(claimDir, {recursive: true, force: true});
+	}
+}
+
+/**
+ * Best-effort reap of a worktree that {@link IsolationStrategy.prepare}/`createJob`
+ * may have created at the deterministic per-job path BEFORE it threw (so the
+ * handle was never returned and the normal teardown is skipped). Reaps it ONLY
+ * if its branch is provably reachable on the arbiter — a `prepare` throw can
+ * happen AFTER a clean continue-push (work is safe ⇒ reap so it can't poison the
+ * next build) or BEFORE any push (work not safe ⇒ retain; never lose work). All
+ * git ops are swallowed: this runs on an already-failing path and must never mask
+ * the original throw.
+ */
+function reapPreparedWorktreeLeak(
+	mirrorUrl: string,
+	slug: string,
+	workspacesDir: string,
+	env: NodeJS.ProcessEnv | undefined,
+	note: (m: string) => void,
+): void {
+	try {
+		const dir = jobWorktreePath(workspacesDir, mirrorUrl, slug);
+		if (!existsSync(dir)) {
+			return;
+		}
+		const mirrorDir = mirrorPath(workspacesDir, mirrorUrl);
+		const result = reapJob({
+			dir,
+			branch: workBranchRef('slice', slug),
+			mirrorPath: mirrorDir,
+			// Same failure-path stance as the normal teardown: reachable-on-arbiter is
+			// enough (don't let incidental churn retain a worktree whose branch is
+			// already safe). Reachability still gates — unsaved work is retained.
+			reachableOnly: true,
+			env,
+		});
+		if (result.removed) {
+			note(
+				`Reaped leaked worktree for ${slug} after prepare() threw ` +
+					`(branch safe on the arbiter).`,
+			);
+		}
+	} catch {
+		// best-effort — never mask the original prepare() throw
 	}
 }
 

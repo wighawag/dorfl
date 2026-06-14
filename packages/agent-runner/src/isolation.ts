@@ -93,8 +93,17 @@ export interface IsolatedTree {
 	 * if provably safe (`reapJob`). In-place: a NO-OP — the human's checkout is
 	 * left in a defined state, NEVER reaped. Always safe to call (e.g. in a
 	 * `finally`).
+	 *
+	 * `opts.reachableOnly` (job-worktree only) drops the clean-tree half of the
+	 * predicate, keeping the reachable-on-arbiter half: a worktree whose durable
+	 * branch is provably on the arbiter is reaped EVEN WHEN its tree has incidental
+	 * churn. This is the FAILURE-path opt-in (`performDoRemote`'s needs-attention
+	 * return, where the seam has already surfaced + pushed the branch), so a
+	 * churn-dirty-but-arbiter-safe worktree does not linger to poison the next
+	 * build. It NEVER reaps work not yet on the arbiter (reachability stands).
+	 * The in-place teardown ignores it (still a no-op).
 	 */
-	teardown(): void;
+	teardown(opts?: {reachableOnly?: boolean}): void;
 }
 
 /** What a strategy needs to prepare an isolated tree for one work item. */
@@ -191,15 +200,22 @@ export function jobWorktreeHandle(
 		continued: job.continued,
 		continueRebaseConflict: job.continueRebaseConflict,
 		continuePushFailure: job.continuePushFailure,
-		teardown(): void {
+		teardown(opts?: {reachableOnly?: boolean}): void {
 			// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
 			// predicate and remove the worktree ONLY if it holds (clean tree AND the
 			// branch tip reachable on the arbiter). NEVER `--force` here.
+			//
+			// `reachableOnly` (the FAILURE-path opt-in) drops the clean-tree half but
+			// KEEPS reachability: a churn-dirty worktree whose durable branch is on
+			// the arbiter is reaped (it would otherwise linger and poison the next
+			// build's fetch); a worktree whose work is NOT yet on the arbiter is still
+			// retained (never lose work).
 			reapJob({
 				dir: job.dir,
 				branch: job.branch,
 				mirrorPath: job.mirror.path,
 				arbiter: job.arbiterRemote,
+				reachableOnly: opts?.reachableOnly === true,
 				env,
 			});
 		},
@@ -354,6 +370,7 @@ export function inPlaceStrategy(options: {
 				// NO-OP teardown: the checkout is the human's / CI's tree — left on
 				// `work/<slug>` in a defined state, NEVER reaped (ADR §2/§4). The
 				// human's `complete` (or the runner) owns the branch lifecycle.
+				// `reachableOnly` is irrelevant here (nothing is ever reaped in-place).
 				teardown(): void {},
 			};
 		},

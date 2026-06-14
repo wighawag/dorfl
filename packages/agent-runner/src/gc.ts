@@ -83,6 +83,21 @@ export interface EvaluateSafetyInput {
 	 * layout can override it.
 	 */
 	arbiter?: string;
+	/**
+	 * Drop the CLEAN-TREE half of the predicate, keeping ONLY the
+	 * reachable-on-arbiter half. A worktree whose durable branch is provably on
+	 * the arbiter is then safe to reap EVEN WHEN its tree has incidental churn
+	 * (uncommitted doc-churn / artefacts) — because the durable artefact is the
+	 * PUSHED branch, not the worktree files.
+	 *
+	 * Scoped, deliberate opt-in for the FAILURE-return path of `performDoRemote`,
+	 * where the needs-attention seam has ALREADY surfaced the item + pushed the
+	 * branch, so we KNOW the work is safe. The reachability half is NEVER dropped
+	 * (we never reap work not yet on the arbiter — never lose work). The default
+	 * (`false`) keeps the full clean-AND-reachable predicate the clean-completion
+	 * path and `gc`'s default sweep use unchanged.
+	 */
+	reachableOnly?: boolean;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -104,8 +119,10 @@ export function evaluateDeletionSafety(
 	const env = input.env;
 	const arbiter = input.arbiter ?? ARBITER_REMOTE;
 
-	// 1. Clean tree? Dirty dominates (we never reap over uncommitted work).
-	if (!isWorkingTreeClean(input.dir, env)) {
+	// 1. Clean tree? Dirty dominates (we never reap over uncommitted work) —
+	//    UNLESS `reachableOnly` was opted into (the failure path, where the branch
+	//    is already pushed so the durable artefact is the branch, not the tree).
+	if (input.reachableOnly !== true && !isWorkingTreeClean(input.dir, env)) {
 		return {safe: false, reason: 'dirty-tree'};
 	}
 
