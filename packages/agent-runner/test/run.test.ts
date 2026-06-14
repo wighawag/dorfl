@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {writeFileSync, existsSync, readFileSync, chmodSync} from 'node:fs';
 import {runOnce, type AgentRunner} from '../src/run.js';
+import {PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE} from '../src/do-config.js';
 import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
@@ -1154,5 +1155,197 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 		});
 		expect(result.items[0].status).toBe('agent-failed');
 		expect(result.items[0].detail).toMatch(/\{model\}/);
+	});
+});
+
+/**
+ * The autonomous-path PR-INTENT pre-flight guard on the `run` daemon (slice
+ * `propose-pr-intent-guard-on-autonomous-paths`): per item, AFTER
+ * `resolveRepoConfig`/`gitEnv` and BEFORE the CLAIM, `runOneItem` runs the SAME
+ * up-front `gh` probe + `shouldFailProposePrIntent` the in-place `performDo` step
+ * 3c runs. The probe runs PRE-CLAIM so a refusal never strands an item claimed
+ * (in-progress on main): a propose item on a GitHub arbiter that INTENDS a PR
+ * fails fast (clean PRE-CLAIM `config-error` item result) when `gh` is genuinely
+ * unauthed, instead of silently degrading at integration. The probe is INJECTED
+ * (no real `gh`); a GitHub arbiter URL is set on the checkout's `arbiter` remote
+ * so `arbiterUrlForRepo` reads it as GitHub, with no real github network op (the
+ * guard refuses / short-circuits before any claim push).
+ */
+describe('runOnce — PR-INTENT pre-flight guard (autonomous path)', () => {
+	const GH_URL = 'https://github.com/o/r.git';
+
+	it('EARLY VISIBLE FAILURE: propose + GitHub arbiter + noPR unset + a failing gh PROBE ⇒ clean PRE-CLAIM config-error, NO claim/build, siblings unaffected', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// Point the configured arbiter remote at a GitHub URL (read-only: the guard
+		// refuses BEFORE any claim push, so no real github op runs).
+		gitIn(['remote', 'set-url', 'arbiter', GH_URL], repo);
+		const config = configFor(scratch.root, {integration: 'propose'});
+
+		let agentRan = false;
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			// The probe says `gh` cannot open a PR.
+			ghCanOpenPr: () => false,
+			agentRunner: () => {
+				agentRan = true;
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+
+		const item = result.items[0];
+		// A clean PRE-CLAIM refusal on a non-slice-fault status (config-error), NOT a
+		// half-built needs-attention, with the shared guard message verbatim.
+		expect(item.status).toBe('config-error');
+		expect(item.detail).toBe(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE);
+		expect(result.claimedAndDone).toBe(0);
+		// NO build ran, and the item was NEVER claimed (still in backlog on the
+		// arbiter — read against the still-local bare arbiter via the pristine clone).
+		expect(agentRan).toBe(false);
+	});
+
+	it('does NOT crash the tick or abort SIBLINGS: a refused propose+gh-unavailable item leaves other repos’ items to proceed', async () => {
+		// Repo A: a GitHub arbiter, propose, failing probe ⇒ refused (config-error).
+		const {repo: repoA} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['remote', 'set-url', 'arbiter', GH_URL], repoA);
+		// Repo B: an independent local (non-GitHub) arbiter, merge ⇒ proceeds green.
+		const repoBRoot = join(scratch.root, 'b-root');
+		const {repo: repoB} = seedRepoWithArbiter(repoBRoot, ['beta']);
+
+		const config = configFor(scratch.root, {integration: 'propose'});
+		const report = scanRepoPaths([repoA, repoB], config);
+		const result = await runOnce({
+			config,
+			report,
+			workspace: join(scratch.root, 'ws'),
+			// repoA's github URL trips the probe; repoB's file:// arbiter is non-GitHub,
+			// so the predicate short-circuits there (the probe is irrelevant).
+			ghCanOpenPr: () => false,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		const byRepo = new Map(result.items.map((i) => [i.repoPath, i]));
+		expect(byRepo.get(repoA)?.status).toBe('config-error');
+		// The sibling (repoB) was NOT aborted by repoA's refusal — it built + landed
+		// (propose: the item completed, work branch pushed, in-progress on main).
+		expect(byRepo.get(repoB)?.status).toBe('claimed-done');
+		expect(existsOnArbiterMain(repoB, 'in-progress', 'beta')).toBe(true);
+	});
+
+	it('AMBIENT AUTH NOT BROKEN: propose + GitHub arbiter + noPR unset + a PASSING probe ⇒ the guard does NOT refuse (proceeds PAST it)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['remote', 'set-url', 'arbiter', GH_URL], repo);
+		const config = configFor(scratch.root, {integration: 'propose'});
+
+		let probed = false;
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			// No `providers.github` identity, but the probe PASSES (ambient `gh` auth).
+			ghCanOpenPr: () => {
+				probed = true;
+				return true;
+			},
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		// The probe ran and let the run THROUGH the guard (it proceeded into the
+		// claim/build against the offline github arbiter, which then fails some other
+		// way — but NOT the up-front PR-intent guard).
+		expect(probed).toBe(true);
+		const item = result.items[0];
+		expect(item.detail).not.toBe(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE);
+	});
+
+	it('MERGE mode ⇒ the guard never fires (no PR is opened), even on a GitHub arbiter with a failing probe', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['remote', 'set-url', 'arbiter', GH_URL], repo);
+		// merge mode (the configFor default), GitHub arbiter, failing probe.
+		const config = configFor(scratch.root, {integration: 'merge'});
+
+		let probed = false;
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			ghCanOpenPr: () => {
+				probed = true;
+				return false;
+			},
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		// merge short-circuits the predicate BEFORE the probe: no guard refusal
+		// (the probe is never consulted). The build then proceeds past the guard.
+		expect(probed).toBe(false);
+		expect(result.items[0].detail).not.toBe(
+			PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+		);
+		void repo;
+	});
+
+	it('noPR: true ⇒ the guard never fires (PR deliberately suppressed), even on a GitHub arbiter with a failing probe', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['remote', 'set-url', 'arbiter', GH_URL], repo);
+		const config = configFor(scratch.root, {
+			integration: 'propose',
+			noPR: true,
+		});
+
+		let probed = false;
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			ghCanOpenPr: () => {
+				probed = true;
+				return false;
+			},
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		// `noPR: true` short-circuits BEFORE the probe: no refusal, probe unconsulted.
+		expect(probed).toBe(false);
+		expect(result.items[0].detail).not.toBe(
+			PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+		);
+		void repo;
+	});
+
+	it('a NON-GitHub (file://) arbiter + propose ⇒ the guard never fires; the item builds + lands', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		// The default `arbiter` remote is the local file:// bare arbiter (non-GitHub).
+		const config = configFor(scratch.root, {integration: 'propose'});
+
+		let probed = false;
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			ghCanOpenPr: () => {
+				probed = true;
+				return false;
+			},
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		// A non-GitHub arbiter short-circuits the predicate BEFORE the probe: the
+		// propose item proceeds (claimed + work branch pushed), never refused.
+		expect(probed).toBe(false);
+		const item = result.items[0];
+		expect(item.status).not.toBe('config-error');
+		expect(item.detail ?? '').not.toBe(
+			PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+		);
+		// propose: the item reached done on the work branch (in-progress on main).
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
 	});
 });

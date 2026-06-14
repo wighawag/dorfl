@@ -35,6 +35,11 @@ import {
 	type FailureCause,
 } from './failure-cause.js';
 import {performIntegration} from './integration-core.js';
+import {
+	shouldFailProposePrIntent,
+	PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+} from './do-config.js';
+import {isGitHubArbiterUrl, GitHubProvider} from './github.js';
 import {identityEnv, assertTransportAllowed} from './identity.js';
 import type {ReviewGate} from './review-gate.js';
 import type {BackoffOptions, Sleep} from './retry-backoff.js';
@@ -144,6 +149,28 @@ async function claimAgainstRepo(opts: {
 	};
 }
 
+/**
+ * Resolve the arbiter URL for `repoPath` PRE-CLAIM, the SAME way
+ * {@link claimAgainstRepo} derives the claim target. A BARE registry hub mirror's
+ * arbiter is its `origin` remote URL (falling back to `file://${repoPath}` when it
+ * has none); a working CHECKOUT's arbiter is the configured `arbiter` remote URL
+ * (falling back to `file://${repoPath}`). Used by the PR-INTENT pre-flight guard
+ * to know whether the arbiter is GitHub BEFORE the claim — it must not claim then
+ * refuse (that would strand the item in-progress on main). Read-only; mutates
+ * nothing.
+ */
+function arbiterUrlForRepo(opts: {
+	repoPath: string;
+	arbiter: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): string {
+	const {repoPath, arbiter, env} = opts;
+	const remote = isBareRepo(repoPath, env) ? 'origin' : arbiter;
+	const res = runProcess('git', ['remote', 'get-url', remote], repoPath, {env});
+	const url = res.status === 0 ? res.stdout.trim() : '';
+	return url !== '' ? url : `file://${repoPath}`;
+}
+
 /** What happened to one selected item across the whole pipeline. */
 export type ItemStatus =
 	| 'claimed-done' // tests green + rebased clean → integrated (pushed/merged)
@@ -230,6 +257,17 @@ export interface RunOnceOptions {
 	 * the core selects the provider PURELY from the arbiter URL (no override axis).
 	 */
 	provider?: ReviewProvider;
+	/**
+	 * The `gh` AUTH/AVAILABILITY PROBE the PR-INTENT pre-flight guard runs UP FRONT
+	 * per item (propose + GitHub arbiter + `noPR` unset): `true` ⇒ `gh` CAN open a
+	 * PR. The SAME signal in-place `do` (and `do --remote`) uses, run BEFORE the
+	 * claim so no item is left claimed when `gh` is genuinely unauthed. The probe
+	 * (not a config check) is the signal — an absent `providers.github` identity
+	 * falls back to ambient `gh` auth, which the probe reports available, so the run
+	 * PROCEEDS. Injectable so tests stub `gh` without a real binary; production
+	 * defaults to `new GitHubProvider().available(repoPath, env)`.
+	 */
+	ghCanOpenPr?: (cwd: string, env: NodeJS.ProcessEnv | undefined) => boolean;
 	/** Optional injectable PR opener for `integration: propose` (legacy bridge). */
 	openPr?: (opts: {
 		cwd: string;
@@ -344,6 +382,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 				harness,
 				reviewGate: options.reviewGate,
 				provider,
+				ghCanOpenPr: options.ghCanOpenPr,
 				openPr: options.openPr,
 				env,
 				onWarn: options.onWarn,
@@ -405,6 +444,12 @@ interface OneItemContext {
 	reviewGate?: ReviewGate;
 	/** An explicitly-injected provider that overrides per-item auto-detection. */
 	provider?: ReviewProvider;
+	/**
+	 * The `gh` AUTH/AVAILABILITY PROBE the PR-INTENT pre-flight guard runs per item
+	 * BEFORE the claim (see {@link RunOnceOptions.ghCanOpenPr}). Injectable for
+	 * tests; production defaults to `new GitHubProvider().available(repoPath, env)`.
+	 */
+	ghCanOpenPr?: (cwd: string, env: NodeJS.ProcessEnv | undefined) => boolean;
 	openPr?: (opts: {
 		cwd: string;
 		branch: string;
@@ -485,6 +530,49 @@ async function runOneItem(
 	// (`saveAgentFailure`/`saveAgentStop`) push under the identity too. We rebind a
 	// COPY (never mutate the shared tick `ctx` — items run concurrently).
 	ctx = {...ctx, gitEnv};
+
+	// 0. PR-INTENT pre-flight guard — the AUTONOMOUS mirror of in-place `performDo`
+	//    step 3c. The SAME predicate, run UP FRONT here (per-repo config resolved,
+	//    BEFORE the claim) so a `propose` item on a GitHub arbiter that INTENDS a PR
+	//    (`noPR` unset) fails fast when `gh` genuinely cannot open one, instead of
+	//    letting integration silently degrade to manual-PR instructions. CRITICAL: the
+	//    probe runs BEFORE the claim — claiming then refusing would strand the item
+	//    in-progress on main (the claim precedes `prepare()`). The arbiter URL is
+	//    derived from `repoPath` the SAME way `claimAgainstRepo` derives the claim
+	//    target (`arbiterUrlForRepo`). The PROBE is the signal, NOT a config check —
+	//    an absent `providers.github` identity falls back to AMBIENT `gh` auth (the
+	//    probe reports it available), so a working ambient setup PROCEEDS. A true
+	//    result returns a CLEAN PRE-CLAIM item result on the `config-error` failure-
+	//    cause status (a wiring/config failure, NOT a slice fault), with NO claim,
+	//    build, or half-built needs-attention surface — and it never crashes the tick
+	//    or aborts siblings (the result is returned; `runConcurrent` continues).
+	//    REUSES the predicate + message so the in-place + autonomous paths cannot
+	//    drift.
+	{
+		const arbiterUrl = arbiterUrlForRepo({
+			repoPath,
+			arbiter: config.defaultArbiter,
+			env: gitEnv,
+		});
+		const probe =
+			ctx.ghCanOpenPr ??
+			((probeCwd, probeEnv) =>
+				new GitHubProvider().available(probeCwd, probeEnv));
+		if (
+			shouldFailProposePrIntent({
+				mode: config.integration,
+				arbiterIsGitHub: isGitHubArbiterUrl(arbiterUrl),
+				noPR: config.noPR,
+				ghCanOpenPr: () => probe(repoPath, gitEnv),
+			})
+		) {
+			return {
+				...base,
+				status: 'config-error',
+				detail: PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+			};
+		}
+	}
 
 	// 1. Claim (the runner's first git-state transition) via the in-process CAS.
 	//    `claimAgainstRepo` handles BOTH discovery shapes: a working CHECKOUT (the

@@ -401,6 +401,18 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	noPR?: boolean;
 	/**
+	 * The `gh` AUTH/AVAILABILITY PROBE the PR-INTENT pre-flight guard runs UP FRONT
+	 * on the AUTONOMOUS path too (propose + GitHub arbiter + `noPR` unset): `true` ⇒
+	 * `gh` CAN open a PR. Mirrors {@link DoOptions.ghCanOpenPr} so the in-place and
+	 * no-checkout `do` paths share ONE signal. The probe (not a config check) is the
+	 * signal — an absent `providers.github` identity falls back to ambient `gh` auth,
+	 * which the probe reports available, so a working ambient setup still PROCEEDS.
+	 * Injectable so tests stub `gh` without a real binary; production defaults to
+	 * `new GitHubProvider().available(probeDir, env)`, run in the claim clone (which
+	 * carries the arbiter remote), NOT a bare cwd.
+	 */
+	ghCanOpenPr?: (cwd: string, env: NodeJS.ProcessEnv | undefined) => boolean;
+	/**
 	 * Optional FULLY-FORMED review provider INSTANCE (tests/embeddings inject a
 	 * stubbed `GitHubProvider` to drive the propose pipeline offline). The resolved
 	 * provider OBJECT, NOT a config override. Unset ⇒ the core selects from the
@@ -1496,6 +1508,40 @@ export async function performDoRemote(
 			? `Auto-registered hub mirror for ${mirror.url} at ${mirror.path}.`
 			: `Using hub mirror for ${mirror.url} at ${mirror.path}.`,
 	);
+
+	// 1b. PR-INTENT pre-flight guard — the AUTONOMOUS mirror of in-place `performDo`
+	//     step 3c. The SAME predicate, run UP FRONT here (mirror resolved, BEFORE the
+	//     claim clone / worktree) so a `propose` run on a GitHub arbiter that INTENDS a
+	//     PR (`noPR` unset) fails fast when `gh` genuinely cannot open one, instead of
+	//     letting integration silently degrade to manual-PR instructions. NO claim/
+	//     build side-effect: it precedes even the throwaway claim CLONE below. The probe
+	//     runs in the bare mirror dir (`mirror.path`), which carries the arbiter remote
+	//     as `origin`, NOT a bare cwd. CRITICAL: the PROBE is the signal, NOT a config
+	//     check — an absent `providers.github` identity falls back to AMBIENT `gh` auth
+	//     (the probe reports it available), so a working ambient setup still PROCEEDS.
+	//     `arbiterIsGitHub` is derived from `mirror.url` (the resolved arbiter URL).
+	//     REUSES the predicate + message so the in-place + autonomous paths cannot
+	//     drift.
+	{
+		const probe =
+			options.ghCanOpenPr ??
+			((probeCwd, probeEnv) =>
+				new GitHubProvider().available(probeCwd, probeEnv));
+		if (
+			shouldFailProposePrIntent({
+				mode: options.integration ?? 'propose',
+				arbiterIsGitHub: isGitHubArbiterUrl(mirror.url),
+				noPR: options.noPR,
+				ghCanOpenPr: () => probe(mirror.path, env),
+			})
+		) {
+			return {
+				exitCode: 1,
+				outcome: 'refused',
+				message: PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+			};
+		}
+	}
 
 	// 2. A throwaway claim clone of the mirror (the CAS context). Slug resolution
 	//    + the claim both run here against `origin` (the arbiter URL). Keyed PER
