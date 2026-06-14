@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, existsSync, readFileSync} from 'node:fs';
+import {writeFileSync, existsSync, readFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -405,6 +405,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		slug: string,
 		lockKey: string,
 		lock?: ReturnType<typeof createKeyedLock>,
+		mergeRetries?: number,
 	) =>
 		performIntegration({
 			cwd,
@@ -419,6 +420,9 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			surfaceArbiter: ARBITER,
 			integrateLock: lock,
 			integrateLockKey: lockKey,
+			// Race-1 bounded re-rebase-and-retry cap (default applies when undefined).
+			// The control test passes `0` to disable BOTH the lock AND the retry.
+			mergeRetries,
 			env: gitEnv(),
 		});
 
@@ -468,33 +472,255 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		);
 	});
 
-	it('WITHOUT the lock, two same-base concurrent merges do NOT both cleanly land (the lock is load-bearing)', async () => {
-		// The control: same disjoint-file jobs, but NO shared lock. Both rebase onto
-		// the SAME stale pre-merge base (neither sees the other's merge), so both push
-		// `${branch}:main`; the second push is non-fast-forward. The point is that the
-		// un-serialised path is NOT a clean both-land — at most one lands cleanly
-		// (the loser's terminal push fails / routes to needs-attention), proving the
-		// lock is what makes the both-land deterministic.
+	it('WITHOUT the lock AND WITHOUT the retry, two same-base concurrent merges do NOT both cleanly land (serialisation is load-bearing)', async () => {
+		// The control: same disjoint-file jobs, but NO shared lock AND `mergeRetries:
+		// 0` (the Race-1 re-rebase-and-retry DISABLED). Both rebase onto the SAME
+		// stale pre-merge base (neither sees the other's merge), so both push
+		// `${branch}:main`; the second push is non-fast-forward AND there is no retry
+		// to recover it. The point is that the un-serialised, un-retried path is NOT a
+		// clean both-land — at most one lands cleanly, proving SOME serialisation
+		// mechanism (the lock OR the bounded retry, both exercised above/below) is
+		// what makes the both-land deterministic.
+		//
+		// UPDATED (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+		// before that slice the integrator did a single plain push, so dropping just the
+		// lock sufficed to break both-land. The merge push now DEFAULTS to a bounded
+		// re-rebase-and-retry (Race-1 fix), so to keep this control meaningful we ALSO
+		// disable the retry (`mergeRetries: 0`) — otherwise the retry alone both-lands
+		// (the `retry alone (no lock)` test below asserts exactly that new contract).
 		const {seeded, arbiterUrl, cwdA, cwdB} = await twoSameRepoMergeJobs(
 			'na',
 			'nb',
 			(cwd, slug) => writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`),
 		);
 		void arbiterUrl;
-		// No lock passed (undefined) ⇒ the tail runs un-serialised, exactly like a
-		// single-job caller. Both rebase onto the same base concurrently.
+		// No lock passed (undefined) AND retry disabled (0) ⇒ the tail runs
+		// un-serialised + un-retried, exactly like the pre-slice single-job caller.
 		const settled = await Promise.allSettled([
-			integrateMerge(cwdA, 'na', 'unused', undefined),
-			integrateMerge(cwdB, 'nb', 'unused', undefined),
+			integrateMerge(cwdA, 'na', 'unused', undefined, 0),
+			integrateMerge(cwdB, 'nb', 'unused', undefined, 0),
 		]);
 		const landed = ['na', 'nb'].filter((slug) =>
 			existsOnArbiterMain(seeded.repo, 'done', slug),
 		);
-		// The un-serialised path cannot deterministically land BOTH on `main`: the
-		// loser's `${branch}:main` push is non-fast-forward against the winner's
-		// advance. (We assert it is NOT a clean both-land; the lock above is what
-		// fixes that.)
+		// The un-serialised, un-retried path cannot deterministically land BOTH on
+		// `main`: the loser's `${branch}:main` push is non-fast-forward against the
+		// winner's advance and is NOT re-rebased.
 		expect(landed.length).toBeLessThan(2);
 		expect(settled).toHaveLength(2);
+	});
+
+	it('WITHOUT the lock but WITH the default retry, two same-base concurrent merges BOTH land (Race-1 bounded re-rebase-and-retry)', async () => {
+		// Race 1 (claim-vs-integrate) fix proven WITHOUT the integrate lock: two
+		// disjoint-file same-repo merge jobs both rebase onto the SAME stale base and
+		// both push `${branch}:main`. The loser's push is non-fast-forward, but the
+		// integrator's DEFAULT bounded re-rebase-and-retry re-fetches the winner's
+		// advanced main, rebases onto it (disjoint files ⇒ clean), and retries — so
+		// BOTH land deterministically WITHOUT serialising the tail. This is the
+		// mechanism that closes the claim-vs-integrate race (a sibling CLAIM advances
+		// main under the SEPARATE claim lock, which the integrate lock cannot cover).
+		const {seeded, cwdA, cwdB} = await twoSameRepoMergeJobs(
+			'ra',
+			'rb',
+			(cwd, slug) => writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`),
+		);
+		// NO lock (undefined); the DEFAULT retry (mergeRetries undefined ⇒ default cap).
+		const [a, b] = await Promise.all([
+			integrateMerge(cwdA, 'ra', 'unused', undefined),
+			integrateMerge(cwdB, 'rb', 'unused', undefined),
+		]);
+		expect(a.outcome).toBe('completed');
+		expect(b.outcome).toBe('completed');
+		expect(existsOnArbiterMain(seeded.repo, 'done', 'ra')).toBe(true);
+		expect(existsOnArbiterMain(seeded.repo, 'done', 'rb')).toBe(true);
+	});
+
+	it('the Race-1 retry still routes EXACTLY ONE conflicting job to needs-attention (never auto-resolves code)', async () => {
+		// The retry only recovers a CLEAN re-rebase (a benign main-advance). Two jobs
+		// editing the SAME file with DIFFERENT content: the loser's re-rebase onto the
+		// winner's advanced main hits a GENUINE code conflict, aborts, and routes to
+		// needs-attention — it CANNOT both-land. No lock; default retry.
+		const {seeded, cwdA, cwdB} = await twoSameRepoMergeJobs(
+			'xa',
+			'xb',
+			(cwd, slug) => writeFileSync(join(cwd, 'shared.txt'), `work ${slug}\n`),
+		);
+		const [a, b] = await Promise.all([
+			integrateMerge(cwdA, 'xa', 'unused', undefined),
+			integrateMerge(cwdB, 'xb', 'unused', undefined),
+		]);
+		const outcomes = [a.outcome, b.outcome].sort();
+		expect(outcomes).toEqual(['completed', 'rebase-conflict']);
+		const winner = a.outcome === 'completed' ? 'xa' : 'xb';
+		const loser = a.outcome === 'completed' ? 'xb' : 'xa';
+		expect(existsOnArbiterMain(seeded.repo, 'done', winner)).toBe(true);
+		expect(existsOnArbiterMain(seeded.repo, 'done', loser)).toBe(false);
+		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', loser)).toBe(
+			true,
+		);
+	});
+});
+
+describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation', () => {
+	// Race 2 (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+	// the step-4 `git rebase <arbiter>/main` can conflict on ANOTHER slug's
+	// `work/<status>/<otherslug>.md` ledger file — a sibling same-repo job landed its
+	// own status-folder move on main between our base and this rebase. A conflict
+	// confined PURELY to other slugs' ledger files is benign (take the arbiter's
+	// version, continue the rebase, the job lands), NOT a needs-attention route. A
+	// conflict touching any CODE file or THIS slug's own ledger still routes.
+
+	/**
+	 * Build ONE repo (slugs `sa` + `sb`), claim `sa` so it is in-progress, and
+	 * branch a `work/slice-sa` whose committed work BOTH does its own agent edit AND
+	 * TOUCHES the named `touch` path with `branchContent` (the conflict surface).
+	 * Then, on the arbiter's main, apply `landOnArbiter` (the divergent change to the
+	 * SAME path). Returns the job cwd + repo so the caller drives `performIntegration`
+	 * for `sa` and asserts the reconcile/route outcome.
+	 */
+	async function siblingLedgerConflictJob(opts: {
+		touch: string;
+		branchContent: string;
+		landOnArbiter: (mainCwd: string) => void;
+	}) {
+		const seeded = seedRepoWithArbiter(scratch.root, ['sa', 'sb']);
+		const repo = seeded.repo;
+		// Claim BOTH so main carries both in-progress moves (the shared pre-merge base).
+		for (const slug of ['sa', 'sb']) {
+			const claim = await performClaim({
+				slug,
+				cwd: repo,
+				arbiter: ARBITER,
+				env: gitEnv(),
+			});
+			expect(claim.exitCode).toBe(0);
+		}
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['switch', '-q', '-c', 'work/slice-sa', `${ARBITER}/main`], repo);
+		// The build agent's work: its own code edit AND a touch of the conflict path,
+		// committed on the work branch (the agent does no git, but to MANUFACTURE a
+		// rebase conflict on the `touch` path we commit it here — `performIntegration`
+		// adds the done-move on top).
+		writeFileSync(join(repo, 'sa.txt'), 'work sa\n');
+		const touchAbs = join(repo, opts.touch);
+		writeFileSync(touchAbs, opts.branchContent);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(sa): work + touch'], repo);
+
+		// Concurrently, a sibling advances the arbiter's main with the DIVERGENT change
+		// to the SAME path, via a throwaway clone (the checkout under test is untouched).
+		const sib = seeded.clone('sibling');
+		gitIn(['switch', '-q', '-c', 'sibling/main', `${ARBITER}/main`], sib);
+		opts.landOnArbiter(sib);
+		gitIn(['add', '-A'], sib);
+		gitIn(['commit', '-q', '-m', 'sibling advance'], sib);
+		gitIn(['push', '-q', ARBITER, 'sibling/main:main'], sib);
+
+		return {seeded, repo};
+	}
+
+	it('a conflict confined to a SIBLING slug ledger file (work/done/sb.md) is reconciled and the job LANDS', async () => {
+		const {seeded, repo} = await siblingLedgerConflictJob({
+			// Our branch modifies the SIBLING's in-progress ledger (a benign touch).
+			touch: 'work/in-progress/sb.md',
+			branchContent: 'sb ledger — our branch view\n',
+			// The arbiter MOVES sb from in-progress to done with different content (the
+			// sibling job's done-move): replaying our touch onto it conflicts on sb's
+			// ledger ONLY — a benign sibling-ledger divergence.
+			landOnArbiter: (mainCwd) => {
+				mkdirSync(join(mainCwd, 'work', 'done'), {recursive: true});
+				gitIn(['mv', 'work/in-progress/sb.md', 'work/done/sb.md'], mainCwd);
+				writeFileSync(
+					join(mainCwd, 'work', 'done', 'sb.md'),
+					'sb ledger — arbiter (sibling done-move)\n',
+				);
+			},
+		});
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'sa',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		// The sibling-ledger conflict was reconciled (arbiter's sb ledger taken, rebase
+		// continued): sa LANDS, NOT routed to needs-attention.
+		expect(core.outcome).toBe('completed');
+		expect(core.routedToNeedsAttention).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(true);
+		// The sibling's ledger ended at the ARBITER's version (sb in done/, not our
+		// in-progress touch): sb's own done-move was honoured, not clobbered.
+		expect(existsOnArbiterMain(repo, 'done', 'sb')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'sb')).toBe(false);
+		void seeded;
+	});
+
+	it('a conflict touching a CODE file still routes to needs-attention (the reconcile NEVER widens to code)', async () => {
+		const {repo} = await siblingLedgerConflictJob({
+			// Our branch and the arbiter both edit a CODE file with different content.
+			touch: 'shared-code.txt',
+			branchContent: 'code — our branch\n',
+			landOnArbiter: (mainCwd) => {
+				writeFileSync(join(mainCwd, 'shared-code.txt'), 'code — arbiter\n');
+			},
+		});
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'sa',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		// A code conflict is NEVER auto-resolved: sa routes to needs-attention.
+		expect(core.outcome).toBe('rebase-conflict');
+		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(true);
+	});
+
+	it('a conflict on THIS slug OWN ledger still routes to needs-attention (sibling arm excludes own ledger)', async () => {
+		// Our branch touches our OWN in-progress ledger; the arbiter independently
+		// edits the same own-ledger file. The sibling arm explicitly EXCLUDES our own
+		// ledger, so this falls through to the divergent-done-move / needs-attention
+		// route (it is NOT the divergent-base case the #86 recovery handles, since the
+		// arbiter still holds sa in in-progress — the same folder we move from).
+		const {repo} = await siblingLedgerConflictJob({
+			touch: 'work/in-progress/sa.md',
+			branchContent: 'sa ledger — our branch view\n',
+			landOnArbiter: (mainCwd) => {
+				writeFileSync(
+					join(mainCwd, 'work', 'in-progress', 'sa.md'),
+					'sa ledger — arbiter view\n',
+				);
+			},
+		});
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'sa',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		// Own-ledger conflict is NOT a sibling-ledger reconcile: it routes.
+		expect(core.outcome).toBe('rebase-conflict');
+		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(true);
 	});
 });

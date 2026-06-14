@@ -358,6 +358,16 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	// now-advanced main, so its push is a clean fast-forward. Distinct repos
 	// integrate in parallel (per-repo key); a genuine same-repo code conflict
 	// routes exactly ONE job to needs-attention (it cannot both-land).
+	//
+	// This lock is the SIBLING-INTEGRATE serialiser ONLY. It does NOT cover the
+	// claim-vs-integrate race: a sibling same-repo CLAIM advances `<arbiter>/main`
+	// under the SEPARATE `claimLock` (above), which can land INSIDE this job's
+	// integrate push window. That is closed independently by the integrator's
+	// bounded re-rebase-and-retry on a non-fast-forward merge push (slice
+	// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`, Race 1) — the
+	// two locks are NOT merged (merging would serialise the cheap claim behind the
+	// slow gated integrate, killing run's parallelism), the retry handles the
+	// cross-lock main-advance instead.
 	const integrateLock = createKeyedLock();
 
 	// GENUINELY CONCURRENT (ADR §3 — the whole point of `run`): run up to
@@ -869,17 +879,17 @@ async function runOneItem(
 				// FRESH-WORKTREE GATE (slice `gate-on-rebased-tip-fresh-worktree`): run the
 				// acceptance gate against the REBASED tip in a clean throwaway worktree (the
 				// tree that integrates) so a green gate provably describes the merged
-				// artifact. The `run` FLEET CONDITIONAL lives HERE (the one fleet-aware
-				// caller, not the caller-agnostic band): use the fresh gate ONLY when the
-				// resolved flag is on AND same-repo concurrency is off (`perRepoMax === 1`).
-				// At `perRepoMax > 1` it falls back to today's in-build-worktree gate, so the
-				// two PRE-EXISTING run-fleet races (claim-vs-integrate non-ff push;
-				// sibling-slug divergent-base ledger rebase — filed as
-				// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`) never fire
-				// and the existing concurrent-`run` tests stay green unchanged. Single-job
-				// callers (in-place `do`/`--isolated`/`--remote`/`complete`) pass the resolved
-				// flag UNCONDITIONALLY (no fleet concurrency, so no downgrade).
-				freshWorktreeGate: config.freshWorktreeGate && config.perRepoMax === 1,
+				// artifact. Passed UNCONDITIONALLY (the resolved flag) at ANY `perRepoMax`:
+				// the two PRE-EXISTING run-fleet same-repo races the gate's latency used to
+				// make deterministic are now CLOSED on their own merits (slice
+				// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`) — RACE 1
+				// (claim-vs-integrate non-fast-forward push) by the integrator's bounded
+				// re-rebase-and-retry on the merge push, RACE 2 (sibling-slug divergent-base
+				// ledger rebase) by the step-4 sibling-ledger reconciliation arm — so the
+				// `perRepoMax === 1` downgrade is REMOVED and the fresh rebased-tip gate runs
+				// on the `run` fleet at any same-repo parallelism. Single-job callers
+				// (`do`/`--isolated`/`--remote`/`complete`) already pass it unconditionally.
+				freshWorktreeGate: config.freshWorktreeGate,
 				// Gate 2 (PR/code review): the per-repo resolved flags ride from `config`;
 				// only the gate SEAM is threaded through `ctx` (the CLI wires the prod
 				// `harnessReviewGate()` only when `config.review` is on).

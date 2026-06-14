@@ -1,5 +1,6 @@
 import type {IntegrationMode} from './config.js';
 import {git, run} from './git.js';
+import {isAncestor} from './gc.js';
 import type {BackoffOptions, Sleep} from './retry-backoff.js';
 
 /**
@@ -268,6 +269,16 @@ export interface IntegrateResult {
 	mode: IntegrationMode;
 	/** True when the work landed on the arbiter's `main` (merge mode). */
 	mergedToMain: boolean;
+	/**
+	 * **Race-1 non-fast-forward signal** (merge mode): set `true` when the
+	 * `${branch}:main` push was REJECTED non-fast-forward because a SIBLING advanced
+	 * `<arbiter>/main` during the push window (and our commit is NOT already on main
+	 * — the idempotency probe ruled that out). The work did NOT land; the caller
+	 * (integration-core's step-4 tail) must re-fetch + re-rebase (reconciling
+	 * sibling-ledger divergence) + retry the push, up to its bounded cap. Absent on a
+	 * clean (or idempotent-landed) merge.
+	 */
+	mergeNonFastForward?: boolean;
 	/** The ref the work was pushed to (`main` for merge, the branch for propose). */
 	pushedRef: string;
 	/** The provider name used (propose mode); `none` in merge mode. */
@@ -322,7 +333,24 @@ export class Integrator {
 	 */
 	async integrate(input: IntegrateInput): Promise<IntegrateResult> {
 		if (input.mode === 'merge') {
-			pushBranch(input, `${input.branch}:main`);
+			// Race-1 (claim-vs-integrate): push `${branch}:main` ONCE. On a
+			// non-fast-forward rejection (a sibling same-repo claim/integrate advanced
+			// `<arbiter>/main` during our push window) report it so the integration-core
+			// step-4 tail re-rebases (with its sibling-ledger reconcile) + retries the
+			// push. We never rebase here (that would miss the ledger reconcile arms) and
+			// never `--force` main.
+			const pushed = mergePushOnce(input);
+			if (pushed.kind === 'non-fast-forward') {
+				// Signal the caller to re-rebase via step-4 and call integrate again.
+				return {
+					mode: 'merge',
+					mergedToMain: false,
+					pushedRef: 'main',
+					provider: 'none',
+					requestOpened: false,
+					mergeNonFastForward: true,
+				};
+			}
 			// Capture the SHA that LANDED on `main` — the work branch's tip is exactly
 			// what `${branch}:main` pushed (additive `commit?`, the merge-mode twin of
 			// propose's `url`). Best-effort: a failed read leaves `commit` absent, so a
@@ -479,6 +507,72 @@ export function rebaseOntoArbiterMain(input: RebaseInput): RebaseResult {
 	// a no-op error we can ignore.
 	run('git', ['rebase', '--abort'], input.cwd, {env});
 	return {clean: false, conflicted: true};
+}
+
+/** Outcome of {@link mergePushOnce}. */
+type MergePushResult = {kind: 'landed'} | {kind: 'non-fast-forward'};
+
+/**
+ * Push `${branch}:main` (merge mode) ONCE, classifying the outcome for the
+ * caller's bounded re-rebase-and-retry loop (Race 1: claim-vs-integrate, slice
+ * `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). It does NOT
+ * rebase itself: the rebase belongs to the integration-core step-4 tail, which
+ * ALSO carries the sibling-ledger + divergent-done-move reconciliation arms a bare
+ * rebase here would miss. This function's only job is to push and tell the caller
+ * whether to LOOP (re-rebase via step-4) or STOP.
+ *
+ *   - `landed` — the push succeeded, OR (under the non-atomic `file://` transport)
+ *     it reported failure but our tip is ALREADY reachable on `<arbiter>/main`
+ *     (the push genuinely landed — an IDEMPOTENT no-op; never re-rebase our own
+ *     already-landed commit, which would self-conflict). The `isAncestor` probe is
+ *     the SAME merged-vs-unmerged predicate `gc.ts`/`finishStrandedBranch` use.
+ *   - `non-fast-forward` — a SIBLING advanced `<arbiter>/main` during our push
+ *     window (a claim CAS commit, or a sibling integrate); the caller must
+ *     re-fetch + re-run the step-4 rebase (reconciling sibling-ledger divergence)
+ *     and retry the push. We NEVER `--force` main.
+ *
+ * Any OTHER push failure (unreachable arbiter, refused ref) THROWS, exactly as a
+ * plain `git push` would.
+ */
+function mergePushOnce(input: IntegrateInput): MergePushResult {
+	const env = input.env;
+	const refspec = `${input.branch}:main`;
+	const arbiterRef = `refs/remotes/${input.arbiter}/main`;
+
+	const push = run('git', ['push', input.arbiter, refspec], input.cwd, {env});
+	if (push.status === 0) {
+		return {kind: 'landed'};
+	}
+	// Distinguish a CONTENTION rejection (main advanced — recoverable by a step-4
+	// re-rebase) from any other push failure (which surfaces as today's throw).
+	const combined = `${push.stderr}\n${push.stdout}`;
+	const nonFastForward =
+		/non-fast-forward|fetch first|\[rejected\]|failed to push/i.test(combined);
+	if (!nonFastForward) {
+		throw new Error(
+			`git push ${input.arbiter} ${refspec} failed (exit ${push.status}): ` +
+				`${push.stderr.trim() || push.stdout.trim()}`,
+		);
+	}
+	// Re-fetch the arbiter's main and check IDEMPOTENCY first: under `file://` a
+	// reported failure can have actually landed. If our tip is already on main, it
+	// landed — never re-rebase our own commit onto a main that has it.
+	git(
+		['fetch', '--quiet', input.arbiter, `+refs/heads/main:${arbiterRef}`],
+		input.cwd,
+		{env},
+	);
+	const tip = run(
+		'git',
+		['rev-parse', '--verify', '--quiet', `refs/heads/${input.branch}`],
+		input.cwd,
+		{env},
+	).stdout.trim();
+	if (tip !== '' && isAncestor(input.cwd, tip, arbiterRef, env)) {
+		return {kind: 'landed'};
+	}
+	// A genuine sibling main-advance: the caller re-runs the step-4 rebase + retries.
+	return {kind: 'non-fast-forward'};
 }
 
 /**
