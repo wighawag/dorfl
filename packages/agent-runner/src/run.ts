@@ -226,9 +226,10 @@ export type AgentRunner = (input: {
 export interface RunOnceOptions {
 	config: Config;
 	/**
-	 * Pre-computed scan report; if omitted, the working-tree scan is run over the
-	 * detected repos (this in-place/roots-based discovery is `run`'s until the
-	 * `run-daemon-reframe` slice switches it to the registry's mirror set).
+	 * Pre-computed scan report; if omitted, discovery falls back to the registry
+	 * (the hub-mirror set, ADR §1). Callers that still operate on working checkouts
+	 * (the CLI / its tests) inject an explicit `report` built from working-tree
+	 * paths; the registry reframe landed in `run-daemon-reframe` (work/done/).
 	 */
 	report?: ScanReport;
 	/**
@@ -313,11 +314,11 @@ export interface RunOnceOptions {
  */
 export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	const config = options.config;
-	// Default discovery is the REGISTRY (the hub-mirror set, ADR §1). `run` today
-	// operates on WORKING CHECKOUTS, so the CLI / its tests inject an explicit
-	// `report` built from working-tree paths ({@link scanRepoPaths}); wiring `run`'s
-	// own tick to the mirror set is the `run-daemon-reframe` slice. Without an
-	// injected report we fall back to the registry scan (async).
+	// Default discovery is the REGISTRY (the hub-mirror set, ADR §1) — the reframe
+	// that landed in `run-daemon-reframe` (work/done/). Callers that still operate
+	// on WORKING CHECKOUTS (the CLI / its tests) inject an explicit `report` built
+	// from working-tree paths ({@link scanRepoPaths}); without an injected report
+	// we fall back to the registry scan (async).
 	const report = options.report ?? (await scan(config));
 	const candidates = selectCandidates(report, {
 		maxParallel: config.maxParallel,
