@@ -8,6 +8,7 @@ import {encodeRepoKey} from './repo-mirror.js';
 import {run as runProcess} from './git.js';
 import {mkdirSync, readFileSync, rmSync} from 'node:fs';
 import {ledgerWrite} from './ledger-write.js';
+import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
 	jobWorktreeStrategy,
 	type IsolatedTree,
@@ -179,6 +180,7 @@ export type ItemStatus =
 	| 'claim-error' // claim exit 1 / unexpected
 	| 'tests-failed' // claimed + ran, but gate red → routed to needs-attention
 	| 'needs-attention' // rebase conflict at integrate time (ADR §10) — human must look
+	| 'surface-unmoved' // the tree-less surface to needs-attention did NOT land on the arbiter (lost the CAS race / no arbiter) — the item is STILL in-progress on the arbiter; retry/resolve
 	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown
 	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
 	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the slice (FAILURE-CAUSE axis)
@@ -429,6 +431,10 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 			// by cause).
 			i.status === 'transient-infra' ||
 			i.status === 'config-error' ||
+			// The surface to needs-attention did NOT land (lost the CAS race); the item
+			// is still in-progress on the arbiter — a genuine FAILURE (not a clean
+			// needs-attention), so it counts as failed, NOT in `needsAttention`.
+			i.status === 'surface-unmoved' ||
 			i.status === 'claim-error',
 	).length;
 
@@ -654,13 +660,16 @@ async function runOneItem(
 				'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 				'main, or `requeue --reset` to discard and start fresh';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			await ledgerWrite.applyTreelessNeedsAttentionTransition({
+			const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
 				reason,
 				arbiter: tree.arbiterRemote,
 				env: gitEnv,
 			});
+			if (!surfaced.moved) {
+				return surfaceUnmovedItemResult({base, tree, slug, reason, surfaced});
+			}
 			return {...base, status: 'needs-attention', detail: reason};
 		}
 
@@ -682,13 +691,16 @@ async function runOneItem(
 				'retry once the churn settles, or `requeue --reset` to discard and start ' +
 				'fresh';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			await ledgerWrite.applyTreelessNeedsAttentionTransition({
+			const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
 				reason,
 				arbiter: tree.arbiterRemote,
 				env: gitEnv,
 			});
+			if (!surfaced.moved) {
+				return surfaceUnmovedItemResult({base, tree, slug, reason, surfaced});
+			}
 			return {...base, status: 'needs-attention', detail: reason};
 		}
 
@@ -1066,6 +1078,37 @@ async function saveAgentFailure(
  */
 function failureCauseToItemStatus(cause: FailureCause): ItemStatus {
 	return cause;
+}
+
+/**
+ * Build the HONEST {@link ItemResult} for a CONTINUE-site surface that did NOT
+ * land on the arbiter (`{moved: false}`). The tree-less `in-progress/ →
+ * needs-attention/` move lost the CAS race against a busy arbiter (its
+ * contention-retry cap exhausted) or had no arbiter to publish to, so the item is
+ * STILL in-progress on the arbiter — reporting a clean `needs-attention` would
+ * mislead (it claims the surface landed, when it did not). The DISTINCT
+ * `surface-unmoved` status carries `reasonNotMoved` so the caller/human can tell
+ * it apart from a successful surface and retry/resolve.
+ *
+ * The local job record was set to `state: 'needs-attention'` (its LOCAL intent,
+ * recorded regardless of the arbiter move) right before the surface; on a
+ * `moved: false` we OVERWRITE its reason so that local record does not
+ * confusingly claim a landed surface either.
+ */
+function surfaceUnmovedItemResult(params: {
+	base: ItemResult;
+	tree: IsolatedTree;
+	slug: string;
+	reason: string;
+	surfaced: SurfaceToNeedsAttentionResult;
+}): ItemResult {
+	const {base, tree, slug, reason, surfaced} = params;
+	const detail =
+		`'${slug}' could NOT be surfaced to needs-attention — the surface did not ` +
+		`reach the arbiter's main; the item is still IN-PROGRESS on the arbiter ` +
+		`(retry/resolve). ${surfaced.reasonNotMoved ?? reason}`;
+	updateJobRecord(tree.dir, {state: 'needs-attention', reason: detail});
+	return {...base, status: 'surface-unmoved', detail};
 }
 
 /**
