@@ -73,7 +73,7 @@ import {
 	type LoadedRepoConfig,
 } from './repo-config.js';
 import {
-	ensureMirror,
+	ensureMirrorMain,
 	readRepoConfigFromMirrorMain,
 	encodeRepoKey,
 } from './repo-mirror.js';
@@ -176,8 +176,17 @@ function resolveGlobalConfig(
  * Resilient by design: a config-less repo (no file on main) OR an unreachable
  * mirror falls back to global+default (the pre-slice behaviour), with a warning
  * on a genuine fetch/read fault — a `--remote` build must not be blocked because
- * the arbiter was momentarily offline. `ensureMirror` here is idempotent with the
- * one `performDoRemote` runs (it fetches + reuses the same bare mirror).
+ * the arbiter was momentarily offline.
+ *
+ * The config read uses {@link ensureMirrorMain} (main-only, NO-prune), NOT the
+ * all-heads pruning {@link ensureMirror}: `git show main:.agent-runner.json` only
+ * needs `main`, and the all-heads `+refs/heads/*:refs/heads/*` fetch would let a
+ * `work/<slug>` branch CHECKED OUT in some stale job worktree block it (git
+ * refuses to fetch into a checked-out branch), throwing the read into its
+ * fallback and silently dropping the per-repo `harness`/`verify`/etc. The build's
+ * own worktree MATERIALISATION still calls the all-heads `ensureMirror` later
+ * (continue-detection needs the kept `work/<slug>` head) — that is a separate,
+ * untouched concern; only the CONFIG-READ fetch is narrowed here.
  */
 function resolveRemoteRepoConfig(options: {
 	remote: string;
@@ -191,7 +200,7 @@ function resolveRemoteRepoConfig(options: {
 	let loaded: LoadedRepoConfig;
 	try {
 		const env = identityEnv(identity, process.env);
-		const mirror = ensureMirror({url: remote, workspacesDir, env});
+		const mirror = ensureMirrorMain({url: remote, workspacesDir, env});
 		const content = readRepoConfigFromMirrorMain(mirror.path, env);
 		loaded =
 			content === undefined
@@ -1694,9 +1703,10 @@ export function buildProgram(): Command {
 				const bootstrap = resolveGlobalConfig(global, remoteFlags);
 				// Source the committed `.agent-runner.json` from `<arbiter>/main` via the
 				// hub mirror, then layer ONLY its whitelisted keys through the EXISTING
-				// per-repo machinery. `ensureMirror` here is idempotent with the one
-				// `performDoRemote` runs (it fetches + reuses the same bare mirror), so
-				// this adds a fetch, never a re-clone. A config-less repo (no file on
+				// per-repo machinery. The read refreshes ONLY `main` (no-prune), so a
+				// `work/<slug>` branch checked out in a stale worktree can never block it,
+				// and the build's later all-heads materialisation fetch is unaffected. A
+				// config-less repo (no file on
 				// main, or an unreachable mirror) → exactly the bootstrap config, i.e.
 				// byte-identical to the pre-slice global+default behaviour.
 				const remoteConfig = resolveRemoteRepoConfig({

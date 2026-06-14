@@ -9,8 +9,11 @@ import {
 } from './helpers/gitRepo.js';
 import {
 	ensureMirror,
+	ensureMirrorMain,
 	readRepoConfigFromMirrorMain,
 } from '../src/repo-mirror.js';
+import {writeFileSync} from 'node:fs';
+import {gitIn} from './helpers/gitRepo.js';
 import {
 	loadRepoConfigFromContent,
 	resolveRepoConfigFromLoaded,
@@ -65,7 +68,10 @@ describe('do --remote — reads the per-repo .agent-runner.json from the arbiter
 	}): LoadedRepoConfig & {config: Config} {
 		const ws = workspacesDir();
 		const env = gitEnv();
-		const mirror = ensureMirror({
+		// Mirror the PRODUCTION build-path config read (`resolveRemoteRepoConfig`):
+		// a main-only, no-prune ensure so a checked-out `work/<slug>` worktree branch
+		// can never block it.
+		const mirror = ensureMirrorMain({
 			url: remoteUrl(opts.arbiter),
 			workspacesDir: ws,
 			env,
@@ -159,6 +165,44 @@ describe('do --remote — reads the per-repo .agent-runner.json from the arbiter
 		// env beats the per-repo file; the per-repo `harness` (no env for it) holds.
 		expect(config.model).toBe('env-model');
 		expect(config.harness).toBe('pi');
+	});
+
+	it('resolves the per-repo config even when a stale work/<other> worktree is checked out in the mirror (defect #1 regression)', () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
+			repoConfig: {harness: 'pi', verify: 'echo gate'},
+		});
+		const repo = join(scratch.root, 'project');
+		const env = gitEnv();
+
+		// A DIFFERENT slice's `work/other` branch on the arbiter, checked out in a
+		// stale (un-reaped) job worktree on the mirror — the exact poisoning shape.
+		gitIn(['switch', '-q', '-c', 'work/other', 'main'], repo);
+		writeFileSync(join(repo, 'OTHER.md'), '# other\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'other'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/other'], repo);
+		gitIn(['switch', '-q', 'main'], repo);
+
+		const all = ensureMirror({
+			url: remoteUrl(arbiter),
+			workspacesDir: workspacesDir(),
+			env,
+		});
+		const stale = join(scratch.root, 'stale-wt');
+		gitIn(['worktree', 'add', stale, 'work/other'], all.path);
+		// Advance `work/other` so a subsequent all-heads fetch WOULD refuse.
+		gitIn(['switch', '-q', 'work/other'], repo);
+		writeFileSync(join(repo, 'OTHER.md'), '# other v2\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'other v2'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/other'], repo);
+		gitIn(['switch', '-q', 'main'], repo);
+
+		// The build-path resolve (via the narrowed `ensureMirrorMain`) succeeds and
+		// honours the per-repo config instead of failing into global+default.
+		const {config} = resolve({arbiter});
+		expect(config.harness).toBe('pi');
+		expect(config.verify).toBe('echo gate');
 	});
 
 	it('a config-less repo resolves to global+default (byte-identical to today)', () => {

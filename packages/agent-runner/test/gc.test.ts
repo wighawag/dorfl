@@ -225,6 +225,87 @@ describe('reapJob — auto-reap at end-of-job', () => {
 	});
 });
 
+describe('reapJob — reachableOnly (the FAILURE-path predicate loosening)', () => {
+	/**
+	 * The failure path's stance (defect #2): a churn-dirty worktree whose durable
+	 * branch is PROVABLY on the arbiter is REAPED — the durable artefact is the
+	 * pushed branch, not the worktree files — so it cannot linger to poison the
+	 * next build. NOT marked forced (it IS provably safe under this predicate).
+	 */
+	it('REAPS a churn-dirty worktree when the branch IS on the arbiter (pushed)', () => {
+		const {job} = setupJob('feat');
+		commitWork(job);
+		pushBranch(job);
+		// Incidental churn AFTER the durable branch is safely pushed.
+		writeFileSync(join(job.dir, 'scratch.txt'), 'doc churn\n');
+
+		// The standard (clean-AND-reachable) predicate RETAINS it (dirty dominates).
+		const standard = reapJob({
+			dir: job.dir,
+			branch: job.branch,
+			mirrorPath: job.mirror.path,
+			env: gitEnv(),
+		});
+		expect(standard.removed).toBe(false);
+		expect(standard.verdict.reason).toBe('dirty-tree');
+		expect(existsSync(job.dir)).toBe(true);
+
+		// The failure-path (reachableOnly) predicate REAPS it — reachability holds,
+		// the clean-tree half is dropped, and it is NOT forced.
+		const loosened = reapJob({
+			dir: job.dir,
+			branch: job.branch,
+			mirrorPath: job.mirror.path,
+			reachableOnly: true,
+			env: gitEnv(),
+		});
+		expect(loosened.removed).toBe(true);
+		expect(loosened.forced).toBe(false);
+		expect(loosened.verdict.reachableVia).toBe('pushed');
+		expect(existsSync(job.dir)).toBe(false);
+	});
+
+	it('REAPS a churn-dirty worktree when the branch is MERGED into arbiter main', () => {
+		const {job} = setupJob('feat');
+		commitWork(job);
+		mergeToArbiterMain(job);
+		writeFileSync(join(job.dir, 'scratch.txt'), 'doc churn\n');
+
+		const result = reapJob({
+			dir: job.dir,
+			branch: job.branch,
+			mirrorPath: job.mirror.path,
+			reachableOnly: true,
+			env: gitEnv(),
+		});
+		expect(result.removed).toBe(true);
+		expect(result.forced).toBe(false);
+		expect(existsSync(job.dir)).toBe(false);
+	});
+
+	/**
+	 * NEVER lose work: reachableOnly drops the clean-tree half but KEEPS the
+	 * reachability half — a worktree whose work is NOT yet on the arbiter is still
+	 * RETAINED, even under the failure-path predicate.
+	 */
+	it('RETAINS a worktree whose work is NOT on the arbiter even with reachableOnly (never lose work)', () => {
+		const {job} = setupJob('feat');
+		commitWork(job); // committed locally, never pushed/merged
+		writeFileSync(join(job.dir, 'scratch.txt'), 'doc churn\n');
+
+		const result = reapJob({
+			dir: job.dir,
+			branch: job.branch,
+			mirrorPath: job.mirror.path,
+			reachableOnly: true,
+			env: gitEnv(),
+		});
+		expect(result.removed).toBe(false);
+		expect(result.verdict.reason).toBe('unmerged-commits');
+		expect(existsSync(job.dir)).toBe(true);
+	});
+});
+
 describe('discoverJobs', () => {
 	it('finds each work/* dir whose SIBLING record (<work-id>.json) exists', () => {
 		const a = setupJob('a');

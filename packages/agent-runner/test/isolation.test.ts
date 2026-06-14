@@ -115,6 +115,72 @@ describe('jobWorktreeStrategy — the existing run isolation, extracted', () => 
 		expect(existsSync(tree.dir)).toBe(false);
 	});
 
+	it('teardown({reachableOnly}) REAPS a churn-dirty worktree whose branch IS on the arbiter (the failure path)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		await performClaim({
+			slug: 'feat',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+
+		const strategy = jobWorktreeStrategy({
+			fromRepo: repo,
+			arbiter: 'arbiter',
+			workspacesDir,
+		});
+		const tree = strategy.prepare({slug: 'feat', env: gitEnv()});
+		// Commit + push the branch to the arbiter (durable work is safe), then leave
+		// incidental churn in the tree — the failure-path shape (surfaced + pushed,
+		// but the worktree still has uncommitted bits).
+		writeFileSync(join(tree.dir, 'agent-output.txt'), 'work done\n');
+		gitIn(['add', '-A'], tree.dir);
+		gitIn(['commit', '-q', '-m', 'feat(feat): work'], tree.dir);
+		gitIn(
+			['push', '-q', tree.arbiterRemote, `${tree.branch}:${tree.branch}`],
+			tree.dir,
+		);
+		writeFileSync(join(tree.dir, 'scratch.txt'), 'incidental churn\n');
+
+		// The DEFAULT teardown (clean-AND-reachable) RETAINS it (dirty dominates).
+		tree.teardown();
+		expect(existsSync(tree.dir)).toBe(true);
+
+		// The FAILURE-path teardown (reachableOnly) REAPS it — the branch is safe on
+		// the arbiter, so the churn-dirty worktree does not linger.
+		tree.teardown({reachableOnly: true});
+		expect(existsSync(tree.dir)).toBe(false);
+	});
+
+	it('teardown({reachableOnly}) STILL RETAINS a worktree whose work is NOT on the arbiter (never lose work)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		await performClaim({
+			slug: 'feat',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+
+		const strategy = jobWorktreeStrategy({
+			fromRepo: repo,
+			arbiter: 'arbiter',
+			workspacesDir,
+		});
+		const tree = strategy.prepare({slug: 'feat', env: gitEnv()});
+		// Commit but NEVER push: the durable work is not on the arbiter.
+		writeFileSync(join(tree.dir, 'agent-output.txt'), 'unsaved work\n');
+		gitIn(['add', '-A'], tree.dir);
+		gitIn(['commit', '-q', '-m', 'feat(feat): unsaved'], tree.dir);
+		writeFileSync(join(tree.dir, 'scratch.txt'), 'churn\n');
+
+		// Even the failure-path predicate keeps reachability: unsaved work is retained.
+		tree.teardown({reachableOnly: true});
+		expect(existsSync(tree.dir)).toBe(true);
+		expect(existsSync(join(tree.dir, 'agent-output.txt'))).toBe(true);
+	});
+
 	it('teardown RETAINS a worktree whose work is NOT on the arbiter (never-lose-work, ADR §4)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const workspacesDir = join(scratch.root, '.agent-runner');
