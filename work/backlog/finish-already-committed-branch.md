@@ -2,12 +2,14 @@
 title: finish-already-committed-branch — integrate an ALREADY-committed, already-done-moved work branch (item in `work/done/` on the branch, tip not on the arbiter) by running ONLY the rebase→integrate tail (skip the done-move + commit), threaded through the shared integration core and reachable by do/run/complete
 slug: finish-already-committed-branch
 prd: ledger-integrity
-needsAnswers: true
+needsAnswers: false
 blockedBy: [atomic-done-move-one-slug-one-folder]
 covers: [6, 7]
 ---
 
-> DRAFT 2026-06-12 — re-scope of the parked `recover-stranded-green-work` (still in `work/needs-attention/`, NOT deleted; its empirical analysis is the source of this slice). The original slice's load-bearing premise was proven FALSE by the build agent (and independently confirmed): it claimed `complete` already does the recovery operation and the only new code is "locate the worktree + set complete's cwd". It does NOT — see below. This slice scopes the ACTUAL missing capability. **`needsAnswers: true` — one open design fork remains (the operator surface): a human must answer it before this is auto-claimed (see Open questions).**
+> DRAFT 2026-06-12 (re-scope of the now-deleted `recover-stranded-green-work`, whose empirical analysis seeded this slice; that slice was retired 2026-06-14 as superseded by THIS one, git history preserves it). The original slice's load-bearing premise was proven FALSE by the build agent (and independently confirmed): it claimed `complete` already does the recovery operation and the only new code is "locate the worktree + set complete's cwd". It does NOT (see below). This slice scopes the ACTUAL missing capability.
+>
+> **FORK ANSWERED 2026-06-14 (`needsAnswers: false`):** the operator surface is **`complete --isolated <slug>`** (with `resume --isolated <slug>` for symmetry), NOT a distinct verb. Rationale: symmetric with `do --isolated` (the locate-EXISTING inverse of create-fresh), the sibling onboard slice `onboard-resolveslice-done-aware-tip-vs-arbiter` (story 5) has ALREADY shipped so the find-slice half is done, and both the parked analysis and the original slice leaned this way. The acceptance criteria below (written presuming `complete --isolated`/`resume --isolated`) now stand as the surface.
 
 ## Why it is `blockedBy` the atomic-done-move slice (same-file serialization)
 
@@ -59,12 +61,12 @@ The parked analysis §3 noted `do`'s after-commit push-failure used to return `u
 - [ ] `complete --isolated <slug>` (or the chosen surface) with nothing retained → a clear "nothing to recover / already integrated" message (no crash, no fresh worktree). A re-run after success is a clean no-op.
 - [ ] `do`'s integration-failure path prints the exact recovery one-liner.
 - [ ] Tests reproduce "green build, integration fails terminally → worktree retained, item in `done/` on the branch, tip not on the arbiter" in a throwaway-git fixture and assert the recovery integrates from the retained commit (PR opened / work landed) with NO rebuild, NO orphan branch, NO `--force` to main; plus the idempotent/nothing-to-recover cases.
-- [ ] `## Decisions` records: the chosen integration-core surface (source-state mode vs thin recovery entry); the compose-not-merge relationship to stale-lease Part B; the local-only-vs-surface decision for the secondary discrepancy; AND the resolved operator-surface fork (see Open questions) once the human answers it.
+- [ ] `## Decisions` records: the chosen integration-core surface (source-state mode vs thin recovery entry); the compose-not-merge relationship to stale-lease Part B; the local-only-vs-surface decision for the secondary discrepancy; AND the resolved operator-surface fork (ANSWERED 2026-06-14: `complete --isolated <slug>` + `resume --isolated <slug>`, see Open questions).
 - [ ] OUT OF SCOPE / fenced: this slice does NOT modify `src/prompt.ts` `resolveSlice` (the onboard find-slice). Teaching onboard to accept a `done/` source is the SEPARATE sibling slice `onboard-resolveslice-done-aware-tip-vs-arbiter` (story 5 of this PRD) and is HAZARDOUS to fold in here — a slice in `done/` because it is genuinely COMPLETE is indistinguishable by folder from one in `done/` because of a strand, so a careless change could make `do` re-onboard a completed slice. Leave `prompt.ts` untouched.
 - [ ] No shared/global location touched outside temp fixtures (point `workspacesDir` at a temp dir).
 - [ ] `pnpm format:check && pnpm build && pnpm test` green (this repo's gate).
 
-## Open questions (for the human, before claim — this is why `needsAnswers: true`)
+## Open questions (RESOLVED 2026-06-14, `needsAnswers: false`)
 
 - **Surface choice (the ONE blocking open fork):** is `complete --isolated <slug>` the right operator surface (symmetric with `do --isolated`), or should the recovery be a distinct verb? The parked analysis and the original slice both leaned `complete --isolated`; the PRD's Implementation Decisions did NOT pin it. CONFIRM the surface (and clear `needsAnswers`) before an autonomous build — the acceptance criteria are written presuming `complete --isolated`/`resume --isolated`, so an unconfirmed answer risks building the wrong surface. (If the human picks a distinct verb, update the `--isolated`-shaped criteria accordingly.)
 - **The onboard sibling — RESOLVED (no longer open):** the question "should THIS slice also fix `prompt.ts`'s find-slice?" is ANSWERED by the decomposition: it is the SEPARATE, file-orthogonal slice `onboard-resolveslice-done-aware-tip-vs-arbiter` (story 5), which adds `done/` to `resolveSlice` ONLY behind a tip-vs-arbiter stranded gate. THIS slice keeps `prompt.ts` fenced out (see the OUT OF SCOPE criterion). Recorded here so the linkage is not lost; it does not gate this slice.
@@ -73,7 +75,7 @@ The parked analysis §3 noted `do`'s after-commit push-failure used to return `u
 
 > Build the capability to FINISH an already-committed, already-done-moved work branch: integrate from the commit already on `work/slice-<slug>` by running ONLY the rebase→integrate tail (skip the done-move + commit, which already happened), threaded through the SHARED `integration-core.ts` (so `do`/`run`/`complete` all reach it without duplicating the tail), plus a `--isolated <slug>` locate-EXISTING resolver and the `do`-integration-failure recovery one-liner. This re-scopes the parked `recover-stranded-green-work` (whose "complete already does it, just point cwd" premise was proven FALSE: `complete` resolves its source folder as in-progress||needs-attention, never `done/`, so it `refused`s a stranded worktree via `IntegrationNothingStaged`). COMPOSE with `stale-lease-retry-…` Part B (surface-on-failure) — they are try-to-finish/else-surface; keep them SEPARATE.
 >
-> NOTE — this slice is `needsAnswers: true`: the operator-surface fork (`complete --isolated <slug>` vs a distinct verb) must be confirmed by a human before an autonomous build (see Open questions). If you are a human (or the fork is already answered), proceed; otherwise route back rather than guess the surface.
+> NOTE: the operator-surface fork is ANSWERED (`needsAnswers: false`). The surface is `complete --isolated <slug>` (+ `resume --isolated <slug>`), NOT a distinct verb (decided 2026-06-14). The `--isolated`-shaped acceptance criteria stand. Proceed.
 >
 > SCOPE: the TRACER-BULLET CORE is item 1 (the integration-core recover-already-committed path) — land that end-to-end with tests. Items 2–3 (the `--isolated <slug>` locate-EXISTING resolver + `resume --isolated`) are the operator surface; split them into a sibling slice if they balloon the core (record in `## Decisions`). Do NOT modify `src/prompt.ts` `resolveSlice` — teaching onboard to accept a `done/` source is the SEPARATE sibling slice `onboard-resolveslice-done-aware-tip-vs-arbiter` (story 5; a genuinely-complete slice in `done/` is folder-indistinguishable from a stranded one), leave it untouched here.
 >
