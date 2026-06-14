@@ -5,5 +5,3 @@
 node_modules/
 
 tmp/
-# agent-runner job-worktree runtime artifact (must never be committed)
-.agent-runner-job.json

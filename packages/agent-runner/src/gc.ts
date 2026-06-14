@@ -3,7 +3,9 @@ import {join} from 'node:path';
 import {git, run} from './git.js';
 import {
 	JOB_RECORD_FILENAME,
+	jobRecordPath,
 	readJobRecord,
+	removeJobRecord,
 	type JobRecord,
 } from './workspace.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -279,9 +281,12 @@ export function gc(options: GcOptions): GcResult {
 
 /**
  * Discover every job worktree under `<workspacesDir>/work/*` (the flat layout —
- * ADR §2). Each immediate subdirectory carrying a `.agent-runner-job.json`
- * record is a job; the branch comes from the record (falling back to
- * `work/<derived-slug>`).
+ * ADR §2). The per-job record is a SIBLING of the worktree dir
+ * (`<work-id>.json` next to `<work-id>/`, {@link jobRecordPath}) — OUTSIDE the
+ * checked-out tree so it can never be swept into a commit — so a work-id dir is
+ * a job iff its sibling record file exists (with a LEGACY fallback to an in-tree
+ * record left by an old binary, via {@link readJobRecord}). The branch comes
+ * from the record (falling back to `work/<derived-slug>`).
  */
 export function discoverJobs(workspacesDir: string): GcJob[] {
 	const workDir = join(workspacesDir, 'work');
@@ -298,10 +303,15 @@ export function discoverJobs(workspacesDir: string): GcJob[] {
 			continue;
 		}
 		if (!isDir) {
-			continue;
+			continue; // skip the sibling `<work-id>.json` record files themselves
 		}
-		if (!existsSync(join(dir, JOB_RECORD_FILENAME))) {
-			continue; // not a job worktree (no record)
+		// A job iff a record exists — the sibling path first, then the legacy
+		// in-tree path (an old-binary worktree). Mirrors `readJobRecord`'s order.
+		if (
+			!existsSync(jobRecordPath(dir)) &&
+			!existsSync(join(dir, JOB_RECORD_FILENAME))
+		) {
+			continue; // not a job worktree (no record at either location)
 		}
 		const record = readJobRecord(dir);
 		const slug = record?.slug ?? deriveSlug(entry);
@@ -344,12 +354,18 @@ function resolveMirrorPath(workspacesDir: string, job: GcJob): string {
 
 /**
  * True iff the working tree has NO uncommitted WORK (tracked, staged, or
- * untracked). The runner's own per-job record (`.agent-runner-job.json`) is
- * bookkeeping metadata — NOT work product — so it is excluded from the
- * cleanliness check (otherwise a perfectly-saved job would read as "dirty"
- * purely because the runner wrote its own state file into the worktree).
- * Everything else (the agent's edits, untracked artefacts) counts: untracked
+ * untracked). The agent's edits and any untracked artefacts count: untracked
  * work is still un-saved work.
+ *
+ * The `.agent-runner-job.json` exclusion below is now INERT: the per-job record
+ * lives at a SIBLING path OUTSIDE the worktree, so it can no longer appear in
+ * the worktree's `git status` at all. It used to be load-bearing (the record
+ * was written INSIDE the worktree, so a perfectly-saved job would otherwise read
+ * as "dirty" purely because the runner wrote its own state file there). It is
+ * kept as a harmless no-op that still names the record for a hypothetical
+ * old-binary worktree whose record is still in-tree (the read-fallback case);
+ * removing it would only risk regressing that edge with no upside. The
+ * `work/`-ledger exclusion is a SEPARATE concern and stays.
  */
 function isWorkingTreeClean(
 	dir: string,
@@ -449,8 +465,11 @@ function revParseOrUndefined(
 /**
  * Remove a job worktree the contract-safe way: `git worktree remove` then
  * `git worktree prune` on the hub mirror, plus dropping the now-orphaned work
- * branch. NEVER a bare `rm -rf` (ADR §4): a raw delete leaves a dangling
- * worktree registration on the hub. Best-effort on prune/branch-drop (idempotent
+ * branch AND the now-orphaned per-job record (a SIBLING of the worktree since
+ * the relocation — it no longer goes away WITH the worktree dir, so we delete it
+ * explicitly so a reaped job leaves no `<work-id>.json` litter). NEVER a bare
+ * `rm -rf` of the WORKTREE (ADR §4): a raw delete leaves a dangling worktree
+ * registration on the hub. Best-effort on prune/branch-drop/record (idempotent
  * re-runs of `gc` must not error on an already-clean hub).
  */
 function removeWorktree(
@@ -460,6 +479,7 @@ function removeWorktree(
 	env: NodeJS.ProcessEnv | undefined,
 ): void {
 	git(['worktree', 'remove', '--force', dir], mirrorPath, {env});
+	removeJobRecord(dir);
 	try {
 		git(['worktree', 'prune'], mirrorPath, {env});
 	} catch {

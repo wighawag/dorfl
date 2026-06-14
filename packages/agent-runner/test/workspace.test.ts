@@ -1,11 +1,15 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {
 	encodeWorkId,
 	jobWorktreePath,
+	jobRecordPath,
 	createJob,
 	readJobRecord,
+	writeJobRecord,
+	updateJobRecord,
+	JOB_RECORD_FILENAME,
 	type JobRecord,
 } from '../src/workspace.js';
 import {mirrorPath, encodeRepoKey} from '../src/repo-mirror.js';
@@ -134,16 +138,23 @@ describe('createJob — hub mirror + isolated worktree', () => {
 		expect(ja.dir).not.toBe(jb.dir);
 	});
 
-	it('writes a .agent-runner-job.json record gc/status can read', () => {
+	it('writes the per-job record at a SIBLING of the worktree (OUTSIDE the tree), readable by gc/status', () => {
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const url = `file://${arbiter}`;
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const job = createJob({url, slug: 'feat', workspacesDir, env: gitEnv()});
 
-		const recordPath = join(job.dir, '.agent-runner-job.json');
-		expect(existsSync(recordPath)).toBe(true);
+		// The record is a sibling `<work-id>.json`, NOT inside `<work-id>/`.
+		const siblingPath = jobRecordPath(job.dir);
+		expect(siblingPath).toBe(`${job.dir}.json`);
+		expect(existsSync(siblingPath)).toBe(true);
+		expect(job.recordPath).toBe(siblingPath);
+		// The OLD in-tree location must NOT exist (no leak surface in the tree).
+		expect(existsSync(join(job.dir, JOB_RECORD_FILENAME))).toBe(false);
+		// And the sibling is OUTSIDE the worktree dir.
+		expect(siblingPath.startsWith(job.dir + '/')).toBe(false);
 
-		const record = JSON.parse(readFileSync(recordPath, 'utf8')) as JobRecord;
+		const record = JSON.parse(readFileSync(siblingPath, 'utf8')) as JobRecord;
 		expect(record.slug).toBe('feat');
 		expect(record.branch).toBe('work/slice-feat');
 		// repoKey is the encoded mirror key; for a file:// arbiter it is the path.
@@ -153,9 +164,90 @@ describe('createJob — hub mirror + isolated worktree', () => {
 		expect(record.state).toBe('running');
 		expect(record.harness).toBeDefined();
 
-		// readJobRecord reads it back.
+		// readJobRecord (keyed on the worktree dir) reads it back from the sibling.
 		const readBack = readJobRecord(job.dir);
 		expect(readBack?.slug).toBe('feat');
+	});
+
+	it('a runner `git add -A` commit in the worktree can NEVER stage the record (out-of-tree), with NO .gitignore entry', () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const url = `file://${arbiter}`;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const job = createJob({url, slug: 'feat', workspacesDir, env: gitEnv()});
+
+		// Sanity: the worktree has NO gitignore entry for the record name.
+		const gitignore = join(job.dir, '.gitignore');
+		const ignoreContents = existsSync(gitignore)
+			? readFileSync(gitignore, 'utf8')
+			: '';
+		expect(ignoreContents).not.toContain(JOB_RECORD_FILENAME);
+
+		// Some genuine source change so the broad staging commit is non-empty.
+		writeFileSync(join(job.dir, 'src-change.txt'), 'real work\n');
+		// The runner's broad staging commit (mirrors needs-attention/integration).
+		git(['add', '-A'], job.dir, {env: gitEnv()});
+		git(['commit', '-q', '-m', 'runner add -A'], job.dir, {env: gitEnv()});
+
+		// The record is NOWHERE in the committed tree — structurally, no gitignore.
+		const tracked = git(['ls-files'], job.dir, {env: gitEnv()});
+		expect(tracked).not.toContain(JOB_RECORD_FILENAME);
+		// And the record still exists + is readable (it lives out of the tree).
+		expect(existsSync(jobRecordPath(job.dir))).toBe(true);
+		expect(readJobRecord(job.dir)?.slug).toBe('feat');
+	});
+
+	it('updateJobRecord patches the out-of-tree sibling in place', () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const url = `file://${arbiter}`;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const job = createJob({url, slug: 'feat', workspacesDir, env: gitEnv()});
+
+		const next = updateJobRecord(job.dir, {
+			state: 'needs-attention',
+			reason: 'gate red',
+		});
+		expect(next?.state).toBe('needs-attention');
+		expect(readJobRecord(job.dir)?.reason).toBe('gate red');
+		// Still out of the tree, still no in-tree copy.
+		expect(existsSync(join(job.dir, JOB_RECORD_FILENAME))).toBe(false);
+	});
+
+	it('reads a LEGACY in-tree record as a migration fallback (old-binary in-flight job)', () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const url = `file://${arbiter}`;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const job = createJob({url, slug: 'feat', workspacesDir, env: gitEnv()});
+
+		// Simulate an OLD-binary worktree: remove the sibling, write the record
+		// at the legacy in-tree path instead.
+		rmSync(jobRecordPath(job.dir));
+		const legacy: JobRecord = {
+			slug: 'feat',
+			repoKey: encodeRepoKey(url),
+			branch: 'work/slice-feat',
+			startedAt: new Date().toISOString(),
+			state: 'running',
+			harness: {adapter: 'null'},
+		};
+		writeFileSync(
+			join(job.dir, JOB_RECORD_FILENAME),
+			JSON.stringify(legacy, null, 2),
+		);
+
+		// readJobRecord falls back to the in-tree path so the job stays discoverable.
+		expect(readJobRecord(job.dir)?.slug).toBe('feat');
+	});
+
+	it('writeJobRecord then readJobRecord round-trips through the sibling path', () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const url = `file://${arbiter}`;
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const job = createJob({url, slug: 'feat', workspacesDir, env: gitEnv()});
+		const rec = readJobRecord(job.dir)!;
+		rec.prUrl = 'https://example/pr/1';
+		writeJobRecord(job.dir, rec);
+		expect(readJobRecord(job.dir)?.prUrl).toBe('https://example/pr/1');
+		expect(existsSync(jobRecordPath(job.dir))).toBe(true);
 	});
 
 	it('does not place the worktree inside the hub mirror', () => {

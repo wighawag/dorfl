@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {existsSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {git} from '../src/git.js';
 import {createJob, readJobRecord, type Job} from '../src/workspace.js';
@@ -124,15 +124,18 @@ describe('evaluateDeletionSafety — predicate', () => {
 		expect(verdict.reason).toBe('dirty-tree');
 	});
 
-	it("the runner's own untracked job record does NOT count as a dirty tree", () => {
+	it('the per-job record (now OUT of the worktree) does NOT count as a dirty tree', () => {
 		const {job} = setupJob('feat');
-		// Commit work WITHOUT the record (mirrors reality: the record is runner
-		// metadata left untracked in the worktree, never committed by the agent).
+		// The record lives at a SIBLING of the worktree (out of the tree), so it can
+		// never appear in the worktree's `git status` — the cleanliness check is
+		// structurally unaffected by it.
 		writeFileSync(join(job.dir, 'work.txt'), 'agent work\n');
 		git(['add', 'work.txt'], job.dir, {env: gitEnv()});
 		git(['commit', '-q', '-m', 'agent work'], job.dir, {env: gitEnv()});
 		mergeToArbiterMain(job);
-		// `.agent-runner-job.json` is present + untracked at this point.
+		// Sanity: the record is the sibling, NOT inside the worktree.
+		expect(existsSync(`${job.dir}.json`)).toBe(true);
+		expect(existsSync(join(job.dir, '.agent-runner-job.json'))).toBe(false);
 
 		const verdict = evaluateDeletionSafety({
 			dir: job.dir,
@@ -179,6 +182,8 @@ describe('reapJob — auto-reap at end-of-job', () => {
 		expect(result.removed).toBe(true);
 		expect(result.forced).toBe(false);
 		expect(existsSync(job.dir)).toBe(false);
+		// The relocated sibling record is removed too — no `<work-id>.json` orphan.
+		expect(existsSync(`${job.dir}.json`)).toBe(false);
 		// The worktree registration is gone from the hub (proper removal, not rm -rf).
 		const list = git(['worktree', 'list', '--porcelain'], job.mirror.path, {
 			env: gitEnv(),
@@ -221,7 +226,7 @@ describe('reapJob — auto-reap at end-of-job', () => {
 });
 
 describe('discoverJobs', () => {
-	it('finds each work/* dir carrying a .agent-runner-job.json record', () => {
+	it('finds each work/* dir whose SIBLING record (<work-id>.json) exists', () => {
 		const a = setupJob('a');
 		const b = setupJob('b');
 		const workspacesDir = a.workspacesDir;
@@ -231,6 +236,21 @@ describe('discoverJobs', () => {
 		expect(slugs).toEqual(['a', 'b']);
 		const dirs = jobs.map((j) => j.dir).sort();
 		expect(dirs).toEqual([a.job.dir, b.job.dir].sort());
+	});
+
+	it('still discovers a LEGACY old-binary job whose record is in-tree (migration fallback)', () => {
+		const {job, workspacesDir} = setupJob('legacy');
+		// Simulate an old-binary worktree: move the record back INSIDE the tree.
+		const sibling = `${job.dir}.json`;
+		const body = readFileSync(sibling, 'utf8');
+		rmSync(sibling);
+		writeFileSync(join(job.dir, '.agent-runner-job.json'), body);
+
+		const jobs = discoverJobs(workspacesDir);
+		const found = jobs.find((j) => j.slug === 'legacy');
+		expect(found).toBeDefined();
+		expect(found?.dir).toBe(job.dir);
+		expect(found?.record?.slug).toBe('legacy');
 	});
 
 	it('returns [] when the work area does not exist', () => {

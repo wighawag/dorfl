@@ -403,6 +403,45 @@ describe('requeue continue — JOB-WORKTREE path (createJob)', () => {
 		expect(existsSync(join(job.dir, 'prior.txt'))).toBe(true);
 	});
 
+	it('the continue rebase + worktree switch is NOT wedged by the per-job record (out-of-tree ⇒ invisible to git)', async () => {
+		// Regression for the continue-rebase WEDGE: when the per-job record lived
+		// INSIDE the worktree, a re-create's `git switch`/rebase could fail with
+		// "local changes to .agent-runner-job.json would be overwritten by checkout".
+		// With the record relocated to a sibling OUTSIDE the tree, the switch + rebase
+		// onto a MOVED main succeed and the worktree stays clean (no record line in
+		// `git status`).
+		const {seeded} = await stuckThenRequeued('xi');
+		// Main moves so the onboard CONTINUE must `git switch` onto the kept branch
+		// and rebase it onto fresh main (the exact step the in-tree record wedged).
+		const mover = seeded.clone('mover');
+		gitIn(['fetch', '-q', ARBITER], mover);
+		gitIn(['switch', '-q', '-C', 'mv-main', `${ARBITER}/main`], mover);
+		writeFileSync(join(mover, 'mainmoved.txt'), 'moved\n');
+		gitIn(['add', '-A'], mover);
+		gitIn(['commit', '-q', '-m', 'main moved'], mover);
+		gitIn(['push', '-q', ARBITER, 'mv-main:main'], mover);
+
+		const workspacesDir = join(scratch.root, '.agent-runner');
+		const job = createJob({
+			fromRepo: seeded.repo,
+			arbiter: ARBITER,
+			slug: 'xi',
+			workspacesDir,
+			env: gitEnv(),
+		});
+		// The continue did NOT wedge: it rebased cleanly onto the moved main.
+		expect(job.continued).toBe(true);
+		expect(job.continueRebaseConflict).toBe(false);
+		expect(existsSync(join(job.dir, 'mainmoved.txt'))).toBe(true);
+		expect(existsSync(join(job.dir, 'prior.txt'))).toBe(true);
+		// The record exists but is OUTSIDE the worktree, so `git status` is clean —
+		// nothing in the tree for the switch/rebase to refuse to overwrite.
+		expect(existsSync(`${job.dir}.json`)).toBe(true);
+		expect(existsSync(join(job.dir, '.agent-runner-job.json'))).toBe(false);
+		const status = gitIn(['status', '--porcelain'], job.dir).trim();
+		expect(status).toBe('');
+	});
+
 	it('pushes the rebased continued tip to the arbiter (the green work lands, PR can open)', async () => {
 		const {seeded} = await stuckThenRequeued('nu');
 		// Main moves on the arbiter while requeued, so the onboard rebase rewrites the

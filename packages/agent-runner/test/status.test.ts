@@ -2,7 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {
-	JOB_RECORD_FILENAME,
+	jobRecordPath,
 	writeJobRecord,
 	type JobRecord,
 } from '../src/workspace.js';
@@ -30,9 +30,10 @@ function workspacesDir(): string {
 }
 
 /**
- * Write a fixture `.agent-runner-job.json` directly into a `work/<work-id>/`
- * dir — NO real git worktree. `status` is read-only over records + a harness
- * for liveness, so fixtures alone exercise its rendering.
+ * Seed a fixture job: create the `work/<work-id>/` worktree dir + write the
+ * per-job record at its SIBLING path ({@link jobRecordPath}, OUTSIDE the dir).
+ * NO real git worktree — `status` is read-only over records + a harness for
+ * liveness, so fixtures alone exercise its rendering. Returns the worktree dir.
  */
 function seedJob(workId: string, record: JobRecord): string {
 	const dir = join(workspacesDir(), 'work', workId);
@@ -284,8 +285,9 @@ describe('status — read-only', () => {
 		);
 		await status({workspacesDir: workspacesDir(), harness: stubHarness([])});
 		// The record + dir are untouched (no claim/run/move/delete side effect).
+		// The record lives at the SIBLING path, OUTSIDE the worktree dir.
 		expect(existsSync(dir)).toBe(true);
-		expect(existsSync(join(dir, JOB_RECORD_FILENAME))).toBe(true);
+		expect(existsSync(jobRecordPath(dir))).toBe(true);
 	});
 });
 
