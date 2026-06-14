@@ -498,3 +498,180 @@ describe('do --remote — NEVER touches the human area or the real state dirs', 
 		expect(encodeRepoKey(remoteUrl(arbiter))).toContain('project-work');
 	});
 });
+
+/**
+ * The autonomous-path PR-INTENT pre-flight guard (slice
+ * `propose-pr-intent-guard-on-autonomous-paths`): the SAME up-front `gh` probe +
+ * `shouldFailProposePrIntent` the in-place `performDo` step 3c runs, now on the
+ * no-checkout `do --remote` path — BEFORE the claim/build, so a `propose` run on a
+ * GitHub arbiter that INTENDS a PR fails fast when `gh` is genuinely unauthed
+ * instead of silently degrading to manual-PR instructions at integration.
+ *
+ * A GitHub arbiter URL would need the network to clone, so we PRE-CREATE the hub
+ * mirror at the github-keyed path by bare-cloning the LOCAL arbiter into it (its
+ * `origin` points at the local arbiter, so `ensureMirror`'s reuse-fetch stays
+ * offline) while `mirror.url` reads as `github.com` — the exact split the guard
+ * keys on (`isGitHubArbiterUrl(mirror.url)`), with no real `gh` ever invoked
+ * (the probe is injected).
+ */
+describe('do --remote — PR-INTENT pre-flight guard (autonomous path)', () => {
+	const GH_URL = 'https://github.com/o/r.git';
+
+	/** Pre-seed the github-keyed hub mirror from the LOCAL arbiter (offline). */
+	function seedGithubMirror(ws: string, arbiter: string): void {
+		const hub = mirrorPath(ws, GH_URL);
+		mkdirSync(join(ws, 'repos'), {recursive: true});
+		gitIn(
+			['clone', '--quiet', '--bare', `file://${arbiter}`, hub],
+			scratch.root,
+		);
+	}
+
+	it('EARLY VISIBLE FAILURE: propose + GitHub arbiter + noPR unset + a failing gh PROBE ⇒ refuses UP FRONT, no claim/build', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		seedGithubMirror(ws, arbiter);
+
+		let agentRan = false;
+		const result = await performDoRemote({
+			arg: 'alpha',
+			remote: GH_URL,
+			workspacesDir: ws,
+			integration: 'propose',
+			// noPR unset (a PR is intended); the probe says `gh` cannot open one.
+			ghCanOpenPr: () => false,
+			verify: PASS,
+			agentRunner: () => {
+				agentRan = true;
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('refused');
+		expect(result.message).toMatch(/gh auth login/);
+		expect(result.message).toMatch(/--no-pr/);
+		expect(result.message).toMatch(/--merge/);
+		// NO build work ran: the agent never launched, and the item is NOT claimed
+		// (still in backlog on the arbiter, never moved to in-progress).
+		expect(agentRan).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+	});
+
+	it('AMBIENT AUTH NOT BROKEN: propose + GitHub arbiter + noPR unset + a PASSING probe ⇒ the guard does NOT refuse (the run gets PAST it)', async () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		seedGithubMirror(ws, arbiter);
+
+		let probed = false;
+		// A PASSING probe (the common ambient-`gh` case, no `providers.github`
+		// identity) ⇒ the guard does NOT refuse and the run proceeds PAST it into the
+		// build. We do not (and cannot) complete a real github.com build offline, so
+		// proceeding-past-the-guard is proven by the run getting as far as the real
+		// claim CLONE of the github URL (which then fails offline) — NOT by an early
+		// PR-intent refusal. The KEY assertion is that the probe WAS consulted and the
+		// failure is the offline clone, never the up-front guard.
+		await expect(
+			performDoRemote({
+				arg: 'alpha',
+				remote: GH_URL,
+				workspacesDir: ws,
+				integration: 'propose',
+				ghCanOpenPr: () => {
+					probed = true;
+					return true;
+				},
+				verify: PASS,
+				agentRunner: editingAgent,
+				env: gitEnv(),
+			}),
+		).rejects.toThrow(/github\.com/);
+		// The probe ran (the guard consulted it) and let the run THROUGH (it reached
+		// the real clone). Ambient auth is honoured.
+		expect(probed).toBe(true);
+	});
+
+	it('MERGE mode ⇒ the guard never fires (no PR is ever opened), even with a failing probe', async () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		seedGithubMirror(ws, arbiter);
+
+		let probed = false;
+		// merge never opens a PR, so the predicate short-circuits BEFORE the probe.
+		// The run is NOT refused — it proceeds PAST the guard (proven by reaching the
+		// real offline github clone), and the probe is never even consulted.
+		await expect(
+			performDoRemote({
+				arg: 'alpha',
+				remote: GH_URL,
+				workspacesDir: ws,
+				integration: 'merge',
+				ghCanOpenPr: () => {
+					probed = true;
+					return false;
+				},
+				verify: PASS,
+				agentRunner: editingAgent,
+				env: gitEnv(),
+			}),
+		).rejects.toThrow(/github\.com/);
+		expect(probed).toBe(false);
+	});
+
+	it('noPR: true ⇒ the guard never fires (a PR was deliberately suppressed), even with a failing probe', async () => {
+		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		seedGithubMirror(ws, arbiter);
+
+		let probed = false;
+		// `noPR: true` short-circuits the predicate BEFORE the probe: no refusal. The
+		// run proceeds PAST the guard (proven by reaching the offline github clone),
+		// and the probe is never consulted.
+		await expect(
+			performDoRemote({
+				arg: 'alpha',
+				remote: GH_URL,
+				workspacesDir: ws,
+				integration: 'propose',
+				noPR: true,
+				ghCanOpenPr: () => {
+					probed = true;
+					return false;
+				},
+				verify: PASS,
+				agentRunner: editingAgent,
+				env: gitEnv(),
+			}),
+		).rejects.toThrow(/github\.com/);
+		expect(probed).toBe(false);
+	});
+
+	it('a NON-GitHub (file://) arbiter ⇒ the guard never fires, even with a failing probe', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+
+		let probed = false;
+		const result = await performDoRemote({
+			arg: 'alpha',
+			// The local file:// arbiter reads as non-GitHub ⇒ no PR is ever possible.
+			remote: remoteUrl(arbiter),
+			workspacesDir: ws,
+			integration: 'propose',
+			ghCanOpenPr: () => {
+				probed = true;
+				return false;
+			},
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		// A non-GitHub arbiter short-circuits the predicate BEFORE the probe: the
+		// propose run proceeds (pushes the work branch, no refusal).
+		expect(probed).toBe(false);
+		expect(result.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+	});
+});
