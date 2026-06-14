@@ -23,6 +23,7 @@ import {fileURLToPath} from 'node:url';
 import {parseFrontmatter} from './frontmatter.js';
 import {run, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
+import {isAncestor} from './gc.js';
 import {extractReason} from './needs-attention.js';
 
 /**
@@ -419,8 +420,13 @@ export function buildAgentPrompt(
 	return `${head}\n\n${slicePrompt}\n`;
 }
 
-/** Which work/ folder a slice file was resolved from. */
-export type SliceFolder = 'in-progress' | 'backlog';
+/**
+ * Which work/ folder a slice file was resolved from. `done` is reachable ONLY on
+ * a CONTINUE and ONLY when the work-branch tip is STRANDED (committed-but-not-on
+ * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE slice
+ * (see {@link resolveSlice} + {@link ContinueResolutionGate}).
+ */
+export type SliceFolder = 'in-progress' | 'backlog' | 'done';
 
 export interface ResolvedSlice {
 	/** The slug of the resolved slice. */
@@ -450,12 +456,94 @@ export interface PromptOptions {
 export class PromptError extends Error {}
 
 /**
+ * The CONTINUE-only gate that lets {@link resolveSlice} reach a slice that has
+ * already been done-moved into `work/done/` — story 5 of the `ledger-integrity`
+ * PRD (defect 3). A continue/re-claim can legitimately land on a branch whose
+ * slice was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
+ * onboard must find it; but a `done/` slice is folder-indistinguishable between
+ * two states and re-onboarding a genuinely-finished one would RE-RUN it. So
+ * `done/` is admitted ONLY behind this gate, which disambiguates by TIP-vs-
+ * ARBITER reachability, NEVER folder name alone:
+ *
+ *   - work-branch tip REACHABLE on `<arbiter>/main` => COMPLETE => NOT admitted
+ *     (onboard must not resurrect a finished slice).
+ *   - work-branch tip committed-but-NOT-on-the-arbiter => STRANDED => admitted
+ *     (the continue is legitimate).
+ *
+ * The reachability predicate REUSES {@link isAncestor} (the one provably-merged
+ * primitive in `gc.ts`, the same `merge-base --is-ancestor <tip> <arbiter>/main`
+ * the reaper uses) — no second, divergent reachability implementation. Absent
+ * this gate (a fresh claim — `resolveSlice` called with no continue gate) the
+ * resolution is UNCHANGED: `in-progress` then `backlog`, blind to `done/`.
+ */
+export interface ContinueResolutionGate {
+	/** The repo/worktree/mirror the work-branch + arbiter refs live in. */
+	cwd: string;
+	/**
+	 * The work-branch tip to test for reachability. In-place clone:
+	 * `<arbiter>/work/<slug>`; bare hub mirror: `work/<slug>`. The SAME ref the
+	 * matching {@link resolveContinueContext} call passes as `branchRef`.
+	 */
+	branchRef: string;
+	/**
+	 * The arbiter main ref the tip is tested against. In-place clone:
+	 * `<arbiter>/main`; bare hub mirror: `main`. The SAME ref the matching
+	 * {@link resolveContinueContext} call passes as `mainRef`.
+	 */
+	mainRef: string;
+	/** Environment for the read-only reachability git child. */
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * True iff the work-branch tip (`gate.branchRef`) is genuinely STRANDED: it
+ * resolves to a commit that is NOT reachable on the arbiter main
+ * (`gate.mainRef`). REUSES {@link isAncestor} (`gc.ts`) — the one reachability
+ * predicate — never a second one. When the branch ref does not resolve (no prior
+ * attempt's branch on the arbiter) the slice is NOT treated as a stranded
+ * continue (false → `done/` stays unreachable, the safe direction). Read-only.
+ */
+function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
+	const tip = run(
+		'git',
+		['rev-parse', '--verify', '--quiet', `${gate.branchRef}^{commit}`],
+		gate.cwd,
+		{env: gate.env},
+	).stdout.trim();
+	if (tip === '') {
+		return false; // no work-branch tip on the arbiter → not a stranded continue
+	}
+	// STRANDED ⇔ the tip is NOT an ancestor of the arbiter main (not integrated).
+	// REACHABLE (an ancestor) ⇒ COMPLETE ⇒ do NOT re-onboard.
+	return !isAncestor(gate.cwd, tip, gate.mainRef, gate.env);
+}
+
+/**
  * Resolve a slice's file: prefer `work/in-progress/<slug>.md`, fall back to
  * `work/backlog/<slug>.md`. Returns the parsed PRD + extracted `## Prompt` body.
  * Throws {@link PromptError} when neither file exists or it has no prompt body.
+ *
+ * On a CONTINUE (a {@link ContinueResolutionGate} is supplied), `work/done/` is
+ * added to the resolution AFTER `in-progress`/`backlog` — but ONLY when the gate
+ * proves the work-branch tip is STRANDED (committed-but-not-on-the-arbiter). A
+ * genuinely-COMPLETE `done/` slice (tip reachable on `<arbiter>/main`) is NEVER
+ * resolved, so onboard cannot resurrect a finished slice (defect 3 / story 5).
+ * The `in-progress`/`backlog` resolution is UNCHANGED in every case; `done/` is
+ * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
+ * is byte-identical to the original `['in-progress','backlog']`-only resolution.
  */
-export function resolveSlice(cwd: string, slug: string): ResolvedSlice {
+export function resolveSlice(
+	cwd: string,
+	slug: string,
+	continueGate?: ContinueResolutionGate,
+): ResolvedSlice {
 	const order: SliceFolder[] = ['in-progress', 'backlog'];
+	// `done/` is appended ONLY on a continue whose work-branch tip is STRANDED —
+	// the tip-vs-arbiter gate (NEVER folder name alone). A complete slice (tip on
+	// the arbiter) leaves the order untouched, so onboard never re-runs it.
+	if (continueGate && isStrandedDoneTip(continueGate)) {
+		order.push('done');
+	}
 	for (const folder of order) {
 		const path = join(cwd, 'work', folder, `${slug}.md`);
 		if (!existsSync(path)) {
@@ -471,9 +559,8 @@ export function resolveSlice(cwd: string, slug: string): ResolvedSlice {
 		const fm = parseFrontmatter(content);
 		return {slug, path, folder, prd: fm.prd, slicePrompt};
 	}
-	throw new PromptError(
-		`no slice '${slug}' found in work/in-progress/ or work/backlog/`,
-	);
+	const searched = order.map((f) => `work/${f}/`).join(', ');
+	throw new PromptError(`no slice '${slug}' found in ${searched}`);
 }
 
 /** If HEAD is a `work/<slug>` branch, return `<slug>`; else `''`. */
