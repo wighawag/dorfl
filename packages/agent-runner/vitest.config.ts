@@ -154,6 +154,23 @@ const RACE_SENSITIVE = [
 	// `null-harness-prompt-write-epipe-tolerant` slice. See
 	// work/observations/review-gate-test-epipe-under-parallel-load.md.
 	'test/review-gate.test.ts',
+	// The FRESH-WORKTREE GATE run-fleet tests + the same-repo concurrent `run`/
+	// `runLoop` merge tests (slice
+	// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). Once that
+	// slice REMOVED the `perRepoMax === 1` fresh-gate downgrade, these drive the
+	// fresh rebased-tip gate (cut a throwaway worktree, prepare+verify on it) AND
+	// the merge integration (write `main` via `${branch}:main` against a --bare
+	// `file://` arbiter) at `perRepoMax > 1`. That is exactly the git-`file://`-CAS
+	// race class above: the protocol is sound (the merge push now re-rebases +
+	// retries on a non-fast-forward), but git's `file://` transport does not
+	// serialise concurrent pushes atomically, so under cross-file parallel pressure
+	// the loser's CAS occasionally flakes (passes 100% in isolation, here and below).
+	// Keep them out of file-parallel pressure for the same deterministic
+	// claim/main-CAS reasoning as run.test.ts / integration-core.test.ts.
+	'test/run-loop.test.ts',
+	'test/run-fresh-worktree-gate.test.ts',
+	'test/fresh-worktree-gate.test.ts',
+	'test/run-internal-error-tests.test.ts',
 ];
 
 export default defineConfig({

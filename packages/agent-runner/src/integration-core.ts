@@ -151,6 +151,17 @@ export interface IntegrationLifecycle {
 	commitTag?: string;
 }
 
+/**
+ * The default Race-1 bounded re-rebase-and-retry cap for the merge-mode
+ * `${branch}:main` push (slice
+ * `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). A small cap is
+ * enough: each retry re-runs the step-4 rebase (reconciling sibling-ledger
+ * divergence) against the freshly-advanced `<arbiter>/main`, so it converges in
+ * O(concurrent same-repo siblings) attempts. A pathological storm gives up cleanly
+ * (routes to needs-attention) rather than looping forever or force-pushing main.
+ */
+const DEFAULT_MERGE_RETRIES = 5;
+
 export interface IntegrationCoreInput {
 	/** The working clone/checkout (in-place) OR worktree dir the work branch lives in. */
 	cwd: string;
@@ -324,6 +335,20 @@ export interface IntegrationCoreInput {
 	 * integrate concurrently. Ignored when {@link integrateLock} is unset.
 	 */
 	integrateLockKey?: string;
+	/**
+	 * **Race-1 (claim-vs-integrate) bounded re-rebase-and-retry cap** for the
+	 * merge-mode `${branch}:main` push (slice
+	 * `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). On a
+	 * non-fast-forward rejection (a sibling same-repo CLAIM — under the SEPARATE
+	 * claim lock — or integrate advanced `<arbiter>/main` during this job's push
+	 * window) the step-4 tail RE-RUNS its rebase (reconciling sibling-ledger
+	 * divergence) and RETRIES the push up to this cap. The `integrateLock` only
+	 * serialises sibling INTEGRATES; a sibling CLAIM is on a DIFFERENT lock, so this
+	 * retry (not the lock) is what makes claim-vs-integrate deterministic. Absent ⇒
+	 * {@link DEFAULT_MERGE_RETRIES}. Tests inject a small cap (or `0` to assert the
+	 * un-retried non-fast-forward route).
+	 */
+	mergeRetries?: number;
 	/**
 	 * Environment for the REVIEW-AGENT launch (Gate 2). Distinct from {@link env}
 	 * because the review agent is an AGENT — it must NOT carry the runner identity
@@ -758,101 +783,152 @@ export async function performIntegration(
 	// byte-for-byte unchanged. The lock is keyed per repo, so cross-repo
 	// integration stays fully concurrent.
 	const runRebaseToIntegrateTail = async (): Promise<IntegrationCoreResult> => {
-		// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
-		//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
-		//
-		//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
-		//    branch's history still carries the original `in-progress → needs-attention`
-		//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
-		//    (the item is in needs-attention/ on main). Replaying that historical move
-		//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
-		//    rebase conflict the human hit doing this by hand. So we DROP that move-only
-		//    commit during the rebase: the replay becomes `wip + (needs-attention →
-		//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
-		//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
-		//    leftover/conflicting on-`main` surface for the human to resolve.
-		// Fetch the arbiter's `main` into the `<arbiter>/main` remote-tracking ref
-		// EXPLICITLY. A `run` JOB WORKTREE is cut from a bare hub mirror whose remote
-		// has no fetch refspec (so `<arbiter>/main` would not otherwise resolve / would
-		// be stale, causing a spurious rebase conflict); a regular clone (`do`/
-		// `complete`) already has it, where the explicit refspec is harmless (the same
-		// refspec `rebaseOntoArbiterMain` used before the convergence).
-		await gitHard(
-			[
-				'fetch',
-				'--quiet',
-				arbiter,
-				`+refs/heads/main:refs/remotes/${arbiter}/main`,
-			],
-			cwd,
-			env,
-		);
-		// ONE-SLUG-ONE-FOLDER guard + divergent-base PRE-CHECK, read from the
-		// freshly-fetched `<arbiter>/main` (a READ of the tracking ref the fetch above
-		// just populated — NO new fetch, so no shared-mirror race). It (a) FAILS LOUD if
-		// the arbiter already holds the slug in >1 status folder with differing content
-		// (a corrupt ledger; never publish over it), and (b) detects the DIVERGENT base
-		// — the arbiter holds the slug's source in a DIFFERENT folder than our local
-		// done-move removed — which is the case that turns the rebased "move" into a
-		// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
-		// done-move).
-		if (!lifecycle) {
-			const arbiterPlacement = readArbiterLedgerPlacement(
+		// The step-4 rebase-onto-`<arbiter>/main` (with BOTH reconciliation arms: the
+		// sibling-slug ledger arm and the divergent-done-move recovery), factored so it
+		// can run ONCE before the gate AND be RE-RUN in the Race-1 merge-push retry loop
+		// (a sibling advancing main mid-push needs the SAME reconcile, not a bare
+		// rebase). Returns `{}` on a clean rebase (fall through to gate/integrate) or
+		// `{route}` when a genuine conflict / invariant violation must stop the tail.
+		const rebaseOntoMainWithReconcile = async (): Promise<{
+			route?: IntegrationCoreResult;
+		}> => {
+			// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
+			//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
+			//
+			//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
+			//    branch's history still carries the original `in-progress → needs-attention`
+			//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
+			//    (the item is in needs-attention/ on main). Replaying that historical move
+			//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
+			//    rebase conflict the human hit doing this by hand. So we DROP that move-only
+			//    commit during the rebase: the replay becomes `wip + (needs-attention →
+			//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
+			//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
+			//    leftover/conflicting on-`main` surface for the human to resolve.
+			// Fetch the arbiter's `main` into the `<arbiter>/main` remote-tracking ref
+			// EXPLICITLY. A `run` JOB WORKTREE is cut from a bare hub mirror whose remote
+			// has no fetch refspec (so `<arbiter>/main` would not otherwise resolve / would
+			// be stale, causing a spurious rebase conflict); a regular clone (`do`/
+			// `complete`) already has it, where the explicit refspec is harmless (the same
+			// refspec `rebaseOntoArbiterMain` used before the convergence).
+			await gitHard(
+				[
+					'fetch',
+					'--quiet',
+					arbiter,
+					`+refs/heads/main:refs/remotes/${arbiter}/main`,
+				],
 				cwd,
-				arbiter,
-				slug,
 				env,
 			);
-			if (arbiterPlacement.error) {
-				note(arbiterPlacement.error);
-				return {
-					outcome: 'invariant-violation',
-					routedToNeedsAttention: false,
-					branch,
-					reason: arbiterPlacement.error,
-				};
-			}
-		}
-		// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
-		// needs-attention move, so it always uses the plain rebase.
-		const rebase =
-			recovering && !lifecycle
-				? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
-				: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
-		if (rebase.status !== 0) {
-			// NEVER auto-resolve a genuine CODE conflict: abort the rebase. But FIRST, a
-			// DIVERGENT-LEDGER conflict (the arbiter holds the slug's source in a folder
-			// our local done-move did not remove — PR #86) is auto-RECONCILABLE without
-			// any semantic judgement: redo the done-move arbiter-resolved (remove the
-			// arbiter's actual source folder, add `done/`) on top of `<arbiter>/main`. We
-			// only do this when the post-abort tree's ONLY divergence is the slug's ledger
-			// file; a real code conflict still routes to needs-attention untouched.
-			await gitSoft(['rebase', '--abort'], cwd, env);
+			// ONE-SLUG-ONE-FOLDER guard + divergent-base PRE-CHECK, read from the
+			// freshly-fetched `<arbiter>/main` (a READ of the tracking ref the fetch above
+			// just populated — NO new fetch, so no shared-mirror race). It (a) FAILS LOUD if
+			// the arbiter already holds the slug in >1 status folder with differing content
+			// (a corrupt ledger; never publish over it), and (b) detects the DIVERGENT base
+			// — the arbiter holds the slug's source in a DIFFERENT folder than our local
+			// done-move removed — which is the case that turns the rebased "move" into a
+			// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
+			// done-move).
 			if (!lifecycle) {
-				const recovered = await reconcileDivergentDoneMove({
+				const arbiterPlacement = readArbiterLedgerPlacement(
 					cwd,
 					arbiter,
 					slug,
-					branch,
-					localSource: source,
 					env,
-					note,
-				});
-				if (recovered) {
-					// The branch is now cleanly on top of `<arbiter>/main` with the slug in
-					// `done/` ONLY — fall through to integrate (skip the needs-attention
-					// route below).
-					note(
-						`Reconciled the done-move against ${arbiter}/main: '${slug}' is in ` +
-							'work/done/ ONLY (the divergent source folder was removed; the move ' +
-							'is a move, not a copy).',
-					);
-				} else {
-					return rebaseConflictRoute();
+				);
+				if (arbiterPlacement.error) {
+					note(arbiterPlacement.error);
+					return {
+						route: {
+							outcome: 'invariant-violation',
+							routedToNeedsAttention: false,
+							branch,
+							reason: arbiterPlacement.error,
+						},
+					};
 				}
-			} else {
-				return rebaseConflictRoute();
 			}
+			// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
+			// needs-attention move, so it always uses the plain rebase.
+			const rebase =
+				recovering && !lifecycle
+					? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
+					: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+			if (rebase.status !== 0) {
+				// NEVER auto-resolve a genuine CODE conflict. But FIRST, a SIBLING-SLUG
+				// LEDGER conflict (the replay conflicts ONLY on OTHER slugs'
+				// `work/<status>/<otherslug>.md` ledger files — a sibling job landed its own
+				// status-folder move on `<arbiter>/main` between our base and this rebase) is
+				// a benign ledger-only divergence with NO semantic judgement: the reconcile
+				// ABORTS the rebase, then redoes OUR work as one clean commit on top of
+				// `<arbiter>/main` (taking the arbiter's version of every sibling ledger file
+				// automatically). It is scoped STRICTLY to other slugs' ledger files — a
+				// conflict touching ANY code file, or THIS slug's own ledger, returns `false`
+				// (and leaves the rebase in progress), so the divergent-done-move recovery /
+				// needs-attention route below handles it; it NEVER widens to code. The slicing
+				// lifecycle is exempt (its move is not a slice done-move).
+				const siblingReconciled = lifecycle
+					? false
+					: await reconcileSiblingLedgerConflict({
+							cwd,
+							arbiter,
+							slug,
+							env,
+							note,
+						});
+				if (siblingReconciled) {
+					// The branch is now cleanly on top of `<arbiter>/main` with OUR work + the
+					// arbiter's sibling-ledger files — fall through to the fresh-gate + integrate
+					// band. THIS slug's own move is untouched.
+					note(
+						`Reconciled a sibling-slug ledger conflict during the rebase onto ` +
+							`${arbiter}/main (took the arbiter's version of the other slugs' ` +
+							`work/<status>/<slug>.md ledger files; no code file was touched).`,
+					);
+				} else if (!lifecycle) {
+					// NEVER auto-resolve a genuine CODE conflict: abort the rebase. But FIRST, a
+					// DIVERGENT-LEDGER conflict (the arbiter holds the slug's source in a folder
+					// our local done-move did not remove — PR #86) is auto-RECONCILABLE without
+					// any semantic judgement: redo the done-move arbiter-resolved (remove the
+					// arbiter's actual source folder, add `done/`) on top of `<arbiter>/main`. We
+					// only do this when the post-abort tree's ONLY divergence is the slug's ledger
+					// file; a real code conflict still routes to needs-attention untouched.
+					await gitSoft(['rebase', '--abort'], cwd, env);
+					const recovered = await reconcileDivergentDoneMove({
+						cwd,
+						arbiter,
+						slug,
+						branch,
+						localSource: source,
+						env,
+						note,
+					});
+					if (recovered) {
+						// The branch is now cleanly on top of `<arbiter>/main` with the slug in
+						// `done/` ONLY — fall through to integrate (skip the needs-attention
+						// route below).
+						note(
+							`Reconciled the done-move against ${arbiter}/main: '${slug}' is in ` +
+								'work/done/ ONLY (the divergent source folder was removed; the move ' +
+								'is a move, not a copy).',
+						);
+					} else {
+						return {route: await rebaseConflictRoute()};
+					}
+				} else {
+					await gitSoft(['rebase', '--abort'], cwd, env);
+					return {route: await rebaseConflictRoute()};
+				}
+			}
+			// Clean rebase (or a reconciled one): fall through to the gate + integrate.
+			return {};
+		};
+
+		// Run the step-4 rebase ONCE up front (before the slow fresh gate).
+		const firstRebase = await rebaseOntoMainWithReconcile();
+		if (firstRebase.route) {
+			return firstRebase.route;
 		}
 
 		// The rebase-conflict needs-attention route, factored so the divergent-ledger
@@ -1058,32 +1134,99 @@ export async function performIntegration(
 				: selectProvider({
 						arbiterUrl: await arbiterUrl(cwd, arbiter, env),
 					}));
-		const integration = await ledgerWrite.applyCompleteTransition({
-			arbiter,
-			branch,
-			mode,
-			provider,
-			// PR-INTENT: when set (propose mode), push the branch but skip the PR.
-			noPR: input.noPR,
-			// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
-			// derives a run-on title from the commit subject via `--fill`.
-			title: prTitle,
-			// Half B: the propose-mode PR body — the agent's summary under a deterministic
-			// runner header (slice pointer). Undefined when no body was supplied (the
-			// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
-			// regression). Ignored in merge mode by the provider/integrator.
-			body: composeProposeBody({slug, body: input.body}),
-			// Part (b) of the merged-branch hygiene slice: when WE perform the merge
-			// (this resolved `merge` mode), reap the remote `work/<slug>` HEAD branch
-			// INLINE right after the merge lands — the commits are now on `main`, so the
-			// head is provably merged and safe to delete (ancestor-guarded inside the
-			// integrator). Idempotent no-op when no remote head exists (the plain
-			// `${branch}:main` push opened none); ignored in `propose` mode (its branch is
-			// the review surface, reaped later by `gc --remote-branches`). NEVER `--force`.
-			deleteMergedHead: true,
-			cwd,
-			env,
-		});
+		// Race-1 (claim-vs-integrate, slice
+		// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`): integrate,
+		// and on a non-fast-forward `${branch}:main` push (a SIBLING same-repo CLAIM —
+		// under the SEPARATE claim lock — or a sibling integrate advanced
+		// `<arbiter>/main` during our push window) RE-RUN the step-4 rebase (which
+		// carries the sibling-ledger + divergent-done-move reconcile arms — a bare
+		// re-rebase would MISS them) and RETRY the push, up to a small cap. INSTANT
+		// retry (contention, not an outage; see `claim-cas.ts`). We NEVER `--force`
+		// main: each retry re-rebases to a clean fast-forward. A genuine code conflict
+		// on a re-rebase routes to needs-attention via the SAME `route` the up-front
+		// rebase uses. A persistent non-fast-forward past the cap also routes (never a
+		// silent drop). `input.mergeRetries` overrides the cap (tests; `0` ⇒ no retry).
+		const maxMergeRetries = input.mergeRetries ?? DEFAULT_MERGE_RETRIES;
+		let integration!: IntegrateResult;
+		for (let mergeAttempt = 0; ; mergeAttempt++) {
+			integration = await ledgerWrite.applyCompleteTransition({
+				arbiter,
+				branch,
+				mode,
+				provider,
+				// PR-INTENT: when set (propose mode), push the branch but skip the PR.
+				noPR: input.noPR,
+				// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
+				// derives a run-on title from the commit subject via `--fill`.
+				title: prTitle,
+				// Half B: the propose-mode PR body — the agent's summary under a deterministic
+				// runner header (slice pointer). Undefined when no body was supplied (the
+				// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
+				// regression). Ignored in merge mode by the provider/integrator.
+				body: composeProposeBody({slug, body: input.body}),
+				// Part (b) of the merged-branch hygiene slice: when WE perform the merge
+				// (this resolved `merge` mode), reap the remote `work/<slug>` HEAD branch
+				// INLINE right after the merge lands — the commits are now on `main`, so the
+				// head is provably merged and safe to delete (ancestor-guarded inside the
+				// integrator). Idempotent no-op when no remote head exists (the plain
+				// `${branch}:main` push opened none); ignored in `propose` mode (its branch is
+				// the review surface, reaped later by `gc --remote-branches`). NEVER `--force`.
+				deleteMergedHead: true,
+				cwd,
+				env,
+			});
+			// Only the merge push can be non-fast-forward (propose pushes its own ref).
+			if (integration.mergeNonFastForward !== true) {
+				break;
+			}
+			if (mergeAttempt >= maxMergeRetries) {
+				// Persistent contention past the cap: route to needs-attention rather than
+				// looping forever or force-pushing main.
+				return await mergeNonFastForwardRoute(
+					`integrating ${branch} onto ${arbiter}/main kept hitting a ` +
+						`non-fast-forward push (a sibling advanced main ${mergeAttempt + 1} ` +
+						`times); gave up cleanly without --force`,
+				);
+			}
+			// A sibling advanced main: re-run the step-4 rebase (with the reconcile arms)
+			// before retrying the push. A genuine conflict on the re-rebase routes.
+			const reRebase = await rebaseOntoMainWithReconcile();
+			if (reRebase.route) {
+				return reRebase.route;
+			}
+		}
+
+		// The Race-1 needs-attention route for a merge that could not land (a genuine
+		// re-rebase conflict is handled by `rebaseOntoMainWithReconcile`'s `route`; this
+		// covers the cap-exhausted persistent-contention case). Mirrors
+		// `rebaseConflictRoute`: the done-move was already committed (steps 2–3), so the
+		// slug sits in work/done/ and the seam bounces it from there.
+		async function mergeNonFastForwardRoute(
+			reason: string,
+		): Promise<IntegrationCoreResult> {
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
+				cwd,
+				slug,
+				reason,
+				arbiter: input.surfaceArbiter,
+				env,
+				note,
+			});
+			return {
+				outcome: 'rebase-conflict',
+				routedToNeedsAttention: routed.moved,
+				branch,
+				commitMessage,
+				reason: routed.moved
+					? `Integrating ${branch} onto ${arbiter}/main kept hitting a ` +
+						`non-fast-forward push (a sibling advanced main); '${slug}' was routed ` +
+						`to work/needs-attention/ (surfaced by status). Resolve against the ` +
+						`latest main, then return it to backlog/ and re-run.`
+					: `Integrating ${branch} onto ${arbiter}/main kept hitting a ` +
+						`non-fast-forward push (a sibling advanced main). Resolve against the ` +
+						`latest main, then re-run complete.`,
+			};
+		}
 
 		// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-comment-prose-field`,
 		//    refining `review-gate-pr-comment`): AFTER the propose integrate, where the
@@ -1847,6 +1990,162 @@ function readArbiterLedgerPlacement(
 		// divergent-done-move reconciliation, which moves the slug to `done/` ONLY.
 	}
 	return {sourceFolders};
+}
+
+/** The `work/<status>/` prefixes a ledger file can live under (no trailing `/`). */
+const LEDGER_FOLDER_PREFIXES = LEDGER_STATUS_FOLDERS.map(
+	(folder) => `work/${folder}/`,
+);
+
+/**
+ * Classify a rebase-conflicted path: is it a SIBLING-slug ledger file (a
+ * `work/<status>/<otherslug>.md` for some slug OTHER than `ourSlug`)? Returns
+ * `false` for any code file AND for THIS slug's own ledger file (both must keep
+ * routing to needs-attention — the sibling arm NEVER widens to code or own-ledger).
+ */
+function isSiblingLedgerPath(path: string, ourSlug: string): boolean {
+	const prefix = LEDGER_FOLDER_PREFIXES.find((p) => path.startsWith(p));
+	if (prefix === undefined) {
+		return false; // not a ledger file at all — a code file (or non-ledger work/ file).
+	}
+	const rest = path.slice(prefix.length);
+	if (!rest.endsWith('.md') || rest.includes('/')) {
+		return false; // not a `<slug>.md` directly under the status folder.
+	}
+	const otherSlug = rest.slice(0, -'.md'.length);
+	return otherSlug !== ourSlug; // OUR own ledger is NOT a sibling — it routes as today.
+}
+
+/**
+ * Reconcile a SIBLING-SLUG ledger conflict during the step-4 rebase WITHOUT
+ * aborting it (Race 2 of `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`).
+ * Called WHILE the rebase is still in progress (right after `git rebase` returned
+ * non-zero): a sibling same-repo job landed its OWN `work/<status>/<otherslug>.md`
+ * move on `<arbiter>/main` between our base and this rebase, so replaying our
+ * commit conflicts on that OTHER slug's ledger file — a benign ledger-only
+ * divergence, NOT a real code conflict.
+ *
+ * STRICT SCOPE (the safety fence): it reconciles ONLY when EVERY conflicted path
+ * is a SIBLING slug's ledger file ({@link isSiblingLedgerPath}). If ANY conflicted
+ * path is a CODE file, a non-ledger `work/` file, or THIS slug's OWN ledger file,
+ * it does NOTHING (returns `false`) so the caller aborts + routes to
+ * needs-attention exactly as today — it NEVER widens to code or own-ledger.
+ *
+ * The resolution takes the ARBITER's (rebased-onto) version of each sibling
+ * ledger file (`git checkout --ours` — during a rebase `--ours` is the base we are
+ * replaying ONTO, i.e. `<arbiter>/main`), stages it, and `git rebase --continue`s,
+ * looping until the rebase completes (a later replayed commit could re-conflict on
+ * a sibling ledger). Returns `true` once the rebase finished cleanly (the caller
+ * falls through to integrate); returns `false` — leaving the rebase in progress —
+ * when the conflict is out of scope (the caller aborts + routes).
+ */
+async function reconcileSiblingLedgerConflict(params: {
+	cwd: string;
+	arbiter: string;
+	slug: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<boolean> {
+	const {cwd, arbiter, slug, env} = params;
+	const arbiterRef = `${arbiter}/main`;
+
+	// The conflicted (unmerged) paths of the failed rebase step. Read them WHILE the
+	// rebase is still in progress (the caller invokes us right after the non-zero
+	// rebase), BEFORE we abort — so we know what conflicted.
+	const conflicted = (
+		await gitSoft(['diff', '--name-only', '--diff-filter=U'], cwd, env)
+	).stdout
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((line) => line !== '');
+	if (conflicted.length === 0) {
+		return false; // not a conflict we can reason about here — defer to the caller.
+	}
+	// SCOPE GATE: every conflicted path MUST be a SIBLING slug's ledger file. Any
+	// code file / own-ledger / non-ledger work file disqualifies the WHOLE
+	// reconciliation (never widen to code) — the caller aborts + routes.
+	if (!conflicted.every((path) => isSiblingLedgerPath(path, slug))) {
+		return false;
+	}
+
+	// Benign sibling-ledger divergence. Rather than the fragile in-progress
+	// `git rebase --continue` (which mutates the shared-worktree branch ref mid-
+	// rebase and flakes under same-repo fleet ref contention), ABORT and REDO our
+	// own work as ONE clean commit on top of `<arbiter>/main` — the SAME safe
+	// reset-and-redo pattern `reconcileDivergentDoneMove` uses. This automatically
+	// takes the arbiter's version of EVERY sibling ledger file (they live in the
+	// reset base, untouched) while preserving OUR agent edits + OUR done-move (kept
+	// in the working tree by the mixed reset). NO semantic judgement, NO `--ours`/
+	// `--theirs` heuristic on any code file.
+	await gitSoft(['rebase', '--abort'], cwd, env);
+
+	// Re-point the branch onto `<arbiter>/main`, KEEPING the working tree (our edits
+	// + our done-move): a mixed reset moves HEAD + index to the arbiter base but
+	// leaves the working tree intact. Our own changes stay in the tree. (`HEAD` was
+	// restored to our work-branch tip by the abort above.)
+	const reset = await gitSoft(
+		['reset', '--mixed', '--quiet', arbiterRef],
+		cwd,
+		env,
+	);
+	if (reset.status !== 0) {
+		return false;
+	}
+	// Take the ARBITER's placement of every SIBLING slug whose ledger conflicted: the
+	// conflict means we touched a sibling's ledger file that the arbiter moved, so our
+	// working-tree copy is STALE. Hard-restore EVERY ledger folder for each affected
+	// sibling slug from the arbiter (index + working tree) and drop any stray copy our
+	// tree still holds, so the sibling's OWN status-folder move (e.g. its done-move) is
+	// honoured verbatim — never clobbered by our stale touch, never duplicated.
+	const siblingSlugs = new Set<string>();
+	for (const path of conflicted) {
+		const prefix = LEDGER_FOLDER_PREFIXES.find((p) => path.startsWith(p));
+		if (prefix !== undefined) {
+			siblingSlugs.add(path.slice(prefix.length, -'.md'.length));
+		}
+	}
+	for (const otherSlug of siblingSlugs) {
+		for (const folder of LEDGER_STATUS_FOLDERS) {
+			const ledgerPath = `work/${folder}/${otherSlug}.md`;
+			const onArbiter =
+				(
+					await gitSoft(
+						['cat-file', '-e', `${arbiterRef}:${ledgerPath}`],
+						cwd,
+						env,
+					)
+				).status === 0;
+			if (onArbiter) {
+				// The arbiter holds the sibling here — take its exact copy.
+				await gitSoft(['checkout', arbiterRef, '--', ledgerPath], cwd, env);
+			} else {
+				// The arbiter does NOT hold the sibling here — drop any stale copy ours has.
+				const abs = join(cwd, ledgerPath);
+				if (existsSync(abs)) {
+					rmSync(abs, {force: true});
+				}
+			}
+		}
+	}
+	// Stage everything (our agent edits + our arbiter-aligned ledger move; the
+	// sibling ledgers are already at the arbiter version) and commit ONE clean
+	// commit on top of `<arbiter>/main`. Nothing staged ⇒ the work is already on the
+	// arbiter (an already-integrated no-op) — treat as cleanly reconciled.
+	await gitSoft(['add', '-A'], cwd, env);
+	if ((await gitSoft(['diff', '--cached', '--quiet'], cwd, env)).status === 0) {
+		return true;
+	}
+	await gitHard(
+		[
+			'commit',
+			'-q',
+			'-m',
+			`feat(${slug}): reconcile sibling-ledger rebase; done`,
+		],
+		cwd,
+		env,
+	);
+	return true;
 }
 
 /**

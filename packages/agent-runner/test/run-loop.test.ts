@@ -46,6 +46,18 @@ const editingAgent: AgentRunner = ({cwd, slug}) => {
 	return {ok: true};
 };
 
+// A NON-conflicting editing agent: each slug writes its OWN disjoint file. Two
+// same-repo jobs then touch DIFFERENT paths, so the both-land contract is
+// DETERMINISTIC (no add/add conflict on a SHARED `agent-output.txt` when two
+// worktrees are cut from the same base concurrently — which the fresh rebased-tip
+// gate's added latency makes reachable; with the shared file that is a GENUINE
+// code conflict that correctly routes ONE job to needs-attention, masking the
+// both-land assertion). Mirrors `run.test.ts`'s `disjointEditingAgent`.
+const disjointEditingAgent: AgentRunner = ({cwd, slug}) => {
+	writeFileSync(join(cwd, `${slug}.txt`), `work done for ${slug}\n`);
+	return {ok: true};
+};
+
 /** A do-nothing tick result (the loop's stop logic is independent of tick work). */
 const emptyResult = (): RunOnceResult => ({
 	claimedAndDone: 0,
@@ -218,8 +230,14 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 		// The registry path claims in a throwaway clone of the BARE mirror and cuts a
 		// distinct job worktree per slug. Two same-repo items under maxParallel 2 +
 		// merge integration exercise every concurrency hazard at once (shared-mirror
-		// claim race serialised per repo; sibling-merge-advances-main claim retry;
-		// distinct-slug worktree isolation). Both must reach done with no claim-error.
+		// claim race serialised per repo; the Race-1 claim-vs-integrate merge-push
+		// re-rebase-and-retry; the Race-2 sibling-ledger reconcile; distinct-slug
+		// worktree isolation). Both must reach done with no claim-error. DISJOINT-file
+		// agent so the both-land contract is deterministic: with the fresh rebased-tip
+		// gate ON (the default, now run at any perRepoMax) two worktrees can be cut from
+		// the same base concurrently, and a SHARED file would then be a GENUINE add/add
+		// code conflict (correctly routing ONE to needs-attention) — disjoint files keep
+		// the assertion about CONCURRENCY safety, not about conflict resolution.
 		const seeded = seedRepoWithArbiter(scratch.root, ['a', 'b', 'c']);
 		const workspacesDir = join(scratch.root, 'ws');
 		registerSeeded(seeded.arbiter, workspacesDir);
@@ -236,7 +254,7 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 		const result = await runOnce({
 			config,
 			workspace: workspacesDir,
-			agentRunner: editingAgent,
+			agentRunner: disjointEditingAgent,
 			env: gitEnv(),
 		});
 		expect(result.items).toHaveLength(2);

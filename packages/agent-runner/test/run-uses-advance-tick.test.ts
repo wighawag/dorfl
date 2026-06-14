@@ -104,13 +104,20 @@ function config(overrides: Partial<Config> = {}): Config {
 	});
 }
 
+// DISJOINT-file agents (each slug writes its OWN `${slug}.txt`) so the two
+// same-repo jobs in the outcome-equivalence tests touch DIFFERENT paths. With the
+// fresh rebased-tip gate now ON at any perRepoMax, two same-repo worktrees can be
+// cut from the same base concurrently; a SHARED `agent-output.txt` would then be a
+// GENUINE add/add code conflict (correctly routing ONE job to needs-attention),
+// breaking the both-land outcome-equivalence the tests assert. Disjoint files keep
+// the equivalence about the DRIVER, not about conflict resolution.
 const editingDoAgent: DoAgentRunner = ({cwd, slug}) => {
-	writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
+	writeFileSync(join(cwd, `${slug}.txt`), `work done for ${slug}\n`);
 	return {ok: true};
 };
 
 const editingRunAgent: AgentRunner = ({cwd, slug}) => {
-	writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
+	writeFileSync(join(cwd, `${slug}.txt`), `work done for ${slug}\n`);
 	return {ok: true};
 };
 

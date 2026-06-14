@@ -309,6 +309,41 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 		}
 	});
 
+	it('two same-repo jobs at perRepoMax 2 with the FRESH GATE ON both land (the run-fleet downgrade is removed)', async () => {
+		// MANDATORY (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`,
+		// the deferred concern of the merged gate slice #125): the `perRepoMax === 1`
+		// fresh-gate downgrade in the `run` caller is REMOVED, so the fresh rebased-tip
+		// gate runs on the `run` fleet at ANY parallelism. Here `perRepoMax: 2`,
+		// `freshWorktreeGate: true`, MERGE: two same-repo jobs run concurrently, the
+		// fresh rebased-tip gate runs for BOTH, and the two Race fixes (the merge-push
+		// re-rebase-retry + the sibling-ledger reconcile) let BOTH land deterministically
+		// — the gate's added latency no longer makes the (now-closed) races fire. (Before
+		// this slice the downgrade silently fell back to the in-build-worktree gate at
+		// perRepoMax > 1; this test would have exercised a DIFFERENT gate path.)
+		const seeded = seedRepoWithArbiter(scratch.root, ['fa', 'fb', 'fc']);
+		const config = configFor(scratch.root, {
+			maxParallel: 2,
+			perRepoMax: 2,
+			integration: 'merge',
+			// Explicit (it already defaults ON) — the point is it runs at perRepoMax 2.
+			freshWorktreeGate: true,
+		});
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: disjointEditingAgent,
+			env: gitEnv(),
+		});
+		expect(result.items).toHaveLength(2);
+		expect(result.claimedAndDone).toBe(2);
+		expect(result.items.every((i) => i.status === 'claimed-done')).toBe(true);
+		// BOTH same-repo jobs landed on main with the fresh gate ON at perRepoMax 2.
+		for (const slug of result.items.map((i) => i.slug)) {
+			expect(existsOnArbiterMain(seeded.repo, 'done', slug)).toBe(true);
+		}
+	});
+
 	// The GENUINELY-CONFLICTING contract (two same-repo merges that touch the SAME
 	// file with different content → EXACTLY ONE routes to needs-attention under the
 	// per-repo integrate lock) is proven DETERMINISTICALLY at the

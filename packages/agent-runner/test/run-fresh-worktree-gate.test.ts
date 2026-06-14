@@ -14,20 +14,26 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The `run`-FLEET CONDITIONAL for the fresh-worktree gate (slice
- * `gate-on-rebased-tip-fresh-worktree`): `run` uses the fresh rebased-tip gate
- * ONLY when the resolved flag is on AND same-repo concurrency is off
- * (`perRepoMax === 1`); at `perRepoMax > 1` it falls back to today's
- * in-build-worktree gate, so the two PRE-EXISTING run-fleet races never fire and
- * the existing `run` concurrency tests stay green unchanged.
+ * The `run`-FLEET fresh-worktree gate behaviour. ORIGINALLY (slice
+ * `gate-on-rebased-tip-fresh-worktree`) `run` used the fresh rebased-tip gate ONLY
+ * at `perRepoMax === 1` and fell back to today's in-build-worktree gate at
+ * `perRepoMax > 1`, to AVOID the two PRE-EXISTING run-fleet same-repo races.
+ *
+ * UPDATED (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+ * those two races are now CLOSED on their own merits (the merge-push
+ * re-rebase-and-retry + the sibling-ledger reconcile), so the `perRepoMax === 1`
+ * downgrade was REMOVED — the fresh rebased-tip gate now runs on the `run` fleet at
+ * ANY `perRepoMax`. The probe below therefore expects the SAME fresh-gate outcome
+ * at perRepoMax 1 AND perRepoMax 2.
  *
  * The probe is a LEAK file: the agent writes a GITIGNORED file in its build
- * worktree (`cwd`), and `verify` REQUIRES it. Today's in-build-worktree gate runs
- * in `cwd` and SEES the file (passes); the fresh rebased-tip gate is cut from the
- * COMMITTED tip (which gitignores the file ⇒ it is absent) and FAILS. So the gate's
+ * worktree (`cwd`), and `verify` REQUIRES it. The fresh rebased-tip gate is cut
+ * from the COMMITTED tip (which gitignores the file ⇒ it is absent) and FAILS,
+ * regardless of perRepoMax; today's in-build-worktree gate (only when the fresh
+ * gate is explicitly OFF) runs in `cwd` and SEES the file (passes). So the gate's
  * outcome reveals WHICH gate ran:
- *   - `perRepoMax: 1` ⇒ fresh gate ⇒ verify FAILS ⇒ tests-failed (the file leaked out);
- *   - `perRepoMax: 2` ⇒ today's gate ⇒ verify PASSES ⇒ claimed-done (the file is in cwd).
+ *   - fresh gate ON (any perRepoMax) ⇒ verify FAILS ⇒ tests-failed (the leak is closed);
+ *   - fresh gate OFF ⇒ today's gate ⇒ verify PASSES ⇒ claimed-done (the file is in cwd).
  */
 
 let scratch: Scratch;
@@ -94,8 +100,13 @@ describe('run-fleet conditional — perRepoMax === 1 uses the FRESH rebased-tip 
 	});
 });
 
-describe('run-fleet conditional — perRepoMax > 1 falls back to TODAY’s in-build-worktree gate', () => {
-	it('the SAME leak file IS visible to the gate (verify passes) ⇒ claimed-done (no regression at perRepoMax 2)', async () => {
+describe('run-fleet — perRepoMax > 1 ALSO uses the FRESH rebased-tip gate (the downgrade is removed)', () => {
+	it('the leak file is ABSENT from the gate at perRepoMax 2 (verify fails) ⇒ tests-failed (fresh gate runs at any parallelism)', async () => {
+		// UPDATED (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+		// the `perRepoMax === 1` downgrade was REMOVED, so at perRepoMax 2 the FRESH
+		// rebased-tip gate runs (NOT today's in-build-worktree gate). The leak file is
+		// gitignored ⇒ absent from the committed rebased tip ⇒ verify FAILS, exactly as
+		// at perRepoMax 1 — the falsely-green leak is closed on the run fleet too.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor({perRepoMax: 2});
 		const result = await runOnce({
@@ -106,10 +117,11 @@ describe('run-fleet conditional — perRepoMax > 1 falls back to TODAY’s in-bu
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
-		// Today's in-build-worktree gate saw the cwd leak file and PASSED ⇒ landed.
-		expect(result.items[0].status).toBe('claimed-done');
-		expect(result.claimedAndDone).toBe(1);
-		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(true);
+		// The fresh gate ran on the rebased tip (no leak-only.txt) ⇒ verify FAILED.
+		expect(result.items[0].status).toBe('tests-failed');
+		expect(result.claimedAndDone).toBe(0);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
 	});
 });
 

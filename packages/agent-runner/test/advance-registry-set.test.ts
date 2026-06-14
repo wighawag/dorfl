@@ -123,15 +123,23 @@ function config(overrides: Partial<Config> = {}): Config {
 	});
 }
 
-/** A stubbed agent that edits a slug-specific file (non-empty diff) and succeeds. */
+/**
+ * A stubbed agent that edits a slug-specific file (non-empty diff) and succeeds.
+ * Each slug writes its OWN DISJOINT `${slug}.txt`, so two same-repo jobs touch
+ * DIFFERENT paths: with the fresh rebased-tip gate now ON at any perRepoMax (the
+ * downgrade removed by slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`),
+ * two same-repo worktrees can be cut from the same base concurrently, and a SHARED
+ * file would be a GENUINE add/add code conflict that correctly routes ONE job to
+ * needs-attention — breaking the both-land outcome-equivalence these tests assert.
+ */
 const editingDoAgent: DoAgentRunner = ({cwd, slug}) => {
-	writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
+	writeFileSync(join(cwd, `${slug}.txt`), `work done for ${slug}\n`);
 	return {ok: true};
 };
 
 /** The `run` (plain build tick) twin of {@link editingDoAgent}. */
 const editingRunAgent: AgentRunner = ({cwd, slug}) => {
-	writeFileSync(join(cwd, 'agent-output.txt'), `work done for ${slug}\n`);
+	writeFileSync(join(cwd, `${slug}.txt`), `work done for ${slug}\n`);
 	return {ok: true};
 };
 
