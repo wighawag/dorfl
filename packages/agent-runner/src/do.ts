@@ -732,16 +732,19 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	// 4a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a `work/<slug>`
 	//     that did not replay onto the current main at onboard-time (aborted, never
-	//     auto-resolved). Route to needs-attention via the SAME seam `run`/
-	//     `do --remote` use (surfaced on the arbiter; the kept branch is already on
-	//     the arbiter) instead of running the agent — the §10 path. The work did NOT
-	//     onboard; the runner owns the bounce.
+	//     auto-resolved). Surface to needs-attention TREE-LESSLY via the SAME `#89`
+	//     mechanism `requeue` uses for the reverse direction — the rebase was
+	//     ABORTED, so the kept `work/<slug>` tip == the arbiter tip (already on the
+	//     arbiter, after-commit, recoverable). The surface is purely the one-file
+	//     `in-progress/ → needs-attention/` ledger move + reason (no branch push, no
+	//     worktree mutation) instead of running the agent — the §10 path. The work
+	//     did NOT onboard; the runner owns the bounce.
 	if (tree.continueRebaseConflict) {
 		const reason =
 			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
-		await ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
 			reason,
@@ -763,15 +766,17 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     FAILED terminally (stale-lease cap exhausted, or a non-stale-lease
 	//     rejection / unreachable arbiter). The push helper THROWS; the strategy
 	//     CATCHES it and flags `continuePushFailure` so the run does NOT crash
-	//     leaving the slice silently in-progress. Route to needs-attention via the
-	//     SAME seam — the kept branch already on the arbiter (recoverable).
+	//     leaving the slice silently in-progress. Surface to needs-attention
+	//     TREE-LESSLY via the SAME `#89` mechanism `requeue` uses — the kept branch
+	//     is already on the arbiter (after-commit, recoverable), so the surface is
+	//     purely the one-file ledger move + reason (no branch push, no worktree).
 	if (tree.continuePushFailure !== undefined) {
 		const reason =
 			`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
 			`to the arbiter failed terminally (${tree.continuePushFailure}) — the kept ` +
 			'branch is left intact on the arbiter (recoverable); `requeue` to retry ' +
 			'once the churn settles, or `requeue --reset` to discard and start fresh';
-		await ledgerWrite.applyNeedsAttentionTransition({
+		await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
 			reason,

@@ -524,22 +524,23 @@ async function runOneItem(
 		// 2a. CONTINUE rebase conflict (ADR §14 + §10): a requeue kept a
 		//     `work/<slug>` whose commits did not replay cleanly onto the current
 		//     main at onboard-time (aborted, never auto-resolved). Route the item to
-		//     needs-attention through the seam, which (with the arbiter) surfaces the
-		//     stuck state on main AND pushes the work branch — here a no-op/ff: the
-		//     rebase was ABORTED, so this worktree's `work/<slug>` tip == the arbiter
-		//     tip (the kept branch, unchanged). The DURABLE artifact is that branch on
-		//     the arbiter + the main surface (ADR §14: the job worktree is a disposable
-		//     cache; recovery flows through the branch + folder-native surfaces, NOT by
-		//     editing the worktree). Because the branch is provably on the arbiter, the
-		//     §4 reap predicate now HOLDS and this worktree is reaped (not specially
-		//     retained) — more §14-aligned, not a regression.
+		//     needs-attention TREE-LESSLY via the SAME `#89` mechanism `requeue` uses
+		//     for the reverse direction — the rebase was ABORTED, so this worktree's
+		//     `work/<slug>` tip == the arbiter tip (the kept branch, unchanged,
+		//     after-commit). The DURABLE artifact is that branch on the arbiter + the
+		//     main surface (ADR §14: the job worktree is a disposable cache; recovery
+		//     flows through the branch + folder-native surfaces, NOT by editing the
+		//     worktree). So the surface is purely the one-file `in-progress/ →
+		//     needs-attention/` ledger move + reason — no branch push, no worktree
+		//     mutation. Because the branch is provably on the arbiter, the §4 reap
+		//     predicate still HOLDS and this worktree is reaped — more §14-aligned.
 		if (tree.continueRebaseConflict) {
 			const reason =
 				`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 				'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 				'main, or `requeue --reset` to discard and start fresh';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			await ledgerWrite.applyNeedsAttentionTransition({
+			await ledgerWrite.applyTreelessNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
 				reason,
@@ -554,10 +555,11 @@ async function runOneItem(
 		//     FAILED terminally (stale-lease cap exhausted, or a non-stale-lease
 		//     rejection / unreachable arbiter). The push helper THROWS; `createJob`
 		//     CATCHES it and flags `continuePushFailure` so the tick does NOT crash
-		//     leaving the slice silently in-progress on the arbiter. Route to
-		//     needs-attention via the SAME seam — the kept branch already on the
-		//     arbiter from the prior requeue (recoverable) — instead of running the
-		//     agent.
+		//     leaving the slice silently in-progress on the arbiter. Surface to
+		//     needs-attention TREE-LESSLY via the SAME `#89` mechanism `requeue` uses —
+		//     the kept branch already on the arbiter from the prior requeue
+		//     (after-commit, recoverable), so the surface is purely the one-file ledger
+		//     move + reason (no branch push, no worktree) — instead of running the agent.
 		if (tree.continuePushFailure !== undefined) {
 			const reason =
 				`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
@@ -566,7 +568,7 @@ async function runOneItem(
 				'retry once the churn settles, or `requeue --reset` to discard and start ' +
 				'fresh';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
-			await ledgerWrite.applyNeedsAttentionTransition({
+			await ledgerWrite.applyTreelessNeedsAttentionTransition({
 				cwd: tree.dir,
 				slug,
 				reason,
