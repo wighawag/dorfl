@@ -61,3 +61,17 @@ Keep the verdict/output CONVENTIONS (a fenced JSON `{verdict, findings, edit, qu
 ## Source
 
 `work/observations/intake-lone-slice-review-built-as-per-round-launches-not-in-context-loop.md` (2026-06-10). Canonical mechanism: `work/prd/review.md` §"Shape 2" (resolved Q1), `work/done/slicer-review-edit-loop.md`. Supersedes PR #62's per-round-launch mechanism and folds in its review nit #1 (cap-only flip → agent-driven early flip). The removed per-round-launch scaffold's salvage value (as the M / fresh-context layer template) is captured in `work/ideas/lone-slice-review-fresh-context-m-layer.md`.
+
+## Needs attention
+
+This slice is `humanOnly: true` and carries an explicit "PARKED — do NOT agent-build as written" banner; its central premise is false and rests on an unresolved human design decision.
+
+FALSE PREMISES (verified against code + in-tree finding `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`):
+1. The slice + its prompt claim PR #62 "inverted the canonical single-context model" and that a "single in-context launch" mechanism is "SETTLED" (`prd/review.md` §Shape 2 + `slicer-review-edit-loop`). This is FALSE. The only review-edit loop actually built — `packages/agent-runner/src/slicer-review-loop.ts` (`runOneExecution`) — is a runner-driven PER-PASS loop (one agent launch per pass, edits accumulated on DISK), the same per-launch structure PR #62 used. The "single in-context launch" model is an UNBUILT ASPIRATION; PR #62 inverts nothing and is recorded ACCEPTED (2026-06-10) as the most coherent reading for intake (per-launch precedent + in-memory because intake must not write `work/backlog/` pre-convergence).
+2. `work/prd/review.md` §"Shape 2" — cited as the SETTLED canonical mechanism — is INTERNALLY CONTRADICTORY ("single context" headline vs the operative "apply edits to the slice FILES / each pass sees the edited slices"). There is no settled model to match.
+
+UNRESOLVED DESIGN DECISION (must be a human's, per the finding): do we want a truly single-launch in-context review-edit loop (the unbuilt aspiration), or is the runner-driven per-pass + accumulation model the intended end state? AND reconcile `prd/review.md` §Shape 2's contradiction. Building "to one in-context launch" silently picks one side and touches the slicer loop + the PRD, not just intake.
+
+ADDITIONAL STALENESS: the slice's `prd: issue-intake` points to `work/prd/issue-intake.md`, which does not exist (relevant PRD is `work/prd/review.md`); its primary source observation `work/observations/intake-lone-slice-review-built-as-per-round-launches-not-in-context-loop.md` no longer exists.
+
+SUGGESTED RE-SCOPE: a human must first (a) settle the model question (single-launch-in-context vs runner-driven per-pass for intake) and (b) rewrite `prd/review.md` §Shape 2 to remove the headline-vs-operative contradiction. Until then keep this slice parked (humanOnly). If the decision lands on "PR #62's per-round + in-memory shape is the accepted end state" (current finding status), this slice should be retired/deleted rather than built. Also fix the slice's stale `prd:` reference and dead observation source before any rebuild.
