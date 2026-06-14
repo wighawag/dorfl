@@ -274,6 +274,28 @@ export interface IntegrationCoreInput {
 	/** Environment for child GIT/provider processes (the identity-scoped env). */
 	env?: NodeJS.ProcessEnv;
 	/**
+	 * Optional per-repo INTEGRATE serialiser (the `run` concurrency seam, sibling
+	 * of the claim lock). When set, ONLY the rebase-to-integrate TAIL (step 4
+	 * fetch+rebase through step 5 integrate) runs inside `integrateLock(key, fn)`,
+	 * so two concurrent SAME-repo merge jobs land on `main` one-at-a-time: the
+	 * loser re-fetches + rebases onto the winner's now-advanced `<arbiter>/main`
+	 * INSIDE the lock, making its `${branch}:main` a clean fast-forward (a genuine
+	 * code conflict then routes ONE to needs-attention, never both-land by timing).
+	 * The front-of-band `prepare`+`verify` gate and the Gate-2 review agent run
+	 * OUTSIDE the lock, so same-repo jobs still gate + review CONCURRENTLY (run's
+	 * parallelism is preserved). Single-job callers (`do`/`--isolated`/`--remote`/
+	 * `complete`) leave it unset ⇒ the tail runs directly, byte-for-byte unchanged.
+	 * Keyed per repo (see {@link integrateLockKey}), so cross-repo integration
+	 * stays fully concurrent.
+	 */
+	integrateLock?: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
+	/**
+	 * The key {@link integrateLock} serialises on — the repo path (the SAME key the
+	 * claim lock uses), so same-repo integrations serialise while distinct repos
+	 * integrate concurrently. Ignored when {@link integrateLock} is unset.
+	 */
+	integrateLockKey?: string;
+	/**
 	 * Environment for the REVIEW-AGENT launch (Gate 2). Distinct from {@link env}
 	 * because the review agent is an AGENT — it must NOT carry the runner identity
 	 * (the agent must not act/commit as the bot; only the runner's own git
@@ -759,249 +781,271 @@ export async function performIntegration(
 	await gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
 	note(`Committed: ${commitMessage}`);
 
-	// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
-	//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
-	//
-	//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
-	//    branch's history still carries the original `in-progress → needs-attention`
-	//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
-	//    (the item is in needs-attention/ on main). Replaying that historical move
-	//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
-	//    rebase conflict the human hit doing this by hand. So we DROP that move-only
-	//    commit during the rebase: the replay becomes `wip + (needs-attention →
-	//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
-	//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
-	//    leftover/conflicting on-`main` surface for the human to resolve.
-	// Fetch the arbiter's `main` into the `<arbiter>/main` remote-tracking ref
-	// EXPLICITLY. A `run` JOB WORKTREE is cut from a bare hub mirror whose remote
-	// has no fetch refspec (so `<arbiter>/main` would not otherwise resolve / would
-	// be stale, causing a spurious rebase conflict); a regular clone (`do`/
-	// `complete`) already has it, where the explicit refspec is harmless (the same
-	// refspec `rebaseOntoArbiterMain` used before the convergence).
-	await gitHard(
-		[
-			'fetch',
-			'--quiet',
-			arbiter,
-			`+refs/heads/main:refs/remotes/${arbiter}/main`,
-		],
-		cwd,
-		env,
-	);
-	// ONE-SLUG-ONE-FOLDER guard + divergent-base PRE-CHECK, read from the
-	// freshly-fetched `<arbiter>/main` (a READ of the tracking ref the fetch above
-	// just populated — NO new fetch, so no shared-mirror race). It (a) FAILS LOUD if
-	// the arbiter already holds the slug in >1 status folder with differing content
-	// (a corrupt ledger; never publish over it), and (b) detects the DIVERGENT base
-	// — the arbiter holds the slug's source in a DIFFERENT folder than our local
-	// done-move removed — which is the case that turns the rebased "move" into a
-	// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
-	// done-move).
-	if (!lifecycle) {
-		const arbiterPlacement = readArbiterLedgerPlacement(
+	// The rebase-to-integrate TAIL (step 4 fetch+rebase → step 5 integrate) is the
+	// ONLY region serialised per repo under the `run` concurrency seam: it is the
+	// land-on-`main` band where two concurrent SAME-repo merge jobs would otherwise
+	// race (the loser pushing a non-fast-forward `${branch}:main`). Wrapping ONLY
+	// this tail keeps the front-of-band gate (`prepare`+`verify`) and the Gate-2
+	// review agent CONCURRENT across same-repo jobs (run's parallelism); inside the
+	// lock the loser re-fetches + rebases onto the winner's now-advanced main, so
+	// its push is a clean fast-forward (a genuine conflict routes ONE to
+	// needs-attention). Single-job callers pass no lock ⇒ the tail runs directly,
+	// byte-for-byte unchanged. The lock is keyed per repo, so cross-repo
+	// integration stays fully concurrent.
+	const runRebaseToIntegrateTail = async (): Promise<IntegrationCoreResult> => {
+		// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
+		//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
+		//
+		//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
+		//    branch's history still carries the original `in-progress → needs-attention`
+		//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
+		//    (the item is in needs-attention/ on main). Replaying that historical move
+		//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
+		//    rebase conflict the human hit doing this by hand. So we DROP that move-only
+		//    commit during the rebase: the replay becomes `wip + (needs-attention →
+		//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
+		//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
+		//    leftover/conflicting on-`main` surface for the human to resolve.
+		// Fetch the arbiter's `main` into the `<arbiter>/main` remote-tracking ref
+		// EXPLICITLY. A `run` JOB WORKTREE is cut from a bare hub mirror whose remote
+		// has no fetch refspec (so `<arbiter>/main` would not otherwise resolve / would
+		// be stale, causing a spurious rebase conflict); a regular clone (`do`/
+		// `complete`) already has it, where the explicit refspec is harmless (the same
+		// refspec `rebaseOntoArbiterMain` used before the convergence).
+		await gitHard(
+			[
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+refs/heads/main:refs/remotes/${arbiter}/main`,
+			],
 			cwd,
-			arbiter,
-			slug,
 			env,
 		);
-		if (arbiterPlacement.error) {
-			note(arbiterPlacement.error);
-			return {
-				outcome: 'invariant-violation',
-				routedToNeedsAttention: false,
-				branch,
-				reason: arbiterPlacement.error,
-			};
-		}
-	}
-	// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
-	// needs-attention move, so it always uses the plain rebase.
-	const rebase =
-		recovering && !lifecycle
-			? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
-			: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
-	if (rebase.status !== 0) {
-		// NEVER auto-resolve a genuine CODE conflict: abort the rebase. But FIRST, a
-		// DIVERGENT-LEDGER conflict (the arbiter holds the slug's source in a folder
-		// our local done-move did not remove — PR #86) is auto-RECONCILABLE without
-		// any semantic judgement: redo the done-move arbiter-resolved (remove the
-		// arbiter's actual source folder, add `done/`) on top of `<arbiter>/main`. We
-		// only do this when the post-abort tree's ONLY divergence is the slug's ledger
-		// file; a real code conflict still routes to needs-attention untouched.
-		await gitSoft(['rebase', '--abort'], cwd, env);
+		// ONE-SLUG-ONE-FOLDER guard + divergent-base PRE-CHECK, read from the
+		// freshly-fetched `<arbiter>/main` (a READ of the tracking ref the fetch above
+		// just populated — NO new fetch, so no shared-mirror race). It (a) FAILS LOUD if
+		// the arbiter already holds the slug in >1 status folder with differing content
+		// (a corrupt ledger; never publish over it), and (b) detects the DIVERGENT base
+		// — the arbiter holds the slug's source in a DIFFERENT folder than our local
+		// done-move removed — which is the case that turns the rebased "move" into a
+		// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
+		// done-move).
 		if (!lifecycle) {
-			const recovered = await reconcileDivergentDoneMove({
+			const arbiterPlacement = readArbiterLedgerPlacement(
 				cwd,
 				arbiter,
 				slug,
-				branch,
-				localSource: source,
 				env,
-				note,
-			});
-			if (recovered) {
-				// The branch is now cleanly on top of `<arbiter>/main` with the slug in
-				// `done/` ONLY — fall through to integrate (skip the needs-attention
-				// route below).
-				note(
-					`Reconciled the done-move against ${arbiter}/main: '${slug}' is in ` +
-						'work/done/ ONLY (the divergent source folder was removed; the move ' +
-						'is a move, not a copy).',
-				);
+			);
+			if (arbiterPlacement.error) {
+				note(arbiterPlacement.error);
+				return {
+					outcome: 'invariant-violation',
+					routedToNeedsAttention: false,
+					branch,
+					reason: arbiterPlacement.error,
+				};
+			}
+		}
+		// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
+		// needs-attention move, so it always uses the plain rebase.
+		const rebase =
+			recovering && !lifecycle
+				? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
+				: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+		if (rebase.status !== 0) {
+			// NEVER auto-resolve a genuine CODE conflict: abort the rebase. But FIRST, a
+			// DIVERGENT-LEDGER conflict (the arbiter holds the slug's source in a folder
+			// our local done-move did not remove — PR #86) is auto-RECONCILABLE without
+			// any semantic judgement: redo the done-move arbiter-resolved (remove the
+			// arbiter's actual source folder, add `done/`) on top of `<arbiter>/main`. We
+			// only do this when the post-abort tree's ONLY divergence is the slug's ledger
+			// file; a real code conflict still routes to needs-attention untouched.
+			await gitSoft(['rebase', '--abort'], cwd, env);
+			if (!lifecycle) {
+				const recovered = await reconcileDivergentDoneMove({
+					cwd,
+					arbiter,
+					slug,
+					branch,
+					localSource: source,
+					env,
+					note,
+				});
+				if (recovered) {
+					// The branch is now cleanly on top of `<arbiter>/main` with the slug in
+					// `done/` ONLY — fall through to integrate (skip the needs-attention
+					// route below).
+					note(
+						`Reconciled the done-move against ${arbiter}/main: '${slug}' is in ` +
+							'work/done/ ONLY (the divergent source folder was removed; the move ' +
+							'is a move, not a copy).',
+					);
+				} else {
+					return rebaseConflictRoute();
+				}
 			} else {
 				return rebaseConflictRoute();
 			}
-		} else {
-			return rebaseConflictRoute();
 		}
-	}
 
-	// The rebase-conflict needs-attention route, factored so the divergent-ledger
-	// recovery above can fall through to integrate while a genuine code conflict
-	// still routes here.
-	async function rebaseConflictRoute(): Promise<IntegrationCoreResult> {
-		// Then route the item to needs-attention/ with the conflict reason (ADR
-		// §12) THROUGH the ledger write seam's needs-attention transition, rather
-		// than leaving it dangling in done/. The done-move was already committed
-		// above, so the item sits in work/done/; the move bounces it from there and
-		// commits the in-progress→needs-attention move (here done→needs-attention)
-		// as ONE transition. No partial state.
-		const reason = `rebase onto ${arbiter}/main conflicted (aborted, never auto-resolved)`;
-		const routed = await ledgerWrite.applyNeedsAttentionTransition({
+		// The rebase-conflict needs-attention route, factored so the divergent-ledger
+		// recovery above can fall through to integrate while a genuine code conflict
+		// still routes here.
+		async function rebaseConflictRoute(): Promise<IntegrationCoreResult> {
+			// Then route the item to needs-attention/ with the conflict reason (ADR
+			// §12) THROUGH the ledger write seam's needs-attention transition, rather
+			// than leaving it dangling in done/. The done-move was already committed
+			// above, so the item sits in work/done/; the move bounces it from there and
+			// commits the in-progress→needs-attention move (here done→needs-attention)
+			// as ONE transition. No partial state.
+			const reason = `rebase onto ${arbiter}/main conflicted (aborted, never auto-resolved)`;
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
+				cwd,
+				slug,
+				reason,
+				// Autonomous caller (`do`) passes the arbiter so the seam both surfaces the
+				// conflict on `main` (OBSERVABLE) AND pushes the `work/<slug>` branch
+				// (RECOVERABLE, cross-machine). The human `complete` leaves it unset →
+				// no surface, no push, local-only. The push lives in the seam (HEAD's
+				// branch is `work/<slug>` here) — no bolted-on push.
+				arbiter: input.surfaceArbiter,
+				env,
+				note,
+			});
+			return {
+				outcome: 'rebase-conflict',
+				routedToNeedsAttention: routed.moved,
+				branch,
+				commitMessage,
+				reason: routed.moved
+					? `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
+						`aborted (never auto-resolved) and '${slug}' was routed to ` +
+						'work/needs-attention/ (surfaced by status). Resolve against the ' +
+						'latest main, then return it to backlog/ and re-run.'
+					: `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
+						'aborted (never auto-resolved). Resolve against the latest main, ' +
+						'then re-run complete.',
+			};
+		}
+
+		// 5. Integrate per mode through the ledger write seam's COMPLETE transition
+		//    (ADR §6 + `docs/adr/claim-ledger-vs-protected-main.md`). The rebase above
+		//    already brought the branch up to date, so the seam's sole strategy uses
+		//    `integrate` (not `integrateWithRebase`) and never --forces. Provider
+		//    selection: an injected `openPr` wins (legacy bridge); otherwise pick by
+		//    the arbiter's remote URL (a GitHub remote ⇒ `gh pr create`, else push-only
+		//    `none`) — PURELY arbiter-derived, no override axis. A missing/unauthenticated
+		//    `gh` degrades to push-only at runtime — never a hard failure (and the
+		//    start-of-run unauthed case is caught UP FRONT by the pre-flight `gh` probe).
+		//    The seam is storage-agnostic: we hand it the work branch, the integration
+		//    mode, the provider, and the PR-INTENT (`noPR`) — `main` lives only in the
+		//    strategy.
+		// Provider precedence: an injected fully-formed provider wins (the `run`
+		// stubbed-provider seam, carrying title/body/url); else the legacy `openPr`
+		// bridge; else select PURELY from the arbiter URL (no override). The orthogonal
+		// `noPR` INTENT (suppress the PR) is threaded SEPARATELY — it does NOT pick a
+		// provider, the integrator simply skips `openRequest` when it is set.
+		const provider =
+			input.providerInstance ??
+			(input.openPr
+				? bridgeProvider(input.openPr)
+				: selectProvider({
+						arbiterUrl: await arbiterUrl(cwd, arbiter, env),
+					}));
+		const integration = await ledgerWrite.applyCompleteTransition({
+			arbiter,
+			branch,
+			mode,
+			provider,
+			// PR-INTENT: when set (propose mode), push the branch but skip the PR.
+			noPR: input.noPR,
+			// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
+			// derives a run-on title from the commit subject via `--fill`.
+			title: prTitle,
+			// Half B: the propose-mode PR body — the agent's summary under a deterministic
+			// runner header (slice pointer). Undefined when no body was supplied (the
+			// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
+			// regression). Ignored in merge mode by the provider/integrator.
+			body: composeProposeBody({slug, body: input.body}),
+			// Part (b) of the merged-branch hygiene slice: when WE perform the merge
+			// (this resolved `merge` mode), reap the remote `work/<slug>` HEAD branch
+			// INLINE right after the merge lands — the commits are now on `main`, so the
+			// head is provably merged and safe to delete (ancestor-guarded inside the
+			// integrator). Idempotent no-op when no remote head exists (the plain
+			// `${branch}:main` push opened none); ignored in `propose` mode (its branch is
+			// the review surface, reaped later by `gc --remote-branches`). NEVER `--force`.
+			deleteMergedHead: true,
 			cwd,
-			slug,
-			reason,
-			// Autonomous caller (`do`) passes the arbiter so the seam both surfaces the
-			// conflict on `main` (OBSERVABLE) AND pushes the `work/<slug>` branch
-			// (RECOVERABLE, cross-machine). The human `complete` leaves it unset →
-			// no surface, no push, local-only. The push lives in the seam (HEAD's
-			// branch is `work/<slug>` here) — no bolted-on push.
-			arbiter: input.surfaceArbiter,
 			env,
-			note,
 		});
+
+		// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-comment-prose-field`,
+		//    refining `review-gate-pr-comment`): AFTER the propose integrate, where the
+		//    approved verdict (with its deliberately-authored `review` prose), the
+		//    resolved `provider`, AND the opened PR url (`integration.url`) are ALL in
+		//    scope, post `verdict.review` as a comment on that PR — INCLUDING on approve
+		//    (the audit trail; decided 2026-06-06). The `review` field is a first-class
+		//    AUTHORED review (the prompt requires it), NOT the residue around the JSON
+		//    — posting the residue was the bug
+		//    (`work/findings/review-comment-posts-agent-thinking-not-a-review.md`). It
+		//    reuses the SAME `provider` the integrate used (the core never imports `gh`).
+		//    The comment is ADVISORY: it changes no gate/verdict/merge/integration logic
+		//    — by here the verdict has ALREADY routed (block never reaches this point; it
+		//    routed to needs-attention above) and the integrate has ALREADY happened.
+		//    The PR identity is resolved in PRECEDENCE: a parsed `integration.url` wins
+		//    (the normal path — post on it directly); else, when a PR WAS opened but its
+		//    url was unparseable (`integration.requestOpened` true, `url` undefined — the
+		//    `gh pr create` exit-0-but-unparseable-stdout degradation), FALL BACK to the
+		//    BRANCH-resolved comment (slice `review-comment-fallback-on-unparsed-pr-url`):
+		//    the provider resolves the branch's open PR and comments on it, instead of
+		//    silently dropping a review on a PR that genuinely exists. Only when NO PR was
+		//    opened at all (merge mode, or a degraded/push-only propose ⇒ `requestOpened`
+		//    false) is it the honest clean no-op — and the branch-resolved fallback's own
+		//    "no PR resolvable" path is a clean no-op too (it tries first). Either way
+		//    `postPRComment*` never throws; the review stays in the run output. Because
+		//    this lives in the shared core, BOTH `do`/`complete` AND `run` post the
+		//    comment — no per-caller wiring.
+		if (approvedVerdict?.review !== undefined) {
+			if (integration.url !== undefined) {
+				const posted = provider.postPRComment({
+					cwd,
+					url: integration.url,
+					body: approvedVerdict.review,
+					env,
+				});
+				note(posted.instruction);
+			} else if (integration.requestOpened) {
+				// A PR opened but its url was unparseable — resolve it from the branch
+				// rather than dropping the review (the audit-trail fallback).
+				const posted = provider.postPRCommentOnBranch({
+					cwd,
+					branch,
+					body: approvedVerdict.review,
+					env,
+				});
+				note(posted.instruction);
+			}
+		}
+
 		return {
-			outcome: 'rebase-conflict',
-			routedToNeedsAttention: routed.moved,
+			outcome: 'completed',
+			routedToNeedsAttention: false,
 			branch,
 			commitMessage,
-			reason: routed.moved
-				? `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-					`aborted (never auto-resolved) and '${slug}' was routed to ` +
-					'work/needs-attention/ (surfaced by status). Resolve against the ' +
-					'latest main, then return it to backlog/ and re-run.'
-				: `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-					'aborted (never auto-resolved). Resolve against the latest main, ' +
-					'then re-run complete.',
+			integration,
 		};
-	}
-
-	// 5. Integrate per mode through the ledger write seam's COMPLETE transition
-	//    (ADR §6 + `docs/adr/claim-ledger-vs-protected-main.md`). The rebase above
-	//    already brought the branch up to date, so the seam's sole strategy uses
-	//    `integrate` (not `integrateWithRebase`) and never --forces. Provider
-	//    selection: an injected `openPr` wins (legacy bridge); otherwise pick by
-	//    the arbiter's remote URL (a GitHub remote ⇒ `gh pr create`, else push-only
-	//    `none`) — PURELY arbiter-derived, no override axis. A missing/unauthenticated
-	//    `gh` degrades to push-only at runtime — never a hard failure (and the
-	//    start-of-run unauthed case is caught UP FRONT by the pre-flight `gh` probe).
-	//    The seam is storage-agnostic: we hand it the work branch, the integration
-	//    mode, the provider, and the PR-INTENT (`noPR`) — `main` lives only in the
-	//    strategy.
-	// Provider precedence: an injected fully-formed provider wins (the `run`
-	// stubbed-provider seam, carrying title/body/url); else the legacy `openPr`
-	// bridge; else select PURELY from the arbiter URL (no override). The orthogonal
-	// `noPR` INTENT (suppress the PR) is threaded SEPARATELY — it does NOT pick a
-	// provider, the integrator simply skips `openRequest` when it is set.
-	const provider =
-		input.providerInstance ??
-		(input.openPr
-			? bridgeProvider(input.openPr)
-			: selectProvider({
-					arbiterUrl: await arbiterUrl(cwd, arbiter, env),
-				}));
-	const integration = await ledgerWrite.applyCompleteTransition({
-		arbiter,
-		branch,
-		mode,
-		provider,
-		// PR-INTENT: when set (propose mode), push the branch but skip the PR.
-		noPR: input.noPR,
-		// Half A: an explicit single-line PR title (propose mode), so `gh` no longer
-		// derives a run-on title from the commit subject via `--fill`.
-		title: prTitle,
-		// Half B: the propose-mode PR body — the agent's summary under a deterministic
-		// runner header (slice pointer). Undefined when no body was supplied (the
-		// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
-		// regression). Ignored in merge mode by the provider/integrator.
-		body: composeProposeBody({slug, body: input.body}),
-		// Part (b) of the merged-branch hygiene slice: when WE perform the merge
-		// (this resolved `merge` mode), reap the remote `work/<slug>` HEAD branch
-		// INLINE right after the merge lands — the commits are now on `main`, so the
-		// head is provably merged and safe to delete (ancestor-guarded inside the
-		// integrator). Idempotent no-op when no remote head exists (the plain
-		// `${branch}:main` push opened none); ignored in `propose` mode (its branch is
-		// the review surface, reaped later by `gc --remote-branches`). NEVER `--force`.
-		deleteMergedHead: true,
-		cwd,
-		env,
-	});
-
-	// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-comment-prose-field`,
-	//    refining `review-gate-pr-comment`): AFTER the propose integrate, where the
-	//    approved verdict (with its deliberately-authored `review` prose), the
-	//    resolved `provider`, AND the opened PR url (`integration.url`) are ALL in
-	//    scope, post `verdict.review` as a comment on that PR — INCLUDING on approve
-	//    (the audit trail; decided 2026-06-06). The `review` field is a first-class
-	//    AUTHORED review (the prompt requires it), NOT the residue around the JSON
-	//    — posting the residue was the bug
-	//    (`work/findings/review-comment-posts-agent-thinking-not-a-review.md`). It
-	//    reuses the SAME `provider` the integrate used (the core never imports `gh`).
-	//    The comment is ADVISORY: it changes no gate/verdict/merge/integration logic
-	//    — by here the verdict has ALREADY routed (block never reaches this point; it
-	//    routed to needs-attention above) and the integrate has ALREADY happened.
-	//    The PR identity is resolved in PRECEDENCE: a parsed `integration.url` wins
-	//    (the normal path — post on it directly); else, when a PR WAS opened but its
-	//    url was unparseable (`integration.requestOpened` true, `url` undefined — the
-	//    `gh pr create` exit-0-but-unparseable-stdout degradation), FALL BACK to the
-	//    BRANCH-resolved comment (slice `review-comment-fallback-on-unparsed-pr-url`):
-	//    the provider resolves the branch's open PR and comments on it, instead of
-	//    silently dropping a review on a PR that genuinely exists. Only when NO PR was
-	//    opened at all (merge mode, or a degraded/push-only propose ⇒ `requestOpened`
-	//    false) is it the honest clean no-op — and the branch-resolved fallback's own
-	//    "no PR resolvable" path is a clean no-op too (it tries first). Either way
-	//    `postPRComment*` never throws; the review stays in the run output. Because
-	//    this lives in the shared core, BOTH `do`/`complete` AND `run` post the
-	//    comment — no per-caller wiring.
-	if (approvedVerdict?.review !== undefined) {
-		if (integration.url !== undefined) {
-			const posted = provider.postPRComment({
-				cwd,
-				url: integration.url,
-				body: approvedVerdict.review,
-				env,
-			});
-			note(posted.instruction);
-		} else if (integration.requestOpened) {
-			// A PR opened but its url was unparseable — resolve it from the branch
-			// rather than dropping the review (the audit-trail fallback).
-			const posted = provider.postPRCommentOnBranch({
-				cwd,
-				branch,
-				body: approvedVerdict.review,
-				env,
-			});
-			note(posted.instruction);
-		}
-	}
-
-	return {
-		outcome: 'completed',
-		routedToNeedsAttention: false,
-		branch,
-		commitMessage,
-		integration,
 	};
+
+	// Serialise ONLY this tail per repo when the `run` seam is wired; absent ⇒ run
+	// it directly (an un-contended no-op, single-job behaviour unchanged).
+	return input.integrateLock && input.integrateLockKey !== undefined
+		? await input.integrateLock(
+				input.integrateLockKey,
+				runRebaseToIntegrateTail,
+			)
+		: await runRebaseToIntegrateTail();
 }
 
 /**

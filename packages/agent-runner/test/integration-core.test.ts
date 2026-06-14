@@ -3,6 +3,7 @@ import {writeFileSync, existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
+import {createKeyedLock} from '../src/concurrency.js';
 import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
 import {
 	makeScratch,
@@ -339,5 +340,161 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 		expect(readFileSync(dest, 'utf8')).toMatch(/conflict/i);
 		// Nothing landed on arbiter main.
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
+	});
+});
+
+describe('integration-core — per-repo INTEGRATE lock serialises the merge tail', () => {
+	// The `run` concurrency-safety seam (slice
+	// `run-merge-integration-concurrency-safe`). Two SAME-repo merge jobs branch off
+	// the SAME pre-merge base and integrate CONCURRENTLY. The injected `integrateLock`
+	// (the sibling of the claim lock, keyed per repo) wraps ONLY the rebase-to-
+	// integrate TAIL, so the loser re-fetches + rebases onto the winner's now-advanced
+	// `<arbiter>/main` INSIDE the lock before its own `${branch}:main` push. These
+	// tests drive `performIntegration` DIRECTLY (the level where the base is
+	// controllable and the race is deterministic), each job in its OWN checkout of the
+	// SAME arbiter so the two genuinely contend on `main` (a single shared checkout
+	// could not run two integrations at once).
+
+	/**
+	 * Seed ONE repo with two slugs and one bare arbiter, then stand BOTH jobs up in
+	 * SEPARATE checkouts of that arbiter, each claimed + branched off the SAME
+	 * `${ARBITER}/main` (the identical pre-merge base) with the supplied agent edit
+	 * UNCOMMITTED. Returns the per-job cwds + the shared arbiter URL (the lock key).
+	 */
+	async function twoSameRepoMergeJobs(
+		slugA: string,
+		slugB: string,
+		edit: (cwd: string, slug: string) => void,
+	) {
+		const seeded = seedRepoWithArbiter(scratch.root, [slugA, slugB]);
+		const arbiterUrl = `file://${seeded.arbiter}`;
+		// Claim BOTH slugs FIRST (each in its own checkout) so the arbiter main has
+		// BOTH in-progress moves, THEN branch each job off that SAME final main — the
+		// IDENTICAL pre-merge base. (The `run` tick cuts every worktree off a
+		// freshly-fetched main that already carries all sibling in-progress moves; we
+		// reproduce that here so the only divergence between the two jobs is their own
+		// agent edit, not a stale ledger base.)
+		const claimOne = async (slug: string) => {
+			const cwd = seeded.clone(`job-${slug}`);
+			const claim = await performClaim({
+				slug,
+				cwd,
+				arbiter: ARBITER,
+				env: gitEnv(),
+			});
+			expect(claim.exitCode).toBe(0);
+			return cwd;
+		};
+		const cwdA = await claimOne(slugA);
+		const cwdB = await claimOne(slugB);
+		const branchOne = (cwd: string, slug: string) => {
+			gitIn(['fetch', '-q', ARBITER], cwd);
+			gitIn(
+				['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`],
+				cwd,
+			);
+			edit(cwd, slug);
+		};
+		branchOne(cwdA, slugA);
+		branchOne(cwdB, slugB);
+		return {seeded, arbiterUrl, cwdA, cwdB};
+	}
+
+	const integrateMerge = (
+		cwd: string,
+		slug: string,
+		lockKey: string,
+		lock?: ReturnType<typeof createKeyedLock>,
+	) =>
+		performIntegration({
+			cwd,
+			arbiter: ARBITER,
+			slug,
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			// `run` always surfaces failures on the arbiter (the autonomous variant);
+			// the rebase-conflict loser routes to needs-attention ON main here.
+			surfaceArbiter: ARBITER,
+			integrateLock: lock,
+			integrateLockKey: lockKey,
+			env: gitEnv(),
+		});
+
+	it('two NON-CONFLICTING jobs (disjoint files) BOTH land deterministically under one shared lock', async () => {
+		const {seeded, arbiterUrl, cwdA, cwdB} = await twoSameRepoMergeJobs(
+			'pa',
+			'pb',
+			(cwd, slug) => writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`),
+		);
+		const lock = createKeyedLock();
+		// Concurrent integration of both same-repo merge jobs under ONE shared lock,
+		// keyed on the arbiter URL (the repo key). The loser rebases onto the winner's
+		// advanced main; disjoint files ⇒ a clean fast-forward, so BOTH complete.
+		const [a, b] = await Promise.all([
+			integrateMerge(cwdA, 'pa', arbiterUrl, lock),
+			integrateMerge(cwdB, 'pb', arbiterUrl, lock),
+		]);
+		expect(a.outcome).toBe('completed');
+		expect(b.outcome).toBe('completed');
+		// BOTH landed on the arbiter's main (deterministic, not timing-dependent).
+		expect(existsOnArbiterMain(seeded.repo, 'done', 'pa')).toBe(true);
+		expect(existsOnArbiterMain(seeded.repo, 'done', 'pb')).toBe(true);
+	});
+
+	it('two GENUINELY-CONFLICTING jobs (same file, different content) route EXACTLY ONE to needs-attention', async () => {
+		const {seeded, arbiterUrl, cwdA, cwdB} = await twoSameRepoMergeJobs(
+			'ca',
+			'cb',
+			(cwd, slug) => writeFileSync(join(cwd, 'shared.txt'), `work ${slug}\n`),
+		);
+		const lock = createKeyedLock();
+		const [a, b] = await Promise.all([
+			integrateMerge(cwdA, 'ca', arbiterUrl, lock),
+			integrateMerge(cwdB, 'cb', arbiterUrl, lock),
+		]);
+		// Exactly ONE wins (lands on main); the loser rebases onto the winner's
+		// advanced main, hits a real conflict on shared.txt, aborts, and routes to
+		// needs-attention (rebase-conflict). They CANNOT both land.
+		const outcomes = [a.outcome, b.outcome].sort();
+		expect(outcomes).toEqual(['completed', 'rebase-conflict']);
+		const winner = a.outcome === 'completed' ? 'ca' : 'cb';
+		const loser = a.outcome === 'completed' ? 'cb' : 'ca';
+		expect(existsOnArbiterMain(seeded.repo, 'done', winner)).toBe(true);
+		expect(existsOnArbiterMain(seeded.repo, 'done', loser)).toBe(false);
+		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', loser)).toBe(
+			true,
+		);
+	});
+
+	it('WITHOUT the lock, two same-base concurrent merges do NOT both cleanly land (the lock is load-bearing)', async () => {
+		// The control: same disjoint-file jobs, but NO shared lock. Both rebase onto
+		// the SAME stale pre-merge base (neither sees the other's merge), so both push
+		// `${branch}:main`; the second push is non-fast-forward. The point is that the
+		// un-serialised path is NOT a clean both-land — at most one lands cleanly
+		// (the loser's terminal push fails / routes to needs-attention), proving the
+		// lock is what makes the both-land deterministic.
+		const {seeded, arbiterUrl, cwdA, cwdB} = await twoSameRepoMergeJobs(
+			'na',
+			'nb',
+			(cwd, slug) => writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`),
+		);
+		void arbiterUrl;
+		// No lock passed (undefined) ⇒ the tail runs un-serialised, exactly like a
+		// single-job caller. Both rebase onto the same base concurrently.
+		const settled = await Promise.allSettled([
+			integrateMerge(cwdA, 'na', 'unused', undefined),
+			integrateMerge(cwdB, 'nb', 'unused', undefined),
+		]);
+		const landed = ['na', 'nb'].filter((slug) =>
+			existsOnArbiterMain(seeded.repo, 'done', slug),
+		);
+		// The un-serialised path cannot deterministically land BOTH on `main`: the
+		// loser's `${branch}:main` push is non-fast-forward against the winner's
+		// advance. (We assert it is NOT a clean both-land; the lock above is what
+		// fixes that.)
+		expect(landed.length).toBeLessThan(2);
+		expect(settled).toHaveLength(2);
 	});
 });

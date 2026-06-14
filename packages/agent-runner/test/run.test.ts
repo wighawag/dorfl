@@ -45,6 +45,16 @@ const editingAgent: AgentRunner = ({cwd, slug}) => {
 	return {ok: true};
 };
 
+// A NON-conflicting editing agent: each slug writes to its OWN disjoint file
+// (`<slug>.txt`), so two same-repo jobs touch DIFFERENT paths and their rebases
+// never collide. The both-land assertion under the per-repo integrate lock needs
+// this (the shared `editingAgent` writes different content to the SAME
+// `agent-output.txt`, which is a GENUINE conflict between two same-repo jobs).
+const disjointEditingAgent: AgentRunner = ({cwd, slug}) => {
+	writeFileSync(join(cwd, `${slug}.txt`), `work done for ${slug}\n`);
+	return {ok: true};
+};
+
 // The gate is now the per-repo, language-agnostic `verify` command (the converged
 // `performIntegration` core), NOT the deleted `defaultTestGate`/`TestGate`. Tests
 // inject it via a string command, exactly as `do`/`complete`'s tests do: `exit 0`
@@ -203,7 +213,13 @@ describe('runOnce — concurrency caps', () => {
 			config,
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
-			agentRunner: editingAgent,
+			// DISJOINT-file agent: this test is about the claim CAP, not about a
+			// same-repo integrate conflict. Two same-repo merge jobs editing the
+			// SHARED `agent-output.txt` would genuinely conflict under the per-repo
+			// integrate lock (the loser routing to needs-attention), which would mask
+			// the cap assertion; disjoint files let both land so `claimedAndDone` is
+			// exactly the cap.
+			agentRunner: disjointEditingAgent,
 			env: gitEnv(),
 			agentId: () => 'agentA',
 		});
@@ -261,12 +277,14 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 		expect(existsOnArbiterMain(b.repo, 'done', 'fb')).toBe(true);
 	});
 
-	it('two same-repo jobs both integrate under the merge path (claim + integration safe under concurrency)', async () => {
+	it('two NON-CONFLICTING same-repo jobs both integrate DETERMINISTICALLY under the merge path (per-repo integrate lock)', async () => {
 		// maxParallel 2, perRepoMax 2, MERGE integration: two same-repo jobs run
-		// concurrently. This is the case that exposed the concurrency hazards — the
-		// shared-checkout claim race (serialised per repo) AND the claim retry when a
-		// sibling's merge advances main. Both must reach done with NO claim-error.
-		seedRepoWithArbiter(scratch.root, ['a', 'b', 'c']);
+		// concurrently and edit DISJOINT files (`a.txt` / `b.txt`). The per-repo
+		// integrate lock serialises ONLY the land-on-main tail, so the loser rebases
+		// onto the winner's now-advanced main and fast-forwards cleanly — both reach
+		// done with NO claim-error and NO timing dependence (the OLD contract relied
+		// on push ordering; this one does not).
+		const seeded = seedRepoWithArbiter(scratch.root, ['a', 'b', 'c']);
 		const config = configFor(scratch.root, {
 			maxParallel: 2,
 			perRepoMax: 10,
@@ -276,14 +294,33 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 			config,
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
-			agentRunner: editingAgent,
+			agentRunner: disjointEditingAgent,
 			env: gitEnv(),
 		});
 		expect(result.items).toHaveLength(2);
 		expect(result.claimedAndDone).toBe(2);
-		// No job fell over on the shared-checkout claim race / retry hazard.
+		// No job fell over on the shared-checkout claim race / integrate race.
 		expect(result.items.every((i) => i.status === 'claimed-done')).toBe(true);
+		// BOTH landed on the arbiter's main (deterministic, not timing-dependent).
+		const landed = result.items.map((i) => i.slug);
+		for (const slug of landed) {
+			expect(existsOnArbiterMain(seeded.repo, 'done', slug)).toBe(true);
+		}
 	});
+
+	// The GENUINELY-CONFLICTING contract (two same-repo merges that touch the SAME
+	// file with different content → EXACTLY ONE routes to needs-attention under the
+	// per-repo integrate lock) is proven DETERMINISTICALLY at the
+	// `performIntegration` level in `test/integration-core.test.ts`
+	// ("per-repo INTEGRATE lock serialises the merge tail"), where the two jobs'
+	// pre-merge BASE is controllable so the race is real every run. At THIS `run`
+	// tick level the job worktrees are cut off a freshly-fetched shared mirror
+	// main, so a same-repo sibling's merge is usually already visible when the next
+	// worktree is cut — the jobs LINEARISE rather than reproduce the same-base race
+	// on demand (the deterministic same-base contention lives in the core test).
+	// The existing "a conflicting rebase routes ONLY its own job to needs-attention"
+	// test below still pins the run-level conflict isolation via a mid-run external
+	// edit (the reliable way to force a conflict at this level).
 
 	it('under concurrency a LOST claim is dropped while the winner proceeds', async () => {
 		// Pre-claim one of two slugs from an independent clone so the concurrent tick

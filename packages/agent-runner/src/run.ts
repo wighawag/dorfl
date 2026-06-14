@@ -306,6 +306,20 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	// concurrent in each job's OWN worktree. Distinct repos claim in parallel.
 	const claimLock = createKeyedLock();
 
+	// The per-repo INTEGRATE serialiser — the SIBLING of `claimLock`, the same
+	// `createKeyedLock` primitive keyed on the same repo key. The land-on-`main`
+	// TAIL of merge-mode integration (fetch+rebase → `${branch}:main` push) is a
+	// shared-`main` step: two concurrent SAME-repo merge jobs both rebase onto the
+	// same pre-merge base and the loser's plain push is non-fast-forward (today it
+	// only works by benign timing). Serialising ONLY that tail per repo (the seam
+	// is applied INSIDE `performIntegration`, around step 4–5, NOT the whole call —
+	// the slow gate + Gate-2 review stay at the front, OUTSIDE the lock, so they
+	// run concurrently) makes the loser re-fetch + rebase onto the winner's
+	// now-advanced main, so its push is a clean fast-forward. Distinct repos
+	// integrate in parallel (per-repo key); a genuine same-repo code conflict
+	// routes exactly ONE job to needs-attention (it cannot both-land).
+	const integrateLock = createKeyedLock();
+
 	// GENUINELY CONCURRENT (ADR §3 — the whole point of `run`): run up to
 	// `maxParallel` `runOneItem`s IN FLIGHT at once, capped at `perRepoMax`
 	// concurrently per repo. The caps now bound ACTUAL in-flight execution, not just
@@ -336,6 +350,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 				backoff: options.backoff,
 				sleep: options.sleep,
 				claimLock,
+				integrateLock,
 			}),
 	});
 	// `runOneItem` is total (it maps every failure to an `ItemResult` and never
@@ -417,6 +432,17 @@ interface OneItemContext {
 	 * an un-contended lock.
 	 */
 	claimLock?: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
+	/**
+	 * Per-repo INTEGRATE serialiser (shared across the tick's in-flight jobs), the
+	 * SIBLING of {@link claimLock}. Threaded into `performIntegration` as the
+	 * `integrateLock` seam, where it wraps ONLY the rebase-to-integrate TAIL (step
+	 * 4 fetch+rebase → step 5 integrate), so same-repo merge jobs land on `main`
+	 * one-at-a-time (the loser rebases onto the winner's advanced main ⇒ a clean
+	 * fast-forward) while their gate + Gate-2 review still run concurrently.
+	 * Cross-repo integration stays concurrent (keyed per repo). Optional so a
+	 * direct `runOneItem` caller (none today) degrades to an un-contended lock.
+	 */
+	integrateLock?: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
 }
 
 async function runOneItem(
@@ -758,6 +784,12 @@ async function runOneItem(
 				// the `run` seam injects) STAYS — it is a DIFFERENT `provider`.
 				providerInstance: ctx.provider,
 				openPr: ctx.openPr,
+				// The per-repo INTEGRATE serialiser (sibling of the claim lock): the
+				// core applies it around ONLY the rebase-to-integrate TAIL, keyed on
+				// the repo path (the same key the claim lock uses), so two same-repo
+				// merge jobs land on `main` one-at-a-time. Absent on single-job paths.
+				integrateLock: ctx.integrateLock,
+				integrateLockKey: repoPath,
 				// Half A/B: the synthesised single-line title + the agent's surfaced
 				// final summary as the PR body (the core scaffolds the slice-pointer
 				// header). `title` is synthesised inside the core from the slice's
