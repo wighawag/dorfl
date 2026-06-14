@@ -1,6 +1,11 @@
 import {readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
-import {mergeConfig, type Config, type PartialConfig} from './config.js';
+import {
+	mergeConfig,
+	warnDeprecatedConfigKeys,
+	type Config,
+	type PartialConfig,
+} from './config.js';
 import {envOverrides, type EnvMap} from './env-config.js';
 import {brand} from './brand.js';
 
@@ -53,7 +58,13 @@ export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
  */
 export const REPO_ALLOWED_KEYS = [
 	'integration',
-	'provider',
+	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
+	// a genuine repo property exactly like `integration`/`review`: whether this
+	// repo's propose runs open a PR is agreed by all collaborators + travels with
+	// the repo. Resolved per-repo through the SAME chain. (The removed `provider`
+	// OVERRIDE is gone — a stale `provider` key is ignored with a deprecation
+	// warning, see `loadRepoConfigFromContent`.)
+	'noPR',
 	'verify',
 	// `prepare` (the env-prep / install step run ONCE before the first `verify` on
 	// a fresh worktree) is a genuine repo property exactly like `verify` — how this
@@ -227,6 +238,11 @@ export function loadRepoConfigFromContent(
 			`Invalid JSON in ${sourceLabel}: ${(err as Error).message}`,
 		);
 	}
+
+	// Drop (with a one-line warning) any DEPRECATED key (e.g. the removed `provider`
+	// override) before the allow/reject split, so an existing committed config keeps
+	// working — ignored, never an error, and never mistaken for an unknown key.
+	warnDeprecatedConfigKeys(parsed, sourceLabel);
 
 	const config: PartialConfig = {};
 	const rejected: string[] = [];

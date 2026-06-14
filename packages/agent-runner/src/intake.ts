@@ -6,9 +6,9 @@ import {
 	performIntegration,
 	type IntegrationCoreResult,
 } from './integration-core.js';
-import type {IntegrateResult} from './integrator.js';
+import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
-import type {IntegrationMode, ReviewProviderName} from './config.js';
+import type {IntegrationMode} from './config.js';
 import {
 	identityEnv,
 	assertTransportAllowed,
@@ -241,8 +241,21 @@ export interface PerformIntakeOptions {
 	 * are no-ops for them. Unset ⇒ propose for both.
 	 */
 	integration?: IntakeIntegrationModes;
-	/** The review-request provider override (propose mode); auto-detect when unset. */
-	provider?: ReviewProviderName;
+	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, intake's propose
+	 * emissions push the branch but skip the PR (the explicit suppress-PR intent).
+	 * NOT a provider choice — the provider is purely arbiter-derived. Unset/false ⇒
+	 * the PR opens normally.
+	 */
+	noPR?: boolean;
+	/**
+	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
+	 * `run`/`do` expose; forwarded to `performIntegration` as `providerInstance`).
+	 * Tests/embeddings inject a stubbed `GitHubProvider` (a custom `gh` path) to
+	 * drive intake's propose pipeline OFFLINE. The resolved provider OBJECT, NOT a
+	 * config override. Unset ⇒ the core selects from the arbiter URL.
+	 */
+	providerInstance?: ReviewProvider;
 	/**
 	 * The optional runner IDENTITY (a bot), threaded from host-only
 	 * `config.identity`. It scopes intake's GIT + provider operations — the `gh`
@@ -713,7 +726,8 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.slice,
-				provider: options.provider,
+				noPR: options.noPR,
+				providerInstance: options.providerInstance,
 				issueProvider,
 				// The bounded lone-slice review seam (tests inject a canned verdict;
 				// production wires the harness via the default below).
@@ -732,7 +746,8 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.prd,
-				provider: options.provider,
+				noPR: options.noPR,
+				providerInstance: options.providerInstance,
 				issueProvider,
 				seen: seenDelta,
 				env,
@@ -898,7 +913,8 @@ async function dispatchSlice(params: {
 	cwd: string;
 	arbiter: string;
 	integration: IntegrationMode;
-	provider: ReviewProviderName | undefined;
+	noPR: boolean | undefined;
+	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
 	/** The bounded lone-slice review seam (tests inject a canned verdict; prod: harness). */
@@ -917,7 +933,8 @@ async function dispatchSlice(params: {
 		cwd,
 		arbiter,
 		integration,
-		provider,
+		noPR,
+		providerInstance,
 		issueProvider,
 		reviewSlice,
 		seen,
@@ -1038,7 +1055,8 @@ async function dispatchSlice(params: {
 		// command's concern.
 		autoMerge: true,
 		mode: integration,
-		provider,
+		noPR,
+		providerInstance,
 		type: 'feat',
 		lifecycle: {
 			// The emitted slice IS the title source. Pass the DRAFTED title EXPLICITLY
@@ -1084,7 +1102,8 @@ async function dispatchPrd(params: {
 	cwd: string;
 	arbiter: string;
 	integration: IntegrationMode;
-	provider: ReviewProviderName | undefined;
+	noPR: boolean | undefined;
+	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
 	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
@@ -1098,7 +1117,8 @@ async function dispatchPrd(params: {
 		cwd,
 		arbiter,
 		integration,
-		provider,
+		noPR,
+		providerInstance,
 		issueProvider,
 		seen,
 		env,
@@ -1142,7 +1162,8 @@ async function dispatchPrd(params: {
 		skipVerify: true,
 		autoMerge: true,
 		mode: integration,
-		provider,
+		noPR,
+		providerInstance,
 		type: 'feat',
 		lifecycle: {
 			// The emitted PRD IS the title source. Pass the DRAFTED title EXPLICITLY (same

@@ -224,10 +224,10 @@ export interface RunOnceOptions {
 	 */
 	reviewGate?: ReviewGate;
 	/**
-	 * An explicitly-injected, fully-formed review provider that overrides per-item
-	 * auto-detection (tests / embedding). Forwarded to `performIntegration` as
-	 * `providerInstance` (carrying title/body/url). Unset ⇒ the core selects the
-	 * provider from the arbiter URL + the per-repo `provider` override.
+	 * An explicitly-injected, fully-formed review provider INSTANCE that overrides
+	 * per-item auto-detection (tests / embedding). Forwarded to
+	 * `performIntegration` as `providerInstance` (carrying title/body/url). Unset ⇒
+	 * the core selects the provider PURELY from the arbiter URL (no override axis).
 	 */
 	provider?: ReviewProvider;
 	/** Optional injectable PR opener for `integration: propose` (legacy bridge). */
@@ -290,9 +290,10 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	const harness =
 		options.harness ??
 		createHarness({harness: config.harness, piBin: config.piBin});
-	// An explicitly-injected provider (tests / embedding) wins over per-item
-	// auto-detection; otherwise each item selects its own provider from its
-	// arbiter URL + the resolved per-repo `provider` override (see runOneItem).
+	// An explicitly-injected provider INSTANCE (tests / embedding) wins over
+	// per-item auto-detection; otherwise each item selects its own provider PURELY
+	// from its arbiter URL (see runOneItem). This is the resolved provider OBJECT,
+	// not a config override (there is none — the provider is arbiter-derived).
 	const provider = options.provider;
 	const workspace = options.workspace ?? config.workspacesDir;
 	const env = options.env;
@@ -675,8 +676,9 @@ async function runOneItem(
 		// the band is what they share. `run` is ALWAYS autonomous, so it ALWAYS
 		// passes `surfaceArbiter` (every failure surfaces on the arbiter's main +
 		// pushes the branch). The injected `openPr` legacy bridge is forwarded to the
-		// core unchanged; absent it the core selects the provider from the arbiter
-		// URL + the per-repo `provider` override (a GitHub remote ⇒ `gh pr create`).
+		// core unchanged; absent it the core selects the provider PURELY from the
+		// arbiter URL (a GitHub remote ⇒ `gh pr create`). The per-repo `noPR` INTENT
+		// (suppress the PR) rides separately — it does not pick a provider.
 		//
 		// `performIntegration` THROWS a plain `Error` for a misconfigured gate
 		// (`review` on with no `reviewGate` wired) — `run`'s CLI always wires one when
@@ -730,10 +732,13 @@ async function runOneItem(
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: ctx.reviewGate,
 				mode: config.integration,
+				// PR-INTENT: the per-repo `noPR` (suppress the PR even on an authed GitHub
+				// arbiter). NOT a provider choice — the provider is purely arbiter-derived.
+				noPR: config.noPR,
 				// Provider: an injected `openPr` wins (legacy test bridge); otherwise the
-				// core selects from the arbiter URL + the per-repo `provider` override
-				// (a GitHub remote ⇒ `gh pr create`, else push-only `none`).
-				provider: config.provider,
+				// core selects PURELY from the arbiter URL (a GitHub remote ⇒ `gh pr
+				// create`, else push-only `none`). `providerInstance` (the resolved object
+				// the `run` seam injects) STAYS — it is a DIFFERENT `provider`.
 				providerInstance: ctx.provider,
 				openPr: ctx.openPr,
 				// Half A/B: the synthesised single-line title + the agent's surfaced

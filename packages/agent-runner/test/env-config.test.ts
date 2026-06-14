@@ -149,6 +149,33 @@ describe('envOverrides — number coercion', () => {
 	});
 });
 
+describe('envOverrides — noPR (the PR-INTENT axis) boolean coercion', () => {
+	it('coerces AGENT_RUNNER_NO_PR=true/false to a boolean', () => {
+		expect(envOverrides({AGENT_RUNNER_NO_PR: 'true'})).toEqual({noPR: true});
+		expect(envOverrides({AGENT_RUNNER_NO_PR: 'false'})).toEqual({noPR: false});
+	});
+});
+
+describe('envOverrides — deprecated AGENT_RUNNER_PROVIDER is IGNORED with a warning', () => {
+	it('ignores AGENT_RUNNER_PROVIDER (no override key) and warns', () => {
+		const warnings: string[] = [];
+		const result = envOverrides({AGENT_RUNNER_PROVIDER: 'github'}, (m) =>
+			warnings.push(m),
+		);
+		// The removed override is NOT carried as any config key (no `provider`).
+		expect(result).toEqual({});
+		expect(warnings.length).toBe(1);
+		expect(warnings[0]).toMatch(/AGENT_RUNNER_PROVIDER/);
+		expect(warnings[0]).toMatch(/arbiter-derived/);
+	});
+
+	it('a stale AGENT_RUNNER_PROVIDER=none warning points at NO_PR', () => {
+		const warnings: string[] = [];
+		envOverrides({AGENT_RUNNER_PROVIDER: 'none'}, (m) => warnings.push(m));
+		expect(warnings[0]).toMatch(/NO_PR/);
+	});
+});
+
 describe('envOverrides — enum coercion', () => {
 	it('accepts a valid enum member', () => {
 		expect(envOverrides({AGENT_RUNNER_INTEGRATION: 'merge'})).toEqual({
@@ -158,9 +185,6 @@ describe('envOverrides — enum coercion', () => {
 			integration: 'propose',
 		});
 		expect(envOverrides({AGENT_RUNNER_HARNESS: 'pi'})).toEqual({harness: 'pi'});
-		expect(envOverrides({AGENT_RUNNER_PROVIDER: 'github'})).toEqual({
-			provider: 'github',
-		});
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
 		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'off'})).toEqual({
 			observationTriage: 'off',

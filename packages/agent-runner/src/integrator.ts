@@ -233,6 +233,15 @@ export interface IntegrateInput {
 	 * ⇒ the provider's `--fill` default. Ignored in `merge` mode.
 	 */
 	body?: string;
+	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6). When `true` on the `propose`
+	 * path, push the branch (the safety-bearing step) but SKIP `openRequest` — the
+	 * explicit suppress-PR intent (re-homing the old `provider: none` use). No
+	 * warning: the no-PR outcome is intended. It does NOT pick a provider; the
+	 * arbiter-derived provider is simply not asked to open a request. Ignored in
+	 * `merge` mode (it never opens a request).
+	 */
+	noPR?: boolean;
 	env?: NodeJS.ProcessEnv;
 	/** Bounded-backoff bounds for the provider's review-request retry. */
 	backoff?: BackoffOptions;
@@ -329,6 +338,22 @@ export class Integrator {
 			`${input.branch}:${input.branch}`,
 			`--force-with-lease=${input.branch}`,
 		);
+		// PR-INTENT (`noPR: true`): the branch is now pushed (safe) — deliberately do
+		// NOT open a review request (the explicit suppress-PR intent). No warning: the
+		// no-PR outcome is intended, not a degrade. The provider is reported as `none`
+		// (no request opened), exactly as a push-only propose surfaces.
+		if (input.noPR === true) {
+			return {
+				mode: 'propose',
+				mergedToMain: false,
+				pushedRef: input.branch,
+				provider: 'none',
+				requestOpened: false,
+				instruction:
+					`Pushed ${input.branch} to ${input.arbiter}. No PR was opened ` +
+					'(noPR is set — the suppress-PR intent).',
+			};
+		}
 		const review = await this.provider.openRequest({
 			cwd: input.cwd,
 			branch: input.branch,

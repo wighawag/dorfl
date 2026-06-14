@@ -45,6 +45,10 @@ describe('repo-config constants', () => {
 		// `prepare` (the env-prep / install step) is a per-repo property like `verify`,
 		// resolved through the SAME chain. Install belongs here, never baked into verify.
 		expect(REPO_ALLOWED_KEYS).toContain('prepare');
+		// `noPR` (the PR-INTENT axis) is a per-repo property like `integration`/`review`.
+		// The removed `provider` OVERRIDE is NOT allowed (it is gone entirely).
+		expect(REPO_ALLOWED_KEYS).toContain('noPR');
+		expect(REPO_ALLOWED_KEYS).not.toContain('provider');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
@@ -63,6 +67,55 @@ describe('repo-config constants', () => {
 		for (const key of REPO_ALLOWED_KEYS) {
 			expect(REPO_REJECTED_KEYS).not.toContain(key);
 		}
+	});
+});
+
+describe('per-repo noPR + the deprecated `provider` key', () => {
+	let repo: string;
+	beforeEach(() => {
+		repo = mkdtempSync(join(tmpdir(), 'agent-runner-repo-nopr-'));
+	});
+	afterEach(() => {
+		rmSync(repo, {recursive: true, force: true});
+	});
+
+	it('honours a per-repo `noPR` boolean', () => {
+		writeRepoConfig(repo, {noPR: true});
+		expect(loadRepoConfig(repo).config.noPR).toBe(true);
+	});
+
+	it('IGNORES a stale per-repo `provider` key with a deprecation warning (never errors)', () => {
+		writeRepoConfig(repo, {provider: 'github', integration: 'merge'});
+		const warnings: string[] = [];
+		const origErr = console.error;
+		console.error = (m?: unknown) => warnings.push(String(m ?? ''));
+		let loaded;
+		try {
+			loaded = loadRepoConfig(repo); // must NOT throw
+		} finally {
+			console.error = origErr;
+		}
+		// The rest of the per-repo config still loads; the stale key is not carried
+		// (and is NOT mistaken for a rejected host-only key).
+		expect(loaded.config.integration).toBe('merge');
+		expect('provider' in loaded.config).toBe(false);
+		expect(loaded.rejected).not.toContain('provider');
+		expect(warnings.some((w) => /deprecated key 'provider'/.test(w))).toBe(
+			true,
+		);
+	});
+
+	it('a stale per-repo `provider: none` warning points at `noPR`', () => {
+		writeRepoConfig(repo, {provider: 'none'});
+		const warnings: string[] = [];
+		const origErr = console.error;
+		console.error = (m?: unknown) => warnings.push(String(m ?? ''));
+		try {
+			loadRepoConfig(repo);
+		} finally {
+			console.error = origErr;
+		}
+		expect(warnings.some((w) => /noPR/.test(w))).toBe(true);
 	});
 });
 

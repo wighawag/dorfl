@@ -30,7 +30,14 @@ import {
 	type IsolatedTree,
 } from './isolation.js';
 import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
-import type {IntegrationMode, ReviewProviderName} from './config.js';
+import {isGitHubArbiterUrl, GitHubProvider} from './github.js';
+import type {ReviewProvider} from './integrator.js';
+import {arbiterUrl} from './integration-core.js';
+import {
+	shouldFailProposePrIntent,
+	PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+} from './do-config.js';
+import type {IntegrationMode} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
 import {git, run, runAsync, localMainAheadCount} from './git.js';
@@ -208,8 +215,32 @@ export interface DoOptions {
 	prepare?: VerifyConfig;
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
-	/** Review-request provider override (propose mode); auto-detect when unset. */
-	provider?: ReviewProviderName;
+	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
+	 * the branch but deliberately skips the PR (the explicit suppress-PR intent).
+	 * NOT a provider choice — the provider is purely arbiter-derived. Threaded
+	 * verbatim into `performComplete`. Unset/false ⇒ propose opens the PR normally.
+	 */
+	noPR?: boolean;
+	/**
+	 * The `gh` AUTH/AVAILABILITY PROBE the PR-INTENT pre-flight guard runs UP FRONT
+	 * (propose + GitHub arbiter + `noPR` unset): `true` ⇒ `gh` CAN open a PR. The
+	 * probe is the signal (mirroring `GitHubProvider.available`), NOT a config check
+	 * — an absent identity falls back to ambient `gh` auth and the probe reports it
+	 * available. Injectable so tests stub `gh` without a real binary; production
+	 * defaults to `new GitHubProvider().available(cwd, env)`. Side-effecting (it
+	 * shells `gh`), a deliberate pre-flight cost justified by saving a wasted build.
+	 */
+	ghCanOpenPr?: (cwd: string, env: NodeJS.ProcessEnv | undefined) => boolean;
+	/**
+	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
+	 * `run` exposes via `RunOptions.provider`; threaded to `performComplete` →
+	 * `performIntegration` as `providerInstance`). Tests/embeddings inject a stubbed
+	 * `GitHubProvider` (a custom `gh` path) to drive the full propose pipeline
+	 * OFFLINE without a real GitHub arbiter. The resolved provider OBJECT, NOT a
+	 * config override (there is none). Unset ⇒ the core selects from the arbiter URL.
+	 */
+	providerInstance?: ReviewProvider;
 	/**
 	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`):
 	 * threaded VERBATIM into `performComplete` (the gate rides inside the shared
@@ -361,8 +392,19 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	prepare?: VerifyConfig;
 	/** The declared per-repo acceptance gate (string | list). */
 	verify?: VerifyConfig;
-	/** Review-request provider override (propose mode); auto-detect when unset. */
-	provider?: ReviewProviderName;
+	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
+	 * the branch but skips the PR (the explicit suppress-PR intent). NOT a provider
+	 * choice — the provider is purely arbiter-derived. Unset/false ⇒ PR opens.
+	 */
+	noPR?: boolean;
+	/**
+	 * Optional FULLY-FORMED review provider INSTANCE (tests/embeddings inject a
+	 * stubbed `GitHubProvider` to drive the propose pipeline offline). The resolved
+	 * provider OBJECT, NOT a config override. Unset ⇒ the core selects from the
+	 * arbiter URL.
+	 */
+	providerInstance?: ReviewProvider;
 	/** Gate 2 (PR/code review) toggle — threaded verbatim into `performComplete`. */
 	review?: boolean;
 	autoMerge?: boolean;
@@ -531,7 +573,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// SAME `integration`/`provider` the slice-build path threads, so they resolve
 			// ONCE in the shared `performIntegration` core (arg parity by construction).
 			integration: options.integration,
-			provider: options.provider,
+			noPR: options.noPR,
+			providerInstance: options.providerInstance,
 			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
 			// candidate slices in place + routes the verdict through the needsAnswers /
 			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
@@ -594,6 +637,42 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 				"and the merge-back can't fast-forward — push or reconcile main first " +
 				'(or re-run with --ignore-diverged-main to proceed anyway).';
 			return {exitCode: 1, outcome: 'refused', slug, message};
+		}
+	}
+
+	// 3c. PR-INTENT pre-flight guard (the honest-failure value of the `noPR` axis).
+	//     When this run is `propose` on a GITHUB arbiter and the operator INTENDS a PR
+	//     (`noPR` unset), run a `gh` AUTH/AVAILABILITY PROBE UP FRONT — BEFORE the
+	//     claim + agent run — and FAIL FAST if `gh` genuinely cannot open one, instead
+	//     of letting integration silently degrade to manual-PR instructions. This sits
+	//     alongside the dirty-tree / diverged-main guards (and mirrors the shared
+	//     `doNeedsAgentCmd`/`NO_AGENT_CMD_MESSAGE` up-front refusal) so no build work
+	//     is wasted. CRITICAL: the PROBE is the signal, NOT "is a `providers.github`
+	//     identity present" — an absent identity falls back to AMBIENT `gh` auth (the
+	//     common local-dev case), which the probe correctly reports as available, so a
+	//     working ambient setup still PROCEEDS. A genuinely transient mid-run `gh`
+	//     outage (probe passes here, the API fails later) is left to the runtime
+	//     degrade. `noPR: true` skips the guard entirely (no PR is intended).
+	{
+		const url = await arbiterUrl(cwd, arbiter, env);
+		const probe =
+			options.ghCanOpenPr ??
+			((probeCwd, probeEnv) =>
+				new GitHubProvider().available(probeCwd, probeEnv));
+		if (
+			shouldFailProposePrIntent({
+				mode: options.integration ?? 'propose',
+				arbiterIsGitHub: url !== undefined && isGitHubArbiterUrl(url),
+				noPR: options.noPR,
+				ghCanOpenPr: () => probe(cwd, env),
+			})
+		) {
+			return {
+				exitCode: 1,
+				outcome: 'refused',
+				slug,
+				message: PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
+			};
 		}
 	}
 
@@ -842,7 +921,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		ignoreDivergedMain: true,
 		prepare: options.prepare,
 		verify: options.verify,
-		provider: options.provider,
+		noPR: options.noPR,
+		// The resolved provider INSTANCE seam (tests/embeddings inject a stubbed
+		// GitHubProvider to drive the propose pipeline offline). Unset ⇒ the core
+		// selects from the arbiter URL.
+		providerInstance: options.providerInstance,
 		// Half B (propose-mode PR body): the build agent's FINAL SUMMARY, captured
 		// from the harness seam's `LaunchResult.output` (surfaced by `runDoAgent`
 		// below) and threaded as the PR description. `complete` scaffolds a
@@ -1444,7 +1527,8 @@ export async function performDoRemote(
 				// SAME `integration`/`provider` the slice-build path threads, so the
 				// `--remote prd:` output ALSO routes through the shared core (arg parity).
 				integration: options.integration,
-				provider: options.provider,
+				noPR: options.noPR,
+				providerInstance: options.providerInstance,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
 				reviewLoop: options.reviewLoop,
 				slicerLoopMax: options.slicerLoopMax,
@@ -1745,7 +1829,8 @@ async function runRemotePipeline(
 		ignoreDivergedMain: true,
 		prepare: options.prepare,
 		verify: options.verify,
-		provider: options.provider,
+		noPR: options.noPR,
+		providerInstance: options.providerInstance,
 		body: agent.output,
 		review: options.review,
 		autoMerge: options.autoMerge,
@@ -1951,7 +2036,7 @@ export function jobWorktreeDoDriver(closure: {
 			integration: options.integration,
 			prepare: options.prepare,
 			verify: options.verify,
-			provider: options.provider,
+			noPR: options.noPR,
 			review: options.review,
 			autoMerge: options.autoMerge,
 			reviewModel: options.reviewModel,

@@ -8,6 +8,9 @@ import {
 	doFlagOverrides,
 	doNeedsAgentCmd,
 	NO_AGENT_CMD_MESSAGE,
+	noPRFlagOverrides,
+	shouldFailProposePrIntent,
+	PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 } from '../src/do-config.js';
 
 /**
@@ -192,5 +195,63 @@ describe('NO_AGENT_CMD_MESSAGE — the shared up-front refusal message', () => {
 		// hatches: the pi adapter (no agentCmd needed) and config.
 		expect(NO_AGENT_CMD_MESSAGE).toContain('--harness pi');
 		expect(NO_AGENT_CMD_MESSAGE).toMatch(/harness\/agentCmd|harness.*agentCmd/);
+	});
+});
+
+describe('noPRFlagOverrides — the --no-pr PR-INTENT flag mapping', () => {
+	it('maps `--no-pr` (commander `pr === false`) to `noPR: true`', () => {
+		expect(noPRFlagOverrides({pr: false})).toEqual({noPR: true});
+	});
+	it('absent `--no-pr` contributes NO key (the lower layer decides)', () => {
+		expect(noPRFlagOverrides({})).toEqual({});
+		// `pr === true` (no `--no-pr` passed) is also a no-op — only `--no-pr` sets it.
+		expect(noPRFlagOverrides({pr: true})).toEqual({});
+	});
+	it('rides the SAME flag-override chain via doFlagOverrides', () => {
+		expect(doFlagOverrides({pr: false})).toMatchObject({noPR: true});
+	});
+});
+
+describe('shouldFailProposePrIntent — the up-front PR-intent guard decision', () => {
+	const base = {
+		mode: 'propose' as const,
+		arbiterIsGitHub: true,
+		noPR: undefined,
+		ghCanOpenPr: () => false,
+	};
+
+	it('FIRES: propose + GitHub arbiter + noPR unset + probe says gh cannot open a PR', () => {
+		expect(shouldFailProposePrIntent(base)).toBe(true);
+	});
+
+	it('does NOT fire when the probe PASSES (ambient gh auth — absent identity OK)', () => {
+		// The CRITICAL case: NO `providers.github` identity but `gh` is ambiently
+		// authed ⇒ the probe passes ⇒ the guard must NOT fire (working setups proceed).
+		expect(shouldFailProposePrIntent({...base, ghCanOpenPr: () => true})).toBe(
+			false,
+		);
+	});
+
+	it('does NOT fire in merge mode (merge never opens a PR)', () => {
+		expect(shouldFailProposePrIntent({...base, mode: 'merge'})).toBe(false);
+	});
+
+	it('does NOT fire on a non-GitHub arbiter (no PR is possible there)', () => {
+		expect(shouldFailProposePrIntent({...base, arbiterIsGitHub: false})).toBe(
+			false,
+		);
+	});
+
+	it('does NOT fire when noPR is true (no PR is intended — the suppress-PR case)', () => {
+		expect(shouldFailProposePrIntent({...base, noPR: true})).toBe(false);
+	});
+
+	it('the message names every real fix (gh auth / providers.github token / --merge / --no-pr)', () => {
+		expect(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE).toMatch(/gh auth login/);
+		expect(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE).toMatch(
+			/providers\.github/,
+		);
+		expect(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE).toMatch(/--merge/);
+		expect(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE).toMatch(/--no-pr/);
 	});
 });

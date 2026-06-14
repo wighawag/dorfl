@@ -70,7 +70,8 @@ export function doFlagOverrides(
 		SlicerLoopFlags &
 		SelectionOrderFlags &
 		ObservationTriageFlags &
-		SurfaceBlockersFlags,
+		SurfaceBlockersFlags &
+		NoPRFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
 	const overrides = {
@@ -95,6 +96,9 @@ export function doFlagOverrides(
 		// `--slicer-loop-max`/`--slicer-loop-model`) rides the same chain — a DISTINCT
 		// family from the gate's `--review*`, never sharing a flag/key/field name.
 		...slicerLoopFlagOverrides(flags),
+		// `--no-pr` (the PR-INTENT axis): suppress the PR even on an authed GitHub
+		// arbiter. Rides the SAME flag > env > per-repo > global > default chain.
+		...noPRFlagOverrides(flags),
 	};
 	if (integration !== undefined) {
 		overrides.integration = integration;
@@ -297,6 +301,31 @@ export function surfaceBlockersFlagOverrides(
 }
 
 /**
+ * The PR-INTENT CLI flag (`--no-pr`), offered by `do`/`complete`/`run`: push the
+ * branch but deliberately skip the review request (the explicit suppress-PR
+ * intent, ADR §6). NOT a provider choice. Commander stores the negatable flag as
+ * `pr` (false when `--no-pr` is passed). Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain as `integration`/`review`.
+ */
+export interface NoPRFlags {
+	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
+	pr?: boolean;
+}
+
+/**
+ * Map the `--no-pr` flag into a {@link PartialConfig} override. Only an explicit
+ * `--no-pr` (commander's `pr === false`) contributes `noPR: true`; otherwise the
+ * key stays absent so the lower layer (env / per-repo / global / default) decides.
+ */
+export function noPRFlagOverrides(flags: NoPRFlags): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.pr === false) {
+		overrides.noPR = true;
+	}
+	return overrides;
+}
+
+/**
  * The null-default guard: the `null` adapter shells out to `agentCmd`, so it is
  * required there; the `pi` adapter invokes the pi CLI directly and does not
  * consume `agentCmd`. Returns `true` when the resolved config selects the null
@@ -317,3 +346,50 @@ export function doNeedsAgentCmd(config: Config): boolean {
 export const NO_AGENT_CMD_MESSAGE =
 	'no harness configured and no agentCmd set — nothing would run. Pass ' +
 	'--harness pi (or set harness/agentCmd in .agent-runner.json or global config).';
+
+/**
+ * The shared up-front message for the PR-INTENT pre-flight refusal: a `propose`
+ * run on a GitHub arbiter intends a PR (`noPR` unset) but a `gh` AUTH/AVAILABILITY
+ * PROBE says `gh` cannot open one. Surfaced BEFORE any claim/onboard/build so no
+ * work is wasted, and naming EVERY real fix (auth `gh`, set a `providers.github`
+ * identity token, switch to `--merge`, or `--no-pr` to push without a PR). The
+ * honest-failure value the `noPR` axis buys: it disambiguates "I deliberately
+ * want no PR" from "I wanted a PR and silently didn't get one". Shared so the
+ * in-place + no-checkout `do` paths speak with one voice.
+ */
+export const PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE =
+	'propose mode on a GitHub arbiter intends a PR, but `gh` is not ' +
+	'available/authenticated to open one. Run `gh auth login` (or set a ' +
+	'`providers.github` identity token), or pass `--merge` to land on main, or ' +
+	'`--no-pr` to push the branch without opening a PR.';
+
+/**
+ * Should the PR-INTENT pre-flight guard FIRE for this run? It fires ONLY when ALL
+ * hold: the run is `propose` mode (not `merge` — merge never opens a PR), the
+ * arbiter is a GitHub URL (only then is a PR even possible), `noPR` is UNSET (the
+ * operator INTENDS a PR), and the injected `gh` auth/availability `probe` reports
+ * `gh` cannot open one. The probe (mirroring `GitHubProvider.available`) is
+ * the signal, NOT a config inspection: an ABSENT `providers.github` identity must
+ * NOT trip this guard — it falls back to AMBIENT `gh` auth (the common local-dev
+ * case), which the probe correctly reports as available. A genuinely TRANSIENT
+ * mid-run `gh` outage (the probe passes here but the API fails later) is left to
+ * the runtime degrade — the probe only catches the start-of-run unauthed case.
+ */
+export function shouldFailProposePrIntent(input: {
+	mode: IntegrationMode;
+	arbiterIsGitHub: boolean;
+	noPR: boolean | undefined;
+	/** The `gh` auth/availability probe (true ⇒ `gh` CAN open a PR). */
+	ghCanOpenPr: () => boolean;
+}): boolean {
+	if (input.mode !== 'propose') {
+		return false;
+	}
+	if (!input.arbiterIsGitHub) {
+		return false;
+	}
+	if (input.noPR === true) {
+		return false;
+	}
+	return !input.ghCanOpenPr();
+}

@@ -8,6 +8,7 @@ import {
 	rmSync,
 } from 'node:fs';
 import {runOnce, type AgentRunner} from '../src/run.js';
+import {GitHubProvider} from '../src/github.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
 import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
@@ -146,8 +147,10 @@ describe('run through performIntegration — propose PR title + body', () => {
 	/**
 	 * The fleet's propose PRs now carry the SAME synthesised single-line `--title`
 	 * + agent-summary `--body` that `do`'s do (PR #15's fix, previously only on the
-	 * `do` path). A recording `gh` stub on PATH (no real GitHub) + `provider:
-	 * 'github'` drives the real propose pipeline; the stub records the `gh` args.
+	 * `do` path). A recording `gh` stub (no real GitHub) injected as the GitHub
+	 * provider INSTANCE drives the real propose pipeline; the stub records the `gh`
+	 * args. (The provider is arbiter-derived now — no `provider` override; the
+	 * instance seam `RunOptions.provider` is how tests drive it offline.)
 	 */
 	it('passes a synthesised --title + a --body (from the agent output); never --fill', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
@@ -176,12 +179,13 @@ describe('run through performIntegration — propose PR title + body', () => {
 			};
 		};
 
-		const config = configFor({integration: 'propose', provider: 'github'});
+		const config = configFor({integration: 'propose'});
 		const result = await runOnce({
 			config,
 			report: scanProject(config),
 			workspace: join(scratch.root, 'ws'),
 			agentRunner: summarisingAgent,
+			provider: new GitHubProvider({ghBin: gh}),
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
 		});
 		expect(result.items[0].status).toBe('claimed-done');

@@ -9,6 +9,16 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({})).toEqual(DEFAULT_CONFIG);
 	});
 
+	it('defaults noPR to false ("I want a PR")', () => {
+		expect(DEFAULT_CONFIG.noPR).toBe(false);
+		expect(mergeConfig({}).noPR).toBe(false);
+		expect(mergeConfig({noPR: true}).noPR).toBe(true);
+	});
+
+	it('has NO `provider` key (the override axis is removed)', () => {
+		expect('provider' in DEFAULT_CONFIG).toBe(false);
+	});
+
 	it('defaults autoBuild to false (strict)', () => {
 		expect(DEFAULT_CONFIG.autoBuild).toBe(false);
 		expect(mergeConfig({}).autoBuild).toBe(false);
@@ -145,6 +155,41 @@ describe('loadConfig', () => {
 		// never maps onto `autoBuild`, which stands on its own value.
 		const cfg = loadConfig(path);
 		expect(cfg.autoBuild).toBe(false);
+	});
+
+	it('a stale `provider` key is IGNORED with a deprecation warning (never a hard error)', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(path, JSON.stringify({provider: 'github', maxParallel: 3}));
+		const warnings: string[] = [];
+		const origErr = console.error;
+		console.error = (m?: unknown) => warnings.push(String(m ?? ''));
+		let cfg;
+		try {
+			cfg = loadConfig(path); // must NOT throw
+		} finally {
+			console.error = origErr;
+		}
+		// The rest of the config still loads (the stale key is dropped, not fatal).
+		expect(cfg.maxParallel).toBe(3);
+		expect('provider' in cfg).toBe(false);
+		expect(warnings.some((w) => /deprecated key 'provider'/.test(w))).toBe(
+			true,
+		);
+		expect(warnings.some((w) => /arbiter-derived/.test(w))).toBe(true);
+	});
+
+	it('a stale `provider: none` deprecation warning points at the `noPR` replacement', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(path, JSON.stringify({provider: 'none'}));
+		const warnings: string[] = [];
+		const origErr = console.error;
+		console.error = (m?: unknown) => warnings.push(String(m ?? ''));
+		try {
+			loadConfig(path);
+		} finally {
+			console.error = origErr;
+		}
+		expect(warnings.some((w) => /noPR/.test(w))).toBe(true);
 	});
 
 	it('loads a valid identity block', () => {

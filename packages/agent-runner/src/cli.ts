@@ -84,6 +84,7 @@ import {
 	doNeedsAgentCmd,
 	NO_AGENT_CMD_MESSAGE,
 	reviewFlagOverrides,
+	noPRFlagOverrides,
 } from './do-config.js';
 import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
 import {harnessSurfaceGate} from './surface-gate.js';
@@ -292,7 +293,7 @@ function buildRegistrySetAdvanceTick(options: {
 				integration: config.integration,
 				prepare: config.prepare,
 				verify: config.verify,
-				provider: config.provider,
+				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
@@ -399,7 +400,8 @@ interface RunFlags extends ScanFlags {
 	perRepoMax?: string;
 	arbiter?: string;
 	integration?: string;
-	provider?: string;
+	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
+	pr?: boolean;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -426,8 +428,11 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	if (flags.integration === 'propose' || flags.integration === 'merge') {
 		overrides.integration = flags.integration;
 	}
-	if (flags.provider === 'github' || flags.provider === 'none') {
-		overrides.provider = flags.provider;
+	// `--no-pr` (the PR-INTENT axis): suppress the PR even on an authed GitHub
+	// arbiter. Commander stores the negatable flag as `pr` (false when `--no-pr` is
+	// passed). Rides the SAME flag-override chain as `integration`.
+	if (flags.pr === false) {
+		overrides.noPR = true;
 	}
 	// The harness/adapter flags (--agent-cmd/--model/--harness/--pi-bin) map via
 	// the SHARED per-key mapping `do` also reuses (do-config.harnessFlagOverrides),
@@ -496,6 +501,8 @@ interface CompleteFlags {
 	arbiter?: string;
 	merge?: boolean;
 	propose?: boolean;
+	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
+	pr?: boolean;
 	switch?: boolean;
 	ignoreDivergedMain?: boolean;
 	skipVerify?: boolean;
@@ -523,6 +530,8 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
+	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
+	pr?: boolean;
 	ignoreDivergedMain?: boolean;
 	agentCmd?: string;
 	model?: string;
@@ -547,6 +556,8 @@ interface IntakeFlags {
 	arbiter?: string;
 	merge?: boolean;
 	propose?: boolean;
+	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
+	pr?: boolean;
 	mergePrd?: boolean;
 	proposePrd?: boolean;
 	mergeSlice?: boolean;
@@ -851,8 +862,8 @@ export function buildProgram(): Command {
 			'integration mode: propose (default) or merge',
 		)
 		.option(
-			'--provider <name>',
-			'propose-mode review-request provider: github (gh pr create) or none (push-only). Default: auto-detect from the arbiter URL (a GitHub remote => github, else none).',
+			'--no-pr',
+			'propose without opening a PR: push the branch but deliberately skip the review request, even on an authed GitHub arbiter (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
 		.option(
@@ -1326,6 +1337,10 @@ export function buildProgram(): Command {
 			'integrate in propose mode this invocation (mutually exclusive with --merge; overrides config)',
 		)
 		.option(
+			'--no-pr',
+			'propose without opening a PR: push the branch but deliberately skip the review request, even on an authed GitHub arbiter (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
+		)
+		.option(
 			'--no-switch',
 			'stay on the work/<slug> branch (and keep it) instead of switching back to main',
 		)
@@ -1392,6 +1407,8 @@ export function buildProgram(): Command {
 				flags: {
 					...(flagMode ? {integration: flagMode} : {}),
 					...reviewFlagOverrides(flags),
+					// `--no-pr` (the PR-INTENT axis) rides the SAME chain.
+					...noPRFlagOverrides(flags),
 				},
 			});
 			if (resolved.message) {
@@ -1403,7 +1420,7 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: config.integration,
-				provider: config.provider,
+				noPR: config.noPR,
 				noSwitch: flags.switch === false,
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
@@ -1485,6 +1502,10 @@ export function buildProgram(): Command {
 		.option(
 			'--propose',
 			'integrate in propose mode this invocation (default; mutually exclusive with --merge; overrides config)',
+		)
+		.option(
+			'--no-pr',
+			'propose without opening a PR: push the branch but deliberately skip the review request, even on an authed GitHub arbiter (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
 			'--ignore-diverged-main',
@@ -1703,7 +1724,7 @@ export function buildProgram(): Command {
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
 					verify: remoteConfig.verify,
-					provider: remoteConfig.provider,
+					noPR: remoteConfig.noPR,
 					harness: remoteHarness,
 					agentCmd: remoteConfig.agentCmd,
 					model: remoteConfig.model,
@@ -1834,7 +1855,7 @@ export function buildProgram(): Command {
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
 				verify: config.verify,
-				provider: config.provider,
+				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
@@ -2097,7 +2118,7 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
-					provider: remoteConfig.provider,
+					noPR: remoteConfig.noPR,
 					harness: isoHarness,
 					agentCmd: remoteConfig.agentCmd,
 					model: remoteConfig.model,
@@ -2215,7 +2236,7 @@ export function buildProgram(): Command {
 				integration: config.integration,
 				prepare: config.prepare,
 				verify: config.verify,
-				provider: config.provider,
+				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
@@ -2539,6 +2560,10 @@ export function buildProgram(): Command {
 			'integrate BOTH outcomes (slice AND PRD) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
 		)
 		.option(
+			'--no-pr',
+			'propose without opening a PR for intake emissions: push the branch but deliberately skip the review request (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
+		)
+		.option(
 			'--merge-prd',
 			'integrate a PRD outcome in merge mode (granular; overrides --merge/--propose for a PRD; mutually exclusive with --propose-prd)',
 		)
@@ -2590,6 +2615,8 @@ export function buildProgram(): Command {
 				global,
 				flags: {
 					...harnessFlagOverrides(flags),
+					// `--no-pr` (the PR-INTENT axis) rides the SAME chain.
+					...noPRFlagOverrides(flags),
 				},
 			});
 			if (resolved.message) {
@@ -2622,7 +2649,7 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: modes,
-				provider: config.provider,
+				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,

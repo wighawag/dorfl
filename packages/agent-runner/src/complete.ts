@@ -11,7 +11,8 @@ import {
 } from './integration-core.js';
 import {ledgerWrite} from './ledger-write.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
-import type {IntegrationMode, ReviewProviderName} from './config.js';
+import type {ReviewProvider} from './integrator.js';
+import type {IntegrationMode} from './config.js';
 import {runAsync, localMainAheadCount, type RunResult} from './git.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
 
@@ -205,12 +206,24 @@ export interface CompleteOptions {
 		env?: NodeJS.ProcessEnv;
 	}) => void;
 	/**
-	 * The review-request provider override (config `provider`, ADR §6). Unset ⇒
-	 * auto-detect from the arbiter URL (a GitHub remote ⇒ `gh pr create`, else
-	 * push-only `none`); an explicit value forces a provider. Ignored when
-	 * `openPr` is injected (the legacy bridge wins). `merge` mode ignores it.
+	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
+	 * `run` exposes via `RunOptions.provider`; forwarded to `performIntegration` as
+	 * `providerInstance`). Tests/embeddings inject a stubbed `GitHubProvider` (a
+	 * custom `gh` path) to drive the full propose pipeline OFFLINE without a real
+	 * GitHub arbiter. This is the resolved provider OBJECT — NOT a config override
+	 * (there is none; the provider is purely arbiter-derived). Unset ⇒ the core
+	 * selects the provider from the arbiter URL as normal.
 	 */
-	provider?: ReviewProviderName;
+	providerInstance?: ReviewProvider;
+	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6). When `true` on the propose
+	 * path, push the branch but SKIP the review request (the explicit suppress-PR
+	 * intent, re-homing the old `provider: none` use). NOT a provider choice — the
+	 * provider is purely arbiter-derived. Threaded verbatim into
+	 * {@link performIntegration}. Ignored in `merge` mode and when `openPr` is
+	 * injected. Unset/false ⇒ propose opens the PR via the arbiter-derived provider.
+	 */
+	noPR?: boolean;
 	/**
 	 * Surface a needs-attention bounce ON THE ARBITER (the AUTONOMOUS variant of
 	 * the failure path). When set, the two FAILURE routings (`gate-failed` /
@@ -488,7 +501,8 @@ async function runComplete(
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
 		mode: requestedMode,
-		provider: options.provider,
+		noPR: options.noPR,
+		providerInstance: options.providerInstance,
 		openPr: options.openPr,
 		body: options.body,
 		type: options.type,

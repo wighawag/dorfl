@@ -79,7 +79,11 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	arbitersDir: 'string',
 	humanWorktreesDir: 'string',
 	integration: {enum: ['propose', 'merge']},
-	provider: {enum: ['none', 'github']},
+	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
+	// `AGENT_RUNNER_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
+	// `provider` override has NO env var (a stale `AGENT_RUNNER_PROVIDER` is ignored
+	// with a deprecation warning — see `envOverrides`).
+	noPR: 'boolean',
 	agentCmd: 'string',
 	model: 'string',
 	harness: {enum: ['null', 'pi']},
@@ -169,7 +173,25 @@ function coerceValue(
  * Env may set ANY key — host-only included — because env is a per-machine
  * source, NOT the committed repo file (see this module's doc + ADR §13).
  */
-export function envOverrides(env: EnvMap = process.env): PartialConfig {
+export function envOverrides(
+	env: EnvMap = process.env,
+	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
+): PartialConfig {
+	// A stale `AGENT_RUNNER_PROVIDER` (the removed provider OVERRIDE) is IGNORED with
+	// a one-line deprecation warning, never an error — the provider is now purely
+	// arbiter-derived; "suppress the PR" re-homes to `noPR` (`AGENT_RUNNER_NO_PR`).
+	const staleProvider = env[ENV_PREFIX + 'PROVIDER'];
+	if (staleProvider !== undefined) {
+		warn(
+			`Ignoring deprecated env var ${ENV_PREFIX}PROVIDER: the provider is now ` +
+				'purely arbiter-derived (a GitHub remote ⇒ the GitHub provider, else ' +
+				'none). To suppress the PR (the old `none` use), set ' +
+				`${ENV_PREFIX}NO_PR=true (or pass --no-pr).` +
+				(staleProvider === 'none'
+					? ' (your `none` maps directly to NO_PR=true.)'
+					: ''),
+		);
+	}
 	const overrides: PartialConfig = {};
 	for (const key of Object.keys(KEY_COERCIONS) as (keyof Config)[]) {
 		const coercion = KEY_COERCIONS[key];

@@ -12,7 +12,8 @@ import {
 	performIntegration,
 	type IntegrationCoreResult,
 } from './integration-core.js';
-import type {IntegrationMode, ReviewProviderName} from './config.js';
+import type {IntegrationMode} from './config.js';
+import type {ReviewProvider} from './integrator.js';
 import {
 	resolveSlicingEligibility,
 	type SlicingEligibilityResult,
@@ -191,8 +192,21 @@ export interface PerformSliceOptions {
 	 * system default (`propose`).
 	 */
 	integration?: IntegrationMode;
-	/** The review-request provider override (propose mode); auto-detect when unset. */
-	provider?: ReviewProviderName;
+	/**
+	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
+	 * the produced slice branch but skips the PR (the explicit suppress-PR intent).
+	 * NOT a provider choice — the provider is purely arbiter-derived. Unset/false ⇒
+	 * the PR opens normally.
+	 */
+	noPR?: boolean;
+	/**
+	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
+	 * `run`/`do` expose; forwarded to `performIntegration` as `providerInstance`).
+	 * Tests/embeddings inject a stubbed `GitHubProvider` (a custom `gh` path) to
+	 * drive the propose pipeline OFFLINE. The resolved provider OBJECT, NOT a config
+	 * override. Unset ⇒ the core selects from the arbiter URL.
+	 */
+	providerInstance?: ReviewProvider;
 	/**
 	 * **The slice-SET ACCEPTANCE GATE** (slice `slice-acceptance-gate`): the
 	 * slice-path mirror of the build Gate-2, riding {@link performIntegration}'s
@@ -536,7 +550,8 @@ export async function performSlice(
 			// (See ## Decisions in the slice.)
 			autoMerge: true,
 			mode: options.integration ?? 'propose',
-			provider: options.provider,
+			noPR: options.noPR,
+			providerInstance: options.providerInstance,
 			type: 'slicing',
 			lifecycle: {
 				// Read the PR title / commit summary from the held PRD (before it moves).
