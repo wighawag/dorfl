@@ -133,6 +133,15 @@ export interface ApplyCompleteTransitionInput {
 	 * threaded straight to the provider. Absent ⇒ the provider's `--fill` default.
 	 */
 	body?: string;
+	/**
+	 * **Reap the remote head branch inline after a merge lands** (the merged-branch
+	 * hygiene slice's part (b)). When `true` on the `merge` path, delete the remote
+	 * `work/<slug>` head AFTER the work landed on `main` (provably merged, so
+	 * ancestor-safe; idempotent no-op when no remote head exists). Threaded straight
+	 * to {@link Integrator.integrate}. Ignored in `propose` mode (the branch is the
+	 * review surface, reaped later by `gc --remote-branches`).
+	 */
+	deleteMergedHead?: boolean;
 	/** Working clone/worktree the integration runs in. */
 	cwd: string;
 	/** Environment for child git processes. */
@@ -550,6 +559,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		noPR,
 		title,
 		body,
+		deleteMergedHead,
 		cwd,
 		env,
 	}): Promise<ApplyCompleteTransitionResult> {
@@ -562,6 +572,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			noPR,
 			title,
 			body,
+			deleteMergedHead,
 			env,
 		});
 	},

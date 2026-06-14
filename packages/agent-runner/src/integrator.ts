@@ -242,6 +242,21 @@ export interface IntegrateInput {
 	 * `merge` mode (it never opens a request).
 	 */
 	noPR?: boolean;
+	/**
+	 * **Reap the remote head branch INLINE after a merge lands** (this slice's part
+	 * (b)). When `true` on the `merge` path, AFTER the work landed on `main` (the
+	 * commits are now provably on main, so the ancestor predicate trivially holds),
+	 * delete the remote `work/<slug>` head branch via `git push <arbiter> --delete`
+	 * — the cross-machine counterpart of the worktree reap, done at the exact merge
+	 * moment so no sweep is needed for the we-merged case. IDEMPOTENT: when no
+	 * remote head exists (the plain `${branch}:main` push opened none), the delete is
+	 * a clean best-effort no-op. NEVER `--force` (a just-merged ref needs none). The
+	 * autonomous complete path sets this on; the direct `integrate` callers / tests
+	 * leave it off, so the bare `${branch}:main` push is byte-for-byte unchanged.
+	 * Ignored in `propose` mode (the branch is the review surface — it is reaped
+	 * later by the `gc --remote-branches` sweep once its PR merges).
+	 */
+	deleteMergedHead?: boolean;
 	env?: NodeJS.ProcessEnv;
 	/** Bounded-backoff bounds for the provider's review-request retry. */
 	backoff?: BackoffOptions;
@@ -313,6 +328,15 @@ export class Integrator {
 			// propose's `url`). Best-effort: a failed read leaves `commit` absent, so a
 			// caller that links it (intake) simply omits the link rather than throwing.
 			const commit = resolveBranchTip(input);
+			// Part (b): reap the remote head INLINE now the merge has landed. The work
+			// is on `main` (we just pushed it there), so the head is provably merged and
+			// safe to delete — the exact merge moment, no sweep needed. Idempotent +
+			// best-effort: a no-remote-head merge (the common `${branch}:main` push) is a
+			// clean no-op. NEVER `--force`. Gated by `deleteMergedHead` so the bare
+			// `integrate` callers / tests are unchanged.
+			if (input.deleteMergedHead === true) {
+				deleteMergedHeadBranch(input);
+			}
 			return {
 				mode: 'merge',
 				mergedToMain: true,
@@ -473,6 +497,68 @@ function pushBranch(
 	git(['push', input.arbiter, refspec, ...extraArgs], input.cwd, {
 		env: input.env,
 	});
+}
+
+/**
+ * Reap the remote `work/<slug>` HEAD branch on the arbiter AFTER its work landed
+ * on `main` (merge mode, part (b)). The merge push above already put the commits
+ * on `main`, so the head is PROVABLY merged — it is the recovery point no longer
+ * (its work is on main), exactly the never-delete invariant's release condition.
+ * We additionally CONFIRM the head, when it exists, is an ancestor of
+ * `<arbiter>/main` before deleting, so a racing un-merged amend is never reaped.
+ *
+ * BEST-EFFORT + idempotent (soft `run`, never throws): the deletion of a
+ * fully-merged ref needs NO force (and we never pass one); a no-remote-head merge
+ * (the plain `${branch}:main` push opened none) is a clean no-op; an unreachable
+ * arbiter / already-gone ref is tolerated. The integrate's safety rides on the
+ * merge push, never on this hygiene step.
+ */
+function deleteMergedHeadBranch(input: IntegrateInput): void {
+	const env = input.env;
+	const arbiter = input.arbiter;
+	const branch = input.branch;
+	// Does a remote head exist at all? (`ls-remote` exits 0 with empty stdout when
+	// absent.) No head ⇒ nothing to reap (the common direct-merge case).
+	const ls = run('git', ['ls-remote', '--heads', arbiter, branch], input.cwd, {
+		env,
+	});
+	if (ls.status !== 0 || ls.stdout.trim() === '') {
+		return; // unreachable arbiter, or no remote head — nothing to delete.
+	}
+	// The head exists. Confirm it is an ancestor of <arbiter>/main before deleting
+	// (it just merged, so this holds; the guard refuses a racing un-merged amend).
+	run(
+		'git',
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/main:refs/remotes/${arbiter}/main`,
+			`+refs/heads/${branch}:refs/remotes/${arbiter}/${branch}`,
+		],
+		input.cwd,
+		{env},
+	);
+	const headSha = parseLsRemoteSha(ls.stdout);
+	if (headSha !== undefined) {
+		const isMerged = run(
+			'git',
+			['merge-base', '--is-ancestor', headSha, `refs/remotes/${arbiter}/main`],
+			input.cwd,
+			{env},
+		);
+		if (isMerged.status !== 0) {
+			return; // NOT provably merged (a racing un-merged amend) — never reap.
+		}
+	}
+	// Provably merged: delete the remote head (NEVER `--force`).
+	run('git', ['push', arbiter, '--delete', branch], input.cwd, {env});
+}
+
+/** First sha from a `git ls-remote` output line (`<sha>\t<ref>`), or undefined. */
+function parseLsRemoteSha(stdout: string): string | undefined {
+	const m = /^([0-9a-f]{40})\s/m.exec(stdout.trim());
+	return m ? m[1] : undefined;
 }
 
 /**

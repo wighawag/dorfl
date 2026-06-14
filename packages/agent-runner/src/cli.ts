@@ -93,6 +93,7 @@ import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
+import {sweepRemoteMergedBranches} from './reap-branches.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -576,6 +577,10 @@ interface GcFlags {
 	yes?: boolean;
 	json?: boolean;
 	ledger?: string;
+	remoteBranches?: boolean;
+	arbiter?: string;
+	cwd?: string;
+	dryRun?: boolean;
 }
 
 interface StatusFlags {
@@ -2345,6 +2350,22 @@ export function buildProgram(): Command {
 			'--ledger [repoPath]',
 			'SWEEP the work/ lifecycle LEDGER instead of job worktrees: REPORT (never delete) every slug present in more than one work/ status folder (the one-slug-one-folder belt-and-suspenders), with its folders + candidate canonical folder, for a HUMAN to resolve. Defaults to the cwd repo.',
 		)
+		.option(
+			'--remote-branches',
+			'SWEEP the arbiter’s remote work/* BRANCHES instead of job worktrees: delete (via git push --delete, NEVER --force) exactly those PROVABLY MERGED into <arbiter>/main (git merge-base --is-ancestor, the SAME predicate the worktree reaper uses), and RETAIN the rest with a reason. An in-flight/un-merged branch (the recovery point) is NEVER touched. Provider-agnostic plain git — works on a --bare arbiter. The merged-only complement of `requeue --reset`.',
+		)
+		.option(
+			'--arbiter <remote>',
+			'(with --remote-branches) the arbiter git remote whose work/* branches to sweep (default: origin); resolved from --cwd',
+		)
+		.option(
+			'--cwd <dir>',
+			'(with --remote-branches) the local repo/clone whose --arbiter remote points at the arbiter to sweep (default: cwd); only remote refs are read + deleted, never the working tree',
+		)
+		.option(
+			'--dry-run',
+			'(with --remote-branches) REPORT which merged branches WOULD be reaped without deleting anything (a read-only preview)',
+		)
 		.option('--json', 'output the raw result as JSON')
 		.action((flags: GcFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
@@ -2366,6 +2387,44 @@ export function buildProgram(): Command {
 				// A corrupt ledger is a fail-loud condition: exit non-zero so a human
 				// (or a script) cannot miss it, mirroring the integration core's refusal.
 				process.exit(result.duplicates.length > 0 ? 1 : 0);
+			}
+
+			// The REMOTE merged-BRANCH sweep (this slice): a SEPARATE surface from the
+			// worktree reaper below — it deletes PROVABLY-MERGED remote `work/*` branches
+			// on the arbiter (the cross-machine counterpart of reaping local worktrees),
+			// guarded by the SAME ancestor-of-main predicate. Provider-agnostic plain git
+			// (works on a `--bare` arbiter); NEVER `--force` (a merged ref needs none),
+			// NEVER touches an in-flight branch.
+			if (flags.remoteBranches) {
+				const sweep = sweepRemoteMergedBranches({
+					cwd: flags.cwd ?? process.cwd(),
+					arbiter: flags.arbiter ?? 'origin',
+					dryRun: flags.dryRun === true,
+					note: (message) => console.error(`>> ${message}`),
+				});
+				if (flags.json) {
+					console.log(JSON.stringify(sweep, null, 2));
+					return;
+				}
+				if (flags.dryRun === true) {
+					for (const w of sweep.wouldReap) {
+						console.log(`  [would-reap] ${w.branch} \u2014 merged`);
+					}
+				} else {
+					for (const r of sweep.reaped) {
+						console.log(`  [reaped]   ${r.branch} \u2014 merged`);
+					}
+				}
+				for (const ret of sweep.retained) {
+					console.log(`  [retained] ${ret.branch} \u2014 ${ret.reasonText}`);
+				}
+				const reapedCount =
+					flags.dryRun === true ? sweep.wouldReap.length : sweep.reaped.length;
+				const verb = flags.dryRun === true ? 'would reap' : 'reaped';
+				console.log(
+					`Summary: ${reapedCount} ${verb}, ${sweep.retained.length} retained.`,
+				);
+				return;
 			}
 
 			// `--force` discards un-saved work, so it is gated behind an explicit

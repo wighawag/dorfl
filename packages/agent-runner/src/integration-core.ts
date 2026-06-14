@@ -892,6 +892,14 @@ export async function performIntegration(
 		// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
 		// regression). Ignored in merge mode by the provider/integrator.
 		body: composeProposeBody({slug, body: input.body}),
+		// Part (b) of the merged-branch hygiene slice: when WE perform the merge
+		// (this resolved `merge` mode), reap the remote `work/<slug>` HEAD branch
+		// INLINE right after the merge lands — the commits are now on `main`, so the
+		// head is provably merged and safe to delete (ancestor-guarded inside the
+		// integrator). Idempotent no-op when no remote head exists (the plain
+		// `${branch}:main` push opened none); ignored in `propose` mode (its branch is
+		// the review surface, reaped later by `gc --remote-branches`). NEVER `--force`.
+		deleteMergedHead: true,
 		cwd,
 		env,
 	});

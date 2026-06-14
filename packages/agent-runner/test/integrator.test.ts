@@ -7,7 +7,7 @@ import {
 	rebaseOntoArbiterMain,
 	type ReviewProvider,
 } from '../src/integrator.js';
-import {git} from '../src/git.js';
+import {git, run} from '../src/git.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -159,6 +159,70 @@ describe('Integrator — merge mode (direct to main, never --force)', () => {
 		// The additive `commit` field surfaces the SHA that LANDED on main (the merge-
 		// mode twin of propose's `url`) — exactly the work branch's tip.
 		expect(result.commit).toBe(tip);
+	});
+
+	it('deleteMergedHead: reaps the remote head INLINE after the merge lands', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const branch = workBranch(repo, 'feat');
+		// Simulate the propose+we-merge flow: a remote head already exists on the
+		// arbiter (an opened PR's branch) BEFORE we perform the merge.
+		gitIn(['push', '-q', 'arbiter', `${branch}:${branch}`], repo);
+		const existsBefore = run(
+			'git',
+			['ls-remote', '--heads', 'arbiter', branch],
+			repo,
+			{env: gitEnv()},
+		);
+		expect(existsBefore.stdout.trim()).not.toBe('');
+
+		const integrator = new Integrator({provider: new NoneProvider()});
+		const result = await integrator.integrate({
+			cwd: repo,
+			arbiter: 'arbiter',
+			branch,
+			mode: 'merge',
+			deleteMergedHead: true,
+			env: gitEnv(),
+		});
+		expect(result.mergedToMain).toBe(true);
+
+		// The work landed on main AND the now-merged remote head was reaped inline.
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const tip = git(['rev-parse', branch], repo, {env: gitEnv()}).trim();
+		const main = git(['rev-parse', 'arbiter/main'], repo, {
+			env: gitEnv(),
+		}).trim();
+		expect(main).toBe(tip);
+		const existsAfter = run(
+			'git',
+			['ls-remote', '--heads', 'arbiter', branch],
+			repo,
+			{env: gitEnv()},
+		);
+		expect(existsAfter.stdout.trim()).toBe('');
+	});
+
+	it('deleteMergedHead is a clean no-op when no remote head exists (direct merge)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const branch = workBranch(repo, 'feat');
+		// No remote head pushed: the plain `${branch}:main` merge opened none.
+		const integrator = new Integrator({provider: new NoneProvider()});
+		const result = await integrator.integrate({
+			cwd: repo,
+			arbiter: 'arbiter',
+			branch,
+			mode: 'merge',
+			deleteMergedHead: true,
+			env: gitEnv(),
+		});
+		expect(result.mergedToMain).toBe(true);
+		// The merge still landed; nothing to reap and no error.
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const tip = git(['rev-parse', branch], repo, {env: gitEnv()}).trim();
+		const main = git(['rev-parse', 'arbiter/main'], repo, {
+			env: gitEnv(),
+		}).trim();
+		expect(main).toBe(tip);
 	});
 
 	it('PROPOSE mode does NOT populate `commit` (the PR `url` is the link there)', async () => {
