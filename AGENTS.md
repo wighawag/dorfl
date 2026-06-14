@@ -17,10 +17,12 @@ Do NOT run `pnpm format:check` first expecting to hand-fix the diff — just run
 A slice is "green" / done-eligible when this passes (equivalent to `agent-runner verify`):
 
 ```sh
-pnpm -r build && pnpm -r test && pnpm -r format:check
+pnpm -r build && pnpm -r test && pnpm format:check
 ```
 
-So a normal finish is: `pnpm format` → confirm `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
+Note: `format:check` is a ROOT-only script (`prettier --check .`), so it is `pnpm format:check`, NOT `pnpm -r format:check`. The `-r` form errors `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT` because no package has that script, whereas `build`/`test` DO exist per-package so the `-r` form is correct for those. This matches the `verify` command in `.agent-runner.json`.
+
+So a normal finish is: `pnpm format` → confirm `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 
 ## Protocol docs — edit the SOURCE, never `work/protocol/`
 
