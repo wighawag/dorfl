@@ -1029,6 +1029,24 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 }
 
 /**
+ * The EXACT recovery one-liner handed to the operator when an isolated/remote `do`
+ * integration fails terminally AFTER the work was committed + done-moved (the
+ * stale-lease-strand class surfaced by Part B #97), leaving the job worktree
+ * RETAINED. It points them straight at the recover-already-committed path
+ * (`complete --isolated <slug>`) so they need not reverse-engineer the encoded
+ * worktree path \u2014 the FINISH half of try-to-finish / else-surface. Detection is
+ * unspoofable (an already-integrated slice is a clean no-op), so re-running it is
+ * always safe.
+ */
+export function recoverIsolatedOneLiner(slug: string): string {
+	return (
+		`To FINISH the stranded branch once the cause clears, run: ` +
+		`agent-runner complete --isolated ${slug} ` +
+		`(integrates the kept commit from the retained worktree; a no-op if already integrated).`
+	);
+}
+
+/**
  * Build the HONEST per-op fragment describing WHAT actually reached the arbiter
  * after a needs-attention route — reading the seam's captured per-op outcomes
  * (`surface`, `branchPush`) rather than ASSUMING "surfaced + pushed" off the
@@ -1956,6 +1974,12 @@ async function runRemotePipeline(
 		completed.outcome === 'review-blocked' ||
 		completed.outcome === 'rebase-conflict'
 	) {
+		// The job worktree is RETAINED (the §4 reap keeps a not-provably-safe tree).
+		// When the work was committed + done-moved but the integrate failed terminally
+		// (the stale-lease-strand class Part B #97 surfaces), the operator FINISHES the
+		// stranded branch with the recover-already-committed path \u2014 hand them the EXACT
+		// one-liner so they need not reverse-engineer the encoded worktree path.
+		note(recoverIsolatedOneLiner(slug));
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',

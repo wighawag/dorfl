@@ -21,6 +21,7 @@ import {selectProvider} from './github.js';
 import type {IntegrationMode} from './config.js';
 import {git, run, runAsync, type RunResult} from './git.js';
 import {workBranchRef} from './slug-namespace.js';
+import {isAncestor} from './gc.js';
 
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
@@ -67,7 +68,8 @@ export type IntegrationCoreOutcome =
 	| 'gate-failed' // the acceptance gate (verify) was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
-	| 'invariant-violation'; // one-slug-one-folder would break (slug in two folders on the arbiter)
+	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
+	| 'already-integrated'; // committed-recovery: the kept tip is already on <arbiter>/main (clean no-op)
 
 /**
  * The CORE's input — everything the band needs, nothing caller-shaped. Every
@@ -167,6 +169,26 @@ export interface IntegrationCoreInput {
 	 * surfaced state on main.
 	 */
 	recovering: boolean;
+	/**
+	 * **RECOVER an already-committed, already-done-moved STRANDED branch** (PRD
+	 * `ledger-integrity` story 6, the `finish-already-committed-branch` slice). When
+	 * `true`, the work is ALREADY committed on the work branch with the slice already
+	 * `git mv`'d into `work/done/` (a terminal push failed AFTER steps 2–3, leaving
+	 * the green work stranded). So the core SKIPS steps 0–3 (prepare / gate / review /
+	 * done-move / commit — they already ran) and runs ONLY the rebase→integrate TAIL
+	 * (steps 4–5) from the kept commit, reusing the SAME
+	 * `ledgerWrite.applyCompleteTransition` integrate primitive — no rebuild, no
+	 * orphan branch.
+	 *
+	 * The detection is UNSPOOFABLE: before acting the core verifies the work-branch
+	 * tip is genuinely AHEAD of `<arbiter>/main` (`isAncestor`, the SAME reachability
+	 * predicate `gc.ts` uses). A tip ALREADY reachable on `<arbiter>/main` is
+	 * already-integrated → a clean `already-integrated` no-op, NEVER a re-push /
+	 * double-integrate. Mutually exclusive with `recovering` and `lifecycle` (both
+	 * presuppose an un-committed source state this path has moved past); when set
+	 * they are ignored.
+	 */
+	committedRecovery?: boolean;
 	/**
 	 * The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * FIRST `verify` on a fresh worktree to make the env ready (install deps,
@@ -356,6 +378,27 @@ export async function performIntegration(
 	// `let` (not `const`): Gate 2's `autoMerge`-off policy may DOWNGRADE a resolved
 	// `merge` to `propose` on an approve (review gates, a human merges) below.
 	let mode = input.mode;
+
+	// RECOVER an already-committed, already-done-moved STRANDED branch (PRD
+	// `ledger-integrity` story 6). The work + the done-move are ALREADY committed on
+	// the work branch (a terminal push failed AFTER steps 2–3); SKIP steps 0–3
+	// (prepare / gate / review / done-move / commit) and run ONLY the
+	// rebase→integrate TAIL from the kept commit, reusing the SAME integrate
+	// primitive. Returns BEFORE any of the build-path steps run.
+	if (input.committedRecovery) {
+		return await recoverAlreadyCommitted({
+			cwd,
+			arbiter,
+			slug,
+			branch,
+			mode,
+			noPR: input.noPR,
+			providerInstance: input.providerInstance,
+			openPr: input.openPr,
+			env,
+			note,
+		});
+	}
 
 	// The file whose `title:` seeds the commit summary + PR title. For a SLICING
 	// transition (a non-slice `lifecycle`) this is the held PRD it supplies; for a
@@ -957,6 +1000,136 @@ export async function performIntegration(
 		routedToNeedsAttention: false,
 		branch,
 		commitMessage,
+		integration,
+	};
+}
+
+/**
+ * RECOVER an already-committed, already-done-moved STRANDED branch (PRD
+ * `ledger-integrity` story 6, the `finish-already-committed-branch` slice). The
+ * green work AND the `git mv → work/done/` are ALREADY committed on the work
+ * branch (a terminal push failed AFTER `performIntegration`'s steps 2–3), and the
+ * tip is NOT on the arbiter. This runs ONLY the rebase→integrate TAIL (steps 4–5)
+ * from the kept commit — NO re-gate, NO re-done-move, NO re-commit, NO rebuild,
+ * NO orphan branch — reusing the SAME `ledgerWrite.applyCompleteTransition`
+ * integrate primitive the build path uses.
+ *
+ * SAFETY — UNSPOOFABLE detection: BEFORE acting it fetches `<arbiter>/main` and
+ * checks whether the kept tip is ALREADY reachable there (`isAncestor`, the SAME
+ * predicate `gc.ts` uses). If so the work is already integrated → a clean
+ * `already-integrated` no-op (never a re-push / double-integrate); a re-run after a
+ * successful recovery hits this. Only when the tip is genuinely AHEAD does it
+ * rebase + integrate. A rebase CONFLICT here is a genuine code conflict the human
+ * resolves — the branch is aborted and the outcome is `rebase-conflict` (the kept
+ * commit stays intact on the branch, recoverable), NEVER auto-resolved, NEVER
+ * `--force` to main.
+ */
+async function recoverAlreadyCommitted(params: {
+	cwd: string;
+	arbiter: string;
+	slug: string;
+	branch: string;
+	mode: IntegrationMode;
+	noPR?: boolean;
+	providerInstance?: ReviewProvider;
+	openPr?: (opts: {
+		cwd: string;
+		branch: string;
+		env?: NodeJS.ProcessEnv;
+	}) => void;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<IntegrationCoreResult> {
+	const {cwd, arbiter, slug, branch, mode, env, note} = params;
+
+	// Fetch `<arbiter>/main` into the tracking ref (the same explicit refspec the
+	// build path's step-4 fetch uses, so a bare-mirror worktree resolves it too).
+	await gitHard(
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/main:refs/remotes/${arbiter}/main`,
+		],
+		cwd,
+		env,
+	);
+
+	const tip = (
+		await gitSoft(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, env)
+	).stdout.trim();
+	if (tip === '') {
+		throw new Error(
+			`cannot recover '${slug}': HEAD does not resolve (no committed work on ` +
+				`${branch}?).`,
+		);
+	}
+
+	// UNSPOOFABLE detection: the kept tip ALREADY reachable on `<arbiter>/main`
+	// means the work is already integrated — a clean no-op, NEVER a re-integration.
+	// (`isAncestor` is the SAME reachability predicate `gc.ts` uses; do not fork it.)
+	if (isAncestor(cwd, tip, `refs/remotes/${arbiter}/main`, env)) {
+		const message =
+			`Nothing to recover for '${slug}': its work branch tip is already on ` +
+			`${arbiter}/main (already integrated). No re-push, no double-integrate.`;
+		note(message);
+		return {
+			outcome: 'already-integrated',
+			routedToNeedsAttention: false,
+			branch,
+			reason: message,
+		};
+	}
+
+	// The tip is genuinely AHEAD — rebase the kept commit onto the latest
+	// `<arbiter>/main`. A clean rebase continues; a CONFLICT is a genuine code
+	// conflict (NEVER auto-resolved): abort + surface as `rebase-conflict` (the kept
+	// commit stays on the branch, recoverable; the human resolves and re-runs).
+	note(
+		`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main…`,
+	);
+	const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+	if (rebase.status !== 0) {
+		await gitSoft(['rebase', '--abort'], cwd, env);
+		const message =
+			`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main ` +
+			'conflicted; the rebase was aborted (never auto-resolved). The committed work ' +
+			'is intact on the branch (recoverable). Resolve against the latest main, then ' +
+			're-run.';
+		note(message);
+		return {
+			outcome: 'rebase-conflict',
+			routedToNeedsAttention: false,
+			branch,
+			reason: message,
+		};
+	}
+
+	// Integrate the rebased kept commit through the SAME complete-transition
+	// primitive the build path uses (no duplication of the integrate mechanism; the
+	// branch is already rebased so it is the non-rebasing `integrate`, never
+	// `--force`). Provider precedence matches the build path: injected instance >
+	// legacy `openPr` bridge > arbiter-derived selection.
+	const provider =
+		params.providerInstance ??
+		(params.openPr
+			? bridgeProvider(params.openPr)
+			: selectProvider({arbiterUrl: await arbiterUrl(cwd, arbiter, env)}));
+	const integration = await ledgerWrite.applyCompleteTransition({
+		arbiter,
+		branch,
+		mode,
+		provider,
+		noPR: params.noPR,
+		deleteMergedHead: true,
+		cwd,
+		env,
+	});
+	note(`Recovered '${slug}': integrated the kept commit from ${branch}.`);
+	return {
+		outcome: 'completed',
+		routedToNeedsAttention: false,
+		branch,
 		integration,
 	};
 }

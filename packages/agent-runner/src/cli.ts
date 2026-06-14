@@ -35,6 +35,10 @@ import {
 } from './work-on.js';
 import {performComplete, integrationFromFlags} from './complete.js';
 import {
+	performRecoverIsolated,
+	locateIsolatedRecovery,
+} from './recover-isolated.js';
+import {
 	performDo,
 	performDoRemote,
 	resolveArbiterUrlFromCheckout,
@@ -493,6 +497,9 @@ interface StartFlags extends AgentLaunchFlags {
 	arbiter?: string;
 	resume?: boolean;
 	ignoreNotReady?: boolean;
+	/** `--isolated` (resume only): re-engage the slug's retained job worktree. */
+	isolated?: boolean;
+	workspace?: string;
 }
 
 interface WorkOnFlags extends AgentLaunchFlags {
@@ -522,6 +529,9 @@ interface CompleteFlags {
 	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
+	/** `--isolated`: finish the slug's retained job worktree (the stranded-branch recover). */
+	isolated?: boolean;
+	workspace?: string;
 }
 
 interface DoFlags {
@@ -730,6 +740,46 @@ async function runStartAction(
 	// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 	const slug = resolveSliceOnlySlug(rawSlug);
 	const cwd = process.cwd();
+
+	// `resume --isolated <slug>`: re-engage the slug's RETAINED job worktree (the
+	// inverse of `do --isolated`) WITHOUT claiming \u2014 locate it off THIS repo's
+	// arbiter and report its path so the operator can cd in. The symmetric
+	// companion of `complete --isolated` (finish the stranded worktree). `start`
+	// (begin-here) has no isolated form \u2014 there is nothing retained to re-engage yet.
+	if (resume && flags.isolated === true) {
+		if (slug === undefined || slug === '') {
+			console.error(
+				'error: resume --isolated requires <slug> (the retained worktree to re-engage).',
+			);
+			process.exit(1);
+		}
+		const {config} = loadHumanWorktreesDir(flags.config ?? defaultConfigPath());
+		const located = locateIsolatedRecovery({
+			slug,
+			cwd,
+			arbiter: flags.arbiter ?? config.defaultArbiter,
+			workspacesDir: flags.workspace ?? config.workspacesDir,
+			env: process.env,
+		});
+		if ('error' in located) {
+			console.error(`error: ${located.error}`);
+			process.exit(1);
+		}
+		if (!located.present) {
+			console.error(
+				`>> No retained isolated worktree for '${slug}' (already integrated and ` +
+					'reaped, or never stranded) \u2014 nothing to resume.',
+			);
+			process.exit(0);
+		}
+		console.error(
+			`>> Re-engaging the retained worktree for '${slug}'. cd into it to ` +
+				`continue, then 'agent-runner complete --isolated ${slug}' to finish:`,
+		);
+		process.stdout.write(`${located.dir}\n`);
+		process.exit(0);
+	}
+
 	const result = await performStart({
 		slug,
 		cwd,
@@ -1181,10 +1231,19 @@ export function buildProgram(): Command {
 			'[slug]',
 			'the slug to resume (inferred from a work/<slug> branch if omitted)',
 		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--arbiter <remote>',
 			'name of the arbiter git remote (default: origin)',
 			'origin',
+		)
+		.option(
+			'--isolated',
+			"re-engage the slug's RETAINED isolated job worktree (the inverse of `do --isolated`) WITHOUT claiming: locate it off THIS repo's arbiter and print its path to cd into. The symmetric companion of `complete --isolated` (finish the stranded worktree).",
+		)
+		.option(
+			'--workspace <dir>',
+			'execution working area for job worktrees (--isolated; default: workspacesDir / ~/.agent-runner)',
 		)
 		.action((rawSlug: string | undefined, flags: StartFlags) =>
 			runStartAction(rawSlug, flags, true),
@@ -1362,6 +1421,14 @@ export function buildProgram(): Command {
 			'--ignore-diverged-main',
 			'override the merge-mode divergence guard: complete --merge even when local main is ahead of <arbiter>/main (unpushed). The work still lands on the arbiter; local main is left for you to `git rebase`. Loud, never default.',
 		)
+		.option(
+			'--isolated',
+			"FINISH a STRANDED isolated worktree: integrate the slug's already-committed, already-done-moved retained job worktree (a terminal push failed AFTER the done-move+commit) by running ONLY the rebase\u2192integrate tail from the kept commit \u2014 the locate-EXISTING inverse of `do --isolated`. Detection is unspoofable: an already-integrated slice is a clean no-op; no retained worktree is a clean \u201cnothing to recover\u201d. --merge/--propose/--arbiter resolve identically to a normal integrate; the already-passed gate is skipped.",
+		)
+		.option(
+			'--workspace <dir>',
+			'execution working area for job worktrees (--isolated; default: workspacesDir / ~/.agent-runner)',
+		)
 		.addOption(
 			new Option(
 				'--skip-verify',
@@ -1408,6 +1475,48 @@ export function buildProgram(): Command {
 			const slug = resolveSliceOnlySlug(rawSlug);
 			const cwd = process.cwd();
 			const global = loadConfig(flags.config);
+
+			// `--isolated`: FINISH a stranded isolated worktree (the recover-already-
+			// committed path) instead of completing the current checkout. It LOCATES the
+			// slug's retained job worktree off THIS repo's arbiter and runs ONLY the
+			// rebase\u2192integrate tail from the kept commit. The slug is REQUIRED (there is no
+			// branch to infer it from in the operator's checkout).
+			if (flags.isolated === true) {
+				if (slug === undefined || slug === '') {
+					console.error(
+						'error: complete --isolated requires <slug> (the stranded item to finish).',
+					);
+					process.exit(1);
+				}
+				const flagMode = integrationFromFlags(flags);
+				const resolved = resolveRepoConfig({
+					repoPath: cwd,
+					global,
+					flags: {
+						...(flagMode ? {integration: flagMode} : {}),
+						...noPRFlagOverrides(flags),
+					},
+				});
+				if (resolved.message) {
+					console.error(`>> ${resolved.message}`);
+				}
+				const isoConfig = resolved.config;
+				const recovered = await performRecoverIsolated({
+					slug,
+					cwd,
+					arbiter: flags.arbiter ?? isoConfig.defaultArbiter,
+					workspacesDir: flags.workspace ?? isoConfig.workspacesDir,
+					integration: isoConfig.integration,
+					noPR: isoConfig.noPR,
+					note: (message) => console.error(`>> ${message}`),
+					env: process.env,
+				});
+				if (recovered.exitCode !== 0) {
+					console.error(`error: ${recovered.message}`);
+				}
+				process.exit(recovered.exitCode);
+			}
+
 			// Resolve the integration mode at completion time, highest first:
 			//   --merge/--propose flag > per-repo .agent-runner.json > global > default.
 			// The flag sits at the TOP of the same chain the autonomous runner uses
