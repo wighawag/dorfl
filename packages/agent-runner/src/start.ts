@@ -1,5 +1,6 @@
 import {performClaim} from './claim-cas.js';
 import {ledgerWrite} from './ledger-write.js';
+import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
@@ -53,6 +54,7 @@ export type StartOutcome =
 	| 'resumed' // switched to an in-progress item's work branch (--resume)
 	| 'resolved' // picked up a stuck needs-attention item (surface cleared)
 	| 'needs-attention' // continued branch's rebase onto main conflicted → routed (§10)
+	| 'surface-unmoved' // the tree-less surface to needs-attention did NOT land on the arbiter (lost the CAS race) — the item is STILL in-progress on the arbiter; retry/resolve
 	| 'refused' // refused (in-progress without --resume, done/absent, or not-ready)
 	| 'lost' // claim lost the race (propagated from claim)
 	| 'contended' // claim push kept being rejected (propagated from claim)
@@ -318,7 +320,10 @@ async function continueConflictResult(params: {
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
 }): Promise<StartResult> {
-	await routeContinueConflict(params);
+	const surfaced = await routeContinueConflict(params);
+	if (!surfaced.moved) {
+		return surfaceUnmovedStartResult({slug: params.slug, surfaced});
+	}
 	const message =
 		`Could not continue '${params.slug}': the kept work branch did not rebase ` +
 		`cleanly onto ${params.arbiter}/main; routed to work/needs-attention/ ` +
@@ -349,7 +354,10 @@ async function continuePushFailureResult(params: {
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
 }): Promise<StartResult> {
-	await routeContinuePushFailure(params);
+	const surfaced = await routeContinuePushFailure(params);
+	if (!surfaced.moved) {
+		return surfaceUnmovedStartResult({slug: params.slug, surfaced});
+	}
 	const message =
 		`Could not continue '${params.slug}': publishing the rebased work branch to ` +
 		`${params.arbiter} failed terminally (${params.pushFailure}); routed to ` +
@@ -703,6 +711,33 @@ function isOfflinePushFailure(message: string): boolean {
 }
 
 /**
+ * Build the HONEST {@link StartResult} for a CONTINUE-site surface that did NOT
+ * land on the arbiter (`{moved: false}`). The tree-less `in-progress/ →
+ * needs-attention/` move lost the CAS race against a busy arbiter (its
+ * contention-retry cap exhausted), so the item is STILL in-progress on the
+ * arbiter — a clean `needs-attention` outcome would mislead (it claims the
+ * surface landed). The DISTINCT `surface-unmoved` outcome carries
+ * `reasonNotMoved` so the human can tell it apart from a successful surface and
+ * retry/resolve.
+ */
+function surfaceUnmovedStartResult(params: {
+	slug: string;
+	surfaced: SurfaceToNeedsAttentionResult;
+}): StartResult {
+	const {slug, surfaced} = params;
+	const message =
+		`'${slug}' could NOT be surfaced to needs-attention — the surface did not ` +
+		`reach the arbiter's main; the item is still IN-PROGRESS on the arbiter ` +
+		`(retry/resolve). ${surfaced.reasonNotMoved ?? ''}`.trim();
+	return {
+		exitCode: 1,
+		outcome: 'surface-unmoved',
+		branch: workBranchRef('slice', slug),
+		message,
+	};
+}
+
+/**
  * Route a CONTINUE rebase conflict to needs-attention (the §10 path): the kept
  * branch's commits did not replay cleanly onto the current main, so a human must
  * resolve (or `requeue --reset`).
@@ -721,14 +756,17 @@ async function routeContinueConflict(params: {
 	cwd: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
-}): Promise<void> {
+}): Promise<SurfaceToNeedsAttentionResult> {
 	const {slug, arbiter, cwd, env, note} = params;
 	const reason =
 		`continuing the kept ${arbiter}/${workBranchRef('slice', slug)}: rebase onto ` +
 		`${arbiter}/main conflicted (aborted, never auto-resolved) — resolve ` +
 		'against the latest main, or `requeue --reset` to discard and start fresh';
 	note(reason);
-	await ledgerWrite.applyTreelessNeedsAttentionTransition({
+	// PROPAGATE the {moved, reasonNotMoved} result to the caller so a `moved:false`
+	// (the surface did NOT reach main — lost the CAS race) is surfaced honestly
+	// instead of swallowed as `void`.
+	return ledgerWrite.applyTreelessNeedsAttentionTransition({
 		cwd,
 		slug,
 		reason,
@@ -761,7 +799,7 @@ async function routeContinuePushFailure(params: {
 	pushFailure: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
-}): Promise<void> {
+}): Promise<SurfaceToNeedsAttentionResult> {
 	const {slug, arbiter, cwd, pushFailure, env, note} = params;
 	const reason =
 		`continuing the kept ${arbiter}/${workBranchRef('slice', slug)}: publishing ` +
@@ -769,7 +807,10 @@ async function routeContinuePushFailure(params: {
 		'the kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
 		'retry once the churn settles, or `requeue --reset` to discard and start fresh';
 	note(reason);
-	await ledgerWrite.applyTreelessNeedsAttentionTransition({
+	// PROPAGATE the {moved, reasonNotMoved} result to the caller so a `moved:false`
+	// (the surface did NOT reach main — lost the CAS race) is surfaced honestly
+	// instead of swallowed as `void`.
+	return ledgerWrite.applyTreelessNeedsAttentionTransition({
 		cwd,
 		slug,
 		reason,

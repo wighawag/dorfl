@@ -24,6 +24,7 @@ import {
 	ledgerWrite,
 	type ApplyNeedsAttentionTransitionResult,
 } from './ledger-write.js';
+import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
 	jobWorktreeStrategy,
 	selectIsolationStrategy,
@@ -115,6 +116,7 @@ export type DoOutcome =
 	| 'lost' // claim lost the race — skipped cleanly
 	| 'contended' // claim push kept being rejected
 	| 'needs-attention' // red gate / rebase conflict / review-block → surfaced (autonomous)
+	| 'surface-unmoved' // the tree-less surface to needs-attention did NOT land on the arbiter (lost the CAS race / no arbiter) — the item is STILL in-progress on the arbiter; retry/resolve
 	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown — work SAVED + surfaced
 	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
 	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the slice (FAILURE-CAUSE axis)
@@ -756,7 +758,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
 			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
 			'main, or `requeue --reset` to discard and start fresh';
-		await ledgerWrite.applyTreelessNeedsAttentionTransition({
+		const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
 			reason,
@@ -764,6 +766,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			env,
 			note,
 		});
+		if (!surfaced.moved) {
+			return surfaceUnmovedDoResult({slug, branch, reason, surfaced});
+		}
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
@@ -788,7 +793,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			`to the arbiter failed terminally (${tree.continuePushFailure}) — the kept ` +
 			'branch is left intact on the arbiter (recoverable); `requeue` to retry ' +
 			'once the churn settles, or `requeue --reset` to discard and start fresh';
-		await ledgerWrite.applyTreelessNeedsAttentionTransition({
+		const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
 			reason,
@@ -796,6 +801,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			env,
 			note,
 		});
+		if (!surfaced.moved) {
+			return surfaceUnmovedDoResult({slug, branch, reason, surfaced});
+		}
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
@@ -1224,6 +1232,30 @@ async function saveAgentFailure(params: {
  */
 function failureCauseToDoOutcome(cause: FailureCause): DoOutcome {
 	return cause;
+}
+
+/**
+ * Build the HONEST result for a CONTINUE-site surface that did NOT land on the
+ * arbiter (`{moved: false}`). The tree-less `in-progress/ → needs-attention/` move
+ * lost the CAS race against a busy arbiter (its contention-retry cap exhausted) or
+ * had no arbiter to publish to, so the item is STILL in-progress on the arbiter —
+ * a clean `needs-attention` would mislead (it claims the surface landed). Distinct
+ * `surface-unmoved` outcome, carrying `reasonNotMoved`, so the caller/human can
+ * tell it from a successful surface and retry/resolve. The `moved: true` path is
+ * left byte-for-byte unchanged (this branch is only reached on `!moved`).
+ */
+function surfaceUnmovedDoResult(params: {
+	slug: string;
+	branch?: string;
+	reason: string;
+	surfaced: SurfaceToNeedsAttentionResult;
+}): DoResult {
+	const {slug, branch, reason, surfaced} = params;
+	const message =
+		`'${slug}' could NOT be surfaced to needs-attention — the surface did not ` +
+		`reach the arbiter's main; the item is still IN-PROGRESS on the arbiter ` +
+		`(retry/resolve). ${surfaced.reasonNotMoved ?? reason}`;
+	return {exitCode: 1, outcome: 'surface-unmoved', slug, branch, message};
 }
 
 /**
@@ -1858,6 +1890,18 @@ async function runRemotePipeline(
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
+			slug,
+			branch: started.branch,
+			message: started.message,
+		};
+	}
+	// FORWARD the honest un-moved signal end-to-end: a continue-site surface that
+	// did NOT land on the arbiter (start's `surface-unmoved`) must NOT degrade to
+	// `usage-error` here — the item is still in-progress on the arbiter (retry/resolve).
+	if (started.outcome === 'surface-unmoved') {
+		return {
+			exitCode: 1,
+			outcome: 'surface-unmoved',
 			slug,
 			branch: started.branch,
 			message: started.message,
