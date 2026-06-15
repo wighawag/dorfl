@@ -27,6 +27,7 @@ import {
 	type RunTick,
 } from './run.js';
 import {performClaim} from './claim-cas.js';
+import {createClaimSpinner} from './cli-spinner.js';
 import {performStart} from './start.js';
 import {
 	performWorkOn,
@@ -1278,27 +1279,58 @@ export function buildProgram(): Command {
 		.action(async (rawSlug: string, flags: ClaimFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug) as string;
-			const result = await performClaim({
-				slug,
-				cwd: process.cwd(),
-				arbiter: flags.arbiter ?? 'origin',
-				retries:
-					flags.retries !== undefined ? Number(flags.retries) : undefined,
-				dryRun: flags.dryRun,
-				humanPath: true,
-				override: flags.ignoreNotReady === true,
-				// HUMAN command (the `humanPath: true` above already says so): the
-				// standalone `claim` CAS micro-commit + push is the human's, so it is
-				// NOT given the runner `config.identity`. The AUTONOMOUS claim is the one
-				// inside `do`/`run`/`intake` (identity-aware). Thread the ambient
-				// `process.env` EXPLICITLY so the human-identity choice is declared at the
-				// call site, not left to the seam's silent `?? process.env` fallback.
-				env: process.env,
-				note: (message) => console.error(`>> ${message}`),
+			// Wrap ONLY this CLI surface's `performClaim` call with the spinner
+			// helper (slice `claim-cas-spinner`): the push can take seconds, so the
+			// terminal looked frozen. In non-TTY mode the helper is a no-op and
+			// stderr stays byte-identical to today (silent on success,
+			// `error: <message>` on failure, `>> <note>` lines unchanged). The
+			// autonomous `performClaim` call sites (`do`/`run`/`start`/`work-on`/
+			// `continue-branch`) are explicitly OUT OF SCOPE.
+			const spinner = createClaimSpinner({
+				stream: process.stderr,
+				isTTY: process.stdout.isTTY === true,
+				clock: {
+					setInterval: (fn, ms) => setInterval(fn, ms),
+					clearInterval: (handle) =>
+						clearInterval(handle as ReturnType<typeof setInterval>),
+				},
+				label: `Claiming ${slug}\u2026`,
 			});
-			if (result.exitCode !== 0) {
-				console.error(`error: ${result.message}`);
+			const onSigint = (): void => {
+				spinner.stop();
+				process.exit(130);
+			};
+			process.on('SIGINT', onSigint);
+			spinner.start();
+			let result;
+			try {
+				result = await performClaim({
+					slug,
+					cwd: process.cwd(),
+					arbiter: flags.arbiter ?? 'origin',
+					retries:
+						flags.retries !== undefined ? Number(flags.retries) : undefined,
+					dryRun: flags.dryRun,
+					humanPath: true,
+					override: flags.ignoreNotReady === true,
+					// HUMAN command (the `humanPath: true` above already says so): the
+					// standalone `claim` CAS micro-commit + push is the human's, so it is
+					// NOT given the runner `config.identity`. The AUTONOMOUS claim is the one
+					// inside `do`/`run`/`intake` (identity-aware). Thread the ambient
+					// `process.env` EXPLICITLY so the human-identity choice is declared at the
+					// call site, not left to the seam's silent `?? process.env` fallback.
+					env: process.env,
+					note: (message) => spinner.note(message),
+				});
+			} catch (err) {
+				// Unhandled error: tear the spinner down cleanly BEFORE the throw
+				// propagates so the cursor is restored + no orphaned ANSI state.
+				spinner.stop();
+				process.off('SIGINT', onSigint);
+				throw err;
 			}
+			spinner.finish(result);
+			process.off('SIGINT', onSigint);
 			process.exit(result.exitCode);
 		});
 
