@@ -51,3 +51,7 @@ CRITICAL non-regression (intentional design point in `prepare.ts` + `config.ts`)
 ## Needs attention
 
 agent failed: 401 Unauthorized
+
+## Needs attention
+
+acceptance gate failed (exit 1) on the rebased tip
