@@ -186,12 +186,14 @@ export default defineConfig({
 			{
 				test: {
 					name: 'parallel',
+					setupFiles: ['./test/setup.ts'],
 					exclude: ['node_modules/**', 'dist/**', ...RACE_SENSITIVE],
 				},
 			},
 			{
 				test: {
 					name: 'sequential',
+					setupFiles: ['./test/setup.ts'],
 					include: RACE_SENSITIVE,
 					fileParallelism: false,
 				},
