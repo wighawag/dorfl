@@ -87,3 +87,7 @@ The integration rebase already encodes the correct philosophy: a stale bookkeepi
 > SEAMS TO TEST AT: `rebaseContinuedBranchOntoMain` (the onboard site) — feed it a kept branch with stale `route to needs-attention` move-only commits + a main moved tree-lessly, assert CLEAN continue + code preserved; feed it a real code conflict (after drop) and assert it still aborts → `conflict`; feed it a `→done` move and assert the done-move is NOT dropped. No network; throwaway git repos as the existing continue-branch / integration-core tests do.
 >
 > DONE: the live self-conflict regression-tests green, genuine conflicts still surface, the done-move/slicing move is never dropped, the drop-helper is shared (one home), all three call sites reconcile, ADR/contract updated at SOURCE + mirrored, and `pnpm -r build && pnpm -r test && pnpm format:check` passes. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
+
+## Needs attention
+
+agent failed: 401 Unauthorized
