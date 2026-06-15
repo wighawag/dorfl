@@ -106,3 +106,7 @@ Previous keep+continue re-drive hit a rebase conflict in the slice .md lifecycle
 ## Needs attention
 
 continuing the kept origin/work/slice-serialise-surface-treeless-moved-false-test-under-parallel-load: rebase onto origin/main conflicted (aborted, never auto-resolved) — resolve against the latest main, or `requeue --reset` to discard and start fresh
+
+## Requeue 2026-06-15
+
+Fresh start (branch already absent so --reset only does the backlog move). prepare step now configured; mirror pruned. Should build + gate cleanly off current main.
