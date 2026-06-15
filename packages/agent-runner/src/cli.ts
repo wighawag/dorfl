@@ -112,6 +112,7 @@ import {brand} from './brand.js';
 import {installCI, type WizardPrompts} from './install-ci.js';
 import {GitHubCIContext} from './install-ci-github.js';
 import {loadCapabilityRegistry} from './install-ci-core.js';
+import {performCloseMergedIssues} from './close-job.js';
 
 interface ScanFlags {
 	config?: string;
@@ -665,6 +666,12 @@ interface InstallCiFlags {
 	cwd?: string;
 	repo?: string;
 	ghBin?: string;
+}
+
+interface CloseMergedIssuesFlags {
+	cwd?: string;
+	ghBin?: string;
+	json?: boolean;
 }
 
 /**
@@ -2910,6 +2917,59 @@ export function buildProgram(): Command {
 				console.error(`>> ${result.message}`);
 			}
 			process.exit(result.exitCode);
+		});
+
+	// The CI CLOSE-JOB driver (PRD `runner-in-ci`, capability E; slice
+	// `install-ci-close-job-workflow`). The thin JOB the emitted close-job workflow
+	// invokes on a merge to main: resolve which source issue(s) the landed work
+	// closes (resolveClosingIssue), run the "PRD complete?" query for the PRD case
+	// (prd-complete-query, done), and close via the IssueProvider seam — all
+	// UNCHANGED engine pieces, CONSUMED not re-built (the Out-of-Scope fence). CI
+	// owns ONLY the job + trigger. Local-runnable too (a manual catch-up close).
+	program
+		.command('close-merged-issues')
+		.helpGroup(ADVANCED_GROUP)
+		.description(
+			'Close source issues whose work has landed on main (CI capability E, PRD runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone slice closes its own `issue:`; a fanned slice/PRD reaches the number via `slice.prd: → PRD issue:`), runs the existing "PRD complete?" query for the PRD case (closes ONLY when ALL its prd:<slug> slices are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
+		)
+		.option(
+			'--cwd <dir>',
+			'the repo working dir whose work/ tree to scan (default: cwd)',
+		)
+		.option('--gh-bin <bin>', 'the gh CLI binary (default: gh on PATH)')
+		.option('--json', 'output the raw result as JSON')
+		.action(async (flags: CloseMergedIssuesFlags) => {
+			const repoPath = flags.cwd ?? process.cwd();
+			const result = await performCloseMergedIssues({
+				repoPath,
+				ghBin: flags.ghBin,
+				env: process.env,
+			});
+			if (flags.json) {
+				console.log(JSON.stringify(result, null, 2));
+			} else {
+				for (const c of result.candidates) {
+					if (c.decision === 'closed') {
+						console.error(
+							`>> closed issue #${c.issueNumber} (${c.via} ${c.slug}).`,
+						);
+					} else if (c.decision === 'close-failed') {
+						console.error(
+							`>> issue #${c.issueNumber} (${c.via} ${c.slug}) NOT closed: ${c.reason}`,
+						);
+					} else {
+						console.error(
+							`>> issue #${c.issueNumber} (${c.via} ${c.slug}) left open (${c.decision}).`,
+						);
+					}
+				}
+				console.error(
+					`>> close-merged-issues: closed ${result.closed.length} issue(s).`,
+				);
+			}
+			// The close-job is a terminal CI tick: a degraded close is reported, not a
+			// crash (exit 0), exactly like intake's bounce close.
+			process.exit(0);
 		});
 
 	// The REGISTRY command group (ADR §1): the registered set of targets IS the

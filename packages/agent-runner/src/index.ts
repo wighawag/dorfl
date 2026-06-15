@@ -620,6 +620,27 @@ export {
 } from './build-slice-tick-template.js';
 
 export type {
+	CloseJobProblem,
+	CloseJobValidation,
+} from './close-job-template.js';
+export {
+	CLOSE_JOB_CAPABILITY_ID,
+	CLOSE_JOB_CAPABILITY_LABEL,
+	CLOSE_JOB_WORKFLOW_PATH,
+	generateCloseJobWorkflow,
+	validateCloseJobWorkflow,
+} from './close-job-template.js';
+
+export type {
+	CloseDecision,
+	CloseCandidate,
+	CloseJobResult,
+	CloseJobOptions,
+	PerformCloseMergedIssuesOptions,
+} from './close-job.js';
+export {runCloseJob, performCloseMergedIssues} from './close-job.js';
+
+export type {
 	AuthMode,
 	ProviderEntry,
 	CIConfigFile,
