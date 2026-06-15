@@ -159,7 +159,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 			cwd: repo,
 			arbiter: ARBITER,
 			// The build-transition config is `merge`, but the autonomous/CI path passes
-			// NO explicit flag ⇒ untrusted-origin clamps the BUILD to propose.
+			// NO explicit flag ⇒ untrusted-origin forces the BUILD to propose.
 			integration: 'merge',
 			verify: PASS,
 			agentRunner: editingAgent,
@@ -179,7 +179,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 		).not.toBe('');
 	});
 
-	it('an explicit --merge (explicitMerge: true) OVERRIDES the clamp — the untrusted slice LANDS on main', async () => {
+	it('an explicit --merge (explicitMerge: true) OVERRIDES the build-propose rule — the untrusted slice LANDS on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['untrusted']);
 		stampSliceUntrusted(repo, 'untrusted');
 

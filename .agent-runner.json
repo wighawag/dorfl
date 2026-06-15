@@ -7,6 +7,5 @@
   "observationTriage": "auto",
   "surfaceBlockers": true,
   "review": true,
-  "autoMerge": false,
   "integration": "propose"
 }

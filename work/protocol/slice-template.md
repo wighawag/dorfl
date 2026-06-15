@@ -30,6 +30,8 @@ Exception: if a prototype produced a snippet that encodes a decision more precis
 > Self-contained instructions to paste into a fresh agent context. An AFK agent should be able to start from THIS FILE ALONE — no conversation history needed. State the goal, the relevant domain vocabulary, where to look in the codebase (by module/concept, not brittle paths), the seams to test at, and what "done" means. Reference any `work/findings/*.md` or ADRs that constrain the work.
 >
 > FIRST, check this slice against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `done/`, the relevant ADRs, and the slices it depends on? If a dependency landed differently than this slice assumes, or an ADR superseded an assumption here, do NOT build on the stale premise — route the slice to `needs-attention/` with the discrepancy as the reason (WORK-CONTRACT.md “Drift is a needs-attention signal”). Building on a stale slice produces wrong-but-compiling work.
+>
+> RECORD non-obvious in-scope decisions you make while building. When the slice did not specify some behaviour and you have to CHOOSE (a new refusal/exit code, a clamp that reaches a second code path, a fail-loud-vs-fail-safe asymmetry, keeping vs collapsing a now-redundant distinction), do not leave the choice silent for a reviewer to reverse-engineer. Surface it so it can be ratified: if it meets the ADR gate (hard to reverse + surprising without context + a real trade-off — see `ADR-FORMAT.md`), write the durable WHY as an ADR in `docs/adr/`; otherwise note it briefly (e.g. a `## Decisions` line in the done record / PR description). An un-recorded in-scope decision is a review FINDING, not a silent default.
 
 ---
 

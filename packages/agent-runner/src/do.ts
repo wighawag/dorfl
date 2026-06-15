@@ -206,11 +206,11 @@ export interface DoOptions {
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
-	 * **The explicit `--merge` override** for the untrusted-origin build clamp
+	 * **The explicit `--merge` override** for the untrusted-origin build-propose rule
 	 * (slice `untrusted-origin-forces-build-propose`). `true` iff the operator
 	 * EXPLICITLY typed `--merge` (vs `merge` resolved from config). Forwarded to the
 	 * slice-BUILD `performComplete` → `performIntegration` so an explicit `--merge`
-	 * OVERRIDES the untrusted-origin `propose` clamp. The autonomous/CI path (a bare
+	 * OVERRIDES the untrusted-origin build-propose rule. The autonomous/CI path (a bare
 	 * `advance`/`do` auto-pick) passes no flag ⇒ unset ⇒ an untrusted-origin slice
 	 * reliably forces `propose`. (Build transition only; the slicing transition is
 	 * unaffected — a slice FILE landing on main is inert.)
@@ -420,7 +420,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
-	 * The explicit `--merge` override for the untrusted-origin build clamp on the
+	 * The explicit `--merge` override for the untrusted-origin build-propose rule on the
 	 * `do --remote` slice-BUILD path. See {@link DoOptions.explicitMerge}.
 	 */
 	explicitMerge?: boolean;
@@ -1001,7 +1001,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		cwd: tree.dir,
 		arbiter: tree.arbiterRemote,
 		integration: options.integration,
-		// An explicit `--merge` overrides the untrusted-origin build clamp (slice
+		// An explicit `--merge` overrides the untrusted-origin build-propose rule (slice
 		// `untrusted-origin-forces-build-propose`); the autonomous path leaves it
 		// unset so untrusted-origin reliably forces propose.
 		explicitMerge: options.explicitMerge,
@@ -2080,7 +2080,7 @@ async function runRemotePipeline(
 		cwd,
 		arbiter: arbiterRemote,
 		integration: options.integration,
-		// An explicit `--merge` overrides the untrusted-origin build clamp (slice
+		// An explicit `--merge` overrides the untrusted-origin build-propose rule (slice
 		// `untrusted-origin-forces-build-propose`); unset on the autonomous path so
 		// untrusted-origin reliably forces propose.
 		explicitMerge: options.explicitMerge,
@@ -2301,7 +2301,7 @@ export function jobWorktreeDoDriver(closure: {
 			slicerLoopModel: options.slicerLoopModel,
 			reviewExecutions: options.reviewExecutions,
 			integration: options.integration,
-			// The explicit `--merge` override for the untrusted-origin build clamp.
+			// The explicit `--merge` override for the untrusted-origin build-propose rule.
 			explicitMerge: options.explicitMerge,
 			prepare: options.prepare,
 			verify: options.verify,

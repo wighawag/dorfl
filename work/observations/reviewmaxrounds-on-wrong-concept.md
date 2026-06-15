@@ -20,7 +20,7 @@ The thing that genuinely LOOPS is the **slicer edit loop** (a SEPARATE concept f
 ## Disposition (do NOT act yet — maintainer will call the slicing pass)
 
 - **Keep the parameter for now** (it is live in the Gate-2 code; removing it is a separate change). Do NOT delete it in isolation.
-- **Later: remove `reviewMaxRounds` from the review GATE** (`complete`/`do` Gate-2 path: `review`/`autoMerge`/`reviewModel` stay; the rounds loop + `reviewMaxRounds` go). The gate becomes a single reviewer invocation → verdict.
+- **Later: remove `reviewMaxRounds` from the review GATE** (`complete`/`do` Gate-2 path: `review`/`reviewModel` stay; the rounds loop + `reviewMaxRounds` go). The gate becomes a single reviewer invocation → verdict. (`autoMerge` is GONE — hard-deleted by slice `remove-automerge-merge-means-auto-on-gate-pass`: `merge` auto-lands on gate pass, `propose` = a human merges; it is no longer a gate knob.)
 - **Later: (re)introduce `reviewMaxRounds` on the SLICER EDIT LOOP** when that is built — same name, NEW home + meaning (loop ceiling, not gate retries), per-repo. So this is a MOVE + reframe, not a pure deletion.
 - Until the slicer edit loop exists and the gate is simplified, the parameter is an orphan on the wrong concept — flagged here so it does not silently calcify into "load-bearing."
 

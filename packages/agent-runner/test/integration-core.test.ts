@@ -153,10 +153,10 @@ describe('integration-core — approve ⇒ completed', () => {
 	});
 });
 
-describe('integration-core — UNTRUSTED-ORIGIN build clamp (untrusted-origin-forces-build-propose)', () => {
+describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-origin-forces-build-propose)', () => {
 	// Stamp `originTrust` onto the in-progress slice the build is about to integrate
 	// (the slicer would have propagated it; here we set it directly to drive the
-	// clamp). The clamp reads it from `work/in-progress/<slug>.md`.
+	// rule). The build-propose rule reads it from `work/in-progress/<slug>.md`.
 	const stampOriginTrust = (
 		repo: string,
 		slug: string,
@@ -182,13 +182,13 @@ describe('integration-core — UNTRUSTED-ORIGIN build clamp (untrusted-origin-fo
 			recovering: false,
 			verify: PASS,
 			// The build-transition config mode is `merge`, but no operator flag is present
-			// (the autonomous/CI path). Untrusted-origin clamps it to propose.
+			// (the autonomous/CI path). Untrusted-origin forces it to propose.
 			mode: 'merge',
 			env: gitEnv(),
 		});
 
 		expect(core.outcome).toBe('completed');
-		// Clamped to propose: the work branch is pushed (PR source), main is NOT touched.
+		// Forced to propose: the work branch is pushed (PR source), main is NOT touched.
 		expect(core.integration?.mode).toBe('propose');
 		expect(core.integration?.mergedToMain).not.toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'untrusted-merge')).toBe(false);
@@ -206,7 +206,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build clamp (untrusted-origin-fo
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
-			// The operator EXPLICITLY typed --merge: it overrides the untrusted clamp.
+			// The operator EXPLICITLY typed --merge: it overrides the untrusted-origin build-propose rule.
 			explicitMerge: true,
 			env: gitEnv(),
 		});
@@ -217,7 +217,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build clamp (untrusted-origin-fo
 		expect(existsOnArbiterMain(repo, 'done', 'untrusted-explicit')).toBe(true);
 	});
 
-	it('a TRUSTED slice + mode merge ⇒ config as-is (lands on main; the clamp does not fire)', async () => {
+	it('a TRUSTED slice + mode merge ⇒ config as-is (lands on main; the rule does not fire)', async () => {
 		const {repo} = await claimAndBranch('trusted-merge');
 		stampOriginTrust(repo, 'trusted-merge', 'trusted');
 
@@ -257,7 +257,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build clamp (untrusted-origin-fo
 		expect(existsOnArbiterMain(repo, 'done', 'unstamped-merge')).toBe(true);
 	});
 
-	it('an UNTRUSTED slice + mode propose ⇒ propose (unchanged; the clamp only matters when config says merge)', async () => {
+	it('an UNTRUSTED slice + mode propose ⇒ propose (unchanged; the rule only matters when config says merge)', async () => {
 		const {repo} = await claimAndBranch('untrusted-propose');
 		stampOriginTrust(repo, 'untrusted-propose', 'untrusted');
 

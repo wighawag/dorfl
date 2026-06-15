@@ -257,7 +257,7 @@ export interface IntegrationCoreInput {
 	/** Integration mode the caller REQUESTED (`propose` default, or `merge`). */
 	mode: IntegrationMode;
 	/**
-	 * **The UNTRUSTED-ORIGIN build clamp** (slice
+	 * **The UNTRUSTED-ORIGIN build-propose rule** (slice
 	 * `untrusted-origin-forces-build-propose`). When `true`, the operator EXPLICITLY
 	 * passed `--merge` on this invocation — which OVERRIDES the untrusted-origin
 	 * `propose` default (the operator is present; CLI always wins, no special
@@ -265,7 +265,7 @@ export interface IntegrationCoreInput {
 	 * an untrusted-origin slice reliably forces `propose`. Resolved entirely from the
 	 * slice's stamped `originTrust:` frontmatter (read HERE from the build source
 	 * file); a `trusted`/unset slice is config-as-is (ZERO behaviour change). This
-	 * clamp touches the slice BUILD transition ONLY: it never fires when
+	 * rule touches the slice BUILD transition ONLY: it never fires when
 	 * {@link lifecycle} is set (the slicing/intake-emit transitions — a file landing
 	 * on main is inert) nor on {@link committedRecovery} (already gated + moved).
 	 */
@@ -465,8 +465,8 @@ export async function performIntegration(
 	let approvedVerdict: ReviewVerdict | undefined;
 	// The resolved integration mode. `merge` lands automatically on a green gate
 	// (and an `approve` when review is on); `propose` leaves the merge to a human.
-	// MUTABLE because the untrusted-origin clamp below may force it to `propose`
-	// for a slice BUILD (the build transition only) — see the clamp after
+	// MUTABLE because the untrusted-origin build-propose rule below may force it to
+	// `propose` for a slice BUILD (the build transition only) — see the rule after
 	// `sourcePath` is resolved.
 	let mode = input.mode;
 	// The fresh-worktree gate (slice `gate-on-rebased-tip-fresh-worktree`): when ON
@@ -511,13 +511,13 @@ export async function performIntegration(
 			? join(cwd, 'work', 'in-progress', `${slug}.md`)
 			: join(cwd, 'work', 'needs-attention', `${slug}.md`);
 
-	// UNTRUSTED-ORIGIN BUILD CLAMP (slice `untrusted-origin-forces-build-propose`).
+	// UNTRUSTED-ORIGIN BUILD-PROPOSE RULE (slice `untrusted-origin-forces-build-propose`).
 	// A slice born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
 	// at intake, propagated by the slicer). Its risk is the BUILD (it becomes code),
 	// so the build transition resolves to `propose` even when the requested mode is
 	// `merge` — moving the human checkpoint onto the becomes-code build. Precedence:
 	//   explicit --merge  >  untrusted-origin ⇒ propose  >  config mode  >  default.
-	// An explicit `--merge` (input.explicitMerge) OVERRIDES the clamp (the operator
+	// An explicit `--merge` (input.explicitMerge) OVERRIDES the rule (the operator
 	// is present; CLI always wins, no special force-key). The autonomous/CI path
 	// passes no flag, so there an untrusted-origin slice RELIABLY forces propose.
 	//

@@ -110,11 +110,11 @@ export interface CompleteOptions {
 	/** Integration mode: `propose` (default) or `merge`. */
 	integration?: IntegrationMode;
 	/**
-	 * **The explicit `--merge` override** for the untrusted-origin build clamp
+	 * **The explicit `--merge` override** for the untrusted-origin build-propose rule
 	 * (slice `untrusted-origin-forces-build-propose`). `true` iff the operator
 	 * EXPLICITLY typed `--merge` on this invocation (vs `merge` resolved from
 	 * config). Forwarded to {@link performIntegration}'s `explicitMerge`: an explicit
-	 * `--merge` OVERRIDES the untrusted-origin `propose` clamp (the operator is
+	 * `--merge` OVERRIDES the untrusted-origin build-propose rule (the operator is
 	 * present; CLI always wins). Unset on the autonomous path ⇒ an untrusted-origin
 	 * slice reliably forces `propose`.
 	 */
@@ -508,7 +508,7 @@ async function runComplete(
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
 		skipVerify: options.skipVerify,
-		// The untrusted-origin build clamp's override (slice
+		// The untrusted-origin build-propose rule's override (slice
 		// `untrusted-origin-forces-build-propose`): an explicit `--merge` lets the
 		// operator land an untrusted-origin slice on main; the autonomous path leaves
 		// it unset so untrusted-origin reliably forces propose.

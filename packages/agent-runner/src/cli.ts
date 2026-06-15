@@ -1586,7 +1586,7 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: config.integration,
-				// An EXPLICIT `--merge` overrides the untrusted-origin build clamp (slice
+				// An EXPLICIT `--merge` overrides the untrusted-origin build-propose rule (slice
 				// `untrusted-origin-forces-build-propose`): `flagMode` is the typed flag
 				// (undefined when none), so this is true ONLY when the operator typed
 				// `--merge`, never when `merge` was resolved from config.
@@ -1899,7 +1899,7 @@ export function buildProgram(): Command {
 					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
-					// EXPLICIT `--merge` override for the untrusted-origin build clamp.
+					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION SLICING override (the `do --remote prd:` slicing path).
 					slicingIntegration: remoteConfig.slicingIntegration,
@@ -2033,7 +2033,7 @@ export function buildProgram(): Command {
 				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
 				autoSlice: config.autoSlice,
 				integration: config.integration,
-				// EXPLICIT `--merge` override for the untrusted-origin build clamp (slice
+				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (slice
 				// `untrusted-origin-forces-build-propose`): true ONLY when the operator
 				// typed `--merge` (`flagMode`), never when `merge` came from config — so an
 				// untrusted-origin slice still forces propose under a config `merge`.
@@ -2308,7 +2308,7 @@ export function buildProgram(): Command {
 					identity: remoteConfig.identity,
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
-					// EXPLICIT `--merge` override for the untrusted-origin build clamp.
+					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION SLICING override (the isolated `do --remote prd:` path).
 					slicingIntegration: remoteConfig.slicingIntegration,
@@ -2431,7 +2431,7 @@ export function buildProgram(): Command {
 				identity: config.identity,
 				autoSlice: config.autoSlice,
 				integration: config.integration,
-				// EXPLICIT `--merge` override for the untrusted-origin build clamp (a
+				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (a
 				// bare `advance` auto-pick passes no flag ⇒ unset ⇒ untrusted forces propose).
 				explicitMerge: flagMode === 'merge',
 				// Per-TRANSITION SLICING override (the `do prd:` slicing path threads
