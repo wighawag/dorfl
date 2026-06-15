@@ -170,7 +170,11 @@ jobs:
         # zero-config; the job's `pull-requests: write` scopes that token.
         env:
           GH_TOKEN: ${{ secrets.AGENT_RUNNER_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: agent-runner advance "${{ matrix.item }}" --propose --arbiter origin
+        # `--watch` streams the build agent's high-signal turns into THIS job log
+        # live (read-only observer; no outcome/gate/git effect), so the run shows
+        # the agent working instead of freezing. Fits because each matrix leg names
+        # ONE item (one pi session to tail); the `-n` merge job cannot use it.
+        run: agent-runner advance "${{ matrix.item }}" --propose --watch --arbiter origin
 
   # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
   # merge-mode items chain via rebase; parallel jobs would thrash the main-CAS.

@@ -2186,6 +2186,10 @@ export function buildProgram(): Command {
 			'--propose',
 			'integrate the advanced item(s) in propose mode this invocation (default; mutually exclusive with --merge; overrides config). The CI propose shape is the parallel matrix (one PR per item).',
 		)
+		.option(
+			'--watch',
+			"stream the build agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git). The same view `do --watch` gives, threaded through the build rung; CI uses it so the job log shows the agent working instead of freezing.",
+		)
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			// Variadic grammar (mirrors `do`): zero args = AUTO-PICK; one = the single
 			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count
@@ -2305,6 +2309,10 @@ export function buildProgram(): Command {
 				// INJECTED job-worktree driver (the isolated advance-tick runner wires it).
 				const isoDoOptions: Omit<DoOptions, 'arg'> = {
 					cwd,
+					// `--watch`: stream the build agent's session live (pi harness only;
+					// validated in `performDo`). Threaded through the orchestrated build rung
+					// so `advance --isolated --watch` (and CI) shows the agent working.
+					watch: flags.watch === true,
 					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
 					identity: remoteConfig.identity,
 					autoSlice: remoteConfig.autoSlice,
@@ -2428,6 +2436,10 @@ export function buildProgram(): Command {
 			// hands the resolved arg to `performDo`, never re-implementing it.
 			const doOptions: Omit<DoOptions, 'arg'> = {
 				cwd,
+				// `--watch`: stream the build agent's session live (pi harness only;
+				// validated in `performDo`). Threaded through the orchestrated build rung
+				// so `advance --watch` (and CI) shows the agent working, not a frozen log.
+				watch: flags.watch === true,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				identity: config.identity,
 				autoSlice: config.autoSlice,
@@ -2483,6 +2495,21 @@ export function buildProgram(): Command {
 				triageModel: config.model,
 				note: (message) => console.error(`>> ${message}`),
 			};
+
+			// `--watch` tails ONE pi session, so it only fits the single-named-item form
+			// (mirrors `do --watch`). The auto-pick / `-n` / multi-item forms run many
+			// ticks in sequence and would tail several logs; reject rather than silently
+			// stream only one. The CI propose matrix names a single item per leg, so it
+			// satisfies this; the `-n` merge job must NOT pass `--watch`.
+			const advanceMulti =
+				args.length === 0 || count !== undefined || args.length > 1;
+			if (advanceMulti && flags.watch === true) {
+				console.error(
+					'error: --watch streams ONE session; it does not combine with the ' +
+						'auto-pick / -n / multi-item forms. Name a single item.',
+				);
+				process.exit(1);
+			}
 
 			// DISPATCH the variadic grammar (the one-shot SEQUENTIAL driver):
 			//   zero args       -> AUTO-PICK `count` (default 1) over the eligible pool

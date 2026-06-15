@@ -110,6 +110,17 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(text).not.toMatch(/secrets\.[A-Z_]*API_KEY/);
 	});
 
+	it('the propose leg streams the agent live (`--watch`); the `-n` merge job does NOT (it tails no single session)', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		// Propose: a single named item per matrix leg, so --watch fits.
+		expect(text).toMatch(
+			/advance "\$\{\{ matrix\.item \}\}" --propose --watch --arbiter origin/,
+		);
+		// Merge: the -n sequential form cannot tail ONE session, so NO --watch.
+		expect(text).toMatch(/advance -n 10 --merge --arbiter origin/);
+		expect(text).not.toMatch(/advance -n \d+ --merge --watch/);
+	});
+
 	it('is the PARAMETERISED seed: it ALSO passes the seed validator (advance-ci-template)', () => {
 		// The emitted workflow is the seed `advance-loop.yml.template`, parameterised
 		// — so it must satisfy the seed's OWN structural validator too (not just this
