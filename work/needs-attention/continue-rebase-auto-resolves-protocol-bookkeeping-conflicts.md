@@ -91,3 +91,7 @@ The integration rebase already encodes the correct philosophy: a stale bookkeepi
 ## Needs attention
 
 agent failed: 401 Unauthorized
+
+## Needs attention
+
+acceptance gate failed (exit 1) on the rebased tip
