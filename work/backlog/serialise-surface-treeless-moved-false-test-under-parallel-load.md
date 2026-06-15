@@ -94,3 +94,7 @@ change with no product-code impact.
 ## Needs attention
 
 acceptance gate failed (exit 1) on the rebased tip
+
+## Requeue 2026-06-15
+
+Gate failed only because .agent-runner.json had no prepare step, so the fresh-worktree gate ran verify with no node_modules (prettier: not found). The agent's work was correct (test added to RACE_SENSITIVE, no src changes). A prepare step (pnpm install --frozen-lockfile) is now configured on main. Re-driving off the kept branch should now pass the gate.
