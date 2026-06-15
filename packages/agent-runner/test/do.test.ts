@@ -135,6 +135,72 @@ describe('do <slug> — in-place happy path → exit', () => {
 	});
 });
 
+describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-forces-build-propose)', () => {
+	// Stamp the backlog slice as untrusted-origin + push it to main (a slice born
+	// from an untrusted issue, propagated by the slicer onto the backlog file).
+	const stampSliceUntrusted = (repo: string, slug: string): void => {
+		const path = join(repo, 'work', 'backlog', `${slug}.md`);
+		const content = readFileSync(path, 'utf8');
+		writeFileSync(
+			path,
+			content.replace(/^---\n/, '---\norigin: issue\noriginTrust: untrusted\n'),
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', `stamp ${slug} untrusted`], repo);
+		gitIn(['push', '-q', ARBITER, 'main'], repo);
+	};
+
+	it('the AUTONOMOUS path (integration: merge, NO explicit flag) PROPOSES an untrusted slice — never merges to main', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['untrusted']);
+		stampSliceUntrusted(repo, 'untrusted');
+
+		const result = await performDo({
+			arg: 'untrusted',
+			cwd: repo,
+			arbiter: ARBITER,
+			// The build-transition config is `merge`, but the autonomous/CI path passes
+			// NO explicit flag ⇒ untrusted-origin clamps the BUILD to propose.
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		// PROPOSE: the slice did NOT land in done/ on main (a human reviews the PR).
+		expect(existsOnArbiterMain(repo, 'done', 'untrusted')).toBe(false);
+		// The work branch was pushed (the PR source).
+		expect(
+			gitIn(
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-untrusted'],
+				repo,
+			).trim(),
+		).not.toBe('');
+	});
+
+	it('an explicit --merge (explicitMerge: true) OVERRIDES the clamp — the untrusted slice LANDS on main', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['untrusted']);
+		stampSliceUntrusted(repo, 'untrusted');
+
+		const result = await performDo({
+			arg: 'untrusted',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			// The operator typed --merge: it wins over the untrusted-origin default.
+			explicitMerge: true,
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'done', 'untrusted')).toBe(true);
+	});
+});
+
 describe('do <slug> — dirty-tree refusal (ar-run.sh guard)', () => {
 	it('refuses on an unstaged dirty tree, claiming nothing', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);

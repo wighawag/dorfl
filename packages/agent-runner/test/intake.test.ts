@@ -256,6 +256,109 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(onBranch).toContain('covers: []');
 		expect(onBranch).not.toMatch(/^prd:/m);
 		expect(onBranch).not.toContain('Fixes');
+		// No --origin-trust passed (a LOCAL intake) ⇒ NO origin-trust stamp.
+		expect(onBranch).not.toMatch(/^origin:/m);
+		expect(onBranch).not.toMatch(/^originTrust:/m);
+	});
+
+	// ── Origin-trust STAMP (slice untrusted-origin-forces-build-propose) ──────────
+	// The CI shell passes `--origin-trust <trusted|untrusted>` (derived from
+	// author_association); `intake` STAMPS it onto the emitted artifact so the
+	// becomes-code checkpoint survives the merge boundary. A LOCAL intake (no flag)
+	// emits UNSTAMPED ⇒ human/trusted (the human running intake IS the checkpoint).
+
+	const readEmittedSlice = (repo: string): string =>
+		gitIn(
+			[
+				'show',
+				`${ARBITER}/work/intake-slice-add-quiet-flag:work/backlog/add-quiet-flag.md`,
+			],
+			repo,
+		);
+
+	it('intake --origin-trust untrusted STAMPS origin: issue + originTrust: untrusted on the emitted slice', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
+			originTrust: 'untrusted',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const onBranch = readEmittedSlice(repo);
+		expect(onBranch).toMatch(/^origin: issue$/m);
+		expect(onBranch).toMatch(/^originTrust: untrusted$/m);
+	});
+
+	it('intake --origin-trust trusted STAMPS originTrust: trusted', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
+			originTrust: 'trusted',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const onBranch = readEmittedSlice(repo);
+		expect(onBranch).toMatch(/^origin: issue$/m);
+		expect(onBranch).toMatch(/^originTrust: trusted$/m);
+	});
+
+	it('a LOCAL intake (no --origin-trust) emits an UNSTAMPED slice (⇒ human/trusted: the human IS the checkpoint)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => SLICE_VERDICT,
+			reviewSlice: convergingReviewGate,
+			// No originTrust passed (the local human path).
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const onBranch = readEmittedSlice(repo);
+		expect(onBranch).not.toMatch(/^origin:/m);
+		expect(onBranch).not.toMatch(/^originTrust:/m);
+	});
+
+	it('intake --origin-trust untrusted STAMPS the emitted PRD too', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 5,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider({issue: {number: 5}}),
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes',
+			}),
+			originTrust: 'untrusted',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('prd');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const onBranch = gitIn(
+			[
+				'show',
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/prd/quiet-and-verbose-modes.md`,
+			],
+			repo,
+		);
+		expect(onBranch).toMatch(/^origin: issue$/m);
+		expect(onBranch).toMatch(/^originTrust: untrusted$/m);
 	});
 
 	it('is GATE-FREE: it proceeds with the autonomous gates (autoBuild/autoSlice) OFF', async () => {

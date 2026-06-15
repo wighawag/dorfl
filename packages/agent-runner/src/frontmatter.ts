@@ -5,7 +5,42 @@
  * what `work/` slice frontmatter needs (slug, humanOnly, blockedBy, ...).
  */
 
+/**
+ * **Origin-trust PROVENANCE** (slice `untrusted-origin-forces-build-propose`).
+ * How a PRD/slice was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
+ * signal SURVIVES the PRD/slice merge boundary (a landed-on-`main` artifact would
+ * otherwise erase how it was created — the laundering gap).
+ *
+ * - `origin` — `human` (the default / unset: a human authored it locally; a local
+ *   intake with no `--origin-trust` is ALSO this) | `issue` (the CI intake
+ *   front-door stamped it from a public issue).
+ * - `originTrust` — `trusted` | `untrusted`, the `author_association` verdict at
+ *   birth (only meaningful when `origin: issue`). UNSET ⇒ `trusted` (the normal
+ *   human path; ZERO behaviour change). `untrusted` forces the slice's BUILD
+ *   transition to `propose` so a human reviews the becomes-code change (an
+ *   explicit `--merge` still overrides — the operator is present).
+ *
+ * `intake.ts` does NOT resolve the trust verdict itself (the `intake.ts` ~L296
+ * boundary: trust is CI's POLICY); the CI shell passes it IN via `--origin-trust`.
+ */
+export type Origin = 'human' | 'issue';
+export type OriginTrust = 'trusted' | 'untrusted';
+
 export interface Frontmatter {
+	/**
+	 * How the artifact was BORN (`human`|`issue`). `undefined` when omitted
+	 * (⇒ `human`/trusted: the normal local-author path, no behaviour change).
+	 * Stamped `issue` by the CI intake front-door so the becomes-code checkpoint is
+	 * not laundered at the merge boundary.
+	 */
+	origin: Origin | undefined;
+	/**
+	 * The author-trust verdict at birth (`trusted`|`untrusted`); only meaningful
+	 * when `origin: issue`. `undefined` when omitted (⇒ `trusted`: the normal path,
+	 * zero behaviour change). An `untrusted` slice forces its BUILD transition to
+	 * `propose` (overridable by an explicit `--merge`).
+	 */
+	originTrust: OriginTrust | undefined;
 	/** Content-derived slug id (frontmatter `slug:`). */
 	slug: string | undefined;
 	/** Source PRD slug (frontmatter `prd:`); the PRD lives at `work/prd/<prd>.md`. */
@@ -172,9 +207,39 @@ export function setFrontmatterMarker(
 	return lines.join('\n');
 }
 
+/**
+ * PROPAGATE the origin-trust PROVENANCE (`origin` + `originTrust`) from a SOURCE
+ * artifact (a PRD) onto a TARGET artifact's content (an emitted slice), returning
+ * the new content (slice `untrusted-origin-forces-build-propose`). The slicer
+ * calls this so a slice born from an untrusted-origin PRD carries the stamp the
+ * BUILD transition reads. IDEMPOTENT: each present source field is written via
+ * {@link setFrontmatterMarker} (replace-or-append). When the source has NO `origin`
+ * (a human/local-authored PRD ⇒ trusted), the target is returned UNCHANGED — the
+ * normal path is never stamped (zero behaviour change). A target with no
+ * frontmatter fence is returned unchanged (setFrontmatterMarker's contract).
+ */
+export function propagateOrigin(
+	source: Pick<Frontmatter, 'origin' | 'originTrust'>,
+	targetContent: string,
+): string {
+	if (source.origin === undefined && source.originTrust === undefined) {
+		return targetContent;
+	}
+	let next = targetContent;
+	if (source.origin !== undefined) {
+		next = setFrontmatterMarker(next, 'origin', source.origin);
+	}
+	if (source.originTrust !== undefined) {
+		next = setFrontmatterMarker(next, 'originTrust', source.originTrust);
+	}
+	return next;
+}
+
 export function parseFrontmatter(content: string): Frontmatter {
 	const block = extractBlock(content);
 	const result: Frontmatter = {
+		origin: undefined,
+		originTrust: undefined,
 		slug: undefined,
 		prd: undefined,
 		issue: undefined,
@@ -203,7 +268,17 @@ export function parseFrontmatter(content: string): Frontmatter {
 		const key = match[1];
 		const rawValue = match[2].trim();
 
-		if (key === 'slug') {
+		if (key === 'origin') {
+			// Provenance: how the artifact was born. Only the known values map;
+			// anything else (or empty) reads as undefined (⇒ the human/trusted default).
+			const v = unquote(rawValue).toLowerCase();
+			result.origin = v === 'human' || v === 'issue' ? v : undefined;
+		} else if (key === 'originTrust') {
+			// The author-trust verdict at birth. Only the known values map; anything
+			// else (or empty) reads as undefined (⇒ trusted, the zero-change default).
+			const v = unquote(rawValue).toLowerCase();
+			result.originTrust = v === 'trusted' || v === 'untrusted' ? v : undefined;
+		} else if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'prd') {
 			result.prd = rawValue === '' ? undefined : unquote(rawValue);
