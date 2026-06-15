@@ -14,6 +14,15 @@ covers: []
 
 So git sees the same `work/<slug>.md` moved/modified differently on both sides and raises a rename/content conflict. ZERO source code is involved — it is entirely agent-runner mutating the same bookkeeping file on two lines of history. The rebase aborts, the slice routes to needs-attention, and (because the kept branch still carries its own move commits) it recurs on every re-`do`. This was reproduced live in a `drive-backlog` run on `serialise-surface-treeless-moved-false-test-under-parallel-load` (see `work/observations/rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset.md` for the full commit trace).
 
+### VERIFIED against the code (do not re-derive from the prose above — confirm these against current `src/`)
+
+There are TWO distinct needs-attention surface mechanisms today, and they differ exactly on the point this slice cares about — whether the `.md` move is COMMITTED ON THE WORK BRANCH:
+
+- **TREE-LESS surface** (`do.ts` ~L763 + `applyTreelessNeedsAttentionTransition` in `ledger-write.ts`): used for the PRE-build rebase-conflict case (`§10`/`#89`). It is purely a one-file `in-progress/ → needs-attention/` ledger move on `main` with NO branch push, NO worktree mutation. THIS is the model to generalise.
+- **BRANCH-COMMITTED `git mv`** (`complete.ts` ~L86: “`git mv work/in-progress|done/<slug>.md → work/needs-attention/<slug>.md`”): used for the GATE-FAILED-after-build case. This is the path that produced the conflicting commit in the live trace: the kept branch carried `58bf7d5` (`vitest.config.ts` edit + `git mv in-progress→done`) THEN `61ea593` (`git mv done→needs-attention`, a BOOKKEEPING move COMMITTED ON THE BRANCH) THEN `9e9847c` (appended the reason note in needs-attention, also on the branch). Those branch-committed bookkeeping moves are what collide on rebase with main's independent tree-less surface/requeue moves of the same `.md`.
+
+So the conflict is NOT “agent-runner has one buggy path” — it is that the GATE-FAILED surface commits the bookkeeping move on the branch while every OTHER lifecycle transition (claim/requeue/pre-build surface) is tree-less on main. The two models disagree on one file. (DRIFT-CHECK: confirm both paths still exist as described before building; if `complete.ts` already routes the gate-failed surface through the tree-less mechanism, Part 1 is already done — then only Part 2 remains.)
+
 ### THE LOAD-BEARING INVARIANT (read this first — it constrains every option below)
 
 **At no point may `arbiter/main` show `work/done/<slug>.md` WITHOUT the slug's actual code change also being on `main`.** The done-move and the code are ONE atomic transaction: they land together (via the merge) or not at all. This splits the slug's `.md` transitions into TWO categories that must be treated DIFFERENTLY:
@@ -25,7 +34,9 @@ The conflict we are fixing came from MIXING these: the work branch wrongly carri
 
 ### The fix (two parts; respect the invariant)
 
-**Part 1 (root) — keep BOOKKEEPING moves off the work branch.** On a gate-fail / abort, the surface-to-needs-attention is a tree-less CAS move on `main` (as `surface` already is); the work branch must NOT also commit a `done→needs-attention` (or any backlog/in-progress/needs-attention) move. The branch carries ONLY: the code diff + the single `→done` move (which only "takes effect" if the branch merges). Removing the bookkeeping moves from the branch removes the dual-history-on-one-file that causes the conflict, WITHOUT touching the atomic done-move.
+**Part 1 (root) — make the GATE-FAILED surface tree-less too, so NO bookkeeping move is committed on the work branch.** Today `complete.ts` (~L86) does the gate-failed surface as a branch-committed `git mv … → needs-attention/` (the `61ea593` commit in the trace). Change it to use the SAME tree-less mechanism the pre-build §10 path already uses (`applyTreelessNeedsAttentionTransition`): the `in-progress/|done/ → needs-attention/` move + reason becomes a tree-less CAS move on `main`, NOT a commit on the work branch. After this, the work branch carries ONLY: the code diff + the single `→done` move (which only “takes effect” if the branch merges). The reason note that today rides commit `9e9847c` on the branch instead becomes part of the tree-less surface payload on main. Removing these branch-committed bookkeeping moves removes the dual-history-on-one-file at the source, WITHOUT touching the atomic done-move.
+
+> SUBTLETY to preserve: the gate-failed branch-committed surface today co-locates the reason + the branch tip so the work is recoverable. The tree-less variant must keep that recoverability: the green code stays on the pushed `work/<slug>` branch (unchanged), and the reason lands on main via the tree-less move — exactly as the pre-build §10 path already manages. Verify the kept branch is still pushed/preserved after the change (a continue must still find it).
 
 **Part 2 (safety net) — narrow auto-resolve for any residual `.md`-only conflict, NEVER fabricating done/:**
 
@@ -38,7 +49,7 @@ The conflict we are fixing came from MIXING these: the work branch wrongly carri
 ## Acceptance criteria
 
 - [ ] **INVARIANT (must be tested explicitly):** `arbiter/main` NEVER shows `work/done/<slug>.md` without the slug's code change on `main`. The done-move stays on the work branch and lands atomically with the code via the merge; bookkeeping moves (claim/surface/requeue) are tree-less on `main`. A test asserts that no intermediate state (gate-fail, surface, requeue, conflict-resolve) ever puts `done/<slug>.md` on main without the code.
-- [ ] On a gate-fail/abort the work branch does NOT acquire a bookkeeping move commit (`done→needs-attention` etc.); the surface is a tree-less move on `main`. The branch carries only the code diff + the single `→done` move.
+- [ ] The GATE-FAILED surface (`complete.ts`) no longer commits a `git mv … → needs-attention/` on the work branch; it routes through the SAME tree-less mechanism (`applyTreelessNeedsAttentionTransition`) the pre-build §10 path uses. The work branch carries only the code diff + the single `→done` move; the reason rides the tree-less surface on main. A test asserts the gate-failed branch tip has NO bookkeeping move commit, and the kept branch + reason are still recoverable (a later continue finds the green work).
 - [ ] A continued-branch rebase whose ONLY conflicts are the slug's `.md` placement across BOOKKEEPING folders and/or runner-appended note bodies is AUTO-RESOLVED (arbiter wins on bookkeeping placement; notes union) and completes `clean` — it does NOT route to needs-attention. The resolver NEVER places the slug in `done/`.
 - [ ] A continued-branch rebase with ANY conflict OUTSIDE the protocol-bookkeeping set still aborts and returns `{kind: 'conflict'}` → needs-attention, EXACTLY as today (ADR §10 preserved for genuine conflicts). A test pins both branches of this fork.
 - [ ] The resolution is deterministic and decided from the ARBITER's current folder for the slug (never the branch's stale view); the slug ends in the folder the arbiter says it is in.
