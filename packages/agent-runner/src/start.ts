@@ -620,7 +620,12 @@ async function continueFromKeptBranch(params: {
 
 	// REBASE onto the freshly-fetched main at onboard-time (§10: rebase, not
 	// merge) so the agent builds on a CURRENT base. Conflict → aborted + reported.
-	const rebase = rebaseContinuedBranchOntoMain(cwd, `${arbiter}/main`, env);
+	const rebase = rebaseContinuedBranchOntoMain(
+		cwd,
+		`${arbiter}/main`,
+		slug,
+		env,
+	);
 	if (rebase.kind === 'conflict') {
 		return {branch, continued: true, rebaseConflict: true};
 	}
@@ -656,6 +661,7 @@ async function continueFromKeptBranch(params: {
 			arbiter,
 			mainRef: `${arbiter}/main`,
 			expectedRemoteTip,
+			slug,
 			env,
 			note,
 		});

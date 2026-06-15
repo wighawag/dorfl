@@ -25,6 +25,7 @@ import {parseFrontmatter} from './frontmatter.js';
 import {git, run, runAsync, type RunResult} from './git.js';
 import {workBranchRef} from './slug-namespace.js';
 import {isAncestor} from './gc.js';
+import {rebaseDroppingBookkeepingMoves} from './drop-bookkeeping-rebase.js';
 
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
@@ -1886,52 +1887,15 @@ async function rebaseDroppingNeedsAttentionSurface(
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<RunResult> {
-	// The branch we are ON (the work branch). Rebasing must UPDATE this ref — so
-	// we pass the branch NAME to `git rebase` (passing the literal `HEAD` would
-	// rebase in DETACHED mode and leave the branch ref behind).
-	const onBranch = (
-		await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
-	).stdout.trim();
-	const base = (
-		await gitSoft(['merge-base', 'HEAD', `${arbiter}/main`], cwd, env)
-	).stdout.trim();
-	if (base === '') {
-		// No common ancestor (shouldn't happen for a branch cut from main): fall
-		// back to a plain rebase so the caller's conflict path still governs.
-		return gitSoft(['rebase', `${arbiter}/main`], cwd, env);
-	}
-	// A sequence editor that strips the route-to-needs-attention move-only commit
-	// from the interactive todo list. `routeToNeedsAttention` authors it as
-	// `chore(<slug>): route to needs-attention; <reason>` — match that prefix and
-	// delete those `pick` lines, leaving the wip + the done-move to replay.
-	const rebaseEnv: NodeJS.ProcessEnv = {
-		...(env ?? process.env),
-		GIT_SEQUENCE_EDITOR: dropMoveOnlySequenceEditor(slug),
-		// Keep the rebase non-interactive for the commit-message editor too.
-		GIT_EDITOR: 'true',
-	};
-	return gitSoft(
-		onBranch === ''
-			? ['rebase', '-i', '--onto', `${arbiter}/main`, base]
-			: ['rebase', '-i', '--onto', `${arbiter}/main`, base, onBranch],
+	// Delegate to the SHARED drop-mechanism (`drop-bookkeeping-rebase.ts`) — ONE
+	// home for the sed/GIT_SEQUENCE_EDITOR logic, called at both rebase sites
+	// (the onboard continue-rebase in `continue-branch.ts` calls the same helper).
+	return rebaseDroppingBookkeepingMoves({
 		cwd,
-		rebaseEnv,
-	);
-}
-
-/**
- * Build a one-shot `GIT_SEQUENCE_EDITOR` command (a `sed` invocation) that
- * deletes, from the rebase todo file (passed as `$1`), every `pick` line whose
- * subject is the route-to-needs-attention move-only commit for `slug`
- * (`chore(<slug>): route to needs-attention`). Deleting a `pick` line drops that
- * commit from the rebase — the mechanism for skipping the move that conflicts
- * with the surfaced main. Anchored to the slug so no unrelated commit is dropped.
- */
-function dropMoveOnlySequenceEditor(slug: string): string {
-	// The todo line looks like: `pick <sha> chore(<slug>): route to needs-attention; …`
-	// Escape any sed-special characters in the slug before embedding it.
-	const escaped = slug.replace(/[\\/&.[\]*^$]/g, '\\$&');
-	return `sed -i -e '/^pick [0-9a-f]* chore(${escaped}): route to needs-attention/d'`;
+		ontoRef: `${arbiter}/main`,
+		slug,
+		env,
+	});
 }
 
 /**

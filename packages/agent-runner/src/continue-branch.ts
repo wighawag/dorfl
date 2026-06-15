@@ -1,4 +1,5 @@
 import {run, type RunResult} from './git.js';
+import {rebaseDroppingBookkeepingMoves} from './drop-bookkeeping-rebase.js';
 
 /**
  * The **continue-detection** shared by BOTH onboarding paths (the keystone of
@@ -91,17 +92,43 @@ export interface ContinueRebaseResult {
  * `mainRef` (the freshly-fetched main), so the agent builds on a CURRENT base
  * (ADR §10: rebase, NOT merge — linear history; the prior attempt's commits were
  * based on an OLD main that moved while the item sat in needs-attention/backlog).
- * A CLEAN rebase returns `{kind: 'clean'}`; a CONFLICTING rebase is `--abort`ed
- * (NEVER auto-resolved) and returns `{kind: 'conflict'}` so the caller can route
- * the item to needs-attention via the §10 path. Must be called while HEAD is the
- * continued branch.
+ *
+ * **Drops the kept branch's stale runner-authored bookkeeping move-only
+ * commits before replaying.** When the runner surfaces a slice to
+ * needs-attention it commits `chore(<slug>): route to needs-attention; <reason>`
+ * — a move-only commit that lives on the kept work branch. On the NEXT claim
+ * the runner ALSO tree-lessly advances `main` (needs-attention→backlog→in-progress),
+ * so a plain replay of the branch's bookkeeping commit onto current main would
+ * conflict on the SAME `.md` file (the agent self-conflicting with the runner's
+ * own protocol bookkeeping — a DESIGN DEFECT, not a human-decision conflict).
+ * We instead RUN the SAME drop-mechanism the integration rebase already uses
+ * (the shared `rebaseDroppingBookkeepingMoves` — ONE home), anchored to the
+ * slug, so the bookkeeping commits never replay and the wip / `→done` commits
+ * land cleanly. A CLEAN rebase returns `{kind: 'clean'}`; a CONFLICTING rebase
+ * (a GENUINE code conflict still present AFTER the drop) is `--abort`ed (NEVER
+ * auto-resolved) and returns `{kind: 'conflict'}` so the caller can route the
+ * item to needs-attention via the §10 path — EXACTLY as today for real conflicts.
+ * Must be called while HEAD is the continued branch.
+ *
+ * Atomicity invariant: the drop targets ONLY the `route to needs-attention`
+ * bookkeeping move (anchored by subject + slug). A completed-state move
+ * (`→done` / `slicing→prd-sliced`) is NEVER dropped — those land atomically
+ * with the artifacts they assert.
+ *
+ * `slug` is REQUIRED for the slug-anchored drop. When the caller does not
+ * know a slug (e.g. a non-slice context), an empty string skips the drop and
+ * degrades to a plain rebase — same conflict-or-clean semantics as before.
  */
 export function rebaseContinuedBranchOntoMain(
 	cwd: string,
 	mainRef: string,
+	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): ContinueRebaseResult {
-	const rebase = gitSoft(['rebase', mainRef], cwd, env);
+	const rebase =
+		slug === ''
+			? gitSoft(['rebase', mainRef], cwd, env)
+			: rebaseDroppingBookkeepingMoves({cwd, ontoRef: mainRef, slug, env});
 	if (rebase.status === 0) {
 		return {kind: 'clean'};
 	}
@@ -189,12 +216,18 @@ export function pushContinuedBranchWithStaleLeaseRetry(options: {
 	mainRef: string;
 	/** The arbiter `<branch>` sha the caller already observed (pre-rebase tip). */
 	expectedRemoteTip: string;
+	/**
+	 * The slug to anchor the bookkeeping-commit drop to on a re-rebase (see
+	 * {@link rebaseContinuedBranchOntoMain}). Empty string skips the drop
+	 * (degrades to a plain rebase) for backwards compatibility.
+	 */
+	slug: string;
 	retries?: number;
 	env: NodeJS.ProcessEnv | undefined;
 	/** Optional progress note sink (mirrors the claim loop's `note`). */
 	note?: (message: string) => void;
 }): ContinuedPushResult {
-	const {cwd, branch, arbiter, mainRef, env} = options;
+	const {cwd, branch, arbiter, mainRef, slug, env} = options;
 	const note = options.note ?? (() => {});
 	const retries = options.retries ?? DEFAULT_STALE_LEASE_RETRIES;
 	// The remote-tracking ref we re-fetch the arbiter `<branch>` into so the lease
@@ -268,7 +301,7 @@ export function pushContinuedBranchWithStaleLeaseRetry(options: {
 		// Replay our green work onto the freshly-fetched main (ADR §10: rebase, not
 		// merge). A CONFLICT is the EXISTING abort → needs-attention path — the retry
 		// handles ONLY the clean-rebase stale-lease case (never auto-resolves).
-		const rebase = rebaseContinuedBranchOntoMain(cwd, mainRef, env);
+		const rebase = rebaseContinuedBranchOntoMain(cwd, mainRef, slug, env);
 		if (rebase.kind === 'conflict') {
 			return {kind: 'conflict'};
 		}
