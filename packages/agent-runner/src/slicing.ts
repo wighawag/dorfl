@@ -28,7 +28,7 @@ import {
 } from './slicing-lock.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
-import {setNeedsAnswersMarker} from './frontmatter.js';
+import {setNeedsAnswersMarker, propagateOrigin} from './frontmatter.js';
 import {workBranchRef} from './slug-namespace.js';
 import {
 	runSliceReviewLoop,
@@ -785,6 +785,17 @@ async function stageSlicingLifecycle(params: {
 	const {cwd, slug, emitSlices, env} = params;
 	const slicing = `work/slicing/${slug}.md`;
 	const prdSliced = `work/prd-sliced/${slug}.md`;
+	// PROPAGATE the origin-trust PROVENANCE (slice
+	// `untrusted-origin-forces-build-propose`): read the held PRD's `origin`/
+	// `originTrust` stamp BEFORE the move, so each emitted slice can carry it. A
+	// slice's risk is its BUILD; the stamp must reach the slice so the build
+	// transition can force `propose` for untrusted-origin work. An UNSTAMPED PRD (a
+	// human/local-authored one ⇒ trusted) propagates nothing — the normal path is
+	// untouched.
+	const prdAbs = join(cwd, slicing);
+	const prdProvenance = existsSync(prdAbs)
+		? parseFrontmatter(readFileSync(prdAbs, 'utf8'))
+		: {origin: undefined, originTrust: undefined};
 	// Move the held PRD slicing/ -> prd-sliced/ (the SLICED resting state — folder =
 	// source of truth, like done/ for slices). This releases the lock as part of THIS
 	// transition's commit, not the lock release's own commit-to-main.
@@ -793,10 +804,12 @@ async function stageSlicingLifecycle(params: {
 	await gitHard(['add', '--', prdSliced], cwd, env);
 	// Drop the produced backlog slices IN (write + stage; the band's `git add -A`
 	// also catches them, but staging here keeps the transition explicit + atomic).
+	// The runner STAMPS the propagated provenance onto each slice as it writes it
+	// (the agent does no git; the runner owns the file write here).
 	for (const [relPath, content] of Object.entries(emitSlices)) {
 		const abs = join(cwd, relPath);
 		mkdirSync(dirname(abs), {recursive: true});
-		writeFileSync(abs, content);
+		writeFileSync(abs, propagateOrigin(prdProvenance, content));
 		await gitHard(['add', '--', relPath], cwd, env);
 	}
 }

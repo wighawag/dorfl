@@ -21,6 +21,7 @@ import {type IntegrateResult, type ReviewProvider} from './integrator.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode} from './config.js';
+import {parseFrontmatter} from './frontmatter.js';
 import {git, run, runAsync, type RunResult} from './git.js';
 import {workBranchRef} from './slug-namespace.js';
 import {isAncestor} from './gc.js';
@@ -256,6 +257,20 @@ export interface IntegrationCoreInput {
 	/** Integration mode the caller REQUESTED (`propose` default, or `merge`). */
 	mode: IntegrationMode;
 	/**
+	 * **The UNTRUSTED-ORIGIN build clamp** (slice
+	 * `untrusted-origin-forces-build-propose`). When `true`, the operator EXPLICITLY
+	 * passed `--merge` on this invocation — which OVERRIDES the untrusted-origin
+	 * `propose` default (the operator is present; CLI always wins, no special
+	 * force-key). The autonomous/CI build path passes no flag ⇒ leaves this unset ⇒
+	 * an untrusted-origin slice reliably forces `propose`. Resolved entirely from the
+	 * slice's stamped `originTrust:` frontmatter (read HERE from the build source
+	 * file); a `trusted`/unset slice is config-as-is (ZERO behaviour change). This
+	 * clamp touches the slice BUILD transition ONLY: it never fires when
+	 * {@link lifecycle} is set (the slicing/intake-emit transitions — a file landing
+	 * on main is inert) nor on {@link committedRecovery} (already gated + moved).
+	 */
+	explicitMerge?: boolean;
+	/**
 	 * **The PR-INTENT axis** (config `noPR`, ADR §6). When `true` on the `propose`
 	 * path, the branch is pushed (the safety-bearing step) but NO review request is
 	 * opened (the explicit suppress-PR intent that re-homes the old `provider: none`
@@ -450,7 +465,10 @@ export async function performIntegration(
 	let approvedVerdict: ReviewVerdict | undefined;
 	// The resolved integration mode. `merge` lands automatically on a green gate
 	// (and an `approve` when review is on); `propose` leaves the merge to a human.
-	const mode = input.mode;
+	// MUTABLE because the untrusted-origin clamp below may force it to `propose`
+	// for a slice BUILD (the build transition only) — see the clamp after
+	// `sourcePath` is resolved.
+	let mode = input.mode;
 	// The fresh-worktree gate (slice `gate-on-rebased-tip-fresh-worktree`): when ON
 	// the deterministic acceptance gate (`prepare`+`verify`) does NOT run here on
 	// the agent's PRE-rebase `cwd`; instead it runs LATER, in a clean throwaway
@@ -492,6 +510,37 @@ export async function performIntegration(
 		: source === 'in-progress'
 			? join(cwd, 'work', 'in-progress', `${slug}.md`)
 			: join(cwd, 'work', 'needs-attention', `${slug}.md`);
+
+	// UNTRUSTED-ORIGIN BUILD CLAMP (slice `untrusted-origin-forces-build-propose`).
+	// A slice born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
+	// at intake, propagated by the slicer). Its risk is the BUILD (it becomes code),
+	// so the build transition resolves to `propose` even when the requested mode is
+	// `merge` — moving the human checkpoint onto the becomes-code build. Precedence:
+	//   explicit --merge  >  untrusted-origin ⇒ propose  >  config mode  >  default.
+	// An explicit `--merge` (input.explicitMerge) OVERRIDES the clamp (the operator
+	// is present; CLI always wins, no special force-key). The autonomous/CI path
+	// passes no flag, so there an untrusted-origin slice RELIABLY forces propose.
+	//
+	// SCOPE: the slice BUILD transition ONLY. It NEVER fires for a `lifecycle`
+	// transition (slicing / intake-emit — a PRD/slice FILE landing on main is inert;
+	// intake's OWN per-emit resolver already decided that mode), and the source file
+	// here is the slice being built. A `trusted`/unset slice ⇒ untouched (zero
+	// behaviour change for the normal human path).
+	if (
+		!lifecycle &&
+		mode === 'merge' &&
+		input.explicitMerge !== true &&
+		existsSync(sourcePath) &&
+		parseFrontmatter(readFileSync(sourcePath, 'utf8')).originTrust ===
+			'untrusted'
+	) {
+		mode = 'propose';
+		note(
+			`Untrusted-origin slice '${slug}': forcing the BUILD transition to ` +
+				'propose (a human reviews the becomes-code change before it merges). ' +
+				'Pass --merge to override.',
+		);
+	}
 
 	// 0. Prepare: make the worktree's ENV READY before the gate (install deps,
 	//    submodules, codegen). A fresh job worktree off the hub mirror has no

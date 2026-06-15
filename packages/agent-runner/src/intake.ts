@@ -9,6 +9,7 @@ import {
 import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
 import type {IntegrationMode} from './config.js';
+import type {OriginTrust} from './frontmatter.js';
 import {
 	identityEnv,
 	assertTransportAllowed,
@@ -241,6 +242,20 @@ export interface PerformIntakeOptions {
 	 * are no-ops for them. Unset ⇒ propose for both.
 	 */
 	integration?: IntakeIntegrationModes;
+	/**
+	 * **The ORIGIN-TRUST verdict, passed IN** (slice
+	 * `untrusted-origin-forces-build-propose`; the `--origin-trust <trusted|untrusted>`
+	 * CLI flag). `intake` STAMPS `origin: issue` + this `originTrust` onto every PRD/
+	 * slice it emits, so the author-trust signal SURVIVES the PRD/slice merge
+	 * boundary (a landed-on-main artifact otherwise erases how it was born, the
+	 * laundering gap). `intake` does NOT resolve trust itself: the verdict is CI's
+	 * POLICY, computed in the `intake.yml` shell from the SAME `author_association`
+	 * case as the integration flags and threaded IN here (preserving the ~L296
+	 * boundary). UNSET means the artifact is emitted UNSTAMPED, read as `human`/trusted:
+	 * a LOCAL `agent-runner intake <N>` (no CI shell, no `--origin-trust`) is the
+	 * human-IS-the-checkpoint path, gate-free exactly as `do`.
+	 */
+	originTrust?: OriginTrust;
 	/**
 	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, intake's propose
 	 * emissions push the branch but skip the PR (the explicit suppress-PR intent).
@@ -726,6 +741,10 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.slice,
+				// The origin-trust STAMP, passed IN (not resolved here): the emitted slice
+				// carries `origin: issue` + this verdict so the becomes-code checkpoint is
+				// not laundered. Unset ⇒ unstamped (a local intake ⇒ human/trusted).
+				originTrust: options.originTrust,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
 				issueProvider,
@@ -746,6 +765,9 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.prd,
+				// Same origin-trust stamp on the PRD outcome (propagated onto its slices
+				// later by the slicer). Passed IN; not resolved here.
+				originTrust: options.originTrust,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
 				issueProvider,
@@ -913,6 +935,8 @@ async function dispatchSlice(params: {
 	cwd: string;
 	arbiter: string;
 	integration: IntegrationMode;
+	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
+	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
 	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
@@ -933,6 +957,7 @@ async function dispatchSlice(params: {
 		cwd,
 		arbiter,
 		integration,
+		originTrust,
 		noPR,
 		providerInstance,
 		issueProvider,
@@ -1036,6 +1061,7 @@ async function dispatchSlice(params: {
 		title: review.title,
 		body: reviewedBody,
 		issueNumber,
+		originTrust,
 	});
 
 	const core = await performIntegration({
@@ -1100,6 +1126,8 @@ async function dispatchPrd(params: {
 	cwd: string;
 	arbiter: string;
 	integration: IntegrationMode;
+	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
+	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
 	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
@@ -1115,6 +1143,7 @@ async function dispatchPrd(params: {
 		cwd,
 		arbiter,
 		integration,
+		originTrust,
 		noPR,
 		providerInstance,
 		issueProvider,
@@ -1147,6 +1176,7 @@ async function dispatchPrd(params: {
 		issueNumber,
 		humanOnly: verdict.prdHumanOnly,
 		needsAnswers: verdict.prdNeedsAnswers,
+		originTrust,
 	});
 
 	const core = await performIntegration({
@@ -1438,17 +1468,26 @@ function renderBacklogSlice(params: {
 	title: string;
 	body: string | undefined;
 	issueNumber: number;
+	/**
+	 * The origin-trust STAMP (slice `untrusted-origin-forces-build-propose`).
+	 * Present ⇒ emit `origin: issue` + `originTrust: <value>` so the becomes-code
+	 * checkpoint survives the merge boundary. UNSET (a local intake, no CI shell)
+	 * ⇒ NO stamp (the human running intake IS the checkpoint ⇒ human/trusted).
+	 */
+	originTrust?: OriginTrust;
 }): string {
-	const {slug, title, body, issueNumber} = params;
-	const frontmatter = [
+	const {slug, title, body, issueNumber, originTrust} = params;
+	const lines = [
 		'---',
 		`title: ${title}`,
 		`slug: ${slug}`,
 		`issue: ${issueNumber}`,
-		'covers: []',
-		'blockedBy: []',
-		'---',
-	].join('\n');
+	];
+	if (originTrust !== undefined) {
+		lines.push('origin: issue', `originTrust: ${originTrust}`);
+	}
+	lines.push('covers: []', 'blockedBy: []', '---');
+	const frontmatter = lines.join('\n');
 	const drafted =
 		body && body.trim() !== ''
 			? body.trim()
@@ -1487,14 +1526,28 @@ function renderPrd(params: {
 	issueNumber: number;
 	humanOnly: boolean | undefined;
 	needsAnswers: boolean | undefined;
+	/**
+	 * The origin-trust STAMP (slice `untrusted-origin-forces-build-propose`).
+	 * Present ⇒ emit `origin: issue` + `originTrust: <value>`, PROPAGATED onto every
+	 * emitted slice by the slicer so the build transition can read it. UNSET (a
+	 * local intake) ⇒ NO stamp (human/trusted).
+	 */
+	originTrust?: OriginTrust;
 }): string {
-	const {slug, title, body, issueNumber, humanOnly, needsAnswers} = params;
+	const {slug, title, body, issueNumber, humanOnly, needsAnswers, originTrust} =
+		params;
 	const lines = [
 		'---',
 		`title: ${title}`,
 		`slug: ${slug}`,
 		`issue: ${issueNumber}`,
 	];
+	// The origin-trust stamp (only when passed IN from the CI shell): the
+	// becomes-code checkpoint that survives the merge boundary. A local intake
+	// leaves it unset ⇒ no stamp ⇒ human/trusted.
+	if (originTrust !== undefined) {
+		lines.push('origin: issue', `originTrust: ${originTrust}`);
+	}
 	// Surface the gate axes AS THE PROMPT JUDGED THEM (PRD US #8). Only emit a `true`
 	// axis — an undeclared axis stays absent (parsed as `undefined`).
 	if (humanOnly === true) {

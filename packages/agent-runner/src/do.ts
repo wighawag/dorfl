@@ -206,6 +206,17 @@ export interface DoOptions {
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
+	 * **The explicit `--merge` override** for the untrusted-origin build clamp
+	 * (slice `untrusted-origin-forces-build-propose`). `true` iff the operator
+	 * EXPLICITLY typed `--merge` (vs `merge` resolved from config). Forwarded to the
+	 * slice-BUILD `performComplete` → `performIntegration` so an explicit `--merge`
+	 * OVERRIDES the untrusted-origin `propose` clamp. The autonomous/CI path (a bare
+	 * `advance`/`do` auto-pick) passes no flag ⇒ unset ⇒ an untrusted-origin slice
+	 * reliably forces `propose`. (Build transition only; the slicing transition is
+	 * unaffected — a slice FILE landing on main is inert.)
+	 */
+	explicitMerge?: boolean;
+	/**
 	 * **Per-TRANSITION override for the SLICING transition only** (config
 	 * `slicingIntegration`). Consumed ONLY by the `do prd:<slug>` slicing path: the
 	 * value threaded into {@link performSlice} is `slicingIntegration ?? integration`,
@@ -408,6 +419,11 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
+	/**
+	 * The explicit `--merge` override for the untrusted-origin build clamp on the
+	 * `do --remote` slice-BUILD path. See {@link DoOptions.explicitMerge}.
+	 */
+	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the SLICING transition only** (config
 	 * `slicingIntegration`) on the `do --remote prd:<slug>` path: threaded into
@@ -985,6 +1001,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		cwd: tree.dir,
 		arbiter: tree.arbiterRemote,
 		integration: options.integration,
+		// An explicit `--merge` overrides the untrusted-origin build clamp (slice
+		// `untrusted-origin-forces-build-propose`); the autonomous path leaves it
+		// unset so untrusted-origin reliably forces propose.
+		explicitMerge: options.explicitMerge,
 		// `do` already ran the pre-flight divergence guard UP FRONT (step 3b), before
 		// the claim + agent; skip `complete`'s redundant re-check. When `do` was run
 		// with --ignore-diverged-main the guard was bypassed there too, so either way
@@ -2060,6 +2080,10 @@ async function runRemotePipeline(
 		cwd,
 		arbiter: arbiterRemote,
 		integration: options.integration,
+		// An explicit `--merge` overrides the untrusted-origin build clamp (slice
+		// `untrusted-origin-forces-build-propose`); unset on the autonomous path so
+		// untrusted-origin reliably forces propose.
+		explicitMerge: options.explicitMerge,
 		// SCOPE: the divergence guard is in-place only. A job worktree is cut fresh off
 		// the bare mirror and never ff's the operator's local main, so the guard does
 		// not apply here — opt out explicitly (the slice: do NOT touch do --remote/run).
@@ -2277,6 +2301,8 @@ export function jobWorktreeDoDriver(closure: {
 			slicerLoopModel: options.slicerLoopModel,
 			reviewExecutions: options.reviewExecutions,
 			integration: options.integration,
+			// The explicit `--merge` override for the untrusted-origin build clamp.
+			explicitMerge: options.explicitMerge,
 			prepare: options.prepare,
 			verify: options.verify,
 			noPR: options.noPR,

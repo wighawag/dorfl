@@ -599,6 +599,14 @@ interface IntakeFlags {
 	proposePrd?: boolean;
 	mergeSlice?: boolean;
 	proposeSlice?: boolean;
+	/**
+	 * `--origin-trust <trusted|untrusted>` — the author-trust verdict the CI shell
+	 * passes IN so `intake` STAMPS the emitted PRD/slice (slice
+	 * `untrusted-origin-forces-build-propose`). `intake` does NOT resolve trust; the
+	 * shell derives it from the SAME `author_association` case as the integration
+	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
+	 */
+	originTrust?: string;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -1578,6 +1586,11 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: config.integration,
+				// An EXPLICIT `--merge` overrides the untrusted-origin build clamp (slice
+				// `untrusted-origin-forces-build-propose`): `flagMode` is the typed flag
+				// (undefined when none), so this is true ONLY when the operator typed
+				// `--merge`, never when `merge` was resolved from config.
+				explicitMerge: flagMode === 'merge',
 				noPR: config.noPR,
 				noSwitch: flags.switch === false,
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
@@ -1886,6 +1899,8 @@ export function buildProgram(): Command {
 					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
+					// EXPLICIT `--merge` override for the untrusted-origin build clamp.
+					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION SLICING override (the `do --remote prd:` slicing path).
 					slicingIntegration: remoteConfig.slicingIntegration,
 					prepare: remoteConfig.prepare,
@@ -2018,6 +2033,11 @@ export function buildProgram(): Command {
 				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				// EXPLICIT `--merge` override for the untrusted-origin build clamp (slice
+				// `untrusted-origin-forces-build-propose`): true ONLY when the operator
+				// typed `--merge` (`flagMode`), never when `merge` came from config — so an
+				// untrusted-origin slice still forces propose under a config `merge`.
+				explicitMerge: flagMode === 'merge',
 				// Per-TRANSITION SLICING override: the `do prd:` slicing path threads
 				// `slicingIntegration ?? integration`; the slice-build path stays on
 				// `integration`. Unset ⇒ slicing falls back to `integration` (today's behaviour).
@@ -2288,6 +2308,8 @@ export function buildProgram(): Command {
 					identity: remoteConfig.identity,
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
+					// EXPLICIT `--merge` override for the untrusted-origin build clamp.
+					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION SLICING override (the isolated `do --remote prd:` path).
 					slicingIntegration: remoteConfig.slicingIntegration,
 					prepare: remoteConfig.prepare,
@@ -2409,6 +2431,9 @@ export function buildProgram(): Command {
 				identity: config.identity,
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				// EXPLICIT `--merge` override for the untrusted-origin build clamp (a
+				// bare `advance` auto-pick passes no flag ⇒ unset ⇒ untrusted forces propose).
+				explicitMerge: flagMode === 'merge',
 				// Per-TRANSITION SLICING override (the `do prd:` slicing path threads
 				// `slicingIntegration ?? integration`; the build path stays on `integration`).
 				slicingIntegration: config.slicingIntegration,
@@ -2812,6 +2837,10 @@ export function buildProgram(): Command {
 			'--propose-slice',
 			'integrate a slice outcome in propose mode (granular; overrides --merge/--propose for a slice; mutually exclusive with --merge-slice)',
 		)
+		.option(
+			'--origin-trust <trusted|untrusted>',
+			"the author-trust verdict to STAMP onto the emitted PRD/slice (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the slice's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
+		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
 			'--model <id>',
@@ -2873,6 +2902,25 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+			// The ORIGIN-TRUST stamp (slice `untrusted-origin-forces-build-propose`):
+			// the CI shell passes `--origin-trust <trusted|untrusted>`; `intake` writes
+			// it onto the emitted artifact (it does NOT resolve trust — the ~L296
+			// boundary). UNSET ⇒ undefined ⇒ emit unstamped (a local intake is
+			// human/trusted). An INVALID value FAILS LOUDLY (an autonomy/trust signal
+			// must never be quietly ignored), mirroring the observation-triage enum.
+			let originTrust: 'trusted' | 'untrusted' | undefined;
+			if (flags.originTrust !== undefined) {
+				if (
+					flags.originTrust !== 'trusted' &&
+					flags.originTrust !== 'untrusted'
+				) {
+					console.error(
+						`error: --origin-trust must be 'trusted' or 'untrusted' (got '${flags.originTrust}').`,
+					);
+					process.exit(1);
+				}
+				originTrust = flags.originTrust;
+			}
 			const harness = createHarness({
 				harness: config.harness,
 				piBin: config.piBin,
@@ -2882,6 +2930,8 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: modes,
+				// The origin-trust stamp the CI shell passes IN (unset ⇒ unstamped).
+				originTrust,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,

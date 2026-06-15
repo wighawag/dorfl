@@ -103,6 +103,16 @@ export interface IntakeIntegrationFlags {
 	prd: 'merge' | 'propose';
 	/** The slice outcome's mode → `--merge-slice` / `--propose-slice`. */
 	slice: 'merge' | 'propose';
+	/**
+	 * The ORIGIN-TRUST verdict CI passes to `intake <N>` via `--origin-trust`
+	 * (slice `untrusted-origin-forces-build-propose`) so the emitted PRD/slice is
+	 * STAMPED with how it was born. Derived from the SAME `author_association` case
+	 * as the integration flags (it IS `authorTrusted` collapsed to the wire value),
+	 * so the stamp and the integration mode CANNOT desync. `intake.ts` writes it
+	 * verbatim onto the frontmatter — it never re-resolves trust (the `intake.ts`
+	 * ~L296 boundary: author-trust is CI's POLICY, passed IN, not resolved here).
+	 */
+	originTrust: 'trusted' | 'untrusted';
 }
 
 /** The gate state CI composes with author-trust to derive the per-outcome flags. */
@@ -153,7 +163,17 @@ export function deriveIntakeFlags(options: {
 	// untrusted; merge ONLY when both are safe (gate OFF AND author trusted).
 	const slice: 'merge' | 'propose' =
 		gate.autoBuild || !authorTrusted ? 'propose' : 'merge';
-	return {prd, slice};
+	// ORIGIN-TRUST stamp (slice `untrusted-origin-forces-build-propose`): the SAME
+	// author-trust verdict, collapsed to the wire value `intake` stamps onto the
+	// emitted artifact. Derived HERE — next to the integration flags, off the SAME
+	// `authorTrusted` input — so the stamp and the slice/PRD modes cannot desync.
+	// It is NOT a re-resolution of trust (CI already resolved it); it is the verdict
+	// being CARRIED so it survives the PRD/slice merge boundary (the becomes-code
+	// checkpoint is not laundered when the file lands on main).
+	const originTrust: 'trusted' | 'untrusted' = authorTrusted
+		? 'trusted'
+		: 'untrusted';
+	return {prd, slice, originTrust};
 }
 
 /**
@@ -339,9 +359,24 @@ jobs:
             slice_flag="--merge-slice"
           fi
 
+          # ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose):
+          # derived from the SAME \${trusted} case above (one author-trust read,
+          # two consumers — the slice/PRD modes AND the stamp — so they cannot
+          # desync). \`intake\` STAMPS this onto the emitted PRD/slice frontmatter
+          # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
+          # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
+          # so a later auto-slice/auto-build of an untrusted-origin artifact still
+          # forces a human becomes-code checkpoint (the laundering gap is closed).
+          if [ "\${trusted}" = "true" ]; then
+            origin_trust_flag="--origin-trust=trusted"
+          else
+            origin_trust_flag="--origin-trust=untrusted"
+          fi
+
           echo "prd_flag=\${prd_flag}" >> "\$GITHUB_OUTPUT"
           echo "slice_flag=\${slice_flag}" >> "\$GITHUB_OUTPUT"
-          echo "intake policy: author_association='\${AUTHOR_ASSOCIATION:-}' trusted=\${trusted} → \${prd_flag} \${slice_flag}"
+          echo "origin_trust_flag=\${origin_trust_flag}" >> "\$GITHUB_OUTPUT"
+          echo "intake policy: author_association='\${AUTHOR_ASSOCIATION:-}' trusted=\${trusted} → \${prd_flag} \${slice_flag} \${origin_trust_flag}"
 
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -356,6 +391,7 @@ jobs:
           agent-runner intake "\${{ github.event.issue.number }}" \\
             "\${{ steps.policy.outputs.prd_flag }}" \\
             "\${{ steps.policy.outputs.slice_flag }}" \\
+            "\${{ steps.policy.outputs.origin_trust_flag }}" \\
             --arbiter origin
 `;
 }
@@ -477,6 +513,22 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	require('derives-propose-prd', /--propose-prd\b/.test(
 		operative,
 	), 'the policy derivation must be able to emit `--propose-prd` (autoSlice on).');
+	// ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose): the shell
+	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
+	// case it uses for the slice/PRD modes, and pass it to `intake` so the emitted
+	// artifact is stamped (the stamp + the modes cannot desync).
+	require('derives-origin-trust-untrusted', /--origin-trust=untrusted\b/.test(
+		operative,
+	), 'the policy derivation must emit `--origin-trust=untrusted` for a non-trusted ' +
+		'author (so the emitted artifact is stamped untrusted; slice ' +
+		'untrusted-origin-forces-build-propose).');
+	require('derives-origin-trust-trusted', /--origin-trust=trusted\b/.test(
+		operative,
+	), 'the policy derivation must emit `--origin-trust=trusted` for a trusted author.');
+	require('passes-origin-trust-to-intake', /steps\.policy\.outputs\.origin_trust_flag/.test(
+		operative,
+	), 'the intake invocation must pass the derived `--origin-trust` flag (the ' +
+		'stamp must reach `agent-runner intake`).');
 	// The derivation must compose the gate env block (it READS the gates to derive).
 	require('reads-auto-build-gate', /AGENT_RUNNER_AUTO_BUILD\b/.test(
 		text,

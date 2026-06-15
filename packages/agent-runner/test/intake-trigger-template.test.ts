@@ -93,7 +93,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoSlice: false},
 				authorTrusted: true,
 			}),
-		).toEqual({prd: 'merge', slice: 'merge'});
+		).toEqual({prd: 'merge', slice: 'merge', originTrust: 'trusted'});
 	});
 
 	it('UNTRUSTED author forces --propose-slice REGARDLESS of autoBuild, but --merge-prd STAYS allowed', () => {
@@ -105,7 +105,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoSlice: false},
 				authorTrusted: false,
 			}),
-		).toEqual({prd: 'merge', slice: 'propose'});
+		).toEqual({prd: 'merge', slice: 'propose', originTrust: 'untrusted'});
 	});
 
 	it('autoBuild ON forces --propose-slice even for a TRUSTED author (an agent will auto-build it)', () => {
@@ -114,7 +114,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: true, autoSlice: false},
 				authorTrusted: true,
 			}),
-		).toEqual({prd: 'merge', slice: 'propose'});
+		).toEqual({prd: 'merge', slice: 'propose', originTrust: 'trusted'});
 	});
 
 	it('autoSlice ON forces --propose-prd (an agent will auto-slice it → human PR checkpoint now)', () => {
@@ -123,7 +123,26 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoSlice: true},
 				authorTrusted: true,
 			}),
-		).toEqual({prd: 'propose', slice: 'merge'});
+		).toEqual({prd: 'propose', slice: 'merge', originTrust: 'trusted'});
+	});
+
+	it('originTrust is the author-trust verdict CARRIED for the stamp (trusted⇒trusted, untrusted⇒untrusted), independent of the gates', () => {
+		// The stamp is derived from the SAME authorTrusted input as the modes, so it
+		// cannot desync; it does not depend on the gate state.
+		for (const autoBuild of [false, true]) {
+			for (const autoSlice of [false, true]) {
+				expect(
+					deriveIntakeFlags({gate: {autoBuild, autoSlice}, authorTrusted: true})
+						.originTrust,
+				).toBe('trusted');
+				expect(
+					deriveIntakeFlags({
+						gate: {autoBuild, autoSlice},
+						authorTrusted: false,
+					}).originTrust,
+				).toBe('untrusted');
+			}
+		}
 	});
 
 	it('the PRD flag is gate-derived ONLY — author-trust does NOT bite a PRD', () => {
@@ -168,7 +187,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoSlice: false},
 				authorTrusted: true,
 			}),
-		).toEqual({prd: 'merge', slice: 'merge'});
+		).toEqual({prd: 'merge', slice: 'merge', originTrust: 'trusted'});
 		// Flip ANY one of the three and it is no longer merge-everything.
 		expect(
 			deriveIntakeFlags({
@@ -287,12 +306,16 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 			autoBuild: boolean,
 			autoSlice: boolean,
 			trusted: boolean,
-		): {prd: string; slice: string} => {
+		): {prd: string; slice: string; originTrust: string} => {
 			// PRD: --propose-prd iff autoSlice true, else --merge-prd.
 			const prd = autoSlice ? '--propose-prd' : '--merge-prd';
 			// SLICE: --propose-slice iff autoBuild true OR not trusted.
 			const slice = autoBuild || !trusted ? '--propose-slice' : '--merge-slice';
-			return {prd, slice};
+			// ORIGIN-TRUST: the same `trusted` case, carried to the stamp flag.
+			const originTrust = trusted
+				? '--origin-trust=trusted'
+				: '--origin-trust=untrusted';
+			return {prd, slice, originTrust};
 		};
 		for (const autoBuild of [false, true]) {
 			for (const autoSlice of [false, true]) {
@@ -304,13 +327,21 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 					});
 					expect(fromShell.prd).toBe(`--${fromFn.prd}-prd`);
 					expect(fromShell.slice).toBe(`--${fromFn.slice}-slice`);
+					// The stamp is derived from the SAME author-trust case as the modes.
+					expect(fromShell.originTrust).toBe(
+						`--origin-trust=${fromFn.originTrust}`,
+					);
 				}
 			}
 		}
 		// And the workflow text actually carries that shell shape (the gate reads +
-		// the OWNER/MEMBER/COLLABORATOR case + both slice branches).
+		// the OWNER/MEMBER/COLLABORATOR case + both slice branches + the origin-trust
+		// stamp derived from the SAME case, passed to intake).
 		expect(text).toContain('OWNER|MEMBER|COLLABORATOR');
 		expect(/case "\$\{AUTHOR_ASSOCIATION:-\}"/.test(text)).toBe(true);
+		expect(text).toContain('--origin-trust=trusted');
+		expect(text).toContain('--origin-trust=untrusted');
+		expect(/steps\.policy\.outputs\.origin_trust_flag/.test(text)).toBe(true);
 	});
 
 	it('insertion point E: requests issues: write (post the verdict to the thread) and does NOT use the PR-comment seam', () => {

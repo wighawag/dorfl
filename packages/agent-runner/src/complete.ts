@@ -110,6 +110,16 @@ export interface CompleteOptions {
 	/** Integration mode: `propose` (default) or `merge`. */
 	integration?: IntegrationMode;
 	/**
+	 * **The explicit `--merge` override** for the untrusted-origin build clamp
+	 * (slice `untrusted-origin-forces-build-propose`). `true` iff the operator
+	 * EXPLICITLY typed `--merge` on this invocation (vs `merge` resolved from
+	 * config). Forwarded to {@link performIntegration}'s `explicitMerge`: an explicit
+	 * `--merge` OVERRIDES the untrusted-origin `propose` clamp (the operator is
+	 * present; CLI always wins). Unset on the autonomous path ⇒ an untrusted-origin
+	 * slice reliably forces `propose`.
+	 */
+	explicitMerge?: boolean;
+	/**
 	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
 	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
 	 * `<arbiter>/main` (has unpushed commits). MERGE MODE ONLY (only merge mode ff's
@@ -498,6 +508,11 @@ async function runComplete(
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
 		skipVerify: options.skipVerify,
+		// The untrusted-origin build clamp's override (slice
+		// `untrusted-origin-forces-build-propose`): an explicit `--merge` lets the
+		// operator land an untrusted-origin slice on main; the autonomous path leaves
+		// it unset so untrusted-origin reliably forces propose.
+		explicitMerge: options.explicitMerge,
 		review: options.review,
 		reviewGate: options.reviewGate,
 		reviewModel: options.reviewModel,

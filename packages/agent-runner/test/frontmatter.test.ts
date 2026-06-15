@@ -103,6 +103,60 @@ describe('parseFrontmatter', () => {
 		expect(parseFrontmatter(md).sliceAfter).toEqual([]);
 	});
 
+	// ── Origin-trust PROVENANCE (slice untrusted-origin-forces-build-propose) ────
+	// The stamp that survives the PRD/slice merge boundary: how the artifact was
+	// born + the author-trust verdict at birth. UNSET ⇒ human/trusted (the normal
+	// path, zero behaviour change).
+
+	it('parses origin: issue + originTrust: untrusted (the stamped front-door path)', () => {
+		const md = [
+			'---',
+			'title: From a public issue',
+			'slug: from-issue',
+			'origin: issue',
+			'originTrust: untrusted',
+			'---',
+		].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.origin).toBe('issue');
+		expect(fm.originTrust).toBe('untrusted');
+	});
+
+	it('parses originTrust: trusted', () => {
+		const md = [
+			'---',
+			'slug: a',
+			'origin: issue',
+			'originTrust: trusted',
+			'---',
+		].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.origin).toBe('issue');
+		expect(fm.originTrust).toBe('trusted');
+	});
+
+	it('treats OMITTED origin/originTrust as undefined (⇒ human/trusted, the unset default)', () => {
+		// The normal human-authored / local path: NO stamp ⇒ both undefined, which the
+		// build transition reads as trusted (zero behaviour change).
+		const md = ['---', 'slug: a', 'blockedBy: []', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.origin).toBeUndefined();
+		expect(fm.originTrust).toBeUndefined();
+	});
+
+	it('reads an UNKNOWN origin/originTrust value as undefined (fail-safe to the default)', () => {
+		const md = [
+			'---',
+			'slug: a',
+			'origin: nonsense',
+			'originTrust: maybe',
+			'---',
+		].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.origin).toBeUndefined();
+		expect(fm.originTrust).toBeUndefined();
+	});
+
 	it('reads a full PRD frontmatter block (humanOnly/needsAnswers/sliceAfter)', () => {
 		const md = [
 			'---',

@@ -153,6 +153,131 @@ describe('integration-core — approve ⇒ completed', () => {
 	});
 });
 
+describe('integration-core — UNTRUSTED-ORIGIN build clamp (untrusted-origin-forces-build-propose)', () => {
+	// Stamp `originTrust` onto the in-progress slice the build is about to integrate
+	// (the slicer would have propagated it; here we set it directly to drive the
+	// clamp). The clamp reads it from `work/in-progress/<slug>.md`.
+	const stampOriginTrust = (
+		repo: string,
+		slug: string,
+		value: 'trusted' | 'untrusted',
+	): void => {
+		const path = join(repo, 'work', 'in-progress', `${slug}.md`);
+		const content = readFileSync(path, 'utf8');
+		writeFileSync(
+			path,
+			content.replace(/^---\n/, `---\norigin: issue\noriginTrust: ${value}\n`),
+		);
+	};
+
+	it('an UNTRUSTED slice + mode merge + NO explicit flag ⇒ resolves to propose (a PR, NOT a merge to main)', async () => {
+		const {repo} = await claimAndBranch('untrusted-merge');
+		stampOriginTrust(repo, 'untrusted-merge', 'untrusted');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'untrusted-merge',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			// The build-transition config mode is `merge`, but no operator flag is present
+			// (the autonomous/CI path). Untrusted-origin clamps it to propose.
+			mode: 'merge',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		// Clamped to propose: the work branch is pushed (PR source), main is NOT touched.
+		expect(core.integration?.mode).toBe('propose');
+		expect(core.integration?.mergedToMain).not.toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'untrusted-merge')).toBe(false);
+	});
+
+	it('an UNTRUSTED slice + explicit --merge (explicitMerge: true) ⇒ lands on main (the operator is present; CLI wins)', async () => {
+		const {repo} = await claimAndBranch('untrusted-explicit');
+		stampOriginTrust(repo, 'untrusted-explicit', 'untrusted');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'untrusted-explicit',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			// The operator EXPLICITLY typed --merge: it overrides the untrusted clamp.
+			explicitMerge: true,
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(core.integration?.mode).toBe('merge');
+		expect(core.integration?.mergedToMain).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'untrusted-explicit')).toBe(true);
+	});
+
+	it('a TRUSTED slice + mode merge ⇒ config as-is (lands on main; the clamp does not fire)', async () => {
+		const {repo} = await claimAndBranch('trusted-merge');
+		stampOriginTrust(repo, 'trusted-merge', 'trusted');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'trusted-merge',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(core.integration?.mode).toBe('merge');
+		expect(existsOnArbiterMain(repo, 'done', 'trusted-merge')).toBe(true);
+	});
+
+	it('an UNSTAMPED slice + mode merge ⇒ config as-is (ZERO behaviour change for the normal human path)', async () => {
+		const {repo} = await claimAndBranch('unstamped-merge');
+		// No stamp (the normal local/human path).
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'unstamped-merge',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(core.integration?.mode).toBe('merge');
+		expect(existsOnArbiterMain(repo, 'done', 'unstamped-merge')).toBe(true);
+	});
+
+	it('an UNTRUSTED slice + mode propose ⇒ propose (unchanged; the clamp only matters when config says merge)', async () => {
+		const {repo} = await claimAndBranch('untrusted-propose');
+		stampOriginTrust(repo, 'untrusted-propose', 'untrusted');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'untrusted-propose',
+			source: 'in-progress',
+			recovering: false,
+			verify: PASS,
+			mode: 'propose',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(core.integration?.mode).toBe('propose');
+		expect(existsOnArbiterMain(repo, 'done', 'untrusted-propose')).toBe(false);
+	});
+});
+
 describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)', () => {
 	it('a fresh worktree runs prepare THEN verify on the green path', async () => {
 		const {repo} = await claimAndBranch('prep-alpha');

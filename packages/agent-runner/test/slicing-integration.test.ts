@@ -62,6 +62,39 @@ function seedPrd(repo: string, slug: string): void {
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
+/**
+ * Seed a `work/prd/<slug>.md` STAMPED with origin-trust provenance (slice
+ * `untrusted-origin-forces-build-propose`) — an intake-born PRD whose stamp the
+ * slicer must PROPAGATE onto every emitted slice.
+ */
+function seedPrdWithOrigin(
+	repo: string,
+	slug: string,
+	originTrust: 'trusted' | 'untrusted',
+): void {
+	const dir = join(repo, 'work', 'prd');
+	mkdirSync(dir, {recursive: true});
+	writeFileSync(
+		join(dir, `${slug}.md`),
+		[
+			'---',
+			`title: ${slug} — slice me`,
+			`slug: ${slug}`,
+			'origin: issue',
+			`originTrust: ${originTrust}`,
+			'---',
+			'',
+			'## Problem Statement',
+			'',
+			`PRD body for ${slug}.`,
+			'',
+		].join('\n'),
+	);
+	run('git', ['add', '-A'], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
+}
+
 /** An agent that writes one backlog slice file (no git). */
 function slicingAgent(file = 'child'): SliceAgentRunner {
 	return ({cwd}) => {
@@ -265,4 +298,80 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 			}
 		});
 	}
+});
+
+describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-forces-build-propose)', () => {
+	it('slicing an UNTRUSTED-origin PRD stamps every emitted slice originTrust: untrusted', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrdWithOrigin(repo, 'it', 'untrusted');
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			// Slicing may MERGE the slice FILES onto main (a file is inert); the BUILD
+			// transition is where untrusted bites. The propagation must happen here so
+			// the build can later read it.
+			integration: 'merge',
+			agentRunner: slicingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		const slice = run(
+			'git',
+			['show', `${ARBITER}/main:work/backlog/child.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		// The agent's slice carried NO origin stamp; the runner PROPAGATED the PRD's.
+		expect(slice).toMatch(/^origin: issue$/m);
+		expect(slice).toMatch(/^originTrust: untrusted$/m);
+		// The agent-authored `prd:` link is preserved.
+		expect(slice).toMatch(/^prd: it$/m);
+	});
+
+	it('a TRUSTED-origin PRD propagates originTrust: trusted', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrdWithOrigin(repo, 'it', 'trusted');
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			integration: 'merge',
+			agentRunner: slicingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		const slice = run(
+			'git',
+			['show', `${ARBITER}/main:work/backlog/child.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(slice).toMatch(/^originTrust: trusted$/m);
+	});
+
+	it('an UNSTAMPED (human/local) PRD propagates NOTHING — the normal path is untouched', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it'); // no origin/originTrust stamp
+		const result = await performSlice({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			integration: 'merge',
+			agentRunner: slicingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		const slice = run(
+			'git',
+			['show', `${ARBITER}/main:work/backlog/child.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(slice).not.toMatch(/^origin:/m);
+		expect(slice).not.toMatch(/^originTrust:/m);
+	});
 });
