@@ -227,6 +227,7 @@ describe('config load + --export-config round-trip', () => {
 			defaultProvider: 'anthropic',
 			defaultModel: 'm',
 			harness: 'pi',
+			installSource: 'registry',
 		};
 		const noSecrets = exportCIConfig(config);
 		expect(noSecrets).not.toContain('secrets');
@@ -260,6 +261,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		defaultProvider: 'anthropic',
 		defaultModel: 'claude-sonnet-4-20250514',
 		harness: 'pi',
+		installSource: 'registry',
 	};
 
 	it('models-json mode writes models.json inline, installs node + agent-runner + harness', () => {
@@ -296,6 +298,88 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(generateSetupAction(modelsConfig)).toBe(
 			generateSetupAction(modelsConfig),
 		);
+	});
+
+	// ─── workspace install mode (build from source, for the self-hosting repo) ──
+
+	it('registry mode (default) installs the published CLI via npm and uses NO pnpm steps', () => {
+		const action = generateSetupAction(modelsConfig);
+		expect(action).toContain('npm install -g agent-runner');
+		expect(action).toContain('npm install -g @mariozechner/pi-coding-agent');
+		expect(action).not.toContain('pnpm');
+		expect(action).not.toContain('build agent-runner');
+	});
+
+	it('workspace mode builds the CLI from source + links it, harness via pnpm, NO npm install -g agent-runner', () => {
+		const action = generateSetupAction({
+			...modelsConfig,
+			installSource: 'workspace',
+		});
+		// The build-from-source steps.
+		expect(action).toContain('uses: pnpm/action-setup@v4');
+		expect(action).toContain('pnpm setup');
+		expect(action).toContain(
+			'echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"',
+		);
+		expect(action).toContain('pnpm install');
+		expect(action).toContain('pnpm -r build');
+		expect(action).toContain('cd packages/agent-runner && pnpm link --global');
+		// Harness installed via pnpm so it lands on the pnpm global bin on PATH.
+		expect(action).toContain('pnpm add -g @mariozechner/pi-coding-agent');
+		// The registry install is GONE in workspace mode.
+		expect(action).not.toContain('npm install -g agent-runner');
+		expect(action).not.toContain(
+			'npm install -g @mariozechner/pi-coding-agent',
+		);
+	});
+
+	it('auth/identity/setup-node steps are identical in registry and workspace modes', () => {
+		const registry = generateSetupAction(modelsConfig);
+		const workspace = generateSetupAction({
+			...modelsConfig,
+			installSource: 'workspace',
+		});
+		for (const shared of [
+			'actions/setup-node@v4',
+			"node-version: '22'",
+			'git config user.name "agent-runner[bot]"',
+			'git config user.email "agent-runner[bot]@users.noreply.github.com"',
+			'Configure agent models (models.json)',
+			'~/.pi/agent/models.json',
+		]) {
+			expect(registry).toContain(shared);
+			expect(workspace).toContain(shared);
+		}
+		// auth-json mode's shared steps are likewise mode-independent.
+		const authRegistry = generateSetupAction({
+			...modelsConfig,
+			authMode: 'auth-json',
+			providers: [],
+		});
+		const authWorkspace = generateSetupAction({
+			...modelsConfig,
+			authMode: 'auth-json',
+			providers: [],
+			installSource: 'workspace',
+		});
+		for (const shared of [
+			'Configure agent auth (auth.json)',
+			'$PI_AUTH_JSON',
+			'node .github/scripts/refresh-oauth-token.mjs',
+		]) {
+			expect(authRegistry).toContain(shared);
+			expect(authWorkspace).toContain(shared);
+		}
+	});
+
+	it('resolveCIConfig defaults a missing installSource to registry', () => {
+		const resolved = resolveCIConfig({
+			authMode: 'models-json',
+			providers: modelsConfig.providers,
+			defaultProvider: 'anthropic',
+			defaultModel: 'm',
+		});
+		expect(resolved.installSource).toBe('registry');
 	});
 });
 
@@ -683,3 +767,177 @@ function safeList(dir: string): string[] {
 		return [];
 	}
 }
+
+// ─── workspace install-source auto-detection + flag override ──────────────
+
+describe('installCI auto-detects the workspace install source in the monorepo', () => {
+	/** A minimal models-json config file written into `dir`; returns its path. */
+	function writeConfigFile(dir: string): string {
+		const file = join(dir, 'ci.json');
+		writeFileSync(
+			file,
+			exportCIConfig({
+				authMode: 'models-json',
+				providers: [
+					{
+						name: 'anthropic',
+						apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+						models: [{id: 'm'}],
+						builtin: true,
+					},
+				],
+				defaultProvider: 'anthropic',
+				defaultModel: 'm',
+				harness: 'pi',
+				installSource: 'registry',
+			}),
+		);
+		return file;
+	}
+
+	/** Write a `<dir>/package.json` with the given `name` (omit `name` if null). */
+	function writePkg(dir: string, name: string | null): void {
+		writeFileSync(
+			join(dir, 'package.json'),
+			name === null ? JSON.stringify({}) : JSON.stringify({name}),
+		);
+	}
+
+	async function run(
+		workDir: string,
+		opts: {installSource?: 'registry' | 'workspace'} = {},
+	): Promise<ResolvedCIConfig> {
+		// The config file lives in the SAME dir as the package.json (workDir), so we
+		// strip installSource from it for the auto-detect cases that need NO explicit
+		// value. writeConfigFile bakes `registry`; the explicit-override tests pass
+		// opts.installSource instead. For the pure auto-detect tests we re-write the
+		// config WITHOUT installSource so neither flag nor file pins it.
+		const ctx = new MemoryCIProviderContext({workDir, ghAvailable: false});
+		const file = join(workDir, 'ci.json');
+		const result = await installCI({
+			ctx,
+			configFile: file,
+			installSource: opts.installSource,
+			log: () => {},
+		});
+		return result.config;
+	}
+
+	/** A config file with NO installSource (so detection/flag decides). */
+	function writeConfigFileNoSource(dir: string): void {
+		writeFileSync(
+			join(dir, 'ci.json'),
+			JSON.stringify({
+				authMode: 'models-json',
+				providers: [
+					{
+						name: 'anthropic',
+						apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+						models: [{id: 'm'}],
+						builtin: true,
+					},
+				],
+				defaultProvider: 'anthropic',
+				defaultModel: 'm',
+				harness: 'pi',
+			}),
+		);
+	}
+
+	it('package.json named agent-runner-monorepo ⇒ workspace (no explicit value)', async () => {
+		writePkg(work, 'agent-runner-monorepo');
+		writeConfigFileNoSource(work);
+		const config = await run(work);
+		expect(config.installSource).toBe('workspace');
+	});
+
+	it('package.json named anything else ⇒ stays registry', async () => {
+		writePkg(work, 'some-consumer-repo');
+		writeConfigFileNoSource(work);
+		const config = await run(work);
+		expect(config.installSource).toBe('registry');
+	});
+
+	it('missing package.json ⇒ stays registry', async () => {
+		writeConfigFileNoSource(work);
+		const config = await run(work);
+		expect(config.installSource).toBe('registry');
+	});
+
+	it('unparseable package.json ⇒ stays registry (error swallowed)', async () => {
+		writeFileSync(join(work, 'package.json'), '{ not valid json');
+		writeConfigFileNoSource(work);
+		const config = await run(work);
+		expect(config.installSource).toBe('registry');
+	});
+
+	it('explicit --install-source registry WINS inside the monorepo', async () => {
+		writePkg(work, 'agent-runner-monorepo');
+		writeConfigFileNoSource(work);
+		const config = await run(work, {installSource: 'registry'});
+		expect(config.installSource).toBe('registry');
+	});
+
+	it('explicit --install-source workspace WINS outside the monorepo', async () => {
+		writePkg(work, 'some-consumer-repo');
+		writeConfigFileNoSource(work);
+		const config = await run(work, {installSource: 'workspace'});
+		expect(config.installSource).toBe('workspace');
+	});
+
+	it('a config file installSource value WINS over auto-detection', async () => {
+		// pkg says monorepo (would auto-detect workspace) but the file pins registry.
+		writePkg(work, 'agent-runner-monorepo');
+		writeConfigFile(work); // bakes installSource: 'registry'
+		const config = await run(work);
+		expect(config.installSource).toBe('registry');
+	});
+
+	it('AUTO-DETECTED workspace is NOT baked into --export-config (export ⇒ registry)', async () => {
+		writePkg(work, 'agent-runner-monorepo');
+		writeConfigFileNoSource(work);
+		const ctx = new MemoryCIProviderContext({
+			workDir: work,
+			ghAvailable: false,
+		});
+		const outFile = join(work, 'exported.json');
+		await installCI({
+			ctx,
+			configFile: join(work, 'ci.json'),
+			exportConfig: outFile,
+			log: () => {},
+		});
+		// The export reflects only the EXPLICIT value (none ⇒ registry default),
+		// NOT the monorepo auto-detection (which runs after the export early-return).
+		const exported = JSON.parse(readFileSync(outFile, 'utf8'));
+		expect(exported.installSource).toBe('registry');
+		expect(resolveCIConfig(loadCIConfigFile(outFile)).installSource).toBe(
+			'registry',
+		);
+	});
+
+	it('an EXPLICIT installSource round-trips through --export-config ⇒ --config', async () => {
+		// Export with an explicit --install-source workspace from a NON-monorepo dir.
+		writePkg(work, 'some-consumer-repo');
+		writeConfigFileNoSource(work);
+		const ctx = new MemoryCIProviderContext({
+			workDir: work,
+			ghAvailable: false,
+		});
+		const outFile = join(work, 'exported.json');
+		await installCI({
+			ctx,
+			configFile: join(work, 'ci.json'),
+			installSource: 'workspace',
+			exportConfig: outFile,
+			log: () => {},
+		});
+		expect(JSON.parse(readFileSync(outFile, 'utf8')).installSource).toBe(
+			'workspace',
+		);
+		// Re-load the exported file: the resolved mode is preserved.
+		expect(resolveCIConfig(loadCIConfigFile(outFile)).installSource).toBe(
+			'workspace',
+		);
+	});
+});

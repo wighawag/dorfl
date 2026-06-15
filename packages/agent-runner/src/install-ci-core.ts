@@ -44,6 +44,18 @@ import type {HarnessAdapter} from './config.js';
  */
 export type AuthMode = 'auth-json' | 'models-json';
 
+/**
+ * Where the composite setup action gets the `agent-runner` CLI from:
+ *   - `registry` (default): `npm install -g agent-runner` — the published CLI,
+ *     for every CONSUMER repo;
+ *   - `workspace`: build the CLI from the checked-out source (`pnpm install` +
+ *     `pnpm -r build`) and link it onto PATH, for the SELF-HOSTING agent-runner
+ *     monorepo (which is not published under that npm name, so `registry` would
+ *     die with `agent-runner: command not found`). Auto-detected when generating
+ *     inside the monorepo (see `installCI`), overridable by an explicit flag/config.
+ */
+export type InstallSource = 'registry' | 'workspace';
+
 /** A configured AI provider (the harness `models.json` shape this emits). */
 export interface ProviderEntry {
 	/** Provider name (`anthropic` / `openai` / a custom name). */
@@ -80,6 +92,8 @@ export interface CIConfigFile {
 	defaultModel: string;
 	/** Which harness the composite setup action installs (`pi` default). */
 	harness?: HarnessAdapter;
+	/** Where to get the CLI from (`registry` default; `workspace` builds from source). */
+	installSource?: InstallSource;
 	/** API key values keyed by env var name. Only present with `--include-secrets`. */
 	secrets?: Record<string, string>;
 }
@@ -96,10 +110,14 @@ export interface ResolvedCIConfig {
 	defaultProvider: string;
 	defaultModel: string;
 	harness: HarnessAdapter;
+	installSource: InstallSource;
 }
 
 /** The default harness the composite setup action installs. */
 export const DEFAULT_HARNESS: HarnessAdapter = 'pi';
+
+/** The default install source: the published CLI via `npm install -g`. */
+export const DEFAULT_INSTALL_SOURCE: InstallSource = 'registry';
 
 // ─── The CI-provider SEAM (provider-agnostic; GitHub is the first adapter) ───
 
@@ -382,6 +400,15 @@ export function loadCIConfigFile(filePath: string): CIConfigFile {
 	if (!data.defaultModel) {
 		throw new CIConfigError('config file must contain "defaultModel"');
 	}
+	if (
+		data.installSource !== undefined &&
+		data.installSource !== 'registry' &&
+		data.installSource !== 'workspace'
+	) {
+		throw new CIConfigError(
+			`config file "installSource" must be "registry" or "workspace"`,
+		);
+	}
 	if (authMode === 'models-json') {
 		if (
 			!data.providers ||
@@ -399,6 +426,7 @@ export function loadCIConfigFile(filePath: string): CIConfigFile {
 		defaultProvider: data.defaultProvider,
 		defaultModel: data.defaultModel,
 		harness: data.harness,
+		installSource: data.installSource,
 		secrets: data.secrets,
 	};
 }
@@ -411,6 +439,7 @@ export function resolveCIConfig(file: CIConfigFile): ResolvedCIConfig {
 		defaultProvider: file.defaultProvider,
 		defaultModel: file.defaultModel,
 		harness: file.harness ?? DEFAULT_HARNESS,
+		installSource: file.installSource ?? DEFAULT_INSTALL_SOURCE,
 	};
 }
 
@@ -430,6 +459,7 @@ export function exportCIConfig(
 		defaultProvider: config.defaultProvider,
 		defaultModel: config.defaultModel,
 		harness: config.harness,
+		installSource: config.installSource,
 	};
 	if (secrets && Object.keys(secrets).length > 0) {
 		file.secrets = secrets;
@@ -448,13 +478,25 @@ function indent(text: string, spaces: number): string {
 		.join('\n');
 }
 
-/** The install step for the configured harness (the `pi` CLI; `null` ⇒ none). */
-function harnessInstallStep(harness: HarnessAdapter): string {
+/**
+ * The install step for the configured harness (the `pi` CLI; `''` ⇒ none).
+ * `registry` mode installs via `npm install -g`; `workspace` mode installs via
+ * `pnpm add -g` so the harness lands on the pnpm global bin already on
+ * `$GITHUB_PATH` (mirroring whitesmith's dev mode).
+ */
+function harnessInstallStep(
+	harness: HarnessAdapter,
+	installSource: InstallSource,
+): string {
 	if (harness === 'pi') {
+		const run =
+			installSource === 'workspace'
+				? 'pnpm add -g @mariozechner/pi-coding-agent'
+				: 'npm install -g @mariozechner/pi-coding-agent';
 		return `
     - name: Install agent harness (pi)
       shell: bash
-      run: npm install -g @mariozechner/pi-coding-agent`;
+      run: ${run}`;
 	}
 	return '';
 }
@@ -507,7 +549,42 @@ ${indent(modelsJsonStr, 8)}
         MODELS_EOF`;
 	}
 
-	const installHarness = harnessInstallStep(config.harness);
+	const installHarness = harnessInstallStep(
+		config.harness,
+		config.installSource,
+	);
+
+	// The CLI-install block branches on installSource. `registry` installs the
+	// published CLI via `npm install -g agent-runner` (the default for every
+	// consumer repo). `workspace` builds the CLI from the checked-out source and
+	// links it onto PATH — for the self-hosting agent-runner monorepo, which is
+	// not published under that npm name. We add pnpm's global bin to $GITHUB_PATH
+	// so the linked `agent-runner` (and the pnpm-installed harness) are on PATH in
+	// all subsequent steps; we always rebuild because source changes per commit.
+	let installSteps: string;
+	if (config.installSource === 'workspace') {
+		installSteps = `\
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Add pnpm global bin to PATH
+      shell: bash
+      run: |
+        pnpm setup
+        echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"
+
+    - name: Install dependencies and build agent-runner
+      shell: bash
+      run: |
+        pnpm install
+        pnpm -r build
+        cd packages/agent-runner && pnpm link --global${installHarness}`;
+	} else {
+		installSteps = `\
+    - name: Install agent-runner
+      shell: bash
+      run: npm install -g agent-runner${installHarness}`;
+	}
 
 	return `\
 name: Setup agent-runner
@@ -527,9 +604,7 @@ runs:
         git config user.name "agent-runner[bot]"
         git config user.email "agent-runner[bot]@users.noreply.github.com"
 
-    - name: Install agent-runner
-      shell: bash
-      run: npm install -g agent-runner${installHarness}
+${installSteps}
 
 ${authStep}
 `;
