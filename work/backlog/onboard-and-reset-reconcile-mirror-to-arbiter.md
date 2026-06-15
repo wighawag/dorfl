@@ -1,7 +1,7 @@
 ---
 title: do/run onboard and requeue --reset must reconcile the hub MIRROR to the arbiter — a stale mirror work/<slug> ref resurrects a deleted branch and makes --reset a no-op
 slug: onboard-and-reset-reconcile-mirror-to-arbiter
-blockedBy: []
+blockedBy: [continue-rebase-auto-resolves-protocol-bookkeeping-conflicts]
 covers: []
 ---
 
@@ -29,7 +29,7 @@ Two coupled fixes:
 
 ## Blocked by
 
-- None.
+- `continue-rebase-auto-resolves-protocol-bookkeeping-conflicts` — NOT a logical dependency but a FILE-ORTHOGONALITY serialiser: both slices edit `packages/agent-runner/src/continue-branch.ts` (slice 1 changes `rebaseContinuedBranchOntoMain` / the surface seam; this slice changes the onboard kept-branch-existence decision). Different functions, same file → serialise to keep the rebase trivial (review-skill lens 3). Build slice 1 first (it changes WHERE bookkeeping moves live, which this slice's mirror↔arbiter reconciliation should be consistent with).
 
 ## Prompt
 
