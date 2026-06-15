@@ -310,6 +310,9 @@ function buildRegistrySetAdvanceTick(options: {
 				identity: config.identity,
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				// The per-TRANSITION SLICING override: the `do prd:` slicing path threads
+				// `slicingIntegration ?? integration`; the build path stays on `integration`.
+				slicingIntegration: config.slicingIntegration,
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -1883,6 +1886,8 @@ export function buildProgram(): Command {
 					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
+					// Per-TRANSITION SLICING override (the `do --remote prd:` slicing path).
+					slicingIntegration: remoteConfig.slicingIntegration,
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2013,6 +2018,10 @@ export function buildProgram(): Command {
 				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				// Per-TRANSITION SLICING override: the `do prd:` slicing path threads
+				// `slicingIntegration ?? integration`; the slice-build path stays on
+				// `integration`. Unset ⇒ slicing falls back to `integration` (today's behaviour).
+				slicingIntegration: config.slicingIntegration,
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
@@ -2279,6 +2288,8 @@ export function buildProgram(): Command {
 					identity: remoteConfig.identity,
 					autoSlice: remoteConfig.autoSlice,
 					integration: remoteConfig.integration,
+					// Per-TRANSITION SLICING override (the isolated `do --remote prd:` path).
+					slicingIntegration: remoteConfig.slicingIntegration,
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2398,6 +2409,9 @@ export function buildProgram(): Command {
 				identity: config.identity,
 				autoSlice: config.autoSlice,
 				integration: config.integration,
+				// Per-TRANSITION SLICING override (the `do prd:` slicing path threads
+				// `slicingIntegration ?? integration`; the build path stays on `integration`).
+				slicingIntegration: config.slicingIntegration,
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.

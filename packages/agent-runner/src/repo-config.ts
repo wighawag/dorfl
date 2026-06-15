@@ -58,6 +58,15 @@ export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
  */
 export const REPO_ALLOWED_KEYS = [
 	'integration',
+	// `slicingIntegration` (the per-TRANSITION override for the PRD→slices SLICING
+	// transition ONLY) is a genuine repo property exactly like `integration`: whether
+	// THIS repo slices a PRD straight onto `main` (slice FILES land, no PR) while it
+	// still BUILDS each slice as a reviewable PR is agreed by all collaborators +
+	// travels with the repo. Resolved per-repo through the SAME chain as
+	// `integration`, then falls back to `integration` when unset. DISTINCT from
+	// intake's per-EMITTED-TYPE `{slice, prd}` resolver (front door, author-trust):
+	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
+	'slicingIntegration',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with

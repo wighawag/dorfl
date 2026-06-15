@@ -1639,3 +1639,174 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(existsOnArbiterMain(repo, 'done', 'dup')).toBe(true);
 	});
 });
+
+/**
+ * Per-TRANSITION integration mode
+ * (`per-transition-integration-mode-slicing-vs-build`): the option-threading
+ * caller (`performDo`) threads `slicingIntegration ?? integration` into the
+ * SLICING transition, but plain `integration` into the slice-BUILD transition. So
+ * a repo with `integration:'propose'` + `slicingIntegration:'merge'` lands the
+ * slice FILES on main when slicing a PRD, yet does NOT auto-land code on main when
+ * building a slice. UNSET `slicingIntegration` ⇒ slicing falls back to
+ * `integration` (byte-for-byte today's behaviour). An explicit `--merge`/`--propose`
+ * is resolved into BOTH keys upstream (`do-config.ts`, covered in do-config.test.ts).
+ */
+const slicingAgent: DoAgentRunner = ({cwd}) => {
+	const dir = join(cwd, 'work', 'backlog');
+	mkdirSync(dir, {recursive: true});
+	writeFileSync(
+		join(dir, 'somePrd-first.md'),
+		[
+			'---',
+			'slug: somePrd-first',
+			'prd: somePrd',
+			'---',
+			'',
+			'## Prompt',
+			'',
+			'> x',
+			'',
+		].join('\n'),
+	);
+	return {ok: true};
+};
+
+describe('do — per-transition integration mode (slicingIntegration vs integration)', () => {
+	it('the SLICING transition uses `slicingIntegration` over `integration`: `integration:propose` + `slicingIntegration:merge` lands the slice FILES on main', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'somePrd');
+
+		const result = await performDo({
+			arg: 'prd:somePrd',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			// The maintainer's target: build proposes, slicing merges. The caller threads
+			// `slicingIntegration ?? integration` (= 'merge') into the SLICING transition.
+			integration: 'propose',
+			slicingIntegration: 'merge',
+			agentRunner: slicingAgent,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('sliced');
+
+		// merge ⇒ the produced slice + the PRD lifecycle move landed on the arbiter main
+		// (NOT on a work branch awaiting a PR). This is `slicingIntegration:'merge'`
+		// winning over `integration:'propose'`.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).toBe(0);
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/prd-sliced/somePrd.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).toBe(0);
+	});
+
+	it('the slice-BUILD transition keeps using `integration` (never `slicingIntegration`): `integration:propose` + `slicingIntegration:merge` does NOT auto-land code on main', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			// The SAME options as the slicing test above. The build path reads `integration`
+			// (propose), so `slicingIntegration:'merge'` MUST NOT leak into it.
+			integration: 'propose',
+			slicingIntegration: 'merge',
+			verify: PASS,
+			agentRunner: editingAgent,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		// propose ⇒ the build is NOT on main (the slice files of the build path stay in
+		// in-progress; the agent's code edit is not auto-merged).
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(['ls-tree', 'arbiter/main', 'agent-output.txt'], repo).trim(),
+		).toBe('');
+	});
+
+	it('UNSET `slicingIntegration` ⇒ slicing falls back to `integration` (byte-for-byte today): `integration:merge` with no override lands the slice files on main', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'somePrd');
+
+		const result = await performDo({
+			arg: 'prd:somePrd',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			// No `slicingIntegration` ⇒ the caller threads `undefined ?? 'merge'` = 'merge'.
+			integration: 'merge',
+			agentRunner: slicingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).toBe(0);
+	});
+
+	it('an explicit slicing mode wins over the config: passing `slicingIntegration:propose` (the resolved flag) on an `integration:propose` repo does NOT land slice files on main', async () => {
+		// `do-config.ts` resolves an explicit `--propose`/`--merge` into BOTH
+		// `integration` AND `slicingIntegration`, so the operator's flag wins for the
+		// SLICING transition too. Here we pin the threaded effect: a `propose`-resolved
+		// slicing transition pushes the work branch + leaves main untouched (no PR
+		// provider needed for a local --bare arbiter; selectProvider derives `none`).
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'somePrd');
+
+		const result = await performDo({
+			arg: 'prd:somePrd',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoSlice: true,
+			integration: 'propose',
+			slicingIntegration: 'propose',
+			agentRunner: slicingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('sliced');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		// propose ⇒ the slice files are NOT on main (they ride the pushed work branch).
+		expect(
+			run(
+				'git',
+				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).not.toBe(0);
+		// The work branch was pushed carrying the slices (the PR source).
+		expect(
+			run(
+				'git',
+				[
+					'cat-file',
+					'-e',
+					`${ARBITER}/work/prd-somePrd:work/backlog/somePrd-first.md`,
+				],
+				repo,
+				{env: gitEnv()},
+			).status,
+		).toBe(0);
+	});
+});

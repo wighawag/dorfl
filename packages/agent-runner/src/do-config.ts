@@ -106,7 +106,17 @@ export function doFlagOverrides(
 		...noPRFlagOverrides(flags),
 	};
 	if (integration !== undefined) {
+		// An explicit `--merge`/`--propose` flag ALWAYS wins for the transition this
+		// command runs. `do` runs EITHER the build transition (a slice) OR the slicing
+		// transition (a `do prd:`) per invocation, and the typed flag is
+		// transition-AGNOSTIC, so it must override BOTH the build mode (`integration`)
+		// AND the slicing mode (`slicingIntegration`). Setting both at the top of the
+		// precedence chain means a `--propose` on a `slicingIntegration:'merge'` repo
+		// proposes the slicing too (the slicing path reads `slicingIntegration ??
+		// integration`, and the flag-set `slicingIntegration` shadows the config one).
+		// (`per-transition-integration-mode-slicing-vs-build`.)
 		overrides.integration = integration;
+		overrides.slicingIntegration = integration;
 	}
 	return overrides;
 }

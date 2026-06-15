@@ -49,6 +49,11 @@ describe('repo-config constants', () => {
 		// The removed `provider` OVERRIDE is NOT allowed (it is gone entirely).
 		expect(REPO_ALLOWED_KEYS).toContain('noPR');
 		expect(REPO_ALLOWED_KEYS).not.toContain('provider');
+		// `slicingIntegration` (the per-TRANSITION SLICING override) is a genuine repo
+		// property like `integration`: whether THIS repo slices a PRD straight onto main
+		// while still building each slice as a PR is agreed by all collaborators + travels
+		// with the repo. (`per-transition-integration-mode-slicing-vs-build`.)
+		expect(REPO_ALLOWED_KEYS).toContain('slicingIntegration');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
@@ -272,6 +277,60 @@ describe('resolveRepoConfig — per-key layering', () => {
 		const global = mergeConfig({verify: 'pnpm test'});
 		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(resolved.config.verify).toBe('make test');
+	});
+
+	// `slicingIntegration` (the per-TRANSITION SLICING override,
+	// `per-transition-integration-mode-slicing-vs-build`) resolves through the SAME
+	// chain as `integration` and is read by the slicing-transition caller as
+	// `slicingIntegration ?? integration` (the FALLBACK is asserted at the do.ts
+	// option-threading seam; here we pin the config-resolution half).
+	it('a per-repo `slicingIntegration` overrides the global for the slicing transition; `integration` is independent', () => {
+		writeRepoConfig(repo, {
+			integration: 'propose',
+			slicingIntegration: 'merge',
+		});
+		const global = mergeConfig({integration: 'propose'});
+		const {config} = resolveRepoConfig({repoPath: repo, global, env: {}});
+		// The maintainer's target: build proposes, slicing merges.
+		expect(config.integration).toBe('propose');
+		expect(config.slicingIntegration).toBe('merge');
+	});
+
+	it("UNSET `slicingIntegration` resolves to undefined (the caller falls back to `integration` ⇒ byte-for-byte today's behaviour)", () => {
+		writeRepoConfig(repo, {integration: 'merge'});
+		const global = mergeConfig({integration: 'propose'});
+		const {config} = resolveRepoConfig({repoPath: repo, global, env: {}});
+		expect(config.integration).toBe('merge');
+		// No default in DEFAULT_CONFIG — unset means "fall back to integration", which
+		// the slicing-transition caller does with `slicingIntegration ?? integration`.
+		expect(config.slicingIntegration).toBeUndefined();
+	});
+
+	it("resolves `slicingIntegration` flag > env > per-repo > global (the new key rides `integration`'s chain)", () => {
+		// per-repo opts the slicing override to merge over an unset global.
+		writeRepoConfig(repo, {slicingIntegration: 'merge'});
+		const global = mergeConfig({integration: 'propose'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.slicingIntegration,
+		).toBe('merge');
+		// env (AGENT_RUNNER_SLICING_INTEGRATION) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_SLICING_INTEGRATION: 'propose'},
+			}).config.slicingIntegration,
+		).toBe('propose');
+		// a flag beats env.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_SLICING_INTEGRATION: 'propose'},
+				flags: {slicingIntegration: 'merge'},
+			}).config.slicingIntegration,
+		).toBe('merge');
 	});
 
 	it('per-repo file overrides the global for `autoBuild` (flag > per-repo > global > default)', () => {

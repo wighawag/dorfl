@@ -13,6 +13,12 @@ describe('envVarName', () => {
 		expect(envVarName('model')).toBe('AGENT_RUNNER_MODEL');
 		// `autoSlice` gets its env var for free off the mechanical mapping.
 		expect(envVarName('autoSlice')).toBe('AGENT_RUNNER_AUTO_SLICE');
+		// `slicingIntegration` (the per-TRANSITION SLICING override) maps mechanically,
+		// so `AGENT_RUNNER_SLICING_INTEGRATION` resolves
+		// (`per-transition-integration-mode-slicing-vs-build`).
+		expect(envVarName('slicingIntegration')).toBe(
+			'AGENT_RUNNER_SLICING_INTEGRATION',
+		);
 	});
 });
 
@@ -185,6 +191,16 @@ describe('envOverrides — enum coercion', () => {
 			integration: 'propose',
 		});
 		expect(envOverrides({AGENT_RUNNER_HARNESS: 'pi'})).toEqual({harness: 'pi'});
+		// `slicingIntegration` coerces as the SAME propose/merge enum as `integration`
+		// (`per-transition-integration-mode-slicing-vs-build`).
+		expect(envOverrides({AGENT_RUNNER_SLICING_INTEGRATION: 'merge'})).toEqual({
+			slicingIntegration: 'merge',
+		});
+		expect(envOverrides({AGENT_RUNNER_SLICING_INTEGRATION: 'propose'})).toEqual(
+			{
+				slicingIntegration: 'propose',
+			},
+		);
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
 		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'off'})).toEqual({
 			observationTriage: 'off',
