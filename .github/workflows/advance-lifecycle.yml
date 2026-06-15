@@ -116,11 +116,13 @@ env:
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
-  # Build the DYNAMIC matrix from the mirror-side eligible-pool scan. `scan --json`
-  # reports the eligible items; `jq` shapes them into a deduplicated GitHub Actions
-  # matrix list of explicit `slice:<slug>` ids (CI MUST use explicit prefixes).
-  # Each becomes one matrix leg → one independent `advance` → one PR. Skipped in
-  # merge mode.
+  # Build the DYNAMIC matrix from the eligible-pool scan. `scan --json` reports
+  # BOTH the registry/hub-mirror pool (`repos[].items[]`) AND the in-place working
+  # checkout (`cwd.repo.items[]`); CI runs IN-PLACE so the eligible items live in
+  # the latter (a fresh runner has no registered mirror). `jq` unions + dedups both
+  # pools into a deduplicated GitHub Actions matrix list of explicit `slice:<slug>`
+  # ids (CI MUST use explicit prefixes). Each becomes one matrix leg → one
+  # independent `advance` → one PR. Skipped in merge mode.
   enumerate:
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
@@ -137,7 +139,7 @@ jobs:
         # uses explicit `slice:` prefixes, never bare (ADR command-surface §3a).
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[.repos[].items[] | select(.eligibility.eligible == true) | "slice:" + .slug]')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"

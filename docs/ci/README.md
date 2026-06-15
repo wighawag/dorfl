@@ -72,9 +72,11 @@ impossible.
 
 ### Matrix enumeration scope
 
-`agent-runner scan --json` reports the hub-mirror queue as eligible **slices**
-(`repos[].items[]`). So the propose **matrix** fans out over eligible slices —
-one PR per slice. Sliceable **PRDs** (the `do prd:`/slice rung) are advanced via
+`agent-runner scan --json` reports eligible **slices** from BOTH the hub-mirror
+queue (`repos[].items[]`) AND the in-place working checkout (`cwd.repo.items[]`);
+the enumeration unions both pools, because CI runs in-place (a fresh runner has no
+registered mirror, so the eligible slices live in `cwd.repo.items[]`). So the
+propose **matrix** fans out over eligible slices — one PR per slice. Sliceable **PRDs** (the `do prd:`/slice rung) are advanced via
 the **sequential** path instead: the `merge` job's `advance -n <x>` covers both
 pools (it drives the full eligible set sequentially), or you dispatch a named
 `advance prd:<slug>`. This keeps the matrix to genuinely-independent PRs and does

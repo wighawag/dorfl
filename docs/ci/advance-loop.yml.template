@@ -102,10 +102,12 @@ env:
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
-  # Build the matrix from the mirror-side eligible-pool scan. `scan --json` reads
-  # the hub-mirror pool (the mirror-side enumeration the loop driver also consumes)
-  # and emits eligible items; `jq` shapes them into a GitHub Actions matrix list.
-  # Skipped entirely in merge mode.
+  # Build the matrix from the eligible-pool scan. `scan --json` reads BOTH the
+  # registry/hub-mirror pool (`repos[].items[]`) AND the in-place working checkout
+  # (`cwd.repo.items[]`) and emits eligible items; CI runs IN-PLACE so the eligible
+  # items live in the latter (a fresh runner has no registered mirror). `jq` unions
+  # + dedups both pools into a GitHub Actions matrix list. Skipped entirely in merge
+  # mode.
   enumerate:
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
@@ -118,16 +120,17 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
       - id: scan
-        # The mirror-side pool scan: enumerate eligible items as namespaced ids.
-        # `scan --json` reports the hub-mirror queue as `repos[].items[]`, each
-        # carrying `.slug` and `.eligibility.eligible`; we take the eligible ones
-        # as explicit `slice:<slug>` ids (CI MUST use explicit prefixes). Each
+        # The eligible-pool scan: enumerate eligible items as namespaced ids.
+        # `scan --json` reports the hub-mirror queue as `repos[].items[]` AND the
+        # in-place working checkout as `cwd.repo.items[]`, each carrying `.slug`
+        # and `.eligibility.eligible`; we union both pools and take the eligible
+        # ones as explicit `slice:<slug>` ids (CI MUST use explicit prefixes). Each
         # becomes one matrix leg → one independent `advance` → one PR. (Eligible
         # SLICES; sliceable PRDs are driven via the sequential/named path — see
         # docs/ci/README.md "Matrix enumeration scope".)
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[.repos[].items[] | select(.eligibility.eligible == true) | "slice:" + .slug]')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
