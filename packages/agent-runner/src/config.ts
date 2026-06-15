@@ -180,6 +180,23 @@ export interface Config {
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
+	 * **Per-TRANSITION override for the PRD→slices (SLICING) transition only.** When
+	 * set, the slicing transition (a `do prd:<slug>` run: emit `work/backlog/*.md` +
+	 * the `work/slicing/ → work/prd-sliced/` lifecycle move) integrates with THIS
+	 * mode instead of the flat {@link integration}; the slice-BUILD transition is
+	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ slicing
+	 * falls back to {@link integration} — byte-for-byte today's behaviour for any repo
+	 * that does not set it. The maintainer's target is `integration: 'propose'` +
+	 * `slicingIntegration: 'merge'`: slice a PRD straight onto `main` (the slice FILES
+	 * land, no PR) but build each slice as a reviewable PR. Resolved per-repo like
+	 * {@link integration}: flag (`--merge`/`--propose`) > env
+	 * (`AGENT_RUNNER_SLICING_INTEGRATION`) > per-repo > global > (fall back to)
+	 * `integration` > default `propose`. DISTINCT from intake's per-EMITTED-TYPE
+	 * `{slice, prd}` resolver (front door, author-trust-resolved): this is a
+	 * per-LIFECYCLE-TRANSITION knob, inside the trust boundary, operator/config-only.
+	 */
+	slicingIntegration?: IntegrationMode;
+	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
 	 * safety-bearing recovery point) but SKIP `openRequest`. `true` ⇒ deliberately

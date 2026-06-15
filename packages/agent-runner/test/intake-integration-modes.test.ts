@@ -124,4 +124,20 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 			both('propose'),
 		);
 	});
+
+	// `per-transition-integration-mode-slicing-vs-build`: the NEW `slicingIntegration`
+	// key is a DIFFERENT resolver (per-LIFECYCLE-TRANSITION, inside the trust
+	// boundary), NOT intake's per-EMITTED-TYPE `{slice, prd}` (front door,
+	// author-trust). intake's resolver takes a FLAT `IntegrationMode` default (the
+	// CLI passes `config.integration`, never `config.slicingIntegration`), so it is
+	// structurally independent of the new key.
+	it('the intake default is the FLAT `integration` (the CLI passes `config.integration`); it never consults `slicingIntegration`', () => {
+		// The fallback the CLI supplies is `config.integration`. A repo that ALSO sets
+		// `slicingIntegration:'merge'` must NOT change intake's resolution — the only
+		// default intake sees is the `integration` value handed in here.
+		expect(resolveIntakeIntegrationModes({}, 'propose')).toEqual(
+			both('propose'),
+		);
+		expect(resolveIntakeIntegrationModes({}, 'merge')).toEqual(both('merge'));
+	});
 });

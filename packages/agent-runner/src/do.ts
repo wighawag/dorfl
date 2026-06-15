@@ -206,6 +206,17 @@ export interface DoOptions {
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
+	 * **Per-TRANSITION override for the SLICING transition only** (config
+	 * `slicingIntegration`). Consumed ONLY by the `do prd:<slug>` slicing path: the
+	 * value threaded into {@link performSlice} is `slicingIntegration ?? integration`,
+	 * so an unset override is byte-for-byte today's behaviour (slicing uses
+	 * `integration`). The slice-BUILD path ALWAYS threads `integration` (never this
+	 * key). An explicit `--merge`/`--propose` flag wins over BOTH (the flag-override
+	 * layer sets `integration` AND `slicingIntegration` to the typed mode — see
+	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{slice, prd}` resolver.
+	 */
+	slicingIntegration?: IntegrationMode;
+	/**
 	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
 	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
 	 * `<arbiter>/main` (has unpushed commits). When overridden and the divergence
@@ -397,6 +408,14 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
+	/**
+	 * **Per-TRANSITION override for the SLICING transition only** (config
+	 * `slicingIntegration`) on the `do --remote prd:<slug>` path: threaded into
+	 * {@link performSlice} as `slicingIntegration ?? integration`. Unset ⇒ slicing
+	 * uses `integration` (today's behaviour); the slice-BUILD path always threads
+	 * `integration`. See {@link DoOptions.slicingIntegration}.
+	 */
+	slicingIntegration?: IntegrationMode;
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
 	prepare?: VerifyConfig;
@@ -598,9 +617,13 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			model: options.model,
 			sessionsDir: options.sessionsDir,
 			// The integrate-time args (slice `slice-output-through-integration`): the
-			// SAME `integration`/`provider` the slice-build path threads, so they resolve
-			// ONCE in the shared `performIntegration` core (arg parity by construction).
-			integration: options.integration,
+			// `provider` is the SAME the slice-build path threads (arg parity), but the
+			// MODE is the per-TRANSITION SLICING resolution (`per-transition-integration-
+			// mode-slicing-vs-build`): `slicingIntegration ?? integration`. Unset override ⇒
+			// falls back to `integration` (today's behaviour); a repo with
+			// `integration:'propose'` + `slicingIntegration:'merge'` lands the slice FILES
+			// on main here while the BUILD path below still threads plain `integration`.
+			integration: options.slicingIntegration ?? options.integration,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
 			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
@@ -1648,9 +1671,12 @@ export async function performDoRemote(
 				model: options.model,
 				sessionsDir: options.sessionsDir,
 				// The integrate-time args (slice `slice-output-through-integration`): the
-				// SAME `integration`/`provider` the slice-build path threads, so the
-				// `--remote prd:` output ALSO routes through the shared core (arg parity).
-				integration: options.integration,
+				// `provider` is the SAME the slice-build path threads (arg parity), but the
+				// MODE is the per-TRANSITION SLICING resolution
+				// (`per-transition-integration-mode-slicing-vs-build`):
+				// `slicingIntegration ?? integration`, so the `--remote prd:` output ALSO
+				// routes through the shared core with the slicing-resolved mode.
+				integration: options.slicingIntegration ?? options.integration,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.

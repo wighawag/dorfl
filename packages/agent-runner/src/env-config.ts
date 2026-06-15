@@ -79,6 +79,11 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	arbitersDir: 'string',
 	humanWorktreesDir: 'string',
 	integration: {enum: ['propose', 'merge']},
+	// `slicingIntegration` (the per-TRANSITION SLICING override) coerces as the SAME
+	// `propose`/`merge` enum as `integration`, so `AGENT_RUNNER_SLICING_INTEGRATION`
+	// works and a typo FAILS LOUDLY. Unset ⇒ the slicing transition falls back to
+	// `integration` (the flat value). It NEVER touches the build transition or intake.
+	slicingIntegration: {enum: ['propose', 'merge']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `AGENT_RUNNER_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `AGENT_RUNNER_PROVIDER` is ignored
