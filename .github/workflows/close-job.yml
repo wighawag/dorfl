@@ -1,0 +1,68 @@
+# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, PRD runner-in-ci).
+# EMITTED by `agent-runner install-ci`; the human commits it. DO NOT hand-edit a
+# copy — re-run install-ci to upgrade the shell.
+#
+# TRIGGER — a MERGE to main. There is NO native "PR merged" event, so this uses
+# `push: {branches: [main]}` (NOT `pull_request: closed` + a merged guard):
+#   * it fires for BOTH a PR-merge AND a direct push to main; and
+#   * it ALWAYS runs with a normal (non-fork-restricted) GITHUB_TOKEN that can
+#     actually CLOSE issues — a `pull_request` event from a FORK gets a read-only
+#     token and could not close (a real limitation we deliberately avoid).
+#
+# WHAT IT DOES — `agent-runner close-merged-issues` resolves which source issue(s)
+# the landed work closes and closes them. CI owns ONLY this job + the trigger; the
+# command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
+#   * the RESOLUTION (resolveClosingIssue): a lone slice closes its own `issue:`;
+#     a fanned slice/PRD reaches the number via `slice.prd: → PRD issue:`.
+#   * the "PRD complete?" QUERY (prd-complete-query, done): a PRD's issue closes
+#     ONLY when ALL its `prd:<slug>` slices are in work/done/.
+#   * the CLOSE (IssueProvider.closeIssue): the atomic comment+close seam — NO
+#     direct `gh` in the engine core; any comment rides this close, never the PR
+#     comment seam.
+#
+# CI runs IN-PLACE (the CI container IS the isolation): NO --isolated/--remote/
+# registry (laptop-only affordances). The concurrency group below serialises
+# overlapping close ticks on main.
+#
+# SAFETY (US #9): the running job is FORBIDDEN from editing the workflows tree
+# under .github. It requests NO `workflows` permission, so it can never rewrite
+# its own triggers. It needs only `contents: read` (read the work/ tree) +
+# `issues: write` (close the issue).
+
+name: close-job
+
+on:
+  # A merge to main: fires for a PR-merge AND a direct push, ALWAYS with a token
+  # that can close issues (unlike a fork `pull_request` event's read-only token).
+  push:
+    branches:
+      - main
+
+# Serialise overlapping close ticks on main; the close-job mutates only the ISSUE
+# (not the main-CAS), so this just avoids redundant concurrent passes.
+concurrency:
+  group: close-job-${{ github.ref }}
+  cancel-in-progress: false
+
+# NO `workflows` permission: the running job can NEVER edit the workflows tree
+# under .github (US #9). It needs only to READ the work/ tree and CLOSE issues.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  close-merged-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/agent-runner-setup
+      - name: close issues whose work has landed on main
+        # In-place in this checkout (no --isolated/--remote): the CI container IS
+        # the isolation. Resolves the closing issue(s) from the work/ tree, runs
+        # the "PRD complete?" query for the PRD case, and closes via the provider
+        # seam — all UNCHANGED engine pieces, consumed not re-built.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: agent-runner close-merged-issues
