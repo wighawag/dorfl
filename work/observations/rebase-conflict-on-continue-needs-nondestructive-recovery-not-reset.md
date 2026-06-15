@@ -36,6 +36,16 @@ So the practical pressure is to reach for the destructive option, and in this ca
 
 Recovery affordances should be NON-DESTRUCTIVE by default and should fire on GENUINE errors. Today the path of least resistance out of a self-inflicted, mechanical conflict is to destroy correct work — and even that didn't work. The lesson: keep+continue is the right default; --reset should be rare, loud, and effective; and protocol-bookkeeping conflicts should never reach the user at all.
 
+## Addendum (also observed live): default requeue REFUSES when no branch exists, forcing --reset even when there is nothing to lose
+
+A second nudge toward `--reset` from the SAME run: once the branch was already gone (deleted by a prior `--reset`), the slice sat in `needs-attention/`. Running the DEFAULT `requeue` (keep+continue) to move it back to backlog failed with:
+
+```
+the work branch work/slice-… isn't on origin (the continue branch a cross-machine worker would resume from) — push it first, or `requeue --reset` to discard and start fresh. Item left in needs-attention (no backlog move).
+```
+
+So to do the harmless thing (move a needs-attention slice with NO branch back to backlog for a fresh build) the user is again told to use `--reset` — the guarded, destructive verb — even though there is literally nothing to discard. The default requeue conflates "move the .md back to backlog" with "continue from a branch", and refuses the move when the (optional) branch is absent. A needs-attention slice with no work branch should requeue to backlog WITHOUT requiring the destructive flag (keep+continue and start-fresh are identical when there is no branch). This further entrenches `--reset` as the path of least resistance.
+
 ## Cross-refs
 
 - `requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md` — the stale-mirror root cause that made the conflict recur and made `--reset` ineffective.
