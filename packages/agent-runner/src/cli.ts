@@ -109,6 +109,9 @@ import {
 	SlugResolutionError,
 } from './slug-namespace.js';
 import {brand} from './brand.js';
+import {installCI, type WizardPrompts} from './install-ci.js';
+import {GitHubCIContext} from './install-ci-github.js';
+import {loadCapabilityRegistry} from './install-ci-core.js';
 
 interface ScanFlags {
 	config?: string;
@@ -652,6 +655,16 @@ interface RemoteLsFlags {
 interface RemoteFindFlags {
 	config?: string;
 	yes?: boolean;
+}
+
+interface InstallCiFlags {
+	config?: string;
+	fake?: boolean;
+	exportConfig?: string;
+	includeSecrets?: boolean;
+	cwd?: string;
+	repo?: string;
+	ghBin?: string;
 }
 
 /**
@@ -3055,7 +3068,115 @@ export function buildProgram(): Command {
 			}
 		});
 
+	program
+		.command('install-ci')
+		.helpGroup(ADVANCED_GROUP)
+		.description(
+			'Scaffold the CI auth/setup foundation (a one-time, human-run SCAFFOLDER): write the shared composite setup action (`agent-runner-setup`) + provider auth (models.json default, or auth.json + GH_PAT + OAuth refresh) and set the provider secrets via the GitHub seam. Interactive wizard, or `--config <file>` for a non-interactive reproduction; `--export-config` round-trips the config; `--fake` writes to `.fake/` (never `.github/`) and sets NO real secret (a snapshot dry-run).',
+		)
+		.option(
+			'--config <file>',
+			'non-interactive: load the CI config from this JSON file (skips the wizard)',
+		)
+		.option(
+			'--export-config <file>',
+			'write the gathered config as JSON to this path instead of generating artifacts',
+		)
+		.option(
+			'--include-secrets',
+			'(with --export-config) also gather + include the secret values in the export',
+		)
+		.option(
+			'--fake',
+			'snapshot mode: write artifacts to `.fake/` (NEVER `.github/`) and set NO real secret',
+		)
+		.option(
+			'--repo <owner/repo>',
+			'the GitHub repo to set secrets on (else auto-detected via gh)',
+		)
+		.option('--gh-bin <bin>', 'the gh CLI binary (default: gh on PATH)')
+		.option('--cwd <dir>', 'the target repo working dir (default: cwd)')
+		.action(async (flags: InstallCiFlags) => {
+			const workDir = flags.cwd ?? process.cwd();
+			const ctx = new GitHubCIContext({
+				workDir,
+				repo: flags.repo,
+				ghBin: flags.ghBin,
+			});
+			// Discover the registered capability emitters (the directory-of-modules
+			// seam: each capability self-registers from its own file under
+			// `install-ci-capabilities/`, picked up here WITHOUT a shared-list edit).
+			// This core slice ships only a no-op reference (emits []); the sibling
+			// capability slices add self-registering modules that flow through here
+			// automatically once landed. A no-op emitter contributes nothing.
+			const capabilities = await loadCapabilityRegistry();
+			const prompts = flags.config ? undefined : readlinePrompts();
+			await installCI({
+				ctx,
+				fake: flags.fake === true,
+				configFile: flags.config,
+				exportConfig: flags.exportConfig,
+				includeSecrets: flags.includeSecrets === true,
+				prompts,
+				capabilities,
+				log: (line) => console.error(line),
+			});
+		});
+
 	return program;
+}
+
+/**
+ * A readline-backed {@link WizardPrompts} for the interactive `install-ci`
+ * wizard. Prompts go to stderr (stdout is reserved for any machine output); a
+ * non-TTY invocation falls back to defaults (or empty), so a piped run never
+ * hangs — use `--config` for a fully non-interactive reproduction.
+ */
+function readlinePrompts(): WizardPrompts {
+	const ask = (message: string, mask = false): Promise<string> =>
+		new Promise((resolvePrompt) => {
+			if (!process.stdin.isTTY) {
+				resolvePrompt('');
+				return;
+			}
+			const rl = createInterface({
+				input: process.stdin,
+				output: process.stderr,
+			});
+			void mask; // readline has no native masking; secrets are typed visibly
+			rl.question(`${message} `, (answer) => {
+				rl.close();
+				resolvePrompt(answer);
+			});
+		});
+	return {
+		async input(message, opts) {
+			const hint = opts?.default ? ` [${opts.default}]` : '';
+			const answer = (await ask(`${message}${hint}`)).trim();
+			return answer === '' && opts?.default ? opts.default : answer;
+		},
+		async password(message) {
+			return (await ask(message, true)).trim();
+		},
+		async confirm(message, opts) {
+			const hint = opts.default ? ' [Y/n]' : ' [y/N]';
+			const answer = (await ask(`${message}${hint}`)).trim().toLowerCase();
+			if (answer === '') return opts.default;
+			return answer === 'y' || answer === 'yes';
+		},
+		async select(message, choices) {
+			process.stderr.write(`${message}\n`);
+			choices.forEach((c, i) => {
+				process.stderr.write(`  [${i + 1}] ${c.name}\n`);
+			});
+			const answer = (await ask('Choose (number):')).trim();
+			const n = Number(answer);
+			if (Number.isInteger(n) && n >= 1 && n <= choices.length) {
+				return choices[n - 1].value;
+			}
+			return choices[0].value; // default to the first choice
+		},
+	};
 }
 
 /**

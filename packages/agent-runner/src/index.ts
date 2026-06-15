@@ -606,3 +606,45 @@ export {
 	loadAdvanceCiTemplate,
 	validateAdvanceCiTemplate,
 } from './advance-ci-template.js';
+
+export type {
+	AuthMode,
+	ProviderEntry,
+	CIConfigFile,
+	ResolvedCIConfig,
+	CIProviderContext,
+	GitHubCIContext as GitHubCIContextType,
+	EmittedFile,
+	CapabilityEmitter,
+	SecretSetResult,
+} from './install-ci-core.js';
+export {
+	DEFAULT_HARNESS,
+	CIConfigError,
+	registerCapability,
+	registeredCapabilities,
+	clearCapabilityRegistry,
+	resolveCapabilitiesDir,
+	loadCapabilityRegistry,
+	buildModelsJson,
+	requiredSecretNames,
+	orchestrateSecrets,
+	loadCIConfigFile,
+	resolveCIConfig,
+	exportCIConfig,
+	generateSetupAction,
+	REFRESH_OAUTH_SCRIPT,
+	buildSetupArtifacts,
+	outputBaseName,
+	writeArtifacts,
+} from './install-ci-core.js';
+
+export type {GitHubCIContextOptions} from './install-ci-github.js';
+export {GitHubCIContext, MemoryCIProviderContext} from './install-ci-github.js';
+
+export type {
+	WizardPrompts,
+	InstallCIOptions,
+	InstallCIResult,
+} from './install-ci.js';
+export {installCI, runWizard} from './install-ci.js';
