@@ -661,6 +661,8 @@ export {
 	loadCapabilityRegistry,
 	buildModelsJson,
 	requiredSecretNames,
+	optionalSecretNames,
+	PR_IDENTITY_SECRET_NAME,
 	orchestrateSecrets,
 	loadCIConfigFile,
 	resolveCIConfig,

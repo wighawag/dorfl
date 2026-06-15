@@ -16,6 +16,8 @@ import {
 	type ResolvedCIConfig,
 	buildModelsJson,
 	requiredSecretNames,
+	optionalSecretNames,
+	PR_IDENTITY_SECRET_NAME,
 	orchestrateSecrets,
 	loadCIConfigFile,
 	resolveCIConfig,
@@ -174,14 +176,85 @@ describe('secret-orchestration logic (which secrets, deduplicated)', () => {
 			knownSecrets: {KEY_X: 'from-config'},
 			prompt: async (name) => (name === 'KEY_Y' ? 'prompted' : ''),
 		});
+		// The required provider keys, THEN the optional PR-identity token (never
+		// prompted here — no `optionalPrompt` — so it skips cleanly).
 		expect(results).toEqual([
 			{name: 'KEY_X', status: 'set'},
 			{name: 'KEY_Y', status: 'set'},
 			{name: 'KEY_Z', status: 'skipped'},
+			{name: 'AGENT_RUNNER_GH_TOKEN', status: 'skipped'},
 		]);
 		expect(ctx.secrets.get('KEY_X')).toBe('from-config');
 		expect(ctx.secrets.get('KEY_Y')).toBe('prompted');
 		expect(ctx.secrets.has('KEY_Z')).toBe(false);
+		expect(ctx.secrets.has('AGENT_RUNNER_GH_TOKEN')).toBe(false);
+	});
+
+	it('offers the OPTIONAL PR-identity token (AGENT_RUNNER_GH_TOKEN): set via optionalPrompt, taken from knownSecrets, or skipped when blank', async () => {
+		// (a) set via optionalPrompt
+		const ctxA = new MemoryCIProviderContext({
+			workDir: work,
+			ghAvailable: false,
+		});
+		const config = baseConfig({
+			providers: [
+				{name: 'a', apiKeyEnvVar: 'KEY_X', models: [{id: 'm'}], builtin: true},
+			],
+		});
+		const setResults = await orchestrateSecrets({
+			ctx: ctxA,
+			config,
+			prompt: async () => 'k',
+			optionalPrompt: async () => 'pat-123',
+		});
+		expect(setResults).toEqual([
+			{name: 'KEY_X', status: 'set'},
+			{name: 'AGENT_RUNNER_GH_TOKEN', status: 'set'},
+		]);
+		expect(ctxA.secrets.get('AGENT_RUNNER_GH_TOKEN')).toBe('pat-123');
+
+		// (b) taken from knownSecrets even without an optionalPrompt
+		const ctxB = new MemoryCIProviderContext({
+			workDir: work,
+			ghAvailable: false,
+		});
+		const knownResults = await orchestrateSecrets({
+			ctx: ctxB,
+			config,
+			knownSecrets: {KEY_X: 'k', AGENT_RUNNER_GH_TOKEN: 'from-config'},
+		});
+		expect(knownResults).toContainEqual({
+			name: 'AGENT_RUNNER_GH_TOKEN',
+			status: 'set',
+		});
+		expect(ctxB.secrets.get('AGENT_RUNNER_GH_TOKEN')).toBe('from-config');
+
+		// (c) blank optionalPrompt ⇒ skipped (the zero-config fallback)
+		const ctxC = new MemoryCIProviderContext({
+			workDir: work,
+			ghAvailable: false,
+		});
+		const skipResults = await orchestrateSecrets({
+			ctx: ctxC,
+			config,
+			prompt: async () => 'k',
+			optionalPrompt: async () => '',
+		});
+		expect(skipResults).toContainEqual({
+			name: 'AGENT_RUNNER_GH_TOKEN',
+			status: 'skipped',
+		});
+		expect(ctxC.secrets.has('AGENT_RUNNER_GH_TOKEN')).toBe(false);
+	});
+
+	it('optionalSecretNames is the PR-identity token in both auth modes; requiredSecretNames is unchanged', async () => {
+		expect(PR_IDENTITY_SECRET_NAME).toBe('AGENT_RUNNER_GH_TOKEN');
+		expect(optionalSecretNames(baseConfig({}))).toEqual([
+			'AGENT_RUNNER_GH_TOKEN',
+		]);
+		expect(optionalSecretNames(baseConfig({authMode: 'auth-json'}))).toEqual([
+			'AGENT_RUNNER_GH_TOKEN',
+		]);
 	});
 });
 
@@ -543,11 +616,15 @@ describe('the CI-provider seam (setSecret / repo / ghAvailable) is fully stubbed
 			),
 		);
 		const result = await installCI({ctx, configFile: file, log: () => {}});
+		// The optional PR-identity token is offered but, with no value in the
+		// config file and no prompts (non-interactive path), cleanly skipped.
 		expect(result.secrets).toEqual([
 			{name: 'ANTHROPIC_API_KEY', status: 'set'},
+			{name: 'AGENT_RUNNER_GH_TOKEN', status: 'skipped'},
 		]);
 		// Recorded ONLY in memory.
 		expect(ctx.secrets.get('ANTHROPIC_API_KEY')).toBe('sk-fixture');
+		expect(ctx.secrets.has('AGENT_RUNNER_GH_TOKEN')).toBe(false);
 	});
 });
 

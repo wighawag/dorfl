@@ -188,6 +188,16 @@ export async function installCI(
 				? (name) =>
 						options.prompts!.password(`Enter the value for secret ${name}:`)
 				: undefined,
+			// The PR-identity token is OPTIONAL: phrase it as such, and Enter-to-skip
+			// leaves the legs on the built-in GITHUB_TOKEN fallback (zero-config).
+			optionalPrompt: options.prompts
+				? (name) =>
+						options.prompts!.password(
+							`Optional: GitHub token for the CI legs to open PRs under your ` +
+								`identity (stored as secret ${name}; a PAT or App token). ` +
+								`Leave blank to use the built-in GITHUB_TOKEN:`,
+						)
+				: undefined,
 		});
 		for (const r of secrets) {
 			if (r.status === 'set') log(`  secret ${r.name}: set`);
@@ -245,10 +255,21 @@ async function gatherSecretsForExport(
 	if (!prompts) {
 		return secrets;
 	}
-	const {requiredSecretNames} = await import('./install-ci-core.js');
+	const {requiredSecretNames, optionalSecretNames} =
+		await import('./install-ci-core.js');
 	for (const name of requiredSecretNames(config)) {
 		if (secrets[name] !== undefined) continue;
 		const value = await prompts.password(`Enter the value for secret ${name}:`);
+		if (value) secrets[name] = value;
+	}
+	// The OPTIONAL PR-identity token: offered (blank ⇒ omitted, never an empty
+	// value), so an exported config can carry it without it ever being required.
+	for (const name of optionalSecretNames(config)) {
+		if (secrets[name] !== undefined) continue;
+		const value = await prompts.password(
+			`Optional: GitHub token for CI to open PRs under your identity ` +
+				`(secret ${name}; a PAT or App token). Leave blank to use GITHUB_TOKEN:`,
+		);
 		if (value) secrets[name] = value;
 	}
 	return secrets;

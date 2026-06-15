@@ -311,6 +311,32 @@ export function requiredSecretNames(config: ResolvedCIConfig): string[] {
 	return names;
 }
 
+/**
+ * The GitHub secret the propose/merge CI legs read as `GH_TOKEN` to open PRs
+ * under a CHOSEN identity (a PAT / App token). It is the PR-IDENTITY token, a
+ * distinct purpose from `auth-json` mode's `GH_PAT` (which exists only to rotate
+ * the OAuth `PI_AUTH_JSON` secret). The generated workflows reference it as
+ * `${{ secrets.AGENT_RUNNER_GH_TOKEN || secrets.GITHUB_TOKEN }}` so it is
+ * OPTIONAL: unset ⇒ the legs fall back to the built-in `GITHUB_TOKEN` (PRs are
+ * `github-actions[bot]` and do not trigger downstream `on: pull_request`
+ * workflows); set ⇒ PRs carry the token's identity and DO trigger them.
+ */
+export const PR_IDENTITY_SECRET_NAME = 'AGENT_RUNNER_GH_TOKEN';
+
+/**
+ * The DEDUPLICATED set of OPTIONAL secret env-var names install-ci offers but
+ * never requires. Today that is the single PR-identity token
+ * ({@link PR_IDENTITY_SECRET_NAME}). Kept separate from {@link requiredSecretNames}
+ * so "required" stays honestly required (an empty required key still SKIPS, but
+ * these are offered as explicitly optional and are never part of the required
+ * set the export/validation paths reason about). De-duped against the required
+ * names so a token already required (it never is today) is not offered twice.
+ */
+export function optionalSecretNames(config: ResolvedCIConfig): string[] {
+	const required = new Set(requiredSecretNames(config));
+	return [PR_IDENTITY_SECRET_NAME].filter((name) => !required.has(name));
+}
+
 /** The outcome of orchestrating one secret through the provider seam. */
 export interface SecretSetResult {
 	/** The secret env-var name. */
@@ -339,19 +365,30 @@ export async function orchestrateSecrets(options: {
 	config: ResolvedCIConfig;
 	/** Known secret values (config-file `secrets` / `--include-secrets`). */
 	knownSecrets?: Record<string, string>;
-	/** Prompt for a missing secret value (interactive path). Tests stub it. */
+	/** Prompt for a missing REQUIRED secret value (interactive path). Tests stub it. */
 	prompt?: (name: string) => Promise<string>;
+	/**
+	 * Prompt for a missing OPTIONAL secret value ({@link optionalSecretNames}) — the
+	 * PR-identity token. Distinct from {@link orchestrateSecrets.prompt} so the UI can
+	 * phrase it as optional (empty ⇒ cleanly skipped, the documented zero-config
+	 * fallback). Omitted ⇒ optional secrets are taken ONLY from `knownSecrets`
+	 * (never prompted), so the non-interactive/config-file path is unchanged.
+	 */
+	optionalPrompt?: (name: string) => Promise<string>;
 }): Promise<SecretSetResult[]> {
-	const {ctx, config, knownSecrets, prompt} = options;
+	const {ctx, config, knownSecrets, prompt, optionalPrompt} = options;
 	const results: SecretSetResult[] = [];
-	for (const name of requiredSecretNames(config)) {
+	const processOne = async (
+		name: string,
+		asker: ((name: string) => Promise<string>) | undefined,
+	): Promise<void> => {
 		let value = knownSecrets?.[name];
-		if (value === undefined && prompt) {
-			value = await prompt(name);
+		if (value === undefined && asker) {
+			value = await asker(name);
 		}
 		if (!value) {
 			results.push({name, status: 'skipped'});
-			continue;
+			return;
 		}
 		try {
 			await ctx.setSecret(name, value);
@@ -363,6 +400,15 @@ export async function orchestrateSecrets(options: {
 				error: err instanceof Error ? err.message : String(err),
 			});
 		}
+	};
+	for (const name of requiredSecretNames(config)) {
+		await processOne(name, prompt);
+	}
+	// OPTIONAL secrets (the PR-identity token) come AFTER the required set, are
+	// prompted only via `optionalPrompt`, and otherwise behave identically
+	// (empty ⇒ skipped, the zero-config fallback).
+	for (const name of optionalSecretNames(config)) {
+		await processOne(name, optionalPrompt);
 	}
 	return results;
 }
