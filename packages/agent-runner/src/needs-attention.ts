@@ -9,6 +9,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
+import {BOOKKEEPING_TRAILER} from './drop-bookkeeping-rebase.js';
 import {ledgerRead} from './ledger-read.js';
 import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -376,10 +377,18 @@ export async function routeToNeedsAttention(
 	}
 	gitHard(['add', '-A'], cwd, env);
 	const commitMessage = `chore(${slug}): route to needs-attention; ${options.reason}`;
+	// Stamp the durable `Agent-Runner-Bookkeeping: route-to-needs-attention` git
+	// TRAILER on the move-only commit (a blank line separates it from the subject
+	// so git parses it as a trailer, never as reason prose). This is the EXPLICIT,
+	// version-stable mark the rebase drop identifies the commit by — it lives on
+	// the commit OBJECT so it travels with the kept branch cross-machine. The
+	// returned `commitMessage` keeps the human-facing subject (no trailer) for
+	// reporting; the trailer is on the COMMIT, distinct from the reason prose.
+	const commitBody = `${commitMessage}\n\n${BOOKKEEPING_TRAILER}`;
 	// On a re-surface the reason block may already be present (idempotent append),
 	// leaving NOTHING staged — a plain commit would error. `--allow-empty` keeps a
 	// stable move-only tip to (re)publish, so re-surfacing never thrashes nor fails.
-	const commitArgs = ['commit', '-q', '-m', commitMessage];
+	const commitArgs = ['commit', '-q', '-m', commitBody];
 	if (alreadyInNeedsAttention) {
 		commitArgs.push('--allow-empty');
 	}
@@ -750,6 +759,14 @@ export async function surfaceToNeedsAttention(
 	const inProgressRel = `work/in-progress/${slug}.md`;
 
 	const commitMessage = `chore(${slug}): route to needs-attention; ${reason}`;
+	// The message handed to `commit-tree` carries the durable
+	// `Agent-Runner-Bookkeeping: route-to-needs-attention` git TRAILER (blank line
+	// before it so git parses it as a trailer, distinct from the reason prose) —
+	// the SAME mark the in-worktree author site stamps, so BOTH move-only author
+	// sites produce a trailer'd commit the rebase drop identifies by plumbing
+	// (never by the version-unstable rendered todo). The returned `commitMessage`
+	// stays the bare subject for reporting; the trailer lives on the COMMIT.
+	const commitBody = `${commitMessage}\n\n${BOOKKEEPING_TRAILER}`;
 	// Append the reason (+ any surfaced questions) to the item BODY before the move
 	// — the PURE-string sibling of `appendReasonBlock`, applied to the blob read off
 	// `<arbiter>/main` (never a cwd file). Idempotent on a re-surface whose body
@@ -798,7 +815,9 @@ export async function surfaceToNeedsAttention(
 				sourceRel: src,
 				destRel,
 				transformBody,
-				commitMessage,
+				// The trailer'd message (subject + Agent-Runner-Bookkeeping trailer) is
+				// what gets committed; the bare `commitMessage` is returned for reporting.
+				commitMessage: commitBody,
 				refNamespace: 'surface',
 				env,
 			});

@@ -111,7 +111,10 @@ export interface ContinueRebaseResult {
  * Must be called while HEAD is the continued branch.
  *
  * Atomicity invariant: the drop targets ONLY the `route to needs-attention`
- * bookkeeping move (anchored by subject + slug). A completed-state move
+ * bookkeeping move — identified by the durable `Agent-Runner-Bookkeeping`
+ * trailer (slug-anchored by the real subject), read via plumbing, and dropped
+ * by driving the rebase from a self-generated `pick <fullsha>` todo (never
+ * git's version-unstable rendered todo text). A completed-state move
  * (`→done` / `slicing→prd-sliced`) is NEVER dropped — those land atomically
  * with the artifacts they assert.
  *
