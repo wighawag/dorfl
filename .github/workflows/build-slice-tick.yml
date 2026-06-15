@@ -138,6 +138,15 @@ jobs:
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. `--propose` can ONLY ride a matrix leg, never the merge
         # job, so a parallel merge-to-main is structurally impossible.
+        # `--propose` shells `gh` to open the PR, which reads `GH_TOKEN` from the
+        # env (a workflow PERMISSION is not a credential). Prefer a dedicated
+        # `AGENT_RUNNER_GH_TOKEN` secret (a PAT / App token) so PRs carry YOUR
+        # identity AND trigger downstream workflows (PRs opened with the built-in
+        # `GITHUB_TOKEN` are `github-actions[bot]` and do NOT trigger further
+        # `on: pull_request` runs). Falls back to the auto `GITHUB_TOKEN` so it
+        # works zero-config; the job's `pull-requests: write` scopes that token.
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_RUNNER_GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: agent-runner advance "${{ matrix.item }}" --propose --arbiter origin
 
   # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
@@ -159,4 +168,7 @@ jobs:
         # sequential job (never a matrix leg), so rebase-chained merges to main
         # happen one at a time — no parallel main-CAS thrash. The flag ties the
         # integration mode to this shape; it overrides the repo config default.
+        # `gh` (merge / PR housekeeping) reads `GH_TOKEN` from the env.
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_RUNNER_GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: agent-runner advance -n 10 --merge --arbiter origin
