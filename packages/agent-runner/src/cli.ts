@@ -670,6 +670,7 @@ interface InstallCiFlags {
 	fake?: boolean;
 	exportConfig?: string;
 	includeSecrets?: boolean;
+	installSource?: string;
 	cwd?: string;
 	repo?: string;
 	ghBin?: string;
@@ -3187,8 +3188,23 @@ export function buildProgram(): Command {
 		)
 		.option('--gh-bin <bin>', 'the gh CLI binary (default: gh on PATH)')
 		.option('--cwd <dir>', 'the target repo working dir (default: cwd)')
+		.option(
+			'--install-source <registry|workspace>',
+			'where the CI installs the CLI from: `registry` (npm install -g, the default) or `workspace` (build from the checked-out source + link onto PATH, for the self-hosting monorepo). Overrides auto-detection in both directions.',
+		)
 		.action(async (flags: InstallCiFlags) => {
 			const workDir = flags.cwd ?? process.cwd();
+			if (
+				flags.installSource !== undefined &&
+				flags.installSource !== 'registry' &&
+				flags.installSource !== 'workspace'
+			) {
+				console.error(
+					`install-ci: --install-source must be "registry" or "workspace" (got "${flags.installSource}")`,
+				);
+				process.exitCode = 1;
+				return;
+			}
 			const ctx = new GitHubCIContext({
 				workDir,
 				repo: flags.repo,
@@ -3208,6 +3224,10 @@ export function buildProgram(): Command {
 				configFile: flags.config,
 				exportConfig: flags.exportConfig,
 				includeSecrets: flags.includeSecrets === true,
+				installSource: flags.installSource as
+					| 'registry'
+					| 'workspace'
+					| undefined,
 				prompts,
 				capabilities,
 				log: (line) => console.error(line),

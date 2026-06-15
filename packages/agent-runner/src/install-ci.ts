@@ -17,12 +17,14 @@
  * interactively or from a config file (the equivalence the slice pins).
  */
 
-import {writeFileSync} from 'node:fs';
+import {writeFileSync, readFileSync, existsSync} from 'node:fs';
+import {join} from 'node:path';
 import {
 	type AuthMode,
 	type ProviderEntry,
 	type CIConfigFile,
 	type ResolvedCIConfig,
+	type InstallSource,
 	type CIProviderContext,
 	type CapabilityEmitter,
 	type SecretSetResult,
@@ -67,6 +69,12 @@ export interface InstallCIOptions {
 	exportConfig?: string;
 	/** With `--export-config`: also gather + include the secret values. */
 	includeSecrets?: boolean;
+	/**
+	 * Force the CLI install source (`registry` / `workspace`), overriding the
+	 * package.json auto-detection in BOTH directions. When omitted, the source
+	 * comes from the config file (if it set it) else the auto-detection below.
+	 */
+	installSource?: InstallSource;
 	/** The interactive prompt seam (required unless `configFile` is given). */
 	prompts?: WizardPrompts;
 	/** The capability emitters to emit workflows for (none in this core slice). */
@@ -115,6 +123,17 @@ export async function installCI(
 	}
 	const config = resolveCIConfig(file);
 
+	// An EXPLICIT --install-source flag wins over the config file's value and is
+	// folded in BEFORE the export so it round-trips through --export-config. The
+	// package.json AUTO-DETECTION (below) is applied AFTER the export early-return
+	// instead, so it is NOT baked into an exported config (a consumer re-running
+	// from that export must not silently inherit the monorepo's workspace mode).
+	const explicitInstallSource =
+		options.installSource ?? file.installSource ?? undefined;
+	if (options.installSource) {
+		config.installSource = options.installSource;
+	}
+
 	// 2. --export-config: round-trip the gathered config back to JSON and exit.
 	if (options.exportConfig) {
 		let secrets: Record<string, string> | undefined;
@@ -128,6 +147,32 @@ export async function installCI(
 		);
 		log(`Config written to ${options.exportConfig}`);
 		return {outcome: 'exported', config, written: [], secrets: []};
+	}
+
+	// 2b. Auto-detect the WORKSPACE install source: when no explicit flag/config
+	//     value was given AND <workDir>/package.json is the agent-runner monorepo,
+	//     build the CLI from source instead of pulling the (unpublished) registry
+	//     package. A single exact-name check (NOT a fuzzy "agent-runner" match, or
+	//     it would wrongly trip in a consumer repo named similarly). A missing or
+	//     unparseable package.json stays `registry` (the error is swallowed). This
+	//     runs AFTER the export early-return so it is never baked into an export.
+	if (!explicitInstallSource) {
+		try {
+			const pkgPath = join(options.ctx.workDir, 'package.json');
+			if (existsSync(pkgPath)) {
+				const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
+					name?: string;
+				};
+				if (pkg.name === 'agent-runner-monorepo') {
+					config.installSource = 'workspace';
+					log(
+						'📦 Detected agent-runner monorepo — using workspace install mode (build from source)',
+					);
+				}
+			}
+		} catch {
+			// Ignore — not the agent-runner monorepo (missing/unparseable pkg).
+		}
 	}
 
 	// 3. Orchestrate secrets — SKIPPED in --fake mode (no real secret touched).
