@@ -102,3 +102,7 @@ continuing the kept work/slice-serialise-surface-treeless-moved-false-test-under
 ## Requeue 2026-06-15
 
 Previous keep+continue re-drive hit a rebase conflict in the slice .md lifecycle move; the code change is 7 trivial lines (add the test file to RACE_SENSITIVE in packages/agent-runner/vitest.config.ts with an explanatory comment). Discarding the conflicted branch and rebuilding fresh off current main (which now has the prepare step).
+
+## Needs attention
+
+continuing the kept origin/work/slice-serialise-surface-treeless-moved-false-test-under-parallel-load: rebase onto origin/main conflicted (aborted, never auto-resolved) — resolve against the latest main, or `requeue --reset` to discard and start fresh
