@@ -282,17 +282,6 @@ export interface Config {
 	 */
 	review: boolean;
 	/**
-	 * On a Gate-2 `approve`, allow the resolved `merge` integration to proceed
-	 * AUTONOMOUSLY. Default **OFF**. **Repo policy only** (the `do`-path author is
-	 * the operator who ran the command — no author-trust resolver here; that is the
-	 * `issue-intake` concern, decoupled). A non-`approve` verdict NEVER auto-merges
-	 * regardless. With `review` on but `autoMerge` off, review still gates
-	 * (block/approve) but a human does the merge (`--propose` semantics). Resolved
-	 * like `integration`: flag (`--auto-merge`/`--no-auto-merge`) > env > per-repo >
-	 * global > default false.
-	 */
-	autoMerge: boolean;
-	/**
 	 * The model the REVIEW agent runs on (de-correlation from the builder's
 	 * `model`). Optional with NO default so "unset" means "no forced review model"
 	 * (the harness's own default). Carried to the review-agent launch through the
@@ -477,10 +466,10 @@ export const DEFAULT_CONFIG: Config = {
 	noPR: false,
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
-	// it is opt-in (ADR §8); its auto-merge sub-policy is OFF too. The loop bound is
-	// a small N so an unattended revise↔review can never run forever.
+	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically
+	// (`merge` IS the auto-land mode); `propose` always leaves the merge to a human.
+	// The loop bound is a small N so an unattended revise↔review can never run forever.
 	review: false,
-	autoMerge: false,
 	reviewMaxRounds: 2,
 	// The slicer improver loop is ON by default — auto-slicing has no `verify`
 	// floor, so the loop is the slice path's quality engine (distinct from the

@@ -320,7 +320,6 @@ function buildRegistrySetAdvanceTick(options: {
 				model: config.model,
 				sessionsDir: config.sessionsDir,
 				review: config.review,
-				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: config.review
@@ -430,7 +429,6 @@ interface RunFlags extends ScanFlags {
 	sessionsDir?: string;
 	workspace?: string;
 	review?: boolean;
-	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
@@ -462,7 +460,7 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	// so there is exactly ONE override path for them.
 	Object.assign(overrides, harnessFlagOverrides(flags));
 	// Gate 2 (PR/code review) flags ride the SAME flag-override path so
-	// `--review`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
+	// `--review`/`--review-model`/`--review-max-rounds` resolve
 	// flag > env > per-repo > global > default — mirroring the `do` command (the
 	// fleet inherits the review gate via the converged `performIntegration` core).
 	Object.assign(overrides, reviewFlagOverrides(flags));
@@ -540,7 +538,6 @@ interface CompleteFlags {
 	type?: string;
 	message?: string;
 	review?: boolean;
-	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
@@ -576,7 +573,6 @@ interface DoFlags {
 	sessionsDir?: string;
 	watch?: boolean;
 	review?: boolean;
-	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
 	/** `--slicer-loop` / `--no-slicer-loop` — the slicer improver loop on/off toggle (`do prd:` path). */
@@ -989,14 +985,6 @@ export function buildProgram(): Command {
 			'run Gate 2 (PR/code review) after verify, before the done-move, on every item (overrides config). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option('--no-review', 'do NOT run Gate 2 this tick (overrides config)')
-		.option(
-			'--auto-merge',
-			'on a Gate-2 approve, let a resolved merge proceed autonomously (overrides config; repo policy only). Default off.',
-		)
-		.option(
-			'--no-auto-merge',
-			'do NOT auto-merge on approve (a human merges; --propose semantics)',
-		)
 		.option(
 			'--review-model <id>',
 			'model the Gate-2 review agent runs on (de-correlated from the builder; routing intent). Resolved flag > env > per-repo > global > default.',
@@ -1497,14 +1485,6 @@ export function buildProgram(): Command {
 			'do NOT run Gate 2 this invocation (overrides config)',
 		)
 		.option(
-			'--auto-merge',
-			'on a Gate-2 approve, let a resolved merge proceed autonomously (overrides config; repo policy only). Default off.',
-		)
-		.option(
-			'--no-auto-merge',
-			'do NOT auto-merge on approve (a human merges; --propose semantics)',
-		)
-		.option(
 			'--review-model <id>',
 			'model the Gate-2 review agent runs on (de-correlated from the builder; routing intent). Resolved flag > env > per-repo > global > default.',
 		)
@@ -1606,7 +1586,6 @@ export function buildProgram(): Command {
 				// AFTER the green verify and BEFORE the done-move. The `reviewModel`
 				// override flows to the launch through the existing harness seam.
 				review: config.review,
-				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: config.review ? harnessReviewGate() : undefined,
@@ -1719,14 +1698,6 @@ export function buildProgram(): Command {
 		.option(
 			'--no-review',
 			'do NOT run Gate 2 this invocation (overrides config)',
-		)
-		.option(
-			'--auto-merge',
-			'on a Gate-2 approve, let a resolved merge proceed autonomously (overrides config; repo policy only). Default off.',
-		)
-		.option(
-			'--no-auto-merge',
-			'do NOT auto-merge on approve (a human merges; --propose semantics)',
 		)
 		.option(
 			'--review-model <id>',
@@ -1922,7 +1893,6 @@ export function buildProgram(): Command {
 					model: remoteConfig.model,
 					sessionsDir: remoteConfig.sessionsDir,
 					review: remoteConfig.review,
-					autoMerge: remoteConfig.autoMerge,
 					reviewModel: remoteConfig.reviewModel,
 					reviewMaxRounds: remoteConfig.reviewMaxRounds,
 					reviewGate: remoteConfig.review
@@ -2064,7 +2034,6 @@ export function buildProgram(): Command {
 				// `reviewModel` via the existing model-routing seam) after the green
 				// verify, before the done-move. A block routes to needs-attention.
 				review: config.review,
-				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: config.review
@@ -2320,7 +2289,6 @@ export function buildProgram(): Command {
 					model: remoteConfig.model,
 					sessionsDir: remoteConfig.sessionsDir,
 					review: remoteConfig.review,
-					autoMerge: remoteConfig.autoMerge,
 					reviewModel: remoteConfig.reviewModel,
 					reviewMaxRounds: remoteConfig.reviewMaxRounds,
 					reviewGate: remoteConfig.review
@@ -2440,7 +2408,6 @@ export function buildProgram(): Command {
 				model: config.model,
 				sessionsDir: config.sessionsDir,
 				review: config.review,
-				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: config.review

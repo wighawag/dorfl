@@ -1,8 +1,12 @@
 ---
 title: autoMerge means TWO different things — the PRD's "auto-merge the --propose PR on approve" vs the code's "let a --merge proceed (else downgrade to propose)" — a concept collision to think through later
 date: 2026-06-07
-status: open
+status: resolved
+resolvedBy: remove-automerge-merge-means-auto-on-gate-pass
+resolvedDate: 2026-06-15
 ---
+
+> **RESOLVED 2026-06-15 (slice `remove-automerge-merge-means-auto-on-gate-pass`).** Closed in favour of **Model P**, realised by HARD-DELETING the `autoMerge` knob entirely (config field + `DEFAULT_CONFIG`, the per-repo key list, the `AGENT_RUNNER_AUTO_MERGE` env coercion, the `--auto-merge`/`--no-auto-merge` CLI flags, the `do`/`run`/`complete`/`integration-core` option fields, and the `merge`→`propose` downgrade logic at both `integration-core.ts` application sites). After this: `integration: merge` MEANS "land automatically when the gate passes" (green `verify`, plus a Gate-2 `approve` when `review` is on) and `integration: propose` MEANS "a human merges" (PR / PR-less checkpoint). The old `merge` + `autoMerge: false` "downgrade to propose" combination is gone — it was redundant with `propose`. There is no separate auto-merge sub-knob; auto-land is a property of the chosen integration mode. A stale `autoMerge` config key / env var is silently inert. The four user stories below resolve to: (1) `integration: merge` + `review: on`; (2) `integration: propose` + `review: on`; (3) review off + `merge` is unaffected (the downgrade never gated no-review merge, and now there is no downgrade at all); (4) `--merge` + `autoMerge` off is no longer expressible — `propose` is the canonical "a human merges" form. PRD `work/prd-sliced/review.md` + ADR `docs/adr/ci-config-policy-and-gate-family.md` updated to Model P.
 
 ## The signal
 

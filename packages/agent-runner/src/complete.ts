@@ -150,14 +150,6 @@ export interface CompleteOptions {
 	 */
 	review?: boolean;
 	/**
-	 * On a Gate-2 `approve`, allow a resolved `merge` integration to proceed
-	 * AUTONOMOUSLY. Repo policy only. Default OFF. A non-`approve` verdict NEVER
-	 * auto-merges. With `review` on but `autoMerge` off, review still gates but
-	 * the resolved `merge` is DOWNGRADED to `propose` (a human does the merge —
-	 * `--propose` semantics). Ignored unless `review` is on.
-	 */
-	autoMerge?: boolean;
-	/**
 	 * The model the REVIEW agent runs on (de-correlation from the builder). Flows
 	 * to the review-agent launch through the EXISTING harness seam
 	 * (`LaunchInput.model` / `substituteModel`). Unset ⇒ no forced review model.
@@ -384,9 +376,10 @@ async function runComplete(
 	const cwd = options.cwd;
 	const env = options.env;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	// The REQUESTED integration mode. The shared core owns the EFFECTIVE-mode
-	// decision (incl. Gate 2's `autoMerge`-off `merge`→`propose` downgrade); the
-	// tail below reads the effective mode from `core.integration.mode`, NEVER this.
+	// The integration mode. The shared core integrates a `merge` automatically on a
+	// green gate (and an `approve` when review is on) and leaves a `propose` to a
+	// human; there is no downgrade, so the mode it resolves always equals this one.
+	// The tail below still reads the resolved mode from `core.integration.mode`.
 	const requestedMode = options.integration ?? DEFAULT_INTEGRATION;
 
 	if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
@@ -507,7 +500,6 @@ async function runComplete(
 		skipVerify: options.skipVerify,
 		review: options.review,
 		reviewGate: options.reviewGate,
-		autoMerge: options.autoMerge,
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
 		mode: requestedMode,
@@ -581,9 +573,9 @@ async function runComplete(
 	}
 
 	// SUCCESS: the core integrated. `result` is its integration result; `mode` is
-	// the EFFECTIVE mode the core resolved (post-downgrade), read from the result —
-	// NEVER the requested mode (an `autoMerge`-off approve downgraded `merge` to
-	// `propose`, and the tail must switch/ff per the mode that actually integrated).
+	// the mode the core resolved, read from the result (it always equals the
+	// requested mode now that there is no downgrade). The tail switches/ffs per the
+	// mode that integrated.
 	const result = core.integration!;
 	const commitMessage = core.commitMessage;
 	const mode = result.mode;

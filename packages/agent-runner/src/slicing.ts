@@ -540,15 +540,12 @@ export async function performSlice(
 			reviewGate: options.reviewGate,
 			reviewModel: options.acceptanceReviewModel,
 			reviewMaxRounds: 1,
-			// `autoMerge: true` so an APPROVE lets the EXPLICITLY-chosen integrate mode
-			// proceed AS-IS — a `--merge` slicing run still lands on main on approve,
-			// `--propose` still opens a PR. The slicing path's merge-vs-propose decision
-			// is the `integration` mode the user typed, NOT the build gate's `--auto-merge`
-			// policy (which downgrades merge→propose on approve when off). The slice gate
-			// family is `--review`/`--no-review`/`--review-model` only (PRD US #6) — it
-			// does NOT expose `--auto-merge`, so we never downgrade the chosen mode here.
-			// (See ## Decisions in the slice.)
-			autoMerge: true,
+			// The EXPLICITLY-chosen integrate mode proceeds AS-IS on an APPROVE — a
+			// `--merge` slicing run lands on main, `--propose` opens a PR. The slicing
+			// path's merge-vs-propose decision is the `integration` mode the user typed;
+			// `merge` IS the auto-land mode, so a resolved `merge` is never downgraded.
+			// The slice gate family is `--review`/`--no-review`/`--review-model` only
+			// (PRD US #6).
 			mode: options.integration ?? 'propose',
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,

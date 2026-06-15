@@ -127,7 +127,6 @@ describe('do --review --watch — the review gate session is tailed too', () => 
 			// The PRODUCTION gate, harness-backed — the SAME pi harness the build
 			// uses, so its review session is tailed by the same shared helper.
 			review: true,
-			autoMerge: true,
 			reviewGate: harnessReviewGate({harness}),
 			watch: true,
 			watchSink: (line) => surfaced.push(line),
@@ -135,7 +134,7 @@ describe('do --review --watch — the review gate session is tailed too', () => 
 			env: {...gitEnv(), VERDICT_MARKER: 'approve'},
 		});
 
-		// The run completed normally (approve + autoMerge + merge ⇒ landed).
+		// The run completed normally (approve + merge ⇒ landed).
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
@@ -177,7 +176,6 @@ describe('do --review --watch — the review gate session is tailed too', () => 
 			verify: 'exit 0',
 			harness,
 			review: true,
-			autoMerge: true,
 			reviewGate: harnessReviewGate({harness}),
 			sessionsDir: sessionsRoot,
 			watch: true,
@@ -215,7 +213,6 @@ describe('do --review WITHOUT --watch — no review tailer, behaviour unchanged'
 			verify: 'exit 0',
 			harness,
 			review: true,
-			autoMerge: true,
 			reviewGate: harnessReviewGate({harness}),
 			// no watch flag — the review path must be byte-for-byte unchanged.
 			watchSink: (line) => surfaced.push(line),
@@ -252,7 +249,6 @@ describe('the gate DECISION is identical with watch on vs off (observability onl
 				verify: 'exit 0',
 				harness,
 				review: true,
-				autoMerge: true,
 				reviewGate: harnessReviewGate({harness}),
 				watch,
 				watchSink: () => {},

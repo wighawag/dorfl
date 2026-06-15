@@ -90,7 +90,7 @@ export function doFlagOverrides(
 		// resolver (`select-order.ts`) validates/expands it at selection time.
 		...selectionOrderFlagOverrides(flags),
 		// Gate 2 (PR/code review) flags ride the SAME flag-override path so
-		// `--review`/`--auto-merge`/`--review-model`/`--review-max-rounds` resolve
+		// `--review`/`--review-model`/`--review-max-rounds` resolve
 		// flag > env > per-repo > global > default, exactly like the harness flags.
 		...reviewFlagOverrides(flags),
 		// The slicer IMPROVER-loop family (`--slicer-loop`/`--no-slicer-loop`/
@@ -113,16 +113,13 @@ export function doFlagOverrides(
 
 /**
  * The Gate-2 (PR/code review) CLI flags, offered by `do` AND `complete`
- * (`--review`/`--no-review`, `--auto-merge`/`--no-auto-merge`,
- * `--review-model`, `--review-max-rounds`). Both commands resolve them through
+ * (`--review`/`--no-review`, `--review-model`, `--review-max-rounds`). Both commands resolve them through
  * the SAME `flag > env > per-repo > global > default` chain as `integration`, so
  * the mapping lives in ONE place (not a parallel copy per command).
  */
 export interface ReviewFlags {
 	/** `--review` ⇒ true, `--no-review` ⇒ false, absent ⇒ undefined. */
 	review?: boolean;
-	/** `--auto-merge` ⇒ true, `--no-auto-merge` ⇒ false, absent ⇒ undefined. */
-	autoMerge?: boolean;
 	/** `--review-model <id>` — the de-correlated review model (routing intent). */
 	reviewModel?: string;
 	/** `--review-max-rounds <n>` — the revise↔review loop bound (parsed to a number). */
@@ -157,9 +154,6 @@ export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
 	const overrides: PartialConfig = {};
 	if (flags.review !== undefined) {
 		overrides.review = flags.review;
-	}
-	if (flags.autoMerge !== undefined) {
-		overrides.autoMerge = flags.autoMerge;
 	}
 	if (flags.reviewModel !== undefined) {
 		overrides.reviewModel = flags.reviewModel;

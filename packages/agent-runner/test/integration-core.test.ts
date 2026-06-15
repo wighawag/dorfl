@@ -108,7 +108,7 @@ describe('integration-core — approve ⇒ completed', () => {
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
-	it('green gate + review APPROVE + autoMerge on + merge ⇒ effective mode stays merge (no downgrade)', async () => {
+	it('green gate + review APPROVE + merge ⇒ lands on main (merge IS the auto-land mode, no downgrade)', async () => {
 		const {repo} = await claimAndBranch('beta');
 
 		const core = await performIntegration({
@@ -119,20 +119,19 @@ describe('integration-core — approve ⇒ completed', () => {
 			recovering: false,
 			verify: PASS,
 			review: true,
-			autoMerge: true,
 			reviewGate: stubGate(APPROVE),
 			mode: 'merge',
 			env: gitEnv(),
 		});
 
 		expect(core.outcome).toBe('completed');
-		// approve + autoMerge ON + merge ⇒ merge proceeds (no downgrade).
+		// approve + merge ⇒ merge proceeds (there is no downgrade to propose).
 		expect(core.integration?.mode).toBe('merge');
 		expect(core.integration?.mergedToMain).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(true);
 	});
 
-	it('green gate + review APPROVE + autoMerge OFF + merge ⇒ effective mode DOWNGRADES to propose (verbatim)', async () => {
+	it('green gate + review BLOCK + merge ⇒ does NOT land on main', async () => {
 		const {repo} = await claimAndBranch('gamma');
 
 		const core = await performIntegration({
@@ -143,16 +142,13 @@ describe('integration-core — approve ⇒ completed', () => {
 			recovering: false,
 			verify: PASS,
 			review: true,
-			autoMerge: false,
-			reviewGate: stubGate(APPROVE),
+			reviewGate: stubGate(BLOCK),
 			mode: 'merge',
 			env: gitEnv(),
 		});
 
-		expect(core.outcome).toBe('completed');
-		// The core owns the autoMerge-off `merge`→`propose` downgrade: a human merges.
-		expect(core.integration?.mode).toBe('propose');
-		expect(core.integration?.mergedToMain).toBe(false);
+		expect(core.outcome).toBe('review-blocked');
+		expect(core.integration?.mergedToMain).not.toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'gamma')).toBe(false);
 	});
 });

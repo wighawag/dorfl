@@ -127,7 +127,7 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 
 	it('review on + an APPROVE verdict integrates normally (the gate ran, did not block)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
-		const config = configFor({review: true, autoMerge: true});
+		const config = configFor({review: true});
 		const gate = stubGate(APPROVE);
 		const result = await runOnce({
 			config,

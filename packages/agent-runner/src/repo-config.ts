@@ -108,12 +108,11 @@ export const REPO_ALLOWED_KEYS = [
 	'harness',
 	// Gate 2 (PR/code review) policy is a genuine repo property (GATES PRD
 	// `work/prd/review.md`), resolved per-repo like `integration`/`autoBuild`:
-	// whether this repo runs Gate 2 (`review`), whether an approve may auto-merge
-	// (`autoMerge`), which model the review agent runs on (`reviewModel`), and the
-	// revise↔review loop bound (`reviewMaxRounds`). `reviewModel` is routing intent
-	// (not auth), so — like `model` — it is repo-appropriate, not host-only.
+	// whether this repo runs Gate 2 (`review`), which model the review agent runs
+	// on (`reviewModel`), and the revise↔review loop bound (`reviewMaxRounds`).
+	// `reviewModel` is routing intent (not auth), so — like `model` — it is
+	// repo-appropriate, not host-only.
 	'review',
-	'autoMerge',
 	'reviewModel',
 	'reviewMaxRounds',
 	// The slicer IMPROVER-loop family (`slicerLoop` on/off, `slicerLoopMax` hard

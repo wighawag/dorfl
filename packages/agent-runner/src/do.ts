@@ -258,11 +258,10 @@ export interface DoOptions {
 	 * `do`/`complete` pipeline, so CI inherits it for free). When `review` is on,
 	 * the `review` SKILL runs as a fresh-context agent AFTER the green `verify` and
 	 * BEFORE the done-move; a `block` maps to the `needs-attention` outcome the same
-	 * way `gate-failed` does (exit 1). `autoMerge`/`reviewModel`/`reviewMaxRounds`
+	 * way `gate-failed` does (exit 1). `reviewModel`/`reviewMaxRounds`
 	 * tune it; `reviewGate` is the injectable seam (production: harness-backed).
 	 */
 	review?: boolean;
-	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
@@ -437,7 +436,6 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	providerInstance?: ReviewProvider;
 	/** Gate 2 (PR/code review) toggle — threaded verbatim into `performComplete`. */
 	review?: boolean;
-	autoMerge?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
@@ -988,7 +986,6 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// before the done-move. A `block` re-uses the same needs-attention surfacing
 		// (`surfaceArbiter`) the red gate does; mapped to `needs-attention` below.
 		review: options.review,
-		autoMerge: options.autoMerge,
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
 		reviewGate: options.reviewGate,
@@ -2048,7 +2045,6 @@ async function runRemotePipeline(
 		providerInstance: options.providerInstance,
 		body: agent.output,
 		review: options.review,
-		autoMerge: options.autoMerge,
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
 		reviewGate: options.reviewGate,
@@ -2259,7 +2255,6 @@ export function jobWorktreeDoDriver(closure: {
 			verify: options.verify,
 			noPR: options.noPR,
 			review: options.review,
-			autoMerge: options.autoMerge,
 			reviewModel: options.reviewModel,
 			reviewMaxRounds: options.reviewMaxRounds,
 			reviewGate: options.reviewGate,
