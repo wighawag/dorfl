@@ -104,6 +104,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
+        with:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: derive the per-outcome merge-vs-propose flags (gate × author-trust)
         id: policy

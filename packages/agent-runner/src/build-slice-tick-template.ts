@@ -42,6 +42,7 @@
  */
 
 import type {EmittedFile, ResolvedCIConfig} from './install-ci-core.js';
+import {providerSecretsWithBlock} from './install-ci-core.js';
 
 /** The capability id (the registry key + the emitted workflow file stem). */
 export const BUILD_SLICE_TICK_CAPABILITY_ID = 'build-slice-tick';
@@ -59,11 +60,16 @@ export const BUILD_SLICE_TICK_WORKFLOW_PATH = 'workflows/build-slice-tick.yml';
  * policy is env/config, so the artifact carries no config-derived policy beyond
  * the env-block scaffolding) — `config` is accepted for parity with the
  * {@link CapabilityEmitter} seam and future per-config wiring, but the build/slice
- * tick shape itself is config-independent.
+ * tick shape itself is config-independent EXCEPT for the provider secrets the
+ * agent-running jobs pass to the setup action (so `pi` can authenticate).
  */
 export function generateBuildSliceTickWorkflow(
-	_config: ResolvedCIConfig,
+	config: ResolvedCIConfig,
 ): string {
+	// The agent-running jobs (propose / merge) pass the configured provider
+	// secret(s) to the setup action ONCE via `with:`; the action forwards them to
+	// `$GITHUB_ENV` so `pi` can authenticate (empty in auth-json mode).
+	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # agent-runner — the BUILD/SLICE tick in CI (capabilities A auto-build + B
 # auto-slice, PRD runner-in-ci). EMITTED by \`agent-runner install-ci\`; the human
@@ -200,7 +206,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/agent-runner-setup${setupWith}
       - name: advance one item in-place (propose ⇒ opens a PR)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. \`--propose\` can ONLY ride a matrix leg, never the merge
@@ -229,7 +235,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/agent-runner-setup${setupWith}
       - name: advance the eligible pool sequentially in-place (merge ⇒ rebase-chains to main)
         # In-place (no --isolated/--remote). \`--merge\` rides ONLY this single
         # sequential job (never a matrix leg), so rebase-chained merges to main

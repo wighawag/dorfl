@@ -663,6 +663,7 @@ export {
 	requiredSecretNames,
 	optionalSecretNames,
 	PR_IDENTITY_SECRET_NAME,
+	providerSecretsWithBlock,
 	orchestrateSecrets,
 	loadCIConfigFile,
 	resolveCIConfig,

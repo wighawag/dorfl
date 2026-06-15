@@ -85,6 +85,31 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		);
 	});
 
+	it('the agent-running jobs pass the provider secret to the setup action via `with:` (so pi can auth); enumerate/reap do not', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		// The propose + merge jobs forward the provider secret.
+		const proposeUses =
+			/agent-runner-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: advance one item/;
+		const mergeUses =
+			/agent-runner-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: advance the eligible pool/;
+		expect(text).toMatch(proposeUses);
+		expect(text).toMatch(mergeUses);
+		// The enumerate + reap jobs use the bare setup action (no agent, no secret).
+		expect(text).toMatch(/agent-runner-setup\n      - id: scan/);
+		expect(text).toMatch(
+			/agent-runner-setup\n      - name: reap merged remote/,
+		);
+	});
+
+	it('auth-json mode passes NO provider secret to the setup action (it uses auth.json)', () => {
+		const text = generateAdvanceLifecycleWorkflow({
+			...config,
+			authMode: 'auth-json',
+			providers: [],
+		});
+		expect(text).not.toMatch(/secrets\.[A-Z_]*API_KEY/);
+	});
+
 	it('is the PARAMETERISED seed: it ALSO passes the seed validator (advance-ci-template)', () => {
 		// The emitted workflow is the seed `advance-loop.yml.template`, parameterised
 		// — so it must satisfy the seed's OWN structural validator too (not just this

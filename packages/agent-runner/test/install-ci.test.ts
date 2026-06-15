@@ -18,6 +18,7 @@ import {
 	requiredSecretNames,
 	optionalSecretNames,
 	PR_IDENTITY_SECRET_NAME,
+	providerSecretsWithBlock,
 	orchestrateSecrets,
 	loadCIConfigFile,
 	resolveCIConfig,
@@ -256,6 +257,29 @@ describe('secret-orchestration logic (which secrets, deduplicated)', () => {
 			'AGENT_RUNNER_GH_TOKEN',
 		]);
 	});
+
+	it('providerSecretsWithBlock: a with: fragment in models-json mode, empty in auth-json / no-providers', () => {
+		const block = providerSecretsWithBlock(
+			baseConfig({
+				providers: [
+					{
+						name: 'a',
+						apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+						models: [{id: 'm'}],
+						builtin: true,
+					},
+				],
+			}),
+		);
+		expect(block).toContain('with:');
+		expect(block).toContain(
+			'ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}',
+		);
+		// auth-json mode has no provider keys here.
+		expect(providerSecretsWithBlock(baseConfig({authMode: 'auth-json'}))).toBe(
+			'',
+		);
+	});
 });
 
 // ─── config load / export round-trip ─────────────────────────────────────────
@@ -351,6 +375,32 @@ describe('composite setup action generation (both auth modes)', () => {
 		// models-json mode carries NO auth.json / OAuth refresh.
 		expect(action).not.toContain('auth.json');
 		expect(action).not.toContain('refresh-oauth-token');
+	});
+
+	it('models-json mode declares a provider-key INPUT and forwards it to $GITHUB_ENV (so pi can auth)', () => {
+		const action = generateSetupAction(modelsConfig);
+		// A top-level optional input named after the secret.
+		expect(action).toContain('inputs:');
+		expect(action).toMatch(/ANTHROPIC_API_KEY:\n\s+description:/);
+		expect(action).toContain('required: false');
+		// The export step maps the input into env, then appends non-empty to GITHUB_ENV.
+		expect(action).toContain('Export provider API key(s) to the environment');
+		expect(action).toContain(
+			'ANTHROPIC_API_KEY: ${{ inputs.ANTHROPIC_API_KEY }}',
+		);
+		expect(action).toContain('>> "$GITHUB_ENV"');
+	});
+
+	it('auth-json mode declares NO provider input and NO export step (it uses auth.json)', () => {
+		const action = generateSetupAction({
+			...modelsConfig,
+			authMode: 'auth-json',
+			providers: [],
+		});
+		expect(action).not.toContain('inputs:');
+		expect(action).not.toContain(
+			'Export provider API key(s) to the environment',
+		);
 	});
 
 	it('auth-json mode writes auth.json from PI_AUTH_JSON + runs the OAuth refresh (the sharp edge)', () => {

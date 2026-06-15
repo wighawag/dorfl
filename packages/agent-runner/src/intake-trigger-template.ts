@@ -58,6 +58,7 @@
 
 import {brand} from './brand.js';
 import type {ResolvedCIConfig} from './install-ci-core.js';
+import {providerSecretsWithBlock} from './install-ci-core.js';
 
 /** The capability id (the registry key + the emitted workflow file stem). */
 export const INTAKE_TRIGGER_CAPABILITY_ID = 'intake';
@@ -209,7 +210,10 @@ export function isAuthorTrusted(
  * {@link deriveIntakeFlags} unit-tests is what the workflow executes — they cannot
  * desync because the test asserts the SHELL derivation matches the function.
  */
-export function generateIntakeWorkflow(_config: ResolvedCIConfig): string {
+export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
+	// `intake <N>` runs the prompt→verdict decision (the agent), so it needs the
+	// provider secret(s) forwarded to `$GITHUB_ENV` by the setup action.
+	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # agent-runner — the ISSUE INTAKE trigger in CI (capability D: consider incoming
 # issues → slice/PRD, PLUS insertion point E: surface the review verdict into the
@@ -316,7 +320,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/agent-runner-setup${setupWith}
 
       - name: derive the per-outcome merge-vs-propose flags (gate × author-trust)
         id: policy

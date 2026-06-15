@@ -58,6 +58,7 @@
  */
 
 import type {ResolvedCIConfig} from './install-ci-core.js';
+import {providerSecretsWithBlock} from './install-ci-core.js';
 
 /** The capability id (the registry key + the emitted workflow file stem). */
 export const ADVANCE_LIFECYCLE_CAPABILITY_ID = 'advance-lifecycle';
@@ -88,8 +89,13 @@ export const ADVANCE_LIFECYCLE_WORKFLOW_PATH =
  * separate gc-sweep workflow is emitted.
  */
 export function generateAdvanceLifecycleWorkflow(
-	_config: ResolvedCIConfig,
+	config: ResolvedCIConfig,
 ): string {
+	// The agent-running jobs (propose / merge) pass the configured provider
+	// secret(s) to the setup action ONCE via `with:`; the action forwards them to
+	// `$GITHUB_ENV` so `pi` can authenticate (models-json mode). auth-json mode has
+	// no provider keys here (it uses auth.json), so the block is empty.
+	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # agent-runner — the ADVANCE LIFECYCLE loop in CI (capability C: auto-triage
 # observations + surface declared blockers + apply committed answers, PRD
@@ -259,7 +265,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/agent-runner-setup${setupWith}
       - name: advance one item in-place (propose ⇒ opens a PR)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. \`--propose\` can ONLY ride a matrix leg, never the merge
@@ -288,7 +294,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/agent-runner-setup${setupWith}
       - name: advance the eligible pool sequentially in-place (merge ⇒ rebase-chains to main)
         # In-place (no --isolated/--remote). \`--merge\` rides ONLY this single
         # sequential job (never a matrix leg), so rebase-chained merges to main

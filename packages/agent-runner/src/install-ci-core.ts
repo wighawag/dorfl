@@ -337,6 +337,32 @@ export function optionalSecretNames(config: ResolvedCIConfig): string[] {
 	return [PR_IDENTITY_SECRET_NAME].filter((name) => !required.has(name));
 }
 
+/**
+ * The `with:` block (YAML fragment, leading newline included) the AGENT-RUNNING CI
+ * jobs append to their `uses: ./.github/actions/agent-runner-setup` line to pass
+ * the configured provider API key secret(s) to the setup action ONCE — the action
+ * forwards them to `$GITHUB_ENV` so `pi` can authenticate. Indented to attach
+ * under a `      - uses: ...` step line (8 spaces for `with:`, 10 for each
+ * entry). Each entry maps the action input (named identically to the secret) to
+ * `${{ secrets.<NAME> }}`.
+ *
+ * Empty string when there are no provider keys (auth-json mode, or no providers),
+ * so the `uses:` line is emitted bare and unchanged. This is the SINGLE place the
+ * provider→`with:` shape lives, shared by every capability workflow generator, so
+ * no template re-derives it.
+ */
+export function providerSecretsWithBlock(config: ResolvedCIConfig): string {
+	const names =
+		config.authMode === 'models-json' ? requiredSecretNames(config) : [];
+	if (names.length === 0) {
+		return '';
+	}
+	const entries = names
+		.map((name) => `          ${name}: \${{ secrets.${name} }}`)
+		.join('\n');
+	return `\n        with:\n${entries}`;
+}
+
 /** The outcome of orchestrating one secret through the provider seam. */
 export interface SecretSetResult {
 	/** The secret env-var name. */
@@ -556,12 +582,21 @@ function harnessInstallStep(
  * already references this exact action name + path (`docs/ci/README.md`).
  *
  * The auth step branches on the mode: `models-json` writes a generated
- * `~/.pi/agent/models.json` inline (the conservative default); `auth-json` writes
+ * `~/.pi/agent/models.json` inline (the conservative default) AND exports each
+ * configured provider's API key from a same-named ACTION INPUT to `$GITHUB_ENV`,
+ * so the agent step (`pi`) can resolve the env var `models.json` references; the
+ * workflow passes the secrets ONCE via `with:` on the `uses:` line (no
+ * per-step / per-capability provider enumeration). `auth-json` writes
  * `~/.pi/agent/auth.json` from `$PI_AUTH_JSON` + runs the OAuth-refresh script
  * (the sharp edge). Deterministic: the same config produces byte-identical output.
  */
 export function generateSetupAction(config: ResolvedCIConfig): string {
 	let authStep: string;
+	// models-json mode declares one ACTION INPUT per distinct provider key (named
+	// identically to the secret / env var) and exports it to `$GITHUB_ENV`, so every
+	// later step inherits it. auth-json mode has no provider keys (it uses auth.json).
+	const providerKeyNames =
+		config.authMode === 'models-json' ? requiredSecretNames(config) : [];
 	if (config.authMode === 'auth-json') {
 		authStep = `\
     - name: Configure agent auth (auth.json)
@@ -585,6 +620,33 @@ export function generateSetupAction(config: ResolvedCIConfig): string {
 			null,
 			2,
 		);
+		// Map each provider-key INPUT into the step env, then append the non-empty
+		// ones to `$GITHUB_ENV` so the agent step inherits them. Values flow via env
+		// (never interpolated into the script body), and Actions masks the secret in
+		// logs. `models.json`'s `apiKey` is the env-var NAME; this puts the value there.
+		const exportEnvLines = providerKeyNames
+			.map((name) => `        ${name}: \${{ inputs.${name} }}`)
+			.join('\n');
+		const exportRunLines = providerKeyNames
+			.map(
+				(name) =>
+					`        if [ -n "\${${name}}" ]; then echo "${name}=\${${name}}" >> "$GITHUB_ENV"; fi`,
+			)
+			.join('\n');
+		const exportStep =
+			providerKeyNames.length > 0
+				? `\n
+    # Surface the configured provider API key(s) to the environment so the agent
+    # step (\`pi\`) can resolve the env var \`models.json\` references. The workflow
+    # passes the secret(s) via \`with:\` on the \`uses:\` line; we forward the
+    # non-empty one(s) to \`$GITHUB_ENV\` (Actions masks the value in logs).
+    - name: Export provider API key(s) to the environment
+      shell: bash
+      env:
+${exportEnvLines}
+      run: |
+${exportRunLines}`
+				: '';
 		authStep = `\
     - name: Configure agent models (models.json)
       shell: bash
@@ -592,7 +654,7 @@ export function generateSetupAction(config: ResolvedCIConfig): string {
         mkdir -p ~/.pi/agent
         cat > ~/.pi/agent/models.json << 'MODELS_EOF'
 ${indent(modelsJsonStr, 8)}
-        MODELS_EOF`;
+        MODELS_EOF${exportStep}`;
 	}
 
 	const installHarness = harnessInstallStep(
@@ -632,11 +694,31 @@ ${indent(modelsJsonStr, 8)}
       run: npm install -g agent-runner${installHarness}`;
 	}
 
+	// One optional ACTION INPUT per provider key (models-json mode), named
+	// identically to the secret/env var. Optional + default '' so a workflow that
+	// does not pass it (or auth-json mode, which declares none) is valid; the export
+	// step skips an empty value. auth-json mode declares no inputs.
+	const inputsBlock =
+		providerKeyNames.length > 0
+			? `inputs:
+${providerKeyNames
+	.map(
+		(name) =>
+			`  ${name}:
+    description: 'Provider API key, forwarded to the agent environment as ${name}.'
+    required: false
+    default: ''`,
+	)
+	.join('\n')}
+
+`
+			: '';
+
 	return `\
 name: Setup agent-runner
 description: Install Node.js, agent-runner, the agent harness, and configure AI provider auth
 
-runs:
+${inputsBlock}runs:
   using: composite
   steps:
     - name: Setup Node.js
