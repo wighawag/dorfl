@@ -400,7 +400,6 @@ describe('review-comment-fallback-on-unparsed-pr-url — PR opened but url unpar
 			recovering: false,
 			verify: PASS,
 			review: true,
-			autoMerge: true,
 			reviewGate: stubGate(parseReviewVerdict(AGENT_OUTPUT_WITH_REVIEW_FIELD)),
 			mode: 'merge', // merge mode opens no PR (provider-agnostic git)
 			providerInstance: provider,

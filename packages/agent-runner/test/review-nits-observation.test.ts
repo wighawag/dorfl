@@ -281,7 +281,6 @@ describe('review-nits-observation — the verdict/decision is identical with and
 			recovering: false,
 			verify: PASS,
 			review: true,
-			autoMerge: true,
 			reviewGate: stubGate(APPROVE_NO_NITS),
 			mode: 'merge',
 			env: gitEnv(),
@@ -299,7 +298,6 @@ describe('review-nits-observation — the verdict/decision is identical with and
 			recovering: false,
 			verify: PASS,
 			review: true,
-			autoMerge: true,
 			reviewGate: stubGate(APPROVE_WITH_NITS),
 			mode: 'merge',
 			env: gitEnv(),
@@ -329,13 +327,12 @@ describe('review-nits-observation — the MERGE path (no PR) still lands the obs
 			recovering: false,
 			verify: PASS,
 			review: true,
-			autoMerge: true,
 			reviewGate: stubGate(APPROVE_WITH_NITS),
 			mode: 'merge',
 			env: gitEnv(),
 		});
 
-		// merge proceeded (autoMerge on, approve) — no PR involved.
+		// merge proceeded (approve on a `merge` lands) — no PR involved.
 		expect(core.outcome).toBe('completed');
 		expect(core.integration?.mode).toBe('merge');
 		expect(core.integration?.mergedToMain).toBe(true);
@@ -380,7 +377,7 @@ describe('review-nits-observation — the fleet (`run`) path also writes it', ()
 
 	it('a `run` approve-with-nits writes the per-run observation to main (shared core)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
-		const config = configFor({review: true, autoMerge: true});
+		const config = configFor({review: true});
 		const result = await runOnce({
 			config,
 			report: scanProject(config),

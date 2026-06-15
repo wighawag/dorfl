@@ -167,8 +167,9 @@ being a special policy surface.
 
 `install-ci` does TWO sticky things: set auth secrets, and drop ONE fixed workflow
 shell. It is re-run only to rotate auth or upgrade the workflow itself. EVERYTHING a
-user might change their mind about (the gates above, `integration` propose/merge,
-`review`/`autoMerge`) is an `AGENT_RUNNER_*` env var / repo variable / committed
+user might change their mind about (the gates above, `integration` propose/merge —
+where `merge` auto-lands on a green gate / review approve and `propose` is a human
+checkpoint, no separate auto-merge knob — and `review`) is an `AGENT_RUNNER_*` env var / repo variable / committed
 `.agent-runner.json` key, edited WITHOUT re-running `install-ci`. The workflow is a
 thin shell that inherits repo config + optional env overrides.
 

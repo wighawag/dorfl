@@ -377,4 +377,16 @@ describe('help tiering — headline vs advanced/plumbing (ADR §7)', () => {
 		const workOnHelp = command('work-on').helpInformation();
 		expect(workOnHelp).toMatch(/Advanced \/ plumbing options:/);
 	});
+
+	it('the --auto-merge / --no-auto-merge flags are GONE from every command that exposed them', () => {
+		// autoMerge is hard-deleted: `merge` IS the auto-land mode, `propose` is the
+		// human checkpoint — there is no separate auto-merge sub-knob.
+		for (const name of ['do', 'complete', 'run']) {
+			const help = command(name).helpInformation();
+			expect(help).not.toContain('--auto-merge');
+			expect(help).not.toContain('--no-auto-merge');
+			// `--review` (the gate it sat beside) is still present.
+			expect(help).toContain('--review');
+		}
+	});
 });

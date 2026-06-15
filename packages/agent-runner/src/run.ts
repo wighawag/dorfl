@@ -895,7 +895,6 @@ async function runOneItem(
 				// only the gate SEAM is threaded through `ctx` (the CLI wires the prod
 				// `harnessReviewGate()` only when `config.review` is on).
 				review: config.review,
-				autoMerge: config.autoMerge,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
 				reviewGate: ctx.reviewGate,

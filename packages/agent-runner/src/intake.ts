@@ -1049,11 +1049,9 @@ async function dispatchSlice(params: {
 		// backlog item, not a build); skip the acceptance gate, exactly as the
 		// slicing transition does.
 		skipVerify: true,
-		// Default `propose` (the per-outcome KNOBS are a later slice). `autoMerge:
-		// true` so the EXPLICITLY-chosen mode proceeds as-is (a future `--merge-slice`
-		// still lands on main); the build gate's auto-merge downgrade is not this
-		// command's concern.
-		autoMerge: true,
+		// Default `propose` (the per-outcome KNOBS are a later slice). The
+		// EXPLICITLY-chosen mode proceeds as-is: a future `--merge-slice` lands on main
+		// (`merge` IS the auto-land mode, never downgraded).
 		mode: integration,
 		noPR,
 		providerInstance,
@@ -1160,7 +1158,6 @@ async function dispatchPrd(params: {
 		// An intake-emitted PRD has no `verify` floor of its own (it is a new spec,
 		// not a build), exactly as the slice branch + the slicing transition skip it.
 		skipVerify: true,
-		autoMerge: true,
 		mode: integration,
 		noPR,
 		providerInstance,

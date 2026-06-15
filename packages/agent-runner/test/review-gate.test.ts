@@ -8,6 +8,7 @@ import {
 	REPO_REJECTED_KEYS,
 	REPO_CONFIG_FILENAME,
 	resolveRepoConfig,
+	loadRepoConfig,
 } from '../src/repo-config.js';
 import {envOverrides, envVarName} from '../src/env-config.js';
 import {reviewFlagOverrides, doFlagOverrides} from '../src/do-config.js';
@@ -26,20 +27,22 @@ import {NullHarness, MODEL_PLACEHOLDER, type Harness} from '../src/harness.js';
  * Gate 2 (PR/code review) — the SEAM + config-resolution unit tests (pure logic,
  * no git). The do/complete WIRING (approve→integrate, block→needs-attention,
  * verify-runs-first, reviewMaxRounds exhaustion) lives in
- * `review-gate-pr.test.ts` (real git, sequential project). Here we pin: the four
+ * `review-gate-pr.test.ts` (real git, sequential project). Here we pin: the
  * config keys + their precedence, the verdict parser, the reviewModel override
  * reaching the launch via the existing `LaunchInput.model`/`substituteModel`
  * seam, and the reason formatters.
  */
 
-describe('config — the four Gate-2 keys (defaults + carry-through)', () => {
-	it('review + autoMerge default OFF; reviewMaxRounds defaults to 2', () => {
+describe('config — the Gate-2 keys (defaults + carry-through)', () => {
+	it('review default OFF; reviewMaxRounds defaults to 2', () => {
 		expect(DEFAULT_CONFIG.review).toBe(false);
-		expect(DEFAULT_CONFIG.autoMerge).toBe(false);
 		expect(DEFAULT_CONFIG.reviewMaxRounds).toBe(2);
 		expect(mergeConfig({}).review).toBe(false);
-		expect(mergeConfig({}).autoMerge).toBe(false);
 		expect(mergeConfig({}).reviewMaxRounds).toBe(2);
+	});
+
+	it('autoMerge is GONE from DEFAULT_CONFIG', () => {
+		expect('autoMerge' in DEFAULT_CONFIG).toBe(false);
 	});
 
 	it('reviewModel is unset by default (no forced review model)', () => {
@@ -51,35 +54,36 @@ describe('config — the four Gate-2 keys (defaults + carry-through)', () => {
 	it('carries the keys through mergeConfig when set', () => {
 		const merged = mergeConfig({
 			review: true,
-			autoMerge: true,
 			reviewModel: 'review/model',
 			reviewMaxRounds: 5,
 		});
 		expect(merged.review).toBe(true);
-		expect(merged.autoMerge).toBe(true);
 		expect(merged.reviewModel).toBe('review/model');
 		expect(merged.reviewMaxRounds).toBe(5);
 	});
 });
 
-describe('env-config — the four keys are coerced (typed, loud)', () => {
-	it('coerces review/autoMerge as booleans and reviewMaxRounds as a number', () => {
+describe('env-config — the keys are coerced (typed, loud)', () => {
+	it('coerces review as a boolean and reviewMaxRounds as a number', () => {
 		const env = {
 			AGENT_RUNNER_REVIEW: 'true',
-			AGENT_RUNNER_AUTO_MERGE: 'false',
 			AGENT_RUNNER_REVIEW_MODEL: 'env/review',
 			AGENT_RUNNER_REVIEW_MAX_ROUNDS: '3',
 		};
 		const o = envOverrides(env);
 		expect(o.review).toBe(true);
-		expect(o.autoMerge).toBe(false);
 		expect(o.reviewModel).toBe('env/review');
 		expect(o.reviewMaxRounds).toBe(3);
 	});
 
+	it('AGENT_RUNNER_AUTO_MERGE is inert — not a recognised env var', () => {
+		// autoMerge is gone, so its env var no longer resolves to any config key.
+		const o = envOverrides({AGENT_RUNNER_AUTO_MERGE: 'true'});
+		expect('autoMerge' in o).toBe(false);
+	});
+
 	it('names the env vars by the SCREAMING_SNAKE convention', () => {
 		expect(envVarName('review')).toBe('AGENT_RUNNER_REVIEW');
-		expect(envVarName('autoMerge')).toBe('AGENT_RUNNER_AUTO_MERGE');
 		expect(envVarName('reviewModel')).toBe('AGENT_RUNNER_REVIEW_MODEL');
 		expect(envVarName('reviewMaxRounds')).toBe(
 			'AGENT_RUNNER_REVIEW_MAX_ROUNDS',
@@ -106,22 +110,34 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 		writeFileSync(join(repo, REPO_CONFIG_FILENAME), JSON.stringify(value));
 	}
 
-	it('treats review/autoMerge/reviewModel/reviewMaxRounds as repo-appropriate', () => {
-		for (const key of [
-			'review',
-			'autoMerge',
-			'reviewModel',
-			'reviewMaxRounds',
-		]) {
+	it('treats review/reviewModel/reviewMaxRounds as repo-appropriate', () => {
+		for (const key of ['review', 'reviewModel', 'reviewMaxRounds']) {
 			expect(REPO_ALLOWED_KEYS).toContain(key);
 			expect(REPO_REJECTED_KEYS).not.toContain(key);
 		}
+		// autoMerge is GONE — no longer a recognised per-repo key.
+		expect(REPO_ALLOWED_KEYS).not.toContain('autoMerge');
+	});
+
+	it('a stale `autoMerge` key in a per-repo file is silently inert', () => {
+		// No hard error, no deprecation warning: an unrecognised key is dropped
+		// (neither honoured into config nor reported as rejected).
+		writeRepoConfig({review: true, autoMerge: false});
+		const loaded = loadRepoConfig(repo);
+		expect('autoMerge' in loaded.config).toBe(false);
+		expect(loaded.rejected).not.toContain('autoMerge');
+		expect(loaded.message).toBeUndefined();
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global: mergeConfig({}),
+		});
+		expect('autoMerge' in resolved.config).toBe(false);
+		expect(resolved.config.review).toBe(true);
 	});
 
 	it('honours the keys from a per-repo file', () => {
 		writeRepoConfig({
 			review: true,
-			autoMerge: true,
 			reviewModel: 'repo/review',
 			reviewMaxRounds: 4,
 		});
@@ -130,7 +146,6 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 			global: mergeConfig({}),
 		});
 		expect(resolved.config.review).toBe(true);
-		expect(resolved.config.autoMerge).toBe(true);
 		expect(resolved.config.reviewModel).toBe('repo/review');
 		expect(resolved.config.reviewMaxRounds).toBe(4);
 	});
@@ -179,24 +194,20 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 		).toBe(false);
 	});
 
-	it('resolves autoMerge / reviewModel / reviewMaxRounds the SAME chain', () => {
+	it('resolves reviewModel / reviewMaxRounds the SAME chain', () => {
 		writeRepoConfig({
-			autoMerge: false,
 			reviewModel: 'repo/m',
 			reviewMaxRounds: 2,
 		});
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
-			global: mergeConfig({autoMerge: true}),
+			global: mergeConfig({}),
 			env: {AGENT_RUNNER_REVIEW_MODEL: 'env/m'},
 			flags: reviewFlagOverrides({
-				autoMerge: true,
 				reviewMaxRounds: '7',
 			}),
 		});
-		// flag autoMerge true beats per-repo false; env reviewModel beats per-repo;
-		// flag reviewMaxRounds 7 beats per-repo 2.
-		expect(resolved.config.autoMerge).toBe(true);
+		// env reviewModel beats per-repo; flag reviewMaxRounds 7 beats per-repo 2.
 		expect(resolved.config.reviewModel).toBe('env/m');
 		expect(resolved.config.reviewMaxRounds).toBe(7);
 	});
@@ -207,13 +218,11 @@ describe('reviewFlagOverrides / doFlagOverrides — flag mapping', () => {
 		expect(reviewFlagOverrides({})).toEqual({});
 		const o = reviewFlagOverrides({
 			review: true,
-			autoMerge: false,
 			reviewModel: 'x',
 			reviewMaxRounds: '3',
 		});
 		expect(o).toEqual({
 			review: true,
-			autoMerge: false,
 			reviewModel: 'x',
 			reviewMaxRounds: 3,
 		});

@@ -60,11 +60,10 @@ import {isAncestor} from './gc.js';
  * autonomous = set ⇒ surface-on-main + push-branch routing) — DATA, never a
  * caller-identity flag.
  *
- * **Slice 1 of the run/do convergence is a PURE REFACTOR.** The band below is
- * byte-for-byte the logic that previously lived inline in `performComplete`,
- * including the current `autoMerge`-off `merge`→`propose` downgrade preserved
- * VERBATIM (the `autoMerge` concept-collision is fenced OUT of this work —
- * `work/findings/automerge-concept-collision-merge-vs-propose.md`). The effective
+ * The band below was extracted (a pure refactor) from `performComplete`. A
+ * resolved `merge` ALWAYS lands on a green gate (and, with review on, an
+ * `approve`); `propose` always leaves the merge to a human. There is no
+ * `merge`→`propose` downgrade — `merge` IS the auto-land mode. The effective
  * mode the core resolved is carried in {@link IntegrationCoreResult.integration}'s
  * `mode`; the tail reads it from there, NEVER from the requested mode.
  */
@@ -250,8 +249,6 @@ export interface IntegrationCoreInput {
 	review?: boolean;
 	/** The review-gate SEAM (injectable). Required when `review` is on. */
 	reviewGate?: ReviewGate;
-	/** On a Gate-2 approve, allow a resolved `merge` to proceed autonomously. */
-	autoMerge?: boolean;
 	/** The model the REVIEW agent runs on (de-correlated from the builder). */
 	reviewModel?: string;
 	/** Bound the revise↔review loop (Gate 2). Defaults to 2. */
@@ -396,9 +393,9 @@ export interface IntegrationCoreResult {
 	/** The completion commit message that was authored, on success. */
 	commitMessage?: string;
 	/**
-	 * The integration result — carries the EFFECTIVE mode (post-downgrade) + the
-	 * PR url. Present on the success path; the tail reads `integration.mode` to
-	 * decide its switch/ff behaviour, NEVER the requested mode.
+	 * The integration result — carries the resolved mode + the PR url. Present on
+	 * the success path; the tail reads `integration.mode` to decide its switch/ff
+	 * behaviour, NEVER the requested mode.
 	 */
 	integration?: IntegrateResult;
 	/**
@@ -451,9 +448,9 @@ export async function performIntegration(
 	// emitted no `review` field, so the post is skipped (no-op). The verdict/routing
 	// decision uses neither.
 	let approvedVerdict: ReviewVerdict | undefined;
-	// `let` (not `const`): Gate 2's `autoMerge`-off policy may DOWNGRADE a resolved
-	// `merge` to `propose` on an approve (review gates, a human merges) below.
-	let mode = input.mode;
+	// The resolved integration mode. `merge` lands automatically on a green gate
+	// (and an `approve` when review is on); `propose` leaves the merge to a human.
+	const mode = input.mode;
 	// The fresh-worktree gate (slice `gate-on-rebased-tip-fresh-worktree`): when ON
 	// the deterministic acceptance gate (`prepare`+`verify`) does NOT run here on
 	// the agent's PRE-rebase `cwd`; instead it runs LATER, in a clean throwaway
@@ -666,10 +663,10 @@ export async function performIntegration(
 		if (reviewOutcome.kind === 'blocked') {
 			return reviewOutcome.result;
 		}
-		// approve: carry the verdict (post-integrate PR comment), write the per-run
+		// approve: carry the verdict (post-integrate PR comment) and write the per-run
 		// non-blocking-nits observation INTO `cwd` BEFORE the done-move + atomic commit
-		// (so it is swept into that SAME done-commit), and honour the autoMerge-off
-		// merge→propose downgrade. All UNCHANGED from today's OFF-path order.
+		// (so it is swept into that SAME done-commit). A resolved `merge` then lands
+		// automatically (`merge` IS the auto-land mode); `propose` leaves it to a human.
 		approvedVerdict = reviewOutcome.verdict;
 		writeReviewNitsObservation({
 			cwd,
@@ -677,13 +674,6 @@ export async function performIntegration(
 			findings: reviewOutcome.verdict?.findings ?? [],
 			note,
 		});
-		if (reviewOutcome.downgradeMerge && mode === 'merge') {
-			note(
-				`autoMerge is off — leaving the merge to a human (proposing '${slug}' ` +
-					'instead of auto-merging an approved review).',
-			);
-			mode = 'propose';
-		}
 	}
 
 	// Read the title now, BEFORE the move, for the default commit summary AND the
@@ -1070,7 +1060,8 @@ export async function performIntegration(
 			// the merged tree). Route a BLOCK exactly as the OFF-path front review does
 			// (only the reviewed tree moved, not the routing). On APPROVE: carry the
 			// verdict (post-integrate PR comment), write the per-run non-blocking-nits
-			// observation, and honour the autoMerge-off merge→propose downgrade.
+			// observation. A resolved `merge` then lands automatically; `propose` leaves
+			// the merge to a human.
 			if (gated.review) {
 				if (gated.review.kind === 'blocked') {
 					// The done-move was already committed (steps 2–3), so the slug sits in
@@ -1099,13 +1090,6 @@ export async function performIntegration(
 					if (nitsAfter.length > nitsBefore.length) {
 						await gitHard(['commit', '-q', '--amend', '--no-edit'], cwd, env);
 					}
-				}
-				if (gated.review.downgradeMerge && mode === 'merge') {
-					note(
-						`autoMerge is off — leaving the merge to a human (proposing '${slug}' ` +
-							'instead of auto-merging an approved review).',
-					);
-					mode = 'propose';
 				}
 			}
 		}
@@ -2259,14 +2243,13 @@ async function reconcileDivergentDoneMove(params: {
 /**
  * The outcome of the Gate-2 review run ({@link runGate2Review}): either it BLOCKED
  * (a ready-to-return {@link IntegrationCoreResult}) or it APPROVED (the verdict to
- * carry + whether the autoMerge-off merge→propose downgrade applies).
+ * carry).
  */
 type Gate2ReviewOutcome =
 	| {kind: 'blocked'; result: IntegrationCoreResult}
 	| {
 			kind: 'approved';
 			verdict: ReviewVerdict | undefined;
-			downgradeMerge: boolean;
 	  };
 
 /**
@@ -2288,8 +2271,8 @@ type Gate2ReviewOutcome =
  *
  * It NEVER mutates `mode` or writes the nits observation itself (those are the
  * caller's concern, because WHEN they happen differs by path — pre-commit on OFF,
- * post-commit-amend on ON); it returns the verdict + the downgrade flag and lets
- * the caller place those effects correctly for its band position.
+ * post-commit-amend on ON); it returns the verdict and lets the caller place those
+ * effects correctly for its band position.
  */
 async function runGate2Review(params: {
 	/** The tree the review AGENT inspects (pre-rebase `cwd` OFF; rebased tip ON). */
@@ -2384,10 +2367,6 @@ async function runGate2Review(params: {
 	return {
 		kind: 'approved',
 		verdict: lastVerdict,
-		// approve + `autoMerge` OFF → the caller DOWNGRADEs a resolved `merge` to
-		// `propose` (review gated, but the autonomous merge is opt-in repo policy, so a
-		// human does the merge). With `autoMerge` ON the resolved `merge` proceeds.
-		downgradeMerge: !input.autoMerge,
 	};
 }
 
@@ -2403,8 +2382,8 @@ interface FreshGateResult {
 	 * The Gate-2 REVIEW outcome, present ONLY when a review gate was supplied to the
 	 * fresh gate AND `verify` passed (so the review ran AFTER it on the rebased tip).
 	 * The caller routes a `blocked` and acts on an `approved` (carry the verdict,
-	 * write the nits observation, honour the autoMerge-off downgrade). Absent when no
-	 * review was requested or `verify` failed (the review never ran).
+	 * write the nits observation). Absent when no review was requested or `verify`
+	 * failed (the review never ran).
 	 */
 	review?: Gate2ReviewOutcome;
 }

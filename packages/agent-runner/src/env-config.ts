@@ -95,7 +95,6 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	prepare: 'list',
 	verify: 'list',
 	review: 'boolean',
-	autoMerge: 'boolean',
 	reviewModel: 'string',
 	reviewMaxRounds: 'number',
 	slicerLoop: 'boolean',
