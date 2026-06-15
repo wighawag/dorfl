@@ -297,6 +297,7 @@ export function inPlaceStrategy(options: {
 				const rebase = rebaseContinuedBranchOntoMain(
 					checkout,
 					`${arbiter}/main`,
+					slug,
 					env,
 				);
 				if (rebase.kind === 'conflict') {
@@ -314,6 +315,7 @@ export function inPlaceStrategy(options: {
 							arbiter,
 							mainRef: `${arbiter}/main`,
 							expectedRemoteTip,
+							slug,
 							env,
 						});
 						if (pushed.kind === 'conflict') {
