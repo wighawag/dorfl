@@ -90,6 +90,13 @@ const RACE_SENSITIVE = [
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
 	'test/needs-attention-surface-on-main.test.ts',
+	// The after-commit CONTINUE-site tree-less surface tests (`moved:false` →
+	// `surface-unmoved`): drive real git against a --bare arbiter AND write main
+	// via the surface-on-main CAS publish; the `moved:false` assertion flakes under
+	// file-parallel pressure (occasionally saw `needs-attention` instead of the
+	// honest `surface-unmoved`). Keep it out of that pressure for the same
+	// deterministic claim/main-CAS reasoning as needs-attention-surface-on-main.test.ts.
+	'test/surface-treeless-moved-false.test.ts',
 	// Drives real git against a --bare arbiter AND writes main (the consolidated
 	// bounce push + on-main surface); same determinism reasoning as above.
 	'test/centralise-bounce-branch-push.test.ts',
