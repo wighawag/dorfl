@@ -146,9 +146,24 @@ jobs:
             slice_flag="--merge-slice"
           fi
 
+          # ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose):
+          # derived from the SAME ${trusted} case above (one author-trust read,
+          # two consumers — the slice/PRD modes AND the stamp — so they cannot
+          # desync). `intake` STAMPS this onto the emitted PRD/slice frontmatter
+          # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
+          # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
+          # so a later auto-slice/auto-build of an untrusted-origin artifact still
+          # forces a human becomes-code checkpoint (the laundering gap is closed).
+          if [ "${trusted}" = "true" ]; then
+            origin_trust_flag="--origin-trust=trusted"
+          else
+            origin_trust_flag="--origin-trust=untrusted"
+          fi
+
           echo "prd_flag=${prd_flag}" >> "$GITHUB_OUTPUT"
           echo "slice_flag=${slice_flag}" >> "$GITHUB_OUTPUT"
-          echo "intake policy: author_association='${AUTHOR_ASSOCIATION:-}' trusted=${trusted} → ${prd_flag} ${slice_flag}"
+          echo "origin_trust_flag=${origin_trust_flag}" >> "$GITHUB_OUTPUT"
+          echo "intake policy: author_association='${AUTHOR_ASSOCIATION:-}' trusted=${trusted} → ${prd_flag} ${slice_flag} ${origin_trust_flag}"
 
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -163,4 +178,5 @@ jobs:
           agent-runner intake "${{ github.event.issue.number }}" \
             "${{ steps.policy.outputs.prd_flag }}" \
             "${{ steps.policy.outputs.slice_flag }}" \
+            "${{ steps.policy.outputs.origin_trust_flag }}" \
             --arbiter origin

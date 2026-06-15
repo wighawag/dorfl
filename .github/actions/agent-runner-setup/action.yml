@@ -15,12 +15,24 @@ runs:
         git config user.name "agent-runner[bot]"
         git config user.email "agent-runner[bot]@users.noreply.github.com"
 
-    - name: Install agent-runner
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Add pnpm global bin to PATH
       shell: bash
-      run: npm install -g agent-runner
+      run: |
+        pnpm setup
+        echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"
+
+    - name: Install dependencies and build agent-runner
+      shell: bash
+      run: |
+        pnpm install
+        pnpm -r build
+        cd packages/agent-runner && pnpm link --global
     - name: Install agent harness (pi)
       shell: bash
-      run: npm install -g @mariozechner/pi-coding-agent
+      run: pnpm add -g @mariozechner/pi-coding-agent
 
     - name: Configure agent models (models.json)
       shell: bash
