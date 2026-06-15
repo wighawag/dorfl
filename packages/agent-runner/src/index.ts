@@ -608,6 +608,18 @@ export {
 } from './advance-ci-template.js';
 
 export type {
+	BuildSliceTickProblem,
+	BuildSliceTickValidation,
+} from './build-slice-tick-template.js';
+export {
+	BUILD_SLICE_TICK_CAPABILITY_ID,
+	BUILD_SLICE_TICK_CAPABILITY_LABEL,
+	BUILD_SLICE_TICK_WORKFLOW_PATH,
+	generateBuildSliceTickWorkflow,
+	validateBuildSliceTickWorkflow,
+} from './build-slice-tick-template.js';
+
+export type {
 	AuthMode,
 	ProviderEntry,
 	CIConfigFile,
