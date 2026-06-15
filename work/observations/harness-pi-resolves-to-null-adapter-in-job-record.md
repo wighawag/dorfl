@@ -1,5 +1,5 @@
 ---
-title: A repo configured `harness: "pi"` records `harness.adapter: "null"` in the job record — the null/shell adapter shell-launches pi, so work happens, but the recorded adapter + the missing pi session pointer are confusing for status/--watch/gc liveness
+title: A repo configured `harness: "pi"` records `harness.adapter: "null"` in the job record, and the record carries no `harness.session` pointer — the session .jsonl DOES exist (under ~/.pi/agent/sessions/), but status/--watch/gc can't follow it from the record without re-deriving the path
 date: 2026-06-15
 status: open
 ---
@@ -15,7 +15,9 @@ During a drive, the live job record `…/install-ci-build-slice-tick-workflow.js
 even though the repo's `.agent-runner.json` (in the same job worktree) declares `"harness": "pi"`. The build agent IS doing real work (the worktree's vitest `results.json` shows the agent's new `build-slice-tick-template.test.ts` passing), so this is NOT "no agent ran" — the null/shell adapter shell-launches pi and the agent builds. The confusion is purely in the RECORD + observability:
 
 - The job record names adapter `null`, not `pi`, so `status`/`gc` re-derive liveness from the null adapter's PID-only signal, NOT from a pi session handle.
-- There is NO `harness.session` pointer (the pi session dir/log path the pi adapter records), so `do --watch` / any session-log tailer has nothing to tail, and there is no `.jsonl` to find when auditing "which session did this work?". (This is what made tracing the agent's session impossible during the drive.)
+- There is NO `harness.session` pointer IN THE JOB RECORD JSON (the pi session dir/log path the pi adapter would record), so `do --watch` / any session-log tailer reading the record has nothing to point at, and `status`/`gc` cannot re-derive liveness from a recorded pi session handle.
+
+> CORRECTION (verified after first writing this): the session `.jsonl` files DO exist and are well-organised — under `~/.pi/agent/sessions/<cwd-encoded-dir>/<slug>-<id>.jsonl`, one per actor (build agent per job worktree, e.g. `--home-wighawag-.agent-runner-work-…__install-ci-close-job-workflow--/install-ci-close-job-workflow-….jsonl`; review agent per fresh-gate tip, e.g. `--tmp-agent-runner-fresh-gate-XXXX-tip--/<slug>-review-….jsonl`). My earlier claim “there is no `.jsonl` to find / tracing the session was impossible” was WRONG — I was looking in `~/.local/share/pi` and `~/.agent-runner/…` instead of `~/.pi/agent/sessions/`. So the file EXISTS at a predictable path; the actual (smaller) gap is only that the JOB-RECORD JSON does not carry a `harness.session` pointer to it, so a record-reader (status/--watch/gc) can't follow it without independently re-deriving the sessions-dir + cwd-encoded path.
 
 ## Why it matters
 
