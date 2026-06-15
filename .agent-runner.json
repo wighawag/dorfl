@@ -2,6 +2,11 @@
   "prepare": "pnpm install --frozen-lockfile",
   "verify": "pnpm format:check && pnpm build && pnpm test",
   "harness": "pi",
-  "autoBuild": false,
-  "autoSlice": false
+  "autoBuild": true,
+  "autoSlice": true,
+  "observationTriage": "auto",
+  "surfaceBlockers": true,
+  "review": true,
+  "autoMerge": false,
+  "integration": "propose"
 }
