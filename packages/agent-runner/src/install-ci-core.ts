@@ -159,7 +159,7 @@ export type GitHubCIContext = CIProviderContext;
  * is repo-relative (under the output base — `.github/` or `.fake/`).
  */
 export interface EmittedFile {
-	/** Path relative to the output base (e.g. `workflows/build-tick.yml`). */
+	/** Path relative to the output base (e.g. `workflows/advance-lifecycle.yml`). */
 	path: string;
 	/** The file's full text content. */
 	content: string;
@@ -167,14 +167,14 @@ export interface EmittedFile {
 
 /**
  * A capability emitter: a per-capability module that, given the resolved config,
- * returns the workflow file(s) for its capability. The four sibling capability
- * slices (build-tick, advance-lifecycle, intake, close-job) each ADD one of these
+ * returns the workflow file(s) for its capability. The sibling capability
+ * slices (advance-lifecycle, intake, close-job) each ADD one of these
  * as a NEW self-registering module — NOT an edit to a shared central
  * list/switch — so they stay file-orthogonal and mergeable in parallel
  * (WORK-CONTRACT slice-quality / `to-slices` §3).
  */
 export interface CapabilityEmitter {
-	/** A stable id for the capability (e.g. `build-slice-tick`). */
+	/** A stable id for the capability (e.g. `advance-lifecycle`). */
 	id: string;
 	/** Human-readable label for the wizard's capability selection. */
 	label: string;

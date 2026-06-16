@@ -80,6 +80,70 @@ export function branchAheadOf(
 	return !isAncestor;
 }
 
+/**
+ * Arbiter-authoritative continue-detection: like {@link branchAheadOf}, but
+ * first asks the arbiter (`git ls-remote <arbiterRemote> refs/heads/<branch>`)
+ * whether the kept branch EXISTS — so a STALE local remote-tracking ref
+ * (`refs/remotes/<arbiter>/<branch>` or a bare mirror's `refs/heads/<branch>`)
+ * pointing at a branch already DELETED on the arbiter (by `requeue --reset`, by
+ * the merge-reap, or cross-machine by `gc --remote-branches`) can no longer
+ * fool the onboard into "continue". This is the READ-side backstop that pairs
+ * with the WRITE-side write-through ordering at every delete site
+ * (local-ref-first, then `git push <arbiter> --delete`): write-through keeps
+ * SAME-MACHINE state in sync at the source; this catches the CROSS-MACHINE
+ * residue at the read (the other machine cannot touch this machine's local
+ * tracking refs). A plain `git remote prune` does NOT cover this — verified a
+ * no-op on the bare hub mirror, which has no `remote.origin.fetch` refspec for
+ * the orphaned `refs/remotes/origin/*` namespace.
+ *
+ * The decision rules, in order:
+ *   - `git ls-remote <arbiterRemote> refs/heads/<branch>` exits 0 with EMPTY
+ *     stdout (branch absent on the arbiter) ⇒ NOT ahead (fresh cut). This is
+ *     the bug-fix case: a stale local ref CANNOT override the arbiter's truth.
+ *   - `ls-remote` exits 0 with a sha ⇒ delegate to {@link branchAheadOf} on
+ *     the local refs (the existing predicate: ref exists AND not an ancestor
+ *     of main). The arbiter-present case is the normal continue path.
+ *   - `ls-remote` exits non-zero (unreachable arbiter / offline) ⇒ fall back
+ *     to {@link branchAheadOf} on the local refs — the best the read can do
+ *     when the arbiter cannot answer (same direction as today).
+ *
+ * `branch` is the unqualified branch name on the arbiter (e.g.
+ * `work/slice-<slug>`); `branchRef` + `mainRef` are the local refs the
+ * arbiter-present delegate uses (in-place clone: `<arbiter>/<branch>` /
+ * `<arbiter>/main`; bare hub mirror: `<branch>` / `main`). `arbiterRemote` is
+ * the remote NAME to ls-remote (e.g. `origin` for the mirror, `arbiter` for an
+ * in-place clone with the conventional remote name).
+ */
+export function branchAheadOfArbiter(options: {
+	cwd: string;
+	/** The remote NAME to `ls-remote` (the arbiter as known to this repo). */
+	arbiterRemote: string;
+	/** Unqualified branch name on the arbiter (e.g. `work/slice-<slug>`). */
+	branch: string;
+	/** The local ref to read for the ahead-of-main check (when arbiter says present). */
+	branchRef: string;
+	/** The local main ref to compare against. */
+	mainRef: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): boolean {
+	const {cwd, arbiterRemote, branch, branchRef, mainRef, env} = options;
+	const ls = gitSoft(['ls-remote', '--heads', arbiterRemote, branch], cwd, env);
+	if (ls.status === 0) {
+		// Reachable arbiter: its answer is AUTHORITATIVE. Empty ⇒ branch absent
+		// ⇒ no continue (a stale local ref cannot resurrect a deleted branch).
+		if (ls.stdout.trim() === '') {
+			return false;
+		}
+		// Present on the arbiter ⇒ use the existing local-ref predicate to decide
+		// ahead-of-main (which is how "there is work to continue" is defined).
+		return branchAheadOf(cwd, branchRef, mainRef, env);
+	}
+	// Unreachable arbiter / offline — fall back to the local-ref answer (the
+	// best the read can do when the arbiter cannot answer; same direction as
+	// before this backstop existed).
+	return branchAheadOf(cwd, branchRef, mainRef, env);
+}
+
 /** The result of rebasing a continued branch onto the freshly-fetched main. */
 export interface ContinueRebaseResult {
 	/** `clean` — the rebase replayed onto main with no conflict. */
