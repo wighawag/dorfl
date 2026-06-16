@@ -47,11 +47,3 @@ CRITICAL non-regression (intentional design point in `prepare.ts` + `config.ts`)
 > SEAM TO TEST AT: the config-resolution / pre-claim path with fixture repos — (a) lockfile present + no prepare + fresh gate on ⇒ STOP before claim; (b) verify unset ⇒ STOP before claim; (c) no lockfile + no prepare ⇒ proceeds (no guard); (d) `--no-fresh-worktree-gate` clears the prepare-guard. Assert no claim/build happens when the guard trips. No network.
 >
 > DONE: the guard fires only on statically-unrunnable gates, never on the intentional no-deps case, no correct work is routed to needs-attention for this reason, and `pnpm -r build && pnpm -r test && pnpm format:check` passes. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
-
-## Needs attention
-
-agent failed: 401 Unauthorized
-
-## Needs attention
-
-acceptance gate failed (exit 1) on the rebased tip
