@@ -65,11 +65,11 @@ The PRD is a launch snapshot (see the `to-prd` skill). Now that the work is slic
 - The slices now own _what to build_ (Implementation/Testing detail) — remove those sections from the PRD.
 - Any **durable rationale** worth keeping (the _why_ of a decision) is RELOCATED to an ADR (`docs/adr/<slug>.md`), not deleted.
 - The PRD settles to its durable framing: Problem / Solution / User Stories / Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that detail moved to slices/ADRs.
-- **Mark the PRD as sliced** so it's clear it has been incorporated: add a `sliced: <YYYY-MM-DD>` line to its frontmatter (and/or a top banner note "Sliced into work/backlog/ on <date> — detail trimmed to slices/ADRs"). A reader then knows the PRD is a launched-and-sliced snapshot, not a pending plan.
+- **Move the PRD to `work/prd-sliced/`** to record that it has been sliced: `git mv work/prd/<slug>.md work/prd-sliced/<slug>.md` (residence in `work/prd-sliced/` IS sliced-ness — the build-machine `done/` analogue for PRDs, the sole signal). Do NOT add a `sliced:` frontmatter marker: that marker was removed from the protocol; the folder is the source of truth. (On the agent/runner path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock slicing path.)
 
 This is a hand-off transition, not ongoing maintenance — after this single trim the PRD is stable because the stale-prone part was relocated, not because it is kept in sync. (Nothing is lost: detail → slices; rationale → ADR.)
 
-**Git protocol:** do NOT stage/commit/push — leave the new/edited files unstaged so the user can inspect them. Report the exact paths written (and the trimmed PRD).
+**Git protocol:** do NOT commit/push — leave the work for the user to inspect. The one exception is the PRD `prd/ → prd-sliced/` relocation above, which is a `git mv` (so it is staged as a rename); leave every other new/edited file unstaged. Report the exact paths written (and the trimmed + relocated PRD).
 
 ## The on-disk contract
 
