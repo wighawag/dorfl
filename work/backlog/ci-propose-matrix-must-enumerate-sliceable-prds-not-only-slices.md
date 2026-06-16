@@ -3,7 +3,6 @@ title: the CI advance-lifecycle PROPOSE-mode matrix must enumerate sliceable PRD
 slug: ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices
 blockedBy: []
 covers: []
-needsAnswers: true
 ---
 
 ## What to build
@@ -22,20 +21,16 @@ GOAL: make a ready, ungated, sliceable PRD reachable by the DEFAULT scheduled (p
 
 This is a fix along the `scan --json` → `jq` → matrix path plus the workflow template(s) that emit that path. As of 2026-06-16 THREE templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `advance-ci-template.ts`, `build-slice-tick-template.ts`) — see Open-questions Q3 for which are live (the `build-slice-tick` deletion is in-progress, NOT yet landed). It is FILE-ADJACENT to the gate-env slices on `advance-lifecycle-template.ts` (see Blocked by / Open questions).
 
-## Open questions
+## Decisions (resolved by the maintainer, 2026-06-16)
 
-Resolve before building (`needsAnswers: true`):
+1. **Approach → (a): surface sliceable PRDs in `scan --json` and union them into the propose matrix as `prd:` legs.** Extend the `scan`/`cwd-section` JSON to ALSO report the sliceable-PRD pool (reuse `sliceablePrds` + the `work/prd` vs `work/prd-sliced` read; resolve `autoSlice` per-repo exactly as `scanMirrorPool` does — do NOT fork the predicate), then update the `jq` in the live template(s) to also emit `"prd:" + .slug` for sliceable PRDs. Surgical, keeps the propose-matrix shape, one leg per item. (Option (b), running `-n` auto-pick on the cron tick, was rejected: it loses the one-PR-per-item matrix parallelism.)
+2. **JSON shape → separate `prds[]` array.** The new pool lives under its own key (e.g. `.repos[].prds[]` and `.cwd.repo.prds[]`), each entry carrying at least `{slug, eligibility:{eligible}}` so the `jq` filter mirrors the slice one (`select(.eligibility.eligible == true) | "prd:" + .slug`). Do NOT reuse the slice-only `items[]` with a discriminator (slices and PRDs are different verbs and project to different prefixes; a separate key avoids polluting `items[]` that other consumers read).
 
-1. **Which approach?** Two ways to make PRDs reachable on the cron tick:
-   - **(a) Surface sliceable PRDs in `scan --json` and union them into the propose matrix as `prd:` legs.** Extend the `scan`/`cwd-section` JSON to ALSO report the sliceable-PRD pool (reuse `sliceablePrds` + the `work/prd` vs `work/prd-sliced` read; resolve `autoSlice` per-repo exactly as `scanMirrorPool` does — do NOT fork the predicate), then update the `jq` in the three templates to also emit `"prd:" + .slug` for sliceable PRDs. Surgical, keeps the propose-matrix shape, one leg per item. PREFERRED lean.
-   - **(b) Run the `-n` auto-pick driver on the cron tick** (which already enumerates PRDs via `scanMirrorPool`) instead of the slice-only propose matrix. Larger change to the workflow shape (loses the one-PR-per-item matrix parallelism for the scheduled tick); rejected unless (a) is infeasible.
-   Decide (a) vs (b). The acceptance criteria below assume (a).
-2. **Does the new `scan --json` PRD pool belong under a new top-level key (e.g. `.repos[].prds[]` / `.cwd.repo.prds[]`) or reuse `items[]` with a discriminator?** A separate key is cleaner (slices and PRDs are different verbs and the `jq` projects them to different prefixes) and avoids polluting the existing slice-only `items[]` that other consumers may read. Lean: separate `prds[]` array carrying at least `{slug, eligibility:{eligible}}` so the `jq` filter mirrors the slice one.
-3. **Three templates touch this `jq`** (`advance-lifecycle-template.ts`, `build-slice-tick-template.ts`, `advance-ci-template.ts`). All THREE still exist as of 2026-06-16 (verified). The sibling slice `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` (currently IN-PROGRESS, NOT landed) DELETES `build-slice-tick-template.ts` + its capability. So: if THAT slice lands first, edit only the two survivors (`advance-lifecycle`, `advance-ci`); if it has not landed when this is built, either edit all three OR (cleaner) order this AFTER the deletion via `blockedBy` so you never touch the doomed `build-slice-tick-template.ts`. DRIFT-CHECK at build time: `ls packages/agent-runner/src/build-slice-tick-template.ts` — edit it only if it still exists. Do NOT resurrect it if gone, and do NOT add PRD-enumeration to a template that is about to be deleted.
+## Build-time note: which templates to edit (NOT an open question — an ordering courtesy)
+
+Three templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `advance-ci-template.ts`, `build-slice-tick-template.ts`); all three exist as of 2026-06-16. The sibling slice `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` (IN-PROGRESS) DELETES `build-slice-tick-template.ts`. RECOMMENDED ORDERING: build this AFTER that deletion lands (see Blocked by) so you only update the two survivors and never add PRD-enumeration to a doomed file. DRIFT-CHECK at build time: `ls packages/agent-runner/src/build-slice-tick-template.ts` — edit it only if it still exists; never resurrect it if gone.
 
 ## Acceptance criteria
-
-> Assume Open-questions A1 = (a), A2 = separate `prds[]` key. Adjust if the maintainer picks otherwise.
 
 - [ ] `agent-runner scan --json` reports the sliceable-PRD pool for each repo (and the cwd section), gated on the per-repo resolved `autoSlice`, REUSING the existing `sliceablePrds` predicate + the `work/prd`/`work/prd-sliced` read (no forked predicate). A test asserts a ready, ungated PRD appears as sliceable in the JSON and a `humanOnly`/`needsAnswers`/`autoSlice:false`-gated PRD does NOT.
 - [ ] The emitted propose-mode `enumerate` job's `jq` unions sliceable PRDs into the matrix as `prd:<slug>` legs alongside `slice:<slug>` legs (deduped). A template test asserts the emitted YAML enumerates both prefixes.
@@ -51,7 +46,7 @@ Resolve before building (`needsAnswers: true`):
 
 ## Prompt
 
-> STOP — this slice is `needsAnswers: true`. Do NOT build until `## Open questions` Q1 (approach (a) vs (b)) and Q2 (JSON shape) are answered by the maintainer. The acceptance criteria assume (a) + a separate `prds[]` key; if the maintainer picks otherwise, follow that.
+> The maintainer has RESOLVED the design questions (see `## Decisions`): approach (a) (surface PRDs in `scan --json`, union `prd:` legs into the propose matrix) + a separate `prds[]` array key. Build to that.
 >
 > FIRST, drift-check: confirm the default cron tick still runs `propose` mode and that the propose `enumerate` job still builds its matrix from `agent-runner scan --json | jq '... "slice:" + .slug'` (slice-only) in the LIVE template(s) — `packages/agent-runner/src/advance-lifecycle-template.ts` is the retained superset; verify whether `build-slice-tick-template.ts` still exists (`ls packages/agent-runner/src/build-slice-tick-template.ts` — as of 2026-06-16 it STILL EXISTS; the slice that deletes it, `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick`, is IN-PROGRESS, not landed) and skip it only if it is gone by build time. Confirm `scan`/`cwd-section` still enumerate slices only (no PRD pool in `scan --json`), and that `scanMirrorPool` is where `sliceablePrds` lives. If a prior change already added PRD legs to the propose matrix, route to needs-attention noting that.
 >
