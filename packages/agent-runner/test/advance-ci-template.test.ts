@@ -98,6 +98,23 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		expect(text).toContain('agent-runner advance');
 	});
 
+	it(
+		'the propose `enumerate` `jq` UNIONS sliceable PRDs into the matrix as ' +
+			'`prd:<slug>` legs alongside the slice legs (the ' +
+			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` fix)',
+		() => {
+			const text = loadAdvanceCiTemplate();
+			// The slice-only jq this fix replaced left `AGENT_RUNNER_AUTO_SLICE` dead on
+			// the hourly cron — a ready ungated PRD never became a matrix leg. The new jq
+			// must read `scan --json`'s sliceable-PRD pool (`repos[].prds[]` +
+			// `cwd.repo.prds[]`) and emit `prd:<slug>` legs alongside `slice:<slug>`.
+			expect(/"slice:" \+ \.slug/.test(text)).toBe(true);
+			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
+		},
+	);
+
 	describe('validateAdvanceCiTemplate flags a template missing each invariant', () => {
 		const base = loadAdvanceCiTemplate();
 
@@ -174,6 +191,24 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				'merge-job-carries-merge-flag',
 			);
 		});
+
+		it(
+			'flags a regression to a SLICE-ONLY `jq` (no `prd:` legs) — the ' +
+				'sliceable-PRD pool must be enumerated',
+			() => {
+				// Strip the PRD union from the jq: a slice-only enumerator would silently
+				// kill auto-slice on the hourly cron (the exact pre-fix bug).
+				const broken = base
+					.replace(/"prd:" \+ \.slug/g, '"slice:" + .slug')
+					.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
+					.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
+				const result = withTmpTemplate(broken);
+				expect(result.ok).toBe(false);
+				expect(result.problems.map((p) => p.id)).toContain(
+					'propose-enumerates-sliceable-prds',
+				);
+			},
+		);
 
 		it('flags --merge riding a matrix leg (parallel merge-to-main thrash)', () => {
 			// Inject a forbidden `--merge` onto the matrix leg: the validator must catch

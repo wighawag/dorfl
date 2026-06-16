@@ -3,6 +3,7 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {resolveRepoConfigFromMirror} from './repo-mirror.js';
 import {
 	scoreItems,
+	scorePrds,
 	type ScannedItem,
 	type ScanReport,
 	type RepoReport,
@@ -157,19 +158,9 @@ export async function scanMirrorPool(
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
 	const counts = {totalItems: 0, totalEligible: 0};
 	const items = scoreItems(state, repoConfig.autoBuild, counts);
-	// The one-slug-one-folder LINT is a HUMAN-FACING surface (`scan`/`status`); this
-	// mirror-side pool scan exists only to SCORE the slice/PRD candidate pools for
-	// autonomous selection, never to render a dashboard, so it carries an empty lint
-	// (the duplicate surface is the user-facing `scan`/`status`, per the slice).
-	const repo: RepoReport = {path: mirrorPath, items, ledgerDuplicates: []};
-	const report: ScanReport = {
-		repos: [repo],
-		totalItems: counts.totalItems,
-		totalEligible: counts.totalEligible,
-	};
-
 	// Pool 2 — SLICEABLE PRDs from the bare mirror's `work/prd`+`work/prd-sliced`,
-	// filtered through `autoslice-gate`'s predicate (NOT reinvented).
+	// filtered through `autoslice-gate`'s predicate (NOT reinvented). Read FIRST so
+	// we can populate the `prds[]` companion of `items[]` on the RepoReport below.
 	const pool = await read.resolveMirrorPrdPool({mirrorPath, ref, env});
 	const prds = sliceablePrds({
 		candidates: pool.prds.map((p) => ({
@@ -182,6 +173,24 @@ export async function scanMirrorPool(
 		slicedSlugs: pool.slicedSlugs,
 		autoSlice: repoConfig.autoSlice,
 	});
+	// The one-slug-one-folder LINT is a HUMAN-FACING surface (`scan`/`status`); this
+	// mirror-side pool scan exists only to SCORE the slice/PRD candidate pools for
+	// autonomous selection, never to render a dashboard, so it carries an empty lint
+	// (the duplicate surface is the user-facing `scan`/`status`, per the slice). The
+	// `prds[]` companion of `items[]` is filled via the SAME `scorePrds` helper
+	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
+	// select(.eligibility.eligible)`) sees the same shape on every surface.
+	const repo: RepoReport = {
+		path: mirrorPath,
+		items,
+		prds: scorePrds(mirrorPath, pool, repoConfig.autoSlice),
+		ledgerDuplicates: [],
+	};
+	const report: ScanReport = {
+		repos: [repo],
+		totalItems: counts.totalItems,
+		totalEligible: counts.totalEligible,
+	};
 
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
 	// `needsAnswers` backlog/PRDs + their sidecars + `work/observations/`) and built

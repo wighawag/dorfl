@@ -216,12 +216,14 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. \`scan --json\` reports
-  # BOTH the registry/hub-mirror pool (\`repos[].items[]\`) AND the in-place working
-  # checkout (\`cwd.repo.items[]\`); CI runs IN-PLACE so the eligible items live in
-  # the latter (a fresh runner has no registered mirror). \`jq\` unions + dedups both
-  # pools into a deduplicated GitHub Actions matrix list of explicit \`slice:<slug>\`
-  # ids (CI MUST use explicit prefixes). Each becomes one matrix leg → one
-  # independent \`advance\` → one PR. Skipped in merge mode.
+  # BOTH the registry/hub-mirror pool (\`repos[].items[]\`, \`repos[].prds[]\`) AND
+  # the in-place working checkout (\`cwd.repo.items[]\`, \`cwd.repo.prds[]\`); CI
+  # runs IN-PLACE so the eligible items live in the latter (a fresh runner has no
+  # registered mirror). \`jq\` unions + dedups both eligible-SLICE pools AND both
+  # sliceable-PRD pools into a deduplicated GitHub Actions matrix list of
+  # explicit \`slice:<slug>\` / \`prd:<slug>\` ids (CI MUST use explicit prefixes).
+  # Each becomes one matrix leg → one independent \`advance\` → one PR / one
+  # auto-sliced PRD. Skipped in merge mode.
   enumerate:
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
@@ -235,10 +237,14 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit \`slice:\` prefixes, never bare (ADR command-surface §3a).
+        # uses explicit \`slice:\` / \`prd:\` prefixes, never bare (ADR command-surface
+        # §3a). Eligible SLICES ⇒ \`slice:<slug>\` legs (\`advance\` builds them);
+        # SLICEABLE PRDs ⇒ \`prd:<slug>\` legs (\`advance\` auto-slices them, capability
+        # B — \`AGENT_RUNNER_AUTO_SLICE\` above). Both pools surface on \`repos[]\`
+        # AND \`cwd.repo\`; we union + dedup so the matrix has one leg per item.
         run: |
           items="$(agent-runner scan --json \\
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
           echo "items=\${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "\${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -524,6 +530,21 @@ export function validateAdvanceLifecycleWorkflow(
 			text,
 		), 'CI must use explicit `slice:`/`prd:` slug prefixes, never bare (ADR ' +
 		'command-surface-and-journeys §3a).');
+
+	// --- The propose `enumerate` matrix must UNION sliceable PRDs --------------
+	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
+	// slice-only `jq` would render `AGENT_RUNNER_AUTO_SLICE: 'true'` dead on the
+	// hourly cron — a ready ungated PRD would never become a matrix leg. The `jq`
+	// must enumerate `prd:<slug>` ids from `scan --json`'s sliceable-PRD pool
+	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-slice legs.
+	require('propose-enumerates-sliceable-prds', /"prd:" \+ \.slug/.test(text) &&
+		/\.prds\[\]/.test(
+			text,
+		), 'the propose-mode `enumerate` `jq` must union sliceable PRDs into the ' +
+		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-slice ' +
+		'matrix leg per item alongside the eligible-slice legs ' +
+		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 
 	// --- Wires the SHARED composite setup action -------------------------------
 	require('uses-shared-setup-action', /uses:\s*\.\/\.github\/actions\/agent-runner-setup\b/.test(

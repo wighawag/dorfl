@@ -170,6 +170,23 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).toBe(false);
 	});
 
+	it(
+		'the propose `enumerate` `jq` UNIONS sliceable PRDs into the matrix as ' +
+			'`prd:<slug>` legs alongside the slice legs (slice ' +
+			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`)',
+		() => {
+			const text = generateAdvanceLifecycleWorkflow(config);
+			// Without this, `AGENT_RUNNER_AUTO_SLICE: 'true'` above is dead on the hourly
+			// cron — a ready ungated PRD never becomes a matrix leg. The `jq` must read
+			// `scan --json`'s sliceable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+			// AND the slice pool, and emit BOTH `slice:<slug>` and `prd:<slug>` ids.
+			expect(/"slice:" \+ \.slug/.test(text)).toBe(true);
+			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
+		},
+	);
+
 	it('merge ⇒ a SINGLE SEQUENTIAL `advance -n <x> --merge` (no matrix)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		expect(/agent-runner advance -n\b/.test(text)).toBe(true);
@@ -388,6 +405,20 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 			'no-auto-advance-gate',
 		);
 	});
+
+	it(
+		'flags a regression to a SLICE-ONLY `jq` (no `prd:` legs) — the propose ' +
+			'matrix must enumerate the sliceable-PRD pool',
+		() => {
+			// Pre-fix shape: slice-only `jq` over `items[]` only. Reintroducing it must
+			// be flagged so `AGENT_RUNNER_AUTO_SLICE` is never silently dead on the cron.
+			const broken = base
+				.replace(/"prd:" \+ \.slug/g, '"slice:" + .slug')
+				.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
+				.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
+			expectFlagged(broken, 'propose-enumerates-sliceable-prds');
+		},
+	);
 
 	it('flags a stripped capability-F reap job', () => {
 		expectFlagged(
