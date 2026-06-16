@@ -1,0 +1,76 @@
+---
+title: the CI advance-lifecycle PROPOSE-mode matrix must enumerate sliceable PRDs (prd:<slug> legs), not only slices — today scan --json is slice-only, so AGENT_RUNNER_AUTO_SLICE never fires on the hourly cron and a ready ungated PRD is never auto-sliced
+slug: ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices
+blockedBy: []
+covers: []
+needsAnswers: true
+---
+
+## What to build
+
+The default CI tick cannot auto-slice a PRD. The hourly `schedule` cron in the emitted `advance-lifecycle.yml` runs in `propose` mode (the default; the `advance-merge`/`-n` job is gated `== 'merge'` and never runs on cron). In `propose` mode the matrix is built by the `enumerate` job from:
+
+```
+agent-runner scan --json | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique'
+```
+
+`scan` (`packages/agent-runner/src/scan.ts`) and the cwd section (`cwd-section.ts` → `scanRepoPaths` → `scoreItems`) enumerate ONLY `work/backlog/*.md` SLICES, scored through the BUILD gate (`resolveEligibility`). There is NO PRD enumeration anywhere in the `scan --json` output — both `.repos[].items[]` and `.cwd.repo.items[]` are slice-only. PRD enumeration (the `sliceablePrds` predicate over `work/prd` vs `work/prd-sliced`, gated on `autoSlice`) lives ONLY in `scanMirrorPool` (`mirror-pool-scan.ts`) and the in-place `do-autopick` pool — the paths consumed by `advance -n` / `run` / `do --remote -n`, which the cron tick never reaches.
+
+Net: in the default propose tick the matrix can only ever contain `slice:` legs. A sliceable PRD is structurally invisible to the enumerator, so `AGENT_RUNNER_AUTO_SLICE: 'true'` (which the advance-lifecycle gate env hardcodes precisely to enable capability B, "auto-slice ready PRDs") does nothing on the hourly cron. The advertised capability is dead on the default tick. (Confirmed by `skill-eval-engine`, authored ungated/ready, never sliced or even claim-attempted: `git log --all --grep skill-eval-engine` shows only the authoring + a later parking commit.)
+
+GOAL: make a ready, ungated, sliceable PRD reachable by the DEFAULT scheduled (propose) tick — one `advance prd:<slug> --propose` matrix leg per sliceable PRD, exactly as each eligible slice already gets one `advance slice:<slug> --propose` leg. CI already uses explicit prefixes, so `prd:` legs are correct and supported by the command surface. The `autoSlice` policy still gates which PRDs are sliceable (resolved per-repo); this slice does NOT change WHAT is sliceable, only that the propose enumerator can SEE the sliceable-PRD pool.
+
+This is a fix along the `scan --json` → `jq` → matrix path plus the three workflow templates that emit that path. It is FILE-ADJACENT to the gate-env slices on `advance-lifecycle-template.ts` (see Blocked by / Open questions).
+
+## Open questions
+
+Resolve before building (`needsAnswers: true`):
+
+1. **Which approach?** Two ways to make PRDs reachable on the cron tick:
+   - **(a) Surface sliceable PRDs in `scan --json` and union them into the propose matrix as `prd:` legs.** Extend the `scan`/`cwd-section` JSON to ALSO report the sliceable-PRD pool (reuse `sliceablePrds` + the `work/prd` vs `work/prd-sliced` read; resolve `autoSlice` per-repo exactly as `scanMirrorPool` does — do NOT fork the predicate), then update the `jq` in the three templates to also emit `"prd:" + .slug` for sliceable PRDs. Surgical, keeps the propose-matrix shape, one leg per item. PREFERRED lean.
+   - **(b) Run the `-n` auto-pick driver on the cron tick** (which already enumerates PRDs via `scanMirrorPool`) instead of the slice-only propose matrix. Larger change to the workflow shape (loses the one-PR-per-item matrix parallelism for the scheduled tick); rejected unless (a) is infeasible.
+   Decide (a) vs (b). The acceptance criteria below assume (a).
+2. **Does the new `scan --json` PRD pool belong under a new top-level key (e.g. `.repos[].prds[]` / `.cwd.repo.prds[]`) or reuse `items[]` with a discriminator?** A separate key is cleaner (slices and PRDs are different verbs and the `jq` projects them to different prefixes) and avoids polluting the existing slice-only `items[]` that other consumers may read. Lean: separate `prds[]` array carrying at least `{slug, eligibility:{eligible}}` so the `jq` filter mirrors the slice one.
+3. **Three templates touch this `jq`** (`advance-lifecycle-template.ts`, `build-slice-tick-template.ts`, `advance-ci-template.ts`). Confirm which are LIVE (the redundant `build-slice-tick` was deleted in a recent slice; the advance-lifecycle one is the retained superset). Edit only the live emitter(s) and their structural validators; do not resurrect a deleted template.
+
+## Acceptance criteria
+
+> Assume Open-questions A1 = (a), A2 = separate `prds[]` key. Adjust if the maintainer picks otherwise.
+
+- [ ] `agent-runner scan --json` reports the sliceable-PRD pool for each repo (and the cwd section), gated on the per-repo resolved `autoSlice`, REUSING the existing `sliceablePrds` predicate + the `work/prd`/`work/prd-sliced` read (no forked predicate). A test asserts a ready, ungated PRD appears as sliceable in the JSON and a `humanOnly`/`needsAnswers`/`autoSlice:false`-gated PRD does NOT.
+- [ ] The emitted propose-mode `enumerate` job's `jq` unions sliceable PRDs into the matrix as `prd:<slug>` legs alongside `slice:<slug>` legs (deduped). A template test asserts the emitted YAML enumerates both prefixes.
+- [ ] End-to-end at the enumeration seam: given a work tree with one eligible slice AND one sliceable PRD, the propose matrix contains BOTH `slice:<slug>` and `prd:<slug>`. A test pins this (mirror the existing scan/enumerate tests).
+- [ ] The structural validator(s) for the edited template(s) accept the PRD-enumerating `jq` and still reject a regression to slice-only (if a validator currently pins slice-only enumeration, update it).
+- [ ] No change to WHAT is sliceable: `autoSlice` still gates the PRD pool; a config-less repo with `autoSlice` off still surfaces no PRD legs. The fix only makes the already-sliceable pool VISIBLE to the propose enumerator. A test pins that the gate still binds.
+- [ ] Only the live template(s) are touched (the deleted `build-slice-tick-template.ts` is not resurrected); `intake`/`close-job` and non-gate env are unaffected.
+- [ ] `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` green.
+
+## Blocked by
+
+- None logically, but FILE-ADJACENT to the two gate-env slices on `advance-lifecycle-template.ts` (`install-ci-emits-no-gate-env-let-config-decide`, `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick`). This slice edits the `enumerate` job's `jq` (and the `scan` JSON), NOT the env block, so the overlap is small — but if those are mid-flight, coordinate the edit to that template so the rebase is trivial. Serialise via `blockedBy` only if they are being built concurrently.
+
+## Prompt
+
+> STOP — this slice is `needsAnswers: true`. Do NOT build until `## Open questions` Q1 (approach (a) vs (b)) and Q2 (JSON shape) are answered by the maintainer. The acceptance criteria assume (a) + a separate `prds[]` key; if the maintainer picks otherwise, follow that.
+>
+> FIRST, drift-check: confirm the default cron tick still runs `propose` mode and that the propose `enumerate` job still builds its matrix from `agent-runner scan --json | jq '... "slice:" + .slug'` (slice-only) in the LIVE template(s) — `packages/agent-runner/src/advance-lifecycle-template.ts` is the retained superset; verify whether `build-slice-tick-template.ts` still exists (a recent slice deleted it) and skip it if gone. Confirm `scan`/`cwd-section` still enumerate slices only (no PRD pool in `scan --json`), and that `scanMirrorPool` is where `sliceablePrds` lives. If a prior change already added PRD legs to the propose matrix, route to needs-attention noting that.
+>
+> WHY: the hourly CI cron runs propose mode, whose matrix is built from a slice-only `scan --json`, so a ready ungated PRD never becomes a matrix leg and `AGENT_RUNNER_AUTO_SLICE: 'true'` never fires on the scheduled tick. `skill-eval-engine` (authored ready) was never sliced for exactly this reason.
+>
+> GOAL (approach (a)): surface the sliceable-PRD pool in `scan --json` (reuse `sliceablePrds` + the `work/prd`/`work/prd-sliced` read, resolve `autoSlice` per-repo as `scanMirrorPool` does — do not fork the predicate), then update the live propose `enumerate` `jq` to ALSO emit `prd:<slug>` legs for sliceable PRDs, so each ready PRD becomes one `advance prd:<slug> --propose` leg. Do not change WHAT is sliceable (the `autoSlice` gate still binds); only make the pool visible to the propose enumerator.
+>
+> SEAM TO TEST AT: `scan --json` output (a ready ungated PRD appears as sliceable; gated PRDs do not) + the emitted propose-matrix `jq` (enumerates both `slice:` and `prd:` legs) + the template structural validator + the end-to-end enumeration (a tree with one eligible slice + one sliceable PRD yields both legs). Mirror the existing scan/`*-template.test.ts`/enumerate tests. No network.
+>
+> RELATED: `work/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md` is ORTHOGONAL (it is about WHERE the autoSlice gate is checked — verb vs selection — not about the enumerator omitting PRDs). Do not conflate the two; this slice is purely "the propose enumerator must SEE the sliceable-PRD pool".
+>
+> DONE: a ready, ungated, sliceable PRD becomes a `prd:<slug>` matrix leg on the default propose tick; the `autoSlice` gate still binds; slice enumeration is unchanged; the validator matches; the approach decision is recorded; and `pnpm -r build && pnpm -r test && pnpm format:check` passes. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
+
+---
+
+### Claiming this slice
+
+```sh
+agent-runner claim ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices --arbiter origin
+git fetch origin && git switch -c work/ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices origin/main
+git mv work/in-progress/ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices.md work/done/ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices.md
+```
