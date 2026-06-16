@@ -50,6 +50,7 @@ import {performAdvance, type AdvanceContext} from './advance.js';
 import {
 	performAdvanceAuto,
 	performAdvanceArgs,
+	runAdvanceTickWithTreelessPublish,
 	type AdvanceMultiResult,
 } from './advance-drivers.js';
 import {
@@ -2549,8 +2550,17 @@ export function buildProgram(): Command {
 				process.exit(multi.exitCode);
 			}
 
-			// Exactly one named item: the single-item tick.
-			const result = await performAdvance({...advanceContext, arg: args[0]});
+			// Exactly one named item: the single-item tick. Wrapped in the shared
+			// in-place tree-less publish so a surfaced sidecar / `triaged:` marker /
+			// applied-answer commit reaches the arbiter's `main` (the CI ephemeral-runner
+			// case — the local commit would otherwise be lost). The wrapper is the SAME
+			// gate the `--isolated` / loop drivers use (`TREELESS_RUNGS` + exit 0 +
+			// arbiter configured); a build/slice rung integrates through the `doDriver`
+			// band already, and a no-arbiter laptop checkout sits on the real `main`.
+			const result = await runAdvanceTickWithTreelessPublish(
+				{...advanceContext, arg: args[0]},
+				performAdvance,
+			);
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
 			}

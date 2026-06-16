@@ -5,6 +5,10 @@ import {
 	type AdvanceExitCode,
 	type AdvanceOutcome,
 } from './advance.js';
+import {
+	pushTreelessResult,
+	TREELESS_RUNGS,
+} from './advance-treeless-publish.js';
 import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
@@ -258,7 +262,10 @@ async function runSelectedInSequence(
 	const results: AdvanceResult[] = [];
 	for (const item of selected) {
 		const arg = mode.verbatimArg ? item.slug : argForSelectedItem(item);
-		const result = await run({...shared, arg, read: options.read});
+		const result = await runAdvanceTickWithTreelessPublish(
+			{...shared, arg, read: options.read},
+			run,
+		);
 		results.push(result);
 	}
 
@@ -269,6 +276,62 @@ async function runSelectedInSequence(
 		`advanced ${results.length} item${results.length === 1 ? '' : 's'} ` +
 		`(${ok} ok, ${results.length - ok} not).`;
 	return {results, exitCode, message};
+}
+
+/**
+ * Run ONE in-place advance tick + ff-push a tree-less rung's result to the
+ * arbiter — slice `advance-in-place-publishes-treeless-results`. Wraps the
+ * substrate-agnostic tick ({@link AdvanceTickRunner}) with the shared
+ * {@link pushTreelessResult} so a surfaced sidecar / `triaged:` marker /
+ * applied-answer commit committed LOCALLY in the in-place cwd LANDS on the
+ * arbiter's `main` (today the in-place tick commits locally and the work is lost
+ * on an ephemeral CI runner). Mirrors the `--isolated` one-shot + `run` loop
+ * driver call sites byte-for-byte:
+ *
+ *   - gates PURELY on `result.exitCode === 0 && TREELESS_RUNGS.has(result.rung)
+ *     && context.arbiter !== undefined` — the SAME gate the existing drivers
+ *     use, no cleverer guard (a build/slice rung integrates through the
+ *     `doDriver` band; a no-arbiter laptop checkout already sits on the real
+ *     `main`);
+ *   - reuses `pushTreelessResult` VERBATIM (its bounded re-fetch+rebase retry is
+ *     LOAD-BEARING for a sequential `-n` batch that integrates a build/slice rung
+ *     mid-batch and then runs a later tree-less rung whose `HEAD:main` push is
+ *     non-fast-forward by construction);
+ *   - NEVER `--force`. A push that keeps failing (or a genuine rebase conflict)
+ *     is REPORTED via the `note` sink and does NOT crash the tick — the work
+ *     stays committed in the cwd for the next pass / a human.
+ *
+ * Used by BOTH in-place entry points: {@link runSelectedInSequence} (the
+ * multi-item `-n` / auto-pick / multi-arg path) AND the CLI single-named-item
+ * path (which calls {@link performAdvance} directly, bypassing the sequence
+ * runner — the easy-to-miss site).
+ *
+ * The promote-apply edge mirrors the existing drivers without a special case: an
+ * `apply` rung whose answer is `promote-slice`/`promote-adr` runs
+ * `promoteObservation`'s OWN arbiter CAS and commits NOTHING tree-less, so the
+ * ff-push here is a harmless no-op (a `HEAD` with nothing new) — it does NOT
+ * double-publish nor clobber the promote CAS.
+ */
+export async function runAdvanceTickWithTreelessPublish(
+	options: AdvanceTickOptions,
+	run: AdvanceTickRunner,
+): Promise<AdvanceResult> {
+	const result = await run(options);
+	if (
+		result.exitCode === 0 &&
+		result.rung !== undefined &&
+		TREELESS_RUNGS.has(result.rung) &&
+		options.arbiter !== undefined
+	) {
+		await pushTreelessResult({
+			cwd: options.cwd,
+			arbiter: options.arbiter,
+			retries: 3,
+			env: undefined,
+			note: options.note ?? (() => {}),
+		});
+	}
+	return result;
 }
 
 /**
