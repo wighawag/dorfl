@@ -1867,19 +1867,22 @@ async function stagedCaptureNotes(
  * plain rebase replays the historical move-only commit (in-progress → needs-
  * attention) onto a main that has no in-progress/<slug>.md → conflict.
  *
- * We rebase the whole range `(merge-base, HEAD]` `--onto <arbiter>/main` and use
- * a `GIT_SEQUENCE_EDITOR` that DELETES the move-only commit's line from the todo
- * list (matched by its message). The remaining `wip + (needs-attention → done)`
- * replays cleanly: wip touches only the agent's files, and the done-move's
- * `git mv work/needs-attention/<slug>.md → work/done/<slug>.md` applies because
- * the surfaced main HAS the item in needs-attention/. Result: the done-move
- * supersedes the surfaced state, and the human never sees a conflict.
+ * We rebase the whole range `(merge-base, HEAD]` `--onto <arbiter>/main`,
+ * IDENTIFYING the move-only commit by its durable `Agent-Runner-Bookkeeping`
+ * trailer (read via plumbing) and DRIVING the rebase from a self-generated
+ * `pick <fullsha>` todo that omits it — never matching git's version-unstable
+ * rendered todo text (see `drop-bookkeeping-rebase.ts`). The remaining
+ * `wip + (needs-attention → done)` replays cleanly: wip touches only the agent's
+ * files, and the done-move's `git mv work/needs-attention/<slug>.md →
+ * work/done/<slug>.md` applies because the surfaced main HAS the item in
+ * needs-attention/. Result: the done-move supersedes the surfaced state, and the
+ * human never sees a conflict.
  *
  * When the branch carries NO such move-only commit (e.g. a needs-attention item
- * placed by hand, never autonomously surfaced), the editor deletes nothing and
- * this degrades to a normal rebase. The seam returns the rebase RunResult so the
- * caller's existing conflict-abort path handles a genuine (non-surface) conflict
- * unchanged.
+ * placed by hand, never autonomously surfaced), the regenerated todo keeps every
+ * commit and this degrades to a normal rebase. The seam returns the rebase
+ * RunResult so the caller's existing conflict-abort path handles a genuine
+ * (non-surface) conflict unchanged.
  */
 async function rebaseDroppingNeedsAttentionSurface(
 	cwd: string,
@@ -1888,8 +1891,8 @@ async function rebaseDroppingNeedsAttentionSurface(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<RunResult> {
 	// Delegate to the SHARED drop-mechanism (`drop-bookkeeping-rebase.ts`) — ONE
-	// home for the sed/GIT_SEQUENCE_EDITOR logic, called at both rebase sites
-	// (the onboard continue-rebase in `continue-branch.ts` calls the same helper).
+	// home for the trailer-identify / sha-driven drop logic, called at both rebase
+	// sites (the onboard continue-rebase in `continue-branch.ts` calls the same helper).
 	return rebaseDroppingBookkeepingMoves({
 		cwd,
 		ontoRef: `${arbiter}/main`,

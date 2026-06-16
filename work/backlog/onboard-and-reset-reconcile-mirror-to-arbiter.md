@@ -62,7 +62,3 @@ Fix 1 keeps same-machine state correct at the source; fix 2 catches the cross-ma
 > SEAMS TO TEST AT: `requeue --reset` (assert the local TRACKING ref is removed before the arbiter delete, and that an arbiter-delete failure leaves a recoverable behind-state, not a stale-ahead one); and the onboard continue-vs-fresh decision (`continue-branch.ts`/`isolation.ts`) with a stale local tracking ref whose arbiter branch is gone (assert FRESH cut via `ls-remote` truth). Use throwaway `--bare` `file://` arbiters + real clones/mirrors as the existing isolation/mirror tests do; no network. Verify a plain `remote prune` is NOT relied on (no-op on the bare mirror).
 >
 > DONE: stale mirror refs can no longer drive a "continue", `--reset` is provably effective, legitimate continue still works, and `pnpm -r build && pnpm -r test && pnpm format:check` passes. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
-
-## Needs attention
-
-agent failed: 401 {"error":{"type":"authentication_required","message":"OAuth refresh token expired or revoked. Run: node scripts/oauth-login.js"}}

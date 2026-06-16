@@ -90,16 +90,6 @@ const RACE_SENSITIVE = [
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
 	'test/needs-attention-surface-on-main.test.ts',
-	// Recovering a surfaced needs-attention item via `complete` (re-gate green →
-	// done): claims against a --bare arbiter, routes the item to a needs-attention
-	// surface on main, then re-gates and INTEGRATES (merge writes `main`; propose
-	// pushes the work branch) while reconciling the surfacing commit. That is the
-	// same git-`file://`-CAS / main-write class as above — under cross-file parallel
-	// pressure the merge/rebase occasionally sees a churned ref and flakes to
-	// `rebase-conflict` / a missing done-move (passes 100% in isolation). Keep it out
-	// of that pressure for the same deterministic claim/main-CAS reasoning as
-	// needs-attention-surface-on-main.test.ts.
-	'test/complete-from-needs-attention.test.ts',
 	// The after-commit CONTINUE-site tree-less surface tests (`moved:false` →
 	// `surface-unmoved`): drive real git against a --bare arbiter AND write main
 	// via the surface-on-main CAS publish; the `moved:false` assertion flakes under
