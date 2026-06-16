@@ -1,6 +1,7 @@
 ---
 title: agent-runner — autonomous parallel agents over file-based work/
 slug: agent-runner
+humanOnly: true
 blockedBy: []
 covers: []
 ---

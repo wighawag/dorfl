@@ -1,6 +1,7 @@
 ---
 title: A reusable skill-eval engine (pi-RPC-driven, interactive-answer, invariant-graded) — with the setup skill as its first consumer
 slug: skill-eval-engine
+humanOnly: true
 ---
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices. (Technical-detail sections below are trimmed by `to-slices` once sliced — they move into slices/ADRs and this PRD settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
