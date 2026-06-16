@@ -23,7 +23,11 @@ The result:
 - **Dirty tree (agent produced work)** ⇒ recover is NOT taken; the normal build→gate→done-move→commit→integrate path runs, so the new work lands.
 - **Clean tree + done-stranded tip (a genuine finished strand)** ⇒ recover the kept commit (the original `autonomous-path-auto-recovers-already-committed-stranded-branch` behaviour, preserved).
 
-This keys off the working-tree/branch source state (via `isWorkBranchDiffEmpty`), needs NO agent signal, NO claim-base comparison, and NO onboard-decision threading. The explicit `complete --isolated <slug>` surface (which deliberately recovers a stranded worktree and sets `committedRecovery` directly via `recover-isolated.ts`) is UNCHANGED — this narrows only the autonomous auto-detect path.
+This keys off the WORKING-TREE-dirty state (the porcelain half only, per the traps above), needs NO agent signal and NO onboard-decision threading. The explicit `complete --isolated <slug>` surface (which deliberately recovers a stranded worktree and sets `committedRecovery` directly via `recover-isolated.ts`) is UNCHANGED — this narrows only the autonomous auto-detect path.
+
+### One edge to decide while building (flagged, not pre-answered)
+
+The verified incident is UNCOMMITTED agent edits (the agent ran the gate green in its working tree but the runner's `git add -A` had not happened) — the working-tree-dirty check catches that. But the agent's "no git" rule is a CONVENTION, not enforced (`do.ts` says "the agent only edits code (it does no git)" but nothing rejects/resets an agent-made commit before `performComplete`). So a confused continue-agent that COMMITS its own work would leave a CLEAN tree + new source commits ahead of the kept tip — which the working-tree-dirty check alone would MISS, and recover would integrate the OLD kept tip, bypassing the agent's committed work. Decide while building: is the working-tree-dirty check sufficient (committed-agent-work is out of scope / a separate convention-enforcement concern), OR should the gate ALSO treat "HEAD moved beyond this run's claim base" as new work? If the latter, compare against THIS RUN's claim base (`claimCommit`, recorded at do.ts ~L789) — NOT against `<arbiter>/main` (a genuine strand is always ahead of main, so a main-relative check re-introduces the story-2 over-block from trap 2). Record the decision in `## Decisions`; if it materially widens the slice, split the committed-case guard into a sibling slice rather than bloating this one.
 
 ## Acceptance criteria
 
