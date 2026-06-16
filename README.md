@@ -1,0 +1,1 @@
+`claims work atomically off a git ref, status is the folder.`
