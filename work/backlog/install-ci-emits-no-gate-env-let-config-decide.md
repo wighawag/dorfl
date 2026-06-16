@@ -1,7 +1,7 @@
 ---
 title: install-ci must NOT hardcode the AGENT_RUNNER_* gate policy into the emitted workflow env — it forces the env layer to win over the repo's own .agent-runner.json, defeating the flag > env > per-repo > global > default precedence; stop shadowing per-repo config (let config decide) and let users add CI-only overrides themselves
 slug: install-ci-emits-no-gate-env-let-config-decide
-blockedBy: []
+blockedBy: [install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick]
 covers: []
 humanOnly: true
 needsAnswers: true
@@ -27,7 +27,7 @@ Change (the UNCONTESTED part — the two LIFECYCLE keys):
 - The build/slice keys (`AUTO_BUILD` / `AUTO_SLICE`) are handled per the resolved `## Open questions` answer (do NOT bare-drop them blind — that disables CI autonomy).
 - The template's structural VALIDATOR (~L457–472) must be updated to match whatever active-env set survives: it currently REQUIRES all four; flip the dropped keys to REQUIRE THEIR ABSENCE-as-active (or commented form), and keep `require()` clauses only for any key the resolved decision KEEPS active. Otherwise the validator rejects the corrected template.
 
-NOTE the relationship to the sibling slice `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick`: both edit `advance-lifecycle-template.ts` (and the build-slice-tick one DELETES `build-slice-tick-template.ts`). They are FILE-ADJACENT — serialise via `blockedBy` or coordinate so the rebase is trivial (see Blocked by). This slice changes the env block of the RETAINED advance workflow; that one removes the duplicate workflow. (That sibling is now in `work/in-progress/` — build/land it first.)
+NOTE the relationship to the sibling slice `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` (now in `work/in-progress/`): the overlap is SMALL, not the "both rewrite the same file" it first looked like. That sibling's own acceptance says advance-lifecycle's template is NOT modified — it only DELETES the `build-slice-tick` capability + template and removes a dangling HEADER-COMMENT reference to `build-slice-tick-template.ts` inside `advance-lifecycle-template.ts`. So the only shared file region is that one doc-comment, far from the env block this slice edits. The `blockedBy` is therefore a cheap ORDERING courtesy (land the deletion first so this slice rebases against a settled file + does not re-introduce a now-stale comment), NOT a genuine same-region conflict. If the sibling has already landed when this is built, the `blockedBy` is satisfied and there is nothing to coordinate.
 
 ## Open questions
 
@@ -55,7 +55,7 @@ Resolve these BEFORE building (this is why `needsAnswers: true`):
 
 ## Blocked by
 
-- `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` — NOT a logical dependency but a FILE-ORTHOGONALITY serialiser: both edit `src/advance-lifecycle-template.ts` (that slice keeps it as the sole advance workflow; this slice strips its gate env block). Build that one first so this rebases trivially. If at build time that slice has NOT landed, either build it first or coordinate the edits; do NOT both-touch the file in parallel.
+- `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` (in `work/in-progress/`) — a light ORDERING dependency, not a same-region conflict. CORRECTED (verified 2026-06-16): that sibling does NOT rewrite `advance-lifecycle-template.ts` (its acceptance explicitly states the advance-lifecycle template is NOT modified); it deletes the `build-slice-tick` capability/template and removes a dangling header-COMMENT reference inside `advance-lifecycle-template.ts`. The only shared file region is that doc-comment, not the env block this slice edits. Reason for the `blockedBy`: land the deletion first so this slice edits a settled file and does not re-touch a comment the sibling is removing. It is a courtesy to keep the rebase trivial, NOT a parallel double-edit of the env block.
 
 ## Prompt
 
