@@ -192,26 +192,20 @@ env:
   # out-of-band human/UI PR merges, whose work/<slug> branch nothing else deletes.
   SWEEP_MERGED_BRANCHES: \${{ github.event.inputs.sweepMergedBranches || 'true' }}
 
-  # ── The engine GATE FAMILY, surfaced as the AGENT_RUNNER_* env block ─────────
+  # ── The engine GATE FAMILY is resolved FROM CONFIG, not carried here ─────────
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
-  # > default. The SAME .agent-runner.json the laptop uses applies here; this env
-  # block is just the optional CI-only override. Change behaviour by editing these
-  # values (or a GitHub repo variable / .agent-runner.json key) — NOT by re-running
-  # install-ci (ADR §6: install-ci is one-time).
-  #
-  # CALM DEFAULTS: the two LIFECYCLE gates sit at their quiet state, so out-of-the-
-  # box this tick builds/slices and reports failures but asks NOTHING — it degrades
-  # to exactly the build/slice tick's behaviour until you opt in. They are
-  # ORTHOGONAL peers: OBSERVATION_TRIAGE governs the raw observation INBOX;
-  # SURFACE_BLOCKERS governs DECLARED needsAnswers work. "Groom my observations but
-  # leave my blocked work alone" = OBSERVATION_TRIAGE: ask + SURFACE_BLOCKERS:
-  # false. Applying an already-committed answer has NO gate (a human's answer is
-  # never stranded).
-  AGENT_RUNNER_AUTO_BUILD: 'true' # capability A: auto-build ready slices
-  AGENT_RUNNER_AUTO_SLICE: 'true' # capability B: auto-slice ready PRDs
-  AGENT_RUNNER_OBSERVATION_TRIAGE: 'off' # calm default (off|ask|auto): leave the observation inbox untouched
-  AGENT_RUNNER_SURFACE_BLOCKERS: 'false' # calm default (true|false): leave declared-blocked work silently blocked
+  # > default. The SAME .agent-runner.json the laptop uses applies here. This
+  # workflow INTENTIONALLY emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_SLICE
+  # / AGENT_RUNNER_OBSERVATION_TRIAGE / AGENT_RUNNER_SURFACE_BLOCKERS env line, so
+  # the env layer carries NO defaults — your committed .agent-runner.json wins (then
+  # the global config, then the strict built-in defaults autoBuild:false /
+  # autoSlice:false / observationTriage:'off' / surfaceBlockers:false). To enable CI
+  # autonomy, either set the gate(s) in .agent-runner.json (applies everywhere) or
+  # add the AGENT_RUNNER_* env var to this \`env:\` block yourself (the explicit,
+  # opt-in CI-only override the env layer is FOR). Change behaviour by editing the
+  # config / a GitHub repo variable / this env block — NOT by re-running install-ci
+  # (ADR §6: install-ci is one-time).
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
@@ -452,24 +446,32 @@ export function validateAdvanceLifecycleWorkflow(
 	), 'the `merge` job must NOT use a matrix (parallel merge jobs would thrash ' +
 		'the main-CAS).');
 
-	// --- The AGENT_RUNNER_* gate-family env block (calm lifecycle defaults) -----
-	require('env-auto-build', /AGENT_RUNNER_AUTO_BUILD:/.test(
-		text,
-	), 'must expose the gate family via `AGENT_RUNNER_AUTO_BUILD` in the env block.');
-	require('env-auto-slice', /AGENT_RUNNER_AUTO_SLICE:/.test(
-		text,
-	), 'must expose the gate family via `AGENT_RUNNER_AUTO_SLICE` in the env block.');
-	// The two LIFECYCLE gates must be present at their CALM defaults so the
-	// out-of-the-box tick degrades to build/slice-only with no questions. They are
-	// ORTHOGONAL peers (one can be on while the other is off).
-	require('env-observation-triage-calm', /AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'off'/.test(
-		text,
-	), '`AGENT_RUNNER_OBSERVATION_TRIAGE` must default to the calm `off` state ' +
-		'(off|ask|auto; no questions out of the box).');
-	require('env-surface-blockers-calm', /AGENT_RUNNER_SURFACE_BLOCKERS:\s*'false'/.test(
-		text,
-	), '`AGENT_RUNNER_SURFACE_BLOCKERS` must default to the calm `false` state ' +
-		'(true|false; no questions out of the box).');
+	// --- The AGENT_RUNNER_* gate family must NOT be carried as workflow env -----
+	// The workflow emits NO active gate env line for any of AUTO_BUILD / AUTO_SLICE
+	// / OBSERVATION_TRIAGE / SURFACE_BLOCKERS: the env layer is the OPTIONAL CI-only
+	// override layer, NOT the carrier of defaults. Emitting any of them would FORCE
+	// env to win over the repo's own .agent-runner.json (the precedence is
+	// flag > env > per-repo > global > default), silently shadowing per-repo gate
+	// config in CI — exactly the bug this slice closes. A user who genuinely wants a
+	// CI-SPECIFIC override adds the env var themselves (the opt-in CI override the
+	// env layer is FOR). Check the OPERATIVE (non-comment) lines so the explanatory
+	// header comment that NAMES these keys is not a false positive.
+	require('no-gate-env-auto-build', !/AGENT_RUNNER_AUTO_BUILD\s*:/.test(
+		operative,
+	), 'the workflow must NOT emit an `AGENT_RUNNER_AUTO_BUILD:` env assignment ' +
+		'(env carries no defaults; the gate is resolved from per-repo config / built-in default).');
+	require('no-gate-env-auto-slice', !/AGENT_RUNNER_AUTO_SLICE\s*:/.test(
+		operative,
+	), 'the workflow must NOT emit an `AGENT_RUNNER_AUTO_SLICE:` env assignment ' +
+		'(env carries no defaults; the gate is resolved from per-repo config / built-in default).');
+	require('no-gate-env-observation-triage', !/AGENT_RUNNER_OBSERVATION_TRIAGE\s*:/.test(
+		operative,
+	), 'the workflow must NOT emit an `AGENT_RUNNER_OBSERVATION_TRIAGE:` env ' +
+		'assignment (env carries no defaults; resolved from per-repo config / built-in default).');
+	require('no-gate-env-surface-blockers', !/AGENT_RUNNER_SURFACE_BLOCKERS\s*:/.test(
+		operative,
+	), 'the workflow must NOT emit an `AGENT_RUNNER_SURFACE_BLOCKERS:` env ' +
+		'assignment (env carries no defaults; resolved from per-repo config / built-in default).');
 	// There is NO autoAdvance gate (the lifecycle decomposes into the gate family).
 	require('no-auto-advance-gate', !/AGENT_RUNNER_AUTO_ADVANCE\b/.test(
 		operative,

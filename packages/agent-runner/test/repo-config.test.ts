@@ -265,6 +265,50 @@ describe('resolveRepoConfig — per-key layering', () => {
 		expect(resolved.config).toEqual(DEFAULT_CONFIG);
 	});
 
+	it('CI seam: a config-less repo with NO AGENT_RUNNER_* gate env resolves to the strict built-in gate defaults', () => {
+		// Slice `install-ci-emits-no-gate-env-let-config-decide`: the emitted
+		// advance workflow carries no gate env, so a config-less repo running in CI
+		// hits the resolver with `env: {}` and falls through to DEFAULT_CONFIG.
+		// This pins that the four gate keys resolve to their strict-default values
+		// (autoBuild/autoSlice: false, observationTriage: 'off', surfaceBlockers:
+		// false) — i.e. CI claims nothing until the user opts in via config or env.
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global: mergeConfig({}),
+			env: {},
+		});
+		expect(resolved.config.autoBuild).toBe(false);
+		expect(resolved.config.autoSlice).toBe(false);
+		expect(resolved.config.observationTriage).toBe('off');
+		expect(resolved.config.surfaceBlockers).toBe(false);
+	});
+
+	it('CI seam: per-repo `.agent-runner.json` governs ALL FOUR gates when the workflow emits no AGENT_RUNNER_* env', () => {
+		// The bug this slice closes: the install-ci workflow used to hardcode the
+		// four AGENT_RUNNER_* gate env vars, which forced the env layer to win
+		// over the repo's committed `.agent-runner.json` (precedence is flag > env
+		// > per-repo > global > default). Now that the workflow emits NO gate env,
+		// per-repo config takes effect for all four — verify that here at the
+		// resolution seam by passing `env: {}` (the post-change workflow state).
+		writeRepoConfig(repo, {
+			autoBuild: true,
+			autoSlice: true,
+			observationTriage: 'ask',
+			surfaceBlockers: true,
+		});
+		const global = mergeConfig({
+			autoBuild: false,
+			autoSlice: false,
+			observationTriage: 'off',
+			surfaceBlockers: false,
+		});
+		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
+		expect(resolved.config.autoBuild).toBe(true);
+		expect(resolved.config.autoSlice).toBe(true);
+		expect(resolved.config.observationTriage).toBe('ask');
+		expect(resolved.config.surfaceBlockers).toBe(true);
+	});
+
 	it('per-repo file overrides the global for `integration`', () => {
 		writeRepoConfig(repo, {integration: 'merge'});
 		const global = mergeConfig({integration: 'propose'});

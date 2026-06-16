@@ -197,35 +197,43 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).toBe(true);
 	});
 
-	it('exposes the two ORTHOGONAL lifecycle gates at calm defaults (no questions out of the box)', () => {
+	it('emits NO active AGENT_RUNNER_* gate env (env carries no defaults; per-repo config wins)', () => {
+		// The slice `install-ci-emits-no-gate-env-let-config-decide`: the workflow
+		// must NOT carry any of the four gate-family env assignments as an ACTIVE
+		// line. The previous baked-in env block forced the env layer to shadow the
+		// repo's own `.agent-runner.json`. Now CI resolves gates from config like
+		// any other consumer (flag > env > per-repo > global > default).
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(/AGENT_RUNNER_AUTO_BUILD:/.test(text)).toBe(true);
-		expect(/AGENT_RUNNER_AUTO_SLICE:/.test(text)).toBe(true);
-		// The two lifecycle gates sit at their calm defaults → degrades to
-		// build/slice-only with no questions until opted in.
-		expect(/AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'off'/.test(text)).toBe(true);
-		expect(/AGENT_RUNNER_SURFACE_BLOCKERS:\s*'false'/.test(text)).toBe(true);
-		// No `autoAdvance` gate (the lifecycle decomposes into the gate family).
-		expect(/AGENT_RUNNER_AUTO_ADVANCE\b/.test(text)).toBe(false);
+		// `operative` = the non-comment lines (the explanatory header comment may
+		// still NAME the keys to document the posture; comments are not assignments).
+		const operative = text
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/AGENT_RUNNER_AUTO_BUILD\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_AUTO_SLICE\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_OBSERVATION_TRIAGE\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_SURFACE_BLOCKERS\s*:/.test(operative)).toBe(false);
+		// No `autoAdvance` gate either (the lifecycle decomposes into the family).
+		expect(/AGENT_RUNNER_AUTO_ADVANCE\b/.test(operative)).toBe(false);
 		expect(
 			validateAdvanceLifecycleWorkflow(text).problems.map((p) => p.id),
 		).not.toContain('no-auto-advance-gate');
 	});
 
-	it('the two lifecycle gates are orthogonal — "groom observations, leave blocked work" is expressible', () => {
-		// Flip OBSERVATION_TRIAGE on while leaving SURFACE_BLOCKERS off: the env
-		// block is a flat list of independent vars, so this is a one-line edit and
-		// the workflow still validates (the gates are peers, not a hierarchy).
-		const expressed = generateAdvanceLifecycleWorkflow(config).replace(
-			/AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'off'/,
-			"AGENT_RUNNER_OBSERVATION_TRIAGE: 'ask'",
-		);
-		expect(/AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'ask'/.test(expressed)).toBe(
-			true,
-		);
-		expect(/AGENT_RUNNER_SURFACE_BLOCKERS:\s*'false'/.test(expressed)).toBe(
-			true,
-		);
+	it('a user CAN add an opt-in CI-only gate env override without breaking the validator', () => {
+		// The env layer is the OPTIONAL CI-only override layer: a user who wants a
+		// CI-specific gate value adds the env var themselves. That edit is fine
+		// (the validator only forbids the EMITTED workflow shipping with active
+		// gate env; a user's hand-edit is out of scope of the shipped emitter).
+		const base = generateAdvanceLifecycleWorkflow(config);
+		// Sanity: the SHIPPED emitter has none of the four as active env.
+		const baseOperative = base
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/AGENT_RUNNER_AUTO_BUILD\s*:/.test(baseOperative)).toBe(false);
+		expect(/AGENT_RUNNER_SURFACE_BLOCKERS\s*:/.test(baseOperative)).toBe(false);
 	});
 
 	it('PRESERVES capability F: the reap-merged-branches job + sweepMergedBranches input (not stripped)', () => {
@@ -352,38 +360,55 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		);
 	});
 
-	it('flags a missing AGENT_RUNNER_AUTO_BUILD gate', () => {
+	it('flags a re-introduced active AGENT_RUNNER_AUTO_BUILD env assignment', () => {
+		// Inject an active env line under the existing `env:` block (right after
+		// the SWEEP_MERGED_BRANCHES line). Any active form of the four gate keys
+		// must FAIL the validator: env is the opt-in CI-only OVERRIDE layer, not
+		// the carrier of defaults.
 		expectFlagged(
-			base.replace(/AGENT_RUNNER_AUTO_BUILD:/, '# AUTO_BUILD removed:'),
-			'env-auto-build',
+			base.replace(
+				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
+				"$1  AGENT_RUNNER_AUTO_BUILD: 'true'\n",
+			),
+			'no-gate-env-auto-build',
 		);
 	});
 
-	it('flags a non-calm observation-triage default', () => {
+	it('flags a re-introduced active AGENT_RUNNER_AUTO_SLICE env assignment', () => {
 		expectFlagged(
 			base.replace(
-				/AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'off'/,
-				"AGENT_RUNNER_OBSERVATION_TRIAGE: 'auto'",
+				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
+				"$1  AGENT_RUNNER_AUTO_SLICE: 'true'\n",
 			),
-			'env-observation-triage-calm',
+			'no-gate-env-auto-slice',
 		);
 	});
 
-	it('flags a non-calm surface-blockers default', () => {
+	it('flags a re-introduced active AGENT_RUNNER_OBSERVATION_TRIAGE env assignment', () => {
 		expectFlagged(
 			base.replace(
-				/AGENT_RUNNER_SURFACE_BLOCKERS:\s*'false'/,
-				"AGENT_RUNNER_SURFACE_BLOCKERS: 'true'",
+				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
+				"$1  AGENT_RUNNER_OBSERVATION_TRIAGE: 'ask'\n",
 			),
-			'env-surface-blockers-calm',
+			'no-gate-env-observation-triage',
+		);
+	});
+
+	it('flags a re-introduced active AGENT_RUNNER_SURFACE_BLOCKERS env assignment', () => {
+		expectFlagged(
+			base.replace(
+				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
+				"$1  AGENT_RUNNER_SURFACE_BLOCKERS: 'true'\n",
+			),
+			'no-gate-env-surface-blockers',
 		);
 	});
 
 	it('flags an autoAdvance gate sneaking in', () => {
 		expectFlagged(
 			base.replace(
-				/AGENT_RUNNER_AUTO_BUILD:/,
-				"AGENT_RUNNER_AUTO_ADVANCE: 'true'\n  AGENT_RUNNER_AUTO_BUILD:",
+				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
+				"$1  AGENT_RUNNER_AUTO_ADVANCE: 'true'\n",
 			),
 			'no-auto-advance-gate',
 		);

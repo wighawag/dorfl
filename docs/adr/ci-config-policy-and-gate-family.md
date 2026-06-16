@@ -158,10 +158,30 @@ lifecycle (triage / surface / apply) for free, with no separate mode to discover
 `advance` auto-pick, `advance -n`. `do` has no triage/surface/apply rungs, so the
 two gates are no-ops there, correctly the calm build-only shape by construction.
 
-Because they are normal `Config` fields, CI gets env-controllability for FREE: the
-generated workflow's `AGENT_RUNNER_*` env block (or a GitHub repo variable) sets
-them, and the SAME `.agent-runner.json` the laptop uses applies in CI too. CI stops
-being a special policy surface.
+Because they are normal `Config` fields, CI gets env-controllability for FREE: a
+`AGENT_RUNNER_*` env var (or a GitHub repo variable) in the workflow CAN set them,
+and the SAME `.agent-runner.json` the laptop uses applies in CI too. CI stops being
+a special policy surface.
+
+**The env layer is the OPTIONAL CI-only override, NOT the carrier of defaults**
+(slice `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16). The emitted
+advance workflow INTENTIONALLY ships with NO `AGENT_RUNNER_AUTO_BUILD` /
+`AGENT_RUNNER_AUTO_SLICE` / `AGENT_RUNNER_OBSERVATION_TRIAGE` /
+`AGENT_RUNNER_SURFACE_BLOCKERS` env line at all. The earlier draft baked "calm
+defaults" into that env block (`AUTO_BUILD: 'true'`, `AUTO_SLICE: 'true'`,
+`OBSERVATION_TRIAGE: 'off'`, `SURFACE_BLOCKERS: 'false'`), but the precedence is
+`flag > env > per-repo > global > default`, so the env layer FORCED itself over
+the repo's own `.agent-runner.json` — a user who set `surfaceBlockers: true` or
+`observationTriage: 'ask'` in committed config saw it silently shadowed in CI. The
+workflow now carries no gate env, so CI resolves the four gates from per-repo
+config (then global, then `DEFAULT_CONFIG`) like any other consumer. The trade-off
+accepted head-on: a CONFIG-LESS repo lands on the strict built-in defaults
+(`autoBuild: false`, `autoSlice: false`, `observationTriage: 'off'`,
+`surfaceBlockers: false`) and CI claims nothing until the user opts in — by either
+setting the gate(s) in `.agent-runner.json` (governs everywhere) OR adding the
+`AGENT_RUNNER_*` env var to the workflow themselves (the explicit, opt-in CI-only
+override the env layer is FOR). `install-ci` prints a completion message that
+names both enable paths so the now-quiet default is not a surprise.
 
 ### 6. install-ci is ONE-TIME; all policy is env/config
 
@@ -230,6 +250,7 @@ once the tool has real downstream users owed a migration window.
 
 - The gate family is coherent: `autoBuild`/`autoSlice` (build/slice) + `observationTriage`/`surfaceBlockers` (the two question sources), all per-repo + env + flag.
 - CI policy is fully expressible by config/env; `install-ci` is genuinely one-time.
+- The emitted advance workflow carries NO `AGENT_RUNNER_*` gate env: CI resolves the four gates through `flag > env > per-repo > global > default` like any other consumer, so per-repo `.agent-runner.json` is no longer silently shadowed. A config-less repo lands on the strict built-in `DEFAULT_CONFIG` (autoBuild/autoSlice off, observationTriage `'off'`, surfaceBlockers false) — CI claims nothing until the user opts in via config or a hand-added env var. (Slice `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16.)
 - The verb decision (`do` vs `advance`) is eliminated from CI; "calm build-only" is `advance` + both lifecycle gates off, not a different verb.
 - Engine work falls out (captured as `work/ideas/`): the `autoTriage -> observationTriage` 3-state migration; the `surfaceBlockers` gate; unifying `run` onto the advance tick.
 - Cross-refs: `command-surface-and-journeys.md` (the gate family + the autonomous face), `work/prd/runner-in-ci.md` ("Config & gate model in CI"), `config.ts`/`repo-config.ts`/`env-config.ts` (the gate-family plumbing), `advance-loop-driver.ts` ("run == CI: swap the tick, keep the loop").
