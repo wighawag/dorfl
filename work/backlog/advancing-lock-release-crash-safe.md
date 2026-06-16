@@ -25,6 +25,8 @@ While here, introduce the single path-construction seam **`advancingMarkerPath(e
 - [ ] Tests use throwaway `--bare` `file://` arbiters + real clones (the existing advancing-lock test style); point any workspace at a temp dir; no network.
 - [ ] `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
+> IN-PLACE vs ISOLATED (verified — scope this precisely). The release runs in the LOCK's `cwd` (the advance checkout). For an IN-PLACE `advance` (the incident: `--propose --watch`, no `--isolated`) the recover/integrate rebase runs in that SAME `cwd`, so the throw leaves THAT dir dirty / mid-rebase and the `finally` release's dirty-guard trips — the fix's "reach a clean ref state first" targets exactly this. For an ISOLATED/worktree dispatch the build's dirty state is in a DIFFERENT job worktree than the release `cwd`, so the release `cwd` may already be clean; the fix must STILL be correct there (don't assume the dirt is local). Make the release robust regardless of WHERE the dirt is: clean the release `cwd` to a known ref before the CAS, and never let a dirty OTHER worktree block it. Cover both in tests.
+
 ## Blocked by
 
 - None — can start immediately. (The reaper/surfacing slice `advancing-lock-human-release-verb-and-surface` is `blockedBy` THIS one: it reuses `advancingMarkerPath(entry)` + the crash-safe release and edits the same `advancing-lock.ts` module, so it serialises after.)
