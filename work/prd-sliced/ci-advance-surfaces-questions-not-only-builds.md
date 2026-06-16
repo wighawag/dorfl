@@ -120,81 +120,17 @@ ledger. This keeps "one word, one meaning" honest.
 ### Autonomy notes (gate axes)
 
 - `humanOnly`: OMITTED. Slicing this PRD is mechanical — the design and slice
-  boundaries are settled below; an agent may auto-slice it.
+  boundaries are settled; an agent may auto-slice it.
 - `needsAnswers`: OMITTED. The one genuine design fork (does a tree-less rung in
   propose mode open a PR or push straight to `main`?) is RESOLVED by precedent
-  (push straight to `main` in both modes; see Implementation Decisions). No open
-  questions block slicing.
+  (push straight to `main` in both modes — the loop + isolated drivers already do
+  this unconditionally on `TREELESS_RUNGS`). No open questions block slicing.
 
-## Implementation Decisions
-
-- **Two slices, ordered B-then-A.** Slice B (in-place tree-less publish) is the
-  foundation and lands first: it independently fixes the merge job and is the push
-  A's acceptance test depends on (A must prove a sidecar from a propose leg reaches
-  the arbiter, which requires B). Slice A (propose-matrix enumeration) builds on B.
-  Slice A `blockedBy: [<slice-B-slug>]`.
-
-- **Slice B — publish tree-less results from the in-place drivers.** Wire the
-  EXISTING `pushTreelessResult` (`advance-treeless-publish.ts`) into the in-place
-  advance path (`performAdvanceAuto` for `-n`/auto-pick, `performAdvance` for a
-  named single item), fired when `result.rung ∈ TREELESS_RUNGS`, `exitCode === 0`,
-  and an arbiter is configured. Reuse the helper VERBATIM (its bounded
-  re-fetch+rebase retry is load-bearing for sequential `-n` batches that mix
-  rungs) — do NOT fork it. Match `advance-isolated.ts` / `advance-loop-driver.ts`
-  byte-for-byte in call shape. The `advancing` borrow + promote-CAS are NOT in
-  `TREELESS_RUNGS`, so nothing double-publishes.
-
-- **Slice A — enumerate lifecycle items into `scan --json` + the propose `jq`.**
-  Add a lifecycle pool to the per-repo scan report, computed via the SHARED
-  `buildLifecyclePools` predicates + the per-repo `surfaceBlockers` /
-  `observationTriage` gates (NOT a forked predicate). Surface it on both the
-  registry (`repos[]`) and in-place (`cwd.repo`) sections, the same dual-surface
-  the slice/PRD pools already use. Extend the `enumerate` step's `jq` to union
-  `obs:<slug>` legs (untriaged observations), `slice:`/`prd:<slug>` legs
-  (`needsAnswers` items with no all-answered sidecar) into the matrix, keeping
-  `unique`. Extend `validateAdvanceLifecycleWorkflow` with a presence assertion
-  for the new legs, mirroring the existing `propose-enumerates-sliceable-prds`
-  assertion. Edit the SEED (`advance-lifecycle-template.ts`), then mirror to any
-  emitted copy under this repo's `.github/` per the repo's propagation rule.
-
-- **No double-leg, by construction.** A `needsAnswers:true` item is `eligible:false`
-  so it is absent from the build pool (it appears only as a surface leg); an
-  untriaged observation is a separate `obs:` namespace. The `jq` union therefore
-  cannot emit two legs for one item; `unique` is belt-and-suspenders. Slice A's
-  acceptance must assert disjointness.
-
-- **Tree-less rungs push to `main` in BOTH modes (DECIDED, by precedent).** The
-  loop + isolated drivers call `pushTreelessResult` (HEAD:main) unconditionally on
-  `TREELESS_RUNGS`, with no propose/merge branch. Slice B matches this: a surfaced
-  sidecar / triage marker / applied answer ff-pushes to `main` even under
-  `--propose`. `integrationMode` is NOT consulted for tree-less rungs. (Rationale
-  is durable → an ADR candidate: "the answer-loop ledger is not code; it is not
-  gated by code integration mode".)
-
-- **Inert when gates are off.** With `surfaceBlockers:false` + `observationTriage:
-  off` (the calm defaults) the lifecycle pool is empty, the `jq` adds no legs, and
-  the in-place push never fires (no tree-less rung runs). The fix changes no
-  calm-default repo's behaviour.
-
-## Testing Decisions
-
-- **Slice B:** a throwaway-git-repo test (the pattern the surface/apply/lock tests
-  use): run an in-place advance whose tick classifies a surface (or triage) rung,
-  assert the sidecar is COMMITTED locally AND ff-pushed to the arbiter's `main`
-  (the pushed tree contains `work/questions/<type>-<slug>.md`). A second test mixes
-  a build/slice rung that advances `main` mid-`-n`-batch with a later tree-less
-  push, asserting the rebase-retry lands it (the non-fast-forward-by-construction
-  case). Assert the push does NOT fire for build/slice rungs (they integrate via
-  `doDriver`) and does NOT fire when no arbiter is configured.
-- **Slice A:** a generate-under-`--fake` test of the workflow (mirroring
-  `advance-ci-template` / `advance-lifecycle-template` tests): assert the
-  `enumerate` `jq` emits `obs:`/`slice:`/`prd:` lifecycle legs from the new pool,
-  the new `validateAdvanceLifecycleWorkflow` assertion passes, pools stay disjoint
-  + `unique`, and a gates-off scan yields an empty lifecycle pool (no added legs).
-  Unit-test the new `scan --json` pool against `buildLifecyclePools` (no forked
-  predicate; gates resolved per repo).
-- **External behaviour, not internals:** tests assert the OBSERVABLE result (a
-  sidecar on the arbiter; the matrix leg list), never the call wiring.
+> Sliced into `work/backlog/`: `advance-in-place-publishes-treeless-results`
+> (the foundation — Slice B) and `ci-propose-matrix-enumerates-lifecycle-items`
+> (Slice A, `blockedBy` the foundation). The Implementation / Testing detail moved
+> into those slices; the driver-coverage + ordering rationale lives in
+> `work/findings/ci-advance-surfacing-gap-analysis.md`.
 
 ## Out of Scope
 
