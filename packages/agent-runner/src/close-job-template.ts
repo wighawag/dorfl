@@ -3,7 +3,7 @@
  * `install-ci-close-job-workflow`; capability E: close issues when their work
  * lands). This module GENERATES the one fixed workflow file for the close-job and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
- * `build-slice-tick-template.ts` / `advance-ci-template.ts` (the package depends on
+ * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
  * NO YAML lib, so the checks are presence/shape assertions over the raw text).
  *
  * The discipline (from the PRD capability-E row + the Out-of-Scope fence):
@@ -144,7 +144,7 @@ export interface CloseJobValidation {
 /**
  * Structurally validate the close-job workflow against the slice's acceptance
  * criteria. Dependency-free (no YAML lib): presence/shape assertions over the raw
- * text, mirroring {@link validateBuildSliceTickWorkflow}.
+ * text, mirroring {@link validateAdvanceLifecycleWorkflow}.
  */
 export function validateCloseJobWorkflow(text: string): CloseJobValidation {
 	const problems: CloseJobProblem[] = [];
