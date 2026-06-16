@@ -541,17 +541,36 @@ export async function returnToBacklog(
 		};
 	}
 
-	// `--reset`: DELETE the remote work branch FIRST (before the backlog move).
-	// Delete-before-move closes the claim-race window. A FAILED delete ABORTS the
-	// requeue (no backlog move) — the item stays in needs-attention rather than
-	// become claimable while continuing from a branch we meant to discard. This is
-	// a remote ref op (provider-agnostic; works against a local `--bare` arbiter) —
-	// it never touches the cwd working tree.
+	// `--reset`: DELETE the remote work branch (before the backlog move). The
+	// deletion is WRITE-THROUGH: the LOCAL refs that drive continue-detection
+	// (`refs/remotes/<arbiter>/work/<slug>` AND any local head `work/<slug>`) are
+	// deleted FIRST, THEN the arbiter `git push --delete`. The asymmetry is the
+	// point: the arbiter is the source of truth and the local ref is derived, so
+	// inverting today's arbiter-first ordering converts a dangerous failure mode
+	// (local AHEAD of arbiter — a permanent stale-continue) into a self-healing
+	// one (local BEHIND — the next fetch restores it from the arbiter). A FAILED
+	// arbiter delete still ABORTS the requeue (no backlog move); the local
+	// behind-state is recoverable by a subsequent fetch and CANNOT drive a wrong
+	// continue. Delete-before-move also closes the claim-race window.
 	let deletedRemoteBranch = false;
 	if (options.reset) {
 		const branch = workBranchRef('slice', slug);
-		// Explicit/guarded departure from the "never delete the remote branch"
-		// invariant; only on the `--reset` path, never the default.
+		// LOCAL-FIRST: the tracking ref `branchAheadOf` reads (the one whose
+		// staleness today silently turns `--reset` into a no-op — verified live in
+		// `work/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md`,
+		// where `--reset` deleted the arbiter branch but the local tracking ref
+		// survived and resurrected a "continue" on the next `do`). Both deletes
+		// are best-effort — their absence is fine, what matters is they are not
+		// LEFT BEHIND when the arbiter delete succeeds.
+		await gitSoftAsync(
+			['update-ref', '-d', `refs/remotes/${arbiter}/${branch}`],
+			cwd,
+			env,
+		);
+		await gitSoftAsync(['branch', '-D', branch], cwd, env);
+		// THEN the arbiter delete (explicit/guarded departure from the "never delete
+		// the remote branch" invariant; only on the `--reset` path, never the
+		// default).
 		const del = await gitSoftAsync(
 			['push', arbiter, '--delete', branch],
 			cwd,
@@ -567,15 +586,17 @@ export async function returnToBacklog(
 				const message =
 					`requeue --reset for '${slug}': failed to delete the remote branch ` +
 					`${branch} on ${arbiter} (${stderr || 'unknown error'}); ` +
-					'aborting the requeue — item left in needs-attention (no backlog move).';
+					'aborting the requeue — item left in needs-attention (no backlog move). ' +
+					'The local tracking ref was already cleared (write-through ordering); ' +
+					'a subsequent fetch will restore it from the arbiter — the local store ' +
+					'is BEHIND the arbiter (self-healing), never AHEAD (which would drive a ' +
+					'stale continue).';
 				note(message);
 				return {moved: false, reasonNotMoved: message};
 			}
 		}
 		deletedRemoteBranch = true;
 		note(`Deleted the remote branch ${branch} on ${arbiter} (--reset).`);
-		// Drop any stale LOCAL work branch too (best-effort — it may not exist here).
-		await gitSoftAsync(['branch', '-D', branch], cwd, env);
 	}
 
 	// DEFAULT (keep+continue) REQUEUE-SAFETY GUARD: a claimable item's continue-

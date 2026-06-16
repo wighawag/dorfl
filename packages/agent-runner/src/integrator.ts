@@ -645,7 +645,18 @@ function deleteMergedHeadBranch(input: IntegrateInput): void {
 			return; // NOT provably merged (a racing un-merged amend) — never reap.
 		}
 	}
-	// Provably merged: delete the remote head (NEVER `--force`).
+	// Provably merged: WRITE-THROUGH delete — drop the LOCAL tracking ref FIRST
+	// (the ref that drives continue-detection), THEN the arbiter head (NEVER
+	// `--force`). The asymmetry is the point: an arbiter-delete failure leaves
+	// the local store BEHIND (self-healing on next fetch), never AHEAD (a stale
+	// `refs/remotes/<arbiter>/work/<slug>` that drives a wrong "continue" — the
+	// permanent stale-continue bug today's arbiter-first ordering creates).
+	run(
+		'git',
+		['update-ref', '-d', `refs/remotes/${arbiter}/${branch}`],
+		input.cwd,
+		{env},
+	);
 	run('git', ['push', arbiter, '--delete', branch], input.cwd, {env});
 }
 

@@ -2,7 +2,7 @@ import {git} from './git.js';
 import {createJob, type Job} from './workspace.js';
 import {reapJob} from './gc.js';
 import {
-	branchAheadOf,
+	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
 	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
@@ -263,8 +263,19 @@ export function inPlaceStrategy(options: {
 			let continued = false;
 			let continueRebaseConflict = false;
 			let continuePushFailure: string | undefined;
+			// ARBITER-AUTHORITATIVE continue-detection: `ls-remote` the arbiter so a
+			// STALE local remote-tracking ref (a plain `git fetch` does NOT prune
+			// unless `fetch.prune` is set) pointing at a branch the arbiter no longer
+			// has cannot resurrect a deleted branch as a "continue".
 			if (
-				branchAheadOf(checkout, `${arbiter}/${branch}`, `${arbiter}/main`, env)
+				branchAheadOfArbiter({
+					cwd: checkout,
+					arbiterRemote: arbiter,
+					branch,
+					branchRef: `${arbiter}/${branch}`,
+					mainRef: `${arbiter}/main`,
+					env,
+				})
 			) {
 				continued = true;
 				// The arbiter `work/<slug>` tip the fetch above brought down, READ BEFORE
