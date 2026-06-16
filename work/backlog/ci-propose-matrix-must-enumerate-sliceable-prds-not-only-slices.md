@@ -19,7 +19,7 @@ Net: in the default propose tick the matrix can only ever contain `slice:` legs.
 
 GOAL: make a ready, ungated, sliceable PRD reachable by the DEFAULT scheduled (propose) tick — one `advance prd:<slug> --propose` matrix leg per sliceable PRD, exactly as each eligible slice already gets one `advance slice:<slug> --propose` leg. CI already uses explicit prefixes, so `prd:` legs are correct and supported by the command surface. The `autoSlice` policy still gates which PRDs are sliceable (resolved per-repo); this slice does NOT change WHAT is sliceable, only that the propose enumerator can SEE the sliceable-PRD pool.
 
-This is a fix along the `scan --json` → `jq` → matrix path plus the workflow template(s) that emit that path. As of 2026-06-16 THREE templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `advance-ci-template.ts`, `build-slice-tick-template.ts`) — see Open-questions Q3 for which are live (the `build-slice-tick` deletion is in-progress, NOT yet landed). It is FILE-ADJACENT to the gate-env slices on `advance-lifecycle-template.ts` (see Blocked by / Open questions).
+This is a fix along the `scan --json` → `jq` → matrix path plus the workflow template(s) that emit that path. As of 2026-06-16 THREE templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `advance-ci-template.ts`, `build-slice-tick-template.ts`) — see the `## Build-time note` for which are live (the `build-slice-tick` deletion is in-progress, NOT yet landed). It is FILE-ADJACENT to the gate-env slice on `advance-lifecycle-template.ts` (see `## Blocked by`).
 
 ## Decisions (resolved by the maintainer, 2026-06-16)
 
@@ -37,7 +37,7 @@ Three templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `adv
 - [ ] End-to-end at the enumeration seam: given a work tree with one eligible slice AND one sliceable PRD, the propose matrix contains BOTH `slice:<slug>` and `prd:<slug>`. A test pins this (mirror the existing scan/enumerate tests).
 - [ ] The structural validator(s) for the edited template(s) accept the PRD-enumerating `jq` and still reject a regression to slice-only (if a validator currently pins slice-only enumeration, update it).
 - [ ] No change to WHAT is sliceable: `autoSlice` still gates the PRD pool; a config-less repo with `autoSlice` off still surfaces no PRD legs. The fix only makes the already-sliceable pool VISIBLE to the propose enumerator. A test pins that the gate still binds.
-- [ ] Only the LIVE template(s) are touched (per Q3: if `build-slice-tick-template.ts` still exists at build time it is either also updated or — preferably — this slice is ordered after its deletion so it is skipped; it is never resurrected if already gone); `intake`/`close-job` and non-gate env are unaffected.
+- [ ] Only the LIVE template(s) are touched (per the `## Build-time note`: if `build-slice-tick-template.ts` still exists at build time it is either also updated or — preferably — this slice is ordered after its deletion so it is skipped; it is never resurrected if already gone); `intake`/`close-job` and non-gate env are unaffected.
 - [ ] `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
 ## Blocked by
