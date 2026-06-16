@@ -1051,7 +1051,17 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		agentEnv: options.env,
 	});
 
-	if (completed.outcome === 'completed') {
+	if (
+		completed.outcome === 'completed' ||
+		completed.outcome === 'already-integrated'
+	) {
+		// `already-integrated` is the stranded-done auto-recover's clean no-op (the
+		// kept tip was already on `<arbiter>/main` — e.g. the prior PR merged
+		// out-of-band before the re-claim). It is a SUCCESSFUL terminal state — the
+		// work is integrated — so it folds into `DoOutcome 'completed'` (exit 0),
+		// not a new outcome value: the autonomous caller just needs to know the
+		// integrate path ended cleanly. The distinct `CompleteOutcome` value
+		// preserves the no-op signal for tests + the `complete` surface.
 		return {
 			exitCode: 0,
 			outcome: 'completed',
@@ -2111,7 +2121,14 @@ async function runRemotePipeline(
 		agentEnv: options.env,
 	});
 
-	if (completed.outcome === 'completed') {
+	if (
+		completed.outcome === 'completed' ||
+		completed.outcome === 'already-integrated'
+	) {
+		// Stranded-done auto-recover's clean no-op folds into `completed` here too
+		// (see the in-place performDo handler for the rationale): same SHARED
+		// `complete.ts` seam — so `do --remote` (this `performDoRemote`) inherits
+		// the auto-recover without per-caller duplication.
 		return {
 			exitCode: 0,
 			outcome: 'completed',

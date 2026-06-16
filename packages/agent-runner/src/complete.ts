@@ -92,6 +92,7 @@ export {synthesiseProposeTitle, composeProposeBody, PR_TITLE_MAX};
 
 export type CompleteOutcome =
 	| 'completed' // gated, moved, committed, integrated
+	| 'already-integrated' // stranded-done auto-recover: tip already on <arbiter>/main → clean no-op (no re-push, no double-integrate)
 	| 'prepare-failed' // the env-prep step (prepare) was red — env not ready, verify not run
 	| 'gate-failed' // the acceptance gate was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
@@ -454,17 +455,47 @@ async function runComplete(
 	// fallback for the degenerate "arbiter holds nothing" case, not the authority.
 	const inProgress = join(cwd, 'work', 'in-progress', `${slug}.md`);
 	const needsAttention = join(cwd, 'work', 'needs-attention', `${slug}.md`);
-	const source: 'in-progress' | 'needs-attention' = existsSync(inProgress)
+	const done = join(cwd, 'work', 'done', `${slug}.md`);
+	const onInProgress = existsSync(inProgress);
+	const onNeedsAttention = existsSync(needsAttention);
+	const onDone = existsSync(done);
+	// STRANDED-DONE AUTO-RECOVER (PRD `ledger-integrity` story 6, the autonomous
+	// half of `finish-already-committed-branch`). When neither in-progress/ nor
+	// needs-attention/ holds the slug on the BRANCH tree BUT done/ does, the work
+	// branch was already built + done-moved + committed by a prior run that never
+	// landed on the arbiter (a terminal push failed, or the PR never merged). The
+	// autonomous `do`/`advance`/plain-`complete` path used to refuse this with
+	// `nothing to complete`; instead route into the SHARED recover tail (the SAME
+	// `committedRecovery: true` path `complete --isolated` drives), reusing the
+	// existing capability. Detection here is the FRONT-GATE only — folder shape;
+	// `recoverAlreadyCommitted` owns the unspoofable tip-vs-arbiter `isAncestor`
+	// decision (one reachability check, not two), so a tip ALREADY on
+	// `<arbiter>/main` returns `already-integrated` (clean no-op, NEVER a
+	// re-push/double-integrate). Mutually exclusive with the build-path source +
+	// `recovering` flags — the core ignores them when `committedRecovery` is set.
+	const committedRecovery = !onInProgress && !onNeedsAttention && onDone;
+	const source: 'in-progress' | 'needs-attention' = onInProgress
 		? 'in-progress'
 		: 'needs-attention';
 	const sourcePath = source === 'in-progress' ? inProgress : needsAttention;
-	if (!existsSync(sourcePath)) {
+	if (!committedRecovery && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
 			`work/in-progress/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
 				'nothing to complete (already done, or wrong slug?).',
 		);
 	}
-	const recovering = source === 'needs-attention';
+	const recovering = !committedRecovery && source === 'needs-attention';
+	if (committedRecovery) {
+		// Announce LOUDLY: a stranded already-complete branch signals an EARLIER
+		// un-merged PR — the CI/job log must record that the autonomous path took
+		// the recovery branch, not a normal completion. The `already-integrated`
+		// no-op gets its own clear note from the core itself.
+		note(
+			`>> recovered a stranded already-complete branch for '${slug}' — ` +
+				'integrating the kept commit (no rebuild). This signals an earlier ' +
+				'un-merged PR.',
+		);
+	}
 
 	// Pre-flight DIVERGENCE GUARD (merge mode only) — the SAME class of refusal `do`
 	// raises up front: a local `main` AHEAD of `<arbiter>/main` (unpushed commits)
@@ -504,6 +535,9 @@ async function runComplete(
 		branch,
 		source,
 		recovering,
+		// Route stranded-done into the shared recover tail (front-gate detection;
+		// the core does the unspoofable tip-vs-arbiter ancestry check).
+		committedRecovery,
 		prepare: options.prepare,
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
@@ -570,6 +604,20 @@ async function runComplete(
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
 			commitMessage: core.commitMessage,
+			message: core.reason ?? '',
+		};
+	}
+	if (core.outcome === 'already-integrated') {
+		// Stranded-done auto-recover: the kept tip is ALREADY on `<arbiter>/main`
+		// (the PR merged out-of-band before the re-run). A clean, successful no-op
+		// — NEVER a re-push / second PR. The core already emitted its honest note;
+		// the caller's tail (switch-to-main / ff / delete-branch) is irrelevant
+		// because the work is already integrated and the branch may or may not
+		// still exist locally.
+		return {
+			exitCode: 0,
+			outcome: 'already-integrated',
+			branch: core.branch,
 			message: core.reason ?? '',
 		};
 	}
