@@ -4,7 +4,7 @@
  * issues → slice/PRD, AND insertion point E: surface the review verdict back into
  * the issue thread). This module GENERATES the one fixed intake workflow file and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
- * `build-slice-tick-template.ts` / `advance-ci-template.ts` (the package depends on
+ * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
  * NO YAML lib, so the checks are presence/shape assertions over the raw text). It
  * ALSO carries the PURE author-trust → per-outcome-flags DERIVATION
  * ({@link deriveIntakeFlags}) — CI's merge-vs-propose POLICY, the load-bearing
@@ -419,7 +419,7 @@ export interface IntakeTriggerValidation {
 /**
  * Structurally validate the intake-trigger workflow against the slice's acceptance
  * criteria. Dependency-free (no YAML lib): presence/shape assertions over the raw
- * text, mirroring {@link validateBuildSliceTickWorkflow} /
+ * text, mirroring {@link validateAdvanceLifecycleWorkflow} /
  * {@link validateCloseJobWorkflow}.
  */
 export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {

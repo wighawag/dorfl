@@ -6,7 +6,7 @@
  * `docs/ci/advance-loop.yml.template` (the advance-loop capability's output) — it
  * does NOT hand-roll a competing advance workflow. It also STRUCTURALLY VALIDATES
  * the emitted YAML, mirroring the snapshot-assertion style of
- * `advance-ci-template.ts` / `build-slice-tick-template.ts` (the package depends on
+ * `advance-ci-template.ts` (the package depends on
  * NO YAML lib, so the checks are presence/shape assertions over the raw text).
  *
  * This is the "human is the clock" loop: CI drains the populated `work/` tree
@@ -360,8 +360,7 @@ export interface AdvanceLifecycleValidation {
 /**
  * Structurally validate the advance-lifecycle workflow against the slice's
  * acceptance criteria. Dependency-free (no YAML lib): presence/shape assertions
- * over the raw text, mirroring {@link validateBuildSliceTickWorkflow} /
- * {@link validateAdvanceCiTemplate}.
+ * over the raw text, mirroring {@link validateAdvanceCiTemplate}.
  */
 export function validateAdvanceLifecycleWorkflow(
 	text: string,

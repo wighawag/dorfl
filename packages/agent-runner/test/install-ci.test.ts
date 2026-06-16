@@ -833,6 +833,158 @@ describe('capability-emitter registry seam (a new capability is a NEW file)', ()
 	});
 });
 
+// ─── install-ci emits ONE advance workflow (no redundant build-slice-tick) ──
+
+describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle, the superset)', () => {
+	// Why: `advance` is a single SUPERSET verb and CI always calls it (never
+	// `do`). The retired `build-slice-tick` emitter was a strictly weaker
+	// duplicate of `advance-lifecycle` — same verb, gates, hourly cron — so its
+	// removal (capability module + template deleted at source) leaves
+	// advance-lifecycle as the sole advance emitter. This pins that, so a future
+	// re-add of a parallel advance workflow would fail the suite.
+	//
+	// NOTE: capability modules self-register at IMPORT time (cached per-worker),
+	// and the registry-seam describe above this one clears the registry in its
+	// afterEach — so a later loadCapabilityRegistry() call hits the import cache
+	// and finds the registry empty. We sidestep that here by re-creating the
+	// shipped emitters DIRECTLY from the template-module exports (the same
+	// constants + generators each capability shim wires up), which validates the
+	// emitter pipeline as the wizard sees it.
+
+	const config: ResolvedCIConfig = {
+		authMode: 'models-json',
+		providers: [
+			{
+				name: 'anthropic',
+				apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+				models: [{id: 'claude-sonnet-4-20250514'}],
+				builtin: true,
+			},
+		],
+		defaultProvider: 'anthropic',
+		defaultModel: 'claude-sonnet-4-20250514',
+		harness: 'pi',
+	};
+
+	async function shippedEmitters() {
+		const adv = await import('../src/advance-lifecycle-template.js');
+		const intake = await import('../src/intake-trigger-template.js');
+		const closeJob = await import('../src/close-job-template.js');
+		return [
+			{
+				id: adv.ADVANCE_LIFECYCLE_CAPABILITY_ID,
+				label: adv.ADVANCE_LIFECYCLE_CAPABILITY_LABEL,
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: adv.ADVANCE_LIFECYCLE_WORKFLOW_PATH,
+						content: adv.generateAdvanceLifecycleWorkflow(c),
+					},
+				],
+			},
+			{
+				id: intake.INTAKE_TRIGGER_CAPABILITY_ID,
+				label: intake.INTAKE_TRIGGER_CAPABILITY_LABEL,
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: intake.INTAKE_TRIGGER_WORKFLOW_PATH,
+						content: intake.generateIntakeWorkflow(c),
+					},
+				],
+			},
+			{
+				id: closeJob.CLOSE_JOB_CAPABILITY_ID,
+				label: closeJob.CLOSE_JOB_CAPABILITY_LABEL,
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: closeJob.CLOSE_JOB_WORKFLOW_PATH,
+						content: closeJob.generateCloseJobWorkflow(c),
+					},
+				],
+			},
+		];
+	}
+
+	it('the shipped capability id set contains advance-lifecycle, intake, close-job — and NO build-slice-tick', async () => {
+		const caps = await shippedEmitters();
+		const ids = caps.map((c) => c.id);
+		expect(ids).toContain('advance-lifecycle');
+		expect(ids).toContain('intake');
+		expect(ids).toContain('close-job');
+		expect(ids).not.toContain('build-slice-tick');
+		// And the deleted template module no longer exists on disk — a future
+		// `loadCapabilityRegistry()` cannot re-find a build-slice-tick emitter.
+		const capDir = new URL('../src/install-ci-capabilities/', import.meta.url)
+			.pathname;
+		expect(existsSync(join(capDir, 'build-slice-tick.ts'))).toBe(false);
+		expect(
+			existsSync(
+				new URL('../src/build-slice-tick-template.ts', import.meta.url)
+					.pathname,
+			),
+		).toBe(false);
+	});
+
+	it('the emitted file set contains exactly ONE workflow that invokes `agent-runner advance`, and NO build-slice-tick.yml', async () => {
+		const shipped = await shippedEmitters();
+		const files = buildSetupArtifacts(config, shipped);
+
+		// No path mentions build-slice-tick anywhere.
+		for (const f of files) {
+			expect(f.path).not.toMatch(/build-slice-tick/);
+		}
+
+		// Workflow files = those under workflows/. Exactly one carries the
+		// `agent-runner advance` verb (the lifecycle superset); intake +
+		// close-job are workflows too, but they do NOT invoke `advance`.
+		const workflowFiles = files.filter((f) =>
+			f.path.startsWith(join('workflows', '')),
+		);
+		const advanceWorkflows = workflowFiles.filter((f) =>
+			/\bagent-runner advance\b/.test(f.content),
+		);
+		expect(advanceWorkflows).toHaveLength(1);
+		expect(advanceWorkflows[0]!.path).toBe(
+			join('workflows', 'advance-lifecycle.yml'),
+		);
+	});
+
+	it('the retained advance workflow keeps its superset shape: question-push trigger + reap job + calm gate env block', async () => {
+		const shipped = await shippedEmitters();
+		const lifecycle = shipped.find((c) => c.id === 'advance-lifecycle')!;
+		expect(lifecycle).toBeDefined();
+		const [file] = lifecycle.emit(config);
+		const yml = file!.content;
+
+		// The on-answer-committed push trigger (the defining lifecycle trigger).
+		expect(yml).toMatch(/\bpush:\s*[\s\S]*?paths:[\s\S]*?work\/questions\//);
+		// The reap-merged-branches job (capability F rides this tick).
+		expect(yml).toMatch(/reap-merged-branches:/);
+		expect(yml).toMatch(/agent-runner gc --remote-branches\b/);
+		// The calm-default lifecycle gate env block.
+		expect(yml).toMatch(/AGENT_RUNNER_AUTO_BUILD:/);
+		expect(yml).toMatch(/AGENT_RUNNER_AUTO_SLICE:/);
+		expect(yml).toMatch(/AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'off'/);
+		expect(yml).toMatch(/AGENT_RUNNER_SURFACE_BLOCKERS:\s*'false'/);
+	});
+
+	it('intake + close-job still emit one workflow each (they are not advance duplicates)', async () => {
+		const shipped = await shippedEmitters();
+		const intake = shipped.find((c) => c.id === 'intake')!;
+		const closeJob = shipped.find((c) => c.id === 'close-job')!;
+		expect(intake.emit(config).length).toBeGreaterThan(0);
+		expect(closeJob.emit(config).length).toBeGreaterThan(0);
+		// And neither of them carries the `advance` verb — they are not advance
+		// workflows (the assertion above pins that there is ONLY ONE advance
+		// workflow, advance-lifecycle).
+		for (const f of intake.emit(config)) {
+			expect(/\bagent-runner advance\b/.test(f.content)).toBe(false);
+		}
+		for (const f of closeJob.emit(config)) {
+			expect(/\bagent-runner advance\b/.test(f.content)).toBe(false);
+		}
+	});
+});
+
 // ─── shared-write isolation (the slice's load-bearing safety assertion) ──────
 
 describe('shared-write isolation: real .github / secrets / ~ / system git config untouched', () => {
