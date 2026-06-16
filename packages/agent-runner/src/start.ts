@@ -2,7 +2,7 @@ import {performClaim} from './claim-cas.js';
 import {ledgerWrite} from './ledger-write.js';
 import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
-	branchAheadOf,
+	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
 	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
@@ -561,14 +561,20 @@ async function switchToWorkBranch(params: {
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 
 	// CONTINUE-detection (shared with the job-worktree path): does the arbiter
-	// have a `work/<slug>` ref AHEAD of main? In a normal clone the refs are the
+	// have a `work/<slug>` ref AHEAD of main? ARBITER-AUTHORITATIVE: `ls-remote`
+	// the arbiter so a STALE local remote-tracking ref (a plain `git fetch` does
+	// NOT prune unless `fetch.prune` is set — verified live in the slice obs)
+	// pointing at a branch the arbiter no longer has cannot resurrect a deleted
+	// branch as a "continue". In a normal clone the local refs are the
 	// remote-tracking `<arbiter>/work/<slug>` and `<arbiter>/main`.
-	const ahead = branchAheadOf(
+	const ahead = branchAheadOfArbiter({
 		cwd,
-		`${arbiter}/${branch}`,
-		`${arbiter}/main`,
+		arbiterRemote: arbiter,
+		branch,
+		branchRef: `${arbiter}/${branch}`,
+		mainRef: `${arbiter}/main`,
 		env,
-	);
+	});
 	if (ahead) {
 		return continueFromKeptBranch({slug, arbiter, cwd, env, note});
 	}

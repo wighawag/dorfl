@@ -137,12 +137,23 @@ export function sweepRemoteMergedBranches(
 		}
 
 		// Provably merged. Report (dry-run) or delete (the real sweep). Deletion of
-		// a fully-merged ref needs NO force — and we NEVER force here.
+		// a fully-merged ref needs NO force — and we NEVER force here. The deletion
+		// is WRITE-THROUGH: drop the LOCAL tracking ref FIRST, THEN `git push
+		// --delete`. An arbiter-delete failure thus leaves the local store BEHIND
+		// (self-healing on next fetch), never AHEAD (a stale tracking ref that
+		// drives a wrong "continue" — the permanent stale-continue bug today's
+		// arbiter-first ordering creates).
 		if (dryRun) {
 			wouldReap.push({branch, tip});
 			note(`Would reap ${branch} (merged) on ${input.arbiter}.`);
 			continue;
 		}
+		run(
+			'git',
+			['update-ref', '-d', `refs/remotes/${input.arbiter}/${branch}`],
+			input.cwd,
+			{env},
+		);
 		const del = run(
 			'git',
 			['push', input.arbiter, '--delete', branch],

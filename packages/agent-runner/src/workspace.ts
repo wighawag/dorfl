@@ -7,7 +7,7 @@ import {
 	type EnsureMirrorResult,
 } from './repo-mirror.js';
 import {
-	branchAheadOf,
+	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
 	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
@@ -254,7 +254,20 @@ export function createJob(options: CreateJobOptions): Job {
 	// If it is AHEAD of `main` (a requeue kept it), CONTINUE from it; otherwise cut
 	// FRESH off main (the common case — a first attempt, or `requeue --reset` deleted
 	// it).
-	const continueFromKept = branchAheadOf(mirror.path, branch, 'main', env);
+	// ARBITER-AUTHORITATIVE continue-detection: `ls-remote` the arbiter (the
+	// mirror's `origin`) so an orphaned local head/tracking-ref in the bare hub
+	// mirror — e.g. a `refs/remotes/origin/work/<slug>` in the namespace no
+	// `remote.origin.fetch` refspec prunes, or a `refs/heads/work/<slug>` that
+	// `ensureMirror`'s `--prune` could not reach — cannot resurrect a branch the
+	// arbiter no longer has (e.g. a cross-machine `gc --remote-branches` delete).
+	const continueFromKept = branchAheadOfArbiter({
+		cwd: mirror.path,
+		arbiterRemote: 'origin',
+		branch,
+		branchRef: branch,
+		mainRef: 'main',
+		env,
+	});
 	let continued = false;
 	let continueRebaseConflict = false;
 	let continuePushFailure: string | undefined;
