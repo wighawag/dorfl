@@ -93,36 +93,32 @@ env:
   # out-of-band human/UI PR merges, whose work/<slug> branch nothing else deletes.
   SWEEP_MERGED_BRANCHES: ${{ github.event.inputs.sweepMergedBranches || 'true' }}
 
-  # ── The engine GATE FAMILY, surfaced as the AGENT_RUNNER_* env block ─────────
+  # ── The engine GATE FAMILY is resolved FROM CONFIG, not carried here ─────────
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
-  # > default. The SAME .agent-runner.json the laptop uses applies here; this env
-  # block is just the optional CI-only override. Change behaviour by editing these
-  # values (or a GitHub repo variable / .agent-runner.json key) — NOT by re-running
-  # install-ci (ADR §6: install-ci is one-time).
-  #
-  # CALM DEFAULTS: the two LIFECYCLE gates sit at their quiet state, so out-of-the-
-  # box this tick builds/slices and reports failures but asks NOTHING — it degrades
-  # to exactly the build/slice tick's behaviour until you opt in. They are
-  # ORTHOGONAL peers: OBSERVATION_TRIAGE governs the raw observation INBOX;
-  # SURFACE_BLOCKERS governs DECLARED needsAnswers work. "Groom my observations but
-  # leave my blocked work alone" = OBSERVATION_TRIAGE: ask + SURFACE_BLOCKERS:
-  # false. Applying an already-committed answer has NO gate (a human's answer is
-  # never stranded).
-  AGENT_RUNNER_AUTO_BUILD: 'true' # capability A: auto-build ready slices
-  AGENT_RUNNER_AUTO_SLICE: 'true' # capability B: auto-slice ready PRDs
-  AGENT_RUNNER_OBSERVATION_TRIAGE: 'off' # calm default (off|ask|auto): leave the observation inbox untouched
-  AGENT_RUNNER_SURFACE_BLOCKERS: 'false' # calm default (true|false): leave declared-blocked work silently blocked
+  # > default. The SAME .agent-runner.json the laptop uses applies here. This
+  # workflow INTENTIONALLY emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_SLICE
+  # / AGENT_RUNNER_OBSERVATION_TRIAGE / AGENT_RUNNER_SURFACE_BLOCKERS env line, so
+  # the env layer carries NO defaults — your committed .agent-runner.json wins (then
+  # the global config, then the strict built-in defaults autoBuild:false /
+  # autoSlice:false / observationTriage:'off' / surfaceBlockers:false). To enable CI
+  # autonomy, either set the gate(s) in .agent-runner.json (applies everywhere) or
+  # add the AGENT_RUNNER_* env var to this `env:` block yourself (the explicit,
+  # opt-in CI-only override the env layer is FOR). Change behaviour by editing the
+  # config / a GitHub repo variable / this env block — NOT by re-running install-ci
+  # (ADR §6: install-ci is one-time).
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. `scan --json` reports
-  # BOTH the registry/hub-mirror pool (`repos[].items[]`) AND the in-place working
-  # checkout (`cwd.repo.items[]`); CI runs IN-PLACE so the eligible items live in
-  # the latter (a fresh runner has no registered mirror). `jq` unions + dedups both
-  # pools into a deduplicated GitHub Actions matrix list of explicit `slice:<slug>`
-  # ids (CI MUST use explicit prefixes). Each becomes one matrix leg → one
-  # independent `advance` → one PR. Skipped in merge mode.
+  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].prds[]`) AND
+  # the in-place working checkout (`cwd.repo.items[]`, `cwd.repo.prds[]`); CI
+  # runs IN-PLACE so the eligible items live in the latter (a fresh runner has no
+  # registered mirror). `jq` unions + dedups both eligible-SLICE pools AND both
+  # sliceable-PRD pools into a deduplicated GitHub Actions matrix list of
+  # explicit `slice:<slug>` / `prd:<slug>` ids (CI MUST use explicit prefixes).
+  # Each becomes one matrix leg → one independent `advance` → one PR / one
+  # auto-sliced PRD. Skipped in merge mode.
   enumerate:
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
@@ -136,10 +132,14 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit `slice:` prefixes, never bare (ADR command-surface §3a).
+        # uses explicit `slice:` / `prd:` prefixes, never bare (ADR command-surface
+        # §3a). Eligible SLICES ⇒ `slice:<slug>` legs (`advance` builds them);
+        # SLICEABLE PRDs ⇒ `prd:<slug>` legs (`advance` auto-slices them, capability
+        # B — `AGENT_RUNNER_AUTO_SLICE` above). Both pools surface on `repos[]`
+        # AND `cwd.repo`; we union + dedup so the matrix has one leg per item.
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
