@@ -3,6 +3,7 @@ title: install-ci must NOT hardcode the AGENT_RUNNER_* gate policy into the emit
 slug: install-ci-emits-no-gate-env-let-config-decide
 blockedBy: []
 covers: []
+humanOnly: true
 ---
 
 ## What to build
