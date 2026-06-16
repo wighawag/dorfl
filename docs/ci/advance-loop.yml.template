@@ -103,11 +103,13 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the matrix from the eligible-pool scan. `scan --json` reads BOTH the
-  # registry/hub-mirror pool (`repos[].items[]`) AND the in-place working checkout
-  # (`cwd.repo.items[]`) and emits eligible items; CI runs IN-PLACE so the eligible
-  # items live in the latter (a fresh runner has no registered mirror). `jq` unions
-  # + dedups both pools into a GitHub Actions matrix list. Skipped entirely in merge
-  # mode.
+  # registry/hub-mirror pool (`repos[].items[]` + `repos[].prds[]`) AND the
+  # in-place working checkout (`cwd.repo.items[]` + `cwd.repo.prds[]`) and emits
+  # eligible items + sliceable PRDs; CI runs IN-PLACE so the eligible items live
+  # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
+  # both eligible-SLICE pools AND both sliceable-PRD pools into a GitHub Actions
+  # matrix list (one `slice:<slug>` or `prd:<slug>` id per leg). Skipped entirely
+  # in merge mode.
   enumerate:
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
@@ -121,16 +123,17 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
       - id: scan
         # The eligible-pool scan: enumerate eligible items as namespaced ids.
-        # `scan --json` reports the hub-mirror queue as `repos[].items[]` AND the
-        # in-place working checkout as `cwd.repo.items[]`, each carrying `.slug`
-        # and `.eligibility.eligible`; we union both pools and take the eligible
-        # ones as explicit `slice:<slug>` ids (CI MUST use explicit prefixes). Each
-        # becomes one matrix leg → one independent `advance` → one PR. (Eligible
-        # SLICES; sliceable PRDs are driven via the sequential/named path — see
-        # docs/ci/README.md "Matrix enumeration scope".)
+        # `scan --json` reports BOTH pools twice — once for the hub-mirror queue
+        # (`repos[].items[]` + `repos[].prds[]`) AND once for the in-place working
+        # checkout (`cwd.repo.items[]` + `cwd.repo.prds[]`), each carrying `.slug`
+        # and `.eligibility.eligible`. We union both surfaces and take the
+        # eligible ones as explicit `slice:<slug>` / `prd:<slug>` ids (CI MUST
+        # use explicit prefixes). Each becomes one matrix leg → one independent
+        # `advance` → one PR — for a SLICE that is the build, for a PRD that is
+        # the auto-slice (capability B, `AGENT_RUNNER_AUTO_SLICE`).
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
