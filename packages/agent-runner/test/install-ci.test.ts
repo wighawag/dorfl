@@ -575,6 +575,44 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		expect(ctx.secrets.size).toBe(0);
 		expect(result.secrets).toEqual([]);
 	});
+
+	it('install-ci emits a completion message explaining CI autonomy is OFF by default + HOW to enable it (config OR workflow env)', async () => {
+		// Slice `install-ci-emits-no-gate-env-let-config-decide`: the emitted
+		// advance workflow carries NO AGENT_RUNNER_* gate env, so a config-less
+		// repo resolves to the built-in strict defaults (autoBuild/autoSlice: false,
+		// observationTriage: 'off', surfaceBlockers: false) and CI claims nothing.
+		// That posture would be surprising without a heads-up; `install-ci` calls
+		// the existing `log()` sink after writing artifacts to explain it AND name
+		// the two enable paths (config key in .agent-runner.json OR the CI-only
+		// AGENT_RUNNER_* env override).
+		const ctx = new MemoryCIProviderContext({
+			workDir: work,
+			repo: 'owner/repo',
+			ghAvailable: false,
+		});
+		const file = join(work, 'ci.json');
+		writeFileSync(file, exportCIConfig(config));
+		const lines: string[] = [];
+		await installCI({
+			ctx,
+			fake: true,
+			configFile: file,
+			log: (line) => lines.push(line),
+		});
+		const joined = lines.join('\n');
+		// Tells the user CI autonomy is off by default.
+		expect(/CI autonomy is OFF by default/i.test(joined)).toBe(true);
+		// Names the precedence chain so the now-quiet behaviour is anchored.
+		expect(
+			/flag\s*>\s*env\s*>\s*per-repo\s*>\s*global\s*>\s*default/.test(joined),
+		).toBe(true);
+		// Names both enable paths: the per-repo config keys AND the CI-only env.
+		expect(/\.agent-runner\.json/.test(joined)).toBe(true);
+		expect(/"autoBuild":\s*true/.test(joined)).toBe(true);
+		expect(/"autoSlice":\s*true/.test(joined)).toBe(true);
+		expect(/AGENT_RUNNER_AUTO_BUILD:\s*'true'/.test(joined)).toBe(true);
+		expect(/AGENT_RUNNER_AUTO_SLICE:\s*'true'/.test(joined)).toBe(true);
+	});
 });
 
 // ─── interactive wizard ≡ config-file path (byte-identical) ───────────────────
@@ -948,7 +986,7 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		);
 	});
 
-	it('the retained advance workflow keeps its superset shape: question-push trigger + reap job + calm gate env block', async () => {
+	it('the retained advance workflow keeps its superset shape: question-push trigger + reap job + NO active gate env (per-repo config wins)', async () => {
 		const shipped = await shippedEmitters();
 		const lifecycle = shipped.find((c) => c.id === 'advance-lifecycle')!;
 		expect(lifecycle).toBeDefined();
@@ -960,11 +998,20 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		// The reap-merged-branches job (capability F rides this tick).
 		expect(yml).toMatch(/reap-merged-branches:/);
 		expect(yml).toMatch(/agent-runner gc --remote-branches\b/);
-		// The calm-default lifecycle gate env block.
-		expect(yml).toMatch(/AGENT_RUNNER_AUTO_BUILD:/);
-		expect(yml).toMatch(/AGENT_RUNNER_AUTO_SLICE:/);
-		expect(yml).toMatch(/AGENT_RUNNER_OBSERVATION_TRIAGE:\s*'off'/);
-		expect(yml).toMatch(/AGENT_RUNNER_SURFACE_BLOCKERS:\s*'false'/);
+		// Slice `install-ci-emits-no-gate-env-let-config-decide`: NONE of the four
+		// AGENT_RUNNER_* gate-family keys appears as an ACTIVE env assignment. The
+		// shipped workflow defers all gate policy to per-repo config / built-in
+		// defaults. Strip comment lines before the negative check so the
+		// explanatory header comment (which names the keys to document the
+		// posture) is not a false positive.
+		const operative = yml
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/AGENT_RUNNER_AUTO_BUILD\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_AUTO_SLICE\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_OBSERVATION_TRIAGE\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_SURFACE_BLOCKERS\s*:/.test(operative)).toBe(false);
 	});
 
 	it('intake + close-job still emit one workflow each (they are not advance duplicates)', async () => {
