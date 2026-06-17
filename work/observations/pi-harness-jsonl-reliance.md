@@ -2,6 +2,7 @@
 title: pi harness relies on .jsonl session-log scraping in multiple places — worth a future polish pass to validate the approach
 date: 2026-06-06
 status: open
+needsAnswers: true
 ---
 
 ## The signal
