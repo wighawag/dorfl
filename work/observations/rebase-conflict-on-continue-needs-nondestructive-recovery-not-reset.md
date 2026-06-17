@@ -3,6 +3,7 @@ title: A "continue from kept branch" rebase conflict pushes users toward the des
 date: 2026-06-15
 status: open
 severity: high
+needsAnswers: true
 ---
 
 ## The signal
