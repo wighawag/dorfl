@@ -3,6 +3,7 @@ title: the advancing lock is a file-ORTHOGONAL presence-marker (work/advancing/<
 date: 2026-06-16
 status: open
 slug: advancing-lock-orthogonal-not-a-move-revisit
+needsAnswers: true
 ---
 
 ## What was observed
