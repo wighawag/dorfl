@@ -27,7 +27,21 @@ status: incubating
 
 ## TL;DR (the recommendation up front)
 
-**Adopt "rebase-until-real-conflict" as the contention-retry model FOR THE FOUR ACQUIRE/CREATE PATHS
+> **The answer is a FUNCTION of one dial: is HUMAN WORKING-TREE VISIBILITY (invariant E) required?**
+> The document now derives the best design for BOTH requirement sets (see `## Requirement SETS`).
+> - **Set 1 (E kept, default):** `C2 + (C5 or C6)`, keep status where a human can `ls` it; the C5/C6
+>   fork is the only open call. Detailed below as the original analysis.
+> - **Set 2 (E dropped, maintainer-requested exploration 2026-06-17):** `C2 + C7`, put the WHOLE `work/`
+>   state machine on ONE dedicated ledger ref and make `main` code-only. This is strictly cleaner (it
+>   deletes branch-inheritance, the `→done` on-branch exception, the drop-rebase machinery, and every
+>   visibility-forced marker/move exception in one substrate move, and incidentally unblocks
+>   protected-main), and is ONLY available because E is dropped. See `## Best design under Requirement
+>   Set 2`.
+> - **Common to BOTH sets: build C2 first.** It is the per-ref contention fix, needed on `main` (Set 1)
+>   or the ledger ref (Set 2) either way, and it kills the verified CI failure immediately while
+>   committing you to nothing about the visibility decision.
+
+**[Set 1 framing] Adopt "rebase-until-real-conflict" as the contention-retry model FOR THE FOUR ACQUIRE/CREATE PATHS
 (claim, slicing-acquire, advancing-acquire, create), and KEEP every lock/marker/move in main's tree.**
 For those four paths a "real conflict" is an EXACT same-path existence check the code already runs
 each attempt, so a losing replay is provably clean and should loop to success rather than count
@@ -123,6 +137,45 @@ Three interacting issues, all verified:
 - **F, NEVER `--force` to main.** Only leased CAS fast-forwards of throwaway-off-main ledger commits.
 - **G, Elegance / one-primitive.** Prefer ONE primitive that dissolves multiple problems over a stack
   of mitigations. The fallback to BEAT is backoff+jitter+budget+stale-marker-cleanup+concurrency-cap.
+
+## Requirement SETS, the design is a function of which invariants are mandatory
+
+The candidate that wins is a FUNCTION of which of A,G are mandatory. Most are non-negotiable
+(A atomicity, B/C recovery, D bare-arbiter, F never-force are all hard), but **E (human visibility)
+and G (elegance) are the dials** that actually move the answer. So rather than one global ranking, the
+honest structure is: pick a REQUIREMENT SET, then derive the best design FOR that set. Two sets are
+worth exploring; this document now covers both.
+
+**A CRITICAL DISTINCTION that the visibility dial turns on (verified in code).** "Visibility" (E) is
+NOT how the CODE reads state. Every machine reader ALREADY reads committed git via `ls-tree`/`show`
+from a REF (a bare mirror's `main`), NOT from a working-tree `ls` (`ledger-read.ts`, `scan.ts`,
+`status.ts`, `claim-cas.ts` all probe `<arbiter>/main:work/...` or `<mirror>/main:work/...`). And a
+generated dashboard ALREADY exists (`agent-runner status` / `scan`) that humans run to see jobs +
+needs-attention. So E is specifically "a HUMAN can `ls` the working tree and see status", which is
+separable from both "the code can read status" (it reads a ref) and "a human can see status at all"
+(they run `status`). Dropping E does NOT break any reader; it only removes the constraint that forced
+status to live where a human could `ls` it. THIS is why dropping E opens the design space so much.
+
+### Requirement SET 1, DEFAULT (E mandatory: a human can `ls work/` and see status)
+
+This is the set the candidates above (C0,C6) were scored against. Under it, the winner is
+**C2 + (C5 or C6)** with C6 only acceptable because it recovers status visibility via the generated
+view. E being mandatory is exactly what KILLS C3 (per-item refs) and the literal D4 (off-main
+advancing) and DEMOTES C6 to "a fork you pay a visibility cost for." The full analysis above stands
+FOR THIS SET.
+
+### Requirement SET 2, VISIBILITY DROPPED (E removed entirely)
+
+> Maintainer decision 2026-06-17: explore the set where HUMAN WORKING-TREE VISIBILITY is NOT a
+> requirement. Humans use `agent-runner status` (a generated view); they do NOT need to read raw
+> `work/` status folders. The referenceable files (backlog/done/prd/prd-sliced) MAY still be glanceable
+> as a convenience, but it is no longer a CONSTRAINT, so the design is free to put status anywhere the
+> code can read it cheaply on a bare arbiter.
+
+With E gone, the entire reason `main`-in-tree status existed collapses, and the rejections that leaned
+on visibility (D4, C3, the ADR's P-opt-1) are REOPENED on their merits. The dominant force becomes
+G (elegance) + A,D,F. The candidate that wins this set is NOT C2+C5 and NOT C6-as-described, it is a
+cleaner thing, see `## Best design under Requirement Set 2` below.
 
 ## The candidates
 
@@ -576,6 +629,104 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
 - **Issue 3's precedence rule is advisory for advance∥claim** (rare residual race), atomic only for
   advance∥slicing (via the existing stale check). Bundling truly-atomic advance∥claim exclusion would
   reopen a narrow unification and widen the blast radius; keep it deferred.
+
+## Best design under Requirement Set 2 (human working-tree visibility DROPPED)
+
+With E removed, re-derive from scratch rather than re-scoring the SET-1 candidates. The forces left are
+A (atomicity), B/C (recovery), D (bare arbiter), F (never-force), and G (elegance), and the code
+ALREADY reads status from a ref via `ls-tree`/`show`. The question becomes purely: **what is the
+cleanest serialization substrate, given no human must `ls` it?**
+
+### The winning shape: C7, ONE dedicated ledger ref holding the WHOLE transient state machine (the full P-opt-2, now unblocked)
+
+C6 was a PARTIAL split because E forced backlog/done/prd/prd-sliced to stay human-glanceable on main.
+Drop E and that constraint vanishes, so the clean shape is the FULL split the ADR's P-opt-2 always
+wanted: **`main` holds CODE only; a single dedicated, agent-writable ledger ref (`refs/agent-runner/ledger`,
+or a `ledger` branch) holds the ENTIRE `work/` state machine** (backlog, in-progress, needs-attention,
+done, slicing, prd, prd-sliced, advancing markers, everything). "Status = the folder" is PRESERVED in
+full, just on the ledger ref instead of main. Every transition is a CAS `git mv`/marker on that ref via
+`applyTransition` retargeted from `:main` to `:refs/agent-runner/ledger`.
+
+Why this is STRICTLY cleaner than C2+C5 and than C6 once E is gone:
+
+- **Issue 1 (false contention): the integration-churn source is GONE entirely**, not just reduced. The
+  ledger ref is advanced ONLY by ledger transitions, never by code integration (which lands on `main`).
+  So the ledger ref's writer set is exactly the ledger writers, no unrelated kicks. Combined with C2's
+  rebase-until-real on the ledger ref (still wanted, the SAME primitive, retargeted), same-path false
+  contention is killed. Cleaner than C6 because there is no longer a mixed main+ledger writer story to
+  reason about per folder.
+- **Issue 2 (branch-inheritance): DELETED, totally and by construction.** A work branch is cut from
+  `main`, and `main` now holds NO `work/` ledger tree at all (only code), so a branch CANNOT inherit
+  ANY ledger file (not advancing markers, not needs-attention moves, not done moves). The entire
+  `drop-bookkeeping-rebase` machinery, the branch-carries PRD's needs-attention-move removal, AND C5
+  all become UNNECESSARY in one move. The branch carries pure code; the `→done` move is no longer even
+  a branch commit, it is a ledger-ref CAS like every other transition. This is the deepest possible
+  closure of the whole class.
+- **The atomic `→done` exception DISSOLVES.** The branch-carries PRD kept `→done` as the one on-branch
+  move BECAUSE `main` had to show `done/` atomically with the code landing. Under C7, `done/` is on the
+  ledger ref and the code is on `main`, they are DIFFERENT refs, so "done atomic with code" becomes a
+  two-ref reconciliation (the same cross-ref story C6 introduced) rather than an on-branch move. This is
+  the ONE place C7 trades a solved problem for a new one, see costs.
+- **"status = the folder" is FULLY universal again.** No marker-vs-move exception forced by visibility,
+  no partial split, no co-located `.lock.md`. Advancing can even become a real per-type STATUS folder on
+  the ledger ref if desired (the taxonomy idea's `OPEN FORK` per-type-status proposal) because the
+  observations-don't-flow and position-shadowing objections were about the MAIN working tree humans
+  read, which no longer matters. (Still likely keep it a marker for the orthogonality reason, but the
+  visibility blocker is gone.)
+
+- A atomicity OK (same CAS+nonce+verify on the ledger ref). B/C recovery OK (verbs repoint to the
+  ledger ref; mechanically identical). D bare OK (a ref is a ref; CAS-push + ls-tree on `--bare`). F
+  never-force OK (leased ff to the ledger ref). G STRONGEST of all candidates: ONE substrate move
+  deletes issue 2 + the done-exception + the drop-rebase machinery + the marker/move visibility
+  exceptions, and hosts C2 unchanged. It is the design the read/write ledger seam ADR was BUILT for.
+
+### The honest costs of C7 (the price of dropping E)
+
+1. **A human can no longer `git clone` + `ls work/` and see the backlog/board.** They MUST run
+   `agent-runner status`/`scan` (which already exist, but now become the ONLY way), or `git show
+   refs/agent-runner/ledger:work/backlog/`. For a project whose CONTEXT.md prizes the readable `work/`
+   tree this is the real loss, it is exactly the requirement we are dropping, named honestly.
+2. **Cross-ref reconciliation is now the WHOLE lifecycle, not an edge.** Every claim (code branch off
+   main + ledger move on the ref) and every complete (code merge to main + done move on the ref) spans
+   two refs. The crash-safety story (code landed, ledger flip didn't, or vice versa) must be designed
+   for the COMMON path, not just failures. This is genuinely more than C2+C5 (one ref, no cross-ref).
+   It is the same CLASS the ADR flagged ("intermediate signal and done-on-main on different
+   refs/timelines") and the same class C6 had, just now unavoidable rather than scoped.
+3. **`scan` is fully network-bound for ALL state** (it must fetch the ledger ref), losing the
+   offline-scan property the seam ADR prized. (C2+C5 keep it fully offline; C6 lost only the status
+   half.) Mitigable with a local tracking copy of the ledger ref, but that is a freshness/caching story
+   to design.
+4. **Biggest reader/writer surface of all**, EVERY `work/` reader and writer retargets from `main` to
+   the ledger ref. Tractable because the read/write seams already centralize this (that is what they
+   were for), but it is the largest single migration here.
+5. **Provider note:** on a protected-`main` repo this is actually a BONUS (the ledger ref can be
+   agent-writable while `main` is protected, the exact contradiction the ADR opened with), so C7 also
+   incidentally UNBLOCKS the protected-main case the seam ADR was created for. Worth noting as upside.
+
+### Does C7 still want C2 and the issue-3 rule? Yes and yes.
+
+- **C2 (rebase-until-real) is STILL wanted**, now on the ledger ref. Same primitive, retargeted. The
+  ledger ref still has a whole-ref lease, so different-item writers still falsely contend without C2.
+  So C2 remains the FIRST step under BOTH requirement sets, more evidence it is the right thing to
+  build first regardless of the visibility decision.
+- **Issue 3 (cross-action exclusion) is UNCHANGED in nature** (advisory precedence + the slicing-stale
+  backstop), but slightly cleaner to host: all three holds now live on one ledger ref, so a future
+  "one action per item" check reads one ref. The advance∥claim TOCTOU residual is the same.
+
+### Set-2 recommendation
+
+**C2 (on the ledger ref) + C7 (whole state machine on one dedicated ledger ref; `main` = code only).**
+This is the most elegant design in the whole space (it deletes issue 2, the done-exception, the
+drop-rebase machinery, and every visibility-forced marker/move exception in ONE substrate move, and
+incidentally unblocks protected-main), and it is ONLY available because E is dropped. Its price is the
+full cross-ref lifecycle, network-bound scan, and the largest reader retarget, all of which are
+acceptable PRECISELY when human working-tree visibility is not required.
+
+**Relationship to the Set-1 answer:** C7 SUPERSEDES C5, C6, the branch-carries PRD's on-branch-move
+removal, AND the `→done` on-branch exception. C2 is common to both sets. So the only genuinely
+set-dependent decision is C5/C6 (Set 1) vs C7 (Set 2), and that decision IS the visibility requirement
+itself: keep E and you get C5/C6 (status stays where a human can read it); drop E and C7 is strictly
+cleaner. The maintainer's 2026-06-17 choice to explore dropping E points at C7.
 
 ## Disposition
 
