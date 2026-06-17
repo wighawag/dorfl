@@ -238,4 +238,14 @@ describe('do integration-failure recovery one-liner', () => {
 		const line = recoverIsolatedOneLiner('my-slice');
 		expect(line).toMatch(/agent-runner complete --isolated my-slice/);
 	});
+
+	it('ALSO names the cross-machine finish (plain complete) so a CI-stranded slice finished from another checkout is not told to use the no-op --isolated', () => {
+		const line = recoverIsolatedOneLiner('my-slice');
+		// Same-machine shortcut still present...
+		expect(line).toMatch(/complete --isolated my-slice/);
+		// ...and the portable, any-checkout finish: plain `complete <slug>`.
+		expect(line).toMatch(/agent-runner complete my-slice/);
+		// Flags WHY --isolated is machine-local (so the reader is not misled).
+		expect(line).toMatch(/SAME MACHINE/);
+	});
 });

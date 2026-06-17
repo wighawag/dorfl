@@ -1173,12 +1173,21 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
  * worktree path \u2014 the FINISH half of try-to-finish / else-surface. Detection is
  * unspoofable (an already-integrated slice is a clean no-op), so re-running it is
  * always safe.
+ *
+ * `complete --isolated` recovers the retained WORKTREE, so it ONLY works ON THE
+ * MACHINE that ran the job (the worktree is local + reaped when that runner ends).
+ * From a DIFFERENT checkout (e.g. a CI-stranded job finished on your laptop),
+ * `--isolated` finds no local worktree and silently no-ops; there, check out the
+ * already-pushed work branch off the arbiter and run plain `complete`. Both named.
  */
 export function recoverIsolatedOneLiner(slug: string): string {
 	return (
-		`To FINISH the stranded branch once the cause clears, run: ` +
-		`agent-runner complete --isolated ${slug} ` +
-		`(integrates the kept commit from the retained worktree; a no-op if already integrated).`
+		`To FINISH the stranded branch once the cause clears: ON THE SAME MACHINE that ` +
+		`ran the job, run \`agent-runner complete --isolated ${slug}\` (integrates the ` +
+		`kept commit from the retained worktree; a no-op if already integrated). From ` +
+		`ANOTHER checkout (e.g. a CI-stranded job finished on your laptop), check out ` +
+		`the pushed work branch off the arbiter and run plain \`agent-runner complete ` +
+		`${slug}\` instead.`
 	);
 }
 

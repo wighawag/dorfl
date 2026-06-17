@@ -242,6 +242,13 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(result.message).toMatch(/uncommitted/i);
 		expect(result.message).toMatch(/complete --isolated delta/);
 		expect(result.message).toMatch(/requeue --reset delta/);
+		// The advice leads with the CROSS-MACHINE finish (plain `complete` off a
+		// checked-out work branch) so a CI-stranded slice finished from another
+		// checkout is not told to use the machine-local (no-op there) --isolated.
+		expect(result.message).toMatch(
+			/git switch[\s\S]*?agent-runner complete delta/,
+		);
+		expect(result.message).toMatch(/ANY checkout/);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(false);
 

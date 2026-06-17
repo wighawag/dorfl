@@ -42,3 +42,7 @@ So the protocol's own recovery instruction, when the stranding happened in CI, p
 - Consider letting plain `complete <slug>` (or a `--from-branch`/`--fetch` flag) DO the `fetch` + `switch` itself when HEAD is on main but `<arbiter>/work/slice-<slug>` exists ahead of main, instead of erroring — so a human finishing a CI strand has one verb, not three manual git steps.
 - Drop / rephrase the "after committing those edits" clause on the path where the run already WIP-committed (the edits are on the branch, not in a dirty tree).
 - Doc-only fallback: if the verbs stay as-is, the CI workflow's surfaced-needs-attention summary (what CI prints / writes) should spell out the cross-machine finish recipe, since the in-CLI advice assumes same-machine.
+
+## Update (2026-06-17 — RESOLVED)
+
+Fixed directly. `complete.ts` now routes all three dirty-continue refusal messages through a shared `finishStrandedBranchAdvice(slug, branch, arbiter)` helper that leads with the CROSS-MACHINE finish (`git fetch <arbiter> && git switch -c <branch> <arbiter>/<branch> && agent-runner complete <slug>`, works from any checkout), names `complete --isolated` only as the SAME-MACHINE shortcut, and keeps `requeue --reset` as the discard path. The stale "after committing those edits" clause is gone (the run already wip-commits). `do.ts`'s `recoverIsolatedOneLiner` got the same cross-machine note (it had the identical machine-locality footgun). Tests pin both the cross-machine recipe and the same-machine shortcut. Gate green.
