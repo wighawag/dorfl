@@ -89,3 +89,7 @@ PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=
 
 Gate-2 nit only: performDo (do.ts ~L1073-1113) doesn't map the new strand-surfaced/surface-unmoved outcomes — they fall through to usage-error. Mirror runRemotePipeline (~L2141-2175) and add a
  performDo-level test. Arbiter ledger surface is already correct; only the in-place outcome label is wrong.
+
+## Needs attention
+
+continue on a kept branch whose 'autonomous-integration-refusal-surfaces-not-strands-in-progress' slice is already in work/done/ produced new uncommitted edits this run — the stranded-done auto-recover was gated off to avoid SILENTLY DISCARDING that work. Finish with `agent-runner complete --isolated autonomous-integration-refusal-surfaces-not-strands-in-progress` after committing those edits on `work/slice-autonomous-integration-refusal-surfaces-not-strands-in-progress`, or `agent-runner requeue --reset autonomous-integration-refusal-surfaces-not-strands-in-progress` to discard the kept branch and rebuild fresh.
