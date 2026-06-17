@@ -5,6 +5,7 @@ kind: observation
 area: skills/setup/SKILL.md (Phase A / A1 / A5 scaffold) vs. observed run output
 severity: low
 status: open
+needsAnswers: true
 ---
 
 ## The signal
