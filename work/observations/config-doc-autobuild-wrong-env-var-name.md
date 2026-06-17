@@ -3,6 +3,7 @@ title: config.ts docblock for `autoBuild` names the WRONG env var (AGENT_RUNNER_
 date: 2026-06-15
 status: open
 severity: low
+needsAnswers: true
 ---
 
 ## The signal
