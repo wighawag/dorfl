@@ -31,12 +31,13 @@ status: incubating
 > The document now derives the best design for BOTH requirement sets (see `## Requirement SETS`).
 > - **Set 1 (E kept, default):** `C2 + (C5 or C6)`, keep status where a human can `ls` it; the C5/C6
 >   fork is the only open call. Detailed below as the original analysis.
-> - **Set 2 (E dropped, maintainer-requested exploration 2026-06-17):** `C2 + C7`, put the WHOLE `work/`
->   state machine on ONE dedicated ledger ref and make `main` code-only. This is strictly cleaner (it
->   deletes branch-inheritance, the `→done` on-branch exception, the drop-rebase machinery, and every
->   visibility-forced marker/move exception in one substrate move, and incidentally unblocks
->   protected-main), and is ONLY available because E is dropped. See `## Best design under Requirement
->   Set 2`.
+> - **Set 2 (E dropped, maintainer-requested exploration 2026-06-17):** C2 + move STATUS off `main`.
+>   Dropping E touches only HUMAN glanceability of STATUS, agents KEEP a readable content tree
+>   (backlog/prd/observations/findings/ideas). So the move is: transient STATUS (folder-position +
+>   locks) goes to a dedicated ledger ref; CONTENT stays a readable tree. This deletes branch-inheritance
+>   + the `→done` on-branch exception + the drop-rebase machinery, and incidentally unblocks
+>   protected-main. Remaining sub-fork: C7 (content tree + status pointers) vs C7-alt (whole `work/` on
+>   the ledger ref). See `## Best design under Requirement Set 2`.
 > - **Common to BOTH sets: build C2 first.** It is the per-ref contention fix, needed on `main` (Set 1)
 >   or the ledger ref (Set 2) either way, and it kills the verified CI failure immediately while
 >   committing you to nothing about the visibility decision.
@@ -172,10 +173,12 @@ FOR THIS SET.
 > as a convenience, but it is no longer a CONSTRAINT, so the design is free to put status anywhere the
 > code can read it cheaply on a bare arbiter.
 
-With E gone, the entire reason `main`-in-tree status existed collapses, and the rejections that leaned
-on visibility (D4, C3, the ADR's P-opt-1) are REOPENED on their merits. The dominant force becomes
-G (elegance) + A,D,F. The candidate that wins this set is NOT C2+C5 and NOT C6-as-described, it is a
-cleaner thing, see `## Best design under Requirement Set 2` below.
+With E gone, the reason transient STATUS lived in a human-`ls`-able tree collapses, and the rejections
+that leaned on visibility (D4, C3, the ADR's P-opt-1) are REOPENED on their merits. IMPORTANT: dropping
+E does NOT move CONTENT (backlog/prd/observations/findings/ideas) anywhere, agents still read/write
+those as a readable tree; it only frees where STATUS lives. The dominant force becomes G (elegance) +
+A,D,F, and the winner moves transient STATUS off `main` to a dedicated ledger ref while CONTENT stays
+readable, see `## Best design under Requirement Set 2` below.
 
 ## The candidates
 
@@ -632,60 +635,125 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
 
 ## Best design under Requirement Set 2 (human working-tree visibility DROPPED)
 
-With E removed, re-derive from scratch rather than re-scoring the SET-1 candidates. The forces left are
-A (atomicity), B/C (recovery), D (bare arbiter), F (never-force), and G (elegance), and the code
-ALREADY reads status from a ref via `ls-tree`/`show`. The question becomes purely: **what is the
-cleanest serialization substrate, given no human must `ls` it?**
+> **CORRECTION 2026-06-17 (maintainer caught a conflation).** An earlier draft of this section said
+> "`main` holds CODE only; the ENTIRE `work/` tree moves to the ledger ref." That OVERSHOT. Dropping
+> HUMAN visibility (E) does NOT mean agents stop having a readable backlog / prd / observations /
+> findings / ideas to work from, OF COURSE they still need those, agents read backlog+prd+findings as
+> work INPUT and write observations/ideas as work OUTPUT. The corrected design below draws the line at
+> the right place: **CONTENT vs STATUS**, not "code vs everything."
 
-### The winning shape: C7, ONE dedicated ledger ref holding the WHOLE transient state machine (the full P-opt-2, now unblocked)
+### The line that actually matters: CONTENT (agent work I/O) vs STATUS (serialization)
 
-C6 was a PARTIAL split because E forced backlog/done/prd/prd-sliced to stay human-glanceable on main.
-Drop E and that constraint vanishes, so the clean shape is the FULL split the ADR's P-opt-2 always
-wanted: **`main` holds CODE only; a single dedicated, agent-writable ledger ref (`refs/agent-runner/ledger`,
-or a `ledger` branch) holds the ENTIRE `work/` state machine** (backlog, in-progress, needs-attention,
-done, slicing, prd, prd-sliced, advancing markers, everything). "Status = the folder" is PRESERVED in
-full, just on the ledger ref instead of main. Every transition is a CAS `git mv`/marker on that ref via
-`applyTransition` retargeted from `:main` to `:refs/agent-runner/ledger`.
+`work/` holds two DIFFERENT kinds of thing, and only ONE of them is what E ever governed:
 
-Why this is STRICTLY cleaner than C2+C5 and than C6 once E is gone:
+- **CONTENT, the files agents read/write as work input and output.** Backlog slice BODIES, prd,
+  prd-sliced, done records, AND the capture buckets observations / findings / ideas. An agent building
+  a slice reads the slice body + the PRD + referenced findings; an agent advancing writes a new
+  observation. These must stay REAL, READABLE, EDITABLE files in a normal tree. Dropping HUMAN
+  visibility says NOTHING about these, they are not "status," they are the work itself.
+- **STATUS, the serialization/lock state.** WHICH folder a slug currently sits in (backlog vs
+  in-progress vs needs-attention vs done), plus the slicing lock and the advancing markers. This is the
+  state the CAS serializes, and "a human can `ls` it" is the ONLY thing E was ever about.
 
-- **Issue 1 (false contention): the integration-churn source is GONE entirely**, not just reduced. The
-  ledger ref is advanced ONLY by ledger transitions, never by code integration (which lands on `main`).
-  So the ledger ref's writer set is exactly the ledger writers, no unrelated kicks. Combined with C2's
-  rebase-until-real on the ledger ref (still wanted, the SAME primitive, retargeted), same-path false
-  contention is killed. Cleaner than C6 because there is no longer a mixed main+ledger writer story to
-  reason about per folder.
-- **Issue 2 (branch-inheritance): DELETED, totally and by construction.** A work branch is cut from
-  `main`, and `main` now holds NO `work/` ledger tree at all (only code), so a branch CANNOT inherit
-  ANY ledger file (not advancing markers, not needs-attention moves, not done moves). The entire
-  `drop-bookkeeping-rebase` machinery, the branch-carries PRD's needs-attention-move removal, AND C5
-  all become UNNECESSARY in one move. The branch carries pure code; the `→done` move is no longer even
-  a branch commit, it is a ledger-ref CAS like every other transition. This is the deepest possible
-  closure of the whole class.
-- **The atomic `→done` exception DISSOLVES.** The branch-carries PRD kept `→done` as the one on-branch
-  move BECAUSE `main` had to show `done/` atomically with the code landing. Under C7, `done/` is on the
-  ledger ref and the code is on `main`, they are DIFFERENT refs, so "done atomic with code" becomes a
-  two-ref reconciliation (the same cross-ref story C6 introduced) rather than an on-branch move. This is
-  the ONE place C7 trades a solved problem for a new one, see costs.
-- **"status = the folder" is FULLY universal again.** No marker-vs-move exception forced by visibility,
-  no partial split, no co-located `.lock.md`. Advancing can even become a real per-type STATUS folder on
-  the ledger ref if desired (the taxonomy idea's `OPEN FORK` per-type-status proposal) because the
-  observations-don't-flow and position-shadowing objections were about the MAIN working tree humans
-  read, which no longer matters. (Still likely keep it a marker for the orthogonality reason, but the
-  visibility blocker is gone.)
+**The hard wrinkle this exposes (VERIFIED, and it is the real design crux):** in the CURRENT model the
+slice FILE *is* both content and status, ONE file, and its FOLDER encodes the status. A claimed slice's
+BODY lives at `work/in-progress/<slug>.md`, so its content-location and its status ARE the same fact
+(`readSliceOnArbiter` in `ledger-read.ts` reads the body from `backlog/` OR `in-progress/`, whichever
+holds it). "Status = the folder" is elegant PRECISELY because the move IS the status change with no
+separate record. So you cannot naively "move status to a ledger ref and leave content on main", because
+for a backlog/in-progress slice the file is BOTH. Set 2 has to decide HOW to split a thing that is
+currently one file. Two coherent ways:
 
-- A atomicity OK (same CAS+nonce+verify on the ledger ref). B/C recovery OK (verbs repoint to the
-  ledger ref; mechanically identical). D bare OK (a ref is a ref; CAS-push + ls-tree on `--bare`). F
-  never-force OK (leased ff to the ledger ref). G STRONGEST of all candidates: ONE substrate move
-  deletes issue 2 + the done-exception + the drop-rebase machinery + the marker/move visibility
-  exceptions, and hosts C2 unchanged. It is the design the read/write ledger seam ADR was BUILT for.
+### C7 (corrected): CONTENT on a readable tree; STATUS as a pointer/position on the ledger ref
 
-### The honest costs of C7 (the price of dropping E)
+- **CONTENT ref (readable, agent + optionally human):** keep backlog, prd, prd-sliced, done,
+  observations, findings, ideas as a normal `work/` file tree, on `main` (simplest) OR on a dedicated
+  content branch (a convenience choice now E is dropped, NOT load-bearing). An item's BODY lives here
+  ONCE, at a status-NEUTRAL path (e.g. `work/items/<slug>.md` or its bucket), and does NOT move when
+  its status changes.
+- **STATUS/LEDGER ref (CAS serialization):** a dedicated agent-writable ref whose tree encodes ONLY
+  position + locks, e.g. `in-progress/<slug>` (presence = claimed), `needs-attention/<slug>`,
+  `slicing/<slug>`, `advancing/<entry>` markers, plus `done/<slug>`. These are POINTERS/markers keyed
+  by slug, NOT the body. The CAS happens here; status = the marker's folder on the ledger ref.
+- So a claim becomes "add `in-progress/<slug>` marker on the ledger ref via CAS" (the body stays put on
+  the content ref); a complete becomes "code to `main` + `done/<slug>` marker on the ledger ref."
 
-1. **A human can no longer `git clone` + `ls work/` and see the backlog/board.** They MUST run
-   `agent-runner status`/`scan` (which already exist, but now become the ONLY way), or `git show
-   refs/agent-runner/ledger:work/backlog/`. For a project whose CONTEXT.md prizes the readable `work/`
-   tree this is the real loss, it is exactly the requirement we are dropping, named honestly.
+This is C6's content-vs-status split taken to its clean conclusion once E is dropped: ALL status on the
+ledger ref (not C6's partial split), ALL content on a readable tree (agents keep everything they read).
+The cost C6 paid (some status visibility lost) is now ACCEPTED by the requirement set, so the partial
+compromise is unnecessary, the split goes fully clean.
+
+> **The genuine tension C7 introduces (be honest):** today the BODY and the STATUS are one file, so
+> there is exactly one source of truth per item and the move is atomic. Splitting body (content ref)
+> from position (ledger ref) creates TWO records per item that must be kept consistent, the same
+> cross-ref reconciliation C6 had, now intrinsic. AND it weakens "status = the folder" into "status =
+> a marker on another ref that POINTS at a body living elsewhere." That is a real loss of the model's
+> current elegance. Whether C7 is cleaner than C5/C6 OVERALL is therefore NOT obvious, it buys the
+> deletion of branch-inheritance + the done-exception, but pays with body/position separation. See
+> "Is C7 actually cleaner?" below.
+
+### C7-alt: WHOLE `work/` (content AND status) on ONE dedicated ledger ref; `main` = code only
+
+The other coherent Set-2 shape, and the one the earlier draft wrongly described as "C7": move the
+ENTIRE `work/` tree (content files AND the status folders) onto one dedicated ledger ref, and make
+`main` hold ONLY code. Agents read backlog/prd/findings and write observations FROM/TO the ledger ref
+(via `ls-tree`/`show`/CAS, exactly as the code already reads `<mirror>/main:work/...` today, just
+retargeted). Humans use `status`/`scan`.
+
+- **PRO:** keeps "status = the folder" FULLY intact (the file is still both body and position, just on
+  the ledger ref), so there is no body/position split and no new per-item dual-record, the SINGLE
+  source of truth per item is preserved, only on a different ref. Branch-inheritance still DELETED
+  (main has no `work/` tree). One substrate, one CAS, one place agents read+write all `work/`.
+- **CON:** agents' work I/O is now ref-based (read backlog from the ledger ref, write an observation as
+  a CAS commit to it), `scan` is fully network-bound, and the whole `work/` tree leaves `main`. It also
+  re-raises a real question: capture buckets (observations/findings/ideas) and content do NOT want CAS
+  serialization (they are not contended status), yet they would share the ledger ref's CAS substrate,
+  mixing "serialized status" with "just files" on one ref (the same regime-mixing the taxonomy idea
+  worked to AVOID). C7 (the split) keeps content OFF the CAS substrate, which is arguably more honest.
+
+### Is C7 (split) actually cleaner than C7-alt (whole tree on the ledger ref)? The honest comparison
+
+| aspect | C7 (content tree + status/pointer ledger ref) | C7-alt (whole work/ on ledger ref, main=code) |
+| --- | --- | --- |
+| "status = the folder" | WEAKENED (status is a marker pointing at a body elsewhere) | PRESERVED (file is body+position, on the ledger ref) |
+| source of truth per item | TWO records (body + position) to reconcile | ONE record (the file), like today |
+| content vs status regimes | cleanly SEPARATED (content not on the CAS ref) | MIXED (content shares the CAS substrate) |
+| agent reads work-input from | a readable content tree (can stay on main) | the ledger ref (network) |
+| branch-inheritance (issue 2) | DELETED | DELETED |
+| done-exception | dissolves (done is a ledger marker) | dissolves (done is a ledger move) |
+| cross-ref lifecycle | intrinsic (body ref + status ref) | only main(code) + ledger(work), but content+status co-located on ledger |
+
+Neither is unambiguously best, they trade body/position-split (C7) against content-on-the-CAS-substrate
+(C7-alt). **The decision hinges on a SECOND requirement we have not pinned:** do we want content (and
+especially capture buckets) to stay on a NON-CAS, plain-file tree (favours C7), or is it acceptable for
+all `work/` to live on the serialized ledger ref (favours C7-alt's single-source simplicity)? This is a
+good candidate for the NEXT requirement-set exploration.
+
+Why this is STRICTLY cleaner than C5/C6 on issue 2 (true for BOTH C7 variants):
+
+- **Issue 2 (branch-inheritance): DELETED by construction.** A work branch is cut from `main`, and
+  `main` now holds NO `work/` STATUS at all, so a branch CANNOT inherit any status file (advancing
+  markers, needs-attention moves, done moves). The `drop-bookkeeping-rebase` machinery, the
+  branch-carries PRD's needs-attention-move removal, AND C5 all become UNNECESSARY in one move.
+- **The atomic `→done` exception DISSOLVES.** The branch-carries PRD kept `→done` on-branch BECAUSE
+  `main` had to show `done/` atomically with the code. With status off `main`, `done` is a ledger-ref
+  transition like any other, the code-vs-done atomicity becomes the cross-ref story (a cost, below).
+- **Issue 1 (false contention): integration-churn source GONE.** The ledger/status ref is advanced
+  ONLY by status transitions, never by code integration (which lands on `main`). Combined with C2 on
+  the status ref, same-path false contention is killed.
+
+- A atomicity OK (CAS+nonce+verify on the ledger ref). B/C recovery OK (verbs repoint to the ledger
+  ref). D bare OK (a ref is a ref). F never-force OK (leased ff). G very strong on issue 2 (deletes the
+  whole inheritance class + the done-exception), but C7 weakens "status = the folder" and C7-alt mixes
+  content onto the CAS substrate, so the elegance is NOT free, it is bought with the costs below.
+
+### The honest costs of the Set-2 shapes (the price of dropping E)
+
+1. **A human can no longer `git clone` + `ls work/` and see the board.** They run `agent-runner
+   status`/`scan` (which already exist, now the primary way), or `git show <ledger-ref>:work/...`. For a
+   project whose CONTEXT.md prizes the readable `work/` tree this is the real loss, exactly the
+   requirement being dropped, named honestly. (Agents are UNAFFECTED, they read content from the
+   content tree either way, the correction this section makes.)
 2. **Cross-ref reconciliation is now the WHOLE lifecycle, not an edge.** Every claim (code branch off
    main + ledger move on the ref) and every complete (code merge to main + done move on the ref) spans
    two refs. The crash-safety story (code landed, ledger flip didn't, or vice versa) must be designed
@@ -696,14 +764,15 @@ Why this is STRICTLY cleaner than C2+C5 and than C6 once E is gone:
    offline-scan property the seam ADR prized. (C2+C5 keep it fully offline; C6 lost only the status
    half.) Mitigable with a local tracking copy of the ledger ref, but that is a freshness/caching story
    to design.
-4. **Biggest reader/writer surface of all**, EVERY `work/` reader and writer retargets from `main` to
-   the ledger ref. Tractable because the read/write seams already centralize this (that is what they
-   were for), but it is the largest single migration here.
-5. **Provider note:** on a protected-`main` repo this is actually a BONUS (the ledger ref can be
-   agent-writable while `main` is protected, the exact contradiction the ADR opened with), so C7 also
-   incidentally UNBLOCKS the protected-main case the seam ADR was created for. Worth noting as upside.
+4. **Big reader/writer surface**, every STATUS reader/writer (C7) or every `work/` reader/writer
+   (C7-alt) retargets from `main` to the ledger ref. Tractable because the read/write seams already
+   centralize this (that is what they were for), but it is a large migration, larger for C7-alt (which
+   also moves content).
+5. **Provider note (UPSIDE):** on a protected-`main` repo this is a BONUS, the ledger ref can be
+   agent-writable while `main` is protected, the EXACT contradiction the seam ADR opened with. So both
+   Set-2 shapes incidentally UNBLOCK the protected-main case the seam was created for.
 
-### Does C7 still want C2 and the issue-3 rule? Yes and yes.
+### Do the Set-2 shapes still want C2 and the issue-3 rule? Yes and yes.
 
 - **C2 (rebase-until-real) is STILL wanted**, now on the ledger ref. Same primitive, retargeted. The
   ledger ref still has a whole-ref lease, so different-item writers still falsely contend without C2.
@@ -715,18 +784,28 @@ Why this is STRICTLY cleaner than C2+C5 and than C6 once E is gone:
 
 ### Set-2 recommendation
 
-**C2 (on the ledger ref) + C7 (whole state machine on one dedicated ledger ref; `main` = code only).**
-This is the most elegant design in the whole space (it deletes issue 2, the done-exception, the
-drop-rebase machinery, and every visibility-forced marker/move exception in ONE substrate move, and
-incidentally unblocks protected-main), and it is ONLY available because E is dropped. Its price is the
-full cross-ref lifecycle, network-bound scan, and the largest reader retarget, all of which are
-acceptable PRECISELY when human working-tree visibility is not required.
+**C2 (on the status/ledger ref) + the STATUS-off-`main` move.** Drop E and ALL transient status leaves
+`main`, deleting issue 2 + the `→done` exception + the drop-rebase machinery, and incidentally
+unblocking protected-main. AGENTS KEEP a readable content tree (backlog/prd/observations/findings/ideas)
+throughout, that is the correction this section makes, dropping E touches HUMAN glanceability of status
+ONLY, never agent work-input. The remaining Set-2 choice is the body/position question:
+- **C7 (content tree + status pointers):** content stays a plain readable tree (on `main` or a content
+  branch); the ledger ref holds only position/lock markers pointing at it. Keeps content OFF the CAS
+  substrate and keeps agent work-input on a readable tree, but splits each item into a body record + a
+  position record (cross-ref reconciliation; weakens "status = the folder").
+- **C7-alt (whole `work/` on the ledger ref):** the file stays both body and position, just on the
+  ledger ref; `main` = code only. Preserves single-source "status = the folder" and one record per item,
+  but agents read/write all `work/` from the ledger ref (network) and content shares the CAS substrate.
 
-**Relationship to the Set-1 answer:** C7 SUPERSEDES C5, C6, the branch-carries PRD's on-branch-move
-removal, AND the `→done` on-branch exception. C2 is common to both sets. So the only genuinely
-set-dependent decision is C5/C6 (Set 1) vs C7 (Set 2), and that decision IS the visibility requirement
-itself: keep E and you get C5/C6 (status stays where a human can read it); drop E and C7 is strictly
-cleaner. The maintainer's 2026-06-17 choice to explore dropping E points at C7.
+Neither is unambiguously best; the tiebreaker is a SECOND, not-yet-pinned requirement (must content,
+especially capture buckets, stay on a non-CAS plain-file tree?), a good next requirement-set to explore.
+
+**Relationship to the Set-1 answer:** EITHER Set-2 shape SUPERSEDES C5, C6, the branch-carries PRD's
+on-branch-move removal, AND the `→done` on-branch exception. C2 is common to both sets. So the only
+genuinely set-dependent decision is C5/C6 (Set 1) vs the status-off-`main` move (Set 2), and that
+decision IS the visibility requirement itself: keep E and you get C5/C6 (status stays where a human can
+`ls` it); drop E and moving status off `main` is strictly cleaner on issue 2. The maintainer's
+2026-06-17 choice to explore dropping E points there, with C7-vs-C7-alt as the remaining sub-fork.
 
 ## Disposition
 
