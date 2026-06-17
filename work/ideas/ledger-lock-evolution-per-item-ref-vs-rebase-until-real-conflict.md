@@ -1069,12 +1069,188 @@ winner via the lock-ref CAS), D (custom-ref `--force-with-lease` push works on a
 identically to `main`), and F (never `--force`, the lock ref uses a lease, `main` writes are leased ff
 or PR-merge) all HOLD.
 
+### The C8 lock-entry STATE MACHINE (the two-axis record, in full)
+
+The lock entry is the single source of truth for an item's TRANSIENT state. It is keyed by item
+identity (`<type>-<slug>`) on `refs/agent-runner/locks`, exists ONLY while a hold is active, and is
+absent when the item is at rest. Its body is a two-axis record:
+
+```
+---
+entry: slice-add-quiet-flag        # <type>-<slug>, the item identity
+action: implement                  # implement | slice | advance   (WHAT holds the lock)
+state: active                      # active | stuck                (health of the hold)
+holder: ci-runner-7                # advisory who
+since: 2026-06-17T10:03:00Z        # advisory when acquired
+reason:                            # PRESENT iff state: stuck (the needs-attention prose)
+---
+<body: optional longer stuck reason / questions, as today's markers carry>
+```
+
+**The two axes are INDEPENDENT** (this is the load-bearing correction from the pressure-test). `action`
+says which of the three mutually-exclusive operations holds the item; `state` says whether that hold is
+healthy or stuck. "in-progress" is not a third action, it is `state:active`; "needs-attention" is not a
+fourth action, it is `state:stuck`. So every (action, state) pair is a legal cell:
+
+| action \ state | active | stuck |
+| --- | --- | --- |
+| implement | building the slice (today: `in-progress/`) | build stuck (today: `needs-attention/` from a build) |
+| slice | slicing the PRD (today: `slicing/`) | slicing stuck / decomposition-unclear (today: `needs-attention/` from slicing) |
+| advance | answering/triaging (today: `advancing/` marker) | advance stuck (a new, today-unrepresentable-cleanly cell) |
+
+**Lifecycle of ONE lock (the state machine):**
+
+```
+        (no entry = item at REST on main, in todo/ or backlog/ or done/ ...)
+              |
+   acquire(action)  -- CAS add entry {action, state:active}  (loser: exit-2 lost; not-free)
+              v
+        [action, active]  ----- work proceeds -----
+           |        |                         \
+           |        | bounce/stuck            \ success
+           |        v                          v
+           |  CAS amend entry            (durable promotion on MAIN, e.g. backlog->done
+           |  {state:stuck, reason}       or prd->prd-sliced or backlog->out-of-scope)
+           |        |                          |
+           |        | human resolves           | then release
+           |        v                          v
+           |   CAS amend {state:active}    CAS REMOVE entry  (lock released)
+           |    (resume) OR release             |
+           |        |                           v
+           +--------+----------------------> (no entry = at REST again)
+```
+
+The legal transitions, each a CAS on the lock ref (so two contenders serialise, one wins):
+
+1. **acquire** `(absent) -> [action, active]`. Add the entry. The CAS loser learns the item is held
+   (exit-2 lost) and backs off. Because there is ONE entry per item, a second action on the same item
+   (advance while implement-held) ALSO loses this CAS , the mutual exclusion (issue 3) is HERE, atomic.
+2. **mark-stuck** `[action, active] -> [action, stuck]+reason`. The runner bounces (red gate, agent
+   failure, decomposition-unclear). Amend the SAME entry's `state` + `reason` (a CAS, not a new lock).
+   The recoverable WORK stays on the `work/<slug>` branch (unchanged). `status`/`scan` read this entry
+   and surface "needs attention: <reason>" , the needs-attention SURFACE is now reading the lock ref,
+   not a `work/needs-attention/` folder on `main`.
+3. **resume** `[action, stuck] -> [action, active]`. A human (or a continue) picks the stuck item up:
+   amend `state` back to `active`, keep the same `action`/holder or reassign. (This is the
+   `applyResolveNeedsAttentionTransition` analogue, now a lock-entry amend, not a `needs-attention ->
+   in-progress` folder move.)
+4. **requeue** `[action, stuck] -> (absent)`. Give up on the stuck hold and return the item to the
+   pool: REMOVE the entry. The item is ALREADY resting in `todo/`/`backlog/` on `main` (its body never
+   moved , Amendment 5), so requeue is purely "release the lock", no `needs-attention -> backlog`
+   folder move. The kept branch remains for recovery.
+5. **complete (success)** `[action, active] -> (durable MAIN move) -> (absent)`. Land the durable
+   promotion on `main` (`backlog/todo -> done`, `prd -> prd-sliced`, or `-> out-of-scope`), ATOMIC
+   with its artifacts (code/slices), THEN remove the lock entry. ORDER MATTERS for crash-safety:
+   main-move FIRST (the authoritative durable record), release SECOND. A crash between them leaves
+   `done`-on-`main` + a stale held lock , recovery treats the `main` durable record as authoritative
+   and clears the stale lock (Amendment 6).
+6. **release (no-op / abort without bounce)** `[action, active] -> (absent)`. Remove the entry without
+   a `main` move (e.g. a human `release-lock`, or an aborted run with nothing to surface).
+
+**Invariants the state machine must preserve:**
+
+- **At most ONE entry per item at any time** (the issue-3 exclusion). Enforced by the CAS: acquire on a
+  present entry is exit-2 lost.
+- **`reason` PRESENT iff `state:stuck`.** A `state:active` entry never carries a stuck reason; a
+  `state:stuck` entry always does (the WORK-CONTRACT rule-3 "reason in the body" carries over).
+- **`done`/`prd-sliced`/`out-of-scope` on `main` are authoritative over any stale lock** (crash
+  reconciliation): if `main` shows the item terminal but a lock entry lingers, the lock is stale ,
+  clear it. The reverse (lock held, item not terminal on `main`) is the NORMAL in-flight state.
+- **`done` + `state:stuck` can legitimately co-exist** (Amendment 2): a rebase-conflict bounce can mark
+  a just-completed item stuck. So "terminal on main" and "has a stuck lock" are NOT mutually exclusive;
+  the stuck lock wins for the human's attention, the `main` record wins for dependency resolution.
+- **An entry whose holder's run vanished is recoverable, never auto-swept** (no liveness heartbeat,
+  the deliberate existing model): `gc --ledger` REPORTS lingering entries; a human `release-lock
+  <item>` clears a NAMED one. Same trust model as today's `release-advancing`.
+
+**What this REPLACES from today's folder model:** the `in-progress/`, `needs-attention/`, and
+`slicing/` folders on `main` ALL collapse into this one lock entry's (action, state) cell. The
+five-folder status set on `main` reduces to the durable records only (`done`, `out-of-scope`, plus the
+resting pools `backlog`/`todo` , see the Kanban section) for slices, and (`prd`, `prd-sliced`) for
+PRDs. The transient three become lock-ref state. That is the whole point: the folders that were never
+referenceable stop being folders.
+
+## Kanban split: a `todo/` pool gate between `backlog/` and the lock (supersedes `humanOnly`)
+
+> Maintainer-raised 2026-06-17 as "somewhat separate but it guides us." It does, and it composes
+> cleanly with C8. Captured here as a SIBLING design (likely its own idea/PRD), with the C8 interaction
+> made explicit.
+
+**The proposal.** Adopt the Kanban distinction the current model conflates. In a Kanban board
+`backlog` is the UN-committed holding area (NOT yet eligible to be worked), and `todo` is the
+committed, ready-to-pull column. Today our `backlog/` means BOTH ("exists" and "eligible to claim").
+Split them:
+
+- **`backlog/` becomes the human-gated HOLDING area** , an item here EXISTS but is NOT in the agent
+  pool. No agent claims/builds from `backlog/`. A human (or a configured rule) PROMOTES it to `todo/`.
+- **`todo/` becomes the eligible POOL** , the set agents pull from. The C8 claimability predicate +
+  the build/slice selection pool read `todo/` (was `backlog/`). `blockedBy` STILL resolves against
+  `done/` (unchanged).
+
+**Why this is better than the `humanOnly` FLAG it can replace.** `humanOnly: true` is a frontmatter
+flag meaning "an agent never auto-builds this." A `backlog/` vs `todo/` FOLDER expresses the SAME
+human-gating POSITIONALLY (status = the folder, the crown-jewel invariant), and it is strictly more
+expressive + more legible:
+
+- **It is human CONTROL, not human visibility.** The maintainer's reframe is exact: dropping E
+  (visibility) we lose the human's "what is happening" GLANCE, but `backlog -> todo` gives back human
+  CONTROL over "what enters the agent pool", a different, arguably more valuable lever. A human curates
+  `todo/` (the on-`main`, human-`ls`-able, readable pool) and need not watch in-flight status.
+- **It is a POSITION a human moves, not a flag they edit.** Promoting = `git mv backlog/x -> todo/x`
+  (a durable `main` move, like the other resting-record moves , it fits C8's "main holds durable
+  records" rule perfectly). Demoting (pull back from the pool) = `todo -> backlog`. No frontmatter
+  edit, no flag the eligibility code must special-case.
+- **It replaces `humanOnly` cleanly:** `humanOnly: true` == "stays in `backlog/`, only a human promotes
+  it to `todo/`." A non-humanOnly item is created directly in `todo/`. So the `humanOnly` axis becomes
+  WHICH FOLDER an item is born into, and the per-repo `autoBuild` policy becomes "may agents create
+  slices directly in `todo/`, or must they land in `backlog/` for human promotion."
+
+**The two further problems it incidentally solves (the maintainer spotted these):**
+
+1. **Agent-created slices can be gated.** A slicer (or a triage promote) that drafts a new slice can be
+   configured to land it in `backlog/` (human must promote) OR `todo/` (straight into the pool),
+   per-repo policy. So a less-trusted autonomous slicer cannot flood the pool , its output waits in
+   `backlog/` for a human's `-> todo` promotion. This is the SAME control `humanOnly` wanted, applied
+   to OUTPUT rather than a pre-set flag.
+2. **The untrusted-PR-author problem maps onto it.** A contribution from an untrusted author can land
+   its slice in `backlog/` (quarantined from the agent pool) rather than `todo/`, so an agent never
+   auto-pulls work proposed by an unreviewed source , a human promotes it after review. This reuses the
+   pool gate as a trust gate, no new mechanism.
+
+**Interaction with C8 (clean):** `todo/` is a DURABLE RESTING pool on `main` (human-curated, readable,
+referenceable as "the pool"), so it lives on `main` exactly like `backlog`/`done`/`out-of-scope`. The
+C8 lock ref is UNAFFECTED , a claim still acquires the per-item lock; it just reads the pool from
+`todo/` instead of `backlog/`. So the Kanban split is ORTHOGONAL to the lock mechanism: it changes
+WHICH on-`main` folder is the eligible pool, not how holds work. The C8 claimability predicate becomes
+"in `todo/` on `main` AND no lock held on the lock ref."
+
+**A PRD analogue (the maintainer's "maybe something similar for prd").** Mirror it: a PRD could be born
+in a `prd-backlog/` (or stay in `prd/` as the holding area) and be promoted to a `prd-ready/`
+(or keep `prd/` as the pool) before agents may auto-slice it. The cleanest mapping keeps symmetry with
+slices: `prd/` (holding) -> `prd-ready/` (sliceable pool) -> `slicing` (lock) -> `prd-sliced/`
+(done analogue). But PRD slicing is lower-volume and already gated by `needsAnswers` + `humanOnly`, so
+the PRD Kanban split is OPTIONAL where the slice one is the higher-value lever. Decide per the same
+logic: if you want human CONTROL over which PRDs enter the auto-slice pool, add the holding/ready
+split; if `needsAnswers`/`humanOnly` already suffice for PRDs, skip it.
+
+**Open questions for the Kanban split (its own design session):**
+- Exact names (`todo` vs `ready` vs `queued`; whether `backlog` keeps its name and `todo` is the new
+  one, or both rename). The verb story matters ("promote to todo" reads well).
+- Whether `humanOnly` is fully RETIRED (replaced by birth-folder) or kept as a redundant convenience
+  during migration (two-step rename, like the `allowAgents -> autoBuild` precedent).
+- The per-repo policy surface: `autoBuild` already gates agent building; add an `autoPromote` (or
+  `slicesBornIn: backlog|todo`) policy for where agent-created slices land.
+- Whether this is one idea/PRD or folded into the C8 PRD (it is orthogonal to the lock mechanism, so
+  likely its OWN PRD that depends on C8's `todo`-as-pool retarget, or vice-versa , sequence by which
+  lands first).
+
 ## Disposition
 
 Incubates as an idea because it proposes RETIRING a decided PRD decision (the co-located `.lock.md`),
-EXTENDING another (branch-carries), and leaves ONE open fork for the maintainer (C5 vs C6 for issue 2),
-all maintainer calls. On confirmation, the actionable form is C2 first, then the C5/C6 fork, then
-optionally issue 3:
+EXTENDING another (branch-carries), and leaves the SET-1-vs-SET-2 visibility decision + (within Set 2)
+the C8 design + the Kanban `todo/` sibling for the maintainer, all maintainer calls. On confirmation,
+the actionable form is C2 first, then the per-set issue-2 choice, then optionally issue 3, with the
+Kanban split and the C8 lock state machine as their own sequenced pieces:
 
 1. **C2 rebase-until-real-conflict (the four acquire paths)**, change the contention-retry semantics
    in the claim/slicing-acquire/advancing-acquire/create loops (or push a retrying variant into the
@@ -1113,3 +1289,33 @@ optionally issue 3:
 Sequence 1 first (the biting failure, independent of everything). 2 with/after branch-carries. 3 last,
 only if the maintainer wants the exclusion (the brief leaves "is it even necessary" open, the
 recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT worth a lock unification").
+
+**IF Set 2 is chosen (visibility dropped, the 2026-06-17 direction), the actionable form changes to:**
+
+4. **C8 (the lock ref + the two-axis lock-entry state machine)**, build `refs/agent-runner/locks` as the
+   per-item lock substrate; generalise the landed advancing-lock into the unified claim/slice/advance
+   lock with the `{action, state, holder, since, reason?}` record + the state machine above; retarget
+   `main` to hold CONTENT + durable resting records only (`done`, `prd-sliced`, `out-of-scope`); split
+   the terminal-move helper (out-of-scope , main; needs-attention , lock entry); retarget the claimable
+   pool readers (`scan`/`select-priority`/claimability) to subtract lock-held slugs; build C2 ON the
+   lock ref. Acceptance: all three issues hold by construction (race tests for the unified lock prove
+   atomic exclusion across claim/slice/advance on one item); `done`+stale-lock reconciliation is
+   crash-safe; the lock ref is a hidden `refs/agent-runner/*` ref; eligibility stays offline on `main`.
+   On a PROTECTED `main`, the durable promotions route through the PR-merge path (Amendment 3), design
+   that explicitly. This SUPERSEDES C5/C6 and most of the branch-carries PRD.
+5. **Kanban `todo/` pool split (its OWN idea/PRD, orthogonal to the lock mechanism, can land under Set
+   1 OR Set 2)**, split `backlog/` (human-gated holding) from `todo/` (the eligible agent pool);
+   retarget the build/slice pool + claimability to read `todo/`; make agent-created slices' birth
+   folder (`backlog/` for human promotion vs `todo/` direct) a per-repo policy; RETIRE `humanOnly` in
+   favour of birth-folder (two-step rename, `allowAgents->autoBuild` precedent); reuse the pool gate as
+   the untrusted-author trust gate. Acceptance: agents pull only from `todo/`; a human `git mv
+   backlog->todo` promotes; `blockedBy` still resolves against `done/`; `humanOnly` semantics preserved
+   by birth-folder. Optionally mirror for PRDs (`prd/` holding , `prd-ready/` pool) if PRD-pool control
+   is wanted beyond `needsAnswers`/`humanOnly`.
+
+**The single decision that orders everything: keep E (Set 1, C5/C6) or drop E (Set 2, C8).** C2 and the
+Kanban split are valuable under BOTH and can land first. C8 is the strongest design but is Set-2-only
+(and pressure-tested as sound with the four amendments). The Kanban split is the clean replacement for
+`humanOnly` and gives back human CONTROL even when visibility is dropped, which is why it "guides us":
+it shows the dropped-visibility world still has a human-legible, human-controlled `main` (todo/done/
+out-of-scope + content), just not a human-glanceable in-flight STATUS.
