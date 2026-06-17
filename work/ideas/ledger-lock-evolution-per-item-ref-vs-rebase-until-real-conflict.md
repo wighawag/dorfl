@@ -1270,11 +1270,81 @@ split, PRD-slicing safety falls out of the slice gate downstream. (The one thing
 wants is that its slicer OUTPUT can target slices-`backlog/`, which is the slice gate's birth-folder
 policy, not a new PRD folder.)
 
+### Does the folder gate REPLACE `humanOnly`? (slices yes-ish, PRDs no), the elegant resolution
+
+> Maintainer question 2026-06-17: do we still need `humanOnly` for PRDs? Can we remove it from slices?
+> Should the slicer's `humanOnly: true` heuristic just become "born in `backlog/` vs `todo/`", or does
+> `humanOnly` still earn its place? The answer turns on ONE distinction the code + skills already draw.
+
+**The distinction that decides everything: `humanOnly` is a PROPERTY of the item; `backlog`-vs-`todo`
+is a POSITION a human controls.** They COINCIDE often but are NOT the same fact:
+- `humanOnly: true` = "building/slicing this INTRINSICALLY needs a human (security, secrets, product
+  judgement, an `AGENTS.md`-type rule), regardless of how complete the spec is" , a DURABLE, decided
+  property that travels with the item and means "an agent must NEVER auto-take this."
+- `backlog/` = "a human has not YET admitted this to the agent pool" , a TRANSIENT position; promotion
+  to `todo/` is expected and routine.
+
+"Never (by nature)" vs "not yet (pending a human's nod)" are different, and conflating them loses
+information: an item parked in `backlog/` for REVIEW is destined for `todo/`; a `humanOnly` item parked
+in `backlog/` must NEVER reach `todo/` for an AGENT (a human still drives it). If you drop `humanOnly`
+and encode only position, you cannot tell "awaiting promotion" from "agents must never take this", a
+human could wrongly promote a human-only item into the agent pool.
+
+**Verified the two `humanOnly` verbs are DISJOINT (skills + WORK-CONTRACT):** PRD `humanOnly` gates
+SLICING (an agent may not auto-slice it); slice `humanOnly` gates BUILDING (an agent may not auto-build
+it); there is NO propagation between them (`to-slices` SKILL §3b: "NO inheritance, NO propagation, NOT
+EVEN A HINT"). So the question must be answered SEPARATELY for the two.
+
+**Answer for SLICES: the folder gate replaces MOST of slice `humanOnly`, but keep `humanOnly` for the
+"NEVER" case, demoted to a guard, not the pool mechanism.**
+- The COMMON slice-`humanOnly` reason ("this needs human review/judgement before an agent runs it") is
+  exactly "land in `backlog/`, human promotes to `todo/` after review" , the FOLDER does this better
+  (positional, the review-without-PR lever, no flag). So the slicer's heuristic SHOULD shift: instead
+  of stamping `humanOnly: true` for "a human should look first", BIRTH the slice in `backlog/` (the
+  review-staging pool). That covers the bulk of today's slice-`humanOnly` uses.
+- BUT the HARD case remains: a slice an agent must NEVER build (touches prod secrets, a release, a
+  security boundary). "Born in `backlog/`" does not capture "never promote me into the AGENT pool" ,
+  a human could promote it by mistake. For THAT, keep `humanOnly: true` as a DURABLE GUARD: even in
+  `todo/`, a `humanOnly` slice is NOT agent-eligible (the predicate still excludes it). So `humanOnly`
+  survives as the "never-for-agents" assertion, while the FOLDER carries the "which pool / awaiting
+  review" axis. Two axes, no overload: **position = `backlog`(staging) vs `todo`(pool); nature =
+  `humanOnly` (never-for-agents, rare).** The slicer's heuristic changes from "flag humanOnly for
+  review" (overloaded) to "birth in `backlog/` for review; flag `humanOnly` ONLY for genuinely
+  never-agent-buildable." Cleaner, and `humanOnly` becomes rare + meaningful instead of the catch-all.
+- So: you do NOT fully remove slice `humanOnly`, you NARROW it to its true meaning (never-for-agents)
+  and let the folder take over the "human gates entry / review-first" job it was being overloaded with.
+
+**Answer for PRDs: `humanOnly` is STILL needed, and the folder does NOT replace it.** PRD `humanOnly`
+gates SLICING (a human must drive the decomposition). The Kanban split is being done for SLICES, NOT
+PRDs (decided above, PRD-slicing safety is inherited downstream). So there is no PRD `todo/` pool whose
+position could carry the "a human must drive slicing" meaning, the only place that fact can live is the
+PRD `humanOnly` flag. AND it is a NEVER (by nature) signal ("this decomposition needs human judgement"),
+not a "not yet", so even if a PRD pool existed, position would be the wrong encoding (same reason as the
+slice hard case). CONCLUSION: **KEEP `humanOnly` on PRDs unchanged** , it is the auto-slice guard, has
+no folder substitute, and is the right shape (a durable property, not a transient position).
+
+**The elegant unified system (the resolution):**
+- **POSITION axis (folder, human-controlled, transient):** `backlog/` (staging / awaiting human
+  promotion / review-first) vs `todo/` (the agent pool). Carries: review-without-PR, untrusted-author
+  gating, agent-output gating, and the COMMON "human should look first" case. SLICES only.
+- **NATURE axis (`humanOnly` flag, durable, rare):** "an agent must NEVER auto-take this" , slice
+  `humanOnly` (never auto-BUILD, survives even in `todo/`) and PRD `humanOnly` (never auto-SLICE).
+  Demoted on slices to the rare hard case; UNCHANGED + still essential on PRDs.
+- **`needsAnswers` (discovered axis) unchanged** on both, orthogonal to both above.
+Net: the folder takes the "human gates ENTRY / review" job (where position is the honest encoding);
+`humanOnly` keeps ONLY the "never-for-agents by nature" job (where a durable flag is the honest
+encoding). No overload, each axis means one thing, and `humanOnly` stops being the catch-all it is
+today. That IS the elegant system: **position for "not yet / which pool", a flag for "never by nature",
+`needsAnswers` for "blocked on a question", three orthogonal axes, each minimal.**
+
 **Open questions for the Kanban split (its own design session):**
 - Exact names (`todo` vs `ready` vs `queued`; whether `backlog` keeps its name and `todo` is the new
   one, or both rename). The verb story matters ("promote to todo" reads well).
-- Whether `humanOnly` is fully RETIRED (replaced by birth-folder) or kept as a redundant convenience
-  during migration (two-step rename, like the `allowAgents -> autoBuild` precedent).
+- `humanOnly` disposition (RESOLVED above, see "Does the folder gate REPLACE `humanOnly`?"): NARROW
+  slice `humanOnly` to the rare "never-for-agents" guard (folder takes the common review-first case);
+  KEEP PRD `humanOnly` unchanged (it gates auto-slicing, no folder substitute). Not a full retirement,
+  a de-overloading. Open sub-question: the migration sequencing of re-homing existing slice-`humanOnly`
+  uses into `backlog/`-birth vs leaving the genuinely-never ones flagged.
 - The per-repo policy surface: `autoBuild` already gates agent building; add the BIRTH-FOLDER policy
   for where agent OUTPUT lands. ONE policy covers all three consequences: where do agent-created /
   `--merge`-emitted / untrusted-author slices land, `backlog/` (human promotes after review) or
