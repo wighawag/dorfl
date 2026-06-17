@@ -1170,7 +1170,7 @@ resting pools `backlog`/`todo` , see the Kanban section) for slices, and (`prd`,
 PRDs. The transient three become lock-ref state. That is the whole point: the folders that were never
 referenceable stop being folders.
 
-## Kanban split: a `todo/` pool gate between `backlog/` and the lock (supersedes `humanOnly`; enables review WITHOUT a PR system)
+## Kanban split: a `staging/pool` position gate for slices AND PRDs (de-overloads `humanOnly`; enables review WITHOUT a PR; RUNNER-enforced)
 
 > Maintainer-raised 2026-06-17 as "somewhat separate but it guides us." It does, and it composes
 > cleanly with C8. Captured here as a SIBLING design (likely its own idea/PRD), with the C8 interaction
@@ -1255,51 +1255,102 @@ C8 lock ref is UNAFFECTED , a claim still acquires the per-item lock; it just re
 WHICH on-`main` folder is the eligible pool, not how holds work. The C8 claimability predicate becomes
 "in `todo/` on `main` AND no lock held on the lock ref."
 
-**Should PRDs have their own `backlog`-vs-`todo` (RE-EXAMINED under the position-vs-nature framing,
-2026-06-17, maintainer asked again). Verdict: still NO, but now for a SHARPER, framing-aware reason,
-and with the ONE case that WOULD justify it named.**
+**Should PRDs have their own `backlog`-vs-`todo` (RE-EXAMINED twice under the position-vs-nature
+framing, 2026-06-17). FINAL verdict: YES , PRDs get the position split too, for the SAME reason slices
+do. (This subsection records the derivation INCLUDING a wrong intermediate "NO" the maintainer
+corrected, kept so the reasoning is honest.)**
 
-The earlier "safety is inherited downstream" argument was a SAFETY argument (the emitted slices are
-gated, so the PRD need not be). It still holds, but the new framing asks a DIFFERENT question: does a
-PRD have a POSITION axis ("not yet / which slice-pool") distinct from its NATURE axis (`humanOnly` =
-"never auto-slice by nature")? Work it through honestly:
+The framing asks: does a PRD have a POSITION axis ("admitted to the auto-slice pool yet?") distinct from
+its NATURE axis (`humanOnly` = "never auto-slice by nature")? The deciding test, set by the
+WORK-CONTRACT, is whether a genuine INTAKE-TRIAGE need exists , i.e. whether AGENT/untrusted output
+writes items into the pool that a human must gate. (VERIFIED in WORK-CONTRACT.md: *"a separate pre-pool
+'not ready yet' state is intentionally NOT added , items should not be WRITTEN into the pool until
+ready. Revisit only if a genuine intake-triage need appears."*)
 
-- **The POSITION question for a PRD would be: "is this PRD admitted to the AUTO-SLICE pool yet?"** That
-  is a real, coherent question, and a `prd/`(holding) vs `prd-ready/`(auto-slice pool) split COULD
-  encode it, exactly mirroring slices. So under the framing it is not INCOHERENT, it is a genuine
-  candidate.
-- **But the project ALREADY made the governing call for the pre-pool state, and it points NO** (VERIFIED
-  in WORK-CONTRACT.md): *"a separate pre-claim 'not ready yet' state is intentionally NOT added , under-
-  specified items simply should not be WRITTEN into `backlog/` until they are ready. Revisit only if a
-  genuine intake-triage need appears."* The Kanban SLICE split is the justified "revisit" because slices
-  have a genuine intake-triage need: AGENT/`--merge`/UNTRUSTED output writes slices into the pool that a
-  human wants to gate. **PRDs do NOT have that need:** a PRD is BORN from a human conversation (`to-prd`
-  synthesizes the current conversation; `to-prd` SKILL: "Do NOT interview, synthesize what you already
-  know") , there is no agent/untrusted firehose writing PRDs into the auto-slice pool the way slicing
-  writes slices into the build pool. So the "don't write it until it's ready" default SUFFICES for PRDs:
-  a half-baked PRD simply stays an `idea/` (the capture bucket) and is promoted to `prd/` by a human
-  when ready. **The `idea/ -> prd/` promotion IS the PRD's `backlog -> todo`** , it already exists, it
-  is already human-driven, and it is the position gate the framing asks for, one level up.
-- **The NATURE axis is already covered:** PRD `humanOnly` = "never auto-slice" (the never-by-nature
-  guard), `needsAnswers` = "blocked on a question." Between `idea/`(not-yet-a-PRD holding) + `humanOnly`
-  (never-auto-slice) + `needsAnswers` (blocked), all three PRD axes are ALREADY encoded, position by the
-  `idea/ -> prd/` promotion, nature by `humanOnly`, discovered by `needsAnswers`. A `prd/ -> prd-ready/`
-  split would be a SECOND position gate ON TOP of the `idea/ -> prd/` one, redundant.
+- **WRONG intermediate answer (NO), kept for honesty:** I first reasoned "PRDs are human-born (`to-prd`
+  synthesizes a conversation), so there is no agent/untrusted firehose writing PRDs into the auto-slice
+  pool; the `idea/ -> prd/` promotion already serves as the PRD position gate; therefore no split."
+- **The maintainer CORRECTED this: the firehose EXISTS for PRDs today.** `intake` writes PRDs through a
+  conversation (an agent-mediated authoring flow into `prd/`), and untrusted sources are ALREADY marked
+  untrusted with a propagating effect (the `untrusted-origin-forces-build-propose` rule, `cli.ts`, forces
+  an untrusted-origin slice to integrate via PROPOSE/PR even in `merge` mode). So agent/untrusted PRD
+  authorship is real NOW, and `intake` writes STRAIGHT to `prd/`, BYPASSING `idea/`, so the `idea/ ->
+  prd/` promotion does NOT gate it. The intake-triage trigger the WORK-CONTRACT names HAS appeared for
+  PRDs.
+- **Therefore the position gate is NEEDED for PRDs, at the `prd/` boundary** (where the agent output
+  lands), mirroring the slice split exactly: an `intake`-authored or untrusted-origin PRD lands STAGED
+  (`prd/` as holding, or a `prd-intake/`) and is PROMOTED by a human into the auto-slice pool
+  (`prd-ready/`), not auto-sliceable the moment an agent writes it.
+- **NATURE/DISCOVERED axes unchanged:** PRD `humanOnly` = "never auto-slice" + `needsAnswers` =
+  "blocked." The position gate is the THIRD axis PRDs were missing once you account for the intake
+  firehose. (The earlier "all three already encoded via `idea/`" was the wrong step , `intake` bypasses
+  `idea/`.)
 
-**The ONE case that WOULD justify a PRD position split (so the NO is honest, not dogmatic):** if PRDs
-EVER start being WRITTEN by agents or untrusted sources directly into `prd/` (an autonomous "draft a PRD
-from this issue" flow, or a contributor PRD), THEN PRDs acquire the same intake-triage need slices have,
-and a `prd/`(staging) vs `prd-ready/`(auto-slice pool) split becomes justified by the SAME logic as the
-slice split. Today no such flow exists (PRDs are human-synthesized), so the need is absent. The trigger
-to revisit is identical to the WORK-CONTRACT's: "if a genuine intake-triage need appears" , for PRDs
-that means "if agents/untrusted sources start writing PRDs into the slice pool."
+**CONCLUSION:** do the position split for SLICES (build pool) AND for PRDs (auto-slice pool),
+for the SAME reason , agent/untrusted output (slicing output for slices; `intake`/untrusted PRDs for
+PRDs) must land STAGED and be human-PROMOTED into the pool, not auto-eligible on write. The symmetry is
+now EXACT, both lifecycles get a `staging -> pool` position gate because both have an agent/untrusted
+intake firehose. PRD `humanOnly` (never-auto-slice by nature) + `needsAnswers` (blocked) still stand as
+the orthogonal NATURE/DISCOVERED axes; the position gate is the THIRD axis PRDs were missing. This
+REVERSES an earlier-committed "PRD split not worth it" call: the trust/intake reality the maintainer
+surfaced (intake authors PRDs; untrusted-origin already forces propose) is exactly the WORK-CONTRACT
+trigger ("a genuine intake-triage need appears"), and it HAS appeared, for PRDs as much as slices.
 
-**CONCLUSION:** do the `backlog/todo` split for SLICES (real intake-triage need); do NOT add a PRD-level
-`prd/`-vs-`prd-ready/` split NOW (PRDs are human-born, the `idea/ -> prd/` promotion already IS the PRD
-position gate, and `humanOnly`/`needsAnswers` cover nature/discovered). REVISIT only if agents/untrusted
-sources begin writing PRDs directly , the same trigger the WORK-CONTRACT names for the slice pre-pool
-state. The one thing the PRD side still needs from the slice split is that PRD-slicing OUTPUT can target
-slices-`backlog/` (the slice birth-folder policy), not a new PRD folder.
+### WHO ENFORCES the placement? The RUNNER, never the agent (the load-bearing principle)
+
+> Maintainer's deeper point, 2026-06-17: "an agent cannot be reliably trusted, so the runner must
+> ensure slices are put in the right folder." This is the MOST IMPORTANT enforcement principle for the
+> whole C8 + Kanban design, and it is already the project's invariant , C8 must preserve it.
+
+**The principle:** the AGENT produces CONTENT; the RUNNER performs the LEDGER TRANSITION (the folder
+placement, the trust-mode decision, the lock acquire/release, the promotion gate). An agent's output
+is untrusted DATA, not a trusted ACTION , so the agent never decides which folder its output lands in,
+never moves a file between status folders, never sets its own trust level, never promotes itself into a
+pool. The runner does all of that, from inputs the agent CANNOT forge.
+
+**This is already the codebase's invariant (VERIFIED), C8 inherits it, does not invent it:**
+- The runner owns every git-state transition. `AGENTS.md` (this repo): "the runner/human owns every
+  git-state transition (claim, done-move, commit, integration); the agent does NOT stage/commit/push
+  and does NOT move files between `work/` folders." The agent runs IN a worktree and EDITS files; the
+  RUNNER commits the transition.
+- The trust/mode decision is runner-side: `performComplete` (`cli.ts` ~L1599) resolves
+  `explicitMerge` / the untrusted-origin-forces-propose rule , the AGENT has no say; it cannot demote
+  itself to trusted or pick `--merge`. Only an OPERATOR typing `--merge` overrides, never the agent.
+- Slicing output already routes through `performIntegration` (the runner's back-half), NOT the agent
+  committing slices, so WHERE the emitted slices land is a runner decision, not an agent one.
+
+**What this REQUIRES of C8 + the Kanban split (the enforcement boundary, stated precisely):**
+1. **The birth-folder is a RUNNER decision, not an agent one.** When a slicer emits slices, the AGENT
+   writes slice CONTENT into its worktree; the RUNNER decides whether each lands in `backlog/`(staging)
+   or `todo/`(pool) , from runner-side inputs (the per-repo `slicesBornIn` policy, the origin's trust
+   level, whether review is required). An agent cannot place its own output in `todo/` to make it
+   self-eligible. Same for `intake`/PRDs: the agent drafts the PRD body; the runner places it in the
+   staging-vs-pool folder per trust.
+2. **Promotion `staging -> pool` is HUMAN-only (or a trusted-runner policy), never agent.** The
+   `backlog -> todo` (and `prd -> prd-ready`) promotion is a privileged transition. An autonomous agent
+   must not promote its own output into the pool , that would defeat the gate. Enforced by the same
+   "runner/human owns transitions" rule: promotion is a ledger move, and agents do not author ledger
+   moves.
+3. **The C8 LOCK acquire/release is runner-mediated too.** The agent does the WORK under the lock; the
+   RUNNER acquires the lock before dispatching and releases/marks-stuck after (today's advancing-lock /
+   claim flow already works this way , the runner calls `acquireAdvancingLock`/`performClaim`, the agent
+   never touches the lock ref). So C8's one-lock-per-item is enforced by the runner's acquire, not by
+   trusting the agent to "hold" anything.
+4. **The trust level is a runner-side INPUT the agent cannot forge.** Trust comes from the ORIGIN (who
+   opened the PR / where the contribution came from), resolved by the runner, NOT a field the agent
+   writes. An untrusted-origin slice forced to `backlog/` + propose-mode is the runner enforcing it; the
+   agent cannot mark itself trusted to skip the gate.
+
+**Why this matters for the design (not just hygiene):** the entire Kanban gate + C8 lock model is only
+as trustworthy as its ENFORCEMENT POINT. If the agent could choose its birth folder, promote itself, or
+place its lock, every gate (review-without-PR, untrusted-author, the per-item mutex) would be advisory
+and bypassable by a misbehaving/compromised agent. Because the RUNNER owns all four transitions above
+from unforgeable inputs, the gates are STRUCTURAL , an agent physically cannot self-promote or
+self-place. So the design's safety rests on the SAME runner-owns-transitions invariant the codebase
+already enforces; C8 + Kanban must thread every new transition (birth-folder placement, promotion, lock
+acquire) through the RUNNER, never expose them to agent control. This is a HARD requirement on the
+implementation, not a nice-to-have: **agent = content; runner = transitions, including placement, trust
+mode, promotion, and the lock.**
 
 ### Does the folder gate REPLACE `humanOnly`? (slices yes-ish, PRDs no), the elegant resolution
 
@@ -1448,22 +1499,31 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
    crash-safe; the lock ref is a hidden `refs/agent-runner/*` ref; eligibility stays offline on `main`.
    On a PROTECTED `main`, the durable promotions route through the PR-merge path (Amendment 3), design
    that explicitly. This SUPERSEDES C5/C6 and most of the branch-carries PRD.
-5. **Kanban `todo/` pool split (its OWN idea/PRD, orthogonal to the lock mechanism, can land under Set
-   1 OR Set 2)**, split `backlog/` (human-gated holding) from `todo/` (the eligible agent pool);
-   retarget the build/slice pool + claimability to read `todo/`; make agent/`--merge`-emitted/untrusted
-   slices' birth folder (`backlog/` for human promotion vs `todo/` direct) a per-repo policy; RETIRE
-   `humanOnly` in favour of birth-folder (two-step rename, `allowAgents->autoBuild` precedent). THREE
-   consequences, one mechanism: (a) replaces `humanOnly`; (b) trust-gates untrusted-author slices; (c)
-   enables REVIEW WITHOUT A PR SYSTEM, `--merge` slicing into `backlog/` is safe on a bare/no-host/
-   protected-`main` repo because the slices land durable-but-not-eligible and a human promotes the
-   approved ones `backlog -> todo` (review = a ledger position, not a PR). Acceptance: agents pull only
-   from `todo/`; `git mv backlog->todo` promotes; `--merge` slicing can target `backlog/` and the
-   emitted slices are NOT claimable until promoted; `blockedBy` still resolves against `done/`;
-   `humanOnly` semantics preserved by birth-folder. Optionally mirror for PRDs (`prd/` holding ,
-   `prd-ready/` pool). NOTE the scope: the review-without-PR benefit is for LEDGER-FILE output
-   (slicing), code/implementation review still uses a BRANCH/PR (correct, a diff cannot be folder-
-   gated); and the PRD-level holding/ready split is NOT worth doing, PRD-slicing safety is inherited
-   from the slice gate downstream (let slicer output land in slices-`backlog/`).
+5. **Kanban `staging/pool` position split for BOTH slices and PRDs (its OWN idea/PRD, orthogonal to the
+   lock mechanism, can land under Set 1 OR Set 2)**, SLICES: split `backlog/`(human-gated staging) from
+   `todo/`(eligible pool); PRDs: split `prd/`(staging) from `prd-ready/`(auto-slice pool). Retarget the
+   build pool to read `todo/` and the auto-slice pool to read `prd-ready/`; make the birth folder of
+   agent/`--merge`/untrusted OUTPUT (slices and `intake`/untrusted PRDs) a RUNNER-decided per-repo
+   policy. RETIRE the COMMON slice-`humanOnly` use into birth-folder; KEEP slice `humanOnly` as the
+   rare never-for-agents guard and PRD `humanOnly` (never-auto-slice) UNCHANGED. THREE consequences, one
+   mechanism: (a) de-overloads `humanOnly`; (b) trust-gates untrusted-author output; (c) enables REVIEW
+   WITHOUT A PR SYSTEM for LEDGER-FILE output (`--merge` slicing into `backlog/` is safe on a
+   bare/no-host/protected-`main` repo, review = a ledger position; CODE/implementation review still uses
+   a BRANCH/PR, correct, a diff cannot be folder-gated). Acceptance: agents pull only from
+   `todo/`/`prd-ready/`; a human promotes `backlog->todo` / `prd->prd-ready`; an `intake`/untrusted PRD
+   is NOT auto-sliceable until promoted; `--merge` slicing can target `backlog/`; `blockedBy`/`sliceAfter`
+   still resolve against `done/`/`prd-sliced/`.
+6. **ENFORCEMENT is RUNNER-owned, never agent (a HARD requirement on ALL of the above, see "WHO
+   ENFORCES").** The agent produces CONTENT; the RUNNER performs every TRANSITION , birth-folder
+   placement, the trust-mode decision, the `staging->pool` promotion, and the C8 lock acquire/release ,
+   from inputs the agent CANNOT forge. This is already the codebase invariant (runner/human owns git-
+   state transitions; trust resolved runner-side in `performComplete`; slicing output via
+   `performIntegration`). C8 + the Kanban split MUST thread every NEW transition (placement, promotion,
+   lock) through the runner; an agent must never place its own output in the pool, promote itself, set
+   its own trust, or hold its own lock. The gates are only structural (not advisory/bypassable) BECAUSE
+   the runner owns them. Acceptance: a test proves an agent's emitted output lands where the RUNNER's
+   policy/trust dictates (not where the agent wrote it), promotion is a runner/human-only ledger move,
+   and the lock acquire/release is runner-mediated.
 
 **The single decision that orders everything: keep E (Set 1, C5/C6) or drop E (Set 2, C8).** C2 and the
 Kanban split are valuable under BOTH and can land first. C8 is the strongest design but is Set-2-only
