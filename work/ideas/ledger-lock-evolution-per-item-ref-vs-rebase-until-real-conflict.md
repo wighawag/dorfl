@@ -1441,26 +1441,67 @@ encoding). No overload, each axis means one thing, and `humanOnly` stops being t
 today. That IS the elegant system: **position for "not yet / which pool", a flag for "never by nature",
 `needsAnswers` for "blocked on a question", three orthogonal axes, each minimal.**
 
+### Low-risk migration: introduce `pre-backlog/`, keep `backlog/` MEANING the pool, rename LATER (maintainer, 2026-06-17)
+
+The danger in the slice split is that `backlog/` TODAY means "the eligible pool" and ~everything reads
+it as such (the build pool, claimability, `scan`). Renaming the HOT folder first is risky. The
+maintainer's de-risking sequence avoids touching the pool's meaning on day one:
+
+- **STEP A (introduce the gate, NO rename of the hot folder).** Keep `backlog/` MEANING "the eligible
+  pool" (every reader unchanged). Add a NEW `pre-backlog/` folder = the staging area. New behaviour is
+  ONLY: agent/untrusted/`--merge` OUTPUT lands in `pre-backlog/` (not the pool); the RUNNER promotes
+  `pre-backlog -> backlog` per trust/policy. NO existing reader changes meaning (`backlog/` is still the
+  pool), so the blast radius is tiny, the only new code is "write staged output to `pre-backlog/`" +
+  "the promote transition." This is the behaviour-changing step, and it is SMALL.
+- **STEP B (cosmetic rename LATER, decoupled, pure value-flip).** Once Step A is stable, rename for
+  legibility: `backlog -> todo` and `pre-backlog -> backlog`, a pure constants flip behind the
+  `work-layout` path module (the taxonomy PRD's Phase-0/Phase-1 pattern) + a `git mv`. NO behaviour
+  change (the gate already works from Step A); this is purely "the pool is now called `todo`, staging is
+  now called `backlog`," matching Kanban vocabulary. Gate-verifiable as a no-op refactor.
+
+This is strictly safer than renaming first: the RISKY part (the gate + promotion semantics) lands while
+the pool keeps its well-understood name; the RENAME is a separate, mechanical, reversible step. It also
+means Step A can ship and be evaluated WITHOUT committing to the final vocabulary. (Same two-phase
+shape as `prd-sliced/` STEP-A/STEP-B and `allowAgents -> autoBuild`.)
+
+### The placement-policy surface (configurable default + per-source exceptions, maintainer, 2026-06-17)
+
+The runner's "where does this output land" decision is a per-repo POLICY with a per-SOURCE override,
+mirroring the EXISTING `originTrust`/precedence shape (VERIFIED: `integration-core.ts` already stamps
+`originTrust: untrusted` at intake and resolves `explicit --merge > untrusted-origin => propose >
+config mode > default`). Mirror that exactly for placement:
+
+- **A configurable DEFAULT landing per lifecycle**, resolved like `autoBuild`/`integration` (CLI flag >
+  env > per-repo config > global > built-in default):
+  - slices: `slicesLandIn: todo | backlog` (default-eligible vs default-staged). "Slices always end in
+    `todo`" = `slicesLandIn: todo`; "always staged for review" = `slicesLandIn: backlog`.
+  - PRDs: `prdsLandIn: prd-ready | prd` (auto-sliceable vs staged). "PRDs always end in `prd-ready`" =
+    `prdsLandIn: prd-ready`.
+- **Per-SOURCE EXCEPTIONS that override the default** (the precedence chain, highest wins):
+  - explicit operator flag (`--land-staged` / `--land-pool`, the operator-present override, like
+    explicit `--merge` today) > UNTRUSTED-origin forces STAGING (the `originTrust: untrusted` stamp
+    forces `pre-backlog`/`prd`, mirroring untrusted-forces-propose) > the configured default >
+    built-in default.
+  - So: a trusted-origin repo with `slicesLandIn: todo` auto-pools everything EXCEPT untrusted-intake
+    output, which is forced to staging, exactly the "configurable + option for exception like untrusted
+    intake" the maintainer asked for. And the reverse (`slicesLandIn: backlog`, everything staged for
+    review) is the conservative default for a repo that wants a human in every loop.
+- **This is the SAME knob as the three review modes** (it IS the birth-folder): `slicesLandIn: backlog`
+  + no PR host = the PR-free review path; `slicesLandIn: todo` = trusted fast path; `--propose` + a host
+  = the PR path. One policy, resolved runner-side (enforcement principle #6), the agent never sets it.
+- **Names are placeholders** (`slicesLandIn`/`prdsLandIn`/`--land-staged`); the design session picks the
+  final spelling. The SHAPE is fixed: a resolved-like-`integration` default per lifecycle + an
+  untrusted-origin staging override + an explicit operator override, RUNNER-resolved.
+
 **Open questions for the Kanban split (its own design session):**
-- Exact names (`todo` vs `ready` vs `queued`; whether `backlog` keeps its name and `todo` is the new
-  one, or both rename). The verb story matters ("promote to todo" reads well).
+- Exact names (`todo` vs `ready` vs `queued`; the `pre-backlog -> backlog -> todo` rename timing per the
+  migration above; the policy key spellings). The verb story matters ("promote to todo" reads well).
 - `humanOnly` disposition (RESOLVED above, see "Does the folder gate REPLACE `humanOnly`?"): NARROW
-  slice `humanOnly` to the rare "never-for-agents" guard (folder takes the common review-first case);
-  KEEP PRD `humanOnly` unchanged (it gates auto-slicing, no folder substitute). Not a full retirement,
-  a de-overloading. Open sub-question: the migration sequencing of re-homing existing slice-`humanOnly`
-  uses into `backlog/`-birth vs leaving the genuinely-never ones flagged.
-- The per-repo policy surface: `autoBuild` already gates agent building; add the BIRTH-FOLDER policy
-  for where agent OUTPUT lands. ONE policy covers all three consequences: where do agent-created /
-  `--merge`-emitted / untrusted-author slices land, `backlog/` (human promotes after review) or
-  `todo/` (straight into the pool)? Likely `slicesBornIn: backlog|todo` (+ maybe a finer split:
-  trusted source , `todo`, untrusted/agent , `backlog`). This is the "review without a PR" knob.
-- How `--merge` slicing chooses `backlog/` vs `todo/` for its output, and whether that REPLACES the
-  `--propose`-needs-a-PR path on no-host repos (the review-without-PR consequence). Likely: `--propose`
-  stays the PR path where a host exists; `--merge` + birth-in-`backlog/` is the PR-FREE review path;
-  `--merge` + birth-in-`todo/` is the trusted no-review fast path. Three honest modes.
+  slice `humanOnly` to the rare "never-for-agents" guard; KEEP PRD `humanOnly` unchanged. A de-
+  overloading, not a retirement. Sub-question: migration sequencing of re-homing existing
+  slice-`humanOnly` uses into staging-birth vs leaving the genuinely-never ones flagged.
 - Whether this is one idea/PRD or folded into the C8 PRD (it is orthogonal to the lock mechanism, so
-  likely its OWN PRD that depends on C8's `todo`-as-pool retarget, or vice-versa , sequence by which
-  lands first).
+  likely its OWN PRD; sequence by which lands first against C8's pool retarget).
 
 ## Disposition
 
