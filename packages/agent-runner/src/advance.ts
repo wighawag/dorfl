@@ -94,10 +94,23 @@ import type {NewQuestion} from './sidecar.js';
 
 const DEFAULT_ARBITER = 'origin';
 
-/** The terminal condition of one `advance` tick (mirrors `DoOutcome`'s shape). */
+/**
+ * The terminal condition of one `advance` tick (mirrors `DoOutcome`'s shape).
+ *
+ * `vanished` (slice `observation-identity-is-its-filename-not-a-foreign-slug`):
+ * a BENIGN SKIP when the item's file was enumerated into the lifecycle pool but
+ * has since been moved/triaged/deleted by a sibling leg (the cross-tick window
+ * under parallel CI). It is `exitCode: 0` so the matrix tolerates it, but it is
+ * DISTINGUISHABLE from `no-op` (which is a calm classify result, e.g. a pending
+ * sidecar) so reviewers can grep these out. NOT used for a human-typed bare slug
+ * that names nothing — that is a malformed invocation; today the two are not
+ * distinguished at this seam (a human typo also skips benignly) and the matrix
+ * scale of the calm condition justifies the trade.
+ */
 export type AdvanceOutcome =
 	| 'advanced'
 	| 'no-op'
+	| 'vanished'
 	| 'usage-error'
 	| 'lost'
 	| 'contended'
@@ -474,13 +487,7 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 	// not folder-derived, so only the ITEM file's folder must be found.
 	const itemPath = findItemPath(cwd, input.namespace, input.slug);
 	if (itemPath === undefined) {
-		return {
-			exitCode: 1,
-			outcome: 'usage-error',
-			message:
-				`advance classified the 'surface' rung for ${item} but could not find ` +
-				`its item file under work/ — a human must reconcile the item's location.`,
-		};
+		return vanishedSkip({rung: 'surface', item});
 	}
 
 	// 1. SPAWN the fresh-context `surface-questions` agent (the skill JUDGES). The
@@ -567,13 +574,7 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 	if (context.observationTriage === 'auto') {
 		const itemPath = findItemPath(cwd, input.namespace, input.slug);
 		if (itemPath === undefined) {
-			return {
-				exitCode: 1,
-				outcome: 'usage-error',
-				message:
-					`advance classified the 'triage' rung for ${item} but could not find ` +
-					`its item file under work/ — a human must reconcile the item's location.`,
-			};
+			return vanishedSkip({rung: 'triage', item});
 		}
 		const gate = context.triageGate ?? harnessTriageGate();
 		let decision;
@@ -636,13 +637,7 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 
 	const itemPath = findItemPath(cwd, input.namespace, input.slug);
 	if (itemPath === undefined) {
-		return {
-			exitCode: 1,
-			outcome: 'usage-error',
-			message:
-				`advance classified the 'apply' rung for ${item} but could not find ` +
-				`its item file under work/ — a human must reconcile the item's location.`,
-		};
+		return vanishedSkip({rung: 'apply', item});
 	}
 
 	// OBSERVATION → an answered "promote" is the triage rung's new-item creation
@@ -708,6 +703,31 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 			message: `apply ${item}: ${detail}`,
 		};
 	}
+}
+
+/**
+ * The cross-tick-window BENIGN SKIP shared by all three rungs that need to
+ * resolve an item file (surface / triage / apply). The lifecycle pool enumerated
+ * the item at scan-time, but by the time this leg ran a sibling parallel leg had
+ * already triaged/settled/deleted it. At the ~33-way CI matrix scale this is a
+ * CALM, EXPECTED condition — making it an exit-1 "a human must reconcile" turned
+ * the matrix into a wall of red. It is now a `vanished` outcome (`exitCode: 0`,
+ * distinguishable from `no-op`) carrying a clear message naming the rung + item.
+ * (See slice `observation-identity-is-its-filename-not-a-foreign-slug`.)
+ */
+function vanishedSkip(input: {
+	rung: 'surface' | 'triage' | 'apply';
+	item: string;
+}): RungExecResult {
+	return {
+		exitCode: 0,
+		outcome: 'vanished',
+		message:
+			`advance classified the '${input.rung}' rung for ${input.item} but its ` +
+			`item file was gone from work/ by the time the leg ran (a sibling leg ` +
+			`likely triaged/settled/deleted it between enumerate and run) — benign ` +
+			`skip.`,
+	};
 }
 
 /**

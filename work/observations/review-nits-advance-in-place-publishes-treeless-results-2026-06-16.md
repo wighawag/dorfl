@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'advance-in-place-publishes-treeless-results' (Gate 2 approve)
 date: 2026-06-16
 status: open
-slug: advance-in-place-publishes-treeless-results
+reviewOf: advance-in-place-publishes-treeless-results
 ---
 
 ## Non-blocking review findings

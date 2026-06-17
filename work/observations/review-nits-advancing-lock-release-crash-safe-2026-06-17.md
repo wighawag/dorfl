@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'advancing-lock-release-crash-safe' (Gate 2 approve)
 date: 2026-06-17
 status: open
-slug: advancing-lock-release-crash-safe
+reviewOf: advancing-lock-release-crash-safe
 ---
 
 ## Non-blocking review findings

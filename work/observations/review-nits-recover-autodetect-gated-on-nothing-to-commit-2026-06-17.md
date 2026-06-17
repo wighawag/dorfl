@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'recover-autodetect-gated-on-nothing-to-commit' (Gate 2 approve)
 date: 2026-06-17
 status: open
-slug: recover-autodetect-gated-on-nothing-to-commit
+reviewOf: recover-autodetect-gated-on-nothing-to-commit
 ---
 
 ## Non-blocking review findings

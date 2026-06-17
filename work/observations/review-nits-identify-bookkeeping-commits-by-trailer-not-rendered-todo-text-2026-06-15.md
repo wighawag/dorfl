@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'identify-bookkeeping-commits-by-trailer-not-rendered-todo-text' (Gate 2 approve)
 date: 2026-06-15
 status: open
-slug: identify-bookkeeping-commits-by-trailer-not-rendered-todo-text
+reviewOf: identify-bookkeeping-commits-by-trailer-not-rendered-todo-text
 ---
 
 ## Non-blocking review findings

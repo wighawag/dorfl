@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices' (Gate 2 approve)
 date: 2026-06-16
 status: open
-slug: ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices
+reviewOf: ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices
 ---
 
 ## Non-blocking review findings

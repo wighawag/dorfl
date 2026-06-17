@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'install-ci-emits-no-gate-env-let-config-decide' (Gate 2 approve)
 date: 2026-06-16
 status: open
-slug: install-ci-emits-no-gate-env-let-config-decide
+reviewOf: install-ci-emits-no-gate-env-let-config-decide
 ---
 
 ## Non-blocking review findings

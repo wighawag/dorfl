@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'advancing-lock-human-release-verb-and-surface' (Gate 2 approve)
 date: 2026-06-17
 status: open
-slug: advancing-lock-human-release-verb-and-surface
+reviewOf: advancing-lock-human-release-verb-and-surface
 ---
 
 ## Non-blocking review findings
