@@ -84,6 +84,15 @@ staging folder + the placement seam introduced by the tracer slice.
 > > built-in). Follow the `slicingIntegration` / `integration` resolution shape
 > exactly. The slicer reads the resolved placement; it never sets it itself.
 >
+> PUT THE PRECEDENCE RESOLVER IN A SHARED MODULE (not inlined into the slicing
+> path), exposing a single pure function from the inputs (`originTrust` stamp,
+> resolved `slicesLandIn`/`prdsLandIn` default, explicit flag) to the staging-vs-pool
+> destination. The PRD-placement slice
+> (`pre-prd-staging-pool-split-and-untrusted-prd-placement`) REUSES this exact
+> resolver for `prdsLandIn`; if it is inlined here it would have to be extracted
+> there. Keep the lifecycle-specific bit (which two folders, which default key) as a
+> parameter so both the slice and PRD callers share one implementation.
+>
 > SEAMS TO TEST AT: the `--bare file://` arbiter house pattern
 > (`test/helpers/gitRepo.ts`); cover each precedence rung + both default landings +
 > the untrusted-origin force + the explicit-flag override. Isolate git config as the
