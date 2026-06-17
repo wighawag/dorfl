@@ -10,11 +10,39 @@ import {
 } from '../src/scan.js';
 import {formatReport} from '../src/format.js';
 import {mergeConfig} from '../src/config.js';
+import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
 import {
 	registerMirrorWithWork,
 	pushWorkToMirrorOrigin,
 	breakMirrorOrigin,
 } from './helpers/gitRepo.js';
+
+/** Write an observation under a repo's `work/observations/` (untriaged unless `triaged`). */
+function writeObservation(repo: string, slug: string, triaged?: string): void {
+	const dir = join(root, repo, 'work', 'observations');
+	mkdirSync(dir, {recursive: true});
+	const lines = ['---', `slug: ${slug}`];
+	if (triaged !== undefined) lines.push(`triaged: ${triaged}`);
+	lines.push('---', '', 'a captured signal');
+	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
+}
+
+/** Write the identity-keyed sidecar `work/questions/<type>-<slug>.md`, answered or pending. */
+function writeSidecar(
+	repo: string,
+	namespace: 'slice' | 'prd',
+	slug: string,
+	answered: boolean,
+): void {
+	const item = `${namespace}:${slug}`;
+	const model = newSidecar(item, [{question: 'pick one?'}]);
+	if (answered) {
+		model.entries[0].answer = 'yes';
+	}
+	const abs = join(root, repo, sidecarPathFor(item));
+	mkdirSync(join(abs, '..'), {recursive: true});
+	writeFileSync(abs, serialiseSidecar(model));
+}
 
 let root: string;
 
@@ -555,5 +583,212 @@ describe('scanRepoPaths — one-slug-one-folder LINT (working tree)', () => {
 		writeItem('repo', 'backlog', 'a.md', {slug: 'a'});
 		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
 		expect(report.repos[0].ledgerDuplicates).toEqual([]);
+	});
+});
+
+/**
+ * The per-repo LIFECYCLE pool (`scan --json`'s `repos[].lifecycle` +
+ * `cwd.repo.lifecycle`) — slice `ci-propose-matrix-enumerates-lifecycle-items`.
+ * The CI propose-matrix `jq` reads `triage[]` ⇒ `obs:<slug>`, `surface[]`/`apply[]`
+ * ⇒ `.namespace + ":" + .slug`, so the WHOLE answer-loop runs in propose mode, not
+ * only in merge mode. The pool REUSES `lifecycle-gather.ts` → `buildLifecyclePools`
+ * (no forked predicate), gated by the per-repo `observationTriage` /
+ * `surfaceBlockers` config. INERT with the calm defaults.
+ */
+describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
+	it('INERT with calm defaults: triage + surface are empty, apply absent (no answered sidecar)', () => {
+		writeObservation('repo', 'obs-a'); // untriaged — but triage gate is OFF
+		writeItem('repo', 'backlog', 'blocked.md', {
+			slug: 'blocked',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		}); // needsAnswers, no sidecar — but surface gate is OFF
+		// Calm defaults (observationTriage:off, surfaceBlockers:false).
+		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
+		const lc = report.repos[0].lifecycle;
+		expect(lc.triage).toEqual([]);
+		expect(lc.surface).toEqual([]);
+		expect(lc.apply).toEqual([]);
+	});
+
+	it('observationTriage ON (ask) ⇒ an untriaged observation enters triage as {slug}', () => {
+		writeObservation('repo', 'obs-a');
+		writeObservation('repo', 'obs-settled', 'keep'); // triaged ⇒ excluded
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({observationTriage: 'ask'}),
+		);
+		const lc = report.repos[0].lifecycle;
+		expect(lc.triage.map((t) => t.slug)).toEqual(['obs-a']);
+	});
+
+	it('observationTriage AUTO also enumerates triage (ask/auto collapse to a leg-or-not boolean)', () => {
+		writeObservation('repo', 'obs-a');
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({observationTriage: 'auto'}),
+		);
+		expect(report.repos[0].lifecycle.triage.map((t) => t.slug)).toEqual([
+			'obs-a',
+		]);
+	});
+
+	it('surfaceBlockers ON ⇒ a needsAnswers slice/PRD with NO sidecar enters surface with its namespace', () => {
+		writeItem('repo', 'backlog', 'blocked.md', {
+			slug: 'blocked',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writePrd('repo', 'prd', 'blocked-prd.md', {
+			slug: 'blocked-prd',
+			needsAnswers: 'true',
+		});
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({surfaceBlockers: true}),
+		);
+		const surface = report.repos[0].lifecycle.surface;
+		expect(surface).toContainEqual({namespace: 'slice', slug: 'blocked'});
+		expect(surface).toContainEqual({namespace: 'prd', slug: 'blocked-prd'});
+	});
+
+	it('APPLY is ALWAYS-ON: an answered sidecar applies even with BOTH create-gates calm', () => {
+		writeItem('repo', 'backlog', 'answered.md', {
+			slug: 'answered',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writeSidecar('repo', 'slice', 'answered', true);
+		// Calm defaults — apply must still surface (consume is never gated).
+		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
+		const lc = report.repos[0].lifecycle;
+		expect(lc.apply).toContainEqual({namespace: 'slice', slug: 'answered'});
+		expect(lc.surface).toEqual([]); // an answered item is apply, never surface
+	});
+
+	it('a PENDING sidecar is NOT enumerated into surface OR apply (kept calm)', () => {
+		writeItem('repo', 'backlog', 'pending.md', {
+			slug: 'pending',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writeSidecar('repo', 'slice', 'pending', false); // exists, not all-answered
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({surfaceBlockers: true}),
+		);
+		const lc = report.repos[0].lifecycle;
+		expect(lc.surface).toEqual([]);
+		expect(lc.apply).toEqual([]);
+	});
+
+	it('DISJOINT: a needsAnswers item is never ALSO a build leg; an observation is its own namespace', () => {
+		// A mixed fixture: an observation, a surface item, an apply item, all with
+		// autoBuild on — none of the needsAnswers items may appear as an eligible
+		// BUILD leg (`items[]`), and the observation lives only in triage.
+		writeObservation('repo', 'obs-x');
+		writeItem('repo', 'backlog', 'surface-it.md', {
+			slug: 'surface-it',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writeItem('repo', 'backlog', 'apply-it.md', {
+			slug: 'apply-it',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writeSidecar('repo', 'slice', 'apply-it', true);
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({
+				autoBuild: true,
+				observationTriage: 'ask',
+				surfaceBlockers: true,
+			}),
+		);
+		const repo = report.repos[0];
+		// Neither needsAnswers item is an ELIGIBLE build leg.
+		const eligibleSlugs = repo.items
+			.filter((i) => i.eligibility.eligible)
+			.map((i) => i.slug);
+		expect(eligibleSlugs).not.toContain('surface-it');
+		expect(eligibleSlugs).not.toContain('apply-it');
+		// They live ONLY in their lifecycle pools.
+		expect(repo.lifecycle.surface).toContainEqual({
+			namespace: 'slice',
+			slug: 'surface-it',
+		});
+		expect(repo.lifecycle.apply).toContainEqual({
+			namespace: 'slice',
+			slug: 'apply-it',
+		});
+		// The observation lives ONLY in triage (its own obs: namespace).
+		expect(repo.lifecycle.triage.map((t) => t.slug)).toEqual(['obs-x']);
+	});
+
+	it('honours the per-repo `.agent-runner.json` gate overrides (off globally, on per-repo)', () => {
+		writeObservation('repo', 'obs-a');
+		writeFileSync(
+			join(root, 'repo', '.agent-runner.json'),
+			JSON.stringify({observationTriage: 'ask'}),
+		);
+		// Global is calm; the per-repo file opts triage in.
+		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
+		expect(report.repos[0].lifecycle.triage.map((t) => t.slug)).toEqual([
+			'obs-a',
+		]);
+	});
+});
+
+describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
+	it('INERT with calm defaults on the mirror (empty triage/surface; no answered sidecar ⇒ empty apply)', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			observations: {'obs-a.md': `---\nslug: obs-a\n---\nsignal`},
+			backlog: {
+				'blocked.md': slice({slug: 'blocked', needsAnswers: 'true'}),
+			},
+		});
+		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
+		const lc = report.repos[0].lifecycle;
+		expect(lc.triage).toEqual([]);
+		expect(lc.surface).toEqual([]);
+		expect(lc.apply).toEqual([]);
+	});
+
+	it('honours the COMMITTED per-repo gates on the mirror (triage + surface ON ⇒ legs)', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			observations: {'obs-a.md': `---\nslug: obs-a\n---\nsignal`},
+			backlog: {
+				'blocked.md': slice({slug: 'blocked', needsAnswers: 'true'}),
+			},
+			repoConfig: {observationTriage: 'ask', surfaceBlockers: true},
+		});
+		// Global is calm; the mirror's committed file opts both gates in.
+		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
+		const lc = report.repos[0].lifecycle;
+		expect(lc.triage.map((t) => t.slug)).toEqual(['obs-a']);
+		expect(lc.surface).toContainEqual({namespace: 'slice', slug: 'blocked'});
+	});
+
+	it('APPLY is ALWAYS-ON on the mirror: an answered sidecar applies with calm gates', async () => {
+		registerMirrorWithWork(workspacesDir(), 'repo', {
+			backlog: {
+				'answered.md': slice({slug: 'answered', needsAnswers: 'true'}),
+			},
+			questions: {
+				'slice-answered.md': serialiseSidecar(
+					(() => {
+						const m = newSidecar('slice:answered', [{question: 'pick?'}]);
+						m.entries[0].answer = 'yes';
+						return m;
+					})(),
+				),
+			},
+		});
+		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
+		expect(report.repos[0].lifecycle.apply).toContainEqual({
+			namespace: 'slice',
+			slug: 'answered',
+		});
 	});
 });

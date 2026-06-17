@@ -445,6 +445,21 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		},
 	);
 
+	it(
+		'flags a regression that DROPS the lifecycle union (no `obs:` / no ' +
+			'`lifecycle.*` reads) — the propose matrix must enumerate triage/surface/apply',
+		() => {
+			// Pre-fix shape: a build/slice-only `jq` with the whole lifecycle union
+			// removed. Reintroducing it must be flagged so the answer-loop is never
+			// silently merge-only again.
+			const broken = base.replace(
+				/ \+ \[\(\.repos\[\]\.lifecycle\.triage\[\]\?[\s\S]*?\.namespace \+ ":" \+ \.slug\]/,
+				'',
+			);
+			expectFlagged(broken, 'propose-enumerates-lifecycle-items');
+		},
+	);
+
 	it('flags a stripped capability-F reap job', () => {
 		expectFlagged(
 			base.replace(/reap-merged-branches:/, '# reap removed:'),

@@ -18,6 +18,78 @@ import {
 	lintRefLedger,
 	type DuplicateSlug,
 } from './ledger-lint.js';
+import {
+	gatherLifecycleInPlace,
+	gatherLifecycleMirror,
+} from './lifecycle-gather.js';
+import type {LifecyclePoolGates} from './lifecycle-pools.js';
+
+/**
+ * The CREATE-side lifecycle gates for the propose-matrix lifecycle pool, derived
+ * from a repo's resolved config. Maps the config's question-surfacing gate family
+ * onto the boolean {@link LifecyclePoolGates} `buildLifecyclePools` takes:
+ *
+ *   - `observationTriage !== 'off'` ⇒ `triage` ON (BOTH `ask` and `auto` enumerate
+ *     triage candidates into the matrix identically; the ask/auto distinction is a
+ *     DISPOSITION concern enforced LATER by the triage rung itself, not by whether
+ *     a leg exists — the matrix only decides "is there a leg at all?").
+ *   - `surfaceBlockers` ⇒ `surface` ON.
+ *
+ * `apply` is NOT a gate (CONSUME is always-on; `buildLifecyclePools` enumerates
+ * answered sidecars regardless), so a committed answer always applies even with
+ * both create-gates calm — the same create-vs-consume invariant the autopick
+ * drivers honour (ADR `ci-config-policy-and-gate-family` §4). Reused on BOTH the
+ * mirror (`scan`) and in-place (`scanRepoPaths`) substrates so the propose matrix
+ * agrees with the `advance -n` / `run` selection.
+ */
+export function lifecycleGatesFrom(config: {
+	observationTriage: string;
+	surfaceBlockers: boolean;
+}): LifecyclePoolGates {
+	return {
+		triage: config.observationTriage !== 'off',
+		surface: config.surfaceBlockers === true,
+	};
+}
+
+/**
+ * A lifecycle item as it appears on a {@link RepoReport.lifecycle} sub-pool: the
+ * bare `slug` plus, for surface/apply, the `namespace` discriminator (`'slice'` /
+ * `'prd'`) the matrix `jq` projects into a `slice:`/`prd:` prefix. Triage items
+ * carry only `{slug}` — the `obs:` prefix is fixed in the matrix `jq` (an
+ * observation has no slice/prd namespace), so a consumer never needs a
+ * `namespace: 'observation'` here.
+ */
+export interface ScannedTriageItem {
+	slug: string;
+}
+/** A surface/apply lifecycle item: a `needsAnswers` slice/PRD, with its namespace. */
+export interface ScannedBlockedItem {
+	namespace: 'slice' | 'prd';
+	slug: string;
+}
+
+/**
+ * The per-repo LIFECYCLE pool on `scan --json` (the `triage`/`surface`/`apply`
+ * companion of `items[]`/`prds[]`), gated by the per-repo question-surfacing
+ * config and computed by REUSING `lifecycle-gather.ts` → {@link buildLifecyclePools}
+ * (NOT a forked predicate) so it AGREES with the `advance -n` / `run` selection.
+ * This is what makes the propose-mode CI matrix enumerate the WHOLE answer-loop —
+ * `obs:<slug>` triage legs, `slice:`/`prd:<slug>` surface legs (`needsAnswers`, no
+ * answered sidecar) AND `slice:`/`prd:<slug>` apply legs (`needsAnswers`, answered
+ * sidecar) — not only build/slice legs
+ * (`ci-propose-matrix-enumerates-lifecycle-items`). Inert by default: with
+ * `observationTriage:off` + `surfaceBlockers:false` (the calm defaults) triage +
+ * surface are empty; apply is the always-on consume pool.
+ */
+export interface ScannedLifecycle {
+	/** Untriaged observations → `obs:<slug>` legs (gated by `observationTriage`). */
+	triage: ScannedTriageItem[];
+	/** `needsAnswers` items with no answered sidecar → surface legs (gated by `surfaceBlockers`). */
+	surface: ScannedBlockedItem[];
+	/** `needsAnswers` items WITH an answered sidecar → apply legs (CONSUME, always-on). */
+	apply: ScannedBlockedItem[];
+}
 
 /**
  * A backlog item with its parsed gate/deps, before eligibility resolution. This
@@ -70,6 +142,18 @@ export interface RepoReport {
 	 * all-`eligible:false` pool (so no `prd:` legs).
 	 */
 	prds: ScannedPrd[];
+	/**
+	 * The per-repo LIFECYCLE pool (the `triage`/`surface`/`apply` companion of
+	 * `items[]`/`prds[]`): untriaged observations + `needsAnswers` slices/PRDs split
+	 * by sidecar answered-state, gated by this repo's `observationTriage` /
+	 * `surfaceBlockers` config and computed by REUSING `lifecycle-gather.ts` (NOT a
+	 * forked predicate). Surfaced on BOTH `repos[]` (mirror) and `cwd.repo`
+	 * (in-place), the same dual-surface `items`/`prds` use, so the propose-mode CI
+	 * matrix can enumerate the WHOLE answer-loop
+	 * (`ci-propose-matrix-enumerates-lifecycle-items`). Inert with the calm-default
+	 * gates (empty triage/surface; apply is the always-on consume pool).
+	 */
+	lifecycle: ScannedLifecycle;
 	/**
 	 * The one-slug-one-folder LINT result (PRD `ledger-integrity` story 3): any
 	 * slug present in MORE THAN ONE `work/` status folder in THIS repo's ledger.
@@ -144,6 +228,37 @@ export function scorePrds(
 		slug: p.slug,
 		eligibility: {eligible: sliceable.has(p.slug)},
 	}));
+}
+
+/**
+ * Project the shared {@link buildLifecyclePools} result (via `gatherLifecycle*`)
+ * onto the `scan --json` {@link ScannedLifecycle} shape: triage items keep only
+ * their `slug` (the `obs:` prefix is fixed in the matrix `jq`), surface/apply keep
+ * `{namespace, slug}` so the `jq` projects the right `slice:`/`prd:` prefix. NOT a
+ * re-enumeration — a pure shape map over the already-gated pools.
+ *
+ * The pool items' `namespace` is the wider {@link SelectedNamespace} (which also
+ * admits `'observation'`), but by CONSTRUCTION the surface/apply sub-pools only
+ * ever carry `'slice'`/`'prd'` items (observations flow ONLY through `triage`,
+ * which has no namespace field here), so we narrow + drop any non-slice/prd
+ * defensively rather than widening {@link ScannedBlockedItem}.
+ */
+export function toScannedLifecycle(pools: {
+	triage: {slug: string}[];
+	surface: {namespace: string; slug: string}[];
+	apply: {namespace: string; slug: string}[];
+}): ScannedLifecycle {
+	const asBlocked = (
+		items: {namespace: string; slug: string}[],
+	): ScannedBlockedItem[] =>
+		items
+			.filter((i) => i.namespace === 'slice' || i.namespace === 'prd')
+			.map((i) => ({namespace: i.namespace as 'slice' | 'prd', slug: i.slug}));
+	return {
+		triage: pools.triage.map((t) => ({slug: t.slug})),
+		surface: asBlocked(pools.surface),
+		apply: asBlocked(pools.apply),
+	};
 }
 
 export function scoreItems(
@@ -250,6 +365,37 @@ export async function scan(
 			env: options.env,
 		});
 		const prds = scorePrds(mirror.path, prdPool, repoAutoSlice);
+		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
+		// gated by this mirror's question-surfacing config (resolved from its committed
+		// `.agent-runner.json`, with the same non-fatal global fall-back as `autoSlice`
+		// above) and computed by REUSING `gatherLifecycleMirror` → `buildLifecyclePools`
+		// (NOT a forked predicate), so it AGREES with the `run` selection.
+		let repoLifecycleConfig = {
+			observationTriage: config.observationTriage as string,
+			surfaceBlockers: config.surfaceBlockers,
+		};
+		try {
+			const resolved = resolveRepoConfigFromMirror({
+				mirrorPath: mirror.path,
+				global: config,
+				env: options.env,
+			});
+			repoLifecycleConfig = {
+				observationTriage: resolved.observationTriage,
+				surfaceBlockers: resolved.surfaceBlockers,
+			};
+		} catch {
+			// Non-fatal: a config read fault already WARNED on the `autoSlice` read
+			// above; fall back to the global-resolved gates (scan is read-only and must
+			// degrade gracefully, ADR §5/§6).
+		}
+		const lifecycle = toScannedLifecycle(
+			await gatherLifecycleMirror({
+				mirrorPath: mirror.path,
+				gates: lifecycleGatesFrom(repoLifecycleConfig),
+				env: options.env,
+			}),
+		);
 		// The one-slug-one-folder LINT (PRD story 3): derive any slug residing in >1
 		// status folder from the mirror's committed `main` tree (the SAME `ls-tree`
 		// read the seam uses), so a corrupt ledger is surfaced LOUDLY by the formatter.
@@ -258,6 +404,7 @@ export async function scan(
 			path: mirror.path,
 			items: scoreItems(state, autoBuild, counts),
 			prds,
+			lifecycle,
 			ledgerDuplicates,
 		});
 	}
@@ -294,12 +441,27 @@ export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
 		const prdPool = ledgerRead.resolvePrdPool({repoPath: path});
 		const prds = scorePrds(path, prdPool, resolved.autoSlice);
+		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
+		// gated by this working tree's `observationTriage` / `surfaceBlockers` (resolved
+		// the same way as `autoBuild`/`autoSlice`) and computed by REUSING
+		// `gatherLifecycleInPlace` → `buildLifecyclePools` (NOT a forked predicate). CI
+		// runs IN-PLACE, so this is the surface the propose matrix reads.
+		const lifecycle = toScannedLifecycle(
+			gatherLifecycleInPlace({
+				repoPath: path,
+				gates: lifecycleGatesFrom({
+					observationTriage: resolved.observationTriage,
+					surfaceBlockers: resolved.surfaceBlockers,
+				}),
+			}),
+		);
 		// The one-slug-one-folder LINT over THIS working tree's `work/` ledger.
 		const ledgerDuplicates = lintLocalLedger(path);
 		repos.push({
 			path,
 			items: scoreItems(state, resolved.autoBuild, counts),
 			prds,
+			lifecycle,
 			ledgerDuplicates,
 		});
 	}

@@ -4,6 +4,7 @@ import {resolveRepoConfigFromMirror} from './repo-mirror.js';
 import {
 	scoreItems,
 	scorePrds,
+	toScannedLifecycle,
 	type ScannedItem,
 	type ScanReport,
 	type RepoReport,
@@ -180,18 +181,6 @@ export async function scanMirrorPool(
 	// `prds[]` companion of `items[]` is filled via the SAME `scorePrds` helper
 	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
 	// select(.eligibility.eligible)`) sees the same shape on every surface.
-	const repo: RepoReport = {
-		path: mirrorPath,
-		items,
-		prds: scorePrds(mirrorPath, pool, repoConfig.autoSlice),
-		ledgerDuplicates: [],
-	};
-	const report: ScanReport = {
-		repos: [repo],
-		totalItems: counts.totalItems,
-		totalEligible: counts.totalEligible,
-	};
-
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
 	// `needsAnswers` backlog/PRDs + their sidecars + `work/observations/`) and built
 	// through the SHARED enumeration unit the in-place caller uses — so the in-place
@@ -204,6 +193,22 @@ export async function scanMirrorPool(
 		gates: options.lifecycleGates,
 		env,
 	});
+
+	const repo: RepoReport = {
+		path: mirrorPath,
+		items,
+		prds: scorePrds(mirrorPath, pool, repoConfig.autoSlice),
+		// The propose-matrix lifecycle pool on this mirror's `RepoReport` — the SAME
+		// `gatherLifecycleMirror` result projected onto the `scan --json` shape, so
+		// the dashboard/matrix surface agrees with the selection scoring below.
+		lifecycle: toScannedLifecycle(lifecycle),
+		ledgerDuplicates: [],
+	};
+	const report: ScanReport = {
+		repos: [repo],
+		totalItems: counts.totalItems,
+		totalEligible: counts.totalEligible,
+	};
 
 	return {
 		report,
