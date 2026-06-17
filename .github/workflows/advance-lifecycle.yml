@@ -66,6 +66,51 @@ on:
         required: false
         default: true
         type: boolean
+      # ── GATE-FAMILY one-shot overrides (dispatch only) ─────────────────────
+      # Override an engine gate for THIS manual run only, riding the env layer of
+      # flag > env > per-repo > global > default. Modelled as `type: choice` with a
+      # BLANK first option (not `type: boolean`, which cannot represent "unset"):
+      # blank ⇒ emit NOTHING (the committed .agent-runner.json wins, today's
+      # behaviour); a non-blank choice ⇒ export the matching AGENT_RUNNER_* for this
+      # run. The blank is load-bearing: env-config coercion THROWS on an empty
+      # string, so the per-job step below only writes when the input is non-blank.
+      autoBuild:
+        description: 'One-shot override of the autoBuild gate (AGENT_RUNNER_AUTO_BUILD) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'true'
+          - 'false'
+      autoSlice:
+        description: 'One-shot override of the autoSlice gate (AGENT_RUNNER_AUTO_SLICE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'true'
+          - 'false'
+      observationTriage:
+        description: 'One-shot override of the observationTriage gate (AGENT_RUNNER_OBSERVATION_TRIAGE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'off'
+          - 'ask'
+          - 'auto'
+      surfaceBlockers:
+        description: 'One-shot override of the surfaceBlockers gate (AGENT_RUNNER_SURFACE_BLOCKERS) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'true'
+          - 'false'
 
 # Serialise overlapping ticks of the same ref; the claim CAS is the real
 # cross-run serialiser, this just avoids redundant concurrent ticks.
@@ -97,16 +142,20 @@ env:
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
   # > default. The SAME .agent-runner.json the laptop uses applies here. This
-  # workflow INTENTIONALLY emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_SLICE
-  # / AGENT_RUNNER_OBSERVATION_TRIAGE / AGENT_RUNNER_SURFACE_BLOCKERS env line, so
-  # the env layer carries NO defaults — your committed .agent-runner.json wins (then
-  # the global config, then the strict built-in defaults autoBuild:false /
-  # autoSlice:false / observationTriage:'off' / surfaceBlockers:false). To enable CI
-  # autonomy, either set the gate(s) in .agent-runner.json (applies everywhere) or
-  # add the AGENT_RUNNER_* env var to this `env:` block yourself (the explicit,
-  # opt-in CI-only override the env layer is FOR). Change behaviour by editing the
-  # config / a GitHub repo variable / this env block — NOT by re-running install-ci
-  # (ADR §6: install-ci is one-time).
+  # workflow emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_SLICE /
+  # AGENT_RUNNER_OBSERVATION_TRIAGE / AGENT_RUNNER_SURFACE_BLOCKERS line on a
+  # SCHEDULE/PUSH tick, so the env layer carries NO defaults there — your committed
+  # .agent-runner.json wins (then the global config, then the strict built-in
+  # defaults autoBuild:false / autoSlice:false / observationTriage:'off' /
+  # surfaceBlockers:false). The ONE exception is a manual `workflow_dispatch` where
+  # you fill a gate override input (above): the per-job step then exports that ONE
+  # AGENT_RUNNER_* for that run only (blank input ⇒ still nothing). The override
+  # MUST be wired into every job that resolves the gate family — including the
+  # `enumerate` scan (it gates the matrix pools via observationTriage/surfaceBlockers
+  # /autoSlice/autoBuild), not just the agent-running jobs — or the override is inert
+  # for the very pools it targets. To enable CI autonomy durably, set the gate(s) in
+  # .agent-runner.json (applies everywhere) — NOT by re-running install-ci (ADR §6:
+  # install-ci is one-time).
 
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
@@ -135,6 +184,20 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
+      - name: apply dispatch gate overrides (one-shot, this run only)
+        # MUST run BEFORE `scan`: scan's matrix pools are gated by the SAME engine
+        # gate family (autoSlice/autoBuild + lifecycle observationTriage/
+        # surfaceBlockers), so an override that does not reach this job produces an
+        # empty matrix and is silently inert. `if:` + the inner `[ -n ... ]` guard
+        # keep schedule/push (and a blank dispatch field) exporting NOTHING — an
+        # empty AGENT_RUNNER_* would make env-config coercion throw.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
         # uses explicit `slice:` / `prd:` / `obs:` prefixes, never bare (ADR
@@ -179,6 +242,17 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
         with:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: apply dispatch gate overrides (one-shot, this run only)
+        # Mirror of the enumerate-job override (see there): export each gate's
+        # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input, so the
+        # one-shot override also reaches the `advance` leg that builds the item.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          true
       - name: advance one item in-place (propose ⇒ opens a PR)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. `--propose` can ONLY ride a matrix leg, never the merge
@@ -215,6 +289,18 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
         with:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: apply dispatch gate overrides (one-shot, this run only)
+        # Mirror of the enumerate-job override (see there): export each gate's
+        # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input. The
+        # merge job re-scans the pool inside `advance -n`, so it needs the override
+        # too for the lifecycle/slice pools to reflect it.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          true
       - name: advance the eligible pool sequentially in-place (merge ⇒ rebase-chains to main)
         # In-place (no --isolated/--remote). `--merge` rides ONLY this single
         # sequential job (never a matrix leg), so rebase-chained merges to main

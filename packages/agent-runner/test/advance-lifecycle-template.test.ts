@@ -87,15 +87,19 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 
 	it('the agent-running jobs pass the provider secret to the setup action via `with:` (so pi can auth); enumerate/reap do not', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		// The propose + merge jobs forward the provider secret.
+		// The propose + merge jobs forward the provider secret. (The gate-override
+		// step now sits between the setup `with:` and the advance step, so allow it.)
 		const proposeUses =
-			/agent-runner-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: advance one item/;
+			/agent-runner-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance one item/;
 		const mergeUses =
-			/agent-runner-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: advance the eligible pool/;
+			/agent-runner-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance the eligible pool/;
 		expect(text).toMatch(proposeUses);
 		expect(text).toMatch(mergeUses);
 		// The enumerate + reap jobs use the bare setup action (no agent, no secret).
-		expect(text).toMatch(/agent-runner-setup\n      - id: scan/);
+		// Enumerate's bare setup is followed by the gate-override step, then `id: scan`.
+		expect(text).toMatch(
+			/agent-runner-setup\n      - name: apply dispatch gate overrides[\s\S]*?\n      - id: scan/,
+		);
 		expect(text).toMatch(
 			/agent-runner-setup\n      - name: reap merged remote/,
 		);
@@ -236,6 +240,72 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(
 			validateAdvanceLifecycleWorkflow(text).problems.map((p) => p.id),
 		).not.toContain('no-auto-advance-gate');
+	});
+
+	it('exposes the four gate-family knobs as one-shot workflow_dispatch overrides, wired into EVERY gate-resolving job (incl. enumerate, before scan)', () => {
+		// Slice `advance-lifecycle-dispatch-gate-inputs`: a human can flip a gate ON
+		// for ONE manual run. The review fix: the override MUST reach the `enumerate`
+		// job (which gates the matrix pools via `scan`), not just the agent jobs —
+		// otherwise an `observationTriage`/`surfaceBlockers`/`autoSlice` override
+		// yields an empty matrix and is silently inert.
+		const text = generateAdvanceLifecycleWorkflow(config);
+
+		// (a) Each gate is a workflow_dispatch input.
+		for (const input of [
+			'autoBuild',
+			'autoSlice',
+			'observationTriage',
+			'surfaceBlockers',
+		]) {
+			expect(
+				new RegExp(
+					`workflow_dispatch:[\\s\\S]*?inputs:[\\s\\S]*?\\b${input}:`,
+				).test(text),
+			).toBe(true);
+		}
+		// The blank sentinel option (don't-override) is present for autoBuild.
+		expect(text).toMatch(/autoBuild:[\s\S]*?default: ''[\s\S]*?type: choice/);
+
+		// (b) Each gate's override is a blank-guarded $GITHUB_ENV write (so blank /
+		// schedule / push emit nothing — an empty value would make env coercion throw).
+		for (const [input, envVar] of [
+			['autoBuild', 'AGENT_RUNNER_AUTO_BUILD'],
+			['autoSlice', 'AGENT_RUNNER_AUTO_SLICE'],
+			['observationTriage', 'AGENT_RUNNER_OBSERVATION_TRIAGE'],
+			['surfaceBlockers', 'AGENT_RUNNER_SURFACE_BLOCKERS'],
+		] as const) {
+			expect(
+				new RegExp(
+					`\\[ -n "\\$\\{\\{ github\\.event\\.inputs\\.${input} \\}\\}" \\][\\s\\S]*?${envVar}=`,
+				).test(text),
+			).toBe(true);
+		}
+
+		// (c) THE review fix: the enumerate job applies the override BEFORE `scan`.
+		expect(text).toMatch(
+			/enumerate:[\s\S]*?AGENT_RUNNER_OBSERVATION_TRIAGE=[\s\S]*?id: scan/,
+		);
+		// And it appears in all three gate-resolving jobs (enumerate + 2 agent jobs):
+		// the guarded write line for autoBuild occurs at least 3 times.
+		const writes = text.match(
+			/echo "AGENT_RUNNER_AUTO_BUILD=\$\{\{ github\.event\.inputs\.autoBuild \}\}"/g,
+		);
+		expect(writes?.length ?? 0).toBeGreaterThanOrEqual(3);
+
+		// (d) The whole override is guarded by the workflow_dispatch event, so a
+		// schedule/push tick never enters the write step (the override is dispatch-only).
+		expect(text).toMatch(
+			/if: \$\{\{ github\.event_name == 'workflow_dispatch' \}\}/,
+		);
+
+		// (e) These writes are `=` shell assignments, NOT `:` YAML env keys, so the
+		// `no-gate-env-*` invariants (env carries no defaults) still hold.
+		const operative = text
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/AGENT_RUNNER_AUTO_BUILD\s*:/.test(operative)).toBe(false);
+		expect(validateAdvanceLifecycleWorkflow(text).ok).toBe(true);
 	});
 
 	it('a user CAN add an opt-in CI-only gate env override without breaking the validator', () => {

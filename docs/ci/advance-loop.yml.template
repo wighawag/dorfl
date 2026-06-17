@@ -76,6 +76,50 @@ on:
         required: false
         default: true
         type: boolean
+      # ── GATE-FAMILY one-shot overrides (dispatch only) ──────────────────────
+      # Override an engine gate for THIS manual run only (rides the env layer of
+      # flag > env > per-repo > global > default). `type: choice` with a BLANK first
+      # option (not `type: boolean`, which has no "unset"): blank ⇒ emit NOTHING
+      # (config wins); a non-blank choice ⇒ export the matching AGENT_RUNNER_* for
+      # this run. The per-job step below writes ONLY when non-blank (an empty value
+      # would make the engine's env coercion throw).
+      autoBuild:
+        description: 'One-shot override of the autoBuild gate (AGENT_RUNNER_AUTO_BUILD) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'true'
+          - 'false'
+      autoSlice:
+        description: 'One-shot override of the autoSlice gate (AGENT_RUNNER_AUTO_SLICE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'true'
+          - 'false'
+      observationTriage:
+        description: 'One-shot override of the observationTriage gate (AGENT_RUNNER_OBSERVATION_TRIAGE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'off'
+          - 'ask'
+          - 'auto'
+      surfaceBlockers:
+        description: 'One-shot override of the surfaceBlockers gate (AGENT_RUNNER_SURFACE_BLOCKERS) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'true'
+          - 'false'
 
 # Serialise overlapping ticks of the same shape; the claim CAS is the real
 # cross-run serialiser, this just avoids redundant concurrent ticks.
@@ -121,6 +165,19 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
+      - name: apply dispatch gate overrides (one-shot, this run only)
+        # MUST run BEFORE `scan`: scan's matrix pools are gated by the SAME engine
+        # gate family, so an override that does not reach this job produces an empty
+        # matrix and is silently inert. `if:` + the inner `[ -n ... ]` guard keep
+        # schedule/push (and a blank dispatch field) exporting NOTHING — an empty
+        # AGENT_RUNNER_* would make the engine's env coercion throw.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          true
       - id: scan
         # The eligible-pool scan: enumerate eligible items as namespaced ids.
         # `scan --json` reports BOTH pools twice — once for the hub-mirror queue
@@ -160,6 +217,17 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
+      - name: apply dispatch gate overrides (one-shot, this run only)
+        # Mirror of the enumerate-job override (see there): export each gate's
+        # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input, so the
+        # one-shot override also reaches the `advance` leg that builds the item.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          true
       - name: advance one item (propose ⇒ opens a PR)
         # `--propose` ties the integration mode to THIS (matrix) shape: it sits at
         # the top of the precedence chain, so the workflow mode always wins over the
@@ -190,6 +258,18 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/agent-runner-setup
+      - name: apply dispatch gate overrides (one-shot, this run only)
+        # Mirror of the enumerate-job override (see there): export each gate's
+        # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input. The
+        # merge job re-scans the pool inside `advance -n`, so it needs the override
+        # too for the lifecycle/slice pools to reflect it.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          true
       - name: advance the eligible pool sequentially (merge ⇒ rebase-chains to main)
         # `--merge` rides ONLY this single sequential job (never a matrix leg), so
         # rebase-chained merges to main happen one at a time — no parallel main-CAS
