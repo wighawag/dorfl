@@ -1234,6 +1234,20 @@ expressive + more legible:
    no PR host, `--merge` into `backlog/` + human promotion is the FULL review story, no PR system
    required. The review gate stops being "a PR exists" and becomes "the slice reached `todo/`."
 
+   > **SCOPE (maintainer, 2026-06-17): this PR-free review applies to LEDGER-FILE output (slicing),
+   > NOT to IMPLEMENTATION (code), and that asymmetry is CORRECT, not a gap.** The `backlog/todo`
+   > folder gate works for slicing because a slice's DELIVERABLE *is* a `work/` markdown file, you can
+   > park it in `backlog/` (a folder) because the artifact lives IN the ledger. An IMPLEMENTATION's
+   > deliverable is CODE (a diff), which CANNOT be parked in a `work/` subfolder, code lands on `main`
+   > or it does not. So review-before-landing for IMPLEMENTATION genuinely needs a BRANCH (a PR, or
+   > `--propose` pushing the `work/<slug>` branch), and that is the RIGHT tool: the thing under review
+   > is a diff, not a ledger file you can position-gate. The clean rule: **review LEDGER-FILE output
+   > (slices, and anything whose artifact is a `work/` file) via the `backlog`-staging folder gate;
+   > review CODE output (implementations) via a branch/PR.** They are not competing, they match the
+   > artifact's nature, a folder gate for files, a branch for code. (This also means the
+   > review-without-PR benefit is SPECIFICALLY a slicing/ledger-output benefit; implementation review
+   > still wants the branch path, which already exists and is unaffected.)
+
 **Interaction with C8 (clean):** `todo/` is a DURABLE RESTING pool on `main` (human-curated, readable,
 referenceable as "the pool"), so it lives on `main` exactly like `backlog`/`done`/`out-of-scope`. The
 C8 lock ref is UNAFFECTED , a claim still acquires the per-item lock; it just reads the pool from
@@ -1241,14 +1255,20 @@ C8 lock ref is UNAFFECTED , a claim still acquires the per-item lock; it just re
 WHICH on-`main` folder is the eligible pool, not how holds work. The C8 claimability predicate becomes
 "in `todo/` on `main` AND no lock held on the lock ref."
 
-**A PRD analogue (the maintainer's "maybe something similar for prd").** Mirror it: a PRD could be born
-in a `prd-backlog/` (or stay in `prd/` as the holding area) and be promoted to a `prd-ready/`
-(or keep `prd/` as the pool) before agents may auto-slice it. The cleanest mapping keeps symmetry with
-slices: `prd/` (holding) -> `prd-ready/` (sliceable pool) -> `slicing` (lock) -> `prd-sliced/`
-(done analogue). But PRD slicing is lower-volume and already gated by `needsAnswers` + `humanOnly`, so
-the PRD Kanban split is OPTIONAL where the slice one is the higher-value lever. Decide per the same
-logic: if you want human CONTROL over which PRDs enter the auto-slice pool, add the holding/ready
-split; if `needsAnswers`/`humanOnly` already suffice for PRDs, skip it.
+**A PRD analogue, NOT worth it (maintainer, 2026-06-17, corrected).** An earlier draft proposed
+mirroring the split for PRDs (`prd/` holding -> `prd-ready/` pool before agents auto-slice). On
+reflection it is LOW-VALUE and should be SKIPPED, because **PRD slicing can already be made safe
+DOWNSTREAM without a PRD-level gate.** The thing you would want to review about an auto-sliced PRD is
+its EMITTED SLICES, and those are ALREADY gated by the SLICE `backlog/todo` split one level down: let a
+slicer's output land in slices' `backlog/` (review-staging), and a human promotes the approved slices
+to `todo/`. So a PRD being auto-sliced is safe BY INHERITANCE, the slices it produces are not actionable
+until promoted, regardless of whether the PRD itself had a holding/ready gate. Adding a SECOND gate at
+the PRD level would be redundant control over the same risk the slice gate already covers, plus PRD
+slicing is lower-volume and already has `needsAnswers`/`humanOnly`. CONCLUSION: do the `backlog/todo`
+split for SLICES (high value, the pool + review + trust lever); do NOT add a PRD-level holding/ready
+split, PRD-slicing safety falls out of the slice gate downstream. (The one thing the PRD side still
+wants is that its slicer OUTPUT can target slices-`backlog/`, which is the slice gate's birth-folder
+policy, not a new PRD folder.)
 
 **Open questions for the Kanban split (its own design session):**
 - Exact names (`todo` vs `ready` vs `queued`; whether `backlog` keeps its name and `todo` is the new
@@ -1339,7 +1359,10 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
    from `todo/`; `git mv backlog->todo` promotes; `--merge` slicing can target `backlog/` and the
    emitted slices are NOT claimable until promoted; `blockedBy` still resolves against `done/`;
    `humanOnly` semantics preserved by birth-folder. Optionally mirror for PRDs (`prd/` holding ,
-   `prd-ready/` pool).
+   `prd-ready/` pool). NOTE the scope: the review-without-PR benefit is for LEDGER-FILE output
+   (slicing), code/implementation review still uses a BRANCH/PR (correct, a diff cannot be folder-
+   gated); and the PRD-level holding/ready split is NOT worth doing, PRD-slicing safety is inherited
+   from the slice gate downstream (let slicer output land in slices-`backlog/`).
 
 **The single decision that orders everything: keep E (Set 1, C5/C6) or drop E (Set 2, C8).** C2 and the
 Kanban split are valuable under BOTH and can land first. C8 is the strongest design but is Set-2-only
