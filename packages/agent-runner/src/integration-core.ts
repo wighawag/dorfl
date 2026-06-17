@@ -788,6 +788,7 @@ export async function performIntegration(
 		throw new IntegrationNothingStaged(
 			`nothing to commit for '${slug}' — no work and no move staged. ` +
 				'(Did the agent produce changes? Is the slice already done?)',
+			slug,
 		);
 	}
 	// SCOOP + REPORT agent-authored CAPTURED NOTES (slice `runner-scoops-captured-notes`,
@@ -1490,8 +1491,20 @@ function resolveWorkBranch(
  * no move) — a deliberate REFUSAL, mapped by `complete`'s try/catch to its
  * `refused` outcome (preserving its existing message verbatim). Exported so the
  * caller can `instanceof`-route it.
+ *
+ * Carries the {@link slug} so the autonomous-strand surface in `complete.ts`
+ * (which catches this error in `performComplete`'s outer try/catch, OUTSIDE the
+ * `runComplete` slug scope) can publish the `in-progress/ → needs-attention/`
+ * tree-less move without re-deriving the slug from the error message.
  */
-export class IntegrationNothingStaged extends Error {}
+export class IntegrationNothingStaged extends Error {
+	constructor(
+		message: string,
+		readonly slug: string,
+	) {
+		super(message);
+	}
+}
 
 /**
  * The arbiter's remote URL for `arbiter` in `cwd` (for provider auto-detection),

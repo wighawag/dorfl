@@ -1074,16 +1074,39 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		completed.outcome === 'prepare-failed' ||
 		completed.outcome === 'gate-failed' ||
 		completed.outcome === 'review-blocked' ||
-		completed.outcome === 'rebase-conflict'
+		completed.outcome === 'rebase-conflict' ||
+		completed.outcome === 'strand-surfaced'
 	) {
 		// Failed env-prep / red gate / Gate-2 review block / rebase conflict — routed
 		// to needs-attention (surfaced on the arbiter). A `prepare-failed` (the env
 		// could not be made ready, so verify was NOT run) and a `review-blocked` are
 		// mapped HERE the SAME way `gate-failed` is. The work did NOT complete; the
 		// runner owns the bounce.
+		//
+		// `strand-surfaced` is the autonomous-strand parity (the SHARED `complete.ts`
+		// seam already surfaced the source-strand / empty-staged refusal to
+		// needs-attention on the arbiter) — in-place `performDo` inherits the fix
+		// here, mapped to the SAME `needs-attention` outcome shape `do --remote`
+		// (`runRemotePipeline`) uses, so `advance slice:<slug>` (via the default
+		// `doDriver = performDo`) agrees with the remote path on the caller-visible
+		// label.
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
+			slug,
+			branch,
+			message: completed.message,
+		};
+	}
+	if (completed.outcome === 'surface-unmoved') {
+		// Strand-surface could not land on the arbiter (CAS contention exhausted /
+		// no arbiter) — HONESTLY still in-progress on the arbiter. Mirror
+		// `runRemotePipeline`'s `surface-unmoved` mapping so in-place `performDo`
+		// (and `advance slice:<slug>` via the default `doDriver`) agrees with
+		// `do --remote` on the same signal, never a fake success.
+		return {
+			exitCode: 1,
+			outcome: 'surface-unmoved',
 			slug,
 			branch,
 			message: completed.message,
@@ -2141,17 +2164,36 @@ async function runRemotePipeline(
 		completed.outcome === 'prepare-failed' ||
 		completed.outcome === 'gate-failed' ||
 		completed.outcome === 'review-blocked' ||
-		completed.outcome === 'rebase-conflict'
+		completed.outcome === 'rebase-conflict' ||
+		completed.outcome === 'strand-surfaced'
 	) {
 		// The job worktree is RETAINED (the §4 reap keeps a not-provably-safe tree).
 		// When the work was committed + done-moved but the integrate failed terminally
 		// (the stale-lease-strand class Part B #97 surfaces), the operator FINISHES the
 		// stranded branch with the recover-already-committed path \u2014 hand them the EXACT
 		// one-liner so they need not reverse-engineer the encoded worktree path.
+		//
+		// `strand-surfaced` is the autonomous-strand parity (the SHARED `complete.ts`
+		// seam already surfaced the source-strand / empty-staged refusal to
+		// needs-attention on the arbiter) — `do --remote` inherits the fix here
+		// without per-caller duplication; mapped to the SAME `needs-attention`
+		// outcome shape the in-place `performDo` uses.
 		note(recoverIsolatedOneLiner(slug));
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',
+			slug,
+			branch,
+			message: completed.message,
+		};
+	}
+	if (completed.outcome === 'surface-unmoved') {
+		// Strand-surface could not land on the arbiter (CAS contention exhausted) —
+		// HONESTLY still in-progress on the arbiter. Mirror in-place `performDo`'s
+		// `surface-unmoved` mapping so `do --remote` agrees on the same signal.
+		return {
+			exitCode: 1,
+			outcome: 'surface-unmoved',
 			slug,
 			branch,
 			message: completed.message,

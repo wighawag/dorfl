@@ -99,6 +99,8 @@ export type CompleteOutcome =
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
 	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
+	| 'strand-surfaced' // autonomous source-strand refusal (or empty-staged) surfaced to needs-attention on the arbiter (parity with run's never-strand-in-in-progress posture)
+	| 'surface-unmoved' // autonomous source-strand surface tried but did NOT land on the arbiter — the item is HONESTLY still in-progress (CAS contention / no arbiter); never a fake success
 	| 'refused' // nothing to complete (nothing to commit, wrong folder, …)
 	| 'usage-error'; // usage / environment problem
 
@@ -350,8 +352,27 @@ export function integrationFromFlags(flags: {
 /** Raised for usage/environment errors (exit 1, outcome 'usage-error'). */
 class CompleteUsageError extends Error {}
 
+/**
+ * The CAUSE-CLASS of a {@link CompleteRefusal}. `source-strand` is the SLUG-IS-
+ * STUCK class (no in-progress/needs-attention/done file on the branch tree) — on
+ * the AUTONOMOUS path (`surfaceArbiter` set) it surfaces to needs-attention via
+ * the tree-less seam so the next tick does not re-claim-and-recrash forever.
+ * `diverged-main` is an ENV/OPERATOR condition (local main ahead of
+ * `<arbiter>/main`) — NOT a stuck slice, so it is NEVER bounced even on the
+ * autonomous path; it stays the local `refused`.
+ */
+type RefusalKind = 'source-strand' | 'diverged-main';
+
 /** Raised for a deliberate REFUSAL (exit 1, outcome 'refused'). */
-class CompleteRefusal extends Error {}
+class CompleteRefusal extends Error {
+	constructor(
+		message: string,
+		readonly kind: RefusalKind,
+		readonly slug?: string,
+	) {
+		super(message);
+	}
+}
 
 /**
  * Run the complete ritual. Never throws for the expected gate-failed /
@@ -365,12 +386,47 @@ export async function performComplete(
 	try {
 		return await runComplete(options, note);
 	} catch (err) {
+		// AUTONOMOUS-STRAND SURFACE (slice
+		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, PRD
+		// `ledger-integrity` story 7). On the AUTONOMOUS path (`surfaceArbiter` set
+		// — the human-vs-autonomous gate the core's other failures use), a SOURCE-
+		// STRAND `CompleteRefusal` (the slug-is-stuck `nothing to complete`) and the
+		// core's empty-commit `IntegrationNothingStaged` would otherwise return a
+		// bare `refused` and silently strand the item in `work/in-progress/` on the
+		// arbiter — so the next autonomous tick re-claims it and re-crashes the
+		// SAME way forever. Mirror `run`'s posture (an autonomous failure NEVER
+		// silently strands the item in in-progress/) by surfacing it to
+		// `needs-attention/` via the TREE-LESS arbiter-truth seam
+		// (`applyTreelessNeedsAttentionTransition`, the same mechanism `requeue`
+		// uses in reverse): there is no working-tree `.md` to `git mv` here (the
+		// strand IS that the source file is missing on the branch), so the
+		// cwd-bound `applyNeedsAttentionTransition` cannot be used — the tree-less
+		// seam resolves the source folder on the arbiter and CAS-publishes the
+		// move-only `.md` relocation. The DIVERGED-MAIN refusal is an env/operator
+		// condition (NOT a stuck slice), so it is excluded — leave it `refused`.
+		// When the tree-less surface cannot land (CAS contention exhausted, or no
+		// arbiter), report the HONEST still-in-progress signal
+		// (`outcome: 'surface-unmoved'`) the gate-fail path's `moved:false` mirrors
+		// in `do.ts`/`run.ts` — never a fake success.
+		const strandSlug = strandRefusalSlug(err);
+		if (strandSlug && options.surfaceArbiter) {
+			return await surfaceAutonomousStrand({
+				cwd: options.cwd,
+				slug: strandSlug,
+				reason: (err as Error).message,
+				arbiter: options.surfaceArbiter,
+				env: options.env,
+				note,
+			});
+		}
 		if (
 			err instanceof CompleteRefusal ||
 			err instanceof IntegrationNothingStaged
 		) {
 			// `IntegrationNothingStaged` is the core's empty-commit refusal — the same
-			// `refused` outcome the inline band raised before the extraction.
+			// `refused` outcome the inline band raised before the extraction. The
+			// diverged-main `CompleteRefusal` (env/operator condition) also lands here
+			// on the autonomous path, deliberately UNCHANGED: it is NOT a stuck slice.
 			return {exitCode: 1, outcome: 'refused', message: err.message};
 		}
 		if (err instanceof CompleteUsageError) {
@@ -379,6 +435,85 @@ export async function performComplete(
 		const message = err instanceof Error ? err.message : String(err);
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
+}
+
+/**
+ * The SLUG of an autonomous-bounceable strand refusal, or `undefined` when the
+ * caught error is NOT a strand class (a `diverged-main` refusal, a usage error,
+ * a usual throw). The two strand classes — a `source-strand` {@link
+ * CompleteRefusal} and the core's {@link IntegrationNothingStaged} — BOTH leave
+ * the slug stuck in `work/in-progress/` on the arbiter (the claim landed and
+ * nothing has moved it since), so the autonomous bounce-set is exactly those
+ * two. The `diverged-main` refusal is deliberately EXCLUDED: it is an
+ * env/operator condition (local main ahead of `<arbiter>/main`), not a stuck
+ * slice; bouncing it would mis-attribute an env problem to the work.
+ */
+function strandRefusalSlug(err: unknown): string | undefined {
+	if (err instanceof CompleteRefusal && err.kind === 'source-strand') {
+		return err.slug;
+	}
+	if (err instanceof IntegrationNothingStaged) {
+		return err.slug;
+	}
+	return undefined;
+}
+
+/**
+ * Surface an autonomous-path strand refusal to `needs-attention/` on the
+ * arbiter via the TREE-LESS seam ({@link
+ * ledgerWrite.applyTreelessNeedsAttentionTransition}). The mechanism is the
+ * one `requeue`/`continue` already use in reverse: fetch `<arbiter>/main`,
+ * resolve the slug's actual current folder ON THE ARBITER (arbiter-is-truth),
+ * build the one-file `work/<src>/<slug>.md → work/needs-attention/<slug>.md`
+ * move on a scratch index, and CAS-publish it. It NEVER touches the caller's
+ * working tree / HEAD / index — important here because the refusal was raised
+ * precisely because the working tree does NOT hold an `.md` to `git mv`. It is
+ * idempotent (a re-surface of an already-surfaced slug is a no-op) and reports
+ * `moved: false` honestly when it cannot land (CAS contention exhausted, or no
+ * arbiter). The HONEST still-in-progress signal is then `outcome:
+ * 'surface-unmoved'` — the SAME vocabulary `do`/`run`/`start` expose for the
+ * after-commit tree-less surface that did not land; never a fake success.
+ */
+async function surfaceAutonomousStrand(params: {
+	cwd: string;
+	slug: string;
+	reason: string;
+	arbiter: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}): Promise<CompleteResult> {
+	const {cwd, slug, reason, arbiter, env, note} = params;
+	const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
+		cwd,
+		slug,
+		reason,
+		arbiter,
+		env,
+		note,
+	});
+	if (surfaced.moved) {
+		const message =
+			`'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ` +
+			`${arbiter}/main so the next autonomous tick does NOT re-claim it.`;
+		note(message);
+		return {
+			exitCode: 1,
+			outcome: 'strand-surfaced',
+			routedToNeedsAttention: true,
+			message,
+		};
+	}
+	const message =
+		`'${slug}' refused (${reason}); the tree-less surface to needs-attention ` +
+		`did NOT reach ${arbiter}/main — the item is HONESTLY still IN-PROGRESS on ` +
+		`the arbiter (retry/resolve). ${surfaced.reasonNotMoved ?? ''}`.trim();
+	note(message);
+	return {
+		exitCode: 1,
+		outcome: 'surface-unmoved',
+		routedToNeedsAttention: false,
+		message,
+	};
 }
 
 async function runComplete(
@@ -553,6 +688,8 @@ async function runComplete(
 		throw new CompleteRefusal(
 			`work/in-progress/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
 				'nothing to complete (already done, or wrong slug?).',
+			'source-strand',
+			slug,
 		);
 	}
 	const recovering = !committedRecovery && source === 'needs-attention';
@@ -585,6 +722,8 @@ async function runComplete(
 					"main, which can't fast-forward against a diverged main — push or " +
 					'reconcile main first (or re-run with --ignore-diverged-main to ' +
 					'proceed anyway).',
+				'diverged-main',
+				slug,
 			);
 		}
 	}

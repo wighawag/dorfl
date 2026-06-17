@@ -410,6 +410,65 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 	});
 });
 
+describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention (performDo parity with runRemotePipeline)', () => {
+	/**
+	 * Slice `autonomous-integration-refusal-surfaces-not-strands-in-progress`
+	 * (PR/Gate-2 follow-up): `complete.ts` now returns `outcome: 'strand-surfaced'`
+	 * (the autonomous source-strand / empty-staged refusal surfaced on the arbiter)
+	 * and `outcome: 'surface-unmoved'` (the honest cannot-land signal). The in-place
+	 * `performDo` dispatch must MAP these to the same caller-visible labels that
+	 * `runRemotePipeline` (the `do --remote` tail) uses — `needs-attention` and
+	 * `surface-unmoved` respectively — so `advance slice:<slug>` (via the default
+	 * `doDriver = performDo`) agrees with the remote path on the outcome label.
+	 * Without this mapping a strand surface fell through to `usage-error`.
+	 */
+
+	/** A stubbed agent that COMMITS a deletion of the in-progress slice file from
+	 * the work branch — the source-strand state `complete.ts` refuses with
+	 * `nothing to complete (already done, or wrong slug?)`. The arbiter still
+	 * holds the claim in `work/in-progress/`, so `do` should bounce it to
+	 * needs-attention on the arbiter, not silently strand it.
+	 */
+	const stranderAgent: DoAgentRunner = ({cwd, slug}) => {
+		// Touch a file too so the empty-diff backstop (`agent-stopped`) does NOT
+		// fire — we WANT the run to reach `performComplete`, where source-resolution
+		// refuses with `nothing to complete` (the source-strand class).
+		writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
+		gitIn(['rm', '-q', `work/in-progress/${slug}.md`], cwd);
+		gitIn(['add', '-A'], cwd);
+		gitIn(['commit', '-q', '-m', 'drop the slice (source strand)'], cwd);
+		return {ok: true};
+	};
+
+	it('an autonomous source-strand bounces to needs-attention on the arbiter — NOT a fall-through usage-error', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			agentRunner: stranderAgent,
+			env: gitEnv(),
+		});
+
+		// The Gate-2 fix: the new `strand-surfaced` outcome from `performComplete`
+		// maps to `needs-attention` here (it previously fell through to
+		// `usage-error`, which is what blocked the prior PR). This brings the
+		// in-place dispatch to parity with `runRemotePipeline`.
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('needs-attention');
+
+		// The arbiter ledger surface is already owned by `complete.ts`; we re-assert
+		// it here so the in-place path's end-to-end behaviour stays pinned (the slug
+		// is on needs-attention/ on main, NOT in-progress/, so the next autonomous
+		// tick does not re-claim and re-crash forever).
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+	});
+});
+
 describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + surface)', () => {
 	/** A stubbed agent that EDITS a file (partial work) then returns ok:false. */
 	const editsThenFails: DoAgentRunner = ({cwd}) => {
