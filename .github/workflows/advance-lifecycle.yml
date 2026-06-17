@@ -111,14 +111,19 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. `scan --json` reports
-  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].prds[]`) AND
-  # the in-place working checkout (`cwd.repo.items[]`, `cwd.repo.prds[]`); CI
-  # runs IN-PLACE so the eligible items live in the latter (a fresh runner has no
-  # registered mirror). `jq` unions + dedups both eligible-SLICE pools AND both
-  # sliceable-PRD pools into a deduplicated GitHub Actions matrix list of
-  # explicit `slice:<slug>` / `prd:<slug>` ids (CI MUST use explicit prefixes).
-  # Each becomes one matrix leg → one independent `advance` → one PR / one
-  # auto-sliced PRD. Skipped in merge mode.
+  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].prds[]`,
+  # `repos[].lifecycle`) AND the in-place working checkout (`cwd.repo.items[]`,
+  # `cwd.repo.prds[]`, `cwd.repo.lifecycle`); CI runs IN-PLACE so the items live
+  # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
+  # the build/slice pools AND the LIFECYCLE pools into a deduplicated GitHub
+  # Actions matrix list of explicit `slice:<slug>` / `prd:<slug>` / `obs:<slug>`
+  # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
+  # answer-loop in propose mode (not only merge): `obs:` (triage untriaged
+  # observations), surface `slice:`/`prd:` (`needsAnswers`, no answered sidecar)
+  # AND apply `slice:`/`prd:` (`needsAnswers`, answered sidecar — consume the
+  # committed answer, closing the on-answer `push: work/questions/**` loop). Each
+  # becomes one matrix leg → one independent `advance --propose`. Skipped in merge
+  # mode. Inert with calm-default gates (empty triage/surface pools).
   enumerate:
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
@@ -132,14 +137,19 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit `slice:` / `prd:` prefixes, never bare (ADR command-surface
-        # §3a). Eligible SLICES ⇒ `slice:<slug>` legs (`advance` builds them);
-        # SLICEABLE PRDs ⇒ `prd:<slug>` legs (`advance` auto-slices them, capability
-        # B — `AGENT_RUNNER_AUTO_SLICE` above). Both pools surface on `repos[]`
-        # AND `cwd.repo`; we union + dedup so the matrix has one leg per item.
+        # uses explicit `slice:` / `prd:` / `obs:` prefixes, never bare (ADR
+        # command-surface §3a). Eligible SLICES ⇒ `slice:<slug>` legs (`advance`
+        # builds them); SLICEABLE PRDs ⇒ `prd:<slug>` legs (`advance` auto-slices
+        # them, capability B — `AGENT_RUNNER_AUTO_SLICE` above). LIFECYCLE pools:
+        # `lifecycle.triage[]` ⇒ `obs:<slug>` (the `obs:` prefix is fixed here;
+        # observations have no slice/prd namespace), `lifecycle.surface[]` +
+        # `lifecycle.apply[]` ⇒ `.namespace + ":" + .slug` (`slice:`/`prd:` legs
+        # for `needsAnswers` items — surface mints the blocker question, apply
+        # consumes the committed answer). All pools surface on `repos[]` AND
+        # `cwd.repo`; we union + dedup so the matrix has one leg per item.
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
