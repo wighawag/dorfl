@@ -40,6 +40,11 @@ import {
 	shouldFailProposePrIntent,
 	PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 } from './do-config.js';
+import {
+	checkGatePreconditions,
+	detectLockfileOnDisk,
+	detectLockfileOnMirrorMain,
+} from './gate-readiness.js';
 import {isGitHubArbiterUrl, GitHubProvider} from './github.js';
 import {identityEnv, assertTransportAllowed} from './identity.js';
 import type {ReviewGate} from './review-gate.js';
@@ -588,6 +593,34 @@ async function runOneItem(
 				status: 'config-error',
 				detail: PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 			};
+		}
+	}
+
+	// 0b. STATIC fresh-worktree-gate readiness guard — the fleet mirror of
+	//     `performDo` step 3d / `performDoRemote` step 1c (slice
+	//     `do-fails-fast-when-acceptance-gate-statically-unrunnable`). When the
+	//     fresh-worktree gate is ON AND `prepare` resolves to no commands AND a
+	//     lockfile is present in the repo, the throwaway worktree the gate runs in
+	//     will have no installed deps, so the gate cannot run. Fail this item
+	//     CLEANLY before the claim (no claim, no isolate, no agent, no surface) so a
+	//     fleet tick never burns a build to discover a STATIC config gap and never
+	//     routes correct work to needs-attention for this reason. Surfaced on the
+	//     same `config-error` axis the PR-intent guard above uses (a wiring/config
+	//     fault, not a slice fault). The repo discovery is either a working checkout
+	//     (in-place tests) OR a BARE hub mirror (production fleet); detect the
+	//     lockfile from whichever shape `repoPath` is. Deps-only — there is no
+	//     verify-unset case (the gate substitutes `DEFAULT_VERIFY_COMMAND`).
+	{
+		const lockfile =
+			detectLockfileOnDisk(repoPath) ??
+			detectLockfileOnMirrorMain(repoPath, gitEnv);
+		const guard = checkGatePreconditions({
+			freshWorktreeGate: config.freshWorktreeGate,
+			prepare: config.prepare,
+			lockfile,
+		});
+		if (guard !== undefined) {
+			return {...base, status: 'config-error', detail: guard.message};
 		}
 	}
 

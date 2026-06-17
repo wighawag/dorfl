@@ -40,6 +40,11 @@ import {
 	shouldFailProposePrIntent,
 	PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 } from './do-config.js';
+import {
+	checkGatePreconditions,
+	detectLockfileOnDisk,
+	detectLockfileOnMirrorMain,
+} from './gate-readiness.js';
 import type {IntegrationMode} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
@@ -740,6 +745,29 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 				slug,
 				message: PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 			};
+		}
+	}
+
+	// 3d. STATIC fresh-worktree-gate readiness guard (slice
+	//     `do-fails-fast-when-acceptance-gate-statically-unrunnable`). When the
+	//     fresh-worktree gate is ON AND `prepare` resolves to no commands AND a
+	//     lockfile is present, the throwaway worktree the gate runs in will have no
+	//     `node_modules` and `verify`'s tools (`prettier`/`tsc`/`vitest`) will be
+	//     "command not found" — fail fast HERE, BEFORE the claim and BEFORE spawning
+	//     the build agent, instead of wasting a whole `do` run and (worse) routing
+	//     correct work to needs-attention as if the slice were at fault. A repo with
+	//     NO lockfile is the intentional dep-free case (the design point preserved)
+	//     and proceeds. There is NO verify-unset case — `resolveVerifyCommands`
+	//     substitutes the default gate when verify is unset/all-blank, so verify is
+	//     never statically unrunnable-because-unset (the guard is deps-only).
+	{
+		const guard = checkGatePreconditions({
+			freshWorktreeGate: options.freshWorktreeGate,
+			prepare: options.prepare,
+			lockfile: detectLockfileOnDisk(cwd),
+		});
+		if (guard !== undefined) {
+			return {exitCode: 1, outcome: 'refused', slug, message: guard.message};
 		}
 	}
 
@@ -1660,6 +1688,25 @@ export async function performDoRemote(
 				outcome: 'refused',
 				message: PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 			};
+		}
+	}
+
+	// 1c. STATIC fresh-worktree-gate readiness guard — the AUTONOMOUS mirror of
+	//     `performDo` step 3d. When the fresh-worktree gate is ON AND `prepare`
+	//     resolves to no commands AND a lockfile is present IN THE MIRROR, the
+	//     throwaway worktree the gate runs in will have no installed deps, so the
+	//     gate cannot run. Probe the bare mirror's main tree (`git ls-tree main`)
+	//     so the guard fires BEFORE the throwaway claim clone is even cut. A repo
+	//     with NO lockfile is the intentional dep-free case and proceeds. Deps-only
+	//     (verify-unset is impossible — `resolveVerifyCommands` defaults the gate).
+	{
+		const guard = checkGatePreconditions({
+			freshWorktreeGate: options.freshWorktreeGate,
+			prepare: options.prepare,
+			lockfile: detectLockfileOnMirrorMain(mirror.path, env),
+		});
+		if (guard !== undefined) {
+			return {exitCode: 1, outcome: 'refused', message: guard.message};
 		}
 	}
 

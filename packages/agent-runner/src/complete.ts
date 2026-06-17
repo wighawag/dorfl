@@ -16,6 +16,10 @@ import type {IntegrationMode} from './config.js';
 import {runAsync, localMainAheadCount, type RunResult} from './git.js';
 import {hasUncommittedSourceChanges} from './agent-stop.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
+import {
+	checkGatePreconditions,
+	detectLockfileOnDisk,
+} from './gate-readiness.js';
 
 // Re-export the propose-mode title/body helpers from their new home (the shared
 // integration core) so existing importers (`test/propose-pr-body.test.ts`) keep
@@ -361,7 +365,7 @@ class CompleteUsageError extends Error {}
  * `<arbiter>/main`) — NOT a stuck slice, so it is NEVER bounced even on the
  * autonomous path; it stays the local `refused`.
  */
-type RefusalKind = 'source-strand' | 'diverged-main';
+type RefusalKind = 'source-strand' | 'diverged-main' | 'gate-unrunnable';
 
 /** Raised for a deliberate REFUSAL (exit 1, outcome 'refused'). */
 class CompleteRefusal extends Error {
@@ -725,6 +729,28 @@ async function runComplete(
 				'diverged-main',
 				slug,
 			);
+		}
+	}
+
+	// STATIC fresh-worktree-gate readiness guard — the human/recovery mirror of
+	// `performDo`'s step 3d (slice
+	// `do-fails-fast-when-acceptance-gate-statically-unrunnable`). When the fresh-
+	// worktree gate is ON for THIS invocation AND `prepare` resolves to no commands
+	// AND a lockfile is present, the throwaway worktree the gate runs in will have
+	// no installed deps, so the gate cannot run. Surface the precise error BEFORE
+	// `performIntegration` does any work (skip-verify bypasses the gate entirely
+	// and so bypasses this guard too — if there is no gate to run, there is no
+	// precondition to check). Gated on `freshWorktreeGate === true` for THIS
+	// invocation: when OFF, the gate runs in the CURRENT checkout (which carries
+	// its deps), so the throwaway-worktree reasoning does not apply.
+	if (options.skipVerify !== true) {
+		const guard = checkGatePreconditions({
+			freshWorktreeGate: options.freshWorktreeGate,
+			prepare: options.prepare,
+			lockfile: detectLockfileOnDisk(cwd),
+		});
+		if (guard !== undefined) {
+			throw new CompleteRefusal(guard.message, 'gate-unrunnable');
 		}
 	}
 

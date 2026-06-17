@@ -47,7 +47,3 @@ CRITICAL non-regression (intentional design point in `prepare.ts` + `config.ts`)
 > SEAM TO TEST AT: the config-resolution / pre-claim path with fixture repos — (a) lockfile present + no prepare + fresh gate on ⇒ STOP before claim; (b) verify unset ⇒ STOP before claim; (c) no lockfile + no prepare ⇒ proceeds (no guard); (d) `--no-fresh-worktree-gate` clears the prepare-guard. Assert no claim/build happens when the guard trips. No network.
 >
 > DONE: the guard fires only on statically-unrunnable gates, never on the intentional no-deps case, no correct work is routed to needs-attention for this reason, and `pnpm -r build && pnpm -r test && pnpm format:check` passes. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
-
-## Needs attention
-
-continue on a kept branch whose 'do-fails-fast-when-acceptance-gate-statically-unrunnable' slice is already in work/done/ produced new uncommitted edits this run — the stranded-done auto-recover was gated off to avoid SILENTLY DISCARDING that work. Finish with `agent-runner complete --isolated do-fails-fast-when-acceptance-gate-statically-unrunnable` after committing those edits on `work/slice-do-fails-fast-when-acceptance-gate-statically-unrunnable`, or `agent-runner requeue --reset do-fails-fast-when-acceptance-gate-statically-unrunnable` to discard the kept branch and rebuild fresh.

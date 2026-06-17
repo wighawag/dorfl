@@ -69,6 +69,11 @@ const RACE_SENSITIVE = [
 	// integration + autonomous surfacing); keep it out of file-parallel pressure for
 	// the same deterministic claim/main-CAS reasoning as do.test.ts.
 	'test/main-divergence-guard.test.ts',
+	// The fresh-worktree-gate STARTUP READINESS guard: drives real git against a
+	// --bare arbiter (`performDo` claim/onboard, `performComplete` integration
+	// path); keep it out of file-parallel pressure for the same deterministic
+	// claim/main-CAS reasoning as do.test.ts/main-divergence-guard.test.ts.
+	'test/gate-readiness.test.ts',
 	// `do --watch` drives real git against a --bare arbiter, writes main, AND
 	// launches a stubbed pi (async spawn) whose session .jsonl is tailed
 	// concurrently; keep it out of file-parallel pressure for the same reason as
