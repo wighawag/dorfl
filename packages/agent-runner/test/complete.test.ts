@@ -210,37 +210,28 @@ describe('complete — done-move + commit', () => {
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
 	});
 
-	it('errors when there is nothing to commit (no-op is fatal)', async () => {
+	it('refuses honestly when there is genuinely nothing to complete on the branch (wrong slug / nothing staged)', async () => {
+		// Stand the work branch up as the "genuinely nothing here" shape: claimed,
+		// then the in-progress slice REMOVED from the branch tree WITHOUT a done-move
+		// (so neither in-progress/ NOR needs-attention/ NOR done/ holds the slug on
+		// the branch). This is the bar the stranded-done auto-recover MUST NOT mask
+		// (slice `autonomous-path-auto-recovers-already-committed-stranded-branch`):
+		// a real wrong-slug / nothing-staged error still surfaces as `refused`. The
+		// auto-recover routing is folder-gated on `work/done/<slug>.md`, so this
+		// shape correctly falls through to the existing honest `CompleteRefusal`.
 		const {repo} = await claimAndBranch('empty');
-		// No agent edits AND the move is reverted: arrange so that after the move
-		// there is genuinely nothing new — by deleting the in-progress file the
-		// "move" cannot stage content. We instead test the guard directly by
-		// completing twice: the second run finds nothing in-progress.
-		agentEdits(repo);
-		// --no-switch keeps us on work/slice-empty so the SECOND run still infers the
-		// slug from the branch and hits the "nothing in-progress" refusal (rather
-		// than landing on main where slug inference would fail).
-		const first = await performComplete({
-			slug: 'empty',
-			cwd: repo,
-			arbiter: ARBITER,
-			integration: 'propose',
-			noSwitch: true,
-			verify: PASS,
-			env: gitEnv(),
-		});
-		expect(first.exitCode).toBe(0);
-		// Second run: nothing in-progress → a clear refusal.
-		const second = await performComplete({
+		gitIn(['rm', '-q', 'work/in-progress/empty.md'], repo);
+		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
+		const result = await performComplete({
 			slug: 'empty',
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
 			env: gitEnv(),
 		});
-		expect(second.exitCode).toBe(1);
-		expect(second.outcome).toBe('refused');
-		expect(second.message).toMatch(/nothing to complete|not found/);
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('refused');
+		expect(result.message).toMatch(/nothing to complete|not found/);
 	});
 
 	it('uses <type>(<slug>): <summary>; done with --type/--message defaults', async () => {
