@@ -1170,7 +1170,7 @@ resting pools `backlog`/`todo` , see the Kanban section) for slices, and (`prd`,
 PRDs. The transient three become lock-ref state. That is the whole point: the folders that were never
 referenceable stop being folders.
 
-## Kanban split: a `todo/` pool gate between `backlog/` and the lock (supersedes `humanOnly`)
+## Kanban split: a `todo/` pool gate between `backlog/` and the lock (supersedes `humanOnly`; enables review WITHOUT a PR system)
 
 > Maintainer-raised 2026-06-17 as "somewhat separate but it guides us." It does, and it composes
 > cleanly with C8. Captured here as a SIBLING design (likely its own idea/PRD), with the C8 interaction
@@ -1205,7 +1205,7 @@ expressive + more legible:
   WHICH FOLDER an item is born into, and the per-repo `autoBuild` policy becomes "may agents create
   slices directly in `todo/`, or must they land in `backlog/` for human promotion."
 
-**The two further problems it incidentally solves (the maintainer spotted these):**
+**The three further problems it incidentally solves (the maintainer spotted these):**
 
 1. **Agent-created slices can be gated.** A slicer (or a triage promote) that drafts a new slice can be
    configured to land it in `backlog/` (human must promote) OR `todo/` (straight into the pool),
@@ -1216,6 +1216,23 @@ expressive + more legible:
    its slice in `backlog/` (quarantined from the agent pool) rather than `todo/`, so an agent never
    auto-pulls work proposed by an unreviewed source , a human promotes it after review. This reuses the
    pool gate as a trust gate, no new mechanism.
+3. **REVIEW WITHOUT A PR SYSTEM, so `--merge` slicing is SAFE even with no PR/host (maintainer-raised
+   2026-06-17, the architectural one).** Today slice OUTPUT routes through `performIntegration` (slice
+   `slice-output-through-integration`), which honors EITHER `--propose` (push the work branch + open a
+   PR, the review path) OR `--merge` (land the slices straight on `main`). The tension: `--propose`
+   needs a PR SYSTEM (a host that can open/review/merge PRs), and `--merge` is UNSAFE when you want a
+   human to review the emitted slices before agents act on them, they land claimable immediately. The
+   `backlog/todo` split DISSOLVES this: emit `--merge`d slices into **`backlog/`** (committed to `main`,
+   durable, readable, but NOT in the agent pool) instead of `todo/`. The slices ARE landed (no PR
+   needed, `--merge` works on a bare `file://` arbiter with no host), yet they are NOT yet actionable,
+   a human REVIEWS them in-tree and PROMOTES the approved ones `backlog -> todo`. So **review becomes a
+   ledger POSITION a human moves, not an out-of-band PR**, and `--merge` slicing is safe WITHOUT any PR
+   system. This is the same lever as (1)/(2) but it specifically rescues the no-PR / bare-arbiter /
+   protected-main world (where `--propose` may be unavailable or unwanted) WHILE keeping human review.
+   It also composes with C8's protected-main story (Amendment 3): on a protected `main` where even
+   `--merge` to `main` is blocked, the slices ride the PR path; but on an UNPROTECTED bare arbiter with
+   no PR host, `--merge` into `backlog/` + human promotion is the FULL review story, no PR system
+   required. The review gate stops being "a PR exists" and becomes "the slice reached `todo/`."
 
 **Interaction with C8 (clean):** `todo/` is a DURABLE RESTING pool on `main` (human-curated, readable,
 referenceable as "the pool"), so it lives on `main` exactly like `backlog`/`done`/`out-of-scope`. The
@@ -1238,8 +1255,15 @@ split; if `needsAnswers`/`humanOnly` already suffice for PRDs, skip it.
   one, or both rename). The verb story matters ("promote to todo" reads well).
 - Whether `humanOnly` is fully RETIRED (replaced by birth-folder) or kept as a redundant convenience
   during migration (two-step rename, like the `allowAgents -> autoBuild` precedent).
-- The per-repo policy surface: `autoBuild` already gates agent building; add an `autoPromote` (or
-  `slicesBornIn: backlog|todo`) policy for where agent-created slices land.
+- The per-repo policy surface: `autoBuild` already gates agent building; add the BIRTH-FOLDER policy
+  for where agent OUTPUT lands. ONE policy covers all three consequences: where do agent-created /
+  `--merge`-emitted / untrusted-author slices land, `backlog/` (human promotes after review) or
+  `todo/` (straight into the pool)? Likely `slicesBornIn: backlog|todo` (+ maybe a finer split:
+  trusted source , `todo`, untrusted/agent , `backlog`). This is the "review without a PR" knob.
+- How `--merge` slicing chooses `backlog/` vs `todo/` for its output, and whether that REPLACES the
+  `--propose`-needs-a-PR path on no-host repos (the review-without-PR consequence). Likely: `--propose`
+  stays the PR path where a host exists; `--merge` + birth-in-`backlog/` is the PR-FREE review path;
+  `--merge` + birth-in-`todo/` is the trusted no-review fast path. Three honest modes.
 - Whether this is one idea/PRD or folded into the C8 PRD (it is orthogonal to the lock mechanism, so
   likely its OWN PRD that depends on C8's `todo`-as-pool retarget, or vice-versa , sequence by which
   lands first).
@@ -1305,13 +1329,17 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
    that explicitly. This SUPERSEDES C5/C6 and most of the branch-carries PRD.
 5. **Kanban `todo/` pool split (its OWN idea/PRD, orthogonal to the lock mechanism, can land under Set
    1 OR Set 2)**, split `backlog/` (human-gated holding) from `todo/` (the eligible agent pool);
-   retarget the build/slice pool + claimability to read `todo/`; make agent-created slices' birth
-   folder (`backlog/` for human promotion vs `todo/` direct) a per-repo policy; RETIRE `humanOnly` in
-   favour of birth-folder (two-step rename, `allowAgents->autoBuild` precedent); reuse the pool gate as
-   the untrusted-author trust gate. Acceptance: agents pull only from `todo/`; a human `git mv
-   backlog->todo` promotes; `blockedBy` still resolves against `done/`; `humanOnly` semantics preserved
-   by birth-folder. Optionally mirror for PRDs (`prd/` holding , `prd-ready/` pool) if PRD-pool control
-   is wanted beyond `needsAnswers`/`humanOnly`.
+   retarget the build/slice pool + claimability to read `todo/`; make agent/`--merge`-emitted/untrusted
+   slices' birth folder (`backlog/` for human promotion vs `todo/` direct) a per-repo policy; RETIRE
+   `humanOnly` in favour of birth-folder (two-step rename, `allowAgents->autoBuild` precedent). THREE
+   consequences, one mechanism: (a) replaces `humanOnly`; (b) trust-gates untrusted-author slices; (c)
+   enables REVIEW WITHOUT A PR SYSTEM, `--merge` slicing into `backlog/` is safe on a bare/no-host/
+   protected-`main` repo because the slices land durable-but-not-eligible and a human promotes the
+   approved ones `backlog -> todo` (review = a ledger position, not a PR). Acceptance: agents pull only
+   from `todo/`; `git mv backlog->todo` promotes; `--merge` slicing can target `backlog/` and the
+   emitted slices are NOT claimable until promoted; `blockedBy` still resolves against `done/`;
+   `humanOnly` semantics preserved by birth-folder. Optionally mirror for PRDs (`prd/` holding ,
+   `prd-ready/` pool).
 
 **The single decision that orders everything: keep E (Set 1, C5/C6) or drop E (Set 2, C8).** C2 and the
 Kanban split are valuable under BOTH and can land first. C8 is the strongest design but is Set-2-only
