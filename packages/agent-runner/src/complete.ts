@@ -14,6 +14,7 @@ import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import type {ReviewProvider} from './integrator.js';
 import type {IntegrationMode} from './config.js';
 import {runAsync, localMainAheadCount, type RunResult} from './git.js';
+import {hasUncommittedSourceChanges} from './agent-stop.js';
 import {formatProposeNextStep, shouldUseColor} from './output.js';
 
 // Re-export the propose-mode title/body helpers from their new home (the shared
@@ -473,11 +474,81 @@ async function runComplete(
 	// `<arbiter>/main` returns `already-integrated` (clean no-op, NEVER a
 	// re-push/double-integrate). Mutually exclusive with the build-path source +
 	// `recovering` flags — the core ignores them when `committedRecovery` is set.
-	const committedRecovery = !onInProgress && !onNeedsAttention && onDone;
+	const folderShapeStranded = !onInProgress && !onNeedsAttention && onDone;
+	// DIRTY-CONTINUE GATE (slice `recover-autodetect-gated-on-nothing-to-commit`).
+	// The folder-shape stranded-done auto-detect is necessary but NOT sufficient on
+	// a CONTINUE: a requeued slice whose prior attempt already done-moved the slug
+	// into `done/` on the kept branch looks IDENTICAL by folder shape to a genuine
+	// finished strand, even when THIS run's agent produced NEW uncommitted edits.
+	// The recover path skips the build/commit/done-move steps and only rebases the
+	// ALREADY-committed kept tip, so firing the recover on a dirty continue would
+	// SILENTLY DISCARD the new work. Disambiguate on the WORKING-TREE-DIRTY check
+	// (the porcelain half of `isWorkBranchDiffEmpty`, extracted as
+	// `hasUncommittedSourceChanges`). NOT the core's `nothingStaged`: that is
+	// INDEX-only and reads empty BEFORE the core's later `git add -A`, so it would
+	// miss the agent's UNSTAGED edits. NOT the FULL `isWorkBranchDiffEmpty`: its
+	// commits-ahead half is true for a GENUINE STRAND too (the kept tip carries
+	// source commits ahead of main), so it would WRONGLY BLOCK the legitimate
+	// recover and break the slice-1 / finished-strand behaviour.
+	const dirtyContinue =
+		folderShapeStranded && (await hasUncommittedSourceChanges({cwd, env}));
+	const committedRecovery = folderShapeStranded && !dirtyContinue;
 	const source: 'in-progress' | 'needs-attention' = onInProgress
 		? 'in-progress'
 		: 'needs-attention';
 	const sourcePath = source === 'in-progress' ? inProgress : needsAttention;
+	if (dirtyContinue) {
+		// SURFACE the data-loss STOPPER (slice
+		// `recover-autodetect-gated-on-nothing-to-commit`, scope option D). AUTO-
+		// LANDING the dirty continue is structurally outside the build path's source
+		// contract (`source: 'in-progress' | 'needs-attention'` — there is no
+		// `'done'`; the step-2 `git mv → done/` cannot run when the slug is already in
+		// done/). Building that contract is the humanOnly sibling slice
+		// `complete-builds-on-already-done-moved-continue`. THIS slice ONLY guarantees
+		// the new work is NEVER SILENTLY DISCARDED: route through the SAME ledger-
+		// write seam the autonomous failure paths use (`applyNeedsAttentionTransition`
+		// — it commits the wip BELOW the move-only tip so the agent's edits are
+		// preserved on the work/<slug> branch + pushed to the arbiter, then surfaces
+		// the move-only commit on the arbiter's `main`). Naming the cause + the two
+		// recovery verbs in the reason so the human can finish from here.
+		const reason =
+			`continue on a kept branch whose '${slug}' slice is already in ` +
+			`work/done/ produced new uncommitted edits this run — the stranded-done ` +
+			'auto-recover was gated off to avoid SILENTLY DISCARDING that work. ' +
+			`Finish with \`agent-runner complete --isolated ${slug}\` after ` +
+			`committing those edits on \`${branch}\`, or \`agent-runner requeue ` +
+			`--reset ${slug}\` to discard the kept branch and rebuild fresh.`;
+		const routed = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			arbiter: options.surfaceArbiter,
+			branch,
+			env,
+			note,
+		});
+		const message = routed.moved
+			? `Refused to silently auto-recover stranded-done '${slug}' (this run ` +
+				'produced uncommitted edits); routed to work/needs-attention/ with the ' +
+				'continue-specific reason. ' +
+				`Finish with \`agent-runner complete --isolated ${slug}\` after ` +
+				`committing on \`${branch}\`, or \`agent-runner requeue --reset ` +
+				`${slug}\` to discard the kept branch and rebuild fresh.`
+			: `Refused to silently auto-recover stranded-done '${slug}' (this run ` +
+				'produced uncommitted edits); could not route to work/needs-attention/ ' +
+				`(${routed.reasonNotMoved ?? 'unknown'}). The new work is preserved in ` +
+				`the working tree on \`${branch}\` — commit it and finish with ` +
+				`\`agent-runner complete --isolated ${slug}\`, or ` +
+				`\`agent-runner requeue --reset ${slug}\` to rebuild fresh.`;
+		note(message);
+		return {
+			exitCode: 1,
+			outcome: 'refused',
+			routedToNeedsAttention: routed.moved,
+			branch,
+			message,
+		};
+	}
 	if (!committedRecovery && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
 			`work/in-progress/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +

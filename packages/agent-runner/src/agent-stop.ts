@@ -186,6 +186,50 @@ export async function isWorkBranchDiffEmpty(params: {
 	env?: NodeJS.ProcessEnv;
 }): Promise<boolean> {
 	const {cwd, arbiter, env} = params;
+	if (await hasUncommittedSourceChanges({cwd, env})) {
+		return false; // the working tree carries source change ⇒ a real build.
+	}
+	// Working tree is clean. It is STILL a real build if the branch carries source
+	// COMMITS ahead of `<arbiter>/main` (a `requeue` continue-from-tip). Only when
+	// there are none is this a genuine no-op.
+	return !(await hasSourceCommitsAhead({cwd, arbiter, env}));
+}
+
+/**
+ * The WORKING-TREE-DIRTY predicate (the first half of {@link
+ * isWorkBranchDiffEmpty}): does the working tree carry any uncommitted source
+ * change — tracked modifications, deletions, OR brand-new untracked files —
+ * outside `work/` and outside the runner's `.agent-runner-job.json` record?
+ *
+ * This is a **best-effort** check in the SAFE direction (a git plumbing failure
+ * reads as TRUE: "dirty" / "has source") so an unknown can never short-circuit a
+ * genuine build by mistake.
+ *
+ * Two consumers share this seam, so they NEVER drift on what "the agent left
+ * uncommitted source work in the tree" means:
+ *
+ *   - {@link isWorkBranchDiffEmpty} (the STOP backstop): empty IFF this is FALSE
+ *     AND `<arbiter>/main..HEAD` has no source commits.
+ *
+ *   - `complete.ts`'s stranded-done auto-recover gate (slice
+ *     `recover-autodetect-gated-on-nothing-to-commit`): on the autonomous path,
+ *     `committedRecovery` (the folder-shape stranded-done auto-detect) fires only
+ *     when this is FALSE. A dirty tree on a done-stranded branch means the agent
+ *     produced new uncommitted work THIS run (a CONTINUE, not a finished strand),
+ *     so the recover must NOT mis-fire and silently discard it.
+ *
+ * DELIBERATELY NOT used at the complete.ts gate point: (1) the core's
+ * `nothingStaged` (`git diff --cached --quiet`) — that is INDEX-only and reads
+ * empty BEFORE the core's later `git add -A`, so it would miss the agent's
+ * unstaged edits; (2) the FULL `isWorkBranchDiffEmpty` — its commits-ahead half
+ * is true for a GENUINE FINISHED STRAND too (the kept tip carries source commits
+ * ahead of main), which would wrongly block the legitimate recover.
+ */
+export async function hasUncommittedSourceChanges(params: {
+	cwd: string;
+	env?: NodeJS.ProcessEnv;
+}): Promise<boolean> {
+	const {cwd, env} = params;
 	const status = await runAsync(
 		'git',
 		['status', '--porcelain', '--', '.', ':(exclude)work'],
@@ -193,7 +237,7 @@ export async function isWorkBranchDiffEmpty(params: {
 		{env},
 	);
 	if (status.status !== 0) {
-		return false; // plumbing error ⇒ treat as NON-empty (the safe direction).
+		return true; // plumbing error ⇒ treat as DIRTY (the safe direction).
 	}
 	// Each porcelain line is `XY <path>` (path from column 3). Drop the runner's
 	// own job-record line (a job worktree leaves it) — the SAME exclusion `gc`'s
@@ -203,13 +247,7 @@ export async function isWorkBranchDiffEmpty(params: {
 		.map((line) => line.trimEnd())
 		.filter((line) => line !== '')
 		.filter((line) => line.slice(3).trim() !== JOB_RECORD_FILENAME);
-	if (remaining.length > 0) {
-		return false; // the working tree carries source change ⇒ a real build.
-	}
-	// Working tree is clean. It is STILL a real build if the branch carries source
-	// COMMITS ahead of `<arbiter>/main` (a `requeue` continue-from-tip). Only when
-	// there are none is this a genuine no-op.
-	return !(await hasSourceCommitsAhead({cwd, arbiter, env}));
+	return remaining.length > 0;
 }
 
 /**

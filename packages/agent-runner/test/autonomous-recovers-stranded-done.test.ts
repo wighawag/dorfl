@@ -179,6 +179,86 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(notes.some((n) => /already integrated/i.test(n))).toBe(true);
 	});
 
+	it('DIRTY CONTINUE: a re-claimed already-done-moved branch with NEW uncommitted edits this run is NEVER silently discarded — it surfaces to needs-attention with a continue-specific reason (slice `recover-autodetect-gated-on-nothing-to-commit`)', async () => {
+		const {repo, tip, branch} = await seedStrandedDoneBranch('delta');
+		const arbiterMainBefore = gitIn(
+			['rev-parse', `${ARBITER}/main`],
+			repo,
+		).trim();
+
+		// THIS RUN'S continue-agent leaves a fresh UNSTAGED edit (a tracked-file
+		// modification) AND a fresh UNTRACKED file in the working tree — the exact
+		// shape the live incident in `recover-already-committed-discards-continue-
+		// agent-new-work.md` describes (the agent edits code, the runner has not yet
+		// `git add -A`'d). The folder-shape stranded-done auto-detect would have
+		// fired here and silently dropped this work.
+		writeFileSync(
+			join(repo, 'feature.txt'),
+			'the work\nplus the continue-agent fix\n',
+		);
+		writeFileSync(join(repo, 'new-file.txt'), 'a brand-new source file\n');
+
+		const notes: string[] = [];
+		const result = await performComplete({
+			slug: 'delta',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			// Surface to the arbiter the same way the autonomous `do`/`run` paths
+			// do, so the cross-machine observable state is exercised end-to-end.
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+
+		// 1. The silent recover did NOT fire — the kept tip is NOT integrated as-
+		//    if-clean and `<arbiter>/main` did NOT advance to the stale tip.
+		expect(result.outcome).toBe('refused');
+		expect(result.exitCode).toBe(1);
+		// The kept STALE tip did NOT integrate (the silent recover would have
+		// fast-forwarded `<arbiter>/main` to `tip`); the work the kept commit
+		// done-moved did NOT land on main.
+		const arbiterMainAfter = gitIn(
+			['rev-parse', `${ARBITER}/main`],
+			repo,
+		).trim();
+		expect(arbiterMainAfter).not.toBe(tip);
+		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(false);
+		// (The surface seam DOES advance main with the move-only commit — that is
+		// the OBSERVABLE half of the needs-attention transition; pinned below.)
+		expect(arbiterMainAfter).not.toBe(arbiterMainBefore);
+		// The LOUD slice-1 recovery note must NOT have been emitted.
+		expect(
+			notes.some((n) =>
+				/recovered a stranded already-complete branch for 'delta'/.test(n),
+			),
+		).toBe(false);
+
+		// 2. The refusal SURFACED to needs-attention/ with a continue-specific
+		//    reason naming both recovery verbs (NOT a bare `nothing to complete`,
+		//    NOT a silent strand in in-progress/).
+		expect(result.routedToNeedsAttention).toBe(true);
+		expect(result.message).not.toMatch(/nothing to complete/i);
+		expect(result.message).toMatch(/uncommitted/i);
+		expect(result.message).toMatch(/complete --isolated delta/);
+		expect(result.message).toMatch(/requeue --reset delta/);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(false);
+
+		// 3. The agent's new work is NOT silently discarded: the ledger-write seam
+		//    committed it as a wip BELOW the move-only tip on the work branch (the
+		//    RECOVERABLE half), so a sibling slice that builds the
+		//    `source: 'done'` continue contract can land it later. The original
+		//    stranded-done tip is now an ANCESTOR of HEAD, not HEAD itself.
+		const headAfter = gitIn(['rev-parse', 'HEAD'], repo).trim();
+		expect(headAfter).not.toBe(tip);
+		const base = gitIn(['merge-base', tip, headAfter], repo).trim();
+		expect(base).toBe(tip);
+		// The branch still exists locally (no `--no-switch` issue here — the
+		// failure tail returns BEFORE the switch-to-main / delete step).
+		expect(result.branch).toBe(branch);
+	});
+
 	it('honest refusal preserved: genuinely-nothing-on-the-branch ⇒ existing CompleteRefusal (exit 1, `refused`)', async () => {
 		// Seed + claim — but DO NOT done-move; instead delete in-progress/ from the
 		// branch tree (so neither in-progress/ NOR needs-attention/ NOR done/ holds
