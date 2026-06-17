@@ -778,9 +778,12 @@ Why this is STRICTLY cleaner than C5/C6 on issue 2 (true for BOTH C7 variants):
    (C7-alt) retargets from `main` to the ledger ref. Tractable because the read/write seams already
    centralize this (that is what they were for), but it is a large migration, larger for C7-alt (which
    also moves content).
-5. **Provider note (UPSIDE):** on a protected-`main` repo this is a BONUS, the ledger ref can be
-   agent-writable while `main` is protected, the EXACT contradiction the seam ADR opened with. So both
-   Set-2 shapes incidentally UNBLOCK the protected-main case the seam was created for.
+5. **Provider note (PARTIAL upside):** on a protected-`main` repo, moving claim + intermediates off
+   `main` removes the EXACT write the ADR's contradiction named (no agent can claim), a real win. But
+   any state that STILL reaches `main` (for C7/C7-alt: nothing; for C8: the durable promotions) is
+   still subject to protection. See C8's `### Pressure-test amendments` , Amendment 3 for the honest
+   "tractable, not fully solved" verdict, this is NOT a free incidental unblock for designs that keep
+   durable records on `main`.
 
 ### Do the Set-2 shapes still want C2 and the issue-3 rule? Yes and yes.
 
@@ -823,11 +826,29 @@ decision IS the visibility requirement itself: keep E and you get C5/C6 (status 
 > checked out on `main`. This rejection, plus the "one lock per item" idea below, produces a STRICTLY
 > better Set-2 design, C8.
 
-## C8 (Set 2, the breakthrough), ONE lock per item on a lock ref; the ONLY `main` moves are the two referenceable promotions
+## C8 (Set 2, the breakthrough), ONE lock per item on a lock ref; `main` holds content + durable resting records, only TRANSIENT HOLDS leave `main`
 
 > Maintainer-proposed 2026-06-17, thinking outside the box. This DISSOLVES more problems than any
 > prior candidate and is the recommended Set-2 design. It rests on a VERIFIED structural fact (below)
 > that none of C5/C6/C7 exploited.
+>
+> **PRESSURE-TESTED 2026-06-17 (adversarial oracle pass + maintainer questions). Four amendments
+> folded in; no objection was fatal. Summary of the corrections (details in `### Pressure-test
+> amendments`):**
+> 1. **out-of-scope** is a FIFTH status folder this design first missed. The rule is NOT "two
+>    promotions"; it is "`main` holds CONTENT + all DURABLE RESTING records (`done`, `prd-sliced`,
+>    `out-of-scope`); the lock ref holds only TRANSIENT HOLDS." Three `main` move classes, not two.
+> 2. **Lock schema is TWO axes** (`action: implement|slice|advance` AND `state: active|stuck`+reason),
+>    not "action + optional reason" (else "advanced-and-stuck" is unrepresentable). The maintainer
+>    called this: the lock must say WHAT it is locked on.
+> 3. **Protected-main is PARTIALLY solved, not "incidentally unblocked."** C8 removes the
+>    claim/intermediate writes from `main` (the ADR's actual boundary, genuinely valuable), but the
+>    durable promotions still reach `main`, on a protected `main` those must route through the existing
+>    PR-merge path. C8 makes protected-main TRACTABLE, it does not fully solve it for free.
+> 4. **Lock ref = `refs/agent-runner/locks` (a HIDDEN, non-branch ref), NOT a branch.** Accidental
+>    deletion = "all locks released," RECOVERABLE (work is safe on the `work/<slug>` branches + `main`),
+>    blast radius FAR smaller than a `--force` to `main`. Plus one selection-hot-path retarget
+>    (`backlog/` is no longer the clean claimable pool; readers must subtract lock-held slugs).
 
 **The verified fact that unlocks it:** dependency/eligibility resolution targets ONLY two folders,
 `blockedBy` , `work/done/` (`eligibility.ts`, `readiness.ts`) and `sliceAfter` , `work/prd-sliced/`
@@ -843,17 +864,27 @@ line, and it is the one the maintainer drew.
 1. **CONTENT always stays checked out on `main`** (kills C7-alt). The full readable `work/` content tree
    (backlog, prd, prd-sliced, done, observations, findings, ideas) lives on `main` as today, a normal
    `git clone` has it all in the working tree. Agents and humans read/write it directly.
-2. **The ONLY moves ever made on `main` are the two REFERENCEABLE promotions:** `backlog/<slug> ,
-   done/<slug>` and `prd/<slug> , prd-sliced/<slug>`. These are rare, are exactly the
-   dependency-resolving transitions, and rest as files humans/agents reference. Everything else that is
-   today a `main` folder-move (claim , in-progress, surface , needs-attention, slicing-lock ,
-   slicing/) STOPS being a `main` move.
-3. **ONE lock per item, on a dedicated lock ref.** Claiming/implementing a slice, slicing a PRD, and
-   advancing (answering/triaging) an item ALL acquire THE SAME lock, keyed on the item identity
-   (`<type>-<slug>`). The lock ref holds one entry per HELD item; the CAS happens here. "in-progress" is
-   "the item's lock is held for implementing"; "slicing" is "held for slicing"; "advancing" is "held for
-   advancing", but they are the SAME lock, so they are MUTUALLY EXCLUSIVE BY CONSTRUCTION. The lock
-   ENTRY records WHICH action holds it + the holder + (if stuck) the needs-attention reason, as body.
+2. **`main` holds CONTENT + all DURABLE RESTING records; only TRANSIENT HOLDS leave `main`** (amended
+   per pressure-test objection 1). The `main` move classes are the THREE durable transitions:
+   `backlog/<slug> , done/<slug>`, `prd/<slug> , prd-sliced/<slug>`, and `backlog/<slug> ,
+   out-of-scope/<slug>` (the permanent "won't do" record, a sibling of `done`, NOT dependency-resolving
+   but a durable human-browsable file). These are rare and rest as files humans/agents reference.
+   Everything TRANSIENT that is today a `main` folder-move (claim , in-progress, surface ,
+   needs-attention, slicing-lock , slicing/) STOPS being a `main` move and becomes lock-ref state. The
+   clean rule: **durable resting record , stays a file on `main`; transient hold , the lock ref.**
+3. **ONE lock per item, on a dedicated lock ref (`refs/agent-runner/locks`).** Claiming/implementing a
+   slice, slicing a PRD, and advancing (answering/triaging) an item ALL acquire THE SAME lock, keyed on
+   the item identity (`<type>-<slug>`). The lock ref holds one entry per HELD item; the CAS happens
+   here. They are the SAME lock, so they are MUTUALLY EXCLUSIVE BY CONSTRUCTION. **The lock entry is a
+   TWO-AXIS record** (amended per pressure-test objection 2, the maintainer's "it must say what it is
+   locked on"):
+   - `action: implement | slice | advance` , WHAT holds the lock (this is the "what it is locked on").
+   - `state: active | stuck` (+ `reason` + `since` + `holder`) , whether the hold is healthy or stuck.
+   The two axes are INDEPENDENT: "in-progress" = `action:implement, state:active`; "needs-attention" =
+   `state:stuck` for WHATEVER action held it (so "advanced-and-stuck" and "building-and-stuck" are BOTH
+   representable, which a single action-field could not do); "slicing" = `action:slice, state:active`.
+   The existing `advancingMarkerBody` (`advancing-lock.ts`) already writes a frontmatter body, so this
+   is a mechanical extension from one field to two.
 
 **What this dissolves (more than any other candidate):**
 
@@ -930,13 +961,15 @@ line, and it is the one the maintainer drew.
 
 - It is the ONLY candidate that solves all THREE issues BY CONSTRUCTION (1 via C2-on-the-lock-ref,
   2 by locks-off-main, 3 by one-lock-per-item-atomic-exclusion), with NO advisory mitigations and NO
-  cross-ref reconciliation for the referenceable promotions.
-- It KEEPS content checked out on `main` (fixes C7-alt's fatal flaw) and keeps the two referenceable
-  resting states (`done`, `prd-sliced`) as real `main` files, so eligibility/dependency resolution
-  stays offline + on the same ref it is today, ZERO change to `blockedBy`/`sliceAfter`.
-- It shrinks `main`'s `work/` churn to the two rare promotions, the smallest possible `main` write
-  surface, which ALSO eases any future protected-main story (only two move classes need to reach
-  `main`, both atomic with content/slices).
+  cross-ref reconciliation for the durable promotions.
+- It KEEPS content checked out on `main` (fixes C7-alt's fatal flaw) and keeps the referenceable
+  resting states (`done`, `prd-sliced`) AND the durable terminal record (`out-of-scope`) as real `main`
+  files, so eligibility/dependency resolution stays offline + on the same ref it is today, ZERO change
+  to `blockedBy`/`sliceAfter`.
+- It shrinks `main`'s `work/` churn to the THREE rare durable transitions, the smallest possible `main`
+  write surface, which ALSO eases (does NOT fully solve, see amendments) the protected-main story: only
+  durable resting records reach `main`, and on a protected `main` those route through the existing
+  PR-merge path while claim + intermediates never touch `main` at all.
 - The "status = the folder" invariant is PRESERVED where it is referenceable (`done`/`prd-sliced` ARE
   folders on `main`) and DELIBERATELY replaced by "status = the per-item lock state" where it is
   transient (in-progress/needs-attention/slicing/advancing), which is HONEST: those were never
@@ -951,6 +984,90 @@ transient-status human-visibility, keep everything else."
 (C7-alt rejected for removing content from the checkout; C7's body/position split is unnecessary once
 you see in-progress/needs-attention are not referenceable and can be pure lock state). C8 is the
 recommended Set-2 design and the strongest candidate found.
+
+### Pressure-test amendments (adversarial pass + maintainer questions, 2026-06-17)
+
+The four amendments summarised at the top of C8, in full. None is fatal; all are folded into the
+design above. Two more (objections 5, 6) are recorded here.
+
+**Amendment 1, out-of-scope is a third durable `main` record (objection 1).** Verified
+`LEDGER_STATUS_FOLDERS = backlog/in-progress/needs-attention/done/out-of-scope` (`ledger-lint.ts`).
+`out-of-scope/` is written by a `git mv` on `main` (`apply-persist.ts` `moveResolvedItemToTerminal`)
+and nothing resolves against it, it is a permanent "won't do" record a human browses. So it is
+neither referenceable-resting NOR transient: it is a DURABLE TERMINAL record. It STAYS a file on
+`main` (a `backlog , out-of-scope` move), making THREE `main` move classes. NOTE the code today writes
+`out-of-scope` and `needs-attention` through the SAME terminal-move helper, C8 must SPLIT that helper
+(out-of-scope , `main`; needs-attention , a stuck lock on the lock ref). The governing rule replaces
+the "two promotions" framing: **durable resting record (`done`/`prd-sliced`/`out-of-scope`) , `main`;
+transient hold , lock ref.**
+
+**Amendment 2, the lock entry is a two-axis record (objection 2, the maintainer's question).** Folded
+into design point 3 above: `action: implement|slice|advance` (WHAT it is locked on) is INDEPENDENT of
+`state: active|stuck`(+reason). A single "action + optional reason" field could not represent
+"advanced-and-stuck" vs "building-and-stuck", two fields can. Subtlety: `needs-attention` is reachable
+today from `in-progress` OR `done` (a rebase-conflict bounce moves `done , needs-attention` via
+`publishSurfaceCommit`'s WORK_FOLDERS handling). Under C8 a `done` item is a resting file on `main`
+with NO lock, so if it later needs attention you ACQUIRE a fresh stuck-lock for it, meaning `done` on
+`main` + a stuck lock on the ref can legitimately co-exist. The recovery story must allow that combo.
+
+**Amendment 3, protected-main is PARTIALLY solved (objection 3, the maintainer's question), the
+sharpest correction.** The ADR's contradiction: on a protected `main` the server REJECTS direct pushes
+to `main`, so the claim CAS (`...:main --force-with-lease`) is rejected , no agent can claim. C8's
+effect on the `main`-write set:
+- claim , lock ref. **Removed from `main`.** This DOES fix the ADR's named contradiction ("no agent can
+  claim"), and matches the ADR's stated boundary exactly ("claim + in-progress + needs-attention served
+  by a substrate that never writes `main`").
+- in-progress / needs-attention / slicing / advancing , lock ref. **Removed from `main`.**
+- BUT `done` / `prd-sliced` / `out-of-scope` STAY `main` writes. On a protected `main` those direct CAS
+  pushes are ALSO rejected.
+So C8 unblocks CLAIMING on a protected `main` (the bulk of the contradiction) but the DURABLE
+PROMOTIONS still need `main`, and on a protected repo they must route through the EXISTING propose/PR
+merge path (the ADR already anticipated "`done`/`backlog` reaching `main` via merged PRs"), NOT a
+direct push. HONEST verdict: **C8 makes protected-main TRACTABLE (claim + all intermediates leave
+`main` cleanly), it does NOT "incidentally unblock" it for free**, the done-via-PR-merge step is real
+work and slightly re-introduces a done-vs-code reconciliation on protected repos (the PR merges code;
+recording `done` rides that merge). On an UNPROTECTED `main` (the common case) the three promotions are
+direct leased CAS ff as today, no PR needed. So: full win for claim everywhere; terminal promotions are
+direct on unprotected `main`, PR-routed on protected `main`.
+
+**Amendment 4, the lock ref is a hidden non-branch ref (objection 4, the maintainer's question).**
+- **Use `refs/agent-runner/locks` (or similar), NOT `refs/heads/*`.** A branch shows in the GitHub UI
+  branch list (noise), appears in `git branch -a`, is caught by "delete merged branches" automation,
+  and invites manual deletion. `refs/agent-runner/*` is invisible to the GitHub UI and to a default
+  `git clone` (default refspecs fetch only `refs/heads/*` + `refs/tags/*`), pushed/fetched only by the
+  runner's explicit refspec. CAVEAT to verify before building: some hosts restrict pushing custom
+  `refs/*` under an org ruleset, on a bare `file://` arbiter custom refs work freely (kill criterion
+  safe); confirm GitHub accepts `refs/agent-runner/*` under the target ruleset, else fall back to a
+  protection-exempt well-known branch.
+- **Accidental deletion = "all locks released," RECOVERABLE, not catastrophic.** The WORK is safe (it
+  lives on the `work/<slug>` branches; content on `main`), the lock ref holds only who-holds-what. Worst
+  realistic case is a DOUBLE-CLAIM (two runners both see an item free), bounded: the re-created lock CAS
+  re-serialises, and a double-build surfaces at integration (one-slug-one-folder / divergent-base
+  guard). Blast radius is FAR smaller than today's forbidden `--force` to `main` (which destroys work);
+  the lock ref loses only coordination state and is self-healing (re-acquired on next claim). Treat an
+  absent lock ref as "no locks held" (exactly as `listAdvancingMarkers` treats an absent dir , `[]`).
+  ONE hardening item: a runner whose OWN lock vanished mid-build must detect it (its release finds
+  nothing) and abort/needs-attention rather than silently "clean-release."
+
+**Amendment 5, the claimable-pool retarget (objection 5, understated scope).** Because the body stays
+in `backlog/` while the lock is held, `backlog/` is NO LONGER the clean "claimable pool" it is today
+(today claim MOVES the body out to `in-progress/`, so "in backlog" == "unclaimed"). Under C8 the
+selection hot path (`scan.ts`, `select-priority.ts`, `mirror-pool-scan.ts`) and the claimability check
+(`claim-cas.ts` ~L281) must read the lock ref and SUBTRACT lock-held slugs ("claimable = in `backlog/`
+on `main` AND no lock held"). Atomicity HOLDS (the lock-ref CAS still picks one winner, invariant A
+intact), the only cost is the enumerator is not transactional with the claim, so it can propose a
+held item and waste a claim attempt that then loses the lock CAS, slightly MORE claim churn, which is
+exactly why C2 on the lock ref is MANDATORY not optional. This is a broader retarget than "claim simply
+stops moving the file", every reader that treats `backlog/` as the pool learns the lock ref.
+
+**Amendment 6, cross-substrate crash-safety (objection 5 tail + invariants).** A complete is: hold
+lock , land code+`done`-move on `main` , release lock. A crash between "done on `main`" and "release
+lock" leaves a `done`-on-`main` item with a still-held lock, recovery must treat "item is in `done/` on
+`main`" as authoritative and release/ignore the stale lock (the same shape as today's already-landed
+advancing-lock crash-safety + `release-lock`/`gc --ledger` report, generalised). Invariants A (one
+winner via the lock-ref CAS), D (custom-ref `--force-with-lease` push works on a bare `file://` arbiter
+identically to `main`), and F (never `--force`, the lock ref uses a lease, `main` writes are leased ff
+or PR-merge) all HOLD.
 
 ## Disposition
 
