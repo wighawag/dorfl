@@ -66,7 +66,7 @@ on:
         required: false
         default: true
         type: boolean
-      # ── GATE-FAMILY one-shot overrides (dispatch only) ─────────────────────
+      # ── GATE-FAMILY one-shot overrides (dispatch only) ──────────────────────
       # Override an engine gate for THIS manual run only, riding the env layer of
       # flag > env > per-repo > global > default. Modelled as `type: choice` with a
       # BLANK first option (not `type: boolean`, which cannot represent "unset"):
