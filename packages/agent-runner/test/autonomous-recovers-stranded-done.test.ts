@@ -179,19 +179,14 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(notes.some((n) => /already integrated/i.test(n))).toBe(true);
 	});
 
-	it('DIRTY CONTINUE: a re-claimed already-done-moved branch with NEW uncommitted edits this run is NEVER silently discarded — it surfaces to needs-attention with a continue-specific reason (slice `recover-autodetect-gated-on-nothing-to-commit`)', async () => {
+	it("DIRTY CONTINUE auto-lands: a re-claimed already-done-moved branch with NEW uncommitted edits this run is BUILT + COMMITTED + INTEGRATED on top of the kept tip — no second `git mv`, no needs-attention bounce, no discarded work (slice `complete-builds-on-already-done-moved-continue`, the `source: 'done'` continue-build contract)", async () => {
 		const {repo, tip, branch} = await seedStrandedDoneBranch('delta');
-		const arbiterMainBefore = gitIn(
-			['rev-parse', `${ARBITER}/main`],
-			repo,
-		).trim();
 
 		// THIS RUN'S continue-agent leaves a fresh UNSTAGED edit (a tracked-file
 		// modification) AND a fresh UNTRACKED file in the working tree — the exact
 		// shape the live incident in `recover-already-committed-discards-continue-
-		// agent-new-work.md` describes (the agent edits code, the runner has not yet
-		// `git add -A`'d). The folder-shape stranded-done auto-detect would have
-		// fired here and silently dropped this work.
+		// agent-new-work.md` describes (the agent edits code, the runner has not
+		// yet `git add -A`'d).
 		writeFileSync(
 			join(repo, 'feature.txt'),
 			'the work\nplus the continue-agent fix\n',
@@ -205,64 +200,60 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 			arbiter: ARBITER,
 			integration: 'merge',
 			// Surface to the arbiter the same way the autonomous `do`/`run` paths
-			// do, so the cross-machine observable state is exercised end-to-end.
+			// do; the auto-land path never needs it, but the test exercises the same
+			// invocation shape.
 			surfaceArbiter: ARBITER,
+			// Run the front gate (this `cwd`) rather than the fresh-worktree gate —
+			// the test does not stand up a fresh worktree, and we want a green path.
+			freshWorktreeGate: false,
+			// Override the default `verify` (which would be `agent-runner verify`,
+			// not runnable in the throwaway scratch repo) with a trivial green gate.
+			verify: 'true',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
 
-		// 1. The silent recover did NOT fire — the kept tip is NOT integrated as-
-		//    if-clean and `<arbiter>/main` did NOT advance to the stale tip.
-		expect(result.outcome).toBe('refused');
-		expect(result.exitCode).toBe(1);
-		// The kept STALE tip did NOT integrate (the silent recover would have
-		// fast-forwarded `<arbiter>/main` to `tip`); the work the kept commit
-		// done-moved did NOT land on main.
+		// 1. The continue-build state landed the new work on the arbiter — the
+		//    new edit + the new untracked file are BOTH on `<arbiter>/main` (no
+		//    silent drop). The kept already-done-moved slice stays in `done/`.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
+		expect(gitIn(['show', `${ARBITER}/main:feature.txt`], repo).trim()).toBe(
+			'the work\nplus the continue-agent fix',
+		);
+		expect(gitIn(['show', `${ARBITER}/main:new-file.txt`], repo).trim()).toBe(
+			'a brand-new source file',
+		);
+
+		// 2. The continue commit is layered ON TOP of the kept already-done-moved
+		//    tip (no orphan/rebuild). The kept `tip` is an ancestor of the now-
+		//    integrated `<arbiter>/main`.
 		const arbiterMainAfter = gitIn(
 			['rev-parse', `${ARBITER}/main`],
 			repo,
 		).trim();
+		const base = gitIn(['merge-base', tip, arbiterMainAfter], repo).trim();
+		expect(base).toBe(tip);
 		expect(arbiterMainAfter).not.toBe(tip);
-		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(false);
-		// (The surface seam DOES advance main with the move-only commit — that is
-		// the OBSERVABLE half of the needs-attention transition; pinned below.)
-		expect(arbiterMainAfter).not.toBe(arbiterMainBefore);
-		// The LOUD slice-1 recovery note must NOT have been emitted.
+
+		// 3. The LOUD slice-1 RECOVERY note must NOT have fired (we built, not
+		//    recovered), AND the continue-build state announced itself loudly.
 		expect(
 			notes.some((n) =>
 				/recovered a stranded already-complete branch for 'delta'/.test(n),
 			),
 		).toBe(false);
+		expect(
+			notes.some((n) =>
+				/continue-build on 'delta'.*already in work\/done\//.test(n),
+			),
+		).toBe(true);
 
-		// 2. The refusal SURFACED to needs-attention/ with a continue-specific
-		//    reason naming both recovery verbs (NOT a bare `nothing to complete`,
-		//    NOT a silent strand in in-progress/).
-		expect(result.routedToNeedsAttention).toBe(true);
-		expect(result.message).not.toMatch(/nothing to complete/i);
-		expect(result.message).toMatch(/uncommitted/i);
-		expect(result.message).toMatch(/complete --isolated delta/);
-		expect(result.message).toMatch(/requeue --reset delta/);
-		// The advice leads with the CROSS-MACHINE finish (plain `complete` off a
-		// checked-out work branch) so a CI-stranded slice finished from another
-		// checkout is not told to use the machine-local (no-op there) --isolated.
-		expect(result.message).toMatch(
-			/git switch[\s\S]*?agent-runner complete delta/,
-		);
-		expect(result.message).toMatch(/ANY checkout/);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(false);
-
-		// 3. The agent's new work is NOT silently discarded: the ledger-write seam
-		//    committed it as a wip BELOW the move-only tip on the work branch (the
-		//    RECOVERABLE half), so a sibling slice that builds the
-		//    `source: 'done'` continue contract can land it later. The original
-		//    stranded-done tip is now an ANCESTOR of HEAD, not HEAD itself.
-		const headAfter = gitIn(['rev-parse', 'HEAD'], repo).trim();
-		expect(headAfter).not.toBe(tip);
-		const base = gitIn(['merge-base', tip, headAfter], repo).trim();
-		expect(base).toBe(tip);
-		// The branch still exists locally (no `--no-switch` issue here — the
-		// failure tail returns BEFORE the switch-to-main / delete step).
+		// 4. The branch that integrated is the kept work branch (no second move,
+		//    no rebuild).
 		expect(result.branch).toBe(branch);
 	});
 
