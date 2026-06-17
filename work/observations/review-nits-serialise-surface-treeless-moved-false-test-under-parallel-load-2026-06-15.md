@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'serialise-surface-treeless-moved-false-test-under-parallel-load' (Gate 2 approve)
 date: 2026-06-15
 status: open
-slug: serialise-surface-treeless-moved-false-test-under-parallel-load
+reviewOf: serialise-surface-treeless-moved-false-test-under-parallel-load
 ---
 
 ## Non-blocking review findings

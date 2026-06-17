@@ -149,7 +149,12 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 		expect(body).toMatch(/^title:.*alpha/m);
 		expect(body).toMatch(/^date: \d{4}-\d{2}-\d{2}$/m);
 		expect(body).toMatch(/^status: open$/m);
-		expect(body).toMatch(/^slug: alpha$/m);
+		// Identity-as-filename rule (slice
+		// `observation-identity-is-its-filename-not-a-foreign-slug`): NO foreign
+		// `slug:` line (would re-collide with the reviewed slice + break the
+		// enumerate→resolve round-trip). The back-pointer is `reviewOf:` instead.
+		expect(body).not.toMatch(/^slug:/m);
+		expect(body).toMatch(/^reviewOf: alpha$/m);
 		expect(body).toContain('rename this helper for clarity');
 		expect(body).toContain('src/foo.ts:42');
 		expect(body).toContain('consider a comment on the regex');

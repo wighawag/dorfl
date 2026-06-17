@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'autonomous-path-auto-recovers-already-committed-stranded-branch' (Gate 2 approve)
 date: 2026-06-16
 status: open
-slug: autonomous-path-auto-recovers-already-committed-stranded-branch
+reviewOf: autonomous-path-auto-recovers-already-committed-stranded-branch
 ---
 
 ## Non-blocking review findings

@@ -368,7 +368,19 @@ function readLocalDoneSlugs(repoPath: string): Set<string> {
 	return slugs;
 }
 
-/** Read `work/observations/*.md` (slug-sorted) from the local tree. */
+/**
+ * Read `work/observations/*.md` (slug-sorted) from the local tree.
+ *
+ * Identity rule (slice `observation-identity-is-its-filename-not-a-foreign-slug`):
+ * an observation's IDENTITY is its FILENAME, NEVER a foreign frontmatter `slug:`.
+ * Earlier this read `fm.slug ?? basename(file)`, which let the review-nits minting
+ * (which wrote the REVIEWED SLICE's slug into `slug:` as a back-pointer) drive the
+ * lifecycle pool to emit `obs:<reviewed-slug>` — a key that did not round-trip
+ * through `findItemPath` (filename-only) and collided with the reviewed slice in
+ * `work/done/`. Identity is now ALWAYS the basename, so the enumerate→resolve
+ * round-trip is total by construction and a stray frontmatter `slug:` cannot
+ * re-break it. The back-pointer lives in `reviewOf:` instead.
+ */
 function readLocalObservations(repoPath: string): LedgerObservationItem[] {
 	const dir = join(repoPath, 'work', 'observations');
 	const items: LedgerObservationItem[] = [];
@@ -377,7 +389,7 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
 		const fm = parseFrontmatter(content);
 		items.push({
 			file,
-			slug: fm.slug ?? basename(file, '.md'),
+			slug: basename(file, '.md'),
 			triaged: fm.triaged,
 		});
 	}
@@ -633,7 +645,12 @@ async function readPrdPoolFromTree(
 	return {prds, slicedSlugs};
 }
 
-/** Parse `<ref>:work/observations/*.md` into items, sorted by slug. */
+/**
+ * Parse `<ref>:work/observations/*.md` into items, sorted by slug. Identity is the
+ * FILENAME (mirrors {@link readLocalObservations}) so the in-place + mirror
+ * enumerations agree, and a foreign frontmatter `slug:` cannot break the
+ * enumerate→resolve round-trip.
+ */
 async function readObservationsFromTree(
 	ref: string,
 	cwd: string,
@@ -649,7 +666,7 @@ async function readObservationsFromTree(
 		const fm = parseFrontmatter(content);
 		items.push({
 			file,
-			slug: fm.slug ?? basename(file, '.md'),
+			slug: basename(file, '.md'),
 			triaged: fm.triaged,
 		});
 	}

@@ -1691,7 +1691,10 @@ export function composeProposeBody(input: {
  * — the dated `<slug>-<date>` name makes a later-abandoned run's nit-observation
  * trivially findable + deletable (lifecycle hygiene). Frontmatter mirrors the
  * `work/observations/*.md` convention (`title` / `date` / `status: open`) plus a
- * pointer to the slug it came from, so it gets triaged like any observation.
+ * `reviewOf:` back-pointer to the slug it came from, so it gets triaged like any
+ * observation. (Identity stays the FILENAME — no `slug:` frontmatter — so the
+ * lifecycle enumerate→resolve round-trip is total; see slice
+ * `observation-identity-is-its-filename-not-a-foreign-slug`.)
  */
 function writeReviewNitsObservation(params: {
 	cwd: string;
@@ -1725,10 +1728,19 @@ function observationDate(): string {
 
 /**
  * Render the per-run review-nits observation file body — `observations/`-convention
- * frontmatter (`title` / `date` / `status: open`) plus a `slug:` pointer to the run
- * it came from, then each non-blocking finding (its `question` + optional
- * `context`), and a one-line note that these are review-gate nits for triage
- * (promote-to-slice / keep / delete). Exported-free pure string builder.
+ * frontmatter (`title` / `date` / `status: open`) plus a `reviewOf:` back-pointer
+ * naming the SLICE the run reviewed, then each non-blocking finding (its
+ * `question` + optional `context`), and a one-line note that these are review-gate
+ * nits for triage (promote-to-slice / keep / delete). Exported-free pure string
+ * builder.
+ *
+ * Identity rule (slice `observation-identity-is-its-filename-not-a-foreign-slug`):
+ * the observation's IDENTITY is its FILENAME (`review-nits-<slug>-<date>.md`).
+ * The frontmatter therefore does NOT emit `slug:` — emitting the reviewed slice's
+ * slug there collided with the (now-done) reviewed slice AND broke the
+ * enumerate→resolve round-trip (the lifecycle pool keyed off `fm.slug`, which
+ * differed from the filename). The back-pointer lives in `reviewOf:` instead, a
+ * clearly-different field whose name cannot be mistaken for identity.
  */
 function renderReviewNitsObservation(input: {
 	slug: string;
@@ -1744,7 +1756,7 @@ function renderReviewNitsObservation(input: {
 		`title: review-gate non-blocking nits for '${input.slug}' (Gate 2 approve)`,
 		`date: ${input.date}`,
 		'status: open',
-		`slug: ${input.slug}`,
+		`reviewOf: ${input.slug}`,
 		'---',
 		'',
 		'## Non-blocking review findings',

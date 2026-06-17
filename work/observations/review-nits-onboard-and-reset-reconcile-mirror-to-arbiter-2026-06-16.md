@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'onboard-and-reset-reconcile-mirror-to-arbiter' (Gate 2 approve)
 date: 2026-06-16
 status: open
-slug: onboard-and-reset-reconcile-mirror-to-arbiter
+reviewOf: onboard-and-reset-reconcile-mirror-to-arbiter
 ---
 
 ## Non-blocking review findings
