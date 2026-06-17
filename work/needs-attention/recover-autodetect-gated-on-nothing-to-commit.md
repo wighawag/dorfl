@@ -1,5 +1,5 @@
 ---
-title: the stranded-done auto-recover must fire ONLY when there is NOTHING TO COMMIT — gate committedRecovery on a clean tree so a CONTINUE with new agent work takes the normal build+commit path and is never DISCARDED
+title: the stranded-done auto-recover must fire ONLY when there is NOTHING TO COMMIT — gate committedRecovery on a clean tree so a CONTINUE with new agent work is NEVER silently DISCARDED (it surfaces a continue-specific needs-attention instead; auto-LANDING the dirty continue is the humanOnly sibling slice)
 slug: recover-autodetect-gated-on-nothing-to-commit
 prd: recover-autodetect-and-advancing-lock-crash-safety
 blockedBy: []
@@ -8,9 +8,20 @@ covers: [1, 2, 3]
 
 ## What to build
 
-Gate the autonomous stranded-done auto-recover so it cannot discard a continue-agent's new work. Today the auto-detect in `complete.ts` sets `committedRecovery` purely from BRANCH FOLDER STATE (`!onInProgress && !onNeedsAttention && onDone`). The recover path (`recoverAlreadyCommitted` in the integration core) SKIPS the `git add -A` + commit step and only rebases+integrates the ALREADY-committed kept tip. So on a CONTINUE (a requeued slice whose prior attempt already done-moved the slice into `done/` on the kept branch), the predicate fires even when the agent just produced NEW, uncommitted work this run — and that work is silently discarded.
+Gate the autonomous stranded-done auto-recover so it can no longer SILENTLY DISCARD a continue-agent's new work. Today the auto-detect in `complete.ts` sets `committedRecovery` purely from BRANCH FOLDER STATE (`!onInProgress && !onNeedsAttention && onDone`). The recover path (`recoverAlreadyCommitted` in the integration core) SKIPS the `git add -A` + commit step and only rebases+integrates the ALREADY-committed kept tip. So on a CONTINUE (a requeued slice whose prior attempt already done-moved the slice into `done/` on the kept branch), the predicate fires even when the agent just produced NEW, uncommitted work this run — and that work is silently discarded.
 
-Fix: `committedRecovery` may be true ONLY when this run produced NO UNCOMMITTED WORKING-TREE work AND the branch is done-stranded. The precise disambiguator is **whether the WORKING TREE is dirty with new source edits this run** — i.e. `git status --porcelain` over non-`work/` source paths (catching the agent's unstaged + untracked edits, excluding the runner's job-record), the SAME working-tree predicate the `isWorkBranchDiffEmpty` helper's FIRST half uses (`src/agent-stop.ts` runs exactly that porcelain check with the `:(exclude)work` + job-record exclusions). Dirty working tree ⇒ the agent produced new work this run ⇒ do NOT recover.
+Gate: `committedRecovery` may be true ONLY when this run produced NO UNCOMMITTED WORKING-TREE work AND the branch is done-stranded. The precise disambiguator is **whether the WORKING TREE is dirty with new source edits this run** — i.e. `git status --porcelain` over non-`work/` source paths (catching the agent's unstaged + untracked edits, excluding the runner's job-record), the SAME working-tree predicate the `isWorkBranchDiffEmpty` helper's FIRST half uses (`src/agent-stop.ts` runs exactly that porcelain check with the `:(exclude)work` + job-record exclusions). Dirty working tree ⇒ the agent produced new work this run ⇒ do NOT recover.
+
+### SCOPE NARROWED (DECIDED 2026-06-17 — option D, verified against the code; do NOT re-litigate or re-widen)
+
+A build attempt at this slice's ORIGINAL scope STOPPED on a contradiction in its own premise, verified end-to-end (the prior `## Needs attention` note below preserves the full analysis). The earlier draft said the dirty continue "MUST take the normal build→commit→integrate path so the work lands". THAT PATH DOES NOT EXIST for a done-stranded source:
+
+- In `src/complete.ts` (~L476–484) `source` is hard-typed `'in-progress' | 'needs-attention'` — there is NO `'done'` source. On a CONTINUE the slice file is ALREADY in `work/done/` on the kept branch (the very state the folder auto-detect mis-fires on). So once `committedRecovery` is gated FALSE on a dirty continue, the next guard `if (!committedRecovery && !existsSync(sourcePath))` fires and THROWS `CompleteRefusal('… nothing to complete …')`.
+- Downstream, `integration-core.ts` step-2 `git mv work/in-progress/<slug>.md → work/done/<slug>.md` cannot run either (the slug is already in `done/`). The whole build-path source contract (`IntegrationCoreInput.source`, the step-2 `git mv`, the `existsSync(sourcePath)` originTrust read, `reconcileDoneMoveAgainstArbiter`) bakes in "the slice is moved INTO done/ for the FIRST time on this commit." A continue-from-done-strand is structurally outside it.
+
+AUTO-LANDING a dirty continue therefore needs a NEW lifecycle path (a `source: 'done'` / `alreadyDoneMoved` contract that skips the `git mv` and exempts originTrust + reconcile) — a real, reviewable design change that is OUT OF SCOPE here. It is owned by the humanOnly sibling slice **`complete-builds-on-already-done-moved-continue`**, which is `blockedBy` THIS slice.
+
+THIS slice is the URGENT data-loss STOPPER only: a dirty continue must be **NEVER silently discarded**. Where the gate now prevents the silent recover, the resulting refusal must surface to `needs-attention/` with a CONTINUE-SPECIFIC, actionable reason (NOT the bare `nothing to complete`) so the human knows what happened and how to finish it. The clean genuine-strand recover (story 2), the explicit `complete --isolated` recover (story 3), and the already-integrated no-op all stay UNCHANGED.
 
 > CRITICAL — TWO traps, both verified against the code:
 >
@@ -20,7 +31,7 @@ Fix: `committedRecovery` may be true ONLY when this run produced NO UNCOMMITTED 
 
 The result:
 
-- **Dirty tree (agent produced work)** ⇒ recover is NOT taken; the normal build→gate→done-move→commit→integrate path runs, so the new work lands.
+- **Dirty tree (agent produced work)** ⇒ recover is NOT taken; instead of the silent discard, the run surfaces to `needs-attention/` with a continue-specific reason (the kept branch already holds `<slug>` in `work/done/` and this run produced uncommitted edits — finish with `complete --isolated <slug>` after committing, or `requeue --reset` and rebuild). The new work is NEVER silently thrown away. Auto-LANDING it is the sibling slice.
 - **Clean tree + done-stranded tip (a genuine finished strand)** ⇒ recover the kept commit (the original `autonomous-path-auto-recovers-already-committed-stranded-branch` behaviour, preserved).
 
 This keys off the WORKING-TREE-dirty state (the porcelain half only, per the traps above), needs NO agent signal and NO onboard-decision threading. The explicit `complete --isolated <slug>` surface (which deliberately recovers a stranded worktree and sets `committedRecovery` directly via `recover-isolated.ts`) is UNCHANGED — this narrows only the autonomous auto-detect path.
@@ -31,7 +42,8 @@ The verified incident is UNCOMMITTED agent edits (the agent ran the gate green i
 
 ## Acceptance criteria
 
-- [ ] A CONTINUE with new uncommitted work on a kept branch whose slice is already in `work/done/` takes the NORMAL build path: the new work is committed + done-moved + integrated, NOT discarded by auto-recover. EXTEND the existing `test/autonomous-recovers-stranded-done.test.ts` (it already builds the stranded-done branch via `writeFileSync` + `git mv → done/` + commit, then calls `performComplete`): add a case that ALSO leaves an UNCOMMITTED working-tree edit before `performComplete`, and assert the integrated result CONTAINS that new edit (recover did NOT fire) — covers story 1.
+- [ ] A CONTINUE with new uncommitted work on a kept branch whose slice is already in `work/done/` is NEVER SILENTLY DISCARDED by auto-recover. EXTEND the existing `test/autonomous-recovers-stranded-done.test.ts` (it already builds the stranded-done branch via `writeFileSync` + `git mv → done/` + commit, then calls `performComplete`): add a case that ALSO leaves an UNCOMMITTED working-tree edit before `performComplete`, and assert the run does NOT take the silent recover (the kept tip is NOT integrated as-if-clean) and instead routes to `needs-attention/` with the continue-specific reason — covers story 1. (AUTO-LANDING the new edit is the sibling slice `complete-builds-on-already-done-moved-continue`, NOT this one.)
+- [ ] **The dirty-continue refusal SURFACES, never strands.** The gated-off dirty continue routes to `needs-attention/` (via the same `applyNeedsAttentionTransition`/surface seam the other autonomous failures use) with a CONTINUE-SPECIFIC message naming the cause and the two recovery options (`complete --isolated` after committing, or `requeue --reset`) — NOT the bare `CompleteRefusal('nothing to complete')`, and NOT a silent strand in `in-progress/`. A test asserts the message + the post-run arbiter folder is `needs-attention/`.
 - [ ] A genuine FINISHED STRAND (clean tree, no new work this run, tip ahead of `<arbiter>/main`, slice in `done/` on the branch) STILL auto-recovers the kept commit (no rebuild) — the original slice-1 behaviour is preserved. A test pins this — covers story 2.
 - [ ] The disambiguator is the WORKING-TREE-DIRTY check ONLY (the `git status --porcelain` over non-`work/` paths half of `isWorkBranchDiffEmpty`) — NOT the index-only `nothingStaged` (reads empty before `git add -A`, so it misses the agent's unstaged edits), NOT the FULL `isWorkBranchDiffEmpty` (its commits-ahead half is true for a genuine strand too, which would wrongly block the legitimate recover and break story 2), and NOT folder + tip-ahead alone. A test pins BOTH: a dirty continue does NOT recover (story 1) AND a clean genuine strand whose kept tip has source commits ahead STILL recovers (story 2). A comment documents why neither `nothingStaged` nor the full `isWorkBranchDiffEmpty` is correct here.
 - [ ] `complete --isolated <slug>` (the explicit stranded-worktree recover via `recover-isolated.ts`) is UNCHANGED — a test confirms the isolated recover still integrates the kept commit (it sets `committedRecovery` directly, not via the auto-detect) — covers story 3.
@@ -41,7 +53,7 @@ The verified incident is UNCOMMITTED agent edits (the agent ran the gate green i
 
 ## Blocked by
 
-- None — can start immediately. This is the urgent data-loss fix; it touches `complete.ts` only and is independent of the advancing-lock work (slices B/C).
+- None — can start immediately. This is the urgent data-loss STOPPER; it touches `complete.ts` only and is independent of the advancing-lock work (slices B/C). The humanOnly sibling `complete-builds-on-already-done-moved-continue` (which AUTO-LANDS the dirty continue via a new `source: 'done'` contract) is `blockedBy` THIS slice — it builds on this gate, so this lands first.
 
 ## Prompt
 
@@ -55,7 +67,14 @@ The verified incident is UNCOMMITTED agent edits (the agent ran the gate green i
 >
 > SEAM TO TEST AT: the autonomous integrate path (`performDo`/`performComplete`) with throwaway `--bare` `file://` arbiters + real clones — (a) dirty-tree continue on a done-stranded branch ⇒ new work integrated (not discarded); (b) clean done-stranded tip ⇒ kept commit recovered (no rebuild); (c) `complete --isolated` ⇒ unchanged; (d) already-integrated clean tip ⇒ no-op. Point `workspacesDir` at a temp dir; no network.
 >
-> DONE: auto-recover fires only on a clean tree + done-stranded branch, a dirty continue lands its new work, the isolated recover + the already-integrated no-op are unchanged, the incident is covered by a regression test, and `pnpm -r build && pnpm -r test && pnpm format:check` is green. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
+> SCOPE FENCE (DECIDED — option D): do NOT try to AUTO-LAND the dirty continue. The "normal build→commit→integrate" path does NOT exist for a done-stranded source — `complete.ts` `source` is hard-typed `'in-progress' | 'needs-attention'` (no `'done'`), so gating `committedRecovery` off makes the next guard throw `CompleteRefusal('nothing to complete')`, and `integration-core.ts` step-2 `git mv → done/` cannot run (the slug is already in `done/`). Building the `source: 'done'`/`alreadyDoneMoved` contract is the humanOnly SIBLING slice `complete-builds-on-already-done-moved-continue`. THIS slice only: (1) gate `committedRecovery` off on a dirty tree; (2) turn the resulting refusal into a SURFACED continue-specific `needs-attention` (not a bare `nothing to complete`, not a silent strand). If you find a clean way the dirty continue can fully land WITHOUT the sibling's contract change, route to needs-attention rather than silently widening scope.
+>
+> DONE: auto-recover fires only on a clean tree + done-stranded branch; a dirty continue is NEVER silently discarded — it surfaces to needs-attention with the continue-specific reason; the isolated recover + the already-integrated no-op are unchanged; the incident is covered by a regression test; and `pnpm -r build && pnpm -r test && pnpm format:check` is green. Do NOT perform git transitions (no stage/commit/push, no folder moves) — the runner/human owns those.
+
+## Decisions (to record while building)
+
+- **Option D, DECIDED 2026-06-17 (human-ratified).** This slice does NOT auto-land the dirty continue (that path does not exist without a contract change — see the scope fence). It (1) gates `committedRecovery` off on a dirty working tree and (2) SURFACES the resulting refusal as a continue-specific `needs-attention` instead of the bare `CompleteRefusal('nothing to complete')` or a silent strand. The full "auto-land a dirty continue" fix is the humanOnly sibling slice `complete-builds-on-already-done-moved-continue` (`blockedBy` this one). The agent's prior verified implementation sketch — extract `hasUncommittedSourceChanges` from `isWorkBranchDiffEmpty`'s working-tree half (`agent-stop.ts`), gate `committedRecovery = folderShapeStranded && !hasUncommittedSourceChanges(...)` in `complete.ts` — is the correct core of part (1).
+- Record the exact continue-specific needs-attention message + the surface seam used (mirror the other autonomous-failure surfaces).
 
 ## Needs attention
 
