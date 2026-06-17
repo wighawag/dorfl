@@ -1,5 +1,5 @@
 ---
-title: Evolving the ledger LOCK/CLAIM mechanism, resolve false contention + branch-inheritance + cross-action exclusion, weighing rebase-until-real-conflict vs per-item refs vs the decided co-located .lock.md
+title: Evolving the ledger LOCK/CLAIM mechanism, resolve false contention + branch-inheritance + cross-action exclusion, weighing rebase-until-real-conflict (C2) vs the C5/C6 fork (drop-set vs a partial dedicated status ledger ref) vs per-item refs vs the decided co-located .lock.md
 slug: ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict
 type: idea
 status: incubating
@@ -36,12 +36,24 @@ primitive, with NO new ref, NO loss of in-tree visibility, NO provider story to 
 to atomicity/crash-safety. It is the one move that fixes the verified, biting failure (CI exit-3 under
 ~33-way parallelism) at its root rather than papering it with backoff+jitter+budget tuning.
 
-It does NOT, by itself, fix branch-inheritance (issue 2). But issue 2 is **already owned and nearly
-solved** by `branch-carries-code-not-ledger-status-main-owns-status` (status lives on main; branch
-carries code). The ONE residual gap is that that PRD removes on-branch *needs-attention* moves but
-not the inherited *advancing marker*. The elegant closure is to **fold the advancing marker into the
-branch-carries principle's drop-set** (a kept branch's tree never legitimately carries a
-`work/advancing/*` marker, so strip it on continue/rebase). No marker moves off main.
+It does NOT, by itself, fix branch-inheritance (issue 2). For issue 2 there are TWO live answers and
+the maintainer is weighing them:
+- **C5 (conservative, recommended interim):** fold the advancing marker into the
+  `branch-carries-code-not-ledger-status-main-owns-status` principle's drop-set (a kept branch's tree
+  never legitimately carries a `work/advancing/*` marker, so strip it on continue/rebase). No marker
+  moves off main; ALL visibility kept; smallest surface.
+- **C6 (structural, maintainer-raised 2026-06-17):** move the TRANSIENT STATUS files (in-progress,
+  needs-attention, slicing, advancing markers) to a DEDICATED ledger ref where the CAS happens, keeping
+  the REFERENCEABLE files (backlog, done, prd, prd-sliced) on `main` so dependency reads stay offline
+  and human-glanceable. This DELETES the whole branch-inheritance class (nothing on main to inherit, so
+  C5 becomes unnecessary) and decouples status-CAS from code-integration churn, at the price of
+  transient-status visibility moving off the working tree (recovered via a `status` view) plus a
+  second-ref reader/writer surface and a cross-ref reconciliation story. **C6 still wants C2 on the
+  status ref**, so C2 is the right first step EITHER WAY. See `### C6` + the `## C2+C5 vs C6` head-to-head.
+
+The pragmatic path: **land C2 first (valuable under both futures, kills the verified CI failure), then
+decide C5 vs C6 for issue 2 as a separate, unforced call** priced purely on "is transient-status
+visibility on the working tree worth keeping, vs a structural deletion of the inheritance class."
 
 For **cross-action exclusion** (issue 3): a single unified per-item lock is **NOT needed**. Keep the
 three distinct locks; add an ADVISORY precedence rule at the existing eligibility gate (one action per
@@ -250,7 +262,108 @@ beside the item. Item never moves.
   a tree file on main, so it does NOT fix contention or branch-inheritance."
 
 Verdict: an **ergonomics/taxonomy** change misfiled as adjacent to a concurrency fix. Must NOT be sold
-as fixing issues 1–2. See `## Supersedes`.
+as fixing issues 1, 2. See `## Supersedes`.
+
+### C6, PARTIAL DEDICATED LEDGER REF: referenceable files stay on main, transient STATUS moves to its own ref. (maintainer-raised 2026-06-17) ★?
+
+> Raised by the maintainer after the C2+C5 idea landed: a SHARPER form of the ADR's P-opt-2
+> (`docs/adr/claim-ledger-vs-protected-main.md`). The ADR's P-opt-2 moved "the whole work/ folder tree,
+> or just the intermediates" to one dedicated ref, lumped together. C6 makes the split PRINCIPLED along
+> the regime seam the taxonomy idea already drew: the files that are REFERENCEABLE WORK-INPUT stay on
+> `main`; only the TRANSIENT STATUS/LOCK state moves to a dedicated, agent-writable ledger ref where the
+> CAS happens.
+
+**The split, drawn on the property that actually matters (referenceable vs transient):**
+
+- **Stays on `main` (referenceable, human-glanceable, dependency-resolving, useful as agent work-input):**
+  `work/backlog/`, `work/done/`, `work/prd/`, `work/prd-sliced/`. VERIFIED these are exactly the files the
+  dependency/eligibility reads target: `blockedBy` resolves against `work/done/` (`readiness.ts`,
+  `eligibility.ts`); `sliceAfter` against `work/prd-sliced/` (`select-priority.ts`, `ledger-read.ts`);
+  backlog enumeration against `work/backlog/`; PRD source `work/prd/`. So the things a claim/slice must
+  READ to decide eligibility ALL stay on `main`: the partial split does NOT force those reads onto the
+  network. This is the key advantage over the ADR's all-in-one P-opt-2.
+- **Moves to a dedicated ledger ref (transient status + locks, where the CAS happens):** `work/in-progress/`,
+  `work/needs-attention/`, `work/slicing/`, `work/advancing/` markers. These are the hot,
+  frequently-mutated, contention-prone, branch-INHERITED files.
+
+**Why this is genuinely attractive (it dissolves issues 1 AND 2 at once for the moved state, like C3 but
+KEEPING the referenceable files visible on main):**
+
+- **Issue 1 (false contention): REDUCED, not gone alone.** The dedicated ledger ref's CAS still leases
+  the whole ref, BUT the ref now carries ONLY transient status, so two claims of different items still
+  contend on it UNLESS the ledger ref's CAS is itself made rebase-until-real (C2 again). What C6 DOES
+  remove is the biggest source the observation named: integration merges land on `main`, so they no
+  longer advance the status ref, so unrelated code landings stop kicking the status CAS ("a sibling job's
+  integration advancing main is exactly what triggers the rejection"). So C6 shrinks the status ref's
+  writer set, but to fully kill same-ref false contention among status writers it STILL WANTS C2's
+  rebase-until-real on the status ref. C6 does not REPLACE C2; it COMPOSES with it (and makes C2's job
+  easier).
+- **Issue 2 (branch-inheritance): GONE, structurally.** A work branch is cut from `main`. If in-progress
+  / needs-attention / advancing markers are NOT on `main`, a branch cut from `main` CANNOT inherit them:
+  there is nothing in main's tree to carry. Same win C3 gives, but C6 keeps backlog/done/prd/prd-sliced
+  visible on main. **C6 makes C5 unnecessary** (no advancing marker on main means nothing to drop from a
+  kept branch's tree), and it makes the branch-carries PRD's needs-attention-move removal moot for the
+  SAME reason. C6 is a STRUCTURAL closure of the whole "branch carries ledger status" class, not a
+  per-marker patch.
+
+- **A atomicity OK**: a CAS on the dedicated ref is as authoritative as on main (same `--force-with-lease`
+  + nonce + verify, different ref). One winner per genuine conflict.
+- **B crash / C recov OK-ish**: recovery verbs (`release-advancing`, `requeue`, `gc --ledger`) repoint
+  from `<arbiter>/main:work/...` to `<arbiter>/<ledger-ref>:work/...`. Mechanically the same, but every
+  such reader/writer must learn the second ref (see cost).
+- **D bare OK**: a dedicated ref is just a ref; CAS-push + `ls-tree`/`show` read work on `--bare file://`
+  exactly as `main` does. Passes the kill criterion.
+- **E visibility: LOST for the moved state (the cost YOU named).** A human reading the working tree on
+  `main` no longer sees in-progress / needs-attention / advancing: they must look at the ledger ref (`git
+  show <ledger-ref>:work/in-progress/`, or a generated `status`/`scan` VIEW). Backlog / done / prd /
+  prd-sliced STAY glanceable on main. So the visibility loss is SCOPED to exactly the transient status,
+  which is the negotiable half (the maintainer already said advancing-visibility is most negotiable;
+  in-progress/needs-attention visibility is more valued but recoverable as a view). This is the central
+  trade C6 asks you to accept: transient-status visibility moves from "ls the working tree" to "run a
+  status command (or git show the ledger ref)."
+- **F never --force OK**: leased CAS ff to the ledger ref, never `--force`.
+- **G elegance: very strong for issue 2, partial for issue 1.** ONE structural move (relocate transient
+  status to its own ref) dissolves the ENTIRE branch-inheritance class AND decouples status-CAS from
+  code-integration churn: a deep, one-primitive simplification. It does NOT by itself finish issue 1
+  (still wants C2 on the status ref), and it costs the second-ref reader/writer surface + the scoped
+  visibility loss.
+
+**The honest costs / risks specific to C6 (verified against code):**
+
+1. **Every status reader/writer must learn the second ref.** Today `main` is the single source of truth
+   the seam ADR deliberately preserved (`scan` is OFFLINE, reads `main`). C6 splits the source of truth:
+   eligibility-input on `main`, status on the ledger ref. `ledger-read.ts` has BOTH a local-tree reader
+   and an `<arbiter>/main:`-ref reader for each folder family; C6 doubles the status half onto a second
+   ref. Tractable (the read seam ADR exists precisely so a future strategy can resolve some states
+   elsewhere, and C6 IS that strategy) but it is the BIGGEST surface of any candidate here.
+2. **`scan` and the autonomous selection loop go (partly) NETWORK-BOUND for status.** Today `scan` reads
+   `main` offline. Reading in-progress/needs-attention from a dedicated ref means fetching that ref
+   (network) or keeping a local tracking copy. The ADR flagged exactly this. For C6 it is PARTIAL:
+   backlog/done/prd stay offline-on-main; only status needs the ref. Still, the offline-scan property the
+   ADR prized is weakened for the status half.
+3. **The `start --resume` cross-ref read (VERIFIED wrinkle).** `readSliceOnArbiter` (`ledger-read.ts`)
+   reads the slice BODY from `work/backlog/` OR `work/in-progress/` on `<arbiter>/main`, because a resume
+   reads the in-progress body. Under C6 the body lives in backlog on `main` but in-progress on the LEDGER
+   REF, so this one reader must consult BOTH refs. Minor, but it is the kind of seam C6 sprinkles wherever
+   a single read today spans a now-split folder set (the `['backlog','in-progress']` and `WORK_FOLDERS`
+   enumerations are the grep anchors).
+4. **Two refs to keep reconciled / clean up.** The ADR's open tension: "the intermediate signal and 'done
+   on main' live on different refs/timelines; how are they reconciled if a PR merges but the intermediate
+   wasn't cleaned up?" Under C6: a claim moves backlog(main) and in-progress(ledger-ref); a complete moves
+   in-progress(ledger-ref) and done(main, atomic with code). So a single claim/build/done lifecycle now
+   touches BOTH refs and must stay consistent (a crash between "remove from in-progress on ledger-ref" and
+   "add to done on main" leaves a recoverable-but-split state). C2/C5 keep everything on ONE ref, so they
+   have no cross-ref reconciliation at all: this is C6's distinctive new failure mode to design for (same
+   CLASS as today's code-land/ledger-flip atomicity, now spanning two refs instead of branch-vs-main).
+
+**Verdict on C6:** the STRONGEST structural answer to issue 2 (it deletes the whole branch-inheritance
+class, making C5 unnecessary) and a MEANINGFUL reduction of issue-1 contention (by removing
+integration-churn from the status ref's writer set), at the price of (a) scoped transient-status
+visibility (the cost you named, mitigated by a generated view), (b) the biggest reader/writer surface of
+any candidate, (c) partial network-bound status reads, and (d) a NEW cross-ref reconciliation failure
+mode. It does NOT replace C2: the status ref still wants rebase-until-real to kill same-ref false
+contention among status writers. So the real comparison is **"C2 + C5 (one ref, in-tree)" vs
+"C2-on-the-status-ref + C6 (two refs, status off-tree)"**, head-to-head below.
 
 ### C5, FOLD THE ADVANCING MARKER INTO branch-carries-code (the issue-2 closure). ★
 
@@ -278,6 +391,46 @@ The closure (pick one form when slicing):
 - G ✔, reuses the branch-carries ONE principle + the existing drop-rebase machinery; adds no new
   concept. This is the issue-2 fix. It pairs with C2 (issue 1); they are independent.
 
+## C2+C5 vs C6, the head-to-head (the decision now on the table)
+
+Both are sound. They differ on ONE axis the maintainer must price: **is transient-status visibility on
+main's working tree worth keeping?**
+
+| dimension | C2 + C5 (one ref, status in-tree) | C2-on-status-ref + C6 (status off-tree) |
+| --- | --- | --- |
+| issue 1 false contention | fixed in-tree (rebase-until-real) | fixed AND reduced (status ref has fewer writers; still wants rebase-until-real) |
+| issue 2 branch-inheritance | fixed by a per-marker drop-set (C5) | fixed STRUCTURALLY (nothing on main to inherit; C5 unnecessary) |
+| transient-status visibility (in-progress/needs-attention/advancing) | KEPT (ls the working tree) | LOST from working tree, recovered via a status view (git show the ledger ref) |
+| referenceable visibility (backlog/done/prd/prd-sliced) | KEPT | KEPT (the point of the PARTIAL split) |
+| reader/writer surface | small (retry semantics + one drop-set) | LARGE (every status reader/writer learns a second ref) |
+| offline `scan` | fully offline (reads main) | partial: status half network-bound |
+| cross-ref reconciliation | none (one ref) | NEW failure mode (claim/complete span main + ledger-ref) |
+| migration | trivial (no format change) | real (introduce the ref, repoint readers, backfill, dual-read window) |
+| elegance | one retry change + one drop-set | one structural split that deletes a whole defect class |
+
+**The honest read:** C6 is the more PROFOUND fix: it deletes the branch-inheritance class outright and
+structurally separates "the serialization substrate" from "the code integration target," the clean
+conceptual seam the original ADR was reaching for. C2+C5 is the more CONSERVATIVE, lower-risk,
+lower-surface fix that keeps ALL visibility and the single-source-of-truth-on-main property. They are
+NOT mutually exclusive in the way that matters: **C6 still wants C2's rebase-until-real on the status
+ref**, so C2 is valuable under BOTH futures. The real fork is C5-vs-C6 for issue 2, and the
+visibility/surface trade.
+
+**A pragmatic sequencing that does NOT force the choice now (RECOMMENDED path through the fork):**
+1. Land **C2** first regardless: it is valuable under both futures (the per-ref contention fix, needed on
+   `main` today and on the status ref tomorrow), lowest-risk highest-value, and it kills the verified CI
+   failure immediately. Landing C2 commits you to NOTHING about C5-vs-C6.
+2. THEN decide C5 vs C6 for issue 2 as a separate, unforced call:
+   - if transient-status visibility on the working tree is worth keeping and you want minimal surface:
+     **C5** (the per-marker drop-set).
+   - if you will trade transient-status visibility for a STRUCTURAL deletion of the whole inheritance
+     class (and accept the second-ref surface + a generated status view): **C6**.
+3. The seam to BUILD C6 cleanly ALREADY EXISTS: the read/write ledger seam ADR
+   (`claim-ledger-vs-protected-main`) was created EXACTLY so "a future strategy could resolve some states
+   from elsewhere without every reader knowing." C6 is the first real consumer of that seam, not a
+   rewrite. (This is a strong argument that C6 is the INTENDED long-run shape and C5 is the tactical
+   interim, but only the maintainer can price the visibility trade.)
+
 ## Scoring summary
 
 | Candidate | A atom | B crash | C recov | D bare | E vis | F no-force | G elegance | fixes #1 | fixes #2 | fixes #3 |
@@ -288,6 +441,7 @@ The closure (pick one form when slicing):
 | C3 off-main ref | ✔ | ~ new | ~ new | ✔ | ✘ (moved) | ✔ | ~ | ✔ (moved) | ✔ (moved) | ✘ |
 | C4 co-located .lock.md | ✔ | ✔ | ✔ | ✔ | ✔ ergo | ✔ | ✘ here | ✘ | ✘ | ✘ |
 | **C5 fold into branch-carries** | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✘ | **✔** | ✘ |
+| **C6 partial dedicated ledger ref** | ✔ | ✔~ | ✔~ | ✔ | ✘ status only | ✔ | ✔✔ #2 / ~ #1 | ~ reduces (wants C2) | **✔✔ structural** | ✘ |
 
 The winning COMBINATION is **C2 + C5**: C2 dissolves false contention in-tree (issue 1) with full
 visibility; C5 closes branch-inheritance (issue 2) by reusing the branch-carries principle. Neither
@@ -376,12 +530,18 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
   *ergonomics* item IF the maintainer still values it, then a cosmetic sibling of the folder reorg, NOT
   part of this concurrency work, NOT required by it. Decision left to the maintainer; this idea's stance
   is "decouple it; it was solving the wrong axis."
-- **REOPENS and then RE-CLOSES the off-main ref rejection (D4)**: D4 was rejected for destroying
-  visibility; reopened because advancing-visibility is recoverable as a view. This idea agrees D4 is
-  *viable* for advancing alone (passes the `--bare` kill criterion) but concludes it is DOMINATED by
-  C2+C5 (same two issues fixed WITHOUT a new ref, a new view command, or any visibility loss). So D4
-  stays rejected, now on stronger grounds (a better in-tree option exists), not the old "visibility is
-  sacred" grounds.
+- **REOPENS the off-main ref rejection (D4) and SPLITS it into two distinct shapes.** D4 was rejected
+  for destroying visibility. Reopened because transient-status visibility is recoverable as a view. The
+  reopening resolves into TWO different proposals that must not be conflated:
+  - the NARROW off-main idea (advancing marker ALONE to an off-main ref, the literal D4) stays DOMINATED
+    by C5 (which closes advancing inheritance in-tree with zero visibility loss and a tiny surface).
+  - the PRINCIPLED partial-split (C6: ALL transient status, not just advancing, to a dedicated ledger
+    ref, while referenceable files stay on main) is a STRONGER, LIVE candidate the maintainer is now
+    actively weighing. It is the sharpened form of the ADR's P-opt-2 and matches the ADR maintainer's
+    own recorded lean ("preserve in-progress as a FILE on a dedicated ledger branch"). So D4-as-advancing
+    -alone is dead, but D4's underlying intuition (status off main) is ALIVE as C6 and is the real fork
+    against C5 for issue 2. The decision is the visibility/surface trade, not "is off-main viable" (it
+    is, on `--bare` too).
 - **EXTENDS `branch-carries-code-not-ledger-status-main-owns-status`**: adds the advancing marker to
   that PRD's "main owns ALL ledger status, branch carries code" scope (C5). When that PRD is sliced,
   its drop-rebase removal/replacement should account for the advancing marker too. Coherent, not
@@ -419,9 +579,10 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
 
 ## Disposition
 
-Incubates as an idea because it proposes RETIRING a decided PRD decision (the co-located `.lock.md`)
-and EXTENDING another (branch-carries), both maintainer calls. On confirmation, the actionable form is
-three slices (likely across one new PRD + the existing branch-carries PRD):
+Incubates as an idea because it proposes RETIRING a decided PRD decision (the co-located `.lock.md`),
+EXTENDING another (branch-carries), and leaves ONE open fork for the maintainer (C5 vs C6 for issue 2),
+all maintainer calls. On confirmation, the actionable form is C2 first, then the C5/C6 fork, then
+optionally issue 3:
 
 1. **C2 rebase-until-real-conflict (the four acquire paths)**, change the contention-retry semantics
    in the claim/slicing-acquire/advancing-acquire/create loops (or push a retrying variant into the
@@ -432,11 +593,24 @@ three slices (likely across one new PRD + the existing branch-carries PRD):
    different-item writers all land with zero exit-3, and a same-item race still yields exactly one
    winner. Pure, gate-verifiable, no format change. **Highest-value, lowest-risk, directly kills the
    verified CI failure.**
-2. **C5 advancing-marker inheritance closure**, fold the advancing marker into the branch-carries
-   drop-set (strip `work/advancing/*` from a kept branch's tree on continue/rebase) via the existing
-   `advancingMarkerPath`/`listAdvancingMarkers` seam; land WITH or AFTER the branch-carries PRD so they
-   share the principle. Acceptance: a kept branch carrying a stale advancing marker continues/rebases
-   cleanly (no rename/rename ledger conflict).
+2. **Issue 2 (branch-inheritance), the OPEN FORK, decide C5 vs C6 (do NOT pre-slice both):**
+   - **C5 (conservative)**: fold the advancing marker into the branch-carries drop-set (strip
+     `work/advancing/*` from a kept branch's tree on continue/rebase) via the existing
+     `advancingMarkerPath`/`listAdvancingMarkers` seam; land WITH or AFTER the branch-carries PRD.
+     Acceptance: a kept branch carrying a stale advancing marker continues/rebases cleanly (no
+     rename/rename ledger conflict). Keeps all visibility, smallest surface.
+   - **C6 (structural)**: move transient status (in-progress, needs-attention, slicing, advancing) to a
+     dedicated ledger ref; keep backlog/done/prd/prd-sliced on `main`; build it AS the first consumer of
+     the existing read/write ledger seam (`docs/adr/claim-ledger-vs-protected-main.md`); add a generated
+     `status` view to recover transient-status visibility; design the cross-ref reconciliation + the
+     `--resume` cross-ref read. This is a larger, own-PRD effort that SUPERSEDES C5 (and most of
+     branch-carries' needs-attention-move removal). Acceptance: nothing transient on main, a branch cut
+     from main inherits no status, status reads/writes go through the ledger ref on `--bare` too, the
+     claim/complete cross-ref lifecycle is crash-safe, and the status view shows in-progress/needs-attention/
+     advancing. Decide this fork on the visibility/surface trade, NOT on viability (both are viable).
+   The recommendation is **C5 as the interim, C6 as the likely long-run shape** (it is what the ledger
+   seam was built to host and matches the ADR maintainer's recorded lean), but the choice is the
+   maintainer's and is unforced by landing C2.
 3. **Cross-action precedence (issue 3, optional/lower priority)**, an advancing-marker-held item is not
    claim-eligible and vice-versa, enforced ADVISORILY at the existing eligibility/readiness gate; the
    slicing-release stale check remains the atomic backstop; the advance∥claim simultaneous race is
