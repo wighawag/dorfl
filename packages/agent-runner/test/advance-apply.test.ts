@@ -257,11 +257,11 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(calls).toEqual([]);
 	});
 
-	it('a disposition terminal (out-of-scope) flows through the engine end-to-end', async () => {
+	it('a disposition terminal (dropped) flows through the engine end-to-end', async () => {
 		const {repo, itemPath, sidecarPath} = seedAnsweredItem({
 			slug: 'oos',
 			questions: ['ship?'],
-			dispositions: ['out-of-scope'],
+			dispositions: ['dropped'],
 		});
 		const result = await performAdvance({
 			arg: 'oos',
@@ -273,6 +273,6 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(result.outcome).toBe('advanced');
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'out-of-scope', 'oos.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'dropped', 'oos.md'))).toBe(true);
 	});
 });

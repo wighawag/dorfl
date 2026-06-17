@@ -346,7 +346,13 @@ export function registerMirrorWithWork(
 		inProgress?: Record<string, string>;
 		done?: Record<string, string>;
 		needsAttention?: Record<string, string>;
-		outOfScope?: Record<string, string>;
+		/**
+		 * Files committed under `work/dropped/` (the generic terminal "won't-proceed"
+		 * folder — slice
+		 * `generic-terminal-dropped-folder-generalising-out-of-scope`). Generalises
+		 * the previous `outOfScope` key.
+		 */
+		dropped?: Record<string, string>;
 		/** PRDs to slice, committed under `work/prd/` on the mirror's `main`. */
 		prd?: Record<string, string>;
 		/** Already-SLICED PRDs, committed under `work/prd-sliced/` (sliced-ness residence). */
@@ -380,7 +386,7 @@ export function registerMirrorWithWork(
 	writeAll('in-progress', work.inProgress);
 	writeAll('done', work.done);
 	writeAll('needs-attention', work.needsAttention);
-	writeAll('out-of-scope', work.outOfScope);
+	writeAll('dropped', work.dropped);
 	writeAll('prd', work.prd);
 	writeAll('prd-sliced', work.prdSliced);
 	writeAll('observations', work.observations);

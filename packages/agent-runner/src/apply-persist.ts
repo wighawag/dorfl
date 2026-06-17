@@ -28,7 +28,7 @@ import {
  *   - **resolve fully** — clear `needsAnswers` + DELETE the sidecar in the SAME
  *     atomic commit (the invariant `needsAnswers:false ⟺ no active sidecar`); OR
  *   - **disposition to a terminal** — an answered entry's `disposition` routes the
- *     item to a terminal state (advance / out-of-scope / needs-attention /
+ *     item to a terminal state (advance / dropped / needs-attention /
  *     observation keep / delete). The apply rung EXECUTES the recorded routing.
  *
  * It is the SIBLING of {@link import('./surface-persist.js').persistSurfacedQuestions}:
@@ -91,8 +91,15 @@ export type ApplyTerminal =
 	| 'repaused'
 	/** A "keep" answer stamped `triaged:keep`; the item drops out of the pool. */
 	| 'kept'
-	/** Moved to `work/out-of-scope/` (the durable "won't do" record). */
-	| 'out-of-scope'
+	/**
+	 * Moved to `work/dropped/` (the generic durable "won't-proceed" record —
+	 * slice `generic-terminal-dropped-folder-generalising-out-of-scope`, PRD
+	 * `staging-pool-position-gate-and-trust-model` US #16/17/18). GENERALISES the
+	 * previous `out-of-scope` terminal; the specific REASON (`out-of-scope` /
+	 * `superseded by <x>` / `duplicate` / `abandoned`) lives in the item BODY,
+	 * not in the folder name.
+	 */
+	| 'dropped'
 	/** Moved to `work/needs-attention/` (the existing bounce — a human must look). */
 	| 'needs-attention'
 	/** A "delete" answer RECOMMENDED deletion (the human deletes — never auto-delete). */
@@ -188,12 +195,12 @@ function readSidecar(
 /**
  * Order on the terminal dispositions, most-decisive first. When the human spread
  * dispositions across entries, the apply executes the SINGLE most-decisive
- * terminal (a needs-attention bounce wins over an out-of-scope, which wins over a
+ * terminal (a needs-attention bounce wins over a dropped, which wins over a
  * keep / delete / plain resolve), so an item never lands in two terminals.
  */
 const TERMINAL_PRECEDENCE: SidecarDisposition[] = [
 	'needs-attention',
-	'out-of-scope',
+	'dropped',
 	'delete',
 	'keep',
 ];
@@ -262,7 +269,7 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
  *   1. **append / re-pause** — `appendQuestions` is non-empty: append `qN+1…`,
  *      keep `needsAnswers:true`, re-pause (one commit, body + sidecar).
  *   2. **terminal disposition** — an answered entry carries a terminal
- *      `disposition` (`needs-attention` / `out-of-scope` / `delete` / `keep`):
+ *      `disposition` (`needs-attention` / `dropped` / `delete` / `keep`):
  *      resolve the item's Q&A (clear `needsAnswers` + delete the sidecar) AND
  *      execute the routing (a `git mv` to the terminal folder, a `triaged:keep`
  *      marker, or a delete recommendation) — all in ONE commit.
@@ -358,7 +365,7 @@ export function applyAnsweredQuestions(
 		note,
 	});
 
-	if (terminal === 'out-of-scope' || terminal === 'needs-attention') {
+	if (terminal === 'dropped' || terminal === 'needs-attention') {
 		return moveResolvedItemToTerminal({
 			cwd,
 			item,
@@ -435,7 +442,7 @@ interface MoveTerminalInput {
 	cwd: string;
 	item: string;
 	itemPath: string;
-	terminal: 'out-of-scope' | 'needs-attention';
+	terminal: 'dropped' | 'needs-attention';
 	by: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
@@ -444,7 +451,7 @@ interface MoveTerminalInput {
 
 /**
  * Route the (already Q&A-resolved) item to a terminal LIFECYCLE folder
- * (`out-of-scope/` or `needs-attention/`) via a `git mv` + commit — the SECOND
+ * (`dropped/` or `needs-attention/`) via a `git mv` + commit — the SECOND
  * commit of the disposition (the first cleared needsAnswers + deleted the
  * sidecar). Status = the folder (WORK-CONTRACT rule 3): the move IS the terminal
  * state, no frontmatter status field. Returns the NEW item path.

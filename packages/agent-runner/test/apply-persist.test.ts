@@ -27,7 +27,7 @@ import {run} from '../src/git.js';
  *     ONE commit, via the sidecar contract's atomic-apply);
  *   - either APPENDS new questions (stays needsAnswers:true, re-pauses) OR resolves
  *     fully (clears needsAnswers + deletes the sidecar in the SAME commit);
- *   - an answer can disposition the item to ANY terminal (advance / out-of-scope /
+ *   - an answer can disposition the item to ANY terminal (advance / dropped /
  *     needs-attention / keep / delete) via the `disposition` field;
  *   - a "keep" answer stamps `triaged:keep` + drops out of the pool;
  *   - applying NEVER invents an answer (only applies human-authored answers);
@@ -190,11 +190,11 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 });
 
 describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () => {
-	it('out-of-scope → resolves the Q&A AND moves the item to work/out-of-scope/', () => {
+	it('dropped → resolves the Q&A AND moves the item to work/dropped/ (the generic terminal)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			questions: ['ship it?'],
 			answers: ['no'],
-			dispositions: ['out-of-scope'],
+			dispositions: ['dropped'],
 		});
 
 		const result = applyAnsweredQuestions({
@@ -204,12 +204,12 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 			env: gitEnv(),
 		});
 
-		expect(result.outcome).toBe('out-of-scope');
+		expect(result.outcome).toBe('dropped');
 		// The Q&A was resolved (sidecar deleted) and the item moved folders.
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'out-of-scope', 'foo.md'))).toBe(true);
-		expect(result.itemPath).toBe('work/out-of-scope/foo.md');
+		expect(existsSync(join(repo, 'work', 'dropped', 'foo.md'))).toBe(true);
+		expect(result.itemPath).toBe('work/dropped/foo.md');
 	});
 
 	it('needs-attention → resolves the Q&A AND bounces the item to work/needs-attention/', () => {
@@ -260,11 +260,11 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 	});
 
 	it('the most-decisive terminal wins when dispositions are spread across entries', () => {
-		// keep + out-of-scope + needs-attention present → needs-attention (most decisive).
+		// keep + dropped + needs-attention present → needs-attention (most decisive).
 		const {repo, itemPath} = seed({
 			questions: ['q1?', 'q2?', 'q3?'],
 			answers: ['a', 'b', 'c'],
-			dispositions: ['keep', 'out-of-scope', 'needs-attention'],
+			dispositions: ['keep', 'dropped', 'needs-attention'],
 		});
 		const result = applyAnsweredQuestions({
 			cwd: repo,

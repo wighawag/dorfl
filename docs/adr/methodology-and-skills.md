@@ -19,7 +19,7 @@ Matt's `to-issues` / `to-prd` / `triage` assume an **issue tracker** (configured
 
 - **`to-issues` → `to-slices`** (ours). Better for our contract (bakes in status-as-folder, content slugs, `humanOnly`, `prd:`, the `## Prompt` block).
 - **`to-prd` → `skills/to-prd`** (ours). Kept CLOSE to Matt's (its structure works), with two changes: writes a FILE (`work/prd/<slug>.md`, no tracker/no setup), and is explicitly a **launch snapshot** (see §4).
-- **`triage` → NO skill.** Matt's triage is a label state-machine; our state is folders + a gate, so triage is _decomposed_ into mechanisms we already have: AFK/human gate (set at slice time), `needs-attention/` (post-claim stuck), `out-of-scope/` (wontfix), and `git mv` between folders (transitions). If a real recurring "backlog-review ritual" emerges, write a small `work/`-native skill then — do NOT port Matt's label machine.
+- **`triage` → NO skill.** Matt's triage is a label state-machine; our state is folders + a gate, so triage is _decomposed_ into mechanisms we already have: AFK/human gate (set at slice time), `needs-attention/` (post-claim stuck), `dropped/` (wontfix — generic "won't-proceed" terminal generalising the previous `out-of-scope/`, with the reason in the item body), and `git mv` between folders (transitions). If a real recurring "backlog-review ritual" emerges, write a small `work/`-native skill then — do NOT port Matt's label machine.
 - **No setup skill.** Conforming to defaults (ADR §5 below) means there is nothing to configure.
 
 Matt's **engineering** skills (`diagnose`, `tdd`, `prototype`, `grill-me`, `grill-with-docs`, `improve-codebase-architecture`, `zoom-out`) are NOT tracker-coupled — used upstream, verbatim.

@@ -40,13 +40,23 @@ import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
 /** The three item-types a sidecar can key onto (the slug-namespace + obs). */
 export type SidecarType = 'prd' | 'slice' | 'observation';
 
-/** The optional triage/terminal routing an answered triage entry carries. */
+/**
+ * The optional triage/terminal routing an answered triage entry carries.
+ *
+ * `dropped` is the GENERIC "won't-proceed" terminal — it ROUTES the item to
+ * `work/dropped/` (slice `generic-terminal-dropped-folder-generalising-out-of-scope`,
+ * PRD `staging-pool-position-gate-and-trust-model` US #16/17/18). It GENERALISES
+ * the previous `out-of-scope` disposition (which routed to `work/out-of-scope/`):
+ * the specific REASON an item was dropped (`superseded by <x>` / `out-of-scope` /
+ * `duplicate` / `abandoned`) lives in the item BODY (a `reason:` line), NOT in
+ * the disposition or the folder — status is the folder (WORK-CONTRACT rule 3).
+ */
 export type SidecarDisposition =
 	| 'promote-slice'
 	| 'promote-adr'
 	| 'keep'
 	| 'delete'
-	| 'out-of-scope'
+	| 'dropped'
 	| 'needs-attention';
 
 /** One question entry in the sidecar (the per-entry source of truth). */
@@ -288,7 +298,7 @@ const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
 	'promote-adr',
 	'keep',
 	'delete',
-	'out-of-scope',
+	'dropped',
 	'needs-attention',
 ]);
 

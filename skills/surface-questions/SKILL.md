@@ -46,7 +46,7 @@ disposition:    <optional — ONLY on a triage/terminal-routing question; the
 ```
 
 - **`question` / `context` / `default`** map 1:1 onto the sidecar entry. `default` is optional (omit when you cannot honestly suggest one — never fabricate a default just to fill the field).
-- **`disposition` is present ONLY on a triage / terminal-routing question** (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's: **`promote-slice` | `promote-adr` | `keep` | `delete` | `out-of-scope` | `needs-attention`**. A plain slice/PRD answer-question carries NO `disposition`.
+- **`disposition` is present ONLY on a triage / terminal-routing question** (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's: **`promote-slice` | `promote-adr` | `keep` | `delete` | `dropped` | `needs-attention`**. `dropped` is the GENERIC "won't-proceed" terminal (it routes the item to `work/dropped/`; the specific REASON — `out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned` — lives in the item body as `reason:`, NOT in the disposition). A plain slice/PRD answer-question carries NO `disposition`.
 - **You do NOT assign ids, `answered:`, `answer:`, or `allAnswered`.** Those are the SIDECAR's machine-owned fields — the engine assigns the stable monotonic id (`q1`, `q2`, …), the human fills `answer:`, and the serialiser derives `answered:`/`allAnswered`. You emit only the four authoring fields above; the engine owns the rest. (This is precisely why you must not write the sidecar: you do not own its machine fields.)
 
 Because the shape is the sidecar's, the engine APPENDS your questions to any existing sidecar (never overwriting an already-answered entry) and writes the whole thing in one CAS-atomic commit. You need not know any of that — you just emit the four fields.
@@ -65,7 +65,7 @@ questions:
   - question:    <… the observation triage question …>
     context:     <…>
     default:     <… e.g. the suggested disposition …>
-    disposition: promote-slice | promote-adr | keep | delete | out-of-scope | needs-attention
+    disposition: promote-slice | promote-adr | keep | delete | dropped | needs-attention
 ```
 
 If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative disposition the PRD's auto-triage bar covers, nothing pre-existing) — emit an **empty question set** and say so. Surfacing nothing is a valid, honest result; do not manufacture a question to look busy.
