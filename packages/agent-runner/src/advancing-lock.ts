@@ -1,4 +1,10 @@
-import {existsSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	writeFileSync,
+	rmSync,
+} from 'node:fs';
 import {dirname, isAbsolute, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -76,6 +82,39 @@ const DEFAULT_ARBITER = 'origin';
  */
 export function advancingMarkerPath(entry: string): string {
 	return `work/advancing/${entry}.md`;
+}
+
+/**
+ * The single ENUMERATION SEAM for orphaned `work/advancing/<entry>.md` markers
+ * in a LOCAL working tree. Returns the sorted list of `<entry>` names
+ * (`<type>-<slug>`) currently resident in `work/advancing/`, ignoring non-`.md`
+ * files. An absent / empty `work/advancing/` directory ⇒ the empty list.
+ *
+ * The slice `advancing-lock-human-release-verb-and-surface` introduces this as
+ * the one read-side enumeration both the `gc --ledger` report (this slice) and
+ * the folder-taxonomy reorg's later relocation slice (`<slug>.lock.md` co-located
+ * with the item) consume — so the read shape stays consistent while the marker
+ * location later moves. There is deliberately NO automatic sweep based on this
+ * list: the advancing lock has no liveness heartbeat, so "provably orphaned"
+ * cannot be inferred — the report is advisory and a human invokes
+ * `release-advancing <item>` to clear a NAMED marker.
+ */
+export function listAdvancingMarkers(repoPath: string): string[] {
+	const dir = join(repoPath, 'work', 'advancing');
+	let entries: string[];
+	try {
+		entries = readdirSync(dir);
+	} catch {
+		return [];
+	}
+	const markers: string[] = [];
+	for (const file of entries) {
+		if (!file.toLowerCase().endsWith('.md')) {
+			continue; // ignore non-marker files (READMEs, .keep, anything else)
+		}
+		markers.push(file.slice(0, -'.md'.length));
+	}
+	return markers.sort();
 }
 
 // --- Acquire --------------------------------------------------------------

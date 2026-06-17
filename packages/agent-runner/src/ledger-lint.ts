@@ -2,6 +2,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {run} from './git.js';
+import {listAdvancingMarkers} from './advancing-lock.js';
 
 /**
  * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (PRD
@@ -267,6 +268,16 @@ export function formatDuplicateWarnings(
 export interface LedgerSweepResult {
 	/** Every slug present in more than one status folder (empty ⇒ clean ledger). */
 	duplicates: DuplicateSlug[];
+	/**
+	 * Every type-encoded entry (`<type>-<slug>`) currently in `work/advancing/`
+	 * (the advancing-lock marker folder), via {@link listAdvancingMarkers}. The
+	 * advancing lock has no liveness heartbeat, so we can never INFER "orphaned"
+	 * — the report is purely advisory: a stuck marker is DISCOVERABLE here, and a
+	 * human invokes `release-advancing <item>` to clear a NAMED marker (slice
+	 * `advancing-lock-human-release-verb-and-surface`). NEVER auto-deleted; there
+	 * is no automatic advancing-lock sweep anywhere in the system.
+	 */
+	advancingMarkers: string[];
 }
 
 /**
@@ -283,7 +294,13 @@ export interface LedgerSweepResult {
  * ledger read.
  */
 export function sweepLedgerDuplicates(repoPath: string): LedgerSweepResult {
-	return {duplicates: lintLocalLedger(repoPath)};
+	return {
+		duplicates: lintLocalLedger(repoPath),
+		// REPORT advancing-lock markers alongside the duplicate-slug surface (slice
+		// `advancing-lock-human-release-verb-and-surface`). Same shape: surveys + a
+		// human-actionable hazard, never auto-deletes.
+		advancingMarkers: listAdvancingMarkers(repoPath),
+	};
 }
 
 /**
@@ -292,22 +309,59 @@ export function sweepLedgerDuplicates(repoPath: string): LedgerSweepResult {
  * the explicit "resolved by a HUMAN, never auto-deleted" note), or a clean line
  * when there is nothing to report.
  */
+/**
+ * Convert a type-encoded advancing entry (`<type>-<slug>`) back into the
+ * namespaced item form (`<namespace>:<slug>`) that {@link resolveSidecarIdentity}
+ * accepts. So a report line for `slice-foo` suggests `release-advancing slice:foo`
+ * — the form the verb (and the lock API) consumes. Unknown prefixes fall back to
+ * the raw entry so the suggestion is still copyable.
+ */
+function itemFromEntry(entry: string): string {
+	for (const prefix of ['slice', 'prd', 'observation'] as const) {
+		const tag = `${prefix}-`;
+		if (entry.startsWith(tag)) {
+			return `${prefix}:${entry.slice(tag.length)}`;
+		}
+	}
+	return entry;
+}
+
 export function formatLedgerSweep(result: LedgerSweepResult): string {
-	const {duplicates} = result;
-	if (duplicates.length === 0) {
+	const {duplicates, advancingMarkers} = result;
+	if (duplicates.length === 0 && advancingMarkers.length === 0) {
 		return 'Ledger clean: every slug is in exactly one work/ status folder.';
 	}
-	const lines = [
-		`Ledger SWEEP: ${duplicates.length} slug(s) present in more than one work/ ` +
-			'status folder (REPORT only — a human resolves each; NEVER auto-deleted):',
-	];
-	for (const dup of duplicates) {
-		lines.push(`  ${dup.slug}`);
-		lines.push(`    in: ${dup.folders.map((f) => `work/${f}/`).join(', ')}`);
-		lines.push(`    candidate canonical: work/${dup.candidateCanonical}/`);
+	const lines: string[] = [];
+	if (duplicates.length > 0) {
 		lines.push(
-			'    resolve: keep the canonical copy, delete the stale one(s), then re-run.',
+			`Ledger SWEEP: ${duplicates.length} slug(s) present in more than one work/ ` +
+				'status folder (REPORT only — a human resolves each; NEVER auto-deleted):',
 		);
+		for (const dup of duplicates) {
+			lines.push(`  ${dup.slug}`);
+			lines.push(`    in: ${dup.folders.map((f) => `work/${f}/`).join(', ')}`);
+			lines.push(`    candidate canonical: work/${dup.candidateCanonical}/`);
+			lines.push(
+				'    resolve: keep the canonical copy, delete the stale one(s), then re-run.',
+			);
+		}
+	}
+	if (advancingMarkers.length > 0) {
+		if (lines.length > 0) {
+			lines.push('');
+		}
+		lines.push(
+			`Advancing-lock markers: ${advancingMarkers.length} entr${advancingMarkers.length === 1 ? 'y' : 'ies'} ` +
+				'present in work/advancing/ (REPORT only — no automatic sweep; the ' +
+				'advancing lock has no liveness heartbeat, so a human names a stuck lock):',
+		);
+		for (const entry of advancingMarkers) {
+			lines.push(`  ${entry}`);
+			lines.push(`    marker: work/advancing/${entry}.md`);
+			lines.push(
+				`    resolve (if the lock is dead): \`agent-runner release-advancing ${itemFromEntry(entry)}\` (never --force).`,
+			);
+		}
 	}
 	return lines.join('\n');
 }
