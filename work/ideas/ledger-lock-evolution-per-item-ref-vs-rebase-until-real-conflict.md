@@ -1255,20 +1255,51 @@ C8 lock ref is UNAFFECTED , a claim still acquires the per-item lock; it just re
 WHICH on-`main` folder is the eligible pool, not how holds work. The C8 claimability predicate becomes
 "in `todo/` on `main` AND no lock held on the lock ref."
 
-**A PRD analogue, NOT worth it (maintainer, 2026-06-17, corrected).** An earlier draft proposed
-mirroring the split for PRDs (`prd/` holding -> `prd-ready/` pool before agents auto-slice). On
-reflection it is LOW-VALUE and should be SKIPPED, because **PRD slicing can already be made safe
-DOWNSTREAM without a PRD-level gate.** The thing you would want to review about an auto-sliced PRD is
-its EMITTED SLICES, and those are ALREADY gated by the SLICE `backlog/todo` split one level down: let a
-slicer's output land in slices' `backlog/` (review-staging), and a human promotes the approved slices
-to `todo/`. So a PRD being auto-sliced is safe BY INHERITANCE, the slices it produces are not actionable
-until promoted, regardless of whether the PRD itself had a holding/ready gate. Adding a SECOND gate at
-the PRD level would be redundant control over the same risk the slice gate already covers, plus PRD
-slicing is lower-volume and already has `needsAnswers`/`humanOnly`. CONCLUSION: do the `backlog/todo`
-split for SLICES (high value, the pool + review + trust lever); do NOT add a PRD-level holding/ready
-split, PRD-slicing safety falls out of the slice gate downstream. (The one thing the PRD side still
-wants is that its slicer OUTPUT can target slices-`backlog/`, which is the slice gate's birth-folder
-policy, not a new PRD folder.)
+**Should PRDs have their own `backlog`-vs-`todo` (RE-EXAMINED under the position-vs-nature framing,
+2026-06-17, maintainer asked again). Verdict: still NO, but now for a SHARPER, framing-aware reason,
+and with the ONE case that WOULD justify it named.**
+
+The earlier "safety is inherited downstream" argument was a SAFETY argument (the emitted slices are
+gated, so the PRD need not be). It still holds, but the new framing asks a DIFFERENT question: does a
+PRD have a POSITION axis ("not yet / which slice-pool") distinct from its NATURE axis (`humanOnly` =
+"never auto-slice by nature")? Work it through honestly:
+
+- **The POSITION question for a PRD would be: "is this PRD admitted to the AUTO-SLICE pool yet?"** That
+  is a real, coherent question, and a `prd/`(holding) vs `prd-ready/`(auto-slice pool) split COULD
+  encode it, exactly mirroring slices. So under the framing it is not INCOHERENT, it is a genuine
+  candidate.
+- **But the project ALREADY made the governing call for the pre-pool state, and it points NO** (VERIFIED
+  in WORK-CONTRACT.md): *"a separate pre-claim 'not ready yet' state is intentionally NOT added , under-
+  specified items simply should not be WRITTEN into `backlog/` until they are ready. Revisit only if a
+  genuine intake-triage need appears."* The Kanban SLICE split is the justified "revisit" because slices
+  have a genuine intake-triage need: AGENT/`--merge`/UNTRUSTED output writes slices into the pool that a
+  human wants to gate. **PRDs do NOT have that need:** a PRD is BORN from a human conversation (`to-prd`
+  synthesizes the current conversation; `to-prd` SKILL: "Do NOT interview, synthesize what you already
+  know") , there is no agent/untrusted firehose writing PRDs into the auto-slice pool the way slicing
+  writes slices into the build pool. So the "don't write it until it's ready" default SUFFICES for PRDs:
+  a half-baked PRD simply stays an `idea/` (the capture bucket) and is promoted to `prd/` by a human
+  when ready. **The `idea/ -> prd/` promotion IS the PRD's `backlog -> todo`** , it already exists, it
+  is already human-driven, and it is the position gate the framing asks for, one level up.
+- **The NATURE axis is already covered:** PRD `humanOnly` = "never auto-slice" (the never-by-nature
+  guard), `needsAnswers` = "blocked on a question." Between `idea/`(not-yet-a-PRD holding) + `humanOnly`
+  (never-auto-slice) + `needsAnswers` (blocked), all three PRD axes are ALREADY encoded, position by the
+  `idea/ -> prd/` promotion, nature by `humanOnly`, discovered by `needsAnswers`. A `prd/ -> prd-ready/`
+  split would be a SECOND position gate ON TOP of the `idea/ -> prd/` one, redundant.
+
+**The ONE case that WOULD justify a PRD position split (so the NO is honest, not dogmatic):** if PRDs
+EVER start being WRITTEN by agents or untrusted sources directly into `prd/` (an autonomous "draft a PRD
+from this issue" flow, or a contributor PRD), THEN PRDs acquire the same intake-triage need slices have,
+and a `prd/`(staging) vs `prd-ready/`(auto-slice pool) split becomes justified by the SAME logic as the
+slice split. Today no such flow exists (PRDs are human-synthesized), so the need is absent. The trigger
+to revisit is identical to the WORK-CONTRACT's: "if a genuine intake-triage need appears" , for PRDs
+that means "if agents/untrusted sources start writing PRDs into the slice pool."
+
+**CONCLUSION:** do the `backlog/todo` split for SLICES (real intake-triage need); do NOT add a PRD-level
+`prd/`-vs-`prd-ready/` split NOW (PRDs are human-born, the `idea/ -> prd/` promotion already IS the PRD
+position gate, and `humanOnly`/`needsAnswers` cover nature/discovered). REVISIT only if agents/untrusted
+sources begin writing PRDs directly , the same trigger the WORK-CONTRACT names for the slice pre-pool
+state. The one thing the PRD side still needs from the slice split is that PRD-slicing OUTPUT can target
+slices-`backlog/` (the slice birth-folder policy), not a new PRD folder.
 
 ### Does the folder gate REPLACE `humanOnly`? (slices yes-ish, PRDs no), the elegant resolution
 
