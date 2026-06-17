@@ -83,12 +83,12 @@ describe('lintLocalLedger (over a working tree)', () => {
 		expect(dups[0].folders).toContain('done');
 	});
 
-	it('covers out-of-scope as a status folder (the full lifecycle set)', () => {
+	it('covers dropped as a status folder (the full lifecycle set)', () => {
 		place('backlog', 'wont');
-		place('out-of-scope', 'wont');
+		place('dropped', 'wont');
 		const dups = lintLocalLedger(root);
 		expect(dups.map((d) => d.slug)).toEqual(['wont']);
-		expect(dups[0].folders).toContain('out-of-scope');
+		expect(dups[0].folders).toContain('dropped');
 	});
 
 	it('reports a clean ledger with NO false positives', () => {
@@ -96,7 +96,7 @@ describe('lintLocalLedger (over a working tree)', () => {
 		place('in-progress', 'b');
 		place('needs-attention', 'c');
 		place('done', 'd');
-		place('out-of-scope', 'e');
+		place('dropped', 'e');
 		expect(lintLocalLedger(root)).toEqual([]);
 	});
 
@@ -194,7 +194,7 @@ describe('the status-folder set', () => {
 			'in-progress',
 			'needs-attention',
 			'done',
-			'out-of-scope',
+			'dropped',
 		]);
 	});
 });

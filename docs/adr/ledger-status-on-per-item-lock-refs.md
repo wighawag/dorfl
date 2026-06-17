@@ -21,8 +21,11 @@ The git ledger is split by what each kind of state actually is:
 - **`main` holds CONTENT + all DURABLE RESTING records.** The readable `work/` content tree
   (backlog/todo, prd/prd-ready, observations, findings, ideas) stays checked out on `main`, and the
   ONLY moves ever made on `main` are the durable resting transitions: `backlog → done`,
-  `prd → prd-sliced`, and `backlog → out-of-scope`. These are exactly the dependency-resolving /
-  permanent records (`blockedBy → done/`, `sliceAfter → prd-sliced/`, the durable "won't do").
+  `prd → prd-sliced`, and `backlog → dropped` (the generic "won't-proceed" terminal that
+  GENERALISES the previous `out-of-scope/`; the specific REASON — superseded /
+  out-of-scope / duplicate / abandoned — lives in the item body as `reason:`). These are
+  exactly the dependency-resolving / permanent records (`blockedBy → done/`,
+  `sliceAfter → prd-sliced/`, the durable "won't-proceed").
 - **Transient STATUS + LOCKS live on PER-ITEM lock refs**, NOT in main's tree. `in-progress`,
   `needs-attention`, `slicing`, and `advancing` collapse into ONE lock per item, keyed by item
   identity, on a hidden `refs/agent-runner/lock/<entry>` ref (or a single `refs/agent-runner/locks`
@@ -76,7 +79,7 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
 
 ## Consequences
 
-- The five status folders on `main` reduce to durable records only (`done`, `out-of-scope`, the
+- The five status folders on `main` reduce to durable records only (`done`, `dropped`, the
   resting pools backlog/todo) for slices, and (`prd`, `prd-ready`, `prd-sliced`) for PRDs. The
   transient three (`in-progress`, `needs-attention`, `slicing`) become lock-ref state.
 - A NEW cross-substrate reconciliation appears for the durable promotions: complete is "hold lock →

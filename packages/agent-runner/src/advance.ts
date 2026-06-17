@@ -621,7 +621,7 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  * sidecar contract's {@link applyAtomic}) — then EITHER append newly-discovered
  * questions (stay `needsAnswers:true`, re-pause) OR resolve fully (clear
  * `needsAnswers` + DELETE the sidecar in the SAME commit) OR disposition the item
- * to a terminal (advance / out-of-scope / needs-attention / keep / delete).
+ * to a terminal (advance / dropped / needs-attention / keep / delete).
  *
  * Under the `advancing` CAS lock (held by {@link performAdvance} BEFORE this runs
  * — so the work is POST-lock, winner-only), it delegates to the engine-owned

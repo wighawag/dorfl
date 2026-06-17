@@ -559,7 +559,7 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 			backlog: {'a.md': slice({slug: 'a'})},
 			inProgress: {'b.md': slice({slug: 'b'})},
 			done: {'c.md': slice({slug: 'c'})},
-			outOfScope: {'d.md': slice({slug: 'd'})},
+			dropped: {'d.md': slice({slug: 'd'})},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),

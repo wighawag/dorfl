@@ -32,12 +32,16 @@ import {listAdvancingMarkers} from './advancing-lock.js';
 /**
  * The `work/` STATUS folders a slice's ledger file can rest in — the
  * one-slug-one-folder set this lint is asserted over (WORK-CONTRACT.md
- * "status = the folder"). This is the FULL lifecycle set INCLUDING `out-of-scope/`
- * (the durable "won't do" record), a strict superset of `integration-core.ts`'s
+ * "status = the folder"). This is the FULL lifecycle set INCLUDING `dropped/`
+ * (the GENERIC durable "won't-proceed" record — slice
+ * `generic-terminal-dropped-folder-generalising-out-of-scope`, PRD
+ * `staging-pool-position-gate-and-trust-model` US #16/17/18; it GENERALISES the
+ * previous `out-of-scope/` folder, with the specific REASON living in the item
+ * BODY as a `reason:` value). A strict superset of `integration-core.ts`'s
  * `LEDGER_STATUS_FOLDERS` / `ledger-write.ts`'s `WORK_FOLDERS` (which omit
- * `out-of-scope/` because the runner's transitions never auto-move a slice there —
- * it is a human disposition). A read-side lint must still surface a slug that ends
- * up in `out-of-scope/` AND another status folder, so the lint covers all five.
+ * `dropped/` because the runner's transitions never auto-move a slice there —
+ * it is a human disposition). A read-side lint must still surface a slug that
+ * ends up in `dropped/` AND another status folder, so the lint covers all five.
  *
  * The capture buckets (`ideas`/`observations`/`findings`) and the PRD-flow folders
  * (`prd`/`slicing`/`prd-sliced`) are NOT slice-status folders (WORK-CONTRACT.md:
@@ -50,7 +54,7 @@ export const LEDGER_STATUS_FOLDERS = [
 	'in-progress',
 	'needs-attention',
 	'done',
-	'out-of-scope',
+	'dropped',
 ] as const;
 
 /** One of the `work/` status folders a slice can reside in. */
@@ -66,7 +70,7 @@ export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
  */
 const CANONICAL_PRECEDENCE: readonly LedgerStatusFolder[] = [
 	'done',
-	'out-of-scope',
+	'dropped',
 	'needs-attention',
 	'in-progress',
 	'backlog',

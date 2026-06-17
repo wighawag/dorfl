@@ -553,7 +553,7 @@ describe('status — one-slug-one-folder LINT (PRD ledger-integrity story 3)', (
 			backlog: {'a.md': '---\nslug: a\n---\nbody'},
 			inProgress: {'b.md': '---\nslug: b\n---\nbody'},
 			done: {'c.md': '---\nslug: c\n---\nbody'},
-			outOfScope: {'d.md': '---\nslug: d\n---\nbody'},
+			dropped: {'d.md': '---\nslug: d\n---\nbody'},
 		});
 		const report = await status({
 			workspacesDir: workspacesDir(),
