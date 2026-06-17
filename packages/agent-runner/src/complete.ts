@@ -379,40 +379,6 @@ class CompleteRefusal extends Error {
 }
 
 /**
- * The two-verb recovery advice for a stranded-done branch that THIS run added
- * uncommitted edits to (the dirty-continue refusal). The work is committed on
- * `branch` and pushed to the arbiter, so the human FINISHES it — but possibly
- * from a DIFFERENT checkout than the one that stranded it (the canonical case: an
- * `advance`/`run` in CI strands the branch; a human finishes from their laptop).
- *
- * Cross-machine, `complete --isolated` is the WRONG verb: it recovers a RETAINED
- * job WORKTREE on the LOCAL disk, which only exists on the machine that ran the
- * job (the CI runner) and is reaped when that job ends — so from any other
- * checkout it silently no-ops ("no retained isolated worktree found"), reading as
- * "already done" when nothing was integrated. The portable finish is to check out
- * the (already-pushed) work branch off the arbiter and run plain `complete`.
- *
- * So advise the CROSS-MACHINE recipe FIRST (works from any checkout), name
- * `complete --isolated` only as the SAME-MACHINE shortcut, and offer
- * `requeue --reset` to discard + rebuild.
- */
-function finishStrandedBranchAdvice(
-	slug: string,
-	branch: string,
-	arbiter: string,
-): string {
-	return (
-		`Finish it by checking out the (already-pushed) work branch and completing: ` +
-		`\`git fetch ${arbiter} && git switch -c ${branch} ${arbiter}/${branch} && ` +
-		`agent-runner complete ${slug}\` (works from ANY checkout — e.g. finishing a ` +
-		`CI-stranded slice on your laptop). ON THE SAME MACHINE that ran the job you ` +
-		`can instead \`agent-runner complete --isolated ${slug}\` (recovers the ` +
-		`retained job worktree). Or \`agent-runner requeue --reset ${slug}\` to ` +
-		`discard the kept branch and rebuild fresh.`
-	);
-}
-
-/**
  * Run the complete ritual. Never throws for the expected gate-failed /
  * rebase-conflict / refused cases — those are returned with exit 1 and a
  * specific outcome. Usage/environment problems also surface as exit 1.
@@ -666,56 +632,38 @@ async function runComplete(
 	const dirtyContinue =
 		folderShapeStranded && (await hasUncommittedSourceChanges({cwd, env}));
 	const committedRecovery = folderShapeStranded && !dirtyContinue;
-	const source: 'in-progress' | 'needs-attention' = onInProgress
-		? 'in-progress'
-		: 'needs-attention';
-	const sourcePath = source === 'in-progress' ? inProgress : needsAttention;
+	// CONTINUE-BUILD (slice `complete-builds-on-already-done-moved-continue`,
+	// scope option A — the explicit `source: 'done'` contract). On a DIRTY
+	// continue whose kept branch already holds the slug in `work/done/`, route
+	// through the build path's NEW continue-build state: the integration core
+	// SKIPS the step-2 `git mv` (the slug is already in done/) and is exempted
+	// from the originTrust read + the divergent-done-move reconcile (there is no
+	// first-time move on this commit), but still runs prepare → gate → `git add
+	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
+	// slice's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
+	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
+	const source: 'in-progress' | 'needs-attention' | 'done' = dirtyContinue
+		? 'done'
+		: onInProgress
+			? 'in-progress'
+			: 'needs-attention';
+	const sourcePath =
+		source === 'in-progress'
+			? inProgress
+			: source === 'needs-attention'
+				? needsAttention
+				: done;
 	if (dirtyContinue) {
-		// SURFACE the data-loss STOPPER (slice
-		// `recover-autodetect-gated-on-nothing-to-commit`, scope option D). AUTO-
-		// LANDING the dirty continue is structurally outside the build path's source
-		// contract (`source: 'in-progress' | 'needs-attention'` — there is no
-		// `'done'`; the step-2 `git mv → done/` cannot run when the slug is already in
-		// done/). Building that contract is the humanOnly sibling slice
-		// `complete-builds-on-already-done-moved-continue`. THIS slice ONLY guarantees
-		// the new work is NEVER SILENTLY DISCARDED: route through the SAME ledger-
-		// write seam the autonomous failure paths use (`applyNeedsAttentionTransition`
-		// — it commits the wip BELOW the move-only tip so the agent's edits are
-		// preserved on the work/<slug> branch + pushed to the arbiter, then surfaces
-		// the move-only commit on the arbiter's `main`). Naming the cause + the two
-		// recovery verbs in the reason so the human can finish from here.
-		const reason =
-			`continue on a kept branch whose '${slug}' slice is already in ` +
-			`work/done/ produced new uncommitted edits this run — the stranded-done ` +
-			'auto-recover was gated off to avoid SILENTLY DISCARDING that work. ' +
-			finishStrandedBranchAdvice(slug, branch, arbiter);
-		const routed = await ledgerWrite.applyNeedsAttentionTransition({
-			cwd,
-			slug,
-			reason,
-			arbiter: options.surfaceArbiter,
-			branch,
-			env,
-			note,
-		});
-		const message = routed.moved
-			? `Refused to silently auto-recover stranded-done '${slug}' (this run ` +
-				'produced uncommitted edits); routed to work/needs-attention/ with the ' +
-				'continue-specific reason. ' +
-				finishStrandedBranchAdvice(slug, branch, arbiter)
-			: `Refused to silently auto-recover stranded-done '${slug}' (this run ` +
-				'produced uncommitted edits); could not route to work/needs-attention/ ' +
-				`(${routed.reasonNotMoved ?? 'unknown'}). The new work is preserved in ` +
-				`the working tree on \`${branch}\` — commit it, then ` +
-				finishStrandedBranchAdvice(slug, branch, arbiter);
-		note(message);
-		return {
-			exitCode: 1,
-			outcome: 'refused',
-			routedToNeedsAttention: routed.moved,
-			branch,
-			message,
-		};
+		// Announce LOUDLY (parallel to the `committedRecovery` recovery note above):
+		// the autonomous integrate path took the CONTINUE-BUILD branch, not the
+		// clean-strand recover and not a refusal — the CI/job log must record that
+		// the new work was built + integrated on top of the kept already-done-moved
+		// tip (no second `git mv`).
+		note(
+			`>> continue-build on '${slug}': the slice is already in work/done/ on the ` +
+				'kept branch (a prior attempt done-moved it); building + integrating the ' +
+				'new uncommitted work on top of the kept tip (no second git mv).',
+		);
 	}
 	if (!committedRecovery && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
@@ -725,6 +673,11 @@ async function runComplete(
 			slug,
 		);
 	}
+	// `source: 'done'` is the CONTINUE-BUILD state — NOT a recover (the agent
+	// produced new work this run) and NOT the clean-strand recover
+	// (`committedRecovery` is mutually exclusive with `dirtyContinue` by
+	// construction above). It falls through to `performIntegration` like a
+	// normal build, where the core skips the step-2 `git mv` for this source.
 	const recovering = !committedRecovery && source === 'needs-attention';
 	if (committedRecovery) {
 		// Announce LOUDLY: a stranded already-complete branch signals an EARLIER
