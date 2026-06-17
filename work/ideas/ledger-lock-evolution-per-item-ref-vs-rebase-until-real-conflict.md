@@ -31,13 +31,15 @@ status: incubating
 > The document now derives the best design for BOTH requirement sets (see `## Requirement SETS`).
 > - **Set 1 (E kept, default):** `C2 + (C5 or C6)`, keep status where a human can `ls` it; the C5/C6
 >   fork is the only open call. Detailed below as the original analysis.
-> - **Set 2 (E dropped, maintainer-requested exploration 2026-06-17):** C2 + move STATUS off `main`.
->   Dropping E touches only HUMAN glanceability of STATUS, agents KEEP a readable content tree
->   (backlog/prd/observations/findings/ideas). So the move is: transient STATUS (folder-position +
->   locks) goes to a dedicated ledger ref; CONTENT stays a readable tree. This deletes branch-inheritance
->   + the `→done` on-branch exception + the drop-rebase machinery, and incidentally unblocks
->   protected-main. Remaining sub-fork: C7 (content tree + status pointers) vs C7-alt (whole `work/` on
->   the ledger ref). See `## Best design under Requirement Set 2`.
+> - **Set 2 (E dropped, maintainer-requested exploration 2026-06-17):** `C2 + C8` (the BREAKTHROUGH).
+>   CONTENT always stays checked out on `main` (the full readable `work/` tree). The ONLY moves ever
+>   made on `main` are the two REFERENCEABLE promotions `backlog→done` and `prd→prd-sliced` (exactly the
+>   dependency-resolving transitions, verified). Everything transient, claim/in-progress,
+>   needs-attention, slicing, advancing, becomes ONE lock per item on a dedicated lock ref, so the three
+>   actions are MUTUALLY EXCLUSIVE BY CONSTRUCTION. This solves all THREE issues by construction (1 via
+>   C2-on-the-lock-ref, 2 by locks-off-main, 3 by the single per-item mutex, NO advisory rule), keeps
+>   content checked out + eligibility offline-on-`main`, and is the strongest candidate found. C7/C7-alt
+>   are superseded (C7-alt rejected: it strips content from the checkout). See `## C8`.
 > - **Common to BOTH sets: build C2 first.** It is the per-ref contention fix, needed on `main` (Set 1)
 >   or the ledger ref (Set 2) either way, and it kills the verified CI failure immediately while
 >   committing you to nothing about the visibility decision.
@@ -504,11 +506,19 @@ visibility; C5 closes branch-inheritance (issue 2) by reusing the branch-carries
 needs an off-main ref; neither sacrifices visibility. C3 is dominated. C4 is retired as a concurrency
 fix and demoted to optional ergonomics.
 
-## Cross-action exclusion (issue 3), the answer: a unified per-item lock is NOT needed
+## Cross-action exclusion (issue 3), the answer: a unified per-item lock is NOT needed (UNDER SET 1)
+
+> **SCOPE: this section reasons under SET 1** (status stays on `main`, three holds on three DISTINCT
+> refs, so unifying them onto one ref would re-create false contention among them). Under SET 2 / C8
+> the premise FLIPS: once status leaves `main` and lives on a lock ref, ONE lock per item is not only
+> safe but the CLEANEST shape, and it solves issue 3 BY CONSTRUCTION (atomic exclusion, no TOCTOU,
+> no advisory rule). So the "no unification" conclusion below is a SET-1 conclusion; C8 supersedes it
+> under Set 2. The two are not contradictory, they answer the same question under different substrates.
 
 The maintainer's question: should "advancing", "slicing", "implementing" be mutually exclusive on one
-item, possibly by collapsing the three locks into ONE per-item hold? **Answer: no unification; close
-the one genuinely-unsafe pair with an ADVISORY precedence rule + the existing atomic backstop.**
+item, possibly by collapsing the three locks into ONE per-item hold? **Answer (SET 1): no unification;
+close the one genuinely-unsafe pair with an ADVISORY precedence rule + the existing atomic backstop.
+(SET 2: YES unify, see C8, it is the right move once the locks are off `main`.)**
 
 Why not collapse into one lock:
 - The three holds are SEMANTICALLY different and key DIFFERENTLY. claim and slicing ARE lifecycle moves
@@ -804,8 +814,143 @@ especially capture buckets, stay on a non-CAS plain-file tree?), a good next req
 on-branch-move removal, AND the `→done` on-branch exception. C2 is common to both sets. So the only
 genuinely set-dependent decision is C5/C6 (Set 1) vs the status-off-`main` move (Set 2), and that
 decision IS the visibility requirement itself: keep E and you get C5/C6 (status stays where a human can
-`ls` it); drop E and moving status off `main` is strictly cleaner on issue 2. The maintainer's
-2026-06-17 choice to explore dropping E points there, with C7-vs-C7-alt as the remaining sub-fork.
+`ls` it); drop E and moving status off `main` is strictly cleaner on issue 2.
+
+> **C7-alt is REJECTED (maintainer, 2026-06-17): it removes the CONTENT from the checked-out repo.**
+> Putting the whole `work/` tree on the ledger ref means a normal `git clone` of `main` has no
+> backlog/prd/observations/findings/ideas in its working tree at all, agents (and humans) would have to
+> `git show <ledger-ref>:...` to read their own work-input. That is unacceptable: content must stay
+> checked out on `main`. This rejection, plus the "one lock per item" idea below, produces a STRICTLY
+> better Set-2 design, C8.
+
+## C8 (Set 2, the breakthrough), ONE lock per item on a lock ref; the ONLY `main` moves are the two referenceable promotions
+
+> Maintainer-proposed 2026-06-17, thinking outside the box. This DISSOLVES more problems than any
+> prior candidate and is the recommended Set-2 design. It rests on a VERIFIED structural fact (below)
+> that none of C5/C6/C7 exploited.
+
+**The verified fact that unlocks it:** dependency/eligibility resolution targets ONLY two folders,
+`blockedBy` , `work/done/` (`eligibility.ts`, `readiness.ts`) and `sliceAfter` , `work/prd-sliced/`
+(`select-priority.ts`, `ledger-read.ts`). NOTHING resolves a dependency or eligibility decision against
+`in-progress/` or `needs-attention/` (a full grep finds only ONE incidental line, reading a slice
+BODY from backlog/ OR in-progress/, never a STATE check). So `in-progress` and `needs-attention` are
+PURELY OPERATIONAL status (consumed by `status`/`scan`/recovery), NOT referenceable lifecycle state.
+The two referenceable resting states are EXACTLY `done` and `prd-sliced`. That is the natural cleave
+line, and it is the one the maintainer drew.
+
+**The design, two independent moves that compose:**
+
+1. **CONTENT always stays checked out on `main`** (kills C7-alt). The full readable `work/` content tree
+   (backlog, prd, prd-sliced, done, observations, findings, ideas) lives on `main` as today, a normal
+   `git clone` has it all in the working tree. Agents and humans read/write it directly.
+2. **The ONLY moves ever made on `main` are the two REFERENCEABLE promotions:** `backlog/<slug> ,
+   done/<slug>` and `prd/<slug> , prd-sliced/<slug>`. These are rare, are exactly the
+   dependency-resolving transitions, and rest as files humans/agents reference. Everything else that is
+   today a `main` folder-move (claim , in-progress, surface , needs-attention, slicing-lock ,
+   slicing/) STOPS being a `main` move.
+3. **ONE lock per item, on a dedicated lock ref.** Claiming/implementing a slice, slicing a PRD, and
+   advancing (answering/triaging) an item ALL acquire THE SAME lock, keyed on the item identity
+   (`<type>-<slug>`). The lock ref holds one entry per HELD item; the CAS happens here. "in-progress" is
+   "the item's lock is held for implementing"; "slicing" is "held for slicing"; "advancing" is "held for
+   advancing", but they are the SAME lock, so they are MUTUALLY EXCLUSIVE BY CONSTRUCTION. The lock
+   ENTRY records WHICH action holds it + the holder + (if stuck) the needs-attention reason, as body.
+
+**What this dissolves (more than any other candidate):**
+
+- **Issue 1 (false contention): killed, and at LOW volume.** Locks live on a dedicated ref advanced
+  only by lock acquire/release, never by code integration NOR by the two `main` promotions. Apply C2
+  (rebase-until-real) on the lock ref and same-path false contention is gone. The lock ref's writer set
+  is just the lock writers, the smallest contended surface of any candidate.
+- **Issue 2 (branch-inheritance): DELETED by construction.** A work branch cut from `main` inherits no
+  lock state (locks are on the lock ref, not in main's tree) and no in-progress/needs-attention/slicing
+  folder (those are not on `main` anymore). The ONLY `main` `work/` files are content + the two
+  promotions, none of which a mid-build branch carries as status. `drop-bookkeeping-rebase`, the
+  branch-carries PRD's needs-attention-move removal, and C5 ALL become unnecessary.
+- **Issue 3 (cross-action exclusion): DISSOLVED, atomically, not advisorily.** This is the big win over
+  the Set-1 answer. Because advance/slice/claim share ONE per-item lock, you CANNOT advance an item
+  that is being implemented, or claim one that is being advanced, the second acquirer loses the SAME
+  CAS. No TOCTOU window (the exclusion IS the lock, not a check-then-act eligibility bar), no
+  slicing-release stale-check needed as the only backstop. The maintainer's original instinct ("one
+  lock per item makes advancing/slicing/implementing mutually exclusive") is REALISED here, and it is
+  the FIRST candidate where issue 3 is solved by construction rather than mitigated.
+- **The `→done` on-branch atomicity exception SURVIVES, cleanly, and is now the ONLY main move class.**
+  Unlike C7/C7-alt (which dissolved `→done` into a cross-ref reconciliation), C8 KEEPS `backlog→done`
+  (and `prd→prd-sliced`) as real `main` moves, atomic with the code/slices they assert, exactly as the
+  branch-carries PRD wants for done. So there is NO new cross-ref reconciliation for the referenceable
+  promotions, they stay single-ref on `main`. The cross-ref surface shrinks to just "hold/release a
+  lock on the lock ref around a `main` promotion", which is the SAME shape as today's claim-then-build
+  -then-complete, only the intermediate hold moved off `main`.
+
+**What `in-progress` and `needs-attention` BECOME (the honest mapping):**
+
+- **in-progress** = the item's lock is HELD (for the `implement` action). `status`/`scan` read the lock
+  ref to list held items, exactly as they read `<mirror>/main:work/...` today, retargeted to the lock
+  ref. The item's CONTENT stays at `work/backlog/<slug>.md` on `main` (it does NOT move on claim), so
+  the `--resume` body read (`readSliceOnArbiter`) reads from `backlog/` on `main` PLUS checks the lock
+  ref for held-ness, no body relocation, the body never leaves `backlog/` until the `→done` promotion.
+  This is actually SIMPLER than today (today claim MOVES the body to in-progress/; here it does not).
+- **needs-attention** = the lock is held in a STUCK sub-state, the lock entry carries the reason (body
+  prose) and a `stuck: true`-style marker. A human picks it up by resolving the stuck lock (or
+  `requeue` = release the lock, leaving the item in `backlog/` where it already is). The recoverable
+  WORK still lives on the kept `work/<slug>` branch (unchanged). So needs-attention stops being a
+  `main` folder and becomes a state of the per-item lock, the surface is read from the lock ref by
+  `status`.
+
+**The costs / open questions C8 must answer (honest):**
+
+1. **`status`/`scan` read the lock ref for operational status** (held/stuck items), so that read is
+   ref-based (the code already reads refs, so this is a retarget, not a new mechanism) and, if the lock
+   ref is remote, network-bound for the operational view. The REFERENCEABLE state (backlog/done/prd/
+   prd-sliced) stays offline-on-`main`, so eligibility/selection stay offline, only the
+   "what's-in-flight" view needs the lock ref. Better than C7-alt (all reads off-main) and even C6
+   (which moved status folders off main); C8 moves only the LOCKS off main and keeps ALL content +
+   both referenceable promotions ON main.
+2. **One lock per item means an item can hold ONLY ONE action at a time, BY DESIGN.** Confirm this is
+   desired for every pair. Advance-while-claimed and slice-while-claimed are CORRECTLY excluded (the
+   point). The one case to check: does any legitimate workflow need TWO actions on one item
+   concurrently? (e.g. advancing a PRD while it is `prd-sliced`?) The taxonomy idea noted an item has
+   multiple orthogonal actions OVER ITS LIFE (answer it, later build it), but never SIMULTANEOUSLY, so
+   one-lock-at-a-time is right. Record this as the load-bearing assumption: actions over an item are
+   SEQUENTIAL, never concurrent, so a single mutex per item is correct.
+3. **The lock entry now carries semantic payload** (which action holds it; the stuck reason). It is no
+   longer a pure presence marker, it is a small state record (action + holder + optional stuck reason).
+   Fine (the advancing marker body already carries holder/since/reason), but it means the lock ref's
+   entry format is a designed schema, not just "file exists."
+4. **Crash-safety / recovery** repoints to the lock ref: a crashed hold leaves a lock entry (today's
+   `release-advancing` + `gc --ledger` generalise to `release-lock <item>` + a stuck-lock report).
+   The kept `work/<slug>` branch still holds recoverable work. Mechanically the same as the
+   already-landed advancing-lock crash-safety, generalised from one action to all three.
+5. **Migration:** the two promotions already exist as `main` moves (keep them). Claim/surface/slicing
+   STOP moving `main` folders and START holding the per-item lock, the in-progress/needs-attention/
+   slicing folders are RETIRED from `main` (their state moves to the lock ref). This is a real
+   migration (every claim/surface/slicing-lock call site retargets), but the read/write ledger seams
+   exist precisely to localize it, and the lock ref work already exists (advancing-lock) to generalize.
+
+**Why C8 is the best Set-2 design (and arguably the best overall):**
+
+- It is the ONLY candidate that solves all THREE issues BY CONSTRUCTION (1 via C2-on-the-lock-ref,
+  2 by locks-off-main, 3 by one-lock-per-item-atomic-exclusion), with NO advisory mitigations and NO
+  cross-ref reconciliation for the referenceable promotions.
+- It KEEPS content checked out on `main` (fixes C7-alt's fatal flaw) and keeps the two referenceable
+  resting states (`done`, `prd-sliced`) as real `main` files, so eligibility/dependency resolution
+  stays offline + on the same ref it is today, ZERO change to `blockedBy`/`sliceAfter`.
+- It shrinks `main`'s `work/` churn to the two rare promotions, the smallest possible `main` write
+  surface, which ALSO eases any future protected-main story (only two move classes need to reach
+  `main`, both atomic with content/slices).
+- The "status = the folder" invariant is PRESERVED where it is referenceable (`done`/`prd-sliced` ARE
+  folders on `main`) and DELIBERATELY replaced by "status = the per-item lock state" where it is
+  transient (in-progress/needs-attention/slicing/advancing), which is HONEST: those were never
+  referenceable states, so encoding them as folders was the overload C8 removes.
+
+The one thing C8 trades away is exactly the dropped requirement, a human can no longer `ls work/` and
+see in-progress/needs-attention (they run `status`, which reads the lock ref). Content, backlog, done,
+prd, prd-sliced all stay `ls`-able on `main`. So C8 is the precise, minimal expression of "drop ONLY
+transient-status human-visibility, keep everything else."
+
+**Set-2 recommendation (UPDATED): C2 (on the lock ref) + C8.** C7/C7-alt are superseded by C8
+(C7-alt rejected for removing content from the checkout; C7's body/position split is unnecessary once
+you see in-progress/needs-attention are not referenceable and can be pure lock state). C8 is the
+recommended Set-2 design and the strongest candidate found.
 
 ## Disposition
 
