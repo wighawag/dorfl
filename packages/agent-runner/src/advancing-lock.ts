@@ -1,5 +1,5 @@
-import {mkdirSync, writeFileSync, rmSync} from 'node:fs';
-import {dirname, join} from 'node:path';
+import {existsSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {dirname, isAbsolute, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveSidecarIdentity} from './sidecar.js';
@@ -61,6 +61,22 @@ import {resolveSidecarIdentity} from './sidecar.js';
  */
 
 const DEFAULT_ARBITER = 'origin';
+
+/**
+ * The single PATH-CONSTRUCTION SEAM for the advancing borrow's marker file —
+ * `work/advancing/<entry>.md`, where `<entry>` is the type-encoded `<type>-<slug>`
+ * identity ({@link resolveSidecarIdentity}). Acquire and release BOTH construct
+ * the marker through THIS function (do NOT inline the path elsewhere), so the
+ * folder-taxonomy reorg slice can repoint the marker's location in ONE place
+ * (`work/<entry>/<slug>.lock.md` etc.) without forking the format between
+ * acquire and release. `<type>-<slug>` stays in the lock + release BRANCH names
+ * (`advancing/<entry>` / `advancing-release/<entry>`) — that is load-bearing for
+ * cross-type/cross-repo branch-collision avoidance regardless of where the
+ * MARKER FILE later lives.
+ */
+export function advancingMarkerPath(entry: string): string {
+	return `work/advancing/${entry}.md`;
+}
 
 // --- Acquire --------------------------------------------------------------
 
@@ -184,7 +200,7 @@ async function runAcquire(
 		);
 	}
 
-	const marker = `work/advancing/${entry}.md`;
+	const marker = advancingMarkerPath(entry);
 	// DISTINCT from the build-claim's `claim/<slug>`, the slicing lock's
 	// `slicing/<slug>`, and the work branch `work/<type>-<slug>` — an advancing
 	// borrow can never collide with a slicing borrow or a build claim.
@@ -460,18 +476,22 @@ async function runRelease(
 	}
 	const by = options.by || (await resolveBy(cwd, env));
 
-	const dirtyWorktree =
-		(await gitSoft(['diff', '--quiet'], cwd, env)).status !== 0;
-	const dirtyIndex =
-		(await gitSoft(['diff', '--cached', '--quiet'], cwd, env)).status !== 0;
-	if (dirtyWorktree || dirtyIndex) {
-		throw new AdvancingLockUsageError(
-			'working tree has uncommitted changes; commit/stash them before releasing',
-		);
-	}
-
-	const marker = `work/advancing/${entry}.md`;
+	const marker = advancingMarkerPath(entry);
 	const releaseBranch = `advancing-release/${entry}`;
+
+	// CRASH-SAFETY (slice `advancing-lock-release-crash-safe`). A failing post-lock
+	// dispatch (recover/integrate hitting a rebase conflict, a build bailing mid-
+	// flight, …) can leave `cwd` mid-rebase or with uncommitted leftovers. The
+	// release itself uses a SCRATCH branch cut from `<arbiter>/main` (it never
+	// consumes the dirty content), so the dirt is INCIDENTAL — but the scratch
+	// checkout below refuses on a mid-rebase / locally-modified tree. Become
+	// checkout-able FIRST, NEVER destroying committed work: the kept work lives on
+	// the WORK BRANCH REF (commits), not on the dirty tree. `git rebase --abort`
+	// restores the pre-rebase tip; `git checkout HEAD -- .` + `git clean -fdq`
+	// clear ONLY uncommitted/untracked dispatch leftovers. NEVER `git reset --hard`
+	// (no branch-rewinding) — only the worktree dirt that was never committed is
+	// dropped. A happy path's clean tree makes this a no-op.
+	await makeCheckoutAble(cwd, env, note);
 
 	const origRef = await originalRef(cwd, env);
 	try {
@@ -885,6 +905,42 @@ async function cleanup(
 ): Promise<void> {
 	await gitSoft(['checkout', '--quiet', origRef], cwd, env);
 	await gitSoft(['branch', '-D', branch], cwd, env);
+}
+
+/**
+ * Become CHECKOUT-ABLE before the scratch-branch CAS runs (see the call site in
+ * {@link runRelease}). A failing post-lock dispatch may leave `cwd` mid-rebase
+ * or with uncommitted leftovers; the kept work lives on the WORK BRANCH REF
+ * (commits), not on the dirty tree, so we restore the pre-rebase tip and clear
+ * UNCOMMITTED dirt only — NEVER `git reset --hard`, NEVER any branch-rewinding,
+ * NEVER discarding commits. A clean tree makes this a no-op (the happy path).
+ */
+async function makeCheckoutAble(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+	note: (m: string) => void,
+): Promise<void> {
+	const gitDirRel = (
+		await gitSoft(['rev-parse', '--git-dir'], cwd, env)
+	).stdout.trim();
+	if (gitDirRel !== '') {
+		const gitDirAbs = isAbsolute(gitDirRel) ? gitDirRel : join(cwd, gitDirRel);
+		if (
+			existsSync(join(gitDirAbs, 'rebase-merge')) ||
+			existsSync(join(gitDirAbs, 'rebase-apply'))
+		) {
+			note(
+				'advancing-release: aborting in-progress rebase to make the worktree ' +
+					'checkout-able (kept commits on the branch ref are preserved).',
+			);
+			await gitSoft(['rebase', '--abort'], cwd, env);
+		}
+	}
+	// Discard uncommitted dispatch leftovers in tracked files + the index, then
+	// untracked dropped files — making the scratch `git checkout` below proceed.
+	// The kept work is on the WORK BRANCH REF, so nothing recoverable is lost.
+	await gitSoft(['checkout', 'HEAD', '--', '.'], cwd, env);
+	await gitSoft(['clean', '-fdq'], cwd, env);
 }
 
 /** Resolve the advisory locker: git user.name, else $USER/$USERNAME, else ''. */
