@@ -2,6 +2,7 @@
 title: CI propose matrix enumerates lifecycle items (surface / triage / apply), not only build/slice
 slug: ci-propose-matrix-enumerates-lifecycle-items
 prd: ci-advance-surfaces-questions-not-only-builds
+humanOnly: true
 blockedBy: [advance-in-place-publishes-treeless-results]
 covers: [1, 2, 3, 4, 6, 7, 8, 11]
 ---
@@ -192,3 +193,21 @@ agent-runner claim ci-propose-matrix-enumerates-lifecycle-items --arbiter origin
 git fetch origin && git switch -c work/ci-propose-matrix-enumerates-lifecycle-items origin/main
 git mv work/in-progress/ci-propose-matrix-enumerates-lifecycle-items.md work/done/ci-propose-matrix-enumerates-lifecycle-items.md
 ```
+
+## Needs attention
+
+**Marked `humanOnly: true` (2026-06-17) — NOT a code defect; a structural autonomy boundary.** An autonomous CI `advance` run built this slice and Gate-2 review APPROVED it (full destination check passed; 3 non-blocking nits recorded in `work/observations/review-nits-ci-propose-matrix-enumerates-lifecycle-items-2026-06-17.md`). The work is correct. But the final branch push was REJECTED by GitHub:
+
+```
+! [remote rejected] work/slice-ci-propose-matrix-enumerates-lifecycle-items
+  refusing to allow a GitHub App to create or update workflow
+  `.github/workflows/advance-lifecycle.yml` without `workflows` permission
+```
+
+This slice's deliverable is to REGENERATE `.github/workflows/advance-lifecycle.yml` (it edits the generator and re-emits the workflow YAML). The CI runner's GitHub App token deliberately LACKS the `workflows` permission — an autonomous run must never be able to rewrite its own triggers (the `runner-in-ci` PRD states this as a hard safety line: "the running CI job is forbidden from touching `.github/workflows/**`"). So GitHub rejects the WHOLE branch push because it carries a `.github/workflows/` change, and the runner releases the advancing borrow but cannot land the branch — the slug strands in `in-progress/`, and every re-claim re-hits the identical wall (an infinite re-fail loop).
+
+**Therefore this slice can ONLY be completed by a human** (or a non-App credential WITH `workflows` permission): a human checks out a branch off `main`, builds the change (the approved review text is a near-complete spec), and pushes/merges it with their own credentials. `humanOnly: true` stops CI from re-claiming it into the dead end.
+
+NOTE: the approved branch was NEVER pushed (the rejection blocked the whole push), so the CI runner's build is LOST — a human must rebuild from the slice + the approved review.
+
+> POLICY GAP worth capturing separately: ANY slice whose deliverable regenerates a file under `.github/workflows/**` is inherently `humanOnly`, because the autonomous runner is forbidden to push such changes. Future workflow-touching slices should be marked `humanOnly` at SLICING time so they never get auto-claimed into this rejection.
