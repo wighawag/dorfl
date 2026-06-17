@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick' (Gate 2 approve)
 date: 2026-06-16
 status: open
-slug: install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick
+reviewOf: install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick
 ---
 
 ## Non-blocking review findings

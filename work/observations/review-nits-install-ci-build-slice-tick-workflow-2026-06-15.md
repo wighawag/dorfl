@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'install-ci-build-slice-tick-workflow' (Gate 2 approve)
 date: 2026-06-15
 status: open
-slug: install-ci-build-slice-tick-workflow
+reviewOf: install-ci-build-slice-tick-workflow
 ---
 
 ## Non-blocking review findings

@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'install-ci-core-and-github-adapter' (Gate 2 approve)
 date: 2026-06-15
 status: open
-slug: install-ci-core-and-github-adapter
+reviewOf: install-ci-core-and-github-adapter
 ---
 
 ## Non-blocking review findings

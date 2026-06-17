@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'continue-rebase-auto-resolves-protocol-bookkeeping-conflicts' (Gate 2 approve)
 date: 2026-06-15
 status: open
-slug: continue-rebase-auto-resolves-protocol-bookkeeping-conflicts
+reviewOf: continue-rebase-auto-resolves-protocol-bookkeeping-conflicts
 ---
 
 ## Non-blocking review findings

@@ -2,7 +2,7 @@
 title: review-gate non-blocking nits for 'install-ci-intake-trigger-and-review-surface' (Gate 2 approve)
 date: 2026-06-15
 status: open
-slug: install-ci-intake-trigger-and-review-surface
+reviewOf: install-ci-intake-trigger-and-review-surface
 ---
 
 ## Non-blocking review findings
