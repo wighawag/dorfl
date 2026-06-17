@@ -84,6 +84,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. Unset ⇒ the slicing transition falls back to
 	// `integration` (the flat value). It NEVER touches the build transition or intake.
 	slicingIntegration: {enum: ['propose', 'merge']},
+	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default — PRD
+	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
+	// `pre-backlog`/`backlog` enum, so `AGENT_RUNNER_SLICES_LAND_IN=backlog` works
+	// and a typo FAILS LOUDLY. Same precedence chain as `slicingIntegration`
+	// (flag > env > per-repo > global > built-in `pre-backlog`); fed into the
+	// runner-deterministic placement resolver (`src/placement.ts`) as the
+	// configured-default rung.
+	slicesLandIn: {enum: ['pre-backlog', 'backlog']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `AGENT_RUNNER_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `AGENT_RUNNER_PROVIDER` is ignored

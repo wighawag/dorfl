@@ -201,6 +201,16 @@ describe('envOverrides — enum coercion', () => {
 				slicingIntegration: 'propose',
 			},
 		);
+		// `slicesLandIn` (the per-repo SLICE-PLACEMENT default, slice
+		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as
+		// the `pre-backlog`/`backlog` enum, on the SAME flag > env > per-repo >
+		// global > built-in chain as `slicingIntegration`.
+		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'backlog'})).toEqual({
+			slicesLandIn: 'backlog',
+		});
+		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'pre-backlog'})).toEqual({
+			slicesLandIn: 'pre-backlog',
+		});
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
 		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'off'})).toEqual({
 			observationTriage: 'off',

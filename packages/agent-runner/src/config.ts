@@ -17,6 +17,23 @@ import {
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
+ * **Per-repo SLICE-PLACEMENT default** (PRD
+ * `staging-pool-position-gate-and-trust-model`, slice
+ * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
+ * folder the runner lands the slicer's emitted slice files in BY DEFAULT —
+ * `'pre-backlog'` (staging — durable + readable but NOT in the agent-eligible
+ * pool; a runner/human promotion is needed to make an item claimable) or
+ * `'backlog'` (the agent-eligible POOL — the trusted fast-path landing). The
+ * runner-deterministic placement RESOLVER (`src/placement.ts`) layers on top:
+ * `explicit operator flag > untrusted-origin ⇒ pre-backlog > slicesLandIn
+ * default > built-in (pre-backlog)`. An untrusted-origin slicer output is
+ * FORCED to staging even in a `'backlog'` repo (the positional analogue of
+ * the existing `untrusted-origin-forces-build-propose` rule).
+ */
+export type SlicesLandIn = 'pre-backlog' | 'backlog';
+
+/**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
  * 3-state ENUM governing the observation INBOX (raw captured signal). It REPLACES
  * the old `autoTriage` boolean, whose name read like "is triage on?" but only
@@ -196,6 +213,21 @@ export interface Config {
 	 * per-LIFECYCLE-TRANSITION knob, inside the trust boundary, operator/config-only.
 	 */
 	slicingIntegration?: IntegrationMode;
+	/**
+	 * **Per-repo DEFAULT landing for the SLICER's emitted slices** (PRD
+	 * `staging-pool-position-gate-and-trust-model` US #5, slice
+	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved
+	 * per-repo EXACTLY like {@link slicingIntegration} (flag `--slices-land-in`
+	 * > env `AGENT_RUNNER_SLICES_LAND_IN` > per-repo > global > built-in
+	 * `'pre-backlog'`). The slicing path reads it and passes it as the
+	 * CONFIGURED-DEFAULT rung into the shared placement resolver
+	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
+	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order. The
+	 * slicer NEVER sets placement itself. PRD US #6 / the governing ADR: the
+	 * runner OWNS placement from unforgeable inputs; the agent cannot
+	 * influence it.
+	 */
+	slicesLandIn: SlicesLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
@@ -481,6 +513,14 @@ export const DEFAULT_CONFIG: Config = {
 	// branch but deliberately skip the PR (the explicit suppress-PR intent that
 	// re-homes the old `provider: none` use). NOT a provider choice.
 	noPR: false,
+	// The slicer's emitted slices land STAGED (`pre-backlog/`) by default — the
+	// conservative landing that preserves the tracer slice's behaviour: an item is
+	// durable + readable but NOT in the agent-eligible pool until a human/runner
+	// promotes it. A repo opts into the trusted fast-path with `slicesLandIn:
+	// 'backlog'` (or `--slices-land-in backlog` / `AGENT_RUNNER_SLICES_LAND_IN=backlog`).
+	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
+	// force on top of this default (`src/placement.ts`).
+	slicesLandIn: 'pre-backlog',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically

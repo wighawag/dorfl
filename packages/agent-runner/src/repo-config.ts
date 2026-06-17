@@ -67,6 +67,18 @@ export const REPO_ALLOWED_KEYS = [
 	// intake's per-EMITTED-TYPE `{slice, prd}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
 	'slicingIntegration',
+	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default — staging vs pool, PRD
+	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
+	// exactly like `slicingIntegration`/`integration`: whether THIS repo's slicer
+	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
+	// straight in the agent-eligible POOL (`backlog/`, trusted fast-path) is agreed
+	// by all collaborators + travels with the repo. Resolved per-repo through the
+	// SAME chain as `slicingIntegration` (flag > env > per-repo > global > built-in
+	// `pre-backlog`). DISTINCT from intake's per-emitted-type stamps (front door):
+	// this is a per-lifecycle PLACEMENT knob, inside the trust boundary,
+	// config-resolved. Fed into the shared placement resolver as the
+	// configured-default rung (`src/placement.ts`).
+	'slicesLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with
