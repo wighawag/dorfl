@@ -1594,7 +1594,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				agentRan = true;
-				const dir = join(cwd, 'work', 'backlog');
+				const dir = join(cwd, 'work', 'pre-backlog');
 				mkdirSync(dir, {recursive: true});
 				writeFileSync(
 					join(dir, 'somePrd-explicit.md'),
@@ -1650,7 +1650,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			// lands it on the arbiter main (propose would open a PR instead).
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
-				const dir = join(cwd, 'work', 'backlog');
+				const dir = join(cwd, 'work', 'pre-backlog');
 				mkdirSync(dir, {recursive: true});
 				writeFileSync(
 					join(dir, 'somePrd-first.md'),
@@ -1681,7 +1681,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1777,7 +1777,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
  * is resolved into BOTH keys upstream (`do-config.ts`, covered in do-config.test.ts).
  */
 const slicingAgent: DoAgentRunner = ({cwd}) => {
-	const dir = join(cwd, 'work', 'backlog');
+	const dir = join(cwd, 'work', 'pre-backlog');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, 'somePrd-first.md'),
@@ -1823,7 +1823,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1883,7 +1883,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1915,7 +1915,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/backlog/somePrd-first.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1927,7 +1927,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 				[
 					'cat-file',
 					'-e',
-					`${ARBITER}/work/prd-somePrd:work/backlog/somePrd-first.md`,
+					`${ARBITER}/work/prd-somePrd:work/pre-backlog/somePrd-first.md`,
 				],
 				repo,
 				{env: gitEnv()},

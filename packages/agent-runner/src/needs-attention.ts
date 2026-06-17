@@ -697,6 +697,168 @@ export async function returnToBacklog(
 }
 
 /**
+ * **Promote a STAGED slice into the agent-eligible pool** (PRD
+ * `staging-pool-position-gate-and-trust-model`, slice
+ * `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Moves
+ * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` as a durable `main`
+ * move, the same category as {@link returnToBacklog} (tree-less CAS via
+ * {@link runTreelessLedgerMove}). After this transition the slice is in the
+ * pool and claimable.
+ *
+ * **RUNNER/human-owned.** There is no agent-facing path that performs this:
+ * the agent's slicing output lands STAGED in `work/pre-backlog/` (the runner's
+ * deterministic placement decision), and only a runner/human invocation moves
+ * it into the pool. The agent does no git here, as everywhere.
+ *
+ * Storage-agnostic: it names the slug + the arbiter, NOT *where* the move
+ * lands; the sole strategy publishes to `<arbiter>/main`. Like
+ * {@link returnToBacklog} the tree-less CAS needs a ref to push to, so an
+ * `arbiter` is REQUIRED. NEVER throws for the expected
+ * "not in pre-backlog/" / contention-exhausted cases — it returns
+ * `{moved: false, reasonNotMoved}` so callers can branch cleanly.
+ */
+export interface PromoteFromPreBacklogOptions {
+	/**
+	 * The working clone the move is ORIGINATED from — purely the ORIGIN SOURCE
+	 * (it resolves the arbiter remote + holds the object store the plumbing
+	 * writes into), NEVER a write TARGET. Tree-less: the cwd index/HEAD/working
+	 * tree are never touched (parity with {@link returnToBacklog}).
+	 */
+	cwd: string;
+	/** The slug of the staged slice to promote into the pool. */
+	slug: string;
+	/**
+	 * The arbiter remote the promotion is CAS-published to. REQUIRED — the
+	 * tree-less CAS needs a ref to push to (parity with `requeue`/`claim`).
+	 */
+	arbiter: string;
+	/** Environment for child git processes (identity etc.). */
+	env?: NodeJS.ProcessEnv;
+	/** Sink for human-readable progress notes. */
+	note?: (message: string) => void;
+}
+
+export interface PromoteFromPreBacklogResult {
+	/** True iff the staged slice was moved into the pool + committed. */
+	moved: boolean;
+	/** When `moved`, the committed transition message. */
+	commitMessage?: string;
+	/** When NOT moved, why (no such pre-backlog item, already in backlog, contention). */
+	reasonNotMoved?: string;
+}
+
+export async function promoteFromPreBacklog(
+	options: PromoteFromPreBacklogOptions,
+): Promise<PromoteFromPreBacklogResult> {
+	const note = options.note ?? (() => {});
+	const {cwd, slug, env} = options;
+
+	if (!options.arbiter) {
+		return {
+			moved: false,
+			reasonNotMoved:
+				`promote for '${slug}' needs an --arbiter: the move is published as a ` +
+				'tree-less compare-and-swap to the arbiter ref (like requeue/claim), so ' +
+				'there is no local-only mode — pass --arbiter.',
+		};
+	}
+	const arbiter = options.arbiter;
+
+	if (
+		(await gitSoftAsync(['remote', 'get-url', arbiter], cwd, env)).status !== 0
+	) {
+		return {
+			moved: false,
+			reasonNotMoved: `no git remote named '${arbiter}' (set one, or pass --arbiter).`,
+		};
+	}
+
+	// Refresh `<arbiter>/main` so the residence probe + the CAS base see the
+	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
+	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+
+	const sourceRel = `work/pre-backlog/${slug}.md`;
+	const destRel = `work/backlog/${slug}.md`;
+
+	// Early-exit message: if NEITHER staged nor already-in-pool, there is nothing
+	// to promote (the per-attempt `plan` is the authoritative resolution against
+	// the live base).
+	const hasSource =
+		(
+			await gitSoftAsync(
+				['cat-file', '-e', `${arbiter}/main:${sourceRel}`],
+				cwd,
+				env,
+			)
+		).status === 0;
+	const hasDest =
+		(
+			await gitSoftAsync(
+				['cat-file', '-e', `${arbiter}/main:${destRel}`],
+				cwd,
+				env,
+			)
+		).status === 0;
+	if (!hasSource && !hasDest) {
+		const message =
+			`'${slug}' is not staged in work/pre-backlog/ on ${arbiter}/main (and not ` +
+			'already in work/backlog/) — nothing to promote (wrong slug, or never ' +
+			'staged?).';
+		note(message);
+		return {moved: false, reasonNotMoved: message};
+	}
+
+	const commitMessage = `chore(${slug}): promote work/pre-backlog/ -> work/backlog/`;
+	const moved = await runTreelessLedgerMove({
+		cwd,
+		slug,
+		arbiter,
+		kind: 'promote',
+		onContended: 'promote',
+		// The surface direction's main-only refspec works here too: this runs in
+		// the project checkout, but we only need `<arbiter>/main` resolved, and
+		// the explicit refspec is the safer default (mirrors `surface`).
+		explicitMainRefspec: true,
+		env,
+		note,
+		plan: (base) => {
+			// If already in the pool on this base, a prior attempt landed (idempotent).
+			if (pathInCommit(base, destRel, cwd, env)) {
+				return 'already-done';
+			}
+			if (!pathInCommit(base, sourceRel, cwd, env)) {
+				return 'missing';
+			}
+			return prepareTreelessMoveCommit({
+				cwd,
+				slug,
+				base,
+				sourceRel,
+				destRel,
+				// The body is carried byte-for-byte from pre-backlog into the pool —
+				// promotion is a placement decision, not a content transform.
+				transformBody: (body) => body,
+				commitMessage,
+				refNamespace: 'promote',
+				env,
+			});
+		},
+	});
+	if (moved) {
+		note(`Promoted '${slug}' from pre-backlog to backlog (claimable).`);
+		return {moved: true, commitMessage};
+	}
+
+	const message =
+		`promote for '${slug}': the arbiter's main kept moving (contended) after ` +
+		`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-backlog (no ` +
+		'move). Try again shortly.';
+	note(message);
+	return {moved: false, reasonNotMoved: message};
+}
+
+/**
  * Surface a stuck in-progress item to `needs-attention/` TREE-LESSLY — the
  * SURFACE-direction sibling of {@link returnToBacklog}, sharing its EXACT
  * tree-less recipe ({@link runTreelessLedgerMove}): fetch `<arbiter>/main`, build

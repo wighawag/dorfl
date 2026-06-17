@@ -3,6 +3,7 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	rmSync,
 	writeFileSync,
 } from 'node:fs';
 import {dirname, join} from 'node:path';
@@ -41,7 +42,9 @@ import type {ReviewGate} from './review-gate.js';
  * The **`do prd:<slug>` slicing path** (PRD `auto-slice`, slice
  * `autoslice-command`) — the orchestration that ties the slicing GATE
  * (`slicing-eligibility.ts`) and the slicing LOCK (`slicing-lock.ts`) together to
- * slice a PRD into `work/backlog/` items, with the RUNNER owning every git-state
+ * slice a PRD into `work/pre-backlog/` STAGED items (slice
+ * `pre-backlog-staging-folder-and-promote-step-a` — the runner-owned promotion
+ * moves them `pre-backlog/ → backlog/` later), with the RUNNER owning every git-state
  * transition. This is the PRD branch of the `do` worker (ADR
  * `command-surface-and-journeys.md` §3/§3a), NOT a standalone `slice` command;
  * `do.ts` dispatches `resolved.namespace === 'prd'` here.
@@ -60,7 +63,7 @@ import type {ReviewGate} from './review-gate.js';
  *      slicers (`prd → work/slicing/`). The HUMAN path with no contention may slice
  *      on `main` directly WITHOUT the lock.
  *   3. **Invoke the agent harness** with the `to-slices` brief — the agent runs the
- *      slicer methodology and produces `work/backlog/<slug>.md` FILES ONLY; it does
+ *      slicer methodology and produces `work/pre-backlog/<slug>.md` FILES ONLY; it does
  *      NOT commit/push/move (the same in-band boundary as the build agent).
  *   4. **The runner integrates the COMPLETING transition through the SHARED core**
  *      (`performIntegration`, slice `slice-output-through-integration`): the agent's
@@ -115,7 +118,7 @@ export interface SliceResult {
 
 /**
  * The agent invocation: runs the `to-slices` brief in `cwd`, WRITING
- * `work/backlog/<slug>.md` slice files (and trimming the PRD). It does NO git —
+ * `work/pre-backlog/<slug>.md` slice files (and trimming the PRD). It does NO git —
  * the runner captures the produced files and commits them.
  */
 export type SliceAgentRunner = (input: {
@@ -281,6 +284,24 @@ export interface PerformSliceOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
+ * **The STAGED-SLICES dir** (PRD `staging-pool-position-gate-and-trust-model`,
+ * slice `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The runner
+ * lands the slicer's emitted slice files HERE, NOT in `work/backlog/`: an item
+ * born in `pre-backlog/` is durable + readable but NOT in the agent-eligible
+ * pool (`work/backlog/` STILL means the pool — every reader is byte-for-byte
+ * unchanged). A runner/human-owned promotion (`promoteFromPreBacklog` in
+ * `needs-attention.ts`) moves an approved item `pre-backlog/ → backlog/` to make
+ * it claimable. STEP A: ADDITIVE — no `work/backlog/` reader changes here.
+ */
+export const STAGED_SLICES_DIR = 'work/pre-backlog';
+
+/** The repo-relative path of a staged slice's `.md` (per {@link STAGED_SLICES_DIR}). */
+function stagedSlicePath(name: string): string {
+	return `${STAGED_SLICES_DIR}/${name}`;
+}
+
+/**
  * Run the `do prd:<slug>` slicing path end-to-end. Never throws for the expected
  * gate-refused / lock-lost / agent-failed / stale cases — those are returned with
  * the appropriate exit code and outcome. The runner owns all git; the agent only
@@ -375,10 +396,17 @@ export async function performSlice(
 		await switchToWorkBranch(cwd, arbiter, slug, env);
 	}
 
-	// 3. INVOKE THE AGENT with the to-slices brief. It WRITES work/backlog/*.md
-	//    slice files; it does NO git. We snapshot the backlog folder before/after
-	//    so the runner (not the agent) captures + commits exactly what was produced.
-	const before = snapshotBacklog(cwd);
+	// 3. INVOKE THE AGENT with the to-slices brief. It WRITES
+	//    `work/pre-backlog/*.md` slice files (the STAGED area — NOT `work/backlog/`,
+	//    which is the agent-eligible pool the runner owns the promotion into; slice
+	//    `pre-backlog-staging-folder-and-promote-step-a`); it does NO git. We
+	//    snapshot the staged-slices folder before/after so the runner (not the
+	//    agent) captures + commits exactly what was produced.
+	const before = snapshotStagedSlices(cwd);
+	// Also snapshot the POOL `work/backlog/` BEFORE the agent runs: the runner's
+	// final commit must scrub any agent writes there (an attempt to self-place into
+	// the pool, PRD US #4) before `git add -A` would sweep them in.
+	const poolBefore = snapshotPool(cwd);
 	const prompt = buildSlicingBrief(slug, prdFm.prd);
 	let agent: {ok: boolean; detail?: string};
 	try {
@@ -414,7 +442,7 @@ export async function performSlice(
 			gate: options.reviewLoop,
 			// SCOPING FENCE (the requeue fix): the loop reviews/edits/flags ONLY the
 			// slices THIS run produced (new-or-changed vs `before`), never the
-			// pre-existing landed slices that share work/backlog/.
+			// pre-existing staged slices that share `work/pre-backlog/`.
 			before,
 			slicerLoopMax: options.slicerLoopMax ?? 3,
 			executions: options.reviewExecutions,
@@ -470,7 +498,7 @@ export async function performSlice(
 	//    direct commit to `main`. The agent never does git. (The backlog snapshot is
 	//    taken AFTER any loop edits, so the runner integrates the IMPROVED slices,
 	//    not the pre-loop candidates.)
-	const emitted = newOrChangedBacklog(cwd, before);
+	const emitted = newOrChangedStagedSlices(cwd, before);
 	const emitSlices = collectEmittedSlices(cwd, emitted);
 	const loopTag: 'converged' | 'uncertain-slices' | undefined =
 		loopDisposition?.outcome === 'converged'
@@ -554,7 +582,8 @@ export async function performSlice(
 				// Read the PR title / commit summary from the held PRD (before it moves).
 				titlePath: join(cwd, 'work', 'slicing', `${slug}.md`),
 				commitTag: 'sliced',
-				stage: () => stageSlicingLifecycle({cwd, slug, emitSlices, env}),
+				stage: () =>
+					stageSlicingLifecycle({cwd, slug, emitSlices, poolBefore, env}),
 			},
 			env,
 			// The slice-SET acceptance review AGENT launches AMBIENT, never the
@@ -766,7 +795,7 @@ async function heldPrdIsStale(
  * {@link performIntegration} lifecycle seam): move the held PRD
  * `git mv work/slicing/<slug>.md -> work/prd-sliced/<slug>.md` (the SLICED resting
  * state — the build-machine `done/` analogue, the SOURCE OF TRUTH for sliced-ness),
- * and write+`git add` the produced `work/backlog/*.md` files. The band's subsequent
+ * and write+`git add` the produced `work/pre-backlog/*.md` files. The band's subsequent
  * `git add -A` + atomic commit folds this AND the agent's uncommitted backlog writes
  * into ONE runner-owned commit (the agent never does git).
  *
@@ -780,9 +809,10 @@ async function stageSlicingLifecycle(params: {
 	cwd: string;
 	slug: string;
 	emitSlices: Record<string, string>;
+	poolBefore: Map<string, string>;
 	env: NodeJS.ProcessEnv | undefined;
 }): Promise<void> {
-	const {cwd, slug, emitSlices, env} = params;
+	const {cwd, slug, emitSlices, poolBefore, env} = params;
 	const slicing = `work/slicing/${slug}.md`;
 	const prdSliced = `work/prd-sliced/${slug}.md`;
 	// PROPAGATE the origin-trust PROVENANCE (slice
@@ -811,6 +841,62 @@ async function stageSlicingLifecycle(params: {
 		mkdirSync(dirname(abs), {recursive: true});
 		writeFileSync(abs, propagateOrigin(prdProvenance, content));
 		await gitHard(['add', '--', relPath], cwd, env);
+	}
+	// **POOL-PLACEMENT FENCE (PRD US #4 / governing ADR
+	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`).** The
+	// slicer's STAGING folder is `work/pre-backlog/`; the POOL `work/backlog/` is
+	// the agent-eligible pool the runner owns the promotion into. The agent ran
+	// AMBIENT in the worktree, so anything it dropped under `work/backlog/` would
+	// otherwise be swept in by `performIntegration`'s subsequent `git add -A` — a
+	// self-placement into the pool. Revert any agent-introduced add/change under
+	// `work/backlog/` here so the runner's commit reflects ONLY the legitimate
+	// `pre-backlog/` placement + the PRD lifecycle move. (STEP A; slice
+	// `pre-backlog-staging-folder-and-promote-step-a`.)
+	await scrubPoolDrift(cwd, poolBefore, env);
+}
+
+/**
+ * Revert any change/addition the agent made to the POOL `work/backlog/` during a
+ * slicing run. The agent's STAGING folder is `work/pre-backlog/`; a write to the
+ * pool is an attempt to self-place into the agent-eligible pool the runner owns
+ * the promotion into (PRD US #4 / governing ADR). Compared to the `poolBefore`
+ * snapshot (the branch-base state of `work/backlog/`, taken BEFORE the agent
+ * ran), any new file is removed from the worktree and any changed file is
+ * checked back out to HEAD — so the subsequent `git add -A` cannot land it. The
+ * runner's commit then carries ONLY the explicit `pre-backlog/` placement.
+ */
+async function scrubPoolDrift(
+	cwd: string,
+	poolBefore: Map<string, string>,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+	const dir = join(cwd, 'work', 'backlog');
+	let entries: string[];
+	try {
+		entries = readdirSync(dir);
+	} catch {
+		return;
+	}
+	for (const name of entries) {
+		if (!name.toLowerCase().endsWith('.md')) {
+			continue;
+		}
+		const abs = join(dir, name);
+		const content = readFileSync(abs, 'utf8');
+		if (poolBefore.has(name)) {
+			if (poolBefore.get(name) === content) {
+				continue;
+			}
+			// The agent edited a pre-existing pool slice — restore it from HEAD.
+			await gitSoft(
+				['checkout', 'HEAD', '--', `work/backlog/${name}`],
+				cwd,
+				env,
+			);
+			continue;
+		}
+		// The agent introduced a NEW file in the pool: drop it.
+		rmSync(abs, {force: true});
 	}
 }
 
@@ -878,9 +964,9 @@ function decompositionUnclearReason(slug: string, questions: string[]): string {
 /**
  * Mark a candidate slice file `needsAnswers: true` and record its open questions in
  * its body (the loop's uncertain-slice routing outcome). The runner writes the
- * file; the agent does no git/disk-escape. A path outside `work/backlog/` is
- * skipped (defensive). A relative `work/backlog/<slug>.md` that does not exist is
- * skipped with a note (never crash the transition).
+ * file; the agent does no git/disk-escape. A path outside `work/pre-backlog/`
+ * is skipped (defensive). A relative `work/pre-backlog/<slug>.md` that does not
+ * exist is skipped with a note (never crash the transition).
  */
 function markSliceNeedsAnswers(
 	cwd: string,
@@ -889,8 +975,13 @@ function markSliceNeedsAnswers(
 	note: (message: string) => void,
 ): void {
 	const normalized = relPath.replace(/\\/g, '/');
-	if (!normalized.startsWith('work/backlog/') || normalized.includes('..')) {
-		note(`Skipped a needsAnswers mark outside work/backlog/ (${relPath}).`);
+	if (
+		!normalized.startsWith(`${STAGED_SLICES_DIR}/`) ||
+		normalized.includes('..')
+	) {
+		note(
+			`Skipped a needsAnswers mark outside ${STAGED_SLICES_DIR}/ (${relPath}).`,
+		);
 		return;
 	}
 	const abs = join(cwd, normalized);
@@ -1006,8 +1097,13 @@ function readSlicedSlugs(cwd: string): Set<string> {
 function buildSlicingBrief(slug: string, _prd: string | undefined): string {
 	return [
 		`Use the **to-slices** skill to slice the PRD \`work/prd/${slug}.md\` into`,
-		'independently-grabbable `work/backlog/<slug>.md` slices (tracer-bullet',
-		'vertical slices). Read the PRD fully first.',
+		`independently-grabbable \`${STAGED_SLICES_DIR}/<slug>.md\` slices (tracer-`,
+		'bullet vertical slices). Read the PRD fully first.',
+		'',
+		`WRITE EVERY emitted slice file under \`${STAGED_SLICES_DIR}/\` — NEVER`,
+		'`work/backlog/`. `work/backlog/` is the agent-eligible POOL and the runner',
+		'owns the runner/human-only promotion into it; the slicer’s STAGING folder is',
+		`\`${STAGED_SLICES_DIR}/\`. A write outside the staging folder is dropped.`,
 		'',
 		'No human is present, so do the CONFIDENCE CHECK (to-slices step 4): only emit',
 		'slices you would have gotten a human to approve. If granularity, dependency',
@@ -1051,9 +1147,9 @@ async function runSliceAgent(
 	return {ok: launched.ok, detail: launched.detail};
 }
 
-/** A snapshot of `work/backlog/`: filename → file content (for change detection). */
-function snapshotBacklog(cwd: string): Map<string, string> {
-	const dir = join(cwd, 'work', 'backlog');
+/** A snapshot of {@link STAGED_SLICES_DIR}: filename → file content. */
+function snapshotStagedSlices(cwd: string): Map<string, string> {
+	const dir = join(cwd, STAGED_SLICES_DIR);
 	const snap = new Map<string, string>();
 	for (const file of listMarkdown(dir)) {
 		snap.set(file, readFileSync(join(dir, file), 'utf8'));
@@ -1062,23 +1158,35 @@ function snapshotBacklog(cwd: string): Map<string, string> {
 }
 
 /**
- * Repo-relative paths of the `work/backlog/*.md` files the agent NEWLY created or
- * CHANGED vs the pre-run snapshot — exactly what the runner captures + commits.
- * (An untouched pre-existing slice is NOT re-committed.)
+ * Repo-relative paths of the {@link STAGED_SLICES_DIR}`/*.md` files the agent
+ * NEWLY created or CHANGED vs the pre-run snapshot — exactly what the runner
+ * captures + commits. (An untouched pre-existing staged slice is NOT
+ * re-committed.) The agent's staging folder is `work/pre-backlog/`; writes to
+ * the pool `work/backlog/` are scrubbed at stage time, never picked up here.
  */
-function newOrChangedBacklog(
+function newOrChangedStagedSlices(
 	cwd: string,
 	before: Map<string, string>,
 ): string[] {
-	const dir = join(cwd, 'work', 'backlog');
+	const dir = join(cwd, STAGED_SLICES_DIR);
 	const changed: string[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		if (before.get(file) !== content) {
-			changed.push(`work/backlog/${file}`);
+			changed.push(stagedSlicePath(file));
 		}
 	}
 	return changed.sort();
+}
+
+/** Snapshot the POOL `work/backlog/` (for the agent-write fence at stage time). */
+function snapshotPool(cwd: string): Map<string, string> {
+	const dir = join(cwd, 'work', 'backlog');
+	const snap = new Map<string, string>();
+	for (const file of listMarkdown(dir)) {
+		snap.set(file, readFileSync(join(dir, file), 'utf8'));
+	}
+	return snap;
 }
 
 /** Read the produced backlog slices' content keyed by repo-relative path. */

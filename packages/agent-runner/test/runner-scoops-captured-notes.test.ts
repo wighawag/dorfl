@@ -227,10 +227,10 @@ function seedPrd(repo: string, slug: string): void {
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** A slicing agent that writes one backlog slice AND a captured note (no git). */
+/** A slicing agent that writes one STAGED slice AND a captured note (no git). */
 function slicingAgentWithNote(note: string | undefined): SliceAgentRunner {
 	return ({cwd}) => {
-		const dir = join(cwd, 'work', 'backlog');
+		const dir = join(cwd, 'work', 'pre-backlog');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, 'child.md'),
@@ -276,7 +276,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 		expect(result.outcome).toBe('sliced');
 		// PERSISTENCE: the produced slice AND the captured note both landed on main
 		// through the shared core (alongside the PRD lifecycle move) \u2014 not dropped.
-		expect(onArbiterMainPath(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMainPath(repo, 'work/pre-backlog/child.md')).toBe(true);
 		expect(
 			onArbiterMainPath(repo, 'work/observations/slicer-spotted-drift.md'),
 		).toBe(true);
@@ -340,7 +340,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 		});
 
 		expect(result.outcome).toBe('sliced');
-		expect(onArbiterMainPath(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMainPath(repo, 'work/pre-backlog/child.md')).toBe(true);
 		expect(sink.lines.some((l) => l.includes('Scooped'))).toBe(false);
 	});
 });

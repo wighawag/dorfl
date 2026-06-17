@@ -74,7 +74,7 @@ function seedPrd(repo: string, slug: string): void {
 /** An agent that writes one backlog slice file (no git). */
 function slicingAgent(file = 'child'): SliceAgentRunner {
 	return ({cwd}) => {
-		const dir = join(cwd, 'work', 'backlog');
+		const dir = join(cwd, 'work', 'pre-backlog');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${file}.md`),
@@ -128,7 +128,7 @@ const BLOCK: ReviewVerdict = {
 		{
 			severity: 'blocking',
 			question: 'the slice set leaves a coverage gap in the PRD goal',
-			context: 'work/backlog/child.md',
+			context: 'work/pre-backlog/child.md',
 		},
 	],
 };
@@ -172,7 +172,7 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 		// The approved set integrated onto main (slice + PRD slicing/ -> prd-sliced/
 		// move). The PRD rests in prd-sliced/ (residence = source of truth for
 		// sliced-ness, no marker), not prd/.
-		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
@@ -197,7 +197,7 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 		});
 		expect(result.outcome).toBe('sliced');
 		expect(gate.calls).toBe(0);
-		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
 	});
 
 	it('review undefined (no gate wired) ⇒ default behaviour unchanged (no gate runs)', async () => {
@@ -214,7 +214,7 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
-		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
 	});
 });
 
@@ -241,7 +241,7 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		// via the lock's slicing/ → needs-attention/ redirect). The slices did NOT
 		// land, and the PRD is no longer held in slicing/.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
@@ -267,7 +267,7 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		});
 		expect(result.outcome).toBe('needs-attention');
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
 	});
 });
 
@@ -379,7 +379,7 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 		// The set landed (the loop converged), and the gate never ran.
 		expect(result.outcome).toBe('sliced');
 		expect(gate.calls).toBe(0);
-		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
 	});
 });
 
