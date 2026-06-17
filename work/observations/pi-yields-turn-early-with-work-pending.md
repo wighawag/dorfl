@@ -2,6 +2,7 @@
 title: 'pi occasionally yields the turn back to the user (waiting for input) when the agent still has queued work, instead of continuing autonomously; a manual "continue" resumes it'
 date: 2026-06-14
 status: open
+needsAnswers: true
 ---
 
 ## The signal
