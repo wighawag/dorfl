@@ -4,7 +4,7 @@
   "harness": "pi",
   "autoBuild": true,
   "autoSlice": true,
-  "observationTriage": "auto",
+  "observationTriage": "off",
   "surfaceBlockers": true,
   "review": true,
   "integration": "propose"
