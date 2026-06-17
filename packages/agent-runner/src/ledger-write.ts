@@ -99,7 +99,17 @@ export type LedgerTransitionKind =
 	| 'needs-attention'
 	| 'requeue'
 	| 'slicing'
-	| 'advancing';
+	| 'advancing'
+	/**
+	 * The **promote** transition (PRD `staging-pool-position-gate-and-trust-model`,
+	 * slice `pre-backlog-staging-folder-and-promote-step-a`): move a STAGED slice
+	 * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` to enter the
+	 * agent-eligible pool. A durable `main` move, the same category as `requeue`
+	 * (tree-less CAS via {@link applyTransition}). RUNNER/human-owned — no
+	 * agent-facing path performs it (governing ADR
+	 * `placement-is-runner-deterministic-humanonly-is-agent-judgement`).
+	 */
+	| 'promote';
 
 /**
  * A *prepared* COMPLETE transition the caller asks the seam to publish: a

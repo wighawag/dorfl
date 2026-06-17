@@ -23,22 +23,24 @@ import {
  * (N) review→edit→re-review, the `slicerLoopMax` hard cap, the M fresh-context
  * re-executions, the edit-application to candidate slice files, and the three
  * verdict-routing outcomes — with a STUBBED review gate (no real model, no
- * network, no harness). Candidate slice files live under a temp `work/backlog/`
- * tree; nothing touches the real `~/.agent-runner/` or `~/.pi/`.
+ * network, no harness). Candidate slice files live under a temp
+ * `work/pre-backlog/` tree (the STAGING folder per slice
+ * `pre-backlog-staging-folder-and-promote-step-a`); nothing touches the real
+ * `~/.agent-runner/` or `~/.pi/`.
  */
 
 let cwd: string;
 beforeEach(() => {
 	cwd = mkdtempSync(join(tmpdir(), 'slicer-review-loop-'));
-	mkdirSync(join(cwd, 'work', 'backlog'), {recursive: true});
+	mkdirSync(join(cwd, 'work', 'pre-backlog'), {recursive: true});
 });
 afterEach(() => {
 	rmSync(cwd, {recursive: true, force: true});
 });
 
-/** Seed a candidate slice file under `work/backlog/`. */
+/** Seed a candidate slice file under `work/pre-backlog/` (the STAGING folder). */
 function seedCandidate(name: string, body = 'draft'): string {
-	const rel = `work/backlog/${name}.md`;
+	const rel = `work/pre-backlog/${name}.md`;
 	writeFileSync(
 		join(cwd, rel),
 		`---\nslug: ${name}\nprd: it\n---\n\n## Prompt\n\n> ${body}\n`,
@@ -46,9 +48,9 @@ function seedCandidate(name: string, body = 'draft'): string {
 	return rel;
 }
 
-/** A snapshot (filename → content) of `work/backlog/` — the loop's `before` fence. */
+/** A snapshot (filename → content) of `work/pre-backlog/` — the loop's `before` fence. */
 function snapshotBacklog(): Map<string, string> {
-	const dir = join(cwd, 'work', 'backlog');
+	const dir = join(cwd, 'work', 'pre-backlog');
 	const snap = new Map<string, string>();
 	for (const name of readdirSync(dir)) {
 		if (name.toLowerCase().endsWith('.md')) {
@@ -86,7 +88,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 					],
 					edits: [
 						{
-							path: 'work/backlog/child.md',
+							path: 'work/pre-backlog/child.md',
 							content:
 								'---\nslug: child\nprd: it\n---\n\n## Prompt\n\n> improved\n',
 						},
@@ -107,9 +109,9 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 		expect(result.passes).toBe(2);
 		expect(result.executions).toBe(1);
 		// The edit was APPLIED to disk (the runner wrote it; the agent does no disk).
-		expect(readFileSync(join(cwd, 'work/backlog/child.md'), 'utf8')).toMatch(
-			/> improved/,
-		);
+		expect(
+			readFileSync(join(cwd, 'work/pre-backlog/child.md'), 'utf8'),
+		).toMatch(/> improved/);
 		// Two in-context passes ran in ONE fresh context.
 		expect(calls).toEqual([
 			{pass: 1, execution: 1},
@@ -140,7 +142,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 					findings: [{severity: 'blocking', question: 'split this'}],
 					edits: [
 						{
-							path: 'work/backlog/child-b.md',
+							path: 'work/pre-backlog/child-b.md',
 							content: '---\nslug: child-b\nprd: it\n---\n\n## Prompt\n\n> b\n',
 						},
 					],
@@ -150,10 +152,10 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 			slicerLoopMax: 3,
 		});
 		expect(result.outcome).toBe('converged');
-		expect(Object.keys(result.slices)).toContain('work/backlog/child-b.md');
+		expect(Object.keys(result.slices)).toContain('work/pre-backlog/child-b.md');
 	});
 
-	it('REFUSES an edit outside work/backlog/ (defensive scope fence)', async () => {
+	it('REFUSES an edit outside work/pre-backlog/ (defensive scope fence)', async () => {
 		seedCandidate('child');
 		const escaped = join(cwd, 'work', 'prd', 'it.md');
 		mkdirSync(join(cwd, 'work', 'prd'), {recursive: true});
@@ -202,9 +204,9 @@ describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', 
 		});
 		expect(result.outcome).toBe('converged');
 		// The gate only saw THIS run's own slice — never the pre-existing landed ones.
-		expect(seen).toEqual(['work/backlog/mine.md']);
+		expect(seen).toEqual(['work/pre-backlog/mine.md']);
 		// The returned slices set is likewise scoped to the run's own output.
-		expect(Object.keys(result.slices)).toEqual(['work/backlog/mine.md']);
+		expect(Object.keys(result.slices)).toEqual(['work/pre-backlog/mine.md']);
 	});
 
 	it('REFUSES an edit to a pre-existing landed slice (untouched on disk)', async () => {
@@ -253,7 +255,7 @@ describe('runSliceReviewLoop — scoping fence (only THIS run’s own slices)', 
 		expect(result.outcome).toBe('uncertain-slices');
 		// Only THIS run's slice is flagged — the pre-existing landed one is untouched.
 		expect(result.uncertainSlices.map((u) => u.path)).toEqual([
-			'work/backlog/mine.md',
+			'work/pre-backlog/mine.md',
 		]);
 	});
 
@@ -293,7 +295,7 @@ describe('runSliceReviewLoop — slicerLoopMax cap rejects via the sink', () => 
 				verdict: 'block',
 				findings: [{severity: 'blocking', question: 'still unclear'}],
 				uncertainSlices: [
-					{path: 'work/backlog/child.md', questions: ['what is the seam?']},
+					{path: 'work/pre-backlog/child.md', questions: ['what is the seam?']},
 				],
 			},
 		]);
@@ -307,7 +309,7 @@ describe('runSliceReviewLoop — slicerLoopMax cap rejects via the sink', () => 
 		// The cap was hit (2 passes), never an infinite loop.
 		expect(result.passes).toBe(2);
 		expect(result.uncertainSlices).toEqual([
-			{path: 'work/backlog/child.md', questions: ['what is the seam?']},
+			{path: 'work/pre-backlog/child.md', questions: ['what is the seam?']},
 		]);
 	});
 
@@ -328,8 +330,8 @@ describe('runSliceReviewLoop — slicerLoopMax cap rejects via the sink', () => 
 		expect(result.outcome).toBe('uncertain-slices');
 		// Never silently drops the rejection: every candidate is flagged.
 		expect(result.uncertainSlices.map((u) => u.path).sort()).toEqual([
-			'work/backlog/a.md',
-			'work/backlog/b.md',
+			'work/pre-backlog/a.md',
+			'work/pre-backlog/b.md',
 		]);
 		// The floor questions come from the blocking findings.
 		for (const u of result.uncertainSlices) {
@@ -442,8 +444,8 @@ describe('parseSliceReviewVerdict — reads the agent verdict (incl. edits + rou
 			JSON.stringify({
 				verdict: 'block',
 				findings: [{severity: 'blocking', question: 'q', context: 'c'}],
-				edits: [{path: 'work/backlog/x.md', content: 'new'}],
-				uncertainSlices: [{path: 'work/backlog/y.md', questions: ['why?']}],
+				edits: [{path: 'work/pre-backlog/x.md', content: 'new'}],
+				uncertainSlices: [{path: 'work/pre-backlog/y.md', questions: ['why?']}],
 				decompositionUnclear: {questions: ['whole?']},
 			}),
 			'```',
@@ -453,9 +455,9 @@ describe('parseSliceReviewVerdict — reads the agent verdict (incl. edits + rou
 		expect(v.findings).toEqual([
 			{severity: 'blocking', question: 'q', context: 'c'},
 		]);
-		expect(v.edits).toEqual([{path: 'work/backlog/x.md', content: 'new'}]);
+		expect(v.edits).toEqual([{path: 'work/pre-backlog/x.md', content: 'new'}]);
 		expect(v.uncertainSlices).toEqual([
-			{path: 'work/backlog/y.md', questions: ['why?']},
+			{path: 'work/pre-backlog/y.md', questions: ['why?']},
 		]);
 		expect(v.decompositionUnclear).toEqual({questions: ['whole?']});
 	});
@@ -476,13 +478,13 @@ describe('buildSliceReviewPrompt — frames the artifact + the output shape', ()
 		const prompt = buildSliceReviewPrompt({
 			slug: 'it',
 			cwd: '/tmp/x',
-			candidateSlices: ['work/backlog/child.md'],
+			candidateSlices: ['work/pre-backlog/child.md'],
 			pass: 1,
 			execution: 1,
 		});
 		expect(prompt).toMatch(/review.*skill/i);
 		expect(prompt).toMatch(/DESTINATION CHECK/);
-		expect(prompt).toMatch(/work\/backlog\/child\.md/);
+		expect(prompt).toMatch(/work\/pre-backlog\/child\.md/);
 		expect(prompt).toMatch(/"verdict"/);
 		expect(prompt).toMatch(/"edits"/);
 		// The loop is framed as an IMPROVER, not a one-shot gate.
@@ -493,7 +495,7 @@ describe('buildSliceReviewPrompt — frames the artifact + the output shape', ()
 		const prompt = buildSliceReviewPrompt({
 			slug: 'it',
 			cwd: '/tmp/x',
-			candidateSlices: ['work/backlog/child.md'],
+			candidateSlices: ['work/pre-backlog/child.md'],
 			pass: 1,
 			execution: 1,
 		});

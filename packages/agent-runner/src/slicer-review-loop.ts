@@ -9,7 +9,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * GATES PRD `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point A).
  *
  * On the `do prd:<slug>` slicing path (`slicing.ts`/`performSlice`), AFTER the
- * agent produces a candidate set of `work/backlog/<slug>.md` slices and BEFORE the
+ * agent produces a candidate set of `work/pre-backlog/<slug>.md` slices and BEFORE the
  * runner finalises/lands them, this loop RUNS the `review` SKILL
  * (`skills/review/SKILL.md`), APPLIES its findings as EDITS to the candidate slice
  * files, then re-reviews — until a pass finds NO NEW blocking issue (the natural
@@ -27,14 +27,14 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  *     PRD's ASPIRATION, NOT what this module does at runtime. The ACTUAL N loop is
  *     RUNNER-DRIVEN and PER-PASS: `runOneExecution` does `for (pass …) { gate(…);
  *     applyEdits(…to disk…) }` — ONE agent LAUNCH per pass, the runner writing the
- *     agent's edits to the candidate slice FILES (`work/backlog/`) between passes, the
+ *     agent's edits to the candidate slice FILES (`work/pre-backlog/`) between passes, the
  *     next pass's agent re-reading the edited files. Accumulation is via DISK +
  *     re-launch, NOT one agent retaining context. `prd/review.md` §Shape 2 is internally
  *     contradictory on this (single-context headline vs "edit the files" operative spec);
  *     this code implements the operative reading. See
  *     `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`.
  *     (Relevant to intake: PR #62's lone-slice loop mirrors this per-pass STRUCTURE but
- *     accumulates IN-MEMORY, because intake must not write to `work/backlog/` pre-emit.)
+ *     accumulates IN-MEMORY, because intake must not write to `work/pre-backlog/` pre-emit.)
  *   - **M** — fresh-context re-executions: a fresh context is simply a NEW EXECUTION
  *     of that same loop in a fresh harness launch (like the Gate-2 reviewer). The
  *     loop is implemented ONCE; M is invoking it again. `M=1` is the cheap default;
@@ -74,12 +74,12 @@ export interface SliceReviewFinding {
 /**
  * An EDIT the review agent wants applied to a candidate slice file between passes
  * — the "feed findings back into edits" mechanism (the loop's improver step). The
- * agent emits the FULL replacement content for a `work/backlog/<slug>.md` file (or
+ * agent emits the FULL replacement content for a `work/pre-backlog/<slug>.md` file (or
  * a new file it adds); the runner writes it (the agent does no git / no direct
  * disk writes that escape the runner's capture).
  */
 export interface SliceEdit {
-	/** Repo-relative path of the candidate slice file to write (`work/backlog/…`). */
+	/** Repo-relative path of the candidate slice file to write (`work/pre-backlog/…`). */
 	path: string;
 	/** The full replacement content for that file. */
 	content: string;
@@ -92,7 +92,7 @@ export interface SliceEdit {
  * recorded in its body by the caller.
  */
 export interface UncertainSlice {
-	/** Repo-relative path of the uncertain candidate slice (`work/backlog/…`). */
+	/** Repo-relative path of the uncertain candidate slice (`work/pre-backlog/…`). */
 	path: string;
 	/** The open questions to record in the slice body (a human answers them). */
 	questions: string[];
@@ -207,15 +207,15 @@ export interface RunSliceReviewLoopOptions {
 	/** The review+edit gate seam (tests inject a canned verdict; production: harness). */
 	gate: SliceReviewGate;
 	/**
-	 * **The SCOPING FENCE (the requeue fix).** A snapshot of `work/backlog/` taken
+	 * **The SCOPING FENCE (the requeue fix).** A snapshot of `work/pre-backlog/` taken
 	 * BEFORE this slicing run produced its candidate slices (filename → content;
 	 * the `before` map `performSlice` already computes at step 3). The loop reviews,
 	 * edits, and flags ONLY the slices that are NEW or CHANGED vs this snapshot —
 	 * i.e. THIS run's own output — NEVER the pre-existing, already-landed slices
-	 * that share the same `work/backlog/` directory (the normal steady state). On a
+	 * that share the same `work/pre-backlog/` directory (the normal steady state). On a
 	 * populated backlog this is what keeps the loop from editing / `needsAnswers`-
 	 * flagging unrelated slices and sweeping them into the runner-owned slicing
-	 * commit. Omitted ⇒ an EMPTY snapshot (every `work/backlog/*.md` is treated as
+	 * commit. Omitted ⇒ an EMPTY snapshot (every `work/pre-backlog/*.md` is treated as
 	 * this run's output — the legacy whole-directory behaviour, kept only for the
 	 * degenerate empty-backlog case / direct callers that pass none).
 	 */
@@ -245,7 +245,7 @@ export interface RunSliceReviewLoopOptions {
 
 /**
  * Run the slicer review→edit→converge loop over the candidate slices currently on
- * disk under `work/backlog/`. Implements the loop ONCE; M (fresh-context
+ * disk under `work/pre-backlog/`. Implements the loop ONCE; M (fresh-context
  * re-executions) is just invoking the inner loop again with a fresh launch.
  *
  * Within ONE execution (the N): run the gate (a review+edit pass), APPLY its edits
@@ -452,13 +452,13 @@ async function runOneExecution(params: {
 
 /**
  * Apply the review agent's full-content edits to the candidate slice files. ONLY
- * paths under `work/backlog/` are written — the loop improves the CANDIDATE SLICES,
+ * paths under `work/pre-backlog/` are written — the loop improves the CANDIDATE SLICES,
  * never escapes to other parts of the tree (a defensive scope fence; the runner,
  * not the agent, performs the write). An edit may CREATE a new candidate slice file
  * (e.g. the review split one slice into two) — that is in-scope.
  *
  * **SCOPED to this run's own output (the requeue fix).** Beyond the
- * `work/backlog/` prefix fence, an edit is only applied when its target is THIS
+ * `work/pre-backlog/` prefix fence, an edit is only applied when its target is THIS
  * run's own slice: either a path NOT present in the `before` snapshot (a slice this
  * run created, or a new file the review is splitting out) OR one this run already
  * changed vs `before`. A pre-existing, unchanged landed slice (present in `before`
@@ -473,14 +473,17 @@ function applyEdits(
 ): void {
 	for (const edit of edits) {
 		const normalized = edit.path.replace(/\\/g, '/');
-		if (!normalized.startsWith('work/backlog/') || normalized.includes('..')) {
+		if (
+			!normalized.startsWith('work/pre-backlog/') ||
+			normalized.includes('..')
+		) {
 			note(
-				`Skipped a review edit outside work/backlog/ (${edit.path}) — the ` +
+				`Skipped a review edit outside work/pre-backlog/ (${edit.path}) — the ` +
 					'loop only improves candidate slices.',
 			);
 			continue;
 		}
-		const filename = normalized.slice('work/backlog/'.length);
+		const filename = normalized.slice('work/pre-backlog/'.length);
 		// A pre-existing slice this run did NOT touch must not be overwritten: it is
 		// in `before` and the current on-disk content still equals the snapshot.
 		if (before.has(filename)) {
@@ -505,7 +508,7 @@ function applyEdits(
 }
 
 /**
- * Repo-relative paths of the `work/backlog/*.md` files that are NEW or CHANGED vs
+ * Repo-relative paths of the `work/pre-backlog/*.md` files that are NEW or CHANGED vs
  * the `before` snapshot — exactly THIS slicing run's own output (the requeue-fix
  * scoping fence). A pre-existing slice present in `before` with identical content
  * is excluded; a file the loop created (absent from `before`) or improved (content
@@ -515,7 +518,7 @@ function newOrChangedBacklog(
 	cwd: string,
 	before: Map<string, string>,
 ): string[] {
-	const dir = join(cwd, 'work', 'backlog');
+	const dir = join(cwd, 'work', 'pre-backlog');
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
@@ -529,7 +532,7 @@ function newOrChangedBacklog(
 		}
 		const content = readFileSync(join(dir, name), 'utf8');
 		if (before.get(name) !== content) {
-			out.push(`work/backlog/${name}`);
+			out.push(`work/pre-backlog/${name}`);
 		}
 	}
 	return out.sort();
@@ -662,8 +665,8 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
 		`{"verdict": "approve" | "block",`,
 		` "findings": [ {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"} ],`,
-		` "edits": [ {"path": "work/backlog/<slug>.md", "content": "<full new file content>"} ],`,
-		` "uncertainSlices": [ {"path": "work/backlog/<slug>.md", "questions": ["…"]} ],`,
+		` "edits": [ {"path": "work/pre-backlog/<slug>.md", "content": "<full new file content>"} ],`,
+		` "uncertainSlices": [ {"path": "work/pre-backlog/<slug>.md", "questions": ["…"]} ],`,
 		` "decompositionUnclear": {"questions": ["…"]} }`,
 		``,
 		`Use "approve" with no blocking findings when the decomposition reaches the`,
