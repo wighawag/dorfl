@@ -1308,11 +1308,25 @@ is untrusted DATA, not a trusted ACTION , so the agent never decides which folde
 never moves a file between status folders, never sets its own trust level, never promotes itself into a
 pool. The runner does all of that, from inputs the agent CANNOT forge.
 
-**This is already the codebase's invariant (VERIFIED), C8 inherits it, does not invent it:**
+**This is already the codebase's invariant (VERIFIED), C8 inherits it, does not invent it , with ONE
+wrinkle the maintainer flagged (slicing CREATES files, it does not MOVE them):**
 - The runner owns every git-state transition. `AGENTS.md` (this repo): "the runner/human owns every
   git-state transition (claim, done-move, commit, integration); the agent does NOT stage/commit/push
   and does NOT move files between `work/` folders." The agent runs IN a worktree and EDITS files; the
   RUNNER commits the transition.
+- **THE SLICING WRINKLE (maintainer, 2026-06-17): that rule is phrased for MOVES, but slicing CREATES
+  ledger files, and the AGENT currently writes them.** A slice file is not moved from another folder,
+  it is NEW, and the slicer agent writes `work/backlog/<slug>.md` directly in its worktree. So "the
+  agent does not MOVE files between folders" does not literally cover "the agent CREATES a ledger file",
+  the creation needs the same runner-ownership the moves have. GOOD NEWS , the code ALREADY does this
+  correctly, the rule just needs restating to include creation: VERIFIED in `slicing.ts`, the agent
+  "produces `work/backlog/<slug>.md` FILES ONLY; it does NO git" (~L63), the RUNNER snapshots the
+  backlog folder before/after (`newOrChangedBacklog`), `collectEmittedSlices` discovers what was
+  created, and `stageSlicingLifecycle` is what `git add`s + commits them. CRUCIALLY the runner already
+  VALIDATES the path: a slice file written OUTSIDE `work/backlog/` is SKIPPED defensively (~L881-892,
+  "a path outside `work/backlog/` is skipped"). So the agent writing a file is NOT a git transition (it
+  is just content in a worktree); the runner's stage+commit IS the transition, and the runner already
+  polices WHERE the agent may create. The maintainer's fix is the natural extension of this.
 - The trust/mode decision is runner-side: `performComplete` (`cli.ts` ~L1599) resolves
   `explicitMerge` / the untrusted-origin-forces-propose rule , the AGENT has no say; it cannot demote
   itself to trusted or pick `--merge`. Only an OPERATOR typing `--merge` overrides, never the agent.
@@ -1320,12 +1334,20 @@ pool. The runner does all of that, from inputs the agent CANNOT forge.
   committing slices, so WHERE the emitted slices land is a runner decision, not an agent one.
 
 **What this REQUIRES of C8 + the Kanban split (the enforcement boundary, stated precisely):**
-1. **The birth-folder is a RUNNER decision, not an agent one.** When a slicer emits slices, the AGENT
-   writes slice CONTENT into its worktree; the RUNNER decides whether each lands in `backlog/`(staging)
-   or `todo/`(pool) , from runner-side inputs (the per-repo `slicesBornIn` policy, the origin's trust
-   level, whether review is required). An agent cannot place its own output in `todo/` to make it
-   self-eligible. Same for `intake`/PRDs: the agent drafts the PRD body; the runner places it in the
-   staging-vs-pool folder per trust.
+1. **The agent ALWAYS creates in `backlog/` (staging); the RUNNER promotes to `todo/` (the maintainer's
+   fix, the clean resolution of the creation wrinkle).** Constrain the slicer agent to write EVERY
+   emitted slice into `work/backlog/<slug>.md` , ONE allowed creation folder, the staging area, which
+   the runner already enforces (a write outside it is skipped). The agent has NO ability to create in
+   `todo/`. Then the RUNNER, at stage/commit time, decides per its inputs (per-repo policy, the origin's
+   TRUST level, whether review is required) whether to leave each slice in `backlog/` (untrusted /
+   review-required , a human promotes) or PROMOTE it to `todo/` (trusted / auto-eligible). So the
+   agent's only power is "create staged content in the one staging folder"; the eligibility-conferring
+   transition (`backlog -> todo`) is RUNNER-owned. This makes the creation case obey the SAME
+   agent=content / runner=transition boundary as the moves: writing a file in `backlog/` is content;
+   promoting it to the pool is the transition. **Restate the `AGENTS.md`/WORK-CONTRACT rule to cover
+   creation explicitly: "the agent may CREATE ledger files ONLY in the staging folder (`backlog/`); the
+   runner owns every MOVE and every PROMOTION into a pool."** Same for `intake`/PRDs: the agent drafts
+   the PRD body into `prd/`(staging); the runner promotes to `prd-ready/` per trust , never the agent.
 2. **Promotion `staging -> pool` is HUMAN-only (or a trusted-runner policy), never agent.** The
    `backlog -> todo` (and `prd -> prd-ready`) promotion is a privileged transition. An autonomous agent
    must not promote its own output into the pool , that would defeat the gate. Enforced by the same
@@ -1516,14 +1538,19 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
 6. **ENFORCEMENT is RUNNER-owned, never agent (a HARD requirement on ALL of the above, see "WHO
    ENFORCES").** The agent produces CONTENT; the RUNNER performs every TRANSITION , birth-folder
    placement, the trust-mode decision, the `staging->pool` promotion, and the C8 lock acquire/release ,
-   from inputs the agent CANNOT forge. This is already the codebase invariant (runner/human owns git-
-   state transitions; trust resolved runner-side in `performComplete`; slicing output via
-   `performIntegration`). C8 + the Kanban split MUST thread every NEW transition (placement, promotion,
-   lock) through the runner; an agent must never place its own output in the pool, promote itself, set
-   its own trust, or hold its own lock. The gates are only structural (not advisory/bypassable) BECAUSE
-   the runner owns them. Acceptance: a test proves an agent's emitted output lands where the RUNNER's
-   policy/trust dictates (not where the agent wrote it), promotion is a runner/human-only ledger move,
-   and the lock acquire/release is runner-mediated.
+   from inputs the agent CANNOT forge. **The agent may CREATE ledger files ONLY in the staging folder
+   (`backlog/` for slices, `prd/` for PRDs); the runner owns every MOVE and every PROMOTION into a
+   pool.** (This RESTATES the `AGENTS.md`/WORK-CONTRACT "agent does not move files" rule to also cover
+   CREATION , slicing CREATES files rather than moving them, so the rule must name creation, not just
+   moves. The code already enforces it: the slicer agent does NO git and a write outside `work/backlog/`
+   is skipped; the runner's `stageSlicingLifecycle` + `performIntegration` is the transition.) So the
+   slicer writes every slice into `backlog/`, and the RUNNER promotes the trusted ones to `todo/`; an
+   agent can never self-place in the pool, self-promote, set its own trust, or hold its own lock. The
+   gates are only structural (not advisory/bypassable) BECAUSE the runner owns them. Acceptance: a test
+   proves (a) the slicer agent's emitted slices ALL land in `backlog/` regardless of where the agent
+   tried to write; (b) the `backlog->todo` (and `prd->prd-ready`) PROMOTION is a runner/human-only
+   ledger move an agent cannot perform; (c) an untrusted-origin's output stays in `backlog/` (not
+   promoted); (d) the C8 lock acquire/release is runner-mediated.
 
 **The single decision that orders everything: keep E (Set 1, C5/C6) or drop E (Set 2, C8).** C2 and the
 Kanban split are valuable under BOTH and can land first. C8 is the strongest design but is Set-2-only
