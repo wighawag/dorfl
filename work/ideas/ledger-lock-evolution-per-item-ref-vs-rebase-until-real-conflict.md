@@ -1543,6 +1543,26 @@ config mode > default`). Mirror that exactly for placement:
 
 ## Disposition
 
+> **GRADUATED 2026-06-17, this idea is now the DESIGN TRAIL, not the live spec.** The maintainer
+> confirmed the system is coherent and committed to the Set-2 / C8 direction. The actionable form now
+> lives in:
+> - **ADRs (the durable whys):** `docs/adr/ledger-status-on-per-item-lock-refs.md` (status on per-item
+>   lock refs; main = content + durable records) and
+>   `docs/adr/placement-is-runner-deterministic-humanonly-is-agent-judgement.md` (the three-axis
+>   model + the determinism/trust line). Both `status: proposed`.
+> - **PRDs (the specs, both `humanOnly: true`):** `work/prd/ledger-status-per-item-lock-refs.md` (the
+>   lock substrate, C8 + per-item refs) and `work/prd/staging-pool-position-gate-and-trust-model.md`
+>   (the position gate / trust / placement / migration).
+> THIS FILE is retained as the full exploration trail, the rejected candidates (C0/C1/C3/C4/C6/C7),
+> the requirement-set analysis, the lock-entry state machine derivation, the pressure-test, and the
+> reasoning that must survive but does not belong in a PRD. The PRDs/ADRs point back here. REFINEMENT
+> since this file: per-item lock refs make C2 (rebase-until-real) UNNECESSARY for the lock itself (only
+> the two durable `main` promotions may still want it), captured in the lock PRD.
+>
+> Per the discharge rule, this file is dischargeable (deletable) once the PRDs/ADRs are self-contained
+> carriers of its signal, but it is KEPT for now because it holds the rejected-candidate reasoning the
+> PRDs deliberately summarise rather than reproduce.
+
 Incubates as an idea because it proposes RETIRING a decided PRD decision (the co-located `.lock.md`),
 EXTENDING another (branch-carries), and leaves the SET-1-vs-SET-2 visibility decision + (within Set 2)
 the C8 design + the Kanban `todo/` sibling for the maintainer, all maintainer calls. On confirmation,
