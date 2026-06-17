@@ -181,11 +181,29 @@ export interface IntegrationCoreInput {
 	branch?: string;
 	/**
 	 * Which folder the item is being completed FROM: `in-progress` (the normal,
-	 * freshly-built path) or `needs-attention` (the runner-owned recovery path).
-	 * The HEAD resolved this; the core uses it for the done-move source folder and
-	 * the recovery rebase. IGNORED when {@link lifecycle} is set (a non-slice move).
+	 * freshly-built path), `needs-attention` (the runner-owned recovery path), or
+	 * `done` (the CONTINUE-BUILD path, slice
+	 * `complete-builds-on-already-done-moved-continue`). The HEAD resolved this;
+	 * the core uses it for the done-move source folder and the recovery rebase.
+	 * IGNORED when {@link lifecycle} is set (a non-slice move).
+	 *
+	 * `done` — the continue-build lifecycle state: a CONTINUE on a kept work
+	 * branch whose `<slug>.md` is ALREADY in `work/done/` (a prior attempt moved
+	 * it there), and THIS run produced NEW uncommitted source edits. The slug is
+	 * already in `done/` ⇒ the step-2 `git mv` is SKIPPED (there is nothing to
+	 * move), and the originTrust read + the divergent-done-move reconciliation
+	 * are EXEMPTED (there is no first-time move on this commit — the prior
+	 * attempt already went through the checkpoint, and the local + arbiter both
+	 * already hold the slug in `done/` so there is nothing to reconcile). The
+	 * build path still runs prepare → gate → `git add -A` → commit → rebase →
+	 * integrate on the NEW work so it lands as a continuation commit on top of
+	 * the kept (already-done-moved) tip. Mutually exclusive with
+	 * {@link committedRecovery} (the clean-strand fast-path — `complete.ts`
+	 * resolves `done` only when the working tree is DIRTY, and
+	 * {@link committedRecovery} only when it is CLEAN; they cannot both be set
+	 * for the same call). See `docs/adr/continue-build-already-done-moved.md`.
 	 */
-	source: 'in-progress' | 'needs-attention';
+	source: 'in-progress' | 'needs-attention' | 'done';
 	/**
 	 * True iff completing FROM `needs-attention/` (a recovery finish). A red re-gate
 	 * here keeps the item in needs-attention/ (no re-route); the rebase drops the
@@ -506,11 +524,20 @@ export async function performIntegration(
 	// transition (a non-slice `lifecycle`) this is the held PRD it supplies; for a
 	// build it is the slice in its source folder. Read BEFORE any move.
 	const lifecycle = input.lifecycle;
+	// CONTINUE-BUILD (`source: 'done'`, slice
+	// `complete-builds-on-already-done-moved-continue`): on a dirty continue whose
+	// kept branch already holds the slug in `work/done/`, the file we read for the
+	// title + (otherwise) untrusted-origin lives there too — not in
+	// `in-progress/`/`needs-attention/`. The step-2 `git mv` is later SKIPPED for
+	// this source (the slug is already in done/), and the originTrust read +
+	// arbiter ledger placement/divergent-done-move reconcile are EXEMPTED below.
 	const sourcePath = lifecycle
 		? lifecycle.titlePath
 		: source === 'in-progress'
 			? join(cwd, 'work', 'in-progress', `${slug}.md`)
-			: join(cwd, 'work', 'needs-attention', `${slug}.md`);
+			: source === 'needs-attention'
+				? join(cwd, 'work', 'needs-attention', `${slug}.md`)
+				: join(cwd, 'work', 'done', `${slug}.md`);
 
 	// UNTRUSTED-ORIGIN BUILD-PROPOSE RULE (slice `untrusted-origin-forces-build-propose`).
 	// A slice born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
@@ -527,8 +554,17 @@ export async function performIntegration(
 	// intake's OWN per-emit resolver already decided that mode), and the source file
 	// here is the slice being built. A `trusted`/unset slice ⇒ untouched (zero
 	// behaviour change for the normal human path).
+	// CONTINUE-BUILD EXEMPTION (slice
+	// `complete-builds-on-already-done-moved-continue`): the prior attempt that
+	// done-moved this slice already went through the originTrust checkpoint (an
+	// untrusted slice on a `merge` config proposed on that first attempt). The
+	// continue-build commit is layered on top of that kept tip, so re-evaluating
+	// the rule here would either double-checkpoint or be a no-op against the same
+	// frontmatter — exempt this state (the slice file lives in `done/` and is now
+	// effectively an on-`main` artifact). The other states are unchanged.
 	if (
 		!lifecycle &&
+		source !== 'done' &&
 		mode === 'merge' &&
 		input.explicitMerge !== true &&
 		existsSync(sourcePath) &&
@@ -772,6 +808,13 @@ export async function performIntegration(
 	//    in two folders with differing content.
 	if (lifecycle) {
 		await lifecycle.stage();
+	} else if (source === 'done') {
+		// CONTINUE-BUILD (`source: 'done'`, slice
+		// `complete-builds-on-already-done-moved-continue`): the slug is ALREADY in
+		// `work/done/` on this kept branch (a prior attempt moved it there), so there
+		// is NOTHING to move — skip the step-2 `git mv`. The subsequent `git add -A`
+		// folds the agent's NEW uncommitted source edits into the atomic commit on
+		// top of the kept (already-done-moved) tip; no second move, no copy.
 	} else {
 		mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
 		await gitHard(
@@ -871,7 +914,14 @@ export async function performIntegration(
 			// done-move removed — which is the case that turns the rebased "move" into a
 			// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
 			// done-move).
-			if (!lifecycle) {
+			// CONTINUE-BUILD EXEMPTION (slice
+			// `complete-builds-on-already-done-moved-continue`): on `source: 'done'`
+			// there was no first-time move on this commit (the slug was already in
+			// `done/` on the kept branch + on the arbiter), so the divergent-done-move
+			// reconcile reasoning does not apply. Skip the arbiter ledger placement
+			// pre-check too: it is structurally an instrument FOR that reconcile, and a
+			// continue-build is by construction already in `done/` on both sides.
+			if (!lifecycle && source !== 'done') {
 				const arbiterPlacement = readArbiterLedgerPlacement(
 					cwd,
 					arbiter,
@@ -927,7 +977,7 @@ export async function performIntegration(
 							`${arbiter}/main (took the arbiter's version of the other slugs' ` +
 							`work/<status>/<slug>.md ledger files; no code file was touched).`,
 					);
-				} else if (!lifecycle) {
+				} else if (!lifecycle && source !== 'done') {
 					// NEVER auto-resolve a genuine CODE conflict: abort the rebase. But FIRST, a
 					// DIVERGENT-LEDGER conflict (the arbiter holds the slug's source in a folder
 					// our local done-move did not remove — PR #86) is auto-RECONCILABLE without
