@@ -103,6 +103,7 @@ import {sweepRemoteMergedBranches} from './reap-branches.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
+import {releaseAdvancingLock} from './advancing-lock.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 import {
 	resolveSliceOnlyArg,
@@ -643,6 +644,13 @@ interface RequeueFlags {
 	arbiter?: string;
 	reset?: boolean;
 	message?: string;
+}
+
+interface ReleaseAdvancingFlags {
+	config?: string;
+	cwd?: string;
+	arbiter?: string;
+	by?: string;
 }
 
 interface RemoteAddFlags {
@@ -2621,9 +2629,16 @@ export function buildProgram(): Command {
 				} else {
 					console.log(formatLedgerSweep(result));
 				}
-				// A corrupt ledger is a fail-loud condition: exit non-zero so a human
-				// (or a script) cannot miss it, mirroring the integration core's refusal.
-				process.exit(result.duplicates.length > 0 ? 1 : 0);
+				// A corrupt ledger OR a stuck advancing-lock marker is a fail-loud
+				// condition: exit non-zero so a human (or a script) cannot miss it,
+				// mirroring the integration core's refusal. Advancing markers are
+				// REPORTED here (never auto-deleted — no automatic advancing-lock sweep
+				// exists; a human clears a NAMED marker via `release-advancing`).
+				process.exit(
+					result.duplicates.length > 0 || result.advancingMarkers.length > 0
+						? 1
+						: 0,
+				);
 			}
 
 			// The REMOTE merged-BRANCH sweep (this slice): a SEPARATE surface from the
@@ -2830,6 +2845,70 @@ export function buildProgram(): Command {
 				? ` (--reset: deleted the remote ${workBranchRef('slice', slug)} branch; next claim starts fresh)`
 				: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
+		});
+
+	// `release-advancing <item>` (slice `advancing-lock-human-release-verb-and-
+	// surface`, PRD `recover-autodetect-and-advancing-lock-crash-safety` story 5):
+	// the HUMAN-invoked named release of a stuck `work/advancing/<entry>.md`
+	// marker. Same trust model as `requeue` — the human ASSERTS the lock is dead
+	// by NAMING it; the tool never guesses liveness (no heartbeat, no age-based
+	// reaping, no automatic sweep — deliberately out of scope per the PRD). Routes
+	// through the existing crash-safe `releaseAdvancingLock` + the
+	// `advancingMarkerPath(entry)` seam (the blocker slice owns that crash-safety;
+	// this verb only EXPOSES it). NEVER `--force`. Idempotent: re-running on an
+	// already-cleared lock returns a clean exit-0 "nothing to clear" (NOT the
+	// acquire-path's exit-2 `lost`, which means "someone else holds it" — a
+	// confusing exit code for a human re-running a known-already-clear release).
+	program
+		.command('release-advancing <item>')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'Clear a NAMED stuck advancing-lock marker (work/advancing/<entry>.md) via a tree-less CAS commit on the arbiter — the recovery verb for a STUCK lock the system itself orphaned (e.g. a live `advance` crash that left the borrow behind). Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the advancing lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere in the system). Accepts the same item forms as the lock API: `slice:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` (= slice). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op. NEVER `--force` (a stale lease re-fetches and retries). Discoverable via `gc --ledger` (it REPORTS any slug present in work/advancing/, never deletes).',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--cwd <dir>',
+			'the repo/working clone whose arbiter remote the tree-less release is CAS-published TO (default: cwd)',
+		)
+		.option(
+			'--arbiter <remote>',
+			'the arbiter git remote the release is CAS-published to (default: origin)',
+		)
+		.option(
+			'--by <name>',
+			'advisory releaser id recorded in the release commit subject (default: git user.name, then $USER)',
+		)
+		.action(async (item: string, flags: ReleaseAdvancingFlags) => {
+			const cwd = flags.cwd ?? process.cwd();
+			const result = await releaseAdvancingLock({
+				item,
+				cwd,
+				arbiter: flags.arbiter ?? 'origin',
+				by: flags.by,
+				env: process.env,
+				note: (message) => console.error(`>> ${message}`),
+			});
+			if (result.outcome === 'released') {
+				console.log(
+					`Released advancing lock '${result.entry}' (work/advancing/${result.entry}.md cleared on ${flags.arbiter ?? 'origin'}/main; the item itself was untouched).`,
+				);
+				return;
+			}
+			// IDEMPOTENT exit semantics (acceptance criterion): `releaseAttempt`
+			// returns `lost` (exit 2) when the marker is ALREADY absent on main — its
+			// internal "the lock must currently be held" guard. For a HUMAN re-running
+			// the release verb on an already-cleared lock that is the CORRECT "nothing
+			// to clear" outcome, not the acquire-path's "someone else holds it". Map
+			// it to a clean exit-0 with an honest message so the second run reads as
+			// successful idempotence, not as a confusing failure.
+			if (result.outcome === 'lost') {
+				console.log(
+					`No advancing lock to release for '${result.entry}' (work/advancing/${result.entry}.md is already absent on ${flags.arbiter ?? 'origin'}/main).`,
+				);
+				return;
+			}
+			console.error(`error: ${result.message}`);
+			process.exit(result.exitCode);
 		});
 
 	program
