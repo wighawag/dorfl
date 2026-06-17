@@ -1441,6 +1441,44 @@ encoding). No overload, each axis means one thing, and `humanOnly` stops being t
 today. That IS the elegant system: **position for "not yet / which pool", a flag for "never by nature",
 `needsAnswers` for "blocked on a question", three orthogonal axes, each minimal.**
 
+**THE DEEPER REASON the two cannot collapse into one (maintainer, 2026-06-17): they live on OPPOSITE
+sides of the determinism / trust boundary.** This is the sharpest justification for keeping BOTH
+mechanisms, and it explains WHY one can never replace the other:
+
+- **`humanOnly` is an AGENT / NON-DETERMINISTIC JUDGEMENT** (like today). It is DECIDED by reasoning
+  about the NATURE of the work , VERIFIED in `to-slices` SKILL §3: a slice's `humanOnly` is "decided
+  from the nature of BUILDING THAT SLICE, does building it need human judgement/security/secrets?",
+  evaluated on its merits. That is a fuzzy, content-level ASSESSMENT the slicer agent (or a human)
+  produces. It is ADVICE, not a rule; it is non-deterministic (two slicers might judge differently);
+  it requires JUDGEMENT the runner does not have.
+- **`backlog`-vs-`todo` is a RUNNER / DETERMINISTIC DECISION.** It is COMPUTED from unforgeable,
+  mechanical inputs , the `originTrust` stamp (VERIFIED `intake.ts`/`integration-core.ts`: stamped at
+  intake from WHERE the work came, an untrusted issue), the per-repo `slicesLandIn` policy, and explicit
+  operator flags , via a FIXED precedence chain. No reasoning, no judgement: a pure FUNCTION of inputs
+  the agent cannot influence. It is deterministic (same inputs , same folder) and it requires TRUST
+  resolution the agent cannot be given.
+
+**This is the SAME boundary twice over, and that is why the split is principled, not arbitrary:**
+- the DETERMINISM line (judgement vs computation) and the TRUST line (agent-produced vs runner-resolved)
+  COINCIDE here. `humanOnly` is non-deterministic AND agent-produced; placement is deterministic AND
+  runner-resolved. So you CANNOT move `humanOnly` to the runner (the runner cannot make the judgement),
+  and you CANNOT leave placement to the agent (the agent cannot be trusted to compute it). Each axis
+  sits on the only side that can correctly own it.
+- It also explains enforcement principle #6 cleanly: the RUNNER owns the DETERMINISTIC decisions
+  (placement, promotion, trust-mode, lock , all computable from unforgeable inputs); the AGENT owns the
+  NON-DETERMINISTIC content + judgement (the slice body, and its `humanOnly`/`needsAnswers` ADVICE). The
+  runner can SAFELY trust a deterministic computation; it must NOT blindly trust an agent's judgement,
+  which is exactly why `humanOnly` is ADVISORY (a human can always override) while placement is
+  STRUCTURAL (the agent cannot override). The line between "advisory flag" and "structural gate" IS the
+  determinism/trust line.
+
+So the three-axis system is not just "each axis means one thing" , it is "each axis is owned by the side
+that can correctly produce it": **NATURE (`humanOnly`) = agent/human non-deterministic judgement,
+advisory; POSITION (folder) = runner deterministic computation from trust+policy, structural; DISCOVERED
+(`needsAnswers`) = agent non-deterministic judgement (are there open questions?), advisory.** Two of the
+three are agent judgement (advisory), one is runner computation (structural), and the structural one is
+exactly the one that MUST be tamper-proof (pool eligibility). That alignment is the real elegance.
+
 ### Low-risk migration: introduce `pre-backlog/`, keep `backlog/` MEANING the pool, rename LATER (maintainer, 2026-06-17)
 
 The danger in the slice split is that `backlog/` TODAY means "the eligible pool" and ~everything reads
