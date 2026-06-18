@@ -120,3 +120,38 @@ would silently change the safety story; one ADR keeps them legible together.
   ADR's tamper-proof structural guarantee holds: a misbehaving or compromised
   agent that writes to the pool is scrubbed; the runner's commit only ever
   reflects the resolver's choice.
+
+## Decisions (ratified post-review, the Gate-2 bounce)
+
+The first build of this slice was BLOCKED by Gate 2 (and routed to
+`needs-attention/`) for a real defect: the resolver + config keys + env coercion
++ direct `performSlice` tests were all in, but `config.slicesLandIn` and the
+`--slices-land-in` flag were NEVER threaded from `cli.ts` into the `DoOptions`
+the `do prd:` path builds, so the configured-default + explicit-flag rungs were
+dead from the shipped binary (a user setting `slicesLandIn: 'backlog'` got the
+built-in `pre-backlog` floor). The continuation closes that wire and ratifies the
+in-scope choices the reviewers asked to pin:
+
+1. **The CLI wire (the fix).** `slicesLandIn: config.slicesLandIn` (and
+   `remoteConfig.slicesLandIn`) is threaded at the SAME five `DoOptions`
+   construction sites that already carry `slicingIntegration`; a new
+   `--slices-land-in <pre-backlog|backlog>` flag contributes `explicitSlicesLandIn`
+   ONLY when the operator typed it (mirroring `flagMode === 'merge'` =>
+   `explicitMerge: true`), so an untrusted-origin staging force still wins when the
+   value came from config, not the flag. A bad flag value FAILS LOUDLY
+   (`explicitSlicesLandInFromFlag`), the same discipline as the
+   `--observation-triage` enum + the `AGENT_RUNNER_SLICES_LAND_IN` env coercion.
+   A binary-level test (`do prd:` through `buildProgram()` on a `--bare file://`
+   arbiter with a stub slicer) proves the configured value + the flag actually
+   reach `performSlice` end-to-end, not only via the in-process interface.
+2. **The pool-placement scrub fence is SILENT by design.** `scrubPoolDrift`
+   reverts an agent's write into `work/backlog/` during slicing (new files
+   removed, changed files restored to HEAD) WITHOUT a per-file `note()`. It is a
+   structural enforcement of PRD US #4 / the governing ADR (the agent cannot
+   self-place into the pool), not an operator-actionable event: the agent should
+   never have written there, so there is nothing for a human to do. Kept silent.
+3. **`SliceResult.emitted` reports the RUNNER-RESOLVED destination.** When the
+   resolver lands slices in the pool, `emitted` shows `work/backlog/*.md` (not the
+   agent's `work/pre-backlog/*.md` staging path), and the agent's staging twin is
+   removed when the destination differs. `emitted` honestly describes where the
+   files landed; callers reading the slice result see the real residence.

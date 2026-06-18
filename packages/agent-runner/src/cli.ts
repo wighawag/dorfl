@@ -315,6 +315,11 @@ function buildRegistrySetAdvanceTick(options: {
 				// The per-TRANSITION SLICING override: the `do prd:` slicing path threads
 				// `slicingIntegration ?? integration`; the build path stays on `integration`.
 				slicingIntegration: config.slicingIntegration,
+				// The SLICE-PLACEMENT configured default (`do prd:` slicing output:
+				// `pre-backlog` staged vs `backlog` pool). No operator flag on this
+				// registry-driven advance context, so only the configured default rung is
+				// threaded (the resolver still layers untrusted-origin force + built-in floor).
+				slicesLandIn: config.slicesLandIn,
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -552,6 +557,31 @@ interface CompleteFlags {
 	workspace?: string;
 }
 
+/**
+ * Resolve the EXPLICIT operator placement override from `--slices-land-in <where>`
+ * (the top of the `do prd:` slicing-placement precedence — slice
+ * `runner-deterministic-slice-placement-policy-and-precedence`). Mirrors the
+ * `flagMode === 'merge'` ⇒ `explicitMerge: true` shape: it contributes
+ * `explicitSlicesLandIn` ONLY when the operator actually typed the flag, so an
+ * untrusted-origin's staging force still wins when the value came from config, not
+ * the flag. An invalid value FAILS LOUDLY (a usage error, never silently dropped
+ * — the SAME discipline the `--observation-triage` enum + the
+ * `AGENT_RUNNER_SLICES_LAND_IN` env coercion use).
+ */
+function explicitSlicesLandInFromFlag(
+	raw: string | undefined,
+): 'pre-backlog' | 'backlog' | undefined {
+	if (raw === undefined) {
+		return undefined;
+	}
+	if (raw !== 'pre-backlog' && raw !== 'backlog') {
+		throw new Error(
+			`--slices-land-in must be 'pre-backlog' or 'backlog' (got '${raw}').`,
+		);
+	}
+	return raw;
+}
+
 interface DoFlags {
 	config?: string;
 	arbiter?: string;
@@ -568,6 +598,8 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
+	/** `--slices-land-in <pre-backlog|backlog>`: the explicit operator placement override for `do prd:` slicing output (top of the placement precedence). */
+	slicesLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
 	ignoreDivergedMain?: boolean;
@@ -1689,6 +1721,10 @@ export function buildProgram(): Command {
 			'integrate in propose mode this invocation (default; mutually exclusive with --merge; overrides config)',
 		)
 		.option(
+			'--slices-land-in <where>',
+			'where `do prd:<slug>` slicing output lands: `pre-backlog` (staged, not agent-eligible) or `backlog` (the pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > slicesLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in.',
+		)
+		.option(
 			'--no-pr',
 			'propose without opening a PR: push the branch but deliberately skip the review request, even on an authed GitHub arbiter (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
@@ -1913,6 +1949,13 @@ export function buildProgram(): Command {
 					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION SLICING override (the `do --remote prd:` slicing path).
 					slicingIntegration: remoteConfig.slicingIntegration,
+					// SLICE-PLACEMENT: the configured default + the EXPLICIT operator override
+					// (`--slices-land-in`), the top of the placement precedence — mirrors
+					// `explicitMerge` (set only when the flag was typed).
+					slicesLandIn: remoteConfig.slicesLandIn,
+					explicitSlicesLandIn: explicitSlicesLandInFromFlag(
+						flags.slicesLandIn,
+					),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2052,6 +2095,13 @@ export function buildProgram(): Command {
 				// `slicingIntegration ?? integration`; the slice-build path stays on
 				// `integration`. Unset ⇒ slicing falls back to `integration` (today's behaviour).
 				slicingIntegration: config.slicingIntegration,
+				// SLICE-PLACEMENT (`do prd:` slicing output): the configured default rung +
+				// the EXPLICIT operator override `--slices-land-in` (top of the precedence).
+				// `explicitSlicesLandIn` is set ONLY when the flag was typed (mirrors
+				// `explicitMerge`), so an untrusted-origin staging force still wins under a
+				// config default.
+				slicesLandIn: config.slicesLandIn,
+				explicitSlicesLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
@@ -2196,6 +2246,10 @@ export function buildProgram(): Command {
 			'integrate the advanced item(s) in propose mode this invocation (default; mutually exclusive with --merge; overrides config). The CI propose shape is the parallel matrix (one PR per item).',
 		)
 		.option(
+			'--slices-land-in <where>',
+			'where `advance prd:<slug>` slicing output lands: `pre-backlog` (staged) or `backlog` (the pool). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in.',
+		)
+		.option(
 			'--watch',
 			"stream the build agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git). The same view `do --watch` gives, threaded through the build rung; CI uses it so the job log shows the agent working instead of freezing.",
 		)
@@ -2330,6 +2384,12 @@ export function buildProgram(): Command {
 					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION SLICING override (the isolated `do --remote prd:` path).
 					slicingIntegration: remoteConfig.slicingIntegration,
+					// SLICE-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
+					// (set only when typed, mirroring `explicitMerge`).
+					slicesLandIn: remoteConfig.slicesLandIn,
+					explicitSlicesLandIn: explicitSlicesLandInFromFlag(
+						flags.slicesLandIn,
+					),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2459,6 +2519,10 @@ export function buildProgram(): Command {
 				// Per-TRANSITION SLICING override (the `do prd:` slicing path threads
 				// `slicingIntegration ?? integration`; the build path stays on `integration`).
 				slicingIntegration: config.slicingIntegration,
+				// SLICE-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
+				// (set only when typed, mirroring `explicitMerge`).
+				slicesLandIn: config.slicesLandIn,
+				explicitSlicesLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
