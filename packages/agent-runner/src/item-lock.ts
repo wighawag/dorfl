@@ -744,6 +744,63 @@ export async function listItemLocks(
 }
 
 /**
+ * Read the FULL lock entries currently held on the arbiter — the `status`/`scan`
+ * in-flight read path (PRD `ledger-status-per-item-lock-refs` US #8; slice
+ * `needs-attention-as-stuck-lock-state`). One fetch of the lock refs, then read
+ * each held entry's `lock.md` blob, returning the parsed {@link LockEntry} for
+ * every ref (so a caller can surface `active` (in-progress) and `stuck`
+ * (needs-attention) holds + their reasons WITHOUT N fetches). Sorted by `entry`.
+ * Best-effort: a fetch/read fault yields an EMPTY list, so the read-only
+ * `status`/`scan` views degrade to "no in-flight locks" rather than erroring
+ * (parity with {@link heldSliceSlugs}).
+ */
+export async function listItemLockEntries(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<LockEntry[]> {
+	try {
+		await gitHard(
+			[
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+${LOCK_REF_PREFIX}/*:${LOCK_REF_PREFIX}/*`,
+			],
+			cwd,
+			env,
+		);
+		const out = await gitSoft(
+			['for-each-ref', '--format=%(refname)', `${LOCK_REF_PREFIX}/*`],
+			cwd,
+			env,
+		);
+		if (out.status !== 0) {
+			return [];
+		}
+		const refs = out.stdout
+			.split('\n')
+			.map((l) => l.trim())
+			.filter((l) => l.startsWith(`${LOCK_REF_PREFIX}/`))
+			.sort();
+		const entries: LockEntry[] = [];
+		for (const ref of refs) {
+			const show = await gitSoft(['show', `${ref}:lock.md`], cwd, env);
+			if (show.status !== 0) {
+				continue;
+			}
+			const lock = parseLockEntry(show.stdout);
+			if (lock) {
+				entries.push(lock);
+			}
+		}
+		return entries;
+	} catch {
+		return [];
+	}
+}
+
+/**
  * List the SLICE slugs currently lock-held on the arbiter — the held-slug set the
  * `backlog/` pool readers SUBTRACT (PRD `ledger-status-per-item-lock-refs` US #15;
  * slice `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}

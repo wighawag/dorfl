@@ -9,6 +9,7 @@ import {fetchMirrorMainOrWarn} from './repo-mirror.js';
 import {extractReason} from './needs-attention.js';
 import {type NeedsAttentionItem} from './needs-attention.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
+import {listItemLockEntries, type LockEntry} from './item-lock.js';
 import {formatCwdSection} from './format.js';
 import type {CwdSection} from './cwd-section.js';
 import {
@@ -92,6 +93,21 @@ export interface RepoNeedsAttention {
 	items: NeedsAttentionItem[];
 }
 
+/**
+ * One repo's PER-ITEM LOCK refs, surfaced for the dashboard (PRD
+ * `ledger-status-per-item-lock-refs` US #8; slice
+ * `needs-attention-as-stuck-lock-state`). The in-flight view read from the lock
+ * refs — held (`active` = in-progress) and stuck (`needs-attention`) entries +
+ * their reasons — ADDITIVE to the folder-native `needsAttention` surface above
+ * (the interim dual-write half; the folder view is NOT removed here).
+ */
+export interface RepoLockEntries {
+	/** The repo path whose lock refs were read (a hub-mirror path). */
+	repoPath: string;
+	/** The held lock entries (action × state + reason), sorted by entry. */
+	entries: LockEntry[];
+}
+
 /** One repo's one-slug-one-folder LINT result, surfaced for the dashboard. */
 export interface RepoLedgerDuplicates {
 	/** The repo path whose `work/` ledger was linted (a hub-mirror path). */
@@ -115,6 +131,18 @@ export interface StatusReport {
 	 * literals stay valid; `status()` always populates it (possibly empty).
 	 */
 	needsAttention?: RepoNeedsAttention[];
+	/**
+	 * The PER-ITEM LOCK in-flight view (PRD `ledger-status-per-item-lock-refs` US
+	 * #8; slice `needs-attention-as-stuck-lock-state`): per registered hub mirror,
+	 * the held lock entries read from the mirror's `refs/agent-runner/lock/*` refs —
+	 * `active` holds (in-progress) and `stuck` holds (needs-attention) + reasons.
+	 * This is the ADDITIVE substrate the lock work introduces; it does NOT replace
+	 * the folder-native `needsAttention` surface above (interim dual-write). Only
+	 * repos WITH at least one held lock appear. Empty when no `mirrorPaths` were
+	 * given or no locks are held. Optional so older literals stay valid; `status()`
+	 * always populates it (possibly empty).
+	 */
+	lockHeld?: RepoLockEntries[];
 	/**
 	 * The one-slug-one-folder LINT (PRD `ledger-integrity` story 3): per registered
 	 * hub mirror, any slug present in MORE THAN ONE `work/` status folder (a corrupt
@@ -218,6 +246,7 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 	// The folder-native needs-attention surface (ADR §12), read from each hub
 	// mirror's BARE `main` ref THROUGH the read seam (mirrors have no working tree).
 	const needsAttention: RepoNeedsAttention[] = [];
+	const lockHeld: RepoLockEntries[] = [];
 	const ledgerDuplicates: RepoLedgerDuplicates[] = [];
 	for (const mirrorPath of options.mirrorPaths ?? []) {
 		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the surface
@@ -236,6 +265,22 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 		if (items.length > 0) {
 			needsAttention.push({repoPath: mirrorPath, items});
 		}
+		// The PER-ITEM LOCK in-flight view (PRD US #8; slice
+		// `needs-attention-as-stuck-lock-state`): ADDITIONALLY read the mirror's lock
+		// refs to surface held (`active` = in-progress) and stuck (`needs-attention`)
+		// entries + reasons. A bare hub mirror's arbiter is its `origin` (the SAME
+		// handle the `scan` held-slug subtraction reads). Best-effort: a fetch/read
+		// fault yields an EMPTY list (see {@link listItemLockEntries}), so this
+		// read-only view degrades to "no in-flight locks" rather than erroring —
+		// parity with the folder-native surface's fetch-first fall-back.
+		const entries = await listItemLockEntries(
+			mirrorPath,
+			'origin',
+			options.env,
+		);
+		if (entries.length > 0) {
+			lockHeld.push({repoPath: mirrorPath, entries});
+		}
 		// The one-slug-one-folder LINT (PRD story 3): derive any slug residing in >1
 		// status folder from the SAME freshly-fetched `main` ref, surfaced LOUDLY.
 		const dups = lintRefLedger('main', mirrorPath, options.env);
@@ -244,12 +289,14 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 		}
 	}
 	needsAttention.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
+	lockHeld.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 	ledgerDuplicates.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 
 	return {
 		active,
 		attention,
 		needsAttention,
+		lockHeld,
 		ledgerDuplicates,
 		...(options.arbiter ? {arbiter: options.arbiter} : {}),
 		...(options.cwd ? {cwd: options.cwd} : {}),
@@ -306,6 +353,8 @@ export function formatStatus(report: StatusReport): string {
 
 	const needsAttention = report.needsAttention ?? [];
 	const naCount = needsAttention.reduce((sum, r) => sum + r.items.length, 0);
+	const lockHeld = report.lockHeld ?? [];
+	const lockCount = lockHeld.reduce((sum, r) => sum + r.entries.length, 0);
 	const ledgerDuplicates = report.ledgerDuplicates ?? [];
 	const dupCount = ledgerDuplicates.reduce(
 		(sum, r) => sum + r.duplicates.length,
@@ -315,6 +364,7 @@ export function formatStatus(report: StatusReport): string {
 		report.active.length === 0 &&
 		report.attention.length === 0 &&
 		naCount === 0 &&
+		lockCount === 0 &&
 		dupCount === 0 &&
 		report.arbiter === undefined &&
 		cwdLines.length === 0
@@ -362,6 +412,32 @@ export function formatStatus(report: StatusReport): string {
 		}
 	}
 
+	// The PER-ITEM LOCK in-flight view (PRD US #8; slice
+	// `needs-attention-as-stuck-lock-state`): the held lock refs read from each
+	// mirror — `active` holds (in-progress) and `stuck` holds (needs-attention) +
+	// reasons. ADDITIVE to the folder-native surface above (interim dual-write).
+	if (lockCount > 0) {
+		lines.push('');
+		lines.push('In-flight locks (refs/agent-runner/lock/* — held + stuck):');
+		for (const repo of lockHeld) {
+			lines.push(`  ${repo.repoPath}`);
+			for (const entry of repo.entries) {
+				const view =
+					entry.state === 'stuck' ? 'needs-attention' : 'in-progress';
+				lines.push(
+					`    ${entry.entry}   (${entry.action}/${entry.state} = ${view})`,
+				);
+				if (entry.state === 'stuck') {
+					const reason =
+						entry.reason && entry.reason !== ''
+							? entry.reason
+							: '(no reason recorded)';
+					lines.push(`      reason: ${reason}`);
+				}
+			}
+		}
+	}
+
 	// The one-slug-one-folder LINT (PRD `ledger-integrity` story 3): WARN LOUDLY
 	// about every slug residing in >1 status folder of a registered mirror's ledger
 	// (a corrupt ledger — never a silent pass). A human must resolve each.
@@ -379,6 +455,7 @@ export function formatStatus(report: StatusReport): string {
 	lines.push(
 		`Summary: ${report.active.length} active, ${report.attention.length} failed/retained job(s)` +
 			(naCount > 0 ? `, ${naCount} needs-attention item(s)` : '') +
+			(lockCount > 0 ? `, ${lockCount} in-flight lock(s)` : '') +
 			(dupCount > 0 ? `, ${dupCount} one-slug-one-folder violation(s)` : '') +
 			'.',
 	);
