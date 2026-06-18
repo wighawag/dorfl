@@ -278,6 +278,7 @@ export {
 	releaseItemLock,
 	readItemLock,
 	listItemLocks,
+	listItemLockEntries,
 	heldSliceSlugs,
 	resolveLockHolder,
 	serialiseLockEntry,

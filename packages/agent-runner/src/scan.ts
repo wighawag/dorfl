@@ -23,7 +23,11 @@ import {
 	gatherLifecycleMirror,
 } from './lifecycle-gather.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
-import {heldSliceSlugs} from './item-lock.js';
+import {
+	heldSliceSlugs,
+	listItemLockEntries,
+	type LockEntry,
+} from './item-lock.js';
 
 /**
  * The CREATE-side lifecycle gates for the propose-matrix lifecycle pool, derived
@@ -163,6 +167,19 @@ export interface RepoReport {
 	 * folder residence, not from any index.
 	 */
 	ledgerDuplicates: DuplicateSlug[];
+	/**
+	 * The PER-ITEM LOCK in-flight view for this repo (PRD
+	 * `ledger-status-per-item-lock-refs` US #8; slice
+	 * `needs-attention-as-stuck-lock-state`): the held lock entries read from the
+	 * repo's `refs/agent-runner/lock/*` refs — `active` holds (in-progress) and
+	 * `stuck` holds (needs-attention) + reasons. ADDITIVE to the folder-based pool
+	 * view above (the interim dual-write half; eligibility/selection stay OFFLINE on
+	 * `main` from `backlog/`, with held slugs SUBTRACTED — this field is the
+	 * read-only surface, NOT a selection input). Empty on a repo with no held locks
+	 * or when the lock refs could not be read (best-effort, see
+	 * {@link listItemLockEntries}). Optional so older literals stay valid.
+	 */
+	lockHeld?: LockEntry[];
 }
 
 /** The full cross-repo scan result. */
@@ -356,6 +373,19 @@ export async function scan(
 		// the lock refs from the mirror's origin; non-fatal (empty set on any fault),
 		// so the read-only scan degrades gracefully exactly as its config reads do.
 		const heldSlugs = await heldSliceSlugs(mirror.path, 'origin', options.env);
+		// The PER-ITEM LOCK in-flight view (PRD US #8; slice
+		// `needs-attention-as-stuck-lock-state`): ADDITIONALLY read the full held
+		// lock entries (action × state + reason) from the mirror's lock refs, so the
+		// scan surfaces held (in-progress) + stuck (needs-attention) items. Read from
+		// the mirror's `origin` (the SAME handle the held-slug subtraction uses);
+		// best-effort (empty list on any fault), so the read-only scan degrades
+		// gracefully. This is a SURFACE only — eligibility/selection stay offline on
+		// `main` (the subtraction above), not gated on this view.
+		const lockHeld = await listItemLockEntries(
+			mirror.path,
+			'origin',
+			options.env,
+		);
 		// PRD pool — the SLICEABLE-PRD companion of the slice pool above
 		// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). Resolve
 		// `autoSlice` PER REPO from the mirror's COMMITTED `.agent-runner.json`
@@ -422,6 +452,7 @@ export async function scan(
 			prds,
 			lifecycle,
 			ledgerDuplicates,
+			lockHeld,
 		});
 	}
 

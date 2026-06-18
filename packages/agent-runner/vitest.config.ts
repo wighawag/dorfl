@@ -95,6 +95,12 @@ const RACE_SENSITIVE = [
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
 	'test/needs-attention-surface-on-main.test.ts',
+	// The needs-attention-as-stuck-lock-state slice: drives the bounce (folder move
+	// + the ADDITIVE per-item-lock mark-stuck CAS amend) AND the status/scan lock-ref
+	// read path against a --bare arbiter, writing main and pushing lock refs; keep it
+	// out of file-parallel pressure for the same deterministic claim/main-CAS
+	// reasoning as needs-attention-surface-on-main.test.ts.
+	'test/needs-attention-as-stuck-lock-state.test.ts',
 	// The after-commit CONTINUE-site tree-less surface tests (`moved:false` →
 	// `surface-unmoved`): drive real git against a --bare arbiter AND write main
 	// via the surface-on-main CAS publish; the `moved:false` assertion flakes under

@@ -30,6 +30,7 @@ import {
 	type Sleep,
 	retryWithBackoff,
 } from './retry-backoff.js';
+import {markStuckItemLock} from './item-lock.js';
 
 /**
  * The **write half** of the ledger-transition seam (ADR
@@ -685,6 +686,20 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			surface = published.outcome;
 			surfaceError = published.error;
 		}
+		// INTERIM DUAL-WRITE (slice `needs-attention-as-stuck-lock-state`): ALSO mark
+		// the held per-item lock `state: stuck` + reason. Best-effort + idempotent —
+		// the `needs-attention/` folder move above is authoritative (see
+		// {@link markStuckLockBestEffort}). Only when the item actually moved.
+		if (result.moved) {
+			await markStuckLockBestEffort({
+				cwd: input.cwd,
+				slug: input.slug,
+				reason: input.reason,
+				arbiter: input.arbiter,
+				env: input.env,
+				note: input.note,
+			});
+		}
 		return {...result, surface, surfaceError};
 	},
 
@@ -713,10 +728,28 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 * staging/committing in the cwd working tree. The reverse of
 	 * {@link applyReturnToBacklogTransition}, the same one mechanism.
 	 */
-	applyTreelessNeedsAttentionTransition(
+	async applyTreelessNeedsAttentionTransition(
 		input: ApplyTreelessNeedsAttentionTransitionInput,
 	): ApplyTreelessNeedsAttentionTransitionResult {
-		return surfaceToNeedsAttention(input);
+		const result = await surfaceToNeedsAttention(input);
+		// INTERIM DUAL-WRITE (slice `needs-attention-as-stuck-lock-state`): ALSO mark
+		// the held per-item lock `state: stuck` + reason after the tree-less folder
+		// surface lands. Best-effort + idempotent (the surface itself is the
+		// authoritative stuck record; see {@link markStuckLockBestEffort}). This is
+		// the after-commit/ledger-only surface path (continue-push-failure /
+		// continue-rebase-conflict), so a re-surface of an already-stuck item is a
+		// tolerated `wrong-state` no-op.
+		if (result.moved) {
+			await markStuckLockBestEffort({
+				cwd: input.cwd,
+				slug: input.slug,
+				reason: input.reason,
+				arbiter: input.arbiter,
+				env: input.env,
+				note: input.note,
+			});
+		}
+		return result;
 	},
 
 	/**
@@ -746,6 +779,74 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		return result;
 	},
 };
+
+/**
+ * INTERIM DUAL-WRITE complement of the `git mv → needs-attention/` folder bounce
+ * (PRD `ledger-status-per-item-lock-refs` US #5/#8; ADR
+ * `ledger-status-on-per-item-lock-refs`; slice `needs-attention-as-stuck-lock-state`):
+ * after the folder move lands, ALSO mark the item's HELD per-item lock
+ * `state: stuck` + reason, via the state machine's mark-stuck CAS amend
+ * ({@link markStuckItemLock}). This is the additive half — the lock becomes the
+ * eventual in-flight substrate WITHOUT removing the `needs-attention/` folder the
+ * legacy bounce path + tests still consume; the capstone (#9) retargets those.
+ *
+ * The bounce holds the SLICE's `implement` lock that `claim` acquired (slice
+ * `claim-acquires-unified-lock-no-body-move`), so the normal stuck path is a plain
+ * `active → stuck` transition. It is BEST-EFFORT + IDEMPOTENT, exactly like the
+ * `releaseItemLock` calls `claim`/`requeue`/`slicing` already make on the same
+ * substrate:
+ *   - the durable `needs-attention/` folder move above is the AUTHORITATIVE stuck
+ *     record (the legacy consumers read it); the lock mark only keeps the two
+ *     substrates in agreement, so it must NEVER fail the bounce;
+ *   - `not-held` (no lock — an item that predates the lock, a flow where claim did
+ *     not acquire, or a re-surface whose lock was already released) and
+ *     `wrong-state` (already `stuck` — an idempotent re-surface) are TOLERATED;
+ *   - a `lost`/`error` is noted but swallowed (the folder bounce stands).
+ *
+ * Keyed on `slice:<slug>` (the bounce surfaces a SLICE; the PRD/observation locks
+ * are slicing/advance holds whose own bounce paths are separate). Only attempted
+ * when an `arbiter` is given (the autonomous path; a human local-only `complete`
+ * passes none — there is no lock ref to amend).
+ */
+async function markStuckLockBestEffort(params: {
+	cwd: string;
+	slug: string;
+	reason: string;
+	arbiter?: string;
+	env?: NodeJS.ProcessEnv;
+	note?: (message: string) => void;
+}): Promise<void> {
+	const {cwd, slug, reason, arbiter, env} = params;
+	const note = params.note ?? (() => {});
+	if (!arbiter) {
+		return;
+	}
+	try {
+		const r = await markStuckItemLock({
+			item: `slice:${slug}`,
+			reason,
+			cwd,
+			arbiter,
+			env,
+		});
+		if (r.outcome === 'transitioned') {
+			note(`Marked the per-item lock for '${slug}' stuck.`);
+		} else if (r.outcome === 'lost' || r.outcome === 'error') {
+			// The folder bounce already stands; the lock mark is the redundant half.
+			note(
+				`Could not mark the per-item lock for '${slug}' stuck (${r.outcome}: ` +
+					`${r.message}) — the needs-attention/ folder bounce is authoritative.`,
+			);
+		}
+		// `not-held` / `wrong-state` are the expected idempotent/no-lock cases — silent.
+	} catch (err) {
+		note(
+			`Could not mark the per-item lock for '${slug}' stuck ` +
+				`(${err instanceof Error ? err.message : String(err)}) — the ` +
+				'needs-attention/ folder bounce is authoritative.',
+		);
+	}
+}
 
 /** The `work/` folders a slug's ledger file can live in, on `main`. */
 const WORK_FOLDERS = ['backlog', 'in-progress', 'done', 'needs-attention'];
