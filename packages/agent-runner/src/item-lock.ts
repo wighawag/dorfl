@@ -116,6 +116,38 @@ export interface ReleaseResult {
 	message: string;
 }
 
+/**
+ * Outcome of an AMEND-style transition (mark-stuck / resume / requeue) — the
+ * lock-entry STATE MACHINE's interior moves (PRD `ledger-status-per-item-lock-refs`,
+ * the C8 lock-entry state machine in the design trail). Each is a single CAS on the
+ * held ref (no retry loop), so the verdict is definitive:
+ *   - `transitioned` — we won the CAS; the entry now holds the target `(action, state)`.
+ *   - `not-held`     — there is no entry to transition (the move's precondition is
+ *                      "a held entry in the right state"; absent ⇒ illegal here).
+ *   - `wrong-state`  — an entry exists but in the wrong `state` for this move
+ *                      (e.g. resume on an `active` entry, mark-stuck on a `stuck` one).
+ *                      An ILLEGAL transition, rejected, not coerced.
+ *   - `lost`         — the leased CAS was rejected because a CONCURRENT writer changed
+ *                      the ref between our read and our push (a genuine same-item race).
+ *   - `error`        — environment/usage (missing item, missing reason for mark-stuck, …).
+ */
+export type TransitionOutcome =
+	| 'transitioned'
+	| 'not-held'
+	| 'wrong-state'
+	| 'lost'
+	| 'error';
+
+export interface TransitionResult {
+	outcome: TransitionOutcome;
+	/** The type-encoded lock entry (`<type>-<slug>`) the transition keyed onto. */
+	entry: string;
+	ref: string;
+	message: string;
+	/** The lock entry AFTER a successful `transitioned` (absent for requeue's removal). */
+	lock?: LockEntry;
+}
+
 function gitSoft(
 	args: string[],
 	cwd: string,
@@ -348,6 +380,306 @@ export async function releaseItemLock(
 			entry,
 			ref,
 			message: `release push rejected: ${del.stderr.trim()}`,
+		};
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+/**
+ * Fetch the lock refs and return the held entry + its current ref sha, or
+ * `undefined` when the item is at REST (no ref). Shared read-before-CAS step for
+ * the amend-style transitions (mark-stuck / resume / requeue): they all need BOTH
+ * the current entry (to check the state precondition + carry forward `action` /
+ * `holder` / `since`) and the current sha (to lease the CAS on it).
+ */
+async function fetchHeldEntry(
+	entry: string,
+	ref: string,
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<{lock: LockEntry; sha: string} | undefined> {
+	await gitHard(
+		['fetch', '--quiet', arbiter, `+${LOCK_REF_PREFIX}/*:${LOCK_REF_PREFIX}/*`],
+		cwd,
+		env,
+	);
+	const rev = await gitSoft(
+		['rev-parse', '--verify', '--quiet', ref],
+		cwd,
+		env,
+	);
+	if (rev.status !== 0 || rev.stdout.trim() === '') {
+		return undefined;
+	}
+	const sha = rev.stdout.trim();
+	const show = await gitSoft(['show', `${ref}:lock.md`], cwd, env);
+	const lock = show.status === 0 ? parseLockEntry(show.stdout) : undefined;
+	if (!lock) {
+		return undefined;
+	}
+	return {lock, sha};
+}
+
+/**
+ * AMEND the held entry in place via a leased CAS: build a NEW parentless commit
+ * carrying `next` and push it to the SAME ref with `--force-with-lease=<ref>:<sha>`
+ * (the sha we just read). The arbiter accepts ONLY if the ref is unchanged since
+ * our read — a concurrent writer who moved it makes our lease fail (`lost`). No
+ * retry loop: a rejection is a genuine same-item race the caller should lose.
+ */
+async function amendHeldEntry(
+	next: LockEntry,
+	ref: string,
+	expectedSha: string,
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<TransitionResult> {
+	const commit = await buildLockCommit(next, cwd, env);
+	const push = await gitSoft(
+		[
+			'push',
+			arbiter,
+			`${commit}:${ref}`,
+			`--force-with-lease=${ref}:${expectedSha}`,
+		],
+		cwd,
+		env,
+	);
+	if (push.status === 0) {
+		// Move our local copy to the new commit too (best-effort) so a subsequent
+		// read in the same clone sees the amended entry without a refetch.
+		await gitSoft(['update-ref', ref, commit], cwd, env);
+		return {
+			outcome: 'transitioned',
+			entry: next.entry,
+			ref,
+			message: `${next.entry} → ${next.action}/${next.state}`,
+			lock: next,
+		};
+	}
+	return {
+		outcome: 'lost',
+		entry: next.entry,
+		ref,
+		message: `'${next.entry}' lock changed concurrently (CAS lost). Back off.`,
+	};
+}
+
+export interface MarkStuckOptions {
+	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
+	item: string;
+	/** The needs-attention prose. REQUIRED — a `stuck` entry always carries a reason. */
+	reason: string;
+	cwd: string;
+	arbiter?: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * mark-stuck (transition 2): `[action, active] -> [action, stuck] + reason`. The
+ * runner bounces (red gate, agent failure, decomposition-unclear). A leased CAS
+ * amend of the SAME entry's `state` + `reason`, keeping `action`/`holder`/`since`.
+ * It is the source of the needs-attention SURFACE (now read from the lock ref,
+ * not a `work/needs-attention/` folder).
+ *
+ * PRECONDITIONS (the state machine + invariants):
+ *   - the entry must be HELD and `active` (`not-held` / `wrong-state` otherwise) —
+ *     stuck is reachable only FROM active, never from absent or already-stuck.
+ *   - `reason` must be non-empty (the `reason` PRESENT iff `state: stuck` invariant).
+ */
+export async function markStuckItemLock(
+	opts: MarkStuckOptions,
+): Promise<TransitionResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const env = opts.env;
+	const cwd = opts.cwd;
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
+	}
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	if (!opts.reason || opts.reason.trim() === '') {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			message: 'mark-stuck requires a reason (reason iff stuck)',
+		};
+	}
+	try {
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		if (!held) {
+			return {
+				outcome: 'not-held',
+				entry,
+				ref,
+				message: `'${entry}' not locked`,
+			};
+		}
+		if (held.lock.state !== 'active') {
+			return {
+				outcome: 'wrong-state',
+				entry,
+				ref,
+				message: `'${entry}' is ${held.lock.state}, not active; cannot mark-stuck`,
+			};
+		}
+		const next: LockEntry = {
+			...held.lock,
+			state: 'stuck',
+			reason: opts.reason.trim(),
+		};
+		return await amendHeldEntry(next, ref, held.sha, cwd, arbiter, env);
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+export interface ResumeOptions {
+	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
+	item: string;
+	cwd: string;
+	arbiter?: string;
+	/** Optionally reassign the holder on resume (a human/continue picks it up). */
+	holder?: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * resume (transition 3): `[action, stuck] -> [action, active]`. A human (or a
+ * `continue`) picks the stuck item up: amend `state` back to `active` and CLEAR
+ * `reason` (the `reason` iff `stuck` invariant — an active entry never carries a
+ * stuck reason). Keeps the same `action`; `holder` may be reassigned. The
+ * lock-entry analogue of the old `needs-attention -> in-progress` folder move.
+ *
+ * PRECONDITION: the entry must be HELD and `stuck` (`not-held` / `wrong-state`
+ * otherwise) — active is reachable from stuck only, not from absent.
+ */
+export async function resumeItemLock(
+	opts: ResumeOptions,
+): Promise<TransitionResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const env = opts.env;
+	const cwd = opts.cwd;
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
+	}
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	try {
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		if (!held) {
+			return {
+				outcome: 'not-held',
+				entry,
+				ref,
+				message: `'${entry}' not locked`,
+			};
+		}
+		if (held.lock.state !== 'stuck') {
+			return {
+				outcome: 'wrong-state',
+				entry,
+				ref,
+				message: `'${entry}' is ${held.lock.state}, not stuck; nothing to resume`,
+			};
+		}
+		const next: LockEntry = {
+			...held.lock,
+			state: 'active',
+			holder: opts.holder ?? held.lock.holder,
+		};
+		// reason is PRESENT iff stuck: drop it on the way back to active.
+		delete next.reason;
+		return await amendHeldEntry(next, ref, held.sha, cwd, arbiter, env);
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+/**
+ * requeue (transition 4): `[action, stuck] -> (absent)`. Give up on a STUCK hold
+ * and return the item to the pool by REMOVING the entry. The body never moved
+ * (Amendment 5 — it is already resting in `backlog/` on `main`), so requeue is
+ * purely "release the lock"; the kept `work/<slug>` branch remains for recovery.
+ *
+ * Distinct from {@link releaseItemLock} (transition 6, abort from ACTIVE): requeue
+ * is the GUARDED give-up from `stuck` only, so it rejects (`wrong-state`) an
+ * `active` entry — abandoning an in-flight active hold goes through `release`, not
+ * `requeue`. The removal itself is a leased delete (a concurrent change ⇒ `lost`).
+ */
+export async function requeueItemLock(
+	opts: ReleaseOptions,
+): Promise<TransitionResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const env = opts.env;
+	const cwd = opts.cwd;
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
+	}
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	try {
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		if (!held) {
+			return {
+				outcome: 'not-held',
+				entry,
+				ref,
+				message: `'${entry}' not locked`,
+			};
+		}
+		if (held.lock.state !== 'stuck') {
+			return {
+				outcome: 'wrong-state',
+				entry,
+				ref,
+				message: `'${entry}' is ${held.lock.state}, not stuck; use release to abort an active hold`,
+			};
+		}
+		const del = await gitSoft(
+			[
+				'push',
+				arbiter,
+				'--delete',
+				ref,
+				`--force-with-lease=${ref}:${held.sha}`,
+			],
+			cwd,
+			env,
+		);
+		if (del.status === 0) {
+			await gitSoft(['update-ref', '-d', ref], cwd, env);
+			return {
+				outcome: 'transitioned',
+				entry,
+				ref,
+				message: `requeued ${entry} (lock released, body still in pool)`,
+			};
+		}
+		return {
+			outcome: 'lost',
+			entry,
+			ref,
+			message: `'${entry}' lock changed concurrently (CAS lost). Back off.`,
 		};
 	} catch (err) {
 		return {
