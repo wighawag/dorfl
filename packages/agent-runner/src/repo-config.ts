@@ -79,6 +79,16 @@ export const REPO_ALLOWED_KEYS = [
 	// config-resolved. Fed into the shared placement resolver as the
 	// configured-default rung (`src/placement.ts`).
 	'slicesLandIn',
+	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — staging vs pool, PRD
+	// `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12) is a genuine
+	// repo property exactly like `slicesLandIn`: whether THIS repo's intake-
+	// authored PRDs land STAGED (`pre-prd/`, review-without-PR human-promote path)
+	// or straight in the auto-slice POOL (`prd/`, trusted fast-path) is agreed by
+	// all collaborators + travels with the repo. Resolved per-repo through the
+	// SAME chain as `slicesLandIn` (flag > env > per-repo > global > built-in
+	// `pre-prd`). Fed into the shared placement resolver as the configured-default
+	// rung for the PRD lifecycle (`src/placement.ts`).
+	'prdsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with

@@ -582,6 +582,31 @@ function explicitSlicesLandInFromFlag(
 	return raw;
 }
 
+/**
+ * The PRD twin of {@link explicitSlicesLandInFromFlag} (slice
+ * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). Resolve the
+ * EXPLICIT operator PRD-placement override from `--prds-land-in <where>` for
+ * `intake`'s `prd` dispatch — the TOP of the same precedence chain that the
+ * slicer placement uses. Contributes `explicitPrdsLandIn` ONLY when the
+ * operator actually typed the flag, so an untrusted-origin's staging force
+ * still wins when the value came from config. An invalid value FAILS LOUDLY
+ * (a usage error, never silently dropped), mirroring the slice helper above
+ * and the `AGENT_RUNNER_PRDS_LAND_IN` env coercion.
+ */
+function explicitPrdsLandInFromFlag(
+	raw: string | undefined,
+): 'pre-prd' | 'prd' | undefined {
+	if (raw === undefined) {
+		return undefined;
+	}
+	if (raw !== 'pre-prd' && raw !== 'prd') {
+		throw new Error(
+			`--prds-land-in must be 'pre-prd' or 'prd' (got '${raw}').`,
+		);
+	}
+	return raw;
+}
+
 interface DoFlags {
 	config?: string;
 	arbiter?: string;
@@ -641,6 +666,8 @@ interface IntakeFlags {
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
 	 */
 	originTrust?: string;
+	/** `--prds-land-in <pre-prd|prd>`: the explicit operator PRD-placement override (top of the precedence). */
+	prdsLandIn?: string;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -3022,6 +3049,10 @@ export function buildProgram(): Command {
 			'--origin-trust <trusted|untrusted>',
 			"the author-trust verdict to STAMP onto the emitted PRD/slice (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the slice's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
 		)
+		.option(
+			'--prds-land-in <where>',
+			'where an intake-authored PRD lands: `pre-prd` (staged, not auto-sliceable) or `prd` (the auto-slice pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > prdsLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_PRDS_LAND_IN) > per-repo > global > built-in.',
+		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
 			'--model <id>',
@@ -3106,6 +3137,18 @@ export function buildProgram(): Command {
 				harness: config.harness,
 				piBin: config.piBin,
 			});
+			// The OPERATOR's EXPLICIT PRD-placement override (`--prds-land-in`), the TOP
+			// of the placement precedence — mirrors `explicitSlicesLandInFromFlag` on
+			// the `do prd:` path. Fails loudly on a bad value.
+			let explicitPrdsLandIn: 'pre-prd' | 'prd' | undefined;
+			try {
+				explicitPrdsLandIn = explicitPrdsLandInFromFlag(flags.prdsLandIn);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
 			const result = await performIntake({
 				issueNumber,
 				cwd,
@@ -3114,6 +3157,11 @@ export function buildProgram(): Command {
 				// The origin-trust stamp the CI shell passes IN (unset ⇒ unstamped).
 				originTrust,
 				noPR: config.noPR,
+				// PRD-PLACEMENT: the configured-default rung + the EXPLICIT
+				// `--prds-land-in` override (top of the precedence). The shared placement
+				// resolver in `intake.ts` overlays the untrusted-origin staging force.
+				prdsLandIn: config.prdsLandIn,
+				explicitPrdsLandIn,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,

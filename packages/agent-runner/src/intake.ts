@@ -8,8 +8,13 @@ import {
 } from './integration-core.js';
 import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
-import type {IntegrationMode} from './config.js';
+import type {IntegrationMode, PrdsLandIn} from './config.js';
 import type {OriginTrust} from './frontmatter.js';
+import {
+	placementFolder,
+	resolvePlacement,
+	type PlacementSlots,
+} from './placement.js';
 import {
 	identityEnv,
 	assertTransportAllowed,
@@ -264,6 +269,30 @@ export interface PerformIntakeOptions {
 	 */
 	noPR?: boolean;
 	/**
+	 * **The per-repo PRD-PLACEMENT default, passed IN** (PRD
+	 * `staging-pool-position-gate-and-trust-model` US #2/#5, slice
+	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The resolved
+	 * per-repo default landing for `intake`-authored PRDs (`pre-prd` =
+	 * staging; `prd` = the auto-slice pool), fed as the CONFIGURED-DEFAULT rung
+	 * into the shared placement resolver (`src/placement.ts`). The resolver
+	 * overlays an EXPLICIT operator flag ({@link explicitPrdsLandIn}, top) and
+	 * the UNTRUSTED-ORIGIN force (`originTrust: untrusted` ⇒ staging) on top.
+	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `pre-prd/`,
+	 * the conservative landing). The PRD TWIN of `slicesLandIn` on the slicer
+	 * path — one resolver, two lifecycles.
+	 */
+	prdsLandIn?: PrdsLandIn;
+	/**
+	 * **The OPERATOR's EXPLICIT PRD-placement override** (the TOP precedence
+	 * rung). When set, the runner-deterministic resolver lands the PRD HERE
+	 * regardless of `originTrust` or {@link prdsLandIn} — the positional
+	 * analogue of `explicitMerge` overriding the untrusted-origin
+	 * build-propose rule ("the operator is present; CLI always wins, no
+	 * special force-key"). Set ONLY when the operator typed
+	 * `--prds-land-in <where>`; never when the value came from config.
+	 */
+	explicitPrdsLandIn?: PrdsLandIn;
+	/**
 	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
 	 * `run`/`do` expose; forwarded to `performIntegration` as `providerInstance`).
 	 * Tests/embeddings inject a stubbed `GitHubProvider` (a custom `gh` path) to
@@ -287,6 +316,52 @@ export interface PerformIntakeOptions {
 }
 
 const DEFAULT_ARBITER = 'origin';
+
+/**
+ * **The STAGED-PRDs dir** (PRD `staging-pool-position-gate-and-trust-model`,
+ * slice `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing
+ * ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement`). When
+ * the runner-deterministic placement resolver picks the staging side for an
+ * `intake`-authored PRD, the runner writes the PRD file HERE instead of in
+ * `work/prd/`. An item born in `pre-prd/` is durable + readable but NOT in
+ * the auto-slice POOL (`work/prd/` STILL means the pool — every existing
+ * reader is byte-for-byte unchanged). A runner/human-owned promotion
+ * ({@link promoteFromPrePrd} in `needs-attention.ts`) moves an approved PRD
+ * `pre-prd/ → prd/` to make it auto-sliceable. STEP A: ADDITIVE — no
+ * `work/prd/` reader changes here; the STEP-B `prd/ → prd-ready/` rename is
+ * deferred to `folder-taxonomy-reorg-and-rename`.
+ */
+export const STAGED_PRDS_DIR = 'work/pre-prd';
+
+/**
+ * The POOL folder PRDs land in when the runner-deterministic placement
+ * resolver chooses the pool side (`prdsLandIn: 'prd'` + a trusted origin, or
+ * an `--prds-land-in prd` operator override). STEP A: the name stays `prd`
+ * (it KEEPS its "the auto-slice candidate pool" meaning); the STEP-B taxonomy
+ * rename to `prd-ready/` is deferred.
+ */
+const POOL_PRDS_DIR = 'work/prd';
+
+/** The placement slots for the PRD lifecycle (folder names). */
+const PRD_PLACEMENT_SLOTS: PlacementSlots = {
+	staging: STAGED_PRDS_DIR,
+	pool: POOL_PRDS_DIR,
+};
+
+/**
+ * Map the `prdsLandIn` folder-name spelling (`pre-prd` | `prd`) onto the
+ * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
+ * `undefined` when no value is set, so the resolver's next precedence rung
+ * applies (the built-in floor). The PRD twin of `landingToSide` on the
+ * slicer path — same shape, different slots.
+ */
+function prdLandingToSide(
+	landing: PrdsLandIn | undefined,
+): 'staging' | 'pool' | undefined {
+	if (landing === 'pre-prd') return 'staging';
+	if (landing === 'prd') return 'pool';
+	return undefined;
+}
 
 /**
  * The emitted artifact TYPE `intake` decides at RUNTIME — a `slice` verdict emits
@@ -769,6 +844,14 @@ async function decideAndDispatch(
 				// later by the slicer). Passed IN; not resolved here.
 				originTrust: options.originTrust,
 				noPR: options.noPR,
+				// RUNNER-DETERMINISTIC PLACEMENT (slice
+				// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the
+				// configured-default + explicit-flag rungs, fed into the SHARED placement
+				// resolver alongside the `originTrust` stamp above. The resolver decides
+				// `pre-prd/` (staging) vs `prd/` (the auto-slice pool); `intake` never
+				// places itself.
+				prdsLandIn: options.prdsLandIn,
+				explicitPrdsLandIn: options.explicitPrdsLandIn,
 				providerInstance: options.providerInstance,
 				issueProvider,
 				seen: seenDelta,
@@ -1129,6 +1212,10 @@ async function dispatchPrd(params: {
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
+	/** The per-repo PRD-PLACEMENT default (configured-default rung of the placement chain). */
+	prdsLandIn: PrdsLandIn | undefined;
+	/** The OPERATOR's EXPLICIT PRD-placement override (the TOP rung). */
+	explicitPrdsLandIn: PrdsLandIn | undefined;
 	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
@@ -1145,6 +1232,8 @@ async function dispatchPrd(params: {
 		integration,
 		originTrust,
 		noPR,
+		prdsLandIn,
+		explicitPrdsLandIn,
 		providerInstance,
 		issueProvider,
 		seen,
@@ -1162,7 +1251,25 @@ async function dispatchPrd(params: {
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
-	const relPath = `work/prd/${slug}.md`;
+	// RUNNER-DETERMINISTIC PLACEMENT (slice
+	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
+	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
+	// which folder the runner writes the intake-authored PRD into BEFORE handing
+	// it to the shared integrate band: the SAME precedence chain the slicer uses
+	// (`explicit > untrusted-origin ⇒ staging > prdsLandIn > built-in (staging)`),
+	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
+	// (the intake decider) never influences placement; it returns the verdict and
+	// the runner computes the destination from unforgeable inputs.
+	const placementDecision = resolvePlacement({
+		explicit: prdLandingToSide(explicitPrdsLandIn),
+		originTrust,
+		configuredDefault: prdLandingToSide(prdsLandIn),
+	});
+	const placementDir = placementFolder(
+		PRD_PLACEMENT_SLOTS,
+		placementDecision.choice,
+	);
+	const relPath = `${placementDir}/${slug}.md`;
 
 	// ONBOARD onto a `work/intake-prd-<slug>` branch off fresh `<arbiter>/main` —
 	// the SAME runner-owns-git discipline the slice branch uses; the intake-

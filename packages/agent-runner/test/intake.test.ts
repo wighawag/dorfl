@@ -350,10 +350,14 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		});
 		expect(result.outcome).toBe('prd');
 		gitIn(['fetch', '-q', ARBITER], repo);
+		// `originTrust: untrusted` FORCES staging via the shared placement resolver
+		// (PRD US #12), so the PRD lands at `work/pre-prd/<slug>.md` on the work
+		// branch, NOT in the auto-slice pool. The originTrust stamp on the BODY is
+		// unchanged — the file just sits in the staged slot.
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/prd/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/pre-prd/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -857,7 +861,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(bounceProvider.closes[0].reason).toBe('not planned');
 	});
 
-	it('a stubbed `prd` verdict writes work/prd/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
+	it('a stubbed `prd` verdict writes work/pre-prd/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 42}});
 		const result = await performIntake({
@@ -892,7 +896,10 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('prd');
 		expect(result.emittedSlug).toBe('quiet-and-verbose-modes');
-		expect(result.emitted).toBe('work/prd/quiet-and-verbose-modes.md');
+		// The built-in PRD-placement floor stages the intake-authored PRD (the PRD
+		// twin of `slicesLandIn`'s `pre-backlog` floor) — it lands at
+		// `work/pre-prd/`, NOT directly in the auto-slice pool, until promoted.
+		expect(result.emitted).toBe('work/pre-prd/quiet-and-verbose-modes.md');
 
 		// One informational completion comment posted (this slice): the runner reports
 		// `prd created` back on the issue, framed as created (not resolved).
@@ -918,7 +925,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/prd/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/pre-prd/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -953,7 +960,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-a-coupled-but-small-pair:work/prd/a-coupled-but-small-pair.md`,
+				`${ARBITER}/work/intake-prd-a-coupled-but-small-pair:work/pre-prd/a-coupled-but-small-pair.md`,
 			],
 			repo,
 		);
@@ -1308,13 +1315,19 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('prd');
-		// MERGE: the PRD landed on arbiter main under work/prd/.
+		// MERGE: the PRD landed on arbiter main — STAGED in `work/pre-prd/` (the
+		// built-in PRD-placement floor); the merge target is the arbiter main, the
+		// folder is the runner's deterministic placement decision.
 		expect(
 			existsOnArbiterMain(repo, 'backlog', 'quiet-and-verbose-modes'),
 		).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const prdOnMain = gitIn(
-			['cat-file', '-e', `${ARBITER}/main:work/prd/quiet-and-verbose-modes.md`],
+			[
+				'cat-file',
+				'-e',
+				`${ARBITER}/main:work/pre-prd/quiet-and-verbose-modes.md`,
+			],
 			repo,
 		);
 		// `cat-file -e` exits 0 (no output) when the blob exists.

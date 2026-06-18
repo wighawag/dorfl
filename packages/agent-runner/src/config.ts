@@ -34,6 +34,27 @@ export type IntegrationMode = 'propose' | 'merge';
 export type SlicesLandIn = 'pre-backlog' | 'backlog';
 
 /**
+ * **Per-repo PRD-PLACEMENT default** (PRD
+ * `staging-pool-position-gate-and-trust-model`, slice
+ * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
+ * folder the runner lands `intake`-authored PRD files in BY DEFAULT —
+ * `'pre-prd'` (staging — durable + readable but NOT in the auto-slice POOL; a
+ * runner/human promotion is needed to make the PRD auto-sliceable) or
+ * `'prd'` (the auto-slice POOL — the trusted fast-path landing). The same
+ * runner-deterministic placement RESOLVER (`src/placement.ts`) layers on top:
+ * `explicit operator flag > untrusted-origin ⇒ pre-prd > prdsLandIn
+ * default > built-in (pre-prd)`. An untrusted-origin intake PRD is FORCED to
+ * staging even in a `'prd'` repo (the positional analogue of the existing
+ * `untrusted-origin-forces-build-propose` rule). The PRD twin of
+ * {@link SlicesLandIn}; the SAME shape, the SAME precedence chain. STEP A
+ * (this slice) keeps `prd/` as the auto-slice pool name; the STEP-B taxonomy
+ * rename to `prd-ready/` is deferred to
+ * `work/prd/folder-taxonomy-reorg-and-rename.md`.
+ */
+export type PrdsLandIn = 'pre-prd' | 'prd';
+
+/**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
  * 3-state ENUM governing the observation INBOX (raw captured signal). It REPLACES
  * the old `autoTriage` boolean, whose name read like "is triage on?" but only
@@ -228,6 +249,22 @@ export interface Config {
 	 * influence it.
 	 */
 	slicesLandIn: SlicesLandIn;
+	/**
+	 * **Per-repo DEFAULT landing for `intake`-authored PRD files** (PRD
+	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12, slice
+	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The PRD twin of
+	 * {@link slicesLandIn}: resolved per-repo EXACTLY like it (flag
+	 * `--prds-land-in` > env `AGENT_RUNNER_PRDS_LAND_IN` > per-repo > global >
+	 * built-in `'pre-prd'`). `intake`'s `prd` dispatch reads it and passes it as
+	 * the CONFIGURED-DEFAULT rung into the shared placement resolver
+	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
+	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order.
+	 * `intake` NEVER sets placement itself. PRD US #6 / the governing ADR: the
+	 * runner OWNS placement from unforgeable inputs; the agent cannot
+	 * influence it. KEY-LEVEL SYMMETRY with `slicesLandIn` — one resolver, two
+	 * lifecycles, one precedence change touches ONE place.
+	 */
+	prdsLandIn: PrdsLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
@@ -521,6 +558,14 @@ export const DEFAULT_CONFIG: Config = {
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	slicesLandIn: 'pre-backlog',
+	// `intake`-authored PRDs land STAGED (`pre-prd/`) by default — the
+	// conservative landing that mirrors `slicesLandIn`'s built-in floor: a PRD is
+	// durable + readable but NOT in the auto-slice POOL until a human/runner
+	// promotes it. A repo opts into the trusted fast-path with `prdsLandIn: 'prd'`
+	// (or `--prds-land-in prd` / `AGENT_RUNNER_PRDS_LAND_IN=prd`). The same
+	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
+	// force on top of this default (`src/placement.ts`).
+	prdsLandIn: 'pre-prd',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically
