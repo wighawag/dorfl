@@ -27,6 +27,7 @@ import {
 	type ReleaseSlicingLockOptions,
 	type ReleaseSlicingLockResult,
 } from './slicing-lock.js';
+import {releaseItemLock} from './item-lock.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {placementFolder, resolvePlacement} from './placement.js';
@@ -712,6 +713,22 @@ export async function performSlice(
 					`The slice acceptance gate blocked the set produced for '${slug}'; ` +
 					`routed the PRD to work/needs-attention/ (no slices landed).`,
 			};
+		}
+		if (core.outcome === 'completed') {
+			// INTERIM DUAL-WRITE (PRD `ledger-status-per-item-lock-refs`; slice
+			// `slicing-acquires-unified-lock`): the durable `prd → prd-sliced` `main` move
+			// landed through the shared integrate core, which CONSUMED the legacy
+			// `work/slicing/<slug>.md` marker (the body left `slicing/`). On THIS path the
+			// completing commit is owned by the integrate band, NOT `releaseSlicingLock`,
+			// so the unified per-item lock that `acquireSlicingLock` ALSO took is released
+			// HERE — the slice's symmetric "release ALSO drops the unified lock". A
+			// `propose` (`mode: 'propose'`) is ALSO `completed` (the PR opened, the lock's
+			// hold over the in-flight slicing is done); the eventual hold-across-the-PR
+			// crash-safe ordering is the capstone slice #7's concern, not this interim
+			// half. Best-effort + idempotent (`not-held` is fine).
+			if (useLock) {
+				await releaseItemLock({item: `prd:${slug}`, cwd, arbiter, env});
+			}
 		}
 		return integrationToSliceResult(core, {slug, emitted, loop: loopTag});
 	}
