@@ -391,6 +391,58 @@ export async function releaseItemLock(
 	}
 }
 
+/** Outcome of a GUARDED release ({@link releaseHeldItemLock}): the caller HELD the
+ * lock, so an absent ref is NOT benign — it is `vanished` (the ref was deleted
+ * under us, an abort signal). */
+export type ReleaseHeldOutcome = 'released' | 'vanished' | 'error';
+
+export interface ReleaseHeldResult {
+	outcome: ReleaseHeldOutcome;
+	/** The type-encoded lock entry (`<type>-<slug>`) the release keyed onto. */
+	entry: string;
+	ref: string;
+	message: string;
+}
+
+/**
+ * GUARDED release for a runner that KNOWS it acquired and HELD the lock (PRD
+ * `ledger-status-per-item-lock-refs` US #13): unlike {@link releaseItemLock} —
+ * whose `not-held` is a BENIGN idempotent case the complete/slicing/needs-attention
+ * callers tolerate (the body may predate the lock, or a crash-recovery may have
+ * already cleared it) — here the absence of OUR ref is an ABORT SIGNAL. A held
+ * runner whose own lock VANISHED mid-build (someone `release-lock`-ed it, or a
+ * `gc`/recovery cleared it) must DETECT it on release and route to
+ * needs-attention rather than silently "clean-release" a lock it no longer holds:
+ * the work it just did was NOT protected by the exclusion it thought it had.
+ *
+ * So this maps {@link releaseItemLock}'s `not-held` to a DISTINCT `vanished`
+ * outcome the caller branches on (abort / needs-attention), while a genuine
+ * `released` is the happy path and `error` stays `error`. It is otherwise the
+ * SAME leased delete (no second mechanism): a clean `released` deletes the ref we
+ * held. Use this ONLY where the caller provably HELD the lock (the in-flight
+ * runner's own release); the tolerant idempotent callers keep using
+ * {@link releaseItemLock}.
+ */
+export async function releaseHeldItemLock(
+	opts: ReleaseOptions,
+): Promise<ReleaseHeldResult> {
+	const rel = await releaseItemLock(opts);
+	if (rel.outcome === 'not-held') {
+		return {
+			outcome: 'vanished',
+			entry: rel.entry,
+			ref: rel.ref,
+			message: `'${rel.entry}' lock VANISHED before our release (the ref is gone) — our hold was lost mid-build; abort / route to needs-attention rather than clean-release.`,
+		};
+	}
+	return {
+		outcome: rel.outcome,
+		entry: rel.entry,
+		ref: rel.ref,
+		message: rel.message,
+	};
+}
+
 /**
  * Fetch the lock refs and return the held entry + its current ref sha, or
  * `undefined` when the item is at REST (no ref). Shared read-before-CAS step for
@@ -900,6 +952,253 @@ export async function reconcileItemLockAgainstMain(
 			message: err instanceof Error ? err.message : String(err),
 		};
 	}
+}
+
+/**
+ * The READ-ONLY classifier behind {@link reconcileItemLockAgainstMain}: it derives
+ * the SAME {@link ReconcileOutcome} verdict, but NEVER mutates the arbiter — it
+ * does NOT clear a stale-active lock, it only REPORTS that the lock IS
+ * reconcilable. This is what the `gc --ledger` stuck-lock report keys off (the
+ * forward-pointer's wiring): per the no-auto-sweep ADR rule, the plain report
+ * surfaces a stale-active lock as `cleared-stale`-eligible WITHOUT clearing it —
+ * a human still asserts the clear via `release-lock` (or runs complete's recovery,
+ * which DOES clear via {@link reconcileItemLockAgainstMain}). The classification
+ * is identical so the report and the recovery never disagree about WHAT a lock is;
+ * only the ACTION differs (report vs clear).
+ *
+ * A `cleared-stale` outcome here therefore means "would be cleared by recovery /
+ * `release-lock`" (the lock is terminal-on-`main` + `active` = stale), NOT that
+ * anything was cleared. Best-effort + never throws (a fetch/read fault degrades to
+ * `error`).
+ */
+export async function classifyItemLockAgainstMain(
+	opts: ReleaseOptions,
+): Promise<ReconcileResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const env = opts.env;
+	const cwd = opts.cwd;
+	if (!opts.item) {
+		return {
+			outcome: 'error',
+			entry: '',
+			ref: '',
+			terminalOnMain: false,
+			message: 'missing item',
+		};
+	}
+	const {type, slug} = resolveSidecarIdentity(opts.item);
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	try {
+		await gitHard(
+			[
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+${LOCK_REF_PREFIX}/*:${LOCK_REF_PREFIX}/*`,
+			],
+			cwd,
+			env,
+		);
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		const terminalOnMain = await isTerminalOnMain(
+			type,
+			slug,
+			arbiter,
+			cwd,
+			env,
+		);
+		if (!held) {
+			return {
+				outcome: 'no-lock',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' has no lock to reconcile`,
+			};
+		}
+		if (!terminalOnMain) {
+			return {
+				outcome: 'kept-in-flight',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' is in flight (held, not terminal on ${arbiter}/main)`,
+			};
+		}
+		if (held.lock.state === 'stuck') {
+			return {
+				outcome: 'kept-stuck',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' is terminal on ${arbiter}/main but STUCK — kept for human attention (resume/requeue/release-lock)`,
+			};
+		}
+		// Terminal on `main` + an `active` lock = a STALE lock. Unlike
+		// `reconcileItemLockAgainstMain` we do NOT clear it here — the report only
+		// names it as reconcilable; the human asserts the clear (no auto-sweep).
+		return {
+			outcome: 'cleared-stale',
+			entry,
+			ref,
+			terminalOnMain,
+			message: `'${entry}' is terminal on ${arbiter}/main but the lock is ACTIVE — reconcilable (stale); clear via 'release-lock' (NOT auto-cleared by the report)`,
+		};
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			terminalOnMain: false,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+/** One lingering lock in the `gc --ledger` stuck-lock REPORT: the held entry plus
+ * the read-only cross-substrate {@link ReconcileOutcome} classification of it
+ * against the authoritative `main` durable record (held/stuck vs stale-active over
+ * a terminal item). Reported, NEVER cleared by the report itself. */
+export interface LockReportEntry {
+	/** The full held lock entry (action × state + holder/since/reason). */
+	lock: LockEntry;
+	/** The lock ref (`refs/agent-runner/lock/<entry>`). */
+	ref: string;
+	/**
+	 * The READ-ONLY {@link classifyItemLockAgainstMain} verdict:
+	 *   - `kept-in-flight` — a normal in-flight hold (not terminal on `main`).
+	 *   - `kept-stuck`     — terminal on `main` + `stuck` (the `done`+`stuck`
+	 *     co-existence; wins the human's attention, never cleared here).
+	 *   - `cleared-stale`  — terminal on `main` + `active` = a STALE lock the report
+	 *     names as reconcilable; a human clears it via `release-lock` (NOT
+	 *     auto-cleared by the report — no auto-sweep).
+	 *   - `error`          — a per-item classification fault (kept verbatim).
+	 */
+	reconcile: ReconcileOutcome;
+}
+
+/** The `gc --ledger` stuck/orphaned-lock REPORT (PRD
+ * `ledger-status-per-item-lock-refs` US #14): every lingering per-item lock on the
+ * arbiter, each classified read-only against `main`. An EMPTY list = no locks held
+ * (an absent ref namespace reads as `[]`, the recoverable "all locks released"
+ * state — US #12). The report NEVER clears anything. */
+export interface ItemLockReport {
+	locks: LockReportEntry[];
+}
+
+/**
+ * Build the `gc --ledger` stuck/orphaned-lock REPORT (PRD
+ * `ledger-status-per-item-lock-refs` US #12/#13/#14; ADR
+ * `ledger-status-on-per-item-lock-refs`): enumerate every per-item lock currently
+ * held on the arbiter ({@link listItemLockEntries} — held active + stuck, with
+ * holder/since/reason) and classify EACH read-only against the authoritative
+ * `main` durable record via {@link classifyItemLockAgainstMain} (the wiring the
+ * `complete-lock-then-durable-main-move-crash-safe` slice's
+ * `reconcileItemLockAgainstMain` had no production caller for). This is the
+ * generalisation of the advancing-marker report (`listAdvancingMarkers` +
+ * `gc --ledger`) from advancing-only to the UNIFIED lock.
+ *
+ * It is a REPORT, never a sweep: it CLEARS nothing (no liveness heartbeat, no
+ * auto-sweep — the same trust model as the advancing report; a human asserts a
+ * lock is dead via `release-lock`). A stale-active lock over a terminal-on-`main`
+ * item is surfaced as `cleared-stale`-eligible ("reconcilable") but left in place.
+ *
+ * Best-effort + degrades safely: an absent lock-ref namespace ⇒ an EMPTY report
+ * ({@link listItemLockEntries} returns `[]`), exactly as `listAdvancingMarkers`
+ * treats an absent `work/advancing/` dir — so a deleted lock ref reads as "all
+ * locks released" (recoverable; work is safe on the `work/<slug>` branches +
+ * `main`).
+ */
+export async function reportItemLocks(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<ItemLockReport> {
+	const entries = await listItemLockEntries(cwd, arbiter, env);
+	const locks: LockReportEntry[] = [];
+	for (const lock of entries) {
+		const ref = itemLockRef(lock.entry);
+		// Read-only classification against `main` — NEVER clears (the report is
+		// advisory; a human asserts the clear via `release-lock`).
+		const verdict = await classifyItemLockAgainstMain({
+			item: itemFromLockEntry(lock.entry),
+			cwd,
+			arbiter,
+			env,
+		});
+		locks.push({lock, ref, reconcile: verdict.outcome});
+	}
+	return {locks};
+}
+
+/**
+ * Format the `gc --ledger` stuck/orphaned-lock REPORT for the terminal: one block
+ * per lingering lock (entry, action/state, holder, since, the stuck `reason`, the
+ * read-only `main`-reconciliation note, and a copy-pasteable `release-lock`
+ * hint). An EMPTY report yields NO lines (a clean lock set is silent here, like
+ * the duplicate-slug surface). It REPORTS only — the matching wording makes the
+ * no-auto-sweep contract explicit (a human asserts a lock is dead).
+ */
+export function formatItemLockReport(report: ItemLockReport): string[] {
+	if (report.locks.length === 0) {
+		return [];
+	}
+	const lines = [
+		`Per-item locks: ${report.locks.length} lock(s) held on the arbiter ` +
+			'(REPORT only — no automatic sweep; the lock has no liveness heartbeat, so ' +
+			'a human asserts a stuck/stale lock is dead via `release-lock`):',
+	];
+	for (const {lock, reconcile} of report.locks) {
+		const item = itemFromLockEntry(lock.entry);
+		lines.push(`  ${lock.entry}  [${lock.action}/${lock.state}]`);
+		lines.push(
+			`    holder: ${lock.holder || '(unknown)'}  since: ${lock.since || '(unknown)'}`,
+		);
+		if (lock.state === 'stuck' && lock.reason) {
+			lines.push(`    reason: ${lock.reason}`);
+		}
+		lines.push(`    ${reconcileNote(reconcile)}`);
+		lines.push(
+			`    resolve (if the lock is dead): \`agent-runner release-lock ${item}\` (never --force).`,
+		);
+	}
+	return lines;
+}
+
+/** The human-readable line for a lock's read-only `main`-reconciliation verdict. */
+function reconcileNote(reconcile: ReconcileOutcome): string {
+	switch (reconcile) {
+		case 'kept-in-flight':
+			return 'in flight (held, not terminal on main) — normal; left untouched.';
+		case 'kept-stuck':
+			return 'terminal on main + STUCK (done+stuck co-exist) — kept for human attention.';
+		case 'cleared-stale':
+			return 'terminal on main + ACTIVE = STALE (reconcilable) — NOT auto-cleared; a human clears it.';
+		case 'no-lock':
+			return 'no lock (already at rest).';
+		case 'error':
+			return 'reconciliation against main could not be determined (left untouched — the safe direction).';
+	}
+}
+
+/**
+ * Convert a type-encoded lock `<entry>` (`<type>-<slug>`) back into the namespaced
+ * item form (`<namespace>:<slug>`) that {@link lockEntryFor} /
+ * {@link resolveSidecarIdentity} accept — so the report's suggested `release-lock`
+ * command is copy-pasteable and the classifier can re-key off the SAME identity.
+ * Unknown prefixes fall back to the raw entry (still copyable). The inverse of
+ * {@link lockEntryFor} for the three known namespaces.
+ */
+export function itemFromLockEntry(entry: string): string {
+	for (const prefix of ['slice', 'prd', 'observation'] as const) {
+		const tag = `${prefix}-`;
+		if (entry.startsWith(tag)) {
+			return `${prefix}:${entry.slice(tag.length)}`;
+		}
+	}
+	return entry;
 }
 
 /** True iff `<arbiter>/main` shows the item TERMINAL — any of

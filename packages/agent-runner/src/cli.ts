@@ -105,6 +105,11 @@ import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {releaseAdvancingLock} from './advancing-lock.js';
 import {
+	releaseItemLock,
+	reportItemLocks,
+	formatItemLockReport,
+} from './item-lock.js';
+import {
 	promoteFromPreBacklog,
 	promoteFromPrePrd,
 	listPromotable,
@@ -722,6 +727,12 @@ interface ReleaseAdvancingFlags {
 	cwd?: string;
 	arbiter?: string;
 	by?: string;
+}
+
+interface ReleaseLockFlags {
+	config?: string;
+	cwd?: string;
+	arbiter?: string;
 }
 
 interface RemoteAddFlags {
@@ -2715,7 +2726,7 @@ export function buildProgram(): Command {
 			'(with --remote-branches) REPORT which merged branches WOULD be reaped without deleting anything (a read-only preview)',
 		)
 		.option('--json', 'output the raw result as JSON')
-		.action((flags: GcFlags) => {
+		.action(async (flags: GcFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 
@@ -2727,18 +2738,62 @@ export function buildProgram(): Command {
 				const repoPath =
 					typeof flags.ledger === 'string' ? flags.ledger : process.cwd();
 				const result = sweepLedgerDuplicates(repoPath);
+				// The UNIFIED-LOCK stuck/orphaned-lock REPORT (slice
+				// `release-lock-verb-and-gc-stuck-report`, PRD
+				// `ledger-status-per-item-lock-refs` US #12/#13/#14): generalises the
+				// advancing-marker report from advancing-only to the unified per-item
+				// lock. The locks live on the ARBITER ref (`refs/agent-runner/lock/*`),
+				// not in the local tree, so this reads the arbiter (cwd's `--arbiter`
+				// remote). Best-effort: an absent lock-ref namespace / unreachable arbiter
+				// degrades to an EMPTY report ("all locks released" — recoverable, US #12),
+				// exactly as `listAdvancingMarkers` treats an absent dir. It REPORTS only,
+				// wiring `reconcileItemLockAgainstMain`'s read-only twin to DISTINGUISH a
+				// held/stuck lock from a stale-active lock over a terminal item WITHOUT
+				// clearing (no auto-sweep; a human asserts a lock is dead via
+				// `release-lock`).
+				const lockReport = await reportItemLocks(
+					flags.cwd ?? repoPath,
+					flags.arbiter ?? 'origin',
+					process.env,
+				);
 				if (flags.json) {
-					console.log(JSON.stringify(result, null, 2));
+					console.log(JSON.stringify({...result, lockReport}, null, 2));
 				} else {
-					console.log(formatLedgerSweep(result));
+					const lockLines = formatItemLockReport(lockReport);
+					if (
+						result.duplicates.length === 0 &&
+						result.advancingMarkers.length === 0 &&
+						lockLines.length === 0
+					) {
+						console.log(formatLedgerSweep(result));
+					} else {
+						const blocks: string[] = [];
+						const sweepText = formatLedgerSweep(result);
+						// Only print the duplicate/advancing block when it found something
+						// (otherwise it returns the "clean" line, which is misleading when
+						// there ARE lingering locks below it).
+						if (
+							result.duplicates.length > 0 ||
+							result.advancingMarkers.length > 0
+						) {
+							blocks.push(sweepText);
+						}
+						if (lockLines.length > 0) {
+							blocks.push(lockLines.join('\n'));
+						}
+						console.log(blocks.join('\n\n'));
+					}
 				}
-				// A corrupt ledger OR a stuck advancing-lock marker is a fail-loud
-				// condition: exit non-zero so a human (or a script) cannot miss it,
-				// mirroring the integration core's refusal. Advancing markers are
-				// REPORTED here (never auto-deleted — no automatic advancing-lock sweep
-				// exists; a human clears a NAMED marker via `release-advancing`).
+				// A corrupt ledger, a stuck advancing-lock marker, OR a lingering per-item
+				// lock is a fail-loud condition: exit non-zero so a human (or a script)
+				// cannot miss it, mirroring the integration core's refusal. ALL are
+				// REPORTED here (never auto-deleted — no automatic sweep exists; a human
+				// clears a NAMED advancing marker via `release-advancing` and a NAMED
+				// unified lock via `release-lock`).
 				process.exit(
-					result.duplicates.length > 0 || result.advancingMarkers.length > 0
+					result.duplicates.length > 0 ||
+						result.advancingMarkers.length > 0 ||
+						lockReport.locks.length > 0
 						? 1
 						: 0,
 				);
@@ -3093,6 +3148,64 @@ export function buildProgram(): Command {
 			}
 			console.error(`error: ${result.message}`);
 			process.exit(result.exitCode);
+		});
+
+	// `release-lock <item>` (slice `release-lock-verb-and-gc-stuck-report`, PRD
+	// `ledger-status-per-item-lock-refs` US #14): the HUMAN-invoked named release of
+	// a stuck/orphaned UNIFIED per-item lock (`refs/agent-runner/lock/<entry>`) —
+	// the GENERALISATION of `release-advancing` from the advancing-only marker to
+	// the one lock per item (implement/slice/advance × active/stuck). Same trust
+	// model as `release-advancing` / `requeue`: a HUMAN asserts the lock is dead by
+	// NAMING it; the tool never guesses liveness (there is NO heartbeat, NO
+	// auto-sweep — the `gc --ledger` report only REPORTS lingering locks). Routes
+	// through the existing leased-delete `releaseItemLock` (deleting the ref IS the
+	// release; the parentless lock commit becomes gc-reclaimable). NEVER `--force`.
+	// Idempotent: deleting an absent ref is a clean exit-0 "nothing to clear"
+	// (`not-held`), NOT a failure — deleting the lock ref(s) is "all locks released"
+	// and recoverable (the work is safe on the `work/<slug>` branches + `main`).
+	program
+		.command('release-lock <item>')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/agent-runner/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/slice/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `slice:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` (= slice). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--cwd <dir>',
+			'the repo/working clone whose arbiter remote the lock ref is DELETED on (default: cwd)',
+		)
+		.option(
+			'--arbiter <remote>',
+			'the arbiter git remote the lock ref is deleted on (default: origin)',
+		)
+		.action(async (item: string, flags: ReleaseLockFlags) => {
+			const cwd = flags.cwd ?? process.cwd();
+			const arbiter = flags.arbiter ?? 'origin';
+			const result = await releaseItemLock({
+				item,
+				cwd,
+				arbiter,
+				env: process.env,
+			});
+			if (result.outcome === 'released') {
+				console.log(
+					`Released lock '${result.entry}' (${result.ref} deleted on ${arbiter}; the item itself was untouched — it rests on main / its work/<slug> branch).`,
+				);
+				return;
+			}
+			// IDEMPOTENT exit semantics: `releaseItemLock` returns `not-held` when the
+			// ref is ALREADY absent. For a HUMAN re-running the verb on an
+			// already-cleared lock that is the CORRECT "nothing to clear" outcome —
+			// deleting the lock ref(s) is "all locks released" and recoverable — so map
+			// it to a clean exit-0 with an honest message (NOT a failure).
+			if (result.outcome === 'not-held') {
+				console.log(
+					`No lock to release for '${result.entry}' (${result.ref} is already absent on ${arbiter} — “all locks released”, recoverable).`,
+				);
+				return;
+			}
+			console.error(`error: ${result.message}`);
+			process.exit(1);
 		});
 
 	program
