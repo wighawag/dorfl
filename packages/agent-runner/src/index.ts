@@ -278,6 +278,8 @@ export {
 	releaseItemLock,
 	readItemLock,
 	listItemLocks,
+	heldSliceSlugs,
+	resolveLockHolder,
 	serialiseLockEntry,
 	parseLockEntry,
 } from './item-lock.js';

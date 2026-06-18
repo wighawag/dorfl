@@ -23,6 +23,7 @@ import {
 	gatherLifecycleMirror,
 } from './lifecycle-gather.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
+import {heldSliceSlugs} from './item-lock.js';
 
 /**
  * The CREATE-side lifecycle gates for the propose-matrix lifecycle pool, derived
@@ -265,21 +266,32 @@ export function scoreItems(
 	state: Pick<LocalLedgerState, 'backlog' | 'doneSlugs'>,
 	autoBuild: boolean,
 	counts: {totalItems: number; totalEligible: number},
+	heldSlugs: Set<string> = new Set(),
 ): ScannedItem[] {
-	return state.backlog.map((item) => {
-		const eligibility = resolveEligibility({
-			humanOnly: item.humanOnly,
-			needsAnswers: item.needsAnswers,
-			blockedBy: item.blockedBy,
-			doneSlugs: state.doneSlugs,
-			autoBuild,
+	// HELD-SLUG SUBTRACTION (PRD `ledger-status-per-item-lock-refs` US #15; slice
+	// `claim-acquires-unified-lock-no-body-move`): exclude any `backlog/` slug whose
+	// per-item lock is currently held — the eligible pool is "in `backlog/` on `main`
+	// AND no lock held". While the body still moves to `in-progress/` on claim this
+	// is REDUNDANT-but-harmless (the moved body already left the pool); it is wired
+	// now so the capstone that stops the body move (slice #9) needs no reader change.
+	// The held set is gathered by the CALLER (which holds the arbiter handle) and is
+	// EMPTY when unavailable/offline, so this degrades to "subtract nothing".
+	return state.backlog
+		.filter((item) => !heldSlugs.has(item.slug))
+		.map((item) => {
+			const eligibility = resolveEligibility({
+				humanOnly: item.humanOnly,
+				needsAnswers: item.needsAnswers,
+				blockedBy: item.blockedBy,
+				doneSlugs: state.doneSlugs,
+				autoBuild,
+			});
+			counts.totalItems++;
+			if (eligibility.eligible) {
+				counts.totalEligible++;
+			}
+			return {...item, eligibility};
 		});
-		counts.totalItems++;
-		if (eligibility.eligible) {
-			counts.totalEligible++;
-		}
-		return {...item, eligibility};
-	});
 }
 
 /**
@@ -340,6 +352,10 @@ export async function scan(
 			repoPath: mirror.path,
 			global: config,
 		}).config.autoBuild;
+		// Held-slug subtraction: a bare hub mirror's arbiter is its `origin`. Reads
+		// the lock refs from the mirror's origin; non-fatal (empty set on any fault),
+		// so the read-only scan degrades gracefully exactly as its config reads do.
+		const heldSlugs = await heldSliceSlugs(mirror.path, 'origin', options.env);
 		// PRD pool — the SLICEABLE-PRD companion of the slice pool above
 		// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). Resolve
 		// `autoSlice` PER REPO from the mirror's COMMITTED `.agent-runner.json`
@@ -402,7 +418,7 @@ export async function scan(
 		const ledgerDuplicates = lintRefLedger('main', mirror.path, options.env);
 		repos.push({
 			path: mirror.path,
-			items: scoreItems(state, autoBuild, counts),
+			items: scoreItems(state, autoBuild, counts, heldSlugs),
 			prds,
 			lifecycle,
 			ledgerDuplicates,
@@ -426,7 +442,20 @@ export async function scan(
  * per-repo `.agent-runner.json` `autoBuild`. The registry `scan` above is the
  * mirror-ref counterpart; this is its working-tree sibling.
  */
-export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
+export function scanRepoPaths(
+	repoPaths: string[],
+	config: Config,
+	/**
+	 * The HELD-SLUG set to SUBTRACT from each repo's `backlog/` pool (PRD
+	 * `ledger-status-per-item-lock-refs` US #15). This is a WORKING-TREE, OFFLINE
+	 * scan (it has no arbiter handle to fetch the lock refs from — that is the
+	 * registry `scan`'s job), so the held set is supplied by the in-place CALLER
+	 * (which knows its arbiter) and DEFAULTS to empty: with the body still moving to
+	 * `in-progress/` on claim the subtraction is redundant-but-harmless, so omitting
+	 * it preserves the offline read while keeping the seam in place for slice #9.
+	 */
+	heldSlugs: Set<string> = new Set(),
+): ScanReport {
 	const repos: RepoReport[] = [];
 	const counts = {totalItems: 0, totalEligible: 0};
 
@@ -459,7 +488,7 @@ export function scanRepoPaths(repoPaths: string[], config: Config): ScanReport {
 		const ledgerDuplicates = lintLocalLedger(path);
 		repos.push({
 			path,
-			items: scoreItems(state, resolved.autoBuild, counts),
+			items: scoreItems(state, resolved.autoBuild, counts, heldSlugs),
 			prds,
 			lifecycle,
 			ledgerDuplicates,

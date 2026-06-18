@@ -170,6 +170,18 @@ export interface SelectPrioritisedInput {
 	 * and `selectionOrder` (what runs first) compose ORTHOGONALLY.
 	 */
 	lifecycle?: SelectedLifecyclePools;
+	/**
+	 * The HELD-SLUG set to SUBTRACT from the `build` pool (eligible SLICES) — PRD
+	 * `ledger-status-per-item-lock-refs` US #15, slice
+	 * `claim-acquires-unified-lock-no-body-move`. A slice whose per-item lock is
+	 * currently held is dropped from selection, so the eligible pool is "in
+	 * `backlog/` on `main` AND no lock held". Normally the `report` is already
+	 * subtracted at {@link scoreItems} time (the readers gather held locks), so this
+	 * is a SECOND, explicit guard for callers that build the report WITHOUT the
+	 * subtraction; OMITTED ⇒ no extra filtering. Redundant-but-harmless while the
+	 * body still moves to `in-progress/`; in force for slice #9.
+	 */
+	heldSlugs?: Set<string>;
 }
 
 /** The (optional) lifecycle pools handed to {@link selectPrioritised}, pre-built. */
@@ -204,14 +216,14 @@ export interface SelectedLifecyclePools {
 export function selectPrioritised(
 	input: SelectPrioritisedInput,
 ): SelectedItem[] {
-	const buildItems: SelectedItem[] = selectCandidates(
-		input.report,
-		input.caps,
-	).map((candidate: Candidate) => ({
-		repoPath: candidate.repoPath,
-		slug: candidate.slug,
-		namespace: 'slice' as const,
-	}));
+	const held = input.heldSlugs;
+	const buildItems: SelectedItem[] = selectCandidates(input.report, input.caps)
+		.filter((candidate: Candidate) => !held || !held.has(candidate.slug))
+		.map((candidate: Candidate) => ({
+			repoPath: candidate.repoPath,
+			slug: candidate.slug,
+			namespace: 'slice' as const,
+		}));
 
 	const sliceItems: SelectedItem[] = input.prds.map((prd) => ({
 		repoPath: prd.repoPath,
