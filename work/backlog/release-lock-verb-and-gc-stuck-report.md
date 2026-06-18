@@ -7,13 +7,30 @@ blockedBy: [lock-entry-state-machine-and-invariants, advancing-acquires-unified-
 covers: [12, 13, 14, 21]
 ---
 
+> **FORWARD-POINTER (planted by the conductor, 2026-06-18).** Slice #7
+> `complete-lock-then-durable-main-move-crash-safe` built and TESTED
+> `reconcileItemLockAgainstMain` (in `item-lock.ts`) — the recovery that, for a
+> terminal-on-`main` item with a lingering lock, clears a stale ACTIVE lock (the
+> `main` record is authoritative) while KEEPING a `stuck` lock (the `done`+`stuck`
+> co-existence). But it currently has NO production caller (it only runs in #7's
+> tests). THIS slice is its home: wire `reconcileItemLockAgainstMain` into the
+> `gc --ledger` surface so the stuck/orphaned-lock report uses it to DISTINGUISH a
+> genuinely stuck/held lock (reported, not cleared) from a stale-active lock over a
+> terminal item (the report may note it as reconcilable, but per the no-auto-sweep
+> rule a human still asserts the clear via `release-lock` / `gc --ledger`'s explicit
+> action — do NOT auto-clear in the plain report). Without this wiring the recovery
+> stays dead in production. Confirm the exact gc behaviour (report-only vs offer-clear)
+> against the ADR's "a human asserts a lock is dead" before building.
+
 ## What to build
 
 Generalise the landed human-recovery surface from advancing-only to the unified
 lock. Add a `release-lock <item>` verb that clears a NAMED lock (generalising
 `release-advancing`), and a stuck/orphaned-lock REPORT in `gc --ledger` that lists
-lingering lock entries (generalising the advancing-marker report). There is NO
-liveness heartbeat and NO auto-sweep: a human asserts a lock is dead and clears it.
+lingering lock entries (generalising the advancing-marker report), wiring in the
+`reconcileItemLockAgainstMain` recovery from #7 (see the FORWARD-POINTER above).
+There is NO liveness heartbeat and NO auto-sweep: a human asserts a lock is dead
+and clears it.
 
 Plus two robustness properties: an ABSENT lock ref is treated as "no locks held"
 (exactly as `listAdvancingMarkers` treats an absent dir as `[]`), so accidental
@@ -32,6 +49,11 @@ needs-attention rather than silently clean-release.
       `work/<slug>` branches + `main`.
 - [ ] A runner whose own lock vanished mid-build detects the missing ref on release
       and aborts / routes to needs-attention rather than silently clean-releasing.
+- [ ] `reconcileItemLockAgainstMain` (built in #7) is WIRED into the `gc --ledger`
+      surface (it had no production caller before this slice): the stuck-lock report
+      uses it to tell a genuinely held/stuck lock (reported) from a stale-active lock
+      over a terminal-on-`main` item, WITHOUT auto-clearing in the plain report
+      (a human still asserts the clear, per the no-auto-sweep ADR rule).
 - [ ] Tests use throwaway repos + a `--bare file://` arbiter; nothing writes outside
       its own temp fixtures.
 
