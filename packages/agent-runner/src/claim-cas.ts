@@ -1,12 +1,7 @@
 import {mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
-import {
-	acquireItemLock,
-	readItemLock,
-	releaseItemLock,
-	resolveLockHolder,
-} from './item-lock.js';
+import {acquireItemLock, releaseItemLock} from './item-lock.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveReadiness} from './readiness.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -124,62 +119,6 @@ async function lostMessage(
 		return `'${slug}' is already in-progress on ${arbiter}/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
 	}
 	return fallback;
-}
-
-/**
- * Self-heal an ORPHANED OWN lock at claim time. Returns `true` when we reclaimed a
- * stale lock that was OUR OWN (same holder) over a body that is genuinely
- * claimable in `backlog/` — the legitimate continue/re-claim of a requeued item
- * whose return-to-pool failed to clear the lock, or a crash-orphaned lock. Returns
- * `false` (the caller then loses definitively) when the lock is a GENUINE
- * concurrent holder: a DIFFERENT principal holds it, OR the body is no longer in
- * `backlog/` (someone has moved it to in-progress).
- *
- * The body-move CAS below remains the authoritative single-winner arbiter, so this
- * never lets two DISTINCT principals both proceed: a genuine concurrent racer has a
- * different holder, so we do NOT steal its lock and lose definitively instead. A
- * reclaim is release + re-acquire of our own ref; if the re-acquire then loses (a
- * true racer slipped in between), we do NOT proceed.
- */
-async function reclaimOwnStaleLock(
-	slug: string,
-	arbiter: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<boolean> {
-	await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
-	// The body must be genuinely claimable in backlog/ (not already in-progress).
-	const backlog = `work/backlog/${slug}.md`;
-	if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
-		return false;
-	}
-	const held = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
-	if (!held) {
-		// The lock vanished between the failed acquire and now — retry the acquire.
-		const reacquire = await acquireItemLock({
-			item: `slice:${slug}`,
-			action: 'implement',
-			cwd,
-			arbiter,
-			env,
-		});
-		return reacquire.outcome === 'acquired';
-	}
-	const ourHolder = await resolveLockHolder(cwd, env);
-	if (held.holder !== ourHolder) {
-		// A DIFFERENT principal holds it — a genuine concurrent holder. Do NOT steal.
-		return false;
-	}
-	// Our own orphaned lock over a claimable body: release + re-acquire.
-	await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
-	const reacquire = await acquireItemLock({
-		item: `slice:${slug}`,
-		action: 'implement',
-		cwd,
-		arbiter,
-		env,
-	});
-	return reacquire.outcome === 'acquired';
 }
 
 /** Raised for usage/environment errors (exit 1). */
@@ -338,39 +277,25 @@ async function runClaim(
 			);
 		}
 		if (lock.outcome === 'lost') {
-			// We lost the create-only lock race. Two cases to tell apart:
-			//
-			//   (a) GENUINE concurrent holder — another writer (a DIFFERENT principal)
-			//       holds this item's lock, or it has already moved the body to
-			//       in-progress. We lose DEFINITIVELY (no retry budget) and perform NO
-			//       body move — the lock and the CAS agree on the single winner.
-			//   (b) OUR OWN ORPHANED lock — a prior in-flight cycle of THIS item by the
-			//       SAME holder left a lock behind that the return-to-pool did not clear
-			//       (or a crash), AND the body is back in `backlog/` (genuinely
-			//       claimable). A legitimate continue/re-claim of our own requeued item
-			//       must not deadlock on that stale ref. We reclaim it (release +
-			//       re-acquire) and proceed; the body-move CAS below stays the
-			//       authoritative single-winner arbiter, so this self-heal can never let
-			//       two DISTINCT principals both proceed (their holders differ → no steal).
-			const selfHealed = await reclaimOwnStaleLock(slug, arbiter, cwd, env);
-			if (!selfHealed) {
-				// (a): definitively lost. Prefer the FOLDER-based diagnostic (its recovery
-				// hints — resume / work-on / requeue — are what a human re-running their
-				// OWN item needs); fall back to the lock's generic message.
-				const message = await lostMessage(
-					slug,
-					arbiter,
-					cwd,
-					env,
-					lock.message,
-				);
-				note(message);
-				return {exitCode: 2, outcome: 'lost', message};
-			}
-			note(
-				`reclaimed our own stale item lock for '${slug}' (orphaned by a prior ` +
-					'cycle; body is back in backlog) and proceeding with the claim.',
-			);
+			// We lost the create-only lock race: another writer holds this SAME item's
+			// lock. This is DEFINITIVE — exit 2, no retry budget, and NO body move (the
+			// lock and the body-move CAS agree on the single winner). We do NOT try to
+			// tell "our own orphaned lock" apart by holder identity and auto-reclaim it:
+			// holder ids are NOT unique (a CI bot claims many items under one
+			// `user.name`), so a release+re-acquire "reclaim" could let a concurrent
+			// LOSER release the WINNER's still-valid lock — and an automatic sweep
+			// contradicts the ADR's recovery model (`ledger-status-on-per-item-lock-refs`:
+			// "no liveness heartbeat, no auto-sweep; a human asserts a lock is dead").
+			// A genuinely orphaned lock (e.g. a cross-machine reroute that bypassed the
+			// lock-releasing return-to-pool) is cleared by the human-mediated
+			// `release-lock` verb + `gc --ledger` report (slice
+			// `release-lock-verb-and-gc-stuck-report`), never an auto-steal at claim time.
+			// Prefer the FOLDER-based diagnostic (its recovery hints — resume / work-on /
+			// requeue — are what a human re-running their OWN item needs); fall back to
+			// the lock's generic message.
+			const message = await lostMessage(slug, arbiter, cwd, env, lock.message);
+			note(message);
+			return {exitCode: 2, outcome: 'lost', message};
 		}
 	}
 

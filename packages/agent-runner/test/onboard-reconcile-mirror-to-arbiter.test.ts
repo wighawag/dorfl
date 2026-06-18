@@ -23,6 +23,7 @@ import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {releaseItemLock} from '../src/item-lock.js';
 import {performStart} from '../src/start.js';
 import {createJob} from '../src/workspace.js';
 import {branchAheadOfArbiter} from '../src/continue-branch.js';
@@ -98,8 +99,22 @@ function arbiterHasBranch(seeded: SeededRepo, branch: string): boolean {
 	return out.trim() !== '';
 }
 
-/** Move a slug from needs-attention/ back to backlog/ on the arbiter (cross-machine). */
-function rerouteToBacklogOnArbiter(seeded: SeededRepo, slug: string): void {
+/**
+ * Move a slug from needs-attention/ back to backlog/ on the arbiter (cross-machine),
+ * AND release its per-item lock — modelling a LEGITIMATE return-to-pool. Under the
+ * interim dual-write (slice `claim-acquires-unified-lock-no-body-move`) a claim
+ * acquires the per-item lock, and the real return-to-pool (`returnToBacklog`)
+ * RELEASES it. A bare arbiter reroute that left the lock held would NOT be
+ * re-claimable (claim's lock acquire would lose definitively — by design, the
+ * orphaned-lock case is cleared by the human `release-lock` verb in slice
+ * `release-lock-verb-and-gc-stuck-report`, never an auto-steal at claim time). So a
+ * test that wants the item to be legitimately re-claimable must release the lock,
+ * exactly as the real return-to-pool does.
+ */
+async function rerouteToBacklogOnArbiter(
+	seeded: SeededRepo,
+	slug: string,
+): Promise<void> {
 	const mover = seeded.clone(`reroute-${slug}`);
 	gitIn(['fetch', '-q', ARBITER], mover);
 	gitIn(['checkout', '-q', '-B', `reroute-${slug}`, `${ARBITER}/main`], mover);
@@ -111,6 +126,14 @@ function rerouteToBacklogOnArbiter(seeded: SeededRepo, slug: string): void {
 	gitIn(['add', '-A'], mover);
 	gitIn(['commit', '-q', '-m', `reroute ${slug}`], mover);
 	gitIn(['push', '-q', ARBITER, `reroute-${slug}:main`], mover);
+	// Release the per-item lock the prior claim took, mirroring the real
+	// return-to-pool (`returnToBacklog`), so the item is LEGITIMATELY re-claimable.
+	await releaseItemLock({
+		item: `slice:${slug}`,
+		cwd: mover,
+		arbiter: ARBITER,
+		env: gitEnv(),
+	});
 }
 
 // =============================================================================
@@ -262,7 +285,7 @@ describe('continue-detection is ARBITER-authoritative (in-place clone path)', ()
 		// The full onboard pipeline agrees. Route the item back to backlog
 		// cross-machine, then `performStart` in the third machine: FRESH cut,
 		// no prior.txt.
-		rerouteToBacklogOnArbiter(seeded, 'delta');
+		await rerouteToBacklogOnArbiter(seeded, 'delta');
 		const started = await performStart({
 			slug: 'delta',
 			cwd: third,
@@ -332,7 +355,7 @@ describe('continue-detection is ARBITER-authoritative (bare hub-mirror path)', (
 
 		// Route the item back to backlog so the next createJob's claim can
 		// land, then call createJob again for the same slug.
-		rerouteToBacklogOnArbiter(seeded, 'epsilon');
+		await rerouteToBacklogOnArbiter(seeded, 'epsilon');
 		// Need a fresh claim for the next createJob — perform it from a
 		// throwaway clone (cross-machine claim).
 		const claimer = seeded.clone('claimer-epsilon');
@@ -368,7 +391,7 @@ describe('legitimate continue still works when the arbiter GENUINELY has the kep
 		const {seeded} = await stuckButNeedsAttention('zeta');
 		// Re-route the item back to backlog (cross-machine) so it is claimable;
 		// the kept branch REMAINS on the arbiter (default keep+continue shape).
-		rerouteToBacklogOnArbiter(seeded, 'zeta');
+		await rerouteToBacklogOnArbiter(seeded, 'zeta');
 		// A fresh continuer clone (cross-machine — no stale local refs).
 		const fresh = seeded.clone('continuer');
 		const started = await performStart({
