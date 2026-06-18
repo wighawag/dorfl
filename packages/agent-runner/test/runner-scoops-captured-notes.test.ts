@@ -97,7 +97,7 @@ function onArbiterMainPath(repo: string, path: string): boolean {
 
 /**
  * Stand a repo up as the build caller's HEAD leaves it just before the shared
- * core: a slice claimed (in-progress on the arbiter) + onboarded onto its work
+ * core: a slice claimed (lock held; body rests in backlog/ on the arbiter) + onboarded onto its work
  * branch off fresh main, with UNCOMMITTED agent work in the tree.
  */
 async function claimAndBranch(slug: string): Promise<string> {
@@ -128,7 +128,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -161,7 +161,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -186,7 +186,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'gamma',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',

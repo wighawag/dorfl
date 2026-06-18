@@ -1,8 +1,5 @@
-import {mkdirSync} from 'node:fs';
-import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
-import {acquireItemLock, releaseItemLock} from './item-lock.js';
-import {ledgerWrite} from './ledger-write.js';
+import {acquireItemLock, releaseItemLock, heldSliceSlugs} from './item-lock.js';
 import {resolveReadiness} from './readiness.js';
 import {workBranchRef} from './slug-namespace.js';
 
@@ -11,31 +8,34 @@ import {workBranchRef} from './slug-namespace.js';
  * `scripts/CLAIM-PROTOCOL.md`. This is the first-class `agent-runner claim`
  * command (ADR §9: agent-runner is the PRIMARY implementation of the claim
  * protocol; `scripts/claim.sh` is retained as the portable, zero-dependency
- * bootstrap / reference). It is behaviourally equivalent to `claim.sh` — same
- * steps, same guardrails, same exit codes.
+ * bootstrap / reference). The lock-substrate cut-over (PRD
+ * `ledger-status-per-item-lock-refs`) has since diverged it from `claim.sh`'s
+ * body-move semantics — see the lock note below — but the exit codes are the same.
  *
  * It is async (each git call is a non-blocking `runAsync`) so two awaited claims
- * over the same slug genuinely race — the arbiter's ref-CAS (not test ordering)
- * picks the single winner, exactly as claim.sh's own verification does.
+ * over the same slug genuinely race — the arbiter's per-item-ref CAS (not test
+ * ordering) picks the single winner.
  *
- * Exit codes (identical to claim.sh / CLAIM-PROTOCOL.md):
- *   0  claim landed (work/in-progress/<slug>.md now on the arbiter's main)
+ * Exit codes:
+ *   0  claim landed (the per-item lock is held; the body stays in work/backlog/)
  *   1  usage / environment error, or a readiness REFUSAL (unmet blockedBy)
- *   2  item not claimable (not in backlog, or lost the race to someone else)
- *   3  push kept failing after retries (transient/contended — try again later)
+ *   2  item not claimable (not in backlog, or lost the lock race to someone else)
+ *   3  (legacy) push contention — no longer reachable: the per-item lock never
+ *      falsely contends, so there is no retry budget to exhaust
  *
- * INTERIM DUAL-WRITE (PRD `ledger-status-per-item-lock-refs`, ADR
- * `ledger-status-on-per-item-lock-refs`): a successful claim ALSO acquires the
- * item's unified per-item lock (`action: implement`) via the lock module, ON TOP
- * OF today's `git mv backlog→in-progress` CAS. The lock is acquired FIRST, so a
- * lock `lost` (the SAME item is already locked) makes the claim lose definitively
- * (exit 2, NO retry budget) and performs NO body move — the lock exclusion and the
- * shared-`main` CAS agree on the single winner. If the body move subsequently
- * loses/contends/errors the lock is RELEASED (never orphaned). Stopping the body
- * move / dropping the `main` write entirely is the capstone slice #9; here the
- * body STILL moves to `in-progress/` and `claimCommit` still lands on `main`.
+ * UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#15/#16,
+ * ADR `ledger-status-on-per-item-lock-refs`): a claim ACQUIRES the item's
+ * per-item lock (`action: implement`) via the lock module and writes NOTHING to
+ * `main` — the body STAYS at `work/backlog/<slug>.md`. The claimable predicate is
+ * "in `backlog/` on `main` AND no lock held"; the held lock IS the claim. The lock
+ * is acquired FIRST, so a lock `lost` (the SAME item is already locked) makes the
+ * claim lose definitively (exit 2, NO retry budget). A subsequent claimability
+ * re-check (the body left `backlog/`) RELEASES the lock (never orphaned). Because
+ * claim touches no `main` (and no protected ref), a protected-`main` repo CAN be
+ * claimed. The interim dual-write (`git mv backlog→in-progress` + a `main` claim
+ * commit) is GONE.
  *
- * Before the CAS runs, the HUMAN path's readiness guard (resolveReadiness) is
+ * Before the claim runs, the HUMAN path's readiness guard (resolveReadiness) is
  * applied: a slice with an unmet `blockedBy` is REFUSED (exit 1, outcome
  * 'not-ready') unless overridden; a `needsAnswers: true` slice is WARNED about
  * but still claimed. The autonomous runner does NOT pass `humanPath`, so its
@@ -60,7 +60,12 @@ export interface ClaimCasOptions {
 	cwd: string;
 	/** Name of the arbiter remote (`--arbiter`). Defaults to `origin`. */
 	arbiter?: string;
-	/** Cap on push retries when main merely advanced (`--retries`). Default 3. */
+	/**
+	 * (LEGACY, accepted-but-ignored) Cap on push retries when main merely advanced.
+	 * The per-item lock never falsely contends (a per-item ref CAS is self-arbitrating),
+	 * so there is no retry loop and nothing to bound. Kept on the option shape so
+	 * existing callers/tests that pass `--retries` keep type-checking; it has NO effect.
+	 */
 	retries?: number;
 	/** Show the intended push without mutating the arbiter (`--dry-run`). */
 	dryRun?: boolean;
@@ -89,23 +94,28 @@ export interface ClaimCasResult {
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 	/**
-	 * The sha of the CLAIM COMMIT (`claim: <slug>`) that landed on the arbiter,
-	 * on a SUCCESSFUL claim (`outcome === 'claimed'`, `exitCode === 0`) only.
-	 * Surfaced so in-place onboarding can branch the work branch from the EXACT
-	 * claim commit (and HARD-FAIL if it is not reachable) rather than a stale
-	 * same-named branch or a not-yet-advanced local `<arbiter>/main`. Absent on a
-	 * dry-run, lost/contended, or usage-error result.
+	 * (RETAINED for the option shape; now ALWAYS absent.) Historically the sha of
+	 * the CLAIM COMMIT that landed on `main`, used by in-place onboarding to branch
+	 * the work branch off the exact claim commit. The lock-substrate claim writes
+	 * NOTHING to `main` (the body stays in `work/backlog/`), so there is no claim
+	 * commit — onboarding cuts the work branch straight off `<arbiter>/main` (which
+	 * carries the backlog body). Kept on the result shape so existing readers
+	 * (`do.ts` threads `claim.claimCommit` into onboarding) keep type-checking; an
+	 * `undefined` value drives onboarding's fresh-off-`<arbiter>/main` branch path.
 	 */
 	claimCommit?: string;
 }
 
 /**
- * The folder-based "lost" diagnostic, reused by the lock-`lost` path so its
- * message matches the CAS folder check's (recovery hints for a human re-running
- * their OWN item). Fetches the arbiter and inspects `work/in-progress/<slug>.md`
- * vs `work/backlog/<slug>.md`; falls back to the lock's generic message when the
- * body has not moved (lock held but body still in `backlog/` — the genuine
- * concurrent-acquire race). */
+ * The "lost" diagnostic for a held-lock loss, reused so its message carries the
+ * recovery hints a human re-running their OWN item needs. The body now STAYS in
+ * `work/backlog/` (claim never moves it), so a held item is identified by its LOCK
+ * (`action: implement` held on the per-item ref), not an `in-progress/` folder: a
+ * held lock + the body still in `backlog/` is the normal claimed state. We fetch
+ * the lock refs and, when the slug's lock is held, surface the resume/requeue
+ * recovery hints; otherwise (the body left `backlog/` entirely — done/removed) we
+ * fall back to the generic message.
+ */
 async function lostMessage(
 	slug: string,
 	arbiter: string,
@@ -113,10 +123,9 @@ async function lostMessage(
 	env: NodeJS.ProcessEnv | undefined,
 	fallback: string,
 ): Promise<string> {
-	await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
-	const inProgress = `work/in-progress/${slug}.md`;
-	if (await catFileExists(`${arbiter}/main:${inProgress}`, cwd, env)) {
-		return `'${slug}' is already in-progress on ${arbiter}/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
+	const held = await heldSliceSlugs(cwd, arbiter, env);
+	if (held.has(slug)) {
+		return `'${slug}' is already claimed on ${arbiter}/main (its per-item lock is held). If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
 	}
 	return fallback;
 }
@@ -131,13 +140,6 @@ class ClaimUsageError extends Error {}
  */
 class ClaimNotReady extends Error {}
 
-/** Internal: the result of a single claim attempt. */
-type AttemptResult =
-	| {kind: 'claimed'; message: string; claimCommit?: string}
-	| {kind: 'lost'; message: string}
-	| {kind: 'rejected'; message: string};
-
-const DEFAULT_RETRIES = 3;
 const DEFAULT_ARBITER = 'origin';
 
 /**
@@ -173,7 +175,6 @@ async function runClaim(
 ): Promise<ClaimCasResult> {
 	const slug = options.slug;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	const retries = options.retries ?? DEFAULT_RETRIES;
 	const dryRun = options.dryRun ?? false;
 	const cwd = options.cwd;
 	const env = options.env;
@@ -246,297 +247,109 @@ async function runClaim(
 	}
 
 	const backlog = `work/backlog/${slug}.md`;
-	const inProgress = `work/in-progress/${slug}.md`;
-	const claimBranch = `claim/${slug}`;
+	const branch = workBranchRef('slice', slug);
 
-	// UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#3/#15/#16;
-	// ADR `ledger-status-on-per-item-lock-refs`). INTERIM DUAL-WRITE: claim ALSO
-	// acquires the item's per-item lock (`action: implement`) ALONGSIDE today's
-	// `git mv backlog→in-progress` CAS. Acquire FIRST (before the body move), so a
-	// lock `lost` (someone already holds this SAME item's lock) makes claim lose
-	// DEFINITIVELY (no retry budget) WITHOUT ever moving the body — the lock
-	// exclusion and the existing CAS agree on the single winner. A dry-run takes no
-	// lock (it mutates nothing). When the body move/CAS subsequently loses or errors,
-	// the lock we just took is RELEASED so it is never orphaned (the body never
-	// moved, so releasing returns the item cleanly to the pool). The body-move /
-	// `main`-write retarget (stop moving the body) is the capstone slice #9; here the
-	// body STILL moves to `in-progress/` and `claimCommit` still lands on `main`.
-	if (!dryRun) {
-		const lock = await acquireItemLock({
-			item: `slice:${slug}`,
-			action: 'implement',
-			cwd,
-			arbiter,
-			env,
-		});
-		if (lock.outcome === 'error') {
-			// Environment/usage problem acquiring the lock — surface as exit 1, never a
-			// false claim. Nothing moved.
-			throw new ClaimUsageError(
-				`failed to acquire the item lock for '${slug}': ${lock.message}`,
+	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (PRD
+	// `ledger-status-per-item-lock-refs` US #1/#15/#16; ADR
+	// `ledger-status-on-per-item-lock-refs`). The interim dual-write is GONE: claim
+	// acquires the item's per-item lock (`action: implement`) and writes NOTHING to
+	// `main` — the body STAYS at `work/backlog/<slug>.md`, the claimable predicate is
+	// "in `backlog/` on `main` AND no lock held", and the held lock IS the claim. So
+	// a protected-`main` repo can be claimed (claim touches no protected ref).
+	//
+	// A dry-run takes no lock (it mutates nothing) and just reports it WOULD claim.
+	if (dryRun) {
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+		if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
+			const message = await lostMessage(
+				slug,
+				arbiter,
+				cwd,
+				env,
+				`'${backlog}' not found on ${arbiter}/main (already done/removed, or wrong slug).`,
 			);
-		}
-		if (lock.outcome === 'lost') {
-			// We lost the create-only lock race: another writer holds this SAME item's
-			// lock. This is DEFINITIVE — exit 2, no retry budget, and NO body move (the
-			// lock and the body-move CAS agree on the single winner). We do NOT try to
-			// tell "our own orphaned lock" apart by holder identity and auto-reclaim it:
-			// holder ids are NOT unique (a CI bot claims many items under one
-			// `user.name`), so a release+re-acquire "reclaim" could let a concurrent
-			// LOSER release the WINNER's still-valid lock — and an automatic sweep
-			// contradicts the ADR's recovery model (`ledger-status-on-per-item-lock-refs`:
-			// "no liveness heartbeat, no auto-sweep; a human asserts a lock is dead").
-			// A genuinely orphaned lock (e.g. a cross-machine reroute that bypassed the
-			// lock-releasing return-to-pool) is cleared by the human-mediated
-			// `release-lock` verb + `gc --ledger` report (slice
-			// `release-lock-verb-and-gc-stuck-report`), never an auto-steal at claim time.
-			// Prefer the FOLDER-based diagnostic (its recovery hints — resume / work-on /
-			// requeue — are what a human re-running their OWN item needs); fall back to
-			// the lock's generic message.
-			const message = await lostMessage(slug, arbiter, cwd, env, lock.message);
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};
 		}
+		const message = `DRY-RUN: would acquire the per-item lock for '${slug}' (body stays in work/backlog/).`;
+		note(message);
+		return {exitCode: 0, outcome: 'claimed', message};
 	}
 
-	const origRef = await originalRef(cwd, env);
+	// Acquire the lock FIRST. A lock `lost` (someone already holds this SAME item's
+	// lock) makes claim lose DEFINITIVELY — exit 2, NO retry budget (a per-item ref
+	// never falsely contends, so a rejection is a GENUINE same-item conflict the
+	// loser should lose). We do NOT try to tell "our own orphaned lock" apart by
+	// holder identity and auto-reclaim it: holder ids are NOT unique (a CI bot claims
+	// many items under one `user.name`), so a release+re-acquire "reclaim" could let a
+	// concurrent LOSER release the WINNER's still-valid lock — and an automatic sweep
+	// contradicts the ADR's recovery model (`ledger-status-on-per-item-lock-refs`:
+	// "no liveness heartbeat, no auto-sweep; a human asserts a lock is dead"). A
+	// genuinely orphaned lock is cleared by the human-mediated `release-lock` verb +
+	// `gc --ledger` report, never an auto-steal at claim time.
+	const lock = await acquireItemLock({
+		item: `slice:${slug}`,
+		action: 'implement',
+		cwd,
+		arbiter,
+		env,
+	});
+	if (lock.outcome === 'error') {
+		// Environment/usage problem acquiring the lock — surface as exit 1, never a
+		// false claim. Nothing was acquired.
+		throw new ClaimUsageError(
+			`failed to acquire the item lock for '${slug}': ${lock.message}`,
+		);
+	}
+	if (lock.outcome === 'lost') {
+		const message = await lostMessage(slug, arbiter, cwd, env, lock.message);
+		note(message);
+		return {exitCode: 2, outcome: 'lost', message};
+	}
 
-	/** Release the lock we just acquired (best-effort) — used when the body move
-	 * subsequently loses/contends/errors, so the lock is never orphaned (the body
-	 * never moved, so the item is cleanly returned to the pool). */
+	/** Release the lock we just acquired (best-effort) — used when the claimability
+	 * re-check finds the item is no longer in the pool, so the lock is never
+	 * orphaned (the body never moved, so the item is cleanly returned to the pool). */
 	async function releaseHeldLock(): Promise<void> {
-		if (dryRun) {
-			return;
-		}
 		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
 	}
 
 	try {
-		let i = 0;
-		// eslint-disable-next-line no-constant-condition
-		while (true) {
-			const result = await attempt({
+		// CLAIMABLE PREDICATE (US #15): "in `backlog/` on `main` AND no lock held". The
+		// HELD-LOCK half is the create-only acquire above (a held slug already lost the
+		// race). Confirm the `backlog/` residence here — the body STAYS in `backlog/`
+		// (claim no longer moves it), so a `done`/absent item is not claimable: release
+		// the lock we just took (it never protected any in-flight work) and lose (exit 2).
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+		if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
+			await releaseHeldLock();
+			const message = await lostMessage(
 				slug,
 				arbiter,
-				dryRun,
 				cwd,
 				env,
-				backlog,
-				inProgress,
-				claimBranch,
-				note,
-			});
-			if (result.kind === 'claimed') {
-				return {
-					exitCode: 0,
-					outcome: 'claimed',
-					message: result.message,
-					claimCommit: result.claimCommit,
-				};
-			}
-			if (result.kind === 'lost') {
-				// The shared-`main` CAS says we lost the body (already in-progress / done /
-				// removed). Release the lock we took so it is not orphaned.
-				await releaseHeldLock();
-				return {exitCode: 2, outcome: 'lost', message: result.message};
-			}
-			// rejected: main moved under us — retry up to the cap, then back off.
-			i += 1;
-			if (i > retries) {
-				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
-				note(message);
-				await releaseHeldLock();
-				return {exitCode: 3, outcome: 'contended', message};
-			}
-			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
-			// The next attempt re-checks claimability, so if we now LOST the item
-			// it returns exit 2 (definitive), matching claim.sh.
+				`'${backlog}' not found on ${arbiter}/main (already done/removed, or wrong slug).`,
+			);
+			note(message);
+			return {exitCode: 2, outcome: 'lost', message};
 		}
 	} catch (err) {
-		// A body-move plumbing failure after we took the lock: release it so the held
-		// lock does not orphan an item whose body never moved, then re-throw for the
-		// top-level handler to classify (exit 1).
+		// A plumbing failure after we took the lock: release it so the held lock does
+		// not orphan an item that never started, then re-throw for the top-level
+		// handler to classify (exit 1).
 		await releaseHeldLock();
 		throw err;
-	} finally {
-		await cleanup(cwd, origRef, claimBranch, env);
-	}
-}
-
-interface AttemptContext {
-	slug: string;
-	arbiter: string;
-	dryRun: boolean;
-	cwd: string;
-	env: NodeJS.ProcessEnv | undefined;
-	backlog: string;
-	inProgress: string;
-	claimBranch: string;
-	note: (m: string) => void;
-}
-
-/** One claim attempt: branch off arbiter/main, move, commit, CAS-push, verify. */
-async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
-	const {arbiter, slug, backlog, inProgress, claimBranch, cwd, env, note} = ctx;
-
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-
-	// Is the item still claimable on the arbiter's main? The claimable predicate is
-	// "in `backlog/` on `main` AND no lock held" (PRD US #15). The HELD-LOCK half is
-	// enforced UPFRONT by `runClaim` acquiring the per-item lock BEFORE this loop (a
-	// held slug already lost the create-only lock race → exit 2, no body move), so the
-	// folder check here only needs to confirm `backlog/` residence — re-listing the
-	// locks here would be redundant and racy against our own just-acquired lock.
-	if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
-		if (await catFileExists(`${arbiter}/main:${inProgress}`, cwd, env)) {
-			const message = `'${slug}' is already in-progress on ${arbiter}/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
-			note(message);
-			return {kind: 'lost', message};
-		}
-		const message = `'${backlog}' not found on ${arbiter}/main (already done/removed, or wrong slug).`;
-		note(message);
-		return {kind: 'lost', message};
 	}
 
-	// Fresh claim branch off the latest arbiter main. DETACH onto `arbiter/main`
-	// first so the throwaway claim branch can always be deleted: on a RETRY (the
-	// push was rejected because main advanced) HEAD is still ON `claimBranch` from
-	// the prior attempt, and `git branch -D <current-branch>` refuses — leaving a
-	// stale branch that makes the re-`checkout -b` fail with "already exists".
-	// Detaching first makes the delete + recreate idempotent across attempts. (This
-	// retry path is hit far more often once `run` claims CONCURRENTLY — a sibling
-	// job's integration advancing main is exactly what triggers the rejection.)
-	await gitHard(
-		['checkout', '--quiet', '--detach', `${arbiter}/main`],
-		cwd,
-		env,
+	// CLAIMED. The body rests in `backlog/` on `<arbiter>/main` and the lock is held.
+	// There is NO claim commit and nothing on `main` to branch from — onboarding cuts
+	// the work branch straight off `<arbiter>/main` (which carries the backlog body).
+	const message = `CLAIMED '${slug}' (lock held; body stays in work/backlog/ on ${arbiter}/main).`;
+	note(message);
+	note(
+		`Start work:  git fetch ${arbiter} && git switch -C ${branch} ${arbiter}/main`,
 	);
-	await gitSoft(['branch', '-D', claimBranch], cwd, env);
-	await gitHard(
-		['checkout', '--quiet', '-b', claimBranch, `${arbiter}/main`],
-		cwd,
-		env,
-	);
-
-	// Make the destination dir exist, then move. A failed move must abort (fatal),
-	// never silently continue — guarding against a false "claimed".
-	const inProgressAbs = join(cwd, inProgress);
-	mkdirSync(dirname(inProgressAbs), {recursive: true});
-	const mv = await gitSoft(['mv', backlog, inProgress], cwd, env);
-	if (mv.status !== 0) {
-		throw new ClaimUsageError(
-			`git mv failed for '${backlog}' (unexpected — aborting claim)`,
-		);
-	}
-
-	// Who/when is recorded authoritatively by THIS commit (the folder + git
-	// history — the committer identity and timestamp — are the source of truth;
-	// there is no advisory claimed_by frontmatter field and no `(by ...)` subject
-	// suffix; read the claimer with `git log` — see WORK-CONTRACT rule 6).
-	await gitHard(['commit', '--quiet', '-m', `claim: ${slug}`], cwd, env);
-
-	// Sanity: the claim commit MUST be a real child of the arbiter main we branched
-	// from (i.e. it actually changed something). Guards against a no-op claim that
-	// would make an "Everything up-to-date" push look like a successful claim.
-	const base = (
-		await gitHard(['rev-parse', `${arbiter}/main`], cwd, env)
-	).stdout.trim();
-	const head = (await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-	if (head === base) {
-		throw new ClaimUsageError(
-			'claim commit is a no-op (nothing moved) — aborting',
-		);
-	}
-	const parent = (
-		await gitHard(['rev-parse', 'HEAD^'], cwd, env)
-	).stdout.trim();
-	if (parent !== base) {
-		throw new ClaimUsageError(
-			`claim is not a direct child of ${arbiter}/main — aborting`,
-		);
-	}
-
-	// Publish the prepared claim micro-commit THROUGH the write seam. The seam's
-	// sole strategy is exactly today's behaviour — the `:main` push, the
-	// `--force-with-lease=main:<base>` lease, and the post-push verify all live
-	// inside the strategy (claim-cas no longer hard-wires the `main` push). The
-	// seam is storage-agnostic: we hand it the transition KIND, the prepared local
-	// branch, the CAS lease base, and the commit we expect to land.
-	if (ctx.dryRun) {
-		const result = await ledgerWrite.applyTransition({
-			kind: 'claim',
-			arbiter,
-			localBranch: claimBranch,
-			expectedBase: base,
-			head,
-			cwd,
-			dryRun: true,
-			env,
-			note,
-		});
-		return {kind: 'claimed', message: result.message};
-	}
-
-	const result = await ledgerWrite.applyTransition({
-		kind: 'claim',
-		arbiter,
-		localBranch: claimBranch,
-		expectedBase: base,
-		head,
-		cwd,
-		env,
-		note,
-	});
-	if (result.kind === 'published') {
-		// The seam stamps the claim commit with a per-attempt `CAS-Nonce` trailer, so
-		// the sha that ACTUALLY landed on the arbiter is the nonce'd one the seam
-		// reports back — NOT our pre-nonce `head` (its un-stamped sibling, which is
-		// NOT on `<arbiter>/main`). Branch the work branch + report off the LANDED
-		// sha so onboarding builds on the ledger tip, not a detached sibling.
-		const landed = result.publishedHead ?? head;
-		// Advance the LOCAL remote-tracking `<arbiter>/main` so it now INCLUDES the
-		// claim commit (the push only moved the arbiter's main; the local tracking
-		// ref stayed at the pre-claim sha). Onboarding then branches the work branch
-		// off an `<arbiter>/main` that reaches the claim, and the printed "Start
-		// work" hint is correct. Best-effort: a failed fetch leaves onboarding's own
-		// fetch to advance it.
-		await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
-		const branch = workBranchRef('slice', slug);
-		const message = `CLAIMED '${slug}' -> work/in-progress/ on ${arbiter}/main.`;
-		note(message);
-		note(
-			`Start work:  git fetch ${arbiter} && git switch -C ${branch} ${landed}`,
-		);
-		return {kind: 'claimed', message, claimCommit: landed};
-	}
-	return {kind: 'rejected', message: result.message};
-}
-
-/** The branch (or detached HEAD sha) we should return to afterward. */
-async function originalRef(
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string> {
-	const sym = await gitSoft(
-		['symbolic-ref', '--quiet', '--short', 'HEAD'],
-		cwd,
-		env,
-	);
-	if (sym.status === 0 && sym.stdout.trim() !== '') {
-		return sym.stdout.trim();
-	}
-	return (await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-}
-
-/** Best-effort: return to where we were and drop the throwaway claim branch. */
-async function cleanup(
-	cwd: string,
-	origRef: string,
-	claimBranch: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<void> {
-	await gitSoft(['checkout', '--quiet', origRef], cwd, env);
-	await gitSoft(['branch', '-D', claimBranch], cwd, env);
+	return {exitCode: 0, outcome: 'claimed', message};
 }
 
 /** `git cat-file -e <object>` — true iff the object exists. */

@@ -152,7 +152,7 @@ describe('resume behaviour — switches to an in-progress branch WITHOUT claimin
 	it('the `resume` verb\u2019s mode (performStart resume) re-engages an in-progress item with no claim', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
 		const repo = seeded.repo;
-		// Someone else claims it → it is in-progress (not in backlog).
+		// Someone else claims it → its lock is held (the body rests in backlog/).
 		const other = seeded.clone('other');
 		await performClaim({
 			slug: 'beta',
@@ -174,7 +174,7 @@ describe('resume behaviour — switches to an in-progress branch WITHOUT claimin
 		expect(result.outcome).toBe('resumed');
 		expect(result.branch).toBe('work/slice-beta');
 		expect(currentBranch(repo)).toBe('work/slice-beta');
-		// It did NOT (re-)claim: the item stays in-progress, never re-moved.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
+		// It did NOT (re-)claim: the body stays in backlog/, never moved.
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 	});
 });

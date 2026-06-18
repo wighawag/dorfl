@@ -216,7 +216,7 @@ describe('ensureMirrorMain — main-only, no-prune mirror-ensure for the config 
 	 * pruning fetch (`ensureMirror`) — git refuses to fetch into a checked-out
 	 * branch — but does NOT block the main-only no-prune `ensureMirrorMain`.
 	 */
-	it('a checked-out work/<other-slug> worktree BLOCKS ensureMirror but NOT ensureMirrorMain', () => {
+	it('a checked-out work/<other-slug> worktree does NOT block ensureMirror (main still refreshes; the checked-out head is left untouched)', () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const url = `file://${arbiter}`;
 		const workspacesDir = join(scratch.root, '.agent-runner');
@@ -246,16 +246,28 @@ describe('ensureMirrorMain — main-only, no-prune mirror-ensure for the config 
 		gitIn(['push', '-q', 'arbiter', 'work/other'], repo);
 		gitIn(['switch', '-q', 'main'], repo);
 
-		// The OLD path (all-heads prune fetch) is BLOCKED by the checked-out branch.
-		expect(() => ensureMirror({url, workspacesDir, env})).toThrow(
-			/refusing to fetch into branch|checked out/i,
-		);
-
-		// The NEW path (main-only, no-prune) is NOT blocked — it never touches
-		// `work/other`, so the config read can proceed.
-		const result = ensureMirrorMain({url, workspacesDir, env});
+		// SHARED-MIRROR SIBLING-WORKTREE SAFETY (slice
+		// `cutover-claim-body-stays-and-complete-sources-from-backlog`): `ensureMirror`
+		// no longer FAILS when a sibling worktree holds a `work/<slug>` head checked
+		// out (git refuses to update THAT head, but the all-heads fetch is now
+		// BEST-EFFORT, so every OTHER ref — incl. `main` — still updates). Before this
+		// slice the claim's body-move serialised same-repo jobs enough to hide the
+		// overlap; with claim no longer writing `main` they run concurrently and a
+		// throwing ensure would crash a sibling job's onboard.
+		const otherBefore = gitIn(['rev-parse', 'work/other'], mirror.path).trim();
+		const result = ensureMirror({url, workspacesDir, env});
 		expect(result.fetched).toBe(true);
 		expect(result.mainSha).toMatch(/^[0-9a-f]{40}$/);
+		// The checked-out `work/other` head was NOT updated (git refused that ONE ref),
+		// but the ensure did not throw.
+		expect(gitIn(['rev-parse', 'work/other'], mirror.path).trim()).toBe(
+			otherBefore,
+		);
+
+		// The narrowed config-read path (main-only, no-prune) is likewise NOT blocked.
+		const readResult = ensureMirrorMain({url, workspacesDir, env});
+		expect(readResult.fetched).toBe(true);
+		expect(readResult.mainSha).toMatch(/^[0-9a-f]{40}$/);
 	});
 
 	it('the config read SUCCEEDS through ensureMirrorMain even with a checked-out work/<other-slug>', () => {

@@ -65,8 +65,9 @@ function remoteBranchExists(repo: string, branch: string): boolean {
 
 /**
  * Stand a repo up exactly as the human loop leaves it just before `complete`:
- * a slice claimed (in-progress on the arbiter) and the human onboarded onto
- * `work/<slug>` off the freshly-pushed main. Returns the seeded handle + repo.
+ * a slice claimed (the lock is held; the body RESTS in backlog/ on the arbiter,
+ * since claim no longer moves it) and the human onboarded onto `work/<slug>` off
+ * the freshly-fetched main. Returns the seeded handle + repo.
  */
 async function claimAndBranch(
 	slug: string,
@@ -176,7 +177,7 @@ describe('complete — gate', () => {
 });
 
 describe('complete — done-move + commit', () => {
-	it('on pass: git mv in-progress→done + ONE atomic commit staging all work', async () => {
+	it('on pass: git mv backlog→done + ONE atomic commit staging all work', async () => {
 		const {repo} = await claimAndBranch('beta');
 		agentEdits(repo, 'src.txt', 'agent code\n');
 
@@ -196,15 +197,13 @@ describe('complete — done-move + commit', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		// The move happened in the tree…
-		expect(existsSync(join(repo, 'work', 'in-progress', 'beta.md'))).toBe(
-			false,
-		);
+		expect(existsSync(join(repo, 'work', 'backlog', 'beta.md'))).toBe(false);
 		expect(existsSync(join(repo, 'work', 'done', 'beta.md'))).toBe(true);
 		// …and ONE commit carries BOTH the move AND the agent's previously-
 		// uncommitted file.
 		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
 		expect(files).toMatch(/work\/done\/beta\.md/);
-		expect(files).toMatch(/work\/in-progress\/beta\.md/);
+		expect(files).toMatch(/work\/backlog\/beta\.md/);
 		expect(files).toMatch(/src\.txt/);
 		// Working tree is clean afterwards (everything was staged).
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
@@ -212,15 +211,15 @@ describe('complete — done-move + commit', () => {
 
 	it('refuses honestly when there is genuinely nothing to complete on the branch (wrong slug / nothing staged)', async () => {
 		// Stand the work branch up as the "genuinely nothing here" shape: claimed,
-		// then the in-progress slice REMOVED from the branch tree WITHOUT a done-move
-		// (so neither in-progress/ NOR needs-attention/ NOR done/ holds the slug on
-		// the branch). This is the bar the stranded-done auto-recover MUST NOT mask
-		// (slice `autonomous-path-auto-recovers-already-committed-stranded-branch`):
+		// then the backlog slice REMOVED from the branch tree WITHOUT a done-move
+		// (so neither backlog/ NOR in-progress/ NOR needs-attention/ NOR done/ holds
+		// the slug on the branch). This is the bar the stranded-done auto-recover MUST
+		// NOT mask (slice `autonomous-path-auto-recovers-already-committed-stranded-branch`):
 		// a real wrong-slug / nothing-staged error still surfaces as `refused`. The
 		// auto-recover routing is folder-gated on `work/done/<slug>.md`, so this
 		// shape correctly falls through to the existing honest `CompleteRefusal`.
 		const {repo} = await claimAndBranch('empty');
-		gitIn(['rm', '-q', 'work/in-progress/empty.md'], repo);
+		gitIn(['rm', '-q', 'work/backlog/empty.md'], repo);
 		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
 		const result = await performComplete({
 			slug: 'empty',
@@ -423,9 +422,10 @@ describe('complete — propose integration', () => {
 			repo,
 		).trim();
 		expect(pushed).not.toBe('');
-		// …but main was NOT advanced to carry the item into done/.
+		// …but main was NOT advanced to carry the item into done/; claim wrote nothing
+		// to main, so the body still rests in backlog/ there.
 		expect(existsOnArbiterMain(repo, 'done', 'zeta')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'zeta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'zeta')).toBe(true);
 		expect(result.message).toMatch(/Open a PR\/MR|opened a review/);
 	});
 

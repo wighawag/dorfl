@@ -68,15 +68,16 @@ function arbiterMainLog(repo: string): string[] {
 		.filter((s) => s !== '');
 }
 
-describe('surface — tree-less CAS transition (in-progress/ → needs-attention/, no cwd tree)', () => {
-	it('moves in-progress/ → needs-attention/ on the arbiter WITHOUT a cwd checkout of the item', async () => {
+describe('surface — tree-less CAS transition (backlog/ → needs-attention/, no cwd tree)', () => {
+	it('moves backlog/ → needs-attention/ on the arbiter WITHOUT a cwd checkout of the item', async () => {
 		const {repo} = await claimedOnArbiterOnly('alpha');
 		// Precondition: the surfaced state is NOT in the cwd working tree (it lives
 		// only on the arbiter's main), proving the move cannot come from the cwd tree.
+		// The body RESTS in backlog/ on the arbiter (claim no longer moves it).
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
 			false,
 		);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 
 		const result = await surfaceToNeedsAttention({
 			cwd: repo,
@@ -87,9 +88,9 @@ describe('surface — tree-less CAS transition (in-progress/ → needs-attention
 		});
 		expect(result.moved).toBe(true);
 
-		// The move landed on the arbiter's main: in-progress/ → needs-attention/.
+		// The move landed on the arbiter's main: backlog/ → needs-attention/.
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
 	});
 
 	it('appends the reason to the item BODY on the move (read via the arbiter, not the cwd tree)', async () => {
@@ -289,13 +290,16 @@ describe('surface — tree-less CAS transition (in-progress/ → needs-attention
 		expect(result.reasonNotMoved).toMatch(/arbiter/i);
 	});
 
-	it('refuses (no move) when the slug is on the arbiter in neither in-progress/ nor needs-attention/', async () => {
+	it('refuses (no move) when the slug is on the arbiter in NO surfaceable folder (absent / already done)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['theta']);
 		const repo = seeded.repo;
-		// Never claimed: theta is in backlog/ on the arbiter, not in-progress/.
+		// The body now rests in backlog/ while claimed, so a backlog slug IS
+		// surfaceable. To exercise the no-move refusal we surface a slug the arbiter
+		// holds in NO surfaceable folder (backlog/ in-progress/ needs-attention/) —
+		// here a slug that does not exist on the arbiter at all (absent / already done).
 		const result = await surfaceToNeedsAttention({
 			cwd: repo,
-			slug: 'theta',
+			slug: 'does-not-exist',
 			reason: 'continue push failed terminally',
 			arbiter: ARBITER,
 			env: gitEnv(),

@@ -47,12 +47,12 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Stand the repo up EXACTLY as the CI incident left it: the slug was claimed
- * (so `work/in-progress/<slug>.md` was published on the arbiter), the work was
- * built + committed + done-moved on the work branch (so the BRANCH tree holds
- * `work/done/<slug>.md` and NOT `work/in-progress/<slug>.md`), but the tip was
- * NEVER pushed / merged — it is genuinely AHEAD of `<arbiter>/main`. HEAD is on
- * the work branch (where the autonomous integrate path runs).
+ * Stand the repo up EXACTLY as the CI incident left it: the slug was claimed (the
+ * body RESTS in `work/backlog/<slug>.md` on the arbiter, since claim no longer
+ * moves it), the work was built + committed + done-moved on the work branch (so
+ * the BRANCH tree holds `work/done/<slug>.md` and NOT `work/backlog/<slug>.md`),
+ * but the tip was NEVER pushed / merged — it is genuinely AHEAD of `<arbiter>/main`.
+ * HEAD is on the work branch (where the autonomous integrate path runs).
  */
 async function seedStrandedDoneBranch(
 	slug: string,
@@ -73,20 +73,18 @@ async function seedStrandedDoneBranch(
 	// The agent's work + the done-move + commit (steps 2–3 of the build path).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`], repo);
+	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], repo);
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], repo);
 
-	// Sanity: the branch tree has done/ and lacks in-progress/needs-attention;
-	// the arbiter still holds in-progress/ (the claim landed) and not done/.
+	// Sanity: the branch tree has done/ and lacks backlog/needs-attention;
+	// the arbiter still holds the body in backlog/ (claim wrote nothing) and not done/.
 	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(true);
-	expect(existsSync(join(repo, 'work', 'in-progress', `${slug}.md`))).toBe(
-		false,
-	);
+	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
 	expect(existsSync(join(repo, 'work', 'needs-attention', `${slug}.md`))).toBe(
 		false,
 	);
-	expect(existsOnArbiterMain(repo, 'in-progress', slug)).toBe(true);
+	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'done', slug)).toBe(false);
 	const tip = gitIn(['rev-parse', 'HEAD'], repo).trim();
 	return {repo, seeded, tip, branch};
@@ -258,9 +256,9 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 	});
 
 	it('honest refusal preserved: genuinely-nothing-on-the-branch ⇒ existing CompleteRefusal (exit 1, `refused`)', async () => {
-		// Seed + claim — but DO NOT done-move; instead delete in-progress/ from the
-		// branch tree (so neither in-progress/ NOR needs-attention/ NOR done/ holds
-		// the slug on the branch). The autonomous path must STILL refuse honestly:
+		// Seed + claim — but DO NOT done-move; instead delete the body from backlog/ on
+		// the branch tree (so neither backlog/ NOR in-progress/ NOR needs-attention/ NOR
+		// done/ holds the slug). The autonomous path must STILL refuse honestly:
 		// the auto-recover must never mask a real wrong-slug / nothing-staged error.
 		const seeded = seedRepoWithArbiter(scratch.root, ['gamma']);
 		const repo = seeded.repo;
@@ -273,13 +271,11 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
-		// Remove the in-progress slice from the branch tree WITHOUT moving it to
+		// Remove the slice body from backlog/ on the branch tree WITHOUT moving it to
 		// done/ — the "genuinely nothing here" state.
-		gitIn(['rm', '-q', 'work/in-progress/gamma.md'], repo);
+		gitIn(['rm', '-q', 'work/backlog/gamma.md'], repo);
 		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
-		expect(existsSync(join(repo, 'work', 'in-progress', 'gamma.md'))).toBe(
-			false,
-		);
+		expect(existsSync(join(repo, 'work', 'backlog', 'gamma.md'))).toBe(false);
 		expect(existsSync(join(repo, 'work', 'done', 'gamma.md'))).toBe(false);
 
 		const result = await performComplete({

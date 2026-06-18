@@ -267,7 +267,13 @@ function findSourceFolder(
 	cwd: string,
 	slug: string,
 ): {rel: string; abs: string} | undefined {
-	for (const folder of ['in-progress', 'done', 'needs-attention']) {
+	// `backlog` is probed FIRST: since claim no longer moves the body (slice
+	// `cutover-claim-body-stays-and-complete-sources-from-backlog`), a freshly-built
+	// slice that hits a red gate / agent failure STILL RESTS in `work/backlog/` (the
+	// claim never relocated it), so the wip-save bounce must be able to source the
+	// move from there. `in-progress` is retained for the legacy/recovery surfaces; on
+	// the rebase-conflict path (after the done-move) the body is in `done/`.
+	for (const folder of ['backlog', 'in-progress', 'done', 'needs-attention']) {
 		const rel = join('work', folder, `${slug}.md`);
 		const abs = join(cwd, rel);
 		if (existsSync(abs)) {
@@ -1184,13 +1190,18 @@ export async function surfaceToNeedsAttention(
 	const sourceRel = await resolveSurfaceSourceRel(arbiter, slug, cwd, env);
 	if (!sourceRel) {
 		const message =
-			`'${slug}' is neither in work/in-progress/ nor work/needs-attention/ on ` +
-			`${arbiter}/main — nothing to surface to needs-attention (wrong slug, or ` +
-			'not claimed?).';
+			`'${slug}' is in none of work/backlog/, work/in-progress/, or ` +
+			`work/needs-attention/ on ${arbiter}/main — nothing to surface to ` +
+			'needs-attention (wrong slug, or not claimed?).';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	}
 	const destRel = `work/needs-attention/${slug}.md`;
+	// The body now RESTS in `backlog/` while claimed (slice
+	// `cutover-claim-body-stays-and-complete-sources-from-backlog`); `in-progress/`
+	// is the legacy landed-claim source. Probe `backlog/` FIRST in the per-attempt
+	// planner (the same order `resolveSurfaceSourceRel` uses).
+	const backlogRel = `work/backlog/${slug}.md`;
 	const inProgressRel = `work/in-progress/${slug}.md`;
 
 	const commitMessage = `chore(${slug}): route to needs-attention; ${reason}`;
@@ -1229,9 +1240,11 @@ export async function surfaceToNeedsAttention(
 			const atDest = pathInCommit(base, destRel, cwd, env);
 			const src = atDest
 				? destRel
-				: pathInCommit(base, inProgressRel, cwd, env)
-					? inProgressRel
-					: undefined;
+				: pathInCommit(base, backlogRel, cwd, env)
+					? backlogRel
+					: pathInCommit(base, inProgressRel, cwd, env)
+						? inProgressRel
+						: undefined;
 			if (!src) {
 				return 'missing';
 			}
@@ -1442,13 +1455,17 @@ async function resolveRequeueSourceRel(
 
 /**
  * Resolve the slug's ACTUAL current folder ON THE ARBITER for a SURFACE source
- * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). The after-commit
- * surface sites have a landed claim, so the item is in `in-progress/`; an
+ * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). Since claim no
+ * longer moves the body (slice
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`), a CLAIMED-AND-
+ * IN-FLIGHT item RESTS in `backlog/` on the arbiter — so the after-commit surface
+ * sites (autonomous strand / continue-conflict) source the move from there;
+ * `in-progress/` is retained for the legacy landed-claim surfaces, and an
  * `needs-attention/` source is an IDEMPOTENT re-surface (the
  * continue-rebase-conflict re-route of an item the arbiter already shows
  * surfaced). Returns the source `work/<folder>/<slug>.md` rel path, or `undefined`
- * when the slug is in NEITHER. `in-progress/` is probed FIRST (the common landed-
- * claim case); the one-slug-one-folder invariant means at most one holds it.
+ * when the slug is in NONE. `backlog/` is probed FIRST (the body-stays reality);
+ * the one-slug-one-folder invariant means at most one holds it.
  */
 async function resolveSurfaceSourceRel(
 	arbiter: string,
@@ -1456,7 +1473,7 @@ async function resolveSurfaceSourceRel(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string | undefined> {
-	for (const folder of ['in-progress', 'needs-attention']) {
+	for (const folder of ['backlog', 'in-progress', 'needs-attention']) {
 		const rel = `work/${folder}/${slug}.md`;
 		if (
 			(

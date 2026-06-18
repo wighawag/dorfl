@@ -1,9 +1,8 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {performClaim} from '../src/claim-cas.js';
-import {returnToBacklog} from '../src/needs-attention.js';
-import {ledgerWrite} from '../src/ledger-write.js';
 import {
 	acquireItemLock,
+	releaseItemLock,
 	listItemLocks,
 	readItemLock,
 	itemLockRef,
@@ -47,8 +46,8 @@ function lockRefOnArbiter(arbiter: string, entry: string): boolean {
 	return r.status === 0 && r.stdout.trim() !== '';
 }
 
-describe('claim ALSO acquires the unified per-item lock (interim dual-write)', () => {
-	it('a successful claim acquires the lock AND still moves the body to in-progress', async () => {
+describe('claim acquires the unified per-item lock and leaves the body in backlog', () => {
+	it('a successful claim acquires the lock and writes NOTHING to main (body stays in backlog)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await performClaim({
 			slug: 'alpha',
@@ -57,11 +56,11 @@ describe('claim ALSO acquires the unified per-item lock (interim dual-write)', (
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('claimed');
-		// Body STILL moves to in-progress/ on main (interim dual-write KEEPS today's CAS).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
-		// claimCommit still lands on main.
-		expect(result.claimCommit).toMatch(/^[0-9a-f]{40}$/);
+		// The body STAYS in backlog/ on main — claim no longer moves it.
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		// No claim commit lands on main (onboarding cuts off <arbiter>/main).
+		expect(result.claimCommit).toBeUndefined();
 		// AND the per-item lock (action: implement) is held on the arbiter.
 		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
 		const entry = await readItemLock({
@@ -72,6 +71,29 @@ describe('claim ALSO acquires the unified per-item lock (interim dual-write)', (
 		});
 		expect(entry?.action).toBe('implement');
 		expect(entry?.state).toBe('active');
+	});
+
+	it('a protected-main repo (claim writes nothing to main) still claims successfully', async () => {
+		// Model a protected `main`: claim must touch no `main` ref. We assert it by the
+		// arbiter main tip being unchanged across the claim (the only proof that needs
+		// no real protection hook: a claim that writes main would advance the tip).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const mainBefore = run('git', ['rev-parse', `${ARBITER}/main`], repo, {
+			env: gitEnv(),
+		}).stdout.trim();
+		const result = await performClaim({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('claimed');
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const mainAfter = run('git', ['rev-parse', `${ARBITER}/main`], repo, {
+			env: gitEnv(),
+		}).stdout.trim();
+		expect(mainAfter).toBe(mainBefore);
 	});
 
 	it('a dry-run takes NO lock and mutates nothing', async () => {
@@ -149,7 +171,7 @@ describe('race on a --bare file:// arbiter', () => {
 				}),
 			),
 		);
-		// Every different-item claim wins, and NONE failed on the LOCK.
+		// Every different-item claim wins, and NONE failed on the LOCK or main.
 		for (const r of results) {
 			expect(r.outcome).toBe('claimed');
 			expect(r.exitCode).toBe(0);
@@ -182,16 +204,20 @@ describe('race on a --bare file:// arbiter', () => {
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(claimed).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		// The two exclusion mechanisms AGREE: the body is in-progress exactly once AND
-		// the lock is held exactly once.
-		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(true);
-		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(false);
+		// The lock is the single exclusion now: held exactly once, body still in backlog.
+		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
+		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(false);
 		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['slice-solo']);
 	});
 });
 
-describe('requeue releases the lock so a legitimate re-claim succeeds', () => {
-	it('claim → needs-attention → requeue → re-claim works (lock released on return-to-pool)', async () => {
+describe('releasing the lock returns the item to the pool so a re-claim succeeds', () => {
+	it('claim → release the lock → re-claim works (the body never left backlog/)', async () => {
+		// The body STAYS in backlog/ throughout (claim no longer moves it), so
+		// returning the item to the pool is purely "release the per-item lock". (The
+		// needs-attention/requeue surface still sources from in-progress/ — its
+		// retarget to a body-rests-in-backlog item is slice 9b; see
+		// work/observations/requeue-needs-attention-still-source-from-in-progress-not-backlog.md.)
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const first = await performClaim({
 			slug: 'alpha',
@@ -200,33 +226,23 @@ describe('requeue releases the lock so a legitimate re-claim succeeds', () => {
 			env: gitEnv(),
 		});
 		expect(first.outcome).toBe('claimed');
-		// Push a kept work branch (the requeue continue artifact) + surface needs-attention.
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', `${ARBITER}/main`], repo);
-		gitIn(['commit', '-q', '--allow-empty', '-m', 'prior work'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/slice-alpha:work/slice-alpha'], repo);
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'alpha',
-			reason: 'red',
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([
+			'slice-alpha',
+		]);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 
-		// Requeue (default keep+continue): the body returns to backlog AND the lock is
-		// released (the dual-write complement of claim acquiring it).
-		const requeued = await returnToBacklog({
+		// Release the lock (the return-to-pool the body-stays model reduces to).
+		const released = await releaseItemLock({
+			item: 'slice:alpha',
 			cwd: repo,
-			slug: 'alpha',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(requeued.moved).toBe(true);
+		expect(released.outcome).toBe('released');
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 
-		// A re-claim now re-acquires the lock and moves the body again.
+		// A re-claim now re-acquires the lock; the body remains in backlog.
 		const second = await performClaim({
 			slug: 'alpha',
 			cwd: repo,
@@ -234,6 +250,7 @@ describe('requeue releases the lock so a legitimate re-claim succeeds', () => {
 			env: gitEnv(),
 		});
 		expect(second.outcome).toBe('claimed');
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([
 			'slice-alpha',
 		]);

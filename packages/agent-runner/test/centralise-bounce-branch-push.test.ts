@@ -217,9 +217,10 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		// Local-only: nothing pushed, main untouched (still shows in-progress).
+		// Local-only: nothing pushed, main untouched (the body still rests in backlog/,
+		// since claim wrote nothing to main).
 		expect(arbiterHasBranch(seeded, 'work/slice-zeta')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'zeta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'zeta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'zeta')).toBe(false);
 	});
 });

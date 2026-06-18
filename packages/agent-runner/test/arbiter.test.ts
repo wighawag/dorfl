@@ -268,13 +268,14 @@ describe('claim against a provisioned arbiter (end-to-end)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('claimed');
-		// The claim landed on the bare arbiter's main: in-progress, not backlog.
+		// The claim acquires the per-item lock on the bare arbiter; the body STAYS in
+		// backlog/ on main (claim writes nothing there — the lock IS the claim).
 		git(['fetch', '-q', 'arbiter'], clone, {env: gitEnv()});
-		const inProg = git(
-			['cat-file', '-e', 'arbiter/main:work/in-progress/feat.md'],
+		const inBacklog = git(
+			['cat-file', '-e', 'arbiter/main:work/backlog/feat.md'],
 			clone,
 			{env: gitEnv()},
 		);
-		expect(inProg).toBe('');
+		expect(inBacklog).toBe('');
 	});
 });

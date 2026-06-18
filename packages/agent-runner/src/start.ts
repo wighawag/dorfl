@@ -1,4 +1,5 @@
 import {performClaim} from './claim-cas.js';
+import {readItemLock} from './item-lock.js';
 import {ledgerWrite} from './ledger-write.js';
 import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
@@ -165,9 +166,10 @@ async function runStart(
 		);
 	}
 
-	// Folder on the arbiter's main is the source of truth (NOT claimed_by).
+	// Folder on the arbiter's main is the source of truth (NOT claimed_by) for the
+	// DURABLE residence; HELD-NESS is read from the per-item LOCK ref, not a folder.
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const folder = await folderOnArbiterMain(slug, arbiter, cwd, env);
+	const folder = await dispatchFolder(slug, arbiter, cwd, env);
 
 	const result = await onboardFromFolder(folder, {
 		options,
@@ -195,7 +197,40 @@ async function runStart(
 	return result;
 }
 
-/** Dispatch the onboard by the slug's folder on `<arbiter>/main`. */
+/**
+ * Resolve the EFFECTIVE dispatch folder, combining the durable `<arbiter>/main`
+ * folder with the per-item LOCK ref (slice
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`). Since claim no
+ * longer moves the body, a CLAIMED-AND-IN-FLIGHT slice RESTS in `backlog/` on
+ * `main` — a folder-only check would mis-read it as unclaimed and let `start`
+ * re-claim it. So when the slug is in `backlog/` AND its per-item lock is held
+ * `active` (`action: implement`), dispatch as `in-progress` (already claimed:
+ * refuse / `--resume`). A held `stuck` lock is the needs-attention surface, which
+ * STILL moves the body to `work/needs-attention/` on `main` (the interim dual-write
+ * 9b owns); so the `needs-attention/` folder remains the dispatch source for the
+ * stuck case and we do not re-key it off the lock here. Everything else dispatches
+ * by folder unchanged.
+ */
+async function dispatchFolder(
+	slug: string,
+	arbiter: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<Folder> {
+	const folder = await folderOnArbiterMain(slug, arbiter, cwd, env);
+	if (folder !== 'backlog') {
+		return folder;
+	}
+	// In `backlog/`: claimed-ness is the per-item lock, not the folder. A held
+	// `active` lock = already claimed/in-flight (it rests in `backlog/` while held).
+	const lock = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	if (lock && lock.state === 'active') {
+		return 'in-progress';
+	}
+	return 'backlog';
+}
+
+/** Dispatch the onboard by the slug's resolved (folder + lock) state. */
 async function onboardFromFolder(
 	folder: Folder,
 	params: {

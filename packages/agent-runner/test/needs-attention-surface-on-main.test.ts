@@ -112,15 +112,16 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 		expect(mainTree).not.toMatch(/feature\.txt/);
 	});
 
-	it('surfaces the rebase-conflict path (item in done/ on the branch, in-progress on main)', async () => {
+	it('surfaces the rebase-conflict path (item in done/ on the branch, body in backlog on main)', async () => {
 		// The runner's rebase-conflict abort routes from done/ (the item was
-		// done-moved before the failed rebase). On main it is still in in-progress/;
-		// surfacing must relocate from there to needs-attention/ regardless.
+		// done-moved before the failed rebase). On main the body still rests in
+		// backlog/ (claim no longer moves it); surfacing must relocate from there to
+		// needs-attention/ regardless.
 		const {repo} = await claimAndBranch('beta');
 		// Emulate the post-done-move state on the work branch (git mv needs the dest
 		// dir to exist — git tracks no empty dirs).
 		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-		gitIn(['mv', 'work/in-progress/beta.md', 'work/done/beta.md'], repo);
+		gitIn(['mv', 'work/backlog/beta.md', 'work/done/beta.md'], repo);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'done-move'], repo);
 
@@ -134,7 +135,7 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 		expect(result.moved).toBe(true);
 
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(false);
 		const onMain = gitIn(
 			['show', `${ARBITER}/main:work/needs-attention/beta.md`],
@@ -153,8 +154,9 @@ describe('needs-attention surface-on-main — routing through the seam', () => {
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		// The surface was NOT published (no arbiter given): main is untouched.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(true);
+		// The surface was NOT published (no arbiter given): main is untouched — the
+		// body still rests in backlog/ there (claim wrote nothing to main).
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
 	});
 
@@ -407,9 +409,9 @@ describe('needs-attention surface-on-main — resolve via start (no manual moves
 });
 
 describe('needs-attention surface-on-main — claim/complete success paths unchanged', () => {
-	it('a happy claim still lands in-progress on main (no needs-attention surface)', async () => {
+	it('a happy claim leaves the body in backlog on main (no needs-attention surface)', async () => {
 		const {repo} = await claimAndBranch('eta');
-		expect(existsOnArbiterMain(repo, 'in-progress', 'eta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(false);
 	});
 

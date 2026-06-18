@@ -139,9 +139,10 @@ describe('Gate 2 — approve proceeds to integrate (merge IS the auto-land mode)
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('completed');
-		// propose is always a human checkpoint — it never lands on main on approve.
+		// propose is always a human checkpoint — it never lands on main on approve;
+		// claim writes nothing to main, so the body still rests in backlog/.
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 	});
 });
 
@@ -230,11 +231,12 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('review-blocked');
 		expect(result.routedToNeedsAttention).toBe(true);
-		// Local bounce; main still shows the in-progress claim (no surfacing).
+		// Local bounce; main still shows the body in backlog/ (no surfacing; claim
+		// wrote nothing to main).
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'gamma.md'))).toBe(
 			true,
 		);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
 	});
 });

@@ -129,10 +129,10 @@ describe('PART 2 — in-place `do` REFUSES on a diverged local main', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		expect(agentRan).toBe(true);
-		// It got past the guard into the claim/onboard (the item left the backlog and
-		// is now in-progress; propose does NOT auto-land it on main).
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		// It got past the guard into the claim/onboard (the lock is held; claim writes
+		// nothing to main, so the body stays in backlog/, and propose does NOT land it).
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 });
@@ -368,8 +368,9 @@ describe('PART 2 — `complete --merge` REFUSES up front on a diverged main (no 
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/ahead of/i);
-		// Nothing landed: still in-progress on the arbiter, not done.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'zeta')).toBe(true);
+		// Nothing landed: the body still rests in backlog/ on the arbiter, not done
+		// (claim wrote nothing to main; the refusal happened before any done-move).
+		expect(existsOnArbiterMain(repo, 'backlog', 'zeta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'zeta')).toBe(false);
 		// The agent's uncommitted work is untouched (no done-move, no commit).
 		expect(existsSync(join(repo, 'thing.txt'))).toBe(true);

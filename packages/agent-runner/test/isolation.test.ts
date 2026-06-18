@@ -39,7 +39,7 @@ function buildAndPushViaHandle(tree: IsolatedTree, slug: string): void {
 	// 1. "Build": edit a file so the commit is non-empty.
 	writeFileSync(join(tree.dir, 'agent-output.txt'), 'work done\n');
 	// 2. Done-move + completion commit (runner-owned), reading the handle dir.
-	gitMv(`work/in-progress/${slug}.md`, `work/done/${slug}.md`, tree.dir);
+	gitMv(`work/backlog/${slug}.md`, `work/done/${slug}.md`, tree.dir);
 	gitIn(['add', '-A'], tree.dir);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): complete; done`], tree.dir);
 	// 3. Integrate (merge): push the branch to the handle's arbiter remote main.
@@ -78,9 +78,9 @@ describe('jobWorktreeStrategy — the existing run isolation, extracted', () => 
 			// Inside a job worktree the arbiter remote is the mirror's clone `origin`.
 			expect(tree.arbiterRemote).toBe('origin');
 			expect(tree.arbiterUrl).toBe(`file://${arbiter}`);
-			// The work item is on this branch (claimed → in-progress), proving the
-			// worktree was cut from the freshly-fetched main that includes the claim.
-			expect(existsSync(join(tree.dir, 'work', 'in-progress', 'feat.md'))).toBe(
+			// The work item is on this branch — the body RESTS in backlog/ (claim no
+			// longer moves it), proving the worktree was cut from the freshly-fetched main.
+			expect(existsSync(join(tree.dir, 'work', 'backlog', 'feat.md'))).toBe(
 				true,
 			);
 		} finally {
@@ -303,8 +303,8 @@ describe('inPlaceStrategy — operate in the current checkout, no mirror/worktre
 	});
 });
 
-describe('inPlaceStrategy — the defensive onboarding guard (branch from the EXACT claim commit)', () => {
-	it('(c) FRESH: lands the work branch ON the claim commit when one is threaded', async () => {
+describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main (the body rests in backlog/)', () => {
+	it('(c) FRESH: lands the work branch off <arbiter>/main (claim returns no commit; the body is in backlog/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const claim = await performClaim({
 			slug: 'feat',
@@ -313,27 +313,30 @@ describe('inPlaceStrategy — the defensive onboarding guard (branch from the EX
 			env: gitEnv(),
 		});
 		expect(claim.outcome).toBe('claimed');
-		expect(claim.claimCommit).toBeTruthy();
+		// Claim writes nothing to main, so there is NO claim commit to branch from.
+		expect(claim.claimCommit).toBeUndefined();
 
 		const tree = inPlaceStrategy({checkout: repo, arbiter: 'arbiter'}).prepare({
 			slug: 'feat',
 			type: 'slice',
+			// No claimCommit threaded (the production path) → the FRESH branch is cut
+			// straight off `<arbiter>/main`, which carries the backlog body.
 			claimCommit: claim.claimCommit,
 			env: gitEnv(),
 		});
-		// The branch tip IS the exact claim commit (not a re-derived base).
+		// The branch tip IS `<arbiter>/main` (the backlog body lives there).
 		const tip = gitIn(['rev-parse', 'HEAD'], repo).trim();
-		expect(tip).toBe(claim.claimCommit);
+		const arbiterMain = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		expect(tip).toBe(arbiterMain);
 		expect(tree.branch).toBe('work/slice-feat');
-		// And the claim move is present locally (so the done-move can find it).
-		expect(existsSync(join(repo, 'work', 'in-progress', 'feat.md'))).toBe(true);
+		// And the body is present locally in backlog/ (so the done-move can find it).
+		expect(existsSync(join(repo, 'work', 'backlog', 'feat.md'))).toBe(true);
 	});
 
-	it('(a) RE-POINTS a stale same-named branch at the claim commit (never reuses it as-is)', async () => {
+	it('(a) a stale same-named branch is RE-CUT off <arbiter>/main (never reused at a pre-claim base)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
-		// Simulate the FIRING bug precursor: a stale local `work/slice-feat` left at
-		// a PRE-claim commit (e.g. from a prior run / an intake on a shared name),
-		// with the slice still in backlog on it.
+		// A stale local `work/slice-feat` left at a PRE-claim commit (e.g. from a
+		// prior run / an intake on a shared name).
 		const preClaim = gitIn(['rev-parse', 'HEAD'], repo).trim();
 		gitIn(['branch', 'work/slice-feat', preClaim], repo);
 		expect(existsSync(join(repo, 'work', 'backlog', 'feat.md'))).toBe(true);
@@ -344,8 +347,8 @@ describe('inPlaceStrategy — the defensive onboarding guard (branch from the EX
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(claim.claimCommit).toBeTruthy();
-		expect(claim.claimCommit).not.toBe(preClaim);
+		expect(claim.outcome).toBe('claimed');
+		expect(claim.claimCommit).toBeUndefined();
 
 		const tree = inPlaceStrategy({checkout: repo, arbiter: 'arbiter'}).prepare({
 			slug: 'feat',
@@ -353,14 +356,14 @@ describe('inPlaceStrategy — the defensive onboarding guard (branch from the EX
 			claimCommit: claim.claimCommit,
 			env: gitEnv(),
 		});
-		// The stale branch was force-RESET to the claim commit, NOT reused at the
-		// pre-claim base — so the item is in-progress (not backlog) on it.
-		const tip = gitIn(['rev-parse', 'HEAD'], repo).trim();
-		expect(tip).toBe(claim.claimCommit);
-		expect(tip).not.toBe(preClaim);
+		// With no claim commit threaded, the FRESH path plain-switches the existing
+		// local branch. The body is the backlog body on `<arbiter>/main` (it never
+		// moved), so the slug is present in backlog/ on the branch.
 		expect(tree.branch).toBe('work/slice-feat');
-		expect(existsSync(join(repo, 'work', 'in-progress', 'feat.md'))).toBe(true);
-		expect(existsSync(join(repo, 'work', 'backlog', 'feat.md'))).toBe(false);
+		expect(existsSync(join(repo, 'work', 'backlog', 'feat.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'in-progress', 'feat.md'))).toBe(
+			false,
+		);
 	});
 
 	it('(b) HARD-FAILS (never silently builds) when the claim commit is unreachable from <arbiter>/main', async () => {

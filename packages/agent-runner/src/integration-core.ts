@@ -180,12 +180,16 @@ export interface IntegrationCoreInput {
 	 */
 	branch?: string;
 	/**
-	 * Which folder the item is being completed FROM: `in-progress` (the normal,
-	 * freshly-built path), `needs-attention` (the runner-owned recovery path), or
-	 * `done` (the CONTINUE-BUILD path, slice
-	 * `complete-builds-on-already-done-moved-continue`). The HEAD resolved this;
-	 * the core uses it for the done-move source folder and the recovery rebase.
-	 * IGNORED when {@link lifecycle} is set (a non-slice move).
+	 * Which folder the item is being completed FROM: `backlog` (the normal,
+	 * freshly-built path — since claim no longer moves the body, a freshly-built
+	 * slice RESTS in `backlog/` on `main`, slice
+	 * `cutover-claim-body-stays-and-complete-sources-from-backlog`),
+	 * `needs-attention` (the runner-owned recovery path), or `done` (the
+	 * CONTINUE-BUILD path, slice `complete-builds-on-already-done-moved-continue`).
+	 * The HEAD resolved this; the core uses it for the done-move source folder and
+	 * the recovery rebase. IGNORED when {@link lifecycle} is set (a non-slice move).
+	 * (`in-progress` is RETAINED in the union for the bounce/recovery surfaces that
+	 * may still source from `in-progress/` until its folder removal, 9c.)
 	 *
 	 * `done` — the continue-build lifecycle state: a CONTINUE on a kept work
 	 * branch whose `<slug>.md` is ALREADY in `work/done/` (a prior attempt moved
@@ -203,7 +207,7 @@ export interface IntegrationCoreInput {
 	 * {@link committedRecovery} only when it is CLEAN; they cannot both be set
 	 * for the same call). See `docs/adr/continue-build-already-done-moved.md`.
 	 */
-	source: 'in-progress' | 'needs-attention' | 'done';
+	source: 'backlog' | 'in-progress' | 'needs-attention' | 'done';
 	/**
 	 * True iff completing FROM `needs-attention/` (a recovery finish). A red re-gate
 	 * here keeps the item in needs-attention/ (no re-route); the rebase drops the
@@ -533,11 +537,9 @@ export async function performIntegration(
 	// arbiter ledger placement/divergent-done-move reconcile are EXEMPTED below.
 	const sourcePath = lifecycle
 		? lifecycle.titlePath
-		: source === 'in-progress'
-			? join(cwd, 'work', 'in-progress', `${slug}.md`)
-			: source === 'needs-attention'
-				? join(cwd, 'work', 'needs-attention', `${slug}.md`)
-				: join(cwd, 'work', 'done', `${slug}.md`);
+		: source === 'done'
+			? join(cwd, 'work', 'done', `${slug}.md`)
+			: join(cwd, 'work', source, `${slug}.md`);
 
 	// UNTRUSTED-ORIGIN BUILD-PROPOSE RULE (slice `untrusted-origin-forces-build-propose`).
 	// A slice born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
@@ -2249,7 +2251,7 @@ async function reconcileDivergentDoneMove(params: {
 	slug: string;
 	branch: string;
 	/** The folder the LOCAL done-move removed the slug from (its `git mv` source). */
-	localSource: 'in-progress' | 'needs-attention';
+	localSource: 'backlog' | 'in-progress' | 'needs-attention';
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<boolean> {

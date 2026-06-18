@@ -1,5 +1,11 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, readFileSync, existsSync} from 'node:fs';
+import {
+	writeFileSync,
+	readFileSync,
+	existsSync,
+	mkdirSync,
+	rmSync,
+} from 'node:fs';
 import {join} from 'node:path';
 import {
 	routeToNeedsAttention,
@@ -63,7 +69,7 @@ function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
 	writeFileSync(join(repo, file), body);
 }
 
-describe('needs-attention — the move (in-progress → needs-attention)', () => {
+describe('needs-attention — the move (backlog → needs-attention)', () => {
 	it('git mvs the item and records the reason in the file body, committed', async () => {
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
@@ -76,10 +82,8 @@ describe('needs-attention — the move (in-progress → needs-attention)', () =>
 		});
 
 		expect(result.moved).toBe(true);
-		// The file moved folders…
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			false,
-		);
+		// The file moved folders (from backlog/, where the body rests after a claim)…
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(false);
 		const dest = join(repo, 'work', 'needs-attention', 'alpha.md');
 		expect(existsSync(dest)).toBe(true);
 		// …the reason is prose in the BODY (not a frontmatter field).
@@ -92,7 +96,7 @@ describe('needs-attention — the move (in-progress → needs-attention)', () =>
 		// the tip without leaking the wip onto main.
 		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
 		expect(tip).toMatch(/work\/needs-attention\/alpha\.md/);
-		expect(tip).toMatch(/work\/in-progress\/alpha\.md/);
+		expect(tip).toMatch(/work\/backlog\/alpha\.md/);
 		expect(tip).not.toMatch(/feature\.txt/); // the wip is NOT in the move-only tip
 		expect(result.moveCommit).toBe(gitIn(['rev-parse', 'HEAD'], repo).trim());
 		// The wip commit below the tip carries the agent's aborted work.
@@ -269,11 +273,13 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 		expect(result.reasonNotMoved).toMatch(/in-progress/);
 	});
 
-	it('recovers a slug stuck in in-progress/ (a claim that never surfaced), not only needs-attention/', async () => {
-		// A claim leaves the slug in in-progress/ on the arbiter; with its work branch
-		// pushed (keep+continue artifact), requeue recovers it to backlog/ via the same
-		// tree-less CAS as the needs-attention path.
-		const {repo} = await claimAndBranch('iota-stuck');
+	it('recovers a slug LEGACY-stuck in in-progress/ (a pre-cut-over surfacing), not only needs-attention/', async () => {
+		// Claim leaves the body in backlog/ (it no longer moves it). To reproduce a
+		// slug LEGACY-stuck in `in-progress/` on the arbiter (an old surfacing / a
+		// pre-cut-over state — the in-progress source `requeue` still recovers from
+		// until 9b), we MANUALLY publish `backlog/ → in-progress/` to main (a separate
+		// clone). requeue then recovers it to backlog/ via the tree-less CAS.
+		const {repo, seeded} = await claimAndBranch('iota-stuck');
 		agentEdits(repo, 'prior.txt', 'prior attempt work\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
@@ -281,6 +287,22 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			['push', '-q', ARBITER, 'work/slice-iota-stuck:work/slice-iota-stuck'],
 			repo,
 		);
+		{
+			const mover = seeded.clone('to-in-progress-iota');
+			gitIn(['fetch', '-q', ARBITER], mover);
+			gitIn(['switch', '-q', '-c', 'to-ip/iota', `${ARBITER}/main`], mover);
+			mkdirSync(join(mover, 'work', 'in-progress'), {recursive: true});
+			gitIn(
+				['mv', 'work/backlog/iota-stuck.md', 'work/in-progress/iota-stuck.md'],
+				mover,
+			);
+			gitIn(
+				['commit', '-q', '-m', 'chore(iota-stuck): legacy in-progress'],
+				mover,
+			);
+			gitIn(['push', '-q', ARBITER, 'to-ip/iota:main'], mover);
+			rmSync(mover, {recursive: true, force: true});
+		}
 		// Leave the cwd on a clean main: the requeue resolves the source from the
 		// arbiter, never the cwd tree.
 		gitIn(['fetch', '-q', ARBITER], repo);

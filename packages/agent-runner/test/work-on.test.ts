@@ -3,6 +3,7 @@ import {existsSync, writeFileSync, readFileSync, lstatSync} from 'node:fs';
 import {join} from 'node:path';
 import {performWorkOn, suggestHumanWorktreesDir} from '../src/work-on.js';
 import {performClaim} from '../src/claim-cas.js';
+import {listItemLocks} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -63,14 +64,15 @@ describe('work-on — in-repo form (work-on <slug>)', () => {
 		expect(result.dir!.startsWith(humanRoot())).toBe(true);
 		expect(result.dir).not.toMatch(/\.agent-runner/);
 
-		// The claim landed on the arbiter (backlog → in-progress).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
+		// The claim acquired the per-item lock; the body STAYS in backlog/ on the
+		// arbiter (claim no longer moves it).
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 
-		// The worktree carries work/in-progress/<slug>.md (cut from post-claim main).
-		expect(
-			existsSync(join(result.dir!, 'work', 'in-progress', 'alpha.md')),
-		).toBe(true);
+		// The worktree carries work/backlog/<slug>.md (cut from main, which holds it).
+		expect(existsSync(join(result.dir!, 'work', 'backlog', 'alpha.md'))).toBe(
+			true,
+		);
 	});
 });
 
@@ -97,10 +99,11 @@ describe('work-on — remote form (work-on <remote> <slug>)', () => {
 		// The hub mirror was created under the workspaces area.
 		expect(existsSync(join(opts.workspacesDir, 'repos'))).toBe(true);
 
-		// The worktree has the in-progress file (claim landed on the arbiter).
-		expect(
-			existsSync(join(result.dir!, 'work', 'in-progress', 'beta.md')),
-		).toBe(true);
+		// The worktree has the backlog body (claim acquired the lock but did not move
+		// the body; it rests in backlog/ on the arbiter).
+		expect(existsSync(join(result.dir!, 'work', 'backlog', 'beta.md'))).toBe(
+			true,
+		);
 	});
 
 	it('creates the hub mirror if absent, then reuses it on a second remote call', async () => {
@@ -356,9 +359,10 @@ describe('work-on — clean failure on a lost claim (no worktree)', () => {
 		// The loser created no worktree.
 		expect(losers[0].dir).toBeUndefined();
 
-		// The arbiter agrees: claimed exactly once.
-		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(true);
-		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(false);
+		// The arbiter agrees: the body stays in backlog/, and the per-item lock is
+		// held exactly once (claimed once).
+		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['slice-solo']);
 	});
 });
 

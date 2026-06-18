@@ -52,10 +52,10 @@ const PASS = 'exit 0';
 /**
  * Stand a repo up EXACTLY as a terminal push failure AFTER the done-move + commit
  * leaves it: claimed, branched onto `work/slice-<slug>`, the agent's work
- * committed, the slice `git mv`'d `in-progress/ → done/` and committed (`…; done`),
+ * committed, the slice `git mv`'d `backlog/ → done/` and committed (`…; done`),
  * but the tip NOT pushed (the strand). The arbiter still holds the slug in
- * `in-progress/` (the claim published it); the tip is genuinely AHEAD of
- * `<arbiter>/main`.
+ * `backlog/` (claim published nothing to main; the body rests there); the tip is
+ * genuinely AHEAD of `<arbiter>/main`.
  */
 async function seedStrandedCommittedDone(
 	slug: string,
@@ -77,18 +77,16 @@ async function seedStrandedCommittedDone(
 	// The done-move + commit already happened (steps 2–3), as the integration
 	// core does just before the push that then failed terminally.
 	mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`], repo);
+	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], repo);
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], repo);
 
-	// Pre-conditions: done/ present on the branch, in-progress/ gone locally; the
+	// Pre-conditions: done/ present on the branch, backlog/ gone locally; the
 	// tip is NOT on the arbiter (the push failed), so the arbiter still has
-	// in-progress/.
+	// the body in backlog/.
 	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(true);
-	expect(existsSync(join(repo, 'work', 'in-progress', `${slug}.md`))).toBe(
-		false,
-	);
-	expect(existsOnArbiterMain(repo, 'in-progress', slug)).toBe(true);
+	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
+	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'done', slug)).toBe(false);
 	const tip = gitIn(['rev-parse', 'HEAD'], repo).trim();
 	return {repo, seeded, tip};
@@ -102,7 +100,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -131,7 +129,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -151,7 +149,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'gamma',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'propose',
@@ -176,7 +174,7 @@ describe('finish-already-committed — unspoofable detection (already-integrated
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -197,7 +195,7 @@ describe('finish-already-committed — unspoofable detection (already-integrated
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',

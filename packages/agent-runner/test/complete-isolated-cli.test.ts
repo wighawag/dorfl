@@ -64,7 +64,7 @@ async function seedStrandedWorktree(
 	const dir = job.dir;
 	writeFileSync(join(dir, 'feature.txt'), 'the work\n');
 	mkdirSync(join(dir, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`], dir);
+	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], dir);
 	gitIn(['add', '-A'], dir);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], dir);
 	expect(dir).toBe(jobWorktreePath(ws, arbiterUrl, slug));
