@@ -169,7 +169,7 @@ source: 'derived from packages/rocketh-verifier/src/etherscan.ts @ <commit>' # R
 
 The autonomy gate is TWO orthogonal binary fields (both default to omitted = false), present on BOTH slices and PRDs, plus the repo's `autoBuild` policy (see `docs/adr/methodology-and-skills.md` §4, authoritative):
 
-- **`humanOnly: true` — the DECIDED axis.** _Should a human drive this, regardless of how complete the spec is?_ A product/design/security/judgement call, or an `AGENTS.md`-type rule. Driven by a decision (in the PRD conversation, or the slicer's own judgement). On a PRD it means "a human must drive the slicing"; on a slice it means "a human must drive the build".
+- **`humanOnly: true` — the DECIDED axis (DE-OVERLOADED — see below).** _Should a human drive this, regardless of how complete the spec is?_ A product/design/security/judgement call, or an `AGENTS.md`-type rule. Driven by a decision (in the PRD conversation, or the slicer's own judgement). On a PRD it means "a human must drive the slicing" (UNCHANGED — no folder substitute); on a SLICE it is now NARROWED to the rare "never-for-agents BY NATURE" guard (secrets/release/security) that **survives even when the slice resides in the agent pool `work/backlog/`**. Slice `humanOnly` is NOT the tool for ordinary "a human should review this before the agent builds it" — that job belongs to POSITION (the runner births the slice STAGED in `work/pre-backlog/`; a human promotes the approved ones into the pool `work/backlog/`). See "Slice `humanOnly` is NARROW" below.
 - **`needsAnswers: true` — the DISCOVERED axis.** _Are there unresolved questions blocking autonomous progress?_ The spec is incomplete; **the open questions live in the body**. Once answered, the flag is cleared and an agent may proceed.
 - They are **orthogonal** — four honest states. e.g. `humanOnly:true, needsAnswers:false` = fully specified but a human must own it; `humanOnly:false, needsAnswers:true` = anyone can do it once the questions are answered.
 - **Repo policy `autoBuild`** answers the question the _repo_ owns: _may agents auto-build undeclared items here?_ The build member of the symmetric per-action gate family (`autoBuild`/`autoSlice`/`observationTriage`; the triage gate's old boolean name `autoTriage` is now the 3-state `observationTriage`). Per-repo config key (`.agent-runner.json`), resolved like `integration`: \*\*CLI flag (`--auto-build` / `--no-auto-build`)
@@ -178,6 +178,35 @@ The autonomy gate is TWO orthogonal binary fields (both default to omitted = fal
 **Predicate (same shape at both levels):** an item is **auto-eligible** iff `needsAnswers` is not `true` AND `humanOnly` is not `true` AND `autoBuild` is `true`. A human is never bound by it (a human may slice/build a flagged item — the gate binds the agent, like the runner-vs-human stance on `verify`).
 
 (This supersedes the older single `humanOnly`-only gate, which itself replaced the three-state `afk` field + `allowUnspecifiedGate`.)
+
+### Slice `humanOnly` is NARROW — POSITION carries "review-first"; `humanOnly` carries "never-by-nature"
+
+Three orthogonal axes, each meaning EXACTLY one thing (governing ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement`):
+
+- **POSITION (folder, runner-deterministic, STRUCTURAL).** Whether a slice is in the agent POOL (`work/backlog/`) or in STAGING (`work/pre-backlog/`) is computed by the runner from unforgeable inputs (the `originTrust` stamp, the per-repo placement policy, explicit operator flags). "A human should review this before an agent acts on it" is encoded HERE — the slice is BIRTHED in `work/pre-backlog/` (not eligible) and a human promotes the approved ones into `work/backlog/`. The agent CREATES only in the staging folder; the runner OWNS every move + promotion.
+- **NATURE (`humanOnly`, agent/human judgement, ADVISORY).** Slice `humanOnly: true` means "an agent must NEVER auto-take this BY NATURE" — the rare hard case (release/secrets/security/AGENTS.md-rule) that **survives even when the slice resides in the pool `work/backlog/`**. The autonomy gate predicate above is exactly this: a `humanOnly: true` slice is never agent-claimable, even from `work/backlog/`. PRD `humanOnly` is UNCHANGED (gates auto-slicing; no folder substitute, because the slicer's input is a single PRD — it must be flagged in-band).
+- **DISCOVERED (`needsAnswers`, agent judgement, ADVISORY).** Unchanged.
+
+Consequences for the slicer heuristic (the `to-slices` skill / the slicer review loop):
+
+- For the COMMON "a human should review this slice first" case, the slicer does NOT stamp `humanOnly: true` — it lets the runner birth the slice STAGED in `work/pre-backlog/` (the position carries the review-first signal). Stamping `humanOnly` for review was the overloaded reading and is RETIRED.
+- The slicer flags `humanOnly: true` on a slice ONLY when building THAT slice is genuinely never-for-agents-by-nature (release pipeline, secrets handling, hard security boundaries, AGENTS.md prohibitions). If in doubt, leave `humanOnly` off and rely on the position — a human can always refuse to promote.
+
+### Three honest integration modes for slicer output (`do prd:<slug>`)
+
+The slicer-output integration combines `--propose`/`--merge` with the `slicesLandIn` placement default into three explicit, named modes (no new flag; the three modes are the existing combinations made explicit):
+
+| Mode | How to invoke | What lands where | When to use |
+| --- | --- | --- | --- |
+| **`--propose`** (PR path) | `do prd:<slug> --propose` (or the configured default) | A work branch pushed; a PR opened against `main`. Slices land in the PR's tree (typically `work/pre-backlog/`); review is the PR diff. | A repo with a host (GitHub, …) and a PR-based review culture. Code/implementation review ALWAYS uses this path — a diff cannot be folder-gated (PRD US #9). |
+| **`--merge` + land-in-staging** (PR-free review) | `do prd:<slug> --merge` with `slicesLandIn: pre-backlog` (or `--slices-land-in pre-backlog`) | Slices land DURABLY on `main` under `work/pre-backlog/` (the staging folder, NOT eligible). A human promotes the approved ones `work/pre-backlog/ → work/backlog/`. | A bare / no-host / protected-`main` repo that still wants human review of ledger-file output. Review is a LEDGER POSITION a human moves, not an out-of-band PR. |
+| **`--merge` + land-in-pool** (trusted no-review fast path) | `do prd:<slug> --merge` with `slicesLandIn: backlog` (or `--slices-land-in backlog`) and a trusted origin | Slices land on `main` directly in the agent POOL `work/backlog/` — immediately eligible for `do` / auto-pick. | A trusted, fast-iteration repo where the slicer's output is trusted to enter the pool without ledger-position review. The runner-deterministic placement precedence still forces STAGING for an untrusted origin (`untrusted-origin-forces-build-propose` style). |
+
+Key rules:
+
+- **Placement is runner-deterministic.** WHICH folder a slice lands in is the runner's CALL from the `originTrust` stamp + `slicesLandIn` config + an explicit `--slices-land-in` flag (precedence: explicit-flag > untrusted-forces-staging > configured default > built-in staging). The agent never sets it.
+- **Code/implementation review is unchanged** — it stays on the branch/PR path (a code diff cannot be folder-gated). The position gate above is SCOPED to LEDGER-FILE output (slicing); the existing branch-based build review is unaffected.
+- **`humanOnly` survives every mode.** A `humanOnly: true` slice in the pool is still not agent-claimable — the position gate and the `humanOnly` gate are orthogonal.
 
 ### `sliceAfter` — PRD slicing-order (enforced against `work/prd-sliced/`, NOT `done/`)
 

@@ -678,6 +678,16 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 		`not guess: a flagged question costs one human glance; a guessed slice ships`,
 		`wrong-but-compiling work. Omit "edits"/"uncertainSlices"/`,
 		`"decompositionUnclear" when not applicable.`,
+		``,
+		`SLICE \`humanOnly\` IS NARROW. Only edit a slice to add \`humanOnly: true\``,
+		`when building THAT slice is genuinely never-for-agents BY NATURE (secrets/`,
+		`release/security/AGENTS.md prohibition) — a \`humanOnly\` slice is not agent-`,
+		`claimable EVEN from the pool \`work/backlog/\`. Do NOT stamp \`humanOnly\` to`,
+		`mean "a human should review this first": that is the POSITION's job — every`,
+		`candidate slice is BIRTHED STAGED in \`work/pre-backlog/\` (not eligible) and a`,
+		`human promotes the approved ones into the pool.`,
+		`Review-first is the staging position; the overloaded "stamp \`humanOnly\` for`,
+		`review" reading is retired.`,
 	].join('\n');
 }
 
