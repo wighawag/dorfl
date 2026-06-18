@@ -1,5 +1,5 @@
 ---
-title: Retarget SLICING-lock onto the unified lock
+title: SLICING additionally acquires the unified lock (interim dual-write; slicing/ marker kept)
 slug: slicing-acquires-unified-lock
 prd: ledger-status-per-item-lock-refs
 humanOnly: true
@@ -7,34 +7,63 @@ blockedBy: [unified-item-lock-module-from-tracer, lock-entry-state-machine-and-i
 covers: [1, 3]
 ---
 
+> **RE-SCOPED 2026-06-18 to Option A (interim dual-write).** Symmetric to the claim
+> re-scope: removing the `work/slicing/<slug>.md`-on-`main` marker in isolation would
+> break the many consumers that still read the `slicing/` folder (`advance.ts`,
+> `needs-attention.ts`, `ledger-read.ts`, `review-gate.ts`, `integration-core.ts`,
+> `slicing.ts`, `ledger-write.ts`, `config.ts`, `ledger-lint.ts`) and the tests that
+> assert it, while the folder-retirement that fixes them is the capstone #9. So this
+> slice makes slicing ADDITIONALLY acquire the per-item lock (`action: slice`) while
+> KEEPING today's `git mv prd→slicing` marker exactly as-is. The marker removal + the
+> `slicing/` folder retirement are DEFERRED to `retire-transient-folders-and-drop-rebase`
+> (#9). The durable `prd → prd-sliced` move on success was always a `main` move and
+> stays one.
+
 ## What to build
 
-Retarget the SLICING lock off the `git mv prd→slicing` marker on `main` onto the
-unified per-item lock, as an `action: slice` hold. After this slice, acquiring the
-slicing lock for a PRD ACQUIRES its per-item lock (`action: slice`) instead of moving
-the PRD into a `work/slicing/` folder on `main`; the PRD body STAYS in `prd/`. On a
-successful slice the release still drives the DURABLE `prd → prd-sliced` move on
-`main` (a durable resting record, that stays a `main` move). On an aborted/unclear
-slice the lock is released (the PRD is already resting in `prd/`; no folder bounce).
+Make the SLICING lock ALSO acquire the item's unified per-item lock
+(`action: slice`) at acquire time, **in addition to** today's `git mv prd→slicing`
+marker on `main`. This is the additive, back-compatible half of the slicing
+retarget: it introduces the lock as the cross-action exclusion primitive WITHOUT
+removing the `slicing/`-on-`main` marker the rest of the runner still consumes.
 
-Crucially, because the slicing hold is now the SAME per-item lock as claim and
-advance, slicing a PRD is mutually exclusive with claiming/advancing the SAME item by
-construction. Preserve the slicing-release STALE-EDIT check (the held PRD body edited
-under the lock → fail loud, never emit slices from a stale snapshot), it remains a
-real backstop and is unchanged in spirit; only the lock substrate moves.
+Concretely, after this slice:
+
+- `acquireSlicingLock` keeps writing today's `work/slicing/<slug>.md` marker via the
+  shared-`main` CAS UNCHANGED, and ADDITIONALLY acquires the unified per-item lock
+  (`action: slice`). If the lock acquire is `lost` (the item is already held for
+  implement/advance/slice), the slicing acquire loses definitively (no retry) and
+  does NOT write the marker either, the two mechanisms agree on the winner.
+- `releaseSlicingLock` keeps its existing behaviour (release-on-SUCCESS drives the
+  durable `prd → prd-sliced` `main` move atomic with the emitted backlog slices;
+  release-on-ABORT bounces `slicing/ → prd/`) UNCHANGED, and ADDITIONALLY releases
+  the unified per-item lock.
+- The slicing-release STALE-EDIT check (held PRD body edited under the lock → fail
+  loud, never emit from a stale snapshot) is preserved exactly.
+
+Because the slicing hold is now ALSO the SAME per-item lock as claim and advance,
+slicing a PRD is mutually exclusive with claiming/advancing the SAME item by
+construction (the second acquirer loses the SAME lock CAS), even though the legacy
+marker still co-exists. The marker removal + `slicing/` folder retirement are OUT OF
+SCOPE here and owned by #9 (see the RE-SCOPED banner).
 
 ## Acceptance criteria
 
-- [ ] `acquireSlicingLock` / `releaseSlicingLock` acquire/release the unified
-      per-item lock with `action: slice`; the PRD body stays in `work/prd/<slug>.md`
-      (no `work/slicing/` move on `main`).
-- [ ] Release-on-SUCCESS still performs the durable `prd → prd-sliced` `main` move,
-      atomic with the emitted backlog slices.
-- [ ] Release-on-ABORT releases the lock with NO `main` move (the PRD rests in `prd/`).
+- [ ] `acquireSlicingLock` ADDITIONALLY acquires the unified per-item lock
+      (`action: slice`); today's `git mv prd→slicing` marker write is KEPT unchanged
+      (interim dual-write). A lock `lost` makes the acquire lose definitively (no
+      retry) and writes NO marker in that case.
+- [ ] `releaseSlicingLock` ADDITIONALLY releases the unified per-item lock; the
+      existing release behaviour is unchanged: release-on-SUCCESS still performs the
+      durable `prd → prd-sliced` `main` move atomic with the emitted backlog slices,
+      release-on-ABORT still bounces `slicing/ → prd/`.
 - [ ] The slicing-release stale-edit check still fires (held body edited under the
       lock → fail loud; never emit slices from a stale snapshot).
 - [ ] A slice action on an item already held for implement/advance loses the SAME
       lock CAS (atomic cross-action exclusion); tested on a `--bare file://` arbiter.
+- [ ] Every EXISTING slicing/advance/integration test still passes (the `slicing/`
+      marker still lands on `main`); this slice does NOT remove the marker or retire
+      the folder.
 - [ ] Tests use throwaway repos + a `--bare file://` arbiter; nothing writes outside
       its own temp fixtures.
 
@@ -45,25 +74,33 @@ real backstop and is unchanged in spirit; only the lock substrate moves.
 
 ## Prompt
 
-> Retarget the SLICING lock onto the unified per-item lock. Today it is a
-> `git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit raced via the
-> shared-`main` CAS (`packages/agent-runner/src/slicing-lock.ts`,
+> Make the SLICING lock ALSO acquire the unified per-item lock, IN ADDITION to
+> today's behaviour. Today it `git mv work/prd/<slug>.md → work/slicing/<slug>.md` as
+> a micro-commit raced via the shared-`main` CAS
+> (`packages/agent-runner/src/slicing-lock.ts`,
 > `acquireSlicingLock`/`releaseSlicingLock`), read it first, noting the release's
-> stale-edit (content-identity) check (exit 4 `stale`). New behaviour: acquire the
-> unified per-item lock with `action: slice`; the PRD body STAYS in `work/prd/`.
-> PRD `work/prd/ledger-status-per-item-lock-refs.md` (US #1, #3); ADR
+> stale-edit (content-identity) check (exit 4 `stale`). KEEP all of that as-is. ADD:
+> on a successful acquire, ALSO acquire the unified per-item lock (`action: slice`)
+> via the lock module (`acquireItemLock`, keyed through `lockEntryFor`); if the lock
+> acquire is `lost`, the slicing acquire loses (no retry) and writes NO marker. On
+> release, ALSO release the unified lock (`releaseItemLock`). PRD
+> `work/prd/ledger-status-per-item-lock-refs.md` (US #1, #3); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`; state machine in the trail's
 > "### The C8 lock-entry STATE MACHINE".
 >
-> The DURABLE resting move `prd → prd-sliced` on a SUCCESSFUL slice STAYS a `main` move
-> (it is a durable resting record, atomic with the emitted backlog slices), only the
-> transient `slicing` HOLD moves to the lock ref. On abort, just release the lock (the
-> PRD already rests in `prd/`; there is no `slicing/ → prd/` bounce because there is no
-> `slicing/` folder anymore). KEEP the slicing-release stale-edit check, it is still a
-> real backstop; only the lock substrate changes. Because this is now the SAME lock as
-> claim/advance, prove slice∥claim and slice∥advance mutual exclusion on the same item.
+> READ the RE-SCOPED banner at the top of this slice: this is the INTERIM DUAL-WRITE
+> half only. Do NOT remove the `work/slicing/<slug>.md` marker, do NOT stop the
+> `slicing/ → prd/` abort bounce, do NOT retire the `slicing/` folder. Those break
+> the `slicing/`-folder consumers (`advance.ts`, `needs-attention.ts`, `ledger-read.ts`,
+> `review-gate.ts`, `integration-core.ts`, `slicing.ts`, …) + their tests, whose
+> retargets are the capstone slice #9; they are explicitly OUT OF SCOPE here. The
+> DURABLE `prd → prd-sliced` move on a successful slice STAYS a `main` move (it always
+> was). KEEP the slicing-release stale-edit check. Because this is now ALSO the SAME
+> lock as claim/advance, prove slice∥claim and slice∥advance mutual exclusion on the
+> same item via the lock.
 >
-> Test on a `--bare file://` arbiter (`test/helpers/gitRepo.ts`). "Done" =
+> Test on a `--bare file://` arbiter (`test/helpers/gitRepo.ts`); prove the EXISTING
+> slicing tests still pass (the marker still lands). "Done" =
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not

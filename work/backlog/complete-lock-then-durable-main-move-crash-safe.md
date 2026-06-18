@@ -7,15 +7,28 @@ blockedBy: [claim-acquires-unified-lock-no-body-move, needs-attention-as-stuck-l
 covers: [9, 10]
 ---
 
+> **RE-SCOPED 2026-06-18 to Option A (interim dual-write).** Under Option A claim
+> still moves the body to `in-progress/` (the body-stays-in-`backlog/` cut-over is
+> deferred to #9), so complete's SOURCE folder is still `in-progress/` here, NOT
+> `backlog/`. This slice therefore KEEPS complete's existing durable `main` move
+> (today's `in-progress → done`, or `prd → prd-sliced`, or the `→ dropped` terminal)
+> and ADDS the cross-substrate ORDERING + recovery around it: hold the lock → land
+> the durable `main` move FIRST → release the lock SECOND, with the `main` record
+> authoritative over a stale lock. The change of complete's source to `backlog/`
+> (once claim stops moving the body) is DEFERRED to #9; the ordering + recovery rule
+> built here is substrate-agnostic and carries through unchanged. Where the criteria
+> below say `backlog → done`, read it as "complete's durable move (interim:
+> `in-progress → done`)".
+
 ## What to build
 
 Make the COMPLETE path cross-substrate crash-safe. Completing an item is now:
-hold the lock → land the DURABLE `main` move (`backlog → done`, atomic with the
-code; or `prd → prd-sliced`; or `backlog → dropped`) → release the lock. ORDER
-MATTERS: the `main` durable move lands FIRST (it is the authoritative referenceable
-record), the lock release SECOND. A crash BETWEEN them leaves a `done`-on-`main`
-item with a still-held lock; recovery treats the `main` durable record as
-AUTHORITATIVE and clears the stale lock.
+hold the lock → land the DURABLE `main` move (complete's existing durable move,
+interim `in-progress → done` atomic with the code; or `prd → prd-sliced`; or
+`→ dropped`) → release the lock. ORDER MATTERS: the `main` durable move lands FIRST
+(it is the authoritative referenceable record), the lock release SECOND. A crash
+BETWEEN them leaves a `done`-on-`main` item with a still-held lock; recovery treats
+the `main` durable record as AUTHORITATIVE and clears the stale lock.
 
 The reconciliation rule: if `main` shows the item terminal (`done`/`dropped`/
 `prd-sliced`) but a lock entry lingers, the lock is stale → clear it. The reverse
@@ -29,9 +42,14 @@ against `dropped/`.
 
 ## Acceptance criteria
 
-- [ ] Complete orders the steps main-move-FIRST, release-SECOND; the `backlog → done`
-      move stays atomic with the code (and `prd → prd-sliced` / `backlog → dropped`
-      with their artifacts).
+- [ ] Complete orders the steps main-move-FIRST, release-SECOND; complete's durable
+      move (interim `in-progress → done`) stays atomic with the code (and
+      `prd → prd-sliced` / `→ dropped` with their artifacts). The unified-lock RELEASE
+      is added after the move; complete's existing durable move is otherwise unchanged
+      (the source-folder change to `backlog/` is #9's).
+- [ ] Every EXISTING complete test still passes (complete still sources its durable
+      move from `in-progress/` under Option A); this slice ADDS the lock
+      ordering/release + recovery, it does not change complete's source folder.
 - [ ] Recovery: a `done`/`dropped`/`prd-sliced` item on `main` with a lingering lock
       → the `main` record wins, the stale lock is cleared.
 - [ ] `done` + a `stuck` lock co-exist without being treated as corruption (the
@@ -52,9 +70,12 @@ against `dropped/`.
 > Make COMPLETE cross-substrate crash-safe. Read the existing complete path
 > (`packages/agent-runner/src/complete*.ts` and the `ledger-write.ts` durable
 > transitions), today the done-move and any lock cleanup are entangled on `main`.
-> New order: hold lock → land the DURABLE `main` move FIRST (`backlog → done` atomic
-> with the code; or `prd → prd-sliced`; or `backlog → dropped`) → release the lock
-> SECOND. PRD `work/prd/ledger-status-per-item-lock-refs.md` (US #9, #10); ADR
+> READ the RE-SCOPED banner: under Option A complete still sources its durable move
+> from `in-progress/` (the `backlog/`-source cut-over is #9). New order: hold lock →
+> land the DURABLE `main` move FIRST (complete's existing move, interim
+> `in-progress → done`, atomic with the code; or `prd → prd-sliced`; or `→ dropped`)
+> → release the unified lock SECOND. Do NOT change complete's source folder to
+> `backlog/` here. PRD `work/prd/ledger-status-per-item-lock-refs.md` (US #9, #10); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`; the trail's Amendment 6
 > (cross-substrate crash-safety).
 >

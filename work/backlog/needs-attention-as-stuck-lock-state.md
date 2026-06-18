@@ -1,5 +1,5 @@
 ---
-title: needs-attention becomes the stuck lock state (read by status/scan)
+title: needs-attention ALSO marks the stuck lock state, read by status/scan (interim dual-write)
 slug: needs-attention-as-stuck-lock-state
 prd: ledger-status-per-item-lock-refs
 humanOnly: true
@@ -7,33 +7,57 @@ blockedBy: [lock-entry-state-machine-and-invariants, claim-acquires-unified-lock
 covers: [5, 8]
 ---
 
+> **RE-SCOPED 2026-06-18 to Option A (interim dual-write).** Consistent with the
+> claim/slicing/advancing re-scopes: under Option A claim still moves the body to
+> `in-progress/` and the `needs-attention/` folder is still consumed by the legacy
+> bounce path + tests until the capstone #9 retargets them. So a bounce here
+> ADDITIONALLY marks the held lock `state: stuck` + reason AND `status`/`scan`
+> ADDITIONALLY read the lock refs, while the existing `git mv → needs-attention/`
+> folder bounce is KEPT. Removing the legacy folder bounce (and switching
+> resolution fully to `resume`/`requeue`) is DEFERRED to #9, where the consumers and
+> tests are retargeted atomically. The lock's `stuck` state and the `done`+`stuck`
+> co-existence (state-machine invariant) are exercised now so #9 can drop the legacy
+> half cleanly.
+
 ## What to build
 
-Make `needs-attention` a STATE of the per-item lock rather than a `main` folder. A
-bounce (red gate, agent failure, conflict, ambiguity) MARKS the held lock
-`state: stuck` + reason via a CAS amend, instead of `git mv in-progress→needs-attention`
-on `main`. The recoverable WORK stays on the kept `work/<slug>` branch (unchanged);
-the item's body stays in `backlog/` (it never moved on claim). Resolving a stuck
-item is a lock amend (`resume` back to active) or a `requeue` (release the lock; the
-item is already resting in the pool), NOT a folder bounce.
+Make a bounce ALSO mark the held per-item lock `state: stuck` + reason (the lock's
+mark-stuck transition), and make `agent-runner status` / `scan` ALSO read the lock
+refs to surface held (in-progress) and stuck (needs-attention) items + reasons,
+**in addition to** today's `git mv in-progress→needs-attention` folder move and the
+folder-based status view. This is the additive, back-compatible half: the lock
+becomes the eventual in-flight substrate WITHOUT removing the `needs-attention/`
+folder the legacy bounce path + ~tests still consume.
 
-The in-flight view moves to the lock ref: `agent-runner status` / `scan` READ the
-lock refs to list held (in-progress) and stuck (needs-attention) items with their
-reasons. Eligibility/selection stay OFFLINE on `main` (the pool is still read from
-`backlog/`); only the operational "what's in flight" view consults the lock ref.
+Concretely, after this slice:
+
+- A bounce (red gate, agent failure, conflict, ambiguity) keeps its existing
+  `git mv in-progress→needs-attention` on `main` UNCHANGED, and ADDITIONALLY marks
+  the held lock `state: stuck` + reason via the CAS amend from
+  `lock-entry-state-machine-and-invariants`.
+- `agent-runner status` / `scan` keep their folder-based view UNCHANGED, and
+  ADDITIONALLY read the lock refs to list held + stuck items and reasons.
+  Eligibility/selection stay OFFLINE on `main` (pool still `backlog/`).
+- The `done` + `stuck` co-existence the state machine allows is exercised (a
+  rebase-conflict bounce of a just-completed item).
+
+The recoverable WORK stays on the kept `work/<slug>` branch (unchanged). Switching
+resolution fully to lock `resume`/`requeue` and REMOVING the `needs-attention/`
+folder bounce are OUT OF SCOPE here and owned by #9 (see the RE-SCOPED banner).
 
 ## Acceptance criteria
 
-- [ ] A bounce marks the held lock `state: stuck` + reason (a CAS amend), with NO
-      `git mv` to a `work/needs-attention/` folder on `main`.
-- [ ] `resume` (stuck → active) and `requeue` (stuck → release, item already in the
-      pool) replace the `needs-attention → in-progress` / `needs-attention → backlog`
-      folder moves.
-- [ ] `agent-runner status` / `scan` read the lock refs and surface held (in-progress)
-      and stuck (needs-attention) items + reasons; eligibility/selection still read
-      the pool offline from `backlog/` on `main`.
+- [ ] A bounce ADDITIONALLY marks the held lock `state: stuck` + reason (a CAS
+      amend); today's `git mv in-progress→needs-attention` folder move is KEPT
+      unchanged (interim dual-write).
+- [ ] `agent-runner status` / `scan` ADDITIONALLY read the lock refs and surface held
+      (in-progress) and stuck (needs-attention) items + reasons; eligibility/selection
+      still read the pool offline from `backlog/` on `main`.
 - [ ] A `done` item can carry a `stuck` lock (rebase-conflict bounce of a just-
       completed item) without corruption (consistent with the state-machine invariant).
+- [ ] Every EXISTING needs-attention/bounce test still passes (the
+      `needs-attention/` folder move still lands); this slice does NOT remove the
+      folder bounce or the folder-based status view.
 - [ ] Tests use throwaway repos + a `--bare file://` arbiter; nothing writes outside
       its own temp fixtures.
 
@@ -51,22 +75,26 @@ reasons. Eligibility/selection stay OFFLINE on `main` (the pool is still read fr
 > discrepancy rather than building on a stale premise (WORK-CONTRACT.md "Drift is a
 > needs-attention signal").
 >
-> Turn `needs-attention` from a `main` folder move into the `stuck` STATE of the
-> per-item lock. Today a stuck claimed item is `git mv`'d
-> `work/in-progress/<slug>.md → work/needs-attention/<slug>.md` with the reason in the
-> body (`packages/agent-runner/src/needs-attention.ts` + the `ledger-write.ts`
-> transitions), read those. New behaviour: mark the HELD lock `state: stuck` + reason
-> via a CAS amend (the state machine from `lock-entry-state-machine-and-invariants`);
-> no folder move. PRD `work/prd/ledger-status-per-item-lock-refs.md` (US #5, #8); ADR
+> Make a bounce ALSO mark the `stuck` STATE of the per-item lock, and `status`/`scan`
+> ALSO read the lock refs, IN ADDITION to today's behaviour. Today a stuck claimed
+> item is `git mv`'d `work/in-progress/<slug>.md → work/needs-attention/<slug>.md`
+> with the reason in the body (`packages/agent-runner/src/needs-attention.ts` + the
+> `ledger-write.ts` transitions), read those. KEEP that folder move as-is. ADD: mark
+> the HELD lock `state: stuck` + reason via the CAS amend (`markStuckItemLock` from
+> `lock-entry-state-machine-and-invariants`). PRD
+> `work/prd/ledger-status-per-item-lock-refs.md` (US #5, #8); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
-> The recoverable work stays on the kept `work/<slug>` branch; the body stays in
-> `backlog/` (it never moved on claim, per `claim-acquires-unified-lock-no-body-move`).
-> Resolve = `resume` (stuck→active) or `requeue` (release; the item is already in the
-> pool), NOT a folder bounce. Retarget the in-flight VIEW: `agent-runner status` /
-> `scan` (`status.ts`, `scan.ts`) read the lock refs to list held + stuck items and
-> reasons; keep eligibility/selection OFFLINE on `main` (pool still `backlog/`). Handle
-> the `done`+`stuck` co-existence the state machine allows.
+> READ the RE-SCOPED banner: this is the INTERIM DUAL-WRITE half. Do NOT remove the
+> `git mv → needs-attention/` folder bounce and do NOT remove the folder-based
+> status view; those break the legacy consumers + ~tests whose retargets are the
+> capstone #9. Note claim still moves the body to `in-progress/` under Option A, so
+> the bounce's SOURCE folder is still `in-progress/` here. Retarget the in-flight VIEW
+> ADDITIVELY: `agent-runner status` / `scan` (`status.ts`, `scan.ts`) ALSO read the
+> lock refs to list held + stuck items and reasons; keep eligibility/selection OFFLINE
+> on `main` (pool still `backlog/`). Handle the `done`+`stuck` co-existence the state
+> machine allows. Prove the EXISTING needs-attention tests still pass (the folder move
+> still lands).
 >
 > Test on a `--bare file://` arbiter (`test/helpers/gitRepo.ts`). "Done" =
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
