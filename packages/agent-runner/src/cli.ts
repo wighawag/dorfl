@@ -108,6 +108,7 @@ import {
 	releaseItemLock,
 	reportItemLocks,
 	formatItemLockReport,
+	itemLockReportNeedsAttention,
 } from './item-lock.js';
 import {
 	promoteFromPreBacklog,
@@ -2784,16 +2785,25 @@ export function buildProgram(): Command {
 						console.log(blocks.join('\n\n'));
 					}
 				}
-				// A corrupt ledger, a stuck advancing-lock marker, OR a lingering per-item
-				// lock is a fail-loud condition: exit non-zero so a human (or a script)
-				// cannot miss it, mirroring the integration core's refusal. ALL are
-				// REPORTED here (never auto-deleted — no automatic sweep exists; a human
-				// clears a NAMED advancing marker via `release-advancing` and a NAMED
+				// A corrupt ledger, a stuck advancing-lock marker, OR a per-item lock that
+				// NEEDS HUMAN ATTENTION is a fail-loud condition: exit non-zero so a human
+				// (or a script) cannot miss it, mirroring the integration core's refusal.
+				// ALL are REPORTED here (never auto-deleted — no automatic sweep exists; a
+				// human clears a NAMED advancing marker via `release-advancing` and a NAMED
 				// unified lock via `release-lock`).
+				//
+				// SCOPED to the ATTENTION verdicts only (PRD US#14/#21, ADR
+				// `ledger-status-on-per-item-lock-refs`: this surface is the STUCK /
+				// crash-orphaned lock, NOT every held one): a `kept-stuck` (terminal +
+				// stuck) or a `cleared-stale`-eligible (terminal + stale active = orphaned)
+				// lock fails loud, but a `kept-in-flight` (active, non-terminal) lock is the
+				// NORMAL in-flight state of a healthy concurrent build (read by `status` as
+				// healthy) — it is reported informationally and does NOT make a routine
+				// `gc --ledger` health check exit non-zero.
 				process.exit(
 					result.duplicates.length > 0 ||
 						result.advancingMarkers.length > 0 ||
-						lockReport.locks.length > 0
+						itemLockReportNeedsAttention(lockReport)
 						? 1
 						: 0,
 				);

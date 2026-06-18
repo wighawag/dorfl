@@ -1141,6 +1141,24 @@ export async function reportItemLocks(
  * the duplicate-slug surface). It REPORTS only — the matching wording makes the
  * no-auto-sweep contract explicit (a human asserts a lock is dead).
  */
+/**
+ * Does the `gc --ledger` lock report contain a lock that NEEDS HUMAN ATTENTION
+ * (PRD US#14/#21; ADR `ledger-status-on-per-item-lock-refs`: this surface is the
+ * STUCK / crash-orphaned lock, NOT every held one)? TRUE iff some lock is
+ * `kept-stuck` (terminal-on-`main` + stuck) or `cleared-stale`-eligible
+ * (terminal-on-`main` + a stale active orphan). A `kept-in-flight` (active,
+ * non-terminal) lock is the NORMAL in-flight state of a healthy concurrent build
+ * (read by `status` as healthy) and does NOT count — so a routine `gc --ledger`
+ * health check whose only locks are healthy in-flight holds exits 0. This is the
+ * fail-loud EXIT predicate for the gc lock surface (the report itself still lists
+ * every held lock, in-flight ones informationally).
+ */
+export function itemLockReportNeedsAttention(report: ItemLockReport): boolean {
+	return report.locks.some(
+		(l) => l.reconcile === 'kept-stuck' || l.reconcile === 'cleared-stale',
+	);
+}
+
 export function formatItemLockReport(report: ItemLockReport): string[] {
 	if (report.locks.length === 0) {
 		return [];

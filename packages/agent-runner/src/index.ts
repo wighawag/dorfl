@@ -288,6 +288,7 @@ export {
 	classifyItemLockAgainstMain,
 	reportItemLocks,
 	formatItemLockReport,
+	itemLockReportNeedsAttention,
 	itemFromLockEntry,
 	terminalMainPaths,
 	listItemLocks,

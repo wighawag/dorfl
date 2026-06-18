@@ -9,6 +9,7 @@ import {
 	listItemLocks,
 	reportItemLocks,
 	formatItemLockReport,
+	itemLockReportNeedsAttention,
 	classifyItemLockAgainstMain,
 	itemFromLockEntry,
 	itemLockRef,
@@ -302,6 +303,72 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		expect(report.locks[0].reconcile).toBe('kept-stuck');
 		// Never cleared by the report.
 		expect(lockRefOnArbiter(arbiter, 'slice-bounced')).toBe(true);
+	});
+});
+
+describe('gc --ledger EXIT scoping — fail loud only on the ATTENTION verdicts', () => {
+	// The fail-loud gc exit (PRD US#14/#21; ADR: this surface is the STUCK /
+	// crash-orphaned lock, NOT every held one) is scoped via
+	// itemLockReportNeedsAttention: a healthy in-flight `active` lock must NOT make a
+	// routine `gc --ledger` health check exit non-zero, while a stuck or stale-active
+	// (terminal-on-main orphan) lock must.
+	it('a healthy in-flight (active, non-terminal) lock does NOT need attention (gc exits 0)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['live']);
+		await acquireItemLock({
+			item: 'slice:live',
+			action: 'implement',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		const report = await reportItemLocks(repo, ARBITER, gitEnv());
+		expect(report.locks[0].reconcile).toBe('kept-in-flight');
+		// The lock IS reported (informational) but does NOT trip the fail-loud exit.
+		expect(itemLockReportNeedsAttention(report)).toBe(false);
+	});
+
+	it('a STALE-active lock over a terminal-on-main item NEEDS attention (gc exits 1)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['orphan']);
+		await acquireItemLock({
+			item: 'slice:orphan',
+			action: 'implement',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		seedTerminalOnArbiter(arbiter, 'done', 'orphan');
+		const report = await reportItemLocks(repo, ARBITER, gitEnv());
+		expect(report.locks[0].reconcile).toBe('cleared-stale');
+		expect(itemLockReportNeedsAttention(report)).toBe(true);
+	});
+
+	it('a STUCK lock over a terminal-on-main item NEEDS attention (gc exits 1)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck-term']);
+		await acquireItemLock({
+			item: 'slice:stuck-term',
+			action: 'implement',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		await markStuckItemLock({
+			item: 'slice:stuck-term',
+			reason: 'rebase-conflict bounce',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		seedTerminalOnArbiter(arbiter, 'done', 'stuck-term');
+		const report = await reportItemLocks(repo, ARBITER, gitEnv());
+		expect(report.locks[0].reconcile).toBe('kept-stuck');
+		expect(itemLockReportNeedsAttention(report)).toBe(true);
+	});
+
+	it('an empty report needs no attention (gc exits 0)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['none']);
+		const report = await reportItemLocks(repo, ARBITER, gitEnv());
+		expect(report.locks).toHaveLength(0);
+		expect(itemLockReportNeedsAttention(report)).toBe(false);
 	});
 });
 
