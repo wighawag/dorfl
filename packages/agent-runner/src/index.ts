@@ -259,6 +259,29 @@ export {
 	createItemThroughCas,
 } from './advancing-lock.js';
 
+export type {
+	LockAction,
+	LockState,
+	LockEntry,
+	AcquireOutcome,
+	ReleaseOutcome,
+	AcquireResult,
+	ReleaseResult,
+	AcquireOptions,
+	ReleaseOptions,
+} from './item-lock.js';
+export {
+	LOCK_REF_PREFIX,
+	lockEntryFor,
+	itemLockRef,
+	acquireItemLock,
+	releaseItemLock,
+	readItemLock,
+	listItemLocks,
+	serialiseLockEntry,
+	parseLockEntry,
+} from './item-lock.js';
+
 export type {StartOutcome, StartOptions, StartResult} from './start.js';
 export {performStart} from './start.js';
 
