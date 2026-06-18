@@ -107,3 +107,19 @@ the lock ref), exactly as the landed advancing-lock already is.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
 > PRD propagation. Record non-obvious in-scope decisions per the slice template.
+
+## Needs attention
+
+The slice's premise — "advancing ALSO acquires the SAME unified per-item lock, so advance∥claim and advance∥slice are mutually exclusive BY CONSTRUCTION" — is sound for concurrent contenders but COLLIDES with the existing advance tick's structure, which is NOT in the slice's scope to change.
+
+In `packages/agent-runner/src/advance.ts`, `performAdvance` takes `acquireAdvancingLock({item})` (step 3 LOCK) and then, for the `build-slice` and `slice-prd` rungs, ORCHESTRATES the inner `performDo({arg: item})` (step 4 EXECUTE) which ITSELF takes the SAME unified per-item lock:
+- build-slice: advancing lock holds unified `slice-<slug>`; inner `performDo('slice:<slug>')` → `performClaim` → `acquireItemLock({item:'slice:<slug>', action:'implement'})` loses the create-only CAS on the ref the advancing lock already holds → the build can never claim.
+- slice-prd: advancing lock holds unified `prd-<slug>`; inner `performDo('prd:<slug>')` → `acquireSlicingLock` → unified `prd-<slug>` loses for the same reason.
+
+So the advancing lock and the inner `do`'s lock are NESTED (one logical operation), not two racers, and the unified lock makes the advance tick deadlock against itself. claim/slice do no re-entrant or holder-based detection (deliberate, per ADR `ledger-status-on-per-item-lock-refs`: no auto-steal), so the inner acquire definitively returns `lost`.
+
+Evidence: implementing the slice exactly as written (mirroring the landed `slicing-acquires-unified-lock`) makes 9 previously-green advance-tick tests fail — `test/run-uses-advance-tick.test.ts` (claimedAndDone/needsAttention drop to 0) and `test/advance-registry-set.test.ts` (multi-mirror build/slice batches, gates-off outcome-equivalence). Pure-unit advance∥claim / advance∥slice race tests and the stuck-cell test all pass; only the advance-tick orchestration path breaks. Stashing my change makes all 13 pass again.
+
+The slicing slice (#4) avoided this only because it left the advancing lock as a plain marker (no unified hold), so the `slice-prd` wrapper did not contend with the inner slicing lock. This slice is the first to put a unified hold on the OUTER advancing wrapper.
+
+Suggested re-scope: decide (with a human) how advance-as-driver coordinates with the unified lock before this slice can land. Likely options, each touching files outside this slice: (a) `performAdvance` should NOT take the unified lock for the `build-slice` / `slice-prd` rungs (those rungs are pure orchestration of an inner `do` that already takes the lock; the inner claim/slice is the single exclusion point), taking it ONLY for the tree-less rungs (surface/apply/triage) that have no inner `do` lock; or (b) make the inner `do` recognise a unified lock already held by the same driving operation as re-entrant (changes `claim-cas.ts` / `slicing-lock.ts`, and contradicts the no-auto-steal ADR unless scoped to a same-process driver token). Either way the decision is load-bearing and belongs in the slice/PRD, not buried in `advancing-lock.ts`. The advancing→unified-lock retarget for the marker semantics (the pure interim dual-write this slice intends) is only safe once the advance-tick nesting is addressed.
