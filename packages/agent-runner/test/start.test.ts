@@ -3,6 +3,7 @@ import {mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performStart} from '../src/start.js';
 import {performClaim} from '../src/claim-cas.js';
+import {listItemLocks} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -34,9 +35,10 @@ function localBranchExists(repo: string, branch: string): boolean {
 }
 
 /**
- * Move an item from in-progress → done on the arbiter (simulating completion),
- * so we can test the done/ refusal. Uses a separate clone so we don't disturb
- * the checkout under test.
+ * Move an item from backlog → done on the arbiter (simulating completion), so we
+ * can test the done/ refusal. The body rests in `backlog/` now (claim no longer
+ * moves it), so the durable done-move sources from there. Uses a separate clone
+ * so we don't disturb the checkout under test.
  */
 function completeOnArbiter(
 	seeded: {clone(label: string): string},
@@ -47,10 +49,7 @@ function completeOnArbiter(
 	gitIn(['checkout', '-q', '-B', `done/${slug}`, 'arbiter/main'], finisher);
 	// git mv needs the destination dir to exist (git tracks no empty dirs).
 	mkdirSync(join(finisher, 'work', 'done'), {recursive: true});
-	gitIn(
-		['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`],
-		finisher,
-	);
+	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], finisher);
 	gitIn(['commit', '-q', '-m', `done: ${slug}`], finisher);
 	gitIn(['push', '-q', 'arbiter', `done/${slug}:main`], finisher);
 }
@@ -68,14 +67,14 @@ describe('start — backlog item, winning claim', () => {
 		expect(result.outcome).toBe('started');
 		expect(result.branch).toBe('work/slice-alpha');
 		expect(currentBranch(repo)).toBe('work/slice-alpha');
-		// The claim landed: item moved to in-progress on the arbiter.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
-		// The work branch contains work/in-progress/<slug>.md.
-		const show = gitIn(
-			['cat-file', '-e', 'HEAD:work/in-progress/alpha.md'],
-			repo,
-		);
+		// The claim landed: the lock is held; the body STAYS in backlog/ on the arbiter.
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
+			'slice-alpha',
+		]);
+		// The work branch (cut off the latest arbiter main) carries the backlog body.
+		const show = gitIn(['cat-file', '-e', 'HEAD:work/backlog/alpha.md'], repo);
 		expect(show).toBe('');
 	});
 });
@@ -101,8 +100,9 @@ describe('start — backlog item, losing/contended claim', () => {
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		// Folder-based: the item is now in-progress, so start refuses (exit 1)
-		// rather than re-claiming — it never re-claims an in-progress item.
+		// Lock-based: the item is now claimed (its lock is held), so start refuses
+		// (exit 1) rather than re-claiming — it never re-claims a held item, even
+		// though the body still rests in backlog/.
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('refused');
 		// User untouched; NO work branch created.
@@ -154,14 +154,14 @@ describe('start — backlog item, losing/contended claim', () => {
 		expect(currentBranch(loserRepo)).toBe(loserBefore);
 		expect(localBranchExists(loserRepo, 'work/slice-solo')).toBe(false);
 
-		// The arbiter agrees: claimed exactly once.
-		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(true);
-		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(false);
+		// The arbiter agrees: the lock is held exactly once; the body stays in backlog/.
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['slice-solo']);
+		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
 	});
 });
 
-describe('start — in-progress item', () => {
-	it('refuses by default with a folder-based message that points at `git log`', async () => {
+describe('start — already-claimed (held lock) item', () => {
+	it('refuses by default with a message that points at `git log`', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
 		const repo = seeded.repo;
 		// Claim it from a separate clone so it is in-progress on the arbiter.
@@ -216,11 +216,14 @@ describe('start — in-progress item', () => {
 		expect(result.outcome).toBe('resumed');
 		expect(result.branch).toBe('work/slice-beta');
 		expect(currentBranch(repo)).toBe('work/slice-beta');
-		// Still in-progress (we did NOT re-claim / move it).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
-		// The work branch carries the in-progress file.
+		// Still claimed (we did NOT re-claim): the lock is held, body still in backlog/.
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
+			'slice-beta',
+		]);
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
+		// The work branch (cut off arbiter main) carries the backlog body.
 		const onBranch = gitIn(
-			['cat-file', '-e', 'HEAD:work/in-progress/beta.md'],
+			['cat-file', '-e', 'HEAD:work/backlog/beta.md'],
 			repo,
 		);
 		expect(onBranch).toBe('');

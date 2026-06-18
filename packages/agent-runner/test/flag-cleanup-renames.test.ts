@@ -134,10 +134,12 @@ describe('--by is removed (flag + the whole claimedBy concept)', () => {
 		}
 	});
 
-	it('the claim commit subject is plain `claim: <slug>` (no `(by ...)` suffix)', async () => {
+	it('claim writes NO `claim:` commit to main (the lock is the claim; no `(by ...)` anywhere)', async () => {
 		const scratch = makeScratch('agent-runner-claim-subject-');
 		try {
 			const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+			gitIn(['fetch', '-q', ARBITER], repo);
+			const before = gitIn(['rev-parse', `${ARBITER}/main`], repo).trim();
 			const result = await performClaim({
 				slug: 'alpha',
 				cwd: repo,
@@ -145,11 +147,16 @@ describe('--by is removed (flag + the whole claimedBy concept)', () => {
 				env: gitEnv(),
 			});
 			expect(result.exitCode).toBe(0);
+			// Claim no longer lands a `claim: <slug>` commit on main — the per-item lock
+			// IS the claim, and main's tip is unchanged.
+			gitIn(['fetch', '-q', ARBITER], repo);
+			const after = gitIn(['rev-parse', `${ARBITER}/main`], repo).trim();
+			expect(after).toBe(before);
 			const subject = gitIn(
 				['log', '-1', '--format=%s', `${ARBITER}/main`],
 				repo,
 			);
-			expect(subject.trim()).toBe('claim: alpha');
+			expect(subject.trim()).not.toBe('claim: alpha');
 			expect(subject).not.toMatch(/\(by /);
 		} finally {
 			scratch.cleanup();
@@ -260,9 +267,10 @@ describe('readiness override = --ignore-not-ready ONLY (--force freed for gc)', 
 				process.chdir(origCwd);
 				process.exit = origExit;
 			}
-			// The override let the unmet-blockedBy slice be claimed (exit 0).
+			// The override let the unmet-blockedBy slice be claimed (exit 0). Claim
+			// writes nothing to main, so the body stays in backlog/.
 			expect(exitCode).toBe(0);
-			expect(existsOnArbiterMain(repo, 'in-progress', 'feature')).toBe(true);
+			expect(existsOnArbiterMain(repo, 'backlog', 'feature')).toBe(true);
 		} finally {
 			scratch.cleanup();
 		}

@@ -248,9 +248,9 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 		expect(args).toMatch(/^create$/m);
 		expect(args).toMatch(/^work\/slice-feat$/m);
 
-		// propose never moves done/ onto main; the slice stays in-progress on main.
+		// propose never moves done/ onto main; claim writes nothing to main, so the body stays in backlog/.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true);
 
 		// The PR URL is recorded on the job record (surfaced by `status`).
 		const dir = jobWorktreePath(workspacesDir, `file://${arbiter}`, 'feat');
@@ -276,7 +276,7 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 		expect(item.integration?.requestOpened).toBe(false);
 		expect(item.integration?.url).toBeUndefined();
 		// Deletion-safety is unaffected: the branch is on the arbiter.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true);
 	});
 
 	it('merge mode is provider-agnostic (gh is never invoked)', async () => {
@@ -314,6 +314,6 @@ describe('runOnce — provider auto-selection via config + URL (no gh)', () => {
 		const item = result.items[0];
 		expect(item.status).toBe('claimed-done');
 		expect(item.integration?.provider).toBe('none');
-		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true);
 	});
 });

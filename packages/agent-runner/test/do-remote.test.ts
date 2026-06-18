@@ -141,15 +141,14 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const ws = workspacesDir();
 
-		// The agent ASSERTS it runs on the work branch with the item in-progress in
-		// the worktree's tree (claimed + onboarded by the runner, NOT the agent).
+		// The agent ASSERTS it runs on the work branch with the body RESTING in
+		// backlog/ in the worktree's tree (claimed via the lock + onboarded by the
+		// runner, NOT the agent; claim no longer moves the body).
 		const assertingAgent: DoAgentRunner = ({cwd, slug}) => {
 			expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).trim()).toBe(
 				`work/slice-${slug}`,
 			);
-			expect(existsSync(join(cwd, 'work', 'in-progress', `${slug}.md`))).toBe(
-				true,
-			);
+			expect(existsSync(join(cwd, 'work', 'backlog', `${slug}.md`))).toBe(true);
 			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
 			return {ok: true};
 		};
@@ -182,11 +181,11 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
-		// propose → main is NOT merged (it still shows the in-progress claim; a human
+		// propose → main is NOT merged (the body still rests in backlog/; a human
 		// merges the PR), but the work branch (carrying the done-move commit) IS
 		// pushed to the arbiter. This is the SAME propose semantics as do-in-place.
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
@@ -669,9 +668,10 @@ describe('do --remote — PR-INTENT pre-flight guard (autonomous path)', () => {
 		});
 
 		// A non-GitHub arbiter short-circuits the predicate BEFORE the probe: the
-		// propose run proceeds (pushes the work branch, no refusal).
+		// propose run proceeds (pushes the work branch, no refusal). The body stays in
+		// backlog/ on main (claim wrote nothing there).
 		expect(probed).toBe(false);
 		expect(result.outcome).toBe('completed');
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 	});
 });

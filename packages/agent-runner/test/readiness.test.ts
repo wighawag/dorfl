@@ -82,9 +82,7 @@ describe('readiness guard — claim path: unmet blockedBy', () => {
 		});
 		expect(ok.exitCode).toBe(0);
 		expect(ok.outcome).toBe('claimed');
-		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'feature')).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
 	});
 });
 
@@ -105,9 +103,7 @@ describe('readiness guard — claim path: override', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('claimed');
-		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'feature')).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
 		// Loud override notice mentioning the guard was overridden.
 		expect(notes.some((n) => /OVERRIDDEN/.test(n))).toBe(true);
 		expect(notes.some((n) => /dep-a/.test(n))).toBe(true);
@@ -130,9 +126,7 @@ describe('readiness guard — claim path: needsAnswers warning', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('claimed');
-		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'questions')).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'questions')).toBe(true);
 		expect(notes.some((n) => /WARNING/.test(n) && /needsAnswers/.test(n))).toBe(
 			true,
 		);
@@ -180,9 +174,7 @@ describe('readiness guard — claim path: ready slice unchanged', () => {
 		// No readiness chatter for a ready slice.
 		expect(notes.some((n) => /OVERRIDDEN/.test(n))).toBe(false);
 		expect(notes.some((n) => /WARNING/.test(n))).toBe(false);
-		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'feature')).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
 	});
 
 	it('humanOnly is NOT gated on the human path (still claimable, no refusal)', async () => {
@@ -198,9 +190,7 @@ describe('readiness guard — claim path: ready slice unchanged', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('claimed');
-		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'decided')).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'decided')).toBe(true);
 	});
 });
 
@@ -261,9 +251,7 @@ describe('readiness guard — start path inherits it', () => {
 		expect(result.branch).toBe('work/slice-feature');
 		expect(currentBranch(seeded.repo)).toBe('work/slice-feature');
 		expect(notes.some((n) => /OVERRIDDEN/.test(n))).toBe(true);
-		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'feature')).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
 	});
 
 	it('start warns on needsAnswers but still starts', async () => {

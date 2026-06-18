@@ -197,8 +197,9 @@ describe('bounce ALSO marks the held lock stuck (interim dual-write)', () => {
 		});
 		expect(result.moved).toBe(true);
 		// No arbiter ⇒ no surface published and the lock (held active from claim) is
-		// NOT amended (there is no ref to CAS without an arbiter handle).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(true);
+		// NOT amended (there is no ref to CAS without an arbiter handle). Main is
+		// untouched, so the body still rests in backlog/ there.
+		expect(existsOnArbiterMain(repo, 'backlog', 'delta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
 		const lock = await readItemLock({
 			item: 'slice:delta',
@@ -227,10 +228,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		gitIn(['fetch', '-q', ARBITER], completer);
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
 		mkdirSync(join(completer, 'work', 'done'), {recursive: true});
-		gitIn(
-			['mv', 'work/in-progress/epsilon.md', 'work/done/epsilon.md'],
-			completer,
-		);
+		gitIn(['mv', 'work/backlog/epsilon.md', 'work/done/epsilon.md'], completer);
 		gitIn(['add', '-A'], completer);
 		gitIn(['commit', '-q', '-m', 'done: epsilon'], completer);
 		gitIn(['push', '-q', ARBITER, 'done-move:main'], completer);
@@ -271,7 +269,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		// Emulate the post-done-move state on the work branch (a rebase-conflict
 		// bounce routes from done/).
 		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-		gitIn(['mv', 'work/in-progress/zeta.md', 'work/done/zeta.md'], repo);
+		gitIn(['mv', 'work/backlog/zeta.md', 'work/done/zeta.md'], repo);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'done-move'], repo);
 

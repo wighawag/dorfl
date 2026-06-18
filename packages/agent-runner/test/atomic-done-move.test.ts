@@ -37,9 +37,10 @@ const ARBITER = 'arbiter';
 const PASS = 'exit 0';
 
 /**
- * Claim a slug (publishes `in-progress/<slug>` to the arbiter) and branch off the
- * freshly-pushed main with UNCOMMITTED agent work — exactly as the caller's HEAD
- * leaves it just before the core.
+ * Claim a slug (acquires the lock; the body RESTS in `backlog/<slug>` on the
+ * arbiter, since claim no longer moves it) and branch off the freshly-fetched main
+ * with UNCOMMITTED agent work — exactly as the caller's HEAD leaves it just before
+ * the core.
  */
 async function claimAndBranch(slug: string) {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
@@ -58,11 +59,11 @@ async function claimAndBranch(slug: string) {
 }
 
 /**
- * On a SEPARATE clone, surface the slug `in-progress/ → needs-attention/` on the
+ * On a SEPARATE clone, surface the slug `backlog/ → needs-attention/` on the
  * arbiter's `main` (a tree-less ledger move pushed independently of any PR) — so
  * the arbiter now holds the slug in `needs-attention/`, while the integrating
- * branch's base still has it in `in-progress/`. This is the DIVERGENT-base
- * condition that turned the done-"move" into a "copy" (PR #86).
+ * branch's base still has it in `backlog/` (the body rests there now). This is the
+ * DIVERGENT-base condition that turned the done-"move" into a "copy" (PR #86).
  */
 function surfaceToNeedsAttentionOnArbiter(
 	seeded: ReturnType<typeof seedRepoWithArbiter>,
@@ -72,7 +73,7 @@ function surfaceToNeedsAttentionOnArbiter(
 	gitIn(['switch', '-q', '-c', `surface/${slug}`, `${ARBITER}/main`], other);
 	mkdirSync(join(other, 'work', 'needs-attention'), {recursive: true});
 	gitIn(
-		['mv', `work/in-progress/${slug}.md`, `work/needs-attention/${slug}.md`],
+		['mv', `work/backlog/${slug}.md`, `work/needs-attention/${slug}.md`],
 		other,
 	);
 	gitIn(
@@ -86,19 +87,19 @@ function surfaceToNeedsAttentionOnArbiter(
 describe('atomic done-move — the move is a MOVE, not a COPY (defect 1)', () => {
 	it('arbiter holds the slug in needs-attention/ while the branch base has in-progress/: the merge lands done/ ONLY (no in-progress/ ghost)', async () => {
 		const {seeded, repo} = await claimAndBranch('alpha');
-		// The arbiter diverges: the slug is surfaced in-progress → needs-attention
+		// The arbiter diverges: the slug is surfaced backlog → needs-attention
 		// on main, independently of this branch. The branch base still has
-		// in-progress/alpha.md (the divergent base that caused the ghost).
+		// backlog/alpha.md (the divergent base that caused the ghost).
 		surfaceToNeedsAttentionOnArbiter(seeded, 'alpha');
 
 		const core = await performIntegration({
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			// The caller's local-tree resolution says `in-progress` (its base has it
+			// The caller's local-tree resolution says `backlog` (its base has it
 			// there) — but the arbiter actually holds it in needs-attention/. The
 			// arbiter-resolved source must win.
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -114,14 +115,14 @@ describe('atomic done-move — the move is a MOVE, not a COPY (defect 1)', () =>
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 	});
 
-	it('the normal in-progress/ path still lands done/ ONLY (no regression)', async () => {
+	it('the normal backlog/ path still lands done/ ONLY (no regression)', async () => {
 		const {repo} = await claimAndBranch('beta');
 
 		const core = await performIntegration({
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -139,7 +140,7 @@ describe('one-slug-one-folder invariant — FAIL LOUD on a two-folder slug (defe
 	it('the arbiter already holds the slug in TWO status folders pre-transition: the done-move FAILS LOUD rather than publishing a corrupt ledger', async () => {
 		const {seeded, repo} = await claimAndBranch('gamma');
 		// Corrupt the arbiter: ADD a stale done/gamma.md alongside the live
-		// in-progress/gamma.md (the exact PR #86 corruption — a slug in two folders).
+		// backlog/gamma.md (the exact PR #86 corruption — a slug in two folders).
 		const other = seeded.clone('corrupt');
 		gitIn(['switch', '-q', '-c', `corrupt/gamma`, `${ARBITER}/main`], other);
 		mkdirSync(join(other, 'work', 'done'), {recursive: true});
@@ -159,7 +160,7 @@ describe('one-slug-one-folder invariant — FAIL LOUD on a two-folder slug (defe
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'gamma',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -171,8 +172,8 @@ describe('one-slug-one-folder invariant — FAIL LOUD on a two-folder slug (defe
 		expect(core.reason).toMatch(
 			/one-slug-one-folder|two .*folders|more than one/i,
 		);
-		// Nothing corrupt landed: the stale done/ copy is untouched, in-progress/
+		// Nothing corrupt landed: the stale done/ copy is untouched, backlog/
 		// still present (we did NOT silently delete either side).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 	});
 });

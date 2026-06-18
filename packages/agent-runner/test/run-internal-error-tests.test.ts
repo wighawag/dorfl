@@ -2,10 +2,8 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {join} from 'node:path';
 import {writeFileSync} from 'node:fs';
 import {runOnce, type AgentRunner} from '../src/run.js';
-import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
-import * as ledgerWriteModule from '../src/ledger-write.js';
 import * as repoConfigModule from '../src/repo-config.js';
 import type {ScanReport} from '../src/scan.js';
 import {
@@ -14,7 +12,6 @@ import {
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	gitEnv,
-	gitIn,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -22,12 +19,8 @@ import {
  * REGRESSION PINS for two thin-coverage `run`/claim internal-error paths (slice
  * `run-internal-error-tests`). These paths were only exercised INDIRECTLY by the
  * higher-level concurrency tests, so a refactor could silently break them. The
- * three pins here make the behaviour explicit + a regression loud:
+ * pins here make the behaviour explicit + a regression loud:
  *
- *   (1) `performClaim`'s RETRY branch — the `git checkout --detach <arbiter>/main`
- *       BEFORE `branch -D`+`checkout -b` that makes the throwaway claim branch
- *       idempotently deletable+recreatable across attempts (drive a forced CAS
- *       rejection; the SECOND attempt must succeed — it FAILS if the detach goes).
  *   (2) `runOneItem`'s thrown-core-error → `config-error` (NOT `agent-failed`),
  *       work preserved, the tick CONTINUES — the `run`-side mirror of the `do`
  *       twin (`test/do.test.ts`).
@@ -35,6 +28,12 @@ import {
  *       captured error message in `detail` (a worker that throws BEFORE the
  *       per-item try/catch is reached — `runOneItem` is documented never to throw,
  *       so this is the defensive last-resort mapping).
+ *
+ * (Pin (1) — `performClaim`'s claim-branch RETRY reset — was RETIRED when the
+ * lock-substrate cut-over removed claim's body move / `main` push / retry loop
+ * entirely: claim acquires a per-item lock and writes nothing to `main`, so there
+ * is no throwaway claim branch or CAS-retry to pin. See slice
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`.)
  *
  * Tests-only: no production behaviour changes. House harness — throwaway repos +
  * a local `--bare` arbiter; temp `workspacesDir`; `isolatePiAgentDir` so the real
@@ -77,58 +76,6 @@ function configFor(overrides = {}) {
 		...overrides,
 	});
 }
-
-// ── (1) performClaim's RETRY branch: the idempotent claim-branch reset ──────────
-
-describe('performClaim — RETRY branch pins the idempotent claim-branch reset', () => {
-	it('a CAS rejection on the FIRST attempt is followed by a SUCCESSFUL second attempt (detach-before-delete reset)', async () => {
-		// Force EXACTLY ONE CAS rejection by stubbing the write seam to reject the
-		// first publish, then delegate to the REAL strategy for the retry — the
-		// slice's "stub the push to reject once" option. This drives `performClaim`
-		// straight into its `while(true)` retry branch deterministically (no race
-		// timing). On the SECOND attempt HEAD is still on `claim/<slug>` from the
-		// rejected first attempt, so the `git branch -D claim/<slug>` would REFUSE
-		// ("cannot delete the current branch") and the re-`checkout -b` would fail
-		// ("already exists") WITHOUT the `git checkout --detach <arbiter>/main`
-		// preamble. The second attempt SUCCEEDING is the proof the detach reset
-		// fired — REMOVE the detach in claim-cas.ts and this test FAILS.
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-
-		const real = ledgerWriteModule.currentLedgerWrite.applyTransition.bind(
-			ledgerWriteModule.currentLedgerWrite,
-		);
-		const spy = vi
-			.spyOn(ledgerWriteModule.ledgerWrite, 'applyTransition')
-			.mockImplementationOnce(async () => ({
-				kind: 'rejected',
-				message: 'push rejected / lease failed (forced once)',
-			}))
-			.mockImplementation(real);
-
-		const result = await performClaim({
-			slug: 'alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			// >=1 retry so the rejection is retried, not given up as contended.
-			retries: 3,
-			env: gitEnv(),
-		});
-
-		// Two attempts ran: the forced rejection THEN the real (successful) publish.
-		expect(spy).toHaveBeenCalledTimes(2);
-		// The second attempt CLAIMED — the branch reset across attempts was clean
-		// (no "branch already exists" / "cannot delete current branch" plumbing
-		// error surfaced as a usage-error).
-		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('claimed');
-		expect(result.message).not.toMatch(/already exists|delete.*branch/i);
-		// The claim genuinely landed on the arbiter.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
-		// The throwaway claim branch was cleaned up (HEAD restored, no leftover).
-		expect(gitIn(['branch', '--list', 'claim/alpha'], repo).trim()).toBe('');
-	});
-});
 
 // ── (2) runOneItem's thrown-core-error → config-error (mirrors the do twin) ─────
 

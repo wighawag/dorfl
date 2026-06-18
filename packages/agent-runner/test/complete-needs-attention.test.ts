@@ -63,7 +63,7 @@ const PASS = 'exit 0';
 const FAIL = 'exit 1';
 
 describe('complete — failed gate routes to needs-attention', () => {
-	it('moves the item in-progress → needs-attention with the reason recorded', async () => {
+	it('moves the item backlog → needs-attention with the reason recorded', async () => {
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
 
@@ -80,11 +80,10 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(result.outcome).toBe('gate-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
 
-		// The item is no longer dangling in in-progress/ — it moved to
-		// needs-attention/ (not done/).
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			false,
-		);
+		// The item is no longer dangling in backlog/ — it moved to needs-attention/
+		// (not done/). (The body rests in backlog/ now that claim no longer moves it,
+		// so the gate-fail bounce sources from there.)
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(false);
 		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(false);
 		const dest = join(repo, 'work', 'needs-attention', 'alpha.md');
 		expect(existsSync(dest)).toBe(true);
@@ -121,7 +120,7 @@ describe('complete — failed gate routes to needs-attention', () => {
 		// work — so a surfacing strategy can publish the tip without leaking the wip.
 		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
 		expect(tip).toMatch(/work\/needs-attention\/beta\.md/);
-		expect(tip).toMatch(/work\/in-progress\/beta\.md/);
+		expect(tip).toMatch(/work\/backlog\/beta\.md/);
 		expect(tip).not.toMatch(/feature\.txt/);
 		const wip = gitIn(['show', '--name-status', '--format=', 'HEAD~1'], repo);
 		expect(wip).toMatch(/feature\.txt/);
@@ -186,9 +185,7 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 
 		// Item moved to needs-attention/ (it was in done/ after the done-move).
 		expect(existsSync(join(repo, 'work', 'done', 'theta.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'in-progress', 'theta.md'))).toBe(
-			false,
-		);
+		expect(existsSync(join(repo, 'work', 'backlog', 'theta.md'))).toBe(false);
 		const dest = join(repo, 'work', 'needs-attention', 'theta.md');
 		expect(existsSync(dest)).toBe(true);
 		expect(readFileSync(dest, 'utf8')).toMatch(/conflict/i);

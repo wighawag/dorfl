@@ -525,9 +525,10 @@ describe('runOnce — integration modes', () => {
 		expect(item.integration?.mergedToMain).toBe(false);
 		expect(item.integration?.requestOpened).toBe(true);
 		expect(prBranch).toBe('work/slice-feat');
-		// PR mode never moves done/ onto main; the slice stays in-progress on main.
+		// PR mode never moves done/ onto main; claim writes nothing to main, so the
+		// slice body stays in backlog/ on main (the done-move is on the pushed branch).
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true);
 	});
 
 	it('integration: merge lands the done-move directly on the arbiter main', async () => {
@@ -1265,9 +1266,10 @@ describe('runOnce — PR-INTENT pre-flight guard (autonomous path)', () => {
 		const byRepo = new Map(result.items.map((i) => [i.repoPath, i]));
 		expect(byRepo.get(repoA)?.status).toBe('config-error');
 		// The sibling (repoB) was NOT aborted by repoA's refusal — it built + landed
-		// (propose: the item completed, work branch pushed, in-progress on main).
+		// (propose: the item completed, work branch pushed; the body stays in backlog/
+		// on main since claim writes nothing there).
 		expect(byRepo.get(repoB)?.status).toBe('claimed-done');
-		expect(existsOnArbiterMain(repoB, 'in-progress', 'beta')).toBe(true);
+		expect(existsOnArbiterMain(repoB, 'backlog', 'beta')).toBe(true);
 	});
 
 	it('AMBIENT AUTH NOT BROKEN: propose + GitHub arbiter + noPR unset + a PASSING probe ⇒ the guard does NOT refuse (proceeds PAST it)', async () => {
@@ -1380,7 +1382,8 @@ describe('runOnce — PR-INTENT pre-flight guard (autonomous path)', () => {
 		expect(item.detail ?? '').not.toBe(
 			PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 		);
-		// propose: the item reached done on the work branch (in-progress on main).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		// propose: the item reached done on the work branch; claim writes nothing to
+		// main, so the body stays in backlog/ on main.
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 	});
 });

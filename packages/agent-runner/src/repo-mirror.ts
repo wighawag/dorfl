@@ -139,9 +139,37 @@ export function ensureMirror(options: EnsureMirrorOptions): EnsureMirrorResult {
 	let fetched = false;
 	if (existsSync(path)) {
 		// Reuse: fetch the latest from the arbiter into the existing bare mirror.
-		git(['fetch', '--prune', 'origin', '+refs/heads/*:refs/heads/*'], path, {
-			env,
-		});
+		//
+		// `main` is the authoritative base every worktree branches off — fetch it
+		// HARD (prune), and it can never collide with a checked-out branch (`main` is
+		// never a job worktree branch).
+		git(
+			['fetch', '--prune', 'origin', '+refs/heads/main:refs/heads/main'],
+			path,
+			{
+				env,
+			},
+		);
+		// SHARED-MIRROR SIBLING-WORKTREE SAFETY (slice
+		// `cutover-claim-body-stays-and-complete-sources-from-backlog`): two SAME-repo
+		// `run` jobs share ONE bare mirror, and each `git worktree add`s its own LOCAL
+		// `work/<slug>` head. The remaining all-heads fetch (which brings down each
+		// arbiter `work/<slug>` so continue-detection can read it as a local head) tries
+		// to UPDATE every such head; git REFUSES to fetch into a SIBLING's `work/<slug>`
+		// head while that sibling worktree has it checked out (`fatal: refusing to fetch
+		// into branch ... checked out`) and exits non-zero — EVEN THOUGH it still updated
+		// every OTHER ref (incl. main, above, and THIS job's own `work/<slug>`). Before
+		// this slice the claim's body-move serialised the jobs enough to hide the
+		// overlap; with claim no longer writing `main` the jobs run concurrently and it
+		// surfaces. So this all-heads fetch is BEST-EFFORT (soft): a sibling's
+		// checked-out head being refused must NOT fail the whole ensure — the refs we
+		// need (main + this job's own head) are already updated, and continue-detection
+		// is arbiter-authoritative (`ls-remote` in `createJob`) anyway. A genuinely
+		// unrelated failure (e.g. an unreachable arbiter) ALSO degrades to best-effort
+		// here, but `main` (the hard fetch above) already succeeded, so the worktree
+		// materialisation has its base; the per-branch onboard reads still fail loudly
+		// downstream if a needed ref is genuinely absent.
+		run('git', ['fetch', 'origin', '+refs/heads/*:refs/heads/*'], path, {env});
 		fetched = true;
 	} else {
 		// First time: a bare mirror clone (shared object store, cheap).

@@ -58,8 +58,9 @@ const BLOCK: ReviewVerdict = {
 
 /**
  * Stand a repo up exactly as the caller's HEAD leaves it just before the core:
- * a slice claimed (in-progress on the arbiter) and onboarded onto `work/<slug>`
- * off the freshly-pushed main, with UNCOMMITTED agent work in the tree.
+ * a slice claimed (the lock is held; the body RESTS in backlog/ on the arbiter,
+ * since claim no longer moves it) and onboarded onto `work/<slug>` off the
+ * freshly-fetched main, with UNCOMMITTED agent work in the tree.
  */
 async function claimAndBranch(slug: string) {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
@@ -86,7 +87,7 @@ describe('integration-core — approve ⇒ completed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
@@ -99,10 +100,8 @@ describe('integration-core — approve ⇒ completed', () => {
 		expect(core.commitMessage).toMatch(/^feat\(alpha\):.*; done$/);
 		// The integration result carries the EFFECTIVE mode (the tail reads it here).
 		expect(core.integration?.mode).toBe('propose');
-		// The done-move happened in the tree (the band did the move + commit).
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			false,
-		);
+		// The done-move happened in the tree (the band moved backlog → done + commit).
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(false);
 		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(true);
 		// propose pushed the work branch (the safety-bearing step), NOT main.
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
@@ -115,7 +114,7 @@ describe('integration-core — approve ⇒ completed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			review: true,
@@ -138,7 +137,7 @@ describe('integration-core — approve ⇒ completed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'gamma',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			review: true,
@@ -154,15 +153,16 @@ describe('integration-core — approve ⇒ completed', () => {
 });
 
 describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-origin-forces-build-propose)', () => {
-	// Stamp `originTrust` onto the in-progress slice the build is about to integrate
+	// Stamp `originTrust` onto the backlog slice the build is about to integrate
 	// (the slicer would have propagated it; here we set it directly to drive the
-	// rule). The build-propose rule reads it from `work/in-progress/<slug>.md`.
+	// rule). The build-propose rule reads it from `work/backlog/<slug>.md` (the body
+	// rests there now — claim no longer moves it).
 	const stampOriginTrust = (
 		repo: string,
 		slug: string,
 		value: 'trusted' | 'untrusted',
 	): void => {
-		const path = join(repo, 'work', 'in-progress', `${slug}.md`);
+		const path = join(repo, 'work', 'backlog', `${slug}.md`);
 		const content = readFileSync(path, 'utf8');
 		writeFileSync(
 			path,
@@ -178,7 +178,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'untrusted-merge',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			// The build-transition config mode is `merge`, but no operator flag is present
@@ -202,7 +202,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'untrusted-explicit',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -225,7 +225,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'trusted-merge',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -245,7 +245,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'unstamped-merge',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -265,7 +265,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'untrusted-propose',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
@@ -287,7 +287,7 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-alpha',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			// prepare appends `prepare`, verify appends `verify` — the file proves order.
 			prepare: `echo prepare >> ${JSON.stringify(order)}`,
@@ -311,7 +311,7 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-beta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			prepare: 'exit 4',
 			// If verify ever ran it would create this file — it must NOT.
@@ -328,8 +328,8 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 		expect(core.reason).not.toMatch(/acceptance gate failed/i);
 		// verify NEVER ran (the env could not be made ready).
 		expect(existsSync(ranVerify)).toBe(false);
-		// Bounced from in-progress/ straight to needs-attention/, never done/.
-		expect(existsSync(join(repo, 'work', 'in-progress', 'prep-beta.md'))).toBe(
+		// Bounced from backlog/ straight to needs-attention/, never done/.
+		expect(existsSync(join(repo, 'work', 'backlog', 'prep-beta.md'))).toBe(
 			false,
 		);
 		expect(existsSync(join(repo, 'work', 'done', 'prep-beta.md'))).toBe(false);
@@ -345,7 +345,7 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-gamma',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			// prepare UNSET — a repo with no deps step is unaffected.
 			verify: PASS,
@@ -366,7 +366,7 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: FAIL,
 			mode: 'propose',
@@ -377,10 +377,8 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 		expect(core.routedToNeedsAttention).toBe(true);
 		expect(core.branch).toBe('work/slice-delta');
 		expect(core.reason).toMatch(/acceptance gate failed/i);
-		// Bounced from in-progress/ straight to needs-attention/, never done/.
-		expect(existsSync(join(repo, 'work', 'in-progress', 'delta.md'))).toBe(
-			false,
-		);
+		// Bounced from backlog/ straight to needs-attention/, never done/.
+		expect(existsSync(join(repo, 'work', 'backlog', 'delta.md'))).toBe(false);
 		expect(existsSync(join(repo, 'work', 'done', 'delta.md'))).toBe(false);
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'delta.md'))).toBe(
 			true,
@@ -398,7 +396,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'epsilon',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			review: true,
@@ -438,7 +436,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'theta',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
@@ -490,11 +488,9 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		const seeded = seedRepoWithArbiter(scratch.root, [slugA, slugB]);
 		const arbiterUrl = `file://${seeded.arbiter}`;
 		// Claim BOTH slugs FIRST (each in its own checkout) so the arbiter main has
-		// BOTH in-progress moves, THEN branch each job off that SAME final main — the
-		// IDENTICAL pre-merge base. (The `run` tick cuts every worktree off a
-		// freshly-fetched main that already carries all sibling in-progress moves; we
-		// reproduce that here so the only divergence between the two jobs is their own
-		// agent edit, not a stale ledger base.)
+		// BOTH locks held with the bodies RESTING in backlog/, THEN branch each job off
+		// that SAME final main — the IDENTICAL pre-merge base. (Claim writes nothing to
+		// main now; the only divergence between the two jobs is their own agent edit.)
 		const claimOne = async (slug: string) => {
 			const cwd = seeded.clone(`job-${slug}`);
 			const claim = await performClaim({
@@ -532,7 +528,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			cwd,
 			arbiter: ARBITER,
 			slug,
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -692,12 +688,13 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 	// conflict touching any CODE file or THIS slug's own ledger still routes.
 
 	/**
-	 * Build ONE repo (slugs `sa` + `sb`), claim `sa` so it is in-progress, and
-	 * branch a `work/slice-sa` whose committed work BOTH does its own agent edit AND
-	 * TOUCHES the named `touch` path with `branchContent` (the conflict surface).
-	 * Then, on the arbiter's main, apply `landOnArbiter` (the divergent change to the
-	 * SAME path). Returns the job cwd + repo so the caller drives `performIntegration`
-	 * for `sa` and asserts the reconcile/route outcome.
+	 * Build ONE repo (slugs `sa` + `sb`), claim `sa` (the lock is held; the body
+	 * RESTS in backlog/, since claim no longer moves it), and branch a `work/slice-sa`
+	 * whose committed work BOTH does its own agent edit AND TOUCHES the named `touch`
+	 * path with `branchContent` (the conflict surface). Then, on the arbiter's main,
+	 * apply `landOnArbiter` (the divergent change to the SAME path). Returns the job
+	 * cwd + repo so the caller drives `performIntegration` for `sa` and asserts the
+	 * reconcile/route outcome.
 	 */
 	async function siblingLedgerConflictJob(opts: {
 		touch: string;
@@ -706,7 +703,8 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 	}) {
 		const seeded = seedRepoWithArbiter(scratch.root, ['sa', 'sb']);
 		const repo = seeded.repo;
-		// Claim BOTH so main carries both in-progress moves (the shared pre-merge base).
+		// Claim BOTH (both locks held; both bodies REST in backlog/ on the shared
+		// pre-merge base — claim writes nothing to main).
 		for (const slug of ['sa', 'sb']) {
 			const claim = await performClaim({
 				slug,
@@ -742,15 +740,15 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 
 	it('a conflict confined to a SIBLING slug ledger file (work/done/sb.md) is reconciled and the job LANDS', async () => {
 		const {seeded, repo} = await siblingLedgerConflictJob({
-			// Our branch modifies the SIBLING's in-progress ledger (a benign touch).
-			touch: 'work/in-progress/sb.md',
+			// Our branch modifies the SIBLING's backlog ledger (a benign touch).
+			touch: 'work/backlog/sb.md',
 			branchContent: 'sb ledger — our branch view\n',
-			// The arbiter MOVES sb from in-progress to done with different content (the
+			// The arbiter MOVES sb from backlog to done with different content (the
 			// sibling job's done-move): replaying our touch onto it conflicts on sb's
 			// ledger ONLY — a benign sibling-ledger divergence.
 			landOnArbiter: (mainCwd) => {
 				mkdirSync(join(mainCwd, 'work', 'done'), {recursive: true});
-				gitIn(['mv', 'work/in-progress/sb.md', 'work/done/sb.md'], mainCwd);
+				gitIn(['mv', 'work/backlog/sb.md', 'work/done/sb.md'], mainCwd);
 				writeFileSync(
 					join(mainCwd, 'work', 'done', 'sb.md'),
 					'sb ledger — arbiter (sibling done-move)\n',
@@ -762,7 +760,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'sa',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -778,7 +776,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// The sibling's ledger ended at the ARBITER's version (sb in done/, not our
 		// in-progress touch): sb's own done-move was honoured, not clobbered.
 		expect(existsOnArbiterMain(repo, 'done', 'sb')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'sb')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'sb')).toBe(false);
 		void seeded;
 	});
 
@@ -796,7 +794,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'sa',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -811,17 +809,17 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 	});
 
 	it('a conflict on THIS slug OWN ledger still routes to needs-attention (sibling arm excludes own ledger)', async () => {
-		// Our branch touches our OWN in-progress ledger; the arbiter independently
+		// Our branch touches our OWN backlog ledger; the arbiter independently
 		// edits the same own-ledger file. The sibling arm explicitly EXCLUDES our own
 		// ledger, so this falls through to the divergent-done-move / needs-attention
 		// route (it is NOT the divergent-base case the #86 recovery handles, since the
-		// arbiter still holds sa in in-progress — the same folder we move from).
+		// arbiter still holds sa in backlog — the same folder we move from).
 		const {repo} = await siblingLedgerConflictJob({
-			touch: 'work/in-progress/sa.md',
+			touch: 'work/backlog/sa.md',
 			branchContent: 'sa ledger — our branch view\n',
 			landOnArbiter: (mainCwd) => {
 				writeFileSync(
-					join(mainCwd, 'work', 'in-progress', 'sa.md'),
+					join(mainCwd, 'work', 'backlog', 'sa.md'),
 					'sa ledger — arbiter view\n',
 				);
 			},
@@ -831,7 +829,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'sa',
-			source: 'in-progress',
+			source: 'backlog',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',

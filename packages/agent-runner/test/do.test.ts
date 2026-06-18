@@ -115,9 +115,11 @@ describe('do <slug> — in-place happy path → exit', () => {
 		// (the runner onboarded) and only edits code.
 		const assertingAgent: DoAgentRunner = ({cwd, slug}) => {
 			expect(currentBranch(cwd)).toBe(`work/slice-${slug}`);
-			// in-progress (claimed) in the tree; the agent never moved it.
+			// The body RESTS in backlog/ in the tree (claim acquired the lock but
+			// never moved the body); the agent never did any git.
+			expect(existsSync(join(cwd, 'work', 'backlog', `${slug}.md`))).toBe(true);
 			expect(existsSync(join(cwd, 'work', 'in-progress', `${slug}.md`))).toBe(
-				true,
+				false,
 			);
 			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
 			return {ok: true};
@@ -356,11 +358,11 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 		);
 	});
 
-	it('CONTRAST: human `complete` (no surfaceArbiter) routes LOCAL-ONLY — main still shows in-progress', async () => {
+	it('CONTRAST: human `complete` (no surfaceArbiter) routes LOCAL-ONLY — main still shows the body in backlog', async () => {
 		// This locks the AUTONOMOUS-vs-HUMAN divergence the slice flags: `do` passes
 		// the arbiter (surfaces on main); the human `complete` does NOT, so a red
-		// gate leaves main showing in-progress (a human is right there). If someone
-		// made `complete` always surface, this fails.
+		// gate leaves main showing the body still in backlog (a human is right there).
+		// If someone made `complete` always surface, this fails.
 		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
 		const repo = seeded.repo;
 		const claim = await performClaim({
@@ -383,12 +385,13 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('gate-failed');
-		// Local-only: the item bounced locally, but main was NOT surfaced — it still
-		// shows the in-progress claim (the human's, no cross-machine surfacing).
+		// Local-only: the item bounced locally (from backlog/ → needs-attention/ in the
+		// working tree), but main was NOT surfaced — it still shows the body in backlog/
+		// (the human's claim is the held lock, no cross-machine surfacing).
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'beta.md'))).toBe(
 			true,
 		);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 	});
 
@@ -423,18 +426,19 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 	 * Without this mapping a strand surface fell through to `usage-error`.
 	 */
 
-	/** A stubbed agent that COMMITS a deletion of the in-progress slice file from
-	 * the work branch — the source-strand state `complete.ts` refuses with
-	 * `nothing to complete (already done, or wrong slug?)`. The arbiter still
-	 * holds the claim in `work/in-progress/`, so `do` should bounce it to
-	 * needs-attention on the arbiter, not silently strand it.
+	/** A stubbed agent that COMMITS a deletion of the slice's body (now resting in
+	 * `work/backlog/`, since claim no longer moves it) from the work branch — the
+	 * source-strand state `complete.ts` refuses with `nothing to complete (already
+	 * done, or wrong slug?)`. The arbiter still holds the body in `work/backlog/`,
+	 * so `do` should bounce it to needs-attention on the arbiter, not silently
+	 * strand it.
 	 */
 	const stranderAgent: DoAgentRunner = ({cwd, slug}) => {
 		// Touch a file too so the empty-diff backstop (`agent-stopped`) does NOT
 		// fire — we WANT the run to reach `performComplete`, where source-resolution
 		// refuses with `nothing to complete` (the source-strand class).
 		writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
-		gitIn(['rm', '-q', `work/in-progress/${slug}.md`], cwd);
+		gitIn(['rm', '-q', `work/backlog/${slug}.md`], cwd);
 		gitIn(['add', '-A'], cwd);
 		gitIn(['commit', '-q', '-m', 'drop the slice (source strand)'], cwd);
 		return {ok: true};
@@ -1236,9 +1240,10 @@ describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 		expect(result.outcome).toBe('completed');
 
 		// propose: the work CODE is on a PUSHED branch awaiting review, NOT merged
-		// to main. The CLAIM move IS on main (the item is in-progress, not done),
-		// but the agent's work has not auto-landed.
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
+		// to main. Claim writes NOTHING to main (the body stays in backlog/), and
+		// the agent's work has not auto-landed (the done-move is on the branch, not main).
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		// The agent's edit is NOT on main (no auto-merge in propose).

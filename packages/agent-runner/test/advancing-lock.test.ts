@@ -288,7 +288,8 @@ describe('advancing-lock does NOT collide with slicing/build on the same slug', 
 		expect(claim.exitCode).toBe(0);
 
 		expect(advancingOnArbiter(seeded.repo, 'slice-dual')).toBe(true);
-		expect(trackedOnArbiter(seeded.repo, 'in-progress', 'dual')).toBe(true);
+		// The build claim acquires the per-item lock; the body stays in backlog/.
+		expect(trackedOnArbiter(seeded.repo, 'backlog', 'dual')).toBe(true);
 	});
 });
 

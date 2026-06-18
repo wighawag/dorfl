@@ -897,7 +897,11 @@ async function runOneItem(
 				// `defaultArbiter` name.
 				arbiter: tree.arbiterRemote,
 				slug,
-				source: 'in-progress',
+				// Claim no longer moves the body (slice
+				// `cutover-claim-body-stays-and-complete-sources-from-backlog`): a
+				// freshly-built slice RESTS in `backlog/` on `main`, so the done-move
+				// sources from there.
+				source: 'backlog',
 				recovering: false,
 				// `run` is ALWAYS autonomous → surface every failure on the arbiter's
 				// main AND push the work branch (DATA, not a caller-identity flag).

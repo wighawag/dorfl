@@ -52,11 +52,11 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Stand the CI repro: claim the slug (`work/in-progress/<slug>.md` on the
- * arbiter), put HEAD on the work branch, and remove the in-progress slice from
- * the BRANCH tree WITHOUT done-moving it — the source-strand state the autonomous
- * source-resolution refuses with "nothing to complete". The arbiter still holds
- * the slug in `work/in-progress/` (the claim landed).
+ * Stand the CI repro: claim the slug (the body RESTS in `work/backlog/<slug>.md`
+ * on the arbiter, since claim no longer moves it), put HEAD on the work branch,
+ * and remove the slice body from the BRANCH tree WITHOUT done-moving it — the
+ * source-strand state the autonomous source-resolution refuses with "nothing to
+ * complete". The arbiter still holds the body in `work/backlog/`.
  */
 async function seedSourceStrand(slug: string): Promise<string> {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
@@ -70,17 +70,15 @@ async function seedSourceStrand(slug: string): Promise<string> {
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
-	gitIn(['rm', '-q', `work/in-progress/${slug}.md`], repo);
+	gitIn(['rm', '-q', `work/backlog/${slug}.md`], repo);
 	gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
-	expect(existsSync(join(repo, 'work', 'in-progress', `${slug}.md`))).toBe(
-		false,
-	);
+	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
 	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(false);
 	expect(existsSync(join(repo, 'work', 'needs-attention', `${slug}.md`))).toBe(
 		false,
 	);
-	// The arbiter still holds in-progress/ (the claim landed; nothing surfaced it).
-	expect(existsOnArbiterMain(repo, 'in-progress', slug)).toBe(true);
+	// The arbiter still holds the body in backlog/ (claim wrote nothing to main).
+	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 	return repo;
 }
 
@@ -136,9 +134,9 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/nothing to complete/i);
-		// The arbiter is UNCHANGED: still in-progress/ (the human is right there
-		// and resolves the strand themselves — no cross-machine surfacing needed).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
+		// The arbiter is UNCHANGED: the body still rests in backlog/ (the human is
+		// right there and resolves the strand themselves — no cross-machine surfacing).
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 		// The checkout was NOT bounced (HEAD still on the work branch).
 		const head = gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim();
@@ -185,8 +183,8 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		// though `surfaceArbiter` is set (autonomous path).
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/local main is ahead/i);
-		// The arbiter is UNCHANGED: still in-progress/ (no surface fired).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(true);
+		// The arbiter is UNCHANGED: the body still rests in backlog/ (no surface fired).
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
 	});
 

@@ -1,7 +1,8 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {performClaim} from '../src/claim-cas.js';
+import {listItemLocks, readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -23,7 +24,7 @@ afterEach(() => {
 });
 
 describe('performClaim — happy path', () => {
-	it('claims a backlog item (exit 0) and moves it to in-progress on the arbiter', async () => {
+	it('claims a backlog item (exit 0), acquires the lock, and leaves the body in backlog (NO main move)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await performClaim({
 			slug: 'alpha',
@@ -33,12 +34,19 @@ describe('performClaim — happy path', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('claimed');
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(false);
+		// The body STAYS in backlog/ on main — claim writes nothing to main.
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		// The per-item lock (action: implement) IS the claim.
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
+			'slice-alpha',
+		]);
 	});
 
-	it('surfaces the claim commit sha AND advances local <arbiter>/main past the push (Part 2)', async () => {
+	it('writes NOTHING to main (the arbiter main tip is unchanged after the claim)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const mainBefore = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
 		const result = await performClaim({
 			slug: 'alpha',
 			cwd: repo,
@@ -46,39 +54,15 @@ describe('performClaim — happy path', () => {
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('claimed');
-		// (1) The claim commit sha is returned in the SUCCESS result.
-		expect(result.claimCommit).toMatch(/^[0-9a-f]{40}$/);
-		// It is the claim move on the arbiter's main (`claim: <slug>`), and it
-		// carries the in-progress move.
-		const arbiterMain = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
-		expect(result.claimCommit).toBe(arbiterMain);
-		const subject = gitIn(
-			['log', '-1', '--format=%s', result.claimCommit!],
-			repo,
-		).trim();
-		expect(subject).toBe('claim: alpha');
-
-		// (2) Local `arbiter/main` was fetch-advanced AFTER the push so it now
-		// REACHES the claim commit (the masking second defect): a fresh onboarding
-		// cut off `arbiter/main` includes the claim.
-		const isAncestor = gitIn(
-			[
-				'merge-base',
-				'--is-ancestor',
-				result.claimCommit!,
-				'arbiter/main',
-				'&&',
-				'echo',
-				'ok',
-			].slice(0, 4),
-			repo,
-		);
-		// `gitIn` throws on non-zero; reaching here means the ancestor check passed.
-		expect(isAncestor).toBe('');
+		// No claim commit (claim no longer lands on main); onboarding cuts off main.
+		expect(result.claimCommit).toBeUndefined();
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const mainAfter = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		expect(mainAfter).toBe(mainBefore);
 	});
 
-	it('does NOT introduce claimed_by / claimed_at (WORK-CONTRACT rule 6)', async () => {
-		// Contract: claim state is the folder + git history, never frontmatter.
+	it('records the holder/since on the lock entry (claim state is the lock, not frontmatter)', async () => {
+		// Contract: claim state is the lock + git history, never advisory frontmatter.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await performClaim({
 			slug: 'alpha',
@@ -86,61 +70,22 @@ describe('performClaim — happy path', () => {
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		const content = gitIn(
-			['show', 'arbiter/main:work/in-progress/alpha.md'],
-			repo,
-		);
+		const entry = await readItemLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(entry?.action).toBe('implement');
+		expect(entry?.state).toBe('active');
+		expect(entry?.holder).not.toBe('');
+		// The backlog body is untouched — no claimed_by/claimed_at stamped into it.
+		const content = gitIn(['show', 'arbiter/main:work/backlog/alpha.md'], repo);
 		expect(content).not.toMatch(/^claimed_by:/m);
 		expect(content).not.toMatch(/^claimed_at:/m);
 	});
 
-	it('uses a PLAIN claim commit subject with no `(by ...)` suffix (claimer lives in git history)', async () => {
-		// The claimer is NOT in the commit-message header any more (the `--by` flag
-		// and the `claimedBy` concept were removed, ADR §7): the subject is plain
-		// `claim: <slug>`. Who claimed is read from git (`git log` — committer
-		// identity + timestamp), not parsed back out of the subject.
-		const {repo} = seedRepoWithArbiter(scratch.root, ['who']);
-		await performClaim({
-			slug: 'who',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		const subject = gitIn(['log', '-1', '--format=%s', 'arbiter/main'], repo);
-		expect(subject.trim()).toBe('claim: who');
-		expect(subject).not.toMatch(/\(by /);
-	});
-
-	it('leaves legacy claimed_by / claimed_at lines untouched (no longer stamped)', async () => {
-		// The advisory-stamp mechanism was removed: a file still carrying legacy
-		// lines is claimed normally and the lines are left exactly as-is (not
-		// updated, not deleted) — the contract simply ignores them.
-		const {repo} = seedRepoWithArbiter(scratch.root, ['legacy']);
-		const backlogFile = join(repo, 'work', 'backlog', 'legacy.md');
-		const legacy = readFileSync(backlogFile, 'utf8').replace(
-			/^blockedBy: \[\]$/m,
-			'blockedBy: []\nclaimed_by:\nclaimed_at:',
-		);
-		writeFileSync(backlogFile, legacy);
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'add legacy advisory lines'], repo);
-		gitIn(['push', '-q', 'arbiter', 'main'], repo);
-		await performClaim({
-			slug: 'legacy',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		const content = gitIn(
-			['show', 'arbiter/main:work/in-progress/legacy.md'],
-			repo,
-		);
-		// Untouched: still the empty legacy lines, NOT stamped with 'alice'.
-		expect(content).toMatch(/^claimed_by:\s*$/m);
-		expect(content).not.toMatch(/^claimed_by: alice$/m);
-	});
-
-	it('restores the original branch and cleans up the claim branch', async () => {
+	it('leaves the original branch and working tree untouched (claim mutates no local refs)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const before = gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim();
 		await performClaim({
@@ -151,7 +96,7 @@ describe('performClaim — happy path', () => {
 		});
 		const after = gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim();
 		expect(after).toBe(before);
-		// The throwaway claim branch must be gone.
+		// No throwaway claim branch is ever created any more.
 		const branches = gitIn(['branch', '--list', 'claim/alpha'], repo);
 		expect(branches.trim()).toBe('');
 	});
@@ -173,12 +118,12 @@ describe('performClaim — not claimable (exit 2)', () => {
 		expect(result.message).not.toMatch(/resume/);
 	});
 
-	it('returns "lost" when the item is already in-progress on the arbiter', async () => {
+	it('returns "lost" when the item is already CLAIMED (lock held) on the arbiter', async () => {
 		const {repo, clone} = (() => {
 			const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 			return {repo: seeded.repo, clone: seeded.clone};
 		})();
-		// First claimer wins from a separate clone.
+		// First claimer wins from a separate clone (holds the lock; body stays in backlog).
 		const other = clone('other');
 		const first = await performClaim({
 			slug: 'alpha',
@@ -187,7 +132,8 @@ describe('performClaim — not claimable (exit 2)', () => {
 			env: gitEnv(),
 		});
 		expect(first.exitCode).toBe(0);
-		// Second claimer (original repo) now finds it already in-progress.
+		// Second claimer (original repo) loses the lock race definitively (exit 2),
+		// even though the body is still in backlog/.
 		const second = await performClaim({
 			slug: 'alpha',
 			cwd: repo,
@@ -196,13 +142,18 @@ describe('performClaim — not claimable (exit 2)', () => {
 		});
 		expect(second.exitCode).toBe(2);
 		expect(second.outcome).toBe('lost');
-		// The in-progress message points a user re-running on their OWN item at the
+		// The held-lock message points a user re-running on their OWN item at the
 		// real recovery verbs (resume / work-on / requeue) rather than only
 		// "pick another item".
-		expect(second.message).toMatch(/already in-progress/);
+		expect(second.message).toMatch(/already claimed/);
 		expect(second.message).toMatch(/resume/);
 		expect(second.message).toMatch(/work-on/);
 		expect(second.message).toMatch(/requeue/);
+		// The body never moved; the lock is held exactly once (b did not steal it).
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
+			'slice-alpha',
+		]);
 	});
 });
 
@@ -219,9 +170,10 @@ describe('performClaim — usage / env errors (exit 1)', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/uncommitted changes/);
-		// It must NOT have mutated the arbiter.
+		// It must NOT have mutated the arbiter, and must NOT have acquired a lock.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
 	});
 
 	it('errors when the arbiter remote does not exist', async () => {
@@ -251,7 +203,7 @@ describe('performClaim — usage / env errors (exit 1)', () => {
 });
 
 describe('performClaim — dry run', () => {
-	it('reports the intended push and does NOT mutate the arbiter', async () => {
+	it('reports it WOULD claim, takes NO lock and does NOT mutate the arbiter', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const notes: string[] = [];
 		const result = await performClaim({
@@ -263,24 +215,22 @@ describe('performClaim — dry run', () => {
 			note: (m) => notes.push(m),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(notes.some((n) => n.includes('[dry-run]'))).toBe(true);
-		// Arbiter untouched: still in backlog, not in-progress.
+		expect(notes.some((n) => n.includes('DRY-RUN'))).toBe(true);
+		// Arbiter untouched: still in backlog, never moved.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
-		// Original branch restored, claim branch cleaned up.
-		const branches = gitIn(['branch', '--list', 'claim/alpha'], repo);
-		expect(branches.trim()).toBe('');
+		// No lock acquired (a dry-run mutates nothing).
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
 	});
 });
 
-describe('performClaim — main merely advanced then succeeds', () => {
-	it('retries when a DIFFERENT item lands on main, then claims ours', async () => {
+describe('performClaim — two different items both claim cleanly', () => {
+	it('a sibling item being claimed does NOT block ours (per-item locks never falsely contend)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['ours', 'other']);
 		const us = seeded.repo;
 		const them = seeded.clone('them');
 
-		// Land `other` on main from a separate clone (advances main, but `ours`
-		// is still claimable).
+		// `other` is claimed from a separate clone (a different per-item ref).
 		const landed = await performClaim({
 			slug: 'other',
 			cwd: them,
@@ -289,7 +239,7 @@ describe('performClaim — main merely advanced then succeeds', () => {
 		});
 		expect(landed.exitCode).toBe(0);
 
-		// Our claim sees the stale base on the first push, refetches, and wins.
+		// Our claim of a DIFFERENT item never contends on `other`'s lock; it wins.
 		const ours = await performClaim({
 			slug: 'ours',
 			cwd: us,
@@ -297,9 +247,13 @@ describe('performClaim — main merely advanced then succeeds', () => {
 			env: gitEnv(),
 		});
 		expect(ours.exitCode).toBe(0);
-		expect(existsOnArbiterMain(us, 'in-progress', 'ours')).toBe(true);
-		expect(existsOnArbiterMain(us, 'done', 'other')).toBe(false);
-		expect(existsOnArbiterMain(us, 'in-progress', 'other')).toBe(true);
+		// Both bodies stay in backlog/; both locks are held, one per item.
+		expect(existsOnArbiterMain(us, 'backlog', 'ours')).toBe(true);
+		expect(existsOnArbiterMain(us, 'backlog', 'other')).toBe(true);
+		expect((await listItemLocks(us, 'arbiter', gitEnv())).sort()).toEqual([
+			'slice-other',
+			'slice-ours',
+		]);
 	});
 });
 
@@ -333,8 +287,8 @@ describe('claim race (mirrors claim.sh verification)', () => {
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(claimed).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		// The arbiter ref agrees: the item is in-progress exactly once.
-		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(true);
-		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(false);
+		// The lock ref agrees: the item is locked exactly once, body still in backlog.
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['slice-solo']);
+		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
 	});
 });

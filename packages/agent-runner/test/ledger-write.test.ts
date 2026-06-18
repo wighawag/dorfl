@@ -53,38 +53,44 @@ describe('ledger-write seam — shape', () => {
 	});
 });
 
-describe('ledger-write seam — claim is dispatched THROUGH it', () => {
-	it('performClaim routes the claim transition via ledgerWrite.applyTransition', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+describe('ledger-write seam — a claim-kind transition is dispatched THROUGH it', () => {
+	// NB: `performClaim` itself NO LONGER routes through this seam — the lock-substrate
+	// cut-over (slice `cutover-claim-body-stays-and-complete-sources-from-backlog`)
+	// made claim acquire a per-item lock and write NOTHING to `main`, so there is no
+	// `claim`-kind `applyTransition` dispatch from `performClaim` any more. The seam's
+	// `kind: 'claim'` path is still exercised DIRECTLY here (a hand-built claim
+	// micro-commit) because the seam itself (the `main`-CAS publish primitive) remains
+	// the mechanism complete/slicing/needs-attention land their durable moves through.
+	it('a claim-kind transition published directly through the seam lands the move on the arbiter', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['beta']);
 		const spy = vi.spyOn(ledgerWriteModule.ledgerWrite, 'applyTransition');
+		// Build a real claim micro-commit (backlog → in-progress) on a local branch off
+		// arbiter/main and publish it through the seam, the SAME way the seam is used
+		// for any durable `main` move.
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['checkout', '-q', '-B', 'claim/beta', 'arbiter/main'], repo);
+		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
+		gitIn(['mv', 'work/backlog/beta.md', 'work/in-progress/beta.md'], repo);
+		gitIn(['commit', '-q', '-m', 'claim: beta'], repo);
+		const base = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		const head = gitIn(['rev-parse', 'HEAD'], repo).trim();
 
-		const result = await performClaim({
-			slug: 'alpha',
-			cwd: repo,
+		const res = await ledgerWriteModule.ledgerWrite.applyTransition({
+			kind: 'claim',
 			arbiter: 'arbiter',
+			localBranch: 'claim/beta',
+			expectedBase: base,
+			head,
+			cwd: repo,
 			env: gitEnv(),
 		});
-
-		expect(result.exitCode).toBe(0);
+		expect(res.kind).toBe('published');
 		expect(spy).toHaveBeenCalled();
-		// The claim transition kind was the one dispatched, and the public input
-		// carried NO `main` (storage-agnostic): only semantic + plumbing fields.
+		// The public input carried NO `main` (storage-agnostic): semantic + plumbing only.
 		const input = spy.mock.calls[0][0];
 		expect(input.kind).toBe('claim');
 		expect(Object.keys(input)).not.toContain('main');
 		expect(JSON.stringify(Object.keys(input))).not.toMatch(/main/i);
-	});
-
-	it('the strategy CAS-publishes the claim so it lands on the arbiter', async () => {
-		// End-to-end through the real strategy: the claim micro-commit lands.
-		const {repo} = seedRepoWithArbiter(scratch.root, ['beta']);
-		const result = await performClaim({
-			slug: 'beta',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(0);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(false);
 	});

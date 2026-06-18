@@ -319,7 +319,8 @@ describe('work-on --agent — interactive launch in the new worktree', () => {
 		const sessionArg = args[args.indexOf('--session') + 1];
 		expect(sessionArg.startsWith(scratch.root)).toBe(true);
 		expect(existsSync(sessionArg)).toBe(true);
-		// The claim landed (the onboard happened before the launch).
-		expect(existsOnArbiterMain(repo, 'in-progress', 'gamma')).toBe(true);
+		// The claim landed (the onboard happened before the launch); claim writes
+		// nothing to main, so the body rests in backlog/.
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 	});
 });

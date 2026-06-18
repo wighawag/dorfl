@@ -56,8 +56,8 @@ async function seedStrandedWorktree(
 ): Promise<{worktreeDir: string; tip: string; arbiterUrl: string}> {
 	const ws = workspacesDir();
 	const arbiterUrl = `file://${seeded.arbiter}`;
-	// Claim FIRST so the arbiter (and the fresh worktree createJob cuts off main)
-	// holds the slug in in-progress/ \u2014 the folder the strand's done-move moves FROM.
+	// Claim FIRST (acquires the lock; the body RESTS in backlog/, since claim no
+	// longer moves it) \u2014 backlog/ is the folder the strand's done-move moves FROM.
 	const claim = await performClaim({
 		slug,
 		cwd: seeded.repo,
@@ -76,14 +76,14 @@ async function seedStrandedWorktree(
 	writeFileSync(join(dir, 'feature.txt'), 'the work\n');
 	// The done-move + commit already happened (steps 2\u20133 of performIntegration),
 	// just before the push that then failed terminally. The worktree's arbiter
-	// remote is `origin` (the mirror's clone); the slice is in in-progress/ there.
+	// remote is `origin` (the mirror's clone); the body rests in backlog/ there.
 	mkdirSync(join(dir, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`], dir);
+	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], dir);
 	gitIn(['add', '-A'], dir);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], dir);
 
 	// Pre-conditions: the worktree is at the deterministic path; done/ present, the
-	// tip not pushed (origin/main still has in-progress/).
+	// tip not pushed (origin/main still has the body in backlog/).
 	expect(dir).toBe(jobWorktreePath(ws, arbiterUrl, slug));
 	expect(existsSync(join(dir, 'work', 'done', `${slug}.md`))).toBe(true);
 	const tip = gitIn(['rev-parse', 'HEAD'], dir).trim();

@@ -594,9 +594,18 @@ async function runComplete(
 	// disagree with what the arbiter holds even when the local tree diverges
 	// (ledger-integrity defect 1). The `source` we pass is the arbiter-content
 	// fallback for the degenerate "arbiter holds nothing" case, not the authority.
+	// THE NORMAL freshly-built path now rests in `work/backlog/` (slice
+	// `cutover-claim-body-stays-and-complete-sources-from-backlog`): claim acquires
+	// the per-item lock and NO LONGER moves the body out of `backlog/`, so the slice
+	// `.md` the build agent worked under is still at `work/backlog/<slug>.md`. We
+	// PREFER `backlog/` as the build source; `in-progress/` is RETAINED below for the
+	// legacy/bounce surfaces that may still source from it until its folder removal
+	// (9c), and `needs-attention/` for the runner-owned recovery finish.
+	const backlog = join(cwd, 'work', 'backlog', `${slug}.md`);
 	const inProgress = join(cwd, 'work', 'in-progress', `${slug}.md`);
 	const needsAttention = join(cwd, 'work', 'needs-attention', `${slug}.md`);
 	const done = join(cwd, 'work', 'done', `${slug}.md`);
+	const onBacklog = existsSync(backlog);
 	const onInProgress = existsSync(inProgress);
 	const onNeedsAttention = existsSync(needsAttention);
 	const onDone = existsSync(done);
@@ -614,7 +623,8 @@ async function runComplete(
 	// `<arbiter>/main` returns `already-integrated` (clean no-op, NEVER a
 	// re-push/double-integrate). Mutually exclusive with the build-path source +
 	// `recovering` flags — the core ignores them when `committedRecovery` is set.
-	const folderShapeStranded = !onInProgress && !onNeedsAttention && onDone;
+	const folderShapeStranded =
+		!onBacklog && !onInProgress && !onNeedsAttention && onDone;
 	// DIRTY-CONTINUE GATE (slice `recover-autodetect-gated-on-nothing-to-commit`).
 	// The folder-shape stranded-done auto-detect is necessary but NOT sufficient on
 	// a CONTINUE: a requeued slice whose prior attempt already done-moved the slug
@@ -643,17 +653,22 @@ async function runComplete(
 	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
 	// slice's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
 	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
-	const source: 'in-progress' | 'needs-attention' | 'done' = dirtyContinue
-		? 'done'
-		: onInProgress
-			? 'in-progress'
-			: 'needs-attention';
+	const source: 'backlog' | 'in-progress' | 'needs-attention' | 'done' =
+		dirtyContinue
+			? 'done'
+			: onBacklog
+				? 'backlog'
+				: onInProgress
+					? 'in-progress'
+					: 'needs-attention';
 	const sourcePath =
-		source === 'in-progress'
-			? inProgress
-			: source === 'needs-attention'
-				? needsAttention
-				: done;
+		source === 'backlog'
+			? backlog
+			: source === 'in-progress'
+				? inProgress
+				: source === 'needs-attention'
+					? needsAttention
+					: done;
 	if (dirtyContinue) {
 		// Announce LOUDLY (parallel to the `committedRecovery` recovery note above):
 		// the autonomous integrate path took the CONTINUE-BUILD branch, not the
@@ -668,8 +683,9 @@ async function runComplete(
 	}
 	if (!committedRecovery && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
-			`work/in-progress/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
-				'nothing to complete (already done, or wrong slug?).',
+			`work/backlog/${slug}.md (nor work/in-progress/${slug}.md nor ` +
+				`work/needs-attention/${slug}.md) found — nothing to complete ` +
+				'(already done, or wrong slug?).',
 			'source-strand',
 			slug,
 		);

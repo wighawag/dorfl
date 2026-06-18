@@ -1,5 +1,11 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, readFileSync, existsSync, mkdirSync} from 'node:fs';
+import {
+	writeFileSync,
+	readFileSync,
+	existsSync,
+	mkdirSync,
+	rmSync,
+} from 'node:fs';
 import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -41,8 +47,11 @@ async function stuckInProgress(
 ): Promise<{seeded: SeededRepo; repo: string; priorTip: string}> {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
 	const repo = seeded.repo;
-	// The claim publishes work/in-progress/<slug>.md to the arbiter's main (the
-	// tree-less CAS) — exactly how a real claim leaves the item in in-progress/.
+	// The claim acquires the lock; the body stays in backlog/ (claim no longer
+	// moves it). To reproduce a slug LEGACY-stuck in `in-progress/` on the arbiter
+	// (an old surfacing / a pre-cut-over state — the in-progress source `requeue`
+	// still recovers from until 9b), we MANUALLY publish the `backlog/ → in-progress/`
+	// move to the arbiter's main (a separate clone), independent of the claim.
 	const claim = await performClaim({
 		slug,
 		cwd: repo,
@@ -50,6 +59,19 @@ async function stuckInProgress(
 		env: gitEnv(),
 	});
 	expect(claim.exitCode).toBe(0);
+	{
+		const mover = seeded.clone(`to-in-progress-${slug}`);
+		gitIn(['fetch', '-q', ARBITER], mover);
+		gitIn(['switch', '-q', '-c', `to-ip/${slug}`, `${ARBITER}/main`], mover);
+		mkdirSync(join(mover, 'work', 'in-progress'), {recursive: true});
+		gitIn(
+			['mv', `work/backlog/${slug}.md`, `work/in-progress/${slug}.md`],
+			mover,
+		);
+		gitIn(['commit', '-q', '-m', `chore(${slug}): legacy in-progress`], mover);
+		gitIn(['push', '-q', ARBITER, `to-ip/${slug}:main`], mover);
+		rmSync(mover, {recursive: true, force: true});
+	}
 	// A prior attempt commits work on work/<slug> and pushes the branch (the
 	// keep+continue artifact). The run is then KILLED — nothing surfaces it, so it
 	// stays in in-progress/ on the arbiter.
