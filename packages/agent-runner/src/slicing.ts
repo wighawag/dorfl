@@ -6,7 +6,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from 'node:fs';
-import {dirname, join} from 'node:path';
+import {basename, dirname, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {runAsync, type RunResult} from './git.js';
 import {
@@ -29,6 +29,7 @@ import {
 } from './slicing-lock.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
+import {placementFolder, resolvePlacement} from './placement.js';
 import {setNeedsAnswersMarker, propagateOrigin} from './frontmatter.js';
 import {workBranchRef} from './slug-namespace.js';
 import {
@@ -236,6 +237,29 @@ export interface PerformSliceOptions {
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
 	lock?: SlicingLockSeam;
 	/**
+	 * **The per-repo SLICE-PLACEMENT default** (PRD
+	 * `staging-pool-position-gate-and-trust-model` US #5, slice
+	 * `runner-deterministic-slice-placement-policy-and-precedence`). The
+	 * resolved per-repo default landing for the slicer's emitted slices, fed as
+	 * the CONFIGURED-DEFAULT rung into the runner-deterministic placement
+	 * resolver (`src/placement.ts`). The resolver overlays an EXPLICIT operator
+	 * flag ({@link explicitSlicesLandIn}, top) and the UNTRUSTED-ORIGIN force
+	 * (`originTrust: untrusted` ⇒ staging) on top. Unset ⇒ the resolver's
+	 * built-in floor applies (`staging` = `pre-backlog/`, the conservative
+	 * landing that preserves zero behaviour change for the normal path).
+	 */
+	slicesLandIn?: 'pre-backlog' | 'backlog';
+	/**
+	 * **The OPERATOR's EXPLICIT slice-placement override** (the TOP precedence
+	 * rung). When set, the runner-deterministic resolver lands the slices HERE
+	 * regardless of `originTrust` or {@link slicesLandIn} — the positional
+	 * analogue of `explicitMerge` overriding the untrusted-origin
+	 * build-propose rule ("the operator is present; CLI always wins, no special
+	 * force-key"). Set ONLY when the operator typed `--slices-land-in <where>`;
+	 * never when the value came from config.
+	 */
+	explicitSlicesLandIn?: 'pre-backlog' | 'backlog';
+	/**
 	 * **The slicer review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES PRD
 	 * `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
 	 * provided, AFTER the agent produces candidate slices (step 3) and BEFORE the
@@ -295,6 +319,37 @@ const DEFAULT_ARBITER = 'origin';
  * it claimable. STEP A: ADDITIVE — no `work/backlog/` reader changes here.
  */
 export const STAGED_SLICES_DIR = 'work/pre-backlog';
+
+/**
+ * The POOL folder slices land in when the runner-deterministic placement
+ * resolver chooses the pool side (`slicesLandIn: 'backlog'` and a trusted
+ * origin, or an `--slices-land-in backlog` operator override). The agent NEVER
+ * writes here — it always writes to {@link STAGED_SLICES_DIR}; the runner
+ * redirects the emitted files to the resolved destination at integrate-stage
+ * time. PRD US #4 / the governing ADR: the agent cannot self-place into the
+ * pool. Slice `runner-deterministic-slice-placement-policy-and-precedence`.
+ */
+const POOL_SLICES_DIR = 'work/backlog';
+
+/** The placement slots for the SLICE lifecycle (folder names). */
+const SLICE_PLACEMENT_SLOTS = {
+	staging: STAGED_SLICES_DIR,
+	pool: POOL_SLICES_DIR,
+} as const;
+
+/**
+ * Map the `slicesLandIn` folder-name spelling (`pre-backlog` | `backlog`) onto
+ * the resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
+ * `undefined` when no value is set, so the resolver's next precedence rung
+ * applies (the built-in floor).
+ */
+function landingToSide(
+	landing: 'pre-backlog' | 'backlog' | undefined,
+): 'staging' | 'pool' | undefined {
+	if (landing === 'pre-backlog') return 'staging';
+	if (landing === 'backlog') return 'pool';
+	return undefined;
+}
 
 /** The repo-relative path of a staged slice's `.md` (per {@link STAGED_SLICES_DIR}). */
 function stagedSlicePath(name: string): string {
@@ -498,8 +553,30 @@ export async function performSlice(
 	//    direct commit to `main`. The agent never does git. (The backlog snapshot is
 	//    taken AFTER any loop edits, so the runner integrates the IMPROVED slices,
 	//    not the pre-loop candidates.)
-	const emitted = newOrChangedStagedSlices(cwd, before);
-	const emitSlices = collectEmittedSlices(cwd, emitted);
+	const stagedEmitted = newOrChangedStagedSlices(cwd, before);
+	const emitSlices = collectEmittedSlices(cwd, stagedEmitted);
+	// RUNNER-DETERMINISTIC PLACEMENT (slice
+	// `runner-deterministic-slice-placement-policy-and-precedence`). Resolve which
+	// folder the runner lands the emitted slices in BEFORE handing them to the
+	// shared integrate band: precedence `explicit > untrusted-origin ⇒ staging >
+	// slicesLandIn > built-in (staging)`, all from unforgeable inputs (the PRD's
+	// stamped `originTrust:` + the resolved per-repo default + the operator's
+	// explicit flag). The agent NEVER influences this; it always writes to
+	// `work/pre-backlog/`, and the runner redirects at `stage()` time.
+	const placementDecision = resolvePlacement({
+		explicit: landingToSide(options.explicitSlicesLandIn),
+		originTrust: prdFm.originTrust,
+		configuredDefault: landingToSide(options.slicesLandIn),
+	});
+	const placementDir = placementFolder(
+		SLICE_PLACEMENT_SLOTS,
+		placementDecision.choice,
+	);
+	// REWRITE the emitted list to the RUNNER-RESOLVED destination so callers see
+	// where the runner actually placed the files (not where the agent wrote them).
+	const emitted = stagedEmitted.map(
+		(rel) => `${placementDir}/${basename(rel)}`,
+	);
 	const loopTag: 'converged' | 'uncertain-slices' | undefined =
 		loopDisposition?.outcome === 'converged'
 			? 'converged'
@@ -583,7 +660,16 @@ export async function performSlice(
 				titlePath: join(cwd, 'work', 'slicing', `${slug}.md`),
 				commitTag: 'sliced',
 				stage: () =>
-					stageSlicingLifecycle({cwd, slug, emitSlices, poolBefore, env}),
+					stageSlicingLifecycle({
+						cwd,
+						slug,
+						emitSlices,
+						poolBefore,
+						placementDir,
+						placementReason: placementDecision.reason,
+						note,
+						env,
+					}),
 			},
 			env,
 			// The slice-SET acceptance review AGENT launches AMBIENT, never the
@@ -810,9 +896,35 @@ async function stageSlicingLifecycle(params: {
 	slug: string;
 	emitSlices: Record<string, string>;
 	poolBefore: Map<string, string>;
+	/**
+	 * The runner-resolved destination folder (slice
+	 * `runner-deterministic-slice-placement-policy-and-precedence`). Computed
+	 * ONCE in `performSlice` via the shared {@link resolvePlacement} from the
+	 * PRD's `originTrust:` stamp + the configured `slicesLandIn` default + the
+	 * operator's explicit override, then passed in here — so the call site sees
+	 * exactly where the emitted slices landed (the placement decision is not
+	 * buried in the stage closure).
+	 */
+	placementDir: string;
+	/** Which precedence rung the resolver took (for honest reporting). */
+	placementReason:
+		| 'explicit'
+		| 'untrusted-origin'
+		| 'configured-default'
+		| 'built-in';
+	note: (message: string) => void;
 	env: NodeJS.ProcessEnv | undefined;
 }): Promise<void> {
-	const {cwd, slug, emitSlices, poolBefore, env} = params;
+	const {
+		cwd,
+		slug,
+		emitSlices,
+		poolBefore,
+		placementDir,
+		placementReason,
+		note,
+		env,
+	} = params;
 	const slicing = `work/slicing/${slug}.md`;
 	const prdSliced = `work/prd-sliced/${slug}.md`;
 	// PROPAGATE the origin-trust PROVENANCE (slice
@@ -826,33 +938,51 @@ async function stageSlicingLifecycle(params: {
 	const prdProvenance = existsSync(prdAbs)
 		? parseFrontmatter(readFileSync(prdAbs, 'utf8'))
 		: {origin: undefined, originTrust: undefined};
+	if (placementReason === 'untrusted-origin') {
+		note(
+			`Untrusted-origin PRD '${slug}': forcing the emitted slices STAGED ` +
+				`(${placementDir}/) regardless of slicesLandIn (a human promotes ` +
+				'them into work/backlog/). Pass --slices-land-in <where> to override.',
+		);
+	}
 	// Move the held PRD slicing/ -> prd-sliced/ (the SLICED resting state — folder =
 	// source of truth, like done/ for slices). This releases the lock as part of THIS
 	// transition's commit, not the lock release's own commit-to-main.
 	mkdirSync(dirname(join(cwd, prdSliced)), {recursive: true});
 	await gitHard(['mv', slicing, prdSliced], cwd, env);
 	await gitHard(['add', '--', prdSliced], cwd, env);
-	// Drop the produced backlog slices IN (write + stage; the band's `git add -A`
-	// also catches them, but staging here keeps the transition explicit + atomic).
-	// The runner STAMPS the propagated provenance onto each slice as it writes it
-	// (the agent does no git; the runner owns the file write here).
-	for (const [relPath, content] of Object.entries(emitSlices)) {
-		const abs = join(cwd, relPath);
-		mkdirSync(dirname(abs), {recursive: true});
-		writeFileSync(abs, propagateOrigin(prdProvenance, content));
-		await gitHard(['add', '--', relPath], cwd, env);
-	}
 	// **POOL-PLACEMENT FENCE (PRD US #4 / governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`).** The
-	// slicer's STAGING folder is `work/pre-backlog/`; the POOL `work/backlog/` is
-	// the agent-eligible pool the runner owns the promotion into. The agent ran
-	// AMBIENT in the worktree, so anything it dropped under `work/backlog/` would
-	// otherwise be swept in by `performIntegration`'s subsequent `git add -A` — a
-	// self-placement into the pool. Revert any agent-introduced add/change under
-	// `work/backlog/` here so the runner's commit reflects ONLY the legitimate
-	// `pre-backlog/` placement + the PRD lifecycle move. (STEP A; slice
-	// `pre-backlog-staging-folder-and-promote-step-a`.)
+	// agent ALWAYS writes to the STAGING folder (`work/pre-backlog/`); the POOL
+	// (`work/backlog/`) is the agent-eligible pool the runner owns the promotion
+	// into. Anything the agent dropped under the pool would otherwise be swept in
+	// by `performIntegration`'s subsequent `git add -A` — a self-placement into
+	// the pool. Scrub it FIRST (before the runner writes its resolved destination
+	// files below), so when the runner-deterministic placement resolves to the
+	// pool the runner's writes are the ONLY legitimate pool entries in the commit.
 	await scrubPoolDrift(cwd, poolBefore, env);
+	// Drop the produced backlog slices IN at the RUNNER-RESOLVED destination
+	// (write + stage; the band's `git add -A` also catches them, but staging here
+	// keeps the transition explicit + atomic). The runner STAMPS the propagated
+	// provenance onto each slice as it writes it (the agent does no git; the runner
+	// owns the file write here). When the resolved destination DIFFERS from where
+	// the agent wrote (the staging folder), remove the agent's source file too —
+	// otherwise `git add -A` would commit BOTH (staging twin + pool destination).
+	for (const [agentRel, content] of Object.entries(emitSlices)) {
+		const filename = basename(agentRel);
+		const destRel = `${placementDir}/${filename}`;
+		const destAbs = join(cwd, destRel);
+		mkdirSync(dirname(destAbs), {recursive: true});
+		writeFileSync(destAbs, propagateOrigin(prdProvenance, content));
+		await gitHard(['add', '--', destRel], cwd, env);
+		if (destRel !== agentRel) {
+			const srcAbs = join(cwd, agentRel);
+			rmSync(srcAbs, {force: true});
+			// Also unstage if `git add --` from a previous run picked it up;
+			// untracked-and-now-gone is fine.
+			await gitSoft(['rm', '-f', '--quiet', '--', agentRel], cwd, env);
+		}
+	}
 }
 
 /**
