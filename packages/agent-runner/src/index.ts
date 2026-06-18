@@ -269,6 +269,8 @@ export type {
 	ReleaseResult,
 	AcquireOptions,
 	ReleaseOptions,
+	ReconcileOutcome,
+	ReconcileResult,
 } from './item-lock.js';
 export {
 	LOCK_REF_PREFIX,
@@ -277,6 +279,8 @@ export {
 	acquireItemLock,
 	releaseItemLock,
 	readItemLock,
+	reconcileItemLockAgainstMain,
+	terminalMainPaths,
 	listItemLocks,
 	listItemLockEntries,
 	heldSliceSlugs,

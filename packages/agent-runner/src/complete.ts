@@ -10,6 +10,7 @@ import {
 	PR_TITLE_MAX,
 } from './integration-core.js';
 import {ledgerWrite} from './ledger-write.js';
+import {releaseItemLock} from './item-lock.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import type {ReviewProvider} from './integrator.js';
 import type {IntegrationMode} from './config.js';
@@ -832,6 +833,13 @@ async function runComplete(
 		// the caller's tail (switch-to-main / ff / delete-branch) is irrelevant
 		// because the work is already integrated and the branch may or may not
 		// still exist locally.
+		//
+		// CROSS-SUBSTRATE RELEASE (PRD `ledger-status-per-item-lock-refs` US #9/#10;
+		// slice `complete-lock-then-durable-main-move-crash-safe`): the durable
+		// `main` record is already terminal, so the per-item lock claim took is now
+		// stale — release it SECOND (the move already landed FIRST). Best-effort +
+		// idempotent (`not-held` is fine when a prior reconcile/release cleared it).
+		await releaseClaimLockAfterDurableMove(slug, cwd, arbiter, env);
 		return {
 			exitCode: 0,
 			outcome: 'already-integrated',
@@ -852,6 +860,24 @@ async function runComplete(
 			message: core.reason ?? '',
 		};
 	}
+
+	// CROSS-SUBSTRATE RELEASE — the HEART of this path's crash-safety (PRD
+	// `ledger-status-per-item-lock-refs` US #9/#10; ADR
+	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; slice
+	// `complete-lock-then-durable-main-move-crash-safe`). ORDER MATTERS: the
+	// DURABLE `main` move (interim `in-progress → done`, atomic with the agent's
+	// code; or `→ dropped`) ALREADY landed FIRST inside `performIntegration`
+	// (the authoritative, referenceable record); the per-item lock that `claim`
+	// ALSO acquired (`action: implement`, keyed `slice:<slug>`) is released SECOND,
+	// HERE. A crash BETWEEN them leaves a `done`-on-`main` item with a still-held
+	// lock; `reconcileItemLockAgainstMain` recovers it (the `main` record is
+	// authoritative over the stale lock). The release is best-effort + idempotent
+	// (`not-held` when the body predates the lock or a reconcile already cleared
+	// it), mirroring `slicing`'s symmetric "the integrate core owns the completing
+	// commit, so the unified lock is released here". The body-move retarget to
+	// `backlog/` is the capstone slice #9; the ordering + recovery built here is
+	// substrate-agnostic and carries through unchanged.
+	await releaseClaimLockAfterDurableMove(slug, cwd, arbiter, env);
 
 	// SUCCESS: the core integrated. `result` is its integration result; `mode` is
 	// the mode the core resolved, read from the result (it always equals the
@@ -955,6 +981,42 @@ async function runComplete(
 		prUrl: result.url,
 		message,
 	};
+}
+
+/**
+ * Release the per-item lock `claim` ALSO acquired (`action: implement`, keyed
+ * `slice:<slug>`) AFTER the durable `main` move has landed — the SECOND, lock-
+ * release half of complete's cross-substrate ordering (PRD
+ * `ledger-status-per-item-lock-refs` US #9/#10; slice
+ * `complete-lock-then-durable-main-move-crash-safe`).
+ *
+ * Called ONLY on the SUCCESS paths (`completed` / `already-integrated`), where
+ * the durable `in-progress → done` (or `→ dropped`) move is already on
+ * `<arbiter>/main` — so the lock is no longer holding anything in flight and is
+ * cleanly released SECOND. The FAILURE paths (gate-failed / review-blocked /
+ * rebase-conflict / prepare-failed) deliberately do NOT release here: those route
+ * to needs-attention (the lock is marked `stuck`, not released, via the
+ * needs-attention seam) and the item is still in flight, so the held lock is
+ * correct.
+ *
+ * Best-effort + idempotent (a `not-held` is fine — the body may predate the lock,
+ * or a crash-recovery `reconcileItemLockAgainstMain` may already have cleared it).
+ * A release fault never fails an already-landed completion: the durable `main`
+ * record is authoritative, and a stranded lock is exactly what recovery clears.
+ */
+async function releaseClaimLockAfterDurableMove(
+	slug: string,
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<void> {
+	try {
+		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	} catch {
+		// Best-effort: a release fault leaves a stale lock that recovery
+		// (`reconcileItemLockAgainstMain`) clears — the durable move already defined
+		// success. Never fail an already-landed completion on the lock release.
+	}
 }
 
 /**

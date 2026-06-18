@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {runAsync, type RunResult} from './git.js';
-import {resolveSidecarIdentity} from './sidecar.js';
+import {resolveSidecarIdentity, type SidecarType} from './sidecar.js';
 
 /**
  * The **unified item-lock module** (PRD `ledger-status-per-item-lock-refs`, ADR
@@ -713,6 +713,213 @@ export async function readItemLock(
 		return undefined;
 	}
 	return parseLockEntry(show.stdout);
+}
+
+/**
+ * The DURABLE-`main` terminal record paths for an item, by its type — the
+ * authoritative resting records the cross-substrate reconciliation reads. An
+ * item is TERMINAL on `main` iff ANY of these paths exists on `<arbiter>/main`:
+ *   - a SLICE: `work/done/<slug>.md` (completed) OR `work/dropped/<slug>.md`
+ *     (the generic "won't-proceed" terminal that generalised `out-of-scope/`).
+ *   - a PRD: `work/prd-sliced/<slug>.md` (sliced) OR `work/dropped/<slug>.md`.
+ *   - an OBSERVATION: `work/dropped/<slug>.md` (the only durable terminal it
+ *     reaches; a promoted observation becomes a NEW slice/PRD with its own ref).
+ * `dropped/` is type-agnostic (the generic terminal), so it is in every set.
+ */
+export function terminalMainPaths(type: SidecarType, slug: string): string[] {
+	const dropped = `work/dropped/${slug}.md`;
+	switch (type) {
+		case 'slice':
+			return [`work/done/${slug}.md`, dropped];
+		case 'prd':
+			return [`work/prd-sliced/${slug}.md`, dropped];
+		case 'observation':
+			return [dropped];
+	}
+}
+
+/** The outcome of a cross-substrate reconciliation of one item's lock against
+ * the authoritative `main` durable record (PRD `ledger-status-per-item-lock-refs`
+ * US #9/#10; ADR `ledger-status-on-per-item-lock-refs`). */
+export type ReconcileOutcome =
+	| 'cleared-stale' // `main` is terminal + the lock was `active` (stranded) → cleared
+	| 'kept-stuck' // `main` is terminal + the lock is `stuck` → kept (co-exists, wins human attention)
+	| 'kept-in-flight' // `main` is NOT terminal + a lock is held → the normal in-flight state, kept
+	| 'no-lock' // there is no lock to reconcile (already at rest)
+	| 'error'; // environment/usage problem (best-effort; never throws)
+
+export interface ReconcileResult {
+	outcome: ReconcileOutcome;
+	/** The type-encoded lock entry (`<type>-<slug>`) reconciled. */
+	entry: string;
+	ref: string;
+	/** Whether `<arbiter>/main` shows the item terminal (done/dropped/prd-sliced). */
+	terminalOnMain: boolean;
+	message: string;
+}
+
+/**
+ * Reconcile ONE item's per-item lock against the AUTHORITATIVE `main` durable
+ * record — the heart of complete's cross-substrate crash-safety (PRD
+ * `ledger-status-per-item-lock-refs` US #9/#10; ADR
+ * `ledger-status-on-per-item-lock-refs`; the design trail's Amendment 6).
+ *
+ * complete's order is hold lock → land the DURABLE `main` move FIRST → release
+ * the lock SECOND. A crash BETWEEN the move and the release leaves a
+ * `done`/`dropped`/`prd-sliced`-on-`main` item with a STILL-HELD lock — a stale
+ * lock with no in-flight work behind it. This is the recovery that converges it.
+ *
+ * THE RECOVERY RULE (the `main` record is authoritative over a stale lock):
+ *   - `main` is TERMINAL + the held lock is `active`  → the item is RESTED, the
+ *     lock is STALE (the crash was after the move) → CLEAR it (`cleared-stale`).
+ *   - `main` is TERMINAL + the held lock is `stuck`   → KEEP it (`kept-stuck`).
+ *     `done` + `stuck` may legitimately CO-EXIST (a rebase-conflict bounce of a
+ *     just-completed item — US #10). The stuck lock wins the human's attention;
+ *     the `main` record wins dependency resolution. NOT corruption, never cleared
+ *     here (a human resolves it via `resume`/`requeue`/`release-lock`).
+ *   - `main` is NOT terminal + a lock is held         → the NORMAL in-flight
+ *     state (`kept-in-flight`); the lock is doing its job, leave it.
+ *   - no lock at all                                   → `no-lock` (at rest).
+ *
+ * Best-effort + idempotent: it NEVER throws (a fetch/read fault degrades to
+ * `error`, leaving the lock untouched — the safe direction), and re-running it
+ * on an already-reconciled item is a clean `no-lock`. The clear is the SAME
+ * leased delete {@link releaseItemLock} uses, so it cannot race off a concurrent
+ * change.
+ */
+export async function reconcileItemLockAgainstMain(
+	opts: ReleaseOptions,
+): Promise<ReconcileResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const env = opts.env;
+	const cwd = opts.cwd;
+	if (!opts.item) {
+		return {
+			outcome: 'error',
+			entry: '',
+			ref: '',
+			terminalOnMain: false,
+			message: 'missing item',
+		};
+	}
+	const {type, slug} = resolveSidecarIdentity(opts.item);
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	try {
+		// One fetch refreshes BOTH the lock refs and `<arbiter>/main` so the lock and
+		// the durable record are read from the SAME live arbiter snapshot.
+		await gitHard(
+			[
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+${LOCK_REF_PREFIX}/*:${LOCK_REF_PREFIX}/*`,
+			],
+			cwd,
+			env,
+		);
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		const terminalOnMain = await isTerminalOnMain(
+			type,
+			slug,
+			arbiter,
+			cwd,
+			env,
+		);
+		if (!held) {
+			return {
+				outcome: 'no-lock',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' has no lock to reconcile`,
+			};
+		}
+		if (!terminalOnMain) {
+			// A held lock + a non-terminal `main` is the NORMAL in-flight state.
+			return {
+				outcome: 'kept-in-flight',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' is in flight (held, not terminal on ${arbiter}/main)`,
+			};
+		}
+		if (held.lock.state === 'stuck') {
+			// `done`/`dropped`/`prd-sliced` + `stuck` co-exist legitimately (US #10) —
+			// NOT corruption. Keep the stuck lock (it wins the human's attention).
+			return {
+				outcome: 'kept-stuck',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' is terminal on ${arbiter}/main but STUCK — kept for human attention (resume/requeue/release-lock)`,
+			};
+		}
+		// Terminal on `main` + an `active` lock = a STALE lock (the crash was after
+		// the durable move, before the release). The `main` record is authoritative:
+		// clear the stale lock with the SAME leased delete `releaseItemLock` uses.
+		const del = await gitSoft(
+			[
+				'push',
+				arbiter,
+				'--delete',
+				ref,
+				`--force-with-lease=${ref}:${held.sha}`,
+			],
+			cwd,
+			env,
+		);
+		if (del.status === 0) {
+			await gitSoft(['update-ref', '-d', ref], cwd, env);
+			return {
+				outcome: 'cleared-stale',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `cleared the stale lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
+			};
+		}
+		// A concurrent change moved the ref between our read and the delete — back
+		// off rather than force (a racer may have just transitioned it to stuck).
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			terminalOnMain,
+			message: `stale-lock clear for '${entry}' rejected (changed concurrently): ${del.stderr.trim()}`,
+		};
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			terminalOnMain: false,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+/** True iff `<arbiter>/main` shows the item TERMINAL — any of
+ * {@link terminalMainPaths} present in `<arbiter>/main`'s tree. */
+async function isTerminalOnMain(
+	type: SidecarType,
+	slug: string,
+	arbiter: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<boolean> {
+	for (const path of terminalMainPaths(type, slug)) {
+		const exists =
+			(await gitSoft(['cat-file', '-e', `${arbiter}/main:${path}`], cwd, env))
+				.status === 0;
+		if (exists) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /** List the entries (`<type>-<slug>`) currently locked on the arbiter (the
