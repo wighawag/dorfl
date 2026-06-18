@@ -233,6 +233,27 @@ export interface DoOptions {
 	 */
 	slicingIntegration?: IntegrationMode;
 	/**
+	 * **The per-repo SLICE-PLACEMENT default** (PRD
+	 * `staging-pool-position-gate-and-trust-model` US #5, slice
+	 * `runner-deterministic-slice-placement-policy-and-precedence`). Consumed by
+	 * the `do prd:<slug>` slicing path: the value is fed as the
+	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
+	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
+	 * `slicingIntegration` (flag > env > per-repo > global > built-in
+	 * `pre-backlog`). The slice-BUILD path ignores it (placement is a SLICING
+	 * lifecycle concern).
+	 */
+	slicesLandIn?: 'pre-backlog' | 'backlog';
+	/**
+	 * **The OPERATOR's EXPLICIT slice-placement override** (the TOP precedence
+	 * rung in the placement resolver). Set ONLY when the operator typed
+	 * `--slices-land-in <where>` on this invocation; never when the value came
+	 * from config. Wins over `originTrust: untrusted` (the operator is present;
+	 * CLI always wins, no special force-key) — the positional analogue of
+	 * `explicitMerge` overriding the untrusted-origin build-propose rule.
+	 */
+	explicitSlicesLandIn?: 'pre-backlog' | 'backlog';
+	/**
 	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
 	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
 	 * `<arbiter>/main` (has unpushed commits). When overridden and the divergence
@@ -437,6 +458,18 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * `integration`. See {@link DoOptions.slicingIntegration}.
 	 */
 	slicingIntegration?: IntegrationMode;
+	/**
+	 * **The per-repo SLICE-PLACEMENT default** (PRD
+	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
+	 * prd:<slug>` path: threaded into {@link performSlice} as the
+	 * configured-default rung. See {@link DoOptions.slicesLandIn}.
+	 */
+	slicesLandIn?: 'pre-backlog' | 'backlog';
+	/**
+	 * **The OPERATOR's EXPLICIT slice-placement override** on the `do --remote
+	 * prd:` path. See {@link DoOptions.explicitSlicesLandIn}.
+	 */
+	explicitSlicesLandIn?: 'pre-backlog' | 'backlog';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
 	prepare?: VerifyConfig;
@@ -645,6 +678,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// `integration:'propose'` + `slicingIntegration:'merge'` lands the slice FILES
 			// on main here while the BUILD path below still threads plain `integration`.
 			integration: options.slicingIntegration ?? options.integration,
+			// The per-repo SLICE-PLACEMENT default + the operator's explicit
+			// override (slice `runner-deterministic-slice-placement-policy-and-
+			// precedence`). The slicer reads them as the configured-default + the
+			// top rung of the runner-deterministic placement resolver; the
+			// `originTrust: untrusted` force is read inside the slicer from the
+			// PRD's stamped frontmatter.
+			slicesLandIn: options.slicesLandIn,
+			explicitSlicesLandIn: options.explicitSlicesLandIn,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
 			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
@@ -1786,6 +1827,11 @@ export async function performDoRemote(
 				// `slicingIntegration ?? integration`, so the `--remote prd:` output ALSO
 				// routes through the shared core with the slicing-resolved mode.
 				integration: options.slicingIntegration ?? options.integration,
+				// The per-repo SLICE-PLACEMENT default + the operator's explicit
+				// override (slice `runner-deterministic-slice-placement-policy-and-
+				// precedence`). Same threading as the in-place `do prd:` path.
+				slicesLandIn: options.slicesLandIn,
+				explicitSlicesLandIn: options.explicitSlicesLandIn,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.

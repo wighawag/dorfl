@@ -104,8 +104,30 @@ staging folder + the placement seam introduced by the tracer slice.
 > the config-key spelling + precedence as an ADR if it meets the gate (it likely
 > does — it pins a trust precedence), else a `## Decisions` note.
 
-## Needs attention
+## Resolution (Gate-2 block fixed)
 
-PR/code review (Gate 2) blocked this work:
-- `config.slicesLandIn` is never threaded from `cli.ts` into `performDo` / `performDoRemote` (compare the four `slicingIntegration: config.slicingIntegration` call-sites — `slicesLandIn` has zero), and no `--slices-land-in` commander option is registered. The resolver, env coercion, per-repo key allow-list, and direct `performSlice` tests all work, but the configured-default rung and the explicit-flag rung are unreachable from the shipped binary — so a user setting `slicesLandIn: 'backlog'` in their `.agent-runner.json` (or `AGENT_RUNNER_SLICES_LAND_IN=backlog`, or typing `--slices-land-in backlog`) gets the built-in `pre-backlog` floor instead. Fix: thread `slicesLandIn` at the four sites `slicingIntegration` is threaded, add the `--slices-land-in <pre-backlog|backlog>` option (setting `explicitSlicesLandIn` only when the operator actually typed it, mirroring `flagMode === 'merge'` ⇒ `explicitMerge: true`), and add a CLI-level test that the value actually reaches `performSlice`. (packages/agent-runner/src/cli.ts (baseDoOptions builders + the two performDoRemote payloads); compare against the `slicingIntegration: config.slicingIntegration` lines at 317/1915/2054/2332/2461. Slice AC #1 — `slicesLandIn` resolves like `slicingIntegration` (flag > env > per-repo > global > built-in).)
-PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
+The first build was BLOCKED by Gate 2 (PR/code review) and routed to
+`needs-attention/` for a REAL defect, now fixed:
+
+- **The block:** the placement resolver (`src/placement.ts`), the `slicesLandIn`
+  config key, the `AGENT_RUNNER_SLICES_LAND_IN` env coercion, the per-repo
+  allowlist, and the direct `performSlice` tests were all in — but
+  `config.slicesLandIn` and the `--slices-land-in` flag were NEVER threaded from
+  `cli.ts` into the `DoOptions` the `do prd:` path builds. So the configured-default
+  and explicit-flag rungs were dead from the shipped binary (a user setting
+  `slicesLandIn: 'backlog'` got the built-in `pre-backlog` floor). Acceptance
+  criterion #1 / PRD US #5 failed in practice; the tests passed only because they
+  called `performSlice` directly, bypassing the unwired CLI seam.
+- **The fix:** thread `slicesLandIn` (`config.slicesLandIn` / `remoteConfig.slicesLandIn`)
+  at the 5 `DoOptions` sites that already carry `slicingIntegration`; register
+  `--slices-land-in <pre-backlog|backlog>` on `do` + `advance`, contributing
+  `explicitSlicesLandIn` ONLY when the operator typed it (mirroring
+  `flagMode === 'merge'` ⇒ `explicitMerge`); a bad value fails loud. Added a
+  binary-level test (`do prd:` through `buildProgram()` on a `--bare file://`
+  arbiter with a stub slicer) proving the configured value + the flag actually
+  reach `performSlice`. The in-scope decisions (the CLI wire, the silent
+  `scrubPoolDrift` fence, the `emitted`-path rewrite) are ratified in
+  `docs/adr/slices-land-in-runner-deterministic-precedence.md`.
+
+The full acceptance gate (`pnpm -r build && pnpm -r test && pnpm format:check`) is
+green; this record rests in `work/done/`.

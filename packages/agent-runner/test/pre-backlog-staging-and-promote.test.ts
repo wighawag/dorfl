@@ -12,6 +12,7 @@ import {
 	type Scratch,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
+import {buildProgram} from '../src/cli.js';
 
 /**
  * STEP A of the staging/pool position gate (PRD
@@ -320,5 +321,176 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 		expect(showArbiterMain(repo, 'work/backlog/poolitem.md')).toBe(poolBefore);
 		// The legitimately staged slice landed.
 		expect(onArbiterMain(repo, 'work/pre-backlog/fresh.md')).toBe(true);
+	});
+});
+
+/**
+ * THE CLI WIRE (the Gate-2 block this slice was bounced for, now closed). The
+ * resolver + the `performSlice` options + the per-repo/env config keys all worked
+ * in isolation, but `config.slicesLandIn` and the `--slices-land-in` flag were
+ * NEVER threaded from `cli.ts` into the `DoOptions` the `do prd:` path builds, so
+ * the configured-default + explicit-flag rungs were dead from the shipped binary
+ * (a user setting `slicesLandIn: 'backlog'` saw the built-in `pre-backlog` floor).
+ * These tests drive the REAL `buildProgram()` `do prd:` path end-to-end on a
+ * `--bare file://` arbiter, with the slicer STUBBED by a trivial `agentCmd` bash
+ * command (the null harness shells `bash -c <agentCmd>` in the worktree), and
+ * assert the configured / flag-chosen placement ACTUALLY reaches the runner.
+ */
+// A trivial slicer the NULL harness shells (`bash -c <agentCmd>` in the worktree):
+// it writes ONE staged slice under `work/pre-backlog/`. `agentCmd` is a HOST-ONLY
+// key (a repo's `.agent-runner.json` may NOT dictate the command the runner
+// shells out to), so it is passed via the `--agent-cmd` FLAG, not the repo config.
+const STUB_SLICER_AGENT_CMD =
+	"mkdir -p work/pre-backlog && printf '%s\\n' '---' 'title: child' " +
+	"'slug: child' 'prd: it' '---' '' '## Prompt' '' '> build it' " +
+	'> work/pre-backlog/child.md';
+
+/** Write a per-repo `.agent-runner.json` (the `slicesLandIn` default under test) + push it. */
+function writeRepoConfig(repo: string, config: Record<string, unknown>): void {
+	writeFileSync(
+		join(repo, '.agent-runner.json'),
+		JSON.stringify(config, null, 2),
+	);
+	run('git', ['add', '-A'], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', 'config'], repo, {env: gitEnv()});
+	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
+}
+
+/**
+ * Drive the REAL `do` command through `buildProgram()` from inside `repo`, with
+ * the null harness + the stub slicer supplied as FLAGS (host-only). Intercepts
+ * the `do` action's `process.exit` (the established CLI-test idiom, see
+ * do-isolated.test.ts) and captures the exit code + stderr. A throw BEFORE the
+ * exit (a usage error, e.g. a bad `--slices-land-in`) leaves `code` undefined and
+ * is surfaced in `captured`.
+ */
+async function runDo(
+	repo: string,
+	args: string[],
+): Promise<{captured: string; code: number | undefined}> {
+	const program = buildProgram();
+	program.exitOverride();
+	let captured = '';
+	let code: number | undefined;
+	const origErr = console.error;
+	const origExit = process.exit;
+	const origCwd = process.cwd();
+	console.error = (msg?: unknown) => {
+		captured += String(msg ?? '') + '\n';
+	};
+	(process as {exit: unknown}).exit = ((c?: number) => {
+		code = c ?? 0;
+		throw new Error(`__exit__:${code}`);
+	}) as typeof process.exit;
+	process.chdir(repo);
+	try {
+		await program.parseAsync([
+			'node',
+			'agent-runner',
+			'do',
+			'--harness',
+			'null',
+			'--agent-cmd',
+			STUB_SLICER_AGENT_CMD,
+			// Skip the slicer IMPROVER loop + the slice-SET acceptance gate: both would
+			// launch the stub as a REVIEW agent and try to parse a JSON verdict (the
+			// trivial slicer emits none). This test exercises the PLACEMENT wire, not the
+			// quality gates — `--no-review` + `--no-slicer-loop` keep it to the slicer +
+			// integrate path.
+			'--no-slicer-loop',
+			...args,
+		]);
+	} catch (err) {
+		// The exit shim (or commander exitOverride) throws — code captured above. A
+		// usage error thrown BEFORE the exit (e.g. a bad `--slices-land-in`) carries
+		// its message on the thrown error itself, not via console.error; fold it into
+		// `captured` so the caller can assert on it (skip our own `__exit__:` marker).
+		const msg = err instanceof Error ? err.message : String(err);
+		if (!msg.startsWith('__exit__:')) {
+			captured += msg + '\n';
+		}
+	} finally {
+		console.error = origErr;
+		process.exit = origExit;
+		process.chdir(origCwd);
+	}
+	return {captured, code};
+}
+
+describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slicer (the wire)', () => {
+	it('a per-repo `slicesLandIn: backlog` reaches performSlice via `do prd:` (slice lands in the POOL, not pre-backlog/)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		// The key under test: a per-repo configured default of `backlog` (the pool).
+		writeRepoConfig(repo, {autoSlice: true, slicesLandIn: 'backlog'});
+		const {code, captured} = await runDo(repo, [
+			'prd:it',
+			'--arbiter',
+			ARBITER,
+			'--merge',
+			'--no-review',
+		]);
+		expect(code, captured).toBe(0);
+		// The configured default REACHED the slicer: the slice landed in the POOL.
+		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
+	});
+
+	it('the built-in floor still STAGES when no slicesLandIn is configured (control: proves the case above is the config, not a default)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		// No slicesLandIn — the resolver's built-in floor stages.
+		writeRepoConfig(repo, {autoSlice: true});
+		const {code, captured} = await runDo(repo, [
+			'prd:it',
+			'--arbiter',
+			ARBITER,
+			'--merge',
+			'--no-review',
+		]);
+		expect(code, captured).toBe(0);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
+	});
+
+	it('the explicit `--slices-land-in pre-backlog` flag OVERRIDES a `slicesLandIn: backlog` config (operator flag wins)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		writeRepoConfig(repo, {autoSlice: true, slicesLandIn: 'backlog'});
+		const {code, captured} = await runDo(repo, [
+			'prd:it',
+			'--arbiter',
+			ARBITER,
+			'--merge',
+			'--no-review',
+			'--slices-land-in',
+			'pre-backlog',
+		]);
+		expect(code, captured).toBe(0);
+		// The flag beat the config: STAGED despite `slicesLandIn: backlog`.
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
+	});
+
+	it('`--slices-land-in <bad>` FAILS LOUDLY (a usage error, never a silent drop)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		writeRepoConfig(repo, {autoSlice: true});
+		// `explicitSlicesLandInFromFlag` throws on a bad value; the action surfaces it
+		// as a fatal usage error (a non-zero exit / thrown error), never a silent
+		// fall-through to the built-in floor. Assert the run did NOT succeed and
+		// nothing was sliced.
+		const {code, captured} = await runDo(repo, [
+			'prd:it',
+			'--arbiter',
+			ARBITER,
+			'--merge',
+			'--slices-land-in',
+			'nonsense',
+		]);
+		expect(code === undefined || code !== 0).toBe(true);
+		expect(captured).toMatch(/slices-land-in/i);
+		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/backlog/child.md')).toBe(false);
 	});
 });

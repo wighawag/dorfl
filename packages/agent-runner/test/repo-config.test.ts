@@ -377,6 +377,54 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe('merge');
 	});
 
+	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default, slice
+	// `runner-deterministic-slice-placement-policy-and-precedence`) is resolved
+	// EXACTLY like `slicingIntegration`: a config-resolved per-repo default fed
+	// into the shared placement resolver (`src/placement.ts`) as the
+	// CONFIGURED-DEFAULT rung. The runner-deterministic precedence (explicit >
+	// untrusted-origin > configured > built-in) is end-to-end-tested in
+	// `placement-precedence.test.ts`; here we pin the config-resolution half.
+	it('`slicesLandIn` is a per-repo allowed key', () => {
+		expect(REPO_ALLOWED_KEYS).toContain('slicesLandIn');
+	});
+
+	it('resolves `slicesLandIn` flag > env > per-repo > global > built-in (`pre-backlog`)', () => {
+		// Built-in floor: unset everywhere ⇒ `pre-backlog` (the conservative
+		// landing that preserves the tracer slice's behaviour).
+		const bare = mergeConfig({});
+		expect(
+			resolveRepoConfig({repoPath: repo, global: bare, env: {}}).config
+				.slicesLandIn,
+		).toBe('pre-backlog');
+		// global override: the user's global config sets `backlog`.
+		const global = mergeConfig({slicesLandIn: 'backlog'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.slicesLandIn,
+		).toBe('backlog');
+		// per-repo file overrides the global.
+		writeRepoConfig(repo, {slicesLandIn: 'pre-backlog'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.slicesLandIn,
+		).toBe('pre-backlog');
+		// env (AGENT_RUNNER_SLICES_LAND_IN) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_SLICES_LAND_IN: 'backlog'},
+			}).config.slicesLandIn,
+		).toBe('backlog');
+		// a flag beats env.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_SLICES_LAND_IN: 'backlog'},
+				flags: {slicesLandIn: 'pre-backlog'},
+			}).config.slicesLandIn,
+		).toBe('pre-backlog');
+	});
+
 	it('per-repo file overrides the global for `autoBuild` (flag > per-repo > global > default)', () => {
 		// default false; global false; per-repo opts in ⇒ per-repo wins.
 		writeRepoConfig(repo, {autoBuild: true});
