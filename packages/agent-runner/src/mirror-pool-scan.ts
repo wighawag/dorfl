@@ -16,6 +16,7 @@ import {
 } from './select-priority.js';
 import {gatherLifecycleMirror} from './lifecycle-gather.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
+import {heldSliceSlugs} from './item-lock.js';
 
 /**
  * The MIRROR-SIDE eligible-pool scan — the isolated counterpart to
@@ -158,7 +159,15 @@ export async function scanMirrorPool(
 	// scored through the EXACT same `scoreItems` the in-place/registry scans use.
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
 	const counts = {totalItems: 0, totalEligible: 0};
-	const items = scoreItems(state, repoConfig.autoBuild, counts);
+	// HELD-SLUG SUBTRACTION (PRD `ledger-status-per-item-lock-refs` US #15): a bare
+	// hub mirror's arbiter is its `origin`; read the held lock refs from there and
+	// exclude those slugs from the enumerated `backlog/` pool. Non-fatal (empty set
+	// on any fault) and redundant-but-harmless while the body still moves — wired now
+	// so slice #9 needs no reader change. Freshness (fetch-first) is the CALLER's job
+	// for the pool ref, exactly as it is for the config read; `heldSliceSlugs` does
+	// its own lock-ref fetch.
+	const heldSlugs = await heldSliceSlugs(mirrorPath, 'origin', env);
+	const items = scoreItems(state, repoConfig.autoBuild, counts, heldSlugs);
 	// Pool 2 — SLICEABLE PRDs from the bare mirror's `work/prd`+`work/prd-sliced`,
 	// filtered through `autoslice-gate`'s predicate (NOT reinvented). Read FIRST so
 	// we can populate the `prds[]` companion of `items[]` on the RepoReport below.

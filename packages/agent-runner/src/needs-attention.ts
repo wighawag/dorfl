@@ -10,6 +10,7 @@ import {join} from 'node:path';
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {BOOKKEEPING_TRAILER} from './drop-bookkeeping-rebase.js';
+import {releaseItemLock} from './item-lock.js';
 import {ledgerRead} from './ledger-read.js';
 import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -684,6 +685,18 @@ export async function returnToBacklog(
 		},
 	});
 	if (moved) {
+		// INTERIM DUAL-WRITE complement of `claim` acquiring the per-item lock (PRD
+		// `ledger-status-per-item-lock-refs`, slice
+		// `claim-acquires-unified-lock-no-body-move`): returning the item to the
+		// claimable pool GIVES UP the hold, so RELEASE the per-item lock the prior
+		// claim took. Without this the lock would orphan and the re-claim would lose on
+		// a stale lock from this item's OWN previous in-flight cycle. Best-effort +
+		// idempotent (`not-held` when there is no lock, e.g. a requeue of an item that
+		// predates the lock or was already released); the durable backlog move above is
+		// the authoritative return-to-pool, the lock release just keeps the two
+		// substrates in agreement. The held-lock state machine's own `requeue`/`release`
+		// transitions are later slices; here we only undo claim's additive acquire.
+		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
 		note(`Returned '${slug}' to backlog.`);
 		return {moved: true, commitMessage, deletedRemoteBranch};
 	}

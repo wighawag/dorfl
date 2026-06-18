@@ -743,6 +743,37 @@ export async function listItemLocks(
 		.sort();
 }
 
+/**
+ * List the SLICE slugs currently lock-held on the arbiter — the held-slug set the
+ * `backlog/` pool readers SUBTRACT (PRD `ledger-status-per-item-lock-refs` US #15;
+ * slice `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
+ * and keeps only the `slice-<slug>` entries (a PRD/observation lock does not gate
+ * the SLICE backlog pool), mapping each to its bare `<slug>`. Best-effort: a fetch
+ * fault yields an EMPTY set, so the offline pool read degrades to "subtract
+ * nothing" rather than erroring — while the body still moves to `in-progress/` the
+ * subtraction is redundant anyway (the moved body already leaves the pool); it is
+ * wired now so the capstone that stops the body move (slice #9) has the predicate
+ * "in `backlog/` on `main` AND no lock held" already in force without re-touching
+ * the readers.
+ */
+export async function heldSliceSlugs(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<Set<string>> {
+	try {
+		const entries = await listItemLocks(cwd, arbiter, env);
+		const prefix = 'slice-';
+		return new Set(
+			entries
+				.filter((e) => e.startsWith(prefix))
+				.map((e) => e.slice(prefix.length)),
+		);
+	} catch {
+		return new Set();
+	}
+}
+
 /** Parse a serialised lock entry body back into a {@link LockEntry}. */
 export function parseLockEntry(body: string): LockEntry | undefined {
 	const fm = /^---\n([\s\S]*?)\n---/.exec(body);
@@ -767,6 +798,19 @@ export function parseLockEntry(body: string): LockEntry | undefined {
 		since: fields.since ?? '',
 		reason: fields.reason,
 	};
+}
+
+/**
+ * Advisory holder id: git user.name, else $USER, else a uuid fragment. Exported
+ * as {@link resolveLockHolder} so callers (e.g. claim's stale-lock self-heal) can
+ * resolve THE SAME holder string the lock would stamp, to compare against a held
+ * entry's `holder` without duplicating the resolution order.
+ */
+export async function resolveLockHolder(
+	cwd: string,
+	env?: NodeJS.ProcessEnv,
+): Promise<string> {
+	return resolveHolder(cwd, env);
 }
 
 /** Advisory holder id: git user.name, else $USER, else a uuid fragment. */

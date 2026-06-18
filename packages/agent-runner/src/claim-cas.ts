@@ -1,6 +1,7 @@
 import {mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
+import {acquireItemLock, releaseItemLock} from './item-lock.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveReadiness} from './readiness.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -22,6 +23,17 @@ import {workBranchRef} from './slug-namespace.js';
  *   1  usage / environment error, or a readiness REFUSAL (unmet blockedBy)
  *   2  item not claimable (not in backlog, or lost the race to someone else)
  *   3  push kept failing after retries (transient/contended — try again later)
+ *
+ * INTERIM DUAL-WRITE (PRD `ledger-status-per-item-lock-refs`, ADR
+ * `ledger-status-on-per-item-lock-refs`): a successful claim ALSO acquires the
+ * item's unified per-item lock (`action: implement`) via the lock module, ON TOP
+ * OF today's `git mv backlog→in-progress` CAS. The lock is acquired FIRST, so a
+ * lock `lost` (the SAME item is already locked) makes the claim lose definitively
+ * (exit 2, NO retry budget) and performs NO body move — the lock exclusion and the
+ * shared-`main` CAS agree on the single winner. If the body move subsequently
+ * loses/contends/errors the lock is RELEASED (never orphaned). Stopping the body
+ * move / dropping the `main` write entirely is the capstone slice #9; here the
+ * body STILL moves to `in-progress/` and `claimCommit` still lands on `main`.
  *
  * Before the CAS runs, the HUMAN path's readiness guard (resolveReadiness) is
  * applied: a slice with an unmet `blockedBy` is REFUSED (exit 1, outcome
@@ -85,6 +97,28 @@ export interface ClaimCasResult {
 	 * dry-run, lost/contended, or usage-error result.
 	 */
 	claimCommit?: string;
+}
+
+/**
+ * The folder-based "lost" diagnostic, reused by the lock-`lost` path so its
+ * message matches the CAS folder check's (recovery hints for a human re-running
+ * their OWN item). Fetches the arbiter and inspects `work/in-progress/<slug>.md`
+ * vs `work/backlog/<slug>.md`; falls back to the lock's generic message when the
+ * body has not moved (lock held but body still in `backlog/` — the genuine
+ * concurrent-acquire race). */
+async function lostMessage(
+	slug: string,
+	arbiter: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+	fallback: string,
+): Promise<string> {
+	await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
+	const inProgress = `work/in-progress/${slug}.md`;
+	if (await catFileExists(`${arbiter}/main:${inProgress}`, cwd, env)) {
+		return `'${slug}' is already in-progress on ${arbiter}/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
+	}
+	return fallback;
 }
 
 /** Raised for usage/environment errors (exit 1). */
@@ -215,7 +249,67 @@ async function runClaim(
 	const inProgress = `work/in-progress/${slug}.md`;
 	const claimBranch = `claim/${slug}`;
 
+	// UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#3/#15/#16;
+	// ADR `ledger-status-on-per-item-lock-refs`). INTERIM DUAL-WRITE: claim ALSO
+	// acquires the item's per-item lock (`action: implement`) ALONGSIDE today's
+	// `git mv backlog→in-progress` CAS. Acquire FIRST (before the body move), so a
+	// lock `lost` (someone already holds this SAME item's lock) makes claim lose
+	// DEFINITIVELY (no retry budget) WITHOUT ever moving the body — the lock
+	// exclusion and the existing CAS agree on the single winner. A dry-run takes no
+	// lock (it mutates nothing). When the body move/CAS subsequently loses or errors,
+	// the lock we just took is RELEASED so it is never orphaned (the body never
+	// moved, so releasing returns the item cleanly to the pool). The body-move /
+	// `main`-write retarget (stop moving the body) is the capstone slice #9; here the
+	// body STILL moves to `in-progress/` and `claimCommit` still lands on `main`.
+	if (!dryRun) {
+		const lock = await acquireItemLock({
+			item: `slice:${slug}`,
+			action: 'implement',
+			cwd,
+			arbiter,
+			env,
+		});
+		if (lock.outcome === 'error') {
+			// Environment/usage problem acquiring the lock — surface as exit 1, never a
+			// false claim. Nothing moved.
+			throw new ClaimUsageError(
+				`failed to acquire the item lock for '${slug}': ${lock.message}`,
+			);
+		}
+		if (lock.outcome === 'lost') {
+			// We lost the create-only lock race: another writer holds this SAME item's
+			// lock. This is DEFINITIVE — exit 2, no retry budget, and NO body move (the
+			// lock and the body-move CAS agree on the single winner). We do NOT try to
+			// tell "our own orphaned lock" apart by holder identity and auto-reclaim it:
+			// holder ids are NOT unique (a CI bot claims many items under one
+			// `user.name`), so a release+re-acquire "reclaim" could let a concurrent
+			// LOSER release the WINNER's still-valid lock — and an automatic sweep
+			// contradicts the ADR's recovery model (`ledger-status-on-per-item-lock-refs`:
+			// "no liveness heartbeat, no auto-sweep; a human asserts a lock is dead").
+			// A genuinely orphaned lock (e.g. a cross-machine reroute that bypassed the
+			// lock-releasing return-to-pool) is cleared by the human-mediated
+			// `release-lock` verb + `gc --ledger` report (slice
+			// `release-lock-verb-and-gc-stuck-report`), never an auto-steal at claim time.
+			// Prefer the FOLDER-based diagnostic (its recovery hints — resume / work-on /
+			// requeue — are what a human re-running their OWN item needs); fall back to
+			// the lock's generic message.
+			const message = await lostMessage(slug, arbiter, cwd, env, lock.message);
+			note(message);
+			return {exitCode: 2, outcome: 'lost', message};
+		}
+	}
+
 	const origRef = await originalRef(cwd, env);
+
+	/** Release the lock we just acquired (best-effort) — used when the body move
+	 * subsequently loses/contends/errors, so the lock is never orphaned (the body
+	 * never moved, so the item is cleanly returned to the pool). */
+	async function releaseHeldLock(): Promise<void> {
+		if (dryRun) {
+			return;
+		}
+		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	}
 
 	try {
 		let i = 0;
@@ -241,6 +335,9 @@ async function runClaim(
 				};
 			}
 			if (result.kind === 'lost') {
+				// The shared-`main` CAS says we lost the body (already in-progress / done /
+				// removed). Release the lock we took so it is not orphaned.
+				await releaseHeldLock();
 				return {exitCode: 2, outcome: 'lost', message: result.message};
 			}
 			// rejected: main moved under us — retry up to the cap, then back off.
@@ -248,12 +345,19 @@ async function runClaim(
 			if (i > retries) {
 				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
 				note(message);
+				await releaseHeldLock();
 				return {exitCode: 3, outcome: 'contended', message};
 			}
 			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
 			// The next attempt re-checks claimability, so if we now LOST the item
 			// it returns exit 2 (definitive), matching claim.sh.
 		}
+	} catch (err) {
+		// A body-move plumbing failure after we took the lock: release it so the held
+		// lock does not orphan an item whose body never moved, then re-throw for the
+		// top-level handler to classify (exit 1).
+		await releaseHeldLock();
+		throw err;
 	} finally {
 		await cleanup(cwd, origRef, claimBranch, env);
 	}
@@ -277,7 +381,12 @@ async function attempt(ctx: AttemptContext): Promise<AttemptResult> {
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 
-	// Is the item still claimable on the arbiter's main?
+	// Is the item still claimable on the arbiter's main? The claimable predicate is
+	// "in `backlog/` on `main` AND no lock held" (PRD US #15). The HELD-LOCK half is
+	// enforced UPFRONT by `runClaim` acquiring the per-item lock BEFORE this loop (a
+	// held slug already lost the create-only lock race → exit 2, no body move), so the
+	// folder check here only needs to confirm `backlog/` residence — re-listing the
+	// locks here would be redundant and racy against our own just-acquired lock.
 	if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
 		if (await catFileExists(`${arbiter}/main:${inProgress}`, cwd, env)) {
 			const message = `'${slug}' is already in-progress on ${arbiter}/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;

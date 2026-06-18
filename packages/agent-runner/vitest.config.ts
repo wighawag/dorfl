@@ -183,6 +183,12 @@ const RACE_SENSITIVE = [
 	'test/run-fresh-worktree-gate.test.ts',
 	'test/fresh-worktree-gate.test.ts',
 	'test/run-internal-error-tests.test.ts',
+	// New git-`file://` CAS race file (in-process two-claimer + high-fan-out
+	// concurrent claims against a --bare arbiter): sound product, but times out
+	// under cross-file parallel pressure (the documented git-`file://` race class
+	// above). Run it in the sequential project for the same deterministic
+	// claim/main-CAS reasoning as claim-cas.test.ts.
+	'test/claim-acquires-unified-lock.test.ts',
 ];
 
 export default defineConfig({
