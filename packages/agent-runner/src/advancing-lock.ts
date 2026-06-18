@@ -9,6 +9,7 @@ import {dirname, isAbsolute, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveSidecarIdentity} from './sidecar.js';
+import {acquireItemLock, releaseItemLock} from './item-lock.js';
 
 /**
  * The **advancing-lock BORROW** (PRD `advance-loop`, slice
@@ -146,6 +147,24 @@ export interface AcquireAdvancingLockOptions {
 	retries?: number;
 	/** Show the intended push without mutating the arbiter (`--dry-run`). */
 	dryRun?: boolean;
+	/**
+	 * ALSO acquire the item's UNIFIED per-item lock (`action: advance`) ALONGSIDE
+	 * the `work/advancing/<entry>.md` marker CAS (PRD
+	 * `ledger-status-per-item-lock-refs` US #1/#3/#18; ADR
+	 * `ledger-status-on-per-item-lock-refs`). The advance tick sets this PER RUNG
+	 * (the policy lives where the rung is known — `advance.ts`): `true` for the
+	 * TREE-LESS rungs (`surface`/`apply`/`triage`), which have no inner `do` and so
+	 * genuinely need the unified hold to realise advance∥claim / advance∥slice
+	 * exclusion; `false` (the default) for the build-slice / slice-prd rungs, whose
+	 * inner `performDo` ALREADY takes the SAME `slice-<slug>`/`prd-<slug>` ref —
+	 * taking it again here would DEADLOCK the tick against itself. When `true`, the
+	 * unified lock is acquired FIRST (before the marker race): a lock `lost` makes
+	 * the acquire lose DEFINITIVELY (no retry) and writes NO marker; a subsequent
+	 * marker loss/contention/error releases the lock so it is never orphaned. A
+	 * dry-run never takes the lock (it mutates nothing). This module stays
+	 * rung-agnostic — it only knows "unified or not", never the rung kind.
+	 */
+	acquireUnified?: boolean;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -245,6 +264,60 @@ async function runAcquire(
 	// borrow can never collide with a slicing borrow or a build claim.
 	const lockBranch = `advancing/${entry}`;
 
+	// UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#3/#18;
+	// ADR `ledger-status-on-per-item-lock-refs`). For a TREE-LESS rung the advance
+	// tick sets `acquireUnified` (the policy lives in `advance.ts`, where the rung
+	// is known): take the item's per-item lock (`action: advance`, keyed `item` so
+	// it shares the ONE `<type>-<slug>` ref with claim/slice/advance of the SAME
+	// item) ALONGSIDE today's `work/advancing/<entry>.md` marker CAS. Acquire FIRST
+	// (before the marker race) so a lock `lost` (someone already holds this SAME
+	// item's lock for implement/slice/advance) makes the advancing acquire lose
+	// DEFINITIVELY (no retry budget) WITHOUT ever writing the marker — the lock
+	// exclusion and the existing CAS agree on the single winner. A dry-run takes no
+	// lock (it mutates nothing). When the marker race subsequently
+	// loses/contends/errors the lock we just took is RELEASED so it is never
+	// orphaned (no marker landed, so the item is cleanly left where it rested). The
+	// marker removal + `advancing/` folder retirement are the capstone slice #9;
+	// here the marker STILL lands on `main` for ALL rungs.
+	const acquireUnified = (options.acquireUnified ?? false) && !dryRun;
+	if (acquireUnified) {
+		const lock = await acquireItemLock({
+			item: options.item,
+			action: 'advance',
+			cwd,
+			arbiter,
+			holder: by,
+			env,
+		});
+		if (lock.outcome === 'error') {
+			// Environment/usage problem acquiring the lock — surface as exit 1, never a
+			// false acquire. No marker written.
+			throw new AdvancingLockUsageError(
+				`failed to acquire the item lock for '${entry}': ${lock.message}`,
+			);
+		}
+		if (lock.outcome === 'lost') {
+			// Lost the create-only lock race: another writer holds this SAME item's lock
+			// (implement / slice / advance). DEFINITIVE — exit 2, no retry, NO marker.
+			// No auto-steal of an orphaned lock here, consistent with claim/slice and the
+			// ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts a
+			// lock is dead via `release-lock` + `gc --ledger`).
+			note(lock.message);
+			return {exitCode: 2, outcome: 'lost', message: lock.message, entry};
+		}
+	}
+
+	/** Release the unified lock we just acquired (best-effort) — used when the
+	 * marker race subsequently loses/contends/errors, so the lock is never orphaned
+	 * (no marker landed, so the item is cleanly left where it rested). A no-op when
+	 * we did not take the unified lock (build/slice rung or dry-run). */
+	async function releaseHeldUnifiedLock(): Promise<void> {
+		if (!acquireUnified) {
+			return;
+		}
+		await releaseItemLock({item: options.item, cwd, arbiter, env});
+	}
+
 	const origRef = await originalRef(cwd, env);
 	try {
 		let i = 0;
@@ -270,6 +343,9 @@ async function runAcquire(
 				};
 			}
 			if (result.kind === 'lost') {
+				// The shared-`main` marker CAS says we lost. Release the unified lock we
+				// took so it is not orphaned (no marker landed).
+				await releaseHeldUnifiedLock();
 				return {exitCode: 2, outcome: 'lost', message: result.message, entry};
 			}
 			// rejected: main moved under us — retry up to the cap, then back off.
@@ -277,10 +353,17 @@ async function runAcquire(
 			if (i > retries) {
 				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
 				note(message);
+				await releaseHeldUnifiedLock();
 				return {exitCode: 3, outcome: 'contended', message, entry};
 			}
 			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
 		}
+	} catch (err) {
+		// A marker-write plumbing failure after we took the lock: release it so the
+		// held lock does not orphan an item whose marker never landed, then re-throw
+		// for the top-level handler to classify (exit 1).
+		await releaseHeldUnifiedLock();
+		throw err;
 	} finally {
 		await cleanup(cwd, origRef, lockBranch, env);
 	}
@@ -440,6 +523,17 @@ export interface ReleaseAdvancingLockOptions {
 	by?: string;
 	/** Cap on push retries when main merely advanced. Default 3. */
 	retries?: number;
+	/**
+	 * ALSO release the item's UNIFIED per-item lock (the complement of
+	 * {@link AcquireAdvancingLockOptions.acquireUnified}). The advance tick sets this
+	 * for a TREE-LESS rung (`surface`/`apply`/`triage`), where the acquire took the
+	 * unified lock; `false` (the default) for the build-slice / slice-prd rungs,
+	 * which never took it at the advance layer (the inner `performDo`'s claim/slice
+	 * lock is the exclusion point and is released by the inner `do`). The marker is
+	 * deleted FIRST (as today), then the unified lock released, so a released item
+	 * has neither the marker NOR the lock.
+	 */
+	releaseUnified?: boolean;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -532,6 +626,22 @@ async function runRelease(
 	// dropped. A happy path's clean tree makes this a no-op.
 	await makeCheckoutAble(cwd, env, note);
 
+	// The complement of the acquire's `acquireUnified`: for a TREE-LESS rung the
+	// unified lock (`action: advance`) was taken at acquire, so release it here. The
+	// marker is deleted FIRST (the loop below), then the lock, so a released item
+	// ends with NEITHER the marker NOR the lock. A no-op for the build/slice rungs
+	// (they never took the unified lock at the advance layer). Done on BOTH the
+	// marker `released` AND the marker `lost` (marker already absent) terminal
+	// states — either way the item is being returned to rest, so the lock must go;
+	// only `contended` (the marker may still be present) keeps it.
+	const releaseUnified = options.releaseUnified ?? false;
+	async function releaseHeldUnifiedLock(): Promise<void> {
+		if (!releaseUnified) {
+			return;
+		}
+		await releaseItemLock({item: options.item, cwd, arbiter, env});
+	}
+
 	const origRef = await originalRef(cwd, env);
 	try {
 		let i = 0;
@@ -548,6 +658,7 @@ async function runRelease(
 				note,
 			});
 			if (result.kind === 'released') {
+				await releaseHeldUnifiedLock();
 				return {
 					exitCode: 0,
 					outcome: 'released',
@@ -556,6 +667,9 @@ async function runRelease(
 				};
 			}
 			if (result.kind === 'lost') {
+				// The marker is already absent — still release the unified lock so a
+				// returned item never keeps an orphaned advance hold.
+				await releaseHeldUnifiedLock();
 				return {exitCode: 2, outcome: 'lost', message: result.message, entry};
 			}
 			// rejected: main moved under us — refetch, re-attempt, cap at retries.
