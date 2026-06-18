@@ -5,7 +5,24 @@ prd: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [claim-acquires-unified-lock-no-body-move, slicing-acquires-unified-lock, advancing-acquires-unified-lock, needs-attention-as-stuck-lock-state, complete-lock-then-durable-main-move-crash-safe]
 covers: [5, 6, 7]
+reason: re-sliced
 ---
+
+> **RETIRED / RE-SLICED 2026-06-18 (decided conductor + human).** This capstone was
+> too large to land green in one pass (the cut-over touches ~91 of 170 test files)
+> and one sub-piece (retiring `needs-attention/`) rested on an unresolved design
+> decision. The build agent STOPped per this slice's own STOP-and-sub-slice escape
+> clause and proposed a 4-way split, which was accepted and authored as:
+> `cutover-claim-body-stays-and-complete-sources-from-backlog` (9a),
+> `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (9b — the
+> design-bearing one, resolved to decision (i+): stuck-state lives entirely on the
+> lock entry, reason/questions on `lock.md`, no `main` write, the `needs-attention/`
+> folder retired so no branch inherits it), `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`
+> (9c), and `cutover-delete-drop-bookkeeping-rebase-and-prove-plain-rebase` (9d).
+> This file is RETIRED to `work/dropped/` for provenance; the work continues in the
+> four sub-slices. See
+> `work/observations/retire-transient-folders-capstone-larger-than-one-green-pass.md`.
+> The original body is kept below unchanged.
 
 > **SCOPE EXPANDED 2026-06-18 (Option A cut-over).** Slices #3/#4/#5 were re-scoped
 > to INTERIM DUAL-WRITE: claim/slicing/advancing each now ALSO acquire the unified
