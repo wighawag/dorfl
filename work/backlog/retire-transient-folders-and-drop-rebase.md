@@ -70,6 +70,17 @@ Concretely, in dependency order WITHIN this slice:
       `backlog→in-progress` (claim writes nothing to `main`; a protected-`main` claim
       succeeds); slicing no longer writes the `slicing/` marker; advancing no longer
       writes the `advancing/` marker. The unified lock is the SOLE transient mechanism.
+- [ ] ADVANCE-TICK exclusion survives the advancing-marker removal: advancing took
+      the unified lock only for the TREE-LESS rungs (`surface`/`apply`/`triage`); the
+      `build-slice`/`slice-prd` rungs rely on the INNER `do`'s claim/slice lock (slice
+      #5 option a, to avoid the nested-lock self-deadlock). With the advancing marker
+      now gone, PROVE (test) that advance∥claim and advance∥slice on a
+      build-slice/slice-prd item remain mutually exclusive through the inner `do`'s
+      unified lock ALONE, and that the brief advance-layer TOCTOU (two advancers both
+      classifying the item as build/slice before the inner `do`) resolves to exactly
+      one winner at the inner lock. An advance-driven build/slice in flight is
+      represented by the inner `do`'s lock (`slice-<slug>` `implement` / `prd-<slug>`
+      `slice`), not a distinct `advance` lock (the accepted conflation).
 - [ ] The legacy folder CONSUMERS are retargeted: `complete` sources `→ done` from
       `backlog/`; `start`/`--resume`/`do`/`run` read held/stuck-ness from the lock ref
       (not the `in-progress/`/`needs-attention/` folders) and the body from `backlog/`;
