@@ -5,8 +5,12 @@ import {
 	readItemLock,
 	listItemLocks,
 	itemLockRef,
+	lockEntryFor,
+	serialiseLockEntry,
+	parseLockEntry,
 	LOCK_REF_PREFIX,
-} from '../src/item-lock-ref.js';
+	type LockEntry,
+} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -19,7 +23,7 @@ import {run} from '../src/git.js';
 
 let scratch: Scratch;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-item-lock-ref-');
+	scratch = makeScratch('agent-runner-item-lock-');
 });
 afterEach(() => {
 	scratch.cleanup();
@@ -60,20 +64,73 @@ function lockCommitParentless(cwd: string, entry: string): boolean {
 	);
 }
 
-describe('item-lock-ref tracer — happy path', () => {
+describe('item-lock — identity seam (reuses resolveSidecarIdentity)', () => {
+	it('derives the type-encoded <entry> from the namespaced identity', () => {
+		// The SAME single-source-of-truth resolver the sidecar / advancing marker use.
+		expect(lockEntryFor('slice:alpha')).toBe('slice-alpha');
+		expect(lockEntryFor('prd:autoslice')).toBe('prd-autoslice');
+		expect(lockEntryFor('observation:beta')).toBe('observation-beta');
+		expect(lockEntryFor('obs:beta')).toBe('observation-beta'); // alias → canonical
+		expect(lockEntryFor('bare-slug')).toBe('slice-bare-slug'); // bare = slice
+	});
+
+	it('a slice, a PRD, and an observation sharing a slug get DISTINCT refs', () => {
+		const slug = 'shared';
+		const refs = new Set([
+			itemLockRef(lockEntryFor(`slice:${slug}`)),
+			itemLockRef(lockEntryFor(`prd:${slug}`)),
+			itemLockRef(lockEntryFor(`observation:${slug}`)),
+		]);
+		expect(refs.size).toBe(3);
+	});
+});
+
+describe('item-lock — entry serialise/parse round-trip', () => {
+	it('an active entry round-trips and carries no reason', () => {
+		const e: LockEntry = {
+			entry: 'slice-alpha',
+			action: 'implement',
+			state: 'active',
+			holder: 'tester',
+			since: '2026-06-18T00:00:00.000Z',
+		};
+		const back = parseLockEntry(serialiseLockEntry(e));
+		expect(back).toEqual(e);
+		expect(back?.reason).toBeUndefined();
+	});
+
+	it('a stuck entry round-trips WITH its reason (the two-axis state)', () => {
+		const e: LockEntry = {
+			entry: 'prd-autoslice',
+			action: 'slice',
+			state: 'stuck',
+			holder: 'tester',
+			since: '2026-06-18T00:00:00.000Z',
+			reason: 'rebase conflict',
+		};
+		const back = parseLockEntry(serialiseLockEntry(e));
+		expect(back).toEqual(e);
+		expect(back?.state).toBe('stuck');
+		expect(back?.reason).toBe('rebase conflict');
+	});
+});
+
+describe('item-lock — happy path', () => {
 	it('acquires by creating the per-item ref, then releases by DELETING it', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 
 		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
 
 		const acq = await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(acq.outcome).toBe('acquired');
+		// The result surfaces the resolved type-encoded entry (the identity seam).
+		expect(acq.entry).toBe('slice-alpha');
 		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
 
 		// The lock commit is PARENTLESS (not chained onto main).
@@ -81,22 +138,24 @@ describe('item-lock-ref tracer — happy path', () => {
 
 		// The two-axis entry round-trips.
 		const entry = await readItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
+		expect(entry?.entry).toBe('slice-alpha');
 		expect(entry?.action).toBe('implement');
 		expect(entry?.state).toBe('active');
 		expect(entry?.reason).toBeUndefined();
 
 		const rel = await releaseItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(rel.outcome).toBe('released');
+		expect(rel.entry).toBe('slice-alpha');
 		// SELF-CLEANING: release DELETED the ref (not emptied it).
 		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
 		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
@@ -105,7 +164,7 @@ describe('item-lock-ref tracer — happy path', () => {
 	it('does NOT touch main (the item file stays in backlog/, no main move)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -120,9 +179,23 @@ describe('item-lock-ref tracer — happy path', () => {
 		);
 		expect(stillBacklog.status).toBe(0);
 	});
+
+	it('a bare <slug> identity locks the slice ref (bare = slice)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const acq = await acquireItemLock({
+			item: 'alpha',
+			action: 'implement',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(acq.outcome).toBe('acquired');
+		expect(acq.entry).toBe('slice-alpha');
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+	});
 });
 
-describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () => {
+describe('item-lock — mutual exclusion (the dangerous core)', () => {
 	it('two racers for the SAME item: exactly ONE acquires, the other is lost (no retry)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const a = raceClone(seeded, 'A');
@@ -130,14 +203,14 @@ describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () =>
 
 		const [ra, rb] = await Promise.all([
 			acquireItemLock({
-				item: 'slice-alpha',
+				item: 'slice:alpha',
 				action: 'implement',
 				cwd: a,
 				arbiter: 'arbiter',
 				env: racerEnv('A'),
 			}),
 			acquireItemLock({
-				item: 'slice-alpha',
+				item: 'slice:alpha',
 				action: 'advance',
 				cwd: b,
 				arbiter: 'arbiter',
@@ -154,7 +227,7 @@ describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () =>
 	it('one lock per item is shared across ACTIONS: advance loses to a held implement (atomic exclusion)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const first = await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -164,7 +237,7 @@ describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () =>
 
 		// A different ACTION on the SAME item must lose the SAME lock.
 		const second = await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'advance',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -181,14 +254,14 @@ describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () =>
 
 		const [ra, rb] = await Promise.all([
 			acquireItemLock({
-				item: 'slice-alpha',
+				item: 'slice:alpha',
 				action: 'implement',
 				cwd: a,
 				arbiter: 'arbiter',
 				env: racerEnv('A'),
 			}),
 			acquireItemLock({
-				item: 'slice-beta',
+				item: 'slice:beta',
 				action: 'implement',
 				cwd: b,
 				arbiter: 'arbiter',
@@ -201,23 +274,53 @@ describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () =>
 		expect(lockRefOnArbiter(seeded.arbiter, 'slice-beta')).toBe(true);
 	});
 
+	it('HIGH FAN-OUT: N racers for N DIFFERENT items ALL acquire with ZERO contention', async () => {
+		const N = 12;
+		const slugs = Array.from({length: N}, (_, i) => `item${i}`);
+		const seeded = seedRepoWithArbiter(scratch.root, slugs);
+		const clones = slugs.map((_, i) => raceClone(seeded, `R${i}`));
+
+		const results = await Promise.all(
+			slugs.map((slug, i) =>
+				acquireItemLock({
+					item: `slice:${slug}`,
+					action: 'implement',
+					cwd: clones[i],
+					arbiter: 'arbiter',
+					env: racerEnv(`R${i}`),
+				}),
+			),
+		);
+
+		// Every distinct-item writer acquired — NO false contention, NO retry budget.
+		expect(results.every((r) => r.outcome === 'acquired')).toBe(true);
+		expect(results.some((r) => r.outcome === 'error')).toBe(false);
+
+		// All N locks are live on the arbiter, exactly once each.
+		for (const slug of slugs) {
+			expect(lockRefOnArbiter(seeded.arbiter, `slice-${slug}`)).toBe(true);
+		}
+		const live = await listItemLocks(seeded.repo, 'arbiter', gitEnv());
+		expect(live.sort()).toEqual(slugs.map((s) => `slice-${s}`).sort());
+	});
+
 	it('after release, the item is re-acquirable (lock lifecycle round-trips)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		await releaseItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		const reacq = await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'slice',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -227,11 +330,11 @@ describe('item-lock-ref tracer — mutual exclusion (the dangerous core)', () =>
 	});
 });
 
-describe('item-lock-ref tracer — release/read edge cases', () => {
+describe('item-lock — release/read edge cases', () => {
 	it('releasing an unheld item is not-held (idempotent)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const rel = await releaseItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -239,25 +342,27 @@ describe('item-lock-ref tracer — release/read edge cases', () => {
 		expect(rel.outcome).toBe('not-held');
 	});
 
-	it('reading an unheld item returns undefined; listItemLocks reflects held set', async () => {
+	it('an absent ref reads as "no locks" (read undefined; list empty)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha', 'beta']);
 		expect(
 			await readItemLock({
-				item: 'slice-alpha',
+				item: 'slice:alpha',
 				cwd: repo,
 				arbiter: 'arbiter',
 				env: gitEnv(),
 			}),
 		).toBeUndefined();
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
+
 		await acquireItemLock({
-			item: 'slice-alpha',
+			item: 'slice:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		await acquireItemLock({
-			item: 'slice-beta',
+			item: 'slice:beta',
 			action: 'slice',
 			cwd: repo,
 			arbiter: 'arbiter',

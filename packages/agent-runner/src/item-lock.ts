@@ -1,16 +1,32 @@
 import {randomUUID} from 'node:crypto';
 import {runAsync, type RunResult} from './git.js';
+import {resolveSidecarIdentity} from './sidecar.js';
 
 /**
- * **TRACER (PRD `ledger-status-per-item-lock-refs`, ADR
- * `ledger-status-on-per-item-lock-refs`).** A minimal, self-contained proof that
- * the DANGEROUS core of the new lock model works end-to-end on a bare `file://`
- * arbiter: ONE lock per item, on a PER-ITEM hidden ref, acquired by an ATOMIC
- * create-only push and released by DELETING the ref, with a two-axis
- * (`action` × `state`) entry. It is NOT yet wired into claim/slice/advance, and
- * deliberately does NOT touch `main` — it exists to validate the substrate before
- * the full substrate-swap is sliced. The production version GENERALISES the
- * landed advancing-lock (see `advancing-lock.ts`) onto this substrate.
+ * The **unified item-lock module** (PRD `ledger-status-per-item-lock-refs`, ADR
+ * `ledger-status-on-per-item-lock-refs`). The runner's ONE lock primitive: ONE
+ * lock per item, on a PER-ITEM hidden ref `refs/agent-runner/lock/<entry>`,
+ * acquired by an ATOMIC create-only push and released by DELETING the ref, with a
+ * two-axis (`action` × `state`) entry. It collapses the old transient status
+ * folders (`in-progress`, `needs-attention`, `slicing`, `advancing`) into ONE
+ * lock keyed by item identity; `in-progress` = lock held active for `implement`,
+ * `needs-attention` = lock held `stuck`.
+ *
+ * It GENERALISES the green tracer that proved the dangerous core end-to-end on a
+ * bare `file://` arbiter (the tracer is now this file). The one production
+ * difference from the tracer is the IDENTITY SEAM: callers pass a NAMESPACED item
+ * identity (`slice:<slug>` / `prd:<slug>` / `observation:<slug>` / `obs:<slug>`,
+ * or a bare `<slug>` = slice), and this module derives the type-encoded lock
+ * `<entry>` (`<type>-<slug>`) through {@link resolveSidecarIdentity} — the SAME
+ * single source of truth the sidecar (`work/questions/<type>-<slug>.md`) and the
+ * advancing-lock marker (`advancingMarkerPath`, `work/advancing/<type>-<slug>.md`)
+ * already use. There is deliberately NO second identity scheme: a slice, a PRD,
+ * and an observation that share a slug get DISTINCT lock refs, and the SAME item
+ * under different actions shares ONE ref (so implement / slice / advance on one
+ * item are mutually exclusive by construction).
+ *
+ * It is NOT yet wired into claim/slice/advance — those are separate, dependent
+ * slices — and deliberately does NOT touch `main`.
  *
  * WHY a per-item ref (not a marker on `main` or a tree on one shared ref):
  *   - **No false contention, no retry.** The ONLY writer that can contend on item
@@ -40,6 +56,20 @@ import {runAsync, type RunResult} from './git.js';
  * clone. Deletion = "all locks released" (recoverable; work is on the work
  * branches + `main`). */
 export const LOCK_REF_PREFIX = 'refs/agent-runner/lock';
+
+/**
+ * The single IDENTITY SEAM for the lock: derive the type-encoded lock `<entry>`
+ * (`<type>-<slug>`) from a NAMESPACED item identity, through the shared
+ * {@link resolveSidecarIdentity} resolver (the single source of truth, which the
+ * sidecar filename + the advancing-lock marker also key onto). Accepts the same
+ * forms as that resolver: `slice:<slug>` / `prd:<slug>` / `observation:<slug>` /
+ * `obs:<slug>`, or a bare `<slug>` (= slice). Acquire/release/read ALL key
+ * through THIS function, so there is one — and only one — addressing scheme.
+ */
+export function lockEntryFor(item: string): string {
+	const {type, slug} = resolveSidecarIdentity(item);
+	return `${type}-${slug}`;
+}
 
 /** The lock ref for a type-encoded `<entry>` (`<type>-<slug>`). */
 export function itemLockRef(entry: string): string {
@@ -73,12 +103,14 @@ export type ReleaseOutcome = 'released' | 'not-held' | 'error';
 
 export interface AcquireResult {
 	outcome: AcquireOutcome;
+	/** The type-encoded lock entry (`<type>-<slug>`) the acquire keyed onto. */
 	entry: string;
 	ref: string;
 	message: string;
 }
 export interface ReleaseResult {
 	outcome: ReleaseOutcome;
+	/** The type-encoded lock entry (`<type>-<slug>`) the release keyed onto. */
 	entry: string;
 	ref: string;
 	message: string;
@@ -169,7 +201,12 @@ async function gitHardInput(
 	return r;
 }
 export interface AcquireOptions {
-	item: string; // the type-encoded entry `<type>-<slug>` (tracer: pass it directly)
+	/**
+	 * The NAMESPACED item identity to lock (`slice:<slug>` / `prd:<slug>` /
+	 * `observation:<slug>` / `obs:<slug>`, or a bare `<slug>` = slice). Resolved to
+	 * the type-encoded lock `<entry>` through {@link lockEntryFor}.
+	 */
+	item: string;
 	action: LockAction;
 	cwd: string;
 	arbiter?: string;
@@ -191,11 +228,11 @@ export async function acquireItemLock(
 	const arbiter = opts.arbiter ?? 'origin';
 	const env = opts.env;
 	const cwd = opts.cwd;
-	const entry = opts.item;
-	const ref = itemLockRef(entry);
-	if (!entry) {
-		return {outcome: 'error', entry, ref, message: 'missing item'};
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
 	}
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
 	try {
 		// Fetch the current lock refs so the lease sees the real state.
 		await gitHard(
@@ -247,6 +284,7 @@ export async function acquireItemLock(
 }
 
 export interface ReleaseOptions {
+	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
 	item: string;
 	cwd: string;
 	arbiter?: string;
@@ -265,7 +303,10 @@ export async function releaseItemLock(
 	const arbiter = opts.arbiter ?? 'origin';
 	const env = opts.env;
 	const cwd = opts.cwd;
-	const entry = opts.item;
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
+	}
+	const entry = lockEntryFor(opts.item);
 	const ref = itemLockRef(entry);
 	try {
 		await gitHard(
@@ -320,8 +361,8 @@ export async function releaseItemLock(
 
 /**
  * Read the current lock entry for an item from the arbiter (the `status`/`scan`
- * read path, in tracer form): fetch the lock refs, read `lock.md` from the ref's
- * tree. Returns `undefined` when the item is not locked.
+ * read path): fetch the lock refs, read `lock.md` from the ref's tree. Returns
+ * `undefined` when the item is not locked.
  */
 export async function readItemLock(
 	opts: ReleaseOptions,
@@ -329,7 +370,7 @@ export async function readItemLock(
 	const arbiter = opts.arbiter ?? 'origin';
 	const env = opts.env;
 	const cwd = opts.cwd;
-	const ref = itemLockRef(opts.item);
+	const ref = itemLockRef(lockEntryFor(opts.item));
 	await gitHard(
 		['fetch', '--quiet', arbiter, `+${LOCK_REF_PREFIX}/*:${LOCK_REF_PREFIX}/*`],
 		cwd,
@@ -342,8 +383,8 @@ export async function readItemLock(
 	return parseLockEntry(show.stdout);
 }
 
-/** List the entries currently locked on the arbiter (the stuck-lock report read
- * path, in tracer form). */
+/** List the entries (`<type>-<slug>`) currently locked on the arbiter (the
+ * stuck-lock report / `status` read path). */
 export async function listItemLocks(
 	cwd: string,
 	arbiter = 'origin',
