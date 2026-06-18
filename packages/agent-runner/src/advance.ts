@@ -864,10 +864,34 @@ export async function performAdvance(
 
 	// 3. LOCK — take the `advancing` CAS borrow for the classified rung, keyed on
 	//    the item's `<type>-<slug>` identity. The expensive phase is POST-lock.
+	//
+	//    UNIFIED PER-ITEM LOCK, TREE-LESS RUNGS ONLY (PRD
+	//    `ledger-status-per-item-lock-refs` US #1/#3/#18; ADR
+	//    `ledger-status-on-per-item-lock-refs`). The rung kind is KNOWN here
+	//    (`classification.kind`, classified pre-lock), so the tree-less-only policy
+	//    lives HERE — where the rung is known — and `advancing-lock.ts` stays
+	//    rung-agnostic (it only learns "unified or not" via `acquireUnified`). For a
+	//    TREE-LESS rung (`surface`/`apply`/`triage-observation`) the advancing acquire
+	//    ALSO takes the item's unified lock (`action: advance`) — these rungs have NO
+	//    inner `do`, so the unified hold is what realises advance∥claim / advance∥slice
+	//    exclusion. For a BUILD-SLICE / SLICE-PRD rung we do NOT take the unified lock
+	//    at the advance layer: `performAdvance` ORCHESTRATES an inner `performDo` that
+	//    ITSELF acquires the SAME `slice-<slug>`/`prd-<slug>` ref (the create-only CAS
+	//    with NO re-entrancy/auto-steal, per the ADR), so taking it here too would
+	//    DEADLOCK the tick against itself. The inner `do`'s claim/slice lock IS the
+	//    single exclusion point for those rungs. The `work/advancing/<entry>.md` marker
+	//    CAS is KEPT for ALL rungs (its removal is the capstone slice #9).
+	const unifiedForRung = isTreeLessRung(classification.kind);
 	const acquire =
 		options.acquireLock ??
 		((lockItem: string) =>
-			acquireAdvancingLock({item: lockItem, cwd, arbiter, note}));
+			acquireAdvancingLock({
+				item: lockItem,
+				cwd,
+				arbiter,
+				acquireUnified: unifiedForRung,
+				note,
+			}));
 	const lock = await acquire(item);
 	if (lock.exitCode !== 0) {
 		// A CAS LOSER (exit 2) or contended (exit 3) backs off having spent ONLY the
@@ -887,7 +911,13 @@ export async function performAdvance(
 	const release =
 		options.releaseLock ??
 		((lockItem: string) =>
-			releaseAdvancingLock({item: lockItem, cwd, arbiter, note}));
+			releaseAdvancingLock({
+				item: lockItem,
+				cwd,
+				arbiter,
+				releaseUnified: unifiedForRung,
+				note,
+			}));
 	try {
 		const exec = await dispatchRung(executor, {
 			item,
@@ -923,6 +953,22 @@ export async function performAdvance(
 	} finally {
 		await release(item);
 	}
+}
+
+/**
+ * Is this a TREE-LESS rung (`surface`/`apply`/`triage-observation`) — the rungs
+ * that have NO inner `performDo`, so the advancing acquire must ALSO take the
+ * unified per-item lock (`action: advance`) to realise advance∥claim / advance∥slice
+ * exclusion? The build/slice rungs (`build-slice`/`slice-prd`) are the inverse:
+ * their inner `do` holds the SAME unified ref, so the advance layer must NOT take
+ * it (it would deadlock the tick against itself). `no-op`/`invariant-violation`
+ * never reach the lock step. This is the single place the tree-less-only policy
+ * is expressed (the rung is known here); `advancing-lock.ts` stays rung-agnostic.
+ */
+function isTreeLessRung(kind: TickClassification['kind']): boolean {
+	return (
+		kind === 'surface' || kind === 'apply' || kind === 'triage-observation'
+	);
 }
 
 /** Dispatch the classified rung to the executor seam (winner-only). */
