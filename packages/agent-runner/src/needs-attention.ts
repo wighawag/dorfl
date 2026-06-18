@@ -859,6 +859,155 @@ export async function promoteFromPreBacklog(
 }
 
 /**
+ * **Promote a STAGED PRD into the auto-slice pool** (PRD
+ * `staging-pool-position-gate-and-trust-model`, slice
+ * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The PRD
+ * twin of {@link promoteFromPreBacklog}: moves
+ * `work/pre-prd/<slug>.md → work/prd/<slug>.md` as a durable `main` move
+ * (tree-less CAS via {@link runTreelessLedgerMove}). After this transition
+ * the PRD is in the auto-slice POOL and eligible to be auto-sliced (subject
+ * to the existing `autoSlice`/`humanOnly`/`needsAnswers`/`sliceAfter` gates,
+ * which are UNCHANGED — the staging/pool split changes only WHICH folder is
+ * the auto-slice pool, not the gates).
+ *
+ * **RUNNER/human-owned.** There is no agent-facing path that performs this:
+ * `intake`'s `prd` dispatch lands the PRD STAGED in `work/pre-prd/` (the
+ * runner's deterministic placement decision), and only a runner/human
+ * invocation moves it into the pool. The agent does no git here, as
+ * everywhere; this function is not reachable from any agent surface.
+ *
+ * Storage-agnostic + tree-less, exactly like {@link promoteFromPreBacklog}:
+ * cwd index/HEAD/working tree are never touched, an arbiter remote is
+ * REQUIRED, and "not in pre-prd/" / contention-exhausted cases are returned
+ * (NEVER thrown) via `{moved: false, reasonNotMoved}` so callers branch
+ * cleanly. Idempotent: re-running after the move LANDED is a no-op success.
+ */
+export interface PromoteFromPrePrdOptions {
+	/** The working clone the move is originated from (origin source only; never written). */
+	cwd: string;
+	/** The slug of the staged PRD to promote into the pool. */
+	slug: string;
+	/** The arbiter remote the promotion is CAS-published to. REQUIRED. */
+	arbiter: string;
+	/** Environment for child git processes (identity etc.). */
+	env?: NodeJS.ProcessEnv;
+	/** Sink for human-readable progress notes. */
+	note?: (message: string) => void;
+}
+
+export interface PromoteFromPrePrdResult {
+	/** True iff the staged PRD was moved into the pool + committed. */
+	moved: boolean;
+	/** When `moved`, the committed transition message. */
+	commitMessage?: string;
+	/** When NOT moved, why (no such pre-prd item, already in prd/, contention). */
+	reasonNotMoved?: string;
+}
+
+export async function promoteFromPrePrd(
+	options: PromoteFromPrePrdOptions,
+): Promise<PromoteFromPrePrdResult> {
+	const note = options.note ?? (() => {});
+	const {cwd, slug, env} = options;
+
+	if (!options.arbiter) {
+		return {
+			moved: false,
+			reasonNotMoved:
+				`promote-prd for '${slug}' needs an --arbiter: the move is published as ` +
+				'a tree-less compare-and-swap to the arbiter ref (like requeue/claim), so ' +
+				'there is no local-only mode — pass --arbiter.',
+		};
+	}
+	const arbiter = options.arbiter;
+
+	if (
+		(await gitSoftAsync(['remote', 'get-url', arbiter], cwd, env)).status !== 0
+	) {
+		return {
+			moved: false,
+			reasonNotMoved: `no git remote named '${arbiter}' (set one, or pass --arbiter).`,
+		};
+	}
+
+	// Refresh `<arbiter>/main` so the residence probe + the CAS base see the
+	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
+	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+
+	const sourceRel = `work/pre-prd/${slug}.md`;
+	const destRel = `work/prd/${slug}.md`;
+
+	const hasSource =
+		(
+			await gitSoftAsync(
+				['cat-file', '-e', `${arbiter}/main:${sourceRel}`],
+				cwd,
+				env,
+			)
+		).status === 0;
+	const hasDest =
+		(
+			await gitSoftAsync(
+				['cat-file', '-e', `${arbiter}/main:${destRel}`],
+				cwd,
+				env,
+			)
+		).status === 0;
+	if (!hasSource && !hasDest) {
+		const message =
+			`'${slug}' is not staged in work/pre-prd/ on ${arbiter}/main (and not ` +
+			'already in work/prd/) — nothing to promote (wrong slug, or never staged?).';
+		note(message);
+		return {moved: false, reasonNotMoved: message};
+	}
+
+	const commitMessage = `chore(${slug}): promote work/pre-prd/ -> work/prd/`;
+	const moved = await runTreelessLedgerMove({
+		cwd,
+		slug,
+		arbiter,
+		kind: 'promote',
+		onContended: 'promote',
+		explicitMainRefspec: true,
+		env,
+		note,
+		plan: (base) => {
+			if (pathInCommit(base, destRel, cwd, env)) {
+				return 'already-done';
+			}
+			if (!pathInCommit(base, sourceRel, cwd, env)) {
+				return 'missing';
+			}
+			return prepareTreelessMoveCommit({
+				cwd,
+				slug,
+				base,
+				sourceRel,
+				destRel,
+				// The body is carried byte-for-byte from pre-prd into the pool —
+				// promotion is a placement decision, not a content transform.
+				transformBody: (body) => body,
+				commitMessage,
+				refNamespace: 'promote',
+				env,
+			});
+		},
+	});
+	if (moved) {
+		note(`Promoted PRD '${slug}' from pre-prd to prd (auto-sliceable).`);
+		return {moved: true, commitMessage};
+	}
+
+	const message =
+		`promote-prd for '${slug}': the arbiter's main kept moving (contended) ` +
+		`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-prd ` +
+		'(no move). Try again shortly.';
+	note(message);
+	return {moved: false, reasonNotMoved: message};
+}
+
+/**
  * Surface a stuck in-progress item to `needs-attention/` TREE-LESSLY — the
  * SURFACE-direction sibling of {@link returnToBacklog}, sharing its EXACT
  * tree-less recipe ({@link runTreelessLedgerMove}): fetch `<arbiter>/main`, build

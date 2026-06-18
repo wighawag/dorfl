@@ -115,18 +115,22 @@ describe('placement.resolvePlacement: precedence chain', () => {
 
 describe("placement.placementFolder: maps the side onto a lifecycle's slots", () => {
 	const SLICE_SLOTS = {staging: 'pre-backlog', pool: 'backlog'};
-	const PRD_SLOTS = {staging: 'prd', pool: 'prd-ready'};
+	// STEP A keeps `prd/` as the auto-slice POOL name (the STEP-B rename to
+	// `prd-ready/` is deferred to `folder-taxonomy-reorg-and-rename`), so the
+	// PRD-placement caller passes `{staging: 'pre-prd', pool: 'prd'}` (slice
+	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`).
+	const PRD_SLOTS = {staging: 'pre-prd', pool: 'prd'};
 
 	it('slice slots: staging \u2192 pre-backlog, pool \u2192 backlog', () => {
 		expect(placementFolder(SLICE_SLOTS, 'staging')).toBe('pre-backlog');
 		expect(placementFolder(SLICE_SLOTS, 'pool')).toBe('backlog');
 	});
 
-	it('prd slots (the future PRD-placement caller): staging \u2192 prd, pool \u2192 prd-ready', () => {
+	it('prd slots (the PRD-placement caller): staging \u2192 pre-prd, pool \u2192 prd', () => {
 		// The PRD-placement slice (`pre-prd-staging-pool-split-and-untrusted-prd-
 		// placement`) REUSES this exact resolver with its own slots; this asserts
 		// the lifecycle-generic seam holds (the same function serves both).
-		expect(placementFolder(PRD_SLOTS, 'staging')).toBe('prd');
-		expect(placementFolder(PRD_SLOTS, 'pool')).toBe('prd-ready');
+		expect(placementFolder(PRD_SLOTS, 'staging')).toBe('pre-prd');
+		expect(placementFolder(PRD_SLOTS, 'pool')).toBe('prd');
 	});
 });

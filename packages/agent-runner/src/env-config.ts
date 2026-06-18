@@ -92,6 +92,13 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// runner-deterministic placement resolver (`src/placement.ts`) as the
 	// configured-default rung.
 	slicesLandIn: {enum: ['pre-backlog', 'backlog']},
+	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — PRD
+	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
+	// `pre-prd`/`prd` enum, so `AGENT_RUNNER_PRDS_LAND_IN=prd` works and a typo
+	// FAILS LOUDLY. Same precedence chain as `slicesLandIn` (flag > env > per-repo
+	// > global > built-in `pre-prd`); fed into the shared placement resolver
+	// (`src/placement.ts`) as the configured-default rung for the PRD lifecycle.
+	prdsLandIn: {enum: ['pre-prd', 'prd']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `AGENT_RUNNER_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `AGENT_RUNNER_PROVIDER` is ignored
