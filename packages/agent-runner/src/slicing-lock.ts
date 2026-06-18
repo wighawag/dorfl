@@ -2,6 +2,7 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
+import {acquireItemLock, releaseItemLock} from './item-lock.js';
 
 /**
  * The **slicing concurrency lock** (PRD `auto-slice`, slice `autoslice-lock`).
@@ -12,7 +13,21 @@ import {ledgerWrite} from './ledger-write.js';
  * `git mv` micro-commit raced to the arbiter's `main` via the ledger-transition
  * write seam's CAS (`applyTransition`).
  *
- * - **Acquire** ({@link acquireSlicingLock}) atomically races a
+ * **UNIFIED PER-ITEM LOCK (INTERIM DUAL-WRITE).** As of PRD
+ * `ledger-status-per-item-lock-refs` (ADR `ledger-status-on-per-item-lock-refs`),
+ * acquire/release ALSO take/drop the item's unified per-item lock
+ * (`action: slice`, keyed `prd:<slug>` through {@link lockEntryFor}) ALONGSIDE the
+ * `slicing/` marker below. Because that lock is the SAME ref claim and advance use
+ * for the same item, slicing a PRD is now mutually exclusive with
+ * claiming/advancing the SAME item BY CONSTRUCTION (the second acquirer loses the
+ * SAME create-only ref CAS), even though the legacy `slicing/`-on-`main` marker
+ * still co-exists. Removing that marker + retiring the `slicing/` folder is the
+ * capstone slice #9; here the marker STILL lands on `main` unchanged.
+ *
+ * - **Acquire** ({@link acquireSlicingLock}) FIRST acquires the unified per-item
+ *   lock (a `lost` there means the item is already held for implement/slice/advance
+ *   → the slicing acquire loses definitively with NO marker written), THEN
+ *   atomically races a
  *   `git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit through the
  *   seam (transition kind `slicing`), on the branch `slicing/<slug>` — DISTINCT
  *   from the build-claim's `claim/<slug>` and the work branch `work/<slug>`, so a
@@ -179,6 +194,57 @@ async function runAcquire(
 	// `work/<slug>` — a slicing lock can never collide with a build claim.
 	const lockBranch = `slicing/${slug}`;
 
+	// UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#3; ADR
+	// `ledger-status-on-per-item-lock-refs`). INTERIM DUAL-WRITE: slicing ALSO
+	// acquires the item's per-item lock (`action: slice`, keyed `prd:<slug>` so it
+	// shares the ONE ref with claim/advance of the SAME item) ALONGSIDE today's
+	// `git mv prd→slicing` CAS marker. Acquire FIRST (before the marker race), so a
+	// lock `lost` (someone already holds this SAME item's lock for
+	// implement/slice/advance) makes the slicing acquire lose DEFINITIVELY (no retry
+	// budget) WITHOUT ever writing the marker — the lock exclusion and the existing
+	// CAS agree on the single winner. A dry-run takes no lock (it mutates nothing).
+	// When the marker race subsequently loses/contends/errors, the lock we just took
+	// is RELEASED so it is never orphaned (no marker landed, so the PRD is cleanly
+	// left in `prd/`). The marker removal + `slicing/` folder retirement are the
+	// capstone slice #9; here the marker STILL lands on `main`.
+	if (!dryRun) {
+		const lock = await acquireItemLock({
+			item: `prd:${slug}`,
+			action: 'slice',
+			cwd,
+			arbiter,
+			holder: by,
+			env,
+		});
+		if (lock.outcome === 'error') {
+			// Environment/usage problem acquiring the lock — surface as exit 1, never a
+			// false acquire. No marker written.
+			throw new SlicingLockUsageError(
+				`failed to acquire the item lock for '${slug}': ${lock.message}`,
+			);
+		}
+		if (lock.outcome === 'lost') {
+			// We lost the create-only lock race: another writer holds this SAME item's
+			// lock (implement / slice / advance). DEFINITIVE — exit 2, no retry budget,
+			// and NO marker written (the lock and the marker CAS agree on the single
+			// winner). No auto-steal of an orphaned lock here, consistent with claim and
+			// the ADR's recovery model (no liveness heartbeat / auto-sweep; a human
+			// asserts a lock is dead via `release-lock` + `gc --ledger`).
+			note(lock.message);
+			return {exitCode: 2, outcome: 'lost', message: lock.message};
+		}
+	}
+
+	/** Release the lock we just acquired (best-effort) — used when the marker race
+	 * subsequently loses/contends/errors, so the lock is never orphaned (no marker
+	 * landed, so the PRD is cleanly left in `prd/`). */
+	async function releaseHeldLock(): Promise<void> {
+		if (dryRun) {
+			return;
+		}
+		await releaseItemLock({item: `prd:${slug}`, cwd, arbiter, env});
+	}
+
 	const origRef = await originalRef(cwd, env);
 	try {
 		let i = 0;
@@ -205,6 +271,9 @@ async function runAcquire(
 				};
 			}
 			if (result.kind === 'lost') {
+				// The shared-`main` marker CAS says we lost (PRD already sliced / moved /
+				// held). Release the lock we took so it is not orphaned (no marker landed).
+				await releaseHeldLock();
 				return {exitCode: 2, outcome: 'lost', message: result.message};
 			}
 			// rejected: main moved under us — retry up to the cap, then back off.
@@ -212,10 +281,17 @@ async function runAcquire(
 			if (i > retries) {
 				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
 				note(message);
+				await releaseHeldLock();
 				return {exitCode: 3, outcome: 'contended', message};
 			}
 			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
 		}
+	} catch (err) {
+		// A marker-move plumbing failure after we took the lock: release it so the held
+		// lock does not orphan a PRD whose marker never landed, then re-throw for the
+		// top-level handler to classify (exit 1).
+		await releaseHeldLock();
+		throw err;
 	} finally {
 		await cleanup(cwd, origRef, lockBranch, env);
 	}
@@ -528,6 +604,13 @@ async function runRelease(
 				note,
 			});
 			if (result.kind === 'released') {
+				// INTERIM DUAL-WRITE: the `slicing/` marker is gone (restored to `prd/` or
+				// routed to `needs-attention/`), so ALSO release the unified per-item lock
+				// (`prd:<slug>`) the acquire took. Best-effort + idempotent: a `not-held`
+				// (already released / crash-recovered) is fine. We release the lock ONLY on
+				// a successful marker release — a `stale`/`contended`/`lost` outcome leaves
+				// the marker (and thus the slicing) HELD, so the lock must stay held too.
+				await releaseItemLock({item: `prd:${slug}`, cwd, arbiter, env});
 				return {exitCode: 0, outcome: 'released', message: result.message};
 			}
 			if (result.kind === 'lost') {
