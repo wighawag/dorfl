@@ -104,6 +104,12 @@ import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {releaseAdvancingLock} from './advancing-lock.js';
+import {
+	promoteFromPreBacklog,
+	promoteFromPrePrd,
+	listPromotable,
+} from './needs-attention.js';
+import {parseSlugArg} from './slug-namespace.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 import {
 	resolveSliceOnlyArg,
@@ -703,6 +709,12 @@ interface RequeueFlags {
 	arbiter?: string;
 	reset?: boolean;
 	message?: string;
+}
+
+interface PromoteFlags {
+	config?: string;
+	cwd?: string;
+	arbiter?: string;
 }
 
 interface ReleaseAdvancingFlags {
@@ -2936,6 +2948,87 @@ export function buildProgram(): Command {
 				? ` (--reset: deleted the remote ${workBranchRef('slice', slug)} branch; next claim starts fresh)`
 				: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
+		});
+
+	// `promote [item]` (PRD `staging-pool-position-gate-and-trust-model`, slices
+	// `pre-backlog-staging-folder-and-promote-step-a` /
+	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the HUMAN/runner-
+	// owned verb that moves a STAGED item into its agent-eligible POOL — a slice
+	// `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a PRD
+	// `work/pre-prd/<slug>.md → work/prd/<slug>.md` — as a tree-less CAS on the
+	// arbiter, the SAME trust model + mechanism as `requeue`. The agent emits STAGED;
+	// only this verb (a human, or the runner) admits it to the pool. With NO argument
+	// it LISTS what is promotable (the "what is staged waiting for me?" discovery), so
+	// a human need not remember the staged slugs.
+	program
+		.command('promote [item]')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a slice `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a PRD `work/pre-prd/<slug>.md → work/prd/<slug>.md`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts `slice:<slug>` / `prd:<slug>` / a bare `<slug>` (= slice). With NO argument, LISTS every promotable item (the slices in pre-backlog/ + the PRDs in pre-prd/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--cwd <dir>',
+			'the repo/working clone whose arbiter remote the tree-less move is resolved FROM (default: cwd) — an ORIGIN SOURCE only; the move is published to the arbiter, never to this tree',
+		)
+		.option(
+			'--arbiter <remote>',
+			'the arbiter git remote the promotion is CAS-published to / the staging folders are listed from (default: origin)',
+		)
+		.action(async (rawItem: string | undefined, flags: PromoteFlags) => {
+			const cwd = flags.cwd ?? process.cwd();
+			const arbiter = flags.arbiter ?? 'origin';
+			// `promote` is a HUMAN command (like `requeue`): the move/commit/push is
+			// THEIRS — NOT the runner identity. Thread the ambient env explicitly.
+			const env = process.env;
+			const note = (message: string) => console.error(`>> ${message}`);
+
+			// NO ARGUMENT → LIST what is promotable (read-only discovery).
+			if (rawItem === undefined) {
+				const listed = await listPromotable({cwd, arbiter, env});
+				if (listed.error) {
+					console.error(`error: ${listed.error}`);
+					process.exit(1);
+				}
+				if (listed.items.length === 0) {
+					console.log(
+						`Nothing staged to promote on ${arbiter}/main (work/pre-backlog/ and work/pre-prd/ are empty).`,
+					);
+					return;
+				}
+				console.log('Staged, awaiting promotion (run `promote <item>`):');
+				for (const item of listed.items) {
+					console.log(`  ${item.namespace}:${item.slug}`);
+				}
+				return;
+			}
+
+			// AN ITEM → promote it. `slice:`/`prd:` are explicit; a bare slug defaults to
+			// a slice (mirrors `requeue`). An `obs:`/`observation:` prefix is rejected
+			// (observations have no pool).
+			const parsed = parseSlugArg(rawItem);
+			if (parsed.explicit === 'observation') {
+				console.error(
+					`error: promote takes a slice or PRD, not an observation ('${rawItem}'). Observations have no agent pool.`,
+				);
+				process.exit(1);
+			}
+			const namespace = parsed.explicit === 'prd' ? 'prd' : 'slice';
+			const slug = parsed.slug;
+			const result =
+				namespace === 'prd'
+					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
+					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
+			if (!result.moved) {
+				console.error(`error: ${result.reasonNotMoved}`);
+				process.exit(1);
+			}
+			const dest = namespace === 'prd' ? 'work/prd/' : 'work/backlog/';
+			console.log(
+				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
+					namespace === 'prd' ? 'auto-sliceable' : 'claimable'
+				}.`,
+			);
 		});
 
 	// `release-advancing <item>` (slice `advancing-lock-human-release-verb-and-
