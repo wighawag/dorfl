@@ -1007,6 +1007,96 @@ export async function promoteFromPrePrd(
 	return {moved: false, reasonNotMoved: message};
 }
 
+/** One staged item awaiting promotion (a slice in `pre-backlog/` or a PRD in `pre-prd/`). */
+export interface PromotableItem {
+	/** `'slice'` (staged in `work/pre-backlog/`) or `'prd'` (staged in `work/pre-prd/`). */
+	namespace: 'slice' | 'prd';
+	/** The slug (filename minus `.md`). */
+	slug: string;
+}
+
+export interface ListPromotableOptions {
+	/** The working clone the arbiter remote is resolved FROM (origin source only). */
+	cwd: string;
+	/** The arbiter remote whose `main` the staging folders are read from. REQUIRED. */
+	arbiter: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface ListPromotableResult {
+	/** Every staged item awaiting promotion, slices then PRDs, each sorted by slug. */
+	items: PromotableItem[];
+	/** When the listing could not run (no such remote), why. */
+	error?: string;
+}
+
+/**
+ * LIST every staged item awaiting a runner/human promotion — the slices in
+ * `work/pre-backlog/` and the PRDs in `work/pre-prd/` on `<arbiter>/main` (the
+ * discovery half of the `promote` verb, so `promote` with no argument answers
+ * "what is staged waiting for me?"). It reads the ARBITER's truth (a fetch + a
+ * tree read), NOT the local working tree (which may be stale) — the same source
+ * the promotion functions act against, so the list and the move never disagree.
+ * Read-only: it never fetches a checkout, never moves anything.
+ */
+export async function listPromotable(
+	options: ListPromotableOptions,
+): Promise<ListPromotableResult> {
+	const {cwd, arbiter, env} = options;
+	if (
+		(await gitSoftAsync(['remote', 'get-url', arbiter], cwd, env)).status !== 0
+	) {
+		return {
+			items: [],
+			error: `no git remote named '${arbiter}' (set one, or pass --arbiter).`,
+		};
+	}
+	// Refresh `<arbiter>/main` so the listing sees the arbiter's TRUTH (a fetch,
+	// not a checkout — the working tree is untouched), exactly as the promote
+	// functions do before their residence probe.
+	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+	const slices = await listMarkdownSlugsInTree(
+		`${arbiter}/main:work/pre-backlog`,
+		cwd,
+		env,
+	);
+	const prds = await listMarkdownSlugsInTree(
+		`${arbiter}/main:work/pre-prd`,
+		cwd,
+		env,
+	);
+	return {
+		items: [
+			...slices.map((slug) => ({namespace: 'slice' as const, slug})),
+			...prds.map((slug) => ({namespace: 'prd' as const, slug})),
+		],
+	};
+}
+
+/**
+ * `git ls-tree --name-only <base>` → the `.md` filenames' SLUGS (filename minus
+ * `.md`), sorted. An absent folder on the ref reads as empty (the staging folder
+ * may not exist yet). The bare-repo-safe read (`ls-tree`, no working tree), the
+ * SAME mechanism the ledger read seam uses.
+ */
+async function listMarkdownSlugsInTree(
+	base: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string[]> {
+	const tree = await gitSoftAsync(['ls-tree', '--name-only', base], cwd, env);
+	if (tree.status !== 0) {
+		return [];
+	}
+	return tree.stdout
+		.split('\n')
+		.map((s) => s.trim())
+		.filter((name) => name.toLowerCase().endsWith('.md'))
+		.map((name) => name.replace(/\.md$/i, ''))
+		.sort();
+}
+
 /**
  * Surface a stuck in-progress item to `needs-attention/` TREE-LESSLY — the
  * SURFACE-direction sibling of {@link returnToBacklog}, sharing its EXACT
