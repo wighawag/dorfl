@@ -94,3 +94,9 @@ needs-attention rather than silently clean-release.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
 > PRD propagation. Record non-obvious in-scope decisions per the slice template.
+
+## Needs attention
+
+PR/code review (Gate 2) blocked this work:
+- `gc --ledger` now exits non-zero (fail-loud) on ANY held per-item lock, including a normal in-flight `active` lock. Should the fail-loud exit (and arguably the report inclusion) be scoped to the stuck/stale classifications (`kept-stuck` / `cleared-stale`) only, so a healthy concurrent build does not make a routine `gc --ledger` health check exit 1? (cli.ts gc action: `process.exit(result.duplicates.length > 0 || result.advancingMarkers.length > 0 || lockReport.locks.length > 0 ? 1 : 0)`. The same report prints `kept-in-flight — normal; left untouched.` for that lock, then exits 1 — internally contradictory. The advancing-marker precedent it copies is not equivalent: an advancing marker is deleted on clean finish, but the implement/slice/advance lock is held for the whole build by design (ADR L33-34, PRD US#4/#8: active lock = in-progress, read by `status` as healthy). ADR L94-95/L100 + PRD US#14/#21 scope this surface to the STUCK/crash-orphaned lock, not every held one. Trivially reversible (gate the exit on the stuck/stale verdicts) but it makes a routine command misreport normal daemon/drive-backlog operation.)
+PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
