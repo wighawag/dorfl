@@ -120,3 +120,7 @@ predicate's shape is unaffected. Build against `backlog/` now.
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
 > PRD propagation. This is the load-bearing claim invariant; record non-obvious
 > in-scope decisions per the slice template.
+
+## Needs attention
+
+acceptance gate failed (exit 1) on the rebased tip
