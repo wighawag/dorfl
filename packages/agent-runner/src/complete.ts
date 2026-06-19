@@ -741,7 +741,16 @@ async function runComplete(
 				'new uncommitted work on top of the kept tip (no second git mv).',
 		);
 	}
-	if (!committedRecovery && !existsSync(sourcePath)) {
+	// The presence check guards the genuine-strand case (no record anywhere). It is
+	// DELIBERATELY skipped for `source === 'done'` (the continue-build / stranded-done
+	// state): there the record is ALREADY in its terminal done-position — presence
+	// was established by `folderShapeStranded`/`onDone`, which is LAYOUT-AWARE (it
+	// accepts a renamed `work/tasks/done/<slug>.md` via `recordAtRenamedDonePosition`).
+	// The binary's `sourcePath` (= `done` = `work/done/<slug>.md`) would NOT exist for
+	// a self-renaming-folder slice, so re-checking it here would wrongly refuse a
+	// build the done-detection already accepted. `source: 'done'` skips the `git mv`
+	// anyway, so there is nothing this check needs to protect for that branch.
+	if (!committedRecovery && source !== 'done' && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
 			`work/backlog/${slug}.md (nor work/in-progress/${slug}.md nor ` +
 				`work/needs-attention/${slug}.md) found — nothing to complete ` +
