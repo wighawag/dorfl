@@ -27,7 +27,7 @@ sliceAfter: []
 >     done/<slug>.md           #   completed          (was done/)
 >     cancelled/<slug>.md      #   won't-proceed terminal (per-regime; reason: in body)
 >   briefs/                    # BRIEF regime — its own lifecycle (was the "PRD" family)
->     draft/<slug>.md          #   STAGING            (was pre-prd/)
+>     proposed/<slug>.md       #   STAGING gate       (was pre-prd/)
 >     ready/<slug>.md          #   the auto-slice POOL (was prd/)
 >     tasked/<slug>.md         #   decomposed, resting (was prd-sliced/)
 >     dropped/<slug>.md        #   won't-proceed terminal (per-regime; reason: in body)
@@ -36,7 +36,7 @@ sliceAfter: []
 > ```
 >
 > The DECIDED points (these resolve every open fork; the stale body sections below are superseded by this):
-> - **`tasks/` is a Kanban board** (`backlog` staging → `todo` pool → `done`/`cancelled`); **`briefs/` is NOT a mirror** — it has its own natural lifecycle (`draft` staging → `ready` pool → `tasked`/`dropped`). Each regime gets the nomenclature that fits it; non-mirroring is intentional and fine.
+> - **`tasks/` is a Kanban board** (`backlog` staging → `todo` pool → `done`/`cancelled`); **`briefs/` is NOT a mirror** — it has its own natural lifecycle (`proposed` staging → `ready` pool → `tasked`/`dropped`). Each regime gets the nomenclature that fits it; non-mirroring is intentional and fine. (`proposed`, not `draft`: a brief is created when it is READY to slice, so the staging slot names the trust/admission gate, not an unfinished document.)
 > - **The transient three (`in-progress`/`needs-attention`/`slicing`) and `advancing` are NOT folders** — they are per-item lock-ref state (the lock work landed). So `tasks/` and `briefs/` are DURABLE-position-only boards.
 > - **The won't-proceed terminal is PER-REGIME**, with its own word each: `tasks/cancelled/` and `briefs/dropped/`. This is load-bearing CORRECTNESS, not just taste: a slice and a PRD (and an observation) can share a slug, and the shipped TOP-LEVEL `work/dropped/` keys by BARE slug, so a dropped task and a dropped brief sharing a slug COLLIDE on `dropped/<slug>.md` (today `item-lock.ts` routes a dropped slice, PRD, AND observation all to one `work/dropped/`). The umbrella gives each regime its own namespace, removing the collision. MIGRATE the existing top-level `work/dropped/` contents into the right regime's terminal (sort each by what it is). A dropped OBSERVATION needs no terminal folder — notes leave by deletion.
 > - **Every reader keys by `(umbrella, slug)`, never bare slug** (e.g. `tasks/todo/foo.md` and `briefs/ready/foo.md` legitimately co-exist). The single `work-layout` module owns the (umbrella, lifecycle) → path mapping and the item-scan predicate; no reader re-derives a bare-slug path.
@@ -67,34 +67,7 @@ The cost of NOT doing this is conceptual: CONTEXT.md states that consistency and
 
 ## Solution
 
-Regroup `work/` so each top-level umbrella means ONE regime, and rename the vocabulary to the plainer `task`/`brief`, WITHOUT changing any behaviour and without weakening the folder-as-status invariant. Target layout:
-
-```
-work/
-  notes/                 # capture regime — do NOT flow, leave only by deletion
-    observations/
-    ideas/
-    findings/
-  briefs/                # was the prd-family. Lifecycle: untasked -> tasking -> tasked
-    untasked/            #   was prd/         (ready to break into tasks)
-    tasking/             #   was slicing/     (the HELD LOCK, mid-break)
-    tasked/              #   was prd-sliced/  (broken into tasks, resting)
-  tasks/                 # build regime — PURE state machine, status = folder, CAS git mv
-    backlog/
-    in-progress/
-    needs-attention/
-    done/
-    out-of-scope/
-  questions/             # surfaced blocker questions — CONTENT humans answer (own surface)
-  advancing/             # PER-ITEM advance holds (see the lock note); stays addressable
-  protocol/              # propagated protocol docs — NOT diluted
-```
-
-Vocabulary: `slice -> task`, `prd -> brief`, applied to user-facing surfaces, on-disk folders, frontmatter field names, the CLI command surface, and the protocol docs. There is NO per-user-configurable nomenclature: one canonical vocabulary, because a synonym layer would break the single-source glossary CONTEXT.md prizes and the byte-identical propagated `protocol/` copies. The brief lifecycle verbs (untasked -> tasking -> tasked) are clearer than prd -> slicing -> prd-sliced.
-
-The advancing lock becomes a CO-LOCATED markdown companion `<slug>.lock.md` sitting beside the item it locks (the item never moves), so the folder keeps telling the WHOLE truth (lifecycle position AND the transient hold) and an `observations/` capture-bucket item can be locked WITHOUT flowing. This relocation is sequenced AFTER and depends on the crash-safety PRD's `advancingMarkerPath()` / `listAdvancingMarkers()` helper.
-
-This is delivered as a safe two-phase migration so the crown-jewel invariant is never at risk: Phase 0 centralizes every `work/...` path behind one module with NO behaviour change and NO rename (all the risk lives here and it is gate-verifiable); Phase 1 flips the constants, `git mv`s the on-disk files, and mirrors the change into both `protocol/` copies. The lock relocation is a further, separate change riding the crash-safety helper.
+Regroup `work/` so each top-level umbrella means ONE regime, and rename the vocabulary to the plainer `task`/`brief`, WITHOUT changing any behaviour and without weakening the folder-as-status invariant. **The resolved target layout, the per-regime lifecycles + terminals, the hard-cutover vocabulary, and the two-phase migration spine are all fixed in the RESOLVED END-STATE banner at the top of this file** (it supersedes the original Solution diagram, which described the now-retired `untasked/tasking/tasked` + five-folder `tasks/` + `advancing/`-lock shape). One canonical vocabulary, NO per-user nomenclature: a synonym layer would break the single-source glossary CONTEXT.md prizes and the byte-identical propagated `protocol/` copies.
 
 ## User Stories
 
@@ -104,46 +77,33 @@ This is delivered as a safe two-phase migration so the crown-jewel invariant is 
 4. As a maintainer, I want every hardcoded `work/...` path string, folder-name union type, and folder-name array routed through ONE `work-layout` module BEFORE any rename, so the rename is a one-file value change rather than a 121-file find-replace (which would collide `slice` with `Array/String.prototype.slice`).
 5. As a maintainer, I want Phase 0 (centralization) to land with the acceptance gate green and NO behaviour change, so I have a verified, independently-valuable checkpoint even if the rename never ships.
 6. As a maintainer, I want Phase 1 (the flip + `git mv` + dual-`protocol/`-copy update) to keep the folder-as-status invariant intact, so concurrent CAS `git mv` transitions stay conflict-safe after the reorg.
-7. As an agent or human, I want the brief lifecycle folders named `briefs/untasked` -> `briefs/tasking` -> `briefs/tasked`, mirroring the build state machine minus done, so the brief flow reads as a clear verb story.
-8. As an agent or human, I want `tasks/` to hold the full build state machine (`backlog`, `in-progress`, `needs-attention`, `done`, `out-of-scope`), so the previously top-level stuck/terminal states live under the regime they belong to.
+7. As an agent or human, I want the brief lifecycle folders named for their own natural flow (`briefs/proposed` -> `briefs/ready` -> `briefs/tasked`, + the terminal `briefs/dropped`), so the brief flow reads as a clear verb story. (Supersedes the original `untasked/tasking/tasked` naming, see the banner; the `tasking` hold is a lock ref, not a folder.)
+8. As an agent or human, I want `tasks/` to hold the DURABLE build board (`backlog` staging, `todo` pool, `done`, `cancelled`), so the previously top-level terminal state lives under the regime it belongs to. (Supersedes the original five-folder shape: the transient `in-progress`/`needs-attention`/`slicing` states are lock-ref state, NOT folders; see the banner.)
 9. As a human, I want `questions/` to remain its own visible top-level surface (the "what needs me?" queue), not folded into `notes/`, so surfaced blockers stay glance-able.
-10. As a human, I want the advancing lock to be a co-located `<slug>.lock.md` markdown companion beside the item it locks, so one `ls` shows both the item's lifecycle position and that it is being advanced.
-11. As the system, I want an `observations/` (capture-bucket) item to be lockable for triage WITHOUT being moved out of its bucket, so the "notes do not flow" invariant holds while triage is in progress.
-12. As a maintainer, I want the item-scan predicate to become "`*.md` that is NOT a reserved companion (`*.lock.md`, `*.questions.md`)", owned in ONE place in `work-layout`, so a co-located lock file is never mistaken for a work item and the rule cannot drift per reader.
-13. As the author of the crash-safety PRD, I want the lock relocation to reuse my `advancingMarkerPath()` / `listAdvancingMarkers()` helper and to land AFTER my flat-path crash-safety fixes, so I ship a tight data-loss/crash-safety fix without absorbing a cosmetic reorg.
-14. As the system, I want the advancing lock BRANCH name to keep the `<type>-<slug>` encoding even after the co-located filename drops the `<type>-` prefix, so two types never collide on `advancing/<slug>`.
+10. As a maintainer, I want the won't-proceed terminal to be PER-REGIME (`tasks/cancelled/` and `briefs/dropped/`, deliberately different words), so a dropped task and a dropped brief sharing a slug never collide on one bare-slug `work/dropped/<slug>.md` (the slug-collision correctness fix; a dropped observation needs no terminal, notes leave by deletion).
+11. As a maintainer, I want every reader to key by `(umbrella, slug)` (never a bare slug), owned in ONE place in `work-layout` so the rule cannot drift per reader, since `tasks/todo/foo.md` and `briefs/ready/foo.md` legitimately co-exist.
+
+> US #12-14 (the retired co-located `<slug>.lock.md` lock relocation, the `observations/`-lockable-without-flowing story, the advancing-lock branch encoding) are DROPPED per the banner. The lock left `main`'s tree entirely (transient status is per-item lock-ref state now), so there is no `main`-tree lock file to co-locate.
+
 15. As a maintainer onboarding a NEW repo, I want `setup` to scaffold the new layout (and the `protocol/` copies to reflect it), so adopted repos get the reorganized tree, not the legacy flat one.
 16. As a maintainer of an EXISTING repo on the legacy layout, I want a documented migration path (the `git mv` mapping old -> new), so adopting the new layout is mechanical and safe.
 17. As a maintainer, I want all skills, `WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `ADR-FORMAT.md`, and ADR path references updated to the new vocabulary and layout in the same effort, so the docs do not drift from the tree.
 
 ### Autonomy notes (the two gate axes)
 
-- **`humanOnly: true` (set):** a human must drive the SLICING of this PRD. The folder names ARE the conflict-safe state machine; the slicing decisions (how to phase the migration, where the Phase-0/Phase-1 cut lines fall, the exact reserved-infix bytes, the sequencing against the crash-safety PRD) are judgement-heavy and must not be auto-sliced. Per the contract this does NOT propagate to the produced slices' own gates: several slices (e.g. the mechanical Phase-0 centralization) may well be fully agent-buildable once cut.
-- **`needsAnswers`:** NOT set. The design cruxes are all DECIDED in the originating idea (layout B; co-located `.lock.md`; two-phase migration; sequence-after-crash-safety with the shared helper). The residue is slicing-level (phasing, ordering, byte-level naming), which is a slicing call, not an open design question.
+- **`humanOnly: true` (set):** a human must drive the SLICING of this PRD. The folder names ARE the conflict-safe state machine, so the phasing/cut-line decisions were judgement-heavy. Per the contract this did NOT propagate to the produced slices' own gates: the slices are mechanical and agent-buildable.
+- **`needsAnswers`:** NOT set (cleared by the banner). Every design fork is resolved.
 
-## Implementation Decisions
-
-- **Two-phase migration (the de-risking spine).** Phase 0: introduce a single `work-layout` module that is the SOLE source of every `work/...` path, every folder-name union (e.g. today's `type SliceFolder = 'in-progress' | 'backlog' | 'done'`), and every folder-name array (e.g. `const WORK_FOLDERS = [...]`). Route all current raw literals (across ~121 `.ts` files), `join(cwd, 'work', ...)` calls, prefix-slices (`'work/backlog/'.length`), and the item-scan filters through it. Names stay EXACTLY as today; the acceptance gate (`pnpm -r build && pnpm -r test && pnpm format:check`) proves no behaviour changed. Phase 1: change the VALUES in `work-layout` to the new nested/renamed paths, `git mv` the on-disk files, and mirror into BOTH `protocol/` copies (keep `diff -r skills/setup/protocol work/protocol` clean). Because Phase 0 de-stringified everything, the JS `.slice()` method is never in scope for the rename.
-- **The item-scan exclusion rule lives in `work-layout`.** The predicate becomes "`*.md` minus reserved companion infixes (`*.lock.md`, `*.questions.md`)", defined once. No reader re-implements it.
-- **The advancing lock = co-located `<slug>.lock.md`.** A markdown companion beside the item (body carries locker/since/reason as today). It is a HOLD, not a status (the item's status is unchanged while held), so the item never moves; the CAS micro-commit adds/removes the sibling. The lock BRANCH name stays `advancing/<type>-<slug>`; only the on-disk marker filename simplifies. This change RIDES the crash-safety PRD's `advancingMarkerPath()` / `listAdvancingMarkers()` helper and `sliceAfter`s it (the relocation rebases onto an already-crash-safe release path — strictly easier than doing both at once). C's stuck-lock surfacing scan and this item-scan filter converge on one `listLockMarkers()`-style primitive.
-- **Old -> new folder mapping (for the migration + the `setup` scaffold):** `prd/`->`briefs/untasked/`, `slicing/`->`briefs/tasking/`, `prd-sliced/`->`briefs/tasked/`, `backlog/`->`tasks/backlog/`, `in-progress/`->`tasks/in-progress/`, `needs-attention/`->`tasks/needs-attention/`, `done/`->`tasks/done/`, `out-of-scope/`->`tasks/out-of-scope/`, `observations/`->`notes/observations/`, `ideas/`->`notes/ideas/`, `findings/`->`notes/findings/`, `advancing/`->`advancing/` (unchanged location; markers relocate to co-located `.lock.md` in the lock slice), `questions/`->`questions/` (unchanged), `protocol/`->`protocol/` (unchanged). Frontmatter: `prd:` field -> `brief:`; `sliceAfter:` -> the brief-equivalent (resolve naming at slicing time — likely `briefAfter` or kept as-is for least churn; a slicing-level decision).
-- **CLI surface:** `do slice:<slug>` / `do prd:<slug>` -> the task/brief-prefixed equivalents; CI matrix ids likewise. Exact deprecation/alias policy for the old prefixes is a slicing-level decision.
-
-## Testing Decisions
-
-- Phase 0 is verified by the EXISTING test suite staying green with zero behaviour change — that IS the test (a pure refactor behind a constants module). Add a focused test that the `work-layout` module is the single source (e.g. a lint/grep guard that no `.ts` outside `work-layout` contains a raw `work/<folder>` literal), so the centralization cannot silently regress.
-- Phase 1: tests assert the new paths resolve, the CAS `git mv` transitions still conflict-safe across the nested folders, and `diff -r` of the two `protocol/` copies is clean.
-- Lock relocation: a co-located `<slug>.lock.md` is acquired/released via CAS without moving the item; an item-scan does NOT pick up the `.lock.md` companion as a task; an `observations/` item can be locked without leaving its bucket; the lock branch name still carries `<type>-<slug>`.
-- Reuse the crash-safety PRD's lock tests as the baseline; this PRD's lock slice extends them for the new path.
+> **Sliced 2026-06-19.** The technical detail (the two-phase migration mechanism, the old->new folder mapping, the identity/CLI/frontmatter cutover, the per-regime terminal correctness fix, the protocol-mirror requirement, and all testing detail) now lives in the slices under `work/backlog/` (`work-layout-module-centralises-all-work-paths`, `guard-test-no-raw-work-literal-outside-work-layout`, `regroup-notes-and-task-board-rename`, `brief-regime-rename-and-dropped-migration`, `slice-task-prd-brief-vocabulary-hard-cutover`, `protocol-docs-skills-and-setup-scaffold-new-vocabulary`). This PRD has settled to its durable framing (Problem / Solution / User Stories / Out of Scope + the resolved banner); the prior Implementation/Testing Decisions sections were trimmed into those slices.
 
 ## Out of Scope
 
 - The `needsAnswers` edit-handshake command (the sibling idea in `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`) — superseded by the advance-loop design; not part of this reorg.
 - Per-user-configurable nomenclature — explicitly REJECTED (one canonical vocabulary).
-- The advancing-lock CRASH-SAFETY and REAPER work itself — owned by `work/prd/recover-autodetect-and-advancing-lock-crash-safety.md`; this PRD only RELOCATES the marker afterward.
-- Defect A (the `complete.ts` stranded-done data-loss fix) — fully independent, ships first via the crash-safety PRD.
+- The advancing-lock CRASH-SAFETY / lock-substrate work itself — LANDED already (`ledger-status-per-item-lock-refs`); the lock-co-location stories this PRD once carried are RETIRED (see the banner), not relocated here.
+- Defect A (the `complete.ts` stranded-done data-loss fix) — fully independent, shipped separately.
 
 ## Further Notes
 
 - Full decision trail (including the rejected alternatives: per-type `advancing/` status folders; a non-`.md` suffix lock file; a `.lock/` subfolder; the `<design>/<build>/<notes>` stage-grouping) is in `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`. Once this PRD is sliced and the idea is fully absorbed, that idea file can be deleted (see the disposition note there) — but keep it until the slices exist, since it carries the rejected-options reasoning that should survive into the slices/ADR rather than evaporate.
-- A new ADR is likely warranted for the regime-umbrella decision and the hold-vs-status distinction for the advancing lock (elicit the durable "why" at slicing time; an ADR records a decision WE made and its rationale).
+- A new ADR is likely warranted for the regime-umbrella decision and the per-regime terminal (the slug-collision correctness fix). Elicit the durable "why" from the human rather than inferring it (an ADR records a decision WE made and its rationale); the `protocol-docs-skills-and-setup-scaffold-new-vocabulary` slice is the natural place to capture it.
