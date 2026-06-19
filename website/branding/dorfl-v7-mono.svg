@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Dorfl v7 MONO: single ink. head silhouette, face knocked out as negative space.
+       works in one color (terminal, stamp, dark/light). -->
+  <rect x="0" y="0" width="256" height="256" rx="44" fill="#E9D9C7"/>
+  <g fill="#2A2622">
+    <!-- head -->
+    <path d="M64 78 Q64 60 82 60 L174 60 Q192 60 192 78
+             L192 196 Q192 214 174 214 L150 214 L150 224 Q150 228 146 228
+             L110 228 Q106 228 106 224 L106 214 L82 214 Q64 214 64 196 Z"/>
+  </g>
+  <!-- visor knocked out -->
+  <rect x="84" y="104" width="88" height="40" rx="9" fill="#E9D9C7"/>
+  <!-- >_ eyes (ink) -->
+  <path d="M100 114 l13 8 l-13 8" fill="none" stroke="#2A2622" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="128" y="126" width="22" height="7" rx="3.5" fill="#2A2622"/>
+  <!-- deadpan mouth (ink) -->
+  <rect x="108" y="176" width="40" height="7" rx="3.5" fill="#E9D9C7"/>
+</svg>

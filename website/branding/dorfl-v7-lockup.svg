@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300">
+  <!-- Dorfl v7 HORIZONTAL LOCKUP: head + wordmark + Title-Case tagline. -->
+  <defs>
+    <filter id="l7" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="960" height="300" fill="#23201C"/>
+  <!-- head -->
+  <g transform="translate(60,40) scale(0.62)">
+    <path d="M20 44 Q20 16 48 16 L208 16 Q236 16 236 44
+             L236 258 Q236 286 208 286 L172 286 L172 300 Q172 306 166 306
+             L90 306 Q84 306 84 300 L84 286 L48 286 Q20 286 20 258 Z"
+          fill="#A4543C"/>
+    <path d="M128 16 H208 Q236 16 236 44 V258 Q236 286 208 286 H172 V300 Q172 306 166 306 H128 Z"
+          fill="#8A4632" opacity="0.42"/>
+    <rect x="50" y="98" width="156" height="68" rx="15" fill="#1C1813"/>
+    <rect x="58" y="105" width="140" height="54" rx="11" fill="#FFB23E" filter="url(#l7)"/>
+    <path d="M86 120 l21 12 l-21 12" fill="none" stroke="#1C1813" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="130" y="140" width="34" height="11" rx="5.5" fill="#1C1813"/>
+    <rect x="98" y="228" width="60" height="10" rx="5" fill="#7E3D2C"/>
+  </g>
+  <!-- wordmark + tagline -->
+  <text x="280" y="158" font-family="Georgia, serif" font-size="104" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+  <text x="284" y="206" font-family="Menlo, monospace" font-size="26" letter-spacing="1" fill="#C9745A">It Claims Its Own Work</text>
+</svg>
