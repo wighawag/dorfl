@@ -14,7 +14,13 @@ import {
 	type SidecarDisposition,
 } from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
-import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
+import {
+	makeScratch,
+	gitEnv,
+	gitIn,
+	fixtureFolderRel,
+	type Scratch,
+} from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
 
 /**
@@ -79,8 +85,8 @@ function seed(opts: {
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
 
-	const itemPath = `work/${folder}/${slug}.md`;
-	mkdirSync(join(repo, 'work', folder), {recursive: true});
+	const itemPath = `work/${fixtureFolderRel(folder)}/${slug}.md`;
+	mkdirSync(join(repo, 'work', fixtureFolderRel(folder)), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[
@@ -344,10 +350,10 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 
 	it('throws when there is no sidecar (the apply rung needs an answered sidecar)', () => {
 		const repo = join(scratch.root, 'no-sidecar');
-		mkdirSync(join(repo, 'work', 'backlog'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
 		writeFileSync(
-			join(repo, 'work', 'backlog', 'foo.md'),
+			join(repo, 'work', 'tasks', 'todo', 'foo.md'),
 			'---\nslug: foo\nneedsAnswers: true\n---\n\nbody\n',
 		);
 		gitIn(['add', '-A'], repo);
@@ -356,7 +362,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 			applyAnsweredQuestions({
 				cwd: repo,
 				item: 'slice:foo',
-				itemPath: 'work/backlog/foo.md',
+				itemPath: 'work/tasks/todo/foo.md',
 				env: gitEnv(),
 			}),
 		).toThrow(ApplyPersistError);

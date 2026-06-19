@@ -11,6 +11,7 @@ import {
 	registerMirrorWithWork,
 	gitEnv,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 
 /**
@@ -135,7 +136,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 		// IN-PLACE side: lay the SAME logical work/ tree into a plain checkout dir.
 		const checkout = join(scratch.root, 'in-place');
 		for (const [folder, files] of Object.entries(WORK)) {
-			const dir = join(checkout, 'work', folder);
+			const dir = join(checkout, 'work', fixtureFolderRel(folder));
 			mkdirSync(dir, {recursive: true});
 			for (const [file, content] of Object.entries(
 				files as Record<string, string>,

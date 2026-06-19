@@ -46,7 +46,7 @@ import type {
  *       auto-sliceable. There is no agent-facing path that performs the
  *       promotion (asserted structurally: no agent surface imports it);
  *   (d) the `sliceAfter` (against `work/prd-sliced/`) and `blockedBy`
- *       (against `work/done/`) resolution is UNCHANGED \u2014 PRD US #14.
+ *       (against `work/tasks/done/`) resolution is UNCHANGED \u2014 PRD US #14.
  */
 
 const ARBITER = 'arbiter';
@@ -415,7 +415,7 @@ describe('STEP A (PRD) \u2014 sliceAfter (prd-sliced/) and blockedBy (done/) res
 		expect(blockedByStaged.sliceAfter.missing).toEqual(['staged-not-sliced']);
 	});
 
-	it('blockedBy still resolves against work/done/ residence \u2014 unchanged by the PRD staging split', () => {
+	it('blockedBy still resolves against work/tasks/done/ residence \u2014 unchanged by the PRD staging split', () => {
 		// `resolveEligibility` does the SLICE side; this asserts the staging
 		// pre-prd/ split does not perturb blockedBy resolution (which is a SLICE
 		// gate axis, never a PRD axis \u2014 the split is on PRDs only).

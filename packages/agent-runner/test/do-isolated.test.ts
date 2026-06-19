@@ -438,9 +438,9 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 	// NOT dependency-aware scheduling, which is deliberately out of scope here).
 	//
 	// The ORDER is made OBSERVABLE by having each item's stubbed agent SNAPSHOT what
-	// its OWN job worktree (`cwd`) carries under `work/done/` at agent-launch time:
+	// its OWN job worktree (`cwd`) carries under `work/tasks/done/` at agent-launch time:
 	// item 1 sees an empty done set; item 2, branched off the refetched main, sees
-	// item 1 ALREADY in `work/done/` — the load-bearing proof that the per-item
+	// item 1 ALREADY in `work/tasks/done/` — the load-bearing proof that the per-item
 	// refetch happened (a stale pre-run base would show item 1 absent).
 	it('integrates item 1 THEN item 2, with item 2’s worktree branched off a main containing item 1’s merge', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(
@@ -460,11 +460,11 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 			gitEnv(),
 		) as string;
 
-		// Per-item record of what each agent's OWN worktree carried under work/done/
+		// Per-item record of what each agent's OWN worktree carried under work/tasks/done/
 		// at launch (the freshness witness), in run order.
 		const doneSeenAtLaunch: Array<{slug: string; done: string[]}> = [];
 		const recordingAgent: DoAgentRunner = ({cwd, slug}) => {
-			const doneDir = join(cwd, 'work', 'done');
+			const doneDir = join(cwd, 'work', 'tasks', 'done');
 			const done = existsSync(doneDir)
 				? readdirSync(doneDir)
 						.filter((f) => f.endsWith('.md'))
@@ -503,7 +503,7 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(true);
 
 		// ORDER + FRESHNESS: two items ran; the FIRST saw an empty done set, the
-		// SECOND saw the FIRST already in work/done/ in its OWN worktree — i.e. item
+		// SECOND saw the FIRST already in work/tasks/done/ in its OWN worktree — i.e. item
 		// 2's worktree was branched off a main that already contained item 1's merge
 		// (the per-item ensureMirror+refetch is load-bearing).
 		expect(doneSeenAtLaunch).toHaveLength(2);

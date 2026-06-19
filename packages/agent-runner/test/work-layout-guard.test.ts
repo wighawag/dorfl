@@ -159,22 +159,28 @@ const SRC_DIR = join(here, '..', 'src');
 describe('work-layout guard — no raw work/<folder> path literal outside work-layout', () => {
 	it('the matcher fires on path-construction literals and NOT on prose/templates (detector self-check)', () => {
 		// Path-construction literals (the SHAPES the centralisation removed) MUST match
-		// — otherwise the guard could rot into a vacuous pass.
+		// — otherwise the guard could rot into a vacuous pass. After the notes-regroup +
+		// task-board-rename flip the task board lives under `tasks/` and the capture
+		// buckets under `notes/`, so a path-construction literal for those folders is
+		// now the NESTED form (`work/tasks/todo`, `work/notes/observations`) — the
+		// matcher fires on the WHOLE nested path because the folder NAME the alternation
+		// carries is itself `tasks/todo` etc. The still-flat out-of-scope folders
+		// (`prd`/`pre-prd`/`prd-sliced`/`dropped`/`questions`) keep their flat shape.
 		for (const path of [
-			'work/backlog',
+			'work/tasks/todo',
 			'work/pre-prd',
 			'work/prd/',
-			'work/backlog/',
-			'work/pre-backlog/',
-			'work/observations/',
-			'work/backlog/${slug}.md',
-			'work/done/${slug}.md',
+			'work/tasks/todo/',
+			'work/tasks/backlog/',
+			'work/notes/observations/',
+			'work/tasks/todo/${slug}.md',
+			'work/tasks/done/${slug}.md',
 			'work/prd-sliced/${slug}.md',
 			'work/questions/${type}-${slug}.md',
-			'work/done/<slug>.md',
-			'${ref}:work/done',
-			'${ref}:work/backlog',
-			'${arbiter}/main:work/pre-backlog',
+			'work/tasks/done/<slug>.md',
+			'${ref}:work/tasks/done',
+			'${ref}:work/tasks/todo',
+			'${arbiter}/main:work/tasks/backlog',
 		]) {
 			expect(isRawWorkPathLiteral(path), `should flag: ${path}`).toBe(true);
 		}
@@ -183,9 +189,9 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		// the CI-template glob — MUST NOT match (they would otherwise red the gate).
 		for (const prose of [
 			"'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ",
-			'work/backlog/${slug}.md (nor work/in-progress/${slug}.md nor ',
+			'work/tasks/todo/${slug}.md (nor work/in-progress/${slug}.md nor ',
 			'Read the source PRD (work/prd/${input.slug}.md) and review the candidate',
-			'(A repo participates iff it has a work/backlog/ with >= 1 .md file.)',
+			'(A repo participates iff it has a work/tasks/todo/ with >= 1 .md file.)',
 			'work/questions/**', // the advance-CI template push-trigger glob
 			'workspace', // a word that merely starts with "work"
 		]) {

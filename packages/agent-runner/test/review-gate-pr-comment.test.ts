@@ -33,7 +33,7 @@ import {
  * `review` PROSE FIELD (carried INSIDE the single verdict JSON) as a PR COMMENT on
  * the `--propose` path, INCLUDING on approve. We post `verdict.review` \u2014 NOT the
  * agent's stream-of-consciousness around the JSON (that residue-posting was the
- * bug: `work/findings/review-comment-posts-agent-thinking-not-a-review.md`). The
+ * bug: `work/notes/findings/review-comment-posts-agent-thinking-not-a-review.md`). The
  * comment is ADVISORY \u2014 it changes no gate/verdict/merge logic.
  *
  * House style (mirrors `review-nits-observation.test.ts` /

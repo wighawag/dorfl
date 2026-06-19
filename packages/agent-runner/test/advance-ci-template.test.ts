@@ -140,7 +140,10 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		});
 
 		it('flags a missing on-answer-committed trigger', () => {
-			const broken = base.replace(/work\/questions\/\*\*/g, 'work/backlog/**');
+			const broken = base.replace(
+				/work\/questions\/\*\*/g,
+				'work/tasks/todo/**',
+			);
 			const result = withTmpTemplate(broken);
 			expect(result.ok).toBe(false);
 			expect(result.problems.map((p) => p.id)).toContain(

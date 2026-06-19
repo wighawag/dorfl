@@ -8,6 +8,7 @@ import {
 	seedRepoWithArbiter,
 	gitEnv,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
 
@@ -41,7 +42,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Stage a slice file in `work/pre-backlog/` on the arbiter. */
+/** Stage a slice file in `work/tasks/backlog/` on the arbiter. */
 function stageSlice(repo: string, slug: string): void {
 	stageStaged(repo, 'pre-backlog', slug);
 }
@@ -52,7 +53,7 @@ function stagePrd(repo: string, slug: string): void {
 }
 
 function stageStaged(repo: string, folder: string, slug: string): void {
-	const dir = join(repo, 'work', folder);
+	const dir = join(repo, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -187,11 +188,11 @@ describe('promote <item> — admits a staged item into its pool', () => {
 	it('promote slice:<slug> moves pre-backlog/ -> backlog/ on the arbiter (claimable)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageSlice(repo, 'feature-x');
-		expect(onArbiterMain(repo, 'work/pre-backlog/feature-x.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(true);
 		const {out} = await runPromote(repo, ['slice:feature-x']);
 		expect(out).toMatch(/Promoted slice 'feature-x' into the pool/);
-		expect(onArbiterMain(repo, 'work/backlog/feature-x.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/pre-backlog/feature-x.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/todo/feature-x.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(false);
 	});
 
 	it('a BARE slug defaults to a slice (mirrors requeue)', async () => {
@@ -199,7 +200,7 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		stageSlice(repo, 'bare-one');
 		const {out} = await runPromote(repo, ['bare-one']);
 		expect(out).toMatch(/Promoted slice 'bare-one' into the pool/);
-		expect(onArbiterMain(repo, 'work/backlog/bare-one.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/todo/bare-one.md')).toBe(true);
 	});
 
 	it('promote prd:<slug> moves pre-prd/ -> prd/ on the arbiter (auto-sliceable)', async () => {

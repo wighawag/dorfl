@@ -170,7 +170,7 @@ describe('requeue recovers a slice stuck on its per-item lock (releases the lock
 
 		const fresh = seeded.clone('reader');
 		const body = readFileSync(
-			join(fresh, 'work', 'backlog', 'delta.md'),
+			join(fresh, 'work', 'tasks', 'todo', 'delta.md'),
 			'utf8',
 		);
 		expect(body).toMatch(/## Requeue \d{4}-\d{2}-\d{2}/);
@@ -183,8 +183,8 @@ describe('requeue recovers a slice stuck on its per-item lock (releases the lock
 		const {repo} = await stuckInProgress('epsilon');
 
 		// Seed an UNTRACKED file in the shared checkout — a concurrent writer's WIP.
-		mkdirSync(join(repo, 'work', 'ideas'), {recursive: true});
-		const strayRel = 'work/ideas/concurrent-wip.md';
+		mkdirSync(join(repo, 'work', 'notes', 'ideas'), {recursive: true});
+		const strayRel = 'work/notes/ideas/concurrent-wip.md';
 		writeFileSync(join(repo, strayRel), '# a concurrent writer was editing\n');
 
 		const beforeArbiter = arbiterMainLog(repo);

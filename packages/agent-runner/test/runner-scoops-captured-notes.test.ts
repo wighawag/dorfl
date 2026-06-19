@@ -17,8 +17,8 @@ import {run} from '../src/git.js';
 /**
  * `runner-scoops-captured-notes` slice (advance-loop's reporting-channel fold-in
  * "EXTEND this channel to agent-authored CAPTURED NOTES"). The RUNNER must SCOOP +
- * REPORT agent-authored capture-bucket files (`work/observations/*`,
- * `work/findings/*`) a rung's agent writes during its run, on BOTH the build path
+ * REPORT agent-authored capture-bucket files (`work/notes/observations/*`,
+ * `work/notes/findings/*`) a rung's agent writes during its run, on BOTH the build path
  * (`do <slice>`/`run`/`complete`) and the slice path (`do prd:`).
  *
  * Rule A is preserved (the agent does NO git \u2014 the stubbed agents below only WRITE
@@ -120,8 +120,8 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 	it('a note the agent wrote during the build is COMMITTED (not dropped) and REPORTED', async () => {
 		const repo = await claimAndBranch('alpha');
 		// Rule A: the build agent WROTE the note files (no git). Simulate that here.
-		writeNote(repo, 'work/observations/spotted-during-build.md');
-		writeNote(repo, 'work/findings/external-quirk.md');
+		writeNote(repo, 'work/notes/observations/spotted-during-build.md');
+		writeNote(repo, 'work/notes/findings/external-quirk.md');
 
 		const sink = noteSink();
 		const core = await performIntegration({
@@ -140,16 +140,19 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 		// PERSISTENCE: both notes landed in the runner-owned commit on the arbiter
 		// main (the merge mode lands the done-commit), not left untracked.
 		expect(
-			onArbiterMainPath(repo, 'work/observations/spotted-during-build.md'),
+			onArbiterMainPath(
+				repo,
+				'work/notes/observations/spotted-during-build.md',
+			),
 		).toBe(true);
-		expect(onArbiterMainPath(repo, 'work/findings/external-quirk.md')).toBe(
-			true,
-		);
+		expect(
+			onArbiterMainPath(repo, 'work/notes/findings/external-quirk.md'),
+		).toBe(true);
 		// REPORTING: the runner announced exactly which note files it scooped.
 		const report = sink.lines.find((l) => l.includes('Scooped'));
 		expect(report).toBeDefined();
-		expect(report).toContain('work/observations/spotted-during-build.md');
-		expect(report).toContain('work/findings/external-quirk.md');
+		expect(report).toContain('work/notes/observations/spotted-during-build.md');
+		expect(report).toContain('work/notes/findings/external-quirk.md');
 		expect(report).toMatch(/Scooped 2 agent-authored captured notes/);
 	});
 
@@ -179,7 +182,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 		// A stray file the agent left elsewhere: it still rides `git add -A`, but it is
 		// NOT a captured signal, so the scoop report must NOT name it.
 		writeFileSync(join(repo, 'scratch.tmp'), 'debug\n');
-		writeNote(repo, 'work/observations/real-signal.md');
+		writeNote(repo, 'work/notes/observations/real-signal.md');
 
 		const sink = noteSink();
 		await performIntegration({
@@ -196,7 +199,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 
 		const report = sink.lines.find((l) => l.includes('Scooped'));
 		expect(report).toBeDefined();
-		expect(report).toContain('work/observations/real-signal.md');
+		expect(report).toContain('work/notes/observations/real-signal.md');
 		expect(report).not.toContain('scratch.tmp');
 		expect(report).toMatch(
 			/Scooped 1 agent-authored captured note into this commit/,
@@ -230,7 +233,7 @@ function seedPrd(repo: string, slug: string): void {
 /** A slicing agent that writes one STAGED slice AND a captured note (no git). */
 function slicingAgentWithNote(note: string | undefined): SliceAgentRunner {
 	return ({cwd}) => {
-		const dir = join(cwd, 'work', 'pre-backlog');
+		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, 'child.md'),
@@ -267,7 +270,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			autoSlice: true,
 			integration: 'merge',
 			agentRunner: slicingAgentWithNote(
-				'work/observations/slicer-spotted-drift.md',
+				'work/notes/observations/slicer-spotted-drift.md',
 			),
 			env: gitEnv(),
 			note: sink.note,
@@ -276,14 +279,17 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 		expect(result.outcome).toBe('sliced');
 		// PERSISTENCE: the produced slice AND the captured note both landed on main
 		// through the shared core (alongside the PRD lifecycle move) \u2014 not dropped.
-		expect(onArbiterMainPath(repo, 'work/pre-backlog/child.md')).toBe(true);
+		expect(onArbiterMainPath(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(
-			onArbiterMainPath(repo, 'work/observations/slicer-spotted-drift.md'),
+			onArbiterMainPath(
+				repo,
+				'work/notes/observations/slicer-spotted-drift.md',
+			),
 		).toBe(true);
 		// REPORTING: the runner announced the scooped note.
 		const report = sink.lines.find((l) => l.includes('Scooped'));
 		expect(report).toBeDefined();
-		expect(report).toContain('work/observations/slicer-spotted-drift.md');
+		expect(report).toContain('work/notes/observations/slicer-spotted-drift.md');
 	});
 
 	it('a note the slicer wrote rides the PROPOSE work branch and is REPORTED (--propose)', async () => {
@@ -298,7 +304,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			autoSlice: true,
 			integration: 'propose',
 			agentRunner: slicingAgentWithNote(
-				'work/findings/slicer-external-fact.md',
+				'work/notes/findings/slicer-external-fact.md',
 			),
 			env: gitEnv(),
 			note: sink.note,
@@ -308,19 +314,19 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 		// PERSISTENCE: propose does not touch main; the note rides the pushed work
 		// branch carrying the slices (the same branch the build path integrates).
 		expect(
-			onArbiterMainPath(repo, 'work/findings/slicer-external-fact.md'),
+			onArbiterMainPath(repo, 'work/notes/findings/slicer-external-fact.md'),
 		).toBe(false);
 		expect(
 			onArbiterBranch(
 				repo,
 				'work/prd-it',
-				'work/findings/slicer-external-fact.md',
+				'work/notes/findings/slicer-external-fact.md',
 			),
 		).toBe(true);
 		// REPORTING.
 		const report = sink.lines.find((l) => l.includes('Scooped'));
 		expect(report).toBeDefined();
-		expect(report).toContain('work/findings/slicer-external-fact.md');
+		expect(report).toContain('work/notes/findings/slicer-external-fact.md');
 	});
 
 	it('a slicing run that writes NO captured note ⇒ no scoop report', async () => {
@@ -340,7 +346,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 		});
 
 		expect(result.outcome).toBe('sliced');
-		expect(onArbiterMainPath(repo, 'work/pre-backlog/child.md')).toBe(true);
+		expect(onArbiterMainPath(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(sink.lines.some((l) => l.includes('Scooped'))).toBe(false);
 	});
 });

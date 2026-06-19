@@ -77,8 +77,8 @@ function seedAnsweredItem(opts: {
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
 
-	const itemPath = `work/backlog/${slug}.md`;
-	mkdirSync(join(repo, 'work', 'backlog'), {recursive: true});
+	const itemPath = `work/tasks/todo/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[
@@ -161,7 +161,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		const {persist, calls} = spyApply({
 			outcome: 'resolved',
 			sidecarPath: 'work/questions/slice-bar.md',
-			itemPath: 'work/backlog/bar.md',
+			itemPath: 'work/tasks/todo/bar.md',
 			message: 'resolved',
 		});
 		const result = await performAdvance({
@@ -182,7 +182,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		const {persist} = spyApply({
 			outcome: 'repaused',
 			sidecarPath: 'work/questions/slice-rep.md',
-			itemPath: 'work/backlog/rep.md',
+			itemPath: 'work/tasks/todo/rep.md',
 			message: 're-paused',
 		});
 		const result = await performAdvance({
@@ -202,7 +202,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		const {persist, calls} = spyApply({
 			outcome: 'resolved',
 			sidecarPath,
-			itemPath: 'work/backlog/foo.md',
+			itemPath: 'work/tasks/todo/foo.md',
 			message: 'resolved',
 		});
 		let released = false;
@@ -236,7 +236,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		const {persist, calls} = spyApply({
 			outcome: 'resolved',
 			sidecarPath: 'work/questions/slice-subset.md',
-			itemPath: 'work/backlog/subset.md',
+			itemPath: 'work/tasks/todo/subset.md',
 			message: 'resolved',
 		});
 		let acquired = false;

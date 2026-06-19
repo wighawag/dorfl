@@ -42,31 +42,41 @@ export const WORK_ROOT = 'work' as const;
  * a value-only flip of the right-hand side here.
  *
  * Folder kinds (kept here as a single registry, but their distinct roles matter):
- *   - SLICE lifecycle: `pre-backlog` (staging) → `backlog` (the agent pool) →
- *     `done` / `dropped` (generic terminal).
+ *   - SLICE lifecycle, the `tasks/` Kanban board: `tasks/backlog` (staging, the
+ *     symbolic key stays `pre-backlog`) → `tasks/todo` (the agent pool, key
+ *     `backlog`) → `tasks/done` / `dropped` (generic terminal).
  *   - PRD lifecycle: `pre-prd` (staging) → `prd` (auto-slice pool) → `prd-sliced`
- *     (sliced, resting).
- *   - Capture buckets (do NOT flow; leave by deletion): `observations` / `ideas` /
- *     `findings`.
+ *     (sliced, resting). (The brief regime is renamed by a SIBLING slice, not here.)
+ *   - Capture buckets under the `notes/` umbrella (do NOT flow; leave by deletion):
+ *     `notes/observations` / `notes/ideas` / `notes/findings`.
  *   - Top-level surfaces: `questions` (the "what needs me?" queue), `protocol`
- *     (propagated protocol docs).
+ *     (propagated protocol docs). NEITHER is folded under an umbrella.
  *   - The stray transient `in-progress` still referenced by legacy/recovery readers
  *     and `needs-attention` (both are really lock-ref state, NOT durable folders;
  *     routed here only so no reader hand-writes the literal).
+ *
+ * NOTE on the notes-regroup + task-board-rename flip (`folder-taxonomy-reorg-and-rename`
+ * Phase 1): the SYMBOLIC KEYS below are deliberately UNCHANGED (a value-only flip),
+ * so no call site moves. The `backlog` key now resolves to the `tasks/todo` POOL
+ * and the `pre-backlog` key to the `tasks/backlog` STAGING slot — i.e. the key
+ * names are the OLD vocabulary, the values are the NEW layout. The key-name
+ * vocabulary cutover (`backlog`→`todo`, `pre-backlog`→`backlog`, the
+ * `slice`/`prd`→`task`/`brief` identity) is a SEPARATE sibling slice; this slice
+ * only moves the on-disk paths.
  */
 export const WORK_FOLDER_NAME = {
-	'pre-backlog': 'pre-backlog',
-	backlog: 'backlog',
+	'pre-backlog': 'tasks/backlog',
+	backlog: 'tasks/todo',
 	'in-progress': 'in-progress',
 	'needs-attention': 'needs-attention',
-	done: 'done',
+	done: 'tasks/done',
 	dropped: 'dropped',
 	'pre-prd': 'pre-prd',
 	prd: 'prd',
 	'prd-sliced': 'prd-sliced',
-	observations: 'observations',
-	ideas: 'ideas',
-	findings: 'findings',
+	observations: 'notes/observations',
+	ideas: 'notes/ideas',
+	findings: 'notes/findings',
 	questions: 'questions',
 	protocol: 'protocol',
 } as const;

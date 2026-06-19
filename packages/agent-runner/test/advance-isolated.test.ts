@@ -217,7 +217,7 @@ describe('advance --isolated surface rung — persists the sidecar to the arbite
 		]);
 		// `needsAnswers:true` was set on the item body in the SAME commit (invariant 1).
 		const itemBody = readFileSync(
-			join(reader, 'work', 'backlog', 'needsq.md'),
+			join(reader, 'work', 'tasks', 'todo', 'needsq.md'),
 			'utf8',
 		);
 		expect(parseFrontmatter(itemBody).needsAnswers).toBe(true);

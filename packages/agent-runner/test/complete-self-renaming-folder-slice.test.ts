@@ -50,12 +50,19 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Stand up the repo as a self-renaming-folder slice leaves it: claimed (body rests
- * in `work/backlog/<slug>.md` on the arbiter), then on the work branch the agent
- * renamed the ledger folders (`done/ -> tasks/done/`) and placed its OWN record at
- * the NEW done-position `work/tasks/done/<slug>.md` (NOT at the binary's
- * `work/done/`), plus produced real source work — all committed. The tip is AHEAD
- * of `<arbiter>/main` and never pushed. HEAD is on the work branch.
+ * Stand up the repo as a slice that placed its OWN record in the terminal
+ * done-position leaves it: claimed (body rests in the pool `work/tasks/todo/<slug>.md`
+ * on the arbiter — the renamed agent POOL), then on the work branch the agent
+ * done-moved its record to `work/tasks/done/<slug>.md` and produced real source
+ * work — all committed. The tip is AHEAD of `<arbiter>/main` and never pushed.
+ * HEAD is on the work branch.
+ *
+ * (Historical note: this guard was born from the `folder-taxonomy-reorg-and-rename`
+ * Phase-1 flip, when the runner's INSTALLED binary still read the pre-rename
+ * `done/` folder while the branch had renamed it to `tasks/done/`. After that flip
+ * LANDED, the binary's `work-layout` resolves the SAME `tasks/done/` leaf, so the
+ * scenario reduces to a normal pool->done done-move; the layout-agnostic `done`-leaf
+ * detection in `complete.ts` still backstops it and is what this test pins.)
  */
 async function seedSelfRenamedDoneBranch(
 	slug: string,
@@ -73,14 +80,15 @@ async function seedSelfRenamedDoneBranch(
 	const branch = `work/slice-${slug}`;
 	gitIn(['switch', '-q', '-c', branch, `${ARBITER}/main`], repo);
 
-	// The agent's source work (the rename touches real files in a real slice; here
-	// a stand-in) AND the self-renaming done-move: relocate the record from the
-	// pre-rename `work/backlog/<slug>.md` to the NEW done-position
-	// `work/tasks/done/<slug>.md` (the renamed `done/` umbrella), exactly as the
-	// migration slice's agent does.
+	// The agent's source work (a stand-in) AND the done-move: relocate the record
+	// from the pool `work/tasks/todo/<slug>.md` to the terminal done-position
+	// `work/tasks/done/<slug>.md`, exactly as a finishing agent does.
 	writeFileSync(join(repo, 'feature.txt'), 'the migration work\n');
 	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
-	gitIn(['mv', `work/backlog/${slug}.md`, `work/tasks/done/${slug}.md`], repo);
+	gitIn(
+		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		repo,
+	);
 	gitIn(['add', '-A'], repo);
 	gitIn(
 		[
@@ -92,12 +100,15 @@ async function seedSelfRenamedDoneBranch(
 		repo,
 	);
 
-	// Sanity: the record is at the NEW done-position, and at NONE of the binary's
-	// pre-rename ledger folders. The arbiter still holds the body in backlog/.
+	// Sanity: the record is at the terminal done-position, and at NONE of the other
+	// ledger folders. The arbiter still holds the body in the pool (`tasks/todo/`,
+	// resolved from the `backlog` status key via `work-layout`).
 	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
 		true,
 	);
-	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
+	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+		false,
+	);
 	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(false);
 	expect(existsSync(join(repo, 'work', 'in-progress', `${slug}.md`))).toBe(
 		false,
@@ -190,11 +201,14 @@ describe('complete — self-renaming-folder slice (record placed in a RENAMED do
 		expect(result.branch).toBe(branch);
 	});
 
-	it('a record stranded in a NON-done renamed position (e.g. tasks/todo/) is NOT silently integrated — it still refuses honestly', async () => {
+	it('a record stranded in a NON-done, non-pool position (tasks/backlog/ staging) is NOT silently integrated — it still refuses honestly', async () => {
 		// Guard the cut line: the layout-agnostic detection fires ONLY on a `done`
-		// leaf. A record left in the renamed POOL (`tasks/todo/`) is NOT a finished
-		// slice; the runner must still refuse rather than mis-integrate an unfinished
-		// item as done.
+		// leaf. A record sitting in STAGING (`tasks/backlog/`, the `pre-backlog` key)
+		// is neither the pool `complete` sources from (`tasks/todo/`) NOR a `done`
+		// leaf, so the runner must REFUSE rather than mis-integrate an unfinished item
+		// as done. (A record left in the pool itself is a normal completion — the
+		// runner does the pool->done move — so staging is the honest "not finished,
+		// not done" position to pin the refusal on.)
 		const slug = 'half-done';
 		const seeded = seedRepoWithArbiter(scratch.root, [slug]);
 		const repo = seeded.repo;
@@ -210,13 +224,18 @@ describe('complete — self-renaming-folder slice (record placed in a RENAMED do
 			['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`],
 			repo,
 		);
-		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+		// Move the record from the pool (`tasks/todo/`, where claim left it) BACK into
+		// staging (`tasks/backlog/`) — a non-done, non-pool durable position.
+		mkdirSync(join(repo, 'work', 'tasks', 'backlog'), {recursive: true});
 		gitIn(
-			['mv', `work/backlog/${slug}.md`, `work/tasks/todo/${slug}.md`],
+			['mv', `work/tasks/todo/${slug}.md`, `work/tasks/backlog/${slug}.md`],
 			repo,
 		);
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', `wip(${slug}): renamed pool only`], repo);
+		gitIn(
+			['commit', '-q', '-m', `wip(${slug}): in staging, no done-move`],
+			repo,
+		);
 
 		const result = await performComplete({
 			slug,

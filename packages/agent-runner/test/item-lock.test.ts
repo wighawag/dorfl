@@ -197,7 +197,7 @@ describe('item-lock — happy path', () => {
 		run('git', ['fetch', '-q', 'arbiter'], repo, {env: gitEnv()});
 		const stillBacklog = run(
 			'git',
-			['cat-file', '-e', 'arbiter/main:work/backlog/alpha.md'],
+			['cat-file', '-e', 'arbiter/main:work/tasks/todo/alpha.md'],
 			repo,
 			{env: gitEnv()},
 		);

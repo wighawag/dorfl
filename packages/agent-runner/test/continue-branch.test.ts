@@ -166,10 +166,12 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 
 		// The body RESTS in `backlog/` on main (claim no longer moves it, slice 9a).
-		// Cut the work branch off main — it inherits the SAME `work/backlog/alpha.md`
+		// Cut the work branch off main — it inherits the SAME `work/tasks/todo/alpha.md`
 		// main has, so there is NO transient-status file unique to the branch.
 		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
-		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+			true,
+		);
 		writeFileSync(join(repo, 'feature.txt'), 'agent feature\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'wip(alpha): agent feature'], repo);
@@ -178,14 +180,14 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		// `backlog → done` move for a SIBLING item + an unrelated content change. None
 		// of this touches our slug's `backlog/alpha.md`, so a plain replay is clean.
 		gitIn(['switch', '-q', 'main'], repo);
-		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'backlog', 'beta.md'),
+			join(repo, 'work', 'tasks', 'todo', 'beta.md'),
 			'---\nslug: beta\n---\nbeta\n',
 		);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'seed beta'], repo);
-		gitIn(['mv', 'work/backlog/beta.md', 'work/done/beta.md'], repo);
+		gitIn(['mv', 'work/tasks/todo/beta.md', 'work/tasks/done/beta.md'], repo);
 		gitIn(['commit', '-q', '-m', 'feat(beta): sibling; done'], repo);
 		writeFileSync(join(repo, 'unrelated.txt'), 'unrelated main change\n');
 		gitIn(['add', '-A'], repo);
@@ -208,8 +210,12 @@ describe('rebaseContinuedBranchOntoMain', () => {
 			'agent feature\n',
 		);
 		expect(existsSync(join(repo, 'unrelated.txt'))).toBe(true);
-		expect(existsSync(join(repo, 'work', 'done', 'beta.md'))).toBe(true);
-		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'beta.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+			true,
+		);
 		// No needs-attention / transient move ever existed on the branch to conflict.
 		const subjects = gitIn(['log', '--format=%s', 'arbiter/main..HEAD'], repo);
 		expect(subjects).not.toMatch(/route to needs-attention/);

@@ -9,6 +9,7 @@ import {
 	makeScratch,
 	registerMirrorWithWork,
 	gitEnv,
+	fixtureFolderRel,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -208,10 +209,14 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 		// run the in-place pool scan the way `do-autopick` does.
 		const checkout = join(scratch.root, 'in-place');
 		for (const [folder, files] of Object.entries(mixed)) {
+			// Normalise the camelCase fixture key to its work-layout folder KEY, then
+			// resolve to the CURRENT on-disk path so the in-place tree mirrors what the
+			// production scan (and the bare-mirror side) now read after the
+			// notes-regroup + task-board-rename flip (`backlog`->`tasks/todo`, etc.).
 			const dir = join(
 				checkout,
 				'work',
-				folder === 'prdSliced' ? 'prd-sliced' : folder,
+				fixtureFolderRel(folder === 'prdSliced' ? 'prd-sliced' : folder),
 			);
 			mkdirSync(dir, {recursive: true});
 			for (const [file, content] of Object.entries(

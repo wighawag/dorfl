@@ -12,6 +12,7 @@ import {
 	raceClone,
 	racerEnv,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
 
@@ -30,7 +31,11 @@ function trackedOnArbiter(cwd: string, folder: string, entry: string): boolean {
 	return (
 		run(
 			'git',
-			['cat-file', '-e', `arbiter/main:work/${folder}/${entry}.md`],
+			[
+				'cat-file',
+				'-e',
+				`arbiter/main:work/${fixtureFolderRel(folder)}/${entry}.md`,
+			],
 			cwd,
 			{env: gitEnv()},
 		).status === 0
@@ -317,7 +322,7 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 	it('creates a new backlog item via the CAS (exit 0)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await createItemThroughCas({
-			path: 'work/backlog/promoted.md',
+			path: 'work/tasks/todo/promoted.md',
 			content: '---\ntitle: promoted\nslug: promoted\nblockedBy: []\n---\n',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -339,14 +344,14 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 
 		const [ra, rb] = await Promise.all([
 			createItemThroughCas({
-				path: 'work/backlog/dup.md',
+				path: 'work/tasks/todo/dup.md',
 				content,
 				cwd: a,
 				arbiter: 'arbiter',
 				env: racerEnv('a'),
 			}),
 			createItemThroughCas({
-				path: 'work/backlog/dup.md',
+				path: 'work/tasks/todo/dup.md',
 				content,
 				cwd: b,
 				arbiter: 'arbiter',
@@ -364,7 +369,7 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 	it('returns "lost" when the target path already exists on the arbiter', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['exists']);
 		const result = await createItemThroughCas({
-			path: 'work/backlog/exists.md',
+			path: 'work/tasks/todo/exists.md',
 			content: '---\ntitle: exists\nslug: exists\n---\n',
 			cwd: repo,
 			arbiter: 'arbiter',

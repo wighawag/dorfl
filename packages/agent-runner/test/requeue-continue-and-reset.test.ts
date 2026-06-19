@@ -536,7 +536,10 @@ function arbiterHasBranch(seeded: SeededRepo, branch: string): boolean {
  */
 function arbiterBacklogBody(seeded: SeededRepo, slug: string): string {
 	const reader = seeded.clone(`read-${slug}`);
-	return readFileSync(join(reader, 'work', 'backlog', `${slug}.md`), 'utf8');
+	return readFileSync(
+		join(reader, 'work', 'tasks', 'todo', `${slug}.md`),
+		'utf8',
+	);
 }
 
 /**

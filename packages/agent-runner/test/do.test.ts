@@ -118,7 +118,9 @@ describe('do <slug> — in-place happy path → exit', () => {
 			expect(currentBranch(cwd)).toBe(`work/slice-${slug}`);
 			// The body RESTS in backlog/ in the tree (claim acquired the lock but
 			// never moved the body); the agent never did any git.
-			expect(existsSync(join(cwd, 'work', 'backlog', `${slug}.md`))).toBe(true);
+			expect(existsSync(join(cwd, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+				true,
+			);
 			expect(existsSync(join(cwd, 'work', 'in-progress', `${slug}.md`))).toBe(
 				false,
 			);
@@ -142,7 +144,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 	// Stamp the backlog slice as untrusted-origin + push it to main (a slice born
 	// from an untrusted issue, propagated by the slicer onto the backlog file).
 	const stampSliceUntrusted = (repo: string, slug: string): void => {
-		const path = join(repo, 'work', 'backlog', `${slug}.md`);
+		const path = join(repo, 'work', 'tasks', 'todo', `${slug}.md`);
 		const content = readFileSync(path, 'utf8');
 		writeFileSync(
 			path,
@@ -423,9 +425,9 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 	 */
 
 	/** A stubbed agent that COMMITS a deletion of the slice's body (now resting in
-	 * `work/backlog/`, since claim no longer moves it) from the work branch — the
+	 * `work/tasks/todo/`, since claim no longer moves it) from the work branch — the
 	 * source-strand state `complete.ts` refuses with `nothing to complete (already
-	 * done, or wrong slug?)`. The arbiter still holds the body in `work/backlog/`,
+	 * done, or wrong slug?)`. The arbiter still holds the body in `work/tasks/todo/`,
 	 * so `do` should bounce it to needs-attention on the arbiter, not silently
 	 * strand it.
 	 */
@@ -434,7 +436,7 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 		// fire — we WANT the run to reach `performComplete`, where source-resolution
 		// refuses with `nothing to complete` (the source-strand class).
 		writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
-		gitIn(['rm', '-q', `work/backlog/${slug}.md`], cwd);
+		gitIn(['rm', '-q', `work/tasks/todo/${slug}.md`], cwd);
 		gitIn(['add', '-A'], cwd);
 		gitIn(['commit', '-q', '-m', 'drop the slice (source strand)'], cwd);
 		return {ok: true};
@@ -1302,7 +1304,7 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 		const args = readFileSync(argsFile, 'utf8');
 		expect(args).toMatch(/^--body$/m);
 		expect(args).toContain('Implemented alpha. Note: refactored the seam.');
-		expect(args).toContain('work/done/alpha.md');
+		expect(args).toContain('work/tasks/done/alpha.md');
 		// Half A still applies: a synthesised single-line title, never --fill.
 		expect(args).toMatch(/^--title$/m);
 		expect(args).not.toMatch(/^--fill$/m);
@@ -1589,7 +1591,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				agentRan = true;
-				const dir = join(cwd, 'work', 'pre-backlog');
+				const dir = join(cwd, 'work', 'tasks', 'backlog');
 				mkdirSync(dir, {recursive: true});
 				writeFileSync(
 					join(dir, 'somePrd-explicit.md'),
@@ -1645,7 +1647,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			// lands it on the arbiter main (propose would open a PR instead).
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
-				const dir = join(cwd, 'work', 'pre-backlog');
+				const dir = join(cwd, 'work', 'tasks', 'backlog');
 				mkdirSync(dir, {recursive: true});
 				writeFileSync(
 					join(dir, 'somePrd-first.md'),
@@ -1676,7 +1678,11 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
+				[
+					'cat-file',
+					'-e',
+					`${ARBITER}/main:work/tasks/backlog/somePrd-first.md`,
+				],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1772,7 +1778,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
  * is resolved into BOTH keys upstream (`do-config.ts`, covered in do-config.test.ts).
  */
 const slicingAgent: DoAgentRunner = ({cwd}) => {
-	const dir = join(cwd, 'work', 'pre-backlog');
+	const dir = join(cwd, 'work', 'tasks', 'backlog');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, 'somePrd-first.md'),
@@ -1818,7 +1824,11 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
+				[
+					'cat-file',
+					'-e',
+					`${ARBITER}/main:work/tasks/backlog/somePrd-first.md`,
+				],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1878,7 +1888,11 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
+				[
+					'cat-file',
+					'-e',
+					`${ARBITER}/main:work/tasks/backlog/somePrd-first.md`,
+				],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1910,7 +1924,11 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/pre-backlog/somePrd-first.md`],
+				[
+					'cat-file',
+					'-e',
+					`${ARBITER}/main:work/tasks/backlog/somePrd-first.md`,
+				],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1922,7 +1940,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 				[
 					'cat-file',
 					'-e',
-					`${ARBITER}/work/prd-somePrd:work/pre-backlog/somePrd-first.md`,
+					`${ARBITER}/work/prd-somePrd:work/tasks/backlog/somePrd-first.md`,
 				],
 				repo,
 				{env: gitEnv()},

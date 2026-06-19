@@ -69,10 +69,10 @@ describe('work-on — in-repo form (work-on <slug>)', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 
-		// The worktree carries work/backlog/<slug>.md (cut from main, which holds it).
-		expect(existsSync(join(result.dir!, 'work', 'backlog', 'alpha.md'))).toBe(
-			true,
-		);
+		// The worktree carries work/tasks/todo/<slug>.md (cut from main, which holds it).
+		expect(
+			existsSync(join(result.dir!, 'work', 'tasks', 'todo', 'alpha.md')),
+		).toBe(true);
 	});
 });
 
@@ -101,9 +101,9 @@ describe('work-on — remote form (work-on <remote> <slug>)', () => {
 
 		// The worktree has the backlog body (claim acquired the lock but did not move
 		// the body; it rests in backlog/ on the arbiter).
-		expect(existsSync(join(result.dir!, 'work', 'backlog', 'beta.md'))).toBe(
-			true,
-		);
+		expect(
+			existsSync(join(result.dir!, 'work', 'tasks', 'todo', 'beta.md')),
+		).toBe(true);
 	});
 
 	it('creates the hub mirror if absent, then reuses it on a second remote call', async () => {

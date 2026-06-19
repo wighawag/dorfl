@@ -147,8 +147,12 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		// (the bounce never wrote main, so there is nothing to conflict with).
 		gitIn(['fetch', '-q', ARBITER], human);
 		gitIn(['merge', '--ff-only', '-q', `${ARBITER}/main`], human);
-		expect(existsSync(join(human, 'work', 'done', 'beta.md'))).toBe(true);
-		expect(existsSync(join(human, 'work', 'backlog', 'beta.md'))).toBe(false);
+		expect(existsSync(join(human, 'work', 'tasks', 'done', 'beta.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(human, 'work', 'tasks', 'todo', 'beta.md'))).toBe(
+			false,
+		);
 	});
 
 	it('refuses a STILL-RED re-gate; the item stays in needs-attention/', async () => {
@@ -251,7 +255,7 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		// propose does not land on main; the branch is pushed with the done-move (the
 		// body's frontmatter, sans any stuck reason — that lived on the transient lock).
 		const branchHead = gitIn(
-			['show', `${ARBITER}/work/slice-zeta:work/done/zeta.md`],
+			['show', `${ARBITER}/work/slice-zeta:work/tasks/done/zeta.md`],
 			repo,
 		);
 		expect(branchHead).toMatch(/zeta/i);
