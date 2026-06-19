@@ -1,23 +1,23 @@
 ---
 name: triage-observations
-description: Drain the work/observations/ inbox ONE note at a time as a human-in-the-loop triage loop — for each observation, READ it, INVESTIGATE its claim against current reality (code/slices/PRDs/ADRs), RECOMMEND exactly one disposition (leave / delete / make-slice / amend / fold-into-ADR), WAIT for the human's decision, then EXECUTE it with writes + scoped commits. Defaults to alphabetical (folder-listing) order for a deterministic full pass; the human may override. Use when asked to triage/trim/prune/clean the observations backlog, decide what to do with each observation, or drain work/observations/ toward a live-only inbox. Protocol-native (assumes the work/ contract); the INVERSE of capture-signal. NEVER auto-decides — the human owns each call. The investigate-before-judging discipline is the point — an observation is a SPOTTED, often-stale signal, not ground truth.
+description: Drain the work/notes/observations/ inbox ONE note at a time as a human-in-the-loop triage loop — for each observation, READ it, INVESTIGATE its claim against current reality (code/tasks/briefs/ADRs), RECOMMEND exactly one disposition (leave / delete / make-task / amend / fold-into-ADR), WAIT for the human's decision, then EXECUTE it with writes + scoped commits. Defaults to alphabetical (folder-listing) order for a deterministic full pass; the human may override. Use when asked to triage/trim/prune/clean the observations backlog, decide what to do with each observation, or drain work/notes/observations/ toward a live-only inbox. Protocol-native (assumes the work/ contract); the INVERSE of capture-signal. NEVER auto-decides — the human owns each call. The investigate-before-judging discipline is the point — an observation is a SPOTTED, often-stale signal, not ground truth.
 ---
 
 # Triage observations
 
-Drain `work/observations/` toward a **live-only inbox**: every note that survives is still a useful signal; everything else is discharged. You are the investigator + recommender; the **human owns every disposition call**.
+Drain `work/notes/observations/` toward a **live-only inbox**: every note that survives is still a useful signal; everything else is discharged. You are the investigator + recommender; the **human owns every disposition call**.
 
 > An observation is a **spotted, unverified, often-stale signal** — NOT ground truth. The whole value of this loop is _investigating before judging_: "this is surely irrelevant now" must become a real check against current code, which sometimes agrees and sometimes doesn't.
 
 ## The loop (one observation at a time)
 
-Default to **alphabetical order** (the folder listing — `ls work/observations/`), so a full pass deterministically covers the whole inbox with nothing skipped or repeated. The human may override with their own order or name specific files; when they do, follow that and do NOT jump ahead or batch. For each:
+Default to **alphabetical order** (the folder listing — `ls work/notes/observations/`), so a full pass deterministically covers the whole inbox with nothing skipped or repeated. The human may override with their own order or name specific files; when they do, follow that and do NOT jump ahead or batch. For each:
 
 1. **READ** the observation in full.
-2. **INVESTIGATE** its claim against _current reality_ — read the actual code, slices, PRDs, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE?
+2. **INVESTIGATE** its claim against _current reality_ — read the actual code, tasks, briefs, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE?
 3. **RECOMMEND** exactly one disposition (below), with reasoning grounded in what you found — not a guess.
-4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this PRD's unsliced state intentional?") as an explicit question.
-5. **EXECUTE** the chosen disposition. For light dispositions (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-slice, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
+4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this brief's unsliced state intentional?") as an explicit question.
+5. **EXECUTE** the chosen disposition. For light dispositions (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-task, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
 6. **UPDATE** a running checklist of dispositions so the session has an at-a-glance summary.
 
 ## The disposition vocabulary
@@ -25,8 +25,8 @@ Default to **alphabetical order** (the folder listing — `ls work/observations/
 | disposition | when | execution |
 | --- | --- | --- |
 | **leave** | still a live, useful signal; just not acting now | nothing (note stays) |
-| **delete** | no longer a live signal — its work landed, the defect is fixed, or it was promoted into a self-contained slice/ADR | `git rm` the file |
-| **make a slice** | there is buildable residue worth promoting | hand off a fresh-context prompt (below); do NOT write the slice inline |
+| **delete** | no longer a live signal — its work landed, the defect is fixed, or it was promoted into a self-contained task/ADR | `git rm` the file |
+| **make a task** | there is buildable residue worth promoting | hand off a fresh-context prompt (below); do NOT write the task inline |
 | **amend** | still live but inaccurate/stale; the _record_ should be corrected | edit the note (observations are append-only in spirit — prefer an `## Update` over rewriting what was seen) — small in-loop edits are fine; hand off if it needs real investigation |
 | **fold-into-ADR / code comment** | the durable _why_ belongs in an ADR or a code comment, not the inbox | hand off a fresh-context prompt (below) when non-trivial; do the note + delete inline only when it is a genuine one-liner |
 
@@ -36,28 +36,28 @@ A note's liveness test is **"is this still a useful signal?"** — NOT "has the 
 
 The triage loop **decides**; it does NOT carry out the follow-on build inline. When a disposition needs real work, produce a **copy-pasteable prompt** for the human to run in a FRESH context, and STOP there (don't also try to do the work).
 
-> **CRITICAL — match the prompt's DELIVERABLE to the disposition, not to the feature.** A **make-slice** hand-off must produce a prompt whose deliverable is **a markdown SLICE FILE in `work/backlog/`** (per the slice template) — NOT a prompt that implements the feature/fixes the bug in code. The observation is being _promoted into a tracked work item_, not built. A prompt that says "implement X / fix Y / write the code and tests" is the WRONG output here — that conflates promoting the work with doing it. The slice itself is the deliverable; building it is a separate, later step the slice will drive. (Likewise a **fold-into-ADR** hand-off delivers an ADR edit, not code.)
+> **CRITICAL — match the prompt's DELIVERABLE to the disposition, not to the feature.** A **make-task** hand-off must produce a prompt whose deliverable is **a markdown TASK FILE in `work/tasks/backlog/`** (per the task template) — NOT a prompt that implements the feature/fixes the bug in code. The observation is being _promoted into a tracked work item_, not built. A prompt that says "implement X / fix Y / write the code and tests" is the WRONG output here — that conflates promoting the work with doing it. The task itself is the deliverable; building it is a separate, later step the task will drive. (Likewise a **fold-into-ADR** hand-off delivers an ADR edit, not code.)
 
 Rules for the prompt:
 
-- **Right deliverable.** State it explicitly at the top: "Write a work slice at `work/backlog/<slug>.md` following `work/protocol/slice-template.md`" (make-slice) or "Add a section to `docs/adr/<file>.md`" (fold-into-ADR). The fresh agent must finish by having WRITTEN THAT FILE, not by having changed product code.
+- **Right deliverable.** State it explicitly at the top: "Write a work task at `work/tasks/backlog/<slug>.md` following `work/protocol/task-template.md`" (make-task) or "Add a section to `docs/adr/<file>.md`" (fold-into-ADR). The fresh agent must finish by having WRITTEN THAT FILE, not by having changed product code.
 - **Prefix-free body.** No Markdown blockquote `>` bars, no `|` sidebars, no line-number gutters — the human pastes it verbatim, so any per-line prefix has to be hand-stripped. Delimit it with a `---` rule before and after (or a fenced block if it contains no triple backticks), but keep the body itself decoration-free.
-- **Self-contained.** Name the source observation, the exact files/seams the SLICE should point its future builder at (verified paths), the change the slice should specify, and the acceptance criteria the slice should carry. Fold in everything — the fresh agent has none of this session's context. (Note these are inputs to WRITING THE SLICE, not a to-do list for the fresh agent to execute.)
-- **Carry the discharge instruction.** End with: once the slice/ADR file is written and self-contained, DELETE the source observation (it has discharged) — so the inbox is drained by the follow-on artifact, not left as a resolved-but-kept note.
+- **Self-contained.** Name the source observation, the exact files/seams the TASK should point its future builder at (verified paths), the change the task should specify, and the acceptance criteria the task should carry. Fold in everything — the fresh agent has none of this session's context. (Note these are inputs to WRITING THE TASK, not a to-do list for the fresh agent to execute.)
+- **Carry the discharge instruction.** End with: once the task/ADR file is written and self-contained, DELETE the source observation (it has discharged) — so the inbox is drained by the follow-on artifact, not left as a resolved-but-kept note.
 
-Compose with the `to-slices` discipline if available — it produces exactly this slice-file deliverable.
+Compose with the `to-task` discipline if available — it produces exactly this task-file deliverable.
 
 ## Protocol rules this loop enforces
 
 Apply the `work/` contract (`work/protocol/WORK-CONTRACT.md`), especially:
 
 - **Discharge by deletion.** A capture-bucket note leaves the inbox by **deletion** the moment it stops being a live signal (git history is the archive). There is no `resolved` status; a note annotated "resolved" and kept is a contradiction.
-- **Promoted notes discharge on SPAWN, not on landing.** A note promoted into a slice/ADR is deletable AS SOON AS that artifact carries its signal — _verify self-containment first_ — NOT when the spawned work lands in `done/`. "Delete once the slice lands" is the resolved-but-kept contradiction. If the spawned artifact is NOT self-contained, the bug is the artifact (fix it to carry the signal), not a reason to keep the note.
-- **Forward & live only.** Don't back-fill a slice/observation to narrate already-done work. A surviving observation describes a _pending or currently-signalled_ concern.
+- **Promoted notes discharge on SPAWN, not on landing.** A note promoted into a task/ADR is deletable AS SOON AS that artifact carries its signal — _verify self-containment first_ — NOT when the spawned work lands in `tasks/done/`. "Delete once the task lands" is the resolved-but-kept contradiction. If the spawned artifact is NOT self-contained, the bug is the artifact (fix it to carry the signal), not a reason to keep the note.
+- **Forward & live only.** Don't back-fill a task/observation to narrate already-done work. A surviving observation describes a _pending or currently-signalled_ concern.
 
 ## Two common discharge patterns
 
-- **The spent drift-pointer:** the slice/code it warned about already landed, and its warning was inlined into that artifact → **delete**.
+- **The spent drift-pointer:** the task/code it warned about already landed, and its warning was inlined into that artifact → **delete**.
 - **The fixed-defect note:** read the code; if the defect it describes is gone, the note is a tombstone → **delete** (optionally preserve the _why_ as a code/ADR note first).
 
 ## Repo-specific trap (agent-runner)
@@ -68,6 +68,6 @@ Apply the `work/` contract (`work/protocol/WORK-CONTRACT.md`), especially:
 
 - **Investigate, don't assume.** A confident "this is obsolete" is a _hypothesis_ until checked against the code.
 - **Never auto-decide.** Recommend → WAIT → execute. The human owns the call.
-- **Self-containment is a precondition for promote-then-delete.** If you make a slice and delete the note, the slice must stand alone.
+- **Self-containment is a precondition for promote-then-delete.** If you make a task and delete the note, the task must stand alone.
 - **Clean tree before writing.** Confirm the repo is ready for writes (the human will say so); commit in scoped commits as you go.
 - **One at a time, human's order.** Don't fan out across the inbox.

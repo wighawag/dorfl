@@ -7,6 +7,8 @@ created: 2026-06-03
 
 # ADR: methodology & skills
 
+> **Forward note (2026-06-19 — `folder-taxonomy-reorg-and-rename`):** the vocabulary and the skill directories were RENAMED after this ADR was written. Read every `to-slices` below as the skill now at **`skills/to-task/`**, every `to-prd` as **`skills/to-brief/`**, `slice-template.md` as **`task-template.md`**, `prd-template.md` as **`brief-template.md`**, and the folders `work/backlog/`→`work/tasks/todo/`, `work/prd/`→`work/briefs/ready/`, `work/prd-sliced/`→`work/briefs/tasked/`. The DECISION this ADR records (the monorepo owns the methodology skills; the `work/`-native tracker) is unchanged — only the names moved. The original text is left intact below to preserve the decision history.
+
 Records the decisions about how this monorepo's `work/` methodology relates to the third-party "Matt Pocock" engineering skills, and the PRD/slice/triage/gate shape — so future sessions don't re-litigate them. (This monorepo IS the project: the `work/` methodology + tooling; `packages/agent-runner` is one implementation; `skills/` holds the methodology skills.)
 
 ## 1. The monorepo owns the methodology skills

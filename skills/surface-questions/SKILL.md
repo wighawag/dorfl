@@ -1,6 +1,6 @@
 ---
 name: surface-questions
-description: "GATHER the open-judgement residue for ONE work/ item and EMIT questions — write NOTHING (doc-shaped, mirrors review). Compose review (slice/PRD/code) + the native observation-triage question (promote/keep/delete) + the item's pre-existing needsAnswers / ## Open questions, each emitted question carrying inline context + an optional suggested default, in the sidecar entry shape the advance engine persists with zero translation. Use as the advance engine's surface-question rung (spawned fresh-context, the engine writes the sidecar CAS-atomically), or human-invoked for the no-runner path. The humility rule: surface the residue, NEVER invent an answer. Composes review/to-slices UNCHANGED; the INVERSE of applying answers."
+description: "GATHER the open-judgement residue for ONE work/ item and EMIT questions — write NOTHING (doc-shaped, mirrors review). Compose review (task/brief/code) + the native observation-triage question (promote/keep/delete) + the item's pre-existing needsAnswers / ## Open questions, each emitted question carrying inline context + an optional suggested default, in the sidecar entry shape the advance engine persists with zero translation. Use as the advance engine's surface-question rung (spawned fresh-context, the engine writes the sidecar CAS-atomically), or human-invoked for the no-runner path. The humility rule: surface the residue, NEVER invent an answer. Composes review/to-task UNCHANGED; the INVERSE of applying answers."
 ---
 
 # surface-questions
@@ -16,26 +16,26 @@ It is **doc-shaped, exactly like `review`** (`skills/review/`): you produce an a
 1. **GATHER-only.** Your job is to FORMULATE the open questions for the item — by composing the existing reviewing/triage judgement, not by re-deriving it. You add no new disposition of the item.
 2. **PERSIST-NEVER.** You EMIT questions and **write nothing** (no `needsAnswers` edit, no sidecar, no `git mv`, no commit) — mirroring `review`. The caller (the advance engine, or a human) routes and persists. If you are tempted to write a file, STOP: that is the engine's job (or, by hand, the `advance` verb — see [the no-runner path](#the-no-runner-path-us-34)).
 
-**The humility rule (the heart of it):** you **surface the residue, you NEVER invent an answer.** A `default:` is a _suggested_ default offered for the human's convenience — it is a humility aid, not a decision, and it never substitutes for the human answering. Automating answer creation is REJECTED by design in the `advance-loop` PRD; the human is the clock. When judgement is genuinely open, that is a QUESTION — never a guess dressed as a resolution.
+**The humility rule (the heart of it):** you **surface the residue, you NEVER invent an answer.** A `default:` is a _suggested_ default offered for the human's convenience — it is a humility aid, not a decision, and it never substitutes for the human answering. Automating answer creation is REJECTED by design in the `advance-loop` brief; the human is the clock. When judgement is genuinely open, that is a QUESTION — never a guess dressed as a resolution.
 
 ## When to use vs. not
 
-- **Use** to formulate the open questions for ONE item before it can advance a lifecycle rung — a slice or PRD that may carry open judgement, an untriaged observation, code in a work PR — whether you are the advance engine's surface rung or a human doing it by hand with no runner.
-- **Don't** use it to PRODUCE an item (that is `to-prd` / `to-slices` / the build agent), to APPLY a human's answer or advance the item (that is the engine's apply rung / the `advance` verb), or to PERSIST the questions (the engine, or the `advance` verb, owns the write). And do not use it to invent answers — there is no answer-creation here, by design.
+- **Use** to formulate the open questions for ONE item before it can advance a lifecycle rung — a task or brief that may carry open judgement, an untriaged observation, code in a work PR — whether you are the advance engine's surface rung or a human doing it by hand with no runner.
+- **Don't** use it to PRODUCE an item (that is `to-brief` / `to-task` / the build agent), to APPLY a human's answer or advance the item (that is the engine's apply rung / the `advance` verb), or to PERSIST the questions (the engine, or the `advance` verb, owns the write). And do not use it to invent answers — there is no answer-creation here, by design.
 
 ## What you COMPOSE (single sources — do NOT duplicate)
 
-You are a GATHERER. You stand up the existing producers/reviewers and collect what they emit; you do not reimplement their judgement. `to-slices` and `review` stay the single sources, **composed and UNCHANGED** — only `batch-qa`'s orchestration is absorbed (by the advance engine), not its composed skills.
+You are a GATHERER. You stand up the existing producers/reviewers and collect what they emit; you do not reimplement their judgement. `to-task` and `review` stay the single sources, **composed and UNCHANGED** — only `batch-qa`'s orchestration is absorbed (by the advance engine), not its composed skills.
 
-1. **`review` (`skills/review/`) — for a slice / PRD / code.** Run the `review` skill; it EMITS a verdict `{verdict, findings:[{severity, question, context}]}` and writes nothing. ROUTE its **`block`** findings into your emitted questions (a blocking finding is an open question that must be answered before the item advances). A non-blocking finding is a nit — record it as an optional/low-priority question, never as a blocker. Do NOT re-derive review's lenses here; you call review and carry its findings over.
-2. **The native observation-triage question — for an observation.** An observation has no gate for `review` to assess; its question is **"what becomes of this signal?"** Emit a single triage question whose answer is a `disposition` (see [the disposition vocabulary](#the-emitted-question-shape-must-match-the-sidecar)). This judgement is NATIVE to this skill (carried over from `batch-qa`) — investigate the observation's claim against current reality (code / slices / PRDs / ADRs) so the inline context and the suggested default are honest, exactly as the triage discipline demands.
+1. **`review` (`skills/review/`) — for a task / brief / code.** Run the `review` skill; it EMITS a verdict `{verdict, findings:[{severity, question, context}]}` and writes nothing. ROUTE its **`block`** findings into your emitted questions (a blocking finding is an open question that must be answered before the item advances). A non-blocking finding is a nit — record it as an optional/low-priority question, never as a blocker. Do NOT re-derive review's lenses here; you call review and carry its findings over.
+2. **The native observation-triage question — for an observation.** An observation has no gate for `review` to assess; its question is **"what becomes of this signal?"** Emit a single triage question whose answer is a `disposition` (see [the disposition vocabulary](#the-emitted-question-shape-must-match-the-sidecar)). This judgement is NATIVE to this skill (carried over from `batch-qa`) — investigate the observation's claim against current reality (code / tasks / briefs / ADRs) so the inline context and the suggested default are honest, exactly as the triage discipline demands.
 3. **The item's PRE-EXISTING open questions.** Collect what the item already carries: a `needsAnswers: true` item's `## Open questions` block, and any open question already written in the body. Carry each over verbatim as an emitted question (with its context). These are open judgement the author already named — they must surface, not be silently dropped.
 
 For each gathered question, attach **inline CONTEXT** (the relevant excerpt / `file:line` / the reasoning — so the human need not open the source item) and, where you can honestly suggest one, an **optional suggested DEFAULT** (the humility aid — never a decision).
 
 ## The emitted question shape (MUST match the sidecar)
 
-The questions you emit MUST match the **sidecar entry fields** from the `advance-sidecar-contract` slice (`work/done/advance-sidecar-contract.md`), so the engine persists them with **zero translation**. Emit each question as this shape (the field names are the sidecar's):
+The questions you emit MUST match the **sidecar entry fields** from the `advance-sidecar-contract` task (`work/tasks/done/advance-sidecar-contract.md`), so the engine persists them with **zero translation**. Emit each question as this shape (the field names are the sidecar's):
 
 ```
 question:       <the question, verbatim>
@@ -46,7 +46,7 @@ disposition:    <optional — ONLY on a triage/terminal-routing question; the
 ```
 
 - **`question` / `context` / `default`** map 1:1 onto the sidecar entry. `default` is optional (omit when you cannot honestly suggest one — never fabricate a default just to fill the field).
-- **`disposition` is present ONLY on a triage / terminal-routing question** (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's: **`promote-slice` | `promote-adr` | `keep` | `delete` | `dropped` | `needs-attention`**. `dropped` is the GENERIC "won't-proceed" terminal (it routes the item to `work/dropped/`; the specific REASON — `out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned` — lives in the item body as `reason:`, NOT in the disposition). A plain slice/PRD answer-question carries NO `disposition`.
+- **`disposition` is present ONLY on a triage / terminal-routing question** (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's (these are the live code constants the engine parses — carry them VERBATIM so the engine needs zero translation): **`promote-slice` | `promote-adr` | `keep` | `delete` | `dropped` | `needs-attention`**. `dropped` is the GENERIC "won't-proceed" terminal (the runner routes a dropped item to its regime's terminal — `tasks/cancelled/` for a task, `briefs/dropped/` for a brief; the specific REASON — `out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned` — lives in the item body as `reason:`, NOT in the disposition). A plain task/brief answer-question carries NO `disposition`.
 - **You do NOT assign ids, `answered:`, `answer:`, or `allAnswered`.** Those are the SIDECAR's machine-owned fields — the engine assigns the stable monotonic id (`q1`, `q2`, …), the human fills `answer:`, and the serialiser derives `answered:`/`allAnswered`. You emit only the four authoring fields above; the engine owns the rest. (This is precisely why you must not write the sidecar: you do not own its machine fields.)
 
 Because the shape is the sidecar's, the engine APPENDS your questions to any existing sidecar (never overwriting an already-answered entry) and writes the whole thing in one CAS-atomic commit. You need not know any of that — you just emit the four fields.
@@ -61,14 +61,14 @@ questions:
   - question:    <…>
     context:     <…>
     default:     <… or omitted>
-    # (no disposition — a slice/PRD answer-question)
+    # (no disposition — a task/brief answer-question)
   - question:    <… the observation triage question …>
     context:     <…>
     default:     <… e.g. the suggested disposition …>
     disposition: promote-slice | promote-adr | keep | delete | dropped | needs-attention
 ```
 
-If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative disposition the PRD's auto-triage bar covers, nothing pre-existing) — emit an **empty question set** and say so. Surfacing nothing is a valid, honest result; do not manufacture a question to look busy.
+If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative disposition the repo's auto-triage bar covers, nothing pre-existing) — emit an **empty question set** and say so. Surfacing nothing is a valid, honest result; do not manufacture a question to look busy.
 
 ### How the caller persists your questions (NOT your job — for orientation only)
 
@@ -79,13 +79,13 @@ If the item carries **no open judgement** (review approves with no blocking find
 
 You stay **human-invokable**. A human with no runner can invoke this skill by hand, take the emitted questions, and persist them one of two ways:
 
-- **Persist via the `advance` verb** — the apply/surface rung of the `advance` command (a **sibling top-level verb**, like `do` and `run`). It is `advance`, **NOT `do advance`** — `advance` is its own verb, and `do` subcommands are REJECTED in the `advance-loop` PRD. (The `advance` verb is built in a later slice; until it lands, use the hand-written path below.)
+- **Persist via the `advance` verb** — the apply/surface rung of the `advance` command (a **sibling top-level verb**, like `do` and `run`). It is `advance`, **NOT `do advance`** — `advance` is its own verb, and `do` subcommands are REJECTED in the `advance-loop` brief. (The `advance` verb is built in a later task; until it lands, use the hand-written path below.)
 - **Hand-write the documented sidecar format** — write `work/questions/<type>-<slug>.md` by hand per the format in `advance-sidecar-contract` (frontmatter + one entry per emitted question; you fill `id`/`answered:` as the format documents). Because the emitted shape already matches the sidecar entry, this is a transcription, not a translation.
 
-**No separate write-skill is added.** Hand-writing the sidecar (or the `advance` verb) is enough; a dedicated `record-questions` write-skill is DEFERRED in the PRD unless hand-writing proves annoying. Do not invent one here.
+**No separate write-skill is added.** Hand-writing the sidecar (or the `advance` verb) is enough; a dedicated `record-questions` write-skill is DEFERRED in the brief unless hand-writing proves annoying. Do not invent one here.
 
 ## Boundaries (the scope fence)
 
-- **`to-slices` / `review` stay COMPOSED and UNCHANGED (US #35).** You call them; you never modify or reimplement them. They are the single sources for slicing/reviewing judgement — only `batch-qa`'s orchestration is absorbed (by the engine), not the producer/reviewer skills.
+- **`to-task` / `review` stay COMPOSED and UNCHANGED (US #35).** You call them; you never modify or reimplement them. They are the single sources for slicing/reviewing judgement — only `batch-qa`'s orchestration is absorbed (by the engine), not the producer/reviewer skills.
 - **You absorb only `batch-qa`'s question-FORMULATION judgement** (the composed review + native triage + pre-existing-question gather, with inline context + suggested defaults). `batch-qa`'s BOUND / APPLY / ITERATE / one-file orchestration is the ENGINE's job now (or `orchestrate`'s, for the human batch) — NOT yours. You formulate the questions for ONE item; you do not batch, apply, or iterate.
 - **You write nothing and you invent no answer.** Both laws, restated because they are the whole point: GATHER-only, PERSIST-NEVER; surface the residue, NEVER invent an answer.

@@ -153,11 +153,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 
 	it('substitutes <slug> everywhere it appears in the canonical text', () => {
 		const emitted = wrapper('my-slug', 'my-prd');
-		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), which
-		// this notes-regroup + task-board-rename slice deliberately leaves UNTOUCHED
-		// (the protocol-doc mirror is a sibling slice). So the emitted slice-body path
-		// is still the protocol's current `work/backlog/<slug>.md`.
-		expect(emitted).toContain('work/backlog/my-slug.md');
+		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), now
+		// cut over to the new layout/vocabulary by the protocol-docs/skills/setup
+		// vocabulary slice. The emitted task-body path is `work/tasks/todo/<slug>.md`.
+		expect(emitted).toContain('work/tasks/todo/my-slug.md');
 		expect(emitted).not.toContain('<slug>');
 	});
 
@@ -187,10 +186,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 	it('the assembled wrapper carries the ## Decisions block + reframed decision bar (Part B)', () => {
 		const emitted = wrapper('example', 'my-prd');
 		expect(emitted).toContain('## Decisions');
-		// The reframed bar: a choice touching another command/flag/slice or a
+		// The reframed bar: a choice touching another command/flag/task or a
 		// user-visible default is a DESIGN decision, not a small factual gap.
 		expect(emitted).toMatch(/DESIGN decision/);
-		expect(emitted).toMatch(/command\/flag\/slice/);
+		expect(emitted).toMatch(/command\/flag\/task/);
 		expect(emitted).toMatch(/USER-VISIBLE DEFAULT|user-visible default/i);
 		// It must NOT block the build (record, proceed).
 		expect(emitted).toMatch(/does NOT stop\s+the build/i);
@@ -260,7 +259,7 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
 			cwd: scratch.root,
 		});
-		expect(out).toContain('work/backlog/example.md');
+		expect(out).toContain('work/tasks/todo/example.md');
 		expect(out).toContain('SLICE-BODY');
 		expect(out).not.toContain('<slug>');
 	});
@@ -690,7 +689,7 @@ describe('renderPrompt — slug given', () => {
 	it('renders the wrapper + slice prompt for an explicit slug', () => {
 		seedSlice(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/backlog/given.md');
+		expect(out).toContain('work/tasks/todo/given.md');
 		expect(out).toContain('the-prd');
 		expect(out).toContain('GIVEN-BODY');
 		expect(out).not.toContain('<slug>');
@@ -705,7 +704,7 @@ describe('renderPrompt — slug given', () => {
 		gitIn(['switch', '-q', '-c', 'work/other'], scratch.root);
 		seedSlice(scratch.root, 'backlog', 'given', '> GIVEN-BODY');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/backlog/given.md');
+		expect(out).toContain('work/tasks/todo/given.md');
 		expect(out).toContain('GIVEN-BODY');
 	});
 });
@@ -731,7 +730,7 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 		initRepoOnBranch('work/inferred');
 		seedSlice(scratch.root, 'in-progress', 'inferred', '> INFERRED-BODY');
 		const out = renderPrompt({cwd: scratch.root, env: gitEnv()});
-		expect(out).toContain('work/backlog/inferred.md');
+		expect(out).toContain('work/tasks/todo/inferred.md');
 		expect(out).toContain('INFERRED-BODY');
 	});
 
