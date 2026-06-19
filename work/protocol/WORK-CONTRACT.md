@@ -10,20 +10,32 @@ This is the shared contract between the **slices** skill (producer) and the **li
 
 ```
 work/
-  # ---- WORK ITEMS: status IS the folder; they FLOW via `git mv` ----
-  prd/<slug>.md            # PRDs / design docs to slice (ready to slice)
-  slicing/<slug>.md        # TRANSIENT HELD LOCK: a PRD is CURRENTLY being sliced
-                           #   (not a resting state) — see note below
+  # ---- WORK ITEMS: DURABLE status IS the folder; they FLOW via `git mv` on `main` ----
+  # PRD lifecycle (staging → pool → sliced):
+  pre-prd/<slug>.md        # STAGING: a PRD not yet admitted to the auto-slice pool
+                           #   (untrusted/agent-authored output lands here; a human promotes)
+  prd/<slug>.md            # the AUTO-SLICE POOL: PRDs eligible to be sliced
   prd-sliced/<slug>.md     # SLICED, resting PRDs — the PRD `done/` analogue; the
                            #   SOURCE OF TRUTH for sliced-ness (see note below)
-  backlog/<slug>.md        # sliced, grabbable items — NOT yet claimed
-  in-progress/<slug>.md    # claimed (moved here via `git mv` during claim)
-  needs-attention/<slug>.md # claimed + attempted but STUCK — bounced back for a human
-  done/<slug>.md           # completed (moved here in the work PR)
+  # Slice lifecycle (staging → pool → terminal):
+  pre-backlog/<slug>.md    # STAGING: a slice not yet admitted to the agent pool
+                           #   (review-first / untrusted output lands here; a human promotes)
+  backlog/<slug>.md        # the AGENT POOL: sliced, grabbable items eligible to claim
+  done/<slug>.md           # completed (moved here durably on `main` at integration)
   dropped/<slug>.md        # durable "won't-proceed" records (lightweight ADR);
                            #   generic terminal — the REASON
                            #   (out-of-scope / superseded by <x> / duplicate /
                            #   abandoned) lives in the item body as `reason:`
+
+  # ---- TRANSIENT STATUS + LOCKS: NOT on `main` — on per-item lock refs ----
+  # `in-progress` (claimed/building), `needs-attention` (stuck), `slicing` (a PRD
+  # being sliced), and `advancing` (a tick holding an item) are NO LONGER `main`
+  # folders. They collapse into ONE per-item lock on a hidden
+  # `refs/agent-runner/lock/<type>-<slug>` ref (ADR `ledger-status-on-per-item-lock-refs`):
+  # a two-axis entry `action: implement|slice|advance` × `state: active|stuck`
+  # (+ holder/since, reason iff stuck). `in-progress` = lock held active for
+  # implement; `needs-attention` = lock held stuck. A human reads in-flight state via
+  # `agent-runner status`/`scan` (which read the lock refs), NOT by `ls`-ing a folder.
 
   # ---- CAPTURE BUCKETS: NOT status-governed; they do NOT flow/move ----
   ideas/<slug>.md          # proposed, pre-PRD ideas — EDITABLE, deletable
@@ -31,9 +43,12 @@ work/
   findings/<slug>.md       # VERIFIED external/domain ground truth — durable
 ```
 
-### Two governance regimes (this is the key distinction)
+> **`backlog/` is the agent POOL today; `pre-backlog/` is its STAGING pre-pool (position-gate STEP-A, landed). A later, separate rename (`folder-taxonomy-reorg-and-rename`, STEP-B) will rename `backlog → todo` and `pre-backlog → backlog` — a pure constants/`git mv` flip with no behaviour change. Until that lands, read "the pool" as `backlog/`.**
 
-- **Work items** (`prd`/`slicing`/`prd-sliced`/`backlog`/`in-progress`/ `needs-attention`/`done`/`dropped`) are the lifecycle: **status = the folder**, transitions are `git mv`, each has one destiny. This is the conflict-safe core. (PRDs flow `prd/ → slicing/ → prd-sliced/` — the build machine minus `done/`; see the `slicing/` note below.) `dropped/` is the generic terminal that GENERALISES the previous `out-of-scope/`: an item that will not proceed for ANY reason (superseded, out-of-scope, duplicate, abandoned/obsolete) rests there with the REASON in the body (`reason:` line).
+### Two governance regimes + the substrate split (the key distinctions)
+
+- **Work items' DURABLE positions are the folder** (`pre-prd`/`prd`/`prd-sliced`; `pre-backlog`/`backlog`/`done`/`dropped`): **status = the folder**, transitions are `git mv` on `main`, each has one destiny. This is the conflict-safe core for the durable resting records. The ONLY moves ever made on `main` are these durable resting transitions: `backlog → done`, `prd → prd-sliced`, `backlog → dropped`. `dropped/` is the generic terminal that GENERALISES the previous `out-of-scope/`: an item that will not proceed for ANY reason (superseded, out-of-scope, duplicate, abandoned/obsolete) rests there with the REASON in the body (`reason:` line).
+- **Transient status + locks are NOT on `main`** — they are per-item lock refs (ADR `ledger-status-on-per-item-lock-refs`). `in-progress`/`needs-attention`/`slicing`/`advancing` are lock-ref state, not folders. A work branch cut from `main` therefore inherits NO transient status (this dissolved the old rename/rename rebase-conflict class and retired the `drop-bookkeeping-rebase` machinery). Eligibility/dependency resolution stay OFFLINE on `main` (`blockedBy → done/`, `sliceAfter → prd-sliced/`); only the operational "what's in flight" view (`status`/`scan`) reads the lock refs.
 - **Capture buckets** (`ideas`/`observations`/`findings`) are **NOT work items** and are **exempt from status = folder** — they are _notes_, not units of work. They do not move through statuses; they sit in their bucket, and the folder is the inbox (`ls work/observations/` = the live signal list). They leave only by **deletion** (git history is the archive). A note may _spawn_ work (a slice, an idea, an ADR) created independently — the note does not "become" or `git mv` into that work; it is simply deleted once it is no longer a useful signal. **Operational discharge test for a promoted note:** a note is dischargeable (deletable) the moment a **self-contained** artifact carries its signal — verify the spawned slice/ADR actually contains the mechanism + fix shape (not just a back-pointer), then delete the note. Do NOT keep it until the spawned work lands in `done/`: "delete once the slice lands" is itself the resolved-but-kept contradiction (the note stops being a live _signal_ the moment it is captured into actionable work, not when that work completes). If the spawned artifact is NOT self-contained, the bug is the artifact (fix it to carry the signal), not a reason to keep the note.
 
 > **Every capture-bucket note and every work item has a DIRECTION and a LIVENESS — never manufacture a backward artifact to look compliant.** Forward artifacts — a `backlog/` slice, an _open_ `observations/` signal — describe work that is **pending or currently-signalled**, never the past. So: work that is **already done** does NOT get a slice or observation back-filled to narrate it (a backlog slice with pre-ticked acceptance criteria is a changelog wearing a spec's shape); completed work is recorded as a `done/` record landed _with_ the code plus the commit message, owned by whoever does the git transition. And a captured note is LIVE: it leaves the inbox **by deletion** the moment it stops being a live signal — a note annotated "resolved" and kept is a contradiction (there is no `resolved` status; discharge it by deleting it, its lasting product being the slice/ADR/commit it spawned). This binds an agent invoked **outside** the runner too: building directly is fine when asked, but do not retroactively mint forward artifacts for it afterward.
@@ -57,38 +72,28 @@ work/
 >
 > Put `source:` in the finding's frontmatter (see below) and, when the provenance is non-obvious, expand on it in the body. A finding without a source is an `observations/` signal, not a finding.
 
-**For work items, status is the folder a file lives in — never a frontmatter field.** Claiming / finishing = moving the file between folders with `git mv`. This is what makes concurrent updates safe: two agents moving _different_ files never conflict. (Capture buckets are exempt — see above.)
+**For work items, DURABLE status is the folder a file lives in — never a frontmatter field.** Finishing / dropping / slicing-complete = moving the file between durable folders with `git mv` on `main`. This is what makes concurrent durable updates safe: two agents moving _different_ files never conflict. (Transient status — claimed/stuck/being-sliced — is NOT a folder move; it is a per-item lock ref, see above. Capture buckets are exempt too.)
 
-### The PRD lifecycle: `prd/ → slicing/ → prd-sliced/` (the build machine minus `done/`)
+### The PRD lifecycle: `prd/` (pool) → `prd-sliced/` on `main`; the slicing HOLD is a lock ref
 
-A PRD flows through the SAME folder state machine as a slice, **minus `done/`**: `work/prd/` (ready to slice) → `work/slicing/` (the held LOCK, being sliced) → `work/prd-sliced/` (sliced, resting). The **folder is the source of truth for sliced-ness**, exactly as `work/done/` is for slices (and as `done/` carries no `done:` marker). Re-slicing a reshaped PRD is `work/prd-sliced/ → work/prd/` (reopen-to-ready, mirroring `done/ → backlog/`).
+A PRD rests in `work/prd/` (the auto-slice pool) and, when sliced, moves durably to `work/prd-sliced/` on `main`. The **folder is the source of truth for sliced-ness**, exactly as `work/done/` is for slices (and as `done/` carries no `done:` marker). Re-slicing a reshaped PRD is `work/prd-sliced/ → work/prd/` (reopen-to-ready, mirroring `done/ → backlog/`).
 
-**`slicing/` — the PRD-slicing concurrency lock (a TRANSIENT HELD LOCK).** `work/slicing/<slug>.md` is **not a resting/post-slice state** — it is a _transient held lock_ that serialises _concurrent_ slicers (two CI runs, or human
+**The slicing HOLD is a per-item lock, NOT a `work/slicing/` folder.** Slicing a PRD acquires the unified per-item lock with `action: slice` on `refs/agent-runner/lock/prd-<slug>` (ADR `ledger-status-on-per-item-lock-refs`) — a create-only ref push that is self-arbitrating (winner creates it; a concurrent slicer loses the same CAS definitively, no retry budget), so a PRD is never double-sliced. The PRD body STAYS in `work/prd/` while held (it does not move to a `slicing/` folder). On a **successful slice** the release performs the durable `work/prd/ → work/prd-sliced/` move on `main` in the SAME runner-owned commit that emits the backlog slices, then releases the lock. On an **aborted / unclear** slice the lock is released with no `main` move (the PRD already rests in `prd/`), or the lock is marked `stuck` for a human.
 
-- CI) so a PRD is never double-sliced. Acquiring the lock races a `git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit to the arbiter via the SAME compare-and-swap the build-claim uses (winner holds the lock; a loser backs off). On a **successful slice** the release transition moves the PRD `work/slicing/ → work/prd-sliced/` (the sliced resting state) in the SAME runner-owned commit that emits the backlog slices. On an **aborted / unclear** slice the lock release instead returns the PRD `work/slicing/ → work/prd/` (re-slice later) or routes it `work/slicing/ → work/needs-attention/`.
+- **Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER, the SOLE signal.** There is no `sliced:` frontmatter marker (it was removed in `remove-sliced-marker-step-b`); the folder is canonical. A PRD whose lock is held `action: slice` is _being sliced right now_; a PRD in `prd-sliced/` _has been sliced_; a PRD in `prd/` is _to-slice_.
+- **Edit a PRD when its slice-lock is NOT held.** While the slice lock is held the PRD is mid-slicing; edit it before slicing starts or after it lands (in `prd/` or `prd-sliced/`), not while the lock is held. (A human on a stale local checkout won't see the durable `git mv` until they fetch — the protocol guarantees no _silent corruption_, not no _human surprise_.)
+- **Release fails loud on a concurrent edit (never a silent stale slice).** If the held PRD body was edited while the lock was held, the release detects it (the held content no longer matches the snapshot the lock took) and FAILS LOUD: the slicing is stale → re-slice from the edited PRD or mark the lock stuck. The release NEVER force-restores over the edit or emits slices cut from a stale snapshot.
+- **The human path needs no lock.** A human slicing locally with no agent running has no contention and may slice on `main` directly — the lock is mandatory for the agent, optional for the human (parallel to "the runner never skips verify; the human may").
 
-* **Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER, the SOLE signal.** There is no `sliced:` frontmatter marker (it was removed in `remove-sliced-marker-step-b`); the folder is canonical. A PRD in `slicing/` is _being sliced right now_; a PRD in `prd-sliced/` _has been sliced_; a PRD in `prd/` is _to-slice_.
-* **`slicing/`-absence-from-`prd/` is the hands-off signal.** While the lock is held the PRD lives at `work/slicing/<slug>.md`, not `work/prd/` — the same folder-as-signal a claimed slice leaving `backlog/` gives. **Edit a PRD after it leaves `slicing/` (in `prd/` or `prd-sliced/`), not while it is in `slicing/`.** (A human on a stale local checkout won't see the `git mv` until they fetch — the protocol guarantees no _silent corruption_, not no _human surprise_.)
-* **Release fails loud on a concurrent edit (never a silent stale slice).** If the held PRD body was edited while the lock was held, the release detects it (the held content no longer matches the snapshot the lock took) and FAILS LOUD: the slicing is stale → re-slice from the edited PRD or route it to `needs-attention/`. The release NEVER force-restores over the edit or emits slices cut from a stale snapshot.
-* **The human path needs no lock.** A human slicing locally with no agent running has no contention and may slice on `main` directly — the lock is mandatory for the agent, optional for the human (parallel to "the runner never skips verify; the human may").
+### `needs-attention` — the post-claim "stuck" state (the lock `state: stuck`)
 
-### `needs-attention/` — the post-claim "stuck" state
+An item that was claimed and _attempted_ but could not complete is marked **stuck on its per-item lock** instead of reaching `done/`. This is the single home for every "couldn't finish, a human must look" outcome — a failed acceptance gate (red tests), a rebase/merge conflict, a slice the agent found too ambiguous to build, a timeout, or a rejected review. It is NOT a `main` folder move: the bounce is a CAS amend of the held lock entry `active → stuck` (+ the reason and any agent-surfaced questions on the entry), with NO `main` write. The item's body never moves (it rests in `backlog/`, since claim no longer relocates it).
 
-An item that was claimed (`in-progress/`) and _attempted_ but could not complete is moved to `work/needs-attention/<slug>.md` instead of `done/`. This is the single home for every "couldn't finish, a human must look" outcome — a failed acceptance gate (red tests), a rebase/merge conflict, a slice the agent found too ambiguous to build, a timeout, or a rejected review. It is the folder-native form of surfacing: there are no labels and no status field (rule 3) — the item simply _moves_, exactly like the done-move.
-
-- **Who moves it:** the runner/human that owns git transitions — NOT the build agent (which does no git). On a stuck job the runner writes the **reason** (and any questions the agent surfaced) into the file body, then `git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md` and commits it like any other transition.
-- **Not claimable:** `needs-attention/` items are NOT eligible (a `scan`/runner skips them for claiming) but ARE surfaced (a human/`status` lists them with their reason — this folder IS the "look here" set).
-- **Return path:** once the human resolves the cause (clarifies the slice, resolves the conflict, fixes the env), the item is `git mv`'d **back to `backlog/`** to be re-claimed (or work resumes on its branch directly). It must not rot in `needs-attention/`.
-- This is a _post-claim_ state. (A separate _pre-claim_ "not ready to be claimed yet" state is intentionally NOT added for now: under-specified items simply should not be written into `backlog/` until they are ready. Revisit only if a genuine intake-triage need appears.)
-- **Self-conflict on a rebase is NOT a needs-attention signal.** A `rebase/merge conflict` only counts as a stuck-state when it is a **genuine content clash between two real lines of development**. The runner's OWN bookkeeping move-only commits — `chore(<slug>): route to needs-attention; <reason>`, anchored to the slug — are NOT such a clash: they are protocol bookkeeping the runner authored AND tree-lessly moved on `main`. To make those commits identifiable in a **version-stable** way, the runner stamps a durable git **trailer** on every route-to-needs-attention move-only commit (at both author sites):
-
-  ```
-  chore(<slug>): route to needs-attention; <reason>
-
-  Agent-Runner-Bookkeeping: route-to-needs-attention
-  ```
-
-  The trailer lives on the commit OBJECT, so it travels with the kept `work/<slug>` branch to the arbiter and to any other machine (a continue-rebase runs in a fresh process, possibly on a different host — there is no in-memory value to pass). Both rebase sites (the INTEGRATION rebase, after the build; the ONBOARD continue-rebase, before re-`do` of a kept branch) DROP those bookkeeping commits before replay — identified by reading that trailer (plus the slug-anchored real subject) via **plumbing**, then driving the rebase from a self-generated `pick <fullsha>` todo. (We deliberately do NOT match git's rendered `git-rebase-todo` line: that text is a presentation detail that drifts across git versions — e.g. the `# %s` `instructionFormat` default in git 2.54 — and silently stops matching.) So a single agent re-`do`'ing its own kept branch NEVER surfaces a self-conflict to a human. The drop is strictly slug-anchored: a COMPLETED-state move (`→done`, or PRD `slicing→prd-sliced`) is NEVER dropped — those land atomically with their artifacts (code / emitted backlog slices). A real content conflict still aborts → needs-attention.
+- **Who marks it:** the runner/human that owns the lock transitions — NOT the build agent (which never touches the lock ref). On a stuck job the runner amends the lock to `state: stuck` with the reason/questions, and SAVES the recoverable work as a wip commit on the kept `work/<slug>` branch (pushed to the arbiter so it travels cross-machine).
+- **Not claimable:** a stuck item's lock is held, so it is not claimable (the create-only acquire loses); it IS surfaced — `agent-runner status`/`scan` read the lock refs and list held (in-progress) + stuck (needs-attention) items with their reasons (this is the "look here" set). `done` on `main` and a `stuck` lock may legitimately CO-EXIST (a rebase-conflict bounce of a just-completed item) without corruption.
+- **Resolve / return path:** a human resolves the cause then either `resume`s the lock (`stuck → active`, pick the work up again) or `requeue`s it (`stuck → released`; the item is already resting in the pool `backlog/`, so there is no folder bounce). A stuck/orphaned lock is nameable and clearable via `release-lock <item>` (+ a stuck-lock report in `gc --ledger`); there is no liveness heartbeat and no auto-sweep (a human asserts a lock is dead).
+- This is a _post-claim_ state. (A separate _pre-claim_ "not ready" state is the STAGING folder `pre-backlog/` — the position gate — not this.)
+- **Branch self-conflicts are gone by construction.** Because NO transient status lands on `main` (a bounce is a lock amend, not a `git mv`), a work branch cut from `main` inherits no `needs-attention`/`slicing`/`advancing` markers, so a continue/rebase is a PLAIN rebase with nothing to drop. The old `drop-bookkeeping-rebase` machinery (and its `Agent-Runner-Bookkeeping: route-to-needs-attention` trailer) existed ONLY to mitigate the inherited-marker rename/rename conflicts that on-`main` transient moves created; it was DELETED once those moves left `main` (ADR `ledger-status-on-per-item-lock-refs`). A genuine content conflict between two real lines of development still aborts → the item is marked stuck.
 
 ### Drift is a needs-attention signal (check the doc against reality first)
 
@@ -108,7 +113,7 @@ The rule is symmetric: _a discrepancy between a doc and reality is not something
 3. **Status = location, not a field.** See above.
 4. **Content-derived slugs, never counters.** Use a URL-safe slug from the title (e.g. "Historical store schema" → `historical-store-schema`). NO monotonic integer IDs — two agents would both grab "next = 43". A short hash or date prefix is fine if disambiguation is needed (`historical-store-schema` or `2026-06-03-historical-store-schema`).
 5. **Dependencies by slug, read-only.** `blockedBy: [other-slug]` references other items; an item never writes another item's file. The blocker owns its own status (its folder).
-6. **Claim state is the folder + git history, never a frontmatter field.** Who claimed an item and when is recorded authoritatively by the `git mv` into `in-progress/` and its commit (`claim: <slug> (by <who>)`). There is NO `claimed_by` / `claimed_at` frontmatter — it would only duplicate what git already holds and tempt agents to coordinate on a non-authoritative field.
+6. **Claim state is the per-item LOCK, never a frontmatter field (and no longer a folder move).** Claiming an item acquires its per-item lock (`refs/agent-runner/lock/<type>-<slug>`, `action: implement`) — a create-only ref push that is self-arbitrating (the loser is definitively told "lost", no retry budget); the body STAYS in `backlog/` (claim writes nothing to `main`, so an agent can claim even on a protected `main`). The holder/since ride the lock entry; `git` (the ref + its parentless commit) holds the authoritative record. There is NO `claimed_by` / `claimed_at` frontmatter, and no `git mv` into an `in-progress/` folder — the claimable predicate is "in the pool `backlog/` on `main` AND no lock held on its ref".
 
 ## Slice quality rule — tests must not touch the real environment
 

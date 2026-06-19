@@ -2,11 +2,13 @@
 
 This documents how a `work/backlog/<slug>.md` item is **atomically claimed** by one agent (human or AFK) when several may try at once. The **slices** skill does not perform claims — it only emits files in a shape this protocol can consume. The **lifecycle** skill implements the steps here.
 
-## The core idea: claim = an atomic compare-and-swap on `main`
+## The core idea: claim = acquiring the item's per-item LOCK (an atomic create-only ref push)
 
-A claim is a tiny, fast commit (just a `git mv backlog/ → in-progress/`) that **races to land on the arbiter's `main` before any real work happens.** Git's ref-update-on-push IS the atomic compare-and-swap: the first push to `main` wins, a concurrent non-fast-forward push is rejected. The loser wasted ~one commit, not real work, and simply picks another item.
+A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/backlog/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`). (ADR `ledger-status-on-per-item-lock-refs`.)
 
-**Separate the claim commit from the work commit.** Claim first (cheap, collision-detecting); do the work only after the claim has provably landed.
+This SUPERSEDES the older claim mechanism (a `git mv backlog/ → in-progress/` micro-commit raced on the shared `main` ref): that shared-`main` CAS falsely-contended between DIFFERENT items under parallelism and exhausted its retry budget; per-item lock refs never falsely contend. The claimable predicate is now **"the body is in the pool `backlog/` on `main` AND no lock is held on its ref."**
+
+**Separate the claim from the work.** Acquire the lock first (cheap, collision-detecting); do the work only after the lock is provably held.
 
 ## The arbiter: one serialization point for updating `main`
 
@@ -30,54 +32,55 @@ git remote add arbiter file:///path/to/project-work.git
 
 When back online, repoint: `git remote set-url arbiter <github-url>` (or push the bare repo's `main` up). Same protocol throughout.
 
-## The script: `scripts/claim.sh`
+## The command: `agent-runner claim` / `do`
 
-These steps are implemented (and verified against real git, including a truly simultaneous two-agent race) by [scripts/claim.sh](scripts/claim.sh) — so a human or agent does not hand-run the dance:
+These steps are implemented (and verified against real git, including a truly simultaneous two-agent race) by the runner — so a human or agent does not hand-run the dance:
 
 ```sh
-scripts/claim.sh <slug> [--arbiter <remote>] [--by <who>] [--retries N] [--dry-run]
+agent-runner claim <slug> [--arbiter <remote>] [--by <who>] [--dry-run]
 ```
 
-Exit codes: `0` claimed · `2` not claimable (not in backlog, or lost the race) · `3` push kept being rejected (contended — retry later) · `1` usage/env error. It refuses to run on a dirty tree, makes the failed-move and no-op cases fatal (never a false "claimed"), and verifies the arbiter's `main` actually points at your claim after the push. The steps it performs:
+Exit codes: `0` claimed · `2` not claimable (not in the pool, or the lock is already held = lost) · `1` usage/env error. The acquire is self-arbitrating (no `3 contended` retry class, unlike the old shared-`main` CAS — a per-item lock never falsely contends). The steps it performs:
 
 ## Claim steps
 
 ```
-CLAIM (fast, collision-detecting):
-  1. git fetch <arbiter>
-  2. git switch -c claim/<slug> <arbiter>/main        # branch off the latest main
-  3. git mv work/backlog/<slug>.md work/in-progress/<slug>.md
-  4. git commit -m "claim: <slug> (by <who>)"
-     # who/when is recorded by THIS commit, not a frontmatter field (no claimed_by/claimed_at)
-  5. git push <arbiter> claim/<slug>:main --force-with-lease    # ATOMIC CAS
-        # (a plain ff-only push works too; NEVER --force)
-     ├─ ACCEPTED  -> the claim is atomically yours.
-     └─ REJECTED (non-fast-forward) -> someone/something moved main:
-            git fetch <arbiter>
-            is work/backlog/<slug>.md still present on <arbiter>/main?
-              NO  -> you lost the race for THIS item:
-                     delete claim branch/worktree, pick a DIFFERENT backlog item.
-              YES -> main merely advanced (a different item landed):
-                     rebase claim/<slug> onto <arbiter>/main and retry push.
-                     Cap retries (e.g. 3) then back off, to avoid livelock.
+CLAIM (acquire the per-item lock; collision-detecting, no body move):
+  1. fetch the lock refs from <arbiter> (refs/agent-runner/lock/*)
+  2. confirm the body is still in the pool: work/backlog/<slug>.md on <arbiter>/main
+  3. build a PARENTLESS lock-entry commit (action: implement, state: active,
+     holder/since) with plumbing — never touches the working tree/HEAD
+  4. push it create-only to refs/agent-runner/lock/<type>-<slug>
+     with --force-with-lease=<ref>:   (the EMPTY expected value = "ref must be absent")
+     ├─ ACCEPTED  -> the lock is atomically yours (the body stays in backlog/;
+     |              NOTHING was written to main).
+     └─ REJECTED  -> the ref already exists: another writer holds this SAME item's
+                    lock. You LOST, definitively (exit 2). No retry budget — pick a
+                    DIFFERENT pool item. (holder/since are readable on the lock entry
+                    via `agent-runner status`.)
+     # who/when rides the lock entry, not a frontmatter field (no claimed_by/claimed_at).
 
-WORK (only after the claim landed):
-  6. git switch -c work/<slug> <arbiter>/main      # NEW main, includes your claim
+WORK (only after the lock is held):
+  5. git switch -c work/<slug> <arbiter>/main      # the body is still in backlog/ on main
      (use a dedicated worktree/clone for isolation when running AFK / in parallel)
-  7. do the work; tests green.
-  8a. SUCCESS path — in the same PR/merge:
-        git mv work/in-progress/<slug>.md work/done/<slug>.md
-      commit it together with the work, using the completed-slice message format
-      (see below).
-  8b. STUCK path — if it could NOT complete (red gate, rebase/merge conflict,
-      slice too ambiguous to build, timeout, rejected review): the runner writes
-      the reason (+ any surfaced questions) into the file body and
-        git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md
-      committing/pushing it like any other transition. A human resolves the cause
-      and `git mv`s it back to work/backlog/ to be re-claimed. (The build agent
-      never does this move — the runner owns git transitions.)
-  9. integrate to <arbiter>/main as normal (PR on GitHub, or ff/rebase push offline).
+  6. do the work; tests green.
+  7a. SUCCESS path — the runner, at integration, lands the DURABLE move on main:
+        git mv work/backlog/<slug>.md work/done/<slug>.md
+      committed together with the work (completed-slice message, see below), then
+      RELEASES the lock (delete the ref). Order: durable main-move FIRST, lock
+      release SECOND — a crash between leaves a done-on-main item with a stale lock,
+      and recovery treats the main record as authoritative and clears it.
+  7b. STUCK path — if it could NOT complete (red gate, rebase/merge conflict, slice
+      too ambiguous to build, timeout, rejected review): the runner amends the held
+      lock active -> stuck (+ reason and any surfaced questions ON THE LOCK ENTRY)
+      and SAVES the recoverable work as a wip commit on the kept work/<slug> branch
+      (pushed to the arbiter). NO main write, NO folder move. A human resumes
+      (stuck -> active) or requeues (stuck -> released; the body is already in the
+      pool). (The build agent never touches the lock — the runner owns it.)
+  8. integrate to <arbiter>/main as normal (PR on GitHub, or ff/rebase push offline).
 ```
+
+> The durable `backlog → done` / `prd → prd-sliced` / `backlog → dropped` moves are the ONLY writes to the shared `main` ref, so THEY keep a small retrying CAS; the per-item LOCK acquire/release never does (it is self-arbitrating). The two are independent substrates that may legitimately disagree (e.g. `done` on `main` + a `stuck` lock co-exist after a rebase-conflict bounce of a just-completed item).
 
 ## The prompt handed to the work agent (the `## Prompt` wrapper)
 
@@ -85,9 +88,10 @@ When a human or an autonomous runner dispatches an agent to do the WORK phase, t
 
 ```
 You are completing one work slice in this repo. It has already been claimed for
-you and lives at work/in-progress/<slug>.md — read that file fully; it is your
-complete brief (What to build, Acceptance criteria, Prompt). Also read its source
-PRD (the slice's `prd:` field, at work/prd/<prd>.md) for context.
+you (its per-item lock is held) and lives at work/backlog/<slug>.md — read that
+file fully; it is your complete brief (What to build, Acceptance criteria, Prompt).
+Also read its source PRD (the slice's `prd:` field, at work/prd/<prd>.md) for
+context.
 
 Implement it to satisfy every Acceptance criterion. TDD where the slice asks for
 it; match the repo's house style.
@@ -147,9 +151,11 @@ that compiles is far more expensive than the question, because every later artif
 that reuses the muddled term inherits the debt.
 
 Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
-move any files between work/ folders, and do not touch work/in-progress/<slug>.md.
-The runner (or human) owns every git-state transition. (Your TESTS may freely
-create and operate on their OWN throwaway git repos — that is expected.)
+move any files between work/ folders, and do not touch the item's lock ref or its
+body at work/backlog/<slug>.md. The runner (or human) owns every git-state
+transition (the durable main-moves AND the per-item lock acquire/release/amend).
+(Your TESTS may freely create and operate on their OWN throwaway git repos — that
+is expected.)
 
 Leave a CLEAN working tree — only the changes this slice intends. The runner
 commits everything untracked (`git add -A`), so any scratch, debug, or
@@ -160,8 +166,9 @@ untracked file or editing .gitignore is producing clean WORK, like writing sourc
 — the "no git" rule above (no stage/commit/push/move) still holds.
 
 When the acceptance criteria are met and the repo's build/test/format checks are
-green, STOP and report what you did. The runner handles the `git mv` to
-work/done/, the completion commit, and integration.
+green, STOP and report what you did. The runner handles the durable `git mv` of the
+body backlog/ -> work/done/, the completion commit, the lock release, and
+integration.
 ```
 
 Why the "no git" line is **in-band** in the prompt (not delegated to a host config like a global `AGENTS.md`): a portable runner cannot assume the target machine has any such rule, so the boundary travels with the prompt. This keeps the acceptance-test gate authoritative (the agent can't commit/merge around it) and the runner the single owner of git state.
@@ -176,7 +183,7 @@ The commit that completes a slice (the work + the `git mv` to `work/done/`) uses
 
 - `<type>` follows conventional-commits (`feat`, `fix`, `docs`, `chore`, …); use `feat` for a slice that adds behaviour.
 - `<slug>` is the slice slug (its `work/done/<slug>.md` basename).
-- the trailing **`; done`** marks the backlog→done transition landing in this commit (mirrors the `claim: <slug>` message that marks backlog→in-progress).
+- the trailing **`; done`** marks the durable `backlog→done` transition landing in this commit (the claim itself has no `main` commit to mirror — it is a lock-ref acquire, not a folder move).
 
 Example: `feat(scan): cross-repo eligible-work queue (read-only); done`
 
