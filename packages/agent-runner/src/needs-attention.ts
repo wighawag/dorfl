@@ -304,36 +304,35 @@ export interface NeedsAttentionItem {
 }
 
 /**
- * Route a stuck claimed item to `needs-attention/` (ADR §12). The RUNNER calls
- * this; the build agent never does. It always **saves the aborted work** and
- * produces TWO commits on `work/<slug>` (never-lose-work; PRD
- * `needs-attention-cherry-pick`):
+ * Save the RECOVERABLE half of a stuck-item bounce (ADR §12). The RUNNER calls
+ * this; the build agent never does.
  *
- *   1. A **wip** commit holding the aborted agent work (`git add -A` of whatever
- *      the agent left uncommitted in the tree). This is committed FIRST and
- *      stays BELOW the tip, so a surfacing strategy that publishes only the tip
- *      never leaks the half-finished work onto the ledger. When the tree is
- *      already clean (nothing uncommitted) no wip commit is made — there is no
- *      aborted work to save.
- *   2. A **move-only** commit on top (the tip): the reason appended to the file
- *      BODY (prose, NOT a frontmatter field — WORK-CONTRACT rule 3) +
- *      `git mv work/<src>/<slug>.md work/needs-attention/<slug>.md` (mkdir -p the
- *      destination first — git tracks no empty dirs). The source is whichever of
- *      `in-progress/` (the test-gate path, before the done-move) or `done/` (the
- *      rebase-conflict path, after it) the item currently sits in. This commit is
- *      PURELY the move + reason — it is the one a surfacing strategy cherry-picks.
+ * **Post `ledger-status-per-item-lock-refs` cut-over (slices 9a–9d, decision i+):**
+ * a bounce is now a PURE LOCK AMEND — the seam (`bounceToStuckLock` →
+ * `markStuckItemLock`) marks the per-item lock `state: stuck` and records the
+ * reason/questions ON THE LOCK ENTRY. There is NO `git mv` to a
+ * `needs-attention/` folder and NO on-`main` surface commit. The item body never
+ * moves (it rests in `backlog/` since claim stopped moving it, slice 9a). So what
+ * REMAINS here is purely the never-lose-work half:
  *
- * Optionally pushes the work branch to the arbiter (the RECOVERABLE half) so the
- * saved wip + the move travel cross-machine, when an `arbiter` is given. The
- * push is BEST-EFFORT (an unreachable arbiter leaves the local branch + the
- * ledger surface standing — recovery degrades, never crashes the bounce),
- * BRANCH-PARAMETERISED (default `work/<slug>`; an explicit `branch` overrides;
- * `pushBranch: false` ⇒ push NOTHING), and EMPTINESS-GUARDED (a branch with no
- * commits beyond main, or an absent branch, is skipped — a couldn't-even-start
- * bounce has nothing to push). The branch MUST be the one HEAD is on.
+ *   1. A **wip** commit on the `work/<slug>` branch tip holding whatever the agent
+ *      left uncommitted (`git add -A`). Skipped when the tree is already clean
+ *      (no aborted work to save). No bookkeeping trailer — after the cut-over NO
+ *      transient-status move-only commit lands on a branch, so a branch rebases
+ *      PLAINLY with nothing to drop (`drop-bookkeeping-rebase` is deleted, 9d).
+ *   2. Optionally PUSH the work branch to the arbiter so the saved wip travels
+ *      cross-machine and a `requeue` continues from the branch tip. BEST-EFFORT
+ *      (an unreachable arbiter leaves the local branch standing — recovery
+ *      degrades, never crashes the bounce; retried with bounded backoff on an
+ *      outage), BRANCH-PARAMETERISED (default `work/<slug>`; an explicit `branch`
+ *      overrides — the slicing bounce passes `work/prd-<slug>`; `pushBranch: false`
+ *      ⇒ push NOTHING), and EMPTINESS-GUARDED (a branch with no commits beyond
+ *      main, or an absent branch, is skipped). The branch MUST be the one HEAD is
+ *      on. The work-branch push is NOT a `main` write.
  *
- * NEVER throws for the expected "not in-progress/done" case — it returns
- * `{moved: false, reasonNotMoved}` so consumers can branch cleanly. Genuine git
+ * The stuck STATE itself (the `state: stuck` + reason/questions) is owned by the
+ * lock amend in the seam, not by this function. NEVER throws for the expected
+ * case — returns `{moved, ...}` so consumers can branch cleanly; genuine git
  * plumbing failures still throw (they are unexpected).
  */
 export async function routeToNeedsAttention(

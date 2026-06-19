@@ -2,7 +2,20 @@
 title: The work branch carries CODE (plus only the atomic →done move); MAIN owns ledger status — eliminate the on-branch needs-attention move and the bookkeeping-drop rebase mechanism it forces
 slug: branch-carries-code-not-ledger-status-main-owns-status
 humanOnly: true
+reason: superseded
 ---
+
+> **RETIRED / SUPERSEDED 2026-06-19.** This PRD's own SUPERSESSION NOTICE said:
+> "DO NOT slice this PRD independently... if the lock PRD is adopted, retire/fold
+> this one into it." `work/prd/ledger-status-per-item-lock-refs.md` is now FULLY
+> ADOPTED (all 12 slices in `work/done/`): all transient ledger status moved off
+> `main` onto per-item lock refs, so a work branch inherits NO ledger status, the
+> on-branch needs-attention move is gone, and `drop-bookkeeping-rebase` is deleted
+> — exactly this PRD's goals, achieved as a side-effect. The preserved PRINCIPLE
+> ("main owns ledger status; the branch carries code") is generalised by the lock
+> ADR (`main` owns the DURABLE records; the lock ref owns the transient holds).
+> Nothing remains to build here. Retired to `work/dropped/` (reason: superseded).
+> The original body is kept below for provenance.
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices. (The technical-detail sections below are trimmed by `to-slices` once the work is sliced — they move into slices/ADRs and this PRD settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
 
