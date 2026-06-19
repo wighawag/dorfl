@@ -5,7 +5,7 @@
 
 	const repoUrl = 'https://github.com/wighawag/agent-runner';
 
-	// Placeholder copy. Product framing from the repo's CONTEXT.md.
+	// Product framing from the repo's CONTEXT.md and work/protocol/WORK-CONTRACT.md.
 	const pillars = [
 		{
 			title: 'Discovers',
@@ -13,33 +13,33 @@
 		},
 		{
 			title: 'Schedules',
-			body: 'Ready slices are picked and ordered across many repos at once, as a guided human loop or as an unattended autonomous runner.',
+			body: 'Ready tasks are picked and ordered across many repos at once, as a guided human loop or as an unattended autonomous runner.',
 		},
 		{
 			title: 'Claims',
-			body: 'An atomic git-ref claim protocol means the first worker to push wins the slice. No coordination server, no lock table.',
+			body: 'Claiming a task acquires its own per-item lock ref with a single create-only push. First to create it wins; the loser is told no. No coordination server, no lock table.',
 		},
 		{
 			title: 'Runs',
-			body: 'Each claimed slice is built in its own isolated worktree, taken to a green acceptance gate, and integrated. Then Dorfl moves on.',
+			body: 'Each claimed task is built in its own isolated worktree, taken to a green acceptance gate, and integrated. Then Dorfl moves on.',
 		},
 	];
 
 	const steps = [
 		{
 			n: '01',
-			title: 'Status is the folder',
-			body: 'Every work item is one markdown file. Its status is the folder it lives in (backlog → in-progress → done), never a field. No database to keep in sync.',
+			title: 'Durable status is the folder',
+			body: 'Every work item is one markdown file, on a Kanban board of folders (tasks: backlog → todo → done). Its resting status is the folder it lives in, never a field. No database to keep in sync.',
 		},
 		{
 			n: '02',
-			title: 'Claim by pushing a ref',
-			body: 'Claiming a slice moves its file backlog → in-progress with a single force-with-lease push to the arbiter. The git ref itself serialises the race.',
+			title: 'Claiming is a lock ref',
+			body: 'Claiming a task acquires a per-item lock ref, not a file move: a create-only push that is self-arbitrating, with no retry budget. The task stays in the pool, so a worker can even claim on a protected main.',
 		},
 		{
 			n: '03',
 			title: 'Build, verify, integrate',
-			body: 'A worker builds the slice on a work/<slug> branch, runs the acceptance gate, and proposes or merges. Conflicts rebase-or-abort, never auto-resolve.',
+			body: 'A worker builds the task on a work/<slug> branch, runs the acceptance gate, and proposes or merges. Conflicts rebase-or-abort, never auto-resolve.',
 		},
 	];
 </script>
@@ -110,7 +110,8 @@
 			<code class="rounded bg-slate-2 px-1.5 py-0.5 font-mono text-clay-light"
 				>work/</code
 			>
-			contract with an atomic git-ref claim protocol. Status is the folder. No database.
+			contract with an atomic git-ref claim protocol. Folders hold the durable status,
+			lock refs hold the live one. No database.
 		</p>
 		<div class="flex flex-col justify-center gap-4 sm:flex-row">
 			<a
@@ -217,7 +218,7 @@
 <span class="text-amber">npm install -g agent-runner</span>
 
 <span class="text-bone-muted"
-						># register a repo and let Dorfl pick a ready slice</span
+						># register a repo and let Dorfl pick a ready task</span
 					>
 <span class="text-amber">agent-runner remote add &lt;url&gt;</span>
 <span class="text-amber">agent-runner do</span></code
