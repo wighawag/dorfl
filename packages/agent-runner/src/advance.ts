@@ -807,7 +807,7 @@ export async function performAdvance(
 		const message =
 			'`advance` with no item is the eligible-SET form (the one-shot driver). ' +
 			'The single-item tick needs a named item: ' +
-			'`advance <slug>` / `advance prd:<slug>` / `advance obs:<slug>`.';
+			'`advance <slug>` / `advance brief:<slug>` / `advance obs:<slug>`.';
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}

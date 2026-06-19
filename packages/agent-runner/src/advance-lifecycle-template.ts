@@ -264,11 +264,11 @@ jobs:
   # \`cwd.repo.prds[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). \`jq\` unions + dedups
   # the build/slice pools AND the LIFECYCLE pools into a deduplicated GitHub
-  # Actions matrix list of explicit \`slice:<slug>\` / \`prd:<slug>\` / \`obs:<slug>\`
+  # Actions matrix list of explicit \`task:<slug>\` / \`brief:<slug>\` / \`obs:<slug>\`
   # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
   # answer-loop in propose mode (not only merge): \`obs:\` (triage untriaged
-  # observations), surface \`slice:\`/\`prd:\` (\`needsAnswers\`, no answered sidecar)
-  # AND apply \`slice:\`/\`prd:\` (\`needsAnswers\`, answered sidecar — consume the
+  # observations), surface \`task:\`/\`brief:\` (\`needsAnswers\`, no answered sidecar)
+  # AND apply \`task:\`/\`brief:\` (\`needsAnswers\`, answered sidecar — consume the
   # committed answer, closing the on-answer \`push: work/questions/**\` loop). Each
   # becomes one matrix leg → one independent \`advance --propose\`. Skipped in merge
   # mode. Inert with calm-default gates (empty triage/surface pools).
@@ -300,8 +300,8 @@ jobs:
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
         # uses explicit \`slice:\` / \`prd:\` / \`obs:\` prefixes, never bare (ADR
-        # command-surface §3a). Eligible SLICES ⇒ \`slice:<slug>\` legs (\`advance\`
-        # builds them); SLICEABLE PRDs ⇒ \`prd:<slug>\` legs (\`advance\` auto-slices
+        # command-surface §3a). Eligible TASKS ⇒ \`task:<slug>\` legs (\`advance\`
+        # builds them); SLICEABLE BRIEFS ⇒ \`brief:<slug>\` legs (\`advance\` auto-slices
         # them, capability B — \`AGENT_RUNNER_AUTO_SLICE\` above). LIFECYCLE pools:
         # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here;
         # observations have no slice/prd namespace), \`lifecycle.surface[]\` +
@@ -311,7 +311,7 @@ jobs:
         # \`cwd.repo\`; we union + dedup so the matrix has one leg per item.
         run: |
           items="$(agent-runner scan --json \\
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "brief:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=\${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "\${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -672,25 +672,27 @@ export function validateAdvanceLifecycleWorkflow(
 	), 'no emitted job step may touch `.github/workflows/**` (US #9).');
 
 	// --- Explicit slug prefixes, never bare ------------------------------------
-	require('explicit-slice-prefix', /"slice:" \+ \.slug/.test(text) ||
-		/slice:/.test(
+	require('explicit-slice-prefix', /"task:" \+ \.slug/.test(text) ||
+		/task:/.test(
 			text,
-		), 'CI must use explicit `slice:`/`prd:` slug prefixes, never bare (ADR ' +
+		), 'CI must use explicit `task:`/`brief:` slug prefixes, never bare (ADR ' +
 		'command-surface-and-journeys §3a).');
 
-	// --- The propose `enumerate` matrix must UNION sliceable PRDs --------------
+	// --- The propose `enumerate` matrix must UNION sliceable BRIEFS --------------
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
-	// slice-only `jq` would render `AGENT_RUNNER_AUTO_SLICE: 'true'` dead on the
-	// hourly cron — a ready ungated PRD would never become a matrix leg. The `jq`
-	// must enumerate `prd:<slug>` ids from `scan --json`'s sliceable-PRD pool
-	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-slice legs.
-	require('propose-enumerates-sliceable-prds', /"prd:" \+ \.slug/.test(text) &&
+	// task-only `jq` would render `AGENT_RUNNER_AUTO_SLICE: 'true'` dead on the
+	// hourly cron — a ready ungated BRIEF would never become a matrix leg. The `jq`
+	// must enumerate `brief:<slug>` ids from `scan --json`'s sliceable-BRIEF pool
+	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-task legs.
+	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
+		text,
+	) &&
 		/\.prds\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union sliceable PRDs into the ' +
-		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-slice ' +
-		'matrix leg per item alongside the eligible-slice legs ' +
+		), 'the propose-mode `enumerate` `jq` must union sliceable BRIEFS into the ' +
+		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-slice ' +
+		'matrix leg per item alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 
 	// --- The propose `enumerate` matrix must UNION the LIFECYCLE pools ----------

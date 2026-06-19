@@ -99,17 +99,17 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS sliceable PRDs into the matrix as ' +
-			'`prd:<slug>` legs alongside the slice legs (the ' +
+		'the propose `enumerate` `jq` UNIONS sliceable BRIEFS into the matrix as ' +
+			'`brief:<slug>` legs alongside the task legs (the ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` fix)',
 		() => {
 			const text = loadAdvanceCiTemplate();
-			// The slice-only jq this fix replaced left `AGENT_RUNNER_AUTO_SLICE` dead on
-			// the hourly cron — a ready ungated PRD never became a matrix leg. The new jq
-			// must read `scan --json`'s sliceable-PRD pool (`repos[].prds[]` +
-			// `cwd.repo.prds[]`) and emit `prd:<slug>` legs alongside `slice:<slug>`.
-			expect(/"slice:" \+ \.slug/.test(text)).toBe(true);
-			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			// The task-only jq this fix replaced left `AGENT_RUNNER_AUTO_SLICE` dead on
+			// the hourly cron — a ready ungated BRIEF never became a matrix leg. The new jq
+			// must read `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` +
+			// `cwd.repo.prds[]`) and emit `brief:<slug>` legs alongside `task:<slug>`.
+			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
+			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
 			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
 			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
 		},
@@ -196,13 +196,13 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		});
 
 		it(
-			'flags a regression to a SLICE-ONLY `jq` (no `prd:` legs) — the ' +
-				'sliceable-PRD pool must be enumerated',
+			'flags a regression to a TASK-ONLY `jq` (no `brief:` legs) — the ' +
+				'sliceable-BRIEF pool must be enumerated',
 			() => {
-				// Strip the PRD union from the jq: a slice-only enumerator would silently
+				// Strip the BRIEF union from the jq: a task-only enumerator would silently
 				// kill auto-slice on the hourly cron (the exact pre-fix bug).
 				const broken = base
-					.replace(/"prd:" \+ \.slug/g, '"slice:" + .slug')
+					.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
 					.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
 					.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
 				const result = withTmpTemplate(broken);

@@ -152,7 +152,7 @@ jobs:
   # eligible items + sliceable PRDs; CI runs IN-PLACE so the eligible items live
   # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
   # both eligible-SLICE pools AND both sliceable-PRD pools into a GitHub Actions
-  # matrix list (one `slice:<slug>` or `prd:<slug>` id per leg). Skipped entirely
+  # matrix list (one `task:<slug>` or `brief:<slug>` id per leg). Skipped entirely
   # in merge mode.
   enumerate:
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
@@ -184,13 +184,13 @@ jobs:
         # (`repos[].items[]` + `repos[].prds[]`) AND once for the in-place working
         # checkout (`cwd.repo.items[]` + `cwd.repo.prds[]`), each carrying `.slug`
         # and `.eligibility.eligible`. We union both surfaces and take the
-        # eligible ones as explicit `slice:<slug>` / `prd:<slug>` ids (CI MUST
+        # eligible ones as explicit `task:<slug>` / `brief:<slug>` ids (CI MUST
         # use explicit prefixes). Each becomes one matrix leg → one independent
         # `advance` → one PR — for a SLICE that is the build, for a PRD that is
         # the auto-slice (capability B, `AGENT_RUNNER_AUTO_SLICE`).
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "brief:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -201,7 +201,7 @@ jobs:
   # ── PROPOSE: a MATRIX of independent jobs (one PR per item) ──────────────────
   # True parallelism — each item is an independent PR, so a matrix is the right
   # parallel shape and `-n` is NOT needed. CI / automation MUST use explicit
-  # prefixes (`advance slice:foo` / `advance prd:foo`), never bare — an ambiguity
+  # prefixes (`advance task:foo` / `advance brief:foo`), never bare — an ambiguity
   # error would halt the job (ADR command-surface-and-journeys §"CI uses prefixes").
   advance-propose:
     needs: enumerate

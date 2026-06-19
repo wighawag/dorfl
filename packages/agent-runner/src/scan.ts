@@ -80,8 +80,8 @@ export interface ScannedBlockedItem {
  * config and computed by REUSING `lifecycle-gather.ts` → {@link buildLifecyclePools}
  * (NOT a forked predicate) so it AGREES with the `advance -n` / `run` selection.
  * This is what makes the propose-mode CI matrix enumerate the WHOLE answer-loop —
- * `obs:<slug>` triage legs, `slice:`/`prd:<slug>` surface legs (`needsAnswers`, no
- * answered sidecar) AND `slice:`/`prd:<slug>` apply legs (`needsAnswers`, answered
+ * `obs:<slug>` triage legs, `task:`/`brief:<slug>` surface legs (`needsAnswers`, no
+ * answered sidecar) AND `task:`/`brief:<slug>` apply legs (`needsAnswers`, answered
  * sidecar) — not only build/slice legs
  * (`ci-propose-matrix-enumerates-lifecycle-items`). Inert by default: with
  * `observationTriage:off` + `surfaceBlockers:false` (the calm defaults) triage +
@@ -111,12 +111,12 @@ export interface ScannedItem extends BacklogItem {
 /**
  * A PRD entry in `scan --json`'s sliceable-PRD pool — the SAME shape an eligible
  * slice carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
- * the propose-matrix `jq` filter mirrors the slice one: `select(.eligibility.eligible)
- * | "prd:" + .slug`. "Eligible" here means SLICEABLE — the per-repo `autoSlice`
+ * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
+ * | "brief:" + .slug`. "Eligible" here means SLICEABLE — the per-repo `autoSlice`
  * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `sliceablePrds`
  * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
  * the cwd section's `repo.prds`), DISTINCT from the slice-only `items[]` because
- * slices and PRDs are different verbs and project to different `slice:`/`prd:`
+ * slices and PRDs are different verbs and project to different `task:`/`brief:`
  * prefixes — a discriminator on `items[]` would pollute the surface other readers
  * already consume.
  */
@@ -139,8 +139,8 @@ export interface RepoReport {
 	 * every PRD in `work/prd/` not already in `work/prd-sliced/`, each tagged with
 	 * `eligibility.eligible` from {@link sliceablePrds} (the SAME `autoslice-gate`
 	 * predicate the mirror-side pool scan uses — NOT a forked predicate). This is
-	 * what makes the propose-mode CI matrix enumerate `prd:<slug>` legs for ready
-	 * ungated PRDs alongside `slice:<slug>` legs for eligible slices (the
+	 * what makes the propose-mode CI matrix enumerate `brief:<slug>` legs for ready
+	 * ungated PRDs alongside `task:<slug>` legs for eligible slices (the
 	 * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` slice): the
 	 * propose `enumerate` `jq` unions both pools and emits one matrix leg per item.
 	 * The `autoSlice` gate still BINDS — a repo with `autoSlice` off yields an
