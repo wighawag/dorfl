@@ -57,6 +57,25 @@ slice; here keep the existing identity prefixes (`slice`/`prd`) untouched, just
 land the brief folders + the namespaced terminals so the cutover slice has them to
 build on.
 
+> FORWARD-POINTER (planted by the conductor, drive-backlog). Like the sibling
+> notes/task-board rename (PR #177), this slice RENAMES ledger folders the runner
+> reads. The runner's `complete` now survives that (PRs #175/#176): when this
+> slice's own record is at none of the pre-rename ledger folders, it detects the
+> record in a `done`-LEAF folder and integrates the agent's tree as-is. So, as the
+> FINAL step of your work, move THIS slice's own record to its terminal
+> done-position under the CURRENT (already-renamed) layout — i.e. to
+> `work/tasks/done/<this-slug>.md` (the `tasks/` board landed in PR #177) — and
+> `git add -A`. Do NOT leave your own record in the pool (`tasks/todo/`) or it will
+> be treated as unfinished and refused. (You are NOT renaming `tasks/`; you are
+> ADDING `tasks/cancelled/` under it + the `briefs/` regime. Your own record simply
+> completes into the existing `tasks/done/`.)
+>
+> KNOWN one-file artifact (FYI, the conductor handles it at review, you need do
+> nothing): the Gate-2 review writes a `review-nits-<slug>.md` via the runner
+> binary's still-pre-rename `work-layout`, so it may land in a pre-rename folder.
+> The conductor re-homes that single file at Gate-3 (see
+> `work/notes/observations/rename-slice-gate-writes-review-nits-to-pre-rename-folder-2026-06-19.md`).
+
 ## Acceptance criteria
 
 - [ ] `work-layout` resolves the brief regime to `briefs/proposed` (staging) /
