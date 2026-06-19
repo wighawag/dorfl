@@ -644,7 +644,7 @@ export async function returnToBacklog(
 		options.message && options.message.trim() !== ''
 			? options.message.trim()
 			: undefined;
-	const backlogRel = `work/backlog/${slug}.md`;
+	const backlogRel = workItemRel('backlog', `${slug}.md`);
 
 	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
 	// section to the item BODY in `work/backlog/` (where it already rests) before the
@@ -796,8 +796,8 @@ export async function promoteFromPreBacklog(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	const sourceRel = `work/pre-backlog/${slug}.md`;
-	const destRel = `work/backlog/${slug}.md`;
+	const sourceRel = workItemRel('pre-backlog', `${slug}.md`);
+	const destRel = workItemRel('backlog', `${slug}.md`);
 
 	// Early-exit message: if NEITHER staged nor already-in-pool, there is nothing
 	// to promote (the per-attempt `plan` is the authoritative resolution against
@@ -953,8 +953,8 @@ export async function promoteFromPrePrd(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	const sourceRel = `work/pre-prd/${slug}.md`;
-	const destRel = `work/prd/${slug}.md`;
+	const sourceRel = workItemRel('pre-prd', `${slug}.md`);
+	const destRel = workItemRel('prd', `${slug}.md`);
 
 	const hasSource =
 		(

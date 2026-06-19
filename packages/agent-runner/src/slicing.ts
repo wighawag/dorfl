@@ -947,8 +947,8 @@ async function stageSlicingLifecycle(params: {
 		note,
 		env,
 	} = params;
-	const prd = `work/prd/${slug}.md`;
-	const prdSliced = `work/prd-sliced/${slug}.md`;
+	const prd = workItemRel('prd', `${slug}.md`);
+	const prdSliced = workItemRel('prd-sliced', `${slug}.md`);
 	// PROPAGATE the origin-trust PROVENANCE (slice
 	// `untrusted-origin-forces-build-propose`): read the held PRD's `origin`/
 	// `originTrust` stamp BEFORE the move, so each emitted slice can carry it. A

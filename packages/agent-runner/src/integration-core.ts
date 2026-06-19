@@ -1737,7 +1737,7 @@ export function composeProposeBody(input: {
 	if (!prose) {
 		return undefined;
 	}
-	const header = `Slice: \`work/done/${input.slug}.md\``;
+	const header = `Slice: \`${workItemRel('done', `${input.slug}.md`)}\``;
 	return `${header}\n\n${prose}`;
 }
 

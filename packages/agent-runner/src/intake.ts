@@ -1,7 +1,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
-import {workFolderRel} from './work-layout.js';
+import {workFolderRel, workItemRel} from './work-layout.js';
 import {paramCase} from './brand.js';
 import {
 	performIntegration,
@@ -1063,7 +1063,7 @@ async function dispatchSlice(params: {
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
-	const relPath = `work/backlog/${slug}.md`;
+	const relPath = workItemRel('backlog', `${slug}.md`);
 
 	// BOUNDED INTERNAL REVIEW (observation
 	// `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
