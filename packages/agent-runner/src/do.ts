@@ -1234,61 +1234,44 @@ export function recoverIsolatedOneLiner(slug: string): string {
 
 /**
  * Build the HONEST per-op fragment describing WHAT actually reached the arbiter
- * after a needs-attention route — reading the seam's captured per-op outcomes
- * (`surface`, `branchPush`) rather than ASSUMING "surfaced + pushed" off the
- * local move. Shared by every save-failure / save-stop message site so they can
- * never drift from reality (the observed bug: the report claimed "pushed" when
- * the branch push was skipped-empty or failed). A PUSH failure (HIGH severity:
- * work-at-risk / breaks cross-machine recovery) flips the fragment to a loud
- * "saved LOCALLY only" with recovery guidance.
+ * after a needs-attention route — reading the seam's captured per-op outcome
+ * (`branchPush`) rather than ASSUMING "pushed" off the local move. Shared by
+ * every save-failure / save-stop message site so they can never drift from
+ * reality (the observed bug: the report claimed "pushed" when the branch push
+ * was skipped-empty or failed). A PUSH failure (HIGH severity: work-at-risk /
+ * breaks cross-machine recovery) flips the fragment to a loud "saved LOCALLY
+ * only" with recovery guidance. The OBSERVABLE half (the stuck state) now rides
+ * on the per-item lock `state: stuck` amend — there is no separate on-`main`
+ * surface to report.
  */
 function routeReport(
 	routed: ApplyNeedsAttentionTransitionResult,
-	arbiter: string,
 	branch: string,
 ): {fragment: string; pushFailed: boolean} {
-	const surface = routed.surface ?? 'not-attempted';
 	const branchPush = routed.branchPush ?? 'not-attempted';
-	const surfaceFailed = surface === 'failed';
 	const branchFailed = branchPush === 'failed';
-	const pushFailed = surfaceFailed || branchFailed;
 
-	if (pushFailed) {
-		// HIGH severity: at least one push did not reach the arbiter — say so loudly,
-		// the work is saved LOCALLY only, and how to recover.
-		const parts: string[] = [];
-		parts.push(
-			surfaceFailed
-				? `surface to ${arbiter}/main FAILED`
-				: `surfaced on ${arbiter}/main`,
-		);
-		if (branchPush === 'skipped-empty') {
-			parts.push(`branch ${branch} skipped (nothing to recover yet)`);
-		} else if (branchFailed) {
-			parts.push(`push of ${branch} FAILED`);
-		} else if (branchPush === 'pushed') {
-			parts.push(`pushed ${branch}`);
-		}
+	if (branchFailed) {
+		// HIGH severity: the recoverable branch push did not reach the arbiter — say
+		// so loudly, the work is saved LOCALLY only, and how to recover.
 		return {
 			fragment:
-				`${parts.join('; ')} — the work is saved LOCALLY only; push it when ` +
-				'online, then `requeue` (continue), or `requeue --reset` to discard',
+				`push of ${branch} FAILED — the work is saved LOCALLY only; push it ` +
+				'when online, then `requeue` (continue), or `requeue --reset` to discard',
 			pushFailed: true,
 		};
 	}
 
-	// All pushes that were attempted succeeded (or were honestly skipped). Report
-	// the surface + branch state truthfully.
-	const parts: string[] = [];
-	if (surface === 'surfaced') {
-		parts.push(`surfaced on ${arbiter}/main`);
-	}
+	// The push that was attempted succeeded (or was honestly skipped). Report
+	// the branch state truthfully.
+	let landed: string;
 	if (branchPush === 'pushed') {
-		parts.push(`pushed ${branch}`);
+		landed = `pushed ${branch}`;
 	} else if (branchPush === 'skipped-empty') {
-		parts.push(`branch ${branch} skipped (nothing to recover yet)`);
+		landed = `branch ${branch} skipped (nothing to recover yet)`;
+	} else {
+		landed = 'saved locally';
 	}
-	const landed = parts.length > 0 ? parts.join('; ') : 'saved locally';
 	return {
 		fragment: `${landed}. Recover via \`requeue\` (continue) or \`requeue --reset\` to discard`,
 		pushFailed: false,
@@ -1371,9 +1354,7 @@ async function saveAgentFailure(params: {
 		note,
 	});
 
-	const report = routed.moved
-		? routeReport(routed, arbiter, branch)
-		: undefined;
+	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
 		? `Agent run failed building '${slug}' [${cause}] (${detail}); SAVED the ` +
 			`partial work and routed it to work/needs-attention/ (${report!.fragment}).`
@@ -1488,9 +1469,7 @@ async function saveAgentStop(params: {
 		note,
 	});
 
-	const report = routed.moved
-		? routeReport(routed, arbiter, branch)
-		: undefined;
+	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
 		? `The agent STOPPED building '${slug}' (the slice drifted / is ambiguous / ` +
 			`produced no change); routed it to work/needs-attention/ (${report!.fragment}) ` +
@@ -1648,7 +1627,6 @@ export async function performDoRemote(
 	options: DoRemoteOptions,
 ): Promise<DoResult> {
 	const note = options.note ?? (() => {});
-	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	// The runner's GIT/provider env, scoped to the configured identity (claim,
 	// push, integrate, `gh`). The AGENT launch stays ambient via `options.env`
 	// (`runDoAgent` reads it directly) — the agent must not commit as the bot.
@@ -1904,7 +1882,7 @@ export async function performDoRemote(
 				reapPreparedWorktreeLeak(mirror.url, slug, workspacesDir, env, note);
 				throw err;
 			}
-			result = await runRemotePipeline(options, tree, slug, arbiter, note, env);
+			result = await runRemotePipeline(options, tree, slug, note, env);
 			return result;
 		} finally {
 			// 7. Teardown via the strategy handle. On a CLEAN completion: reap iff clean
@@ -1982,7 +1960,6 @@ async function runRemotePipeline(
 	options: DoRemoteOptions,
 	tree: IsolatedTree,
 	slug: string,
-	displayArbiter: string,
 	note: (m: string) => void,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<DoResult> {
@@ -2143,7 +2120,6 @@ async function runRemotePipeline(
 				branch,
 				cwd,
 				arbiterRemote,
-				displayArbiter,
 				detail: err.message,
 				env,
 				note,
@@ -2162,7 +2138,6 @@ async function runRemotePipeline(
 			branch,
 			cwd,
 			arbiterRemote,
-			displayArbiter,
 			detail: message,
 			env,
 			note,
@@ -2175,7 +2150,6 @@ async function runRemotePipeline(
 			branch,
 			cwd,
 			arbiterRemote,
-			displayArbiter,
 			detail,
 			env,
 			note,
@@ -2336,12 +2310,11 @@ async function saveRemoteAgentFailure(params: {
 	branch: string | undefined;
 	cwd: string;
 	arbiterRemote: string;
-	displayArbiter: string;
 	detail: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<DoResult> {
-	const {slug, cwd, arbiterRemote, displayArbiter, detail, env, note} = params;
+	const {slug, cwd, arbiterRemote, detail, env, note} = params;
 	const branch = params.branch ?? workBranchRef('slice', slug);
 	// Same best-effort cause classification as in-place `do`'s `saveAgentFailure`
 	// (shared `classifyFailureCause`), so the remote form labels the SAME error the
@@ -2358,9 +2331,7 @@ async function saveRemoteAgentFailure(params: {
 		note,
 	});
 
-	const report = routed.moved
-		? routeReport(routed, displayArbiter, branch)
-		: undefined;
+	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
 		? `Agent run failed building '${slug}' [${cause}] (${detail}); SAVED the ` +
 			`partial work and routed it to work/needs-attention/ (${report!.fragment}).`

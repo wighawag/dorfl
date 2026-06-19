@@ -45,11 +45,11 @@ import {run} from './git.js';
  * (`in-progress` = lock held active, `needs-attention` = lock held stuck), read
  * via `agent-runner status` / `gc --ledger`'s lock report, NOT an `ls`-able folder.
  *
- * A strict superset of `integration-core.ts`'s `LEDGER_STATUS_FOLDERS` /
- * `ledger-write.ts`'s `WORK_FOLDERS` (which omit `dropped/` because the runner's
- * transitions never auto-move a slice there — it is a human disposition). A
- * read-side lint must still surface a slug that ends up in `dropped/` AND another
- * status folder, so the lint covers all three.
+ * A strict superset of `integration-core.ts`'s `LEDGER_STATUS_FOLDERS` (which
+ * omits `dropped/` because the runner's transitions never auto-move a slice
+ * there — it is a human disposition). A read-side lint must still surface a
+ * slug that ends up in `dropped/` AND another status folder, so the lint covers
+ * all three.
  *
  * The capture buckets (`ideas`/`observations`/`findings`) and the PRD-flow folders
  * (`prd`/`prd-sliced`) are NOT slice-status folders (WORK-CONTRACT.md: the buckets
