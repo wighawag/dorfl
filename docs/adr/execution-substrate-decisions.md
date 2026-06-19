@@ -7,6 +7,8 @@ created: 2026-06-03
 
 # Execution substrate decisions (ADR)
 
+> **Forward note (2026-06-19 — `folder-taxonomy-reorg-and-rename`):** skill/vocabulary renames landed after this ADR. Read `to-slices` below as **`skills/to-task/`** and the `work/` folders per the new layout (`work/tasks/todo/`, `work/briefs/ready/`, …). The substrate decisions recorded here are unchanged; only the names moved. (`claim.sh` keeps its name; it is now under `skills/to-task/scripts/`.)
+
 Captures the load-bearing decisions for how agent-runner runs work concurrently and safely, agreed during design before any of the B/C-tier slices were built. The slices `agent-workspaces`, `claim-command`, `arbiter-management`, `harness-pi`, `integration-github`, and `watch` all depend on these.
 
 ## 1. Jobs, not agents
