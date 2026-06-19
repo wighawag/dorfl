@@ -1,3 +1,4 @@
+import {readItemLock} from '../src/item-lock.js';
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, existsSync, readFileSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
@@ -261,17 +262,22 @@ describe('review-nits-observation — no observation when there is nothing to ca
 			review: true,
 			reviewGate: stubGate(BLOCK_WITH_NITS),
 			mode: 'propose',
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
-		// The BLOCK path is unchanged: routed to needs-attention, never integrated.
+		// The BLOCK path is unchanged: routed to stuck (the lock), never integrated.
 		expect(core.outcome).toBe('review-blocked');
 		expect(core.routedToNeedsAttention).toBe(true);
 		expect(nitObservations(repo, 'delta')).toHaveLength(0);
-		// The blocking finding still lands in the needs-attention body (unchanged).
-		const dest = join(repo, 'work', 'needs-attention', 'delta.md');
-		expect(existsSync(dest)).toBe(true);
-		expect(readFileSync(dest, 'utf8')).toMatch(/does not reach the slice goal/);
+		// The blocking finding lands on the stuck lock entry (the SOLE stuck record).
+		const lock = await readItemLock({
+			item: 'slice:delta',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/does not reach the slice goal/);
 	});
 });
 

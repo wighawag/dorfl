@@ -145,16 +145,13 @@ describe('complete — gate', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('gate-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
-		// The item is NOT left dangling in in-progress/, and never reaches done/ —
-		// it is bounced to needs-attention/ for the human (detailed assertions in
-		// complete-needs-attention.test.ts).
+		// The item never reaches done/; the body stays in backlog/ (the bounce is a
+		// pure lock amend now — detailed assertions in complete-needs-attention.test.ts).
 		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
 			false,
 		);
 		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
-			true,
-		);
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
 	});
 
 	it('--skip-verify skips the gate and completes anyway', async () => {
@@ -584,12 +581,10 @@ describe('complete — rebase conflict (ADR §10)', () => {
 		expect(currentBranch(repo)).toBe('work/slice-theta');
 		expect(existsSync(join(repo, '.git', 'rebase-merge'))).toBe(false);
 		expect(existsSync(join(repo, '.git', 'rebase-apply'))).toBe(false);
-		// Nothing landed on arbiter main — and the item is routed to
-		// needs-attention/ rather than left dangling (ADR §12).
+		// Nothing landed on arbiter main; the body stays in backlog/ (the human
+		// local-only bounce is a no-op lock amend without an arbiter handle).
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'theta.md'))).toBe(
-			true,
-		);
+		expect(existsOnArbiterMain(repo, 'backlog', 'theta')).toBe(true);
 	});
 });
 

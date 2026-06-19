@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, existsSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
+import {readItemLock} from '../src/item-lock.js';
 import {performDo, type DoAgentRunner} from '../src/do.js';
 import {performComplete} from '../src/complete.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -10,6 +11,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -164,22 +166,24 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
-		// Routed via the SAME needs-attention machinery the red gate uses, SURFACED
-		// on the arbiter main (autonomous `do` passes surfaceArbiter).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		// Routed via the SAME stuck-lock machinery the red gate uses (autonomous `do`
+		// passes surfaceArbiter so the lock CAN be marked).
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		// The work never reached main (NO merge of a blocked review).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(['ls-tree', 'arbiter/main', 'agent-output.txt'], repo).trim(),
 		).toBe('');
-		// The blocking findings are recorded in the item body (the reason).
-		const body = gitIn(
-			['show', 'arbiter/main:work/needs-attention/alpha.md'],
-			repo,
-		);
-		expect(body).toMatch(/does not reach the slice goal/);
+		// The blocking findings are recorded on the stuck lock entry (the reason).
+		const lock = await readItemLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/does not reach the slice goal/);
 	});
 
 	it('a non-approve verdict NEVER merges (verdict block on a merge)', async () => {
@@ -231,11 +235,9 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('review-blocked');
 		expect(result.routedToNeedsAttention).toBe(true);
-		// Local bounce; main still shows the body in backlog/ (no surfacing; claim
-		// wrote nothing to main).
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'gamma.md'))).toBe(
-			true,
-		);
+		// HUMAN local-only (no surfaceArbiter): the lock is NOT marked stuck (no
+		// arbiter handle) and main is untouched — the body rests in backlog/.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
 	});
@@ -261,8 +263,8 @@ describe('Gate 2 — verify is the non-skippable floor, review is ON TOP', () =>
 		// The review was NEVER invoked — verify is the floor, run first; a red gate
 		// short-circuits before the judgement gate (review never replaces verify).
 		expect(gate.calls).toBe(0);
-		// Surfaced as a gate failure (not a review block).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		// Surfaced as a gate failure (not a review block) on the stuck lock.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
@@ -352,14 +354,17 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 		expect(gate.rounds).toEqual([1, 2, 3]);
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		// The exhaustion reason is recorded (never a silent merge/loop).
-		const body = gitIn(
-			['show', 'arbiter/main:work/needs-attention/alpha.md'],
-			repo,
-		);
-		expect(body).toMatch(/reviewMaxRounds=3/);
+		// The exhaustion reason is recorded on the stuck lock entry (never a silent
+		// merge/loop).
+		const lock = await readItemLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/reviewMaxRounds=3/);
 	});
 
 	it('reviewMaxRounds default (2): a persistent block invokes the gate twice then bounces', async () => {

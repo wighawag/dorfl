@@ -3,12 +3,14 @@ import {writeFileSync, existsSync, readFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
+import {readItemLock} from '../src/item-lock.js';
 import {createKeyedLock} from '../src/concurrency.js';
 import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -328,14 +330,13 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 		expect(core.reason).not.toMatch(/acceptance gate failed/i);
 		// verify NEVER ran (the env could not be made ready).
 		expect(existsSync(ranVerify)).toBe(false);
-		// Bounced from backlog/ straight to needs-attention/, never done/.
-		expect(existsSync(join(repo, 'work', 'backlog', 'prep-beta.md'))).toBe(
+		// The body STAYS in backlog/ (it never moved on claim) and never reaches
+		// done/; the stuck state is the lock (no needs-attention/ folder).
+		expect(existsOnArbiterMain(repo, 'backlog', 'prep-beta')).toBe(true);
+		expect(existsSync(join(repo, 'work', 'done', 'prep-beta.md'))).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'prep-beta')).toBe(
 			false,
 		);
-		expect(existsSync(join(repo, 'work', 'done', 'prep-beta.md'))).toBe(false);
-		expect(
-			existsSync(join(repo, 'work', 'needs-attention', 'prep-beta.md')),
-		).toBe(true);
 	});
 
 	it('UNSET prepare ⇒ no-op: the green gate path is byte-for-byte unchanged', async () => {
@@ -370,6 +371,9 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 			recovering: false,
 			verify: FAIL,
 			mode: 'propose',
+			// Autonomous-equivalent: the lock CAN be marked stuck (the bounce needs an
+			// arbiter handle for the lock ref).
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
@@ -377,13 +381,11 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 		expect(core.routedToNeedsAttention).toBe(true);
 		expect(core.branch).toBe('work/slice-delta');
 		expect(core.reason).toMatch(/acceptance gate failed/i);
-		// Bounced from backlog/ straight to needs-attention/, never done/.
-		expect(existsSync(join(repo, 'work', 'backlog', 'delta.md'))).toBe(false);
+		// The body STAYS in backlog/ (never moved on claim) and never reaches done/;
+		// the stuck state is the per-item lock (no needs-attention/ folder).
+		expect(existsOnArbiterMain(repo, 'backlog', 'delta')).toBe(true);
 		expect(existsSync(join(repo, 'work', 'done', 'delta.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'delta.md'))).toBe(
-			true,
-		);
-		// Local-only (no surfaceArbiter): nothing surfaced on main.
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
 	});
 });
@@ -402,6 +404,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 			review: true,
 			reviewGate: stubGate(BLOCK),
 			mode: 'propose',
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
@@ -410,12 +413,17 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 		expect(core.branch).toBe('work/slice-epsilon');
 		expect(core.reason).toMatch(/review.*blocked/i);
 		expect(core.integration).toBeUndefined();
-		// Routed to needs-attention/, never reached done/.
+		// Never reached done/; the stuck state is the per-item lock.
 		expect(existsSync(join(repo, 'work', 'done', 'epsilon.md'))).toBe(false);
-		const dest = join(repo, 'work', 'needs-attention', 'epsilon.md');
-		expect(existsSync(dest)).toBe(true);
-		// The blocking findings are recorded in the item body (WORK-CONTRACT rule 3).
-		expect(readFileSync(dest, 'utf8')).toMatch(/does not reach the slice goal/);
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
+		// The blocking findings are recorded on the lock entry (the SOLE stuck record).
+		const lock = await readItemLock({
+			item: 'slice:epsilon',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/does not reach the slice goal/);
 	});
 });
 
@@ -440,6 +448,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
@@ -452,13 +461,19 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 		// The rebase was aborted (not mid-rebase).
 		expect(existsSync(join(repo, '.git', 'rebase-merge'))).toBe(false);
 		expect(existsSync(join(repo, '.git', 'rebase-apply'))).toBe(false);
-		// The item moved on to needs-attention/ (it was in done/ after the move).
-		expect(existsSync(join(repo, 'work', 'done', 'theta.md'))).toBe(false);
-		const dest = join(repo, 'work', 'needs-attention', 'theta.md');
-		expect(existsSync(dest)).toBe(true);
-		expect(readFileSync(dest, 'utf8')).toMatch(/conflict/i);
-		// Nothing landed on arbiter main.
+		// The stuck state is the per-item lock (the conflict reason rides on it); no
+		// needs-attention/ folder is written.
+		expect(stuckLockOnArbiter(repo, 'theta')).toBe(true);
+		const lock = await readItemLock({
+			item: 'slice:theta',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/conflict/i);
+		// Nothing landed on arbiter main (the body still rests in backlog/).
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'theta')).toBe(true);
 	});
 });
 
@@ -584,8 +599,10 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		const loser = a.outcome === 'completed' ? 'cb' : 'ca';
 		expect(existsOnArbiterMain(seeded.repo, 'done', winner)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', loser)).toBe(false);
+		// The loser's stuck state is its per-item lock (no needs-attention/ folder).
+		expect(stuckLockOnArbiter(seeded.repo, loser)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', loser)).toBe(
-			true,
+			false,
 		);
 	});
 
@@ -672,8 +689,9 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		const loser = a.outcome === 'completed' ? 'xb' : 'xa';
 		expect(existsOnArbiterMain(seeded.repo, 'done', winner)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', loser)).toBe(false);
+		expect(stuckLockOnArbiter(seeded.repo, loser)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', loser)).toBe(
-			true,
+			false,
 		);
 	});
 });
@@ -805,7 +823,8 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// A code conflict is NEVER auto-resolved: sa routes to needs-attention.
 		expect(core.outcome).toBe('rebase-conflict');
 		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'sa')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(false);
 	});
 
 	it('a conflict on THIS slug OWN ledger still routes to needs-attention (sibling arm excludes own ledger)', async () => {
@@ -840,6 +859,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// Own-ledger conflict is NOT a sibling-ledger reconcile: it routes.
 		expect(core.outcome).toBe('rebase-conflict');
 		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'sa')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(false);
 	});
 });

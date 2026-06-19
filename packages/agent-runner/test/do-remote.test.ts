@@ -16,6 +16,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -252,7 +253,7 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(result.message).toMatch(/a flag that was removed/);
 		// Surfaced on the arbiter main; never reached done.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
@@ -270,7 +271,7 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 		});
 		expect(result.outcome).toBe('agent-stopped');
 		expect(result.message).toMatch(/no source change|empty diff|no-op/i);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 });
@@ -434,7 +435,7 @@ describe('do --remote — teardown re-applies the §4 predicate (reapJob)', () =
 		expect(result.outcome).toBe('needs-attention');
 		// `do` is autonomous: the stuck state is SURFACED ON MAIN (mode-M cherry-pick
 		// of the move-only commit) so scan/status/another machine can see it.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});

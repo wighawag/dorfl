@@ -1,6 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {existsSync, writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
+import {readItemLock} from '../src/item-lock.js';
 import {performComplete} from '../src/complete.js';
 import {performClaim} from '../src/claim-cas.js';
 import * as ledgerWriteModule from '../src/ledger-write.js';
@@ -8,6 +9,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -101,18 +103,19 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('strand-surfaced');
 		expect(result.routedToNeedsAttention).toBe(true);
-		// The arbiter ledger surface: the slug is in needs-attention/, NOT in
-		// in-progress/, so `scan`/`status`/another machine see it as stuck (not as
-		// a live claim) and the next autonomous tick does not re-claim it.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
-		// The reason is recorded on the surfaced ledger file (the tree-less seam
-		// appends the refusal message into the body).
-		const body = gitIn(
-			['show', `${ARBITER}/main:work/needs-attention/alpha.md`],
-			repo,
-		);
-		expect(body).toMatch(/nothing to complete/i);
+		// The stuck state is the per-item lock (the body rests in backlog/), so
+		// `scan`/`status`/another machine see it as stuck (not a live claim) and the
+		// next autonomous tick does not re-claim it.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		// The reason is recorded on the lock entry (the refusal message).
+		const lock = await readItemLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/nothing to complete/i);
 		// LOUD: a surface note fired (distinct from a normal completion message),
 		// so the CI/job log records the autonomous bounce.
 		expect(notes.some((n) => /surfaced.*needs-attention/i.test(n))).toBe(true);
@@ -262,8 +265,9 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('strand-surfaced');
 		expect(result.routedToNeedsAttention).toBe(true);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'delta')).toBe(false);
+		// The stuck state is the per-item lock; the body rests in backlog/.
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'delta')).toBe(true);
 	});
 
 	it('SURFACE CANNOT LAND ⇒ HONEST still-in-progress signal (`surface-unmoved`), never a fake success', async () => {

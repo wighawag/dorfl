@@ -117,17 +117,9 @@ async function rerouteToBacklogOnArbiter(
 ): Promise<void> {
 	const mover = seeded.clone(`reroute-${slug}`);
 	gitIn(['fetch', '-q', ARBITER], mover);
-	gitIn(['checkout', '-q', '-B', `reroute-${slug}`, `${ARBITER}/main`], mover);
-	mkdirSync(join(mover, 'work', 'backlog'), {recursive: true});
-	gitIn(
-		['mv', `work/needs-attention/${slug}.md`, `work/backlog/${slug}.md`],
-		mover,
-	);
-	gitIn(['add', '-A'], mover);
-	gitIn(['commit', '-q', '-m', `reroute ${slug}`], mover);
-	gitIn(['push', '-q', ARBITER, `reroute-${slug}:main`], mover);
-	// Release the per-item lock the prior claim took, mirroring the real
-	// return-to-pool (`returnToBacklog`), so the item is LEGITIMATELY re-claimable.
+	// The body already RESTS in backlog/ (the bounce is a pure lock amend now — no
+	// folder move). The real return-to-pool (`returnToBacklog`) just RELEASES the
+	// per-item lock, so the item becomes LEGITIMATELY re-claimable.
 	await releaseItemLock({
 		item: `slice:${slug}`,
 		cwd: mover,
@@ -183,10 +175,10 @@ describe('requeue --reset is WRITE-THROUGH (local tracking ref deleted FIRST)', 
 			reset: true,
 			env: gitEnv(),
 		});
-		// The requeue ABORTED (arbiter delete failed) — item stays in
-		// needs-attention. No backlog move.
+		// The requeue ABORTED (arbiter delete failed) — the lock stays held (not
+		// released). No backlog move (the body already rests in backlog/).
 		expect(result.moved).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		// CRITICAL: the LOCAL tracking ref was deleted FIRST (write-through), so
 		// the local store is now BEHIND the arbiter (the arbiter still has the
 		// branch). It is NOT AHEAD (the dangerous direction that drives stale

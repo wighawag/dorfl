@@ -1,11 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {
-	writeFileSync,
-	readFileSync,
-	existsSync,
-	mkdirSync,
-	rmSync,
-} from 'node:fs';
+import {writeFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	routeToNeedsAttention,
@@ -15,15 +9,36 @@ import {
 import {ledgerWrite} from '../src/ledger-write.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {performClaim} from '../src/claim-cas.js';
+import {readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
 } from './helpers/gitRepo.js';
 import type {Config} from '../src/config.js';
+
+/**
+ * The needs-attention RECOVERY SURFACE after the cut-over (slice
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+):
+ * stuck-state is the per-item lock `state: stuck`, NOT a `needs-attention/` folder
+ * file. So:
+ *   - {@link routeToNeedsAttention} no longer does a `git mv` to
+ *     `needs-attention/`; it SAVES the agent's uncommitted wip to the work branch
+ *     tip + PUSHES the branch (the recoverable half). The reason/questions ride on
+ *     the lock entry (the seam marks it stuck);
+ *   - the seam bounce ({@link ledgerWrite.applyNeedsAttentionTransition}) marks the
+ *     held lock `active → stuck` (the SOLE stuck record); NO `main` write;
+ *   - {@link returnToBacklog} (requeue) RELEASES the stuck lock (the body already
+ *     rests in `backlog/`); NO `needs-attention/` folder read;
+ *   - {@link readNeedsAttentionItems} (the retired folder reader) returns [].
+ *
+ * All real git against a local `--bare file://` arbiter, writing only into its own
+ * temp fixtures.
+ */
 
 let scratch: Scratch;
 
@@ -38,9 +53,9 @@ const ARBITER = 'arbiter';
 
 /**
  * Stand a repo up exactly as the runner leaves it just before a stuck outcome: a
- * slice claimed (in-progress on the arbiter) and onboarded onto `work/<slug>`
- * off the freshly-pushed main, with the build agent's (uncommitted) edits in the
- * tree. Returns the seeded handle + working clone.
+ * slice claimed (the per-item lock is held active; the body RESTS in backlog/) and
+ * onboarded onto `work/<slug>` off the freshly-pushed main, with the build agent's
+ * (uncommitted) edits in the tree.
  */
 async function claimAndBranch(
 	slug: string,
@@ -69,8 +84,8 @@ function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
 	writeFileSync(join(repo, file), body);
 }
 
-describe('needs-attention — the move (backlog → needs-attention)', () => {
-	it('git mvs the item and records the reason in the file body, committed', async () => {
+describe('routeToNeedsAttention — saves wip + pushes the branch (no folder move)', () => {
+	it('commits the agent wip to the work branch tip; the body STAYS in backlog/', async () => {
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
 
@@ -78,39 +93,51 @@ describe('needs-attention — the move (backlog → needs-attention)', () => {
 			cwd: repo,
 			slug: 'alpha',
 			reason: 'acceptance gate failed (exit 1)',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 
 		expect(result.moved).toBe(true);
-		// The file moved folders (from backlog/, where the body rests after a claim)…
-		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(false);
-		const dest = join(repo, 'work', 'needs-attention', 'alpha.md');
-		expect(existsSync(dest)).toBe(true);
-		// …the reason is prose in the BODY (not a frontmatter field).
-		const body = readFileSync(dest, 'utf8');
-		expect(body).toMatch(/acceptance gate failed \(exit 1\)/);
-		expect(body).toMatch(/Needs attention/i);
-		// Routing now produces TWO commits (needs-attention-surface-on-main): a wip
-		// commit saving the aborted agent work, then a MOVE-ONLY commit (the tip) that
-		// is PURELY the reason + the git mv — so a surfacing strategy can cherry-pick
-		// the tip without leaking the wip onto main.
+		// NO folder move: the body still rests in backlog/ (claim never moved it),
+		// and NO needs-attention/ folder file exists.
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
+			false,
+		);
+		// The agent's wip is committed to the work branch tip (the recoverable half).
 		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
-		expect(tip).toMatch(/work\/needs-attention\/alpha\.md/);
-		expect(tip).toMatch(/work\/backlog\/alpha\.md/);
-		expect(tip).not.toMatch(/feature\.txt/); // the wip is NOT in the move-only tip
+		expect(tip).toMatch(/feature\.txt/);
 		expect(result.moveCommit).toBe(gitIn(['rev-parse', 'HEAD'], repo).trim());
-		// The wip commit below the tip carries the agent's aborted work.
-		const wip = gitIn(['show', '--name-status', '--format=', 'HEAD~1'], repo);
-		expect(wip).toMatch(/feature\.txt/);
-		// Working tree is clean afterwards.
+		// Working tree is clean afterwards (the wip was committed).
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+		// The branch was pushed to the arbiter (cross-machine recoverable).
+		expect(result.branchPush).toBe('pushed');
 	});
 
-	it('records agent-surfaced questions alongside the reason', async () => {
+	it('skips the wip commit when the tree is clean (the couldn’t-even-start bounce)', async () => {
+		const {repo} = await claimAndBranch('beta');
+		// No agent edits: nothing to save.
+		const result = await routeToNeedsAttention({
+			cwd: repo,
+			slug: 'beta',
+			reason: 'agent did nothing',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(result.moved).toBe(true);
+		// No wip commit was made (the tree was clean), so the branch is at main and
+		// the push is skipped (nothing beyond main to recover).
+		expect(result.moveCommit).toBeUndefined();
+		expect(result.branchPush).toBe('skipped-empty');
+	});
+});
+
+describe('the seam bounce marks the lock stuck (the SOLE stuck record)', () => {
+	it('marks the held lock stuck + reason + questions; NO main write', async () => {
 		const {repo} = await claimAndBranch('beta');
 		agentEdits(repo);
 
-		await routeToNeedsAttention({
+		const r = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'beta',
 			reason: 'agent reported the slice too ambiguous to build',
@@ -118,41 +145,54 @@ describe('needs-attention — the move (backlog → needs-attention)', () => {
 				'Which schema version is the source of truth?',
 				'Should retries be idempotent?',
 			],
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
+		expect(r.moved).toBe(true);
 
-		const body = readFileSync(
-			join(repo, 'work', 'needs-attention', 'beta.md'),
-			'utf8',
+		const lock = await readItemLock({
+			item: 'slice:beta',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.state).toBe('stuck');
+		expect(lock?.reason).toMatch(/too ambiguous to build/);
+		expect(lock?.questions).toContain(
+			'Which schema version is the source of truth?',
 		);
-		expect(body).toMatch(/too ambiguous to build/);
-		expect(body).toMatch(/Which schema version is the source of truth\?/);
-		expect(body).toMatch(/Should retries be idempotent\?/);
+		expect(lock?.questions).toContain('Should retries be idempotent?');
+		// NO main write: the body stays in backlog/, no needs-attention/ folder.
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 	});
 
-	it('refuses (does not throw) when the slug is not in-progress', async () => {
+	it('reports moved:false when there is no held lock to mark', async () => {
 		const {repo} = await claimAndBranch('gamma');
-		const result = await routeToNeedsAttention({
+		// Release the lock so there is nothing to mark stuck.
+		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'nonexistent',
 			reason: 'whatever',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/not found|not in-progress/i);
+		expect(result.reasonNotMoved).toMatch(/no held lock/i);
+		void repo;
 	});
 });
 
-describe('needs-attention — not claimable, but surfaced', () => {
-	it('scan/eligibility do NOT treat needs-attention items as claimable', async () => {
-		// Keep `backlog/` non-empty (so the repo is still detected) while moving the
-		// claimed slice out to needs-attention/.
+describe('needs-attention — not claimable, but surfaced via the lock', () => {
+	it('scan/eligibility do NOT treat a lock-held item as claimable', async () => {
+		// The held slug is subtracted from the eligible pool; the sibling stays.
 		const {repo} = await claimAndBranch('delta', {extraSlugs: ['stays']});
 		agentEdits(repo);
-		await routeToNeedsAttention({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'delta',
 			reason: 'rebase conflict against main',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 
@@ -165,43 +205,35 @@ describe('needs-attention — not claimable, but surfaced', () => {
 			agentCmd: 'true',
 			workspacesDir: join(scratch.root, '.workspaces'),
 		};
-		const report = scanRepoPaths([repo], config);
+		// `scanRepoPaths` is an OFFLINE working-tree read; the in-place caller supplies
+		// the held-slug set (the registry `scan` fetches it from the lock refs). The
+		// held `delta` is subtracted; `stays` remains claimable.
+		const report = scanRepoPaths([repo], config, new Set(['delta']));
 		const all = report.repos.flatMap((r) => r.items);
-		// The item is in needs-attention/, not backlog/ — scan never sees it as a
-		// claimable backlog item (only the sibling `stays` remains in backlog/).
 		expect(all.find((i) => i.slug === 'delta')).toBeUndefined();
 		expect(all.find((i) => i.slug === 'stays')).toBeDefined();
 	});
 
-	it('readNeedsAttentionItems lists the stuck items with their reason', async () => {
+	it('readNeedsAttentionItems (the retired folder reader) returns [] — the folder is gone', async () => {
 		const {repo} = await claimAndBranch('epsilon');
 		agentEdits(repo);
-		await routeToNeedsAttention({
+		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'epsilon',
 			reason: 'timeout after 30m with no progress',
+			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-
-		const items = readNeedsAttentionItems(repo);
-		expect(items).toHaveLength(1);
-		expect(items[0].slug).toBe('epsilon');
-		expect(items[0].reason).toMatch(/timeout after 30m/);
-	});
-
-	it('readNeedsAttentionItems is empty when the folder is absent', async () => {
-		const {repo} = await claimAndBranch('zeta');
+		// The folder is retired: nothing reads/writes work/needs-attention/.
 		expect(readNeedsAttentionItems(repo)).toEqual([]);
 	});
 });
 
-describe('needs-attention — return path (needs-attention → backlog)', () => {
-	it('moves an item back to backlog for re-claiming on the arbiter (tree-less)', async () => {
+describe('returnToBacklog (requeue) — releases the stuck lock (body stays in pool)', () => {
+	it('releases the lock so the item is claimable again; NO needs-attention/ read', async () => {
 		const {repo} = await claimAndBranch('eta');
 		agentEdits(repo);
-		// Surface to needs-attention ON THE ARBITER (wip + move + branch push +
-		// surface on main) so the tree-less requeue has an arbiter item + continue-
-		// branch to act on.
+		// Bounce: save wip + push branch + mark the lock stuck.
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'eta',
@@ -209,6 +241,10 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
+		// Move back to a clean main so the requeue reads the arbiter, not the cwd.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 
 		const result = await returnToBacklog({
 			cwd: repo,
@@ -216,11 +252,11 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-
 		expect(result.moved).toBe(true);
-		// The move landed on the arbiter (needs-attention → backlog), tree-less.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(false);
+		// The lock is released; the body already rests in backlog/ (claimable again).
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(false);
 	});
 
 	it('a returned item is once again claimable by scan/eligibility', async () => {
@@ -233,15 +269,14 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
+		gitIn(['fetch', '-q', ARBITER], repo);
+		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 		await returnToBacklog({
 			cwd: repo,
 			slug: 'theta',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// Bring the arbiter's backlog move into the cwd so the local scan sees it.
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 
 		const config: Config = {
 			maxParallel: 1,
@@ -252,15 +287,14 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			agentCmd: 'true',
 			workspacesDir: join(scratch.root, '.workspaces'),
 		};
-		const report = scanRepoPaths([repo], config);
+		// The lock was released by requeue, so an empty held-set leaves theta visible.
+		const report = scanRepoPaths([repo], config, new Set());
 		const all = report.repos.flatMap((r) => r.items);
 		expect(all.find((i) => i.slug === 'theta')).toBeDefined();
 	});
 
-	it('refuses (does not throw) with a CLEAR message when the slug is in NEITHER needs-attention/ nor in-progress/', async () => {
-		// `iota` is seeded only in backlog/ (never claimed): it is in neither
-		// legitimate requeue source. requeue must refuse gracefully, naming BOTH
-		// recoverable folders — never a bare "not found".
+	it('refuses (does not throw) with a CLEAR message when the slug has no held lock', async () => {
+		// `iota` is seeded only in backlog/ (never claimed): no held lock to requeue.
 		const seeded = seedRepoWithArbiter(scratch.root, ['iota']);
 		const result = await returnToBacklog({
 			cwd: seeded.repo,
@@ -269,79 +303,6 @@ describe('needs-attention — return path (needs-attention → backlog)', () => 
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/needs-attention/);
-		expect(result.reasonNotMoved).toMatch(/in-progress/);
-	});
-
-	it('recovers a slug LEGACY-stuck in in-progress/ (a pre-cut-over surfacing), not only needs-attention/', async () => {
-		// Claim leaves the body in backlog/ (it no longer moves it). To reproduce a
-		// slug LEGACY-stuck in `in-progress/` on the arbiter (an old surfacing / a
-		// pre-cut-over state — the in-progress source `requeue` still recovers from
-		// until 9b), we MANUALLY publish `backlog/ → in-progress/` to main (a separate
-		// clone). requeue then recovers it to backlog/ via the tree-less CAS.
-		const {repo, seeded} = await claimAndBranch('iota-stuck');
-		agentEdits(repo, 'prior.txt', 'prior attempt work\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
-		gitIn(
-			['push', '-q', ARBITER, 'work/slice-iota-stuck:work/slice-iota-stuck'],
-			repo,
-		);
-		{
-			const mover = seeded.clone('to-in-progress-iota');
-			gitIn(['fetch', '-q', ARBITER], mover);
-			gitIn(['switch', '-q', '-c', 'to-ip/iota', `${ARBITER}/main`], mover);
-			mkdirSync(join(mover, 'work', 'in-progress'), {recursive: true});
-			gitIn(
-				['mv', 'work/backlog/iota-stuck.md', 'work/in-progress/iota-stuck.md'],
-				mover,
-			);
-			gitIn(
-				['commit', '-q', '-m', 'chore(iota-stuck): legacy in-progress'],
-				mover,
-			);
-			gitIn(['push', '-q', ARBITER, 'to-ip/iota:main'], mover);
-			rmSync(mover, {recursive: true, force: true});
-		}
-		// Leave the cwd on a clean main: the requeue resolves the source from the
-		// arbiter, never the cwd tree.
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-f', 'main'], repo);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'iota-stuck')).toBe(true);
-
-		const result = await returnToBacklog({
-			cwd: repo,
-			slug: 'iota-stuck',
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(result.moved).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'iota-stuck')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'iota-stuck')).toBe(false);
-	});
-});
-
-describe('needs-attention — pushes the transition like the done-move', () => {
-	it('the move reaches the arbiter when an arbiter remote is configured', async () => {
-		const {repo} = await claimAndBranch('kappa');
-		agentEdits(repo);
-
-		await routeToNeedsAttention({
-			cwd: repo,
-			slug: 'kappa',
-			reason: 'a reason',
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-
-		// The work branch carries the move; push it and confirm the arbiter has it.
-		gitIn(['push', '-q', ARBITER, 'work/slice-kappa:work/slice-kappa'], repo);
-		const res = gitIn(
-			['cat-file', '-e', 'work/slice-kappa:work/needs-attention/kappa.md'],
-			repo,
-		);
-		expect(res).toBe('');
-		// Sanity: helper above asserts existsOnArbiterMain is importable.
-		expect(typeof existsOnArbiterMain).toBe('function');
+		expect(result.reasonNotMoved).toMatch(/no held per-item lock/i);
 	});
 });

@@ -113,6 +113,30 @@ describe('item-lock — entry serialise/parse round-trip', () => {
 		expect(back?.state).toBe('stuck');
 		expect(back?.reason).toBe('rebase conflict');
 	});
+
+	it('a stuck entry round-trips RICH multi-line reason prose + surfaced questions', () => {
+		// Slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
+		// (decision i+): the lock entry is the SOLE stuck record, so it must carry the
+		// FULL reason prose (not a one-line field) AND any agent-surfaced questions, in
+		// a shape a future advance-surface rung can render.
+		const e: LockEntry = {
+			entry: 'slice-alpha',
+			action: 'implement',
+			state: 'stuck',
+			holder: 'tester',
+			since: '2026-06-18T00:00:00.000Z',
+			reason:
+				'acceptance gate failed (exit 1).\nThe lint step rejected two files.\nA human must look.',
+			questions: [
+				'Should the lint rule be relaxed, or the code fixed?',
+				'Is the `foo` API stable enough to depend on?',
+			],
+		};
+		const back = parseLockEntry(serialiseLockEntry(e));
+		expect(back).toEqual(e);
+		expect(back?.reason).toContain('A human must look.');
+		expect(back?.questions).toHaveLength(2);
+	});
 });
 
 describe('item-lock — happy path', () => {

@@ -3,11 +3,13 @@ import {writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performComplete} from '../src/complete.js';
 import {readNeedsAttentionItems} from '../src/needs-attention.js';
+import {readItemLock} from '../src/item-lock.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -72,6 +74,8 @@ describe('complete — failed gate routes to needs-attention', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: FAIL,
+			// Autonomous-equivalent: the bounce needs an arbiter handle to mark the lock.
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
@@ -80,24 +84,19 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(result.outcome).toBe('gate-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
 
-		// The item is no longer dangling in backlog/ — it moved to needs-attention/
-		// (not done/). (The body rests in backlog/ now that claim no longer moves it,
-		// so the gate-fail bounce sources from there.)
-		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(false);
+		// The body STAYS in backlog/ (no folder move); never reaches done/.
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(false);
-		const dest = join(repo, 'work', 'needs-attention', 'alpha.md');
-		expect(existsSync(dest)).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 
-		// The reason is recorded as prose in the body (no status/label field).
-		const body = readFileSync(dest, 'utf8');
-		expect(body).toMatch(/Needs attention/i);
-		expect(body).toMatch(/gate failed/i);
-
-		// Surfaced by readNeedsAttentionItems with that reason.
-		const items = readNeedsAttentionItems(repo);
-		expect(items.find((i) => i.slug === 'alpha')?.reason).toMatch(
-			/gate failed/i,
-		);
+		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
+		const lock = await readItemLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/gate failed/i);
 	});
 
 	it('no partial state: aborted work saved (wip) + move-only tip, clean tree', async () => {
@@ -113,17 +112,13 @@ describe('complete — failed gate routes to needs-attention', () => {
 		});
 		expect(result.routedToNeedsAttention).toBe(true);
 
-		// Working tree is clean (everything was staged + committed). No partial state.
+		// Working tree is clean (the wip was staged + committed). No partial state.
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
-		// TWO commits (needs-attention-surface-on-main): the MOVE-ONLY tip is purely
-		// the git mv (no agent file), and the wip commit below it saves the aborted
-		// work — so a surfacing strategy can publish the tip without leaking the wip.
+		// The bounce is a pure lock amend now: the aborted work is saved as the WIP
+		// commit on the branch tip (no folder move, no separate move-only commit).
 		const tip = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
-		expect(tip).toMatch(/work\/needs-attention\/beta\.md/);
-		expect(tip).toMatch(/work\/backlog\/beta\.md/);
-		expect(tip).not.toMatch(/feature\.txt/);
-		const wip = gitIn(['show', '--name-status', '--format=', 'HEAD~1'], repo);
-		expect(wip).toMatch(/feature\.txt/);
+		expect(tip).toMatch(/feature\.txt/);
+		expect(tip).not.toMatch(/work\/needs-attention\/beta\.md/);
 		// Not mid-rebase, not detached.
 		expect(currentBranch(repo)).toBe('work/slice-beta');
 	});
@@ -147,9 +142,7 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(result.outcome).toBe('completed');
 		expect(result.routedToNeedsAttention).toBeFalsy();
 		expect(existsSync(join(repo, 'work', 'done', 'gamma.md'))).toBe(true);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'gamma.md'))).toBe(
-			false,
-		);
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
 	});
 });
 
@@ -172,6 +165,7 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 			arbiter: ARBITER,
 			integration: 'merge',
 			verify: PASS,
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
@@ -183,19 +177,21 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 		expect(existsSync(join(repo, '.git', 'rebase-merge'))).toBe(false);
 		expect(existsSync(join(repo, '.git', 'rebase-apply'))).toBe(false);
 
-		// Item moved to needs-attention/ (it was in done/ after the done-move).
-		expect(existsSync(join(repo, 'work', 'done', 'theta.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'backlog', 'theta.md'))).toBe(false);
-		const dest = join(repo, 'work', 'needs-attention', 'theta.md');
-		expect(existsSync(dest)).toBe(true);
-		expect(readFileSync(dest, 'utf8')).toMatch(/conflict/i);
+		// The stuck state is the lock; nothing landed on the arbiter's done/ (the
+		// done-move happened on the BRANCH tree but never reached main).
+		expect(stuckLockOnArbiter(repo, 'theta')).toBe(true);
 
 		// Nothing landed on arbiter main.
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
 
-		// Surfaced with the conflict reason.
-		const items = readNeedsAttentionItems(repo);
-		expect(items.find((i) => i.slug === 'theta')?.reason).toMatch(/conflict/i);
+		// Surfaced with the conflict reason on the lock entry.
+		const lock = await readItemLock({
+			item: 'slice:theta',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/conflict/i);
 	});
 
 	it('no partial state on conflict: clean tree, still on the work branch', async () => {

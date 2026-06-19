@@ -5,11 +5,13 @@ import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performStart} from '../src/start.js';
+import {acquireItemLock, markStuckItemLock} from '../src/item-lock.js';
 import {createJob} from '../src/workspace.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -188,10 +190,11 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		});
 		expect(started.exitCode).toBe(1);
 		expect(started.outcome).toBe('needs-attention');
-		// The item is surfaced on the arbiter's main in needs-attention/ (bounced,
-		// not auto-resolved), and it is NO longer claimable from backlog.
-		expect(existsOnArbiterMain(fresh, 'needs-attention', 'gamma')).toBe(true);
-		expect(existsOnArbiterMain(fresh, 'backlog', 'gamma')).toBe(false);
+		// The item is STUCK on its per-item lock (bounced, not auto-resolved); the
+		// body rests in backlog/ but the held stuck lock makes it non-claimable.
+		expect(stuckLockOnArbiter(fresh, 'gamma')).toBe(true);
+		expect(existsOnArbiterMain(fresh, 'backlog', 'gamma')).toBe(true);
+		expect(existsOnArbiterMain(fresh, 'needs-attention', 'gamma')).toBe(false);
 	});
 });
 
@@ -285,11 +288,9 @@ describe('requeue --reset — discard + fresh', () => {
 		expect(result.moved).toBe(false);
 		// A missing arbiter remote is refused up front (it is the CAS push target).
 		expect(result.reasonNotMoved).toMatch(/no git remote named/i);
-		// The item is STILL in needs-attention on the arbiter (no backlog move).
-		expect(
-			existsOnArbiterMain(reset.repo, 'needs-attention', 'eta-reset'),
-		).toBe(true);
-		expect(existsOnArbiterMain(reset.repo, 'backlog', 'eta-reset')).toBe(false);
+		// The item is STILL stuck (the lock was NOT released); body rests in backlog/.
+		expect(stuckLockOnArbiter(reset.repo, 'eta-reset')).toBe(true);
+		expect(existsOnArbiterMain(reset.repo, 'backlog', 'eta-reset')).toBe(true);
 	});
 });
 
@@ -319,9 +320,9 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 			message: 'first steer',
 			env: gitEnv(),
 		});
-		// Re-route back to needs-attention ON THE ARBITER (the move lives there now,
-		// not in the cwd tree), then requeue again with a second note.
-		rerouteToNeedsAttentionOnArbiter(reset.seeded, 'iota-note');
+		// Make it stuck again ON THE ARBITER (re-acquire + mark stuck), then requeue
+		// again with a second note.
+		await rerouteToNeedsAttentionOnArbiter(reset.seeded, 'iota-note');
 		const result = await returnToBacklog({
 			cwd: reset.repo,
 			slug: 'iota-note',
@@ -539,25 +540,28 @@ function arbiterBacklogBody(seeded: SeededRepo, slug: string): string {
 }
 
 /**
- * Re-route a requeued item BACK to needs-attention/ on the arbiter's `main`
- * (backlog → needs-attention), in a throwaway clone so the cwd tree under test is
- * untouched — the cross-machine analogue of "it got stuck again". Used to drive a
- * second requeue and prove the handoff notes ACCUMULATE.
+ * Make a requeued item STUCK AGAIN on its per-item lock (the cross-machine
+ * analogue of "it got stuck again"), in a throwaway clone so the cwd tree under
+ * test is untouched: re-acquire the lock + mark it stuck. Used to drive a second
+ * requeue and prove the handoff notes ACCUMULATE on the backlog body.
  */
-function rerouteToNeedsAttentionOnArbiter(
+async function rerouteToNeedsAttentionOnArbiter(
 	seeded: SeededRepo,
 	slug: string,
-): void {
+): Promise<void> {
 	const mover = seeded.clone(`reroute-${slug}`);
-	gitIn(['fetch', '-q', ARBITER], mover);
-	gitIn(['checkout', '-q', '-B', 'reroute', `${ARBITER}/main`], mover);
-	// `git mv` needs the destination dir to exist (it does not auto-create).
-	mkdirSync(join(mover, 'work', 'needs-attention'), {recursive: true});
-	gitIn(
-		['mv', `work/backlog/${slug}.md`, `work/needs-attention/${slug}.md`],
-		mover,
-	);
-	gitIn(['add', '-A'], mover);
-	gitIn(['commit', '-q', '-m', `back to NA: ${slug}`], mover);
-	gitIn(['push', '-q', ARBITER, 'reroute:main'], mover);
+	await acquireItemLock({
+		item: `slice:${slug}`,
+		action: 'implement',
+		cwd: mover,
+		arbiter: ARBITER,
+		env: gitEnv(),
+	});
+	await markStuckItemLock({
+		item: `slice:${slug}`,
+		reason: 'stuck again',
+		cwd: mover,
+		arbiter: ARBITER,
+		env: gitEnv(),
+	});
 }

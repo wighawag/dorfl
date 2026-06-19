@@ -10,7 +10,14 @@ import {join} from 'node:path';
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {BOOKKEEPING_TRAILER} from './drop-bookkeeping-rebase.js';
-import {releaseItemLock} from './item-lock.js';
+import {
+	releaseItemLock,
+	readItemLock,
+	itemLockRef,
+	lockEntryFor,
+	parseLockEntry,
+	type LockEntry,
+} from './item-lock.js';
 import {ledgerRead} from './ledger-read.js';
 import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -336,83 +343,43 @@ export async function routeToNeedsAttention(
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
-	// The item could be in-progress (test-gate path, before the done-move), already
-	// moved to done/ (rebase-conflict path, after it), or ALREADY in
-	// needs-attention/ (the continue-conflict RE-SURFACE: the kept work/<slug>
-	// branch's tree still holds the prior bounce). Route from whichever folder holds
-	// it; a needs-attention/ source is a no-op-content re-surface (see below).
-	const source = findSourceFolder(cwd, slug);
-	if (!source) {
-		return {
-			moved: false,
-			reasonNotMoved:
-				`work/in-progress/${slug}.md (nor work/done/ nor ` +
-				`work/needs-attention/${slug}.md) not found — nothing to route to ` +
-				'needs-attention (wrong slug, or not claimed?).',
-		};
-	}
-	const destRel = join('work', 'needs-attention', `${slug}.md`);
-	const alreadyInNeedsAttention = source.rel === destRel;
+	// SLICE `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
+	// (decision i+): the bounce is now a PURE lock amend (done by the seam) — there
+	// is NO `git mv` to `needs-attention/` and NO on-`main` surface. What REMAINS
+	// here is the RECOVERABLE half: SAVE the agent's uncommitted work as a wip
+	// commit on the `work/<slug>` branch tip and PUSH the branch to the arbiter, so
+	// the partial work travels cross-machine and a `requeue` continues from the
+	// branch tip. The reason/questions ride on the lock entry (the seam amends it),
+	// NOT a moved `.md`. The work branch push is NOT a `main` write.
 
-	// 1. WIP commit: save whatever the agent left uncommitted FIRST, so it sits
-	//    BELOW the move-only tip and a tip-only surface never carries it. Skip when
-	//    the tree is clean (no aborted work to save).
+	// 1. WIP commit: save whatever the agent left uncommitted to the work branch
+	//    tip. Skip when the tree is clean (no aborted work to save). NOTE this no
+	//    longer needs a folder source — the body rests in `backlog/` (slice 9a) and
+	//    never moves on a bounce.
 	gitHard(['add', '-A'], cwd, env);
-	if (!nothingStaged(cwd, env)) {
-		gitHard(
-			['commit', '-q', '-m', `chore(${slug}): save aborted work (wip)`],
-			cwd,
-			env,
-		);
+	const hadWip = !nothingStaged(cwd, env);
+	if (hadWip) {
+		// Stamp the durable `Agent-Runner-Bookkeeping` git TRAILER on the wip commit
+		// (a blank line separates it from the subject so git parses it as a trailer).
+		// It marks the commit for the drop-rebase machinery the same way the old
+		// move-only commit was marked, so a kept branch carrying this wip rebases
+		// cleanly. (No `needs-attention/` move lands on the branch anymore — this slice
+		// is what MAKES the drop-rebase deletable, 9d.)
+		const wipBody = `chore(${slug}): save aborted work (wip)\n\n${BOOKKEEPING_TRAILER}`;
+		gitHard(['commit', '-q', '-m', wipBody], cwd, env);
 	}
+	const commitMessage = `chore(${slug}): bounce to stuck; ${options.reason}`;
+	const moveCommit = hadWip ? revParseHead(cwd, env) : undefined;
+	note(`Bounced '${slug}' to stuck (lock): ${options.reason}`);
 
-	// 2. Record the reason as PROSE in the body (never a frontmatter field), then
-	//    move folders (mkdir -p first; git tracks no empty dirs — no .gitkeep), and
-	//    commit the MOVE-ONLY transition (reason + the git mv, nothing else) as the
-	//    tip. This is the commit a surfacing strategy cherry-picks.
-	appendReasonBlock(source.abs, options.reason, options.questions);
-	const destDir = join(cwd, 'work', 'needs-attention');
-	mkdirSync(destDir, {recursive: true});
-	// When the item is ALREADY in needs-attention/ (the continue-conflict
-	// re-surface), source.rel === destRel: there is no folder change, so `git mv
-	// A A` would ERROR. Skip the mv; the file is in place and any reason-block
-	// refresh staged below carries the re-surface. The move-only commit may then be
-	// EMPTY (reason already present, idempotent) — `--allow-empty` keeps a stable
-	// tip to (re)publish without thrashing.
-	if (!alreadyInNeedsAttention) {
-		gitHard(['mv', source.rel, destRel], cwd, env);
-	}
-	gitHard(['add', '-A'], cwd, env);
-	const commitMessage = `chore(${slug}): route to needs-attention; ${options.reason}`;
-	// Stamp the durable `Agent-Runner-Bookkeeping: route-to-needs-attention` git
-	// TRAILER on the move-only commit (a blank line separates it from the subject
-	// so git parses it as a trailer, never as reason prose). This is the EXPLICIT,
-	// version-stable mark the rebase drop identifies the commit by — it lives on
-	// the commit OBJECT so it travels with the kept branch cross-machine. The
-	// returned `commitMessage` keeps the human-facing subject (no trailer) for
-	// reporting; the trailer is on the COMMIT, distinct from the reason prose.
-	const commitBody = `${commitMessage}\n\n${BOOKKEEPING_TRAILER}`;
-	// On a re-surface the reason block may already be present (idempotent append),
-	// leaving NOTHING staged — a plain commit would error. `--allow-empty` keeps a
-	// stable move-only tip to (re)publish, so re-surfacing never thrashes nor fails.
-	const commitArgs = ['commit', '-q', '-m', commitBody];
-	if (alreadyInNeedsAttention) {
-		commitArgs.push('--allow-empty');
-	}
-	gitHard(commitArgs, cwd, env);
-	const moveCommit = revParseHead(cwd, env);
-	note(`Routed '${slug}' to needs-attention: ${options.reason}`);
-
-	// Optionally push the work branch to the arbiter — the RECOVERABLE half of the
-	//    bounce (so the saved wip + the move travel cross-machine and a requeue can
-	//    continue from the branch tip). Three behaviours: SURFACE-ONLY (no push)
-	//    when `pushBranch === false`; an explicit `branch` target; else the default
-	//    `work/<slug>`. BEST-EFFORT (no throw on a failed/unreachable push), now
-	//    RETRIED with bounded backoff on an OUTAGE before a clean give-up, and
-	//    EMPTINESS-GUARDED (a branch with no work beyond main / an absent branch is
-	//    skipped — a couldn't-even-start bounce has nothing to push). The OUTCOME is
-	//    CAPTURED + RETURNED (`branchPush`) so the caller reports what ACTUALLY
-	//    landed rather than assuming "pushed" off the local move.
+	// 2. Push the work branch to the arbiter — the RECOVERABLE half of the bounce
+	//    (so the saved wip travels cross-machine and a requeue continues from the
+	//    branch tip). Three behaviours: SURFACE-ONLY (no push) when
+	//    `pushBranch === false`; an explicit `branch` target; else the default
+	//    `work/<slug>`. BEST-EFFORT (no throw on a failed/unreachable push), RETRIED
+	//    with bounded backoff on an OUTAGE, and EMPTINESS-GUARDED (a branch with no
+	//    work beyond main / an absent branch is skipped). The OUTCOME is CAPTURED +
+	//    RETURNED (`branchPush`) so the caller reports what ACTUALLY landed.
 	let branchPush: BranchPushOutcome = 'not-attempted';
 	let pushError: string | undefined;
 	if (options.arbiter && options.pushBranch !== false) {
@@ -487,6 +454,26 @@ export async function routeToNeedsAttention(
  *
  * Like the move, NEVER throws for the expected "not in needs-attention" case.
  */
+/**
+ * Read the item's lock entry from the LOCAL lock ref (no fetch) — the resilient
+ * fall-back for {@link returnToBacklog} when an arbiter fetch fails (e.g. a
+ * `--reset` against a moved-away arbiter). The up-front soft fetch already
+ * refreshed the local refs, so reading them locally is the best-effort truth
+ * without throwing.
+ */
+async function readLocalItemLock(
+	slug: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LockEntry | undefined> {
+	const ref = itemLockRef(lockEntryFor(`slice:${slug}`));
+	const show = await gitSoftAsync(['show', `${ref}:lock.md`], cwd, env);
+	if (show.status !== 0) {
+		return undefined;
+	}
+	return parseLockEntry(show.stdout);
+}
+
 export async function returnToBacklog(
 	options: ReturnToBacklogOptions,
 ): Promise<ReturnToBacklogResult> {
@@ -527,24 +514,33 @@ export async function returnToBacklog(
 	// local copy. This is a fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	// Where is the item ON THE ARBITER? (We read the arbiter ref, NOT the cwd tree
-	// — the cwd may be on a branch that never checked out the surfaced state.)
-	// `requeue` recovers from BOTH `needs-attention/` (the resolved-surface path)
-	// AND `in-progress/` (a claim that never surfaced: an un-surfaced abort, a
-	// killed run, or an in-place requeue note — defect 2, story 4): both are
-	// legitimate stuck states the conductor's recovery verb must recover from, via
-	// the SAME tree-less CAS. We resolve the slug's ACTUAL current folder on the
-	// arbiter (arbiter-is-truth) rather than assuming needs-attention/. Absent from
-	// BOTH ⇒ nothing to requeue.
-	const sourceRel = await resolveRequeueSourceRel(arbiter, slug, cwd, env);
-	if (!sourceRel) {
+	// Is the item LOCK-HELD on the arbiter? (slice
+	// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+:
+	// stuck-state is the per-item lock `state: stuck`, NOT a `needs-attention/`
+	// folder file). `requeue` recovers a STUCK hold (the resolved-recovery path) and
+	// tolerates an ACTIVE hold (a killed run that never surfaced) — both legitimate
+	// in-flight states the human's recovery verb returns to the pool. We read the
+	// LOCK ref (arbiter-is-truth), NOT a folder. No held lock ⇒ nothing to requeue
+	// (the item is already at rest — unclaimed in `backlog/`, or terminal).
+	// Read the held lock TOLERANTLY: a broken/unreachable arbiter (e.g. a
+	// `--reset` against a moved-away arbiter) must NOT throw out of requeue — the
+	// up-front soft fetch above already refreshed the local lock refs, so on a
+	// fetch fault we fall back to the local lock ref (best-effort) rather than
+	// crashing. A genuinely absent lock still refuses below.
+	let held: Awaited<ReturnType<typeof readItemLock>>;
+	try {
+		held = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	} catch {
+		held = await readLocalItemLock(slug, cwd, env);
+	}
+	if (!held) {
 		return {
 			moved: false,
 			reasonNotMoved:
-				`'${slug}' is neither in work/needs-attention/ nor work/in-progress/ on ` +
-				`${arbiter}/main — nothing to return to backlog (wrong slug, or already ` +
-				'in backlog/done?). requeue recovers a slice stuck in needs-attention/ or ' +
-				'in-progress/.',
+				`'${slug}' has no held per-item lock on ${arbiter} — nothing to requeue ` +
+				'(wrong slug, or already at rest in backlog/done?). requeue recovers a ' +
+				'slice whose lock is held stuck (needs-attention) or active (a killed ' +
+				'in-progress run).',
 		};
 	}
 
@@ -607,14 +603,12 @@ export async function returnToBacklog(
 	}
 
 	// DEFAULT (keep+continue) REQUEUE-SAFETY GUARD: a claimable item's continue-
-	// branch MUST be reachable by ANY worker, so before moving the item back to
-	// backlog verify the ARBITER branch `<arbiter>/work/<slug>` exists + is ahead
-	// of main — the EXACT "is the continue-branch on the arbiter?" question the
-	// continue-path asks in `isolation.ts`
-	// (`branchAheadOf(checkout, '<arbiter>/<branch>', '<arbiter>/main')`). We check
-	// the ARBITER ref (already fetched above), NOT the local `work/<slug>` (which
-	// SURVIVES a failed push, so testing it would pass falsely). NOT on `--reset`
-	// (which discards the branch by design).
+	// branch MUST be reachable by ANY worker, so before releasing the lock verify
+	// the ARBITER branch `<arbiter>/work/<slug>` exists + is ahead of main — the
+	// EXACT "is the continue-branch on the arbiter?" question the continue-path asks
+	// in `isolation.ts`. We check the ARBITER ref (already fetched above), NOT the
+	// local `work/<slug>` (which SURVIVES a failed push). NOT on `--reset` (which
+	// discards the branch by design).
 	if (!options.reset) {
 		const branch = workBranchRef('slice', slug);
 		const onArbiter = branchAheadOf(
@@ -627,92 +621,86 @@ export async function returnToBacklog(
 			const message =
 				`the work branch ${branch} isn't on ${arbiter} (the continue ` +
 				`branch a cross-machine worker would resume from) — push it first, or ` +
-				'`requeue --reset` to discard and start fresh. Item left in ' +
-				'needs-attention (no backlog move).';
+				'`requeue --reset` to discard and start fresh. Item left stuck (lock not ' +
+				'released).';
 			note(message);
 			return {moved: false, reasonNotMoved: message};
 		}
 	}
 
 	const commitMessage = `chore(${slug}): return to backlog for re-claiming`;
-	const message =
+	const handoff =
 		options.message && options.message.trim() !== ''
 			? options.message.trim()
 			: undefined;
 	const backlogRel = `work/backlog/${slug}.md`;
 
-	// Build + CAS-push the move tree-lessly through the SHARED core (one mechanism
-	// for BOTH the requeue direction here and the surface direction — see
-	// {@link runTreelessLedgerMove}). On a CONTENTION rejection (main advanced under
-	// us) it refetches + rebuilds against the new base and retries, exactly as
-	// `claim` and the surface publish do.
-	const moved = await runTreelessLedgerMove({
-		cwd,
-		slug,
-		arbiter,
-		kind: 'requeue',
-		onContended: 'requeue',
-		// requeue runs from the project checkout + needs ALL refs (the continue-branch
-		// guard reads `<arbiter>/work/<slug>`), so a plain fetch (its own up-front
-		// fetch above + the loop's) is correct here — not a main-only refspec.
-		explicitMainRefspec: false,
-		env,
-		note,
-		// Plan FRESH per attempt: the source `work/<folder>/<slug>.md` resolved at
-		// the top may have moved if main advanced under us, so re-resolve on the
-		// current base. Already-in-backlog ⇒ a prior attempt landed (idempotent).
-		plan: (base) => {
-			if (pathInCommit(base, backlogRel, cwd, env)) {
-				return 'already-done';
-			}
-			const src = pathInCommit(base, sourceRel, cwd, env)
-				? sourceRel
-				: pathInCommit(base, `work/in-progress/${slug}.md`, cwd, env)
-					? `work/in-progress/${slug}.md`
-					: pathInCommit(base, `work/needs-attention/${slug}.md`, cwd, env)
-						? `work/needs-attention/${slug}.md`
-						: undefined;
-			if (!src) {
-				return 'missing';
-			}
-			return prepareTreelessMoveCommit({
-				cwd,
-				slug,
-				base,
-				sourceRel: src,
-				destRel: backlogRel,
-				// Append the optional dated handoff note to the item BODY before the move.
-				transformBody: (body) =>
-					message !== undefined ? appendRequeueNoteText(body, message) : body,
-				commitMessage,
-				refNamespace: 'requeue',
-				env,
-			});
-		},
-	});
-	if (moved) {
-		// INTERIM DUAL-WRITE complement of `claim` acquiring the per-item lock (PRD
-		// `ledger-status-per-item-lock-refs`, slice
-		// `claim-acquires-unified-lock-no-body-move`): returning the item to the
-		// claimable pool GIVES UP the hold, so RELEASE the per-item lock the prior
-		// claim took. Without this the lock would orphan and the re-claim would lose on
-		// a stale lock from this item's OWN previous in-flight cycle. Best-effort +
-		// idempotent (`not-held` when there is no lock, e.g. a requeue of an item that
-		// predates the lock or was already released); the durable backlog move above is
-		// the authoritative return-to-pool, the lock release just keeps the two
-		// substrates in agreement. The held-lock state machine's own `requeue`/`release`
-		// transitions are later slices; here we only undo claim's additive acquire.
-		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
-		note(`Returned '${slug}' to backlog.`);
-		return {moved: true, commitMessage, deletedRemoteBranch};
+	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
+	// section to the item BODY in `work/backlog/` (where it already rests) before the
+	// lock release, via the SAME tree-less CAS move (backlog → backlog with the body
+	// transform) — it NEVER stages/commits in the cwd tree. The handoff is OPTIONAL;
+	// the lock release below is the core requeue.
+	if (handoff !== undefined) {
+		const noted = await runTreelessLedgerMove({
+			cwd,
+			slug,
+			arbiter,
+			kind: 'requeue',
+			onContended: 'requeue',
+			explicitMainRefspec: false,
+			env,
+			note,
+			plan: (base) => {
+				if (!pathInCommit(base, backlogRel, cwd, env)) {
+					// The body is not in backlog/ on this base — nothing to annotate
+					// (the durable move that placed it there must land first).
+					return 'missing';
+				}
+				return prepareTreelessMoveCommit({
+					cwd,
+					slug,
+					base,
+					sourceRel: backlogRel,
+					destRel: backlogRel,
+					transformBody: (body) => appendRequeueNoteText(body, handoff),
+					commitMessage: `chore(${slug}): requeue handoff note`,
+					refNamespace: 'requeue',
+					env,
+				});
+			},
+		});
+		if (!noted) {
+			const message =
+				`requeue for '${slug}': could not append the handoff note (the body is ` +
+				`not in work/backlog/ on ${arbiter}/main, or main kept moving). The lock ` +
+				'was NOT released. Try again shortly.';
+			note(message);
+			return {moved: false, reasonNotMoved: message};
+		}
 	}
 
-	const message2 =
-		`requeue for '${slug}': the arbiter's main kept moving (contended) after ` +
-		`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in needs-attention ` +
-		'(no move). Try again shortly.';
-	note(message2);
-	return {moved: false, reasonNotMoved: message2};
+	// RELEASE the held lock (`stuck → released` / give up the hold): the item
+	// returns to the claimable pool (its body already rests in `backlog/`). Use the
+	// tolerant {@link releaseItemLock} (idempotent) so requeue recovers BOTH a
+	// `stuck` hold (the resolved-recovery path) and an `active` hold (a killed run
+	// that never surfaced) — the human asserting "put it back".
+	const released = await releaseItemLock({
+		item: `slice:${slug}`,
+		cwd,
+		arbiter,
+		env,
+	});
+	if (released.outcome === 'error') {
+		const message =
+			`requeue for '${slug}': could not release the per-item lock ` +
+			`(${released.message}). The item is left stuck. Try again shortly.`;
+		note(message);
+		return {moved: false, reasonNotMoved: message};
+	}
+	note(
+		`Returned '${slug}' to backlog (released the lock; body rests in pool).`,
+	);
+	return {moved: true, commitMessage, deletedRemoteBranch};
 }
 
 /**

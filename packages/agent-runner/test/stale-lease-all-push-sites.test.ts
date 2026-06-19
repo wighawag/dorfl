@@ -19,6 +19,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -455,11 +456,10 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 			env: gitEnv(),
 		});
 		// SURFACED, not swallowed: the run reports needs-attention and the slice is
-		// in needs-attention/ on the arbiter (NOT silently in-progress).
+		// STUCK on its per-item lock (NOT silently in-progress).
 		expect(started.outcome).toBe('needs-attention');
 		expect(started.exitCode).toBe(1);
-		expect(existsOnArbiterMain(fresh, 'needs-attention', 'zeta')).toBe(true);
-		expect(existsOnArbiterMain(fresh, 'in-progress', 'zeta')).toBe(false);
+		expect(stuckLockOnArbiter(fresh, 'zeta')).toBe(true);
 		// RECOVERABLE: the kept work branch is still on the arbiter.
 		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-zeta')).not.toBe('');
 	});
@@ -541,12 +541,9 @@ describe('Part B — after-commit push failure surfaces to needs-attention (job-
 		expect(result.exitCode).toBe(1);
 		// The agent NEVER ran (the onboard push failed first; the build is skipped).
 		expect(agentRan).toBe(false);
-		// The item LANDS in needs-attention/ on the arbiter and is NO LONGER in
-		// in-progress/ (the observed silent-strand bug, now closed on the incident's
-		// own path).
-		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'theta')).toBe(
-			true,
-		);
+		// The item is STUCK on its per-item lock and is NO LONGER in-progress (the
+		// observed silent-strand bug, now closed on the incident's own path).
+		expect(stuckLockOnArbiter(seeded.repo, 'theta')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'theta')).toBe(
 			false,
 		);

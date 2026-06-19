@@ -353,17 +353,13 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 			reason: 'a stuck reason',
 			env: gitEnv(),
 		});
+		// Local-only (no arbiter): the bounce is a no-op lock amend (a human is right
+		// there). NO folder move — the body stays in backlog/, no needs-attention/.
 		expect(res.moved).toBe(true);
-		expect(existsSync(`${repo}/work/in-progress/beta.md`)).toBe(false);
-		const dest = `${repo}/work/needs-attention/beta.md`;
-		expect(existsSync(dest)).toBe(true);
-		// Reason recorded as body PROSE (never a frontmatter field).
-		expect(readFileSync(dest, 'utf8')).toMatch(/a stuck reason/);
-		// surface (status) still reads the reason via readNeedsAttentionItems.
-		const items = readNeedsAttentionItems(repo);
-		expect(items.find((i) => i.slug === 'beta')?.reason).toMatch(
-			/a stuck reason/,
-		);
+		expect(existsSync(`${repo}/work/needs-attention/beta.md`)).toBe(false);
+		expect(existsSync(`${repo}/work/backlog/beta.md`)).toBe(true);
+		// The retired folder reader returns nothing.
+		expect(readNeedsAttentionItems(repo)).toEqual([]);
 	});
 
 	it('the return-to-backlog re-queue is dispatched via the seam', async () => {
