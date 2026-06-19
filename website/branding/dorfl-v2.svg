@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Dorfl v2: prompt-forward, flat, stone-tablet -->
+  <defs>
+    <filter id="glow2" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- flat slate ground -->
+  <rect x="0" y="0" width="512" height="512" rx="64" fill="#23201C"/>
+
+  <!-- STONE TABLET silhouette: golem head as a carved standing stone.
+       flat clay fill, faceted top corners (chiselled), stacked seams -->
+  <path d="M150 150
+           L150 132 Q150 110 172 110
+           L340 110 Q362 110 362 132
+           L362 150
+           L380 168 L380 372
+           Q380 396 356 396
+           L340 396 L340 412 Q340 416 336 416 L176 416 Q172 416 172 412 L172 396 L156 396
+           Q132 396 132 372 L132 168 Z"
+        fill="#A4543C"/>
+
+  <!-- chiselled darker bevel down the right + bottom (flat, single tone) -->
+  <path d="M362 150 L380 168 L380 372 Q380 396 356 396 L340 396 L340 412 Q340 416 336 416 L256 416 L256 110 L340 110 Q362 110 362 132 Z"
+        fill="#8A4632" opacity="0.55"/>
+
+  <!-- dry-stack seams (the file-per-slice rhyme), flat thin lines -->
+  <line x1="132" y1="250" x2="380" y2="250" stroke="#6E3727" stroke-width="4"/>
+  <line x1="256" y1="250" x2="256" y2="396" stroke="#6E3727" stroke-width="4"/>
+
+  <!-- THE PROMPT IS THE FACE. big chem slot across the brow. -->
+  <rect x="160" y="196" width="192" height="44" rx="8" fill="#1C1813"/>
+  <rect x="168" y="202" width="176" height="32" rx="5" fill="#FFB23E" filter="url(#glow2)"/>
+  <!-- crisp >_ etched dark into the glowing chem -->
+  <path d="M232 210 l16 8 l-16 8" fill="none" stroke="#1C1813" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="258" y="224" width="26" height="6" rx="3" fill="#1C1813"/>
+
+  <!-- minimal eyes: two flat amber squares (carved), calm, low -->
+  <rect x="196" y="300" width="34" height="34" rx="6" fill="#1C1813"/>
+  <rect x="282" y="300" width="34" height="34" rx="6" fill="#1C1813"/>
+  <rect x="205" y="309" width="16" height="16" rx="3" fill="#FFB23E"/>
+  <rect x="291" y="309" width="16" height="16" rx="3" fill="#FFB23E"/>
+
+  <!-- no mouth: the prompt is the expression -->
+
+  <text x="256" y="476" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="60" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+</svg>
