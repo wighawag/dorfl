@@ -9,6 +9,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -96,7 +97,7 @@ describe('run-fleet conditional — perRepoMax === 1 uses the FRESH rebased-tip 
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 	});
 });
 
@@ -121,7 +122,7 @@ describe('run-fleet — perRepoMax > 1 ALSO uses the FRESH rebased-tip gate (the
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 	});
 });
 

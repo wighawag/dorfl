@@ -304,6 +304,41 @@ export function existsOnArbiterMain(
 }
 
 /**
+ * Is the SLICE `slug`'s per-item lock held `stuck` on the arbiter? (slice
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: stuck-state is
+ * the lock `state: stuck`, NOT a `needs-attention/` folder file). Reads the lock
+ * ref blob from the arbiter; `false` when there is no lock or it is `active`.
+ * The lock-state replacement for `existsOnArbiterMain(cwd, 'needs-attention', …)`.
+ */
+export function stuckLockOnArbiter(
+	cwd: string,
+	slug: string,
+	arbiter = 'arbiter',
+): boolean {
+	run(
+		'git',
+		[
+			'fetch',
+			'-q',
+			arbiter,
+			`+refs/agent-runner/lock/*:refs/agent-runner/lock/*`,
+		],
+		cwd,
+		{env: gitEnv()},
+	);
+	const show = run(
+		'git',
+		['show', `refs/agent-runner/lock/slice-${slug}:lock.md`],
+		cwd,
+		{env: gitEnv()},
+	);
+	if (show.status !== 0) {
+		return false;
+	}
+	return /^state:\s*stuck\s*$/m.test(show.stdout);
+}
+
+/**
  * Does `<arbiter>/main` currently track an ARBITRARY repo-relative `path` (e.g. a
  * sidecar `work/questions/slice-<slug>.md`)? The path-keyed sibling of
  * {@link existsOnArbiterMain} for the tree-less rungs' results, which live outside

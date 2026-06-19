@@ -11,6 +11,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -115,7 +116,7 @@ describe('runOnce — a thrown CORE wiring/config error is config-error, NOT age
 
 		// Work preserved + SURFACED on the arbiter (the work-preserving needs-attention
 		// seam ran), never reaching done.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
 	});

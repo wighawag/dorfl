@@ -17,6 +17,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -120,9 +121,9 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 		expect(gate.calls).toBe(1);
 		expect(result.items[0].status).toBe('needs-attention');
 		expect(result.claimedAndDone).toBe(0);
-		// NOT integrated: never reached done on main; surfaced as needs-attention.
+		// NOT integrated: never reached done on main; surfaced as a stuck lock.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 	});
 
 	it('review on + an APPROVE verdict integrates normally (the gate ran, did not block)', async () => {
@@ -245,7 +246,7 @@ describe('run through performIntegration — per-repo, language-agnostic gate', 
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 	});
 });
 
@@ -329,11 +330,11 @@ describe('run through performIntegration — a THROWN core error is caught', () 
 		for (const item of result.items) {
 			expect(item.status).toBe('config-error');
 		}
-		// The work was surfaced (not silently dropped): each item is in
-		// needs-attention on main, and its branch was pushed.
-		expect(
-			existsOnArbiterMain(scratch.root + '/project', 'needs-attention', 'feat'),
-		).toBe(true);
+		// The work was surfaced (not silently dropped): each item is stuck on its
+		// lock, and its branch was pushed.
+		expect(stuckLockOnArbiter(join(scratch.root, 'project'), 'feat')).toBe(
+			true,
+		);
 		gitIn(['fetch', '-q', 'arbiter'], join(scratch.root, 'project'));
 		expect(
 			gitIn(

@@ -12,6 +12,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -181,7 +182,7 @@ describe('do — continue-site surface moved:false (surface-unmoved)', () => {
 		expect(result.exitCode).toBe(1);
 		// The surface landed: the item is on the arbiter's needs-attention.
 		gitIn(['fetch', '-q', ARBITER], repo);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(true);
 	});
 });
 
@@ -249,7 +250,7 @@ describe('run — continue-site surface moved:false (surface-unmoved)', () => {
 		expect(item?.status).toBe('needs-attention');
 		expect(result.needsAttention).toBe(1);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
 	});
 });
 
@@ -295,6 +296,6 @@ describe('start — continue-site surface moved:false (surface-unmoved)', () => 
 		expect(result.outcome).toBe('needs-attention');
 		expect(result.exitCode).toBe(1);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'zeta')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'zeta')).toBe(true);
 	});
 });

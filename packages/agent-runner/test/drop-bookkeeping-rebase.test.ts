@@ -54,14 +54,18 @@ function subjectOf(repo: string, rev: string): string {
 // ---------------------------------------------------------------------------
 
 describe('producer stamps the Agent-Runner-Bookkeeping trailer', () => {
-	it('routeToNeedsAttention (in-worktree) stamps the trailer on the move-only commit', async () => {
+	it('routeToNeedsAttention (in-worktree) stamps the trailer on the wip commit', async () => {
+		// After the cut-over (slice
+		// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`) the bounce no
+		// longer does a `git mv` to needs-attention/; it SAVES the agent's wip on the
+		// branch tip with the bookkeeping TRAILER (so a kept branch carrying it still
+		// rebases cleanly), then marks the lock stuck. The trailer rides on that wip
+		// commit — this is the commit the drop-rebase machinery identifies.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		// Claim: move backlog→in-progress on a work branch (the routing precondition).
 		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
-		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
-		gitIn(['mv', 'work/backlog/alpha.md', 'work/in-progress/alpha.md'], repo);
-		gitIn(['commit', '-q', '-m', 'claim(alpha)'], repo);
+		// Leave UNCOMMITTED agent work so the bounce makes a wip commit.
+		writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 
 		const reason = 'acceptance gate failed (exit 1)';
 		const result = await routeToNeedsAttention({
@@ -71,19 +75,11 @@ describe('producer stamps the Agent-Runner-Bookkeeping trailer', () => {
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		// The move-only commit carries the trailer...
+		// The wip commit (HEAD) carries the bookkeeping trailer.
 		expect(hasTrailerLine(repo, 'HEAD')).toBe(true);
-		// ...the subject is the human-facing route message...
-		expect(subjectOf(repo, 'HEAD')).toBe(
-			`chore(alpha): route to needs-attention; ${reason}`,
-		);
-		// ...and the trailer is DISTINCT from the reason prose (the reason text does
-		// not contain the trailer string).
+		// The trailer is DISTINCT from the reason prose.
 		expect(reason).not.toContain(BOOKKEEPING_TRAILER);
-		// The returned commitMessage is the bare subject (no trailer) for reporting.
-		expect(result.commitMessage).toBe(
-			`chore(alpha): route to needs-attention; ${reason}`,
-		);
+		// The returned commitMessage (the bounce subject) carries no trailer.
 		expect(result.commitMessage).not.toContain(BOOKKEEPING_TRAILER_KEY);
 	});
 

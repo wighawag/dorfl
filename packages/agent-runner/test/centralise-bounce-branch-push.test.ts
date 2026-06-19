@@ -14,6 +14,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -98,7 +99,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 			),
 		).toBe('');
 		// And the surface still lands on main.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 	});
 
 	it('non-default branch: a supplied `branch` is the push target (the slicing-branch shape)', async () => {
@@ -157,7 +158,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		expect(result.moved).toBe(true);
 		// Nothing was pushed for the absent branch; the surface still landed.
 		expect(arbiterHasBranch(seeded, 'work/slice-never-created')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
 	});
 
 	it('best-effort: an unreachable arbiter push does NOT throw the bounce', async () => {
@@ -185,7 +186,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		// The push failed (rejected), so the branch is NOT on the arbiter — but the
 		// move committed locally and (work/* only being rejected) the surface landed.
 		expect(arbiterHasBranch(seeded, 'work/slice-delta')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
 	});
 
 	it('SURFACE-ONLY (pushBranch:false): publishes the main surface, pushes NOTHING', async () => {
@@ -203,7 +204,7 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		expect(result.moved).toBe(true);
 		// No branch push at all (surface-only), but the on-main surface still lands.
 		expect(arbiterHasBranch(seeded, 'work/slice-epsilon')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'epsilon')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
 	});
 
 	it('human-vs-autonomous gate (no logic): NO arbiter ⇒ no surface AND no push (local-only)', async () => {
@@ -261,13 +262,11 @@ describe('run agent-failure is SAVED + cross-machine recoverable (the fifth gap)
 			env: gitEnv(),
 		});
 		expect(result.items[0].status).toBe('agent-failed');
-		// Saved + surfaced + pushed (the seam did all three).
+		// Saved (wip on the branch) + pushed + the lock marked stuck.
 		expect(arbiterHasBranch(seeded, 'work/slice-alpha')).toBe(true);
-		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'alpha')).toBe(
-			true,
-		);
+		expect(stuckLockOnArbiter(seeded.repo, 'alpha')).toBe(true);
 
-		// A human requeues (default keep + continue): needs-attention → backlog.
+		// A human requeues (default keep + continue): releases the stuck lock.
 		const human = seeded.clone('requeuer');
 		gitIn(['fetch', '-q', ARBITER], human);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], human);
@@ -371,16 +370,9 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		// still in the branch's history).
 		expect(arbiterHasBranch(seeded, 'work/slice-gamma')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		const newTip = arbiterRef(seeded, 'refs/heads/work/slice-gamma');
-		expect(
-			gitIn(
-				['cat-file', '-e', `${newTip}:work/needs-attention/gamma.md`],
-				repo,
-			),
-		).toBe('');
-		gitIn(['merge-base', '--is-ancestor', keptTip, newTip], repo);
-		// The on-main surface is (re)published as needs-attention (the fix's point).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(true);
+		// The stuck state is the per-item lock (re-marked stuck on the re-route); the
+		// branch carries no folder move anymore.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
 		// Because the branch is provably on the arbiter, the §4 reap predicate HOLDS
 		// ⇒ the worktree is REAPED (the §14-aligned outcome: the worktree is a
 		// disposable cache; recovery flows through the branch + surface). No special

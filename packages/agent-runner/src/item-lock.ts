@@ -86,6 +86,17 @@ export type LockState = 'active' | 'stuck';
  * The two-axis lock entry. `action` and `state` are INDEPENDENT axes (so
  * "advanced-and-stuck" and "building-and-stuck" are both representable, which a
  * single action-field could not do). `reason` is present IFF `state === 'stuck'`.
+ *
+ * Since the lock entry is the SOLE stuck record (slice
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+: the
+ * `needs-attention/` folder is retired), `reason` is the FULL bounce prose (it may
+ * span multiple lines — a red-gate excerpt, a rebase-conflict report, an agent's
+ * ambiguity note), and `questions` carries any agent-surfaced questions for the
+ * human. Both ride in the lock blob BODY (not a single frontmatter field) so they
+ * round-trip richly, in a shape a future advance-surface rung
+ * (`work/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md`) can
+ * render into a `work/questions/` sidecar. `questions` is present (non-empty) only
+ * for a stuck entry that recorded them.
  */
 export interface LockEntry {
 	entry: string;
@@ -94,6 +105,7 @@ export interface LockEntry {
 	holder: string;
 	since: string;
 	reason?: string;
+	questions?: string[];
 }
 
 /** Outcome of an acquire attempt. `acquired` = we hold it; `lost` = someone else
@@ -169,8 +181,21 @@ async function gitHard(
 	return r;
 }
 
-/** Serialise a lock entry to the ref's blob body (markdown frontmatter, like the
- * advancing marker, so it round-trips and is previewable). */
+/** The body heading that opens the (possibly multi-line) stuck reason prose. */
+const LOCK_REASON_HEADING = '## Reason';
+/** The body heading that opens the agent-surfaced questions list. */
+const LOCK_QUESTIONS_HEADING = '## Questions';
+
+/**
+ * Serialise a lock entry to the ref's blob body (markdown frontmatter, like the
+ * advancing marker, so it round-trips and is previewable). The two-axis state
+ * (`entry`/`action`/`state`/`holder`/`since`) lives in the frontmatter; a stuck
+ * entry's FULL reason prose + any surfaced questions live in the BODY (under
+ * `## Reason` / `## Questions`) so they round-trip RICHLY (multi-line reason,
+ * bulleted questions) — the lock entry is the SOLE stuck record now, in a shape a
+ * future advance-surface rung can render. {@link parseLockEntry} is the exact
+ * inverse.
+ */
 export function serialiseLockEntry(e: LockEntry): string {
 	const lines = [
 		'---',
@@ -179,12 +204,20 @@ export function serialiseLockEntry(e: LockEntry): string {
 		`state: ${e.state}`,
 		`holder: ${e.holder}`,
 		`since: ${e.since}`,
-		...(e.state === 'stuck' && e.reason ? [`reason: ${e.reason}`] : []),
 		'---',
 		'',
 		`Lock held for \`${e.entry}\` (${e.action}/${e.state}).`,
-		'',
 	];
+	if (e.state === 'stuck' && e.reason) {
+		lines.push('', LOCK_REASON_HEADING, '', ...e.reason.split('\n'));
+	}
+	if (e.state === 'stuck' && e.questions && e.questions.length > 0) {
+		lines.push('', LOCK_QUESTIONS_HEADING, '');
+		for (const q of e.questions) {
+			lines.push(`- ${q}`);
+		}
+	}
+	lines.push('');
 	return lines.join('\n');
 }
 
@@ -530,6 +563,13 @@ export interface MarkStuckOptions {
 	item: string;
 	/** The needs-attention prose. REQUIRED — a `stuck` entry always carries a reason. */
 	reason: string;
+	/**
+	 * Any agent-surfaced QUESTIONS for the human, recorded on the stuck entry's
+	 * body (the lock is the SOLE stuck record now). Optional; empty/absent ⇒ no
+	 * questions block. A future advance-surface rung renders these into a
+	 * `work/questions/` sidecar.
+	 */
+	questions?: string[];
 	cwd: string;
 	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
@@ -589,6 +629,14 @@ export async function markStuckItemLock(
 			state: 'stuck',
 			reason: opts.reason.trim(),
 		};
+		const questions = (opts.questions ?? [])
+			.map((q) => q.trim())
+			.filter((q) => q !== '');
+		if (questions.length > 0) {
+			next.questions = questions;
+		} else {
+			delete next.questions;
+		}
 		return await amendHeldEntry(next, ref, held.sha, cwd, arbiter, env);
 	} catch (err) {
 		return {
@@ -654,8 +702,9 @@ export async function resumeItemLock(
 			state: 'active',
 			holder: opts.holder ?? held.lock.holder,
 		};
-		// reason is PRESENT iff stuck: drop it on the way back to active.
+		// reason + questions are PRESENT iff stuck: drop them on the way to active.
 		delete next.reason;
+		delete next.questions;
 		return await amendHeldEntry(next, ref, held.sha, cwd, arbiter, env);
 	} catch (err) {
 		return {
@@ -1355,9 +1404,17 @@ export async function heldSliceSlugs(
 	}
 }
 
-/** Parse a serialised lock entry body back into a {@link LockEntry}. */
+/**
+ * Parse a serialised lock entry body back into a {@link LockEntry} — the exact
+ * inverse of {@link serialiseLockEntry}. Reads the two-axis state from the
+ * frontmatter and, for a stuck entry, the FULL reason prose + any questions from
+ * the body (`## Reason` / `## Questions`). Tolerates a LEGACY entry whose reason
+ * lived in a one-line frontmatter `reason:` field (the pre-cutover shape) so a
+ * lock written by an older binary still reads.
+ */
 export function parseLockEntry(body: string): LockEntry | undefined {
-	const fm = /^---\n([\s\S]*?)\n---/.exec(body);
+	const normalized = body.replace(/\r\n/g, '\n');
+	const fm = /^---\n([\s\S]*?)\n---/.exec(normalized);
 	if (!fm) {
 		return undefined;
 	}
@@ -1371,14 +1428,62 @@ export function parseLockEntry(body: string): LockEntry | undefined {
 	if (!fields.entry || !fields.action || !fields.state) {
 		return undefined;
 	}
-	return {
+	const bodyText = normalized.slice(fm[0].length);
+	const reason = extractBodyReason(bodyText) ?? fields.reason;
+	const questions = extractBodyQuestions(bodyText);
+	const entry: LockEntry = {
 		entry: fields.entry,
 		action: fields.action as LockAction,
 		state: fields.state as LockState,
 		holder: fields.holder ?? '',
 		since: fields.since ?? '',
-		reason: fields.reason,
 	};
+	if (reason !== undefined && reason !== '') {
+		entry.reason = reason;
+	}
+	if (questions.length > 0) {
+		entry.questions = questions;
+	}
+	return entry;
+}
+
+/** Extract the `## Reason` block's prose (joined multi-line), or undefined. */
+function extractBodyReason(bodyText: string): string | undefined {
+	const lines = bodyText.split('\n');
+	const start = lines.findIndex((l) => l.trim() === LOCK_REASON_HEADING);
+	if (start === -1) {
+		return undefined;
+	}
+	const collected: string[] = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		if (/^##\s/.test(lines[i])) {
+			break;
+		}
+		collected.push(lines[i]);
+	}
+	// Trim leading/trailing blank lines but PRESERVE interior newlines (rich prose).
+	const text = collected.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
+	return text === '' ? undefined : text;
+}
+
+/** Extract the `## Questions` block's bulleted list, or [] when absent. */
+function extractBodyQuestions(bodyText: string): string[] {
+	const lines = bodyText.split('\n');
+	const start = lines.findIndex((l) => l.trim() === LOCK_QUESTIONS_HEADING);
+	if (start === -1) {
+		return [];
+	}
+	const questions: string[] = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		if (/^##\s/.test(lines[i])) {
+			break;
+		}
+		const m = /^-\s+(.*)$/.exec(lines[i].trim());
+		if (m) {
+			questions.push(m[1]);
+		}
+	}
+	return questions;
 }
 
 /**

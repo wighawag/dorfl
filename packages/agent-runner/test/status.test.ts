@@ -382,8 +382,12 @@ function seedNeedsAttentionMirror(slug: string, reason: string): string {
 	}).mirrorPath;
 }
 
-describe('status — folder-native needs-attention surface (ADR §12)', () => {
-	it("lists each mirror's work/needs-attention/ items (from the bare main ref) with their reason", async () => {
+describe('status — the needs-attention/ FOLDER is RETIRED (stuck = the lock)', () => {
+	it('does NOT surface a work/needs-attention/ folder file (the folder is no longer read)', async () => {
+		// Slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
+		// (decision i+): the stuck-state surface is the per-item lock `state: stuck`,
+		// NOT a `needs-attention/` folder file. A folder file (e.g. a legacy leftover)
+		// is IGNORED by `status` — nothing reads `work/needs-attention/` anymore.
 		const mirror = seedNeedsAttentionMirror(
 			'stuck-slice',
 			'rebase conflict against main',
@@ -392,17 +396,10 @@ describe('status — folder-native needs-attention surface (ADR §12)', () => {
 			workspacesDir: workspacesDir(),
 			mirrorPaths: [mirror],
 		});
-		expect(report.needsAttention).toHaveLength(1);
-		expect(report.needsAttention?.[0].repoPath).toBe(mirror);
-		expect(report.needsAttention?.[0].items[0].slug).toBe('stuck-slice');
-		expect(report.needsAttention?.[0].items[0].reason).toMatch(
-			/rebase conflict against main/,
-		);
-
-		const out = formatStatus(report);
-		expect(out.toLowerCase()).toContain('needs attention');
-		expect(out).toMatch(/stuck-slice/);
-		expect(out).toMatch(/rebase conflict against main/);
+		// The folder-native surface is empty (the folder is retired); the lock-ref
+		// surface (`lockHeld`) carries stuck state and there is none here.
+		expect(report.needsAttention).toEqual([]);
+		expect(report.lockHeld).toEqual([]);
 	});
 
 	it('omits the surface entirely when no mirrorPaths are given', async () => {
@@ -427,10 +424,11 @@ function needsAttentionBody(slug: string, reason: string): string {
 	].join('\n');
 }
 
-describe('status — fetch-first (ADR §5/§6; offline-scan invariant retired)', () => {
-	it('sees a needs-attention item pushed to the arbiter AFTER fetching', async () => {
-		// A mirror with one needs-attention item; a SECOND is pushed onto its origin
-		// only — the bare mirror's `main` is stale until status fetches.
+describe('status — fetch-first (ADR §5/§6; folder retired — the fetch still runs)', () => {
+	it('a folder needs-attention file pushed to the arbiter is IGNORED (folder retired)', async () => {
+		// The fetch-first invariant still holds (status refreshes the mirror's main),
+		// but the folder-native surface is retired: even a freshly-fetched
+		// `work/needs-attention/` file is not surfaced.
 		const mirror = registerMirrorWithWork(workspacesDir(), 'project', {
 			needsAttention: {
 				'first.md': needsAttentionBody('first', 'reason one'),
@@ -448,23 +446,15 @@ describe('status — fetch-first (ADR §5/§6; offline-scan invariant retired)',
 			workspacesDir: workspacesDir(),
 			mirrorPaths: [mirror],
 		});
-		const slugs = report.needsAttention?.[0].items.map((i) => i.slug).sort();
-		expect(slugs).toEqual(['first', 'second']);
+		expect(report.needsAttention).toEqual([]);
 	});
 
-	it('WARNS and falls back to last-known when the fetch FAILS (never errors)', async () => {
+	it('a broken mirror origin WARNS and never errors (the lock-ref read degrades)', async () => {
 		const mirror = registerMirrorWithWork(workspacesDir(), 'project', {
 			needsAttention: {
 				'known.md': needsAttentionBody('known', 'known reason'),
 			},
 		}).mirrorPath;
-		pushWorkToMirrorOrigin(
-			workspacesDir(),
-			'project',
-			'needs-attention',
-			'unseen.md',
-			needsAttentionBody('unseen', 'never fetched'),
-		);
 		breakMirrorOrigin(mirror);
 
 		const warnings: string[] = [];
@@ -474,10 +464,10 @@ describe('status — fetch-first (ADR §5/§6; offline-scan invariant retired)',
 			warn: (m) => warnings.push(m),
 		});
 
-		// Did NOT throw; still surfaces the last-known item (offline fall-back).
-		expect(report.needsAttention?.[0].items.map((i) => i.slug)).toEqual([
-			'known',
-		]);
+		// Did NOT throw; the folder is retired (empty surface) and the lock-ref read
+		// degrades to empty on the broken origin.
+		expect(report.needsAttention).toEqual([]);
+		expect(report.lockHeld).toEqual([]);
 		expect(warnings).toHaveLength(1);
 		expect(warnings[0].toLowerCase()).toMatch(/fetch|offline|last-known/);
 	});

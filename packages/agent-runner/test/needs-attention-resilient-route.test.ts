@@ -10,6 +10,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -80,7 +81,7 @@ describe('needs-attention route — fault tolerance (never crashes on a git outa
 		const {repo} = await claimAndBranch('alpha', {commitWork: true});
 		breakArbiter(repo);
 
-		// The whole route resolves (no unhandled exception); the local move stands.
+		// The whole route resolves (no unhandled exception, even on a git outage).
 		const routed = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'alpha',
@@ -90,9 +91,10 @@ describe('needs-attention route — fault tolerance (never crashes on a git outa
 			...FAST,
 		});
 
-		expect(routed.moved).toBe(true);
-		// Both remote ops failed-after-retries (saved LOCALLY only) — reported, not thrown.
-		expect(routed.surface).toBe('failed');
+		// With the arbiter unreachable the lock amend (the SOLE stuck record) cannot
+		// land, so the bounce HONESTLY reports moved:false (nothing was recorded) and
+		// the branch push failed-after-retries — reported, never THROWN.
+		expect(routed.moved).toBe(false);
 		expect(routed.branchPush).toBe('failed');
 	});
 
@@ -132,10 +134,11 @@ describe('needs-attention route — honest per-op reporting', () => {
 			env: gitEnv(),
 			...FAST,
 		});
-		expect(routed.surface).toBe('surfaced');
+		// The on-`main` surface half is GONE (the lock is the surface now).
+		expect(routed.surface).toBe('not-attempted');
 		expect(routed.branchPush).toBe('pushed');
-		// The branch really reached the arbiter.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(true);
+		// The stuck state is the lock; the branch really reached the arbiter.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
 	});
 
 	it('(b) surface ✓ + branch SKIPPED-empty (the observed early-failure case)', async () => {
@@ -153,7 +156,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 			env: gitEnv(),
 			...FAST,
 		});
-		expect(routed.surface).toBe('surfaced');
+		expect(routed.surface).toBe('not-attempted');
 		expect(routed.branchPush).toBe('skipped-empty');
 		// The absent branch did NOT reach the arbiter (nothing to recover yet).
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -222,7 +225,7 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 			env: gitEnv(),
 			...FAST,
 		});
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
 		// Remove the continue-branch from the arbiter (the local one survives, which
 		// is exactly why the guard must check the ARBITER ref, not the local one).
 		gitIn(['push', '-q', ARBITER, '--delete', 'work/slice-eta'], repo);
@@ -237,9 +240,9 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 		expect(result.moved).toBe(false);
 		expect(result.reasonNotMoved).toMatch(/isn't on/);
 		expect(result.reasonNotMoved).toMatch(/push it first|--reset/);
-		// The item stayed in needs-attention (no backlog move).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(false);
+		// The lock stayed stuck (not released); the body rests in backlog/.
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(true);
 	});
 
 	it('REQUEUES when the arbiter branch IS present', async () => {

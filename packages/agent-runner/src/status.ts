@@ -4,9 +4,7 @@ import {resolveHarness, type Harness} from './harness.js';
 // harness registry so `resolveHarness` dispatches pi jobs' liveness to it.
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
-import {ledgerRead} from './ledger-read.js';
 import {fetchMirrorMainOrWarn} from './repo-mirror.js';
-import {extractReason} from './needs-attention.js';
 import {type NeedsAttentionItem} from './needs-attention.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {listItemLockEntries, type LockEntry} from './item-lock.js';
@@ -243,36 +241,25 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 	active.sort(bySlug);
 	attention.sort(bySlug);
 
-	// The folder-native needs-attention surface (ADR §12), read from each hub
-	// mirror's BARE `main` ref THROUGH the read seam (mirrors have no working tree).
-	const needsAttention: RepoNeedsAttention[] = [];
+	// The STUCK-STATE surface is now the PER-ITEM LOCK `state: stuck` (slice
+	// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+:
+	// the `needs-attention/` folder is retired — NO code reads
+	// `work/needs-attention/`). `status` reads the lock refs per mirror to surface
+	// held (`active` = in-progress) AND stuck (`needs-attention`) entries + their
+	// reasons/questions.
 	const lockHeld: RepoLockEntries[] = [];
 	const ledgerDuplicates: RepoLedgerDuplicates[] = [];
 	for (const mirrorPath of options.mirrorPaths ?? []) {
-		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the surface
-		// reflects the remote truth. Never fatal — a failed fetch WARNS and falls
-		// back to the mirror's last-known `main` (the read strategy is unchanged).
+		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the duplicate lint
+		// reflects the remote truth. Never fatal — a failed fetch WARNS and falls back
+		// to the mirror's last-known `main`.
 		fetchMirrorMainOrWarn({mirrorPath, warn: options.warn, env: options.env});
-		const state = await ledgerRead.resolveMirrorState({
-			mirrorPath,
-			env: options.env,
-		});
-		const items: NeedsAttentionItem[] = state.needsAttention.map((item) => ({
-			file: item.file,
-			slug: item.slug,
-			reason: extractReason(item.content),
-		}));
-		if (items.length > 0) {
-			needsAttention.push({repoPath: mirrorPath, items});
-		}
-		// The PER-ITEM LOCK in-flight view (PRD US #8; slice
-		// `needs-attention-as-stuck-lock-state`): ADDITIONALLY read the mirror's lock
-		// refs to surface held (`active` = in-progress) and stuck (`needs-attention`)
-		// entries + reasons. A bare hub mirror's arbiter is its `origin` (the SAME
+		// The PER-ITEM LOCK in-flight view (PRD US #8): read the mirror's lock refs to
+		// surface held (`active` = in-progress) and stuck (`needs-attention`) entries +
+		// reasons/questions. A bare hub mirror's arbiter is its `origin` (the SAME
 		// handle the `scan` held-slug subtraction reads). Best-effort: a fetch/read
 		// fault yields an EMPTY list (see {@link listItemLockEntries}), so this
-		// read-only view degrades to "no in-flight locks" rather than erroring —
-		// parity with the folder-native surface's fetch-first fall-back.
+		// read-only view degrades to "no in-flight locks" rather than erroring.
 		const entries = await listItemLockEntries(
 			mirrorPath,
 			'origin',
@@ -288,14 +275,13 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 			ledgerDuplicates.push({repoPath: mirrorPath, duplicates: dups});
 		}
 	}
-	needsAttention.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 	lockHeld.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 	ledgerDuplicates.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 
 	return {
 		active,
 		attention,
-		needsAttention,
+		needsAttention: [],
 		lockHeld,
 		ledgerDuplicates,
 		...(options.arbiter ? {arbiter: options.arbiter} : {}),
@@ -351,8 +337,6 @@ export function formatStatus(report: StatusReport): string {
 	// job/registry dashboard (never merged into the job counts).
 	const cwdLines = report.cwd !== undefined ? formatCwdSection(report.cwd) : [];
 
-	const needsAttention = report.needsAttention ?? [];
-	const naCount = needsAttention.reduce((sum, r) => sum + r.items.length, 0);
 	const lockHeld = report.lockHeld ?? [];
 	const lockCount = lockHeld.reduce((sum, r) => sum + r.entries.length, 0);
 	const ledgerDuplicates = report.ledgerDuplicates ?? [];
@@ -363,7 +347,6 @@ export function formatStatus(report: StatusReport): string {
 	if (
 		report.active.length === 0 &&
 		report.attention.length === 0 &&
-		naCount === 0 &&
 		lockCount === 0 &&
 		dupCount === 0 &&
 		report.arbiter === undefined &&
@@ -396,26 +379,11 @@ export function formatStatus(report: StatusReport): string {
 		}
 	}
 
-	// The folder-native needs-attention surface (ADR §12): items the runner
-	// bounced from in-progress/done to work/needs-attention/, each with its reason.
-	if (naCount > 0) {
-		lines.push('');
-		lines.push('Needs attention (work/needs-attention/ — a human must look):');
-		for (const repo of needsAttention) {
-			lines.push(`  ${repo.repoPath}`);
-			for (const item of repo.items) {
-				const reason =
-					item.reason !== '' ? item.reason : '(no reason recorded)';
-				lines.push(`    ${item.slug}`);
-				lines.push(`      reason: ${reason}`);
-			}
-		}
-	}
-
 	// The PER-ITEM LOCK in-flight view (PRD US #8; slice
-	// `needs-attention-as-stuck-lock-state`): the held lock refs read from each
-	// mirror — `active` holds (in-progress) and `stuck` holds (needs-attention) +
-	// reasons. ADDITIVE to the folder-native surface above (interim dual-write).
+	// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`): the held lock
+	// refs read from each mirror — `active` holds (in-progress) and `stuck` holds
+	// (needs-attention) + their reasons/questions. This is the SOLE stuck-state
+	// surface now (the `needs-attention/` folder is retired).
 	if (lockCount > 0) {
 		lines.push('');
 		lines.push('In-flight locks (refs/agent-runner/lock/* — held + stuck):');
@@ -432,7 +400,18 @@ export function formatStatus(report: StatusReport): string {
 						entry.reason && entry.reason !== ''
 							? entry.reason
 							: '(no reason recorded)';
-					lines.push(`      reason: ${reason}`);
+					// A multi-line reason renders on its own indented lines.
+					const reasonLines = reason.split('\n');
+					lines.push(`      reason: ${reasonLines[0]}`);
+					for (const extra of reasonLines.slice(1)) {
+						lines.push(`        ${extra}`);
+					}
+					if (entry.questions && entry.questions.length > 0) {
+						lines.push('      questions:');
+						for (const q of entry.questions) {
+							lines.push(`        - ${q}`);
+						}
+					}
 				}
 			}
 		}
@@ -454,7 +433,6 @@ export function formatStatus(report: StatusReport): string {
 	lines.push('');
 	lines.push(
 		`Summary: ${report.active.length} active, ${report.attention.length} failed/retained job(s)` +
-			(naCount > 0 ? `, ${naCount} needs-attention item(s)` : '') +
 			(lockCount > 0 ? `, ${lockCount} in-flight lock(s)` : '') +
 			(dupCount > 0 ? `, ${dupCount} one-slug-one-folder violation(s)` : '') +
 			'.',

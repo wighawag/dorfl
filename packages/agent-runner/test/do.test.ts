@@ -18,6 +18,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	raceClone,
@@ -341,21 +342,16 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 
-		// CRITICAL — `do` is autonomous: the stuck state is SURFACED ON MAIN (the
-		// mode-M cherry-pick of the move-only commit), so scan/status/another
-		// machine can see it. A `complete` (human) call without surfaceArbiter
-		// would leave main showing in-progress; `do` MUST surface it.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		// CRITICAL — `do` is autonomous: the stuck state is the per-item lock
+		// `state: stuck` (slice 9b: the lock is the SOLE stuck record), so
+		// scan/status/another machine can read it. NO `main` write — the body STAYS
+		// in backlog/ (it never moved on claim) and NO needs-attention/ folder is
+		// written.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-
-		// Locally too, the item bounced to needs-attention/ with the reason.
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
-			true,
-		);
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			false,
-		);
 	});
 
 	it('CONTRAST: human `complete` (no surfaceArbiter) routes LOCAL-ONLY — main still shows the body in backlog', async () => {
@@ -385,12 +381,12 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('gate-failed');
-		// Local-only: the item bounced locally (from backlog/ → needs-attention/ in the
-		// working tree), but main was NOT surfaced — it still shows the body in backlog/
-		// (the human's claim is the held lock, no cross-machine surfacing).
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'beta.md'))).toBe(
-			true,
-		);
+		// HUMAN local-only path (NO surfaceArbiter): there is no arbiter handle, so
+		// the lock is NOT marked stuck (a human is right there) and main is untouched
+		// — the body stays in backlog/, no needs-attention/ folder, the lock stays
+		// active. The autonomous-vs-human divergence rides on whether an arbiter is
+		// given to the bounce.
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 	});
@@ -464,11 +460,12 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 
-		// The arbiter ledger surface is already owned by `complete.ts`; we re-assert
-		// it here so the in-place path's end-to-end behaviour stays pinned (the slug
-		// is on needs-attention/ on main, NOT in-progress/, so the next autonomous
-		// tick does not re-claim and re-crash forever).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		// The stuck state is the per-item lock `state: stuck` (slice 9b); the body
+		// STAYS in backlog/ on main (no needs-attention/ folder, no in-progress/), so
+		// the next autonomous tick reads the held stuck lock and does NOT re-claim and
+		// re-crash forever.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 	});
 });
@@ -500,15 +497,12 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		expect(result.routedToNeedsAttention).toBe(true);
 
 		// The work-preserving side-effect now MATCHES the gate-failure path:
-		// (a) surfaced ON THE ARBITER main (mode-M), cross-machine visible.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		// (a) the stuck state is the per-item lock `state: stuck` (cross-machine
+		//     visible via the lock ref); the body STAYS in backlog/ on main.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-
-		// (b) the failure reason is recorded in the item body.
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
-			true,
-		);
 
 		// (c) the work/<slug> branch is PUSHED to the arbiter, carrying the agent's
 		// partial work (a wip commit) — the durable artifact a requeue continues from.
@@ -589,10 +583,10 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(result.message).toMatch(/did nothing/);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
-			true,
-		);
+		// The reason is STILL surfaced on the lock entry even with no wip to save (the
+		// lock amend does not depend on a commit).
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 	});
 
 	it('a THROWN agent error is saved the same way (commit + push + surface)', async () => {
@@ -612,7 +606,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.message).toMatch(/crashed hard/);
 		expect(result.routedToNeedsAttention).toBe(true);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
@@ -637,8 +631,8 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		});
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
-		// Surfaced on the arbiter main + the branch pushed, from the job checkout.
-		expect(existsOnArbiterMain(job, 'needs-attention', 'alpha')).toBe(true);
+		// The stuck lock is marked + the branch pushed, from the job checkout.
+		expect(stuckLockOnArbiter(job, 'alpha')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], job);
 		expect(
 			gitIn(
@@ -675,7 +669,7 @@ describe('do <slug> — failure-CAUSE classification (transient-infra / config-e
 		expect(result.routedToNeedsAttention).toBe(true);
 		// The cause is legible on the route reason.
 		expect(result.message).toMatch(/transient[\s-]?infra/i);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 	});
 
 	it('an agent that ran but produced bad/empty output stays the generic agent-failed (conservative default)', async () => {
@@ -740,9 +734,10 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 
-		// The LEDGER is surfaced on main (mode-M), as before.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
+		// The stuck state is the per-item lock; the body STAYS in backlog/ on main.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 
 		// THE FIX: the work/<slug> branch is now PUSHED to the arbiter, carrying the
@@ -835,10 +830,10 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('gate-failed');
-		// Local bounce happened, but the work branch was NOT pushed.
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'beta.md'))).toBe(
-			true,
-		);
+		// Local-only (no surfaceArbiter): the lock is NOT marked stuck and the work
+		// branch is NOT pushed (a human is right there). No needs-attention/ folder.
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 		// No `<arbiter>/work/slice-beta` ref exists (the human path never pushes it).
 		// `git ls-remote` is a soft check: it lists nothing for an absent ref.
 		const remoteRefs = gitIn(
@@ -883,16 +878,11 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 		expect(result.message).toMatch(/premise X which is false/);
 		expect(result.message).toMatch(/Re-scope before re-claiming/);
 
-		// Routed to needs-attention, surfaced on the arbiter main (autonomous).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		// Routed to stuck (the lock), surfaced on the arbiter via the lock ref.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		// The reason landed in the item body.
-		const body = readFileSync(
-			join(repo, 'work', 'needs-attention', 'alpha.md'),
-			'utf8',
-		);
-		expect(body).toMatch(/premise X which is false/);
 
 		// The acceptance gate was NEVER run (the exploding verify never fired) — a
 		// STOP short-circuits before the gate + Gate-2.
@@ -918,7 +908,7 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 		expect(result.outcome).toBe('agent-stopped');
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(result.message).toMatch(/no source change|empty diff|no-op/i);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
@@ -962,7 +952,7 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 		});
 		expect(result.outcome).toBe('agent-stopped');
 		expect(result.message).toMatch(/the API this slice targets was removed/);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 

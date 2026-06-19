@@ -199,17 +199,19 @@ async function runStart(
 
 /**
  * Resolve the EFFECTIVE dispatch folder, combining the durable `<arbiter>/main`
- * folder with the per-item LOCK ref (slice
- * `cutover-claim-body-stays-and-complete-sources-from-backlog`). Since claim no
- * longer moves the body, a CLAIMED-AND-IN-FLIGHT slice RESTS in `backlog/` on
- * `main` — a folder-only check would mis-read it as unclaimed and let `start`
- * re-claim it. So when the slug is in `backlog/` AND its per-item lock is held
- * `active` (`action: implement`), dispatch as `in-progress` (already claimed:
- * refuse / `--resume`). A held `stuck` lock is the needs-attention surface, which
- * STILL moves the body to `work/needs-attention/` on `main` (the interim dual-write
- * 9b owns); so the `needs-attention/` folder remains the dispatch source for the
- * stuck case and we do not re-key it off the lock here. Everything else dispatches
- * by folder unchanged.
+ * folder with the per-item LOCK ref. Since claim no longer moves the body, a
+ * CLAIMED-AND-IN-FLIGHT slice RESTS in `backlog/` on `main` (slice
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`), and a STUCK item
+ * is the per-item lock `state: stuck` (NOT a `needs-attention/` folder file —
+ * slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision
+ * i+: the folder is retired). So a folder-only check would mis-read either as
+ * unclaimed and let `start` re-claim it. We re-key the dispatch off the LOCK when
+ * the body is in `backlog/`:
+ *   - held `active` (`action: implement`) ⇒ `in-progress` (already claimed:
+ *     refuse / `--resume`);
+ *   - held `stuck` ⇒ `needs-attention` (the recovery dispatch: print the reason,
+ *     resume the lock `stuck → active`, onboard).
+ * Everything else dispatches by folder unchanged.
  */
 async function dispatchFolder(
 	slug: string,
@@ -221,9 +223,11 @@ async function dispatchFolder(
 	if (folder !== 'backlog') {
 		return folder;
 	}
-	// In `backlog/`: claimed-ness is the per-item lock, not the folder. A held
-	// `active` lock = already claimed/in-flight (it rests in `backlog/` while held).
+	// In `backlog/`: claimed-ness + stuck-ness are the per-item lock, not the folder.
 	const lock = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	if (lock && lock.state === 'stuck') {
+		return 'needs-attention';
+	}
 	if (lock && lock.state === 'active') {
 		return 'in-progress';
 	}
@@ -422,55 +426,42 @@ async function startFromNeedsAttention(params: {
 }): Promise<StartResult> {
 	const {slug, arbiter, cwd, env, note} = params;
 
-	// Surface the recorded reason for the human, read from the stuck file on the
-	// arbiter's main (the body prose under `## Needs attention`).
-	const reason = await reasonOnArbiterMain(slug, arbiter, cwd, env);
-	if (reason) {
-		note(`'${slug}' is stuck (needs-attention): ${reason}`);
+	// Surface the recorded reason for the human, read from the STUCK LOCK ENTRY
+	// (slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: the lock
+	// is the sole stuck record — no `needs-attention/` folder file). The full reason
+	// prose + any surfaced questions ride on the lock entry body.
+	const stuck = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	if (stuck?.reason) {
+		note(`'${slug}' is stuck (needs-attention): ${stuck.reason}`);
 	} else {
 		note(`'${slug}' is stuck (needs-attention) — picking it up.`);
 	}
-
-	// To transition the surface on main, work in a checkout that has the stuck file
-	// in its tree. Cut a temporary branch off the arbiter's needs-attention surface
-	// (the human's current branch may be anything), apply the reverse move THROUGH
-	// the write seam (which clears the main surface in mode M), then onboard onto
-	// work/<slug>. No manual file move escapes — the seam owns it.
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const startRef =
-		(
-			await gitSoft(['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, env)
-		).stdout.trim() ||
-		(await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-	const resolveBranch = `agent-runner/resolve-${slug}`;
-	await gitHard(
-		['switch', '--quiet', '-C', resolveBranch, `${arbiter}/main`],
-		cwd,
-		env,
-	);
-	try {
-		const resolved = await ledgerWrite.applyResolveNeedsAttentionTransition({
-			cwd,
-			slug,
-			arbiter,
-			env,
-			note,
-		});
-		if (!resolved.moved) {
-			throw new StartUsageError(
-				resolved.reasonNotMoved ??
-					`could not resolve '${slug}' from needs-attention.`,
-			);
+	if (stuck?.questions && stuck.questions.length > 0) {
+		note('Surfaced questions:');
+		for (const q of stuck.questions) {
+			note(`  - ${q}`);
 		}
-	} finally {
-		// Leave no scratch resolve branch behind: switch back, then drop it.
-		await gitSoft(['switch', '--quiet', startRef], cwd, env);
-		await gitSoft(['branch', '-D', resolveBranch], cwd, env);
 	}
 
-	// The surface is cleared on main (item back in in-progress). Onboard onto the
-	// work branch: CONTINUE from a kept arbiter work/<slug> when present, else
-	// fresh off the NEW main.
+	// Resume the lock `stuck → active` THROUGH the write seam (a pure lock amend, NO
+	// `main` write, NO temp checkout — the body already rests in `backlog/` and the
+	// work stays on the kept `work/<slug>` branch), then onboard onto work/<slug>.
+	const resolved = await ledgerWrite.applyResolveNeedsAttentionTransition({
+		cwd,
+		slug,
+		arbiter,
+		env,
+		note,
+	});
+	if (!resolved.moved) {
+		throw new StartUsageError(
+			resolved.reasonNotMoved ??
+				`could not resolve '${slug}' from needs-attention.`,
+		);
+	}
+
+	// The lock is back to active (the human owns it). Onboard onto the work branch:
+	// CONTINUE from a kept arbiter work/<slug> when present, else fresh off main.
 	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
 	if (switched.rebaseConflict) {
 		return continueConflictResult({slug, arbiter, cwd, env, note});
@@ -903,48 +894,6 @@ async function folderOnArbiterMain(
 		}
 	}
 	return 'absent';
-}
-
-/**
- * Read the recorded needs-attention reason for `slug` from `<arbiter>/main`: the
- * prose under the `## Needs attention` heading in
- * `work/needs-attention/<slug>.md`. Returns '' when absent/unreadable (the human
- * is told it is stuck regardless). Read-only.
- */
-async function reasonOnArbiterMain(
-	slug: string,
-	arbiter: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string> {
-	const show = await gitSoft(
-		['show', `${arbiter}/main:work/needs-attention/${slug}.md`],
-		cwd,
-		env,
-	);
-	if (show.status !== 0) {
-		return '';
-	}
-	const lines = show.stdout.replace(/\r\n/g, '\n').split('\n');
-	const start = lines.findIndex((l) => l.trim() === '## Needs attention');
-	if (start === -1) {
-		return '';
-	}
-	const collected: string[] = [];
-	for (let i = start + 1; i < lines.length; i++) {
-		const line = lines[i];
-		if (/^##\s/.test(line) || /^###\s/.test(line)) {
-			break;
-		}
-		if (line.trim() === '') {
-			if (collected.length > 0) {
-				break;
-			}
-			continue;
-		}
-		collected.push(line.trim());
-	}
-	return collected.join(' ').trim();
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */

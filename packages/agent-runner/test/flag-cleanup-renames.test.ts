@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {readFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {Command} from 'commander';
@@ -11,6 +11,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -93,6 +94,9 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['switch', '-q', '-c', 'work/slice-alpha', `${ARBITER}/main`], repo);
+		// Leave agent work so the bounce saves a wip commit + PUSHES the work branch
+		// (the continue-branch the default requeue's safety guard checks for).
+		writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'alpha',
@@ -102,7 +106,7 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		});
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 
 		// Drive the renamed verb through the actual CLI program (the same wiring the
 		// `return` verb had — only the verb name changed).
@@ -118,9 +122,9 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 			ARBITER,
 		]);
 
-		// The item is back in backlog (exactly what `return` did).
+		// The item is back in the claimable pool: the lock is released, body in backlog.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
 	});
 });
 

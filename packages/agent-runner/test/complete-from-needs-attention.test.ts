@@ -2,13 +2,14 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performComplete} from '../src/complete.js';
-import {readNeedsAttentionItems} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -68,7 +69,8 @@ async function seedSurfacedNeedsAttention(
 	// The agent produced work, but the gate failed spuriously.
 	agentEdits(repo, opts.agentFile);
 
-	// The autonomous routing: wip + move-only on the branch AND surface on main.
+	// The autonomous routing: save wip on the branch + mark the lock stuck (the SOLE
+	// stuck record). NO folder move — the body stays in backlog/.
 	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,
@@ -78,14 +80,10 @@ async function seedSurfacedNeedsAttention(
 	});
 	expect(routed.moved).toBe(true);
 
-	// Pre-conditions: item in needs-attention/ locally AND on the surfaced main.
-	expect(existsSync(join(repo, 'work', 'needs-attention', `${slug}.md`))).toBe(
-		true,
-	);
-	expect(existsSync(join(repo, 'work', 'in-progress', `${slug}.md`))).toBe(
-		false,
-	);
-	expect(existsOnArbiterMain(repo, 'needs-attention', slug)).toBe(true);
+	// Pre-conditions: the lock is stuck; the body rests in backlog/ (no folder move).
+	expect(stuckLockOnArbiter(repo, slug)).toBe(true);
+	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
+	expect(existsOnArbiterMain(repo, 'needs-attention', slug)).toBe(false);
 	expect(currentBranch(repo)).toBe(`work/slice-${slug}`);
 	return {repo, seeded};
 }
@@ -130,8 +128,9 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		// must fast-forward to a main where the item is in done/ — NO conflict.
 		const {repo, seeded} = await seedSurfacedNeedsAttention('beta');
 		const human = seeded.clone('human');
-		// The human's main currently shows the surfaced needs-attention state.
-		expect(existsOnArbiterMain(human, 'needs-attention', 'beta')).toBe(true);
+		// The human's main shows the body in backlog/ (no surfacing on main); the
+		// stuck state is the lock.
+		expect(existsOnArbiterMain(human, 'backlog', 'beta')).toBe(true);
 
 		const result = await performComplete({
 			slug: 'beta',
@@ -144,13 +143,12 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		});
 		expect(result.outcome).toBe('completed');
 
-		// The human just fast-forwards — a clean ff to the done state, no conflict.
+		// The human just fast-forwards — a clean ff to the done state, no conflict
+		// (the bounce never wrote main, so there is nothing to conflict with).
 		gitIn(['fetch', '-q', ARBITER], human);
 		gitIn(['merge', '--ff-only', '-q', `${ARBITER}/main`], human);
 		expect(existsSync(join(human, 'work', 'done', 'beta.md'))).toBe(true);
-		expect(existsSync(join(human, 'work', 'needs-attention', 'beta.md'))).toBe(
-			false,
-		);
+		expect(existsSync(join(human, 'work', 'backlog', 'beta.md'))).toBe(false);
 	});
 
 	it('refuses a STILL-RED re-gate; the item stays in needs-attention/', async () => {
@@ -170,17 +168,19 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('gate-failed');
 
-		// The item stays in needs-attention/ (locally AND surfaced on main).
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'gamma.md'))).toBe(
-			true,
-		);
-		expect(existsSync(join(repo, 'work', 'done', 'gamma.md'))).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(true);
+		// The item stays STUCK (the lock); never reaches done/, body stays in backlog/.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'gamma')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 
-		// Still surfaced with its reason.
-		const items = readNeedsAttentionItems(repo);
-		expect(items.find((i) => i.slug === 'gamma')?.reason).toMatch(/gate/i);
+		// Still stuck with its reason on the lock entry.
+		const lock = await readItemLock({
+			item: 'slice:gamma',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/gate/i);
 	});
 
 	it('--skip-verify remains the human-only override (completes without re-gating)', async () => {
@@ -203,8 +203,13 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
 	});
 
-	it('keeps the recorded reason in the completed item as durable history', async () => {
-		const {repo, seeded} = await seedSurfacedNeedsAttention('epsilon');
+	it('completing a recovered stuck item RELEASES the lock (the stuck reason was transient)', async () => {
+		// The stuck reason lived on the (transient) lock entry, not the durable body
+		// (the working-tree-visibility trade the ADR made). Completing the item
+		// done-moves it and RELEASES the lock — the reason history is not carried into
+		// the durable `done/` record.
+		const {repo} = await seedSurfacedNeedsAttention('epsilon');
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
 
 		await performComplete({
 			slug: 'epsilon',
@@ -216,11 +221,15 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 			env: gitEnv(),
 		});
 
-		// Read the completed file off the arbiter's main: the reason block survives.
-		const done = seeded.clone('reader');
-		const body = readFileSync(join(done, 'work', 'done', 'epsilon.md'), 'utf8');
-		expect(body).toMatch(/Needs attention/i);
-		expect(body).toMatch(/spurious/i);
+		expect(existsOnArbiterMain(repo, 'done', 'epsilon')).toBe(true);
+		// The lock (the transient stuck record) is released on completion.
+		const lock = await readItemLock({
+			item: 'slice:epsilon',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(lock).toBeUndefined();
 	});
 
 	it('propose mode: recovers from needs-attention by pushing the branch', async () => {
@@ -239,12 +248,13 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
-		// propose does not land on main; the branch is pushed with the done-move.
+		// propose does not land on main; the branch is pushed with the done-move (the
+		// body's frontmatter, sans any stuck reason — that lived on the transient lock).
 		const branchHead = gitIn(
 			['show', `${ARBITER}/work/slice-zeta:work/done/zeta.md`],
 			repo,
 		);
-		expect(branchHead).toMatch(/Needs attention/i);
+		expect(branchHead).toMatch(/zeta/i);
 	});
 });
 

@@ -8,6 +8,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -128,18 +129,20 @@ describe('requeue — tree-less CAS transition (does not write the cwd tree)', (
 		// 2. The cwd HEAD did not move — requeue made NO commit in the cwd tree.
 		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(beforeHead);
 
-		// 3. The stray file is absent from EVERY commit requeue added to the arbiter.
+		// 3. The stray file is absent from any commit requeue added to the arbiter (a
+		//    default requeue releases the lock and writes NO main commit, so the set is
+		//    typically empty — the point is the stray is never swept in).
 		const afterArbiter = arbiterMainLog(repo);
 		const newCommits = afterArbiter.filter((c) => !beforeArbiter.includes(c));
-		expect(newCommits.length).toBeGreaterThan(0);
 		for (const commit of newCommits) {
 			const files = gitIn(['show', '--name-only', '--format=', commit], repo);
 			expect(files).not.toMatch(/assistant-wip\.md/);
 		}
 
-		// 4. And the move itself DID land on the arbiter (needs-attention → backlog).
+		// 4. And the requeue itself DID land: the lock is released, the body rests in
+		//    backlog/ (claimable again).
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 	});
 
 	it('-m appends a dated handoff note (read+rewritten via the arbiter, not the cwd tree)', async () => {

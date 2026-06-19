@@ -16,6 +16,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -271,9 +272,7 @@ describe('the gate DECISION is identical with watch on vs off (observability onl
 		expect(blockOff.result.outcome).toBe('needs-attention');
 		expect(blockOn.result.outcome).toBe(blockOff.result.outcome);
 		expect(blockOn.result.exitCode).toBe(blockOff.result.exitCode);
-		expect(existsOnArbiterMain(blockOn.repo, 'needs-attention', 'b-on')).toBe(
-			true,
-		);
+		expect(stuckLockOnArbiter(blockOn.repo, 'b-on')).toBe(true);
 		expect(existsOnArbiterMain(blockOn.repo, 'done', 'b-on')).toBe(false);
 	});
 });

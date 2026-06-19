@@ -212,11 +212,13 @@ describe('fresh-worktree gate — prepare runs in the fresh worktree before veri
 		expect(core.routedToNeedsAttention).toBe(true);
 		expect(core.reason).toMatch(/prepare/i);
 		expect(core.reason).not.toMatch(/acceptance gate failed/i);
-		// Bounced to needs-attention/, never landed on arbiter main.
+		// Bounced (the routedToNeedsAttention flag), never landed on arbiter main.
+		// Local-only `performIntegration` (no surfaceArbiter) records nothing durable;
+		// the body stays in backlog/ and no needs-attention/ folder is written.
 		expect(existsOnArbiterMain(repo, 'done', 'prep-fail')).toBe(false);
 		expect(
 			existsSync(join(repo, 'work', 'needs-attention', 'prep-fail.md')),
-		).toBe(true);
+		).toBe(false);
 	});
 });
 
@@ -289,11 +291,10 @@ describe('fresh-worktree gate — failure routing is unchanged (only the gate TR
 		expect(core.routedToNeedsAttention).toBe(true);
 		expect(core.branch).toBe('work/slice-route');
 		expect(core.reason).toMatch(/acceptance gate failed/i);
-		// The done-move had already happened (the gate runs AFTER it on the ON path),
-		// so the item bounces from done/ to needs-attention/.
-		expect(existsSync(join(repo, 'work', 'done', 'route.md'))).toBe(false);
+		// The bounce is a pure lock amend now (no folder move). Local-only
+		// `performIntegration` records nothing durable; nothing landed on main.
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'route.md'))).toBe(
-			true,
+			false,
 		);
 		expect(existsOnArbiterMain(repo, 'done', 'route')).toBe(false);
 	});
@@ -441,12 +442,11 @@ describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the
 		expect(core.routedToNeedsAttention).toBe(true);
 		// verify ran (and passed) BEFORE the review blocked, on the rebased tip.
 		expect(verifyRanBeforeReview).toBe(true);
-		// The done-move already happened (the review runs after it on the ON path), so
-		// the block bounces the item from done/ to needs-attention/.
-		expect(existsSync(join(repo, 'work', 'done', 'vtr-block.md'))).toBe(false);
+		// The bounce is a pure lock amend now (no folder move); local-only, nothing
+		// durable recorded; nothing landed on main.
 		expect(
 			existsSync(join(repo, 'work', 'needs-attention', 'vtr-block.md')),
-		).toBe(true);
+		).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'vtr-block')).toBe(false);
 	});
 
@@ -539,11 +539,12 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 		});
 
 		expect(core.outcome).toBe('gate-failed');
-		// OFF path bounces from backlog/ (the gate runs BEFORE the done-move; the body
-		// rests in backlog/ now that claim no longer moves it).
-		expect(existsSync(join(repo, 'work', 'backlog', 'off-red.md'))).toBe(false);
+		expect(core.routedToNeedsAttention).toBe(true);
+		// The bounce is a pure lock amend now (no folder move); the body stays in
+		// backlog/ and no needs-attention/ folder is written (local-only).
+		expect(existsSync(join(repo, 'work', 'backlog', 'off-red.md'))).toBe(true);
 		expect(
 			existsSync(join(repo, 'work', 'needs-attention', 'off-red.md')),
-		).toBe(true);
+		).toBe(false);
 	});
 });

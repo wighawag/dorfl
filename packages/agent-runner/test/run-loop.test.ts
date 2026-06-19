@@ -16,6 +16,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -301,11 +302,9 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 		// (surfaced on main as needs-attention, NOT a bespoke reporter).
 		expect(summary.ticks[0].failed).toBe(1);
 		expect(summary.ticks[0].needsAttention).toBe(1);
-		// It is on main as needs-attention (the existing on-main surfacing) and is
-		// NOT in backlog/in-progress.
-		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'feat')).toBe(
-			true,
-		);
+		// It is STUCK on its per-item lock (the stuck-state surface); the body rests
+		// in backlog/ but the held stuck lock makes it ineligible.
+		expect(stuckLockOnArbiter(seeded.repo, 'feat')).toBe(true);
 		// NOT infinite-retried: once surfaced (out of backlog), the later ticks find
 		// it ineligible — they do NOT re-claim it. So the item is failed AT MOST once.
 		const totalFailed = summary.failed;

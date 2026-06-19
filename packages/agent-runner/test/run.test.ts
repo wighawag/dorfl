@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {writeFileSync, existsSync, readFileSync, chmodSync} from 'node:fs';
 import {runOnce, type AgentRunner} from '../src/run.js';
+import {readItemLock} from '../src/item-lock.js';
 import {PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE} from '../src/do-config.js';
 import {performClaim} from '../src/claim-cas.js';
 import {mergeConfig} from '../src/config.js';
@@ -13,6 +14,7 @@ import {
 	isolatePiAgentDir,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
 	raceClone,
@@ -155,7 +157,7 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		// actively-in-progress.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		// Folder-native surfacing (ADR §12): the runner bounced the work item from
 		// in-progress/ to needs-attention/ on the work branch, with the reason in
 		// its body, and PUSHED the branch to the arbiter (so the saved wip is
@@ -422,9 +424,7 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 		expect(byStatus.get('clash')).toBe('needs-attention');
 		// The conflict is isolated: the sibling clean job still integrated.
 		expect(byStatus.get('clean')).toBe('claimed-done');
-		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', 'clash')).toBe(
-			true,
-		);
+		expect(stuckLockOnArbiter(seeded.repo, 'clash')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', 'clean')).toBe(true);
 	});
 });
@@ -645,7 +645,7 @@ describe('runOnce — agent failure', () => {
 		// `run`'s agent-failure now routes through the seam (not a bare-return): the
 		// stuck state is SURFACED on main (needs-attention, not the in-progress claim)
 		// and the work branch is PUSHED — cross-machine recoverable.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
@@ -685,7 +685,7 @@ describe('runOnce — failure-CAUSE classification (transient-infra / config-err
 		expect(result.items[0].status).not.toBe('agent-failed');
 		// Still routed + surfaced (the work-preserving seam is unchanged — only the
 		// label is more precise).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
@@ -705,7 +705,7 @@ describe('runOnce — failure-CAUSE classification (transient-infra / config-err
 			agentId: () => 'agentA',
 		});
 		expect(result.items[0].status).toBe('agent-failed');
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 	});
 
 	it('a thrown CORE wiring/config error (review on, no reviewGate) → config-error (NOT agent-failed)', async () => {
@@ -724,7 +724,7 @@ describe('runOnce — failure-CAUSE classification (transient-infra / config-err
 		});
 		expect(result.items[0].status).toBe('config-error');
 		expect(result.items[0].status).not.toBe('agent-failed');
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 	});
 });
 
@@ -756,15 +756,16 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		expect(item.status).toBe('agent-stopped');
 		expect(item.detail).toMatch(/already landed elsewhere/);
 		// Routed + surfaced on the arbiter main; never reached done.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		// The reason is recorded in the item body.
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-		const body = gitIn(
-			['show', 'arbiter/main:work/needs-attention/feat.md'],
-			repo,
-		);
-		expect(body).toMatch(/already landed elsewhere/);
+		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
+		const lock = await readItemLock({
+			item: 'slice:feat',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(lock?.reason).toMatch(/already landed elsewhere/);
 		// Counted as needs-attention (a STOP is a human-must-look outcome).
 		expect(result.needsAttention).toBe(1);
 	});
@@ -785,7 +786,7 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		expect(result.items[0].detail).toMatch(
 			/no source change|empty diff|no-op/i,
 		);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
@@ -923,7 +924,7 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		expect(arbiterHasBranch(arbiter, repo, 'work/slice-feat')).toBe(true);
 		// The needs-attention surface is on the arbiter's main (mode-M), where it is
 		// observable to scan/status/another machine.
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 
 		// main was NOT advanced to the agent's version (never auto-resolved).
