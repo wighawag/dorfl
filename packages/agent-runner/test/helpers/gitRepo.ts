@@ -176,7 +176,7 @@ export function seedRepoWithArbiter(
 		needsAnswers?: boolean;
 		blockedBy?: string[];
 		promptBody?: string;
-		/** PRD slugs to seed under `work/prd/<slug>.md` (for the slicing lock). */
+		/** PRD slugs to seed under `work/briefs/ready/<slug>.md` (for the slicing lock). */
 		prds?: string[];
 		/**
 		 * Commit a `.agent-runner.json` at the repo root (so it travels onto
@@ -198,7 +198,7 @@ export function seedRepoWithArbiter(
 		writeFileSync(join(backlog, `${slug}.md`), sliceFile(slug, opts));
 	}
 	if (opts.prds && opts.prds.length > 0) {
-		const prdDir = join(repo, 'work', 'prd');
+		const prdDir = join(repo, 'work', 'briefs', 'ready');
 		mkdirSync(prdDir, {recursive: true});
 		for (const slug of opts.prds) {
 			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
@@ -275,7 +275,7 @@ function sliceFile(
 	].join('\n');
 }
 
-/** A minimal PRD file body for `work/prd/<slug>.md` (slicing-lock fixtures). */
+/** A minimal PRD file body for `work/briefs/ready/<slug>.md` (slicing-lock fixtures). */
 export function prdFile(slug: string, marker = 'ORIGINAL'): string {
 	return [
 		'---',
@@ -409,15 +409,19 @@ export function registerMirrorWithWork(
 		done?: Record<string, string>;
 		needsAttention?: Record<string, string>;
 		/**
-		 * Files committed under `work/dropped/` (the generic terminal "won't-proceed"
-		 * folder — slice
-		 * `generic-terminal-dropped-folder-generalising-out-of-scope`). Generalises
-		 * the previous `outOfScope` key.
+		 * Files committed under `work/tasks/cancelled/` (the SLICE regime's
+		 * "won't-proceed" terminal — the per-regime split of the previous shared
+		 * `work/dropped/`, slice `brief-regime-rename-and-dropped-migration`).
 		 */
-		dropped?: Record<string, string>;
-		/** PRDs to slice, committed under `work/prd/` on the mirror's `main`. */
+		cancelled?: Record<string, string>;
+		/**
+		 * Files committed under `work/briefs/dropped/` (the BRIEF regime's
+		 * "won't-proceed" terminal). The per-regime counterpart of `cancelled`.
+		 */
+		briefsDropped?: Record<string, string>;
+		/** PRDs to slice, committed under `work/briefs/ready/` on the mirror's `main`. */
 		prd?: Record<string, string>;
-		/** Already-SLICED PRDs, committed under `work/prd-sliced/` (sliced-ness residence). */
+		/** Already-SLICED PRDs, committed under `work/briefs/tasked/` (sliced-ness residence). */
 		prdSliced?: Record<string, string>;
 		/** Observations committed under `work/notes/observations/` (the triage candidate pool). */
 		observations?: Record<string, string>;
@@ -448,7 +452,8 @@ export function registerMirrorWithWork(
 	writeAll('in-progress', work.inProgress);
 	writeAll('done', work.done);
 	writeAll('needs-attention', work.needsAttention);
-	writeAll('dropped', work.dropped);
+	writeAll('cancelled', work.cancelled);
+	writeAll('briefs-dropped', work.briefsDropped);
 	writeAll('prd', work.prd);
 	writeAll('prd-sliced', work.prdSliced);
 	writeAll('observations', work.observations);

@@ -514,11 +514,12 @@ describe('status — arbiter fold-in (the old `arbiter status`, ADR §1/§7)', (
 
 describe('status — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () => {
 	it('WARNS loudly when a slug resides in two status folders on the mirror, naming both', async () => {
-		// A corrupt ledger: the SAME slug present in BOTH dropped/ and done/ (the orphan
-		// class the integration core refuses). The lint set is the DURABLE folders now
-		// (`backlog`/`done`/`dropped`) — the transient ones are retired from `main`.
+		// A corrupt ledger: the SAME slug present in BOTH tasks/cancelled/ and done/
+		// (the orphan class the integration core refuses). The lint set is the DURABLE
+		// folders now (`backlog`/`done`/`cancelled`) — the transient ones are retired
+		// from `main`.
 		const {mirrorPath} = registerMirrorWithWork(workspacesDir(), 'project', {
-			dropped: {'ghost.md': '---\nslug: ghost\n---\nbody'},
+			cancelled: {'ghost.md': '---\nslug: ghost\n---\nbody'},
 			done: {'ghost.md': '---\nslug: ghost\n---\nbody'},
 		});
 		const report = await status({
@@ -529,13 +530,13 @@ describe('status — one-slug-one-folder LINT (PRD ledger-integrity story 3)', (
 		expect(report.ledgerDuplicates?.[0].repoPath).toBe(mirrorPath);
 		const dup = report.ledgerDuplicates?.[0].duplicates[0];
 		expect(dup?.slug).toBe('ghost');
-		expect(dup?.folders).toContain('dropped');
+		expect(dup?.folders).toContain('cancelled');
 		expect(dup?.folders).toContain('done');
 
 		const out = formatStatus(report);
 		expect(out).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(out).toMatch(/ghost/);
-		expect(out).toContain('work/dropped/');
+		expect(out).toContain('work/tasks/cancelled/');
 		expect(out).toContain('work/tasks/done/');
 	});
 
@@ -544,7 +545,7 @@ describe('status — one-slug-one-folder LINT (PRD ledger-integrity story 3)', (
 			backlog: {'a.md': '---\nslug: a\n---\nbody'},
 			inProgress: {'b.md': '---\nslug: b\n---\nbody'},
 			done: {'c.md': '---\nslug: c\n---\nbody'},
-			dropped: {'d.md': '---\nslug: d\n---\nbody'},
+			cancelled: {'d.md': '---\nslug: d\n---\nbody'},
 		});
 		const report = await status({
 			workspacesDir: workspacesDir(),

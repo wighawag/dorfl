@@ -15,7 +15,7 @@ import {
 
 /**
  * The `finish-already-committed-branch` slice (PRD
- * `work/prd-sliced/ledger-integrity.md` story 6, defect 4): a first-class way to
+ * `work/briefs/tasked/ledger-integrity.md` story 6, defect 4): a first-class way to
  * FINISH an already-committed, already-done-moved stranded work branch.
  *
  * When a terminal push fails AFTER the done-move + commit (steps 2–3 of

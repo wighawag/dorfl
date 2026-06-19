@@ -257,7 +257,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(calls).toEqual([]);
 	});
 
-	it('a disposition terminal (dropped) flows through the engine end-to-end', async () => {
+	it('a disposition terminal (dropped on a slice) flows through the engine end-to-end → tasks/cancelled', async () => {
 		const {repo, itemPath, sidecarPath} = seedAnsweredItem({
 			slug: 'oos',
 			questions: ['ship?'],
@@ -273,6 +273,8 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(result.outcome).toBe('advanced');
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'dropped', 'oos.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'oos.md'))).toBe(
+			true,
+		);
 	});
 });

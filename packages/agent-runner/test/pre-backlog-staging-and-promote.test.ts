@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 function seedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -157,7 +157,7 @@ describe('STEP A — slicer output lands STAGED in pre-backlog/, not backlog/', 
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 		// PRD lifecycle move still happens (the staging split is orthogonal).
-		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
 	});
 });
 

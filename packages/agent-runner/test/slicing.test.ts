@@ -45,7 +45,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/prd/<slug>.md` (committed onto the arbiter) with frontmatter. */
+/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) with frontmatter. */
 function seedPrd(
 	repo: string,
 	slug: string,
@@ -59,11 +59,11 @@ function seedPrd(
 		 * leftover marker does NOT count toward sliced-ness (residence does).
 		 */
 		sliced?: string;
-		/** Seed into `work/prd-sliced/` (the sliced resting state) instead of `prd/`. */
+		/** Seed into `work/briefs/tasked/` (the sliced resting state) instead of `prd/`. */
 		inPrdSliced?: boolean;
 	} = {},
 ): void {
-	const dir = join(repo, 'work', fm.inPrdSliced ? 'prd-sliced' : 'prd');
+	const dir = join(repo, 'work', 'briefs', fm.inPrdSliced ? 'tasked' : 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -291,8 +291,8 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 
 	it('passes the gate once the sliceAfter PRD IS sliced', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` is SLICED — it RESIDES in work/prd-sliced/ (the source of truth), not
-		// a `sliced:` marker in work/prd/. `it`'s sliceAfter resolves against that
+		// `dep` is SLICED — it RESIDES in work/briefs/tasked/ (the source of truth), not
+		// a `sliced:` marker in work/briefs/ready/. `it`'s sliceAfter resolves against that
 		// folder residence (mirroring blockedBy -> done/).
 		seedPrd(repo, 'dep', {inPrdSliced: true});
 		seedPrd(repo, 'it', {sliceAfter: ['dep']});
@@ -309,7 +309,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 
 	it('STILL refuses when the sliceAfter PRD only carries an INERT `sliced:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` sits in work/prd/ with a leftover (INERT) `sliced:` line but is NOT in
+		// `dep` sits in work/briefs/ready/ with a leftover (INERT) `sliced:` line but is NOT in
 		// prd-sliced/. Folder residence is the SOLE source of truth — the marker was
 		// removed in remove-sliced-marker-step-b, so the line is ignored and does NOT
 		// satisfy sliceAfter.
@@ -382,15 +382,17 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		expect(onArbiter(repo, 'work/tasks/backlog/it-first.md')).toBe(true);
 		expect(onArbiter(repo, 'work/tasks/todo/it-first.md')).toBe(false);
 		// The lock was released into the SLICED resting state: the PRD now resides in
-		// work/prd-sliced/ (the source of truth, like done/), NOT back in prd/; slicing/
+		// work/briefs/tasked/ (the source of truth, like done/), NOT back in prd/; slicing/
 		// is empty.
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
 		// Sliced-ness is RESIDENCE in prd-sliced/ (asserted above). The `sliced:` marker
 		// was removed in remove-sliced-marker-step-b, so the resting PRD carries NO
 		// sliced: line.
-		expect(showArbiter(repo, 'work/prd-sliced/it.md')).not.toMatch(/^sliced:/m);
+		expect(showArbiter(repo, 'work/briefs/tasked/it.md')).not.toMatch(
+			/^sliced:/m,
+		);
 	});
 
 	it('the RUNNER (not the agent) authored the commits/moves', async () => {
@@ -432,7 +434,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		expect(subject).toMatch(/; sliced$/);
 		// The completing commit carries BOTH the emitted backlog slice AND the
 		// slicing→prd-sliced move (a rename), in ONE runner-owned commit (rename
-		// detection shows the move as `work/prd-sliced/it.md`; slicing/ verified empty).
+		// detection shows the move as `work/briefs/tasked/it.md`; slicing/ verified empty).
 		const files = run(
 			'git',
 			['show', '--name-status', '--format=', `${ARBITER}/main`],
@@ -440,12 +442,12 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			{env: gitEnv()},
 		).stdout;
 		expect(files).toMatch(/work\/tasks\/backlog\/it-a\.md/);
-		expect(files).toMatch(/work\/prd-sliced\/it\.md/);
+		expect(files).toMatch(/work\/briefs\/tasked\/it\.md/);
 		// The PRD is no longer held in slicing/ (the lock was released in this commit)
 		// and now rests in prd-sliced/ (the source of truth), NOT back in prd/.
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
 	});
 
 	it('REGRESSION (`do prd:` titlePath read): the commit subject carries the PRD `title:` (read from titlePath, NOT the generic fallback)', async () => {
@@ -457,7 +459,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// A DISTINCT multi-word title (not just the slug) so the subject is provably
 		// derived from the PRD title, not a generic fallback.
-		const dir = join(repo, 'work', 'prd');
+		const dir = join(repo, 'work', 'briefs', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, 'it.md'),
@@ -537,13 +539,13 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		// The arbiter was NOT modified by the slicing: the PRD body stays in prd/ (the
 		// lock is still held on the ref), and no backlog slice landed on main. The PRD
 		// did NOT move to prd-sliced/.
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
 	it('RE-SLICE round-trip: prd-sliced/ -> prd/ reopens a sliced PRD into the slice pool', async () => {
-		// Slice `it` ONCE: it lands in work/prd-sliced/ (the sliced resting state).
+		// Slice `it` ONCE: it lands in work/briefs/tasked/ (the sliced resting state).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const first = await performSlice({
@@ -556,17 +558,17 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			env: gitEnv(),
 		});
 		expect(first.outcome).toBe('sliced');
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 
-		// REOPEN-TO-READY: git mv work/prd-sliced/it.md -> work/prd/it.md (mirroring
+		// REOPEN-TO-READY: git mv work/briefs/tasked/it.md -> work/briefs/ready/it.md (mirroring
 		// done/ -> backlog/), so the reshaped PRD re-enters the slice pool with no
 		// special case. Do it on a throwaway clone + push (the runner owns git; this is
 		// a test's own throwaway repo).
 		reopenSlicedPrd(scratch.root, 'it');
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
 		// Sync the local checkout to the reopened arbiter main so its working tree has
-		// work/prd/it.md (the to-slice source `performSlice` reads at step 0).
+		// work/briefs/ready/it.md (the to-slice source `performSlice` reads at step 0).
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		run('git', ['reset', '-q', '--hard', `${ARBITER}/main`], repo, {
 			env: gitEnv(),
@@ -585,14 +587,14 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		});
 		expect(second.outcome).toBe('sliced');
 		expect(onArbiter(repo, 'work/tasks/backlog/it-second.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
 	});
 });
 
 /**
  * REOPEN a sliced PRD to ready: from a throwaway clone of the arbiter,
- * `git mv work/prd-sliced/<slug>.md -> work/prd/<slug>.md` and push it to `main`
+ * `git mv work/briefs/tasked/<slug>.md -> work/briefs/ready/<slug>.md` and push it to `main`
  * (the re-slice / reopen-to-ready move, mirroring done/ -> backlog/).
  */
 function reopenSlicedPrd(root: string, slug: string): void {
@@ -607,10 +609,10 @@ function reopenSlicedPrd(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'reopen', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	mkdirSync(join(dest, 'work', 'prd'), {recursive: true});
+	mkdirSync(join(dest, 'work', 'briefs', 'ready'), {recursive: true});
 	run(
 		'git',
-		['mv', `work/prd-sliced/${slug}.md`, `work/prd/${slug}.md`],
+		['mv', `work/briefs/tasked/${slug}.md`, `work/briefs/ready/${slug}.md`],
 		dest,
 		{env: gitEnv()},
 	);
@@ -621,9 +623,9 @@ function reopenSlicedPrd(root: string, slug: string): void {
 }
 
 /**
- * From a throwaway clone of the arbiter, EDIT the held `work/prd/<slug>.md` body
+ * From a throwaway clone of the arbiter, EDIT the held `work/briefs/ready/<slug>.md` body
  * and push it to `main` — simulating a concurrent writer editing the PRD under the
- * slicing lock (the body stays in `work/prd/` now; the read-stability backstop must
+ * slicing lock (the body stays in `work/briefs/ready/` now; the read-stability backstop must
  * detect the changed blob and fail the integrate as `stale`).
  */
 function editHeldPrdOnArbiter(root: string, slug: string): void {
@@ -638,7 +640,7 @@ function editHeldPrdOnArbiter(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'edit', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	const held = join(dest, 'work', 'prd', `${slug}.md`);
+	const held = join(dest, 'work', 'briefs', 'ready', `${slug}.md`);
 	writeFileSync(
 		held,
 		readFileSync(held, 'utf8') + '\nCONCURRENT EDIT under the lock.\n',
@@ -766,7 +768,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		// sliced-ness signal; the `sliced:` marker was removed in
 		// remove-sliced-marker-step-b).
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 	});
 
 	it('a persistent block hits slicerLoopMax → emits the uncertain slice needsAnswers + questions', async () => {
@@ -828,11 +830,11 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(result.exitCode).toBe(1);
 		// The needs-attention surface is the per-item lock `state: stuck` now (slice
 		// `cutover-...-trim-folder-sets`), NOT a folder move: the PRD body STAYS in
-		// work/prd/ (it never moved under the lock), and NO needs-attention/ or
+		// work/briefs/ready/ (it never moved under the lock), and NO needs-attention/ or
 		// slicing/ folder file is written.
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
 		// No guessed slices emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);

@@ -196,7 +196,7 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 });
 
 describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () => {
-	it('dropped → resolves the Q&A AND moves the item to work/dropped/ (the generic terminal)', () => {
+	it('dropped on a SLICE → resolves the Q&A AND moves to work/tasks/cancelled/ (the slice regime terminal)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			questions: ['ship it?'],
 			answers: ['no'],
@@ -214,8 +214,68 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		// The Q&A was resolved (sidecar deleted) and the item moved folders.
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'dropped', 'foo.md'))).toBe(true);
-		expect(result.itemPath).toBe('work/dropped/foo.md');
+		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'foo.md'))).toBe(
+			true,
+		);
+		expect(result.itemPath).toBe('work/tasks/cancelled/foo.md');
+	});
+
+	it('dropped on a BRIEF → moves to work/briefs/dropped/ (the brief regime terminal; the per-regime split, no slug collision)', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			slug: 'foo',
+			folder: 'prd',
+			type: 'prd',
+			questions: ['ship it?'],
+			answers: ['no'],
+			dispositions: ['dropped'],
+		});
+
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'prd:foo',
+			itemPath,
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('dropped');
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+		// A dropped BRIEF lands in briefs/dropped/, NOT tasks/cancelled/ — so a
+		// task-drop and a brief-drop sharing the slug `foo` never collide.
+		expect(existsSync(join(repo, 'work', 'briefs', 'dropped', 'foo.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'foo.md'))).toBe(
+			false,
+		);
+		expect(result.itemPath).toBe('work/briefs/dropped/foo.md');
+	});
+
+	it('dropped on an OBSERVATION → recommends deletion (a note has NO terminal folder; it leaves by deletion)', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			slug: 'note',
+			folder: 'observations',
+			type: 'observation',
+			questions: ['drop it?'],
+			answers: ['yes'],
+			dispositions: ['dropped'],
+		});
+
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'observation:note',
+			itemPath,
+			env: gitEnv(),
+		});
+
+		// No observation terminal exists, so a `dropped` disposition downgrades to a
+		// delete-recommendation: the Q&A resolves but the FILE stays (human deletes).
+		expect(result.outcome).toBe('delete-recommended');
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		expect(existsSync(join(repo, itemPath))).toBe(true);
+		expect(readFileSync(join(repo, itemPath), 'utf8')).toContain(
+			'## Recommended: delete',
+		);
 	});
 
 	it('needs-attention → resolves the Q&A AND bounces the item to work/needs-attention/', () => {

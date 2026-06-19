@@ -13,7 +13,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The ledger-integrity hardening (PRD `work/prd-sliced/ledger-integrity.md`,
+ * The ledger-integrity hardening (PRD `work/briefs/tasked/ledger-integrity.md`,
  * defect 1 + its root defect 2): the integration done-move must be ATOMIC against
  * the ARBITER's current status folder, and the one-slug-one-folder invariant must
  * hold on the transition — a merge can NEVER land `done/` while leaving an

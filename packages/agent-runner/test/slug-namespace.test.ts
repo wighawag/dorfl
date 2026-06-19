@@ -123,8 +123,8 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		}
 	});
 
-	it('a bare slug ERRORS on collision even when the PRD is mid-slice (body stays in work/prd/)', () => {
-		// A PRD currently being sliced KEEPS its body in work/prd/<slug>.md (the slicing
+	it('a bare slug ERRORS on collision even when the PRD is mid-slice (body stays in work/briefs/ready/)', () => {
+		// A PRD currently being sliced KEEPS its body in work/briefs/ready/<slug>.md (the slicing
 		// lock no longer moves it — the `slicing/` folder is retired; the in-flight state
 		// is the per-item lock ref). The PRD namespace still claims the slug via its prd/
 		// residence, so a bare slug is still ambiguous.
@@ -355,7 +355,7 @@ describe('resolveSliceOnlyArg — the slice-only command guard', () => {
 });
 
 describe('ledger-read seam — resolvePrdExistence (the NEW PRD read path)', () => {
-	it('reports a PRD present in work/prd/', () => {
+	it('reports a PRD present in work/briefs/ready/', () => {
 		writeItem('prd', 'p.md', {slug: 'p'});
 		const r = currentLedgerRead.resolvePrdExistence({
 			repoPath: repoPath(),
@@ -366,7 +366,7 @@ describe('ledger-read seam — resolvePrdExistence (the NEW PRD read path)', () 
 		expect(r.prdSlicedFile).toBeUndefined();
 	});
 
-	it('reports a PRD present only via its work/prd-sliced/ resting file (already sliced)', () => {
+	it('reports a PRD present only via its work/briefs/tasked/ resting file (already sliced)', () => {
 		writeItem('prd-sliced', 's.md', {slug: 's'});
 		const r = currentLedgerRead.resolvePrdExistence({
 			repoPath: repoPath(),

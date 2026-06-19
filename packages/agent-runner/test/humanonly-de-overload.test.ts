@@ -222,7 +222,7 @@ function slice(frontmatter: Record<string, string>): string {
 }
 
 function seedPrdRaw(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),

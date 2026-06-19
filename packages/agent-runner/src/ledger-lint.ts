@@ -44,20 +44,19 @@ import {
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
  * the ONLY `work/` moves on `main` are the DURABLE RESTING transitions, so a
  * slice's ledger file can rest only in the DURABLE set: the pool `backlog/`, the
- * terminal `done/`, and the GENERIC "won't-proceed" terminal `dropped/` (slice
- * `generic-terminal-dropped-folder-generalising-out-of-scope`, PRD
- * `staging-pool-position-gate-and-trust-model` US #16/17/18; it GENERALISES the
- * previous `out-of-scope/`, with the specific REASON living in the item BODY as a
- * `reason:` value). The transient `in-progress`/`needs-attention`/`slicing`/
+ * terminal `done/`, and the slice regime's PER-REGIME "won't-proceed" terminal
+ * `tasks/cancelled/` (the per-regime split of the previous shared `dropped/`, PRD
+ * `folder-taxonomy-reorg-and-rename` US #10; the specific REASON lives in the item
+ * BODY as a `reason:` value). The brief regime's terminal `briefs/dropped/` is a
+ * SEPARATE namespace and is NOT a slice-status folder. The transient
+ * `in-progress`/`needs-attention`/`slicing`/
  * `advancing` are GONE from `main`'s tree — they are per-item lock-ref state
  * (`in-progress` = lock held active, `needs-attention` = lock held stuck), read
  * via `agent-runner status` / `gc --ledger`'s lock report, NOT an `ls`-able folder.
  *
- * A strict superset of `integration-core.ts`'s `LEDGER_STATUS_FOLDERS` (which
- * omits `dropped/` because the runner's transitions never auto-move a slice
- * there — it is a human disposition). A read-side lint must still surface a
- * slug that ends up in `dropped/` AND another status folder, so the lint covers
- * all three.
+ * Shares `integration-core.ts`'s `LEDGER_STATUS_FOLDERS` (`backlog`/`done`/
+ * `cancelled`). A read-side lint surfaces a slug that ends up in `tasks/cancelled/`
+ * AND another status folder, so the lint covers all three.
  *
  * The capture buckets (`ideas`/`observations`/`findings`) and the PRD-flow folders
  * (`prd`/`prd-sliced`) are NOT slice-status folders (WORK-CONTRACT.md: the buckets
@@ -77,7 +76,7 @@ export {LEDGER_STATUS_FOLDERS, type LedgerStatusFolder} from './work-layout.js';
  */
 const CANONICAL_PRECEDENCE: readonly LedgerStatusFolder[] = [
 	'done',
-	'dropped',
+	'cancelled',
 	'backlog',
 ];
 

@@ -820,23 +820,30 @@ export async function readItemLock(
 /**
  * The DURABLE-`main` terminal record paths for an item, by its type — the
  * authoritative resting records the cross-substrate reconciliation reads. An
- * item is TERMINAL on `main` iff ANY of these paths exists on `<arbiter>/main`:
- *   - a SLICE: `work/done/<slug>.md` (completed) OR `work/dropped/<slug>.md`
- *     (the generic "won't-proceed" terminal that generalised `out-of-scope/`).
- *   - a PRD: `work/prd-sliced/<slug>.md` (sliced) OR `work/dropped/<slug>.md`.
- *   - an OBSERVATION: `work/dropped/<slug>.md` (the only durable terminal it
- *     reaches; a promoted observation becomes a NEW slice/PRD with its own ref).
- * `dropped/` is type-agnostic (the generic terminal), so it is in every set.
+ * item is TERMINAL on `main` iff ANY of these paths exists on `<arbiter>/main`.
+ * The won't-proceed terminal is PER-REGIME (the slug-collision correctness fix:
+ * a dropped slice and a dropped brief sharing a slug used to collide on one
+ * bare-slug `work/dropped/<slug>.md`):
+ *   - a SLICE: `work/tasks/done/<slug>.md` (completed) OR
+ *     `work/tasks/cancelled/<slug>.md` (the slice regime's won't-proceed terminal).
+ *   - a PRD: `work/briefs/tasked/<slug>.md` (sliced) OR `work/briefs/dropped/<slug>.md`
+ *     (the brief regime's won't-proceed terminal).
+ *   - an OBSERVATION: NONE. A note has no durable terminal folder — it leaves by
+ *     deletion (its absence, not a terminal record, is the end state). A promoted
+ *     observation becomes a NEW slice/PRD with its own ref.
  */
 export function terminalMainPaths(type: SidecarType, slug: string): string[] {
-	const dropped = workItemRel('dropped', `${slug}.md`);
+	const file = `${slug}.md`;
 	switch (type) {
 		case 'slice':
-			return [workItemRel('done', `${slug}.md`), dropped];
+			return [workItemRel('done', file), workItemRel('cancelled', file)];
 		case 'prd':
-			return [workItemRel('prd-sliced', `${slug}.md`), dropped];
+			return [
+				workItemRel('prd-sliced', file),
+				workItemRel('briefs-dropped', file),
+			];
 		case 'observation':
-			return [dropped];
+			return [];
 	}
 }
 
@@ -855,7 +862,8 @@ export interface ReconcileResult {
 	/** The type-encoded lock entry (`<type>-<slug>`) reconciled. */
 	entry: string;
 	ref: string;
-	/** Whether `<arbiter>/main` shows the item terminal (done/dropped/prd-sliced). */
+	/** Whether `<arbiter>/main` shows the item terminal (per {@link terminalMainPaths}:
+	 * a slice at `tasks/done`/`tasks/cancelled`, a brief at `briefs/tasked`/`briefs/dropped`). */
 	terminalOnMain: boolean;
 	message: string;
 }
@@ -868,8 +876,9 @@ export interface ReconcileResult {
  *
  * complete's order is hold lock → land the DURABLE `main` move FIRST → release
  * the lock SECOND. A crash BETWEEN the move and the release leaves a
- * `done`/`dropped`/`prd-sliced`-on-`main` item with a STILL-HELD lock — a stale
- * lock with no in-flight work behind it. This is the recovery that converges it.
+ * terminal-on-`main` item (a completed/cancelled slice or a tasked/dropped brief,
+ * per {@link terminalMainPaths}) with a STILL-HELD lock — a stale lock with no
+ * in-flight work behind it. This is the recovery that converges it.
  *
  * THE RECOVERY RULE (the `main` record is authoritative over a stale lock):
  *   - `main` is TERMINAL + the held lock is `active`  → the item is RESTED, the
@@ -950,7 +959,7 @@ export async function reconcileItemLockAgainstMain(
 			};
 		}
 		if (held.lock.state === 'stuck') {
-			// `done`/`dropped`/`prd-sliced` + `stuck` co-exist legitimately (US #10) —
+			// a terminal-on-main record + `stuck` co-exist legitimately (US #10) —
 			// NOT corruption. Keep the stuck lock (it wins the human's attention).
 			return {
 				outcome: 'kept-stuck',

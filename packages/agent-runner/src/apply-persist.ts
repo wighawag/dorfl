@@ -9,12 +9,35 @@ import {
 	appendQuestions,
 	isEntryAnswered,
 	parseSidecar,
+	resolveSidecarIdentity,
 	sidecarPathFor,
 	type NewQuestion,
 	type SidecarDisposition,
 	type SidecarEntry,
 	type SidecarModel,
 } from './sidecar.js';
+import type {SidecarType} from './sidecar.js';
+import type {WorkFolderKey} from './work-layout.js';
+
+/**
+ * The PER-REGIME won't-proceed terminal a `dropped` disposition routes an item to,
+ * by its TYPE — the slug-collision correctness fix (PRD
+ * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped brief
+ * sharing a slug used to collide on one bare-slug `work/dropped/<slug>.md`; each
+ * regime now has its own namespaced terminal. An OBSERVATION has NO terminal folder
+ * (`undefined`) — a note leaves by DELETION, so a `dropped` disposition on an
+ * observation is handled as a delete-recommendation, never a move to a terminal.
+ */
+function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
+	switch (type) {
+		case 'slice':
+			return 'cancelled';
+		case 'prd':
+			return 'briefs-dropped';
+		case 'observation':
+			return undefined;
+	}
+}
 
 /**
  * The engine-owned APPLY PERSIST (PRD `advance-loop`, slice `advance-rung-apply`,
@@ -93,12 +116,15 @@ export type ApplyTerminal =
 	/** A "keep" answer stamped `triaged:keep`; the item drops out of the pool. */
 	| 'kept'
 	/**
-	 * Moved to `work/dropped/` (the generic durable "won't-proceed" record —
-	 * slice `generic-terminal-dropped-folder-generalising-out-of-scope`, PRD
-	 * `staging-pool-position-gate-and-trust-model` US #16/17/18). GENERALISES the
-	 * previous `out-of-scope` terminal; the specific REASON (`out-of-scope` /
-	 * `superseded by <x>` / `duplicate` / `abandoned`) lives in the item BODY,
-	 * not in the folder name.
+	 * Moved to the regime's PER-REGIME "won't-proceed" terminal: a TASK to
+	 * `work/tasks/cancelled/`, a BRIEF to `work/briefs/dropped/` (the slug-collision
+	 * fix, slice `brief-regime-rename-and-dropped-migration`). An OBSERVATION has no
+	 * terminal folder, so a `dropped` disposition on one downgrades to
+	 * `delete-recommended` (notes leave by deletion). The specific REASON
+	 * (`out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned`) lives in the
+	 * item BODY, not in the folder name. The OUTCOME word stays `dropped` for a
+	 * task/brief (the disposition kept its meaning; only the resolved PATH is
+	 * regime-namespaced).
 	 */
 	| 'dropped'
 	/** Moved to `work/needs-attention/` (the existing bounce — a human must look). */
@@ -331,7 +357,16 @@ export function applyAnsweredQuestions(
 
 	// No follow-ups → the Q&A is RESOLVED (clear needsAnswers + delete the sidecar).
 	// A terminal disposition routes the (now-resolved) item further.
-	const terminal = pickTerminal(model.entries);
+	const picked = pickTerminal(model.entries);
+	const itemType = resolveSidecarIdentity(item).type;
+	// A `dropped` disposition on an OBSERVATION has no terminal folder (notes leave
+	// by deletion), so it DOWNGRADES to a delete-recommendation — the note is never
+	// moved to a terminal. For a task/brief, `dropped` keeps routing to the regime's
+	// namespaced won't-proceed terminal (`tasks/cancelled` / `briefs/dropped`).
+	const terminal =
+		picked === 'dropped' && dropTerminalFolder(itemType) === undefined
+			? 'delete'
+			: picked;
 	const resolvedBody = withAppliedAnswers(baseBody, model.entries);
 
 	if (terminal === 'keep') {
@@ -372,6 +407,7 @@ export function applyAnsweredQuestions(
 			item,
 			itemPath,
 			terminal,
+			itemType,
 			by,
 			env,
 			note,
@@ -443,7 +479,10 @@ interface MoveTerminalInput {
 	cwd: string;
 	item: string;
 	itemPath: string;
+	/** The terminal OUTCOME name (kept as the disposition word). */
 	terminal: 'dropped' | 'needs-attention';
+	/** The item type, used to resolve the per-regime `dropped` terminal folder. */
+	itemType: SidecarType;
 	by: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
@@ -452,26 +491,37 @@ interface MoveTerminalInput {
 
 /**
  * Route the (already Q&A-resolved) item to a terminal LIFECYCLE folder
- * (`dropped/` or `needs-attention/`) via a `git mv` + commit — the SECOND
- * commit of the disposition (the first cleared needsAnswers + deleted the
- * sidecar). Status = the folder (WORK-CONTRACT rule 3): the move IS the terminal
- * state, no frontmatter status field. Returns the NEW item path.
+ * (the per-regime won't-proceed terminal for `dropped`, or `needs-attention/`)
+ * via a `git mv` + commit — the SECOND commit of the disposition (the first
+ * cleared needsAnswers + deleted the sidecar). Status = the folder (WORK-CONTRACT
+ * rule 3): the move IS the terminal state, no frontmatter status field. A
+ * `dropped` disposition resolves the destination PER REGIME (`tasks/cancelled`
+ * for a task, `briefs/dropped` for a brief) so a task-drop and a brief-drop
+ * sharing a slug never collide; `needs-attention` is type-agnostic. Returns the
+ * NEW item path.
  */
 function moveResolvedItemToTerminal(
 	input: MoveTerminalInput,
 ): ApplyAnsweredQuestionsResult {
-	const {cwd, item, itemPath, terminal, env, note, sidecarPath} = input;
-	const destDir = workFolderPath(cwd, terminal);
+	const {cwd, item, itemPath, terminal, itemType, env, note, sidecarPath} =
+		input;
+	const destFolder: WorkFolderKey =
+		terminal === 'dropped'
+			? // observation is already downgraded to `delete` upstream, so the folder
+				// resolves to a defined regime terminal here.
+				(dropTerminalFolder(itemType) ?? 'cancelled')
+			: 'needs-attention';
+	const destDir = workFolderPath(cwd, destFolder);
 	mkdirSync(destDir, {recursive: true});
 	const slug = itemPath.replace(/^.*\//, '');
-	const destRel = workItemRel(terminal, slug);
+	const destRel = workItemRel(destFolder, slug);
 	gitHard(['mv', itemPath, destRel], cwd, env);
 	gitHard(['add', '-A'], cwd, env);
 	const subject = `advance: ${item} → ${terminal} (by ${input.by})`;
 	gitHard(['commit', '--quiet', '-m', subject], cwd, env);
 	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
 	const message = `applied ${item} → ${terminal} (moved to ${workFolderPrefix(
-		terminal,
+		destFolder,
 	)}).`;
 	note(message);
 	return {

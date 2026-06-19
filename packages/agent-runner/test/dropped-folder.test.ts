@@ -8,17 +8,24 @@ import {mergeConfig} from '../src/config.js';
 import {LEDGER_STATUS_FOLDERS} from '../src/ledger-lint.js';
 
 /**
- * Slice `generic-terminal-dropped-folder-generalising-out-of-scope`
- * (PRD `staging-pool-position-gate-and-trust-model`, US #16/17/18).
+ * The PER-REGIME won't-proceed terminals (slice
+ * `brief-regime-rename-and-dropped-migration`, PRD
+ * `folder-taxonomy-reorg-and-rename` US #10). The previously-shared top-level
+ * `work/dropped/` is split per regime so a dropped task and a dropped brief
+ * sharing a slug never collide on one bare-slug `work/dropped/<slug>.md`:
+ *   - a SLICE drops to `work/tasks/cancelled/`,
+ *   - a BRIEF (PRD) drops to `work/briefs/dropped/`,
+ *   - an OBSERVATION has NO terminal folder (notes leave by deletion).
  *
- * Pool-eligibility BY RESIDENCE: an item resting in `work/dropped/` is OUT of
- * every pool, the SAME way `work/tasks/done/` excludes \u2014 there is ONE residence rule
- * (the pool readers enumerate ONLY their pool folders, `backlog/` for slices,
- * `prd/` for PRDs), so a `dropped/` file is invisible to every reader by
- * construction; no reader re-implements the rule.
+ * Pool-eligibility BY RESIDENCE: an item resting in its regime's won't-proceed
+ * terminal is OUT of every pool, the SAME way `work/tasks/done/` /
+ * `work/briefs/tasked/` exclude — the pool readers enumerate ONLY their pool
+ * folders (`tasks/todo/` for slices, `briefs/ready/` for briefs), so a terminal
+ * file is invisible to every reader by construction; no reader re-implements the
+ * rule.
  *
  * The REASON for dropping (`out-of-scope` / `superseded by <x>` / `duplicate` /
- * `abandoned`) lives in the item BODY, NOT in a frontmatter status field \u2014
+ * `abandoned`) lives in the item BODY, NOT in a frontmatter status field —
  * WORK-CONTRACT rule 3 ("status = the folder"). This file asserts the body
  * `reason:` line is preserved verbatim by the readers (they do not consult or
  * coerce it).
@@ -45,18 +52,18 @@ function writeMd(rel: string, fm: Record<string, string>, body = 'body'): void {
 	writeFileSync(abs, lines.join('\n'));
 }
 
-describe('work/dropped/ — a generic terminal residence excludes from every pool', () => {
-	it('is one of the canonical status folders (one residence rule, defined once)', () => {
-		expect([...LEDGER_STATUS_FOLDERS]).toContain('dropped');
+describe('per-regime wont-proceed terminals — residence excludes from every pool', () => {
+	it('the slice regime terminal `cancelled` is one of the canonical status folders (one residence rule, defined once)', () => {
+		expect([...LEDGER_STATUS_FOLDERS]).toContain('cancelled');
 	});
 
-	it('a PRD resting in work/dropped/ is OUT of the auto-slice PRD pool (by residence, like work/prd-sliced/)', () => {
-		// A live PRD in work/prd/ + a SUPERSEDED PRD in work/dropped/. Only the live
-		// one is in the pool the auto-slicer enumerates. The dropped PRD must NEVER
-		// be auto-sliced.
-		writeMd('repo/work/prd/live.md', {slug: 'live'});
+	it('a BRIEF resting in work/briefs/dropped/ is OUT of the auto-slice pool (by residence, like work/briefs/tasked/)', () => {
+		// A live brief in work/briefs/ready/ + a SUPERSEDED brief in
+		// work/briefs/dropped/. Only the live one is in the pool the auto-slicer
+		// enumerates. The dropped brief must NEVER be auto-sliced.
+		writeMd('repo/work/briefs/ready/live.md', {slug: 'live'});
 		writeMd(
-			'repo/work/dropped/superseded.md',
+			'repo/work/briefs/dropped/superseded.md',
 			{slug: 'superseded'},
 			'reason: superseded by live\n\nbody',
 		);
@@ -68,12 +75,13 @@ describe('work/dropped/ — a generic terminal residence excludes from every poo
 		expect(pool.slicedSlugs).toEqual(new Set());
 	});
 
-	it('a slice resting in work/dropped/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
-		// A live slice in work/tasks/todo/ + a dropped slice in work/dropped/. The scan
-		// enumerates only the backlog pool, so the dropped slice never appears.
+	it('a slice resting in work/tasks/cancelled/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
+		// A live slice in work/tasks/todo/ + a cancelled slice in
+		// work/tasks/cancelled/. The scan enumerates only the pool, so the cancelled
+		// slice never appears.
 		writeMd('repo/work/tasks/todo/live.md', {slug: 'live'});
 		writeMd(
-			'repo/work/dropped/abandoned.md',
+			'repo/work/tasks/cancelled/abandoned.md',
 			{slug: 'abandoned'},
 			'reason: abandoned\n\nbody',
 		);
@@ -87,16 +95,51 @@ describe('work/dropped/ — a generic terminal residence excludes from every poo
 		expect(slugs).not.toContain('abandoned');
 	});
 
+	it('a task-drop and a brief-drop sharing a slug NO LONGER collide (the per-regime correctness fix)', () => {
+		// The load-bearing reason the terminal is per-regime: a slice `shared` and a
+		// brief `shared` that are BOTH dropped land in DIFFERENT files
+		// (work/tasks/cancelled/shared.md vs work/briefs/dropped/shared.md), never
+		// the one bare-slug work/dropped/shared.md they used to collide on.
+		writeMd(
+			'repo/work/tasks/cancelled/shared.md',
+			{slug: 'shared'},
+			'reason: a cancelled TASK',
+		);
+		writeMd(
+			'repo/work/briefs/dropped/shared.md',
+			{slug: 'shared'},
+			'reason: a dropped BRIEF',
+		);
+
+		// Both terminals co-exist for the same slug WITHOUT being a ledger duplicate:
+		// the slice-status lint covers only the tasks board, so `briefs/dropped/` is
+		// a separate namespace, not a same-folder collision.
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({autoBuild: true}),
+		);
+		expect(report.repos[0].ledgerDuplicates).toEqual([]);
+		// Neither is in any pool (both are terminal residences).
+		expect(report.repos[0].items).toEqual([]);
+		const prdPool = currentLedgerRead.resolvePrdPool({
+			repoPath: join(root, 'repo'),
+		});
+		expect(prdPool.prds).toEqual([]);
+	});
+
 	it('the `reason:` is preserved in the item BODY (status is the folder; no frontmatter status field is read)', () => {
-		// An existing record `migrates cleanly` if folded in: a file with a body
-		// `reason:` value (one of the maintainer's vocabulary) is the durable shape
-		// the readers tolerate without consulting/coercing it.
+		// A file with a body `reason:` value (one of the maintainer's vocabulary) is
+		// the durable shape the readers tolerate without consulting/coercing it.
 		const body = [
 			'reason: out-of-scope',
 			'',
-			'Folded-in record from the previous `work/out-of-scope/` folder.',
+			'Folded-in record from the previous shared `work/dropped/` terminal.',
 		].join('\n');
-		writeMd('repo/work/dropped/folded-in.md', {slug: 'folded-in'}, body);
+		writeMd(
+			'repo/work/tasks/cancelled/folded-in.md',
+			{slug: 'folded-in'},
+			body,
+		);
 
 		// Sanity: still excluded from every pool (residence rule), and the body
 		// reason text was not coerced into frontmatter.
@@ -111,17 +154,22 @@ describe('work/dropped/ — a generic terminal residence excludes from every poo
 		expect(report.repos[0].items).toEqual([]);
 	});
 
-	it('and a slug present BOTH in work/dropped/ and another status folder is a one-slug-one-folder duplicate (the lint covers dropped)', async () => {
-		// Cross-residence corruption is still detectable: a slug in `dropped/`
-		// AND `backlog/` is a duplicate the lint surfaces (the read-side lint covers
-		// the full lifecycle set including the terminal `dropped/`).
+	it('a slug present BOTH in work/tasks/cancelled/ and another slice-status folder is a one-slug-one-folder duplicate (the lint covers cancelled)', async () => {
+		// Cross-residence corruption is still detectable: a slug in
+		// `tasks/cancelled/` AND `tasks/todo/` is a duplicate the lint surfaces (the
+		// read-side lint covers the full slice lifecycle set including the terminal
+		// `tasks/cancelled/`).
 		writeMd('repo/work/tasks/todo/both.md', {slug: 'both'});
-		writeMd('repo/work/dropped/both.md', {slug: 'both'}, 'reason: duplicate');
+		writeMd(
+			'repo/work/tasks/cancelled/both.md',
+			{slug: 'both'},
+			'reason: duplicate',
+		);
 
 		const {lintLocalLedger} = await import('../src/ledger-lint.js');
 		const dups = lintLocalLedger(join(root, 'repo'));
 		expect(dups.map((d) => d.slug)).toEqual(['both']);
-		expect(dups[0].folders).toContain('dropped');
+		expect(dups[0].folders).toContain('cancelled');
 		expect(dups[0].folders).toContain('backlog');
 	});
 });

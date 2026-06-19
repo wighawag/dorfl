@@ -57,13 +57,13 @@ const editingAgent: DoAgentRunner = ({cwd}) => {
 	return {ok: true};
 };
 
-/** Seed a `work/prd/<slug>.md` in the checkout's working tree (for prd: tests). */
+/** Seed a `work/briefs/ready/<slug>.md` in the checkout's working tree (for prd: tests). */
 function seedPrd(
 	repo: string,
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean} = {},
 ): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -1690,7 +1690,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/prd-sliced/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/briefs/tasked/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1699,7 +1699,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/prd/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/briefs/ready/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1717,7 +1717,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		).not.toBe(0);
 		const prd = run(
 			'git',
-			['show', `${ARBITER}/main:work/prd-sliced/somePrd.md`],
+			['show', `${ARBITER}/main:work/briefs/tasked/somePrd.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
@@ -1836,7 +1836,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/prd-sliced/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/briefs/tasked/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,

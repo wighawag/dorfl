@@ -161,7 +161,7 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(emitted).not.toContain('<slug>');
 	});
 
-	it('substitutes the source PRD path (work/prd/<prd>.md)', () => {
+	it('substitutes the source PRD path (work/briefs/ready/<prd>.md)', () => {
 		const emitted = wrapper('example', 'agent-runner');
 		expect(emitted).toContain('agent-runner');
 		expect(emitted).not.toContain('<prd>');

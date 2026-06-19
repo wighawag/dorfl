@@ -49,8 +49,9 @@ const ALLOW = 'work-layout.ts';
  * entirety, a `work/<folder>` path:
  *   - an OPTIONAL git-ref prefix ending in `:` (e.g. `${ref}:`, `${arbiter}/main:`),
  *   - the `work/` root + one of the known folder NAMES (not a longer word that
- *     merely starts with one — the `(?![A-Za-z-])` boundary stops `work/prd` from
- *     matching inside `work/prd-sliced`'s own folder token, etc.),
+ *     merely starts with one — the `(?![A-Za-z-])` boundary stops a folder name
+ *     from matching only a PREFIX of a longer same-rooted token, e.g.
+ *     `work/tasks/done` must not match inside `work/tasks/done-ish`),
  *   - then zero or more `/segment` path continuations, where a segment is any run of
  *     `${…}` interpolations, `<…>` placeholders, and path-safe chars (NOT `*`, so a
  *     `work/questions/**` template glob is NOT a path-construction literal).
@@ -161,21 +162,24 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		// Path-construction literals (the SHAPES the centralisation removed) MUST match
 		// — otherwise the guard could rot into a vacuous pass. After the notes-regroup +
 		// task-board-rename flip the task board lives under `tasks/` and the capture
-		// buckets under `notes/`, so a path-construction literal for those folders is
-		// now the NESTED form (`work/tasks/todo`, `work/notes/observations`) — the
+		// buckets under `notes/`; after the brief-regime rename the brief lifecycle
+		// lives under `briefs/` (`briefs/proposed`/`briefs/ready`/`briefs/tasked`) and
+		// the won't-proceed terminals are per-regime (`tasks/cancelled`/`briefs/dropped`).
+		// A path-construction literal for any of those is now the NESTED form — the
 		// matcher fires on the WHOLE nested path because the folder NAME the alternation
-		// carries is itself `tasks/todo` etc. The still-flat out-of-scope folders
-		// (`prd`/`pre-prd`/`prd-sliced`/`dropped`/`questions`) keep their flat shape.
+		// carries is itself `briefs/ready` etc. `questions` keeps its flat shape.
 		for (const path of [
 			'work/tasks/todo',
-			'work/pre-prd',
-			'work/prd/',
+			'work/briefs/proposed',
+			'work/briefs/ready/',
 			'work/tasks/todo/',
 			'work/tasks/backlog/',
+			'work/tasks/cancelled/',
+			'work/briefs/dropped/',
 			'work/notes/observations/',
 			'work/tasks/todo/${slug}.md',
 			'work/tasks/done/${slug}.md',
-			'work/prd-sliced/${slug}.md',
+			'work/briefs/tasked/${slug}.md',
 			'work/questions/${type}-${slug}.md',
 			'work/tasks/done/<slug>.md',
 			'${ref}:work/tasks/done',
@@ -190,7 +194,7 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		for (const prose of [
 			"'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ",
 			'work/tasks/todo/${slug}.md (nor work/in-progress/${slug}.md nor ',
-			'Read the source PRD (work/prd/${input.slug}.md) and review the candidate',
+			'Read the source PRD (work/briefs/ready/${input.slug}.md) and review the candidate',
 			'(A repo participates iff it has a work/tasks/todo/ with >= 1 .md file.)',
 			'work/questions/**', // the advance-CI template push-trigger glob
 			'workspace', // a word that merely starts with "work"
