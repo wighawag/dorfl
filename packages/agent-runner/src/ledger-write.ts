@@ -75,26 +75,21 @@ import {
 /**
  * The `work/` lifecycle transitions the write seam can apply.
  *
- * `slicing` is the **slicing-lock** transition (ADR `auto-slice`): it races a
- * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` micro-commit to the
- * arbiter via the SAME CAS the `claim` transition uses, so two concurrent slicers
- * never double-slice one PRD. Like `claim` it rides {@link applyTransition} (the
- * publish/lease is identical); it is a distinct KIND only so the lock is
- * self-documenting and uses a non-colliding branch name (see
- * `slicing-lock.ts`). `work/slicing/` is a TRANSIENT held lock, not a resting
- * state — release returns the PRD to `work/prd/`.
+ * `slicing` is the legacy slicing-lock MARKER transition. It is now VESTIGIAL: the
+ * capstone cut-over (slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) retired the
+ * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` marker, so the slicing lock
+ * is the unified per-item lock ref (`slicing-lock.ts`) and no longer routes through
+ * {@link applyTransition} with this kind. The member is kept so the strategy
+ * interface and any historical reference stay valid; nothing publishes it.
  *
- * `advancing` is the **advancing-lock** BORROW (PRD `advance-loop`, slice
- * `advancing-lock-borrow`): the surface/apply/triage phase's SHORT borrow. Like
- * `slicing` it rides {@link applyTransition} (the publish/lease is identical) and
- * is a distinct KIND only so the lock is self-documenting and uses a
- * non-colliding branch name (`advancing/<type>-<slug>`). Unlike `slicing` /
- * `claim` it does NOT move the item's lifecycle file: it races a PRESENCE-MARKER
- * micro-commit (`work/advancing/<type>-<slug>.md`) to the arbiter — the
- * lock-FOLDER encodes the ACTION, the entry name the IDENTITY — so a slice, a
- * PRD, and an observation sharing a slug never collide on the CAS ref (see
- * `advancing-lock.ts`). `work/advancing/` is a TRANSIENT held lock, not a resting
- * state — release deletes the marker and the item never moved.
+ * `advancing` is the kind {@link createItemThroughCas} (`advancing-lock.ts`) uses
+ * to publish a NEW `work/` item (the triage observation→promote path) through the
+ * SAME CAS the `claim` transition uses, keyed on the new item's identity (its
+ * path). The advancing-lock BORROW itself no longer rides this kind: the
+ * `work/advancing/<entry>.md` presence-marker is retired (the borrow is the unified
+ * `action: advance` lock ref now). So `advancing` survives only as the create-item
+ * CAS kind.
  */
 export type LedgerTransitionKind =
 	| 'claim'
@@ -875,8 +870,16 @@ async function bounceToStuckLock(params: {
 	}
 }
 
-/** The `work/` folders a slug's ledger file can live in, on `main`. */
-const WORK_FOLDERS = ['backlog', 'in-progress', 'done', 'needs-attention'];
+/**
+ * The DURABLE `work/` folders a slug's ledger file can live in, on `main`, after
+ * the capstone cut-over (slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
+ * `ledger-status-per-item-lock-refs`): only the durable resting transitions reach
+ * `main`, so the transient `in-progress`/`needs-attention` are GONE (they are
+ * per-item lock-ref state now). Kept for the (now-dead) surface-commit probe
+ * below.
+ */
+const WORK_FOLDERS = ['backlog', 'done'];
 
 /**
  * Publish the EFFECT of a single MOVE-ONLY commit (a `work/` ledger move — a

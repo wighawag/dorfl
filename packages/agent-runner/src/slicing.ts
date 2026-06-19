@@ -61,17 +61,18 @@ import type {ReviewGate} from './review-gate.js';
  *      naming it IS the authorization, exactly as `do <slice>` builds regardless of
  *      `autoBuild` (the pool, not the explicit claim, gates the policy). The HUMAN
  *      path is unbound by the gate entirely.
- *   2. **Acquire the lock** (agent path) via the seam CAS — serialising concurrent
- *      slicers (`prd → work/slicing/`). The HUMAN path with no contention may slice
- *      on `main` directly WITHOUT the lock.
+ *   2. **Acquire the lock** (agent path) via the unified per-item lock CAS —
+ *      serialising concurrent slicers on the `prd:<slug>` ref (the body STAYS in
+ *      `work/prd/`; the lock no longer moves it). The HUMAN path with no contention
+ *      may slice on `main` directly WITHOUT the lock.
  *   3. **Invoke the agent harness** with the `to-slices` brief — the agent runs the
  *      slicer methodology and produces `work/pre-backlog/<slug>.md` FILES ONLY; it does
  *      NOT commit/push/move (the same in-band boundary as the build agent).
  *   4. **The runner integrates the COMPLETING transition through the SHARED core**
  *      (`performIntegration`, slice `slice-output-through-integration`): the agent's
- *      slicing runs on a `work/<slug>` branch cut from `<arbiter>/main` (which the
- *      lock just published `work/slicing/<slug>.md` onto), and the produced backlog
- *      slices + the PRD lifecycle move (`work/slicing/ → work/prd-sliced/`)
+ *      slicing runs on a `work/<slug>` branch cut from `<arbiter>/main` (whose base
+ *      holds the PRD in `work/prd/`), and the produced backlog slices + the durable
+ *      PRD lifecycle move (`work/prd/ → work/prd-sliced/`)
  *      integrate via the band honoring `--propose` (push the branch + open a
  *      PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
  *      args resolve ONCE in the shared core, EVERY `do slice:` integrate arg applies
@@ -80,11 +81,12 @@ import type {ReviewGate} from './review-gate.js';
  *      so a concurrent edit of the held PRD still fails loud (`stale`).
  *
  * The slicing LOCK (`slicing-lock.ts`, `acquireSlicingLock`/`releaseSlicingLock`)
- * is UNCHANGED — the ledger-write CAS `prd → slicing/` on the visibility ref
- * (`docs/adr/claim-ledger-vs-protected-main.md`). The lock RELEASE still owns the
- * `slicing/ → needs-attention/` redirect for the loop's decomposition-unclear
- * verdict; only the SUCCESS output now integrates through the shared core instead
- * of committing slices straight to `main` via `emitSlices`. This path
+ * is the UNIFIED per-item lock (`refs/agent-runner/lock/<entry>`, `action: slice`)
+ * — the transient `slicing/` folder marker is RETIRED (slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`). The lock
+ * RELEASE owns the needs-attention redirect for the loop's decomposition-unclear
+ * verdict (it amends the lock `active → stuck` — no folder write); only the SUCCESS
+ * output integrates through the shared core. This path
  * does NOT build the no-human confidence routing — that is the review/edit loop
  * owned by `slicer-review-edit-loop`; this path produces + integrates the slices.
  */
@@ -441,9 +443,9 @@ export async function performSlice(
 
 	// 2b. ONBOARD the agent's slicing work onto a `work/<slug>` BRANCH cut from the
 	//     freshly-fetched `<arbiter>/main` (slice `slice-output-through-integration`).
-	//     The lock has just published `work/slicing/<slug>.md` to `<arbiter>/main`, so
-	//     the branch's base HOLDS the held PRD — the lifecycle stage below moves it
-	//     `slicing/ → prd-sliced/` ON THIS BRANCH and the shared integrate core (`--propose`
+	//     The PRD body rests in `work/prd/<slug>.md` on `<arbiter>/main` (the lock no
+	//     longer moves it), so the branch's base HOLDS the held PRD — the lifecycle
+	//     stage below moves it `prd/ → prd-sliced/` ON THIS BRANCH and the shared integrate core (`--propose`
 	//     PR / `--merge` main) lands the whole transition, WITHOUT the lock release
 	//     committing slices straight to `main`. The agent runs IN-PLACE on this branch
 	//     (branch ≠ worktree; the isolation seam upgrades it). The HUMAN path stays on
@@ -509,8 +511,9 @@ export async function performSlice(
 			note,
 		});
 		// DECOMPOSITION UNCLEAR: emit NO guessed slices — route the held PRD to
-		// needs-attention with the questions as the reason (the lock is released by
-		// the SAME runner-owned transition, redirecting slicing/ → needs-attention/).
+		// needs-attention with the questions as the reason. The lock release amends the
+		// `prd:<slug>` unified lock `active → stuck` (the slicing needs-attention surface
+		// is the stuck lock now — NO folder write; the PRD body stays in `work/prd/`).
 		if (loopDisposition.outcome === 'decomposition-unclear') {
 			const reason = decompositionUnclearReason(
 				slug,
@@ -592,7 +595,7 @@ export async function performSlice(
 		// into prd/ (a rename+edit merge) while the slices were cut from the OLD body —
 		// the exact silent stale-slice drift the lock forbids
 		// (`work/observations/slicing-lock-does-not-stabilise-prd-content.md`). So we
-		// compare the CURRENTLY held `work/slicing/<slug>.md` blob on the arbiter against
+		// compare the CURRENTLY held `work/prd/<slug>.md` blob on the arbiter against
 		// the snapshot the lock TOOK (`lockedBlob`); ANY change ⇒ STALE ⇒ fail loud,
 		// touch NOTHING (the lock stays held; a human re-slices or routes to
 		// needs-attention). It is the SAME content-identity check `releaseSlicingLock`
@@ -601,9 +604,9 @@ export async function performSlice(
 		const stale = await heldPrdIsStale(cwd, arbiter, slug, lockedBlob, env);
 		if (stale) {
 			const message =
-				`RELEASE CONFLICT for '${slug}': the PRD was edited (work/slicing/${slug}.md ` +
+				`RELEASE CONFLICT for '${slug}': the PRD was edited (work/prd/${slug}.md ` +
 				`changed on ${arbiter}/main) while the slicing lock was held. The slicing is ` +
-				`STALE — re-slice from the edited PRD or route it to work/needs-attention/. ` +
+				`STALE — re-slice from the edited PRD or route it to needs-attention. ` +
 				`The arbiter was NOT modified (lock still held).`;
 			note(message);
 			return {exitCode: 4, outcome: 'stale', slug, message};
@@ -611,7 +614,7 @@ export async function performSlice(
 
 		// Route the OUTPUT through the SHARED integrate back-half (slice
 		// `slice-output-through-integration`): the produced backlog slices + the PRD
-		// lifecycle move (`work/slicing/ -> work/prd-sliced/`, residence = sliced-ness) integrate
+		// lifecycle move (`work/prd/ -> work/prd-sliced/`, residence = sliced-ness) integrate
 		// via `performIntegration` honoring `--propose` (push the work branch + open a
 		// PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
 		// args resolve ONCE in the shared core, every `do slice:` arg applies here by
@@ -658,7 +661,7 @@ export async function performSlice(
 			type: 'slicing',
 			lifecycle: {
 				// Read the PR title / commit summary from the held PRD (before it moves).
-				titlePath: join(cwd, 'work', 'slicing', `${slug}.md`),
+				titlePath: join(cwd, 'work', 'prd', `${slug}.md`),
 				commitTag: 'sliced',
 				stage: () =>
 					stageSlicingLifecycle({
@@ -682,14 +685,12 @@ export async function performSlice(
 		// THE SLICE-SET ACCEPTANCE GATE BLOCKED (slice `slice-acceptance-gate`): the
 		// fresh-context review of the produced SET returned `block`, so the core ran
 		// the review BEFORE the stage/integrate and did NOT integrate the slices
-		// (correct). But the held PRD lives in `work/slicing/<slug>.md`, NOT the build
-		// lifecycle's `in-progress/done/` that the core's needs-attention route
-		// (`applyNeedsAttentionTransition`) understands — so that route is a harmless
-		// no-op here (it finds nothing to move). The CORRECT slice-path destination is
-		// the SAME `slicing/ -> needs-attention/` redirect the lock release already
-		// owns for the decomposition-unclear verdict (the existing slice-path
-		// needs-attention concept; see ## Decisions in the slice). So on a block we route
-		// the held PRD to needs-attention THROUGH the lock release — the set never lands.
+		// (correct). The CORRECT slice-path destination is the SAME needs-attention
+		// route the lock release owns for the decomposition-unclear verdict: it amends
+		// the `prd:<slug>` unified lock `active -> stuck` with the block reason (the
+		// slicing needs-attention surface is the stuck lock now — NO folder write; the
+		// PRD body stays in `work/prd/`). So on a block we route the held PRD to
+		// needs-attention THROUGH the lock release — the set never lands.
 		if (core.outcome === 'review-blocked') {
 			const reason = sliceGateBlockedReason(slug, core.reviewBlockReason);
 			const routed = await lock.release({
@@ -711,17 +712,15 @@ export async function performSlice(
 				slug,
 				message:
 					`The slice acceptance gate blocked the set produced for '${slug}'; ` +
-					`routed the PRD to work/needs-attention/ (no slices landed).`,
+					`marked the per-item lock stuck (needs attention; no slices landed).`,
 			};
 		}
 		if (core.outcome === 'completed') {
-			// INTERIM DUAL-WRITE (PRD `ledger-status-per-item-lock-refs`; slice
-			// `slicing-acquires-unified-lock`): the durable `prd → prd-sliced` `main` move
-			// landed through the shared integrate core, which CONSUMED the legacy
-			// `work/slicing/<slug>.md` marker (the body left `slicing/`). On THIS path the
-			// completing commit is owned by the integrate band, NOT `releaseSlicingLock`,
-			// so the unified per-item lock that `acquireSlicingLock` ALSO took is released
-			// HERE — the slice's symmetric "release ALSO drops the unified lock". A
+			// The durable `prd → prd-sliced` `main` move landed through the shared integrate
+			// core (the body moved straight from `work/prd/` — no transient `slicing/`
+			// marker). The completing commit is owned by the integrate band, NOT
+			// `releaseSlicingLock`, so the unified per-item lock that `acquireSlicingLock`
+			// took is released HERE (delete the ref). A
 			// `propose` (`mode: 'propose'`) is ALSO `completed` (the PR opened, the lock's
 			// hold over the in-flight slicing is done); the eventual hold-across-the-PR
 			// crash-safe ordering is the capstone slice #7's concern, not this interim
@@ -807,7 +806,7 @@ function integrationToSliceResult(
 		const message =
 			`Sliced '${slug}' -> ${emitted.length} backlog slice` +
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +
-			`through the shared core (moved work/slicing/ -> work/prd-sliced/, the ` +
+			`through the shared core (moved work/prd/ -> work/prd-sliced/, the ` +
 			`sliced resting state) and ${landed}.`;
 		return {exitCode: 0, outcome: 'sliced', slug, emitted, loop, message};
 	}
@@ -835,9 +834,9 @@ function integrationToSliceResult(
 /**
  * ONBOARD the slicing work onto a `work/<slug>` branch cut from the freshly-
  * fetched `<arbiter>/main` (slice `slice-output-through-integration`). Called
- * AFTER the lock published `work/slicing/<slug>.md` to `<arbiter>/main`, so the
- * branch's base HOLDS the locked PRD — the lifecycle stage then moves it
- * `slicing/ -> prd-sliced/` ON THIS BRANCH and the shared integrate core lands it. A
+ * AFTER the slicing lock is held, so the branch's base HOLDS the PRD in
+ * `work/prd/` (the lock no longer moves the body) — the lifecycle stage then moves
+ * it `prd/ -> prd-sliced/` ON THIS BRANCH and the shared integrate core lands it. A
  * pre-existing local `work/<slug>` (a re-run) is force-recreated off fresh main.
  * The agent runs in-place on this branch (branch ≠ worktree).
  */
@@ -861,11 +860,11 @@ async function switchToWorkBranch(
 /**
  * The READ-STABILITY content-identity STALE CHECK (the lock's backstop, owned at
  * the integrate seam now that the OUTPUT no longer rides the lock release): true
- * iff the CURRENTLY held `work/slicing/<slug>.md` blob on `<arbiter>/main` DIFFERS
- * from the snapshot the lock TOOK (`lockedBlob`). ANY change = a concurrent edit
- * under the lock = the slicing is STALE. Stronger than a textual rebase conflict
- * (which a rename+edit merge can apply CLEANLY), exactly as `releaseSlicingLock`
- * documents. When `lockedBlob` is absent (never, in production) it reads as
+ * iff the CURRENTLY held `work/prd/<slug>.md` blob on `<arbiter>/main` DIFFERS
+ * from the snapshot the lock TOOK (`lockedBlob`, read from `work/prd/<slug>.md` at
+ * acquire). ANY change = a concurrent edit under the lock = the slicing is STALE.
+ * Stronger than a textual rebase conflict (which a rename+edit merge can apply
+ * CLEANLY). When `lockedBlob` is absent (never, in production) it reads as
  * not-stale (the lock acquire always returns it).
  */
 async function heldPrdIsStale(
@@ -880,13 +879,12 @@ async function heldPrdIsStale(
 	}
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const held = await gitSoft(
-		['rev-parse', `${arbiter}/main:work/slicing/${slug}.md`],
+		['rev-parse', `${arbiter}/main:work/prd/${slug}.md`],
 		cwd,
 		env,
 	);
-	// The lock not being held (no slicing/<slug>.md) is NOT this check's concern
-	// (the integrate's rebase/push surfaces a genuinely-lost lock); only a CHANGED
-	// held blob is stale.
+	// The PRD being absent (already sliced/moved) is NOT this check's concern
+	// (the integrate's rebase/push surfaces that); only a CHANGED held blob is stale.
 	if (held.status !== 0) {
 		return false;
 	}
@@ -896,7 +894,7 @@ async function heldPrdIsStale(
 /**
  * STAGE the slicing lifecycle into the index on the `work/<slug>` branch (the
  * {@link performIntegration} lifecycle seam): move the held PRD
- * `git mv work/slicing/<slug>.md -> work/prd-sliced/<slug>.md` (the SLICED resting
+ * `git mv work/prd/<slug>.md -> work/prd-sliced/<slug>.md` (the SLICED resting
  * state — the build-machine `done/` analogue, the SOURCE OF TRUTH for sliced-ness),
  * and write+`git add` the produced `work/pre-backlog/*.md` files. The band's subsequent
  * `git add -A` + atomic commit folds this AND the agent's uncommitted backlog writes
@@ -942,7 +940,7 @@ async function stageSlicingLifecycle(params: {
 		note,
 		env,
 	} = params;
-	const slicing = `work/slicing/${slug}.md`;
+	const prd = `work/prd/${slug}.md`;
 	const prdSliced = `work/prd-sliced/${slug}.md`;
 	// PROPAGATE the origin-trust PROVENANCE (slice
 	// `untrusted-origin-forces-build-propose`): read the held PRD's `origin`/
@@ -951,7 +949,7 @@ async function stageSlicingLifecycle(params: {
 	// transition can force `propose` for untrusted-origin work. An UNSTAMPED PRD (a
 	// human/local-authored one ⇒ trusted) propagates nothing — the normal path is
 	// untouched.
-	const prdAbs = join(cwd, slicing);
+	const prdAbs = join(cwd, prd);
 	const prdProvenance = existsSync(prdAbs)
 		? parseFrontmatter(readFileSync(prdAbs, 'utf8'))
 		: {origin: undefined, originTrust: undefined};
@@ -962,11 +960,12 @@ async function stageSlicingLifecycle(params: {
 				'them into work/backlog/). Pass --slices-land-in <where> to override.',
 		);
 	}
-	// Move the held PRD slicing/ -> prd-sliced/ (the SLICED resting state — folder =
-	// source of truth, like done/ for slices). This releases the lock as part of THIS
-	// transition's commit, not the lock release's own commit-to-main.
+	// Move the held PRD prd/ -> prd-sliced/ (the SLICED resting state — folder =
+	// source of truth, like done/ for slices). This is the DURABLE `prd → prd-sliced`
+	// success move, owned by THIS transition's commit (the lock no longer moved the
+	// body, so the source is `work/prd/`, never `work/slicing/`).
 	mkdirSync(dirname(join(cwd, prdSliced)), {recursive: true});
-	await gitHard(['mv', slicing, prdSliced], cwd, env);
+	await gitHard(['mv', prd, prdSliced], cwd, env);
 	await gitHard(['add', '--', prdSliced], cwd, env);
 	// **POOL-PLACEMENT FENCE (PRD US #4 / governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`).** The

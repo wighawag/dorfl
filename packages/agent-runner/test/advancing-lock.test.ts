@@ -1,18 +1,14 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {join} from 'node:path';
-import {writeFileSync} from 'node:fs';
 import {
 	acquireAdvancingLock,
 	releaseAdvancingLock,
 	createItemThroughCas,
 } from '../src/advancing-lock.js';
-import {acquireSlicingLock} from '../src/slicing-lock.js';
-import {performClaim} from '../src/claim-cas.js';
+import {itemLockRef, listItemLocks} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	gitEnv,
-	gitIn,
 	raceClone,
 	racerEnv,
 	type Scratch,
@@ -40,12 +36,128 @@ function trackedOnArbiter(cwd: string, folder: string, entry: string): boolean {
 		).status === 0
 	);
 }
-const advancingOnArbiter = (cwd: string, entry: string): boolean =>
-	trackedOnArbiter(cwd, 'advancing', entry);
+/** Does the arbiter currently HOLD the per-item lock ref for `entry`? */
+function lockRefOnArbiter(arbiter: string, entry: string): boolean {
+	const r = run(
+		'git',
+		['ls-remote', `file://${arbiter}`, itemLockRef(entry)],
+		scratch.root,
+		{env: gitEnv()},
+	);
+	return r.status === 0 && r.stdout.trim() !== '';
+}
 
-describe('acquireAdvancingLock — happy path', () => {
-	it('writes the type-encoded marker on the arbiter (exit 0)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+/**
+ * The advancing borrow is the UNIFIED per-item lock now (slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the
+ * `work/advancing/<entry>.md` presence-marker is RETIRED. A TREE-LESS rung
+ * (`acquireUnified: true`) takes the `action: advance` lock ref; a build/slice rung
+ * (the default) is a NO-OP hold (the inner `do`'s claim/slice lock is the
+ * exclusion). The cross-action exclusion / `performAdvance` wiring lives in
+ * `advancing-acquires-unified-lock.test.ts`; this file covers the lock PRIMITIVE +
+ * the `createItemThroughCas` helper.
+ */
+
+describe('acquireAdvancingLock — tree-less rung (the unified lock)', () => {
+	it('takes the unified action:advance lock ref; the item is untouched, NO marker', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await acquireAdvancingLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('acquired');
+		expect(result.entry).toBe('slice-alpha');
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+		// The retired marker is never written; the borrow is a LOCK, not a move.
+		expect(trackedOnArbiter(repo, 'advancing', 'slice-alpha')).toBe(false);
+		expect(trackedOnArbiter(repo, 'backlog', 'alpha')).toBe(true);
+	});
+
+	it('keys a bare slug to the slice type (slice-<slug>)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await acquireAdvancingLock({
+			item: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.entry).toBe('slice-alpha');
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+	});
+
+	it('keys a PRD to prd-<slug> and an observation to observation-<slug>', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
+			prds: ['beta'],
+		});
+		const prd = await acquireAdvancingLock({
+			item: 'prd:beta',
+			cwd: repo,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			env: gitEnv(),
+		});
+		expect(prd.exitCode).toBe(0);
+		expect(prd.entry).toBe('prd-beta');
+		expect(lockRefOnArbiter(arbiter, 'prd-beta')).toBe(true);
+
+		const obs = await acquireAdvancingLock({
+			item: 'obs:gamma',
+			cwd: repo,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			env: gitEnv(),
+		});
+		expect(obs.exitCode).toBe(0);
+		expect(obs.entry).toBe('observation-gamma');
+		expect(lockRefOnArbiter(arbiter, 'observation-gamma')).toBe(true);
+	});
+
+	it('dry-run takes NO lock and does NOT mutate the arbiter', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await acquireAdvancingLock({
+			item: 'slice:alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			dryRun: true,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+	});
+
+	it('returns "lost" when the unified lock is already held', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const other = seeded.clone('other');
+		const first = await acquireAdvancingLock({
+			item: 'slice:alpha',
+			cwd: other,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			env: gitEnv(),
+		});
+		expect(first.exitCode).toBe(0);
+		const second = await acquireAdvancingLock({
+			item: 'slice:alpha',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			acquireUnified: true,
+			env: gitEnv(),
+		});
+		expect(second.exitCode).toBe(2);
+		expect(second.outcome).toBe('lost');
+	});
+});
+
+describe('acquireAdvancingLock — build/slice rung is a NO-OP hold', () => {
+	it('takes NO lock (default acquireUnified) — the inner do is the exclusion point', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
@@ -54,139 +166,31 @@ describe('acquireAdvancingLock — happy path', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
-		expect(result.entry).toBe('slice-alpha');
-		expect(advancingOnArbiter(repo, 'slice-alpha')).toBe(true);
-		// The borrow is a LOCK, not a lifecycle move: the item is untouched.
-		expect(trackedOnArbiter(repo, 'backlog', 'alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
 	});
 
-	it('keys a bare slug to the slice type (slice-<slug>)', async () => {
+	it('releases as a NO-OP too (nothing to drop at the advance layer)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		const result = await acquireAdvancingLock({
-			item: 'alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(0);
-		expect(result.entry).toBe('slice-alpha');
-		expect(advancingOnArbiter(repo, 'slice-alpha')).toBe(true);
-	});
-
-	it('keys a PRD to prd-<slug> and an observation to observation-<slug>', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['beta']});
-		const prd = await acquireAdvancingLock({
-			item: 'prd:beta',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(prd.exitCode).toBe(0);
-		expect(prd.entry).toBe('prd-beta');
-		expect(advancingOnArbiter(repo, 'prd-beta')).toBe(true);
-
-		const obs = await acquireAdvancingLock({
-			item: 'obs:gamma',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(obs.exitCode).toBe(0);
-		expect(obs.entry).toBe('observation-gamma');
-		expect(advancingOnArbiter(repo, 'observation-gamma')).toBe(true);
-	});
-
-	it('uses an advancing/<entry> branch distinct from claim/slicing/work', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireAdvancingLock({
+		const released = await releaseAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(
-			gitIn(['branch', '--list', 'advancing/slice-alpha'], repo).trim(),
-		).toBe('');
-		expect(gitIn(['branch', '--list', 'claim/alpha'], repo).trim()).toBe('');
-		expect(gitIn(['branch', '--list', 'slicing/alpha'], repo).trim()).toBe('');
-		expect(gitIn(['branch', '--list', 'work/slice-alpha'], repo).trim()).toBe(
-			'',
-		);
-	});
-
-	it('records the locker in the lock COMMIT subject', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireAdvancingLock({
-			item: 'slice:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			by: 'alice',
-			env: gitEnv(),
-		});
-		const subject = gitIn(['log', '-1', '--format=%s', 'arbiter/main'], repo);
-		expect(subject.trim()).toBe('advancing: lock slice-alpha (by alice)');
-	});
-
-	it('dry-run reports the push and does NOT mutate the arbiter', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		const notes: string[] = [];
-		const result = await acquireAdvancingLock({
-			item: 'slice:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			dryRun: true,
-			env: gitEnv(),
-			note: (m) => notes.push(m),
-		});
-		expect(result.exitCode).toBe(0);
-		expect(notes.some((n) => n.includes('[dry-run]'))).toBe(true);
-		expect(advancingOnArbiter(repo, 'slice-alpha')).toBe(false);
-	});
-});
-
-describe('acquireAdvancingLock — already held (exit 2)', () => {
-	it('returns "lost" when the advancing lock is already held', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
-		const other = seeded.clone('other');
-		const first = await acquireAdvancingLock({
-			item: 'slice:alpha',
-			cwd: other,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(first.exitCode).toBe(0);
-		const second = await acquireAdvancingLock({
-			item: 'slice:alpha',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(second.exitCode).toBe(2);
-		expect(second.outcome).toBe('lost');
+		expect(released.exitCode).toBe(0);
+		expect(released.outcome).toBe('released');
 	});
 });
 
 describe('acquireAdvancingLock — usage / env errors (exit 1)', () => {
-	it('refuses on a dirty working tree', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		writeFileSync(join(repo, 'README.md'), '# project\nDIRTY\n');
-		const result = await acquireAdvancingLock({
-			item: 'slice:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('usage-error');
-		expect(advancingOnArbiter(repo, 'slice-alpha')).toBe(false);
-	});
-
 	it('errors when the arbiter remote does not exist', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'nope',
+			acquireUnified: true,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(1);
@@ -199,6 +203,7 @@ describe('acquireAdvancingLock — usage / env errors (exit 1)', () => {
 			item: '',
 			cwd: repo,
 			arbiter: 'arbiter',
+			acquireUnified: true,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(1);
@@ -206,12 +211,12 @@ describe('acquireAdvancingLock — usage / env errors (exit 1)', () => {
 	});
 });
 
-describe('advancing-lock race — exactly one winner', () => {
+describe('advancing-lock tree-less race — exactly one winner', () => {
 	it('two simultaneous ticks ⇒ one acquires, the loser gets exit-2', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
-		// Distinct committer identity per racer so the two lock micro-commits get
-		// DISTINCT shas (as two real ticks would) and the loser loses through the
-		// genuine path-exists/lease CAS, not a fixture sha-collision. See racerEnv.
+		// Distinct committer identity per racer so the two lock commits get DISTINCT
+		// shas (as two real ticks would) and the loser loses through the genuine
+		// create-only ref CAS, not a fixture sha-collision. See racerEnv.
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 
@@ -220,12 +225,14 @@ describe('advancing-lock race — exactly one winner', () => {
 				item: 'slice:solo',
 				cwd: a,
 				arbiter: 'arbiter',
+				acquireUnified: true,
 				env: racerEnv('a'),
 			}),
 			acquireAdvancingLock({
 				item: 'slice:solo',
 				cwd: b,
 				arbiter: 'arbiter',
+				acquireUnified: true,
 				env: racerEnv('b'),
 			}),
 		]);
@@ -234,87 +241,34 @@ describe('advancing-lock race — exactly one winner', () => {
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(acquired).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		expect(advancingOnArbiter(a, 'slice-solo')).toBe(true);
+		expect(lockRefOnArbiter(seeded.arbiter, 'slice-solo')).toBe(true);
 	});
 });
 
-describe('advancing-lock does NOT collide with slicing/build on the same slug', () => {
-	it('an advancing-borrow on prd:x coexists with a slicing-borrow on x', async () => {
-		// Same slug `dual`, different ACTIONS → distinct refs/entries, never co-held
-		// collide. A PRD may hold `advancing` and (later/separately) `slicing`.
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['dual']});
-
-		const advancing = await acquireAdvancingLock({
-			item: 'prd:dual',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(advancing.exitCode).toBe(0);
-		expect(advancing.entry).toBe('prd-dual');
-
-		// The slicing lock on the SAME slug still acquires — different action/ref.
-		const slicing = await acquireSlicingLock({
-			slug: 'dual',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(slicing.exitCode).toBe(0);
-
-		// Both locks are held simultaneously on distinct refs/folders.
-		expect(advancingOnArbiter(seeded.repo, 'prd-dual')).toBe(true);
-		expect(trackedOnArbiter(seeded.repo, 'slicing', 'dual')).toBe(true);
-	});
-
-	it('an advancing-borrow on slice:x coexists with a build-claim on x', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, ['dual']);
-
-		const advancing = await acquireAdvancingLock({
-			item: 'slice:dual',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(advancing.exitCode).toBe(0);
-
-		// The build claim on the SAME slug still lands — different action/ref.
-		const claim = await performClaim({
-			slug: 'dual',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(claim.exitCode).toBe(0);
-
-		expect(advancingOnArbiter(seeded.repo, 'slice-dual')).toBe(true);
-		// The build claim acquires the per-item lock; the body stays in backlog/.
-		expect(trackedOnArbiter(seeded.repo, 'backlog', 'dual')).toBe(true);
-	});
-});
-
-describe('releaseAdvancingLock — short borrow, no lifecycle move', () => {
-	it('removes the marker WITHOUT moving the item (exit 0)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+describe('releaseAdvancingLock — tree-less rung deletes the unified lock', () => {
+	it('deletes the unified lock ref WITHOUT moving the item (exit 0)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const acquired = await acquireAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			acquireUnified: true,
 			env: gitEnv(),
 		});
 		expect(acquired.exitCode).toBe(0);
-		expect(advancingOnArbiter(repo, 'slice-alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
 
 		const released = await releaseAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			releaseUnified: true,
 			env: gitEnv(),
 		});
 		expect(released.exitCode).toBe(0);
 		expect(released.outcome).toBe('released');
-		// The marker is gone; the item NEVER moved status folder (lock, not transition).
-		expect(advancingOnArbiter(repo, 'slice-alpha')).toBe(false);
+		// The lock ref is gone; the item NEVER moved status folder (lock, not move).
+		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
 		expect(trackedOnArbiter(repo, 'backlog', 'alpha')).toBe(true);
 	});
 
@@ -324,33 +278,38 @@ describe('releaseAdvancingLock — short borrow, no lifecycle move', () => {
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			acquireUnified: true,
 			env: gitEnv(),
 		});
 		await releaseAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			releaseUnified: true,
 			env: gitEnv(),
 		});
 		const reacquired = await acquireAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			acquireUnified: true,
 			env: gitEnv(),
 		});
 		expect(reacquired.exitCode).toBe(0);
 	});
 
-	it('returns "lost" when the lock is not held', async () => {
+	it('a tree-less release of an already-absent lock is an idempotent "released"', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await releaseAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
+			releaseUnified: true,
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(2);
-		expect(result.outcome).toBe('lost');
+		// Idempotent: a returned item never keeps an orphaned advance hold.
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('released');
 	});
 });
 

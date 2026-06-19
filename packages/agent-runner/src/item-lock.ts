@@ -19,8 +19,8 @@ import {resolveSidecarIdentity, type SidecarType} from './sidecar.js';
  * or a bare `<slug>` = slice), and this module derives the type-encoded lock
  * `<entry>` (`<type>-<slug>`) through {@link resolveSidecarIdentity} — the SAME
  * single source of truth the sidecar (`work/questions/<type>-<slug>.md`) and the
- * advancing-lock marker (`advancingMarkerPath`, `work/advancing/<type>-<slug>.md`)
- * already use. There is deliberately NO second identity scheme: a slice, a PRD,
+ * work branch (`work/<type>-<slug>`) already use. There is deliberately NO second
+ * identity scheme: a slice, a PRD,
  * and an observation that share a slug get DISTINCT lock refs, and the SAME item
  * under different actions shares ONE ref (so implement / slice / advance on one
  * item are mutually exclusive by construction).
@@ -1146,8 +1146,8 @@ export interface ItemLockReport {
  * `main` durable record via {@link classifyItemLockAgainstMain} (the wiring the
  * `complete-lock-then-durable-main-move-crash-safe` slice's
  * `reconcileItemLockAgainstMain` had no production caller for). This is the
- * generalisation of the advancing-marker report (`listAdvancingMarkers` +
- * `gc --ledger`) from advancing-only to the UNIFIED lock.
+ * generalisation of the (now-retired) advancing-marker report from advancing-only
+ * to the UNIFIED lock (the `gc --ledger` stuck-lock report).
  *
  * It is a REPORT, never a sweep: it CLEARS nothing (no liveness heartbeat, no
  * auto-sweep — the same trust model as the advancing report; a human asserts a
@@ -1155,8 +1155,7 @@ export interface ItemLockReport {
  * item is surfaced as `cleared-stale`-eligible ("reconcilable") but left in place.
  *
  * Best-effort + degrades safely: an absent lock-ref namespace ⇒ an EMPTY report
- * ({@link listItemLockEntries} returns `[]`), exactly as `listAdvancingMarkers`
- * treats an absent `work/advancing/` dir — so a deleted lock ref reads as "all
+ * ({@link listItemLockEntries} returns `[]`) — so a deleted lock ref reads as "all
  * locks released" (recoverable; work is safe on the `work/<slug>` branches +
  * `main`).
  */

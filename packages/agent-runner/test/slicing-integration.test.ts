@@ -223,15 +223,16 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
 
-		// The slices are NOT on main (propose does not land them); the PRD is still
-		// HELD in slicing/ on main (the lock release rides the PR, not main).
+		// The slices are NOT on main (propose does not land them); the PRD body STAYS
+		// in prd/ on main (the lock is a ref now — it never moves the body; the PR
+		// carries the prd → prd-sliced move). NO slicing/ marker.
 		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(true);
-		// The OUTPUT never advanced main past the lock's `prd → slicing/` move: the
-		// main tip is the lock commit, NOT a slicing integrate commit.
-		expect(arbiterHeadSubject(repo)).toMatch(/^slicing: lock it/);
+		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
+		// The OUTPUT never advanced main: the lock is a hidden ref (not a main commit),
+		// and propose does not land the slices — main is still the seed commit.
+		expect(arbiterHeadSubject(repo)).not.toMatch(/sliced/);
 
 		// The work branch was PUSHED carrying the slices + the PRD restore.
 		expect(

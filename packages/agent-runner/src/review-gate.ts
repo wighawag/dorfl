@@ -353,7 +353,7 @@ export function buildSliceAcceptancePrompt(slug: string): string {
 		`\`review\` skill in its SET-OF-SLICES mode over the candidate slices this`,
 		`slicing run produced for the PRD "${slug}" — the new/changed`,
 		`\`work/backlog/*.md\` files on this work branch — AGAINST their source PRD`,
-		`(work/prd/${slug}.md, or work/slicing/${slug}.md while it is held).`,
+		`(work/prd/${slug}.md — the held PRD stays in prd/ while it is being sliced).`,
 		``,
 		`Review the WHOLE SET as a SET, not each slice in isolation. Apply the review`,
 		`skill's set-of-slices lens, ending in the destination check:`,

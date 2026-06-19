@@ -6,6 +6,7 @@ import {
 	type AcquireSlicingLockResult,
 	type ReleaseSlicingLockResult,
 } from '../src/slicing-lock.js';
+import {readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -533,9 +534,11 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		});
 		expect(result.exitCode).toBe(4);
 		expect(result.outcome).toBe('stale');
-		// The arbiter was NOT modified: the lock is still held (PRD in slicing/), and
-		// no backlog slice landed on main.
-		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(true);
+		// The arbiter was NOT modified by the slicing: the PRD body stays in prd/ (the
+		// lock is still held on the ref), and no backlog slice landed on main. The PRD
+		// did NOT move to prd-sliced/.
+		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/pre-backlog/child.md')).toBe(false);
 	});
 
@@ -618,10 +621,10 @@ function reopenSlicedPrd(root: string, slug: string): void {
 }
 
 /**
- * From a throwaway clone of the arbiter, EDIT the held `work/slicing/<slug>.md`
- * body and push it to `main` — simulating a concurrent writer editing the PRD
- * under the slicing lock (the read-stability backstop must detect the changed
- * blob and fail the release as `stale`).
+ * From a throwaway clone of the arbiter, EDIT the held `work/prd/<slug>.md` body
+ * and push it to `main` — simulating a concurrent writer editing the PRD under the
+ * slicing lock (the body stays in `work/prd/` now; the read-stability backstop must
+ * detect the changed blob and fail the integrate as `stale`).
  */
 function editHeldPrdOnArbiter(root: string, slug: string): void {
 	const dest = join(root, `concurrent-edit-${slug}`);
@@ -635,7 +638,7 @@ function editHeldPrdOnArbiter(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'edit', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	const held = join(dest, 'work', 'slicing', `${slug}.md`);
+	const held = join(dest, 'work', 'prd', `${slug}.md`);
 	writeFileSync(
 		held,
 		readFileSync(held, 'utf8') + '\nCONCURRENT EDIT under the lock.\n',
@@ -823,18 +826,26 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		});
 		expect(result.outcome).toBe('needs-attention');
 		expect(result.exitCode).toBe(1);
-		// The PRD is in needs-attention (NOT in prd/, NOT in prd-sliced/, NOT sliced).
-		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
+		// The needs-attention surface is the per-item lock `state: stuck` now (slice
+		// `cutover-...-trim-folder-sets`), NOT a folder move: the PRD body STAYS in
+		// work/prd/ (it never moved under the lock), and NO needs-attention/ or
+		// slicing/ folder file is written.
+		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
 		// No guessed slices emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/pre-backlog/child.md')).toBe(false);
 		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(false);
-		// The questions are recorded as the needs-attention reason.
-		expect(showArbiter(repo, 'work/needs-attention/it.md')).toMatch(
-			/should this be split across two PRDs\?/,
-		);
+		// The PRD's per-item lock is held STUCK, carrying the questions as the reason.
+		const entry = await readItemLock({
+			item: 'prd:it',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(entry?.state).toBe('stuck');
+		expect(entry?.reason).toMatch(/should this be split across two PRDs\?/);
 	});
 
 	it('M>1 runs the loop in fresh contexts (the loop seam is invoked per execution)', async () => {

@@ -1,13 +1,11 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {join} from 'node:path';
-import {readFileSync, writeFileSync} from 'node:fs';
 import {acquireSlicingLock, releaseSlicingLock} from '../src/slicing-lock.js';
+import {performClaim} from '../src/claim-cas.js';
+import {itemLockRef, listItemLocks, readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
 	gitEnv,
-	gitIn,
-	prdFile,
 	raceClone,
 	racerEnv,
 	type Scratch,
@@ -37,12 +35,33 @@ function trackedOnArbiter(cwd: string, folder: string, slug: string): boolean {
 }
 const prdOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'prd', slug);
-const slicingOnArbiter = (cwd: string, slug: string): boolean =>
+const slicingFolderOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'slicing', slug);
+/** Does the arbiter HOLD the per-item lock ref for the PRD `slug`? */
+function lockRefOnArbiter(arbiter: string, slug: string): boolean {
+	const r = run(
+		'git',
+		['ls-remote', `file://${arbiter}`, itemLockRef(`prd-${slug}`)],
+		scratch.root,
+		{env: gitEnv()},
+	);
+	return r.status === 0 && r.stdout.trim() !== '';
+}
+
+/**
+ * The slicing lock is the UNIFIED per-item lock now (slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the
+ * `git mv work/prd/ → work/slicing/` marker is RETIRED, so the PRD body STAYS in
+ * `work/prd/` while it is being sliced (the lock is the `prd:<slug>` ref,
+ * `action: slice`). The durable `prd → prd-sliced` success move + the read-stability
+ * stale check live at the integrate seam (`slicing.ts`), not in the lock.
+ */
 
 describe('acquireSlicingLock — happy path', () => {
-	it('moves the PRD prd/ -> slicing/ on the arbiter (exit 0)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+	it('takes the prd:<slug> unified lock; the PRD body STAYS in prd/ (no slicing/ marker)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
+			prds: ['alpha'],
+		});
 		const result = await acquireSlicingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -51,40 +70,44 @@ describe('acquireSlicingLock — happy path', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
-		expect(slicingOnArbiter(repo, 'alpha')).toBe(true);
-		expect(prdOnArbiter(repo, 'alpha')).toBe(false);
+		// The unified lock (action: slice) is held; the retired slicing/ marker is
+		// never written; the body stays in prd/.
+		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(true);
+		expect(slicingFolderOnArbiter(repo, 'alpha')).toBe(false);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
+		const entry = await readItemLock({
+			item: 'prd:alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(entry?.action).toBe('slice');
+		expect(entry?.state).toBe('active');
 	});
 
-	it('uses a lock branch (slicing/<slug>) distinct from build claims', async () => {
-		// The branch name must not be claim/<slug> or work/<slug>; we assert the
-		// lock branch is cleaned up and no claim/work branch was created.
+	it('returns the acquire-time lockedBlob (the prd/ body snapshot)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
-		await acquireSlicingLock({
+		const result = await acquireSlicingLock({
 			slug: 'alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(gitIn(['branch', '--list', 'slicing/alpha'], repo).trim()).toBe('');
-		expect(gitIn(['branch', '--list', 'claim/alpha'], repo).trim()).toBe('');
-		expect(gitIn(['branch', '--list', 'work/prd-alpha'], repo).trim()).toBe('');
+		expect(result.exitCode).toBe(0);
+		// The lockedBlob is the blob of work/prd/alpha.md on the arbiter.
+		const blob = run(
+			'git',
+			['rev-parse', 'arbiter/main:work/prd/alpha.md'],
+			repo,
+			{env: gitEnv()},
+		).stdout.trim();
+		expect(result.lockedBlob).toBe(blob);
 	});
 
-	it('records the locker in the lock COMMIT subject', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
-		await acquireSlicingLock({
-			slug: 'alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			by: 'alice',
-			env: gitEnv(),
+	it('dry-run reports the lockable snapshot and does NOT take the lock', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
+			prds: ['alpha'],
 		});
-		const subject = gitIn(['log', '-1', '--format=%s', 'arbiter/main'], repo);
-		expect(subject.trim()).toBe('slicing: lock alpha (by alice)');
-	});
-
-	it('dry-run reports the push and does NOT mutate the arbiter', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const notes: string[] = [];
 		const result = await acquireSlicingLock({
 			slug: 'alpha',
@@ -96,8 +119,9 @@ describe('acquireSlicingLock — happy path', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(notes.some((n) => n.includes('[dry-run]'))).toBe(true);
+		expect(result.lockedBlob).toBeDefined();
+		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
-		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
 	});
 });
 
@@ -114,7 +138,7 @@ describe('acquireSlicingLock — not lockable (exit 2)', () => {
 		expect(result.outcome).toBe('lost');
 	});
 
-	it('returns "lost" when the PRD is already held (in slicing/)', async () => {
+	it('returns "lost" when the PRD is already held (unified lock taken)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const other = seeded.clone('other');
 		const first = await acquireSlicingLock({
@@ -136,21 +160,6 @@ describe('acquireSlicingLock — not lockable (exit 2)', () => {
 });
 
 describe('acquireSlicingLock — usage / env errors (exit 1)', () => {
-	it('refuses on a dirty working tree', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
-		writeFileSync(join(repo, 'README.md'), '# project\nDIRTY\n');
-		const result = await acquireSlicingLock({
-			slug: 'alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('usage-error');
-		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
-		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
-	});
-
 	it('errors when the arbiter remote does not exist', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await acquireSlicingLock({
@@ -167,13 +176,12 @@ describe('acquireSlicingLock — usage / env errors (exit 1)', () => {
 describe('slicing-lock race — exactly one winner', () => {
 	it('two simultaneous slicers ⇒ one acquires, the loser gets exit-2', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['solo']});
-		// Distinct committer identity per racer so the two slicing-lock commits get
-		// DISTINCT shas (as two real slicers would) and the loser loses through the
-		// genuine path-exists/lease CAS, not a fixture sha-collision. See racerEnv.
+		// Distinct committer identity per racer so the two lock commits get DISTINCT
+		// shas (as two real slicers would) and the loser loses through the genuine
+		// create-only ref CAS, not a fixture sha-collision. See racerEnv.
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 
-		// Genuinely concurrent: the arbiter's ref-CAS picks the single winner.
 		const [ra, rb] = await Promise.all([
 			acquireSlicingLock({
 				slug: 'solo',
@@ -193,21 +201,54 @@ describe('slicing-lock race — exactly one winner', () => {
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(acquired).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		// The arbiter agrees: the PRD is held exactly once.
-		expect(slicingOnArbiter(a, 'solo')).toBe(true);
-		expect(prdOnArbiter(a, 'solo')).toBe(false);
+		// The arbiter agrees: the lock is held exactly once; the PRD never moved.
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['prd-solo']);
+		expect(prdOnArbiter(a, 'solo')).toBe(true);
+		expect(slicingFolderOnArbiter(a, 'solo')).toBe(false);
 	});
 });
 
-describe('releaseSlicingLock — happy path', () => {
-	it('moves the PRD slicing/ -> prd/ on a clean release (exit 0)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+describe('slicing∥claim exclusion on the SAME slug-namespace ref', () => {
+	it('a held slicing lock and a build claim share the SAME prd: vs slice: ref namespaces (no collision)', async () => {
+		// A PRD `dual` and a SLICE `dual` are DISTINCT entries (`prd-dual` vs
+		// `slice-dual`), so a slicing lock on the PRD and a build claim on the slice
+		// do NOT collide — they are different items.
+		const seeded = seedRepoWithArbiter(scratch.root, ['dual'], {
+			prds: ['dual'],
+		});
+		const slicing = await acquireSlicingLock({
+			slug: 'dual',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(slicing.exitCode).toBe(0);
+		const claim = await performClaim({
+			slug: 'dual',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(claim.exitCode).toBe(0);
+		// Both locks are held on DISTINCT refs.
+		expect(lockRefOnArbiter(seeded.arbiter, 'dual')).toBe(true); // prd-dual
+		const slugs = await listItemLocks(seeded.repo, 'arbiter', gitEnv());
+		expect(slugs.sort()).toEqual(['prd-dual', 'slice-dual']);
+	});
+});
+
+describe('releaseSlicingLock — deletes the unified lock', () => {
+	it('deletes the prd: lock ref on a clean release (exit 0); the PRD stays in prd/', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
+			prds: ['alpha'],
+		});
 		const acquired = await acquireSlicingLock({
 			slug: 'alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
+		expect(acquired.exitCode).toBe(0);
 		const result = await releaseSlicingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -217,134 +258,69 @@ describe('releaseSlicingLock — happy path', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('released');
+		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
-		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
 	});
 
-	it('a release on top of an UNRELATED concurrent change still succeeds', async () => {
-		// A different PRD edited concurrently must NOT make our release stale.
-		const seeded = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha', 'beta'],
-		});
-		const acquired = await acquireSlicingLock({
-			slug: 'alpha',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		// A second writer edits a DIFFERENT PRD and pushes.
-		const writer = seeded.clone('writer');
-		gitIn(['checkout', '-q', '-B', 'edit-beta', 'arbiter/main'], writer);
-		writeFileSync(
-			join(writer, 'work', 'prd', 'beta.md'),
-			prdFile('beta', 'EDITED'),
-		);
-		gitIn(['add', '-A'], writer);
-		gitIn(['commit', '-q', '-m', 'edit beta'], writer);
-		gitIn(['push', '-q', 'arbiter', 'edit-beta:main'], writer);
-
-		const result = await releaseSlicingLock({
-			slug: 'alpha',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			lockedBlob: acquired.lockedBlob,
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('released');
-		expect(prdOnArbiter(seeded.repo, 'alpha')).toBe(true);
-		// The concurrent edit to beta survived.
-		const beta = gitIn(['show', 'arbiter/main:work/prd/beta.md'], seeded.repo);
-		expect(beta).toMatch(/EDITED/);
-	});
-
-	it('returns "lost" when the lock is not held', async () => {
+	it('an already-absent lock is an idempotent "released"', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await releaseSlicingLock({
 			slug: 'alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
-			// A lockedBlob is now REQUIRED (omitted ⇒ refuse); pass a dummy so we still
-			// exercise the "lock not held" path (it returns lost before any stale check).
-			lockedBlob: '0'.repeat(40),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('released');
+	});
+});
+
+describe('releaseSlicingLock — routeToNeedsAttention marks the lock stuck', () => {
+	it('amends the prd: lock active → stuck with the reason (no folder write)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
+			prds: ['alpha'],
+		});
+		const acquired = await acquireSlicingLock({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(acquired.exitCode).toBe(0);
+		const result = await releaseSlicingLock({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			lockedBlob: acquired.lockedBlob,
+			routeToNeedsAttention: {reason: 'decomposition unclear: what is X?'},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('released');
+		// The lock is STILL held — but stuck, carrying the reason. NO folder write.
+		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(true);
+		expect(trackedOnArbiter(repo, 'needs-attention', 'alpha')).toBe(false);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
+		const entry = await readItemLock({
+			item: 'prd:alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(entry?.state).toBe('stuck');
+		expect(entry?.reason).toMatch(/decomposition unclear/);
+	});
+
+	it('returns "lost" when there is no held lock to mark stuck', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const result = await releaseSlicingLock({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			routeToNeedsAttention: {reason: 'x'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
-	});
-
-	it('REFUSES (usage-error) when lockedBlob is omitted (never a silent overwrite)', async () => {
-		// The omitted-lockedBlob path must REFUSE rather than skip the stale check and
-		// blindly restore — closing the footgun the lock's first consumer flagged.
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
-		const acquired = await acquireSlicingLock({
-			slug: 'alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(acquired.exitCode).toBe(0);
-		const result = await releaseSlicingLock({
-			slug: 'alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			// lockedBlob deliberately omitted.
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('usage-error');
-		expect(result.message).toMatch(/lockedBlob/);
-		// The arbiter was NOT touched — the lock is still held, the PRD did not
-		// silently return to prd/.
-		expect(slicingOnArbiter(repo, 'alpha')).toBe(true);
-		expect(prdOnArbiter(repo, 'alpha')).toBe(false);
-	});
-});
-
-describe('releaseSlicingLock — concurrent PRD edit ⇒ STALE, fail loud', () => {
-	it('a concurrent edit to the HELD PRD makes release conflict and fail loud', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
-		// Slicer acquires the lock (PRD now at work/slicing/alpha.md on main).
-		const acquired = await acquireSlicingLock({
-			slug: 'alpha',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(acquired.exitCode).toBe(0);
-
-		// A second writer edits the HELD PRD body (work/slicing/alpha.md) and pushes.
-		const writer = seeded.clone('writer');
-		gitIn(['checkout', '-q', '-B', 'edit-alpha', 'arbiter/main'], writer);
-		writeFileSync(
-			join(writer, 'work', 'slicing', 'alpha.md'),
-			prdFile('alpha', 'EDITED-UNDER-LOCK'),
-		);
-		gitIn(['add', '-A'], writer);
-		gitIn(['commit', '-q', '-m', 'edit held PRD body'], writer);
-		gitIn(['push', '-q', 'arbiter', 'edit-alpha:main'], writer);
-
-		// Release must detect the edit (content-identity stale check) and FAIL LOUD.
-		const result = await releaseSlicingLock({
-			slug: 'alpha',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			lockedBlob: acquired.lockedBlob,
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(4);
-		expect(result.outcome).toBe('stale');
-		expect(result.message).toMatch(/STALE/);
-
-		// Arbiter untouched: the edit is preserved, the lock is still held, the PRD
-		// did NOT silently return to prd/ (no stale slices could ride a silent
-		// overwrite).
-		expect(slicingOnArbiter(seeded.repo, 'alpha')).toBe(true);
-		expect(prdOnArbiter(seeded.repo, 'alpha')).toBe(false);
-		const held = gitIn(
-			['show', 'arbiter/main:work/slicing/alpha.md'],
-			seeded.repo,
-		);
-		expect(held).toMatch(/EDITED-UNDER-LOCK/);
 	});
 });

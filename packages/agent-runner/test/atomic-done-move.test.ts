@@ -58,63 +58,16 @@ async function claimAndBranch(slug: string) {
 	return {seeded, repo};
 }
 
-/**
- * On a SEPARATE clone, surface the slug `backlog/ → needs-attention/` on the
- * arbiter's `main` (a tree-less ledger move pushed independently of any PR) — so
- * the arbiter now holds the slug in `needs-attention/`, while the integrating
- * branch's base still has it in `backlog/` (the body rests there now). This is the
- * DIVERGENT-base condition that turned the done-"move" into a "copy" (PR #86).
- */
-function surfaceToNeedsAttentionOnArbiter(
-	seeded: ReturnType<typeof seedRepoWithArbiter>,
-	slug: string,
-) {
-	const other = seeded.clone('surface');
-	gitIn(['switch', '-q', '-c', `surface/${slug}`, `${ARBITER}/main`], other);
-	mkdirSync(join(other, 'work', 'needs-attention'), {recursive: true});
-	gitIn(
-		['mv', `work/backlog/${slug}.md`, `work/needs-attention/${slug}.md`],
-		other,
-	);
-	gitIn(
-		['commit', '-q', '-m', `chore(${slug}): surface needs-attention`],
-		other,
-	);
-	gitIn(['push', '-q', ARBITER, `surface/${slug}:main`], other);
-	rmSync(other, {recursive: true, force: true});
-}
-
 describe('atomic done-move — the move is a MOVE, not a COPY (defect 1)', () => {
-	it('arbiter holds the slug in needs-attention/ while the branch base has in-progress/: the merge lands done/ ONLY (no in-progress/ ghost)', async () => {
-		const {seeded, repo} = await claimAndBranch('alpha');
-		// The arbiter diverges: the slug is surfaced backlog → needs-attention
-		// on main, independently of this branch. The branch base still has
-		// backlog/alpha.md (the divergent base that caused the ghost).
-		surfaceToNeedsAttentionOnArbiter(seeded, 'alpha');
-
-		const core = await performIntegration({
-			cwd: repo,
-			arbiter: ARBITER,
-			slug: 'alpha',
-			// The caller's local-tree resolution says `backlog` (its base has it
-			// there) — but the arbiter actually holds it in needs-attention/. The
-			// arbiter-resolved source must win.
-			source: 'backlog',
-			recovering: false,
-			verify: PASS,
-			mode: 'merge',
-			env: gitEnv(),
-		});
-
-		expect(core.outcome).toBe('completed');
-		expect(core.integration?.mergedToMain).toBe(true);
-		// The merged ledger has the slug in done/ ONLY — no ghost in EITHER source
-		// folder.
-		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
-		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
-	});
-
+	// NOTE: the historical divergent-base scenario (the arbiter holds the slug in a
+	// TRANSIENT folder — `in-progress/`/`needs-attention/` — while the branch base has
+	// it elsewhere) is RETIRED by the capstone cut-over (slice
+	// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the only
+	// `work/` moves on `main` are the durable resting transitions, the body always
+	// rests in `backlog/` until the durable promotion, and the stuck surface is a lock
+	// amend (never a `needs-attention/` folder ghost). The remaining divergent case a
+	// merge must still handle correctly is a backlog/-vs-done/ duplicate — the
+	// FAIL-LOUD corrupt-ledger test below.
 	it('the normal backlog/ path still lands done/ ONLY (no regression)', async () => {
 		const {repo} = await claimAndBranch('beta');
 
