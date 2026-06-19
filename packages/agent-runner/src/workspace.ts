@@ -295,7 +295,7 @@ export function createJob(options: CreateJobOptions): Job {
 		// --force-with-lease on the WORK branch ONLY (a requeued item is unshared) —
 		// NEVER --force, NEVER to main (§11). A CONFLICT → aborted (never
 		// auto-resolved) + flagged so the caller routes to needs-attention.
-		const rebase = rebaseContinuedBranchOntoMain(dir, 'main', slug, env);
+		const rebase = rebaseContinuedBranchOntoMain(dir, 'main', env);
 		if (rebase.kind === 'conflict') {
 			continueRebaseConflict = true;
 		} else {
@@ -320,7 +320,6 @@ export function createJob(options: CreateJobOptions): Job {
 					arbiter: 'origin',
 					mainRef: 'main',
 					expectedRemoteTip,
-					slug,
 					env,
 				});
 				if (pushed.kind === 'conflict') {

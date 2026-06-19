@@ -378,10 +378,11 @@ export class Integrator {
 		// propose: push the branch under its own name (the safety-bearing step),
 		// THEN ask the provider to request review. Reconcile with --force-with-lease
 		// on the WORK BRANCH ONLY (§11: a work branch is unshared) so a RECOVERY
-		// complete — which rebases dropping the historical needs-attention move-only
-		// commit (`rebaseDroppingNeedsAttentionSurface`) and so REWRITES the tip vs an
-		// already-pushed `work/<slug>` (the bounce now pushes it via the seam) — lands
-		// cleanly instead of failing non-fast-forward. The lease guards the CAS; this
+		// complete — which rebases the kept branch onto fresh `main` (a PLAIN rebase
+		// after the per-item-lock cut-over: no transient status lands on a branch, so
+		// there is nothing to drop) and so REWRITES the tip vs an already-pushed
+		// `work/<slug>` (the bounce now pushes it via the seam) — lands cleanly
+		// instead of failing non-fast-forward. The lease guards the CAS; this
 		// is NEVER a plain `--force`, and NEVER touches main. For a first-time propose
 		// (no remote ref yet) the lease against the absent remote-tracking ref allows
 		// the new-branch push, so the normal path is unchanged.
