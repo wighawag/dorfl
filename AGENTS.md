@@ -33,6 +33,12 @@ This repo is special: it is both a **user** of the agent-runner protocol (it has
 
 When you change a protocol doc (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, `CLAIM-PROTOCOL.md`, the templates, `VERSION`), edit `skills/setup/protocol/` and mirror the same change into `work/protocol/` so the two stay byte-identical (`diff -r skills/setup/protocol work/protocol` should be clean apart from files that legitimately only live in one). Editing `work/protocol/` alone silently drifts the copy from the source, and the next `setup` run will propagate the OLD source text — losing your change everywhere else.
 
+## Website (`website/`)
+
+The `website/` folder holds the **Dorfl** marketing/landing site (Dorfl is the new name for this tool) plus the brand assets in `website/branding/`. It has its own scoped guidance in **`website/AGENTS.md`** — read it before working there.
+
+The key rule, repeated here in case nested `AGENTS.md` files are not auto-loaded: the site is scaffolded from our house template `~/dev/github/wighawag/template-svelte-tailwind`, and **any decision/fix/dependency/config choice made while building it may be a general improvement worth backporting to that template.** Record every such deviation in `website/TEMPLATE-NOTES.md` (Dorfl-specific vs. backport-candidate) so template improvements are never silently lost. The site living directly under `website/` (not `website/web/`) is NOT a deviation — it is just a workspace member of this already-existing monorepo.
+
 ## Git transitions (reminder only — not the source of truth)
 
 When you are dispatched to build a work slice, you do NOT perform git operations on this repo: no stage/commit/push, and do not move files between `work/` folders. The runner/human owns every git-state transition (claim, done-move, commit, integration). Your tests MAY use their own throwaway git repos.
