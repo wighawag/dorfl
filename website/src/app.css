@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+/*
+ * Dorfl theme. Palette from website/branding/README.md.
+ * Clay golem on slate, with one warm amber pop for the visor / accents.
+ */
+@theme {
+	/* Clay (the golem head) */
+	--color-clay-light: #c9745a;
+	--color-clay: #a4543c;
+	--color-clay-shade: #8a4632;
+	--color-clay-dark: #7e3d2c;
+
+	/* The one warm light: the glowing visor band */
+	--color-amber: #ffb23e;
+	--color-visor-inset: #1c1813;
+
+	/* Surfaces & ink */
+	--color-slate: #23201c;
+	--color-slate-2: #2b2722;
+	--color-slate-3: #353029;
+	--color-border: #3a342c;
+	--color-bone: #e9d9c7;
+	--color-bone-muted: #a89b8a;
+
+	/* Wordmark serif (the "carved" feel) + mono tagline, per the brand doc */
+	--font-serif: Georgia, 'Times New Roman', serif;
+	--font-mono:
+		ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html {
+	font-family:
+		'Inter',
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		Roboto,
+		sans-serif;
+}
+
+body {
+	@apply bg-slate text-bone;
+}
+
+/* Subtle carved-clay backdrop glow used behind the hero. */
+.clay-glow {
+	background: radial-gradient(
+		60% 60% at 50% 35%,
+		rgba(164, 84, 60, 0.18),
+		transparent 70%
+	);
+}

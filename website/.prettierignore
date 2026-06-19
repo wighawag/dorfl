@@ -1,0 +1,10 @@
+node_modules/
+/.svelte-kit
+/build
+
+# Committed brand assets: the site consumes them, it does not reformat them.
+branding
+
+src/app.html
+*.local
+pnpm-lock.yaml

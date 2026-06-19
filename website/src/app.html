@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate text-bone">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.png" sizes="any" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/icon.png" />
+		<meta name="theme-color" content="#23201C" />
+		<meta
+			name="description"
+			content="Dorfl is a small CLI that discovers, schedules, and runs work across many repos, autonomously and as a guided human loop, on a file-based work/ contract with an atomic git-ref claim protocol."
+		/>
+
+		<!-- Open Graph / social -->
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="Dorfl: It Claims Its Own Work" />
+		<meta
+			property="og:description"
+			content="A small CLI that discovers, schedules, and runs work across many repos. Status = the folder. No database."
+		/>
+		<meta property="og:image" content="%sveltekit.assets%/og-image.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="Dorfl: It Claims Its Own Work" />
+		<meta
+			name="twitter:description"
+			content="A small CLI that discovers, schedules, and runs work across many repos. Status = the folder. No database."
+		/>
+		<meta name="twitter:image" content="%sveltekit.assets%/og-image.png" />
+
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover" class="h-full">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
