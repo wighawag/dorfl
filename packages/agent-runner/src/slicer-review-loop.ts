@@ -1,5 +1,12 @@
 import {readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {
+	workFolderPrefix,
+	workFolderPath,
+	workItemRel,
+	stripWorkFolderPrefix,
+	isWorkItemFile,
+} from './work-layout.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
@@ -473,17 +480,14 @@ function applyEdits(
 ): void {
 	for (const edit of edits) {
 		const normalized = edit.path.replace(/\\/g, '/');
-		if (
-			!normalized.startsWith('work/pre-backlog/') ||
-			normalized.includes('..')
-		) {
+		const filename = stripWorkFolderPrefix(normalized, 'pre-backlog');
+		if (filename === undefined || normalized.includes('..')) {
 			note(
-				`Skipped a review edit outside work/pre-backlog/ (${edit.path}) — the ` +
+				`Skipped a review edit outside ${workFolderPrefix('pre-backlog')} (${edit.path}) — the ` +
 					'loop only improves candidate slices.',
 			);
 			continue;
 		}
-		const filename = normalized.slice('work/pre-backlog/'.length);
 		// A pre-existing slice this run did NOT touch must not be overwritten: it is
 		// in `before` and the current on-disk content still equals the snapshot.
 		if (before.has(filename)) {
@@ -518,7 +522,7 @@ function newOrChangedBacklog(
 	cwd: string,
 	before: Map<string, string>,
 ): string[] {
-	const dir = join(cwd, 'work', 'pre-backlog');
+	const dir = workFolderPath(cwd, 'pre-backlog');
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
@@ -527,12 +531,12 @@ function newOrChangedBacklog(
 	}
 	const out: string[] = [];
 	for (const name of entries) {
-		if (!name.toLowerCase().endsWith('.md')) {
+		if (!isWorkItemFile(name)) {
 			continue;
 		}
 		const content = readFileSync(join(dir, name), 'utf8');
 		if (before.get(name) !== content) {
-			out.push(`work/pre-backlog/${name}`);
+			out.push(workItemRel('pre-backlog', name));
 		}
 	}
 	return out.sort();

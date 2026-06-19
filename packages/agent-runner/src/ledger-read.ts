@@ -2,6 +2,13 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {runAsync, type RunResult} from './git.js';
+import {
+	type WorkFolderKey,
+	type PrdFolder,
+	workFolderPath,
+	workFolderRel,
+	isWorkItemFile,
+} from './work-layout.js';
 
 /**
  * The **read half** of the ledger-transition seam (ADR
@@ -328,7 +335,7 @@ function listMarkdown(dir: string): string[] {
 	} catch {
 		return [];
 	}
-	return entries.filter((name) => name.toLowerCase().endsWith('.md')).sort();
+	return entries.filter((name) => isWorkItemFile(name)).sort();
 }
 
 function slugForFile(dir: string, file: string): string {
@@ -339,7 +346,7 @@ function slugForFile(dir: string, file: string): string {
 
 /** Read `work/backlog/*.md` from the local tree, parsed and sorted by slug. */
 function readLocalBacklog(repoPath: string): LedgerBacklogItem[] {
-	const dir = join(repoPath, 'work', 'backlog');
+	const dir = workFolderPath(repoPath, 'backlog');
 	const items: LedgerBacklogItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -357,7 +364,7 @@ function readLocalBacklog(repoPath: string): LedgerBacklogItem[] {
 
 /** Collect the slugs present in `work/done/` on the local tree. */
 function readLocalDoneSlugs(repoPath: string): Set<string> {
-	const dir = join(repoPath, 'work', 'done');
+	const dir = workFolderPath(repoPath, 'done');
 	const slugs = new Set<string>();
 	for (const file of listMarkdown(dir)) {
 		slugs.add(slugForFile(dir, file));
@@ -379,7 +386,7 @@ function readLocalDoneSlugs(repoPath: string): Set<string> {
  * re-break it. The back-pointer lives in `reviewOf:` instead.
  */
 function readLocalObservations(repoPath: string): LedgerObservationItem[] {
-	const dir = join(repoPath, 'work', 'observations');
+	const dir = workFolderPath(repoPath, 'observations');
 	const items: LedgerObservationItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -395,7 +402,7 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
 
 /** Read `work/needs-attention/*.md` (filename-sorted) from the local tree. */
 function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
-	const dir = join(repoPath, 'work', 'needs-attention');
+	const dir = workFolderPath(repoPath, 'needs-attention');
 	const items: LedgerNeedsAttentionItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -420,10 +427,10 @@ function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
  */
 function findPrdFileBySlug(
 	repoPath: string,
-	folder: 'prd' | 'prd-sliced',
+	folder: PrdFolder,
 	slug: string,
 ): string | undefined {
-	const dir = join(repoPath, 'work', folder);
+	const dir = workFolderPath(repoPath, folder);
 	for (const file of listMarkdown(dir)) {
 		if (slugForFile(dir, file) === slug) {
 			return file;
@@ -446,7 +453,7 @@ function findPrdFileBySlug(
  * matches `slicing.ts`'s `readSlicedSlugs`. Missing folders read as empty.
  */
 function readLocalPrdPool(repoPath: string): LocalPrdPool {
-	const dir = join(repoPath, 'work', 'prd');
+	const dir = workFolderPath(repoPath, 'prd');
 	const prds: LedgerPrdItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -466,7 +473,7 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 	// `remove-sliced-marker-step-b`), mirroring slicing.ts's readSlicedSlugs. Missing
 	// folder reads as empty.
 	const slicedSlugs = new Set<string>();
-	const slicedDir = join(repoPath, 'work', 'prd-sliced');
+	const slicedDir = workFolderPath(repoPath, 'prd-sliced');
 	for (const file of listMarkdown(slicedDir)) {
 		const content = readFileSync(join(slicedDir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -499,7 +506,7 @@ async function readSliceOnArbiter(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string | undefined> {
 	for (const folder of ['backlog', 'in-progress'] as const) {
-		const object = `${arbiter}/main:work/${folder}/${slug}.md`;
+		const object = `${arbiter}/main:${workFolderRel(folder)}/${slug}.md`;
 		const show = await gitSoft(['show', object], cwd, env);
 		if (show.status === 0) {
 			return show.stdout;
@@ -543,7 +550,7 @@ async function listMarkdownInTree(
 	return tree.stdout
 		.split('\n')
 		.map((s) => s.trim())
-		.filter((name) => name.toLowerCase().endsWith('.md'))
+		.filter((name) => isWorkItemFile(name))
 		.sort();
 }
 
@@ -565,7 +572,11 @@ async function readDoneSlugsFromTree(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<Set<string>> {
 	const slugs = new Set<string>();
-	for (const file of await listMarkdownInTree(`${ref}:work/done`, cwd, env)) {
+	for (const file of await listMarkdownInTree(
+		`${ref}:${workFolderRel('done')}`,
+		cwd,
+		env,
+	)) {
 		slugs.add(file.slice(0, -'.md'.length));
 	}
 	return slugs;
@@ -577,7 +588,7 @@ async function readBacklogFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerBacklogItem[]> {
-	const base = `${ref}:work/backlog`;
+	const base = `${ref}:${workFolderRel('backlog')}`;
 	const items: LedgerBacklogItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
@@ -608,7 +619,7 @@ async function readPrdPoolFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerPrdPool> {
-	const prdBase = `${ref}:work/prd`;
+	const prdBase = `${ref}:${workFolderRel('prd')}`;
 	const prds: LedgerPrdItem[] = [];
 	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
 		const content = await showInTree(prdBase, file, cwd, env);
@@ -629,7 +640,7 @@ async function readPrdPoolFromTree(
 	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
 	// truth (the `sliced:` marker was removed in `remove-sliced-marker-step-b`),
 	// exactly as the working-tree reader resolves it.
-	const slicedBase = `${ref}:work/prd-sliced`;
+	const slicedBase = `${ref}:${workFolderRel('prd-sliced')}`;
 	const slicedSlugs = new Set<string>();
 	for (const file of await listMarkdownInTree(slicedBase, cwd, env)) {
 		const content = await showInTree(slicedBase, file, cwd, env);
@@ -653,7 +664,7 @@ async function readObservationsFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerObservationItem[]> {
-	const base = `${ref}:work/observations`;
+	const base = `${ref}:${workFolderRel('observations')}`;
 	const items: LedgerObservationItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
@@ -676,7 +687,7 @@ async function readNeedsAttentionFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerNeedsAttentionItem[]> {
-	const base = `${ref}:work/needs-attention`;
+	const base = `${ref}:${workFolderRel('needs-attention')}`;
 	const items: LedgerNeedsAttentionItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);

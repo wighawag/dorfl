@@ -10,6 +10,13 @@ import {basename, dirname, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {runAsync, type RunResult} from './git.js';
 import {
+	workFolderRel,
+	workFolderPath,
+	workItemPath,
+	workItemRel,
+	isWorkItemFile,
+} from './work-layout.js';
+import {
 	performIntegration,
 	type IntegrationCoreResult,
 } from './integration-core.js';
@@ -321,7 +328,7 @@ const DEFAULT_ARBITER = 'origin';
  * `needs-attention.ts`) moves an approved item `pre-backlog/ → backlog/` to make
  * it claimable. STEP A: ADDITIVE — no `work/backlog/` reader changes here.
  */
-export const STAGED_SLICES_DIR = 'work/pre-backlog';
+export const STAGED_SLICES_DIR = workFolderRel('pre-backlog');
 
 /**
  * The POOL folder slices land in when the runner-deterministic placement
@@ -332,7 +339,7 @@ export const STAGED_SLICES_DIR = 'work/pre-backlog';
  * time. PRD US #4 / the governing ADR: the agent cannot self-place into the
  * pool. Slice `runner-deterministic-slice-placement-policy-and-precedence`.
  */
-const POOL_SLICES_DIR = 'work/backlog';
+const POOL_SLICES_DIR = workFolderRel('backlog');
 
 /** The placement slots for the SLICE lifecycle (folder names). */
 const SLICE_PLACEMENT_SLOTS = {
@@ -382,9 +389,9 @@ export async function performSlice(
 
 	// 0. The PRD must exist in the checkout (`work/prd/<slug>.md`) — it is the
 	//    source the agent slices + the file the lock holds.
-	const prdPath = join(cwd, 'work', 'prd', `${slug}.md`);
+	const prdPath = workItemPath(cwd, 'prd', slug);
 	if (!existsSync(prdPath)) {
-		const message = `no PRD '${slug}' found at work/prd/${slug}.md.`;
+		const message = `no PRD '${slug}' found at ${workFolderRel('prd')}/${slug}.md.`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', slug, message};
 	}
@@ -661,7 +668,7 @@ export async function performSlice(
 			type: 'slicing',
 			lifecycle: {
 				// Read the PR title / commit summary from the held PRD (before it moves).
-				titlePath: join(cwd, 'work', 'prd', `${slug}.md`),
+				titlePath: workItemPath(cwd, 'prd', slug),
 				commitTag: 'sliced',
 				stage: () =>
 					stageSlicingLifecycle({
@@ -879,7 +886,7 @@ async function heldPrdIsStale(
 	}
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const held = await gitSoft(
-		['rev-parse', `${arbiter}/main:work/prd/${slug}.md`],
+		['rev-parse', `${arbiter}/main:${workFolderRel('prd')}/${slug}.md`],
 		cwd,
 		env,
 	);
@@ -1016,7 +1023,7 @@ async function scrubPoolDrift(
 	poolBefore: Map<string, string>,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
-	const dir = join(cwd, 'work', 'backlog');
+	const dir = workFolderPath(cwd, 'backlog');
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
@@ -1024,7 +1031,7 @@ async function scrubPoolDrift(
 		return;
 	}
 	for (const name of entries) {
-		if (!name.toLowerCase().endsWith('.md')) {
+		if (!isWorkItemFile(name)) {
 			continue;
 		}
 		const abs = join(dir, name);
@@ -1035,7 +1042,7 @@ async function scrubPoolDrift(
 			}
 			// The agent edited a pre-existing pool slice — restore it from HEAD.
 			await gitSoft(
-				['checkout', 'HEAD', '--', `work/backlog/${name}`],
+				['checkout', 'HEAD', '--', workItemRel('backlog', name)],
 				cwd,
 				env,
 			);
@@ -1230,7 +1237,7 @@ function gateRefusalReason(
  */
 function readSlicedSlugs(cwd: string): Set<string> {
 	const slugs = new Set<string>();
-	const dir = join(cwd, 'work', 'prd-sliced');
+	const dir = workFolderPath(cwd, 'prd-sliced');
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -1336,7 +1343,7 @@ function newOrChangedStagedSlices(
 
 /** Snapshot the POOL `work/backlog/` (for the agent-write fence at stage time). */
 function snapshotPool(cwd: string): Map<string, string> {
-	const dir = join(cwd, 'work', 'backlog');
+	const dir = workFolderPath(cwd, 'backlog');
 	const snap = new Map<string, string>();
 	for (const file of listMarkdown(dir)) {
 		snap.set(file, readFileSync(join(dir, file), 'utf8'));
@@ -1364,5 +1371,5 @@ function listMarkdown(dir: string): string[] {
 	} catch {
 		return [];
 	}
-	return entries.filter((name) => name.toLowerCase().endsWith('.md')).sort();
+	return entries.filter((name) => isWorkItemFile(name)).sort();
 }

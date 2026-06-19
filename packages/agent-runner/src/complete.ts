@@ -1,5 +1,5 @@
 import {existsSync} from 'node:fs';
-import {join} from 'node:path';
+import {workItemPath} from './work-layout.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
 import {
@@ -601,10 +601,10 @@ async function runComplete(
 	// PREFER `backlog/` as the build source; `in-progress/` is RETAINED below for the
 	// legacy/bounce surfaces that may still source from it until its folder removal
 	// (9c), and `needs-attention/` for the runner-owned recovery finish.
-	const backlog = join(cwd, 'work', 'backlog', `${slug}.md`);
-	const inProgress = join(cwd, 'work', 'in-progress', `${slug}.md`);
-	const needsAttention = join(cwd, 'work', 'needs-attention', `${slug}.md`);
-	const done = join(cwd, 'work', 'done', `${slug}.md`);
+	const backlog = workItemPath(cwd, 'backlog', slug);
+	const inProgress = workItemPath(cwd, 'in-progress', slug);
+	const needsAttention = workItemPath(cwd, 'needs-attention', slug);
+	const done = workItemPath(cwd, 'done', slug);
 	const onBacklog = existsSync(backlog);
 	const onInProgress = existsSync(inProgress);
 	const onNeedsAttention = existsSync(needsAttention);

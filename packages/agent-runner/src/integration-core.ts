@@ -8,6 +8,14 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {
+	LEDGER_STATUS_FOLDERS,
+	type LedgerStatusFolder,
+	workItemPath,
+	workItemRel,
+	workFolderPath,
+	workFolderPrefix,
+} from './work-layout.js';
 import {runVerify, type VerifyConfig} from './verify.js';
 import {ensurePrepared} from './prepare.js';
 import {
@@ -537,8 +545,8 @@ export async function performIntegration(
 	const sourcePath = lifecycle
 		? lifecycle.titlePath
 		: source === 'done'
-			? join(cwd, 'work', 'done', `${slug}.md`)
-			: join(cwd, 'work', source, `${slug}.md`);
+			? workItemPath(cwd, 'done', slug)
+			: workItemPath(cwd, source, slug);
 
 	// UNTRUSTED-ORIGIN BUILD-PROPOSE RULE (slice `untrusted-origin-forces-build-propose`).
 	// A slice born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
@@ -817,9 +825,13 @@ export async function performIntegration(
 		// folds the agent's NEW uncommitted source edits into the atomic commit on
 		// top of the kept (already-done-moved) tip; no second move, no copy.
 	} else {
-		mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
+		mkdirSync(workFolderPath(cwd, 'done'), {recursive: true});
 		await gitHard(
-			['mv', `work/${source}/${slug}.md`, `work/done/${slug}.md`],
+			[
+				'mv',
+				workItemRel(source, `${slug}.md`),
+				workItemRel('done', `${slug}.md`),
+			],
 			cwd,
 			env,
 		);
@@ -1765,7 +1777,7 @@ function writeReviewNitsObservation(params: {
 		return;
 	}
 	const date = observationDate();
-	const obsDir = join(params.cwd, 'work', 'observations');
+	const obsDir = workFolderPath(params.cwd, 'observations');
 	mkdirSync(obsDir, {recursive: true});
 	const filename = `review-nits-${params.slug}-${date}.md`;
 	writeFileSync(
@@ -1878,7 +1890,10 @@ async function nothingStaged(
  * buckets) so accidental scratch files the agent left elsewhere are not announced
  * as captured signals — matching the observation's recommended scope.
  */
-const CAPTURE_NOTE_DIRS = ['work/observations/', 'work/findings/'] as const;
+const CAPTURE_NOTE_DIRS = [
+	workFolderPrefix('observations'),
+	workFolderPrefix('findings'),
+] as const;
 
 /**
  * SCOOP + REPORT the agent-authored CAPTURED NOTES this run's atomic commit is
@@ -1949,8 +1964,6 @@ async function stagedCaptureNotes(
  * transient `in-progress`/`needs-attention` are GONE from `main`'s tree (they are
  * per-item lock-ref state now).
  */
-const LEDGER_STATUS_FOLDERS = ['backlog', 'done', 'dropped'] as const;
-
 /** The result of {@link readArbiterLedgerPlacement}. */
 /** The result of {@link readArbiterLedgerPlacement}. */
 interface ArbiterLedgerPlacement {
@@ -1990,9 +2003,9 @@ function readArbiterLedgerPlacement(
 	env: NodeJS.ProcessEnv | undefined,
 ): ArbiterLedgerPlacement {
 	const arbiterRef = `${arbiter}/main`;
-	const placements: {folder: string; blob: string}[] = [];
+	const placements: {folder: LedgerStatusFolder; blob: string}[] = [];
 	for (const folder of LEDGER_STATUS_FOLDERS) {
-		const path = `work/${folder}/${slug}.md`;
+		const path = workItemRel(folder, `${slug}.md`);
 		const ls = run('git', ['ls-tree', arbiterRef, path], cwd, {env});
 		const line = ls.stdout.trim();
 		if (ls.status !== 0 || line === '') {
@@ -2009,7 +2022,9 @@ function readArbiterLedgerPlacement(
 
 	if (placements.length > 1) {
 		const uniqueBlobs = new Set(placements.map((p) => p.blob));
-		const folders = placements.map((p) => `work/${p.folder}/`).join(', ');
+		const folders = placements
+			.map((p) => workFolderPrefix(p.folder))
+			.join(', ');
 		if (uniqueBlobs.size !== 1) {
 			return {
 				error:
@@ -2028,8 +2043,8 @@ function readArbiterLedgerPlacement(
 }
 
 /** The `work/<status>/` prefixes a ledger file can live under (no trailing `/`). */
-const LEDGER_FOLDER_PREFIXES = LEDGER_STATUS_FOLDERS.map(
-	(folder) => `work/${folder}/`,
+const LEDGER_FOLDER_PREFIXES = LEDGER_STATUS_FOLDERS.map((folder) =>
+	workFolderPrefix(folder),
 );
 
 /**
@@ -2141,7 +2156,7 @@ async function reconcileSiblingLedgerConflict(params: {
 	}
 	for (const otherSlug of siblingSlugs) {
 		for (const folder of LEDGER_STATUS_FOLDERS) {
-			const ledgerPath = `work/${folder}/${otherSlug}.md`;
+			const ledgerPath = workItemRel(folder, `${otherSlug}.md`);
 			const onArbiter =
 				(
 					await gitSoft(
@@ -2236,8 +2251,12 @@ async function reconcileDivergentDoneMove(params: {
 	// Capture the slug's ledger content (our tip's done/ copy, or any source copy)
 	// BEFORE we reset — it is what lands in `done/`.
 	let ledgerContent: string | undefined;
-	for (const folder of ['done', ...LEDGER_STATUS_FOLDERS]) {
-		const abs = join(cwd, 'work', folder, `${slug}.md`);
+	const captureOrder: readonly LedgerStatusFolder[] = [
+		'done',
+		...LEDGER_STATUS_FOLDERS,
+	];
+	for (const folder of captureOrder) {
+		const abs = workItemPath(cwd, folder, slug);
 		if (existsSync(abs)) {
 			ledgerContent = readFileSync(abs, 'utf8');
 			break;
@@ -2260,8 +2279,8 @@ async function reconcileDivergentDoneMove(params: {
 	// Arbiter-resolved ledger placement: write `done/` from the captured content,
 	// and remove every non-`done` copy (the arbiter's source folder is now checked
 	// out by the reset; any stale local source is swept too).
-	mkdirSync(join(cwd, 'work', 'done'), {recursive: true});
-	const donePath = join(cwd, 'work', 'done', `${slug}.md`);
+	mkdirSync(workFolderPath(cwd, 'done'), {recursive: true});
+	const donePath = workItemPath(cwd, 'done', slug);
 	if (ledgerContent !== undefined) {
 		writeFileSync(donePath, ledgerContent);
 	}
@@ -2269,7 +2288,7 @@ async function reconcileDivergentDoneMove(params: {
 		if (folder === 'done') {
 			continue;
 		}
-		const abs = join(cwd, 'work', folder, `${slug}.md`);
+		const abs = workItemPath(cwd, folder, slug);
 		if (existsSync(abs)) {
 			rmSync(abs, {force: true});
 		}

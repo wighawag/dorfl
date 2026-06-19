@@ -1,4 +1,5 @@
 import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
+import {workItemRel} from './work-layout.js';
 
 /**
  * The **question/answer SIDECAR contract** (PRD `advance-loop`, slice
@@ -202,7 +203,7 @@ export function resolveSidecarIdentity(identity: string): SidecarIdentity {
  */
 export function sidecarPathFor(identity: string): string {
 	const {type, slug} = resolveSidecarIdentity(identity);
-	return `work/questions/${type}-${slug}.md`;
+	return workItemRel('questions', `${type}-${slug}.md`);
 }
 
 // --- Parse ----------------------------------------------------------------

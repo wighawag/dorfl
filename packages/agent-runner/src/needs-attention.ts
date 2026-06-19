@@ -7,6 +7,13 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {
+	type WorkFolderKey,
+	workFolderPath,
+	workFolderRel,
+	workItemRel,
+	isWorkItemFile,
+} from './work-layout.js';
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {
@@ -279,8 +286,14 @@ function findSourceFolder(
 	// claim never relocated it), so the wip-save bounce must be able to source the
 	// move from there. `in-progress` is retained for the legacy/recovery surfaces; on
 	// the rebase-conflict path (after the done-move) the body is in `done/`.
-	for (const folder of ['backlog', 'in-progress', 'done', 'needs-attention']) {
-		const rel = join('work', folder, `${slug}.md`);
+	const lookupFolders: readonly WorkFolderKey[] = [
+		'backlog',
+		'in-progress',
+		'done',
+		'needs-attention',
+	];
+	for (const folder of lookupFolders) {
+		const rel = workItemRel(folder, `${slug}.md`);
 		const abs = join(cwd, rel);
 		if (existsSync(abs)) {
 			return {rel, abs};
@@ -1062,12 +1075,12 @@ export async function listPromotable(
 	// functions do before their residence probe.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 	const slices = await listMarkdownSlugsInTree(
-		`${arbiter}/main:work/pre-backlog`,
+		`${arbiter}/main:${workFolderRel('pre-backlog')}`,
 		cwd,
 		env,
 	);
 	const prds = await listMarkdownSlugsInTree(
-		`${arbiter}/main:work/pre-prd`,
+		`${arbiter}/main:${workFolderRel('pre-prd')}`,
 		cwd,
 		env,
 	);
@@ -1097,7 +1110,7 @@ async function listMarkdownSlugsInTree(
 	return tree.stdout
 		.split('\n')
 		.map((s) => s.trim())
-		.filter((name) => name.toLowerCase().endsWith('.md'))
+		.filter((name) => isWorkItemFile(name))
 		.map((name) => name.replace(/\.md$/i, ''))
 		.sort();
 }
@@ -1254,8 +1267,12 @@ async function resolveRequeueSourceRel(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string | undefined> {
-	for (const folder of ['needs-attention', 'in-progress']) {
-		const rel = `work/${folder}/${slug}.md`;
+	const requeueSources: readonly WorkFolderKey[] = [
+		'needs-attention',
+		'in-progress',
+	];
+	for (const folder of requeueSources) {
+		const rel = workItemRel(folder, `${slug}.md`);
 		if (
 			(
 				await gitSoftAsync(
@@ -1389,7 +1406,7 @@ export function resolveFromNeedsAttention(
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
-	const naRel = join('work', 'needs-attention', `${slug}.md`);
+	const naRel = workItemRel('needs-attention', `${slug}.md`);
 	const naAbs = join(cwd, naRel);
 	if (!existsSync(naAbs)) {
 		return {
@@ -1400,9 +1417,9 @@ export function resolveFromNeedsAttention(
 		};
 	}
 
-	const destDir = join(cwd, 'work', 'in-progress');
+	const destDir = workFolderPath(cwd, 'in-progress');
 	mkdirSync(destDir, {recursive: true});
-	const destRel = join('work', 'in-progress', `${slug}.md`);
+	const destRel = workItemRel('in-progress', `${slug}.md`);
 	gitHard(['mv', naRel, destRel], cwd, env);
 
 	gitHard(['add', '-A'], cwd, env);

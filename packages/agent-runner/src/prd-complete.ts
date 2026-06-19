@@ -1,6 +1,13 @@
 import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
+import {
+	SLICE_LIFECYCLE_FOLDERS,
+	type SliceLifecycleFolder,
+	workFolderPath,
+	workItemRel,
+	isWorkItemFile,
+} from './work-layout.js';
 
 /**
  * The read-only **"is this PRD complete?"** core query (PRD `issue-intake`, US #8 —
@@ -26,15 +33,10 @@ import {parseFrontmatter} from './frontmatter.js';
  */
 
 /** The slice lifecycle folders a `prd:<slug>` slice can reside in. */
-const SLICE_FOLDERS = [
-	'backlog',
-	'in-progress',
-	'needs-attention',
-	'done',
-] as const;
+const SLICE_FOLDERS = SLICE_LIFECYCLE_FOLDERS;
 
 /** Where a slice resides — the folder name under `work/`. */
-type SliceFolder = (typeof SLICE_FOLDERS)[number];
+type SliceFolder = SliceLifecycleFolder;
 
 /** What the query needs: which repo's `work/` tree to scan + which PRD slug. */
 export interface PrdCompleteInput {
@@ -72,14 +74,14 @@ export interface PrdCompleteResult {
 
 /** List the `.md` filenames in `<repoPath>/work/<folder>/`, sorted; `[]` if absent. */
 function listMarkdown(repoPath: string, folder: SliceFolder): string[] {
-	const dir = join(repoPath, 'work', folder);
+	const dir = workFolderPath(repoPath, folder);
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
 	} catch {
 		return [];
 	}
-	return entries.filter((name) => name.toLowerCase().endsWith('.md')).sort();
+	return entries.filter((name) => isWorkItemFile(name)).sort();
 }
 
 /**
@@ -95,7 +97,7 @@ export function isPrdComplete(input: PrdCompleteInput): PrdCompleteResult {
 	for (const folder of SLICE_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const content = readFileSync(
-				join(repoPath, 'work', folder, file),
+				join(repoPath, workItemRel(folder, file)),
 				'utf8',
 			);
 			const fm = parseFrontmatter(content);
