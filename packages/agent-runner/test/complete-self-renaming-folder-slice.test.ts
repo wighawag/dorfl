@@ -146,6 +146,50 @@ describe('complete — self-renaming-folder slice (record placed in a RENAMED do
 		expect(result.branch).toBe(branch);
 	});
 
+	it('DIRTY-CONTINUE: agent placed its record at work/tasks/done/ with UNCOMMITTED work still in the tree (the live WIP state) integrates, not `nothing to complete`', async () => {
+		// The exact live failure mode: the migration agent renamed the folders +
+		// committed, placing its own record at work/tasks/done/<slug>.md, but THIS run
+		// left uncommitted edits in the worktree (the dirtyContinue state). The second
+		// presence guard re-checked the binary's work/done/<slug>.md (absent) and
+		// crashed with `nothing to complete`. It must instead fold the uncommitted work
+		// into the commit and integrate.
+		const {repo, branch} = await seedSelfRenamedDoneBranch('dirty-regroup');
+		// Leave NEW uncommitted work in the tree (what made it a dirty continue).
+		writeFileSync(join(repo, 'extra.txt'), 'a late edit\n');
+		const notes: string[] = [];
+
+		const result = await performComplete({
+			slug: 'dirty-regroup',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		// The continue-build note fired (the dirtyContinue / source:'done' path).
+		expect(notes.some((n) => /continue-build on 'dirty-regroup'/.test(n))).toBe(
+			true,
+		);
+		// Both the renamed-folder record AND the late uncommitted edit landed.
+		expect(
+			gitIn(['show', `${ARBITER}/main:work/tasks/done/dirty-regroup.md`], repo)
+				.length,
+		).toBeGreaterThan(0);
+		expect(gitIn(['show', `${ARBITER}/main:extra.txt`], repo).trim()).toBe(
+			'a late edit',
+		);
+		// No stray binary-layout work/done/ record.
+		const lsmain = gitIn(
+			['ls-tree', '-r', '--name-only', `${ARBITER}/main`],
+			repo,
+		);
+		expect(lsmain).not.toContain('work/done/dirty-regroup.md');
+		expect(result.branch).toBe(branch);
+	});
+
 	it('a record stranded in a NON-done renamed position (e.g. tasks/todo/) is NOT silently integrated — it still refuses honestly', async () => {
 		// Guard the cut line: the layout-agnostic detection fires ONLY on a `done`
 		// leaf. A record left in the renamed POOL (`tasks/todo/`) is NOT a finished
