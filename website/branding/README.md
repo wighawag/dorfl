@@ -9,52 +9,56 @@ Brand assets for **Dorfl**, _It Claims Its Own Work_.
 
 ## Status
 
-**`v8` is the current work-in-progress system.** It introduces a deliberate
-two-silhouette fork from one shared face geometry. Earlier `v2`…`v7` and the
-original `dorfl-logo` / `-horizontal` / `-glyph-mono` are kept as drafts for
-reference; they are not canonical. See _Evolution_ below.
+**`v9b` is the current canonical system: ONE head (square + jaw), used
+everywhere.** Square/circle/tiny contexts are solved by _framing and cropping_
+the one head, never by re-proportioning the creature. The hero/lockup may show a
+_bit of body_ below the head, but the body is purely additive: it never changes
+the head's shape.
 
-## Logo construction (locked proportions)
+This supersedes the `v8` two-proportion fork (tall + square head), which risked
+deforming the creature. Earlier `v2`…`v7`, `v8*`, and `v9a` are kept as drafts.
+See _Evolution_ below.
 
-All v8 assets are **one head**, drawn at fixed ratios, only the head box and the
-framing change. This is an intentional _responsive logo_, not accidental drift:
-when two assets differ, it is on purpose (silhouette fork + small-size
-simplification), never because the numbers wandered.
+## Logo construction (locked geometry)
 
-**Two canonical silhouettes (the fork):**
+There is **one head**. Every asset is the same head, only the _framing_ changes
+(crop, scale, container, optional body below). This is a responsive logo, not
+drift: differences are deliberate, never the numbers wandering.
 
-| Silhouette | Head box (w×h) | Use                                        | File                  |
-| ---------- | -------------- | ------------------------------------------ | --------------------- |
-| **tall**   | 200 × 252      | hero, lockup, illustration ("standing")    | `dorfl-v8-tall.svg`   |
-| **square** | 220 × 208      | icon, favicon, avatar, UI (fills the tile) | `dorfl-v8-square.svg` |
+**The head (canonical — square + jaw). Do not let these drift:**
 
-The square fork exists because a squarer head seats better in tiles/avatars
-(less dead corner space); the tall fork keeps the standing-golem character.
+| Feature     | Spec                                                          |
+| ----------- | ------------------------------------------------------------- |
+| Head box    | 220 × 208, corner r30                                         |
+| Jaw         | squared chin 92 × 26, r10, centered, flush at head bottom     |
+| Visor band  | 148 × 72, r15; inset amber 132 × 56, r11                       |
+| `>` eye     | chevron, stroke weight **13**, round caps/joins               |
+| `_` eye     | 34 × 11, r5.5, pulled tight to `>` (reads as a cursor)        |
+| Mouth       | flat dash 58 × 10, r5, dark clay `#7E3D2C` — **deadpan**      |
+| Shaded half | right side, `#8A4632` @ 0.42 opacity                          |
 
-**Shared, locked across BOTH silhouettes (do not let these drift):**
+**The jaw is NON-NEGOTIABLE.** Without it the square reads as a terminal
+window/card, not a head (see `dorfl-v9b-head-nojaw.svg`, kept as the proof). The
+chin is the cheapest possible silhouette cue and the thing that says "creature."
 
-| Feature        | Spec                                                        |
-| -------------- | ----------------------------------------------------------- |
-| Visor band     | 148 × 72, corner r15, inset amber 132 × 56 r11              |
-| `>` eye        | chevron, stroke weight **13**, round caps/joins             |
-| `_` eye        | 34 × 11, r5.5, pulled tight to `>` (reads as a cursor)      |
-| Mouth          | flat dash 58 × 10, r5, dark clay `#7E3D2C` — **deadpan**    |
-| Jaw            | squared chin 92 × 26, r10, centered, flush at head bottom   |
-| Shaded half    | right side, `#8A4632` @ 0.42 opacity                        |
+**Showing a body (hero/lockup only):** the body is drawn _behind_ the head and
+rises to tuck **under the jaw** (neck meets chin, like a real bust). The head
+geometry above is unchanged — the body is additive and is cropped by the frame.
+Never flatten the jaw to attach a neck.
 
-The **only** legitimate per-asset differences are: (1) which silhouette is used,
-(2) framing/scale, and (3) the mono version dropping the shaded half. Anything
-else is a bug.
+The **only** legitimate per-asset differences are: (1) framing/scale/crop,
+(2) container (square tile / circle / band), (3) whether a body is shown, and
+(4) mono dropping the shaded half. Anything else is a bug.
 
-## Current files (v8)
+## Current files (v9b canonical + v9a alt)
 
-| File                   | Silhouette | Use                                      |
-| ---------------------- | ---------- | ---------------------------------------- |
-| `dorfl-v8-tall.svg`    | tall       | master head (transparent), hero/inline   |
-| `dorfl-v8-square.svg`  | square     | master head (transparent), tiles/avatars |
-| `dorfl-v8-icon.svg`    | square     | app icon / favicon (slate tile)          |
-| `dorfl-v8-lockup.svg`  | tall       | horizontal: head + `dorfl` + tagline     |
-| `dorfl-v8-mono.svg`    | square     | single-ink (terminal, stamp, print)      |
+| File                          | Use                                                |
+| ----------------------------- | -------------------------------------------------- |
+| `dorfl-v9b-head.svg`          | **the mark** — square head + jaw (avatar/tile)     |
+| `dorfl-v9b-lockup.svg`        | horizontal: head + bit of chest + `dorfl` + tagline|
+| `dorfl-v9b-hero.svg`          | full standing golem (illustration only)            |
+| `dorfl-v9b-head-nojaw.svg`    | rejected experiment (why the jaw stays)            |
+| `dorfl-v9a-*.svg`             | tall-head alternative (head-only lockup, icons)    |
 
 ## The idea
 
@@ -89,7 +93,9 @@ claim-a-slice protocol _and_ Dorfl's arc of claiming his own freedom.
 | `dorfl-v5.svg`           | `>_` in a recessed visor, but eyes too far apart (read as 2 eyes)   |
 | `dorfl-v6.svg`           | tighter `>_` + `~` mouth — but the smile made him cute, lost charm  |
 | `dorfl-v7*.svg`          | deadpan flat mouth + lore tagline — right face, but assets drifted  |
-| **`dorfl-v8-*.svg`**     | **current** — one locked geometry, tall+square fork, jaw not plug   |
+| `dorfl-v8-*.svg`         | one locked geometry, but a two-PROPORTION fork (risked deforming)   |
+| `dorfl-v9a-*.svg`        | one TALL head; square/circle/favicon by framing+crop (alt)         |
+| **`dorfl-v9b-*.svg`**    | **current** — one SQUARE+jaw head everywhere; body shown only below |
 
 ## Building
 
