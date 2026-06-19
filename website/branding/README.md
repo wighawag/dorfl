@@ -9,9 +9,52 @@ Brand assets for **Dorfl**, _It Claims Its Own Work_.
 
 ## Status
 
-**`dorfl-v7.svg` is the current work-in-progress mark.** Earlier `v2`…`v6` and
-the original `dorfl-logo` / `-horizontal` / `-glyph-mono` are kept as drafts for
+**`v8` is the current work-in-progress system.** It introduces a deliberate
+two-silhouette fork from one shared face geometry. Earlier `v2`…`v7` and the
+original `dorfl-logo` / `-horizontal` / `-glyph-mono` are kept as drafts for
 reference; they are not canonical. See _Evolution_ below.
+
+## Logo construction (locked proportions)
+
+All v8 assets are **one head**, drawn at fixed ratios, only the head box and the
+framing change. This is an intentional _responsive logo_, not accidental drift:
+when two assets differ, it is on purpose (silhouette fork + small-size
+simplification), never because the numbers wandered.
+
+**Two canonical silhouettes (the fork):**
+
+| Silhouette | Head box (w×h) | Use                                        | File                  |
+| ---------- | -------------- | ------------------------------------------ | --------------------- |
+| **tall**   | 200 × 252      | hero, lockup, illustration ("standing")    | `dorfl-v8-tall.svg`   |
+| **square** | 220 × 208      | icon, favicon, avatar, UI (fills the tile) | `dorfl-v8-square.svg` |
+
+The square fork exists because a squarer head seats better in tiles/avatars
+(less dead corner space); the tall fork keeps the standing-golem character.
+
+**Shared, locked across BOTH silhouettes (do not let these drift):**
+
+| Feature        | Spec                                                        |
+| -------------- | ----------------------------------------------------------- |
+| Visor band     | 148 × 72, corner r15, inset amber 132 × 56 r11              |
+| `>` eye        | chevron, stroke weight **13**, round caps/joins             |
+| `_` eye        | 34 × 11, r5.5, pulled tight to `>` (reads as a cursor)      |
+| Mouth          | flat dash 58 × 10, r5, dark clay `#7E3D2C` — **deadpan**    |
+| Jaw            | squared chin 92 × 26, r10, centered, flush at head bottom   |
+| Shaded half    | right side, `#8A4632` @ 0.42 opacity                        |
+
+The **only** legitimate per-asset differences are: (1) which silhouette is used,
+(2) framing/scale, and (3) the mono version dropping the shaded half. Anything
+else is a bug.
+
+## Current files (v8)
+
+| File                   | Silhouette | Use                                      |
+| ---------------------- | ---------- | ---------------------------------------- |
+| `dorfl-v8-tall.svg`    | tall       | master head (transparent), hero/inline   |
+| `dorfl-v8-square.svg`  | square     | master head (transparent), tiles/avatars |
+| `dorfl-v8-icon.svg`    | square     | app icon / favicon (slate tile)          |
+| `dorfl-v8-lockup.svg`  | tall       | horizontal: head + `dorfl` + tagline     |
+| `dorfl-v8-mono.svg`    | square     | single-ink (terminal, stamp, print)      |
 
 ## The idea
 
@@ -45,7 +88,8 @@ claim-a-slice protocol _and_ Dorfl's arc of claiming his own freedom.
 | `dorfl-v4.svg`           | `>_` glowing directly on the face (raw, no border)                  |
 | `dorfl-v5.svg`           | `>_` in a recessed visor, but eyes too far apart (read as 2 eyes)   |
 | `dorfl-v6.svg`           | tighter `>_` + `~` mouth — but the smile made him cute, lost charm  |
-| **`dorfl-v7.svg`**       | **current** — tight `>_` eyes, **deadpan flat mouth**, lore tagline |
+| `dorfl-v7*.svg`          | deadpan flat mouth + lore tagline — right face, but assets drifted  |
+| **`dorfl-v8-*.svg`**     | **current** — one locked geometry, tall+square fork, jaw not plug   |
 
 ## Building
 

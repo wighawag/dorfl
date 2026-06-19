@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="340" viewBox="0 0 320 340">
+  <!-- Dorfl v8 TALL head — canonical "standing golem" silhouette.
+       Shared geometry with v8-square: identical visor/eyes/mouth/jaw + stroke
+       weights. ONLY the head box ratio differs (tall: 200x270).
+       Neck is a squared subtle JAW, not a plug. Transparent background. -->
+  <defs>
+    <filter id="t8" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(10,10)">
+    <!-- HEAD box: x20 y16, w200 h252, corner r28 -->
+    <rect x="20" y="16" width="200" height="252" rx="28" fill="#A4543C"/>
+    <!-- carved shaded half (right) -->
+    <path d="M120 16 H192 Q220 16 220 44 V240 Q220 268 192 268 H120 Z" fill="#8A4632" opacity="0.42"/>
+    <!-- JAW: squared chin block, centered, narrower than head, short. NOT a plug.
+         head bottom = 268; jaw sits flush, w92 h22, centered (x74) -->
+    <rect x="74" y="262" width="92" height="26" rx="10" fill="#A4543C"/>
+    <path d="M120 262 H166 V288 H120 Z" fill="#8A4632" opacity="0.42"/>
+
+    <!-- VISOR: recessed amber band. centered on head. x50 y96 w140 h64 -->
+    <rect x="46" y="92" width="148" height="72" rx="15" fill="#1C1813"/>
+    <rect x="54" y="100" width="132" height="56" rx="11" fill="#FFB23E" filter="url(#t8)"/>
+    <!-- '>' eye: apex at gap center, stroke 13 -->
+    <path d="M82 114 l21 14 l-21 14" fill="none" stroke="#1C1813" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- '_' eye: tight to '>', w34 h11 -->
+    <rect x="126" y="138" width="34" height="11" rx="5.5" fill="#1C1813"/>
+
+    <!-- DEADPAN mouth: flat dash, w58 h10, dark clay, centered, below visor -->
+    <rect x="91" y="212" width="58" height="10" rx="5" fill="#7E3D2C"/>
+  </g>
+</svg>

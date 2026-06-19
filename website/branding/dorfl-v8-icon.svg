@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Dorfl v8 ICON: the SQUARE head (canonical fork), on a slate tile.
+       Same geometry as dorfl-v8-square, framed + scaled to fill an app icon. -->
+  <defs>
+    <filter id="ci8" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="#23201C"/>
+  <!-- square head, centered & scaled (~1.55x of the 320 source, recentred) -->
+  <g transform="translate(86,84) scale(1.18)">
+    <rect x="10" y="8" width="220" height="208" rx="30" fill="#A4543C"/>
+    <path d="M120 8 H200 Q230 8 230 38 V186 Q230 216 200 216 H120 Z" fill="#8A4632" opacity="0.42"/>
+    <rect x="74" y="210" width="92" height="26" rx="10" fill="#A4543C"/>
+    <path d="M120 210 H166 V236 H120 Z" fill="#8A4632" opacity="0.42"/>
+    <rect x="46" y="64" width="148" height="72" rx="15" fill="#1C1813"/>
+    <rect x="54" y="72" width="132" height="56" rx="11" fill="#FFB23E" filter="url(#ci8)"/>
+    <path d="M82 86 l21 14 l-21 14" fill="none" stroke="#1C1813" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="126" y="110" width="34" height="11" rx="5.5" fill="#1C1813"/>
+    <rect x="91" y="172" width="58" height="10" rx="5" fill="#7E3D2C"/>
+  </g>
+</svg>
