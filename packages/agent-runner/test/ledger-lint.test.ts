@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fixtureFolderRel} from './helpers/gitRepo.js';
 import {
 	detectDuplicateSlugs,
 	lintLocalLedger,
@@ -30,7 +31,7 @@ afterEach(() => {
 
 /** Write `work/<folder>/<slug>.md` in the fixture repo (a minimal slice body). */
 function place(folder: string, slug: string, content?: string): void {
-	const dir = join(root, 'work', folder);
+	const dir = join(root, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -117,13 +118,16 @@ describe('lintLocalLedger (over a working tree)', () => {
 
 	it('resolves the slug from frontmatter, not the filename', () => {
 		// Two files with DIFFERENT names but the SAME frontmatter slug, in two folders.
-		mkdirSync(join(root, 'work', 'backlog'), {recursive: true});
-		mkdirSync(join(root, 'work', 'done'), {recursive: true});
+		mkdirSync(join(root, 'work', 'tasks', 'todo'), {recursive: true});
+		mkdirSync(join(root, 'work', 'tasks', 'done'), {recursive: true});
 		writeFileSync(
-			join(root, 'work', 'backlog', 'a.md'),
+			join(root, 'work', 'tasks', 'todo', 'a.md'),
 			'---\nslug: same\n---\n',
 		);
-		writeFileSync(join(root, 'work', 'done', 'b.md'), '---\nslug: same\n---\n');
+		writeFileSync(
+			join(root, 'work', 'tasks', 'done', 'b.md'),
+			'---\nslug: same\n---\n',
+		);
 		const dups = lintLocalLedger(root);
 		expect(dups.map((d) => d.slug)).toEqual(['same']);
 	});
@@ -143,7 +147,9 @@ describe('sweepLedgerDuplicates (the gc-style on-demand REPORT)', () => {
 		expect(result.duplicates[0].candidateCanonical).toBe('done');
 		// The sweep is REPORT-ONLY: both files are still present afterwards.
 		expect(existsSync(join(root, 'work', 'dropped', 'stuck.md'))).toBe(true);
-		expect(existsSync(join(root, 'work', 'done', 'stuck.md'))).toBe(true);
+		expect(existsSync(join(root, 'work', 'tasks', 'done', 'stuck.md'))).toBe(
+			true,
+		);
 	});
 
 	it('reports a clean ledger as clean', () => {
@@ -161,8 +167,8 @@ describe('formatting', () => {
 		const text = lines.join('\n');
 		expect(text).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(text).toContain('ghost');
-		expect(text).toContain('work/done/');
-		expect(text).toContain('work/backlog/');
+		expect(text).toContain('work/tasks/done/');
+		expect(text).toContain('work/tasks/todo/');
 	});
 
 	it('a clean ledger produces NO warning lines (silent)', () => {
@@ -175,8 +181,8 @@ describe('formatting', () => {
 		place('done', 'dup');
 		const text = formatLedgerSweep(sweepLedgerDuplicates(root));
 		expect(text).toContain('dup');
-		expect(text).toContain('work/done/');
-		expect(text).toContain('candidate canonical: work/done/');
+		expect(text).toContain('work/tasks/done/');
+		expect(text).toContain('candidate canonical: work/tasks/done/');
 		expect(text).toMatch(/NEVER auto-deleted/);
 	});
 

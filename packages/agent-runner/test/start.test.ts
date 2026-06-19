@@ -48,8 +48,11 @@ function completeOnArbiter(
 	gitIn(['fetch', '-q', 'arbiter'], finisher);
 	gitIn(['checkout', '-q', '-B', `done/${slug}`, 'arbiter/main'], finisher);
 	// git mv needs the destination dir to exist (git tracks no empty dirs).
-	mkdirSync(join(finisher, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], finisher);
+	mkdirSync(join(finisher, 'work', 'tasks', 'done'), {recursive: true});
+	gitIn(
+		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		finisher,
+	);
 	gitIn(['commit', '-q', '-m', `done: ${slug}`], finisher);
 	gitIn(['push', '-q', 'arbiter', `done/${slug}:main`], finisher);
 }
@@ -74,7 +77,10 @@ describe('start — backlog item, winning claim', () => {
 			'slice-alpha',
 		]);
 		// The work branch (cut off the latest arbiter main) carries the backlog body.
-		const show = gitIn(['cat-file', '-e', 'HEAD:work/backlog/alpha.md'], repo);
+		const show = gitIn(
+			['cat-file', '-e', 'HEAD:work/tasks/todo/alpha.md'],
+			repo,
+		);
 		expect(show).toBe('');
 	});
 });
@@ -223,7 +229,7 @@ describe('start — already-claimed (held lock) item', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		// The work branch (cut off arbiter main) carries the backlog body.
 		const onBranch = gitIn(
-			['cat-file', '-e', 'HEAD:work/backlog/beta.md'],
+			['cat-file', '-e', 'HEAD:work/tasks/todo/beta.md'],
 			repo,
 		);
 		expect(onBranch).toBe('');

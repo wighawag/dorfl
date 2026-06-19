@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fixtureFolderRel} from './helpers/gitRepo.js';
 import {runCloseJob} from '../src/close-job.js';
 import type {
 	IssueProvider,
@@ -93,7 +94,7 @@ function write(
 	file: string,
 	frontmatter: Record<string, string>,
 ): void {
-	const dir = join(repoPath(), 'work', folder);
+	const dir = join(repoPath(), 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -111,7 +112,7 @@ afterEach(() => {
 });
 
 describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', () => {
-	it('closes the PRD issue when ALL its prd:<slug> slices are in work/done/', async () => {
+	it('closes the PRD issue when ALL its prd:<slug> slices are in work/tasks/done/', async () => {
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
 		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
 		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
@@ -136,7 +137,7 @@ describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', ()
 		);
 	});
 
-	it('leaves the PRD issue OPEN when a prd:<slug> slice is NOT yet in work/done/', async () => {
+	it('leaves the PRD issue OPEN when a prd:<slug> slice is NOT yet in work/tasks/done/', async () => {
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
 		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
 		write('backlog', 'b.md', {slug: 'b', prd: 'my-prd'}); // not landed
@@ -169,7 +170,7 @@ describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', ()
 });
 
 describe('runCloseJob — the lone-slice case (closes its own issue:)', () => {
-	it('closes a lone slice (issue:, no prd:) once it lands in work/done/', async () => {
+	it('closes a lone slice (issue:, no prd:) once it lands in work/tasks/done/', async () => {
 		write('done', 'lone.md', {slug: 'lone', issue: '13'});
 
 		const provider = new MemoryIssueProvider();
@@ -186,7 +187,7 @@ describe('runCloseJob — the lone-slice case (closes its own issue:)', () => {
 		expect(provider.closeCalls[0].comment).toContain('lone');
 	});
 
-	it('leaves a lone slice OPEN while it is still outside work/done/', async () => {
+	it('leaves a lone slice OPEN while it is still outside work/tasks/done/', async () => {
 		write('backlog', 'lone.md', {slug: 'lone', issue: '13'});
 
 		const provider = new MemoryIssueProvider();

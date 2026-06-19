@@ -45,7 +45,7 @@ function seedSlice(
 	slug: string,
 	fm: {needsAnswers?: boolean; humanOnly?: boolean} = {},
 ): void {
-	const dir = join(repo, 'work', 'backlog');
+	const dir = join(repo, 'work', 'tasks', 'todo');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -64,7 +64,7 @@ function seedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
 }
 
 function seedObservation(slug: string, triaged?: string): void {
-	const dir = join(repo, 'work', 'observations');
+	const dir = join(repo, 'work', 'notes', 'observations');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (triaged !== undefined) lines.push(`triaged: ${triaged}`);

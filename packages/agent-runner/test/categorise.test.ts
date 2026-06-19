@@ -124,7 +124,7 @@ describe('categoriseItem — every humanOnly×needsAnswers×deps combination', (
 		});
 	}
 
-	it('readiness is policy-independent: deps satisfied via work/done/', () => {
+	it('readiness is policy-independent: deps satisfied via work/tasks/done/', () => {
 		const result = categoriseItem(item('b', undefined, ['a'], new Set(['a'])));
 		expect(result.ready).toBe(true);
 		expect(result.category).toBe('agent-claimable');

@@ -37,6 +37,14 @@
 
 import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
+import {
+	SLICE_LIFECYCLE_FOLDERS,
+	PRD_FOLDERS as WORK_LAYOUT_PRD_FOLDERS,
+	type WorkFolderKey,
+	workFolderPath,
+	workItemRel,
+	isWorkItemFile,
+} from './work-layout.js';
 import {parseFrontmatter, resolveClosingIssue} from './frontmatter.js';
 import {isPrdComplete} from './prd-complete.js';
 import {
@@ -46,15 +54,10 @@ import {
 } from './issue-provider.js';
 
 /** The slice lifecycle folders a lone-slice `issue:` can reside in. */
-const SLICE_FOLDERS = [
-	'backlog',
-	'in-progress',
-	'needs-attention',
-	'done',
-] as const;
+const SLICE_FOLDERS = SLICE_LIFECYCLE_FOLDERS;
 
 /** The PRD folders an `issue:`-bearing PRD can reside in. */
-const PRD_FOLDERS = ['prd', 'prd-sliced'] as const;
+const PRD_FOLDERS = WORK_LAYOUT_PRD_FOLDERS;
 
 /** Why the close-job acted (or did not act) on a candidate issue. */
 export type CloseDecision =
@@ -96,15 +99,15 @@ export interface CloseJobOptions {
 }
 
 /** List the `.md` filenames in `<repoPath>/work/<folder>/`, sorted; `[]` if absent. */
-function listMarkdown(repoPath: string, folder: string): string[] {
-	const dir = join(repoPath, 'work', folder);
+function listMarkdown(repoPath: string, folder: WorkFolderKey): string[] {
+	const dir = workFolderPath(repoPath, folder);
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
 	} catch {
 		return [];
 	}
-	return entries.filter((name) => name.toLowerCase().endsWith('.md')).sort();
+	return entries.filter((name) => isWorkItemFile(name)).sort();
 }
 
 /**
@@ -116,7 +119,7 @@ function prdIssueNumber(repoPath: string, prdSlug: string): number | undefined {
 	for (const folder of PRD_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
-				readFileSync(join(repoPath, 'work', folder, file), 'utf8'),
+				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
 			);
 			const slug = fm.slug ?? basename(file, '.md');
 			if (slug === prdSlug && fm.issue !== undefined) {
@@ -155,7 +158,7 @@ function resolveCandidates(repoPath: string): {
 	for (const folder of PRD_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
-				readFileSync(join(repoPath, 'work', folder, file), 'utf8'),
+				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
 			);
 			const slug = fm.slug ?? basename(file, '.md');
 			const closing = resolveClosingIssue(fm);
@@ -174,7 +177,7 @@ function resolveCandidates(repoPath: string): {
 	for (const folder of SLICE_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
-				readFileSync(join(repoPath, 'work', folder, file), 'utf8'),
+				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
 			);
 			const slug = fm.slug ?? basename(file, '.md');
 			const closing = resolveClosingIssue(fm);
@@ -197,7 +200,7 @@ function resolveCandidates(repoPath: string): {
 function loneSliceLanded(repoPath: string, sliceSlug: string): boolean {
 	for (const file of listMarkdown(repoPath, 'done')) {
 		const fm = parseFrontmatter(
-			readFileSync(join(repoPath, 'work', 'done', file), 'utf8'),
+			readFileSync(join(repoPath, workItemRel('done', file)), 'utf8'),
 		);
 		const slug = fm.slug ?? basename(file, '.md');
 		if (slug === sliceSlug) {

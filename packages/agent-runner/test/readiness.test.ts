@@ -35,7 +35,7 @@ describe('readiness guard — claim path: unmet blockedBy', () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
 			blockedBy: ['dep-a', 'dep-b'],
 		});
-		// Neither dependency is in work/done/ on the arbiter.
+		// Neither dependency is in work/tasks/done/ on the arbiter.
 		const notes: string[] = [];
 		const result = await performClaim({
 			slug: 'feature',
@@ -71,7 +71,7 @@ describe('readiness guard — claim path: unmet blockedBy', () => {
 		});
 		expect(refused.outcome).toBe('not-ready');
 
-		// Land dep-a in work/done/ on the arbiter, then re-claim.
+		// Land dep-a in work/tasks/done/ on the arbiter, then re-claim.
 		seedDoneOnArbiter(seeded, 'dep-a');
 		const ok = await performClaim({
 			slug: 'feature',

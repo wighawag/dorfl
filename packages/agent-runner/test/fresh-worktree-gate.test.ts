@@ -130,7 +130,9 @@ describe('fresh-worktree gate — the gate tests the REBASED tip, not the pre-re
 
 		// The pre-rebase gate saw the cwd-only file and PASSED (today's behaviour).
 		expect(core.outcome).toBe('completed');
-		expect(existsSync(join(repo, 'work', 'done', 'leak-off.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'leak-off.md'))).toBe(
+			true,
+		);
 	});
 
 	it('a change introduced ONLY by the integration rebase IS present in the gated tree (gate sees what merges)', async () => {
@@ -160,7 +162,9 @@ describe('fresh-worktree gate — the gate tests the REBASED tip, not the pre-re
 		});
 
 		expect(core.outcome).toBe('completed');
-		expect(existsSync(join(repo, 'work', 'done', 'rebased.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'rebased.md'))).toBe(
+			true,
+		);
 	});
 });
 
@@ -188,7 +192,9 @@ describe('fresh-worktree gate — prepare runs in the fresh worktree before veri
 		// The prepare marker was written in the THROWAWAY worktree, not the agent's
 		// cwd (the gate worktree is reaped, so it does not exist anywhere now).
 		expect(existsSync(join(repo, 'prepared.marker'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'done', 'prep.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'prep.md'))).toBe(
+			true,
+		);
 	});
 
 	it('a FAILING prepare in the fresh worktree ⇒ prepare-failed (distinct from gate-failed), NEVER runs verify', async () => {
@@ -376,7 +382,9 @@ describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the
 		expect(reviewCwd).toBeDefined();
 		expect(reviewCwd).not.toBe(repo);
 		expect(reviewCwd).toMatch(/agent-runner-fresh-gate-/);
-		expect(existsSync(join(repo, 'work', 'done', 'vtr.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'vtr.md'))).toBe(
+			true,
+		);
 		// The verify marker lived only in the (reaped) gate worktree; it never touched
 		// the agent's cwd or the committed tree.
 		expect(existsSync(join(repo, 'verify-ran.marker'))).toBe(false);
@@ -496,7 +504,9 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 		});
 
 		expect(core.outcome).toBe('completed');
-		expect(existsSync(join(repo, 'work', 'done', 'off-green.md'))).toBe(true);
+		expect(
+			existsSync(join(repo, 'work', 'tasks', 'done', 'off-green.md')),
+		).toBe(true);
 		// OFF ⇒ no fresh worktree is ever created.
 		expect(gateSandboxCount()).toBe(before);
 	});
@@ -542,7 +552,9 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 		expect(core.routedToNeedsAttention).toBe(true);
 		// The bounce is a pure lock amend now (no folder move); the body stays in
 		// backlog/ and no needs-attention/ folder is written (local-only).
-		expect(existsSync(join(repo, 'work', 'backlog', 'off-red.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'off-red.md'))).toBe(
+			true,
+		);
 		expect(
 			existsSync(join(repo, 'work', 'needs-attention', 'off-red.md')),
 		).toBe(false);

@@ -12,7 +12,7 @@ import {LEDGER_STATUS_FOLDERS} from '../src/ledger-lint.js';
  * (PRD `staging-pool-position-gate-and-trust-model`, US #16/17/18).
  *
  * Pool-eligibility BY RESIDENCE: an item resting in `work/dropped/` is OUT of
- * every pool, the SAME way `work/done/` excludes \u2014 there is ONE residence rule
+ * every pool, the SAME way `work/tasks/done/` excludes \u2014 there is ONE residence rule
  * (the pool readers enumerate ONLY their pool folders, `backlog/` for slices,
  * `prd/` for PRDs), so a `dropped/` file is invisible to every reader by
  * construction; no reader re-implements the rule.
@@ -68,10 +68,10 @@ describe('work/dropped/ — a generic terminal residence excludes from every poo
 		expect(pool.slicedSlugs).toEqual(new Set());
 	});
 
-	it('a slice resting in work/dropped/ is OUT of the build (scan) pool (by residence, like work/done/)', () => {
-		// A live slice in work/backlog/ + a dropped slice in work/dropped/. The scan
+	it('a slice resting in work/dropped/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
+		// A live slice in work/tasks/todo/ + a dropped slice in work/dropped/. The scan
 		// enumerates only the backlog pool, so the dropped slice never appears.
-		writeMd('repo/work/backlog/live.md', {slug: 'live'});
+		writeMd('repo/work/tasks/todo/live.md', {slug: 'live'});
 		writeMd(
 			'repo/work/dropped/abandoned.md',
 			{slug: 'abandoned'},
@@ -115,7 +115,7 @@ describe('work/dropped/ — a generic terminal residence excludes from every poo
 		// Cross-residence corruption is still detectable: a slug in `dropped/`
 		// AND `backlog/` is a duplicate the lint surfaces (the read-side lint covers
 		// the full lifecycle set including the terminal `dropped/`).
-		writeMd('repo/work/backlog/both.md', {slug: 'both'});
+		writeMd('repo/work/tasks/todo/both.md', {slug: 'both'});
 		writeMd('repo/work/dropped/both.md', {slug: 'both'}, 'reason: duplicate');
 
 		const {lintLocalLedger} = await import('../src/ledger-lint.js');

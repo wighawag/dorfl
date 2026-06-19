@@ -974,7 +974,7 @@ describe('runOnce — pi harness wiring (config.harness = "pi", stubbed pi CLI)'
 	 * un-pushed case (a failed/offline push) — letting this test read the harness
 	 * record after teardown. (Repointed from the old "agent-fail bare-returns, never
 	 * pushes" gap, now closed by `centralise-bounce-branch-push`; see
-	 * `work/observations/run-agent-failure-does-not-save-work.md`.) Only `work/*` is
+	 * `work/notes/observations/run-agent-failure-does-not-save-work.md`.) Only `work/*` is
 	 * rejected, so the OBSERVABLE on-main surface still publishes — isolating the
 	 * RECOVERABLE-push failure.
 	 */

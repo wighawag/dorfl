@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {runAsync, type RunResult} from './git.js';
 import {resolveSidecarIdentity, type SidecarType} from './sidecar.js';
+import {workItemRel} from './work-layout.js';
 
 /**
  * The **unified item-lock module** (PRD `ledger-status-per-item-lock-refs`, ADR
@@ -828,12 +829,12 @@ export async function readItemLock(
  * `dropped/` is type-agnostic (the generic terminal), so it is in every set.
  */
 export function terminalMainPaths(type: SidecarType, slug: string): string[] {
-	const dropped = `work/dropped/${slug}.md`;
+	const dropped = workItemRel('dropped', `${slug}.md`);
 	switch (type) {
 		case 'slice':
-			return [`work/done/${slug}.md`, dropped];
+			return [workItemRel('done', `${slug}.md`), dropped];
 		case 'prd':
-			return [`work/prd-sliced/${slug}.md`, dropped];
+			return [workItemRel('prd-sliced', `${slug}.md`), dropped];
 		case 'observation':
 			return [dropped];
 	}

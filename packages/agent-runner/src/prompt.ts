@@ -21,6 +21,13 @@ import {existsSync, readFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseFrontmatter} from './frontmatter.js';
+import {
+	WORK_ROOT,
+	workFolderName,
+	workItemPath,
+	workFolderRel,
+	type SliceResolutionFolder,
+} from './work-layout.js';
 import {run, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {isAncestor} from './gc.js';
@@ -99,7 +106,9 @@ export function resolveClaimProtocolPath(
 	const candidates: string[] = [];
 	// 2. The target repo's adopted copy (authoritative when present).
 	if (cwd) {
-		candidates.push(resolve(cwd, 'work', 'protocol', 'CLAIM-PROTOCOL.md'));
+		candidates.push(
+			resolve(cwd, WORK_ROOT, workFolderName('protocol'), 'CLAIM-PROTOCOL.md'),
+		);
 	}
 	// 3. The copy vendored inside this package (published-CLI fallback). From
 	//    `src/` (tsx) `dist/` is a sibling; from `dist/` it is the dir itself.
@@ -426,7 +435,7 @@ export function buildAgentPrompt(
  * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE slice
  * (see {@link resolveSlice} + {@link ContinueResolutionGate}).
  */
-export type SliceFolder = 'in-progress' | 'backlog' | 'done';
+export type SliceFolder = SliceResolutionFolder;
 
 export interface ResolvedSlice {
 	/** The slug of the resolved slice. */
@@ -545,7 +554,7 @@ export function resolveSlice(
 		order.push('done');
 	}
 	for (const folder of order) {
-		const path = join(cwd, 'work', folder, `${slug}.md`);
+		const path = workItemPath(cwd, folder, slug);
 		if (!existsSync(path)) {
 			continue;
 		}
@@ -553,13 +562,13 @@ export function resolveSlice(
 		const slicePrompt = extractPromptSection(content);
 		if (slicePrompt === undefined) {
 			throw new PromptError(
-				`slice '${slug}' (work/${folder}/${slug}.md) has no '## Prompt' section`,
+				`slice '${slug}' (${workFolderRel(folder)}/${slug}.md) has no '## Prompt' section`,
 			);
 		}
 		const fm = parseFrontmatter(content);
 		return {slug, path, folder, prd: fm.prd, slicePrompt};
 	}
-	const searched = order.map((f) => `work/${f}/`).join(', ');
+	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
 	throw new PromptError(`no slice '${slug}' found in ${searched}`);
 }
 

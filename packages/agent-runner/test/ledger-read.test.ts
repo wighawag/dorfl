@@ -20,6 +20,7 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 
 let root: string;
@@ -31,7 +32,7 @@ function writeItem(
 	frontmatter: Record<string, string>,
 	body = 'body',
 ): void {
-	const dir = join(root, repo, 'work', status);
+	const dir = join(root, repo, 'work', fixtureFolderRel(status));
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -113,7 +114,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		file: string,
 		fm: Record<string, string>,
 	): void {
-		const dir = join(root, 'repo', 'work', folder);
+		const dir = join(root, 'repo', 'work', fixtureFolderRel(folder));
 		mkdirSync(dir, {recursive: true});
 		const lines = ['---'];
 		for (const [k, v] of Object.entries(fm)) {

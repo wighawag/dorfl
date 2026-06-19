@@ -168,7 +168,7 @@ describe('runVerify — gate status propagation', () => {
 	it('does not move or commit anything under work/ (read-only gate)', async () => {
 		// Seed a work/ tree; a passing AND a failing gate must both leave it intact.
 		const workInProgress = join(dir, 'work', 'in-progress');
-		const workDone = join(dir, 'work', 'done');
+		const workDone = join(dir, 'work', 'tasks', 'done');
 		mkdirSync(workInProgress, {recursive: true});
 		mkdirSync(workDone, {recursive: true});
 		writeFileSync(join(workInProgress, 'slice.md'), '# slice');

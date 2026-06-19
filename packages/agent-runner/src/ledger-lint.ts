@@ -2,6 +2,14 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {run} from './git.js';
+import {
+	LEDGER_STATUS_FOLDERS,
+	type LedgerStatusFolder,
+	workFolderName,
+	workFolderPath,
+	workFolderPrefix,
+	isWorkItemFile,
+} from './work-layout.js';
 
 /**
  * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (PRD
@@ -57,10 +65,7 @@ import {run} from './git.js';
  * namespace) — they are deliberately EXCLUDED so a slug that legitimately has both
  * a slice and a same-named note/PRD is never a false positive.
  */
-export const LEDGER_STATUS_FOLDERS = ['backlog', 'done', 'dropped'] as const;
-
-/** One of the `work/` status folders a slice can reside in. */
-export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
+export {LEDGER_STATUS_FOLDERS, type LedgerStatusFolder} from './work-layout.js';
 
 /**
  * Lifecycle precedence used to pick the CANDIDATE CANONICAL folder of a duplicate
@@ -144,7 +149,7 @@ function readLocalFolderSlugs(
 	repoPath: string,
 	folder: LedgerStatusFolder,
 ): Set<string> {
-	const dir = join(repoPath, 'work', folder);
+	const dir = workFolderPath(repoPath, folder);
 	const slugs = new Set<string>();
 	let entries: string[];
 	try {
@@ -153,7 +158,7 @@ function readLocalFolderSlugs(
 		return slugs; // missing folder ⇒ nothing there
 	}
 	for (const file of entries) {
-		if (!file.toLowerCase().endsWith('.md')) {
+		if (!isWorkItemFile(file)) {
 			continue;
 		}
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -192,7 +197,7 @@ function readRefFolderSlugs(
 	const slugs = new Set<string>();
 	const tree = run(
 		'git',
-		['ls-tree', '--name-only', `${ref}:work/${folder}`],
+		['ls-tree', '--name-only', `${ref}:work/${workFolderName(folder)}`],
 		cwd,
 		{env},
 	);
@@ -201,7 +206,7 @@ function readRefFolderSlugs(
 	}
 	for (const name of tree.stdout.split('\n')) {
 		const file = name.trim();
-		if (!file.toLowerCase().endsWith('.md')) {
+		if (!isWorkItemFile(file)) {
 			continue;
 		}
 		// The ledger names each file after its slug (claim/done moves do); reading
@@ -259,10 +264,10 @@ export function formatDuplicateWarnings(
 			'one work/ status folder (a corrupt ledger — a human must resolve each):',
 	];
 	for (const dup of duplicates) {
-		const where = dup.folders.map((f) => `work/${f}/`).join(', ');
+		const where = dup.folders.map((f) => workFolderPrefix(f)).join(', ');
 		lines.push(
 			`   ${dup.slug}: in ${where} ` +
-				`(candidate canonical: work/${dup.candidateCanonical}/)`,
+				`(candidate canonical: ${workFolderPrefix(dup.candidateCanonical)})`,
 		);
 	}
 	return lines;
@@ -314,8 +319,12 @@ export function formatLedgerSweep(result: LedgerSweepResult): string {
 	);
 	for (const dup of duplicates) {
 		lines.push(`  ${dup.slug}`);
-		lines.push(`    in: ${dup.folders.map((f) => `work/${f}/`).join(', ')}`);
-		lines.push(`    candidate canonical: work/${dup.candidateCanonical}/`);
+		lines.push(
+			`    in: ${dup.folders.map((f) => workFolderPrefix(f)).join(', ')}`,
+		);
+		lines.push(
+			`    candidate canonical: ${workFolderPrefix(dup.candidateCanonical)}`,
+		);
 		lines.push(
 			'    resolve: keep the canonical copy, delete the stale one(s), then re-run.',
 		);

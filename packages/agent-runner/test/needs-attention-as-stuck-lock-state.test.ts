@@ -227,8 +227,11 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		const completer = seeded.clone('completer');
 		gitIn(['fetch', '-q', ARBITER], completer);
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
-		mkdirSync(join(completer, 'work', 'done'), {recursive: true});
-		gitIn(['mv', 'work/backlog/epsilon.md', 'work/done/epsilon.md'], completer);
+		mkdirSync(join(completer, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(
+			['mv', 'work/tasks/todo/epsilon.md', 'work/tasks/done/epsilon.md'],
+			completer,
+		);
 		gitIn(['add', '-A'], completer);
 		gitIn(['commit', '-q', '-m', 'done: epsilon'], completer);
 		gitIn(['push', '-q', ARBITER, 'done-move:main'], completer);
@@ -269,8 +272,11 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		const completer = seeded.clone('zeta-completer');
 		gitIn(['fetch', '-q', ARBITER], completer);
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
-		mkdirSync(join(completer, 'work', 'done'), {recursive: true});
-		gitIn(['mv', 'work/backlog/zeta.md', 'work/done/zeta.md'], completer);
+		mkdirSync(join(completer, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(
+			['mv', 'work/tasks/todo/zeta.md', 'work/tasks/done/zeta.md'],
+			completer,
+		);
 		gitIn(['add', '-A'], completer);
 		gitIn(['commit', '-q', '-m', 'done: zeta'], completer);
 		gitIn(['push', '-q', ARBITER, 'done-move:main'], completer);

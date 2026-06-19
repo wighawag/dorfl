@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fixtureFolderRel} from './helpers/gitRepo.js';
 import {currentLedgerRead} from '../src/ledger-read.js';
 import {
 	parseSlugArg,
@@ -22,7 +23,7 @@ function writeItem(
 	frontmatter: Record<string, string>,
 	body = 'body',
 ): void {
-	const dir = join(root, 'repo', 'work', folder);
+	const dir = join(root, 'repo', 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {

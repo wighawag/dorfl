@@ -180,9 +180,11 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 			'a captured signal',
 			'',
 		].join('\n');
-		mkdirSync(join(seed.repo, 'work', 'observations'), {recursive: true});
+		mkdirSync(join(seed.repo, 'work', 'notes', 'observations'), {
+			recursive: true,
+		});
 		writeFileSync(
-			join(seed.repo, 'work', 'observations', `${slug}.md`),
+			join(seed.repo, 'work', 'notes', 'observations', `${slug}.md`),
 			obsBody,
 		);
 		gitIn(['add', '-A'], seed.repo);
@@ -343,7 +345,7 @@ describe('advance in-place — the rebase-retry handles a mid-batch external adv
 						env: gitEnv(),
 					},
 				);
-				const doneDir = join(side, 'work', 'done');
+				const doneDir = join(side, 'work', 'tasks', 'done');
 				mkdirSync(doneDir, {recursive: true});
 				writeFileSync(
 					join(doneDir, `${externalSlug}.md`),
@@ -421,7 +423,7 @@ describe('advance in-place — promote-apply is a harmless no-op (mirrors the ex
 				env: gitEnv(),
 			},
 		);
-		const backlog = join(side, 'work', 'backlog');
+		const backlog = join(side, 'work', 'tasks', 'todo');
 		mkdirSync(backlog, {recursive: true});
 		writeFileSync(
 			join(backlog, `${promotedSlug}.md`),

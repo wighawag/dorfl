@@ -25,14 +25,14 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** A throwaway working repo with a populated `work/backlog/` (a participating repo). */
+/** A throwaway working repo with a populated `work/tasks/todo/` (a participating repo). */
 function seedWorkingRepo(name: string, slugs: string[] = ['feat']): string {
 	const repo = join(scratch.root, name);
-	mkdirSync(join(repo, 'work', 'backlog'), {recursive: true});
+	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
 	for (const slug of slugs) {
 		writeFileSync(
-			join(repo, 'work', 'backlog', `${slug}.md`),
+			join(repo, 'work', 'tasks', 'todo', `${slug}.md`),
 			['---', `slug: ${slug}`, 'blockedBy: []', '---', '', 'body', ''].join(
 				'\n',
 			),

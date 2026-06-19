@@ -536,7 +536,7 @@ describe('status — one-slug-one-folder LINT (PRD ledger-integrity story 3)', (
 		expect(out).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(out).toMatch(/ghost/);
 		expect(out).toContain('work/dropped/');
-		expect(out).toContain('work/done/');
+		expect(out).toContain('work/tasks/done/');
 	});
 
 	it('a CLEAN mirror ledger reports no duplicates (no false positives)', async () => {

@@ -150,8 +150,12 @@ describe('complete — gate', () => {
 		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
 			false,
 		);
-		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+			true,
+		);
 	});
 
 	it('--skip-verify skips the gate and completes anyway', async () => {
@@ -194,13 +198,17 @@ describe('complete — done-move + commit', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		// The move happened in the tree…
-		expect(existsSync(join(repo, 'work', 'backlog', 'beta.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'done', 'beta.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'beta.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'beta.md'))).toBe(
+			true,
+		);
 		// …and ONE commit carries BOTH the move AND the agent's previously-
 		// uncommitted file.
 		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
-		expect(files).toMatch(/work\/done\/beta\.md/);
-		expect(files).toMatch(/work\/backlog\/beta\.md/);
+		expect(files).toMatch(/work\/tasks\/done\/beta\.md/);
+		expect(files).toMatch(/work\/tasks\/todo\/beta\.md/);
 		expect(files).toMatch(/src\.txt/);
 		// Working tree is clean afterwards (everything was staged).
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
@@ -213,10 +221,10 @@ describe('complete — done-move + commit', () => {
 		// the slug on the branch). This is the bar the stranded-done auto-recover MUST
 		// NOT mask (slice `autonomous-path-auto-recovers-already-committed-stranded-branch`):
 		// a real wrong-slug / nothing-staged error still surfaces as `refused`. The
-		// auto-recover routing is folder-gated on `work/done/<slug>.md`, so this
+		// auto-recover routing is folder-gated on `work/tasks/done/<slug>.md`, so this
 		// shape correctly falls through to the existing honest `CompleteRefusal`.
 		const {repo} = await claimAndBranch('empty');
-		gitIn(['rm', '-q', 'work/backlog/empty.md'], repo);
+		gitIn(['rm', '-q', 'work/tasks/todo/empty.md'], repo);
 		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
 		const result = await performComplete({
 			slug: 'empty',
@@ -236,7 +244,7 @@ describe('complete — done-move + commit', () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['theslug']);
 		const repo = seeded.repo;
 		// Rewrite the slice title to the realistic "slug — summary" form.
-		const slicePath = join(repo, 'work', 'backlog', 'theslug.md');
+		const slicePath = join(repo, 'work', 'tasks', 'todo', 'theslug.md');
 		const original = readFileSync(slicePath, 'utf8');
 		writeFileSync(
 			slicePath,
@@ -520,7 +528,7 @@ describe('complete — propose integration', () => {
 		expect(args).toMatch(/^--body$/m);
 		// The body carries the summary AND a pointer back to the slice file.
 		expect(args).toContain('Built the thing. Decided to inline the helper.');
-		expect(args).toContain('work/done/bodied.md');
+		expect(args).toContain('work/tasks/done/bodied.md');
 		expect(args).not.toMatch(/^--fill$/m);
 	});
 

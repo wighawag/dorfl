@@ -200,7 +200,7 @@ describe('run through performIntegration — propose PR title + body', () => {
 		expect(args).toContain(
 			'Implemented feat. Note: routed run through the core.',
 		);
-		expect(args).toContain('work/done/feat.md');
+		expect(args).toContain('work/tasks/done/feat.md');
 		// Title + body present ⇒ gh never re-derives from the commit subject.
 		expect(args).not.toMatch(/^--fill$/m);
 	});

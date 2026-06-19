@@ -79,8 +79,8 @@ function seedObservation(slug = 'obs'): {repo: string; itemPath: string} {
 	const repo = join(scratch.root, 'project');
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
-	const itemPath = `work/observations/${slug}.md`;
-	mkdirSync(join(repo, 'work', 'observations'), {recursive: true});
+	const itemPath = `work/notes/observations/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[
@@ -316,8 +316,8 @@ function seedAnsweredObservation(
 	slug: string,
 	disposition: SidecarDisposition,
 ): {itemPath: string; sidecarPath: string} {
-	const itemPath = `work/observations/${slug}.md`;
-	mkdirSync(join(repo, 'work', 'observations'), {recursive: true});
+	const itemPath = `work/notes/observations/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[
@@ -476,7 +476,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 			return {
 				outcome: 'promoted',
 				exitCode: 0,
-				newItemPath: 'work/backlog/seamprom.md',
+				newItemPath: 'work/tasks/todo/seamprom.md',
 				message: 'promoted',
 			};
 		};

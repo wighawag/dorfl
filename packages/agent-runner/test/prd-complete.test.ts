@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fixtureFolderRel} from './helpers/gitRepo.js';
 import {isPrdComplete} from '../src/prd-complete.js';
 
 let root: string;
@@ -13,7 +14,7 @@ function writeSlice(
 	frontmatter: Record<string, string>,
 	body = 'body',
 ): void {
-	const dir = join(root, 'repo', 'work', folder);
+	const dir = join(root, 'repo', 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -52,7 +53,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		expect(result.slices).toEqual([]);
 	});
 
-	it('NOT complete when ≥1 prd:<slug> slice exists but some are NOT in work/done/', () => {
+	it('NOT complete when ≥1 prd:<slug> slice exists but some are NOT in work/tasks/done/', () => {
 		// Three slices link the PRD; two are done, one is still in backlog.
 		writeSlice('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
 		writeSlice('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
@@ -85,7 +86,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		).toBe(false);
 	});
 
-	it('COMPLETE when ≥1 prd:<slug> slice exists and ALL are in work/done/', () => {
+	it('COMPLETE when ≥1 prd:<slug> slice exists and ALL are in work/tasks/done/', () => {
 		writeSlice('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
 		writeSlice('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
 		// An unrelated, not-done slice for a different PRD must not block completion.

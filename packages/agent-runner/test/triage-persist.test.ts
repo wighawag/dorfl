@@ -44,8 +44,8 @@ afterEach(() => {
 });
 
 function seedObs(repo: string, slug: string): string {
-	const itemPath = `work/observations/${slug}.md`;
-	mkdirSync(join(repo, 'work', 'observations'), {recursive: true});
+	const itemPath = `work/notes/observations/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[
@@ -120,8 +120,8 @@ describe('autoDispositionObservation — the conservative no-question write', ()
 
 /** Seed an answered-promote observation + sidecar in a repo (working tree). */
 function seedAnsweredPromote(repo: string, slug: string): string {
-	const itemPath = `work/observations/${slug}.md`;
-	mkdirSync(join(repo, 'work', 'observations'), {recursive: true});
+	const itemPath = `work/notes/observations/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[
@@ -167,7 +167,7 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		});
 		expect(result.outcome).toBe('promoted');
 		expect(result.exitCode).toBe(0);
-		expect(result.newItemPath).toBe('work/backlog/prom.md');
+		expect(result.newItemPath).toBe('work/tasks/todo/prom.md');
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'prom')).toBe(true);
 		// The observation resolved locally (sidecar gone, needsAnswers cleared).
 		expect(
@@ -218,14 +218,14 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 			promoteObservation({
 				cwd: a,
 				item: 'observation:dup',
-				itemPath: 'work/observations/dup.md',
+				itemPath: 'work/notes/observations/dup.md',
 				arbiter: 'arbiter',
 				env: racerEnv('a'),
 			}),
 			promoteObservation({
 				cwd: b,
 				item: 'observation:dup',
-				itemPath: 'work/observations/dup.md',
+				itemPath: 'work/notes/observations/dup.md',
 				arbiter: 'arbiter',
 				env: racerEnv('b'),
 			}),
@@ -262,7 +262,7 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 			promoteObservation({
 				cwd: a,
 				item: 'observation:dup',
-				itemPath: 'work/observations/dup.md',
+				itemPath: 'work/notes/observations/dup.md',
 				arbiter: 'arbiter',
 				// IDENTICAL identity for BOTH racers (the SAME gitEnv()), NOT racerEnv.
 				env: gitEnv(),
@@ -270,7 +270,7 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 			promoteObservation({
 				cwd: b,
 				item: 'observation:dup',
-				itemPath: 'work/observations/dup.md',
+				itemPath: 'work/notes/observations/dup.md',
 				arbiter: 'arbiter',
 				env: gitEnv(),
 			}),

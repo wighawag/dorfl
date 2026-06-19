@@ -125,8 +125,8 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		const {repo} = await claimedOnArbiterOnly('beta');
 
 		// Seed an UNTRACKED file in the shared checkout.
-		mkdirSync(join(repo, 'work', 'ideas'), {recursive: true});
-		const strayRel = 'work/ideas/assistant-wip.md';
+		mkdirSync(join(repo, 'work', 'notes', 'ideas'), {recursive: true});
+		const strayRel = 'work/notes/ideas/assistant-wip.md';
 		writeFileSync(join(repo, strayRel), '# an idea being written\n');
 
 		const beforeArbiter = arbiterMainLog(repo);

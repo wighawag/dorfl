@@ -96,12 +96,12 @@ describe('one-slug-one-folder invariant — FAIL LOUD on a two-folder slug (defe
 		// backlog/gamma.md (the exact PR #86 corruption — a slug in two folders).
 		const other = seeded.clone('corrupt');
 		gitIn(['switch', '-q', '-c', `corrupt/gamma`, `${ARBITER}/main`], other);
-		mkdirSync(join(other, 'work', 'done'), {recursive: true});
+		mkdirSync(join(other, 'work', 'tasks', 'done'), {recursive: true});
 		// DISTINCT content from the in-progress copy, so the auto-clean
 		// "provably-safe (identical content)" escape hatch does NOT apply — it must
 		// fail loud, never silently pick one.
 		writeFileSync(
-			join(other, 'work', 'done', 'gamma.md'),
+			join(other, 'work', 'tasks', 'done', 'gamma.md'),
 			'---\ntitle: gamma\nslug: gamma\n---\n\nA DIFFERENT, stale copy.\n',
 		);
 		gitIn(['add', '-A'], other);

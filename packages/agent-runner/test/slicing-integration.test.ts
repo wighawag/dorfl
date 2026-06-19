@@ -15,7 +15,7 @@ import {run} from '../src/git.js';
 /**
  * `do prd:<slug>` SLICE-OUTPUT-THROUGH-INTEGRATION tests (slice
  * `slice-output-through-integration`). The KEYSTONE behaviour: the produced
- * `work/backlog/*` slices integrate through the SHARED `performIntegration` core
+ * `work/tasks/todo/*` slices integrate through the SHARED `performIntegration` core
  * (`src/integration-core.ts`) honoring `--propose`/`--merge`, instead of
  * committing straight to `main` via the lock's `emitSlices`.
  *
@@ -98,7 +98,7 @@ function seedPrdWithOrigin(
 /** An agent that writes one backlog slice file (no git). */
 function slicingAgent(file = 'child'): SliceAgentRunner {
 	return ({cwd}) => {
-		const dir = join(cwd, 'work', 'pre-backlog');
+		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${file}.md`),
@@ -168,7 +168,7 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		// landed on the arbiter main, through the shared core (not the lock's direct
 		// commit). The PRD now rests in prd-sliced/ (the source of truth for
 		// sliced-ness — residence, no marker), NOT back in prd/.
-		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
@@ -226,7 +226,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		// The slices are NOT on main (propose does not land them); the PRD body STAYS
 		// in prd/ on main (the lock is a ref now — it never moves the body; the PR
 		// carries the prd → prd-sliced move). NO slicing/ marker.
-		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
@@ -236,7 +236,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 
 		// The work branch was PUSHED carrying the slices + the PRD restore.
 		expect(
-			onArbiterBranch(repo, 'work/prd-it', 'work/pre-backlog/child.md'),
+			onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
 		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prd-sliced/it.md')).toBe(
 			true,
@@ -287,14 +287,14 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 			// The shared core resolved the mode to the SAME effect it resolves for a
 			// build: merge lands the slice on main; propose does not (it pushes the
 			// `work/<slug>` branch + leaves main untouched, the PR source).
-			expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(
+			expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(
 				row.landsOnMain,
 			);
 			if (!row.landsOnMain) {
 				// Propose pushed the work branch carrying the slices (the SAME branch
 				// `performIntegration` integrates on the build path).
 				expect(
-					onArbiterBranch(repo, 'work/prd-it', 'work/pre-backlog/child.md'),
+					onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
 				).toBe(true);
 			}
 		});
@@ -320,7 +320,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 		expect(result.outcome).toBe('sliced');
 		const slice = run(
 			'git',
-			['show', `${ARBITER}/main:work/pre-backlog/child.md`],
+			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
@@ -346,7 +346,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 		expect(result.outcome).toBe('sliced');
 		const slice = run(
 			'git',
-			['show', `${ARBITER}/main:work/pre-backlog/child.md`],
+			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
@@ -368,7 +368,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 		expect(result.outcome).toBe('sliced');
 		const slice = run(
 			'git',
-			['show', `${ARBITER}/main:work/pre-backlog/child.md`],
+			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;

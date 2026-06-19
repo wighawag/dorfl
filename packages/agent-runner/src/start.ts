@@ -8,6 +8,7 @@ import {
 	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
 import {runAsync, type RunResult} from './git.js';
+import {workFolderRel} from './work-layout.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import type {InteractiveLauncher} from './harness.js';
 
@@ -882,7 +883,7 @@ async function folderOnArbiterMain(
 		'done',
 	];
 	for (const folder of folders) {
-		const object = `${arbiter}/main:work/${folder}/${slug}.md`;
+		const object = `${arbiter}/main:${workFolderRel(folder)}/${slug}.md`;
 		if ((await gitSoft(['cat-file', '-e', object], cwd, env)).status === 0) {
 			return folder;
 		}

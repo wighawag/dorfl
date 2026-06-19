@@ -20,6 +20,7 @@ import {
 	gitIn,
 	prdFile,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 
 const ARBITER = 'arbiter';
@@ -82,7 +83,7 @@ function seedTerminalOnArbiter(
 	run('git', ['checkout', '-q', '-B', `seed/${slug}`, 'origin/main'], dest, {
 		env,
 	});
-	const dir = join(dest, 'work', folder);
+	const dir = join(dest, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(join(dir, `${slug}.md`), seed + '\n');
 	run('git', ['add', '-A'], dest, {env});
@@ -139,7 +140,7 @@ describe('complete — cross-substrate crash-safety (hold → durable main move 
 		// per-item lock is RELEASED here exactly as on the merge path.
 		const onBranch = run(
 			'git',
-			['cat-file', '-e', 'HEAD:work/done/beta.md'],
+			['cat-file', '-e', 'HEAD:work/tasks/done/beta.md'],
 			repo,
 			{env: gitEnv()},
 		);
@@ -350,7 +351,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 
 	it('maps each type to its durable terminal main paths', () => {
 		expect(terminalMainPaths('slice', 's')).toEqual([
-			'work/done/s.md',
+			'work/tasks/done/s.md',
 			'work/dropped/s.md',
 		]);
 		expect(terminalMainPaths('prd', 'p')).toEqual([
