@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- single-color glyph: proves the mark works in one ink (CLI/terminal/stamp) -->
+  <rect x="0" y="0" width="256" height="256" rx="40" fill="#E9D9C7"/>
+  <g fill="#2A2622">
+    <rect x="74" y="58" width="108" height="34" rx="6"/>
+    <rect x="64" y="88" width="128" height="116" rx="10"/>
+    <rect x="78" y="196" width="100" height="22" rx="6"/>
+  </g>
+  <!-- chem slot knocked out (the glowing forehead becomes negative space + caret) -->
+  <rect x="86" y="104" width="84" height="16" rx="4" fill="#E9D9C7"/>
+  <path d="M120 108 l7 4 l-7 4" fill="none" stroke="#2A2622" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="131" y="114" width="9" height="2.5" rx="1" fill="#2A2622"/>
+  <!-- eyes -->
+  <circle cx="103" cy="152" r="11" fill="#E9D9C7"/>
+  <circle cx="153" cy="152" r="11" fill="#E9D9C7"/>
+</svg>

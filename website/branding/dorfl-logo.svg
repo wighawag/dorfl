@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Dorfl: the golem that claims its own work -->
+  <!-- palette -->
+  <defs>
+    <linearGradient id="clay" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9745A"/>
+      <stop offset="1" stop-color="#A4543C"/>
+    </linearGradient>
+    <linearGradient id="clayDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9B4E38"/>
+      <stop offset="1" stop-color="#7E3D2C"/>
+    </linearGradient>
+    <linearGradient id="chem" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD27A"/>
+      <stop offset="0.5" stop-color="#FFB23E"/>
+      <stop offset="1" stop-color="#FFD27A"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- background tile (rounded square, deep slate) -->
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="#2A2622"/>
+
+  <!-- golem head built from stacked blocks: status = the folder, one file per slice -->
+  <!-- crown block -->
+  <rect x="150" y="120" width="212" height="70" rx="10" fill="url(#clayDark)"/>
+  <!-- main head block -->
+  <rect x="132" y="180" width="248" height="220" rx="16" fill="url(#clay)"/>
+  <!-- jaw block (slightly offset, 'stacked file' feel) -->
+  <rect x="156" y="372" width="200" height="40" rx="10" fill="url(#clayDark)"/>
+
+  <!-- mortar lines (the dry-stacked seams) -->
+  <line x1="132" y1="246" x2="380" y2="246" stroke="#7E3D2C" stroke-width="3" opacity="0.5"/>
+  <line x1="256" y1="246" x2="256" y2="372" stroke="#7E3D2C" stroke-width="3" opacity="0.5"/>
+
+  <!-- the chem: the words in the head. forehead slot, glowing. reads as a '>' prompt -->
+  <rect x="168" y="206" width="176" height="26" rx="6" fill="#3A2A22"/>
+  <rect x="176" y="210" width="160" height="18" rx="4" fill="url(#chem)" filter="url(#glow)"/>
+  <!-- prompt caret etched in the chem -->
+  <path d="M250 214 l10 5 l-10 5" fill="none" stroke="#3A2A22" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="266" y="222" width="14" height="3" rx="1.5" fill="#3A2A22"/>
+
+  <!-- calm eyes: Dorfl chose his own purpose, steady, not menacing -->
+  <circle cx="206" cy="300" r="22" fill="#2A2622"/>
+  <circle cx="306" cy="300" r="22" fill="#2A2622"/>
+  <circle cx="206" cy="300" r="9" fill="#FFB23E"/>
+  <circle cx="306" cy="300" r="9" fill="#FFB23E"/>
+
+  <!-- simple set mouth -->
+  <rect x="216" y="350" width="80" height="8" rx="4" fill="#2A2622"/>
+
+  <!-- wordmark -->
+  <text x="256" y="470" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="64" letter-spacing="4" fill="#E9D9C7">dorfl</text>
+</svg>

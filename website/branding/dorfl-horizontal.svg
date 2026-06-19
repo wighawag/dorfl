@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="280" viewBox="0 0 900 280">
+  <defs>
+    <linearGradient id="clay" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9745A"/><stop offset="1" stop-color="#A4543C"/>
+    </linearGradient>
+    <linearGradient id="clayDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9B4E38"/><stop offset="1" stop-color="#7E3D2C"/>
+    </linearGradient>
+    <linearGradient id="chem" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD27A"/><stop offset="0.5" stop-color="#FFB23E"/><stop offset="1" stop-color="#FFD27A"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="900" height="280" fill="#2A2622"/>
+  <!-- compact head mark -->
+  <g transform="translate(40,40) scale(0.42)">
+    <rect x="150" y="120" width="212" height="70" rx="10" fill="url(#clayDark)"/>
+    <rect x="132" y="180" width="248" height="220" rx="16" fill="url(#clay)"/>
+    <rect x="156" y="372" width="200" height="40" rx="10" fill="url(#clayDark)"/>
+    <rect x="168" y="206" width="176" height="26" rx="6" fill="#3A2A22"/>
+    <rect x="176" y="210" width="160" height="18" rx="4" fill="url(#chem)"/>
+    <path d="M250 214 l10 5 l-10 5" fill="none" stroke="#3A2A22" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="266" y="222" width="14" height="3" rx="1.5" fill="#3A2A22"/>
+    <circle cx="206" cy="300" r="22" fill="#2A2622"/><circle cx="306" cy="300" r="22" fill="#2A2622"/>
+    <circle cx="206" cy="300" r="9" fill="#FFB23E"/><circle cx="306" cy="300" r="9" fill="#FFB23E"/>
+    <rect x="216" y="350" width="80" height="8" rx="4" fill="#2A2622"/>
+  </g>
+  <text x="290" y="150" font-family="Georgia, serif" font-size="92" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+  <text x="293" y="196" font-family="Menlo, monospace" font-size="22" letter-spacing="1" fill="#C9745A">the golem that claims its own work</text>
+</svg>
