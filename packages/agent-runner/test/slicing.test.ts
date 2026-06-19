@@ -52,7 +52,7 @@ function seedPrd(
 	fm: {
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
-		sliceAfter?: string[];
+		briefAfter?: string[];
 		/**
 		 * Emit an INERT `sliced:` line (the marker was removed in
 		 * remove-sliced-marker-step-b — the parser ignores it). Only used to PROVE a
@@ -68,8 +68,8 @@ function seedPrd(
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.sliceAfter && fm.sliceAfter.length > 0) {
-		lines.push(`sliceAfter: [${fm.sliceAfter.join(', ')}]`);
+	if (fm.briefAfter && fm.briefAfter.length > 0) {
+		lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
 	}
 	if (fm.sliced) lines.push(`sliced: ${fm.sliced}`);
 	lines.push(
@@ -82,7 +82,7 @@ function seedPrd(
 	);
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -97,7 +97,7 @@ function slicingAgent(file = 'child', extra?: () => void): SliceAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'prd: it',
+				'brief: it',
 				'---',
 				'',
 				'## Prompt',
@@ -250,10 +250,10 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		expect(result.message).toMatch(/needsAnswers/);
 	});
 
-	it('EXPLICIT still refuses an unsatisfied sliceAfter (ordering binds regardless of explicit)', async () => {
+	it('EXPLICIT still refuses an unsatisfied briefAfter (ordering binds regardless of explicit)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'dep');
-		seedPrd(repo, 'it', {sliceAfter: ['dep']});
+		seedPrd(repo, 'it', {briefAfter: ['dep']});
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
@@ -265,16 +265,16 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
-		expect(result.message).toMatch(/sliceAfter/);
+		expect(result.message).toMatch(/briefAfter/);
 		// The autoSlice policy is NEVER the named reason on the explicit path.
 		expect(result.message).not.toMatch(/autoSlice/);
 	});
 
-	it('refuses when a sliceAfter PRD is not yet sliced (names it)', async () => {
+	it('refuses when a briefAfter PRD is not yet sliced (names it)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` exists but is NOT sliced; `it` sliceAfter: [dep].
+		// `dep` exists but is NOT sliced; `it` briefAfter: [dep].
 		seedPrd(repo, 'dep');
-		seedPrd(repo, 'it', {sliceAfter: ['dep']});
+		seedPrd(repo, 'it', {briefAfter: ['dep']});
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
@@ -286,16 +286,16 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
-		expect(result.message).toMatch(/sliceAfter/);
+		expect(result.message).toMatch(/briefAfter/);
 	});
 
-	it('passes the gate once the sliceAfter PRD IS sliced', async () => {
+	it('passes the gate once the briefAfter PRD IS sliced', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// `dep` is SLICED — it RESIDES in work/briefs/tasked/ (the source of truth), not
-		// a `sliced:` marker in work/briefs/ready/. `it`'s sliceAfter resolves against that
+		// a `sliced:` marker in work/briefs/ready/. `it`'s briefAfter resolves against that
 		// folder residence (mirroring blockedBy -> done/).
 		seedPrd(repo, 'dep', {inPrdSliced: true});
-		seedPrd(repo, 'it', {sliceAfter: ['dep']});
+		seedPrd(repo, 'it', {briefAfter: ['dep']});
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
@@ -307,14 +307,14 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		expect(result.outcome).toBe('sliced');
 	});
 
-	it('STILL refuses when the sliceAfter PRD only carries an INERT `sliced:` line in prd/ (folder, not marker)', async () => {
+	it('STILL refuses when the briefAfter PRD only carries an INERT `sliced:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// `dep` sits in work/briefs/ready/ with a leftover (INERT) `sliced:` line but is NOT in
 		// prd-sliced/. Folder residence is the SOLE source of truth — the marker was
 		// removed in remove-sliced-marker-step-b, so the line is ignored and does NOT
-		// satisfy sliceAfter.
+		// satisfy briefAfter.
 		seedPrd(repo, 'dep', {sliced: '2026-06-01'});
-		seedPrd(repo, 'it', {sliceAfter: ['dep']});
+		seedPrd(repo, 'it', {briefAfter: ['dep']});
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
@@ -476,7 +476,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			].join('\n'),
 		);
 		run('git', ['add', '-A'], repo, {env: gitEnv()});
-		run('git', ['commit', '-q', '-m', 'prd: it'], repo, {env: gitEnv()});
+		run('git', ['commit', '-q', '-m', 'brief: it'], repo, {env: gitEnv()});
 		run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 
 		const result = await performSlice({
@@ -841,7 +841,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/tasks/todo/child.md')).toBe(false);
 		// The PRD's per-item lock is held STUCK, carrying the questions as the reason.
 		const entry = await readItemLock({
-			item: 'prd:it',
+			item: 'brief:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

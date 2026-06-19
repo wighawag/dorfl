@@ -130,19 +130,21 @@ export function validateAdvanceCiTemplate(
 		text,
 	), 'the matrix items must be ENUMERATED via the mirror-side pool scan ' +
 		'(`agent-runner scan --json`).');
-	// The `enumerate` `jq` must UNION sliceable PRDs into the matrix
+	// The `enumerate` `jq` must UNION sliceable BRIEFS into the matrix
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
-	// slice-only `jq` would render `AGENT_RUNNER_AUTO_SLICE` dead on the hourly
-	// cron — a ready ungated PRD would never become a matrix leg. The `jq` must
-	// read `scan --json`'s sliceable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
-	// and emit `prd:<slug>` legs alongside the `slice:<slug>` legs.
-	require('propose-enumerates-sliceable-prds', /"prd:" \+ \.slug/.test(text) &&
+	// task-only `jq` would render `AGENT_RUNNER_AUTO_SLICE` dead on the hourly
+	// cron — a ready ungated BRIEF would never become a matrix leg. The `jq` must
+	// read `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+	// and emit `brief:<slug>` legs alongside the `task:<slug>` legs.
+	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
+		text,
+	) &&
 		/\.prds\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union sliceable PRDs into the ' +
-		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-slice ' +
-		'matrix leg alongside the eligible-slice legs ' +
+		), 'the propose-mode `enumerate` `jq` must union sliceable BRIEFS into the ' +
+		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-slice ' +
+		'matrix leg alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 	require('propose-one-advance-per-item', /agent-runner advance "?\$\{\{\s*matrix\./.test(
 		text,

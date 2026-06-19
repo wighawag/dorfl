@@ -45,11 +45,11 @@ async function stuckOnArbiterOnly(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
-	gitIn(['push', '-q', ARBITER, `work/slice-${slug}:work/slice-${slug}`], repo);
+	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
 	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,

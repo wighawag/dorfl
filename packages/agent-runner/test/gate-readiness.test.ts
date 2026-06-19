@@ -66,7 +66,7 @@ const failIfReached: DoAgentRunner = () => {
  */
 function onWorkBranchWithInProgress(repo: string, slug: string): void {
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 	gitIn(
 		['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
@@ -222,7 +222,7 @@ describe('end-to-end — in-place `do` STOPS before claim when the gate is stati
 		expect(agentRan).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
-		expect(gitIn(['branch', '--list', 'work/slice-alpha'], repo).trim()).toBe(
+		expect(gitIn(['branch', '--list', 'work/task-alpha'], repo).trim()).toBe(
 			'',
 		);
 	});
@@ -329,7 +329,7 @@ describe('end-to-end — `complete` STOPS before performIntegration when the gat
 		// to run the gate in a throwaway worktree with no node_modules.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedLockfile(repo);
-		// Claim + onboard onto work/slice-alpha (so complete has something to do).
+		// Claim + onboard onto work/task-alpha (so complete has something to do).
 		onWorkBranchWithInProgress(repo, 'alpha');
 
 		const result = await performComplete({

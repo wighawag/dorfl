@@ -95,7 +95,7 @@ describe('PART 2 — in-place `do` REFUSES on a diverged local main', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(currentBranch(repo)).toBe('main');
-		expect(gitIn(['branch', '--list', 'work/slice-alpha'], repo).trim()).toBe(
+		expect(gitIn(['branch', '--list', 'work/task-alpha'], repo).trim()).toBe(
 			'',
 		);
 	});
@@ -182,12 +182,12 @@ describe('PART 1 — `complete --merge` local-main ff is NON-FATAL on a diverged
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-delta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-delta', `${ARBITER}/main`], repo);
 
 		// DIVERGE local main AFTER branching (an unpushed commit on main only), then
 		// return to the work branch and leave the agent's uncommitted work there.
 		const divergeSha = divergeLocalMain(repo);
-		gitIn(['switch', '-q', 'work/slice-delta'], repo);
+		gitIn(['switch', '-q', 'work/task-delta'], repo);
 		writeFileSync(join(repo, 'thing.txt'), 'merged work\n');
 
 		const notes: string[] = [];
@@ -314,10 +314,7 @@ describe('the NORMAL (non-diverged) path still ff’s local main exactly as toda
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(
-			['switch', '-q', '-c', 'work/slice-epsilon', `${ARBITER}/main`],
-			repo,
-		);
+		gitIn(['switch', '-q', '-c', 'work/task-epsilon', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'thing.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -352,9 +349,9 @@ describe('PART 2 — `complete --merge` REFUSES up front on a diverged main (no 
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-zeta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-zeta', `${ARBITER}/main`], repo);
 		divergeLocalMain(repo);
-		gitIn(['switch', '-q', 'work/slice-zeta'], repo);
+		gitIn(['switch', '-q', 'work/task-zeta'], repo);
 		writeFileSync(join(repo, 'thing.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -389,9 +386,9 @@ describe('PART 2 — `complete --merge` REFUSES up front on a diverged main (no 
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-eta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-eta', `${ARBITER}/main`], repo);
 		divergeLocalMain(repo);
-		gitIn(['switch', '-q', 'work/slice-eta'], repo);
+		gitIn(['switch', '-q', 'work/task-eta'], repo);
 		writeFileSync(join(repo, 'thing.txt'), 'work\n');
 
 		const result = await performComplete({

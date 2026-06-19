@@ -242,7 +242,7 @@ describe('ledger-write seam — complete is dispatched THROUGH it', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		gitIn(['switch', '-q', '-c', `work/slice-${slug}`, 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', `work/task-${slug}`, 'arbiter/main'], repo);
 		return repo;
 	}
 
@@ -268,7 +268,7 @@ describe('ledger-write seam — complete is dispatched THROUGH it', () => {
 		// The complete transition carried the work branch + mode + provider, and the
 		// public input is storage-agnostic (it does NOT name `main`).
 		const input = spy.mock.calls[0][0];
-		expect(input.branch).toBe('work/slice-alpha');
+		expect(input.branch).toBe('work/task-alpha');
 		expect(input.mode).toBe('propose');
 		expect(JSON.stringify(Object.keys(input))).not.toMatch(/main/i);
 	});
@@ -315,7 +315,7 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		gitIn(['switch', '-q', '-c', `work/slice-${slug}`, 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', `work/task-${slug}`, 'arbiter/main'], repo);
 		writeFileSync(`${repo}/feature.txt`, 'the work\n');
 		return repo;
 	}
@@ -371,7 +371,7 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 		// safety guard checks for) and surface to needs-attention ON THE ARBITER.
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'wip gamma'], repo);
-		gitIn(['push', '-q', 'arbiter', 'work/slice-gamma:work/slice-gamma'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-gamma:work/task-gamma'], repo);
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'gamma',

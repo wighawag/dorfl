@@ -337,7 +337,7 @@ export function discoverJobs(workspacesDir: string): GcJob[] {
 		// the flat work-id dir name cannot recover the type, so default to the
 		// overwhelmingly-common `slice` namespace (a recordless worktree is a rare
 		// legacy/corrupt case).
-		const branch = record?.branch ?? workBranchRef('slice', slug);
+		const branch = record?.branch ?? workBranchRef('task', slug);
 		jobs.push({dir, slug, branch, record});
 	}
 	return jobs;

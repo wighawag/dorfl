@@ -24,14 +24,14 @@ import type {
 /**
  * `install-ci-close-job-workflow` — the CI CLOSE-JOB driver (capability E). The
  * driver WIRES three UNCHANGED engine pieces (the resolution `resolveClosingIssue`,
- * the "PRD complete?" query `prd-complete-query`, and `IssueProvider.closeIssue`)
+ * the "PRD complete?" query `brief-complete-query`, and `IssueProvider.closeIssue`)
  * and re-implements NONE of them.
  *
  * SEAM: the `IssueProvider` is a STUB that records every `closeIssue` call IN
  * MEMORY — NO network, NO real `gh`, NO real GitHub issue touched (the slice's
  * shared-write isolation: the stubbed close seam records calls in-memory without
  * touching a real issue). The query/resolution behaviour itself is already covered
- * by `prd-complete-query` / `frontmatter` tests and is NOT re-tested here; these
+ * by `brief-complete-query` / `frontmatter` tests and is NOT re-tested here; these
  * tests cover the DRIVER's wiring + closure conditions only.
  */
 
@@ -114,8 +114,8 @@ afterEach(() => {
 describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', () => {
 	it('closes the PRD issue when ALL its prd:<slug> slices are in work/tasks/done/', async () => {
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
-		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
+		write('done', 'a.md', {slug: 'a', brief: 'my-prd'});
+		write('done', 'b.md', {slug: 'b', brief: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -139,8 +139,8 @@ describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', ()
 
 	it('leaves the PRD issue OPEN when a prd:<slug> slice is NOT yet in work/tasks/done/', async () => {
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
-		write('backlog', 'b.md', {slug: 'b', prd: 'my-prd'}); // not landed
+		write('done', 'a.md', {slug: 'a', brief: 'my-prd'});
+		write('backlog', 'b.md', {slug: 'b', brief: 'my-prd'}); // not landed
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -157,7 +157,7 @@ describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', ()
 
 	it('finds the PRD issue from work/briefs/tasked/ too (a PRD that has been sliced)', async () => {
 		write('prd-sliced', 'my-prd.md', {slug: 'my-prd', issue: '7'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+		write('done', 'a.md', {slug: 'a', brief: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -208,7 +208,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 	it('a fanned slice carries prd: (NOT issue:) and reaches the number via the PRD only', async () => {
 		// The PRD carries the issue number; the fanned slice carries `prd:` only.
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+		write('done', 'a.md', {slug: 'a', brief: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -231,7 +231,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 		// A contradiction only a human hand-edit could produce; resolveClosingIssue
 		// makes `prd:` win, so the slice is NOT a lone-slice candidate for issue 99.
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd', issue: '99'});
+		write('done', 'a.md', {slug: 'a', brief: 'my-prd', issue: '99'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -246,9 +246,9 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 
 	it('considers each PRD issue ONCE even with many slices pointing at it (dedup)', async () => {
 		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
-		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
-		write('done', 'c.md', {slug: 'c', prd: 'my-prd'});
+		write('done', 'a.md', {slug: 'a', brief: 'my-prd'});
+		write('done', 'b.md', {slug: 'b', brief: 'my-prd'});
+		write('done', 'c.md', {slug: 'c', brief: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({

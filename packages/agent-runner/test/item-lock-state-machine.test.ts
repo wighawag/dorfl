@@ -81,7 +81,7 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 
 		// 1. acquire: (absent) → [implement, active]
 		const acq = await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -91,7 +91,7 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 
 		// 2. mark-stuck: [implement, active] → [implement, stuck] + reason
 		const stuck = await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'gate red on lint',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -99,7 +99,7 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 		});
 		expect(stuck.outcome).toBe('transitioned');
 		const stuckEntry = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -108,18 +108,18 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 		expect(stuckEntry?.state).toBe('stuck');
 		expect(stuckEntry?.reason).toBe('gate red on lint');
 		// the amended commit is still parentless.
-		expect(lockCommitParentless(repo, 'slice-alpha')).toBe(true);
+		expect(lockCommitParentless(repo, 'task-alpha')).toBe(true);
 
 		// 3. resume: [implement, stuck] → [implement, active] (reason cleared)
 		const resumed = await resumeItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(resumed.outcome).toBe('transitioned');
 		const activeAgain = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -130,26 +130,26 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 
 		// 6. release: [implement, active] → (absent)
 		const rel = await releaseItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(rel.outcome).toBe('released');
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 	});
 
 	it('requeue (transition 4): [action, stuck] → (absent) returns the item to the pool', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'giving up for now',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -157,20 +157,20 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 		});
 
 		const req = await requeueItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(req.outcome).toBe('transitioned');
 		// The lock is gone…
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
 		// …and the body NEVER moved: it is still resting in backlog/ on main.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		// After requeue the item is freely re-acquirable.
 		const reacq = await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -185,7 +185,7 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const {repo, arbiter} = seeded;
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -196,13 +196,13 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
 		// the lock half: release after.
 		const rel = await releaseItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(rel.outcome).toBe('released');
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 	});
 });
 
@@ -212,7 +212,7 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 		expect(
 			(
 				await markStuckItemLock({
-					item: 'slice:alpha',
+					item: 'task:alpha',
 					reason: 'r',
 					cwd: repo,
 					arbiter: 'arbiter',
@@ -223,7 +223,7 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 		expect(
 			(
 				await resumeItemLock({
-					item: 'slice:alpha',
+					item: 'task:alpha',
 					cwd: repo,
 					arbiter: 'arbiter',
 					env: gitEnv(),
@@ -233,7 +233,7 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 		expect(
 			(
 				await requeueItemLock({
-					item: 'slice:alpha',
+					item: 'task:alpha',
 					cwd: repo,
 					arbiter: 'arbiter',
 					env: gitEnv(),
@@ -245,14 +245,14 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 	it('resume on an ACTIVE entry is wrong-state (active is reachable from stuck only)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		const r = await resumeItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -263,21 +263,21 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 	it('mark-stuck on an already-STUCK entry is wrong-state', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'first',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		const again = await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'second',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -289,21 +289,21 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 	it('requeue on an ACTIVE entry is wrong-state (abort an active hold via release)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		const r = await requeueItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		expect(r.outcome).toBe('wrong-state');
 		// the active hold is untouched.
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
 	});
 });
 
@@ -311,7 +311,7 @@ describe('lock state machine — invariant: reason iff stuck', () => {
 	it('mark-stuck with an empty reason is rejected (a stuck entry MUST carry a reason)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -319,7 +319,7 @@ describe('lock state machine — invariant: reason iff stuck', () => {
 		});
 		for (const reason of ['', '   ']) {
 			const r = await markStuckItemLock({
-				item: 'slice:alpha',
+				item: 'task:alpha',
 				reason,
 				cwd: repo,
 				arbiter: 'arbiter',
@@ -329,7 +329,7 @@ describe('lock state machine — invariant: reason iff stuck', () => {
 		}
 		// the entry stays active (the bad mark-stuck did not mutate it).
 		const e = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -341,7 +341,7 @@ describe('lock state machine — invariant: reason iff stuck', () => {
 	it('an active entry never carries a reason; resume CLEARS the stuck reason', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -351,7 +351,7 @@ describe('lock state machine — invariant: reason iff stuck', () => {
 		expect(
 			(
 				await readItemLock({
-					item: 'slice:alpha',
+					item: 'task:alpha',
 					cwd: repo,
 					arbiter: 'arbiter',
 					env: gitEnv(),
@@ -359,21 +359,21 @@ describe('lock state machine — invariant: reason iff stuck', () => {
 			)?.reason,
 		).toBeUndefined();
 		await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'has a reason while stuck',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		await resumeItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		// back to active: reason must be gone again.
 		const e = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -387,7 +387,7 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 	it('a SECOND action (advance) on an implement-held item loses the SAME CAS', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const first = await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -395,7 +395,7 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 		});
 		expect(first.outcome).toBe('acquired');
 		const second = await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'advance', // a DIFFERENT action, SAME item
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -403,9 +403,9 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 		});
 		expect(second.outcome).toBe('lost');
 		// exactly ONE entry exists, and it is still the implement hold.
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
 		const e = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -417,14 +417,14 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 		// mark-stuck via the seed clone, then race two resumes on distinct clones.
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: seeded.repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
 		await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'stuck for the race',
 			cwd: seeded.repo,
 			arbiter: 'arbiter',
@@ -435,14 +435,14 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 		const b = raceClone(seeded, 'B');
 		const [ra, rb] = await Promise.all([
 			resumeItemLock({
-				item: 'slice:alpha',
+				item: 'task:alpha',
 				cwd: a,
 				arbiter: 'arbiter',
 				holder: 'A',
 				env: racerEnv('A'),
 			}),
 			resumeItemLock({
-				item: 'slice:alpha',
+				item: 'task:alpha',
 				cwd: b,
 				arbiter: 'arbiter',
 				holder: 'B',
@@ -457,7 +457,7 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 		const loser = [ra, rb].find((r) => r.outcome !== 'transitioned');
 		expect(['lost', 'wrong-state']).toContain(loser?.outcome);
 		const e = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: seeded.repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -471,7 +471,7 @@ describe('lock state machine — invariant: done on main + a stuck lock CO-EXIST
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const {repo, arbiter} = seeded;
 		await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -484,7 +484,7 @@ describe('lock state machine — invariant: done on main + a stuck lock CO-EXIST
 		// A rebase-conflict bounce marks the JUST-COMPLETED item stuck (Amendment 2):
 		// done-on-main and a stuck lock legitimately co-exist.
 		const stuck = await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'rebase conflict on bounce after done landed',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -497,7 +497,7 @@ describe('lock state machine — invariant: done on main + a stuck lock CO-EXIST
 		//  - the stuck lock wins for the human's attention.
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),

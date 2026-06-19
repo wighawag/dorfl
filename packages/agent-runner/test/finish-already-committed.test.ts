@@ -22,7 +22,7 @@ import {
  * `performIntegration`), the work is stranded in this state:
  *   - `work/tasks/done/<slug>.md` PRESENT on the branch; in-progress/needs-attention
  *     ABSENT (the done-move already ran);
- *   - the green work ALREADY committed on `work/slice-<slug>` (`…; done`), tip
+ *   - the green work ALREADY committed on `work/task-<slug>` (`…; done`), tip
  *     NOT on the arbiter.
  * Running plain `complete` against it REFUSES (`IntegrationNothingStaged` — the
  * done-move + commit already happened, so nothing is left to stage). This slice
@@ -51,7 +51,7 @@ const PASS = 'exit 0';
 
 /**
  * Stand a repo up EXACTLY as a terminal push failure AFTER the done-move + commit
- * leaves it: claimed, branched onto `work/slice-<slug>`, the agent's work
+ * leaves it: claimed, branched onto `work/task-<slug>`, the agent's work
  * committed, the slice `git mv`'d `backlog/ → done/` and committed (`…; done`),
  * but the tip NOT pushed (the strand). The arbiter still holds the slug in
  * `backlog/` (claim published nothing to main; the body rests there); the tip is
@@ -70,7 +70,7 @@ async function seedStrandedCommittedDone(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 
 	// The agent's work, committed (it was swept into the would-be done commit).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
@@ -166,7 +166,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 		expect(result.outcome).toBe('completed');
 		// propose pushes the branch carrying the done-move.
 		const onBranch = gitIn(
-			['show', `${ARBITER}/work/slice-gamma:work/tasks/done/gamma.md`],
+			['show', `${ARBITER}/work/task-gamma:work/tasks/done/gamma.md`],
 			repo,
 		);
 		expect(onBranch).toMatch(/thing/i);

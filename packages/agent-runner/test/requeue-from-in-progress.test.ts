@@ -51,7 +51,7 @@ async function stuckInProgress(
 	// A prior attempt commits work on work/<slug> and the bounce marks the lock
 	// stuck + pushes the branch (the keep+continue artifact).
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 	const bounced = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
@@ -116,7 +116,7 @@ describe('requeue recovers a slice stuck on its per-item lock (releases the lock
 
 	it('keep+continue (default) leaves the work branch on the arbiter untouched', async () => {
 		const {seeded, repo} = await stuckInProgress('beta');
-		const before = arbiterRef(seeded, 'refs/heads/work/slice-beta');
+		const before = arbiterRef(seeded, 'refs/heads/work/task-beta');
 		expect(before).not.toBe('');
 
 		const result = await returnToBacklog({
@@ -130,8 +130,8 @@ describe('requeue recovers a slice stuck on its per-item lock (releases the lock
 
 		// The kept work branch is UNTOUCHED on the arbiter (the next claim continues
 		// from its tip).
-		expect(arbiterHasBranch(seeded, 'work/slice-beta')).toBe(true);
-		expect(arbiterRef(seeded, 'refs/heads/work/slice-beta')).toBe(before);
+		expect(arbiterHasBranch(seeded, 'work/task-beta')).toBe(true);
+		expect(arbiterRef(seeded, 'refs/heads/work/task-beta')).toBe(before);
 		// And the lock is released; the body rests in backlog/.
 		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
@@ -139,7 +139,7 @@ describe('requeue recovers a slice stuck on its per-item lock (releases the lock
 
 	it('--reset deletes the remote work branch FIRST, then releases the lock', async () => {
 		const {seeded, repo} = await stuckInProgress('gamma');
-		expect(arbiterHasBranch(seeded, 'work/slice-gamma')).toBe(true);
+		expect(arbiterHasBranch(seeded, 'work/task-gamma')).toBe(true);
 
 		const result = await returnToBacklog({
 			cwd: repo,
@@ -151,7 +151,7 @@ describe('requeue recovers a slice stuck on its per-item lock (releases the lock
 		expect(result.moved).toBe(true);
 		expect(result.deletedRemoteBranch).toBe(true);
 		// The remote branch is GONE (discarded).
-		expect(arbiterHasBranch(seeded, 'work/slice-gamma')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/task-gamma')).toBe(false);
 		// The lock is released; the body rests in backlog/.
 		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);

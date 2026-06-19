@@ -226,7 +226,7 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 		const {gate: triage} = spyTriage({
 			auto: true,
 			kind: 'map',
-			existing: 'slice:existing',
+			existing: 'task:existing',
 			reason: 'already covered there',
 		});
 		const result = await performAdvance({
@@ -240,7 +240,7 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 		expect(result.exitCode).toBe(0);
 		const body = readFileSync(join(repo, itemPath), 'utf8');
 		expect(body).toContain('maps onto an existing item');
-		expect(body).toContain('slice:existing');
+		expect(body).toContain('task:existing');
 		expect(isTriagedKeep(body)).toBe(true);
 	});
 

@@ -146,7 +146,7 @@ export async function performDoRemoteAuto(
 
 /** The `do --remote` arg for a selected item: `prd:<slug>` for a PRD, bare slug for a slice. */
 function remoteArgFor(item: SelectedItem): string {
-	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
+	return item.namespace === 'brief' ? `brief:${item.slug}` : item.slug;
 }
 
 /**

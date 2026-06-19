@@ -98,7 +98,7 @@ async function claimAndBranch(slug: string) {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	// Simulate the build agent: leave UNCOMMITTED work (it does no git).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return {seeded, repo};
@@ -272,7 +272,7 @@ describe('review-nits-observation — no observation when there is nothing to ca
 		expect(nitObservations(repo, 'delta')).toHaveLength(0);
 		// The blocking finding lands on the stuck lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
-			item: 'slice:delta',
+			item: 'task:delta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

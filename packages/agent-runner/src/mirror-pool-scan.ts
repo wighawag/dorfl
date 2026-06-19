@@ -178,7 +178,7 @@ export async function scanMirrorPool(
 			slug: p.slug,
 			humanOnly: p.humanOnly,
 			needsAnswers: p.needsAnswers,
-			sliceAfter: p.sliceAfter,
+			briefAfter: p.briefAfter,
 		})),
 		slicedSlugs: pool.slicedSlugs,
 		autoSlice: repoConfig.autoSlice,

@@ -614,7 +614,7 @@ async function runComplete(
 	const branch =
 		headParsed && headParsed.slug === slug
 			? headBranch
-			: workBranchRef('slice', slug);
+			: workBranchRef('task', slug);
 
 	// We must be ON the work branch — that is where the agent's work lives and
 	// what we rebase + push. (Unlike `start`, `complete` mutates the checkout.)
@@ -1096,7 +1096,7 @@ async function releaseClaimLockAfterDurableMove(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
 	try {
-		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+		await releaseItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	} catch {
 		// Best-effort: a release fault leaves a stale lock that recovery
 		// (`reconcileItemLockAgainstMain`) clears — the durable move already defined

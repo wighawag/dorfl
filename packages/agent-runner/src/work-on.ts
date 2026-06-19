@@ -412,7 +412,7 @@ function createHumanWorktree(params: {
 
 	const key = encodeRepoKey(mirrorUrl);
 	// `work-on` builds a SLICE in a worktree — the slice-namespaced work branch.
-	const branch = workBranchRef('slice', slug);
+	const branch = workBranchRef('task', slug);
 	const dir = join(root, key, slug);
 
 	// Clear any stale worktree/branch for this slug (idempotent re-run).

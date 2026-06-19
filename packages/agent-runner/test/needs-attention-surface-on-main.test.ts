@@ -69,7 +69,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -110,7 +110,7 @@ describe('the bounce marks the lock stuck and writes NO main', () => {
 		// The stuck reason rides on the lock entry (the SOLE stuck record).
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -255,15 +255,15 @@ describe('resolve via start (no manual moves) — through the lock', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('resolved');
-		expect(result.branch).toBe('work/slice-epsilon');
+		expect(result.branch).toBe('work/task-epsilon');
 		// The recorded reason was printed for the human.
 		expect(notes.join('\n')).toMatch(/flaky test/i);
 		// The human landed ON the work branch.
-		expect(currentBranch(human)).toBe('work/slice-epsilon');
+		expect(currentBranch(human)).toBe('work/task-epsilon');
 		// The lock is back to active (resumed); no longer stuck.
 		expect(stuckLockOnArbiter(human, 'epsilon')).toBe(false);
 		const lock = await readItemLock({
-			item: 'slice:epsilon',
+			item: 'task:epsilon',
 			cwd: human,
 			arbiter: ARBITER,
 			env: gitEnv(),

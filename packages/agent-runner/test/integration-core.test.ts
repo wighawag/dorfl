@@ -75,7 +75,7 @@ async function claimAndBranch(slug: string) {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	// Simulate the build agent: leave UNCOMMITTED work (it does no git).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return {seeded, repo};
@@ -98,7 +98,7 @@ describe('integration-core — approve ⇒ completed', () => {
 
 		expect(core.outcome).toBe('completed');
 		expect(core.routedToNeedsAttention).toBe(false);
-		expect(core.branch).toBe('work/slice-alpha');
+		expect(core.branch).toBe('work/task-alpha');
 		expect(core.commitMessage).toMatch(/^feat\(alpha\):.*; done$/);
 		// The integration result carries the EFFECTIVE mode (the tail reads it here).
 		expect(core.integration?.mode).toBe('propose');
@@ -387,7 +387,7 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 
 		expect(core.outcome).toBe('gate-failed');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/slice-delta');
+		expect(core.branch).toBe('work/task-delta');
 		expect(core.reason).toMatch(/acceptance gate failed/i);
 		// The body STAYS in backlog/ (never moved on claim) and never reaches done/;
 		// the stuck state is the per-item lock (no needs-attention/ folder).
@@ -420,7 +420,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 
 		expect(core.outcome).toBe('review-blocked');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/slice-epsilon');
+		expect(core.branch).toBe('work/task-epsilon');
 		expect(core.reason).toMatch(/review.*blocked/i);
 		expect(core.integration).toBeUndefined();
 		// Never reached done/; the stuck state is the per-item lock.
@@ -430,7 +430,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
 		// The blocking findings are recorded on the lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
-			item: 'slice:epsilon',
+			item: 'task:epsilon',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -466,7 +466,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 
 		expect(core.outcome).toBe('rebase-conflict');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/slice-theta');
+		expect(core.branch).toBe('work/task-theta');
 		expect(core.reason).toMatch(/conflict/i);
 		// The commit was authored (done-move happened) before the rebase conflicted.
 		expect(core.commitMessage).toMatch(/^feat\(theta\):.*; done$/);
@@ -477,7 +477,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 		// needs-attention/ folder is written.
 		expect(stuckLockOnArbiter(repo, 'theta')).toBe(true);
 		const lock = await readItemLock({
-			item: 'slice:theta',
+			item: 'task:theta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -534,7 +534,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		const branchOne = (cwd: string, slug: string) => {
 			gitIn(['fetch', '-q', ARBITER], cwd);
 			gitIn(
-				['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`],
+				['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`],
 				cwd,
 			);
 			edit(cwd, slug);
@@ -719,7 +719,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 
 	/**
 	 * Build ONE repo (slugs `sa` + `sb`), claim `sa` (the lock is held; the body
-	 * RESTS in backlog/, since claim no longer moves it), and branch a `work/slice-sa`
+	 * RESTS in backlog/, since claim no longer moves it), and branch a `work/task-sa`
 	 * whose committed work BOTH does its own agent edit AND TOUCHES the named `touch`
 	 * path with `branchContent` (the conflict surface). Then, on the arbiter's main,
 	 * apply `landOnArbiter` (the divergent change to the SAME path). Returns the job
@@ -745,7 +745,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			expect(claim.exitCode).toBe(0);
 		}
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-sa', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-sa', `${ARBITER}/main`], repo);
 		// The build agent's work: its own code edit AND a touch of the conflict path,
 		// committed on the work branch (the agent does no git, but to MANUFACTURE a
 		// rebase conflict on the `touch` path we commit it here — `performIntegration`

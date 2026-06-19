@@ -74,12 +74,12 @@ describe('resolveSliceGate — explicit naming satisfies the autoSlice policy te
 	});
 });
 
-describe('resolveSlicingEligibility — explicit drops the policy term but keeps sliceAfter', () => {
-	it('explicit + autoSlice OFF + no sliceAfter ⇒ sliceable', () => {
+describe('resolveSlicingEligibility — explicit drops the policy term but keeps briefAfter', () => {
+	it('explicit + autoSlice OFF + no briefAfter ⇒ sliceable', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			sliceAfter: [],
+			briefAfter: [],
 			slicedSlugs: new Set(),
 			autoSlice: false,
 			explicit: true,
@@ -88,25 +88,25 @@ describe('resolveSlicingEligibility — explicit drops the policy term but keeps
 		expect(r.gatePass).toBe(true);
 	});
 
-	it('explicit + autoSlice OFF but an UNSLICED sliceAfter ⇒ gate passes, still blocked', () => {
+	it('explicit + autoSlice OFF but an UNSLICED briefAfter ⇒ gate passes, still blocked', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			sliceAfter: ['other'],
+			briefAfter: ['other'],
 			slicedSlugs: new Set(),
 			autoSlice: false,
 			explicit: true,
 		});
 		expect(r.gatePass).toBe(true);
 		expect(r.sliceable).toBe(false);
-		expect(r.sliceAfter.missing).toEqual(['other']);
+		expect(r.briefAfter.missing).toEqual(['other']);
 	});
 
 	it('explicit + humanOnly ⇒ never (the readiness axis binds)', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
-			sliceAfter: [],
+			briefAfter: [],
 			slicedSlugs: new Set(),
 			autoSlice: false,
 			explicit: true,
@@ -117,7 +117,7 @@ describe('resolveSlicingEligibility — explicit drops the policy term but keeps
 });
 
 describe('resolveSliceAfter — against `work/briefs/tasked/` residence (not done/)', () => {
-	it('is satisfied when sliceAfter is empty', () => {
+	it('is satisfied when briefAfter is empty', () => {
 		const r = resolveSliceAfter([], new Set());
 		expect(r.satisfied).toBe(true);
 		expect(r.missing).toEqual([]);
@@ -147,22 +147,22 @@ describe('resolveSliceAfter — against `work/briefs/tasked/` residence (not don
 	});
 });
 
-describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced fixtures)', () => {
+describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced fixtures)', () => {
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
 		autoSlice: boolean;
-		sliceAfter: string[];
+		briefAfter: string[];
 		sliced: Set<string>;
 		sliceable: boolean;
 		gatePass: boolean;
 	}> = [
-		// undeclared + autoSlice on + no sliceAfter ⇒ sliceable
+		// undeclared + autoSlice on + no briefAfter ⇒ sliceable
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoSlice: true,
-			sliceAfter: [],
+			briefAfter: [],
 			sliced: new Set(),
 			sliceable: true,
 			gatePass: true,
@@ -172,7 +172,7 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoSlice: true,
-			sliceAfter: ['other'],
+			briefAfter: ['other'],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: true,
@@ -182,7 +182,7 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoSlice: true,
-			sliceAfter: ['other'],
+			briefAfter: ['other'],
 			sliced: new Set(['other']),
 			sliceable: true,
 			gatePass: true,
@@ -192,17 +192,17 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoSlice: false,
-			sliceAfter: [],
+			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
 		},
-		// humanOnly + autoSlice on ⇒ never (gate fails regardless of sliceAfter)
+		// humanOnly + autoSlice on ⇒ never (gate fails regardless of briefAfter)
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
 			autoSlice: true,
-			sliceAfter: ['other'],
+			briefAfter: ['other'],
 			sliced: new Set(['other']),
 			sliceable: false,
 			gatePass: false,
@@ -212,7 +212,7 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: undefined,
 			needsAnswers: true,
 			autoSlice: true,
-			sliceAfter: [],
+			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
@@ -222,7 +222,7 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: false,
 			needsAnswers: true,
 			autoSlice: true,
-			sliceAfter: [],
+			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
@@ -232,7 +232,7 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: true,
 			needsAnswers: true,
 			autoSlice: true,
-			sliceAfter: [],
+			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
@@ -242,17 +242,17 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			humanOnly: true,
 			needsAnswers: undefined,
 			autoSlice: false,
-			sliceAfter: [],
+			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
 		},
-		// multiple sliceAfter, one unsliced ⇒ blocked though gate passes
+		// multiple briefAfter, one unsliced ⇒ blocked though gate passes
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoSlice: true,
-			sliceAfter: ['a', 'b'],
+			briefAfter: ['a', 'b'],
 			sliced: new Set(['a']),
 			sliceable: false,
 			gatePass: true,
@@ -263,10 +263,10 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 		const label =
 			`humanOnly=${String(c.humanOnly)} needsAnswers=${String(c.needsAnswers)} ` +
 			`autoSlice=${c.autoSlice} ` +
-			`sliceAfter=${
-				c.sliceAfter.length === 0
+			`briefAfter=${
+				c.briefAfter.length === 0
 					? 'none'
-					: c.sliceAfter.every((s) => c.sliced.has(s))
+					: c.briefAfter.every((s) => c.sliced.has(s))
 						? 'sliced'
 						: 'unsliced'
 			}`;
@@ -274,7 +274,7 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 			const r = resolveSlicingEligibility({
 				humanOnly: c.humanOnly,
 				needsAnswers: c.needsAnswers,
-				sliceAfter: c.sliceAfter,
+				briefAfter: c.briefAfter,
 				slicedSlugs: c.sliced,
 				autoSlice: c.autoSlice,
 			});
@@ -283,15 +283,15 @@ describe('resolveSlicingEligibility — gate × sliceAfter (sliced-vs-unsliced f
 		});
 	}
 
-	it('reports the unsliced PRDs when blocked by sliceAfter', () => {
+	it('reports the unsliced PRDs when blocked by briefAfter', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			sliceAfter: ['other'],
+			briefAfter: ['other'],
 			slicedSlugs: new Set(),
 			autoSlice: true,
 		});
-		expect(r.sliceAfter.satisfied).toBe(false);
-		expect(r.sliceAfter.missing).toEqual(['other']);
+		expect(r.briefAfter.satisfied).toBe(false);
+		expect(r.briefAfter.missing).toEqual(['other']);
 	});
 });

@@ -62,9 +62,9 @@ describe('claim acquires the unified per-item lock and leaves the body in backlo
 		// No claim commit lands on main (onboarding cuts off <arbiter>/main).
 		expect(result.claimCommit).toBeUndefined();
 		// AND the per-item lock (action: implement) is held on the arbiter.
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -106,7 +106,7 @@ describe('claim acquires the unified per-item lock and leaves the body in backlo
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 	});
@@ -119,7 +119,7 @@ describe('a lock LOST makes claim lose definitively with NO body move', () => {
 		// the folder CAS alone would admit a claimer; only the held lock gates it.
 		const a = raceClone(seeded, 'a');
 		const held = await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: a,
 			arbiter: ARBITER,
@@ -144,7 +144,7 @@ describe('a lock LOST makes claim lose definitively with NO body move', () => {
 		expect(existsOnArbiterMain(b, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(b, 'in-progress', 'alpha')).toBe(false);
 		// The lock is still held by principal a exactly once (b did not steal it).
-		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['slice-alpha']);
+		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['task-alpha']);
 	});
 });
 
@@ -178,7 +178,7 @@ describe('race on a --bare file:// arbiter', () => {
 		}
 		// The lock never falsely contends: exactly N held locks, one per item.
 		const held = await listItemLocks(clones[0], ARBITER, gitEnv());
-		expect(held.sort()).toEqual(slugs.map((s) => `slice-${s}`).sort());
+		expect(held.sort()).toEqual(slugs.map((s) => `task-${s}`).sort());
 	});
 
 	it('two simultaneous claims of the SAME item: exactly one wins; lock + body agree', async () => {
@@ -207,7 +207,7 @@ describe('race on a --bare file:// arbiter', () => {
 		// The lock is the single exclusion now: held exactly once, body still in backlog.
 		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
 		expect(existsOnArbiterMain(a, 'in-progress', 'solo')).toBe(false);
-		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['slice-solo']);
+		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['task-solo']);
 	});
 });
 
@@ -227,13 +227,13 @@ describe('releasing the lock returns the item to the pool so a re-claim succeeds
 		});
 		expect(first.outcome).toBe('claimed');
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([
-			'slice-alpha',
+			'task-alpha',
 		]);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 
 		// Release the lock (the return-to-pool the body-stays model reduces to).
 		const released = await releaseItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -252,7 +252,7 @@ describe('releasing the lock returns the item to the pool so a re-claim succeeds
 		expect(second.outcome).toBe('claimed');
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([
-			'slice-alpha',
+			'task-alpha',
 		]);
 	});
 });

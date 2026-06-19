@@ -158,7 +158,7 @@ export async function performRecoverIsolated(
 	}
 
 	const dir = located.dir;
-	const branch = workBranchRef('slice', options.slug);
+	const branch = workBranchRef('task', options.slug);
 	// The strand left the worktree ON its `work/<slug>` branch; make sure we are on
 	// it (it carries the kept committed work + the done-move). Best-effort: if HEAD
 	// is already there this is a no-op; a missing branch surfaces as a usage error

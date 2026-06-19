@@ -43,30 +43,30 @@ export interface Frontmatter {
 	originTrust: OriginTrust | undefined;
 	/** Content-derived slug id (frontmatter `slug:`). */
 	slug: string | undefined;
-	/** Source PRD slug (frontmatter `prd:`); the PRD lives at `work/prd/<prd>.md`. */
-	prd: string | undefined;
+	/** Source brief slug (frontmatter `brief:`); the brief lives at `work/briefs/ready/<brief>.md`. */
+	brief: string | undefined;
 	/**
 	 * The GitHub issue number an `intake`-emitted artifact was transformed from
 	 * (frontmatter `issue:`). Parsed so the `issue: N` intake writes is
 	 * MACHINE-READABLE — the close JOB (`runner-in-ci`'s) reaches it to resolve the
 	 * issue from folder + field state. Carried on EITHER:
 	 *
-	 * - a **PRD** (`intake`'s PRD outcome) — a fanned slice reaches it via
-	 *   `slice.prd: → work/prd/<prd>.md → PRD issue:` (the number lives ONLY on the
-	 *   PRD, never duplicated across the N fanned slices); OR
-	 * - a **lone slice** (`intake`'s SLICE outcome, no `prd:`) — the provider-agnostic
-	 *   closure link for a slice that closes its own issue directly (replaces the old
+	 * - a **brief** (`intake`'s brief outcome) — a fanned task reaches it via
+	 *   `task.brief: → work/briefs/ready/<brief>.md → brief issue:` (the number lives
+	 *   ONLY on the brief, never duplicated across the N fanned tasks); OR
+	 * - a **lone task** (`intake`'s TASK outcome, no `brief:`) — the provider-agnostic
+	 *   closure link for a task that closes its own issue directly (replaces the old
 	 *   GitHub-only `Fixes #N` body line, which is now a deferred optimisation).
 	 *
-	 * INVARIANT — one closure path per slice: a slice uses `issue:` XOR `prd:`, never
+	 * INVARIANT — one closure path per task: a task uses `issue:` XOR `brief:`, never
 	 * both. Either it closes its own issue directly (`issue:`) or it contributes to a
-	 * PRD that closes the issue (`prd:` → PRD `issue:`). This is NOT enforced by a
+	 * brief that closes the issue (`brief:` → brief `issue:`). This is NOT enforced by a
 	 * throwing validator (there is no frontmatter-validation layer): intake never
-	 * emits both — its slice / PRD dispatch branches are mutually exclusive — so only
-	 * a human hand-edit could produce both, and the precedence rule (`prd:` wins,
+	 * emits both — its task / brief dispatch branches are mutually exclusive — so only
+	 * a human hand-edit could produce both, and the precedence rule (`brief:` wins,
 	 * `issue:` ignored) is the future close-job's concern (see {@link
-	 * resolveClosingIssue}), degrading a typo to "use the PRD's number" rather than
-	 * crashing. `undefined` when omitted (every non-intake PRD and most slices).
+	 * resolveClosingIssue}), degrading a typo to "use the brief's number" rather than
+	 * crashing. `undefined` when omitted (every non-intake brief and most tasks).
 	 */
 	issue: number | undefined;
 	/**
@@ -96,12 +96,12 @@ export interface Frontmatter {
 	/** Slugs this item is blocked by; `[]` when omitted or empty. */
 	blockedBy: string[];
 	/**
-	 * PRD-only: slugs of PRDs that must already be SLICED before this PRD may be
-	 * sliced (resolved against `work/prd-sliced/` residence, NOT `done/`). `[]` when
+	 * Brief-only: slugs of briefs that must already be SLICED before this brief may be
+	 * sliced (resolved against `work/briefs/tasked/` residence, NOT `done/`). `[]` when
 	 * omitted or empty. Parsed here so the auto-slicer can read it; enforcement
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
-	sliceAfter: string[];
+	briefAfter: string[];
 }
 
 /**
@@ -241,13 +241,13 @@ export function parseFrontmatter(content: string): Frontmatter {
 		origin: undefined,
 		originTrust: undefined,
 		slug: undefined,
-		prd: undefined,
+		brief: undefined,
 		issue: undefined,
 		humanOnly: undefined,
 		needsAnswers: undefined,
 		triaged: undefined,
 		blockedBy: [],
-		sliceAfter: [],
+		briefAfter: [],
 	};
 	if (block === undefined) {
 		return result;
@@ -280,8 +280,8 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.originTrust = v === 'trusted' || v === 'untrusted' ? v : undefined;
 		} else if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'prd') {
-			result.prd = rawValue === '' ? undefined : unquote(rawValue);
+		} else if (key === 'brief') {
+			result.brief = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'issue') {
 			// Integer issue link (`intake`'s PRD-emit OR a lone-slice emit). A
 			// non-integer / empty value reads as undefined (the field is absent rather
@@ -298,7 +298,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 			// observation out of the triage pool. An empty value reads as undefined
 			// (undeclared — still untriaged).
 			result.triaged = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'blockedBy' || key === 'sliceAfter') {
+		} else if (key === 'blockedBy' || key === 'briefAfter') {
 			let list: string[];
 			if (rawValue.startsWith('[')) {
 				list = parseInlineList(rawValue);
@@ -325,7 +325,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 			if (key === 'blockedBy') {
 				result.blockedBy = list;
 			} else {
-				result.sliceAfter = list;
+				result.briefAfter = list;
 			}
 		}
 	}
@@ -335,27 +335,27 @@ export function parseFrontmatter(content: string): Frontmatter {
 
 /**
  * Resolve, from a parsed artifact's frontmatter, HOW it closes its source issue:
- * the `prd:` hop or the lone-slice `issue:` field. A PURE helper for the FUTURE
+ * the `brief:` hop or the lone-task `issue:` field. A PURE helper for the FUTURE
  * CI close-job (`runner-in-ci`'s) — it is NOT wired into intake or any reader
  * today; it merely pins the one-closure-path PRECEDENCE in one place.
  *
- * Encodes the invariant: a slice uses `issue:` XOR `prd:`. When (only a human
- * hand-edit could) BOTH are present, `prd:` WINS — the close-job hops to the PRD's
- * `issue:` and IGNORES the slice's own `issue:` (the fanned-PRD path is the
- * authoritative one; a lone `issue:` on a `prd:`-bearing slice is a contradiction
- * that degrades to "use the PRD" rather than crashing).
+ * Encodes the invariant: a task uses `issue:` XOR `brief:`. When (only a human
+ * hand-edit could) BOTH are present, `brief:` WINS — the close-job hops to the brief's
+ * `issue:` and IGNORES the task's own `issue:` (the fanned-brief path is the
+ * authoritative one; a lone `issue:` on a `brief:`-bearing task is a contradiction
+ * that degrades to "use the brief" rather than crashing).
  *
  * Returns:
- * - `{via: 'prd', prd}` when a `prd:` is present (hop to the PRD's `issue:`; the
- *   caller resolves the PRD file to read its number);
- * - `{via: 'issue', issue}` when only a lone-slice `issue:` is present;
+ * - `{via: 'brief', brief}` when a `brief:` is present (hop to the brief's `issue:`; the
+ *   caller resolves the brief file to read its number);
+ * - `{via: 'issue', issue}` when only a lone-task `issue:` is present;
  * - `undefined` when neither is present (no closure path).
  */
 export function resolveClosingIssue(
-	frontmatter: Pick<Frontmatter, 'prd' | 'issue'>,
-): {via: 'prd'; prd: string} | {via: 'issue'; issue: number} | undefined {
-	if (frontmatter.prd !== undefined) {
-		return {via: 'prd', prd: frontmatter.prd};
+	frontmatter: Pick<Frontmatter, 'brief' | 'issue'>,
+): {via: 'brief'; brief: string} | {via: 'issue'; issue: number} | undefined {
+	if (frontmatter.brief !== undefined) {
+		return {via: 'brief', brief: frontmatter.brief};
 	}
 	if (frontmatter.issue !== undefined) {
 		return {via: 'issue', issue: frontmatter.issue};

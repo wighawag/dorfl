@@ -67,7 +67,7 @@ async function seedStrandedDoneBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	const branch = `work/slice-${slug}`;
+	const branch = `work/task-${slug}`;
 	gitIn(['switch', '-q', '-c', branch, `${ARBITER}/main`], repo);
 
 	// The agent's work + the done-move + commit (steps 2–3 of the build path).
@@ -277,7 +277,7 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 		// Remove the slice body from backlog/ on the branch tree WITHOUT moving it to
 		// done/ — the "genuinely nothing here" state.
 		gitIn(['rm', '-q', 'work/tasks/todo/gamma.md'], repo);

@@ -245,7 +245,7 @@ export function createJob(options: CreateJobOptions): Job {
 	});
 
 	const slug = options.slug;
-	const branch = workBranchRef(options.type ?? 'slice', slug);
+	const branch = workBranchRef(options.type ?? 'task', slug);
 	const dir = jobWorktreePath(options.workspacesDir, mirror.url, slug);
 
 	// CONTINUE-detection (shared with the in-place path, ADR §14 keystone): after

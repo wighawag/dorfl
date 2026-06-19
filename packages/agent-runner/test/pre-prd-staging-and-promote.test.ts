@@ -45,7 +45,7 @@ import type {
  *       PRD `pre-prd/ \u2192 prd/` on the arbiter and the same slug becomes
  *       auto-sliceable. There is no agent-facing path that performs the
  *       promotion (asserted structurally: no agent surface imports it);
- *   (d) the `sliceAfter` (against `work/briefs/tasked/`) and `blockedBy`
+ *   (d) the `briefAfter` (against `work/briefs/tasked/`) and `blockedBy`
  *       (against `work/tasks/done/`) resolution is UNCHANGED \u2014 PRD US #14.
  */
 
@@ -150,13 +150,13 @@ function onArbiterMain(repo: string, path: string): boolean {
 
 /**
  * Land the staged PRD on `<arbiter>/main` (a propose-mode intake emission lives
- * on a `work/intake-prd-<slug>` branch \u2014 we ff-merge it onto main so the
+ * on a `work/intake-brief-<slug>` branch \u2014 we ff-merge it onto main so the
  * read-strategy/pool/eligibility tests see it on main without changing intake's
  * default propose mode). The fetched ref is the arbiter side post-intake.
  */
 function landIntakeBranchOnMain(repo: string, slug: string): void {
 	gitIn(['fetch', '-q', ARBITER], repo);
-	const branch = `work/intake-prd-${slug}`;
+	const branch = `work/intake-brief-${slug}`;
 	gitIn(['checkout', 'main'], repo);
 	gitIn(['merge', '--ff-only', `${ARBITER}/${branch}`], repo);
 	gitIn(['push', '-q', ARBITER, 'main'], repo);
@@ -263,7 +263,7 @@ describe('STEP A (PRD) \u2014 work/briefs/ready/ STILL means the auto-slice POOL
 			humanOnly: false,
 			needsAnswers: false,
 			autoSlice: true,
-			sliceAfter: [],
+			briefAfter: [],
 			slicedSlugs: new Set(),
 		});
 		// The gate itself is open (no axes block it); the POSITION (residence
@@ -380,13 +380,13 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 	});
 });
 
-describe('STEP A (PRD) \u2014 sliceAfter (prd-sliced/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
-	it('sliceAfter still resolves against work/briefs/tasked/ residence \u2014 not work/briefs/proposed/, not work/briefs/ready/', () => {
+describe('STEP A (PRD) \u2014 briefAfter (prd-sliced/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
+	it('briefAfter still resolves against work/briefs/tasked/ residence \u2014 not work/briefs/proposed/, not work/briefs/ready/', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// Seed an already-sliced PRD into work/briefs/tasked/, AND a counterpart in
-		// the STAGING pre-prd/ folder. `sliceAfter` resolution must read
+		// the STAGING pre-prd/ folder. `briefAfter` resolution must read
 		// `prd-sliced/` for its satisfied set \u2014 the staging folder must not
-		// satisfy a `sliceAfter` dependency.
+		// satisfy a `briefAfter` dependency.
 		mkdirSync(join(repo, 'work', 'briefs', 'tasked'), {recursive: true});
 		writeFileSync(
 			join(repo, 'work', 'briefs', 'tasked', 'already-sliced.md'),
@@ -408,29 +408,29 @@ describe('STEP A (PRD) \u2014 sliceAfter (prd-sliced/) and blockedBy (done/) res
 		expect(pool.slicedSlugs.has('already-sliced')).toBe(true);
 		expect(pool.slicedSlugs.has('staged-not-sliced')).toBe(false);
 
-		// `sliceAfter: [already-sliced]` is satisfied (the sliced set includes it).
+		// `briefAfter: [already-sliced]` is satisfied (the sliced set includes it).
 		const okIfPriorSliced = resolveSlicingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoSlice: true,
-			sliceAfter: ['already-sliced'],
+			briefAfter: ['already-sliced'],
 			slicedSlugs: pool.slicedSlugs,
 		});
 		expect(okIfPriorSliced.sliceable).toBe(true);
-		expect(okIfPriorSliced.sliceAfter.satisfied).toBe(true);
+		expect(okIfPriorSliced.briefAfter.satisfied).toBe(true);
 
-		// `sliceAfter: [staged-not-sliced]` is NOT satisfied \u2014 a STAGED PRD
+		// `briefAfter: [staged-not-sliced]` is NOT satisfied \u2014 a STAGED PRD
 		// (residence in `work/briefs/proposed/`) does NOT count as already-sliced.
 		const blockedByStaged = resolveSlicingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoSlice: true,
-			sliceAfter: ['staged-not-sliced'],
+			briefAfter: ['staged-not-sliced'],
 			slicedSlugs: pool.slicedSlugs,
 		});
 		expect(blockedByStaged.sliceable).toBe(false);
-		expect(blockedByStaged.sliceAfter.satisfied).toBe(false);
-		expect(blockedByStaged.sliceAfter.missing).toEqual(['staged-not-sliced']);
+		expect(blockedByStaged.briefAfter.satisfied).toBe(false);
+		expect(blockedByStaged.briefAfter.missing).toEqual(['staged-not-sliced']);
 	});
 
 	it('blockedBy still resolves against work/tasks/done/ residence \u2014 unchanged by the PRD staging split', () => {

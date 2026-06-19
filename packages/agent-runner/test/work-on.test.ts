@@ -55,10 +55,10 @@ describe('work-on — in-repo form (work-on <slug>)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('created');
-		expect(result.branch).toBe('work/slice-alpha');
+		expect(result.branch).toBe('work/task-alpha');
 		expect(result.dir).toBeDefined();
 		expect(existsSync(result.dir!)).toBe(true);
-		expect(branchOf(result.dir!)).toBe('work/slice-alpha');
+		expect(branchOf(result.dir!)).toBe('work/task-alpha');
 
 		// The worktree lives UNDER the configured human root, never ~/.agent-runner.
 		expect(result.dir!.startsWith(humanRoot())).toBe(true);
@@ -92,7 +92,7 @@ describe('work-on — remote form (work-on <remote> <slug>)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('created');
-		expect(result.branch).toBe('work/slice-beta');
+		expect(result.branch).toBe('work/task-beta');
 		expect(existsSync(result.dir!)).toBe(true);
 		expect(result.dir!.startsWith(humanRoot())).toBe(true);
 
@@ -362,7 +362,7 @@ describe('work-on — clean failure on a lost claim (no worktree)', () => {
 		// The arbiter agrees: the body stays in backlog/, and the per-item lock is
 		// held exactly once (claimed once).
 		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
-		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['slice-solo']);
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['task-solo']);
 	});
 });
 

@@ -335,9 +335,9 @@ export interface ReadSignalsInput {
 function sidecarTypeFor(namespace: SlugNamespace): SidecarType {
 	return namespace === 'observation'
 		? 'observation'
-		: namespace === 'prd'
-			? 'prd'
-			: 'slice';
+		: namespace === 'brief'
+			? 'brief'
+			: 'task';
 }
 
 /**
@@ -368,13 +368,13 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * The lifecycle folders each item type may rest in (frontmatter source). After
  * the capstone cut-over (slice
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the transient
- * `slicing/` folder is GONE — a PRD rests in `prd/` (source) or `prd-sliced/`
+ * `slicing/` folder is GONE — a brief rests in `prd/` (source) or `prd-sliced/`
  * (sliced); while it is being sliced the body STAYS in `prd/` (the lock no longer
  * moves it), so `slicing/` is never a frontmatter source.
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
-	slice: ['backlog', 'in-progress', 'done'],
-	prd: ['prd', 'prd-sliced'],
+	task: ['backlog', 'in-progress', 'done'],
+	brief: ['prd', 'prd-sliced'],
 	observation: ['observations'],
 };
 
@@ -807,7 +807,7 @@ export async function performAdvance(
 		const message =
 			'`advance` with no item is the eligible-SET form (the one-shot driver). ' +
 			'The single-item tick needs a named item: ' +
-			'`advance <slug>` / `advance prd:<slug>` / `advance obs:<slug>`.';
+			'`advance <slug>` / `advance brief:<slug>` / `advance obs:<slug>`.';
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}

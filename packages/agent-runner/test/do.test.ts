@@ -72,7 +72,7 @@ function seedPrd(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 	// Commit it so the PRD lives on main (and survives the work-branch cut).
 	gitIn(['add', '-A'], repo);
-	gitIn(['commit', '-q', '-m', `prd: ${slug}`], repo);
+	gitIn(['commit', '-q', '-m', `brief: ${slug}`], repo);
 	gitIn(['push', '-q', ARBITER, 'main'], repo);
 }
 
@@ -105,7 +105,7 @@ describe('do <slug> — in-place happy path → exit', () => {
 
 		// Like `complete`: switched back to main, branch tidied (provably on arbiter).
 		expect(currentBranch(repo)).toBe('main');
-		expect(gitIn(['branch', '--list', 'work/slice-alpha'], repo).trim()).toBe(
+		expect(gitIn(['branch', '--list', 'work/task-alpha'], repo).trim()).toBe(
 			'',
 		);
 	});
@@ -115,7 +115,7 @@ describe('do <slug> — in-place happy path → exit', () => {
 		// An agent that ASSERTS the tree is already on the work branch + claimed
 		// (the runner onboarded) and only edits code.
 		const assertingAgent: DoAgentRunner = ({cwd, slug}) => {
-			expect(currentBranch(cwd)).toBe(`work/slice-${slug}`);
+			expect(currentBranch(cwd)).toBe(`work/task-${slug}`);
 			// The body RESTS in backlog/ in the tree (claim acquired the lock but
 			// never moved the body); the agent never did any git.
 			expect(existsSync(join(cwd, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
@@ -178,7 +178,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 		// The work branch was pushed (the PR source).
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-untrusted'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-untrusted'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -280,9 +280,7 @@ describe('do <slug> — lost claim race is skipped cleanly', () => {
 		expect(result.exitCode).not.toBe(0);
 		expect(['lost', 'refused']).toContain(result.outcome);
 		expect(agentRan).toBe(false);
-		expect(gitIn(['branch', '--list', 'work/slice-solo'], repo).trim()).toBe(
-			'',
-		);
+		expect(gitIn(['branch', '--list', 'work/task-solo'], repo).trim()).toBe('');
 		expect(currentBranch(repo)).toBe('main');
 	});
 
@@ -371,7 +369,7 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-beta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-beta', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -511,13 +509,13 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		// The agent's partial edit is on that pushed branch (not dropped).
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/task-alpha:partial.txt'], repo),
 		).toBe('');
 		// But it never reached main (no auto-merge of a failed build).
 		expect(gitIn(['ls-tree', 'arbiter/main', 'partial.txt'], repo).trim()).toBe(
@@ -563,7 +561,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 			env: gitEnv(),
 		});
 		expect(restarted.exitCode).toBe(0);
-		expect(restarted.branch).toBe('work/slice-alpha');
+		expect(restarted.branch).toBe('work/task-alpha');
 		// The partial work the failed agent left is present on the continued branch.
 		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
 	});
@@ -611,7 +609,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/task-alpha:partial.txt'], repo),
 		).toBe('');
 	});
 
@@ -638,12 +636,12 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		gitIn(['fetch', '-q', ARBITER], job);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				job,
 			).trim(),
 		).not.toBe('');
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], job),
+			gitIn(['cat-file', '-e', 'arbiter/work/task-alpha:partial.txt'], job),
 		).toBe('');
 	});
 });
@@ -748,13 +746,13 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		// The partial edit is on the pushed branch (not dropped).
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/slice-alpha:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/task-alpha:partial.txt'], repo),
 		).toBe('');
 		// But it never reached main (no auto-merge of failing work).
 		expect(gitIn(['ls-tree', 'arbiter/main', 'partial.txt'], repo).trim()).toBe(
@@ -801,7 +799,7 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 			env: gitEnv(),
 		});
 		expect(restarted.exitCode).toBe(0);
-		expect(restarted.branch).toBe('work/slice-alpha');
+		expect(restarted.branch).toBe('work/task-alpha');
 		// The partial work the gate-failed run left is present on the continued branch.
 		expect(existsSync(join(fresh, 'partial.txt'))).toBe(true);
 	});
@@ -820,7 +818,7 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-beta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-beta', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'partial.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -836,10 +834,10 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 		// branch is NOT pushed (a human is right there). No needs-attention/ folder.
 		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
-		// No `<arbiter>/work/slice-beta` ref exists (the human path never pushes it).
+		// No `<arbiter>/work/task-beta` ref exists (the human path never pushes it).
 		// `git ls-remote` is a soft check: it lists nothing for an absent ref.
 		const remoteRefs = gitIn(
-			['ls-remote', '--heads', ARBITER, 'work/slice-beta'],
+			['ls-remote', '--heads', ARBITER, 'work/task-beta'],
 			repo,
 		).trim();
 		expect(remoteRefs).toBe('');
@@ -985,7 +983,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		const repo = seeded.repo;
 
 		// First attempt: the agent edits a file, the gate is RED → `do` saves the
-		// partial work + pushes `work/slice-alpha` to the arbiter (the durable artifact a
+		// partial work + pushes `work/task-alpha` to the arbiter (the durable artifact a
 		// requeue continues from).
 		const first = await performDo({
 			arg: 'alpha',
@@ -1041,7 +1039,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		const repo = seeded.repo;
 
 		// First attempt: the agent produces real source work, but the gate is RED →
-		// `do` saves the partial work + pushes `work/slice-alpha` to the arbiter (a chain of
+		// `do` saves the partial work + pushes `work/task-alpha` to the arbiter (a chain of
 		// COMMITTED commits ahead of main — the durable artifact a requeue continues).
 		const first = await performDo({
 			arg: 'alpha',
@@ -1093,7 +1091,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const repo = seeded.repo;
 
-		// First attempt edits a SHARED file then the gate fails → the kept work/slice-alpha
+		// First attempt edits a SHARED file then the gate fails → the kept work/task-alpha
 		// (with that edit) is pushed to the arbiter.
 		const first = await performDo({
 			arg: 'alpha',
@@ -1154,13 +1152,13 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		// and the run did NOT complete — byte-parity with `run`'s onboard-conflict.
 		expect(agentRan).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		// The durable artifact — the kept work/slice-alpha branch — is still on the arbiter
+		// The durable artifact — the kept work/task-alpha branch — is still on the arbiter
 		// (the rebase was aborted; recovery flows through the branch + the surface the
 		// prior bounce already published).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -1181,7 +1179,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 
 		let agentRan = false;
 		const result = await performDo({
-			arg: 'slice:solo', // explicit (no backlog existence check), reaches the claim
+			arg: 'task:solo', // explicit (no backlog existence check), reaches the claim
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
@@ -1247,7 +1245,7 @@ describe('do <slug> — --merge / --propose resolve at integrate-time', () => {
 		// The work branch was pushed to the arbiter (the safety-bearing step).
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -1451,7 +1449,7 @@ describe('do <slug> — noPR (the PR-INTENT axis) + the up-front gh-probe guard'
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -1561,7 +1559,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 	it('an explicit slice:<slug> resolves to the slice and builds it', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await performDo({
-			arg: 'slice:alpha',
+			arg: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
@@ -1584,7 +1582,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 
 		let agentRan = false;
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			// autoSlice deliberately OMITTED (defaults off) — explicit naming authorizes.
@@ -1614,7 +1612,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 
 		let agentRan = false;
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
@@ -1639,7 +1637,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 
 		// The stubbed slicing agent writes a backlog slice file (no git).
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
@@ -1655,7 +1653,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 						'---',
 						'title: somePrd-first',
 						'slug: somePrd-first',
-						'prd: somePrd',
+						'brief: somePrd',
 						'---',
 						'',
 						'## Prompt',
@@ -1740,8 +1738,8 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/ambiguous/i);
-		expect(result.message).toMatch(/slice:dup/);
-		expect(result.message).toMatch(/prd:dup/);
+		expect(result.message).toMatch(/task:dup/);
+		expect(result.message).toMatch(/brief:dup/);
 		// Nothing was claimed — the collision halts before any git transition.
 		expect(existsOnArbiterMain(repo, 'backlog', 'dup')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'dup')).toBe(false);
@@ -1752,7 +1750,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		seedPrd(repo, 'dup');
 
 		const result = await performDo({
-			arg: 'slice:dup', // explicit → no collision check, builds the slice
+			arg: 'task:dup', // explicit → no collision check, builds the slice
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
@@ -1785,7 +1783,7 @@ const slicingAgent: DoAgentRunner = ({cwd}) => {
 		[
 			'---',
 			'slug: somePrd-first',
-			'prd: somePrd',
+			'brief: somePrd',
 			'---',
 			'',
 			'## Prompt',
@@ -1803,7 +1801,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
@@ -1874,7 +1872,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
@@ -1909,7 +1907,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoSlice: true,
@@ -1940,7 +1938,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 				[
 					'cat-file',
 					'-e',
-					`${ARBITER}/work/prd-somePrd:work/tasks/backlog/somePrd-first.md`,
+					`${ARBITER}/work/brief-somePrd:work/tasks/backlog/somePrd-first.md`,
 				],
 				repo,
 				{env: gitEnv()},

@@ -128,7 +128,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		writePrd('prd', 'beta.md', {
 			slug: 'beta',
 			needsAnswers: 'true',
-			sliceAfter: '[alpha]',
+			briefAfter: '[alpha]',
 		});
 		writePrd('prd', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
 
@@ -140,12 +140,12 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 			file: 'alpha.md',
 			slug: 'alpha',
 			humanOnly: true,
-			sliceAfter: [],
+			briefAfter: [],
 		});
 		expect(pool.prds[1]).toMatchObject({
 			slug: 'beta',
 			needsAnswers: true,
-			sliceAfter: ['alpha'],
+			briefAfter: ['alpha'],
 		});
 	});
 
@@ -385,7 +385,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 				'beta.md': prd({
 					slug: 'beta',
 					needsAnswers: 'true',
-					sliceAfter: '[alpha]',
+					briefAfter: '[alpha]',
 				}),
 				'gamma.md': prd({slug: 'gamma', humanOnly: 'true'}),
 			},
@@ -401,7 +401,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			file: 'beta.md',
 			slug: 'beta',
 			needsAnswers: true,
-			sliceAfter: ['alpha'],
+			briefAfter: ['alpha'],
 		});
 		expect(pool.prds[1]).toMatchObject({slug: 'gamma', humanOnly: true});
 		// Sliced-ness is RESIDENCE in prd-sliced/ (the folder is the source of truth).

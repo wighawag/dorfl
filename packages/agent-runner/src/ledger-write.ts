@@ -741,7 +741,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			return {moved: true};
 		}
 		const r = await resumeItemLock({
-			item: `slice:${input.slug}`,
+			item: `task:${input.slug}`,
 			cwd: input.cwd,
 			arbiter: input.arbiter,
 			env: input.env,
@@ -817,7 +817,7 @@ async function bounceToStuckLock(params: {
 	}
 	try {
 		const r = await markStuckItemLock({
-			item: `slice:${slug}`,
+			item: `task:${slug}`,
 			reason,
 			questions,
 			cwd,

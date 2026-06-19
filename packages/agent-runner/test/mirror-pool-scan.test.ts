@@ -78,10 +78,10 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 				// sliceable
 				'sliceme.md': prd({slug: 'sliceme'}),
 				// gated out
-				'prd-human.md': prd({slug: 'prd-human', humanOnly: 'true'}),
-				'prd-asks.md': prd({slug: 'prd-asks', needsAnswers: 'true'}),
-				// sliceAfter not satisfied (unsliced-dep is NOT in prd-sliced/)
-				'after.md': prd({slug: 'after', sliceAfter: '[unsliced-dep]'}),
+				'brief-human.md': prd({slug: 'brief-human', humanOnly: 'true'}),
+				'brief-asks.md': prd({slug: 'brief-asks', needsAnswers: 'true'}),
+				// briefAfter not satisfied (unsliced-dep is NOT in prd-sliced/)
+				'after.md': prd({slug: 'after', briefAfter: '[unsliced-dep]'}),
 			},
 		});
 
@@ -142,10 +142,10 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		expect(result.prds.map((p) => p.slug)).toEqual(['sliceme']);
 	});
 
-	it('resolves blockedBy / sliceAfter against the mirror own folders (per-repo, like in-place)', async () => {
+	it('resolves blockedBy / briefAfter against the mirror own folders (per-repo, like in-place)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
-			prd: {'after.md': prd({slug: 'after', sliceAfter: '[alpha]'})},
+			prd: {'after.md': prd({slug: 'after', briefAfter: '[alpha]'})},
 		});
 		const cfg = mergeConfig({autoBuild: true, autoSlice: true});
 
@@ -166,7 +166,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
 			done: {'a.md': slice({slug: 'a'})},
 			prd: {
-				'after.md': prd({slug: 'after', sliceAfter: '[alpha]'}),
+				'after.md': prd({slug: 'after', briefAfter: '[alpha]'}),
 			},
 			prdSliced: {'alpha.md': prd({slug: 'alpha'})},
 		});
@@ -191,7 +191,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			done: {'dep.md': slice({slug: 'dep'})},
 			prd: {
 				'sliceme.md': prd({slug: 'sliceme'}),
-				'after.md': prd({slug: 'after', sliceAfter: '[alpha]'}),
+				'after.md': prd({slug: 'after', briefAfter: '[alpha]'}),
 			},
 			prdSliced: {'alpha.md': prd({slug: 'alpha'})},
 		};
@@ -234,7 +234,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 					slug: p.slug,
 					humanOnly: p.humanOnly,
 					needsAnswers: p.needsAnswers,
-					sliceAfter: p.sliceAfter,
+					briefAfter: p.briefAfter,
 				})),
 			slicedSlugs: (
 				await import('../src/ledger-read.js')
@@ -281,9 +281,9 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 			prds: prdCandidates,
 		});
 		expect(loopSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:alpha',
-			'slice:beta',
-			'prd:gamma',
+			'task:alpha',
+			'task:beta',
+			'brief:gamma',
 		]);
 
 		// ONE-SHOT driver shape (`advance --remote -n 2`): ALWAYS SEQUENTIAL, bound by
@@ -298,8 +298,8 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 			count: 2,
 		});
 		expect(oneShotSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:alpha',
-			'slice:beta',
+			'task:alpha',
+			'task:beta',
 		]);
 	});
 });

@@ -175,17 +175,17 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS sliceable PRDs into the matrix as ' +
-			'`prd:<slug>` legs alongside the slice legs (slice ' +
+		'the propose `enumerate` `jq` UNIONS sliceable BRIEFS into the matrix as ' +
+			'`brief:<slug>` legs alongside the task legs (slice ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`)',
 		() => {
 			const text = generateAdvanceLifecycleWorkflow(config);
 			// Without this, `AGENT_RUNNER_AUTO_SLICE: 'true'` above is dead on the hourly
-			// cron — a ready ungated PRD never becomes a matrix leg. The `jq` must read
-			// `scan --json`'s sliceable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
-			// AND the slice pool, and emit BOTH `slice:<slug>` and `prd:<slug>` ids.
-			expect(/"slice:" \+ \.slug/.test(text)).toBe(true);
-			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			// cron — a ready ungated BRIEF never becomes a matrix leg. The `jq` must read
+			// `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+			// AND the task pool, and emit BOTH `task:<slug>` and `brief:<slug>` ids.
+			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
+			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
 			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
 			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
 		},
@@ -357,9 +357,9 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).toBe(true);
 	});
 
-	it('uses explicit slug prefixes (slice:/prd:), never bare', () => {
+	it('uses explicit slug prefixes (task:/brief:), never bare', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(text).toContain('"slice:" + .slug');
+		expect(text).toContain('"task:" + .slug');
 	});
 
 	it('US #9: requests NO `workflows` permission and no job step touches the workflows tree', () => {
@@ -502,13 +502,13 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	});
 
 	it(
-		'flags a regression to a SLICE-ONLY `jq` (no `prd:` legs) — the propose ' +
-			'matrix must enumerate the sliceable-PRD pool',
+		'flags a regression to a TASK-ONLY `jq` (no `brief:` legs) — the propose ' +
+			'matrix must enumerate the sliceable-BRIEF pool',
 		() => {
-			// Pre-fix shape: slice-only `jq` over `items[]` only. Reintroducing it must
+			// Pre-fix shape: task-only `jq` over `items[]` only. Reintroducing it must
 			// be flagged so `AGENT_RUNNER_AUTO_SLICE` is never silently dead on the cron.
 			const broken = base
-				.replace(/"prd:" \+ \.slug/g, '"slice:" + .slug')
+				.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
 				.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
 				.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
 			expectFlagged(broken, 'propose-enumerates-sliceable-prds');

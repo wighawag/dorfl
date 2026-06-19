@@ -72,11 +72,11 @@ async function stuckThenRequeued(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work (green, approved)'], repo);
-	gitIn(['push', '-q', ARBITER, `work/slice-${slug}:work/slice-${slug}`], repo);
+	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
 	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,
@@ -206,7 +206,7 @@ function assertSafePushes(commands: string[][]): void {
 			expect(cmd).not.toContain('-f');
 			continue;
 		}
-		if (!joined.includes('work/slice-')) {
+		if (!joined.includes('work/task-')) {
 			continue;
 		}
 		// Work-branch push: --force-with-lease ONLY, never a bare --force.
@@ -224,13 +224,13 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 	it('threads the pre-rebase arbiter tip as an EXPLICIT --force-with-lease=<branch>:<tip> (never bare force / :main)', async () => {
 		const {seeded} = await stuckThenRequeued('alpha');
 		// The pre-rebase arbiter work-branch tip (what the lease must expect).
-		const preTip = arbiterWorkTip(seeded.arbiter, 'work/slice-alpha');
+		const preTip = arbiterWorkTip(seeded.arbiter, 'work/task-alpha');
 
 		const commands: string[][] = [];
 		const tree = traceGit(commands, (env) =>
 			inPlaceStrategy({checkout: seeded.repo, arbiter: ARBITER}).prepare({
 				slug: 'alpha',
-				type: 'slice',
+				type: 'task',
 				env,
 			}),
 		);
@@ -244,16 +244,16 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 		const workPush = commands.find(
 			(c) =>
 				c.includes('push') &&
-				c.some((a) => /^work\/slice-alpha:work\/slice-alpha$/.test(a)),
+				c.some((a) => /^work\/task-alpha:work\/task-alpha$/.test(a)),
 		);
 		expect(workPush).toBeDefined();
 		expect(workPush!.join(' ')).toContain(
-			`--force-with-lease=work/slice-alpha:${preTip}`,
+			`--force-with-lease=work/task-alpha:${preTip}`,
 		);
 		assertSafePushes(commands);
 
 		// The work landed on the arbiter (clean ff — no churn here).
-		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-alpha')).toBe(
+		expect(arbiterWorkTip(seeded.arbiter, 'work/task-alpha')).toBe(
 			gitIn(['rev-parse', 'HEAD'], seeded.repo).trim(),
 		);
 	});
@@ -261,7 +261,7 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 	it('SURVIVES a stale-lease rejection: the arbiter churns the ref under the lease → re-fetch + re-rebase + retry lands the work', async () => {
 		const {seeded} = await stuckThenRequeued('beta');
 		// Deterministically make the FIRST leased work-branch push STALE: a git shim
-		// that, the first time it sees the `work/slice-beta:work/slice-beta` push,
+		// that, the first time it sees the `work/task-beta:work/task-beta` push,
 		// CHURNS the arbiter ref (advancing it past the lease's expected tip) BEFORE
 		// delegating to the real push. That real push then fails `stale info`; the
 		// helper re-fetches the churned tip, re-rebases cleanly, and retries — landing
@@ -271,7 +271,7 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 		const sentinel = join(shimDir, 'churn-once');
 		writeFileSync(sentinel, '1');
 		const shim = join(shimDir, 'git');
-		// On the first `push <remote> work/slice-beta:work/slice-beta ...` (sentinel
+		// On the first `push <remote> work/task-beta:work/task-beta ...` (sentinel
 		// present), churn the arbiter work ref via the REAL git, drop the sentinel,
 		// then fall through to the requested push (now against a moved arbiter tip).
 		writeFileSync(
@@ -280,16 +280,16 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 				'#!/bin/sh',
 				'export PATH="$REAL_PATH"',
 				'case "$*" in',
-				'  *"push"*"work/slice-beta:work/slice-beta"*)',
+				'  *"push"*"work/task-beta:work/task-beta"*)',
 				`    if [ -f ${JSON.stringify(sentinel)} ]; then`,
 				`      rm -f ${JSON.stringify(sentinel)}`,
 				`      churndir="${join(scratch.root, 'shim-churn-beta')}"`,
 				`      git clone -q "file://${seeded.arbiter}" "$churndir" >/dev/null 2>&1`,
-				'      git -C "$churndir" switch -q -C work/slice-beta origin/work/slice-beta >/dev/null 2>&1',
+				'      git -C "$churndir" switch -q -C work/task-beta origin/work/task-beta >/dev/null 2>&1',
 				'      echo churned-by-shim > "$churndir/churned-beta.txt"',
 				'      git -C "$churndir" add -A >/dev/null 2>&1',
 				'      git -C "$churndir" -c user.name=Churn -c user.email=churn@x commit -q -m churn >/dev/null 2>&1',
-				'      git -C "$churndir" push -q origin work/slice-beta:work/slice-beta >/dev/null 2>&1',
+				'      git -C "$churndir" push -q origin work/task-beta:work/task-beta >/dev/null 2>&1',
 				'    fi',
 				'    ;;',
 				'esac',
@@ -308,7 +308,7 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 		const tree = inPlaceStrategy({
 			checkout: seeded.repo,
 			arbiter: ARBITER,
-		}).prepare({slug: 'beta', type: 'slice', env: shimEnv});
+		}).prepare({slug: 'beta', type: 'task', env: shimEnv});
 		expect(tree.continued).toBe(true);
 		expect(tree.continueRebaseConflict).toBe(false);
 		expect(tree.continuePushFailure).toBeUndefined();
@@ -319,7 +319,7 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 		// reconciled local tip — the green work LANDED instead of stranding (the
 		// retry re-leased against the churned tip, an unshared work-branch ff). The
 		// prior attempt's work is present (continued, never lost).
-		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-beta')).toBe(
+		expect(arbiterWorkTip(seeded.arbiter, 'work/task-beta')).toBe(
 			gitIn(['rev-parse', 'HEAD'], seeded.repo).trim(),
 		);
 		expect(existsSync(join(seeded.repo, 'prior.txt'))).toBe(true);
@@ -338,18 +338,18 @@ describe('Part A — isolation.ts in-place strategy: continue push via the stale
 		gitIn(['push', '-q', ARBITER, 'mv-main:main'], mover);
 		// The kept work branch edits shared.txt too (re-point it on the arbiter).
 		gitIn(
-			['switch', '-q', '-C', 'work/slice-gamma', `${ARBITER}/work/slice-gamma`],
+			['switch', '-q', '-C', 'work/task-gamma', `${ARBITER}/work/task-gamma`],
 			mover,
 		);
 		writeFileSync(join(mover, 'shared.txt'), 'branch version\n');
 		gitIn(['add', '-A'], mover);
 		gitIn(['commit', '-q', '-m', 'branch edits shared'], mover);
-		gitIn(['push', '-q', ARBITER, 'work/slice-gamma:work/slice-gamma'], mover);
+		gitIn(['push', '-q', ARBITER, 'work/task-gamma:work/task-gamma'], mover);
 
 		const tree = inPlaceStrategy({
 			checkout: seeded.repo,
 			arbiter: ARBITER,
-		}).prepare({slug: 'gamma', type: 'slice', env: gitEnv()});
+		}).prepare({slug: 'gamma', type: 'task', env: gitEnv()});
 		expect(tree.continueRebaseConflict).toBe(true);
 		expect(tree.continuePushFailure).toBeUndefined();
 		// Never auto-resolved: the checkout is clean (the rebase was aborted).
@@ -373,7 +373,7 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 		expect(started.exitCode).toBe(0);
 		expect(started.outcome).toBe('resumed');
 		// The reconciled work tip is on the arbiter (the leased push landed it).
-		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-delta')).toBe(
+		expect(arbiterWorkTip(seeded.arbiter, 'work/task-delta')).toBe(
 			gitIn(['rev-parse', 'HEAD'], fresh).trim(),
 		);
 		// The prior work is present (continued, not fresh-cut).
@@ -385,7 +385,7 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 		const fresh = seeded.clone('continuer-epsilon');
 		// Isolate the PUSH connectivity failure (the read/fetch+rebase succeed against
 		// a reachable arbiter; only the reconcile PUSH is unreachable). A git shim
-		// fails the `work/slice-epsilon:work/slice-epsilon` push with a git CONNECTIVITY
+		// fails the `work/task-epsilon:work/task-epsilon` push with a git CONNECTIVITY
 		// stderr ("Could not read from remote repository") + non-zero exit, delegating
 		// every OTHER git invocation (fetch, rebase, switch) to the real git. This is
 		// the exact tolerated-offline case: the helper's first push throws a NON-stale
@@ -399,7 +399,7 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 				'#!/bin/sh',
 				'export PATH="$REAL_PATH"',
 				'case "$*" in',
-				'  *"push"*"work/slice-epsilon:work/slice-epsilon"*)',
+				'  *"push"*"work/task-epsilon:work/task-epsilon"*)',
 				'    echo "fatal: unable to access remote: Could not read from remote repository." 1>&2',
 				'    exit 128',
 				'    ;;',
@@ -428,7 +428,7 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 		// complete's later push.
 		expect(started.exitCode).toBe(0);
 		expect(started.outcome).toBe('resumed');
-		expect(currentBranch(fresh)).toBe('work/slice-epsilon');
+		expect(currentBranch(fresh)).toBe('work/task-epsilon');
 	});
 
 	it('SURFACES a REAL terminal push failure (a protected / denyNonFastForwards arbiter) to needs-attention — NOT silently swallowed', async () => {
@@ -461,7 +461,7 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 		expect(started.exitCode).toBe(1);
 		expect(stuckLockOnArbiter(fresh, 'zeta')).toBe(true);
 		// RECOVERABLE: the kept work branch is still on the arbiter.
-		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-zeta')).not.toBe('');
+		expect(arbiterWorkTip(seeded.arbiter, 'work/task-zeta')).not.toBe('');
 	});
 });
 
@@ -553,7 +553,7 @@ describe('Part B — after-commit push failure surfaces to needs-attention (job-
 			/publishing the rebased work branch|failed/i,
 		);
 		// RECOVERABLE: the kept green work branch is left intact on the arbiter.
-		expect(arbiterWorkTip(seeded.arbiter, 'work/slice-theta')).not.toBe('');
+		expect(arbiterWorkTip(seeded.arbiter, 'work/task-theta')).not.toBe('');
 		// performDoRemote materialises a hub mirror + job worktree (a real clone) and
 		// drives the whole pipeline, so this e2e is genuinely slower than the
 		// strategy-level tests above — give it headroom past the 5s default.

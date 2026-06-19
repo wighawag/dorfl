@@ -97,7 +97,7 @@ function seedAnsweredItem(opts: {
 	);
 
 	let model: SidecarModel = newSidecar(
-		`slice:${slug}`,
+		`task:${slug}`,
 		questions.map((q, i) => ({
 			question: q,
 			disposition: opts.dispositions?.[i],
@@ -110,7 +110,7 @@ function seedAnsweredItem(opts: {
 			answer: i < answeredCount ? `answer-${e.id}` : '',
 		})),
 	};
-	const sidecarPath = `work/questions/slice-${slug}.md`;
+	const sidecarPath = `work/questions/task-${slug}.md`;
 	mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
 	writeFileSync(join(repo, sidecarPath), serialiseSidecar(model));
 
@@ -160,7 +160,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		const {repo} = seedAnsweredItem({slug: 'bar'});
 		const {persist, calls} = spyApply({
 			outcome: 'resolved',
-			sidecarPath: 'work/questions/slice-bar.md',
+			sidecarPath: 'work/questions/task-bar.md',
 			itemPath: 'work/tasks/todo/bar.md',
 			message: 'resolved',
 		});
@@ -174,14 +174,14 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(result.exitCode).toBe(0);
 		expect(result.rung).toBe('apply');
 		expect(calls).toHaveLength(1);
-		expect(calls[0].item).toBe('slice:bar');
+		expect(calls[0].item).toBe('task:bar');
 	});
 
 	it('a re-pause (appended new questions) reports a no-op outcome (the item idles, awaiting human)', async () => {
 		const {repo} = seedAnsweredItem({slug: 'rep'});
 		const {persist} = spyApply({
 			outcome: 'repaused',
-			sidecarPath: 'work/questions/slice-rep.md',
+			sidecarPath: 'work/questions/task-rep.md',
 			itemPath: 'work/tasks/todo/rep.md',
 			message: 're-paused',
 		});
@@ -235,7 +235,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		});
 		const {persist, calls} = spyApply({
 			outcome: 'resolved',
-			sidecarPath: 'work/questions/slice-subset.md',
+			sidecarPath: 'work/questions/task-subset.md',
 			itemPath: 'work/tasks/todo/subset.md',
 			message: 'resolved',
 		});

@@ -251,7 +251,7 @@ describe('advanceRegistrySetRunTick — a gate flip makes plain `run` perform th
 				needsAnswers: true,
 			});
 			const emit: SurfaceEmit = {
-				item: `slice:${blockedSlug}`,
+				item: `task:${blockedSlug}`,
 				questions: [{question: 'which approach?'}],
 			};
 			const surfaceGate: SurfaceGate = async () => emit;
@@ -279,7 +279,7 @@ describe('advanceRegistrySetRunTick — a gate flip makes plain `run` perform th
 			);
 			expect(
 				existsSync(
-					join(treelessCwd, 'work', 'questions', `slice-${blockedSlug}.md`),
+					join(treelessCwd, 'work', 'questions', `task-${blockedSlug}.md`),
 				),
 			).toBe(true);
 		},

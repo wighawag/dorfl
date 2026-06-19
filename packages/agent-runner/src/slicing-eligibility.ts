@@ -2,7 +2,7 @@
  * Pure slicing-eligibility resolution — the auto-slice decision layer, one level
  * UP from the build gate (`eligibility.ts`). No I/O: callers pass in the PRD's
  * two autonomy axes (`humanOnly`, `needsAnswers`), the repo's `autoSlice` policy,
- * the PRD's `sliceAfter` slugs, and the set of slugs whose PRDs are already
+ * the PRD's `briefAfter` slugs, and the set of slugs whose PRDs are already
  * SLICED (resolved against `work/prd-sliced/` residence, NOT `work/done/`).
  *
  * This mirrors the build-gate shape deliberately (CONTEXT.md / the `auto-slice`
@@ -15,7 +15,7 @@ import type {HumanOnlyGate} from './eligibility.js';
 
 export type {HumanOnlyGate};
 
-/** Resolution of a PRD's `sliceAfter` against the set of already-sliced PRDs. */
+/** Resolution of a PRD's `briefAfter` against the set of already-sliced PRDs. */
 export interface SliceAfterResult {
 	/** True when every listed PRD is already sliced. */
 	satisfied: boolean;
@@ -29,7 +29,7 @@ export interface SlicingEligibilityInput {
 	/** Autonomy axis 2 (DISCOVERED): the PRD has unresolved questions. */
 	needsAnswers: HumanOnlyGate;
 	/** Cross-PRD order: PRD slugs that must already be sliced before this one. */
-	sliceAfter: string[];
+	briefAfter: string[];
 	/** Slugs of PRDs that are already SLICED (residence in `work/prd-sliced/`). */
 	slicedSlugs: Set<string>;
 	/** Per-repo policy: may an agent auto-slice *undeclared* PRDs in this repo? */
@@ -40,7 +40,7 @@ export interface SlicingEligibilityInput {
 	 * exactly as `do <slice>` builds a named slice regardless of `autoBuild` (the
 	 * `autoBuild` precedent: the pool/scan gates the policy, the explicit claim path
 	 * never re-checks it). When `true`, the policy term drops from the gate and ONLY
-	 * the PRD's own readiness axes (`humanOnly`/`needsAnswers`) + `sliceAfter` bind.
+	 * the PRD's own readiness axes (`humanOnly`/`needsAnswers`) + `briefAfter` bind.
 	 * Defaults `false` (the AUTO-PICK pool path, where the `autoSlice` policy DOES
 	 * gate). The pool is the single policy-enforcement point; the per-invocation gate
 	 * applies the policy only when NOT explicit.
@@ -49,11 +49,11 @@ export interface SlicingEligibilityInput {
 }
 
 export interface SlicingEligibilityResult {
-	/** Sliceable now = gate passes AND every `sliceAfter` PRD is already sliced. */
+	/** Sliceable now = gate passes AND every `briefAfter` PRD is already sliced. */
 	sliceable: boolean;
 	/** Whether the autonomy gate alone passes (agent-sliceable on its own axes). */
 	gatePass: boolean;
-	sliceAfter: SliceAfterResult;
+	briefAfter: SliceAfterResult;
 }
 
 /**
@@ -82,20 +82,20 @@ export function resolveSliceGate(
 }
 
 /**
- * Resolve a PRD's `sliceAfter` against the slugs of PRDs already SLICED (NOT
+ * Resolve a PRD's `briefAfter` against the slugs of PRDs already SLICED (NOT
  * `done/`): satisfied iff every listed PRD is present in `slicedSlugs`. An
  * unsliced blocker ⇒ not yet sliceable (so this PRD's emitted slices can
  * reference the real slugs of those PRDs' slices).
  */
 export function resolveSliceAfter(
-	sliceAfter: string[],
+	briefAfter: string[],
 	slicedSlugs: Set<string>,
 ): SliceAfterResult {
-	const missing = sliceAfter.filter((slug) => !slicedSlugs.has(slug));
+	const missing = briefAfter.filter((slug) => !slicedSlugs.has(slug));
 	return {satisfied: missing.length === 0, missing};
 }
 
-/** Combine the slicing gate and `sliceAfter` resolution into a verdict. */
+/** Combine the slicing gate and `briefAfter` resolution into a verdict. */
 export function resolveSlicingEligibility(
 	input: SlicingEligibilityInput,
 ): SlicingEligibilityResult {
@@ -105,10 +105,10 @@ export function resolveSlicingEligibility(
 		input.autoSlice,
 		input.explicit,
 	);
-	const sliceAfter = resolveSliceAfter(input.sliceAfter, input.slicedSlugs);
+	const briefAfter = resolveSliceAfter(input.briefAfter, input.slicedSlugs);
 	return {
-		sliceable: gatePass && sliceAfter.satisfied,
+		sliceable: gatePass && briefAfter.satisfied,
 		gatePass,
-		sliceAfter,
+		briefAfter,
 	};
 }

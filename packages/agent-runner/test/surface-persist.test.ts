@@ -64,7 +64,7 @@ describe('persistSurfacedQuestions — first pass (CREATE the sidecar + set need
 		const {repo, itemPath} = seedBacklogItem();
 		const result = persistSurfacedQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			questions: [
 				{question: 'A?', context: 'ctx-a'},
@@ -75,7 +75,7 @@ describe('persistSurfacedQuestions — first pass (CREATE the sidecar + set need
 
 		expect(result.outcome).toBe('surfaced');
 		expect(result.entryCount).toBe(2);
-		expect(result.sidecarPath).toBe('work/questions/slice-foo.md');
+		expect(result.sidecarPath).toBe('work/questions/task-foo.md');
 
 		// The sidecar exists with the two questions (stable ids q1, q2).
 		const model = parseSidecar(
@@ -100,13 +100,13 @@ describe('persistSurfacedQuestions — first pass (CREATE the sidecar + set need
 		const {repo, itemPath} = seedBacklogItem('bar');
 		const result = persistSurfacedQuestions({
 			cwd: repo,
-			item: 'slice:bar',
+			item: 'task:bar',
 			itemPath, // work/tasks/todo/bar.md
 			questions: [{question: 'q?'}],
 			env: gitEnv(),
 		});
 		// Path is `<type>-<slug>`, regardless of which lifecycle folder the item rests in.
-		expect(result.sidecarPath).toBe('work/questions/slice-bar.md');
+		expect(result.sidecarPath).toBe('work/questions/task-bar.md');
 	});
 });
 
@@ -114,12 +114,12 @@ describe('persistSurfacedQuestions — append-never-overwrite (re-surface)', () 
 	it('APPENDS qN+1 to an existing sidecar, never mutating an answered entry', () => {
 		const {repo, itemPath} = seedBacklogItem();
 		// Seed a sidecar where q1 is already ANSWERED + needsAnswers true.
-		let model = newSidecar('slice:foo', [{question: 'A?'}]);
+		let model = newSidecar('task:foo', [{question: 'A?'}]);
 		model = {
 			...model,
 			entries: model.entries.map((e) => ({...e, answer: 'answered A'})),
 		};
-		const sidecarPath = 'work/questions/slice-foo.md';
+		const sidecarPath = 'work/questions/task-foo.md';
 		mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
 		writeFileSync(join(repo, sidecarPath), serialiseSidecar(model));
 		writeFileSync(
@@ -134,7 +134,7 @@ describe('persistSurfacedQuestions — append-never-overwrite (re-surface)', () 
 
 		const result = persistSurfacedQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			questions: [{question: 'B (new)?'}],
 			env: gitEnv(),
@@ -152,12 +152,12 @@ describe('persistSurfacedQuestions — append-never-overwrite (re-surface)', () 
 	it('a re-surface flips a previously-ALL-ANSWERED sidecar back to not-all-answered', () => {
 		const {repo, itemPath} = seedBacklogItem();
 		// All entries answered → allAnswered true on disk.
-		let model = newSidecar('slice:foo', [{question: 'A?'}]);
+		let model = newSidecar('task:foo', [{question: 'A?'}]);
 		model = {
 			...model,
 			entries: model.entries.map((e) => ({...e, answer: 'done'})),
 		};
-		const sidecarPath = 'work/questions/slice-foo.md';
+		const sidecarPath = 'work/questions/task-foo.md';
 		mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
 		writeFileSync(join(repo, sidecarPath), serialiseSidecar(model));
 		gitIn(['add', '-A'], repo);
@@ -167,7 +167,7 @@ describe('persistSurfacedQuestions — append-never-overwrite (re-surface)', () 
 
 		persistSurfacedQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			questions: [{question: 'C (new)?'}],
 			env: gitEnv(),
@@ -187,7 +187,7 @@ describe('persistSurfacedQuestions — the empty emit is a clean no-op', () => {
 
 		const result = persistSurfacedQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			questions: [],
 			env: gitEnv(),
@@ -196,7 +196,7 @@ describe('persistSurfacedQuestions — the empty emit is a clean no-op', () => {
 		expect(result.outcome).toBe('nothing');
 		expect(result.commit).toBeUndefined();
 		// No sidecar written; the item body untouched; no commit produced.
-		expect(existsSync(join(repo, 'work', 'questions', 'slice-foo.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'questions', 'task-foo.md'))).toBe(
 			false,
 		);
 		expect(readFileSync(join(repo, itemPath), 'utf8')).toBe(before);
@@ -211,7 +211,7 @@ describe('persistSurfacedQuestions — usage errors', () => {
 		expect(() =>
 			persistSurfacedQuestions({
 				cwd: dir,
-				item: 'slice:foo',
+				item: 'task:foo',
 				itemPath: 'work/tasks/todo/foo.md',
 				questions: [{question: 'q?'}],
 				env: gitEnv(),

@@ -16,8 +16,8 @@ import {
 /** A canonical two-entry sidecar text (one answered, one open). */
 const SAMPLE = [
 	'---',
-	'item: prd:autoslice',
-	'type: prd',
+	'item: brief:autoslice',
+	'type: brief',
 	'slug: autoslice',
 	'allAnswered: false',
 	'---',
@@ -46,8 +46,8 @@ const SAMPLE = [
 describe('parseSidecar', () => {
 	it('parses identity frontmatter and ordered entries', () => {
 		const model = parseSidecar(SAMPLE);
-		expect(model.item).toBe('prd:autoslice');
-		expect(model.type).toBe('prd');
+		expect(model.item).toBe('brief:autoslice');
+		expect(model.type).toBe('brief');
 		expect(model.slug).toBe('autoslice');
 		expect(model.entries.map((e) => e.id)).toEqual(['q1', 'q2']);
 		expect(model.entries[0].question).toBe(
@@ -67,8 +67,8 @@ describe('parseSidecar', () => {
 	it('is tolerant of the human writing only answer: (no answered: line)', () => {
 		const text = [
 			'---',
-			'item: slice:foo',
-			'type: slice',
+			'item: task:foo',
+			'type: task',
 			'slug: foo',
 			'allAnswered: false',
 			'---',
@@ -91,7 +91,7 @@ describe('parseSidecar', () => {
 	});
 
 	it('throws on a missing item: identity', () => {
-		const text = ['---', 'type: slice', 'slug: foo', '---', ''].join('\n');
+		const text = ['---', 'type: task', 'slug: foo', '---', ''].join('\n');
 		expect(() => parseSidecar(text)).toThrow(SidecarParseError);
 	});
 
@@ -142,8 +142,8 @@ describe('serialiseSidecar — round-trip stable + canonical', () => {
 
 	it('normalises answered: true for a non-empty answer with no explicit override', () => {
 		const model: SidecarModel = {
-			item: 'slice:foo',
-			type: 'slice',
+			item: 'task:foo',
+			type: 'task',
 			slug: 'foo',
 			entries: [{id: 'q1', question: 'q?', context: '', answer: 'an answer'}],
 		};
@@ -153,8 +153,8 @@ describe('serialiseSidecar — round-trip stable + canonical', () => {
 
 	it('preserves an explicit answered: false override over a non-empty answer', () => {
 		const model: SidecarModel = {
-			item: 'slice:foo',
-			type: 'slice',
+			item: 'task:foo',
+			type: 'task',
 			slug: 'foo',
 			entries: [
 				{
@@ -208,20 +208,20 @@ describe('the answered predicate (MAINTAINER-RESOLVED §1)', () => {
 
 describe('allAnswered / pendingEntries — derived from entries', () => {
 	it('none answered', () => {
-		const model = newSidecar('slice:foo', [{question: 'a?'}, {question: 'b?'}]);
+		const model = newSidecar('task:foo', [{question: 'a?'}, {question: 'b?'}]);
 		expect(allAnswered(model)).toBe(false);
 		expect(pendingEntries(model).map((e) => e.id)).toEqual(['q1', 'q2']);
 	});
 
 	it('subset answered ⇒ NOT all answered', () => {
-		const model = newSidecar('slice:foo', [{question: 'a?'}, {question: 'b?'}]);
+		const model = newSidecar('task:foo', [{question: 'a?'}, {question: 'b?'}]);
 		model.entries[0].answer = 'yes';
 		expect(allAnswered(model)).toBe(false);
 		expect(pendingEntries(model).map((e) => e.id)).toEqual(['q2']);
 	});
 
 	it('all answered ⇒ allAnswered true', () => {
-		const model = newSidecar('slice:foo', [{question: 'a?'}]);
+		const model = newSidecar('task:foo', [{question: 'a?'}]);
 		model.entries[0].answer = 'yes';
 		expect(allAnswered(model)).toBe(true);
 		expect(pendingEntries(model)).toEqual([]);
@@ -229,8 +229,8 @@ describe('allAnswered / pendingEntries — derived from entries', () => {
 
 	it('an empty sidecar is NOT all-answered (keeps pending⇒NO-OP honest)', () => {
 		const empty: SidecarModel = {
-			item: 'slice:foo',
-			type: 'slice',
+			item: 'task:foo',
+			type: 'task',
 			slug: 'foo',
 			entries: [],
 		};
@@ -240,13 +240,13 @@ describe('allAnswered / pendingEntries — derived from entries', () => {
 
 describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 	it('appends qN+1 off the highest existing id', () => {
-		const model = newSidecar('slice:foo', [{question: 'a?'}]);
+		const model = newSidecar('task:foo', [{question: 'a?'}]);
 		const next = appendQuestions(model, [{question: 'b?'}, {question: 'c?'}]);
 		expect(next.entries.map((e) => e.id)).toEqual(['q1', 'q2', 'q3']);
 	});
 
 	it('never mutates an existing answered entry', () => {
-		const model = newSidecar('slice:foo', [{question: 'a?'}]);
+		const model = newSidecar('task:foo', [{question: 'a?'}]);
 		model.entries[0].answer = 'kept answer';
 		const next = appendQuestions(model, [{question: 'b?'}]);
 		expect(next.entries[0]).toEqual(model.entries[0]);
@@ -256,7 +256,7 @@ describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 	});
 
 	it('appending flips a previously-allAnswered sidecar back to not-all-answered', () => {
-		const model = newSidecar('slice:foo', [{question: 'a?'}]);
+		const model = newSidecar('task:foo', [{question: 'a?'}]);
 		model.entries[0].answer = 'yes';
 		expect(allAnswered(model)).toBe(true);
 		const next = appendQuestions(model, [{question: 'b?'}]);
@@ -266,8 +266,8 @@ describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 	it('ids are NEVER reused even when a middle id is conceptually gone', () => {
 		// Simulate a model whose highest id is q5 (history); append continues at q6.
 		const model: SidecarModel = {
-			item: 'slice:foo',
-			type: 'slice',
+			item: 'task:foo',
+			type: 'task',
 			slug: 'foo',
 			entries: [
 				{id: 'q1', question: 'a', context: '', answer: 'x'},
@@ -280,13 +280,13 @@ describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 });
 
 describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver SoT)', () => {
-	it('prd:<slug> → work/questions/prd-<slug>.md', () => {
-		expect(sidecarPathFor('prd:autoslice')).toBe(
-			'work/questions/prd-autoslice.md',
+	it('brief:<slug> → work/questions/brief-<slug>.md', () => {
+		expect(sidecarPathFor('brief:autoslice')).toBe(
+			'work/questions/brief-autoslice.md',
 		);
 	});
-	it('slice:<slug> → work/questions/slice-<slug>.md', () => {
-		expect(sidecarPathFor('slice:foo')).toBe('work/questions/slice-foo.md');
+	it('task:<slug> → work/questions/task-<slug>.md', () => {
+		expect(sidecarPathFor('task:foo')).toBe('work/questions/task-foo.md');
 	});
 	it('observation:<slug> and obs:<slug> both → observation-<slug>.md', () => {
 		expect(sidecarPathFor('observation:bar')).toBe(
@@ -294,15 +294,15 @@ describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver S
 		);
 		expect(sidecarPathFor('obs:bar')).toBe('work/questions/observation-bar.md');
 	});
-	it('a bare slug resolves to the slice namespace (resolver default)', () => {
-		expect(sidecarPathFor('plain')).toBe('work/questions/slice-plain.md');
+	it('a bare slug resolves to the task namespace (resolver default)', () => {
+		expect(sidecarPathFor('plain')).toBe('work/questions/task-plain.md');
 		expect(resolveSidecarIdentity('plain')).toEqual({
-			type: 'slice',
+			type: 'task',
 			slug: 'plain',
-			item: 'slice:plain',
+			item: 'task:plain',
 		});
 	});
 	it('the `:`→`-` mapping is in the FILENAME only (item keeps the colon)', () => {
-		expect(resolveSidecarIdentity('prd:x').item).toBe('prd:x');
+		expect(resolveSidecarIdentity('brief:x').item).toBe('brief:x');
 	});
 });

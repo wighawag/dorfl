@@ -60,7 +60,7 @@ function seedPrd(
 	fm: {
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
-		sliceAfter?: string[];
+		briefAfter?: string[];
 	} = {},
 ): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
@@ -68,7 +68,7 @@ function seedPrd(
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.sliceAfter) lines.push(`sliceAfter: [${fm.sliceAfter.join(', ')}]`);
+	if (fm.briefAfter) lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
 	lines.push('---', '', '# PRD');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
@@ -76,7 +76,7 @@ function seedPrd(
 /**
  * Seed a SLICED PRD as RESIDENCE in `work/briefs/tasked/` (the source of truth for
  * sliced-ness, slice `prd-sliced-folder-step-a`) — it has left the to-slice pool
- * (`work/briefs/ready/`) and now resolves another PRD's `sliceAfter` by FOLDER residence
+ * (`work/briefs/ready/`) and now resolves another PRD's `briefAfter` by FOLDER residence
  * (the `sliced:` marker was removed in `remove-sliced-marker-step-b`).
  */
 function seedSlicedPrd(slug: string): void {
@@ -136,7 +136,7 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
 		// the PRD dispatches to the `do prd:` path (prefixed arg).
-		expect(args).toEqual(['prd:gamma']);
+		expect(args).toEqual(['brief:gamma']);
 	});
 
 	it('an empty backlog + no sliceable PRD is NOT a failure (exit 0, nothing run)', async () => {
@@ -161,7 +161,7 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		// one eligible slice drains first, then the two sliceable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
+		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
 	});
 
 	it('-n bounds the count (does not over-take)', async () => {
@@ -177,13 +177,13 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 describe('do <a> <b> — explicit multi-arg, in the GIVEN order', () => {
 	it('runs the named items in sequence (no pool/priority), arg passed verbatim', async () => {
 		const {run, args} = recordingRunner();
-		const result = await performDoArgs(['beta', 'slice:alpha', 'prd:gamma'], {
+		const result = await performDoArgs(['beta', 'task:alpha', 'brief:gamma'], {
 			...base(run),
 			config: cfg(),
 		});
 		expect(result.exitCode).toBe(0);
 		// verbatim + in the operator's order (performDo does its own slug resolve).
-		expect(args).toEqual(['beta', 'slice:alpha', 'prd:gamma']);
+		expect(args).toEqual(['beta', 'task:alpha', 'brief:gamma']);
 	});
 
 	it('reports a non-zero exit when one named item fails (first failure surfaces)', async () => {
@@ -226,7 +226,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 			config: cfg({selectionOrder: ['slice', 'build', 'surface', 'triage']}),
 			count: 1,
 		});
-		expect(args).toEqual(['prd:gamma']);
+		expect(args).toEqual(['brief:gamma']);
 	});
 
 	it('the FULL ordering flips with the order (all slices vs all PRDs)', async () => {
@@ -234,7 +234,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 		seedPrd('gamma');
 		const off = recordingRunner();
 		await performDoAuto({...base(off.run), config: cfg(), count: 9});
-		expect(off.args).toEqual(['alpha', 'prd:gamma']);
+		expect(off.args).toEqual(['alpha', 'brief:gamma']);
 
 		const on = recordingRunner();
 		await performDoAuto({
@@ -242,7 +242,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 			config: cfg({selectionOrder: ['slice', 'build', 'surface', 'triage']}),
 			count: 9,
 		});
-		expect(on.args).toEqual(['prd:gamma', 'alpha']);
+		expect(on.args).toEqual(['brief:gamma', 'alpha']);
 	});
 });
 
@@ -259,33 +259,33 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('a humanOnly / needsAnswers PRD is excluded; a sliceAfter-blocked one too', async () => {
+	it('a humanOnly / needsAnswers PRD is excluded; a briefAfter-blocked one too', async () => {
 		seedPrd('human', {humanOnly: true});
 		seedPrd('asks', {needsAnswers: true});
-		seedPrd('beta', {sliceAfter: ['alpha']}); // alpha not sliced
+		seedPrd('beta', {briefAfter: ['alpha']}); // alpha not sliced
 		seedPrd('ready'); // the only sliceable one
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
-		expect(args).toEqual(['prd:ready']);
+		expect(args).toEqual(['brief:ready']);
 	});
 
-	it('a sliceAfter PRD becomes selectable once its blocker resides in prd-sliced/ (folder residence, not done/)', async () => {
+	it('a briefAfter PRD becomes selectable once its blocker resides in prd-sliced/ (folder residence, not done/)', async () => {
 		// beta's blocker alpha is UNSLICED ⇒ beta is excluded (alpha itself is
 		// sliceable: the gate does not exclude an unsliced PRD).
 		seedPrd('alpha');
-		seedPrd('beta', {sliceAfter: ['alpha']});
+		seedPrd('beta', {briefAfter: ['alpha']});
 		const blocked = recordingRunner();
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
-		expect(blocked.args).toEqual(['prd:alpha']);
+		expect(blocked.args).toEqual(['brief:alpha']);
 
 		// Move alpha into `work/briefs/tasked/` (the source of truth for sliced-ness) ⇒
-		// beta's sliceAfter is satisfied (resolved against FOLDER residence) and beta
+		// beta's briefAfter is satisfied (resolved against FOLDER residence) and beta
 		// joins the pool. alpha itself has LEFT the to-slice pool (it now rests in
 		// prd-sliced/), so only beta is selectable.
 		seedSlicedPrd('alpha');
 		const unblocked = recordingRunner();
 		await performDoAuto({...base(unblocked.run), config: cfg(), count: 9});
-		expect(unblocked.args).toEqual(['prd:beta']);
+		expect(unblocked.args).toEqual(['brief:beta']);
 	});
 
 	it('blocked slice is excluded from the slice pool (existing eligibility path)', async () => {

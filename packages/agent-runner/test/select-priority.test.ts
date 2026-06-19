@@ -43,7 +43,7 @@ function prd(slug: string, extra: Partial<PrdCandidate> = {}): PrdCandidate {
 		slug,
 		humanOnly: undefined,
 		needsAnswers: undefined,
-		sliceAfter: [],
+		briefAfter: [],
 		...extra,
 	};
 }
@@ -72,8 +72,8 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 		expect(out).toEqual([]);
 	});
 
-	it('sliceAfter gates against the SLICED markers, not done/', () => {
-		const candidates = [prd('beta', {sliceAfter: ['alpha']})];
+	it('briefAfter gates against the SLICED markers, not done/', () => {
+		const candidates = [prd('beta', {briefAfter: ['alpha']})];
 		// alpha not yet sliced ⇒ beta not sliceable.
 		expect(
 			sliceablePrds({candidates, slicedSlugs: new Set(), autoSlice: true}),
@@ -98,9 +98,7 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 			prds: [prd('p1')],
 			count: 1,
 		});
-		expect(picked).toEqual([
-			{repoPath: '/repo', slug: 'a', namespace: 'slice'},
-		]);
+		expect(picked).toEqual([{repoPath: '/repo', slug: 'a', namespace: 'task'}]);
 	});
 
 	it('auto-pick falls through to a PRD when NO slice is eligible', () => {
@@ -111,7 +109,9 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 			prds: [prd('p1'), prd('p2')],
 			count: 1,
 		});
-		expect(picked).toEqual([{repoPath: '/repo', slug: 'p1', namespace: 'prd'}]);
+		expect(picked).toEqual([
+			{repoPath: '/repo', slug: 'p1', namespace: 'brief'},
+		]);
 	});
 
 	it('orders ALL slices before ANY PRD (drain ready work first)', () => {
@@ -122,10 +122,10 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 			prds: [prd('p1'), prd('p2')],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:a',
-			'slice:b',
-			'prd:p1',
-			'prd:p2',
+			'task:a',
+			'task:b',
+			'brief:p1',
+			'brief:p2',
 		]);
 	});
 
@@ -139,8 +139,8 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 		});
 		// one slice drains, then the first PRD.
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:a',
-			'prd:p1',
+			'task:a',
+			'brief:p1',
 		]);
 	});
 
@@ -174,8 +174,8 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			prds: [prd('p1')],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:a',
-			'prd:p1',
+			'task:a',
+			'brief:p1',
 		]);
 		// And an EXPLICIT `drain` preset gives the same as omitting it.
 		const viaPreset = selectPrioritised({
@@ -196,8 +196,8 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			selectionOrder: ['slice', 'build', 'surface', 'triage'],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'prd:p1',
-			'slice:a',
+			'brief:p1',
+			'task:a',
 		]);
 	});
 
@@ -216,8 +216,8 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			selectionOrder: ['slice', 'build', 'surface', 'triage'],
 			count: 1,
 		});
-		expect(slicesFirst[0]).toMatchObject({namespace: 'slice', slug: 'a'});
-		expect(prdsFirst[0]).toMatchObject({namespace: 'prd', slug: 'p1'});
+		expect(slicesFirst[0]).toMatchObject({namespace: 'task', slug: 'a'});
+		expect(prdsFirst[0]).toMatchObject({namespace: 'brief', slug: 'p1'});
 	});
 
 	it('the `groom` preset puts surface+triage AHEAD of build+slice', () => {
@@ -229,15 +229,15 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			selectionOrder: 'groom',
 			lifecycle: {
 				apply: [],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'brief'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			},
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'prd:su', // surface
+			'brief:su', // surface
 			'observation:tr', // triage
-			'slice:s', // build
-			'prd:p', // slice (PRD)
+			'task:s', // build
+			'brief:p', // slice (PRD)
 		]);
 	});
 
@@ -272,8 +272,8 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			prds: [prd('p1')],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:a',
-			'prd:p1',
+			'task:a',
+			'brief:p1',
 		]);
 		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
 	});
@@ -285,16 +285,16 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			caps: CAPS,
 			prds: [prd('p')],
 			lifecycle: lifecycle({
-				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'brief'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:ap', // apply: PINNED FIRST (consume-always-wins)
-			'slice:s', // build: eligible slice
-			'prd:p', // slice: sliceable PRD
-			'prd:su', // surface
+			'task:ap', // apply: PINNED FIRST (consume-always-wins)
+			'task:s', // build: eligible slice
+			'brief:p', // slice: sliceable PRD
+			'brief:su', // surface
 			'observation:tr', // triage
 		]);
 	});
@@ -307,14 +307,14 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			prds: [],
 			count: 2,
 			lifecycle: lifecycle({
-				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		// apply first (pinned), then the eligible slice (count 2 stops before triage).
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:ap',
-			'slice:s',
+			'task:ap',
+			'task:s',
 		]);
 	});
 
@@ -325,14 +325,14 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			caps: CAPS,
 			prds: [],
 			lifecycle: lifecycle({
-				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'slice'}],
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'task'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:ap', // apply pinned first
-			'slice:su', // surface (drain order)
+			'task:ap', // apply pinned first
+			'task:su', // surface (drain order)
 			'observation:tr', // triage
 		]);
 	});
@@ -345,14 +345,14 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			prds: [prd('p')],
 			selectionOrder: ['slice', 'build', 'surface', 'triage'],
 			lifecycle: lifecycle({
-				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'slice'}],
+				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:ap', // apply STILL first (not orderable)
-			'prd:p', // slice (PRD) flipped ahead of build
-			'slice:s', // build
+			'task:ap', // apply STILL first (not orderable)
+			'brief:p', // slice (PRD) flipped ahead of build
+			'task:s', // build
 			'observation:tr', // triage (still last)
 		]);
 	});
@@ -370,7 +370,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			lifecycle: lifecycle({triage: []}),
 		});
 		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
-		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual(['slice:s']);
+		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual(['task:s']);
 	});
 });
 

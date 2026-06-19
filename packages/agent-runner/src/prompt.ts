@@ -444,7 +444,7 @@ export interface ResolvedSlice {
 	path: string;
 	/** The folder the slice was resolved from (in-progress wins over backlog). */
 	folder: SliceFolder;
-	/** The slice's source PRD slug (frontmatter `prd:`), if any. */
+	/** The slice's source brief slug (frontmatter `brief:`), if any. */
 	prd: string | undefined;
 	/** The extracted `## Prompt` body. */
 	slicePrompt: string;
@@ -566,7 +566,7 @@ export function resolveSlice(
 			);
 		}
 		const fm = parseFrontmatter(content);
-		return {slug, path, folder, prd: fm.prd, slicePrompt};
+		return {slug, path, folder, prd: fm.brief, slicePrompt};
 	}
 	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
 	throw new PromptError(`no slice '${slug}' found in ${searched}`);

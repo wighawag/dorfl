@@ -1724,7 +1724,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do slice:<slug> | do prd:<slug> (the slicing path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws SLICES-FIRST then PRDs-to-slice by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do brief:<slug> (the slicing path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then BRIEFS-to-slice by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
 		// EXTENSIBLE argument grammar (the three do-* slices grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -1733,7 +1733,7 @@ export function buildProgram(): Command {
 		// for the auto-pick form. `do` stays SEQUENTIAL (parallelism is `run`).
 		.argument(
 			'[slugs...]',
-			'the item(s) to do: bare (= the slice), slice:<slug>, or prd:<slug> (slice the PRD). Zero args = auto-pick; multiple = do them in sequence.',
+			'the item(s) to do: bare (= the task), task:<slug>, or brief:<slug> (slice the BRIEF). Zero args = auto-pick; multiple = do them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2246,11 +2246,11 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the slice) | advance prd:<slug> (the PRD slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoSlice, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (BRIEF advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance brief:<slug> (the BRIEF slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoSlice, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
-			'the item(s) to advance: bare (= the slice), slice:<slug>, prd:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
+			'the item(s) to advance: bare (= the task), task:<slug>, brief:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2275,7 +2275,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--surface-blockers',
-			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a slice/PRD carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance prd:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
+			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a slice/PRD carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance brief:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
 		)
 		.option(
 			'--no-surface-blockers',
@@ -2994,7 +2994,7 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const how = result.deletedRemoteBranch
-				? ` (--reset: deleted the remote ${workBranchRef('slice', slug)} branch; next claim starts fresh)`
+				? ` (--reset: deleted the remote ${workBranchRef('task', slug)} branch; next claim starts fresh)`
 				: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});
@@ -3013,7 +3013,7 @@ export function buildProgram(): Command {
 		.command('promote [item]')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a slice `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a PRD `work/pre-prd/<slug>.md → work/prd/<slug>.md`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts `slice:<slug>` / `prd:<slug>` / a bare `<slug>` (= slice). With NO argument, LISTS every promotable item (the slices in pre-backlog/ + the PRDs in pre-prd/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.',
+			'Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a slice `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a PRD `work/pre-prd/<slug>.md → work/prd/<slug>.md`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts `task:<slug>` / `brief:<slug>` / a bare `<slug>` (= task). With NO argument, LISTS every promotable item (the slices in pre-backlog/ + the PRDs in pre-prd/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3058,14 +3058,14 @@ export function buildProgram(): Command {
 			const parsed = parseSlugArg(rawItem);
 			if (parsed.explicit === 'observation') {
 				console.error(
-					`error: promote takes a slice or PRD, not an observation ('${rawItem}'). Observations have no agent pool.`,
+					`error: promote takes a task or brief, not an observation ('${rawItem}'). Observations have no agent pool.`,
 				);
 				process.exit(1);
 			}
-			const namespace = parsed.explicit === 'prd' ? 'prd' : 'slice';
+			const namespace = parsed.explicit === 'brief' ? 'brief' : 'task';
 			const slug = parsed.slug;
 			const result =
-				namespace === 'prd'
+				namespace === 'brief'
 					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
@@ -3073,12 +3073,12 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const dest =
-				namespace === 'prd'
+				namespace === 'brief'
 					? workFolderPrefix('prd')
 					: workFolderPrefix('backlog');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
-					namespace === 'prd' ? 'auto-sliceable' : 'claimable'
+					namespace === 'brief' ? 'auto-sliceable' : 'claimable'
 				}.`,
 			);
 		});
@@ -3106,7 +3106,7 @@ export function buildProgram(): Command {
 		.command('release-lock <item>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/agent-runner/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/slice/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `slice:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` (= slice). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
+			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/agent-runner/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/slice/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `brief:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(

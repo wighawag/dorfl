@@ -41,10 +41,10 @@ describe('do command grammar (do-autopick widens the shared block)', () => {
 		expect(flags.some((f) => f.startsWith('--propose'))).toBe(true);
 	});
 
-	it('describes the auto-pick / multi-arg / -n forms + slices-first priority', () => {
+	it('describes the auto-pick / multi-arg / -n forms + tasks-first priority', () => {
 		const desc = doCommand().description();
 		expect(desc).toMatch(/auto-pick/i);
 		expect(desc).toMatch(/in sequence/i);
-		expect(desc).toMatch(/slices-first/i);
+		expect(desc).toMatch(/tasks-first/i);
 	});
 });

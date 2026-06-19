@@ -108,7 +108,7 @@ export async function performDoAuto(
 		slug: prd.slug,
 		humanOnly: prd.humanOnly,
 		needsAnswers: prd.needsAnswers,
-		sliceAfter: prd.sliceAfter,
+		briefAfter: prd.briefAfter,
 	}));
 	const eligiblePrds = sliceablePrds({
 		candidates: prdCandidates,
@@ -152,7 +152,7 @@ export async function performDoArgs(
 		slug: arg,
 		// The arg is passed VERBATIM to `performDo` (it does its own slug
 		// resolution); the namespace is irrelevant for explicit args.
-		namespace: 'slice' as const,
+		namespace: 'task' as const,
 	}));
 	return runSelectedInSequence(selected, options, run, {verbatimArg: true});
 }
@@ -160,7 +160,7 @@ export async function performDoArgs(
 /**
  * Run a list of selected items through the existing `do` pipeline, SEQUENTIALLY,
  * threading the shared options to each. For the pool path the `do` arg encodes
- * the namespace (`prd:<slug>` for a selected PRD, bare slug for a slice); for the
+ * the namespace (`brief:<slug>` for a selected brief, bare slug for a task); for the
  * explicit-arg path the caller's raw arg is passed verbatim.
  */
 async function runSelectedInSequence(
@@ -174,8 +174,8 @@ async function runSelectedInSequence(
 	for (const item of selected) {
 		const arg = mode.verbatimArg
 			? item.slug
-			: item.namespace === 'prd'
-				? `prd:${item.slug}`
+			: item.namespace === 'brief'
+				? `brief:${item.slug}`
 				: item.slug;
 		const result = await run({...shared, arg});
 		results.push(result);

@@ -72,7 +72,7 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unifie
 	it('takes ONLY the unified lock (action: advance); the retired marker is never written', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			acquireUnified: true,
@@ -81,11 +81,11 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unifie
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
 		// The legacy `work/advancing/<entry>.md` marker is RETIRED — never written.
-		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(false);
+		expect(advancingMarkerOnArbiter(repo, 'task-alpha')).toBe(false);
 		// The unified per-item lock (action: advance) is the SOLE hold.
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -99,14 +99,14 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unifie
 	it('releaseAdvancingLock (releaseUnified) clears the unified lock', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			acquireUnified: true,
 			env: gitEnv(),
 		});
 		const released = await releaseAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			releaseUnified: true,
@@ -114,15 +114,15 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unifie
 		});
 		expect(released.exitCode).toBe(0);
 		expect(released.outcome).toBe('released');
-		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(advancingMarkerOnArbiter(repo, 'task-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 
 	it('a dry-run takes NO unified lock and writes nothing', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			acquireUnified: true,
@@ -130,8 +130,8 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unifie
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
-		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
+		expect(advancingMarkerOnArbiter(repo, 'task-alpha')).toBe(false);
 	});
 });
 
@@ -141,7 +141,7 @@ describe('advancing acquire — BUILD/SLICE rung (no acquireUnified) is a NO-OP 
 		// Default (acquireUnified omitted) is the build/slice-rung behaviour: a NO-OP
 		// `acquired` (the inner `do`'s claim/slice lock is the sole exclusion point).
 		const result = await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -149,8 +149,8 @@ describe('advancing acquire — BUILD/SLICE rung (no acquireUnified) is a NO-OP 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
 		// No marker (retired) and NO unified lock at the advance layer for a build rung.
-		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
+		expect(advancingMarkerOnArbiter(repo, 'task-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 });
@@ -162,7 +162,7 @@ describe('a unified lock LOST makes the tree-less advancing acquire lose definit
 		// CAS alone would admit an advancer, only the held lock gates it.
 		const a = raceClone(seeded, 'a');
 		const held = await acquireItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			action: 'implement',
 			cwd: a,
 			arbiter: ARBITER,
@@ -174,7 +174,7 @@ describe('a unified lock LOST makes the tree-less advancing acquire lose definit
 		// create-only lock race definitively, no retry, and NO marker written.
 		const b = raceClone(seeded, 'b');
 		const second = await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: b,
 			arbiter: ARBITER,
 			acquireUnified: true,
@@ -183,12 +183,12 @@ describe('a unified lock LOST makes the tree-less advancing acquire lose definit
 		expect(second.exitCode).toBe(2);
 		expect(second.outcome).toBe('lost');
 		// No marker is written by b (retired) — the held lock is the sole gate.
-		expect(advancingMarkerOnArbiter(b, 'slice-alpha')).toBe(false);
+		expect(advancingMarkerOnArbiter(b, 'task-alpha')).toBe(false);
 		// The lock is still held by principal a exactly once (b did not steal it).
-		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['slice-alpha']);
+		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['task-alpha']);
 
 		await releaseItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: a,
 			arbiter: ARBITER,
 			env: racerEnv('a'),
@@ -201,14 +201,14 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const adv = raceClone(seeded, 'adv');
 		const advance = await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: adv,
 			arbiter: ARBITER,
 			acquireUnified: true,
 			env: racerEnv('adv'),
 		});
 		expect(advance.outcome).toBe('acquired');
-		expect(lockRefOnArbiter(seeded.arbiter, 'slice-alpha')).toBe(true);
+		expect(lockRefOnArbiter(seeded.arbiter, 'task-alpha')).toBe(true);
 
 		// A claim of the SAME item now loses the create-only lock CAS (no advisory
 		// check, no TOCTOU) — the advance hold IS the gate.
@@ -224,7 +224,7 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		expect(existsOnArbiterMain(clm, 'in-progress', 'alpha')).toBe(false);
 		// The advance hold is unmoved (advance action, exactly once).
 		const entry = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: clm,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -236,14 +236,14 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['beta']});
 		const adv = raceClone(seeded, 'adv');
 		const advance = await acquireAdvancingLock({
-			item: 'prd:beta',
+			item: 'brief:beta',
 			cwd: adv,
 			arbiter: ARBITER,
 			acquireUnified: true,
 			env: racerEnv('adv'),
 		});
 		expect(advance.outcome).toBe('acquired');
-		expect(lockRefOnArbiter(seeded.arbiter, 'prd-beta')).toBe(true);
+		expect(lockRefOnArbiter(seeded.arbiter, 'brief-beta')).toBe(true);
 
 		// A slicing of the SAME PRD now loses the create-only lock CAS.
 		const slc = raceClone(seeded, 'slc');
@@ -258,7 +258,7 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		// The PRD never moved to slicing/; the advance hold is the single winner.
 		expect(existsOnArbiterMain(slc, 'backlog', 'beta')).toBe(false);
 		const entry = await readItemLock({
-			item: 'prd:beta',
+			item: 'brief:beta',
 			cwd: slc,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -272,14 +272,14 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		const b = raceClone(seeded, 'b');
 		const [ra, rb] = await Promise.all([
 			acquireAdvancingLock({
-				item: 'slice:solo',
+				item: 'task:solo',
 				cwd: a,
 				arbiter: ARBITER,
 				acquireUnified: true,
 				env: racerEnv('a'),
 			}),
 			acquireAdvancingLock({
-				item: 'slice:solo',
+				item: 'task:solo',
 				cwd: b,
 				arbiter: ARBITER,
 				acquireUnified: true,
@@ -291,8 +291,8 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		expect(won).toHaveLength(1);
 		expect(lost).toHaveLength(1);
 		// The unified lock is the sole gate: held exactly once, no marker.
-		expect(advancingMarkerOnArbiter(a, 'slice-solo')).toBe(false);
-		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['slice-solo']);
+		expect(advancingMarkerOnArbiter(a, 'task-solo')).toBe(false);
+		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['task-solo']);
 	});
 });
 
@@ -307,9 +307,9 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		let heldDuringExec = false;
 		let actionDuringExec: string | undefined;
 		const gate: SurfaceGate = async (input) => {
-			heldDuringExec = lockRefOnArbiter(arbiter, 'slice-foo');
+			heldDuringExec = lockRefOnArbiter(arbiter, 'task-foo');
 			const entry = await readItemLock({
-				item: 'slice:foo',
+				item: 'task:foo',
 				cwd: repo,
 				arbiter: ARBITER,
 				env: gitEnv(),
@@ -332,7 +332,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		expect(heldDuringExec).toBe(true);
 		expect(actionDuringExec).toBe('advance');
 		// …and is RELEASED after the tick (the item returns to rest, no orphaned lock).
-		expect(lockRefOnArbiter(arbiter, 'slice-foo')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-foo')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 
@@ -350,7 +350,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 			arbiter: ARBITER,
 			executor: {
 				buildSlice: async (input) => {
-					heldDuringExec = lockRefOnArbiter(arbiter, 'slice-bar');
+					heldDuringExec = lockRefOnArbiter(arbiter, 'task-bar');
 					return {
 						exitCode: 0,
 						outcome: 'advanced',
@@ -374,7 +374,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		expect(heldDuringExec).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 		// No marker at all (retired); the build rung takes no advance-layer hold.
-		expect(advancingMarkerOnArbiter(repo, 'slice-bar')).toBe(false);
+		expect(advancingMarkerOnArbiter(repo, 'task-bar')).toBe(false);
 	});
 });
 
@@ -382,14 +382,14 @@ describe('a tree-less advance hold can reach the stuck state', () => {
 	it('mark-stuck moves the advance hold to advance/stuck carrying its reason', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireAdvancingLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			acquireUnified: true,
 			env: gitEnv(),
 		});
 		const stuck = await markStuckItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			reason: 'surface rung needs a human decision',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -397,7 +397,7 @@ describe('a tree-less advance hold can reach the stuck state', () => {
 		});
 		expect(stuck.outcome).toBe('transitioned');
 		const entry = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

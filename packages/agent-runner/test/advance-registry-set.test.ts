@@ -360,7 +360,7 @@ describe('advanceRegistrySet — a lifecycle rung fires under a gate-on batch', 
 			});
 
 			const emit: SurfaceEmit = {
-				item: `slice:${blockedSlug}`,
+				item: `task:${blockedSlug}`,
 				questions: [{question: 'which approach?'}],
 			};
 			const surfaceGate: SurfaceGate = async () => emit;
@@ -387,7 +387,7 @@ describe('advanceRegistrySet — a lifecycle rung fires under a gate-on batch', 
 			);
 			expect(
 				existsSync(
-					join(treelessCwd, 'work', 'questions', `slice-${blockedSlug}.md`),
+					join(treelessCwd, 'work', 'questions', `task-${blockedSlug}.md`),
 				),
 			).toBe(true);
 			// No build worktree was materialised for the surfaced (non-build) item: the
@@ -418,7 +418,7 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 			});
 
 			const surfaceGate: SurfaceGate = async () => ({
-				item: `slice:${blockedSlug}`,
+				item: `task:${blockedSlug}`,
 				questions: [{question: 'which approach?'}],
 			});
 
@@ -436,7 +436,7 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 			// on the ARBITER's `main` (ff-pushed from the treeless cwd), so another
 			// machine / a `scan` sees them — NOT lost when the cwd is next re-cloned.
 			expect(
-				pathOnArbiterMain(seed.repo, `work/questions/slice-${blockedSlug}.md`),
+				pathOnArbiterMain(seed.repo, `work/questions/task-${blockedSlug}.md`),
 			).toBe(true);
 		},
 	);
@@ -463,9 +463,9 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 			expect(advanceRegistrySetSummary(result).advanced).toBe(1);
 			expect(existsOnArbiterMain(seed.repo, 'done', 'calm1')).toBe(true);
 			// NOTHING tree-less was published: no question sidecar on the arbiter.
-			expect(
-				pathOnArbiterMain(seed.repo, 'work/questions/slice-calm1.md'),
-			).toBe(false);
+			expect(pathOnArbiterMain(seed.repo, 'work/questions/task-calm1.md')).toBe(
+				false,
+			);
 		},
 	);
 
@@ -508,7 +508,7 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 			// `main` and pushed it.
 			expect(existsOnArbiterMain(seed.repo, 'done', buildSlug)).toBe(true);
 			expect(
-				pathOnArbiterMain(seed.repo, `work/questions/slice-${blockedSlug}.md`),
+				pathOnArbiterMain(seed.repo, `work/questions/task-${blockedSlug}.md`),
 			).toBe(true);
 		},
 	);

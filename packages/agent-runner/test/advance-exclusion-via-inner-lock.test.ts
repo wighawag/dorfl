@@ -56,7 +56,7 @@ afterEach(() => {
 
 /**
  * A `doDriver` whose body IS the inner `do`'s lock point: it runs the REAL
- * `performClaim` for the resolved slice (the create-only `slice-<slug>` ref CAS),
+ * `performClaim` for the resolved slice (the create-only `task-<slug>` ref CAS),
  * then maps the claim outcome onto a {@link DoResult}. This is the faithful inner
  * exclusion — `performDo` itself begins with this very claim — without the rest of
  * the build pipeline (gate/agent/integrate), so the test is deterministic.
@@ -66,7 +66,7 @@ function claimOnlyDoDriver(
 	label: string,
 ): (options: DoOptions) => Promise<DoResult> {
 	return async (options: DoOptions): Promise<DoResult> => {
-		const slug = options.arg.replace(/^slice:/, '');
+		const slug = options.arg.replace(/^task:/, '');
 		const claim = await performClaim({
 			slug,
 			cwd,
@@ -92,7 +92,7 @@ function claimOnlyDoDriver(
 /** Drive a real build-slice advance whose inner `do` is the claim-only driver. */
 function advanceBuildSlice(cwd: string, slug: string, label: string) {
 	return performAdvance({
-		arg: `slice:${slug}`,
+		arg: `task:${slug}`,
 		cwd,
 		arbiter: ARBITER,
 		// `doOptions` present so the build-slice rung ORCHESTRATES a `do`; the inner
@@ -111,7 +111,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		// A DIFFERENT principal holds the slice's implement lock (a concurrent claim).
 		const holder = raceClone(seeded, 'holder');
 		const held = await acquireItemLock({
-			item: 'slice:solo',
+			item: 'task:solo',
 			action: 'implement',
 			cwd: holder,
 			arbiter: ARBITER,
@@ -120,7 +120,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		expect(held.outcome).toBe('acquired');
 
 		// The advance build-slice rung orchestrates its inner `do` → performClaim,
-		// which loses the SAME `slice-solo` create-only ref CAS. The advance layer took
+		// which loses the SAME `task-solo` create-only ref CAS. The advance layer took
 		// NO hold of its own; the inner claim lock is the sole gate.
 		const adv = await advanceBuildSlice(
 			raceClone(seeded, 'adv'),
@@ -133,18 +133,18 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		// The held lock is UNMOVED: still the holder's `implement` claim, exactly once.
 		// No `advance` hold was ever taken at the advance layer.
 		const entry = await readItemLock({
-			item: 'slice:solo',
+			item: 'task:solo',
 			cwd: holder,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(entry?.action).toBe('implement');
 		expect(await listItemLocks(holder, ARBITER, gitEnv())).toEqual([
-			'slice-solo',
+			'task-solo',
 		]);
 
 		await releaseItemLock({
-			item: 'slice:solo',
+			item: 'task:solo',
 			cwd: holder,
 			arbiter: ARBITER,
 			env: racerEnv('holder'),
@@ -157,7 +157,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		const b = raceClone(seeded, 'clm');
 
 		// The advance build-slice rung's inner claim competes with a direct claim for
-		// the SAME `slice-solo` ref. Exactly one wins (the inner claim lock arbitrates;
+		// the SAME `task-solo` ref. Exactly one wins (the inner claim lock arbitrates;
 		// the advance layer takes no hold).
 		const [adv, clm] = await Promise.all([
 			advanceBuildSlice(a, 'solo', 'adv'),
@@ -176,9 +176,9 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		// The single held lock is an `implement` claim (the inner `do`'s claim OR the
 		// direct claim) — never an `advance` hold from the advance layer.
 		const locks = await listItemLocks(a, ARBITER, gitEnv());
-		expect(locks).toEqual(['slice-solo']);
+		expect(locks).toEqual(['task-solo']);
 		const entry = await readItemLock({
-			item: 'slice:solo',
+			item: 'task:solo',
 			cwd: a,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -195,7 +195,7 @@ describe('advance-layer TOCTOU resolves to one winner at the inner claim lock', 
 
 		// Both ticks classify the item as build-slice (pre-lock, the brief TOCTOU
 		// window) and both orchestrate an inner `do` → performClaim. The inner claim
-		// lock resolves it: exactly one wins the `slice-solo` ref CAS.
+		// lock resolves it: exactly one wins the `task-solo` ref CAS.
 		const [ra, rb] = await Promise.all([
 			advanceBuildSlice(a, 'solo', 'a'),
 			advanceBuildSlice(b, 'solo', 'b'),
@@ -207,6 +207,6 @@ describe('advance-layer TOCTOU resolves to one winner at the inner claim lock', 
 		expect(lost).toHaveLength(1);
 		// Exactly one `implement` claim is held (the inner-lock winner); no `advance`
 		// hold, no second claim.
-		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['slice-solo']);
+		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['task-solo']);
 	});
 });

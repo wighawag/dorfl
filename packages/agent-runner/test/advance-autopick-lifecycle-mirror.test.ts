@@ -80,9 +80,9 @@ const WORK = {
 		'settled.md': obs({slug: 'settled', triaged: 'keep'}),
 	},
 	questions: {
-		'slice-answered-slice.md': sidecar('slice:answered-slice', true),
-		'slice-half-slice.md': sidecar('slice:half-slice', false), // pending
-		'prd-answered-prd.md': sidecar('prd:answered-prd', true),
+		'task-answered-slice.md': sidecar('task:answered-slice', true),
+		'task-half-slice.md': sidecar('task:half-slice', false), // pending
+		'brief-answered-prd.md': sidecar('brief:answered-prd', true),
 	},
 };
 
@@ -101,7 +101,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['prd:answered-prd', 'slice:answered-slice']);
+		).toEqual(['brief:answered-prd', 'task:answered-slice']);
 	});
 
 	it('INTERIM born-OFF default: triage + surface EMPTY, apply still present (consume always-on)', async () => {
@@ -116,7 +116,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		expect(result.lifecycle.surface).toEqual([]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['prd:answered-prd', 'slice:answered-slice']);
+		).toEqual(['brief:answered-prd', 'task:answered-slice']);
 	});
 });
 
@@ -170,7 +170,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 			},
 			observations: {'triage-me.md': obs({slug: 'triage-me'})},
 			questions: {
-				'slice-answered-slice.md': sidecar('slice:answered-slice', true),
+				'task-answered-slice.md': sidecar('task:answered-slice', true),
 			},
 		});
 		const pool = await scanMirrorPool({
@@ -190,9 +190,9 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 			lifecycle: pool.lifecycle,
 		});
 		expect(selected.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'slice:answered-slice', // apply: PINNED FIRST (consume-always-wins)
-			'slice:build-me', // build
-			'slice:blocked-slice', // surface
+			'task:answered-slice', // apply: PINNED FIRST (consume-always-wins)
+			'task:build-me', // build
+			'task:blocked-slice', // surface
 			'observation:triage-me', // triage
 		]);
 	});

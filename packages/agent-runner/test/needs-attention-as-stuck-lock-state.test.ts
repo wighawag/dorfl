@@ -62,7 +62,7 @@ function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
 /**
  * Stand a repo up exactly as the runner leaves it just before a stuck outcome: a
  * slice CLAIMED (which, under the interim dual-write, ALSO acquired the per-item
- * `slice:<slug>` lock `active`) and onboarded onto `work/slice-<slug>` off the
+ * `slice:<slug>` lock `active`) and onboarded onto `work/task-<slug>` off the
  * freshly-pushed main, with the agent's uncommitted edits in the tree.
  */
 async function claimAndBranch(
@@ -79,7 +79,7 @@ async function claimAndBranch(
 	expect(claim.exitCode).toBe(0);
 	// Claim acquired the lock (interim dual-write) — held `active` for `implement`.
 	const held = await readItemLock({
-		item: `slice:${slug}`,
+		item: `task:${slug}`,
 		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
@@ -87,7 +87,7 @@ async function claimAndBranch(
 	expect(held?.state).toBe('active');
 	expect(held?.action).toBe('implement');
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -114,7 +114,7 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 
 		// The held lock is now the SOLE stuck record: stuck + reason + questions.
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -145,7 +145,7 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 
 		const lock = await readItemLock({
-			item: 'slice:beta',
+			item: 'task:beta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -163,7 +163,7 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 		const repo = seeded.repo;
 		// Sit on a work branch with NO lock held (no performClaim).
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 
 		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
@@ -178,7 +178,7 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 		// (mark-stuck is `active → stuck` only, not `absent → stuck`).
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
 		const lock = await readItemLock({
-			item: 'slice:gamma',
+			item: 'task:gamma',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -202,7 +202,7 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'delta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
 		const lock = await readItemLock({
-			item: 'slice:delta',
+			item: 'task:delta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -240,7 +240,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		// Mark the still-held lock STUCK directly (the lock half of a rebase-conflict
 		// bounce of a just-completed item — the state-machine `active → stuck` amend).
 		const marked = await markStuckItemLock({
-			item: 'slice:epsilon',
+			item: 'task:epsilon',
 			reason: 'rebase onto arbiter/main conflicted (aborted)',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -252,7 +252,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		// is untouched by the lock amend (it touches only the lock ref) — the two
 		// substrates legitimately disagree, no corruption.
 		const lock = await readItemLock({
-			item: 'slice:epsilon',
+			item: 'task:epsilon',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -293,7 +293,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 
 		// The held lock is stuck (the human's attention)…
 		const lock = await readItemLock({
-			item: 'slice:zeta',
+			item: 'task:zeta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -326,7 +326,7 @@ async function seedLockOnMirrorOrigin(
 	gitIn(['fetch', '-q', 'arbiter'], clone);
 	// The identity NAMESPACE is `slice:` (what the bounce surfaces); the lock ACTION
 	// axis (`implement`/`slice`/`advance`) is a SEPARATE field passed to acquire.
-	const item = `slice:${slug}`;
+	const item = `task:${slug}`;
 	const acq = await acquireItemLock({
 		item,
 		action: opts.action ?? 'implement',
@@ -337,7 +337,7 @@ async function seedLockOnMirrorOrigin(
 	expect(acq.outcome).toBe('acquired');
 	if (opts.stuck !== undefined) {
 		const marked = await markStuckItemLock({
-			item, // = `slice:${slug}`
+			item, // = `task:${slug}`
 			reason: opts.stuck,
 			cwd: clone,
 			arbiter: 'arbiter',
@@ -374,15 +374,15 @@ describe('status ADDITIONALLY reads the lock refs (held + stuck + reasons)', () 
 		expect(entries).toHaveLength(2);
 		const stuck = entries.find((e) => e.state === 'stuck');
 		const active = entries.find((e) => e.state === 'active');
-		expect(active?.entry).toBe('slice-held');
-		expect(stuck?.entry).toBe('slice-broken');
+		expect(active?.entry).toBe('task-held');
+		expect(stuck?.entry).toBe('task-broken');
 		expect(stuck?.reason).toMatch(/acceptance gate failed/);
 
 		const out = formatStatus(report);
 		expect(out).toMatch(/In-flight locks/);
-		expect(out).toMatch(/slice-held/);
+		expect(out).toMatch(/task-held/);
 		expect(out).toMatch(/in-progress/);
-		expect(out).toMatch(/slice-broken/);
+		expect(out).toMatch(/task-broken/);
 		expect(out).toMatch(/needs-attention/);
 		expect(out).toMatch(/acceptance gate failed/);
 		expect(out).toMatch(/in-flight lock\(s\)/);
@@ -414,7 +414,7 @@ describe('scan ADDITIONALLY reads the lock refs (surface only; selection stays o
 		const repo = report.repos.find((r) => r.path === mirrorPath);
 		expect(repo).toBeDefined();
 		// The lock surface lists the held entry…
-		expect(repo?.lockHeld?.map((e) => e.entry)).toContain('slice-busy');
+		expect(repo?.lockHeld?.map((e) => e.entry)).toContain('task-busy');
 		// …and the OFFLINE selection still reads the backlog pool, with the held slug
 		// subtracted (eligibility stays offline on `main`).
 		const slugs = repo?.items.map((i) => i.slug) ?? [];

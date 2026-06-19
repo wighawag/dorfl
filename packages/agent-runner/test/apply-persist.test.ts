@@ -80,7 +80,7 @@ function seed(opts: {
 }): {repo: string; itemPath: string; sidecarPath: string} {
 	const slug = opts.slug ?? 'foo';
 	const folder = opts.folder ?? 'backlog';
-	const type = opts.type ?? 'slice';
+	const type = opts.type ?? 'task';
 	const repo = join(scratch.root, 'project');
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
@@ -136,7 +136,7 @@ describe('applyAnsweredQuestions — resolve fully (the default, all answered)',
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -168,7 +168,7 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			appendQuestions: [{question: 'follow-up?'}],
 			env: gitEnv(),
@@ -205,7 +205,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -224,7 +224,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'foo',
 			folder: 'prd',
-			type: 'prd',
+			type: 'brief',
 			questions: ['ship it?'],
 			answers: ['no'],
 			dispositions: ['dropped'],
@@ -232,7 +232,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'prd:foo',
+			item: 'brief:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -287,7 +287,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -334,7 +334,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		});
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -384,7 +384,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 		});
 		applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -401,7 +401,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 		expect(() =>
 			applyAnsweredQuestions({
 				cwd: repo,
-				item: 'slice:foo',
+				item: 'task:foo',
 				itemPath,
 				env: gitEnv(),
 			}),
@@ -421,7 +421,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 		expect(() =>
 			applyAnsweredQuestions({
 				cwd: repo,
-				item: 'slice:foo',
+				item: 'task:foo',
 				itemPath: 'work/tasks/todo/foo.md',
 				env: gitEnv(),
 			}),
@@ -435,7 +435,7 @@ describe('applyAnsweredQuestions — only the repo it is pointed at is touched',
 		const before = gitIn(['rev-parse', 'HEAD'], repo).trim();
 		applyAnsweredQuestions({
 			cwd: repo,
-			item: 'slice:foo',
+			item: 'task:foo',
 			itemPath,
 			env: gitEnv(),
 		});

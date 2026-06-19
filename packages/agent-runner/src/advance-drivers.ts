@@ -174,7 +174,7 @@ export async function performAdvanceAuto(
 		slug: prd.slug,
 		humanOnly: prd.humanOnly,
 		needsAnswers: prd.needsAnswers,
-		sliceAfter: prd.sliceAfter,
+		briefAfter: prd.briefAfter,
 	}));
 	const eligiblePrds = sliceablePrds({
 		candidates: prdCandidates,
@@ -237,8 +237,8 @@ export async function performAdvanceArgs(
 		repoPath: options.cwd,
 		slug: arg,
 		// The arg is passed VERBATIM to the tick (it does its own slug resolution
-		// across slice/prd/observation); the namespace is irrelevant for explicit args.
-		namespace: 'slice' as const,
+		// across task/brief/observation); the namespace is irrelevant for explicit args.
+		namespace: 'task' as const,
 	}));
 	return runSelectedInSequence(selected, options, run, {verbatimArg: true});
 }
@@ -353,8 +353,8 @@ function argForSelectedItem(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	if (item.namespace === 'prd') {
-		return `prd:${item.slug}`;
+	if (item.namespace === 'brief') {
+		return `brief:${item.slug}`;
 	}
 	return item.slug;
 }

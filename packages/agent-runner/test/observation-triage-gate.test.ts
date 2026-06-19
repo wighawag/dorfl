@@ -327,7 +327,7 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 		const {gate: triage} = spyTriage({
 			auto: true,
 			kind: 'map',
-			existing: 'slice:existing-thing',
+			existing: 'task:existing-thing',
 			reason: 'covered by an existing slice',
 		});
 		const disposed: AutoDispositionOptions[] = [];
@@ -354,7 +354,7 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 		expect(result.exitCode).toBe(0);
 		expect(disposed).toHaveLength(1);
 		expect(disposed[0].kind).toBe('map');
-		expect(disposed[0].existing).toBe('slice:existing-thing');
+		expect(disposed[0].existing).toBe('task:existing-thing');
 	});
 });
 
@@ -389,7 +389,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 	}
 
 	function seedAnsweredSidecar(slug: string): void {
-		const item = `slice:${slug}`;
+		const item = `task:${slug}`;
 		const model = newSidecar(item, [{question: 'pick one?'}]);
 		model.entries[0].answer = 'yes';
 		const abs = join(repo, sidecarPathFor(item));

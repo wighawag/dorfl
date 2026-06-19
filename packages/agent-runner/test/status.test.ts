@@ -46,7 +46,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
 	return {
 		slug: 'feat',
 		repoKey: 'github-com/wighawag/agent-runner',
-		branch: 'work/slice-feat',
+		branch: 'work/task-feat',
 		startedAt: '2026-06-04T07:00:00.000Z',
 		state: 'running',
 		harness: {adapter: 'null', pid: 1234},
@@ -147,7 +147,7 @@ describe('status — grouping active vs failed/retained', () => {
 			record({
 				slug: 'feat',
 				repoKey: 'github-com/wighawag/agent-runner',
-				branch: 'work/slice-feat',
+				branch: 'work/task-feat',
 				startedAt: '2026-06-04T07:00:00.000Z',
 				state: 'running',
 				harness: {adapter: 'stub', pid: 7},
@@ -160,7 +160,7 @@ describe('status — grouping active vs failed/retained', () => {
 		const job = report.active[0];
 		expect(job.slug).toBe('feat');
 		expect(job.repo).toBe('github-com/wighawag/agent-runner');
-		expect(job.branch).toBe('work/slice-feat');
+		expect(job.branch).toBe('work/task-feat');
 		expect(job.startedAt).toBe('2026-06-04T07:00:00.000Z');
 	});
 
@@ -298,7 +298,7 @@ describe('formatStatus — rendering', () => {
 				{
 					slug: 'feat',
 					repo: 'github-com/wighawag/agent-runner',
-					branch: 'work/slice-feat',
+					branch: 'work/task-feat',
 					startedAt: '2026-06-04T07:00:00.000Z',
 					state: 'running',
 					alive: true,
@@ -309,7 +309,7 @@ describe('formatStatus — rendering', () => {
 				{
 					slug: 'stuck',
 					repo: 'github-com/wighawag/agent-runner',
-					branch: 'work/slice-stuck',
+					branch: 'work/task-stuck',
 					startedAt: '2026-06-04T06:00:00.000Z',
 					state: 'needs-attention',
 					alive: false,
@@ -320,7 +320,7 @@ describe('formatStatus — rendering', () => {
 		});
 		expect(out).toMatch(/Active/i);
 		expect(out).toMatch(/feat/);
-		expect(out).toMatch(/work\/slice-feat/);
+		expect(out).toMatch(/work\/task-feat/);
 		// The stuck job's reason is surfaced.
 		expect(out).toMatch(/acceptance gate failed/);
 		// Distinct from scan: it speaks of jobs, not the backlog queue.
@@ -341,7 +341,7 @@ describe('formatStatus — rendering', () => {
 				{
 					slug: 'crashed',
 					repo: 'r',
-					branch: 'work/slice-crashed',
+					branch: 'work/task-crashed',
 					startedAt: '2026-06-04T06:00:00.000Z',
 					state: 'running',
 					alive: false,

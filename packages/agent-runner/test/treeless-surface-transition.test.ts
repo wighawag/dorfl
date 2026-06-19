@@ -39,7 +39,7 @@ const ARBITER = 'arbiter';
 /**
  * Drive a slice to the AFTER-COMMIT continue state on the arbiter ONLY: claim it
  * (the per-item lock is held active; the body RESTS in `backlog/`) and push its
- * kept `work/slice-<slug>` branch (the already-committed, recoverable work), then
+ * kept `work/task-<slug>` branch (the already-committed, recoverable work), then
  * leave the cwd working tree on the ORIGINAL seed `main`.
  */
 async function claimedOnArbiterOnly(
@@ -55,11 +55,11 @@ async function claimedOnArbiterOnly(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'committed.txt'), 'already committed work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'already committed work'], repo);
-	gitIn(['push', '-q', ARBITER, `work/slice-${slug}:work/slice-${slug}`], repo);
+	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
 	// Leave the cwd on the original seed main.
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['checkout', '-q', '-f', 'main'], repo);
@@ -112,7 +112,7 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		expect(result.moved).toBe(true);
 
 		const lock = await readItemLock({
-			item: 'slice:gamma',
+			item: 'task:gamma',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -152,11 +152,11 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		expect(stuckLockOnArbiter(repo, 'beta')).toBe(true);
 	});
 
-	it('the recoverable kept work/slice-<slug> branch is UNCHANGED on the arbiter', async () => {
+	it('the recoverable kept work/task-<slug> branch is UNCHANGED on the arbiter', async () => {
 		const {repo} = await claimedOnArbiterOnly('eta');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const branchBefore = gitIn(
-			['rev-parse', `${ARBITER}/work/slice-eta`],
+			['rev-parse', `${ARBITER}/work/task-eta`],
 			repo,
 		).trim();
 
@@ -172,7 +172,7 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		// The kept branch (the recoverable artifact) is untouched.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const branchAfter = gitIn(
-			['rev-parse', `${ARBITER}/work/slice-eta`],
+			['rev-parse', `${ARBITER}/work/task-eta`],
 			repo,
 		).trim();
 		expect(branchAfter).toBe(branchBefore);

@@ -31,7 +31,7 @@ function writeObservation(repo: string, slug: string, triaged?: string): void {
 /** Write the identity-keyed sidecar `work/questions/<type>-<slug>.md`, answered or pending. */
 function writeSidecar(
 	repo: string,
-	namespace: 'slice' | 'prd',
+	namespace: 'task' | 'brief',
 	slug: string,
 	answered: boolean,
 ): void {
@@ -383,11 +383,11 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 		expect(prd!.eligibility.eligible).toBe(true);
 	});
 
-	it('gates humanOnly / needsAnswers / unsatisfied sliceAfter PRDs out of the sliceable pool', () => {
+	it('gates humanOnly / needsAnswers / unsatisfied briefAfter PRDs out of the sliceable pool', () => {
 		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		writePrd('repo', 'prd', 'human.md', {slug: 'human', humanOnly: 'true'});
 		writePrd('repo', 'prd', 'asks.md', {slug: 'asks', needsAnswers: 'true'});
-		writePrd('repo', 'prd', 'after.md', {slug: 'after', sliceAfter: '[dep]'});
+		writePrd('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoSlice: true}),
@@ -425,8 +425,8 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 		).toBe(true);
 	});
 
-	it('a sliceAfter dep already in work/briefs/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
-		writePrd('repo', 'prd', 'after.md', {slug: 'after', sliceAfter: '[dep]'});
+	it('a briefAfter dep already in work/briefs/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
+		writePrd('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
 		writePrd('repo', 'prd-sliced', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
@@ -651,8 +651,8 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			mergeConfig({surfaceBlockers: true}),
 		);
 		const surface = report.repos[0].lifecycle.surface;
-		expect(surface).toContainEqual({namespace: 'slice', slug: 'blocked'});
-		expect(surface).toContainEqual({namespace: 'prd', slug: 'blocked-prd'});
+		expect(surface).toContainEqual({namespace: 'task', slug: 'blocked'});
+		expect(surface).toContainEqual({namespace: 'brief', slug: 'blocked-prd'});
 	});
 
 	it('APPLY is ALWAYS-ON: an answered sidecar applies even with BOTH create-gates calm', () => {
@@ -661,11 +661,11 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		writeSidecar('repo', 'slice', 'answered', true);
+		writeSidecar('repo', 'task', 'answered', true);
 		// Calm defaults — apply must still surface (consume is never gated).
 		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
 		const lc = report.repos[0].lifecycle;
-		expect(lc.apply).toContainEqual({namespace: 'slice', slug: 'answered'});
+		expect(lc.apply).toContainEqual({namespace: 'task', slug: 'answered'});
 		expect(lc.surface).toEqual([]); // an answered item is apply, never surface
 	});
 
@@ -675,7 +675,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		writeSidecar('repo', 'slice', 'pending', false); // exists, not all-answered
+		writeSidecar('repo', 'task', 'pending', false); // exists, not all-answered
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({surfaceBlockers: true}),
@@ -700,7 +700,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		writeSidecar('repo', 'slice', 'apply-it', true);
+		writeSidecar('repo', 'task', 'apply-it', true);
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({
@@ -718,11 +718,11 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 		expect(eligibleSlugs).not.toContain('apply-it');
 		// They live ONLY in their lifecycle pools.
 		expect(repo.lifecycle.surface).toContainEqual({
-			namespace: 'slice',
+			namespace: 'task',
 			slug: 'surface-it',
 		});
 		expect(repo.lifecycle.apply).toContainEqual({
-			namespace: 'slice',
+			namespace: 'task',
 			slug: 'apply-it',
 		});
 		// The observation lives ONLY in triage (its own obs: namespace).
@@ -770,7 +770,7 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
 		const lc = report.repos[0].lifecycle;
 		expect(lc.triage.map((t) => t.slug)).toEqual(['obs-a']);
-		expect(lc.surface).toContainEqual({namespace: 'slice', slug: 'blocked'});
+		expect(lc.surface).toContainEqual({namespace: 'task', slug: 'blocked'});
 	});
 
 	it('APPLY is ALWAYS-ON on the mirror: an answered sidecar applies with calm gates', async () => {
@@ -779,9 +779,9 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 				'answered.md': slice({slug: 'answered', needsAnswers: 'true'}),
 			},
 			questions: {
-				'slice-answered.md': serialiseSidecar(
+				'task-answered.md': serialiseSidecar(
 					(() => {
-						const m = newSidecar('slice:answered', [{question: 'pick?'}]);
+						const m = newSidecar('task:answered', [{question: 'pick?'}]);
 						m.entries[0].answer = 'yes';
 						return m;
 					})(),
@@ -790,7 +790,7 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 		});
 		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
 		expect(report.repos[0].lifecycle.apply).toContainEqual({
-			namespace: 'slice',
+			namespace: 'task',
 			slug: 'answered',
 		});
 	});

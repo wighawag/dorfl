@@ -115,13 +115,13 @@ export interface LedgerPrdItem {
 	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
 	needsAnswers: boolean | undefined;
 	/** PRD-only cross-PRD order: PRD slugs that must already be SLICED first. */
-	sliceAfter: string[];
+	briefAfter: string[];
 }
 
 /**
  * The PRD pool of ONE repo, resolved from `work/prd/` (the auto-slice candidate
  * source). Carries every PRD's gate axes PLUS the set of already-SLICED slugs so
- * the selection layer can resolve each PRD's `sliceAfter` against `work/prd-sliced/`
+ * the selection layer can resolve each PRD's `briefAfter` against `work/prd-sliced/`
  * RESIDENCE (slice `prd-sliced-folder-step-a` / PRD `slicing-coherence` US #9): the
  * FOLDER is the source of truth, like `done/` for slices (the auto-slicer reads
  * folder-residence; the `sliced:` marker was removed in
@@ -132,7 +132,7 @@ export interface LedgerPrdItem {
 export interface LedgerPrdPool {
 	/** Every PRD in `work/prd/`, sorted by slug. */
 	prds: LedgerPrdItem[];
-	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `sliceAfter`). */
+	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
 	slicedSlugs: Set<string>;
 }
 
@@ -314,9 +314,9 @@ export interface LedgerReadStrategy {
 	/**
 	 * Enumerate the repo's PRD pool from `work/prd/` (the auto-slice candidate
 	 * source for the `do`/`run` "slices-first then PRDs to slice" priority, ADR
-	 * §3). Returns every PRD's gate axes (`humanOnly`/`needsAnswers`/`sliceAfter`)
+	 * §3). Returns every PRD's gate axes (`humanOnly`/`needsAnswers`/`briefAfter`)
 	 * PLUS the set of already-SLICED slugs so the selection layer can resolve
-	 * `sliceAfter` against `work/prd-sliced/` residence (the FOLDER is the source of
+	 * `briefAfter` against `work/prd-sliced/` residence (the FOLDER is the source of
 	 * truth) and apply `autoslice-gate`'s
 	 * predicate. This is the SAME PRD read path {@link resolvePrdExistence} uses,
 	 * widened from a single-slug existence check to a full enumeration — NOT a
@@ -444,10 +444,10 @@ function findPrdFileBySlug(
  * priority's PRD source) — the SAME PRD read path {@link findPrdFileBySlug} uses,
  * widened from a single-slug existence check to a full enumeration. Each PRD's
  * slug is resolved from frontmatter `slug:` (falling back to the filename) and
- * its gate axes (`humanOnly`/`needsAnswers`/`sliceAfter`) parsed. The
+ * its gate axes (`humanOnly`/`needsAnswers`/`briefAfter`) parsed. The
  * already-SLICED set is RESIDENCE in `work/prd-sliced/` (slice
  * `prd-sliced-folder-step-a` / PRD `slicing-coherence` US #9): the FOLDER is the
- * source of truth (the build-machine `done/` analogue), so `sliceAfter` resolves
+ * source of truth (the build-machine `done/` analogue), so `briefAfter` resolves
  * against `prd-sliced/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
  * matches `slicing.ts`'s `readSlicedSlugs`. Missing folders read as empty.
@@ -463,7 +463,7 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
-			sliceAfter: fm.sliceAfter,
+			briefAfter: fm.briefAfter,
 		});
 	}
 	prds.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -632,7 +632,7 @@ async function readPrdPoolFromTree(
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
-			sliceAfter: fm.sliceAfter,
+			briefAfter: fm.briefAfter,
 		});
 	}
 	prds.sort((a, b) => a.slug.localeCompare(b.slug));

@@ -43,7 +43,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		writeSlice('done', 'unrelated-done.md', {slug: 'unrelated-done'});
 		writeSlice('done', 'other-prd.md', {
 			slug: 'other-prd',
-			prd: 'some-other-prd',
+			brief: 'some-other-prd',
 		});
 		writeSlice('backlog', 'standalone.md', {slug: 'standalone'});
 
@@ -55,9 +55,9 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 
 	it('NOT complete when ≥1 prd:<slug> slice exists but some are NOT in work/tasks/done/', () => {
 		// Three slices link the PRD; two are done, one is still in backlog.
-		writeSlice('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
-		writeSlice('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
-		writeSlice('backlog', 'c.md', {slug: 'c', prd: 'issue-intake'});
+		writeSlice('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
+		writeSlice('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
+		writeSlice('backlog', 'c.md', {slug: 'c', brief: 'issue-intake'});
 
 		const result = isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'});
 
@@ -67,8 +67,8 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 	});
 
 	it('NOT complete when a matching slice is in in-progress or needs-attention (not done)', () => {
-		writeSlice('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
-		writeSlice('in-progress', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		writeSlice('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
+		writeSlice('in-progress', 'b.md', {slug: 'b', brief: 'issue-intake'});
 
 		expect(
 			isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
@@ -79,7 +79,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 			recursive: true,
 			force: true,
 		});
-		writeSlice('needs-attention', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		writeSlice('needs-attention', 'b.md', {slug: 'b', brief: 'issue-intake'});
 
 		expect(
 			isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
@@ -87,12 +87,12 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 	});
 
 	it('COMPLETE when ≥1 prd:<slug> slice exists and ALL are in work/tasks/done/', () => {
-		writeSlice('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
-		writeSlice('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		writeSlice('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
+		writeSlice('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
 		// An unrelated, not-done slice for a different PRD must not block completion.
 		writeSlice('backlog', 'elsewhere.md', {
 			slug: 'elsewhere',
-			prd: 'other-prd',
+			brief: 'other-prd',
 		});
 
 		const result = isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'});
@@ -103,7 +103,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 	});
 
 	it('COMPLETE with a single done slice (≥1 is enough)', () => {
-		writeSlice('done', 'only.md', {slug: 'only', prd: 'issue-intake'});
+		writeSlice('done', 'only.md', {slug: 'only', brief: 'issue-intake'});
 
 		const result = isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'});
 
@@ -115,9 +115,9 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		// Frontmatter slug wins; filename fallback when no slug.
 		writeSlice('done', 'on-disk-name.md', {
 			slug: 'real-slug',
-			prd: 'issue-intake',
+			brief: 'issue-intake',
 		});
-		writeSlice('done', 'filename-fallback.md', {prd: 'issue-intake'});
+		writeSlice('done', 'filename-fallback.md', {brief: 'issue-intake'});
 
 		const result = isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'});
 

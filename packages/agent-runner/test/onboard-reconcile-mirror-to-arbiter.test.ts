@@ -51,7 +51,7 @@ afterEach(() => {
 
 /**
  * Drive a slice to needs-attention with a prior attempt's commit on
- * `work/slice-<slug>` PUSHED to the arbiter (the kept-branch artifact a
+ * `work/task-<slug>` PUSHED to the arbiter (the kept-branch artifact a
  * `requeue --reset` is meant to discard).
  */
 async function stuckButNeedsAttention(
@@ -67,11 +67,11 @@ async function stuckButNeedsAttention(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
-	gitIn(['push', '-q', ARBITER, `work/slice-${slug}:work/slice-${slug}`], repo);
+	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
 	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: repo,
 		slug,
@@ -121,7 +121,7 @@ async function rerouteToBacklogOnArbiter(
 	// folder move). The real return-to-pool (`returnToBacklog`) just RELEASES the
 	// per-item lock, so the item becomes LEGITIMATELY re-claimable.
 	await releaseItemLock({
-		item: `slice:${slug}`,
+		item: `task:${slug}`,
 		cwd: mover,
 		arbiter: ARBITER,
 		env: gitEnv(),
@@ -135,7 +135,7 @@ async function rerouteToBacklogOnArbiter(
 describe('requeue --reset is WRITE-THROUGH (local tracking ref deleted FIRST)', () => {
 	it("removes the LOCAL tracking ref refs/remotes/<arbiter>/work/<slug> (not just the local HEAD — today's specific miss)", async () => {
 		const {repo} = await stuckButNeedsAttention('alpha');
-		const trackingRef = `refs/remotes/${ARBITER}/work/slice-alpha`;
+		const trackingRef = `refs/remotes/${ARBITER}/work/task-alpha`;
 		expect(localRef(repo, trackingRef)).not.toBe('');
 
 		const result = await returnToBacklog({
@@ -152,12 +152,12 @@ describe('requeue --reset is WRITE-THROUGH (local tracking ref deleted FIRST)', 
 		// from the stale tracking ref.)
 		expect(localRef(repo, trackingRef)).toBe('');
 		// And the local HEAD is gone too.
-		expect(localRef(repo, 'refs/heads/work/slice-alpha')).toBe('');
+		expect(localRef(repo, 'refs/heads/work/task-alpha')).toBe('');
 	});
 
 	it('when the arbiter delete FAILS, the local state is BEHIND (recoverable on fetch), not AHEAD (stale-continue)', async () => {
 		const {seeded, repo} = await stuckButNeedsAttention('beta');
-		const trackingRef = `refs/remotes/${ARBITER}/work/slice-beta`;
+		const trackingRef = `refs/remotes/${ARBITER}/work/task-beta`;
 		expect(localRef(repo, trackingRef)).not.toBe('');
 
 		// Break the arbiter remote URL so `git push --delete` fails (the local
@@ -202,7 +202,7 @@ describe('requeue --reset is WRITE-THROUGH (local tracking ref deleted FIRST)', 
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		expect(arbiterHasBranch(seeded, 'work/slice-gamma')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/task-gamma')).toBe(false);
 
 		// Re-`do` in THIS SAME checkout (where the stale tracking ref previously
 		// would have driven the bug). The next claim must start FRESH — the prior
@@ -228,7 +228,7 @@ describe('continue-detection is ARBITER-authoritative (in-place clone path)', ()
 
 		// THIRD-machine clone, the live in-place shape: it has fetched the kept
 		// branch (so its tracking ref + objects are local), `fetch.prune` is
-		// UNSET (the default), and it has no local HEAD `work/slice-delta`.
+		// UNSET (the default), and it has no local HEAD `work/task-delta`.
 		// Clone NOW — before the cross-machine delete — so the fetch brings the
 		// kept branch + objects into the third machine's local store.
 		const third = seeded.clone('third-machine');
@@ -236,23 +236,17 @@ describe('continue-detection is ARBITER-authoritative (in-place clone path)', ()
 			run('git', ['config', '--get', 'fetch.prune'], third, {env: gitEnv()})
 				.status,
 		).not.toBe(0);
-		const trackingRef = `refs/remotes/${ARBITER}/work/slice-delta`;
+		const trackingRef = `refs/remotes/${ARBITER}/work/task-delta`;
 		expect(localRef(third, trackingRef)).not.toBe('');
-		expect(localRef(third, 'refs/heads/work/slice-delta')).toBe('');
+		expect(localRef(third, 'refs/heads/work/task-delta')).toBe('');
 
 		// Cross-machine delete: a DIFFERENT machine deletes the arbiter branch.
 		const otherMachine = seeded.clone('cross-machine-deleter');
 		gitIn(
-			[
-				'push',
-				'-q',
-				`file://${seeded.arbiter}`,
-				'--delete',
-				'work/slice-delta',
-			],
+			['push', '-q', `file://${seeded.arbiter}`, '--delete', 'work/task-delta'],
 			otherMachine,
 		);
-		expect(arbiterHasBranch(seeded, 'work/slice-delta')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/task-delta')).toBe(false);
 
 		// The third machine still holds the STALE tracking ref — a plain `git
 		// fetch` does NOT prune (verified: `fetch.prune` unset, the live shape).
@@ -267,8 +261,8 @@ describe('continue-detection is ARBITER-authoritative (in-place clone path)', ()
 			branchAheadOfArbiter({
 				cwd: third,
 				arbiterRemote: ARBITER,
-				branch: 'work/slice-delta',
-				branchRef: `${ARBITER}/work/slice-delta`,
+				branch: 'work/task-delta',
+				branchRef: `${ARBITER}/work/task-delta`,
 				mainRef: `${ARBITER}/main`,
 				env: gitEnv(),
 			}),
@@ -317,11 +311,11 @@ describe('continue-detection is ARBITER-authoritative (bare hub-mirror path)', (
 				'-q',
 				`file://${seeded.arbiter}`,
 				'--delete',
-				'work/slice-epsilon',
+				'work/task-epsilon',
 			],
 			otherMachine,
 		);
-		expect(arbiterHasBranch(seeded, 'work/slice-epsilon')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/task-epsilon')).toBe(false);
 
 		// Plant the bare-mirror in the live ORPHAN shape: a
 		// `refs/remotes/origin/work/<slug>` ref in the namespace NO
@@ -329,7 +323,7 @@ describe('continue-detection is ARBITER-authoritative (bare hub-mirror path)', (
 		// refs in the slice observation).
 		run(
 			'git',
-			['update-ref', 'refs/remotes/origin/work/slice-epsilon', oldTip],
+			['update-ref', 'refs/remotes/origin/work/task-epsilon', oldTip],
 			mirrorPath,
 			{env: gitEnv()},
 		);
@@ -337,11 +331,11 @@ describe('continue-detection is ARBITER-authoritative (bare hub-mirror path)', (
 		// VERIFY a plain `remote prune` is NOT what we rely on: it is a NO-OP on
 		// the bare mirror's `refs/remotes/origin/*` namespace (no
 		// `remote.origin.fetch` refspec).
-		expect(localRef(mirrorPath, 'refs/remotes/origin/work/slice-epsilon')).toBe(
+		expect(localRef(mirrorPath, 'refs/remotes/origin/work/task-epsilon')).toBe(
 			oldTip,
 		);
 		run('git', ['remote', 'prune', 'origin'], mirrorPath, {env: gitEnv()});
-		expect(localRef(mirrorPath, 'refs/remotes/origin/work/slice-epsilon')).toBe(
+		expect(localRef(mirrorPath, 'refs/remotes/origin/work/task-epsilon')).toBe(
 			oldTip,
 		); // PROVES `remote prune` is a no-op here.
 
@@ -420,15 +414,15 @@ describe('write-through ordering also applies at the merged-branch reaper (`gc -
 		const seeded = seedRepoWithArbiter(scratch.root, ['theta']);
 		const repo = seeded.repo;
 
-		// Build a `work/slice-theta` branch and FAST-FORWARD merge it into main
+		// Build a `work/task-theta` branch and FAST-FORWARD merge it into main
 		// on the arbiter (so it is provably an ancestor of `<arbiter>/main`).
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-theta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-theta', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'merged.txt'), 'merged work\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'merged work'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/slice-theta:work/slice-theta'], repo);
-		gitIn(['push', '-q', ARBITER, 'work/slice-theta:main'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/task-theta:work/task-theta'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/task-theta:main'], repo);
 
 		// Materialise the local tracking ref by fetching explicitly.
 		gitIn(
@@ -436,12 +430,12 @@ describe('write-through ordering also applies at the merged-branch reaper (`gc -
 				'fetch',
 				'-q',
 				ARBITER,
-				'+refs/heads/work/slice-theta:refs/remotes/arbiter/work/slice-theta',
+				'+refs/heads/work/task-theta:refs/remotes/arbiter/work/task-theta',
 				'+refs/heads/main:refs/remotes/arbiter/main',
 			],
 			repo,
 		);
-		const trackingRef = 'refs/remotes/arbiter/work/slice-theta';
+		const trackingRef = 'refs/remotes/arbiter/work/task-theta';
 		expect(localRef(repo, trackingRef)).not.toBe('');
 
 		// Sweep — the branch is provably merged, so it is reaped.
@@ -450,9 +444,9 @@ describe('write-through ordering also applies at the merged-branch reaper (`gc -
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(result.reaped.map((r) => r.branch)).toContain('work/slice-theta');
+		expect(result.reaped.map((r) => r.branch)).toContain('work/task-theta');
 		// LOCAL tracking ref is gone (write-through), arbiter branch is gone.
 		expect(localRef(repo, trackingRef)).toBe('');
-		expect(arbiterHasBranch(seeded, 'work/slice-theta')).toBe(false);
+		expect(arbiterHasBranch(seeded, 'work/task-theta')).toBe(false);
 	});
 });

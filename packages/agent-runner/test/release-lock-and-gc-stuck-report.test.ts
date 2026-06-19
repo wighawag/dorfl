@@ -92,26 +92,26 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 		// Plant the lock by running the normal acquire path — the shape a crashed
 		// build/slice/advance leaves behind (a held ref with no matching release).
 		const acq = await acquireItemLock({
-			item: 'slice:stuck',
+			item: 'task:stuck',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(acq.outcome).toBe('acquired');
-		expect(lockRefOnArbiter(arbiter, 'slice-stuck')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-stuck')).toBe(true);
 
 		// The human-invoked release names + clears the lock (deleting the ref).
 		const rel = await releaseItemLock({
-			item: 'slice:stuck',
+			item: 'task:stuck',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(rel.outcome).toBe('released');
-		expect(rel.entry).toBe('slice-stuck');
+		expect(rel.entry).toBe('task-stuck');
 		// SELF-CLEANING: release DELETED the ref (the lock set is now empty).
-		expect(lockRefOnArbiter(arbiter, 'slice-stuck')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-stuck')).toBe(false);
 
 		// The item itself was NEVER moved — the borrow is a lock, not a transition.
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
@@ -127,14 +127,14 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 	it('is IDEMPOTENT: a re-run on an already-cleared lock is not-held (exit-0 "nothing to clear")', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['twice']);
 		await acquireItemLock({
-			item: 'slice:twice',
+			item: 'task:twice',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		const first = await releaseItemLock({
-			item: 'slice:twice',
+			item: 'task:twice',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -143,20 +143,20 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 		// The second release finds the ref already absent — a clean idempotent
 		// no-op the CLI maps to exit-0 "all locks released, recoverable".
 		const second = await releaseItemLock({
-			item: 'slice:twice',
+			item: 'task:twice',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(second.outcome).toBe('not-held');
-		expect(second.entry).toBe('slice-twice');
+		expect(second.entry).toBe('task-twice');
 	});
 
 	it('the suggested item form round-trips through the identity seam (copy-pasteable hint)', () => {
 		// The report suggests `release-lock <item>`; the item form must be the SAME
 		// the lock API accepts (the inverse of lockEntryFor for the known namespaces).
-		expect(itemFromLockEntry('slice-foo')).toBe('slice:foo');
-		expect(itemFromLockEntry('prd-bar')).toBe('prd:bar');
+		expect(itemFromLockEntry('task-foo')).toBe('task:foo');
+		expect(itemFromLockEntry('brief-bar')).toBe('brief:bar');
 		expect(itemFromLockEntry('observation-baz')).toBe('observation:baz');
 	});
 });
@@ -169,7 +169,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		]);
 		// One active (in-progress) lock and one stuck (needs-attention) lock.
 		await acquireItemLock({
-			item: 'slice:building',
+			item: 'task:building',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -177,7 +177,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 			env: gitEnv(),
 		});
 		await acquireItemLock({
-			item: 'slice:jammed',
+			item: 'task:jammed',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -185,7 +185,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 			env: gitEnv(),
 		});
 		const stuck = await markStuckItemLock({
-			item: 'slice:jammed',
+			item: 'task:jammed',
 			reason: 'gate failed twice',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -195,22 +195,20 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 
 		const report = await reportItemLocks(repo, ARBITER, gitEnv());
 		expect(report.locks.map((l) => l.lock.entry).sort()).toEqual([
-			'slice-building',
-			'slice-jammed',
+			'task-building',
+			'task-jammed',
 		]);
-		const jammed = report.locks.find((l) => l.lock.entry === 'slice-jammed');
+		const jammed = report.locks.find((l) => l.lock.entry === 'task-jammed');
 		expect(jammed?.lock.state).toBe('stuck');
 		expect(jammed?.lock.reason).toBe('gate failed twice');
 		expect(jammed?.lock.holder).toBe('bob');
-		const building = report.locks.find(
-			(l) => l.lock.entry === 'slice-building',
-		);
+		const building = report.locks.find((l) => l.lock.entry === 'task-building');
 		expect(building?.lock.state).toBe('active');
 		expect(building?.lock.holder).toBe('alice');
 
 		// CRITICAL: the report did NOT clear anything (no auto-sweep, no heartbeat).
-		expect(lockRefOnArbiter(arbiter, 'slice-building')).toBe(true);
-		expect(lockRefOnArbiter(arbiter, 'slice-jammed')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-building')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-jammed')).toBe(true);
 
 		const lines = formatItemLockReport(report);
 		const text = lines.join('\n');
@@ -219,7 +217,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		expect(text).toMatch(/holder: bob/);
 		expect(text).toMatch(/reason: gate failed twice/);
 		// The pointer names the canonical item form (copy-pasteable).
-		expect(text).toMatch(/agent-runner release-lock slice:jammed/);
+		expect(text).toMatch(/agent-runner release-lock task:jammed/);
 		expect(text).toMatch(/never --force/);
 	});
 
@@ -233,7 +231,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 	it('classifies a held + non-terminal lock as in-flight (left untouched)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['live']);
 		await acquireItemLock({
-			item: 'slice:live',
+			item: 'task:live',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -242,13 +240,13 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		const report = await reportItemLocks(repo, ARBITER, gitEnv());
 		expect(report.locks).toHaveLength(1);
 		expect(report.locks[0].reconcile).toBe('kept-in-flight');
-		expect(lockRefOnArbiter(arbiter, 'slice-live')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-live')).toBe(true);
 	});
 
 	it('wires reconcile (read-only): a STALE-active lock over a terminal-on-main item is reported "reconcilable" but NOT cleared', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['done-ish']);
 		await acquireItemLock({
-			item: 'slice:done-ish',
+			item: 'task:done-ish',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -261,7 +259,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		// The read-only classifier names it as stale (cleared-stale-eligible) but
 		// MUST NOT clear it (the report's no-auto-sweep contract).
 		const verdict = await classifyItemLockAgainstMain({
-			item: 'slice:done-ish',
+			item: 'task:done-ish',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -269,13 +267,13 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		expect(verdict.outcome).toBe('cleared-stale');
 		expect(verdict.terminalOnMain).toBe(true);
 		// The lock is STILL held — classification did not delete the ref.
-		expect(lockRefOnArbiter(arbiter, 'slice-done-ish')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-done-ish')).toBe(true);
 
 		const report = await reportItemLocks(repo, ARBITER, gitEnv());
 		expect(report.locks).toHaveLength(1);
 		expect(report.locks[0].reconcile).toBe('cleared-stale');
 		// Reported, not swept.
-		expect(lockRefOnArbiter(arbiter, 'slice-done-ish')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-done-ish')).toBe(true);
 		const text = formatItemLockReport(report).join('\n');
 		expect(text).toMatch(/STALE/);
 		expect(text).toMatch(/NOT auto-cleared/);
@@ -284,14 +282,14 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 	it('a STUCK lock over a terminal-on-main item is kept for human attention (done+stuck co-exist)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['bounced']);
 		await acquireItemLock({
-			item: 'slice:bounced',
+			item: 'task:bounced',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		await markStuckItemLock({
-			item: 'slice:bounced',
+			item: 'task:bounced',
 			reason: 'rebase-conflict bounce of a just-completed item',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -303,7 +301,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		expect(report.locks).toHaveLength(1);
 		expect(report.locks[0].reconcile).toBe('kept-stuck');
 		// Never cleared by the report.
-		expect(lockRefOnArbiter(arbiter, 'slice-bounced')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(true);
 	});
 });
 
@@ -316,7 +314,7 @@ describe('gc --ledger EXIT scoping — fail loud only on the ATTENTION verdicts'
 	it('a healthy in-flight (active, non-terminal) lock does NOT need attention (gc exits 0)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['live']);
 		await acquireItemLock({
-			item: 'slice:live',
+			item: 'task:live',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -331,7 +329,7 @@ describe('gc --ledger EXIT scoping — fail loud only on the ATTENTION verdicts'
 	it('a STALE-active lock over a terminal-on-main item NEEDS attention (gc exits 1)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['orphan']);
 		await acquireItemLock({
-			item: 'slice:orphan',
+			item: 'task:orphan',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -346,14 +344,14 @@ describe('gc --ledger EXIT scoping — fail loud only on the ATTENTION verdicts'
 	it('a STUCK lock over a terminal-on-main item NEEDS attention (gc exits 1)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck-term']);
 		await acquireItemLock({
-			item: 'slice:stuck-term',
+			item: 'task:stuck-term',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		await markStuckItemLock({
-			item: 'slice:stuck-term',
+			item: 'task:stuck-term',
 			reason: 'rebase-conflict bounce',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -385,7 +383,7 @@ describe('absent lock ref = "no locks held" ([]) — deletion is recoverable', (
 	it('deleting the lock ref(s) leaves the work safe on main (the item never moved)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['recoverable']);
 		await acquireItemLock({
-			item: 'slice:recoverable',
+			item: 'task:recoverable',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -393,7 +391,7 @@ describe('absent lock ref = "no locks held" ([]) — deletion is recoverable', (
 		});
 		// Delete the lock ref (the accidental-deletion / release scenario).
 		await releaseItemLock({
-			item: 'slice:recoverable',
+			item: 'task:recoverable',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -417,7 +415,7 @@ describe('vanished-own-lock — a held runner detects the missing ref and aborts
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['midbuild']);
 		// The runner acquires + HOLDS the lock (in-flight build).
 		const acq = await acquireItemLock({
-			item: 'slice:midbuild',
+			item: 'task:midbuild',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -428,44 +426,44 @@ describe('vanished-own-lock — a held runner detects the missing ref and aborts
 		// Mid-build, someone else clears the lock out from under us (a human
 		// `release-lock`, or a recovery/gc) — our own ref VANISHES.
 		await releaseItemLock({
-			item: 'slice:midbuild',
+			item: 'task:midbuild',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lockRefOnArbiter(arbiter, 'slice-midbuild')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-midbuild')).toBe(false);
 
 		// The held runner's guarded release DETECTS the missing ref and reports
 		// `vanished` (an abort / needs-attention signal), NOT a silent clean
 		// `released` — its hold was lost mid-build, so the exclusion it relied on
 		// was not in force.
 		const rel = await releaseHeldItemLock({
-			item: 'slice:midbuild',
+			item: 'task:midbuild',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(rel.outcome).toBe('vanished');
-		expect(rel.entry).toBe('slice-midbuild');
+		expect(rel.entry).toBe('task-midbuild');
 		expect(rel.message).toMatch(/VANISHED/);
 	});
 
 	it('a held runner whose lock is still present releases cleanly (the happy path)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['cleanfinish']);
 		await acquireItemLock({
-			item: 'slice:cleanfinish',
+			item: 'task:cleanfinish',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		const rel = await releaseHeldItemLock({
-			item: 'slice:cleanfinish',
+			item: 'task:cleanfinish',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(rel.outcome).toBe('released');
-		expect(lockRefOnArbiter(arbiter, 'slice-cleanfinish')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-cleanfinish')).toBe(false);
 	});
 });

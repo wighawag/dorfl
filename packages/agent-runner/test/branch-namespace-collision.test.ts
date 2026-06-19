@@ -49,9 +49,9 @@ describe('branch namespace — a same-slug slice and PRD never collide', () => {
 	it('claim, onboard, and gc all agree on the namespaced ref (slice ≠ prd)', async () => {
 		// A slug that exists as BOTH a backlog slice AND a PRD (the collision case
 		// advance-loop made first-class). Distinct branch refs by construction.
-		const sliceRef = workBranchRef('slice', 'dup');
-		const prdRef = workBranchRef('prd', 'dup');
-		const intakeSliceRef = workBranchRef('slice', 'dup', {producer: 'intake'});
+		const sliceRef = workBranchRef('task', 'dup');
+		const prdRef = workBranchRef('brief', 'dup');
+		const intakeSliceRef = workBranchRef('task', 'dup', {producer: 'intake'});
 		expect(new Set([sliceRef, prdRef, intakeSliceRef]).size).toBe(3);
 
 		// Claim the slice + onboard in-place: the branch is the SLICE ref, carrying
@@ -67,7 +67,7 @@ describe('branch namespace — a same-slug slice and PRD never collide', () => {
 
 		const tree = inPlaceStrategy({checkout: repo, arbiter: ARBITER}).prepare({
 			slug: 'dup',
-			type: 'slice',
+			type: 'task',
 			claimCommit: claim.claimCommit,
 			env: gitEnv(),
 		});
@@ -82,12 +82,12 @@ describe('branch namespace — a same-slug slice and PRD never collide', () => {
 });
 
 describe('intake then do slice:<slug> on the same slug + checkout — no collision', () => {
-	it('intake leaves work/intake-slice-<slug>; the later build lands on work/slice-<slug> and COMPLETES (no "nothing to complete")', async () => {
+	it('intake leaves work/intake-task-<slug>; the later build lands on work/task-<slug> and COMPLETES (no "nothing to complete")', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const slug = 'add-quiet-flag';
 
 		// 1. A real intake (merge) that creates the backlog slice. Its onboarding
-		//    branch is the INTAKE-produced `work/intake-slice-<slug>`.
+		//    branch is the INTAKE-produced `work/intake-task-<slug>`.
 		const verdict: IntakeVerdict = {
 			outcome: 'slice',
 			sliceSlug: slug,
@@ -123,9 +123,9 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 
 		// The intake branch is the INTAKE-namespaced ref — distinct from the build
 		// ref. Simulate it being LEFT BEHIND locally (the firing precursor): the
-		// checkout still has a local `work/intake-slice-<slug>` from the intake run.
-		const intakeRef = workBranchRef('slice', slug, {producer: 'intake'});
-		const buildRef = workBranchRef('slice', slug);
+		// checkout still has a local `work/intake-task-<slug>` from the intake run.
+		const intakeRef = workBranchRef('task', slug, {producer: 'intake'});
+		const buildRef = workBranchRef('task', slug);
 		expect(intakeRef).not.toBe(buildRef);
 		// (intake leaves the checkout on its own branch; ensure it exists locally)
 		expect(gitIn(['branch', '--list', intakeRef], repo).trim()).not.toBe('');
@@ -136,9 +136,9 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 		// 2. `do slice:<slug>` for the SAME slug, SAME checkout. Pre-rename this hit
 		//    the collision: the stale `work/<slug>` was reused, the build landed on a
 		//    pre-claim base, and the done-move errored "nothing to complete". Now the
-		//    build is on the DISTINCT `work/slice-<slug>` off the claim commit.
+		//    build is on the DISTINCT `work/task-<slug>` off the claim commit.
 		const result = await performDo({
-			arg: `slice:${slug}`,
+			arg: `task:${slug}`,
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',

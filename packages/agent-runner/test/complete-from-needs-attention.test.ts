@@ -64,7 +64,7 @@ async function seedSurfacedNeedsAttention(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 
 	// The agent produced work, but the gate failed spuriously.
 	agentEdits(repo, opts.agentFile);
@@ -84,7 +84,7 @@ async function seedSurfacedNeedsAttention(
 	expect(stuckLockOnArbiter(repo, slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'needs-attention', slug)).toBe(false);
-	expect(currentBranch(repo)).toBe(`work/slice-${slug}`);
+	expect(currentBranch(repo)).toBe(`work/task-${slug}`);
 	return {repo, seeded};
 }
 
@@ -179,7 +179,7 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 
 		// Still stuck with its reason on the lock entry.
 		const lock = await readItemLock({
-			item: 'slice:gamma',
+			item: 'task:gamma',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -228,7 +228,7 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(existsOnArbiterMain(repo, 'done', 'epsilon')).toBe(true);
 		// The lock (the transient stuck record) is released on completion.
 		const lock = await readItemLock({
-			item: 'slice:epsilon',
+			item: 'task:epsilon',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -255,7 +255,7 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		// propose does not land on main; the branch is pushed with the done-move (the
 		// body's frontmatter, sans any stuck reason — that lived on the transient lock).
 		const branchHead = gitIn(
-			['show', `${ARBITER}/work/slice-zeta:work/tasks/done/zeta.md`],
+			['show', `${ARBITER}/work/task-zeta:work/tasks/done/zeta.md`],
 			repo,
 		);
 		expect(branchHead).toMatch(/zeta/i);
@@ -274,7 +274,7 @@ describe('complete — the in-progress → done path is unchanged', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-omega', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-omega', `${ARBITER}/main`], repo);
 		agentEdits(repo);
 
 		const result = await performComplete({
@@ -299,7 +299,7 @@ describe('complete — the in-progress → done path is unchanged', () => {
 		// Never claim — just sit on a work branch with no ledger file present.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(
-			['switch', '-q', '-c', 'work/slice-nonexistent', `${ARBITER}/main`],
+			['switch', '-q', '-c', 'work/task-nonexistent', `${ARBITER}/main`],
 			repo,
 		);
 
