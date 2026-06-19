@@ -207,9 +207,9 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 	});
 });
 
-/** Seed a `work/prd/<slug>.md` (committed onto the arbiter) for the slicing path. */
+/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) for the slicing path. */
 function seedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),

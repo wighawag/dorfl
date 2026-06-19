@@ -54,12 +54,12 @@ function seedSlice(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-/** Seed a `work/prd/<slug>.md` PRD with the given gate frontmatter. */
+/** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
 function seedPrd(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; sliceAfter?: string[]} = {},
 ): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');

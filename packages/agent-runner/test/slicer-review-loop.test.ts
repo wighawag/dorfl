@@ -159,8 +159,8 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 
 	it('REFUSES an edit outside work/tasks/backlog/ (defensive scope fence)', async () => {
 		seedCandidate('child');
-		const escaped = join(cwd, 'work', 'prd', 'it.md');
-		mkdirSync(join(cwd, 'work', 'prd'), {recursive: true});
+		const escaped = join(cwd, 'work', 'briefs', 'ready', 'it.md');
+		mkdirSync(join(cwd, 'work', 'briefs', 'ready'), {recursive: true});
 		writeFileSync(escaped, 'original PRD');
 		await runSliceReviewLoop({
 			slug: 'it',
@@ -169,7 +169,7 @@ describe('runSliceReviewLoop — converging (findings → edits → clean)', () 
 				{
 					verdict: 'block',
 					findings: [{severity: 'blocking', question: 'x'}],
-					edits: [{path: 'work/prd/it.md', content: 'HIJACKED'}],
+					edits: [{path: 'work/briefs/ready/it.md', content: 'HIJACKED'}],
 				},
 				{verdict: 'approve', findings: []},
 			]),

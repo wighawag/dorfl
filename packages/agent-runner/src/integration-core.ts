@@ -1958,9 +1958,10 @@ async function stagedCaptureNotes(
  * durable resting transitions, so the source a build completes FROM is `backlog/`
  * (claim no longer moves the body, slice
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`) and the canonical
- * done-move destination is `done/`. The generic terminal `dropped/` is also a
- * durable resting folder, so the one-slug-one-folder guard covers it (a slug in
- * `dropped/` AND another durable folder is a corrupt ledger to refuse). The
+ * done-move destination is `done/`. The slice regime's won't-proceed terminal
+ * `tasks/cancelled/` is also a durable resting folder, so the one-slug-one-folder
+ * guard covers it (a slug in `tasks/cancelled/` AND another durable folder is a
+ * corrupt ledger to refuse). The
  * transient `in-progress`/`needs-attention` are GONE from `main`'s tree (they are
  * per-item lock-ref state now).
  */

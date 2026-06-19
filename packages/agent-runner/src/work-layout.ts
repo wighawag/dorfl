@@ -44,9 +44,19 @@ export const WORK_ROOT = 'work' as const;
  * Folder kinds (kept here as a single registry, but their distinct roles matter):
  *   - SLICE lifecycle, the `tasks/` Kanban board: `tasks/backlog` (staging, the
  *     symbolic key stays `pre-backlog`) → `tasks/todo` (the agent pool, key
- *     `backlog`) → `tasks/done` / `dropped` (generic terminal).
- *   - PRD lifecycle: `pre-prd` (staging) → `prd` (auto-slice pool) → `prd-sliced`
- *     (sliced, resting). (The brief regime is renamed by a SIBLING slice, not here.)
+ *     `backlog`) → `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed
+ *     terminal, key `cancelled`).
+ *   - BRIEF lifecycle, the `briefs/` regime (renamed from the old flat
+ *     `pre-prd`/`prd`/`prd-sliced`; the symbolic keys are UNCHANGED, only the
+ *     values moved): `briefs/proposed` (staging, key `pre-prd`) → `briefs/ready`
+ *     (auto-slice pool, key `prd`) → `briefs/tasked` (sliced, resting, key
+ *     `prd-sliced`) / `briefs/dropped` (the PER-REGIME won't-proceed terminal, key
+ *     `briefs-dropped`).
+ *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `briefs/dropped`)
+ *     replace the previous shared top-level `work/dropped/`: a dropped task and a
+ *     dropped brief sharing a slug used to COLLIDE on one bare-slug
+ *     `work/dropped/<slug>.md`; namespacing each regime's terminal removes the
+ *     collision. A dropped OBSERVATION needs no terminal — notes leave by deletion.
  *   - Capture buckets under the `notes/` umbrella (do NOT flow; leave by deletion):
  *     `notes/observations` / `notes/ideas` / `notes/findings`.
  *   - Top-level surfaces: `questions` (the "what needs me?" queue), `protocol`
@@ -70,10 +80,11 @@ export const WORK_FOLDER_NAME = {
 	'in-progress': 'in-progress',
 	'needs-attention': 'needs-attention',
 	done: 'tasks/done',
-	dropped: 'dropped',
-	'pre-prd': 'pre-prd',
-	prd: 'prd',
-	'prd-sliced': 'prd-sliced',
+	cancelled: 'tasks/cancelled',
+	'pre-prd': 'briefs/proposed',
+	prd: 'briefs/ready',
+	'prd-sliced': 'briefs/tasked',
+	'briefs-dropped': 'briefs/dropped',
 	observations: 'notes/observations',
 	ideas: 'notes/ideas',
 	findings: 'notes/findings',
@@ -204,14 +215,18 @@ export type SliceLifecycleFolder = (typeof SLICE_LIFECYCLE_FOLDERS)[number];
 
 /**
  * The DURABLE slice-status folders the ledger lint / integration core treat as the
- * one-slug-one-folder state machine: `backlog`, `done`, `dropped`
+ * one-slug-one-folder state machine: `backlog`, `done`, `cancelled`
  * (ledger-lint.ts + integration-core.ts `LEDGER_STATUS_FOLDERS`). The transient
  * `in-progress`/`needs-attention`/`slicing` are NOT here (they are lock-ref state).
+ * `cancelled` is the slice regime's won't-proceed terminal (the per-regime split
+ * of the previous shared `dropped/`); the brief regime's terminal `briefs-dropped`
+ * is NOT here (this set is the SLICE board's state machine, keyed by `tasks/`-slug,
+ * and a brief never co-resides with a slice on the tasks board).
  */
 export const LEDGER_STATUS_FOLDERS = [
 	'backlog',
 	'done',
-	'dropped',
+	'cancelled',
 ] as const satisfies readonly WorkFolderKey[];
 
 /** One of the durable ledger status folders (ledger-lint.ts / integration-core.ts). */

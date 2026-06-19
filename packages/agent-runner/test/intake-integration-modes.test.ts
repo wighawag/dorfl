@@ -12,7 +12,7 @@ import {
  * GRANULAR flags layered over the two AGGREGATES. This is the unit-test target: a
  * resolution TABLE over the flag set → both per-type modes.
  *
- * The canonical rule (the source of truth: `work/prd-sliced/issue-intake.md`):
+ * The canonical rule (the source of truth: `work/briefs/tasked/issue-intake.md`):
  * - granular: `--merge-prd`/`--propose-prd` (PRD), `--merge-slice`/`--propose-slice`
  *   (slice);
  * - aggregates: `--merge` = both-merge, `--propose` = both-propose;

@@ -10,6 +10,7 @@ import {join} from 'node:path';
 import {
 	type WorkFolderKey,
 	workFolderPath,
+	workFolderPrefix,
 	workFolderRel,
 	workItemRel,
 	isWorkItemFile,
@@ -974,13 +975,16 @@ export async function promoteFromPrePrd(
 		).status === 0;
 	if (!hasSource && !hasDest) {
 		const message =
-			`'${slug}' is not staged in work/pre-prd/ on ${arbiter}/main (and not ` +
-			'already in work/prd/) — nothing to promote (wrong slug, or never staged?).';
+			`'${slug}' is not staged in ${workFolderPrefix('pre-prd')} on ${arbiter}/main ` +
+			`(and not already in ${workFolderPrefix('prd')}) — nothing to promote ` +
+			'(wrong slug, or never staged?).';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	}
 
-	const commitMessage = `chore(${slug}): promote work/pre-prd/ -> work/prd/`;
+	const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
+		'pre-prd',
+	)} -> ${workFolderPrefix('prd')}`;
 	const moved = await runTreelessLedgerMove({
 		cwd,
 		slug,

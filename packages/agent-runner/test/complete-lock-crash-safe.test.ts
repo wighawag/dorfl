@@ -200,7 +200,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(true);
 	});
 
-	it('clears a stale ACTIVE lock when main shows the item dropped (the generic terminal)', async () => {
+	it('clears a stale ACTIVE lock when main shows the slice cancelled (the slice regime terminal)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['epsilon']);
 		await acquireItemLock({
 			item: 'slice:epsilon',
@@ -209,7 +209,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		seedTerminalOnArbiter(arbiter, 'dropped', 'epsilon');
+		seedTerminalOnArbiter(arbiter, 'cancelled', 'epsilon');
 
 		const rec = await reconcileItemLockAgainstMain({
 			item: 'slice:epsilon',
@@ -349,17 +349,19 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(second.outcome).toBe('no-lock');
 	});
 
-	it('maps each type to its durable terminal main paths', () => {
+	it('maps each type to its PER-REGIME durable terminal main paths', () => {
+		// A slice: done OR the slice regime's won't-proceed terminal (tasks/cancelled).
 		expect(terminalMainPaths('slice', 's')).toEqual([
 			'work/tasks/done/s.md',
-			'work/dropped/s.md',
+			'work/tasks/cancelled/s.md',
 		]);
+		// A brief: tasked (sliced, resting) OR the brief regime's terminal
+		// (briefs/dropped). A task-drop and a brief-drop sharing a slug never collide.
 		expect(terminalMainPaths('prd', 'p')).toEqual([
-			'work/prd-sliced/p.md',
-			'work/dropped/p.md',
+			'work/briefs/tasked/p.md',
+			'work/briefs/dropped/p.md',
 		]);
-		expect(terminalMainPaths('observation', 'o')).toEqual([
-			'work/dropped/o.md',
-		]);
+		// An observation has NO durable terminal — it leaves by deletion.
+		expect(terminalMainPaths('observation', 'o')).toEqual([]);
 	});
 });

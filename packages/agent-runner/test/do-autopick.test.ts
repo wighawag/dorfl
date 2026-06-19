@@ -54,7 +54,7 @@ function seedDone(slug: string): void {
 	writeFileSync(join(dir, `${slug}.md`), `---\nslug: ${slug}\n---\n`);
 }
 
-/** Seed a `work/prd/<slug>.md` PRD with the given gate frontmatter. */
+/** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
 function seedPrd(
 	slug: string,
 	fm: {
@@ -63,7 +63,7 @@ function seedPrd(
 		sliceAfter?: string[];
 	} = {},
 ): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -74,16 +74,16 @@ function seedPrd(
 }
 
 /**
- * Seed a SLICED PRD as RESIDENCE in `work/prd-sliced/` (the source of truth for
+ * Seed a SLICED PRD as RESIDENCE in `work/briefs/tasked/` (the source of truth for
  * sliced-ness, slice `prd-sliced-folder-step-a`) — it has left the to-slice pool
- * (`work/prd/`) and now resolves another PRD's `sliceAfter` by FOLDER residence
+ * (`work/briefs/ready/`) and now resolves another PRD's `sliceAfter` by FOLDER residence
  * (the `sliced:` marker was removed in `remove-sliced-marker-step-b`).
  */
 function seedSlicedPrd(slug: string): void {
-	const fromDir = join(repo, 'work', 'prd');
+	const fromDir = join(repo, 'work', 'briefs', 'ready');
 	const from = join(fromDir, `${slug}.md`);
 	rmSync(from, {force: true});
-	const dir = join(repo, 'work', 'prd-sliced');
+	const dir = join(repo, 'work', 'briefs', 'tasked');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -278,7 +278,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
 		expect(blocked.args).toEqual(['prd:alpha']);
 
-		// Move alpha into `work/prd-sliced/` (the source of truth for sliced-ness) ⇒
+		// Move alpha into `work/briefs/tasked/` (the source of truth for sliced-ness) ⇒
 		// beta's sliceAfter is satisfied (resolved against FOLDER residence) and beta
 		// joins the pool. alpha itself has LEFT the to-slice pool (it now rests in
 		// prd-sliced/), so only beta is selectable.

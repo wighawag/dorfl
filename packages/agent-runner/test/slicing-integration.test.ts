@@ -39,9 +39,9 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/prd/<slug>.md` (committed onto the arbiter). */
+/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter). */
 function seedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -63,7 +63,7 @@ function seedPrd(repo: string, slug: string): void {
 }
 
 /**
- * Seed a `work/prd/<slug>.md` STAMPED with origin-trust provenance (slice
+ * Seed a `work/briefs/ready/<slug>.md` STAMPED with origin-trust provenance (slice
  * `untrusted-origin-forces-build-propose`) — an intake-born PRD whose stamp the
  * slicer must PROPAGATE onto every emitted slice.
  */
@@ -72,7 +72,7 @@ function seedPrdWithOrigin(
 	slug: string,
 	originTrust: 'trusted' | 'untrusted',
 ): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -169,12 +169,12 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		// commit). The PRD now rests in prd-sliced/ (the source of truth for
 		// sliced-ness — residence, no marker), NOT back in prd/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 		const prd = run(
 			'git',
-			['show', `${ARBITER}/main:work/prd-sliced/it.md`],
+			['show', `${ARBITER}/main:work/briefs/tasked/it.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
@@ -227,8 +227,8 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		// in prd/ on main (the lock is a ref now — it never moves the body; the PR
 		// carries the prd → prd-sliced move). NO slicing/ marker.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 		// The OUTPUT never advanced main: the lock is a hidden ref (not a main commit),
 		// and propose does not land the slices — main is still the seed commit.
@@ -238,10 +238,12 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(
 			onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
-		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prd-sliced/it.md')).toBe(
-			true,
-		);
-		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prd/it.md')).toBe(false);
+		expect(
+			onArbiterBranch(repo, 'work/prd-it', 'work/briefs/tasked/it.md'),
+		).toBe(true);
+		expect(
+			onArbiterBranch(repo, 'work/prd-it', 'work/briefs/ready/it.md'),
+		).toBe(false);
 
 		// A PR was opened (the recording gh stub captured a `pr create`).
 		const args = readFileSync(argsFile, 'utf8');

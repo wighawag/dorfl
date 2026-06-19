@@ -124,7 +124,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		writeFileSync(join(dir, file), lines.join('\n'));
 	}
 
-	it('enumerates work/prd/*.md with each PRD’s gate axes, sorted by slug', () => {
+	it('enumerates work/briefs/ready/*.md with each PRD’s gate axes, sorted by slug', () => {
 		writePrd('prd', 'beta.md', {
 			slug: 'beta',
 			needsAnswers: 'true',
@@ -149,7 +149,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		});
 	});
 
-	it('collects already-SLICED slugs from `work/prd-sliced/` RESIDENCE (the folder is the SOLE source of truth; the `sliced:` marker was removed)', () => {
+	it('collects already-SLICED slugs from `work/briefs/tasked/` RESIDENCE (the folder is the SOLE source of truth; the `sliced:` marker was removed)', () => {
 		// alpha + gamma rest in prd-sliced/ (sliced); beta is still to-slice in prd/.
 		writePrd('prd-sliced', 'alpha.md', {slug: 'alpha'});
 		writePrd('prd', 'beta.md', {slug: 'beta'});
@@ -378,7 +378,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		return lines.join('\n');
 	}
 
-	it('enumerates work/prd/*.md (gate axes, sorted by slug) + prd-sliced/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
+	it('enumerates work/briefs/ready/*.md (gate axes, sorted by slug) + prd-sliced/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
 		const ws = join(scratch.root, '.agent-runner');
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			prd: {

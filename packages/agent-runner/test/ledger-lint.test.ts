@@ -84,18 +84,18 @@ describe('lintLocalLedger (over a working tree)', () => {
 		expect(dups[0].folders).toContain('done');
 	});
 
-	it('covers dropped as a status folder (the full lifecycle set)', () => {
+	it('covers cancelled as a status folder (the full lifecycle set)', () => {
 		place('backlog', 'wont');
-		place('dropped', 'wont');
+		place('cancelled', 'wont');
 		const dups = lintLocalLedger(root);
 		expect(dups.map((d) => d.slug)).toEqual(['wont']);
-		expect(dups[0].folders).toContain('dropped');
+		expect(dups[0].folders).toContain('cancelled');
 	});
 
 	it('reports a clean ledger with NO false positives (durable set only)', () => {
 		place('backlog', 'a');
 		place('done', 'd');
-		place('dropped', 'e');
+		place('cancelled', 'e');
 		// The transient `in-progress`/`needs-attention` are retired from `main`'s tree
 		// (per-item lock state now); even if present they are NOT lint-set folders, so
 		// they never count.
@@ -139,14 +139,16 @@ describe('lintLocalLedger (over a working tree)', () => {
 
 describe('sweepLedgerDuplicates (the gc-style on-demand REPORT)', () => {
 	it('reports the duplicate set + candidate canonical folder, NEVER deleting', () => {
-		place('dropped', 'stuck');
+		place('cancelled', 'stuck');
 		place('done', 'stuck');
 		const result = sweepLedgerDuplicates(root);
 		expect(result.duplicates).toHaveLength(1);
 		expect(result.duplicates[0].slug).toBe('stuck');
 		expect(result.duplicates[0].candidateCanonical).toBe('done');
 		// The sweep is REPORT-ONLY: both files are still present afterwards.
-		expect(existsSync(join(root, 'work', 'dropped', 'stuck.md'))).toBe(true);
+		expect(
+			existsSync(join(root, 'work', 'tasks', 'cancelled', 'stuck.md')),
+		).toBe(true);
 		expect(existsSync(join(root, 'work', 'tasks', 'done', 'stuck.md'))).toBe(
 			true,
 		);
@@ -201,6 +203,10 @@ describe('the status-folder set', () => {
 		// `work/` moves on `main` are the durable resting transitions, so a slice's
 		// ledger file rests only in the durable set; the transient
 		// `in-progress`/`needs-attention` are per-item lock state now.
-		expect([...LEDGER_STATUS_FOLDERS]).toEqual(['backlog', 'done', 'dropped']);
+		expect([...LEDGER_STATUS_FOLDERS]).toEqual([
+			'backlog',
+			'done',
+			'cancelled',
+		]);
 	});
 });

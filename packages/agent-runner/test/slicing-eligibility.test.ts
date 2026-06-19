@@ -116,7 +116,7 @@ describe('resolveSlicingEligibility — explicit drops the policy term but keeps
 	});
 });
 
-describe('resolveSliceAfter — against `work/prd-sliced/` residence (not done/)', () => {
+describe('resolveSliceAfter — against `work/briefs/tasked/` residence (not done/)', () => {
 	it('is satisfied when sliceAfter is empty', () => {
 		const r = resolveSliceAfter([], new Set());
 		expect(r.satisfied).toBe(true);

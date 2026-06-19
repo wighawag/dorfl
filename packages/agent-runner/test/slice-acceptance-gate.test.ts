@@ -49,9 +49,9 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/prd/<slug>.md` (committed onto the arbiter). */
+/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter). */
 function seedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -174,8 +174,8 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 		// move). The PRD rests in prd-sliced/ (residence = source of truth for
 		// sliced-ness, no marker), not prd/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 	});
 });
@@ -240,12 +240,12 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		expect(gate.calls).toBe(1);
 		// The slice-path block route is a per-item lock `active → stuck` amend now
 		// (slice `cutover-...-trim-folder-sets`), NOT a folder move: the PRD body STAYS
-		// in work/prd/, the slices did NOT land, and NO needs-attention/ or slicing/
+		// in work/briefs/ready/, the slices did NOT land, and NO needs-attention/ or slicing/
 		// folder file is written.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
 		const entry = await readItemLock({
@@ -276,7 +276,7 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		expect(result.outcome).toBe('needs-attention');
 		// The block route is the stuck lock; the PRD body stays in prd/, no PR opened.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		const entry = await readItemLock({
 			item: 'prd:it',

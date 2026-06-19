@@ -175,7 +175,7 @@ describe('parseFrontmatter', () => {
 	});
 
 	it('parses a PRD-only `issue: N` link as a number (intake PRD-emit)', () => {
-		// `intake`'s PRD outcome writes `issue: N` on `work/prd/<slug>.md` so the close
+		// `intake`'s PRD outcome writes `issue: N` on `work/briefs/ready/<slug>.md` so the close
 		// JOB can reach it via `slice.prd: → PRD issue:`. It must be machine-readable.
 		const md = [
 			'---',
@@ -218,7 +218,7 @@ describe('parseFrontmatter', () => {
 
 	it('ignores a stale `sliced:` line (the marker was removed in remove-sliced-marker-step-b)', () => {
 		// `sliced:` is no longer a parsed frontmatter axis — sliced-ness is RESIDENCE in
-		// `work/prd-sliced/`. A leftover `sliced:` line is just inert text the parser
+		// `work/briefs/tasked/`. A leftover `sliced:` line is just inert text the parser
 		// neither recognises nor trips over.
 		const md = ['---', 'slug: my-prd', 'sliced: 2026-06-03', '---'].join('\n');
 		const fm = parseFrontmatter(md);

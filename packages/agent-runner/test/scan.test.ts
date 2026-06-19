@@ -64,7 +64,7 @@ function workspacesDir(): string {
 
 function writeItem(
 	repo: string,
-	status: 'backlog' | 'done' | 'dropped',
+	status: 'backlog' | 'done' | 'cancelled',
 	file: string,
 	frontmatter: Record<string, string>,
 ): void {
@@ -425,7 +425,7 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 		).toBe(true);
 	});
 
-	it('a sliceAfter dep already in work/prd-sliced/ unblocks the PRD (folder-residence is the truth)', () => {
+	it('a sliceAfter dep already in work/briefs/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
 		writePrd('repo', 'prd', 'after.md', {slug: 'after', sliceAfter: '[dep]'});
 		writePrd('repo', 'prd-sliced', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(
@@ -532,12 +532,13 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 
 describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () => {
 	it('surfaces a slug present in two status folders on the mirror, naming both', async () => {
-		// A corrupt ledger: the SAME slug in BOTH dropped/ and done/ (the read-side
-		// belt-and-suspenders for the orphan class). The lint set is the DURABLE folders
-		// now (`backlog`/`done`/`dropped`) — the transient ones are retired from `main`.
+		// A corrupt ledger: the SAME slug in BOTH tasks/cancelled/ and done/ (the
+		// read-side belt-and-suspenders for the orphan class). The lint set is the
+		// DURABLE folders now (`backlog`/`done`/`cancelled`) — the transient ones are
+		// retired from `main`.
 		const m = registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {'live.md': slice({slug: 'live'})},
-			dropped: {'ghost.md': slice({slug: 'ghost'})},
+			cancelled: {'ghost.md': slice({slug: 'ghost'})},
 			done: {'ghost.md': slice({slug: 'ghost'})},
 		});
 		const report = await scan(
@@ -546,13 +547,13 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 		const repo = report.repos.find((r) => r.path === m.mirrorPath)!;
 		expect(repo.ledgerDuplicates).toHaveLength(1);
 		expect(repo.ledgerDuplicates[0].slug).toBe('ghost');
-		expect(repo.ledgerDuplicates[0].folders).toContain('dropped');
+		expect(repo.ledgerDuplicates[0].folders).toContain('cancelled');
 		expect(repo.ledgerDuplicates[0].folders).toContain('done');
 
 		const out = formatReport(report);
 		expect(out).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(out).toMatch(/ghost/);
-		expect(out).toContain('work/dropped/');
+		expect(out).toContain('work/tasks/cancelled/');
 		expect(out).toContain('work/tasks/done/');
 	});
 
@@ -561,7 +562,7 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 			backlog: {'a.md': slice({slug: 'a'})},
 			inProgress: {'b.md': slice({slug: 'b'})},
 			done: {'c.md': slice({slug: 'c'})},
-			dropped: {'d.md': slice({slug: 'd'})},
+			cancelled: {'d.md': slice({slug: 'd'})},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
@@ -574,7 +575,7 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 
 describe('scanRepoPaths — one-slug-one-folder LINT (working tree)', () => {
 	it('surfaces a slug in two status folders of a working checkout', () => {
-		writeItem('repo', 'dropped', 'dup.md', {slug: 'dup'});
+		writeItem('repo', 'cancelled', 'dup.md', {slug: 'dup'});
 		writeItem('repo', 'done', 'dup.md', {slug: 'dup'});
 		const report = scanRepoPaths([join(root, 'repo')], mergeConfig({}));
 		expect(report.repos[0].ledgerDuplicates).toHaveLength(1);

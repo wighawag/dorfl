@@ -55,7 +55,7 @@ function seedSlice(
 }
 
 function seedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
-	const dir = join(repo, 'work', 'prd');
+	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');

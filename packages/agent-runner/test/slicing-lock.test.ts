@@ -56,8 +56,8 @@ function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 /**
  * The slicing lock is the UNIFIED per-item lock now (slice
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the
- * `git mv work/prd/ → work/slicing/` marker is RETIRED, so the PRD body STAYS in
- * `work/prd/` while it is being sliced (the lock is the `prd:<slug>` ref,
+ * `git mv work/briefs/ready/ → work/slicing/` marker is RETIRED, so the PRD body STAYS in
+ * `work/briefs/ready/` while it is being sliced (the lock is the `prd:<slug>` ref,
  * `action: slice`). The durable `prd → prd-sliced` success move + the read-stability
  * stale check live at the integrate seam (`slicing.ts`), not in the lock.
  */
@@ -99,10 +99,10 @@ describe('acquireSlicingLock — happy path', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		// The lockedBlob is the blob of work/prd/alpha.md on the arbiter.
+		// The lockedBlob is the blob of work/briefs/ready/alpha.md on the arbiter.
 		const blob = run(
 			'git',
-			['rev-parse', 'arbiter/main:work/prd/alpha.md'],
+			['rev-parse', 'arbiter/main:work/briefs/ready/alpha.md'],
 			repo,
 			{env: gitEnv()},
 		).stdout.trim();

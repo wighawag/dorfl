@@ -155,7 +155,7 @@ describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', ()
 		);
 	});
 
-	it('finds the PRD issue from work/prd-sliced/ too (a PRD that has been sliced)', async () => {
+	it('finds the PRD issue from work/briefs/tasked/ too (a PRD that has been sliced)', async () => {
 		write('prd-sliced', 'my-prd.md', {slug: 'my-prd', issue: '7'});
 		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
 
