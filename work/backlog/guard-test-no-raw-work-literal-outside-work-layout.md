@@ -27,6 +27,26 @@ regression is trivially located.
 This is a test-only slice, file-orthogonal to the src edits of the centralisation
 slice, so the two rebase trivially.
 
+> FORWARD-POINTER (planted by the conductor after the centralisation slice
+> `work-layout-module-centralises-all-work-paths` landed, PR #173): the Phase-0
+> centralisation routed every PATH-CONSTRUCTION site through `work-layout`, but it
+> DELIBERATELY left ~26 `work/<folder>` literals in `src/*.ts` that are NOT path
+> construction: doc-comments, error/log/`--help` PROSE, and embedded CI-workflow
+> template YAML (e.g. the `work/questions/**` push-trigger globs in
+> `advance-ci-template.ts` / `advance-lifecycle-template.ts`, and agent-prompt
+> example JSON). Those are legitimate human-readable text, not paths, and the
+> centralisation slice correctly left them. THEREFORE this guard MUST be
+> context-aware: scope the rule to PATH-CONSTRUCTION literals (a `work/<folder>`
+> string used as a path, i.e. the kind `work-layout` helpers now build), NOT a
+> blanket text-regex over every source line, or it will FALSE-POSITIVE on those ~26
+> legitimate prose/template strings and red the acceptance gate. Allow-list
+> `work-layout` as the one home of path-construction literals; do NOT satisfy the
+> rule by per-file disables or by deleting the legitimate prose. If a precise
+> path-context detection is impractical, distinguishing "inside a string passed to a
+> path/`join`/template-path site" from "prose in a comment or a triggers: glob" is
+> the cut line the guard must encode. (This does not change the criteria below; it
+> tells you HOW to keep criterion #5's gate green given the intended residual.)
+
 ## Acceptance criteria
 
 - [ ] A test asserts no `.ts` under `packages/agent-runner/src` except
