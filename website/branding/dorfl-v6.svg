@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Dorfl v6: tighter >_ eyes (still reads as a CLI cursor) + an ASCII '~' mouth.
+       The whole face is terminal characters. -->
+  <defs>
+    <filter id="g6" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- slate tile -->
+  <rect x="0" y="0" width="512" height="512" rx="72" fill="#23201C"/>
+
+  <!-- blocky golem head, flat clay -->
+  <path d="M148 152 Q148 124 176 124 L336 124 Q364 124 364 152
+           L364 366 Q364 394 336 394 L300 394 L300 408 Q300 414 294 414
+           L218 414 Q212 414 212 408 L212 394 L176 394 Q148 394 148 366 Z"
+        fill="#A4543C"/>
+  <!-- carved shaded half -->
+  <path d="M256 124 H336 Q364 124 364 152 V366 Q364 394 336 394 H300 V408 Q300 414 294 414 H256 Z"
+        fill="#8A4632" opacity="0.42"/>
+
+  <!-- EYE-BAND: recessed glowing amber visor with dark border -->
+  <rect x="178" y="208" width="156" height="68" rx="15" fill="#1C1813"/>
+  <rect x="186" y="215" width="140" height="54" rx="11" fill="#FFB23E" filter="url(#g6)"/>
+
+  <!-- '>' and '_' eyes, spacing REDUCED so it reads as a cursor '>_' -->
+  <!-- '>' eye -->
+  <path d="M214 230 l21 12 l-21 12" fill="none" stroke="#1C1813" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- '_' eye, pulled closer to the '>' -->
+  <rect x="258" y="250" width="34" height="11" rx="5.5" fill="#1C1813"/>
+
+  <!-- ASCII '~' MOUTH: calm, wry. carved dark, same language as the eyes. -->
+  <path d="M222 332
+           q14 -16 28 0
+           q14 16 28 0
+           q14 -16 28 0"
+        fill="none" stroke="#7E3D2C" stroke-width="11"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- wordmark -->
+  <text x="256" y="476" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="62" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+</svg>

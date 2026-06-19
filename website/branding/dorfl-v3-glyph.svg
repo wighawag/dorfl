@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Dorfl v3 glyph: a carved stone square with a glowing >_ slot.
+       Abstract — the "head" is implied. Scales cleanly to 16px. -->
+  <defs>
+    <filter id="gg" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- carved clay tablet -->
+  <rect x="36" y="36" width="184" height="184" rx="34" fill="#A4543C"/>
+  <!-- shaded carved edge (bottom-right), flat -->
+  <path d="M128 36 H186 Q220 36 220 70 V186 Q220 220 186 220 H128 Z" fill="#8A4632" opacity="0.45"/>
+
+  <!-- the chem prompt, centered, the whole identity -->
+  <rect x="74" y="104" width="108" height="48" rx="9" fill="#1C1813"/>
+  <rect x="81" y="110" width="94" height="36" rx="6" fill="#FFB23E" filter="url(#gg)"/>
+  <path d="M104 120 l15 8 l-15 8" fill="none" stroke="#1C1813" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="128" y="134" width="24" height="6" rx="3" fill="#1C1813"/>
+</svg>

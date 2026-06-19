@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Dorfl v5: the v3-glyph slot treatment becomes the FACE.
+       A clay golem head with a single glowing amber eye-band (dark border),
+       the '>' and '_' carved dark INTO it as two spaced eyes. -->
+  <defs>
+    <filter id="g5" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- slate tile -->
+  <rect x="0" y="0" width="512" height="512" rx="72" fill="#23201C"/>
+
+  <!-- blocky golem head, flat clay -->
+  <path d="M148 152 Q148 124 176 124 L336 124 Q364 124 364 152
+           L364 360 Q364 388 336 388 L300 388 L300 402 Q300 408 294 408
+           L218 408 Q212 408 212 402 L212 388 L176 388 Q148 388 148 360 Z"
+        fill="#A4543C"/>
+  <!-- carved shaded half -->
+  <path d="M256 124 H336 Q364 124 364 152 V360 Q364 388 336 388 H300 V402 Q300 408 294 408 H256 Z"
+        fill="#8A4632" opacity="0.42"/>
+
+  <!-- THE EYE-BAND: recessed glowing amber visor with a dark border,
+       exactly the v3-glyph slot treatment, now spanning the face. -->
+  <rect x="176" y="214" width="160" height="72" rx="16" fill="#1C1813"/>
+  <rect x="184" y="222" width="144" height="56" rx="11" fill="#FFB23E" filter="url(#g5)"/>
+
+  <!-- the '>' and '_' carved DARK into the band, spaced apart = two eyes -->
+  <!-- '>' eye (left) -->
+  <path d="M210 238 l22 12 l-22 12" fill="none" stroke="#1C1813" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- '_' eye (right), pushed apart with spacing -->
+  <rect x="278" y="258" width="34" height="11" rx="5.5" fill="#1C1813"/>
+
+  <!-- wordmark -->
+  <text x="256" y="470" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="62" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+</svg>

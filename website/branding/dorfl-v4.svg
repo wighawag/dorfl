@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Dorfl v4: the face IS the prompt. The two eyes are the '>' and the '_'.
+       A blocky clay golem head whose eyes spell a CLI cursor: > _ -->
+  <defs>
+    <filter id="g4" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- flat slate ground tile -->
+  <rect x="0" y="0" width="512" height="512" rx="72" fill="#23201C"/>
+
+  <!-- blocky golem head: simple, squarish, slightly tapered jaw. flat clay. -->
+  <path d="M150 150
+           Q150 122 178 122
+           L334 122 Q362 122 362 150
+           L362 360 Q362 388 334 388
+           L300 388 L300 404 Q300 410 294 410 L218 410 Q212 410 212 404 L212 388 L178 388
+           Q150 388 150 360 Z"
+        fill="#A4543C"/>
+  <!-- carved shaded half (flat single tone) -->
+  <path d="M256 122 H334 Q362 122 362 150 V360 Q362 388 334 388 H300 V404 Q300 410 294 410 H256 Z"
+        fill="#8A4632" opacity="0.45"/>
+
+  <!-- THE EYES ARE THE PROMPT.
+       left eye = '>' chevron. right eye = '_' underscore cursor. both glow. -->
+  <!-- '>' eye -->
+  <path d="M214 214 L256 250 L214 286"
+        fill="none" stroke="#FFB23E" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round" filter="url(#g4)"/>
+  <!-- '_' eye (the blinking cursor) -->
+  <rect x="284" y="270" width="66" height="22" rx="11" fill="#FFB23E" filter="url(#g4)"/>
+
+  <!-- wordmark -->
+  <text x="256" y="472" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="62" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+</svg>

@@ -1,62 +1,85 @@
 # Dorfl — branding
 
-Brand assets for **Dorfl**, _the golem that claims its own work_.
+Brand assets for **Dorfl**, _It Claims Its Own Work_.
 
 > Named after Dorfl, the golem who buys his own receipt and chooses his own
 > purpose, in Terry Pratchett's _Feet of Clay_. A respectful nod, not an
 > endorsement. Discworld and its characters are the creation of Sir Terry
 > Pratchett.
 
+## Status
+
+**`dorfl-v7.svg` is the current work-in-progress mark.** Earlier `v2`…`v6` and
+the original `dorfl-logo` / `-horizontal` / `-glyph-mono` are kept as drafts for
+reference; they are not canonical. See _Evolution_ below.
+
 ## The idea
 
-The mark is a calm clay-golem head built from **stacked blocks**. Three meanings
-share one shape:
+The mark is a calm clay-golem **head** whose **face is a command prompt**:
 
-- **Golem** — Dorfl is clay/stone; humble, blocky, tireless.
-- **The chem** — a golem runs on words placed inside its head. That's the
-  glowing slot across the forehead, drawn as a `>_` prompt: the words/spec that
-  animate the agent are the same glyph as the CLI that drives it.
-- **Stacked work** — the seams between blocks echo the product itself: one file
-  per slice, status is the folder it lives in, no database, no mortar. It holds
-  by how the pieces fit.
+- **Eyes = `>_`** — a golem is animated by words; Dorfl was rebuilt and _given a
+  voice_. His eyes spell a CLI cursor: he is a being that was given language.
+  Drawn inside a recessed glowing amber visor with a dark border.
+- **Mouth = a flat ASCII line** — deliberately **deadpan, not a smile**. Dorfl is
+  the Disc's first ceramic atheist; he survives a divine thunderbolt and calls it
+  "Not Much Of An Argument." The charm is _serene, unbothered dignity_, not
+  cuteness. A smiling mouth (see the retired `v6` `~`) reads as a friendly robot
+  mascot and loses him.
+- **Clay, blocky, honest** — golems are clay/stone; his Hebrew/Yiddish name means
+  "holy innocent." Humble, square, tireless (he never sleeps), fireproof.
 
-The eyes are steady, not menacing: Dorfl chose his own purpose.
+The wordmark tagline **"It Claims Its Own Work"** is set
+With-Every-Word-Capitalised, because golems Speak With The First Letter Of Every
+Word Capitalised. "Claims" is true twice over: it is the tool's atomic
+claim-a-slice protocol _and_ Dorfl's arc of claiming his own freedom.
 
-## Files
+## Evolution (drafts → current)
 
-| File                     | Use                                                   |
-| ------------------------ | ----------------------------------------------------- |
-| `dorfl-logo.svg`         | Hero / app-icon (512, rounded square on slate)        |
-| `dorfl-horizontal.svg`   | Wide lockup with wordmark + tagline (README, site)    |
-| `dorfl-glyph-mono.svg`   | Single-ink glyph (favicon, terminal, stamp)           |
+| Draft                    | What it tried / why it isn't canonical                              |
+| ------------------------ | ------------------------------------------------------------------- |
+| `dorfl-logo.svg`         | v1 hero — gradient clay head, separate brow-slot + round eyes        |
+| `dorfl-horizontal.svg`   | v1 wide lockup                                                       |
+| `dorfl-glyph-mono.svg`   | v1 single-ink glyph                                                  |
+| `dorfl-v2.svg`           | prompt-forward + flat, but the silhouette read as a jar             |
+| `dorfl-v3-glyph.svg`     | abstract carved tablet with a `>_` slot (still a nice alt icon)     |
+| `dorfl-v4.svg`           | `>_` glowing directly on the face (raw, no border)                  |
+| `dorfl-v5.svg`           | `>_` in a recessed visor, but eyes too far apart (read as 2 eyes)   |
+| `dorfl-v6.svg`           | tighter `>_` + `~` mouth — but the smile made him cute, lost charm  |
+| **`dorfl-v7.svg`**       | **current** — tight `>_` eyes, **deadpan flat mouth**, lore tagline |
 
-SVG is the source of truth. Rasterize with ImageMagick or Inkscape, e.g.:
+## Building
+
+SVG is the source of truth (tracked). PNGs are generated into `out/`
+(gitignored). Render everything with:
 
 ```sh
-magick -background none dorfl-logo.svg dorfl-logo.png
-magick -background none dorfl-glyph-mono.svg -resize 32x32 favicon-32.png
+./build.sh
 ```
 
-Prefer the **mono glyph** lineage for small favicons; it reduces more cleanly
-than the gradient hero.
+It renders each SVG to `out/<name>.png`, `out/<name>@512.png`, and
+`out/<name>-favicon.png`, auto-detecting `magick` (ImageMagick v7) or `convert`.
+
+Prefer an **icon-only** lineage (no tagline) for small favicons; taglined
+lockups are for README/site headers.
 
 ## Palette
 
-| Token       | Hex       | Use                              |
-| ----------- | --------- | -------------------------------- |
-| Clay (light)| `#C9745A` | Golem body highlight             |
-| Clay (base) | `#A4543C` | Golem body                       |
-| Clay (dark) | `#7E3D2C` | Seams, crown/jaw blocks          |
-| Chem amber  | `#FFB23E` | The lit forehead slot; eyes; accent |
-| Chem gold   | `#FFD27A` | Chem highlight                   |
-| Slate       | `#2A2622` | Background, knocked-out details  |
-| Bone        | `#E9D9C7` | Wordmark, light-ink glyph        |
+| Token        | Hex       | Use                                  |
+| ------------ | --------- | ------------------------------------ |
+| Clay (light) | `#C9745A` | Highlights, tagline                  |
+| Clay (base)  | `#A4543C` | Golem head                           |
+| Clay (shade) | `#8A4632` | Carved shaded half                   |
+| Clay (dark)  | `#7E3D2C` | Deadpan mouth, seams                 |
+| Chem amber   | `#FFB23E` | The glowing visor (the `>_` band)    |
+| Visor inset  | `#1C1813` | Recessed band + carved `>` `_` chars |
+| Slate        | `#23201C` | Background tile                      |
+| Bone         | `#E9D9C7` | Wordmark                             |
 
-Amber (`#FFB23E`) is the brand pop — the one warm light in the head. Use it
-sparingly.
+Amber (`#FFB23E`) is the one warm light in the head — the brand pop. Use it only
+for the visor.
 
 ## Typography
 
-Wordmark is currently set in a serif (Georgia placeholder) for a "carved stone"
-feel; a chunkier slab / humanist serif is a candidate for v2. The tagline is set
-in a monospace to tie back to the CLI.
+Wordmark: a serif (Georgia placeholder) for a "carved" feel; a chunkier slab is a
+candidate later. Tagline: monospace, Title Case, tying the golem-speech nod to the
+CLI.

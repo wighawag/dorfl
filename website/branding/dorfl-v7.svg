@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="560" viewBox="0 0 512 560">
+  <!-- Dorfl v7: deadpan, not cute. The lore: a calm ceramic stoic who was
+       GIVEN A VOICE, speaks With Every Word Capitalised, finds your
+       thunderbolt 'not much of an argument'. Eyes = >_ prompt (given language).
+       Mouth = a flat, unbothered ASCII line. No smile. -->
+  <defs>
+    <filter id="g7" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- slate tile -->
+  <rect x="0" y="0" width="512" height="512" rx="72" fill="#23201C"/>
+
+  <!-- blocky golem head, flat clay, calm and square -->
+  <path d="M148 152 Q148 124 176 124 L336 124 Q364 124 364 152
+           L364 366 Q364 394 336 394 L300 394 L300 408 Q300 414 294 414
+           L218 414 Q212 414 212 408 L212 394 L176 394 Q148 394 148 366 Z"
+        fill="#A4543C"/>
+  <path d="M256 124 H336 Q364 124 364 152 V366 Q364 394 336 394 H300 V408 Q300 414 294 414 H256 Z"
+        fill="#8A4632" opacity="0.42"/>
+
+  <!-- eye-band: recessed glowing amber visor with dark border -->
+  <rect x="178" y="206" width="156" height="68" rx="15" fill="#1C1813"/>
+  <rect x="186" y="213" width="140" height="54" rx="11" fill="#FFB23E" filter="url(#g7)"/>
+
+  <!-- '>_' eyes, tight = reads as a cursor -->
+  <path d="M214 228 l21 12 l-21 12" fill="none" stroke="#1C1813" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="258" y="248" width="34" height="11" rx="5.5" fill="#1C1813"/>
+
+  <!-- DEADPAN MOUTH: a flat ASCII line. unbothered. 'not much of an argument.'
+       a single, faint, level dash. carved dark. -->
+  <rect x="226" y="338" width="60" height="10" rx="5" fill="#7E3D2C"/>
+
+  <!-- wordmark + Capitalised-First-Letter lore nod -->
+  <text x="256" y="476" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="62" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+  <text x="256" y="512" text-anchor="middle" font-family="Menlo, monospace"
+        font-size="17" letter-spacing="0.5" fill="#C9745A">It Claims Its Own Work</text>
+</svg>
