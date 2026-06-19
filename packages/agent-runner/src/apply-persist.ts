@@ -1,5 +1,6 @@
 import {existsSync, mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {workFolderPath, workFolderPrefix, workItemRel} from './work-layout.js';
 import {run, type RunResult} from './git.js';
 import {setFrontmatterMarker} from './frontmatter.js';
 import {applyAtomic, type ApplyAtomicResult} from './sidecar-apply.js';
@@ -460,16 +461,18 @@ function moveResolvedItemToTerminal(
 	input: MoveTerminalInput,
 ): ApplyAnsweredQuestionsResult {
 	const {cwd, item, itemPath, terminal, env, note, sidecarPath} = input;
-	const destDir = join(cwd, 'work', terminal);
+	const destDir = workFolderPath(cwd, terminal);
 	mkdirSync(destDir, {recursive: true});
 	const slug = itemPath.replace(/^.*\//, '');
-	const destRel = join('work', terminal, slug);
+	const destRel = workItemRel(terminal, slug);
 	gitHard(['mv', itemPath, destRel], cwd, env);
 	gitHard(['add', '-A'], cwd, env);
 	const subject = `advance: ${item} → ${terminal} (by ${input.by})`;
 	gitHard(['commit', '--quiet', '-m', subject], cwd, env);
 	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
-	const message = `applied ${item} → ${terminal} (moved to work/${terminal}/).`;
+	const message = `applied ${item} → ${terminal} (moved to ${workFolderPrefix(
+		terminal,
+	)}).`;
 	note(message);
 	return {
 		outcome: terminal,

@@ -1,6 +1,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
+import {workFolderRel, workItemRel} from './work-layout.js';
 import {paramCase} from './brand.js';
 import {
 	performIntegration,
@@ -331,7 +332,7 @@ const DEFAULT_ARBITER = 'origin';
  * `work/prd/` reader changes here; the STEP-B `prd/ → prd-ready/` rename is
  * deferred to `folder-taxonomy-reorg-and-rename`.
  */
-export const STAGED_PRDS_DIR = 'work/pre-prd';
+export const STAGED_PRDS_DIR = workFolderRel('pre-prd');
 
 /**
  * The POOL folder PRDs land in when the runner-deterministic placement
@@ -340,7 +341,7 @@ export const STAGED_PRDS_DIR = 'work/pre-prd';
  * (it KEEPS its "the auto-slice candidate pool" meaning); the STEP-B taxonomy
  * rename to `prd-ready/` is deferred.
  */
-const POOL_PRDS_DIR = 'work/prd';
+const POOL_PRDS_DIR = workFolderRel('prd');
 
 /** The placement slots for the PRD lifecycle (folder names). */
 const PRD_PLACEMENT_SLOTS: PlacementSlots = {
@@ -1062,7 +1063,7 @@ async function dispatchSlice(params: {
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
-	const relPath = `work/backlog/${slug}.md`;
+	const relPath = workItemRel('backlog', `${slug}.md`);
 
 	// BOUNDED INTERNAL REVIEW (observation
 	// `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):

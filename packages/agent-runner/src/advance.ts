@@ -1,5 +1,6 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {type WorkFolderKey, workItemPath, workItemRel} from './work-layout.js';
 import {
 	resolveAdvanceArg,
 	SlugResolutionError,
@@ -371,7 +372,7 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * (sliced); while it is being sliced the body STAYS in `prd/` (the lock no longer
  * moves it), so `slicing/` is never a frontmatter source.
  */
-const FOLDERS_FOR_TYPE: Record<SidecarType, readonly string[]> = {
+const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
 	slice: ['backlog', 'in-progress', 'done'],
 	prd: ['prd', 'prd-sliced'],
 	observation: ['observations'],
@@ -384,7 +385,7 @@ function readNeedsAnswers(
 	slug: string,
 ): boolean | undefined {
 	for (const folder of FOLDERS_FOR_TYPE[type]) {
-		const abs = join(repoPath, 'work', folder, `${slug}.md`);
+		const abs = workItemPath(repoPath, folder, slug);
 		if (existsSync(abs)) {
 			return parseFrontmatter(readFileSync(abs, 'utf8')).needsAnswers;
 		}
@@ -749,7 +750,7 @@ function findItemPath(
 ): string | undefined {
 	const type = sidecarTypeFor(namespace);
 	for (const folder of FOLDERS_FOR_TYPE[type]) {
-		const rel = `work/${folder}/${slug}.md`;
+		const rel = workItemRel(folder, `${slug}.md`);
 		if (existsSync(join(cwd, rel))) {
 			return rel;
 		}

@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {run, type RunResult} from './git.js';
 import {setFrontmatterMarker} from './frontmatter.js';
 import {applyAtomic} from './sidecar-apply.js';
+import {workItemRel} from './work-layout.js';
 import {
 	createItemThroughCas,
 	type CreateItemThroughCasResult,
@@ -305,7 +306,7 @@ export async function promoteObservation(
 			message: `promote ${item}: empty new slug — cannot draft a backlog stub`,
 		};
 	}
-	const newItemPath = `work/backlog/${newSlug}.md`;
+	const newItemPath = workItemRel('backlog', `${newSlug}.md`);
 	const by = options.by || resolveBy(cwd, env);
 	const content = options.stubContent ?? defaultStub(newSlug, item);
 

@@ -1,5 +1,6 @@
 import {readdirSync, existsSync, statSync} from 'node:fs';
 import {join} from 'node:path';
+import {workFolderPath, isWorkItemFile} from './work-layout.js';
 
 /**
  * Discovery of `work/`-participating repos in a FOLDER. In the registry model
@@ -16,14 +17,14 @@ import {join} from 'node:path';
  * one `.md` file. This is the predicate `remote find` (ADR §1) filters on.
  */
 export function isParticipatingRepo(repoPath: string): boolean {
-	const backlog = join(repoPath, 'work', 'backlog');
+	const backlog = workFolderPath(repoPath, 'backlog');
 	let entries: string[];
 	try {
 		entries = readdirSync(backlog);
 	} catch {
 		return false;
 	}
-	return entries.some((name) => name.toLowerCase().endsWith('.md'));
+	return entries.some((name) => isWorkItemFile(name));
 }
 
 function shouldPrune(name: string): boolean {

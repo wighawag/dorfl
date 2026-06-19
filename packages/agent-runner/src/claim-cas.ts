@@ -2,6 +2,7 @@ import {runAsync, type RunResult} from './git.js';
 import {acquireItemLock, releaseItemLock, heldSliceSlugs} from './item-lock.js';
 import {resolveReadiness} from './readiness.js';
 import {workBranchRef} from './slug-namespace.js';
+import {workItemRel} from './work-layout.js';
 
 /**
  * In-process TypeScript implementation of the atomic compare-and-swap claim from
@@ -246,7 +247,7 @@ async function runClaim(
 		}
 	}
 
-	const backlog = `work/backlog/${slug}.md`;
+	const backlog = workItemRel('backlog', `${slug}.md`);
 	const branch = workBranchRef('slice', slug);
 
 	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (PRD

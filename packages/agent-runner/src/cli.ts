@@ -61,6 +61,7 @@ import {
 } from './advance-isolated.js';
 import {advanceRegistrySetRunTick} from './advance-loop-driver.js';
 import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
+import {workFolderPrefix} from './work-layout.js';
 import {
 	performDoAuto,
 	performDoArgs,
@@ -3071,7 +3072,10 @@ export function buildProgram(): Command {
 				console.error(`error: ${result.reasonNotMoved}`);
 				process.exit(1);
 			}
-			const dest = namespace === 'prd' ? 'work/prd/' : 'work/backlog/';
+			const dest =
+				namespace === 'prd'
+					? workFolderPrefix('prd')
+					: workFolderPrefix('backlog');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
 					namespace === 'prd' ? 'auto-sliceable' : 'claimable'
