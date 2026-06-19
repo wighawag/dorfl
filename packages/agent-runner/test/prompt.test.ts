@@ -147,7 +147,7 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 
 	it('substitutes <slug> everywhere it appears in the canonical text', () => {
 		const emitted = wrapper('my-slug', 'my-prd');
-		expect(emitted).toContain('work/in-progress/my-slug.md');
+		expect(emitted).toContain('work/backlog/my-slug.md');
 		expect(emitted).not.toContain('<slug>');
 	});
 
@@ -250,7 +250,7 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
 			cwd: scratch.root,
 		});
-		expect(out).toContain('work/in-progress/example.md');
+		expect(out).toContain('work/backlog/example.md');
 		expect(out).toContain('SLICE-BODY');
 		expect(out).not.toContain('<slug>');
 	});
@@ -677,7 +677,7 @@ describe('renderPrompt — slug given', () => {
 	it('renders the wrapper + slice prompt for an explicit slug', () => {
 		seedSlice(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/in-progress/given.md');
+		expect(out).toContain('work/backlog/given.md');
 		expect(out).toContain('the-prd');
 		expect(out).toContain('GIVEN-BODY');
 		expect(out).not.toContain('<slug>');
@@ -692,7 +692,7 @@ describe('renderPrompt — slug given', () => {
 		gitIn(['switch', '-q', '-c', 'work/other'], scratch.root);
 		seedSlice(scratch.root, 'backlog', 'given', '> GIVEN-BODY');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/in-progress/given.md');
+		expect(out).toContain('work/backlog/given.md');
 		expect(out).toContain('GIVEN-BODY');
 	});
 });
@@ -718,7 +718,7 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 		initRepoOnBranch('work/inferred');
 		seedSlice(scratch.root, 'in-progress', 'inferred', '> INFERRED-BODY');
 		const out = renderPrompt({cwd: scratch.root, env: gitEnv()});
-		expect(out).toContain('work/in-progress/inferred.md');
+		expect(out).toContain('work/backlog/inferred.md');
 		expect(out).toContain('INFERRED-BODY');
 	});
 
