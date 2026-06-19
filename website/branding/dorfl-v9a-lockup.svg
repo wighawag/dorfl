@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="300" viewBox="0 0 980 300">
+  <!-- Dorfl v9a LOCKUP: the canonical TALL head (head-only) + wordmark + tagline. -->
+  <defs>
+    <filter id="la9" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="980" height="300" fill="#23201C"/>
+  <!-- tall head (v9a geometry), vertically centered in the 300-tall band -->
+  <g transform="translate(72,18) scale(0.84)">
+    <rect x="10" y="6" width="200" height="252" rx="28" fill="#A4543C"/>
+    <path d="M110 6 H182 Q210 6 210 34 V230 Q210 258 182 258 H110 Z" fill="#8A4632" opacity="0.42"/>
+    <rect x="64" y="252" width="92" height="26" rx="10" fill="#A4543C"/>
+    <path d="M110 252 H156 V278 H110 Z" fill="#8A4632" opacity="0.42"/>
+    <rect x="36" y="82" width="148" height="72" rx="15" fill="#1C1813"/>
+    <rect x="44" y="90" width="132" height="56" rx="11" fill="#FFB23E" filter="url(#la9)"/>
+    <path d="M72 104 l21 14 l-21 14" fill="none" stroke="#1C1813" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="116" y="128" width="34" height="11" rx="5.5" fill="#1C1813"/>
+    <rect x="81" y="202" width="58" height="10" rx="5" fill="#7E3D2C"/>
+  </g>
+  <!-- wordmark + Title-Case tagline -->
+  <text x="300" y="158" font-family="Georgia, serif" font-size="104" letter-spacing="6" fill="#E9D9C7">dorfl</text>
+  <text x="304" y="206" font-family="Menlo, monospace" font-size="26" letter-spacing="1" fill="#C9745A">It Claims Its Own Work</text>
+</svg>
