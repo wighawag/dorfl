@@ -96,7 +96,7 @@ describe('observationTriage — the SELECTION-layer gate over the observation po
 	});
 
 	function seedObservation(slug: string, triaged?: string): void {
-		const dir = join(repo, 'work', 'observations');
+		const dir = join(repo, 'work', 'notes', 'observations');
 		mkdirSync(dir, {recursive: true});
 		const lines = ['---', `slug: ${slug}`];
 		if (triaged !== undefined) lines.push(`triaged: ${triaged}`);
@@ -178,8 +178,8 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 		const repo = join(scratch.root, slug);
 		mkdirSync(repo, {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
-		const itemPath = `work/observations/${slug}.md`;
-		mkdirSync(join(repo, 'work', 'observations'), {recursive: true});
+		const itemPath = `work/notes/observations/${slug}.md`;
+		mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
 		writeFileSync(
 			join(repo, itemPath),
 			[
@@ -372,7 +372,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 	});
 
 	function seedSlice(slug: string): void {
-		const dir = join(repo, 'work', 'backlog');
+		const dir = join(repo, 'work', 'tasks', 'todo');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${slug}.md`),

@@ -20,7 +20,7 @@ import {
  *
  * When a terminal push fails AFTER the done-move + commit (steps 2–3 of
  * `performIntegration`), the work is stranded in this state:
- *   - `work/done/<slug>.md` PRESENT on the branch; in-progress/needs-attention
+ *   - `work/tasks/done/<slug>.md` PRESENT on the branch; in-progress/needs-attention
  *     ABSENT (the done-move already ran);
  *   - the green work ALREADY committed on `work/slice-<slug>` (`…; done`), tip
  *     NOT on the arbiter.
@@ -76,16 +76,23 @@ async function seedStrandedCommittedDone(
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	// The done-move + commit already happened (steps 2–3), as the integration
 	// core does just before the push that then failed terminally.
-	mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], repo);
+	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+	gitIn(
+		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		repo,
+	);
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], repo);
 
 	// Pre-conditions: done/ present on the branch, backlog/ gone locally; the
 	// tip is NOT on the arbiter (the push failed), so the arbiter still has
 	// the body in backlog/.
-	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(true);
-	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
+	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
+		true,
+	);
+	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+		false,
+	);
 	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'done', slug)).toBe(false);
 	const tip = gitIn(['rev-parse', 'HEAD'], repo).trim();
@@ -159,7 +166,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 		expect(result.outcome).toBe('completed');
 		// propose pushes the branch carrying the done-move.
 		const onBranch = gitIn(
-			['show', `${ARBITER}/work/slice-gamma:work/done/gamma.md`],
+			['show', `${ARBITER}/work/slice-gamma:work/tasks/done/gamma.md`],
 			repo,
 		);
 		expect(onBranch).toMatch(/thing/i);

@@ -17,7 +17,13 @@ import {
 	PromptError,
 	type ContinueContext,
 } from '../src/prompt.js';
-import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
+import {
+	makeScratch,
+	gitEnv,
+	gitIn,
+	fixtureFolderRel,
+	type Scratch,
+} from './helpers/gitRepo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** The canonical work-contract, owned by the `setup` skill at the monorepo root. */
@@ -62,7 +68,7 @@ function seedSlice(
 	body: string,
 	prd = 'my-prd',
 ): void {
-	const dir = join(root, 'work', folder);
+	const dir = join(root, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	const content = [
 		'---',
@@ -147,6 +153,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 
 	it('substitutes <slug> everywhere it appears in the canonical text', () => {
 		const emitted = wrapper('my-slug', 'my-prd');
+		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), which
+		// this notes-regroup + task-board-rename slice deliberately leaves UNTOUCHED
+		// (the protocol-doc mirror is a sibling slice). So the emitted slice-body path
+		// is still the protocol's current `work/backlog/<slug>.md`.
 		expect(emitted).toContain('work/backlog/my-slug.md');
 		expect(emitted).not.toContain('<slug>');
 	});
@@ -532,7 +542,7 @@ describe('resolveSlice — in-progress over backlog', () => {
 		expect(slice.prd).toBe('my-prd');
 	});
 
-	it('falls back to work/backlog/ when not in-progress', () => {
+	it('falls back to work/tasks/todo/ when not in-progress', () => {
 		seedSlice(scratch.root, 'backlog', 'bar', '> backlog body');
 		const slice = resolveSlice(scratch.root, 'bar');
 		expect(slice.folder).toBe('backlog');
@@ -564,7 +574,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 
 	/**
 	 * Build a throwaway repo whose slice `<slug>` has been DONE-MOVED into
-	 * `work/done/` on a `work/slice-<slug>` branch, with a sibling `--bare`
+	 * `work/tasks/done/` on a `work/slice-<slug>` branch, with a sibling `--bare`
 	 * arbiter. `integrated` controls the tip-vs-arbiter state under test:
 	 *   - `false` (STRANDED): the done-move commit is committed on the branch but
 	 *     NOT pushed to the arbiter — `arbiter/main` lacks it (the strand state).
@@ -589,8 +599,11 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
 		// The done-move commit: in-progress/ -> done/, on a work/slice-<slug> branch.
 		gitIn(['switch', '-q', '-c', `work/slice-${slug}`], repo);
-		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-		gitIn(['mv', `work/in-progress/${slug}.md`, `work/done/${slug}.md`], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(
+			['mv', `work/in-progress/${slug}.md`, `work/tasks/done/${slug}.md`],
+			repo,
+		);
 		gitIn(['commit', '-q', '-m', `done: ${slug}`], repo);
 		if (integrated) {
 			// COMPLETE: the done-move tip is published to arbiter/main (integrated).

@@ -48,9 +48,9 @@ const ARBITER = 'arbiter';
 
 /**
  * Stand the repo up EXACTLY as the CI incident left it: the slug was claimed (the
- * body RESTS in `work/backlog/<slug>.md` on the arbiter, since claim no longer
+ * body RESTS in `work/tasks/todo/<slug>.md` on the arbiter, since claim no longer
  * moves it), the work was built + committed + done-moved on the work branch (so
- * the BRANCH tree holds `work/done/<slug>.md` and NOT `work/backlog/<slug>.md`),
+ * the BRANCH tree holds `work/tasks/done/<slug>.md` and NOT `work/tasks/todo/<slug>.md`),
  * but the tip was NEVER pushed / merged — it is genuinely AHEAD of `<arbiter>/main`.
  * HEAD is on the work branch (where the autonomous integrate path runs).
  */
@@ -72,15 +72,22 @@ async function seedStrandedDoneBranch(
 
 	// The agent's work + the done-move + commit (steps 2–3 of the build path).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
-	mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], repo);
+	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+	gitIn(
+		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		repo,
+	);
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], repo);
 
 	// Sanity: the branch tree has done/ and lacks backlog/needs-attention;
 	// the arbiter still holds the body in backlog/ (claim wrote nothing) and not done/.
-	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(true);
-	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
+	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
+		true,
+	);
+	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+		false,
+	);
 	expect(existsSync(join(repo, 'work', 'needs-attention', `${slug}.md`))).toBe(
 		false,
 	);
@@ -273,10 +280,14 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
 		// Remove the slice body from backlog/ on the branch tree WITHOUT moving it to
 		// done/ — the "genuinely nothing here" state.
-		gitIn(['rm', '-q', 'work/backlog/gamma.md'], repo);
+		gitIn(['rm', '-q', 'work/tasks/todo/gamma.md'], repo);
 		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
-		expect(existsSync(join(repo, 'work', 'backlog', 'gamma.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'done', 'gamma.md'))).toBe(false);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'gamma.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'gamma.md'))).toBe(
+			false,
+		);
 
 		const result = await performComplete({
 			slug: 'gamma',

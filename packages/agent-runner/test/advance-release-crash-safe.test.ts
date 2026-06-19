@@ -69,8 +69,8 @@ function seedStrandedWorkBranch(
 ): {branch: string; keptTip: string} {
 	const branch = `work/${entry}`;
 	git(['checkout', '-q', '-b', branch, 'arbiter/main'], repo);
-	mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-	git(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], repo);
+	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+	git(['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`], repo);
 	git(
 		['commit', '-q', '-m', `done: ${slug} (kept commit from prior run)`],
 		repo,
@@ -86,7 +86,10 @@ function reclaimOnArbiterMain(repo: string, slug: string): void {
 	git(['checkout', '-q', 'main'], repo);
 	git(['pull', '-q', '--ff-only', 'arbiter', 'main'], repo);
 	mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
-	git(['mv', `work/backlog/${slug}.md`, `work/in-progress/${slug}.md`], repo);
+	git(
+		['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+		repo,
+	);
 	git(['commit', '-q', '-m', `claim: ${slug}`], repo);
 	git(['push', '-q', 'arbiter', 'main:main'], repo);
 }
@@ -164,7 +167,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 		// INVARIANT: the slug is in exactly ONE lifecycle folder on arbiter/main
 		// (the in-progress it started in — the strand's done-move never landed).
 		expect(trackedOnArbiter(repo, `work/in-progress/${slug}.md`)).toBe(true);
-		expect(trackedOnArbiter(repo, `work/done/${slug}.md`)).toBe(false);
+		expect(trackedOnArbiter(repo, `work/tasks/done/${slug}.md`)).toBe(false);
 		// INVARIANT: the KEPT WORK branch tip is preserved (recoverable, never
 		// `git reset --hard`'d).
 		git(['fetch', '-q', 'arbiter'], repo);
@@ -178,7 +181,10 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 		const entry = `slice-${slug}`;
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
-		git(['mv', `work/backlog/${slug}.md`, `work/in-progress/${slug}.md`], repo);
+		git(
+			['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+			repo,
+		);
 		git(['commit', '-q', '-m', `claim: ${slug}`], repo);
 		git(['push', '-q', 'arbiter', 'main:main'], repo);
 		const preDispatchTip = git(['rev-parse', 'HEAD'], repo).trim();
@@ -227,7 +233,10 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 		const entry = `slice-${slug}`;
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
-		git(['mv', `work/backlog/${slug}.md`, `work/in-progress/${slug}.md`], repo);
+		git(
+			['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+			repo,
+		);
 		git(['commit', '-q', '-m', `claim: ${slug}`], repo);
 		git(['push', '-q', 'arbiter', 'main:main'], repo);
 

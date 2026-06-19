@@ -40,12 +40,12 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-/** Seed a `work/backlog/<slug>.md` slice with the given gate frontmatter. */
+/** Seed a `work/tasks/todo/<slug>.md` slice with the given gate frontmatter. */
 function seedSlice(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
 ): void {
-	const dir = join(repo, 'work', 'backlog');
+	const dir = join(repo, 'work', 'tasks', 'todo');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');

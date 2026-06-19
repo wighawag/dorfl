@@ -121,8 +121,8 @@ describe('the bounce marks the lock stuck and writes NO main', () => {
 	it('the rebase-conflict path (item done-moved on the branch) is the same pure lock amend', async () => {
 		const {repo} = await claimAndBranch('beta');
 		// Emulate the post-done-move state on the work branch.
-		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
-		gitIn(['mv', 'work/backlog/beta.md', 'work/done/beta.md'], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(['mv', 'work/tasks/todo/beta.md', 'work/tasks/done/beta.md'], repo);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'done-move'], repo);
 

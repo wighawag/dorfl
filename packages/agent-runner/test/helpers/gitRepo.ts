@@ -3,6 +3,29 @@ import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {run, git} from '../../src/git.js';
 import {mirrorPath} from '../../src/repo-mirror.js';
+import {
+	WORK_FOLDER_NAME,
+	workFolderName,
+	type WorkFolderKey,
+} from '../../src/work-layout.js';
+
+/**
+ * Map a fixture's STATUS/folder KEY (the OLD-vocabulary symbolic name a test
+ * passes, e.g. `'backlog'`/`'done'`/`'observations'`) to its CURRENT on-disk
+ * repo-relative folder path via `work-layout`. After the notes-regroup +
+ * task-board-rename flip these resolve to the NEW layout (`tasks/todo`,
+ * `tasks/done`, `notes/observations`, …) while leaving the test call sites,
+ * which still speak the old status words, untouched. This is the single seam the
+ * parameter-driven fixture helpers (which cannot be statically swept) route
+ * through, so a later folder rename is a `work-layout` value flip here too.
+ *
+ * LOOSE on purpose: a name that is NOT a known `work-layout` folder key (e.g. the
+ * legacy transient `'slicing'` some readers still probe) passes through
+ * UNCHANGED, so callers that mix durable keys with such literals keep working.
+ */
+export function fixtureFolderRel(key: string): string {
+	return key in WORK_FOLDER_NAME ? workFolderName(key as WorkFolderKey) : key;
+}
 
 /**
  * Deterministic git identity + non-interactive env for throwaway test repos.
@@ -134,7 +157,7 @@ function gx(args: string[], cwd: string): string {
 }
 
 /**
- * Build a throwaway project repo with a `work/backlog/<slug>.md` for each given
+ * Build a throwaway project repo with a `work/tasks/todo/<slug>.md` for each given
  * slug, plus a sibling local `--bare` arbiter the project pushes its `main` to.
  * Returns the working-clone path, the arbiter path, and a `clone()` that makes
  * an additional independent clone of the arbiter (for parallel isolation tests).
@@ -169,7 +192,7 @@ export function seedRepoWithArbiter(
 	mkdirSync(repo, {recursive: true});
 	gx(['init', '-q', '-b', 'main'], repo);
 
-	const backlog = join(repo, 'work', 'backlog');
+	const backlog = join(repo, 'work', 'tasks', 'todo');
 	mkdirSync(backlog, {recursive: true});
 	for (const slug of slugs) {
 		writeFileSync(join(backlog, `${slug}.md`), sliceFile(slug, opts));
@@ -268,7 +291,7 @@ export function prdFile(slug: string, marker = 'ORIGINAL'): string {
 }
 
 /**
- * Seed a `work/done/<slug>.md` directly onto `<arbiter>/main` (simulating a
+ * Seed a `work/tasks/done/<slug>.md` directly onto `<arbiter>/main` (simulating a
  * completed dependency), via a throwaway clone so the checkout under test is
  * left untouched. Used to satisfy a slice's `blockedBy` for readiness tests.
  */
@@ -278,7 +301,7 @@ export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
 	gx(['remote', 'add', 'arbiter', `file://${seeded.arbiter}`], dest);
 	gx(['fetch', '-q', 'arbiter'], dest);
 	gx(['checkout', '-q', '-B', `seed-done/${slug}`, 'arbiter/main'], dest);
-	const doneDir = join(dest, 'work', 'done');
+	const doneDir = join(dest, 'work', 'tasks', 'done');
 	mkdirSync(doneDir, {recursive: true});
 	writeFileSync(join(doneDir, `${slug}.md`), sliceFile(slug, {}));
 	gx(['add', '-A'], dest);
@@ -296,7 +319,11 @@ export function existsOnArbiterMain(
 	run('git', ['fetch', '-q', 'arbiter'], cwd, {env: gitEnv()});
 	const res = run(
 		'git',
-		['cat-file', '-e', `arbiter/main:work/${status}/${slug}.md`],
+		[
+			'cat-file',
+			'-e',
+			`arbiter/main:work/${fixtureFolderRel(status)}/${slug}.md`,
+		],
 		cwd,
 		{env: gitEnv()},
 	);
@@ -392,7 +419,7 @@ export function registerMirrorWithWork(
 		prd?: Record<string, string>;
 		/** Already-SLICED PRDs, committed under `work/prd-sliced/` (sliced-ness residence). */
 		prdSliced?: Record<string, string>;
-		/** Observations committed under `work/observations/` (the triage candidate pool). */
+		/** Observations committed under `work/notes/observations/` (the triage candidate pool). */
 		observations?: Record<string, string>;
 		/** Sidecars committed under `work/questions/` (`<type>-<slug>.md`). */
 		questions?: Record<string, string>;
@@ -411,7 +438,7 @@ export function registerMirrorWithWork(
 		if (!files) {
 			return;
 		}
-		const dir = join(src, 'work', folder);
+		const dir = join(src, 'work', fixtureFolderRel(folder as WorkFolderKey));
 		mkdirSync(dir, {recursive: true});
 		for (const [file, content] of Object.entries(files)) {
 			writeFileSync(join(dir, file), content);
@@ -458,7 +485,7 @@ export function pushWorkToMirrorOrigin(
 	content: string,
 ): void {
 	const src = mirrorSrc(workspacesDir, name);
-	const dir = join(src, 'work', folder);
+	const dir = join(src, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(join(dir, file), content);
 	gx(['add', '-A'], src);

@@ -20,17 +20,17 @@ afterEach(() => {
 });
 
 /**
- * Seed a plain working repo (no arbiter) with a `work/backlog/<slug>.md` for
+ * Seed a plain working repo (no arbiter) with a `work/tasks/todo/<slug>.md` for
  * each slug, on `main`. This is the input `arbiter init` derives a bare arbiter
  * from. Returns the working-repo path.
  */
 function seedWorkingRepo(root: string, slugs: string[]): string {
 	const repo = join(root, 'project');
-	mkdirSync(join(repo, 'work', 'backlog'), {recursive: true});
+	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
 	for (const slug of slugs) {
 		writeFileSync(
-			join(repo, 'work', 'backlog', `${slug}.md`),
+			join(repo, 'work', 'tasks', 'todo', `${slug}.md`),
 			[
 				'---',
 				`title: ${slug}`,
@@ -149,7 +149,7 @@ describe('arbiter init', () => {
 		// `at` is an existing NON-BARE repo with `main` checked out — using it as the
 		// arbiter would reject claim pushes (CLAIM-PROTOCOL). init must refuse.
 		const nonBare = join(scratch.root, 'non-bare');
-		mkdirSync(join(nonBare, 'work', 'backlog'), {recursive: true});
+		mkdirSync(join(nonBare, 'work', 'tasks', 'todo'), {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], nonBare);
 		writeFileSync(join(nonBare, 'README.md'), '# x\n');
 		gitIn(['add', '-A'], nonBare);
@@ -272,7 +272,7 @@ describe('claim against a provisioned arbiter (end-to-end)', () => {
 		// backlog/ on main (claim writes nothing there — the lock IS the claim).
 		git(['fetch', '-q', 'arbiter'], clone, {env: gitEnv()});
 		const inBacklog = git(
-			['cat-file', '-e', 'arbiter/main:work/backlog/feat.md'],
+			['cat-file', '-e', 'arbiter/main:work/tasks/todo/feat.md'],
 			clone,
 			{env: gitEnv()},
 		);

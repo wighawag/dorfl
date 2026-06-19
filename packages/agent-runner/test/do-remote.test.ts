@@ -149,7 +149,9 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 			expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).trim()).toBe(
 				`work/slice-${slug}`,
 			);
-			expect(existsSync(join(cwd, 'work', 'backlog', `${slug}.md`))).toBe(true);
+			expect(existsSync(join(cwd, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+				true,
+			);
 			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
 			return {ok: true};
 		};
@@ -298,7 +300,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				agentRan = true;
-				const dir = join(cwd, 'work', 'backlog');
+				const dir = join(cwd, 'work', 'tasks', 'todo');
 				mkdirSync(dir, {recursive: true});
 				writeFileSync(
 					join(dir, 'someprd-explicit.md'),

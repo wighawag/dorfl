@@ -189,7 +189,7 @@ describe('parseFrontmatter', () => {
 	});
 
 	it('parses a lone-slice `issue: N` link as a number (intake SLICE-emit, no prd:)', () => {
-		// `intake`'s SLICE outcome writes `issue: N` on the lone `work/backlog/<slug>.md`
+		// `intake`'s SLICE outcome writes `issue: N` on the lone `work/tasks/todo/<slug>.md`
 		// (no `prd:`) as the provider-agnostic closure link a future CI close-job reads.
 		const md = [
 			'---',

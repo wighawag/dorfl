@@ -54,11 +54,11 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Stand the CI repro: claim the slug (the body RESTS in `work/backlog/<slug>.md`
+ * Stand the CI repro: claim the slug (the body RESTS in `work/tasks/todo/<slug>.md`
  * on the arbiter, since claim no longer moves it), put HEAD on the work branch,
  * and remove the slice body from the BRANCH tree WITHOUT done-moving it — the
  * source-strand state the autonomous source-resolution refuses with "nothing to
- * complete". The arbiter still holds the body in `work/backlog/`.
+ * complete". The arbiter still holds the body in `work/tasks/todo/`.
  */
 async function seedSourceStrand(slug: string): Promise<string> {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
@@ -72,10 +72,14 @@ async function seedSourceStrand(slug: string): Promise<string> {
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
-	gitIn(['rm', '-q', `work/backlog/${slug}.md`], repo);
+	gitIn(['rm', '-q', `work/tasks/todo/${slug}.md`], repo);
 	gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
-	expect(existsSync(join(repo, 'work', 'backlog', `${slug}.md`))).toBe(false);
-	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(false);
+	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+		false,
+	);
+	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
+		false,
+	);
 	expect(existsSync(join(repo, 'work', 'needs-attention', `${slug}.md`))).toBe(
 		false,
 	);
@@ -197,7 +201,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		// staged`): claim the slug, put HEAD on the work branch, leave the
 		// in-progress slice file in place, but DO NOT done-move it locally — and
 		// arrange that the core's done-move is suppressed too. The simplest way:
-		// pre-move the slice into work/done/ on the branch tree AND commit it (so
+		// pre-move the slice into work/tasks/done/ on the branch tree AND commit it (so
 		// the core's `git mv` from in-progress/ to done/ has nothing to stage) AND
 		// keep the agent's tree clean (no uncommitted work). To force the throw we
 		// land the same state on the work branch HEAD with nothing further to
@@ -219,9 +223,12 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		// resolves source='in-progress' and the core's done-move from in-progress/
 		// to done/ runs — but the destination already has the file so the staged
 		// diff is empty.
-		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 		// Make a second copy of the slice in done/ committed already.
-		writeFileSync(join(repo, 'work', 'done', 'delta.md'), 'pre-done\n');
+		writeFileSync(
+			join(repo, 'work', 'tasks', 'done', 'delta.md'),
+			'pre-done\n',
+		);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'pre-seed done/delta.md'], repo);
 
@@ -247,7 +254,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 
 		// Reset to a clean source-present state so the front-gate does NOT take the
 		// stranded-done route (it would skip the core).
-		gitIn(['rm', '-q', '--cached', 'work/done/delta.md'], repo);
+		gitIn(['rm', '-q', '--cached', 'work/tasks/done/delta.md'], repo);
 		gitIn(['commit', '-q', '-m', 'unstash done/delta.md'], repo);
 
 		const notes: string[] = [];

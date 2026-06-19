@@ -103,8 +103,12 @@ describe('integration-core — approve ⇒ completed', () => {
 		// The integration result carries the EFFECTIVE mode (the tail reads it here).
 		expect(core.integration?.mode).toBe('propose');
 		// The done-move happened in the tree (the band moved backlog → done + commit).
-		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			true,
+		);
 		// propose pushed the work branch (the safety-bearing step), NOT main.
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
@@ -157,14 +161,14 @@ describe('integration-core — approve ⇒ completed', () => {
 describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-origin-forces-build-propose)', () => {
 	// Stamp `originTrust` onto the backlog slice the build is about to integrate
 	// (the slicer would have propagated it; here we set it directly to drive the
-	// rule). The build-propose rule reads it from `work/backlog/<slug>.md` (the body
+	// rule). The build-propose rule reads it from `work/tasks/todo/<slug>.md` (the body
 	// rests there now — claim no longer moves it).
 	const stampOriginTrust = (
 		repo: string,
 		slug: string,
 		value: 'trusted' | 'untrusted',
 	): void => {
-		const path = join(repo, 'work', 'backlog', `${slug}.md`);
+		const path = join(repo, 'work', 'tasks', 'todo', `${slug}.md`);
 		const content = readFileSync(path, 'utf8');
 		writeFileSync(
 			path,
@@ -333,7 +337,9 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 		// The body STAYS in backlog/ (it never moved on claim) and never reaches
 		// done/; the stuck state is the lock (no needs-attention/ folder).
 		expect(existsOnArbiterMain(repo, 'backlog', 'prep-beta')).toBe(true);
-		expect(existsSync(join(repo, 'work', 'done', 'prep-beta.md'))).toBe(false);
+		expect(
+			existsSync(join(repo, 'work', 'tasks', 'done', 'prep-beta.md')),
+		).toBe(false);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'prep-beta')).toBe(
 			false,
 		);
@@ -355,7 +361,9 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 		});
 
 		expect(core.outcome).toBe('completed');
-		expect(existsSync(join(repo, 'work', 'done', 'prep-gamma.md'))).toBe(true);
+		expect(
+			existsSync(join(repo, 'work', 'tasks', 'done', 'prep-gamma.md')),
+		).toBe(true);
 	});
 });
 
@@ -384,7 +392,9 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 		// The body STAYS in backlog/ (never moved on claim) and never reaches done/;
 		// the stuck state is the per-item lock (no needs-attention/ folder).
 		expect(existsOnArbiterMain(repo, 'backlog', 'delta')).toBe(true);
-		expect(existsSync(join(repo, 'work', 'done', 'delta.md'))).toBe(false);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'delta.md'))).toBe(
+			false,
+		);
 		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
 	});
@@ -414,7 +424,9 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 		expect(core.reason).toMatch(/review.*blocked/i);
 		expect(core.integration).toBeUndefined();
 		// Never reached done/; the stuck state is the per-item lock.
-		expect(existsSync(join(repo, 'work', 'done', 'epsilon.md'))).toBe(false);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'epsilon.md'))).toBe(
+			false,
+		);
 		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
 		// The blocking findings are recorded on the lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
@@ -756,19 +768,22 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		return {seeded, repo};
 	}
 
-	it('a conflict confined to a SIBLING slug ledger file (work/done/sb.md) is reconciled and the job LANDS', async () => {
+	it('a conflict confined to a SIBLING slug ledger file (work/tasks/done/sb.md) is reconciled and the job LANDS', async () => {
 		const {seeded, repo} = await siblingLedgerConflictJob({
 			// Our branch modifies the SIBLING's backlog ledger (a benign touch).
-			touch: 'work/backlog/sb.md',
+			touch: 'work/tasks/todo/sb.md',
 			branchContent: 'sb ledger — our branch view\n',
 			// The arbiter MOVES sb from backlog to done with different content (the
 			// sibling job's done-move): replaying our touch onto it conflicts on sb's
 			// ledger ONLY — a benign sibling-ledger divergence.
 			landOnArbiter: (mainCwd) => {
-				mkdirSync(join(mainCwd, 'work', 'done'), {recursive: true});
-				gitIn(['mv', 'work/backlog/sb.md', 'work/done/sb.md'], mainCwd);
+				mkdirSync(join(mainCwd, 'work', 'tasks', 'done'), {recursive: true});
+				gitIn(
+					['mv', 'work/tasks/todo/sb.md', 'work/tasks/done/sb.md'],
+					mainCwd,
+				);
 				writeFileSync(
-					join(mainCwd, 'work', 'done', 'sb.md'),
+					join(mainCwd, 'work', 'tasks', 'done', 'sb.md'),
 					'sb ledger — arbiter (sibling done-move)\n',
 				);
 			},
@@ -834,11 +849,11 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// route (it is NOT the divergent-base case the #86 recovery handles, since the
 		// arbiter still holds sa in backlog — the same folder we move from).
 		const {repo} = await siblingLedgerConflictJob({
-			touch: 'work/backlog/sa.md',
+			touch: 'work/tasks/todo/sa.md',
 			branchContent: 'sa ledger — our branch view\n',
 			landOnArbiter: (mainCwd) => {
 				writeFileSync(
-					join(mainCwd, 'work', 'backlog', 'sa.md'),
+					join(mainCwd, 'work', 'tasks', 'todo', 'sa.md'),
 					'sa ledger — arbiter view\n',
 				);
 			},

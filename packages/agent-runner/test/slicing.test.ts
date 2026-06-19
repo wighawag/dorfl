@@ -86,10 +86,10 @@ function seedPrd(
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** An agent that writes one STAGED slice file under `work/pre-backlog/` (no git). */
+/** An agent that writes one STAGED slice file under `work/tasks/backlog/` (no git). */
 function slicingAgent(file = 'child', extra?: () => void): SliceAgentRunner {
 	return ({cwd}) => {
-		const dir = join(cwd, 'work', 'pre-backlog');
+		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${file}.md`),
@@ -215,7 +215,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		});
 		expect(result.outcome).toBe('sliced');
 		expect(agentRan).toBe(true);
-		expect(onArbiter(repo, 'work/pre-backlog/it-explicit.md')).toBe(true);
+		expect(onArbiter(repo, 'work/tasks/backlog/it-explicit.md')).toBe(true);
 	});
 
 	it('EXPLICIT still refuses a humanOnly PRD (the readiness axis binds regardless of explicit)', async () => {
@@ -374,13 +374,13 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
-		expect(result.emitted).toEqual(['work/pre-backlog/it-first.md']);
+		expect(result.emitted).toEqual(['work/tasks/backlog/it-first.md']);
 
-		// The produced slice landed STAGED on the arbiter (work/pre-backlog/ — the
-		// agent-eligible pool work/backlog/ is the runner-owned promotion target,
+		// The produced slice landed STAGED on the arbiter (work/tasks/backlog/ — the
+		// agent-eligible pool work/tasks/todo/ is the runner-owned promotion target,
 		// slice `pre-backlog-staging-folder-and-promote-step-a`).
-		expect(onArbiter(repo, 'work/pre-backlog/it-first.md')).toBe(true);
-		expect(onArbiter(repo, 'work/backlog/it-first.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasks/backlog/it-first.md')).toBe(true);
+		expect(onArbiter(repo, 'work/tasks/todo/it-first.md')).toBe(false);
 		// The lock was released into the SLICED resting state: the PRD now resides in
 		// work/prd-sliced/ (the source of truth, like done/), NOT back in prd/; slicing/
 		// is empty.
@@ -407,7 +407,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			agentRunner: ({cwd}) => {
 				// The lock already moved the PRD to slicing/ on the arbiter; the agent
 				// must not have committed anything itself.
-				const dir = join(cwd, 'work', 'pre-backlog');
+				const dir = join(cwd, 'work', 'tasks', 'backlog');
 				mkdirSync(dir, {recursive: true});
 				writeFileSync(
 					join(dir, 'it-a.md'),
@@ -439,7 +439,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(files).toMatch(/work\/pre-backlog\/it-a\.md/);
+		expect(files).toMatch(/work\/tasks\/backlog\/it-a\.md/);
 		expect(files).toMatch(/work\/prd-sliced\/it\.md/);
 		// The PRD is no longer held in slicing/ (the lock was released in this commit)
 		// and now rests in prd-sliced/ (the source of truth), NOT back in prd/.
@@ -484,7 +484,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			autoSlice: true,
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
-				const out = join(cwd, 'work', 'pre-backlog');
+				const out = join(cwd, 'work', 'tasks', 'backlog');
 				mkdirSync(out, {recursive: true});
 				writeFileSync(
 					join(out, 'it-a.md'),
@@ -539,7 +539,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 		// did NOT move to prd-sliced/.
 		expect(onArbiter(repo, 'work/prd/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/pre-backlog/child.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
 	it('RE-SLICE round-trip: prd-sliced/ -> prd/ reopens a sliced PRD into the slice pool', async () => {
@@ -584,7 +584,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			env: gitEnv(),
 		});
 		expect(second.outcome).toBe('sliced');
-		expect(onArbiter(repo, 'work/pre-backlog/it-second.md')).toBe(true);
+		expect(onArbiter(repo, 'work/tasks/backlog/it-second.md')).toBe(true);
 		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/prd/it.md')).toBe(false);
 	});
@@ -743,7 +743,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 					findings: [{severity: 'blocking', question: 'thin prompt'}],
 					edits: [
 						{
-							path: 'work/pre-backlog/child.md',
+							path: 'work/tasks/backlog/child.md',
 							content:
 								'---\nslug: child\nprd: it\n---\n\n## Prompt\n\n> IMPROVED by the loop\n',
 						},
@@ -758,8 +758,8 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(result.outcome).toBe('sliced');
 		expect(result.loop).toBe('converged');
 		// The IMPROVED slice landed STAGED on the arbiter (not the pre-loop draft).
-		expect(onArbiter(repo, 'work/pre-backlog/child.md')).toBe(true);
-		expect(showArbiter(repo, 'work/pre-backlog/child.md')).toMatch(
+		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(true);
+		expect(showArbiter(repo, 'work/tasks/backlog/child.md')).toMatch(
 			/IMPROVED by the loop/,
 		);
 		// The lock was released + the PRD now rests in prd-sliced/ (residence = the SOLE
@@ -785,7 +785,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 					findings: [{severity: 'blocking', question: 'unresolved seam'}],
 					uncertainSlices: [
 						{
-							path: 'work/pre-backlog/child.md',
+							path: 'work/tasks/backlog/child.md',
 							questions: ['which seam does this reuse?'],
 						},
 					],
@@ -797,7 +797,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(result.outcome).toBe('sliced');
 		expect(result.loop).toBe('uncertain-slices');
 		// The slice landed STAGED BUT is flagged needsAnswers with the questions in its body.
-		const body = showArbiter(repo, 'work/pre-backlog/child.md');
+		const body = showArbiter(repo, 'work/tasks/backlog/child.md');
 		expect(body).toMatch(/needsAnswers: true/);
 		expect(body).toMatch(/which seam does this reuse\?/);
 		expect(body).toMatch(/## Open questions/);
@@ -835,8 +835,8 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
 		// No guessed slices emitted (neither staged nor in the pool).
-		expect(onArbiter(repo, 'work/pre-backlog/child.md')).toBe(false);
-		expect(onArbiter(repo, 'work/backlog/child.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasks/todo/child.md')).toBe(false);
 		// The PRD's per-item lock is held STUCK, carrying the questions as the reason.
 		const entry = await readItemLock({
 			item: 'prd:it',
@@ -917,7 +917,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		});
 		expect(result.outcome).toBe('sliced');
 		expect(result.loop).toBeUndefined();
-		expect(onArbiter(repo, 'work/pre-backlog/child.md')).toBe(true);
+		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(true);
 	});
 
 	it('on a POPULATED pool, the loop’s edit attempts to a pool slice are FENCED OUT (the loop only touches pre-backlog/)', async () => {
@@ -927,7 +927,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		// must be left completely alone (not edited, not needsAnswers-flagged, not
 		// re-committed into the runner-owned slicing release).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['landed']);
-		const landedBefore = showArbiter(repo, 'work/backlog/landed.md');
+		const landedBefore = showArbiter(repo, 'work/tasks/todo/landed.md');
 		seedPrd(repo, 'it');
 		const seenByGate: string[][] = [];
 		// A loop gate that, given the chance, would HIJACK + flag a landed POOL
@@ -941,7 +941,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 				edits: [
 					// Try to overwrite the pre-existing POOL slice (must be REFUSED
 					// — outside the pre-backlog/ fence)…
-					{path: 'work/backlog/landed.md', content: 'HIJACKED landed'},
+					{path: 'work/tasks/todo/landed.md', content: 'HIJACKED landed'},
 					// …and improve the run's own slice (allowed), keeping valid frontmatter.
 					...input.candidateSlices.map((path) => ({
 						path,
@@ -951,7 +951,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 				],
 				// Also try to flag the pre-existing slice directly by name.
 				uncertainSlices: [
-					{path: 'work/backlog/landed.md', questions: ['hijack flag']},
+					{path: 'work/tasks/todo/landed.md', questions: ['hijack flag']},
 					...input.candidateSlices.map((path) => ({
 						path,
 						questions: ['own flag'],
@@ -974,17 +974,19 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 		expect(result.loop).toBe('uncertain-slices');
 		// The gate was only ever shown THIS run's own produced STAGED slice.
 		for (const seen of seenByGate) {
-			expect(seen).toEqual(['work/pre-backlog/child.md']);
+			expect(seen).toEqual(['work/tasks/backlog/child.md']);
 		}
 		// The pre-existing landed slice on the arbiter is BYTE-FOR-BYTE unchanged:
 		// not hijacked, not needsAnswers-flagged, not re-committed.
-		expect(showArbiter(repo, 'work/backlog/landed.md')).toBe(landedBefore);
-		expect(showArbiter(repo, 'work/backlog/landed.md')).not.toMatch(/HIJACKED/);
-		expect(showArbiter(repo, 'work/backlog/landed.md')).not.toMatch(
+		expect(showArbiter(repo, 'work/tasks/todo/landed.md')).toBe(landedBefore);
+		expect(showArbiter(repo, 'work/tasks/todo/landed.md')).not.toMatch(
+			/HIJACKED/,
+		);
+		expect(showArbiter(repo, 'work/tasks/todo/landed.md')).not.toMatch(
 			/needsAnswers/,
 		);
 		// THIS run's own STAGED slice WAS the one flagged needsAnswers (cap hit).
-		const child = showArbiter(repo, 'work/pre-backlog/child.md');
+		const child = showArbiter(repo, 'work/tasks/backlog/child.md');
 		expect(child).toMatch(/needsAnswers: true/);
 		expect(child).toMatch(/own flag/);
 	});

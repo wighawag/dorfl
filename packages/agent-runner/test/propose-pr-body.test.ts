@@ -108,10 +108,10 @@ describe('composeProposeBody — Half B (agent summary under a runner header)', 
 			slug: 'widget',
 			body: 'Built the widget. Decided X over Y.',
 		});
-		expect(body).toContain('work/done/widget.md');
+		expect(body).toContain('work/tasks/done/widget.md');
 		expect(body).toContain('Built the widget. Decided X over Y.');
 		// The header precedes the prose.
-		expect(body!.indexOf('work/done/widget.md')).toBeLessThan(
+		expect(body!.indexOf('work/tasks/done/widget.md')).toBeLessThan(
 			body!.indexOf('Built the widget'),
 		);
 	});
@@ -159,7 +159,7 @@ describe('NoneProvider — surfaces title/body in the manual instructions (Half 
 			branch: 'work/widget',
 			arbiter: 'origin',
 			title: 'feat(widget): add a widget',
-			body: 'Slice: `work/done/widget.md`\n\nThe summary.',
+			body: 'Slice: `work/tasks/done/widget.md`\n\nThe summary.',
 		});
 		expect(result.opened).toBe(false);
 		expect(result.instruction).toContain('feat(widget): add a widget');

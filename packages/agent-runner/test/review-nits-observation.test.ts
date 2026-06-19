@@ -22,7 +22,7 @@ import {
  * `review-nits-observation`: on a review APPROVE that carries ≥1 NON-BLOCKING
  * finding, the RUNNER (the shared `performIntegration` core — `do` AND `run`)
  * writes ONE per-run observation
- * `work/observations/review-nits-<slug>-<date>.md` capturing that run's
+ * `work/notes/observations/review-nits-<slug>-<date>.md` capturing that run's
  * non-blocking nits, BEFORE the done-move + atomic `git add -A`, so it is swept
  * into the SAME done-commit on every path. A zero-nit approve writes nothing; a
  * BLOCK is unchanged (needs-attention/, no nit-observation); the verdict/routing
@@ -106,7 +106,7 @@ async function claimAndBranch(slug: string) {
 
 /** The observation files written for a slug (sorted, just the basenames). */
 function nitObservations(repo: string, slug: string): string[] {
-	const dir = join(repo, 'work', 'observations');
+	const dir = join(repo, 'work', 'notes', 'observations');
 	if (!existsSync(dir)) {
 		return [];
 	}
@@ -143,7 +143,7 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 
 		// Content: observations-convention frontmatter + a slug pointer + both nits.
 		const body = readFileSync(
-			join(repo, 'work', 'observations', files[0]),
+			join(repo, 'work', 'notes', 'observations', files[0]),
 			'utf8',
 		);
 		expect(body).toMatch(/^---\n/);
@@ -186,7 +186,7 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 		const files = nitObservations(repo, 'mixed');
 		expect(files).toHaveLength(1);
 		const body = readFileSync(
-			join(repo, 'work', 'observations', files[0]),
+			join(repo, 'work', 'notes', 'observations', files[0]),
 			'utf8',
 		);
 		expect(body).toContain('a nit to keep');
@@ -219,10 +219,10 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 		expect(status).toBe('');
 		// It is tracked at the done-commit (HEAD), in the same commit as the move.
 		const tracked = gitIn(
-			['ls-files', `work/observations/${files[0]}`],
+			['ls-files', `work/notes/observations/${files[0]}`],
 			repo,
 		).trim();
-		expect(tracked).toBe(`work/observations/${files[0]}`);
+		expect(tracked).toBe(`work/notes/observations/${files[0]}`);
 	});
 });
 
@@ -246,7 +246,7 @@ describe('review-nits-observation — no observation when there is nothing to ca
 		expect(core.outcome).toBe('completed');
 		expect(nitObservations(repo, 'gamma')).toHaveLength(0);
 		// No observations/ dir spam at all (the write is the only thing that makes it).
-		expect(existsSync(join(repo, 'work', 'observations'))).toBe(false);
+		expect(existsSync(join(repo, 'work', 'notes', 'observations'))).toBe(false);
 	});
 
 	it('a BLOCK writes NO review-nits observation (findings go to needs-attention, unchanged)', async () => {
@@ -356,7 +356,11 @@ describe('review-nits-observation — the MERGE path (no PR) still lands the obs
 		expect(existsOnArbiterMain(repo, 'done', 'zeta')).toBe(true);
 		expect(
 			gitIn(
-				['cat-file', '-e', `${ARBITER}/main:work/observations/${files[0]}`],
+				[
+					'cat-file',
+					'-e',
+					`${ARBITER}/main:work/notes/observations/${files[0]}`,
+				],
 				repo,
 			),
 		).toBe('');
@@ -406,7 +410,7 @@ describe('review-nits-observation — the fleet (`run`) path also writes it', ()
 		// observation, swept into the same done-commit ⇒ it landed on main.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onMain = gitIn(
-			['ls-tree', '--name-only', `${ARBITER}/main`, 'work/observations/'],
+			['ls-tree', '--name-only', `${ARBITER}/main`, 'work/notes/observations/'],
 			repo,
 		)
 			.split('\n')

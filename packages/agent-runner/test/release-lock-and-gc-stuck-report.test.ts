@@ -19,6 +19,7 @@ import {
 	seedRepoWithArbiter,
 	gitEnv,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
 
@@ -76,7 +77,7 @@ function seedTerminalOnArbiter(
 	run('git', ['checkout', '-q', '-B', `seed/${slug}`, 'origin/main'], dest, {
 		env,
 	});
-	const dir = join(dest, 'work', folder);
+	const dir = join(dest, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(join(dir, `${slug}.md`), `${folder}: ${slug}\n`);
 	run('git', ['add', '-A'], dest, {env});
@@ -116,7 +117,7 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		const inBacklog = run(
 			'git',
-			['cat-file', '-e', `${ARBITER}/main:work/backlog/stuck.md`],
+			['cat-file', '-e', `${ARBITER}/main:work/tasks/todo/stuck.md`],
 			repo,
 			{env: gitEnv()},
 		);
@@ -254,7 +255,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 			env: gitEnv(),
 		});
 		// Simulate the crash between the durable main-move and the lock release: the
-		// item is now terminal on main (work/done/) but the active lock lingers.
+		// item is now terminal on main (work/tasks/done/) but the active lock lingers.
 		seedTerminalOnArbiter(arbiter, 'done', 'done-ish');
 
 		// The read-only classifier names it as stale (cleared-stale-eligible) but
@@ -403,7 +404,7 @@ describe('absent lock ref = "no locks held" ([]) — deletion is recoverable', (
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/backlog/recoverable.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/tasks/todo/recoverable.md`],
 				repo,
 				{env: gitEnv()},
 			).status,

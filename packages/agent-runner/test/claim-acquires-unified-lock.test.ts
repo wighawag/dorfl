@@ -217,7 +217,7 @@ describe('releasing the lock returns the item to the pool so a re-claim succeeds
 		// returning the item to the pool is purely "release the per-item lock". (The
 		// needs-attention/requeue surface still sources from in-progress/ — its
 		// retarget to a body-rests-in-backlog item is slice 9b; see
-		// work/observations/requeue-needs-attention-still-source-from-in-progress-not-backlog.md.)
+		// work/notes/observations/requeue-needs-attention-still-source-from-in-progress-not-backlog.md.)
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const first = await performClaim({
 			slug: 'alpha',

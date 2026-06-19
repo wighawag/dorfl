@@ -29,12 +29,12 @@ import {run} from '../src/git.js';
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`).
  *
  * The three orthogonal axes, each meaning one thing:
- *   - POSITION (folder, runner-deterministic): `work/pre-backlog/` (staging, not
- *     eligible) vs `work/backlog/` (the agent pool). Carries "review before the
+ *   - POSITION (folder, runner-deterministic): `work/tasks/backlog/` (staging, not
+ *     eligible) vs `work/tasks/todo/` (the agent pool). Carries "review before the
  *     agent acts".
  *   - NATURE (slice `humanOnly`, agent judgement, NARROWED): "never-by-nature"
  *     (secrets/release/security) — survives even when the slice resides in the
- *     pool `work/backlog/`. PRD `humanOnly` UNCHANGED (gates auto-slicing).
+ *     pool `work/tasks/todo/`. PRD `humanOnly` UNCHANGED (gates auto-slicing).
  *   - DISCOVERED (`needsAnswers`): unchanged.
  */
 
@@ -43,7 +43,7 @@ import {run} from '../src/git.js';
 describe('slice `humanOnly` (NARROWED) — never agent-eligible, even in the pool', () => {
 	it('humanOnly:true is not agent-claimable regardless of autoBuild / pool residency', () => {
 		// The predicate operates on already-read frontmatter — the caller reads it
-		// from `work/backlog/` (the pool). `autoBuild:true` simulates the pool path
+		// from `work/tasks/todo/` (the pool). `autoBuild:true` simulates the pool path
 		// (the strongest possible policy); `humanOnly:true` still refuses.
 		expect(resolveGateInputs({humanOnly: true})).toBe(false);
 		const e = resolveEligibility({
@@ -109,7 +109,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
 
 // --- Pool-residency on a real BARE mirror (`--bare file://`, house pattern) -
 
-describe('pool residency — humanOnly slice in `work/backlog/` (the pool) is NOT eligible', () => {
+describe('pool residency — humanOnly slice in `work/tasks/todo/` (the pool) is NOT eligible', () => {
 	let root: string;
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), 'humanonly-de-overload-'));
@@ -122,7 +122,7 @@ describe('pool residency — humanOnly slice in `work/backlog/` (the pool) is NO
 		const workspacesDir = join(root, '.agent-runner');
 		registerMirrorWithWork(workspacesDir, 'repo', {
 			backlog: {
-				// Lives in the AGENT POOL `work/backlog/` — even there, the narrowed
+				// Lives in the AGENT POOL `work/tasks/todo/` — even there, the narrowed
 				// `humanOnly: true` survives (never-by-nature guard).
 				'never-by-nature.md': slice({
 					slug: 'never-by-nature',
@@ -157,7 +157,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		scratch.cleanup();
 	});
 
-	it('the slicing brief tells the agent to BIRTH slices in STAGING (`work/pre-backlog/`) and reserves `humanOnly` for never-by-nature', async () => {
+	it('the slicing brief tells the agent to BIRTH slices in STAGING (`work/tasks/backlog/`) and reserves `humanOnly` for never-by-nature', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// Seed a PRD.
 		run('git', ['fetch', '-q', 'arbiter', 'main'], repo, {env: gitEnv()});
@@ -166,7 +166,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		const agentRunner: SliceAgentRunner = ({cwd, prompt}) => {
 			capturedPrompt = prompt;
 			// Honour the brief: birth in STAGING, do not stamp humanOnly for review.
-			const dir = join(cwd, 'work', 'pre-backlog');
+			const dir = join(cwd, 'work', 'tasks', 'backlog');
 			mkdirSync(dir, {recursive: true});
 			writeFileSync(
 				join(dir, 'it-first.md'),
@@ -196,7 +196,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		const prompt = buildSliceReviewPrompt({
 			slug: 'it',
 			cwd: '/tmp/x',
-			candidateSlices: ['work/pre-backlog/it-a.md'],
+			candidateSlices: ['work/tasks/backlog/it-a.md'],
 			pass: 1,
 			execution: 1,
 		});

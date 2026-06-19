@@ -33,12 +33,12 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-/** Seed a `work/backlog/<slug>.md` slice with the given gate frontmatter. */
+/** Seed a `work/tasks/todo/<slug>.md` slice with the given gate frontmatter. */
 function seedSlice(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
 ): void {
-	const dir = join(repo, 'work', 'backlog');
+	const dir = join(repo, 'work', 'tasks', 'todo');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -47,9 +47,9 @@ function seedSlice(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-/** Seed a `work/done/<slug>.md` (satisfies a slice's blockedBy). */
+/** Seed a `work/tasks/done/<slug>.md` (satisfies a slice's blockedBy). */
 function seedDone(slug: string): void {
-	const dir = join(repo, 'work', 'done');
+	const dir = join(repo, 'work', 'tasks', 'done');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(join(dir, `${slug}.md`), `---\nslug: ${slug}\n---\n`);
 }

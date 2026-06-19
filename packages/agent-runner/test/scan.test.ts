@@ -15,11 +15,12 @@ import {
 	registerMirrorWithWork,
 	pushWorkToMirrorOrigin,
 	breakMirrorOrigin,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 
-/** Write an observation under a repo's `work/observations/` (untriaged unless `triaged`). */
+/** Write an observation under a repo's `work/notes/observations/` (untriaged unless `triaged`). */
 function writeObservation(repo: string, slug: string, triaged?: string): void {
-	const dir = join(root, repo, 'work', 'observations');
+	const dir = join(root, repo, 'work', 'notes', 'observations');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (triaged !== undefined) lines.push(`triaged: ${triaged}`);
@@ -67,7 +68,7 @@ function writeItem(
 	file: string,
 	frontmatter: Record<string, string>,
 ): void {
-	const dir = join(root, repo, 'work', status);
+	const dir = join(root, repo, 'work', fixtureFolderRel(status));
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -86,7 +87,7 @@ afterEach(() => {
 });
 
 describe('readDoneSlugs', () => {
-	it('returns the set of slugs present in work/done/', () => {
+	it('returns the set of slugs present in work/tasks/done/', () => {
 		writeItem('repo', 'done', 'one.md', {slug: 'one'});
 		writeItem('repo', 'done', 'two.md', {slug: 'two'});
 		const slugs = readDoneSlugs(join(root, 'repo'));
@@ -94,14 +95,14 @@ describe('readDoneSlugs', () => {
 	});
 
 	it('falls back to the filename (sans .md) when slug frontmatter is absent', () => {
-		const dir = join(root, 'repo', 'work', 'done');
+		const dir = join(root, 'repo', 'work', 'tasks', 'done');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(join(dir, 'no-slug.md'), 'no frontmatter');
 		const slugs = readDoneSlugs(join(root, 'repo'));
 		expect(slugs).toEqual(new Set(['no-slug']));
 	});
 
-	it('returns an empty set when there is no work/done/', () => {
+	it('returns an empty set when there is no work/tasks/done/', () => {
 		mkdirSync(join(root, 'repo'), {recursive: true});
 		expect(readDoneSlugs(join(root, 'repo'))).toEqual(new Set());
 	});
@@ -132,7 +133,7 @@ describe('readBacklogItems', () => {
 	});
 
 	it('falls back to filename when slug frontmatter is absent', () => {
-		const dir = join(root, 'repo', 'work', 'backlog');
+		const dir = join(root, 'repo', 'work', 'tasks', 'todo');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(join(dir, 'fallback.md'), '---\nhumanOnly: true\n---');
 		const items = readBacklogItems(join(root, 'repo'));
@@ -194,7 +195,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		expect(answers.eligibility.gatePass).toBe(false);
 	});
 
-	it('resolves blockedBy against the same mirror work/done/', async () => {
+	it('resolves blockedBy against the same mirror work/tasks/done/', async () => {
 		// dependency not yet done
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
@@ -360,7 +361,7 @@ function writePrd(
 	file: string,
 	frontmatter: Record<string, string>,
 ): void {
-	const dir = join(root, repo, 'work', status);
+	const dir = join(root, repo, 'work', fixtureFolderRel(status));
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -552,7 +553,7 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 		expect(out).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(out).toMatch(/ghost/);
 		expect(out).toContain('work/dropped/');
-		expect(out).toContain('work/done/');
+		expect(out).toContain('work/tasks/done/');
 	});
 
 	it('a CLEAN mirror ledger reports no duplicates (no false positives; buckets excluded)', async () => {

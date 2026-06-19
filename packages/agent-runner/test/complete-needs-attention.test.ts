@@ -86,7 +86,9 @@ describe('complete — failed gate routes to needs-attention', () => {
 
 		// The body STAYS in backlog/ (no folder move); never reaches done/.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
-		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(false);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			false,
+		);
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 
 		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
@@ -141,7 +143,9 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		expect(result.routedToNeedsAttention).toBeFalsy();
-		expect(existsSync(join(repo, 'work', 'done', 'gamma.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'gamma.md'))).toBe(
+			true,
+		);
 		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
 	});
 });

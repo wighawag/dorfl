@@ -9,6 +9,7 @@ import {
 	raceClone,
 	racerEnv,
 	type Scratch,
+	fixtureFolderRel,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
 
@@ -27,7 +28,11 @@ function trackedOnArbiter(cwd: string, folder: string, slug: string): boolean {
 	return (
 		run(
 			'git',
-			['cat-file', '-e', `arbiter/main:work/${folder}/${slug}.md`],
+			[
+				'cat-file',
+				'-e',
+				`arbiter/main:work/${fixtureFolderRel(folder)}/${slug}.md`,
+			],
 			cwd,
 			{env: gitEnv()},
 		).status === 0

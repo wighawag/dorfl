@@ -77,15 +77,20 @@ async function seedStrandedWorktree(
 	// The done-move + commit already happened (steps 2\u20133 of performIntegration),
 	// just before the push that then failed terminally. The worktree's arbiter
 	// remote is `origin` (the mirror's clone); the body rests in backlog/ there.
-	mkdirSync(join(dir, 'work', 'done'), {recursive: true});
-	gitIn(['mv', `work/backlog/${slug}.md`, `work/done/${slug}.md`], dir);
+	mkdirSync(join(dir, 'work', 'tasks', 'done'), {recursive: true});
+	gitIn(
+		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		dir,
+	);
 	gitIn(['add', '-A'], dir);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): build the thing; done`], dir);
 
 	// Pre-conditions: the worktree is at the deterministic path; done/ present, the
 	// tip not pushed (origin/main still has the body in backlog/).
 	expect(dir).toBe(jobWorktreePath(ws, arbiterUrl, slug));
-	expect(existsSync(join(dir, 'work', 'done', `${slug}.md`))).toBe(true);
+	expect(existsSync(join(dir, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
+		true,
+	);
 	const tip = gitIn(['rev-parse', 'HEAD'], dir).trim();
 	return {worktreeDir: dir, tip, arbiterUrl};
 }

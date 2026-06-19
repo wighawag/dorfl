@@ -106,7 +106,7 @@ async function mintReviewNitsObservation(slug: string): Promise<{
 		env: gitEnv(),
 	});
 	expect(core.outcome).toBe('completed');
-	const obsDir = join(repo, 'work', 'observations');
+	const obsDir = join(repo, 'work', 'notes', 'observations');
 	const files = readdirSync(obsDir).filter((f) =>
 		f.startsWith(`review-nits-${slug}-`),
 	);
@@ -118,7 +118,7 @@ describe('observation identity = filename — review-nits minting', () => {
 	it('writes `reviewOf:` not `slug:` (no foreign-slug identity)', async () => {
 		const {repo, observationFile} = await mintReviewNitsObservation('alpha');
 		const body = readFileSync(
-			join(repo, 'work', 'observations', observationFile),
+			join(repo, 'work', 'notes', 'observations', observationFile),
 			'utf8',
 		);
 		// The frontmatter does NOT claim identity with a foreign slug.
@@ -194,7 +194,7 @@ describe('observation identity = filename — a vanished lifecycle leg is a BENI
 
 		// Simulate the cross-tick window: a sibling parallel leg triaged/deleted
 		// the observation between enumerate and run.
-		rmSync(join(repo, 'work', 'observations', observationFile));
+		rmSync(join(repo, 'work', 'notes', 'observations', observationFile));
 
 		const slug = observationFile.replace(/\.md$/, '');
 		const result = await performAdvance({
@@ -222,20 +222,20 @@ describe('observation identity = filename — a vanished lifecycle leg is a BENI
 });
 
 describe('observation identity = filename — the 17 migrated review-nits obs each round-trip', () => {
-	it('every `work/observations/review-nits-*.md` in THIS repo enumerates with slug = its filename (no foreign slug)', () => {
+	it('every `work/notes/observations/review-nits-*.md` in THIS repo enumerates with slug = its filename (no foreign slug)', () => {
 		// This is a snapshot check against the actual repo — the migration is the
 		// DATA half of this slice. We do not start a throwaway tree here: we read
 		// the live observations and assert the invariant on each one. Walk up from
-		// the test file until we find a `work/observations` dir (the test runs with
+		// the test file until we find a `work/notes/observations` dir (the test runs with
 		// `cwd` = the package, not the repo root).
 		let repoPath = resolve(__dirname, '..');
 		while (
 			repoPath !== dirname(repoPath) &&
-			!existsSync(join(repoPath, 'work', 'observations'))
+			!existsSync(join(repoPath, 'work', 'notes', 'observations'))
 		) {
 			repoPath = dirname(repoPath);
 		}
-		const obsDir = join(repoPath, 'work', 'observations');
+		const obsDir = join(repoPath, 'work', 'notes', 'observations');
 		const files = readdirSync(obsDir).filter((f) =>
 			/^review-nits-.+\.md$/.test(f),
 		);
