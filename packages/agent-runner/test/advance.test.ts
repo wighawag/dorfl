@@ -110,13 +110,13 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 		expect(result.exitCode).toBe(0);
 		expect(result.rung).toBe('build-slice');
 		expect(result.slug).toBe('feature');
-		expect(calls).toEqual(['build-slice:slice:feature']);
+		expect(calls).toEqual(['build-slice:task:feature']);
 	});
 
 	it('resolves prd:<slug> to the slice-prd rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
-			arg: 'prd:autoslice',
+			arg: 'brief:autoslice',
 			cwd: repoPath(),
 			executor,
 			readSignals: () => ({needsAnswers: undefined, sidecar: undefined}),
@@ -124,7 +124,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.rung).toBe('slice-prd');
-		expect(calls).toEqual(['slice-prd:prd:autoslice']);
+		expect(calls).toEqual(['slice-prd:brief:autoslice']);
 	});
 
 	it('resolves obs:<slug> (the NEW namespace) to the triage-observation rung', async () => {
@@ -228,7 +228,7 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 	it('a PENDING sidecar is a clean NO-OP that NEVER takes the lock (a run daemon must not spin hot)', async () => {
 		let locked = false;
 		const {executor, calls} = spyExecutor();
-		const pending = newSidecar('slice:feature', [{question: 'open?'}]);
+		const pending = newSidecar('task:feature', [{question: 'open?'}]);
 		const result = await performAdvance({
 			arg: 'feature',
 			cwd: repoPath(),
@@ -248,7 +248,7 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 
 	it('an ALL-ANSWERED sidecar locks + dispatches the apply rung', async () => {
 		const {executor, calls} = spyExecutor();
-		let model = newSidecar('slice:feature', [{question: 'q?'}]);
+		let model = newSidecar('task:feature', [{question: 'q?'}]);
 		model = {
 			...model,
 			entries: model.entries.map((e) => ({...e, answer: 'yes'})),
@@ -262,14 +262,14 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.rung).toBe('apply');
-		expect(calls).toEqual(['apply:slice:feature']);
+		expect(calls).toEqual(['apply:task:feature']);
 	});
 
 	it('a needsAnswers/sidecar invariant violation REFUSES (no lock, no execute)', async () => {
 		const {executor, calls} = spyExecutor();
 		let locked = false;
 		// sidecar present but needsAnswers NOT true ⇒ invariant 1 broken.
-		const orphan = newSidecar('slice:feature', [{question: 'q?'}]);
+		const orphan = newSidecar('task:feature', [{question: 'q?'}]);
 		const result = await performAdvance({
 			arg: 'feature',
 			cwd: repoPath(),
@@ -315,24 +315,24 @@ describe('advance \u2014 build/slice rungs ORCHESTRATE do (no duplication)', () 
 			read: currentLedgerRead,
 		});
 		expect(result.rung).toBe('build-slice');
-		expect(result.message).toContain('ORCHESTRATE `do slice:feature`');
+		expect(result.message).toContain('ORCHESTRATE `do task:feature`');
 	});
 });
 
 describe('readItemSignals \u2014 reads the two signals off disk (read-only)', () => {
 	it('reads needsAnswers from the item body + parses the active sidecar', () => {
 		writeItem('backlog', 'feature.md', {slug: 'feature', needsAnswers: 'true'});
-		const sidecar = newSidecar('slice:feature', [{question: 'q?'}]);
+		const sidecar = newSidecar('task:feature', [{question: 'q?'}]);
 		const qdir = join(repoPath(), 'work', 'questions');
 		mkdirSync(qdir, {recursive: true});
 		// Write the sidecar at its identity-derived path.
-		writeFileSync(join(qdir, 'slice-feature.md'), serialiseSidecar(sidecar));
+		writeFileSync(join(qdir, 'task-feature.md'), serialiseSidecar(sidecar));
 
 		const signals: ItemSignals = readItemSignals({
 			repoPath: repoPath(),
-			type: 'slice',
+			type: 'task',
 			slug: 'feature',
-			item: 'slice:feature',
+			item: 'task:feature',
 		});
 		expect(signals.needsAnswers).toBe(true);
 		expect(signals.sidecar?.entries).toHaveLength(1);
@@ -341,9 +341,9 @@ describe('readItemSignals \u2014 reads the two signals off disk (read-only)', ()
 	it('reports needsAnswers:undefined + no sidecar for an item with neither', () => {
 		const signals = readItemSignals({
 			repoPath: repoPath(),
-			type: 'slice',
+			type: 'task',
 			slug: 'ghost',
-			item: 'slice:ghost',
+			item: 'task:ghost',
 		});
 		expect(signals.needsAnswers).toBeUndefined();
 		expect(signals.sidecar).toBeUndefined();

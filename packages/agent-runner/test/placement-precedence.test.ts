@@ -73,7 +73,7 @@ function seedPrd(
 	].join('\n');
 	writeFileSync(join(dir, `${slug}.md`), fm);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -93,7 +93,7 @@ function slicingAgent(file = 'child'): SliceAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'prd: it',
+				'brief: it',
 				'---',
 				'',
 				'## Prompt',
@@ -124,7 +124,7 @@ function selfPlacingAgent(file = 'child'): SliceAgentRunner {
 			'---',
 			`title: ${file}`,
 			`slug: ${file}`,
-			'prd: it',
+			'brief: it',
 			'---',
 			'',
 			'## Prompt',

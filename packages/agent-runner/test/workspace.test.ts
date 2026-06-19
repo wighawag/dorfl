@@ -103,11 +103,11 @@ describe('createJob — hub mirror + isolated worktree', () => {
 
 		expect(job.dir).toBe(jobWorktreePath(workspacesDir, url, 'feat'));
 		expect(existsSync(job.dir)).toBe(true);
-		expect(job.branch).toBe('work/slice-feat');
+		expect(job.branch).toBe('work/task-feat');
 		const branch = git(['branch', '--show-current'], job.dir, {
 			env: gitEnv(),
 		}).trim();
-		expect(branch).toBe('work/slice-feat');
+		expect(branch).toBe('work/task-feat');
 		// Branch tip == the freshly-fetched mirror main.
 		const tip = git(['rev-parse', 'HEAD'], job.dir, {env: gitEnv()}).trim();
 		expect(tip).toBe(job.mirror.mainSha);
@@ -156,7 +156,7 @@ describe('createJob — hub mirror + isolated worktree', () => {
 
 		const record = JSON.parse(readFileSync(siblingPath, 'utf8')) as JobRecord;
 		expect(record.slug).toBe('feat');
-		expect(record.branch).toBe('work/slice-feat');
+		expect(record.branch).toBe('work/task-feat');
 		// repoKey is the encoded mirror key; for a file:// arbiter it is the path.
 		expect(record.repoKey).not.toBe('');
 		expect(record.repoKey).toBe(encodeRepoKey(url));
@@ -224,7 +224,7 @@ describe('createJob — hub mirror + isolated worktree', () => {
 		const legacy: JobRecord = {
 			slug: 'feat',
 			repoKey: encodeRepoKey(url),
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			startedAt: new Date().toISOString(),
 			state: 'running',
 			harness: {adapter: 'null'},

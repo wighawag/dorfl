@@ -2994,7 +2994,7 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const how = result.deletedRemoteBranch
-				? ` (--reset: deleted the remote ${workBranchRef('slice', slug)} branch; next claim starts fresh)`
+				? ` (--reset: deleted the remote ${workBranchRef('task', slug)} branch; next claim starts fresh)`
 				: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});
@@ -3058,14 +3058,14 @@ export function buildProgram(): Command {
 			const parsed = parseSlugArg(rawItem);
 			if (parsed.explicit === 'observation') {
 				console.error(
-					`error: promote takes a slice or PRD, not an observation ('${rawItem}'). Observations have no agent pool.`,
+					`error: promote takes a task or brief, not an observation ('${rawItem}'). Observations have no agent pool.`,
 				);
 				process.exit(1);
 			}
-			const namespace = parsed.explicit === 'prd' ? 'prd' : 'slice';
+			const namespace = parsed.explicit === 'brief' ? 'brief' : 'task';
 			const slug = parsed.slug;
 			const result =
-				namespace === 'prd'
+				namespace === 'brief'
 					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
@@ -3073,12 +3073,12 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const dest =
-				namespace === 'prd'
+				namespace === 'brief'
 					? workFolderPrefix('prd')
 					: workFolderPrefix('backlog');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
-					namespace === 'prd' ? 'auto-sliceable' : 'claimable'
+					namespace === 'brief' ? 'auto-sliceable' : 'claimable'
 				}.`,
 			);
 		});

@@ -83,8 +83,8 @@ export interface LifecyclePoolGates {
 export interface NeedsAnswersCandidate {
 	/** The repo this item lives in (a working checkout in-place, the mirror path remote). */
 	repoPath: string;
-	/** `'slice'` (a `work/backlog/` slice) or `'prd'` (a `work/prd/` PRD). */
-	namespace: 'slice' | 'prd';
+	/** `'task'` (a `work/backlog/` task) or `'brief'` (a `work/prd/` brief). */
+	namespace: 'task' | 'brief';
 	/** The bare slug. */
 	slug: string;
 	/** The parsed ACTIVE sidecar, or `undefined` when none exists yet. */

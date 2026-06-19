@@ -101,7 +101,7 @@ export function isPrdComplete(input: PrdCompleteInput): PrdCompleteResult {
 				'utf8',
 			);
 			const fm = parseFrontmatter(content);
-			if (fm.prd === slug) {
+			if (fm.brief === slug) {
 				slices.push({
 					file,
 					slug: fm.slug ?? basename(file, '.md'),

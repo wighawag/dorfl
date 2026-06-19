@@ -647,7 +647,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    lives in `slicing.ts`; `do` dispatches `prd:` here. The agent only writes
 	//    slice files — the runner owns every git transition (same boundary as the
 	//    build path). It does NOT run the slice-build pipeline below.
-	if (resolved.namespace === 'prd') {
+	if (resolved.namespace === 'brief') {
 		const sliced = await performSlice({
 			slug: resolved.slug,
 			cwd,
@@ -658,7 +658,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// it, or the auto-pick POOL already filtered it on `autoSlice` before
 			// dispatching here — the single policy-enforcement point). So the slicing gate
 			// drops the `autoSlice` policy term and binds only the PRD's own readiness
-			// (`humanOnly`/`needsAnswers`) + `sliceAfter`, EXACTLY as `do <slice>` builds a
+			// (`humanOnly`/`needsAnswers`) + `briefAfter`, EXACTLY as `do <slice>` builds a
 			// named slice regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
 			explicit: true,
@@ -851,10 +851,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	try {
 		tree = selectIsolationStrategy({checkout: cwd, arbiter}).prepare({
 			slug,
-			// The slice-build path: namespace the branch `work/slice-<slug>`, and
+			// The task-build path: namespace the branch `work/task-<slug>`, and
 			// branch it from the EXACT claim commit (the defensive guard) so a stale
 			// same-named branch (e.g. one `intake` left) is re-pointed, never reused.
-			type: 'slice',
+			type: 'task',
 			claimCommit: claim.claimCommit,
 			env,
 		});
@@ -1329,7 +1329,7 @@ async function saveAgentFailure(params: {
 	// onboarding switched the checkout to it before the agent ran); derive it from
 	// the slug so the push target is always defined even when the caller's `branch`
 	// was not narrowed.
-	const branch = params.branch ?? workBranchRef('slice', slug);
+	const branch = params.branch ?? workBranchRef('task', slug);
 	// Classify the failure CAUSE (best-effort + conservative) from the surfaced
 	// detail — the SAME `classifyFailureCause` `run` uses, so `do`/`run` agree on the
 	// same error. The cause LABEL prefixes the recorded reason so the cause is legible
@@ -1458,7 +1458,7 @@ async function saveAgentStop(params: {
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiter, reason, env, note} = params;
-	const branch = params.branch ?? workBranchRef('slice', slug);
+	const branch = params.branch ?? workBranchRef('task', slug);
 
 	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
@@ -1776,7 +1776,7 @@ export async function performDoRemote(
 			return {exitCode: 1, outcome: 'usage-error', message};
 		}
 
-		if (resolved.namespace === 'prd') {
+		if (resolved.namespace === 'brief') {
 			// `do --remote prd:<slug>`: slice the PRD as the AGENT, against the claim
 			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
 			// mirror's main). No job worktree is needed — the slicing transition is a
@@ -1791,7 +1791,7 @@ export async function performDoRemote(
 				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoSlice` before reaching here), so the
 				// slicing gate drops the policy term — only the PRD's own readiness +
-				// `sliceAfter` bind, mirroring the build path vs `autoBuild`.
+				// `briefAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
 				agentRunner: options.agentRunner,
 				harness: options.harness,
@@ -1869,7 +1869,7 @@ export async function performDoRemote(
 		let result: DoResult | undefined;
 		try {
 			try {
-				tree = strategy.prepare({slug, type: 'slice', env});
+				tree = strategy.prepare({slug, type: 'task', env});
 			} catch (err) {
 				// `prepare()`/`createJob` THREW before returning the handle (e.g. an
 				// onboard reconcile/stale-lease push surfaced as a throw). `tree` is
@@ -1930,7 +1930,7 @@ function reapPreparedWorktreeLeak(
 		const mirrorDir = mirrorPath(workspacesDir, mirrorUrl);
 		const result = reapJob({
 			dir,
-			branch: workBranchRef('slice', slug),
+			branch: workBranchRef('task', slug),
 			mirrorPath: mirrorDir,
 			// Same failure-path stance as the normal teardown: reachable-on-arbiter is
 			// enough (don't let incidental churn retain a worktree whose branch is
@@ -2039,7 +2039,7 @@ async function runRemotePipeline(
 	await primeWorktreeTrackingRef(
 		cwd,
 		arbiterRemote,
-		workBranchRef('slice', slug),
+		workBranchRef('task', slug),
 		env,
 	);
 
@@ -2315,7 +2315,7 @@ async function saveRemoteAgentFailure(params: {
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiterRemote, detail, env, note} = params;
-	const branch = params.branch ?? workBranchRef('slice', slug);
+	const branch = params.branch ?? workBranchRef('task', slug);
 	// Same best-effort cause classification as in-place `do`'s `saveAgentFailure`
 	// (shared `classifyFailureCause`), so the remote form labels the SAME error the
 	// SAME way too.

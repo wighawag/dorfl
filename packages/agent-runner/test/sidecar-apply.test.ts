@@ -52,8 +52,8 @@ function seedItemWithSidecar(slug = 'foo'): {
 	writeFileSync(join(repo, itemPath), itemBody);
 
 	// A sidecar with two open questions.
-	const sidecarPath = `work/questions/slice-${slug}.md`;
-	const sidecar = newSidecar(`slice:${slug}`, [
+	const sidecarPath = `work/questions/task-${slug}.md`;
+	const sidecar = newSidecar(`task:${slug}`, [
 		{question: 'A?'},
 		{question: 'B?'},
 	]);

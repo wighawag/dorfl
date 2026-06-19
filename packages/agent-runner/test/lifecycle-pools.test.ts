@@ -36,7 +36,7 @@ function answeredSidecar(item: string): SidecarModel {
 }
 
 function blocked(
-	namespace: 'slice' | 'prd',
+	namespace: 'task' | 'brief',
 	slug: string,
 	sidecar: SidecarModel | undefined,
 ): NeedsAnswersCandidate {
@@ -83,11 +83,11 @@ describe('buildLifecyclePools — surface sub-pool (needsAnswers, no all-answere
 		const pools = buildLifecyclePools({
 			repoPath: '/repo',
 			observations: [],
-			needsAnswers: [blocked('slice', 'blocked-one', undefined)],
+			needsAnswers: [blocked('task', 'blocked-one', undefined)],
 			gates: {surface: true},
 		});
 		expect(pools.surface).toEqual([
-			{repoPath: '/repo', slug: 'blocked-one', namespace: 'slice'},
+			{repoPath: '/repo', slug: 'blocked-one', namespace: 'task'},
 		]);
 	});
 
@@ -95,7 +95,7 @@ describe('buildLifecyclePools — surface sub-pool (needsAnswers, no all-answere
 		const pools = buildLifecyclePools({
 			repoPath: '/repo',
 			observations: [],
-			needsAnswers: [blocked('prd', 'blocked-prd', undefined)],
+			needsAnswers: [blocked('brief', 'blocked-prd', undefined)],
 		});
 		expect(pools.surface).toEqual([]);
 	});
@@ -104,7 +104,7 @@ describe('buildLifecyclePools — surface sub-pool (needsAnswers, no all-answere
 		const pools = buildLifecyclePools({
 			repoPath: '/repo',
 			observations: [],
-			needsAnswers: [blocked('slice', 'half', pendingSidecar('slice:half'))],
+			needsAnswers: [blocked('task', 'half', pendingSidecar('task:half'))],
 			// even with BOTH create-gates ON, a pending sidecar is not a surface/apply.
 			gates: {surface: true, triage: true},
 		});
@@ -120,18 +120,18 @@ describe('buildLifecyclePools — apply sub-pool (answered sidecar; CONSUME, ALW
 			observations: [obs('open')],
 			needsAnswers: [
 				blocked(
-					'slice',
+					'task',
 					'answered-slice',
-					answeredSidecar('slice:answered-slice'),
+					answeredSidecar('task:answered-slice'),
 				),
-				blocked('prd', 'answered-prd', answeredSidecar('prd:answered-prd')),
+				blocked('brief', 'answered-prd', answeredSidecar('brief:answered-prd')),
 			],
 			// create-side gates OFF (the default/interim) — apply is NOT gated.
 			gates: {},
 		});
 		expect(pools.apply).toEqual([
-			{repoPath: '/repo', slug: 'answered-slice', namespace: 'slice'},
-			{repoPath: '/repo', slug: 'answered-prd', namespace: 'prd'},
+			{repoPath: '/repo', slug: 'answered-slice', namespace: 'task'},
+			{repoPath: '/repo', slug: 'answered-prd', namespace: 'brief'},
 		]);
 		// create-side pools stay empty (gates off).
 		expect(pools.surface).toEqual([]);
@@ -145,9 +145,9 @@ describe('buildLifecyclePools — INTERIM born-OFF default is calm (apply-only)'
 			repoPath: '/repo',
 			observations: [obs('open'), obs('settled', 'keep')],
 			needsAnswers: [
-				blocked('slice', 'a', undefined), // would-be surface, but gate off
-				blocked('slice', 'b', pendingSidecar('slice:b')), // pending → neither
-				blocked('slice', 'c', answeredSidecar('slice:c')), // apply (always on)
+				blocked('task', 'a', undefined), // would-be surface, but gate off
+				blocked('task', 'b', pendingSidecar('task:b')), // pending → neither
+				blocked('task', 'c', answeredSidecar('task:c')), // apply (always on)
 			],
 		});
 		expect(pools.triage).toEqual([]);

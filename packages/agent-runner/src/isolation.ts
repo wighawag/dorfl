@@ -173,7 +173,7 @@ export function jobWorktreeStrategy(options: {
 				fromRepo: options.fromRepo,
 				arbiter: options.arbiter,
 				slug,
-				type: type ?? 'slice',
+				type: type ?? 'task',
 				workspacesDir: options.workspacesDir,
 				env,
 			});
@@ -249,7 +249,7 @@ export function inPlaceStrategy(options: {
 	return {
 		name: 'in-place',
 		prepare({slug, type, claimCommit, env}): IsolatedTree {
-			const branch = workBranchRef(type ?? 'slice', slug);
+			const branch = workBranchRef(type ?? 'task', slug);
 			const arbiterUrl = git(['remote', 'get-url', arbiter], checkout, {
 				env,
 			}).trim();

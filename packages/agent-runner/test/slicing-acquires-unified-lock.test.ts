@@ -83,9 +83,9 @@ describe('acquireSlicingLock acquires the unified per-item lock (the marker is R
 		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		// AND the per-item lock (entry prd-alpha, action slice) is held on the arbiter.
-		expect(lockRefOnArbiter(arbiter, lockEntryFor('prd:alpha'))).toBe(true);
+		expect(lockRefOnArbiter(arbiter, lockEntryFor('brief:alpha'))).toBe(true);
 		const entry = await readItemLock({
-			item: 'prd:alpha',
+			item: 'brief:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -108,7 +108,7 @@ describe('acquireSlicingLock acquires the unified per-item lock (the marker is R
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(lockRefOnArbiter(arbiter, lockEntryFor('prd:alpha'))).toBe(false);
+		expect(lockRefOnArbiter(arbiter, lockEntryFor('brief:alpha'))).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
 	});
@@ -121,7 +121,7 @@ describe('a lock LOST makes the slicing acquire lose definitively with NO marker
 		// prd/, so the marker CAS alone would admit a slicer; only the held lock gates.
 		const a = raceClone(seeded, 'a');
 		const held = await acquireItemLock({
-			item: 'prd:alpha',
+			item: 'brief:alpha',
 			action: 'slice',
 			cwd: a,
 			arbiter: ARBITER,
@@ -145,7 +145,7 @@ describe('a lock LOST makes the slicing acquire lose definitively with NO marker
 		expect(prdOnArbiter(b, 'alpha')).toBe(true);
 		expect(slicingOnArbiter(b, 'alpha')).toBe(false);
 		// The lock is still held by principal a exactly once (b did not steal it).
-		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['prd-alpha']);
+		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['brief-alpha']);
 	});
 });
 
@@ -153,10 +153,10 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 	it('a slice action on an item already held for IMPLEMENT loses the SAME lock CAS', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['shared']});
 		// Principal a holds the item for IMPLEMENT (the claim action) — the SAME ref
-		// `prd-shared` (the lock is keyed by item identity, shared across actions).
+		// `brief-shared` (the lock is keyed by item identity, shared across actions).
 		const a = raceClone(seeded, 'a');
 		const claimHold = await acquireItemLock({
-			item: 'prd:shared',
+			item: 'brief:shared',
 			action: 'implement',
 			cwd: a,
 			arbiter: ARBITER,
@@ -178,7 +178,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 		expect(slicingOnArbiter(b, 'shared')).toBe(false);
 		// The implement hold survives, untouched.
 		const entry = await readItemLock({
-			item: 'prd:shared',
+			item: 'brief:shared',
 			cwd: b,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -188,10 +188,10 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 
 	it('a slice action on an item already held for ADVANCE loses the SAME lock CAS', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['shared']});
-		// Principal a holds the item for ADVANCE on the SAME ref `prd-shared`.
+		// Principal a holds the item for ADVANCE on the SAME ref `brief-shared`.
 		const a = raceClone(seeded, 'a');
 		const advanceHold = await acquireItemLock({
-			item: 'prd:shared',
+			item: 'brief:shared',
 			action: 'advance',
 			cwd: a,
 			arbiter: ARBITER,
@@ -211,7 +211,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 		expect(slicingOnArbiter(b, 'shared')).toBe(false);
 		// The advance hold survives.
 		const entry = await readItemLock({
-			item: 'prd:shared',
+			item: 'brief:shared',
 			cwd: b,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -233,7 +233,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 		// A claim/advance of the SAME item now loses the SAME ref CAS.
 		const b = raceClone(seeded, 'b');
 		const claim = await acquireItemLock({
-			item: 'prd:shared',
+			item: 'brief:shared',
 			action: 'implement',
 			cwd: b,
 			arbiter: ARBITER,
@@ -241,7 +241,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 		});
 		expect(claim.outcome).toBe('lost');
 		// The slice hold survives exactly once.
-		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['prd-shared']);
+		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['brief-shared']);
 	});
 });
 
@@ -274,7 +274,7 @@ describe('race on a --bare file:// arbiter: two slicers of the SAME PRD', () => 
 		// (no slicing/ marker).
 		expect(slicingOnArbiter(a, 'solo')).toBe(false);
 		expect(prdOnArbiter(a, 'solo')).toBe(true);
-		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['prd-solo']);
+		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['brief-solo']);
 	});
 });
 
@@ -290,7 +290,7 @@ describe('releaseSlicingLock releases the unified per-item lock', () => {
 			env: gitEnv(),
 		});
 		expect(acquired.exitCode).toBe(0);
-		expect(lockRefOnArbiter(arbiter, 'prd-alpha')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'brief-alpha')).toBe(true);
 
 		const released = await releaseSlicingLock({
 			slug: 'alpha',
@@ -305,7 +305,7 @@ describe('releaseSlicingLock releases the unified per-item lock', () => {
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
 		// ... AND the unified lock is released (self-cleaning: no ref left).
-		expect(lockRefOnArbiter(arbiter, 'prd-alpha')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'brief-alpha')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 
@@ -350,7 +350,7 @@ describe('a lockable-check loss takes NO lock (no orphan)', () => {
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
-		expect(lockRefOnArbiter(arbiter, 'prd-nope')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'brief-nope')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 });

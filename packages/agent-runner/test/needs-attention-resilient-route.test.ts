@@ -59,7 +59,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	if (opts.commitWork) {
 		writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
 		gitIn(['add', '-A'], repo);
@@ -152,7 +152,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 			slug: 'delta',
 			reason: 'gate red',
 			arbiter: ARBITER,
-			branch: 'work/slice-never-created',
+			branch: 'work/task-never-created',
 			env: gitEnv(),
 			...FAST,
 		});
@@ -165,7 +165,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/slice-never-created^{commit}`,
+				`${ARBITER}/work/task-never-created^{commit}`,
 			],
 			repo,
 			{env: gitEnv()},
@@ -196,7 +196,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 			slug: 'zeta',
 			reason: 'gate red',
 			arbiter: ARBITER,
-			branch: 'work/slice-never-created',
+			branch: 'work/task-never-created',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 			...FAST,
@@ -205,7 +205,7 @@ describe('needs-attention route — honest per-op reporting', () => {
 		// A note explicitly says the branch push was SKIPPED (nothing to recover) —
 		// not "pushed".
 		expect(notes.join('\n')).toMatch(
-			/Skipped pushing work\/slice-never-created/,
+			/Skipped pushing work\/task-never-created/,
 		);
 	});
 });
@@ -227,7 +227,7 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
 		// Remove the continue-branch from the arbiter (the local one survives, which
 		// is exactly why the guard must check the ARBITER ref, not the local one).
-		gitIn(['push', '-q', ARBITER, '--delete', 'work/slice-eta'], repo);
+		gitIn(['push', '-q', ARBITER, '--delete', 'work/task-eta'], repo);
 		void seeded;
 
 		const result = await returnToBacklog({
@@ -342,7 +342,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		const delays: number[] = [];
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 			sleep: async (ms: number) => {
 				delays.push(ms);
@@ -352,7 +352,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 
 		// LOW severity: the branch is reported SAFE/pushed; only the PR is missing.
 		expect(result.opened).toBe(false);
-		expect(result.instruction).toMatch(/Pushed work\/slice-feat/);
+		expect(result.instruction).toMatch(/Pushed work\/task-feat/);
 		expect(result.instruction).toMatch(/gh pr create/);
 		expect(result.instruction).toMatch(/after retries|transient outage|SAFE/i);
 		// It RETRIED (an authed-but-failing create) before degrading.
@@ -367,7 +367,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		const delays: number[] = [];
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 			sleep: async (ms: number) => {
 				delays.push(ms);
@@ -404,7 +404,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		const delays: number[] = [];
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 			sleep: async (ms: number) => {
 				delays.push(ms);
@@ -415,7 +415,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		expect(result.instruction).toContain(realCause);
 		expect(result.instruction).not.toMatch(/unavailable or unauthenticated/);
 		// The manual-fallback guidance + the safe-pushed posture stay intact.
-		expect(result.instruction).toMatch(/Pushed work\/slice-feat/);
+		expect(result.instruction).toMatch(/Pushed work\/task-feat/);
 		expect(result.instruction).toMatch(/gh pr create/);
 		expect(delays).toEqual([]); // deterministic (unavailable) → no backoff
 	});
@@ -427,7 +427,7 @@ describe('PR-create failure (propose) — distinct LOW-severity degrade mode', (
 		const delays: number[] = [];
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 			sleep: async (ms: number) => {
 				delays.push(ms);

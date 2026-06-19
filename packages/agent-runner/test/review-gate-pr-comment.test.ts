@@ -177,7 +177,7 @@ async function claimAndBranch(slug: string) {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	// Simulate the build agent: leave UNCOMMITTED work (it does no git).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return {seeded, repo};
@@ -353,7 +353,7 @@ describe('review-comment-fallback-on-unparsed-pr-url — PR opened but url unpar
 		// ... so the review was posted via the BRANCH-resolved fallback, NOT dropped.
 		expect(provider.comments).toHaveLength(0); // not the url path
 		expect(provider.branchComments).toHaveLength(1);
-		expect(provider.branchComments[0].branch).toBe('work/slice-beta');
+		expect(provider.branchComments[0].branch).toBe('work/task-beta');
 		expect(provider.branchComments[0].body).toBe(REVIEW_PROSE);
 	});
 
@@ -648,7 +648,7 @@ describe('GitHubProvider.postPRCommentOnBranch — branch-resolved fallback (stu
 		const provider = new GitHubProvider({ghBin: stub.bin});
 		const result = provider.postPRCommentOnBranch({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			body: 'The authored review prose.',
 		});
 
@@ -670,7 +670,7 @@ describe('GitHubProvider.postPRCommentOnBranch — branch-resolved fallback (stu
 		const provider = new GitHubProvider({ghBin: stub.bin});
 		const result = provider.postPRCommentOnBranch({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			body: 'the review',
 		});
 
@@ -685,7 +685,7 @@ describe('GitHubProvider.postPRCommentOnBranch — branch-resolved fallback (stu
 		const provider = new GitHubProvider({ghBin: missingGhBin()});
 		const result = provider.postPRCommentOnBranch({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			body: 'the review',
 		});
 		expect(result.posted).toBe(false);
@@ -707,7 +707,7 @@ describe('NoneProvider.postPRComment — degrades, surfaces the review, never th
 	it('postPRCommentOnBranch posts nothing but surfaces the review text', () => {
 		const result = new NoneProvider().postPRCommentOnBranch({
 			cwd: '/tmp',
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			body: 'the review prose',
 		});
 		expect(result.posted).toBe(false);

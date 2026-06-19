@@ -68,9 +68,9 @@ export function lifecycleGatesFrom(config: {
 export interface ScannedTriageItem {
 	slug: string;
 }
-/** A surface/apply lifecycle item: a `needsAnswers` slice/PRD, with its namespace. */
+/** A surface/apply lifecycle item: a `needsAnswers` task/brief, with its namespace. */
 export interface ScannedBlockedItem {
-	namespace: 'slice' | 'prd';
+	namespace: 'task' | 'brief';
 	slug: string;
 }
 
@@ -113,7 +113,7 @@ export interface ScannedItem extends BacklogItem {
  * slice carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the slice one: `select(.eligibility.eligible)
  * | "prd:" + .slug`. "Eligible" here means SLICEABLE — the per-repo `autoSlice`
- * gate + the `humanOnly`/`needsAnswers`/`sliceAfter` predicates of `sliceablePrds`
+ * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `sliceablePrds`
  * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
  * the cwd section's `repo.prds`), DISTINCT from the slice-only `items[]` because
  * slices and PRDs are different verbs and project to different `slice:`/`prd:`
@@ -236,7 +236,7 @@ export function scorePrds(
 				slug: p.slug,
 				humanOnly: p.humanOnly,
 				needsAnswers: p.needsAnswers,
-				sliceAfter: p.sliceAfter,
+				briefAfter: p.briefAfter,
 			})),
 			slicedSlugs: pool.slicedSlugs,
 			autoSlice,
@@ -270,8 +270,8 @@ export function toScannedLifecycle(pools: {
 		items: {namespace: string; slug: string}[],
 	): ScannedBlockedItem[] =>
 		items
-			.filter((i) => i.namespace === 'slice' || i.namespace === 'prd')
-			.map((i) => ({namespace: i.namespace as 'slice' | 'prd', slug: i.slug}));
+			.filter((i) => i.namespace === 'task' || i.namespace === 'brief')
+			.map((i) => ({namespace: i.namespace as 'task' | 'brief', slug: i.slug}));
 	return {
 		triage: pools.triage.map((t) => ({slug: t.slug})),
 		surface: asBlocked(pools.surface),

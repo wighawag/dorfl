@@ -127,7 +127,10 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	}
 
 	/** An answered sidecar for `<namespace>:<slug>` (the APPLY/consume case). */
-	function seedAnsweredSidecar(namespace: 'slice' | 'prd', slug: string): void {
+	function seedAnsweredSidecar(
+		namespace: 'task' | 'brief',
+		slug: string,
+	): void {
 		const item = `${namespace}:${slug}`;
 		const model = newSidecar(item, [{question: 'pick one?'}]);
 		model.entries[0].answer = 'yes';
@@ -168,9 +171,9 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		// The declared blocker is left SILENTLY blocked: not auto-picked, no surface.
 		expect(args).toEqual([]);
 		// And the selection layer never created a sidecar (it never even ran a tick).
-		expect(
-			existsSync(join(repo, 'work', 'questions', 'slice-blocked.md')),
-		).toBe(false);
+		expect(existsSync(join(repo, 'work', 'questions', 'task-blocked.md'))).toBe(
+			false,
+		);
 	});
 
 	it('on ⇒ the blocked SLICE pool IS enumerated (auto-picked as the surface arg)', async () => {
@@ -198,12 +201,12 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 			lifecycleGates: surfaceGateFor(true),
 			count: 5,
 		});
-		expect(args).toEqual(['prd:blocked-prd']);
+		expect(args).toEqual(['brief:blocked-prd']);
 	});
 
 	it('APPLY is NOT gated: an answered blocker sidecar is auto-picked + applied EVEN under surfaceBlockers off', async () => {
 		seedBlockedSlice('answered');
-		seedAnsweredSidecar('slice', 'answered');
+		seedAnsweredSidecar('task', 'answered');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -300,7 +303,7 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 	it('the single-tick surface rung runs on a named blocker regardless of the gate (performAdvance)', async () => {
 		const {repo} = seedBlockedSlice('direct');
 		const {gate: surface, spawns} = spySurface({
-			item: 'slice:direct',
+			item: 'task:direct',
 			questions: [{question: 'which approach?'}],
 		});
 		// The tick itself has no surfaceBlockers parameter — surface is ALWAYS allowed
@@ -314,8 +317,8 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.rung).toBe('surface');
-		expect(spawns).toEqual(['slice:direct']);
-		expect(existsSync(join(repo, 'work', 'questions', 'slice-direct.md'))).toBe(
+		expect(spawns).toEqual(['task:direct']);
+		expect(existsSync(join(repo, 'work', 'questions', 'task-direct.md'))).toBe(
 			true,
 		);
 	});
@@ -408,7 +411,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 		// surfaceBlockers off ⇒ a no-sidecar blocker drops from the surface pool, but
 		// an ANSWERED blocker (apply/consume) is STILL enumerated. needs-attention is
 		// not a lifecycle pool at all, so this gate cannot touch it (separate, always-on).
-		const answered = newSidecar('slice:answered', [{question: 'q?'}]);
+		const answered = newSidecar('task:answered', [{question: 'q?'}]);
 		answered.entries[0].answer = 'yes';
 		const offPools = buildLifecyclePools({
 			repoPath: repo,
@@ -416,13 +419,13 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 			needsAnswers: [
 				{
 					repoPath: repo,
-					namespace: 'slice',
+					namespace: 'task',
 					slug: 'create-only',
 					sidecar: undefined,
 				},
 				{
 					repoPath: repo,
-					namespace: 'slice',
+					namespace: 'task',
 					slug: 'answered',
 					sidecar: answered,
 				},
@@ -441,13 +444,13 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 			needsAnswers: [
 				{
 					repoPath: repo,
-					namespace: 'slice',
+					namespace: 'task',
 					slug: 'create-only',
 					sidecar: undefined,
 				},
 				{
 					repoPath: repo,
-					namespace: 'slice',
+					namespace: 'task',
 					slug: 'answered',
 					sidecar: answered,
 				},

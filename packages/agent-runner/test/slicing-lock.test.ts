@@ -46,7 +46,7 @@ const slicingFolderOnArbiter = (cwd: string, slug: string): boolean =>
 function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 	const r = run(
 		'git',
-		['ls-remote', `file://${arbiter}`, itemLockRef(`prd-${slug}`)],
+		['ls-remote', `file://${arbiter}`, itemLockRef(`brief-${slug}`)],
 		scratch.root,
 		{env: gitEnv()},
 	);
@@ -81,7 +81,7 @@ describe('acquireSlicingLock — happy path', () => {
 		expect(slicingFolderOnArbiter(repo, 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'prd:alpha',
+			item: 'brief:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -207,7 +207,7 @@ describe('slicing-lock race — exactly one winner', () => {
 		expect(acquired).toHaveLength(1);
 		expect(lost).toHaveLength(1);
 		// The arbiter agrees: the lock is held exactly once; the PRD never moved.
-		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['prd-solo']);
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['brief-solo']);
 		expect(prdOnArbiter(a, 'solo')).toBe(true);
 		expect(slicingFolderOnArbiter(a, 'solo')).toBe(false);
 	});
@@ -215,8 +215,8 @@ describe('slicing-lock race — exactly one winner', () => {
 
 describe('slicing∥claim exclusion on the SAME slug-namespace ref', () => {
 	it('a held slicing lock and a build claim share the SAME prd: vs slice: ref namespaces (no collision)', async () => {
-		// A PRD `dual` and a SLICE `dual` are DISTINCT entries (`prd-dual` vs
-		// `slice-dual`), so a slicing lock on the PRD and a build claim on the slice
+		// A PRD `dual` and a SLICE `dual` are DISTINCT entries (`brief-dual` vs
+		// `task-dual`), so a slicing lock on the PRD and a build claim on the slice
 		// do NOT collide — they are different items.
 		const seeded = seedRepoWithArbiter(scratch.root, ['dual'], {
 			prds: ['dual'],
@@ -238,7 +238,7 @@ describe('slicing∥claim exclusion on the SAME slug-namespace ref', () => {
 		// Both locks are held on DISTINCT refs.
 		expect(lockRefOnArbiter(seeded.arbiter, 'dual')).toBe(true); // prd-dual
 		const slugs = await listItemLocks(seeded.repo, 'arbiter', gitEnv());
-		expect(slugs.sort()).toEqual(['prd-dual', 'slice-dual']);
+		expect(slugs.sort()).toEqual(['brief-dual', 'task-dual']);
 	});
 });
 
@@ -307,7 +307,7 @@ describe('releaseSlicingLock — routeToNeedsAttention marks the lock stuck', ()
 		expect(trackedOnArbiter(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'prd:alpha',
+			item: 'brief:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),

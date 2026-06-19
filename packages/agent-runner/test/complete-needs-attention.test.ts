@@ -52,7 +52,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -93,7 +93,7 @@ describe('complete — failed gate routes to needs-attention', () => {
 
 		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -122,7 +122,7 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(tip).toMatch(/feature\.txt/);
 		expect(tip).not.toMatch(/work\/needs-attention\/beta\.md/);
 		// Not mid-rebase, not detached.
-		expect(currentBranch(repo)).toBe('work/slice-beta');
+		expect(currentBranch(repo)).toBe('work/task-beta');
 	});
 
 	it('--skip-verify is unchanged: completes, no needs-attention move', async () => {
@@ -190,7 +190,7 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 
 		// Surfaced with the conflict reason on the lock entry.
 		const lock = await readItemLock({
-			item: 'slice:theta',
+			item: 'task:theta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -217,6 +217,6 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 		});
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
-		expect(currentBranch(repo)).toBe('work/slice-kappa');
+		expect(currentBranch(repo)).toBe('work/task-kappa');
 	});
 });

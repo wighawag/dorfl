@@ -14,7 +14,7 @@ import {run} from '../src/git.js';
 
 /**
  * `do prd:<slug>` SLICE-OUTPUT-THROUGH-INTEGRATION tests (slice
- * `slice-output-through-integration`). The KEYSTONE behaviour: the produced
+ * `task-output-through-integration`). The KEYSTONE behaviour: the produced
  * `work/tasks/todo/*` slices integrate through the SHARED `performIntegration` core
  * (`src/integration-core.ts`) honoring `--propose`/`--merge`, instead of
  * committing straight to `main` via the lock's `emitSlices`.
@@ -58,7 +58,7 @@ function seedPrd(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -91,7 +91,7 @@ function seedPrdWithOrigin(
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -106,7 +106,7 @@ function slicingAgent(file = 'child'): SliceAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'prd: it',
+				'brief: it',
 				'---',
 				'',
 				'## Prompt',
@@ -236,13 +236,13 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 
 		// The work branch was PUSHED carrying the slices + the PRD restore.
 		expect(
-			onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
+			onArbiterBranch(repo, 'work/brief-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
 		expect(
-			onArbiterBranch(repo, 'work/prd-it', 'work/briefs/tasked/it.md'),
+			onArbiterBranch(repo, 'work/brief-it', 'work/briefs/tasked/it.md'),
 		).toBe(true);
 		expect(
-			onArbiterBranch(repo, 'work/prd-it', 'work/briefs/ready/it.md'),
+			onArbiterBranch(repo, 'work/brief-it', 'work/briefs/ready/it.md'),
 		).toBe(false);
 
 		// A PR was opened (the recording gh stub captured a `pr create`).
@@ -296,7 +296,7 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 				// Propose pushed the work branch carrying the slices (the SAME branch
 				// `performIntegration` integrates on the build path).
 				expect(
-					onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
+					onArbiterBranch(repo, 'work/brief-it', 'work/tasks/backlog/child.md'),
 				).toBe(true);
 			}
 		});
@@ -330,7 +330,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 		expect(slice).toMatch(/^origin: issue$/m);
 		expect(slice).toMatch(/^originTrust: untrusted$/m);
 		// The agent-authored `prd:` link is preserved.
-		expect(slice).toMatch(/^prd: it$/m);
+		expect(slice).toMatch(/^brief: it$/m);
 	});
 
 	it('a TRUSTED-origin PRD propagates originTrust: trusted', async () => {

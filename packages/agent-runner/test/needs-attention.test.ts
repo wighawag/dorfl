@@ -75,7 +75,7 @@ async function claimAndBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	return {repo, seeded};
 }
 
@@ -153,7 +153,7 @@ describe('the seam bounce marks the lock stuck (the SOLE stuck record)', () => {
 		expect(r.moved).toBe(true);
 
 		const lock = await readItemLock({
-			item: 'slice:beta',
+			item: 'task:beta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

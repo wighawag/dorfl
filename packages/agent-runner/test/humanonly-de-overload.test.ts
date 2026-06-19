@@ -87,7 +87,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
-			sliceAfter: [],
+			briefAfter: [],
 			slicedSlugs: new Set(),
 			autoSlice: true,
 		});
@@ -99,7 +99,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: undefined,
 			needsAnswers: true,
-			sliceAfter: [],
+			briefAfter: [],
 			slicedSlugs: new Set(),
 			autoSlice: true,
 		});
@@ -239,6 +239,6 @@ function seedPrdRaw(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', 'arbiter', 'main'], repo, {env: gitEnv()});
 }

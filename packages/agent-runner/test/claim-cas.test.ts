@@ -39,7 +39,7 @@ describe('performClaim — happy path', () => {
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		// The per-item lock (action: implement) IS the claim.
 		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
-			'slice-alpha',
+			'task-alpha',
 		]);
 	});
 
@@ -71,7 +71,7 @@ describe('performClaim — happy path', () => {
 			env: gitEnv(),
 		});
 		const entry = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -155,7 +155,7 @@ describe('performClaim — not claimable (exit 2)', () => {
 		// The body never moved; the lock is held exactly once (b did not steal it).
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
-			'slice-alpha',
+			'task-alpha',
 		]);
 	});
 });
@@ -254,8 +254,8 @@ describe('performClaim — two different items both claim cleanly', () => {
 		expect(existsOnArbiterMain(us, 'backlog', 'ours')).toBe(true);
 		expect(existsOnArbiterMain(us, 'backlog', 'other')).toBe(true);
 		expect((await listItemLocks(us, 'arbiter', gitEnv())).sort()).toEqual([
-			'slice-other',
-			'slice-ours',
+			'task-other',
+			'task-ours',
 		]);
 	});
 });
@@ -291,7 +291,7 @@ describe('claim race (mirrors claim.sh verification)', () => {
 		expect(claimed).toHaveLength(1);
 		expect(lost).toHaveLength(1);
 		// The lock ref agrees: the item is locked exactly once, body still in backlog.
-		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['slice-solo']);
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['task-solo']);
 		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
 	});
 });

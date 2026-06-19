@@ -68,13 +68,13 @@ describe('start — backlog item, winning claim', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('started');
-		expect(result.branch).toBe('work/slice-alpha');
-		expect(currentBranch(repo)).toBe('work/slice-alpha');
+		expect(result.branch).toBe('work/task-alpha');
+		expect(currentBranch(repo)).toBe('work/task-alpha');
 		// The claim landed: the lock is held; the body STAYS in backlog/ on the arbiter.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
-			'slice-alpha',
+			'task-alpha',
 		]);
 		// The work branch (cut off the latest arbiter main) carries the backlog body.
 		const show = gitIn(
@@ -113,7 +113,7 @@ describe('start — backlog item, losing/contended claim', () => {
 		expect(result.outcome).toBe('refused');
 		// User untouched; NO work branch created.
 		expect(currentBranch(repo)).toBe(before);
-		expect(localBranchExists(repo, 'work/slice-alpha')).toBe(false);
+		expect(localBranchExists(repo, 'work/task-alpha')).toBe(false);
 	});
 
 	it('a two-claimer race: the loser creates no branch, the winner lands on its work branch', async () => {
@@ -156,12 +156,12 @@ describe('start — backlog item, losing/contended claim', () => {
 		const winnerRepo = aWon ? a : b;
 		const loserRepo = aWon ? b : a;
 		const loserBefore = aWon ? beforeB : beforeA;
-		expect(currentBranch(winnerRepo)).toBe('work/slice-solo');
+		expect(currentBranch(winnerRepo)).toBe('work/task-solo');
 		expect(currentBranch(loserRepo)).toBe(loserBefore);
-		expect(localBranchExists(loserRepo, 'work/slice-solo')).toBe(false);
+		expect(localBranchExists(loserRepo, 'work/task-solo')).toBe(false);
 
 		// The arbiter agrees: the lock is held exactly once; the body stays in backlog/.
-		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['slice-solo']);
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['task-solo']);
 		expect(existsOnArbiterMain(a, 'backlog', 'solo')).toBe(true);
 	});
 });
@@ -197,7 +197,7 @@ describe('start — already-claimed (held lock) item', () => {
 		expect(result.message).not.toMatch(/\bby \w/);
 		// User untouched; no work branch.
 		expect(currentBranch(repo)).toBe(before);
-		expect(localBranchExists(repo, 'work/slice-beta')).toBe(false);
+		expect(localBranchExists(repo, 'work/task-beta')).toBe(false);
 	});
 
 	it('--resume switches to the work branch WITHOUT claiming', async () => {
@@ -220,11 +220,11 @@ describe('start — already-claimed (held lock) item', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('resumed');
-		expect(result.branch).toBe('work/slice-beta');
-		expect(currentBranch(repo)).toBe('work/slice-beta');
+		expect(result.branch).toBe('work/task-beta');
+		expect(currentBranch(repo)).toBe('work/task-beta');
 		// Still claimed (we did NOT re-claim): the lock is held, body still in backlog/.
 		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
-			'slice-beta',
+			'task-beta',
 		]);
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		// The work branch (cut off arbiter main) carries the backlog body.
@@ -260,7 +260,7 @@ describe('start — done / absent item', () => {
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/already done/);
 		expect(currentBranch(repo)).toBe(before);
-		expect(localBranchExists(repo, 'work/slice-gamma')).toBe(false);
+		expect(localBranchExists(repo, 'work/task-gamma')).toBe(false);
 	});
 
 	it('refuses an absent item', async () => {
@@ -274,7 +274,7 @@ describe('start — done / absent item', () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/not present/);
-		expect(localBranchExists(repo, 'work/slice-does-not-exist')).toBe(false);
+		expect(localBranchExists(repo, 'work/task-does-not-exist')).toBe(false);
 	});
 });
 
@@ -290,7 +290,7 @@ describe('start — slug inference from branch', () => {
 			env: gitEnv(),
 		});
 		expect(first.exitCode).toBe(0);
-		expect(currentBranch(repo)).toBe('work/slice-delta');
+		expect(currentBranch(repo)).toBe('work/task-delta');
 
 		// Now, sitting on work/delta with the item in-progress, re-run start with
 		// NO slug and --resume — the slug is inferred from the branch.
@@ -302,8 +302,8 @@ describe('start — slug inference from branch', () => {
 		});
 		expect(again.exitCode).toBe(0);
 		expect(again.outcome).toBe('resumed');
-		expect(again.branch).toBe('work/slice-delta');
-		expect(currentBranch(repo)).toBe('work/slice-delta');
+		expect(again.branch).toBe('work/task-delta');
+		expect(currentBranch(repo)).toBe('work/task-delta');
 	});
 
 	it('errors when no slug is given and not on a work/<slug> branch', async () => {
@@ -347,7 +347,7 @@ describe('start — environment errors', () => {
 		expect(result).toEqual({
 			exitCode: 0,
 			outcome: 'started',
-			branch: 'work/slice-alpha',
+			branch: 'work/task-alpha',
 			message: expect.stringContaining('Started'),
 		});
 	});

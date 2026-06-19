@@ -270,7 +270,7 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-slice-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
 			],
 			repo,
 		);

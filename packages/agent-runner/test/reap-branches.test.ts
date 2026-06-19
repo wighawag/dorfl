@@ -36,7 +36,7 @@ function setup(): {repo: string; arbiter: string} {
 const ARBITER = 'arbiter';
 
 /**
- * Push a namespaced work branch `work/slice-<slug>` to the arbiter, branched off
+ * Push a namespaced work branch `work/task-<slug>` to the arbiter, branched off
  * `arbiter/main` with one new commit. Returns the branch ref + its tip sha.
  */
 function pushWorkBranch(
@@ -44,7 +44,7 @@ function pushWorkBranch(
 	slug: string,
 	merge = false,
 ): {branch: string; tip: string} {
-	const branch = `work/slice-${slug}`;
+	const branch = `work/task-${slug}`;
 	git(['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 	git(['checkout', '-q', '-B', branch, `${ARBITER}/main`], repo, {
 		env: gitEnv(),

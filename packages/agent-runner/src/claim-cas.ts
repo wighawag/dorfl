@@ -248,7 +248,7 @@ async function runClaim(
 	}
 
 	const backlog = workItemRel('backlog', `${slug}.md`);
-	const branch = workBranchRef('slice', slug);
+	const branch = workBranchRef('task', slug);
 
 	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (PRD
 	// `ledger-status-per-item-lock-refs` US #1/#15/#16; ADR
@@ -289,7 +289,7 @@ async function runClaim(
 	// genuinely orphaned lock is cleared by the human-mediated `release-lock` verb +
 	// `gc --ledger` report, never an auto-steal at claim time.
 	const lock = await acquireItemLock({
-		item: `slice:${slug}`,
+		item: `task:${slug}`,
 		action: 'implement',
 		cwd,
 		arbiter,
@@ -312,7 +312,7 @@ async function runClaim(
 	 * re-check finds the item is no longer in the pool, so the lock is never
 	 * orphaned (the body never moved, so the item is cleanly returned to the pool). */
 	async function releaseHeldLock(): Promise<void> {
-		await releaseItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+		await releaseItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	}
 
 	try {

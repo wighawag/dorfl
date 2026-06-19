@@ -117,8 +117,8 @@ export interface TickClassification {
 
 /** The per-TYPE ANALYSE rung when there are no open questions (the no-gate path). */
 const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
-	slice: 'build-slice',
-	prd: 'slice-prd',
+	task: 'build-slice',
+	brief: 'slice-prd',
 	observation: 'triage-observation',
 };
 

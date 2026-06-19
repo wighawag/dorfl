@@ -178,7 +178,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 		).toBe('');
 		// The blocking findings are recorded on the stuck lock entry (the reason).
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -219,7 +219,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 
 		const result = await performComplete({
@@ -359,7 +359,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 		// The exhaustion reason is recorded on the stuck lock entry (never a silent
 		// merge/loop).
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -398,7 +398,7 @@ describe('Gate 2 — review on with no gate wired is a loud usage error', () => 
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 		writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 
 		const result = await performComplete({

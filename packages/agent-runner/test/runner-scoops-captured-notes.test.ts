@@ -110,7 +110,7 @@ async function claimAndBranch(slug: string): Promise<string> {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	// The build agent: leave UNCOMMITTED source work (it does no git).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return repo;
@@ -226,7 +226,7 @@ function seedPrd(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -241,7 +241,7 @@ function slicingAgentWithNote(note: string | undefined): SliceAgentRunner {
 				'---',
 				'title: child',
 				'slug: child',
-				'prd: it',
+				'brief: it',
 				'---',
 				'',
 				'## Prompt',
@@ -319,7 +319,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 		expect(
 			onArbiterBranch(
 				repo,
-				'work/prd-it',
+				'work/brief-it',
 				'work/notes/findings/slicer-external-fact.md',
 			),
 		).toBe(true);

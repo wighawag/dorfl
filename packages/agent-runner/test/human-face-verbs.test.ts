@@ -99,7 +99,7 @@ describe('work-on — --remote is a FLAG (migrated from positional <remote> <slu
 	});
 });
 
-describe('slice-only (§3a): resume / work-on reject prd:, accept bare + slice:', () => {
+describe('task-only (§3a): resume / work-on reject prd:, accept bare + slice:', () => {
 	/** Parse argv through the program, capturing a thrown SlugResolution exit. */
 	async function runReject(argv: string[]): Promise<string> {
 		const program = buildProgram();
@@ -126,13 +126,13 @@ describe('slice-only (§3a): resume / work-on reject prd:, accept bare + slice:'
 	}
 
 	it('resume rejects a prd: argument with "operates on slices, not PRDs"', async () => {
-		const out = await runReject(['resume', 'prd:some-prd']);
-		expect(out).toMatch(/slices, not PRDs/);
+		const out = await runReject(['resume', 'brief:some-prd']);
+		expect(out).toMatch(/tasks, not briefs/);
 	});
 
 	it('work-on rejects a prd: argument with "operates on slices, not PRDs"', async () => {
-		const out = await runReject(['work-on', 'prd:some-prd']);
-		expect(out).toMatch(/slices, not PRDs/);
+		const out = await runReject(['work-on', 'brief:some-prd']);
+		expect(out).toMatch(/tasks, not briefs/);
 	});
 });
 
@@ -172,8 +172,8 @@ describe('resume behaviour — switches to an in-progress branch WITHOUT claimin
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('resumed');
-		expect(result.branch).toBe('work/slice-beta');
-		expect(currentBranch(repo)).toBe('work/slice-beta');
+		expect(result.branch).toBe('work/task-beta');
+		expect(currentBranch(repo)).toBe('work/task-beta');
 		// It did NOT (re-)claim: the body stays in backlog/, never moved.
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 	});

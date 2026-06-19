@@ -207,7 +207,7 @@ describe('advance --isolated surface rung — persists the sidecar to the arbite
 		// in-place tick leaves the sidecar in the participating checkout.
 		const reader = join(scratch.root, 'reader');
 		gitIn(['clone', '-q', arbiterUrl, reader], scratch.root);
-		const sidecarPath = join(reader, 'work', 'questions', 'slice-needsq.md');
+		const sidecarPath = join(reader, 'work', 'questions', 'task-needsq.md');
 		expect(existsSync(sidecarPath)).toBe(true);
 		const sidecar = parseSidecar(readFileSync(sidecarPath, 'utf8'));
 		expect(sidecar.entries).toHaveLength(2);
@@ -418,7 +418,7 @@ describe('advance --isolated -n — sequential auto-pick over the mirror-side po
 		gitIn(['clone', '-q', arbiterUrl, reader], scratch.root);
 		for (const slug of ['ia', 'ib']) {
 			expect(
-				existsSync(join(reader, 'work', 'questions', `slice-${slug}.md`)),
+				existsSync(join(reader, 'work', 'questions', `task-${slug}.md`)),
 			).toBe(true);
 		}
 		void repo;

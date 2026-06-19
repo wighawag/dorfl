@@ -30,9 +30,9 @@ import type {WorkFolderKey} from './work-layout.js';
  */
 function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
 	switch (type) {
-		case 'slice':
+		case 'task':
 			return 'cancelled';
-		case 'prd':
+		case 'brief':
 			return 'briefs-dropped';
 		case 'observation':
 			return undefined;

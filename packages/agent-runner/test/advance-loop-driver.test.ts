@@ -96,7 +96,7 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 			env: gitEnv(),
 		});
 		// the eligible slice + the sliceable PRD (not the humanOnly slice).
-		expect(args.sort()).toEqual(['alpha', 'prd:gamma']);
+		expect(args.sort()).toEqual(['alpha', 'brief:gamma']);
 		expect(result.items).toHaveLength(2);
 	});
 

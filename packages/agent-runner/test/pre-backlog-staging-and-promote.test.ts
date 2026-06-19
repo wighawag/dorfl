@@ -69,7 +69,7 @@ function seedPrd(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -84,7 +84,7 @@ function stagingAgent(file = 'child'): SliceAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'prd: it',
+				'brief: it',
 				'---',
 				'',
 				'## Prompt',
@@ -344,7 +344,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 // shells out to), so it is passed via the `--agent-cmd` FLAG, not the repo config.
 const STUB_SLICER_AGENT_CMD =
 	"mkdir -p work/tasks/backlog && printf '%s\\n' '---' 'title: child' " +
-	"'slug: child' 'prd: it' '---' '' '## Prompt' '' '> build it' " +
+	"'slug: child' 'brief: it' '---' '' '## Prompt' '' '> build it' " +
 	'> work/tasks/backlog/child.md';
 
 /** Write a per-repo `.agent-runner.json` (the `slicesLandIn` default under test) + push it. */
@@ -426,7 +426,7 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 		// The key under test: a per-repo configured default of `backlog` (the pool).
 		writeRepoConfig(repo, {autoSlice: true, slicesLandIn: 'backlog'});
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'brief:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -444,7 +444,7 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 		// No slicesLandIn — the resolver's built-in floor stages.
 		writeRepoConfig(repo, {autoSlice: true});
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'brief:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -460,7 +460,7 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 		seedPrd(repo, 'it');
 		writeRepoConfig(repo, {autoSlice: true, slicesLandIn: 'backlog'});
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'brief:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -483,7 +483,7 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 		// fall-through to the built-in floor. Assert the run did NOT succeed and
 		// nothing was sliced.
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'brief:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',

@@ -147,7 +147,7 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 		// runner, NOT the agent; claim no longer moves the body).
 		const assertingAgent: DoAgentRunner = ({cwd, slug}) => {
 			expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], cwd).trim()).toBe(
-				`work/slice-${slug}`,
+				`work/task-${slug}`,
 			);
 			expect(existsSync(join(cwd, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
 				true,
@@ -192,7 +192,7 @@ describe('do --remote — end-to-end in a job worktree (no checkout)', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-alpha'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-alpha'],
 				repo,
 			).trim(),
 		).not.toBe('');
@@ -293,7 +293,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 
 		let agentRan = false;
 		const result = await performDoRemote({
-			arg: 'prd:someprd',
+			arg: 'brief:someprd',
 			remote: remoteUrl(arbiter),
 			workspacesDir: ws,
 			// autoSlice deliberately OMITTED (defaults off) — explicit naming authorizes.

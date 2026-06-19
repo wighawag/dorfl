@@ -1138,7 +1138,7 @@ async function dispatchSlice(params: {
 	// the shared integrate core (`--propose` PR / `--merge` main) lands it. The
 	// intake- producer prefix keeps it distinct from a later `do slice:<slug>`
 	// build branch for the same slug. The agent ran no git.
-	await switchToWorkBranch(cwd, arbiter, 'slice', slug, env);
+	await switchToWorkBranch(cwd, arbiter, 'task', slug, env);
 
 	const sliceContent = renderBacklogSlice({
 		slug,
@@ -1275,7 +1275,7 @@ async function dispatchPrd(params: {
 	// ONBOARD onto a `work/intake-prd-<slug>` branch off fresh `<arbiter>/main` —
 	// the SAME runner-owns-git discipline the slice branch uses; the intake-
 	// producer prefix keeps it distinct from a `do prd:<slug>` slicing branch.
-	await switchToWorkBranch(cwd, arbiter, 'prd', slug, env);
+	await switchToWorkBranch(cwd, arbiter, 'brief', slug, env);
 
 	const prdContent = renderPrd({
 		slug,

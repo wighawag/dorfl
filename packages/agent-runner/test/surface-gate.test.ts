@@ -26,7 +26,7 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 			'Here are the questions.',
 			'```json',
 			JSON.stringify({
-				item: 'slice:foo',
+				item: 'task:foo',
 				questions: [
 					{
 						question: 'which default applies?',
@@ -43,7 +43,7 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 			'```',
 		].join('\n');
 		const emit = parseSurfaceEmit(output);
-		expect(emit.item).toBe('slice:foo');
+		expect(emit.item).toBe('task:foo');
 		expect(emit.questions).toHaveLength(2);
 		expect(emit.questions[0].context).toBe('src/foo.ts:10');
 		expect(emit.questions[0].default).toBe('use A');
@@ -51,7 +51,7 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 	});
 
 	it('an EMPTY questions array is VALID (the honest "no open judgement" result)', () => {
-		const emit = parseSurfaceEmit('{"item":"slice:foo","questions":[]}');
+		const emit = parseSurfaceEmit('{"item":"task:foo","questions":[]}');
 		expect(emit.questions).toEqual([]);
 	});
 
@@ -101,9 +101,9 @@ describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestio
 
 describe('buildSurfacePrompt — frames the fresh-context surface + the required output', () => {
 	it('names the item, the surface-questions skill, and demands the JSON {questions}', () => {
-		const p = buildSurfacePrompt('prd:autoslice');
+		const p = buildSurfacePrompt('brief:autoslice');
 		expect(p).toMatch(/surface-questions` skill|surface-questions\b/);
-		expect(p).toContain('prd:autoslice');
+		expect(p).toContain('brief:autoslice');
 		expect(p).toMatch(/"questions"/);
 		// Fresh-context surfacer that EDITS nothing and EMITS only (mirrors review).
 		expect(p).toMatch(/EMIT questions only|Do NOT edit/);
@@ -111,7 +111,7 @@ describe('buildSurfacePrompt — frames the fresh-context surface + the required
 	});
 
 	it('states the humility rule (surface the residue, NEVER invent an answer) + empty is valid', () => {
-		const p = buildSurfacePrompt('slice:foo');
+		const p = buildSurfacePrompt('task:foo');
 		expect(p).toMatch(/NEVER invent an answer/i);
 		// An empty questions array (no open judgement) is an explicitly valid result.
 		expect(p).toMatch(/EMPTY questions[\s\S]*array/i);
@@ -133,7 +133,7 @@ describe('harnessSurfaceGate — surfaceModel reaches the launch via the existin
 				return {
 					ok: true,
 					record: {adapter: 'spy'},
-					output: '{"item":"slice:foo","questions":[{"question":"q?"}]}',
+					output: '{"item":"task:foo","questions":[{"question":"q?"}]}',
 				};
 			},
 			launchInteractive: () => {
@@ -143,7 +143,7 @@ describe('harnessSurfaceGate — surfaceModel reaches the launch via the existin
 		};
 		const gate = harnessSurfaceGate({harness: spyHarness, agentCmd: 'ignored'});
 		const emit = await gate({
-			item: 'slice:foo',
+			item: 'task:foo',
 			cwd: '/tmp',
 			surfaceModel: 'surface/override',
 		});
@@ -168,7 +168,7 @@ describe('harnessSurfaceGate — surfaceModel reaches the launch via the existin
 			isAlive: () => false,
 		};
 		const gate = harnessSurfaceGate({harness: outputHarness});
-		const emit = await gate({item: 'slice:foo', cwd: '/tmp'});
+		const emit = await gate({item: 'task:foo', cwd: '/tmp'});
 		expect(emit.questions[0].question).toBe('open?');
 	});
 
@@ -182,7 +182,7 @@ describe('harnessSurfaceGate — surfaceModel reaches the launch via the existin
 			isAlive: () => false,
 		};
 		const gate = harnessSurfaceGate({harness: emptyOutput});
-		await expect(gate({item: 'slice:foo', cwd: '/tmp'})).rejects.toBeInstanceOf(
+		await expect(gate({item: 'task:foo', cwd: '/tmp'})).rejects.toBeInstanceOf(
 			SurfaceParseError,
 		);
 	});
@@ -197,7 +197,7 @@ describe('harnessSurfaceGate — surfaceModel reaches the launch via the existin
 			isAlive: () => false,
 		};
 		const gate = harnessSurfaceGate({harness: failing});
-		await expect(gate({item: 'slice:foo', cwd: '/tmp'})).rejects.toBeInstanceOf(
+		await expect(gate({item: 'task:foo', cwd: '/tmp'})).rejects.toBeInstanceOf(
 			SurfaceParseError,
 		);
 	});
@@ -207,7 +207,7 @@ describe('harnessSurfaceGate — surfaceModel reaches the launch via the existin
 			harness: new NullHarness(),
 			agentCmd: 'surface-agent --model {model}',
 		});
-		await expect(gate({item: 'slice:foo', cwd: process.cwd()})).rejects.toThrow(
+		await expect(gate({item: 'task:foo', cwd: process.cwd()})).rejects.toThrow(
 			new RegExp(MODEL_PLACEHOLDER.replace(/[{}]/g, '\\$&')),
 		);
 	});

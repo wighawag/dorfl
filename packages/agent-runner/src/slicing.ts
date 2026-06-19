@@ -56,13 +56,13 @@ import type {ReviewGate} from './review-gate.js';
  * moves them `pre-backlog/ → backlog/` later), with the RUNNER owning every git-state
  * transition. This is the PRD branch of the `do` worker (ADR
  * `command-surface-and-journeys.md` §3/§3a), NOT a standalone `slice` command;
- * `do.ts` dispatches `resolved.namespace === 'prd'` here.
+ * `do.ts` dispatches `resolved.namespace === 'brief'` here.
  *
  * The end-to-end flow (mirroring the `do`/`run` runner-owns-git discipline — the
  * agent only EDITS files, the runner does ALL git):
  *
  *   1. **Resolve the gate** (agent path): refuse to slice a PRD that is
- *      `humanOnly`/`needsAnswers`, or whose `sliceAfter` PRDs are not yet sliced.
+ *      `humanOnly`/`needsAnswers`, or whose `briefAfter` PRDs are not yet sliced.
  *      The repo's `autoSlice` POLICY also refuses on the AUTO-PICK pool path, but
  *      NOT when the PRD was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
  *      naming it IS the authorization, exactly as `do <slice>` builds regardless of
@@ -101,7 +101,7 @@ import type {ReviewGate} from './review-gate.js';
 /** The terminal status of one `do prd:<slug>` slicing run. */
 export type SliceOutcome =
 	| 'sliced' // gate passed (agent) / unbound (human) → lock → agent → committed
-	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoSlice/sliceAfter)
+	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoSlice/briefAfter)
 	| 'lock-lost' // the lock was lost/contended (another slicer holds it)
 	| 'agent-failed' // the agent invocation itself errored
 	| 'stale' // the held PRD was edited under the lock → the slicing is stale
@@ -176,7 +176,7 @@ export interface PerformSliceOptions {
 	 * build path's precedent: `autoBuild` gates the scan/selection POOL only, never
 	 * `performDo`'s explicit claim). When `true`, the agent slicing gate drops the
 	 * `autoSlice` policy term and binds ONLY the PRD's own readiness axes
-	 * (`humanOnly`/`needsAnswers`) + `sliceAfter`. Defaults `false`. Both the
+	 * (`humanOnly`/`needsAnswers`) + `briefAfter`. Defaults `false`. Both the
 	 * explicit `do prd:` dispatch AND the auto-pick path pass `true` here: the
 	 * auto-pick POOL (`do-autopick.ts`) is the single `autoSlice`-enforcement point
 	 * (a pool-ineligible PRD is never selected), so once a PRD is dispatched its
@@ -472,7 +472,7 @@ export async function performSlice(
 	// final commit must scrub any agent writes there (an attempt to self-place into
 	// the pool, PRD US #4) before `git add -A` would sweep them in.
 	const poolBefore = snapshotPool(cwd);
-	const prompt = buildSlicingBrief(slug, prdFm.prd);
+	const prompt = buildSlicingBrief(slug, prdFm.brief);
 	let agent: {ok: boolean; detail?: string};
 	try {
 		agent = await runSliceAgent(options, cwd, prompt, slug);
@@ -733,7 +733,7 @@ export async function performSlice(
 			// crash-safe ordering is the capstone slice #7's concern, not this interim
 			// half. Best-effort + idempotent (`not-held` is fine).
 			if (useLock) {
-				await releaseItemLock({item: `prd:${slug}`, cwd, arbiter, env});
+				await releaseItemLock({item: `brief:${slug}`, cwd, arbiter, env});
 			}
 		}
 		return integrationToSliceResult(core, {slug, emitted, loop: loopTag});
@@ -855,7 +855,7 @@ async function switchToWorkBranch(
 ): Promise<void> {
 	// The slicing path is the PRD namespace (`do prd:<slug>`): the branch is
 	// `work/prd-<slug>`, distinct from a same-slug slice-build's `work/slice-<slug>`.
-	const branch = workBranchRef('prd', slug);
+	const branch = workBranchRef('brief', slug);
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(
 		['switch', '--quiet', '-C', branch, `${arbiter}/main`],
@@ -1167,20 +1167,20 @@ function appendQuestionsBlock(content: string, questions: string[]): string {
 /**
  * Resolve the AGENT slicing gate for `slug`: the pure predicate
  * (`needsAnswers !== true && humanOnly !== true && autoSlice`) plus the
- * cross-PRD `sliceAfter` ordering, resolved against `work/prd-sliced/` residence of
+ * cross-PRD `briefAfter` ordering, resolved against `work/prd-sliced/` residence of
  * the PRDs present in the checkout.
  */
 function resolveAgentGate(
 	cwd: string,
 	slug: string,
-	prdFm: {humanOnly?: boolean; needsAnswers?: boolean; sliceAfter: string[]},
+	prdFm: {humanOnly?: boolean; needsAnswers?: boolean; briefAfter: string[]},
 	autoSlice: boolean | undefined,
 	explicit: boolean,
 ): SlicingEligibilityResult {
 	return resolveSlicingEligibility({
 		humanOnly: prdFm.humanOnly,
 		needsAnswers: prdFm.needsAnswers,
-		sliceAfter: prdFm.sliceAfter,
+		briefAfter: prdFm.briefAfter,
 		slicedSlugs: readSlicedSlugs(cwd),
 		autoSlice: autoSlice ?? false,
 		explicit,
@@ -1214,9 +1214,9 @@ function gateRefusalReason(
 	) {
 		reasons.push("the repo's autoSlice policy is off");
 	}
-	if (!eligibility.sliceAfter.satisfied) {
+	if (!eligibility.briefAfter.satisfied) {
 		reasons.push(
-			`sliceAfter PRD(s) not yet sliced: ${eligibility.sliceAfter.missing.join(', ')}`,
+			`briefAfter PRD(s) not yet sliced: ${eligibility.briefAfter.missing.join(', ')}`,
 		);
 	}
 	const why =
@@ -1229,7 +1229,7 @@ function gateRefusalReason(
  * in `work/prd-sliced/` (the sliced resting state, slice `prd-sliced-folder-step-a`
  * / PRD `slicing-coherence` US #9), the build-machine `done/` analogue. The FOLDER
  * is the source of truth; the `sliced:` frontmatter marker was removed entirely in
- * `remove-sliced-marker-step-b` and is NOT consulted. So `sliceAfter` resolves
+ * `remove-sliced-marker-step-b` and is NOT consulted. So `briefAfter` resolves
  * against `prd-sliced/` residence
  * (mirroring `blockedBy` -> `done/`). A missing folder reads as empty. The slug is
  * read from each file's frontmatter `slug:`, falling back to the filename — the same

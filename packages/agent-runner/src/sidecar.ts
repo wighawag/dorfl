@@ -39,7 +39,7 @@ import {workItemRel} from './work-layout.js';
  */
 
 /** The three item-types a sidecar can key onto (the slug-namespace + obs). */
-export type SidecarType = 'prd' | 'slice' | 'observation';
+export type SidecarType = 'brief' | 'task' | 'observation';
 
 /**
  * The optional triage/terminal routing an answered triage entry carries.
@@ -87,7 +87,7 @@ export interface SidecarEntry {
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
 export interface SidecarModel {
-	/** The NAMESPACED identity (`prd:autoslice`, `slice:foo`, `observation:bar`). */
+	/** The NAMESPACED identity (`brief:autoslice`, `task:foo`, `observation:bar`). */
 	item: string;
 	/** The item type (redundant with the filename; explicit for the parser). */
 	type: SidecarType;
@@ -136,8 +136,8 @@ export function allAnswered(model: SidecarModel): boolean {
 }
 
 const TYPE_TO_NAMESPACE: Record<SidecarType, string> = {
-	prd: 'prd',
-	slice: 'slice',
+	brief: 'brief',
+	task: 'task',
 	observation: 'observation',
 };
 
@@ -146,20 +146,20 @@ function typeForNamespace(
 	explicit: SlugNamespace | undefined,
 	rawPrefix: string,
 ): SidecarType {
-	if (explicit === 'prd') {
-		return 'prd';
+	if (explicit === 'brief') {
+		return 'brief';
 	}
-	if (explicit === 'slice') {
-		return 'slice';
+	if (explicit === 'task') {
+		return 'task';
 	}
-	// `parseSlugArg` only knows `slice:`/`prd:`; the sidecar adds the
+	// `parseSlugArg` only knows `task:`/`brief:`; the sidecar adds the
 	// `observation:` namespace (`obs:` is the CLI alias the verb resolves; the
 	// sidecar stores the canonical `observation`). A bare slug (no prefix)
-	// defaults to the slice namespace, matching the resolver's "bare = slice".
+	// defaults to the task namespace, matching the resolver's "bare = task".
 	if (rawPrefix === 'observation' || rawPrefix === 'obs') {
 		return 'observation';
 	}
-	return 'slice';
+	return 'task';
 }
 
 /** The resolved identity of a sidecar: `{type, slug, item}`. */
@@ -171,10 +171,10 @@ export interface SidecarIdentity {
 }
 
 /**
- * Resolve a namespaced-identity argument (`prd:autoslice`, `slice:foo`,
- * `observation:bar`, `obs:bar`, or a bare `<slug>` = slice) into its
+ * Resolve a namespaced-identity argument (`brief:autoslice`, `task:foo`,
+ * `observation:bar`, `obs:bar`, or a bare `<slug>` = task) into its
  * `{type, slug, item}`. PURE string work over {@link parseSlugArg} — the
- * resolver is the single source of truth for the slice/prd split; the sidecar
+ * resolver is the single source of truth for the task/brief split; the sidecar
  * extends it with the `observation` namespace.
  */
 export function resolveSidecarIdentity(identity: string): SidecarIdentity {

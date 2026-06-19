@@ -355,7 +355,7 @@ export function stuckLockOnArbiter(
 	);
 	const show = run(
 		'git',
-		['show', `refs/agent-runner/lock/slice-${slug}:lock.md`],
+		['show', `refs/agent-runner/lock/task-${slug}:lock.md`],
 		cwd,
 		{env: gitEnv()},
 	);
@@ -367,7 +367,7 @@ export function stuckLockOnArbiter(
 
 /**
  * Does `<arbiter>/main` currently track an ARBITRARY repo-relative `path` (e.g. a
- * sidecar `work/questions/slice-<slug>.md`)? The path-keyed sibling of
+ * sidecar `work/questions/task-<slug>.md`)? The path-keyed sibling of
  * {@link existsOnArbiterMain} for the tree-less rungs' results, which live outside
  * the `work/<status>/<slug>.md` shape.
  */

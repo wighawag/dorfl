@@ -34,7 +34,7 @@ import type {SelectedLifecyclePools} from './select-priority.js';
 
 /** A `needsAnswers:true` slice/PRD pulled from the live `work/` state (pre-sidecar). */
 interface BlockedItem {
-	namespace: 'slice' | 'prd';
+	namespace: 'task' | 'brief';
 	slug: string;
 }
 
@@ -45,7 +45,7 @@ interface BlockedItem {
  */
 function readSidecarInPlace(
 	repoPath: string,
-	namespace: 'slice' | 'prd',
+	namespace: 'task' | 'brief',
 	slug: string,
 ): SidecarModel | undefined {
 	const rel = sidecarPathFor(`${namespace}:${slug}`);
@@ -71,13 +71,13 @@ function blockedItemsInPlace(
 	const state = read.resolveLocalState({repoPath});
 	for (const item of state.backlog) {
 		if (item.needsAnswers === true) {
-			out.push({namespace: 'slice', slug: item.slug});
+			out.push({namespace: 'task', slug: item.slug});
 		}
 	}
 	const pool = read.resolvePrdPool({repoPath});
 	for (const prd of pool.prds) {
 		if (prd.needsAnswers === true) {
-			out.push({namespace: 'prd', slug: prd.slug});
+			out.push({namespace: 'brief', slug: prd.slug});
 		}
 	}
 	return out;
@@ -124,7 +124,7 @@ export function gatherLifecycleInPlace(input: {
 async function readSidecarMirror(
 	mirrorPath: string,
 	ref: string,
-	namespace: 'slice' | 'prd',
+	namespace: 'task' | 'brief',
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<SidecarModel | undefined> {
@@ -163,12 +163,12 @@ export async function gatherLifecycleMirror(input: {
 	const blocked: BlockedItem[] = [];
 	for (const item of state.backlog) {
 		if (item.needsAnswers === true) {
-			blocked.push({namespace: 'slice', slug: item.slug});
+			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
 	for (const prd of prdPool.prds) {
 		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'prd', slug: prd.slug});
+			blocked.push({namespace: 'brief', slug: prd.slug});
 		}
 	}
 

@@ -77,7 +77,7 @@ async function seedSelfRenamedDoneBranch(
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	const branch = `work/slice-${slug}`;
+	const branch = `work/task-${slug}`;
 	gitIn(['switch', '-q', '-c', branch, `${ARBITER}/main`], repo);
 
 	// The agent's source work (a stand-in) AND the done-move: relocate the record
@@ -220,10 +220,7 @@ describe('complete — self-renaming-folder slice (record placed in a RENAMED do
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(
-			['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`],
-			repo,
-		);
+		gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 		// Move the record from the pool (`tasks/todo/`, where claim left it) BACK into
 		// staging (`tasks/backlog/`) — a non-done, non-pool durable position.
 		mkdirSync(join(repo, 'work', 'tasks', 'backlog'), {recursive: true});

@@ -74,7 +74,7 @@ describe('jobWorktreeStrategy — the existing run isolation, extracted', () => 
 			expect(tree.dir).toBe(expected);
 			expect(existsSync(tree.dir)).toBe(true);
 			expect(tree.dir.startsWith(workspacesDir)).toBe(true);
-			expect(tree.branch).toBe('work/slice-feat');
+			expect(tree.branch).toBe('work/task-feat');
 			// Inside a job worktree the arbiter remote is the mirror's clone `origin`.
 			expect(tree.arbiterRemote).toBe('origin');
 			expect(tree.arbiterUrl).toBe(`file://${arbiter}`);
@@ -223,14 +223,14 @@ describe('inPlaceStrategy — operate in the current checkout, no mirror/worktre
 
 		// The handle's dir IS the checkout (in-place); no external worktree.
 		expect(tree.dir).toBe(repo);
-		expect(tree.branch).toBe('work/slice-feat');
+		expect(tree.branch).toBe('work/task-feat');
 		// The arbiter remote/url are the CHECKOUT's own (not a mirror `origin`).
 		expect(tree.arbiterRemote).toBe('arbiter');
 		expect(tree.arbiterUrl).toBe(`file://${arbiter}`);
 
 		// The checkout is now ON the work branch (switched in-place).
 		const head = gitIn(['symbolic-ref', '--short', 'HEAD'], repo).trim();
-		expect(head).toBe('work/slice-feat');
+		expect(head).toBe('work/task-feat');
 		// No hub mirror / external worktree was created anywhere under the checkout.
 		expect(existsSync(join(repo, 'repos'))).toBe(false);
 	});
@@ -279,7 +279,7 @@ describe('inPlaceStrategy — operate in the current checkout, no mirror/worktre
 			'human work in progress\n',
 		);
 		const head = gitIn(['symbolic-ref', '--short', 'HEAD'], repo).trim();
-		expect(head).toBe('work/slice-feat');
+		expect(head).toBe('work/task-feat');
 	});
 
 	it('switches to an EXISTING work/<slug> branch (resume / re-run) instead of failing', async () => {
@@ -292,14 +292,14 @@ describe('inPlaceStrategy — operate in the current checkout, no mirror/worktre
 		});
 		// Pre-create the work branch + move off it, so prepare must SWITCH not -c.
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-feat', 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-feat', 'arbiter/main'], repo);
 		gitIn(['switch', '-q', 'main'], repo);
 
 		const strategy = inPlaceStrategy({checkout: repo, arbiter: 'arbiter'});
 		const tree = strategy.prepare({slug: 'feat', env: gitEnv()});
-		expect(tree.branch).toBe('work/slice-feat');
+		expect(tree.branch).toBe('work/task-feat');
 		const head = gitIn(['symbolic-ref', '--short', 'HEAD'], repo).trim();
-		expect(head).toBe('work/slice-feat');
+		expect(head).toBe('work/task-feat');
 	});
 });
 
@@ -318,7 +318,7 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 
 		const tree = inPlaceStrategy({checkout: repo, arbiter: 'arbiter'}).prepare({
 			slug: 'feat',
-			type: 'slice',
+			type: 'task',
 			// No claimCommit threaded (the production path) → the FRESH branch is cut
 			// straight off `<arbiter>/main`, which carries the backlog body.
 			claimCommit: claim.claimCommit,
@@ -328,7 +328,7 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 		const tip = gitIn(['rev-parse', 'HEAD'], repo).trim();
 		const arbiterMain = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
 		expect(tip).toBe(arbiterMain);
-		expect(tree.branch).toBe('work/slice-feat');
+		expect(tree.branch).toBe('work/task-feat');
 		// And the body is present locally in backlog/ (so the done-move can find it).
 		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'feat.md'))).toBe(
 			true,
@@ -337,10 +337,10 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 
 	it('(a) a stale same-named branch is RE-CUT off <arbiter>/main (never reused at a pre-claim base)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
-		// A stale local `work/slice-feat` left at a PRE-claim commit (e.g. from a
+		// A stale local `work/task-feat` left at a PRE-claim commit (e.g. from a
 		// prior run / an intake on a shared name).
 		const preClaim = gitIn(['rev-parse', 'HEAD'], repo).trim();
-		gitIn(['branch', 'work/slice-feat', preClaim], repo);
+		gitIn(['branch', 'work/task-feat', preClaim], repo);
 		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'feat.md'))).toBe(
 			true,
 		);
@@ -356,14 +356,14 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 
 		const tree = inPlaceStrategy({checkout: repo, arbiter: 'arbiter'}).prepare({
 			slug: 'feat',
-			type: 'slice',
+			type: 'task',
 			claimCommit: claim.claimCommit,
 			env: gitEnv(),
 		});
 		// With no claim commit threaded, the FRESH path plain-switches the existing
 		// local branch. The body is the backlog body on `<arbiter>/main` (it never
 		// moved), so the slug is present in backlog/ on the branch.
-		expect(tree.branch).toBe('work/slice-feat');
+		expect(tree.branch).toBe('work/task-feat');
 		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'feat.md'))).toBe(
 			true,
 		);
@@ -386,7 +386,7 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 		expect(() =>
 			inPlaceStrategy({checkout: repo, arbiter: 'arbiter'}).prepare({
 				slug: 'feat',
-				type: 'slice',
+				type: 'task',
 				claimCommit: bogus,
 				env: gitEnv(),
 			}),
@@ -463,8 +463,8 @@ describe('selectIsolationStrategy — by "is there a checkout", not a hardcoded 
 			]);
 			// Same branch; differing dirs (checkout vs agents' area) — proving the
 			// pipeline never assumes WHERE the tree lives.
-			expect(ipTree.branch).toBe('work/slice-feat');
-			expect(jwTree.branch).toBe('work/slice-feat');
+			expect(ipTree.branch).toBe('work/task-feat');
+			expect(jwTree.branch).toBe('work/task-feat');
 			expect(ipTree.dir).toBe(inPlace.repo);
 			expect(jwTree.dir.startsWith(workspacesDir)).toBe(true);
 		} finally {

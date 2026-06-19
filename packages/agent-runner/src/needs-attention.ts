@@ -397,7 +397,7 @@ export async function routeToNeedsAttention(
 	if (options.arbiter && options.pushBranch !== false) {
 		// DEFAULT to the slice-namespaced build-bounce branch; a non-slice caller
 		// (the slicing bounce) passes its own `work/prd-<slug>` via `branch`.
-		const branch = options.branch ?? workBranchRef('slice', slug);
+		const branch = options.branch ?? workBranchRef('task', slug);
 		if (branchAheadOf(cwd, branch, 'main', env)) {
 			const arbiter = options.arbiter;
 			const result = await retryWithBackoff(
@@ -478,7 +478,7 @@ async function readLocalItemLock(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LockEntry | undefined> {
-	const ref = itemLockRef(lockEntryFor(`slice:${slug}`));
+	const ref = itemLockRef(lockEntryFor(`task:${slug}`));
 	const show = await gitSoftAsync(['show', `${ref}:lock.md`], cwd, env);
 	if (show.status !== 0) {
 		return undefined;
@@ -541,7 +541,7 @@ export async function returnToBacklog(
 	// crashing. A genuinely absent lock still refuses below.
 	let held: Awaited<ReturnType<typeof readItemLock>>;
 	try {
-		held = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+		held = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	} catch {
 		held = await readLocalItemLock(slug, cwd, env);
 	}
@@ -569,7 +569,7 @@ export async function returnToBacklog(
 	// continue. Delete-before-move also closes the claim-race window.
 	let deletedRemoteBranch = false;
 	if (options.reset) {
-		const branch = workBranchRef('slice', slug);
+		const branch = workBranchRef('task', slug);
 		// LOCAL-FIRST: the tracking ref `branchAheadOf` reads (the one whose
 		// staleness today silently turns `--reset` into a no-op — verified live in
 		// `work/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md`,
@@ -622,7 +622,7 @@ export async function returnToBacklog(
 	// local `work/<slug>` (which SURVIVES a failed push). NOT on `--reset` (which
 	// discards the branch by design).
 	if (!options.reset) {
-		const branch = workBranchRef('slice', slug);
+		const branch = workBranchRef('task', slug);
 		const onArbiter = branchAheadOf(
 			cwd,
 			`${arbiter}/${branch}`,
@@ -697,7 +697,7 @@ export async function returnToBacklog(
 	// `stuck` hold (the resolved-recovery path) and an `active` hold (a killed run
 	// that never surfaced) — the human asserting "put it back".
 	const released = await releaseItemLock({
-		item: `slice:${slug}`,
+		item: `task:${slug}`,
 		cwd,
 		arbiter,
 		env,
@@ -886,7 +886,7 @@ export async function promoteFromPreBacklog(
  * `work/pre-prd/<slug>.md → work/prd/<slug>.md` as a durable `main` move
  * (tree-less CAS via {@link runTreelessLedgerMove}). After this transition
  * the PRD is in the auto-slice POOL and eligible to be auto-sliced (subject
- * to the existing `autoSlice`/`humanOnly`/`needsAnswers`/`sliceAfter` gates,
+ * to the existing `autoSlice`/`humanOnly`/`needsAnswers`/`briefAfter` gates,
  * which are UNCHANGED — the staging/pool split changes only WHICH folder is
  * the auto-slice pool, not the gates).
  *
@@ -1029,10 +1029,10 @@ export async function promoteFromPrePrd(
 	return {moved: false, reasonNotMoved: message};
 }
 
-/** One staged item awaiting promotion (a slice in `pre-backlog/` or a PRD in `pre-prd/`). */
+/** One staged item awaiting promotion (a task in `pre-backlog/` or a brief in `pre-prd/`). */
 export interface PromotableItem {
-	/** `'slice'` (staged in `work/pre-backlog/`) or `'prd'` (staged in `work/pre-prd/`). */
-	namespace: 'slice' | 'prd';
+	/** `'task'` (staged in `work/pre-backlog/`) or `'brief'` (staged in `work/pre-prd/`). */
+	namespace: 'task' | 'brief';
 	/** The slug (filename minus `.md`). */
 	slug: string;
 }
@@ -1090,8 +1090,8 @@ export async function listPromotable(
 	);
 	return {
 		items: [
-			...slices.map((slug) => ({namespace: 'slice' as const, slug})),
-			...prds.map((slug) => ({namespace: 'prd' as const, slug})),
+			...slices.map((slug) => ({namespace: 'task' as const, slug})),
+			...prds.map((slug) => ({namespace: 'brief' as const, slug})),
 		],
 	};
 }

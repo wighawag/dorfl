@@ -71,7 +71,7 @@ async function seedSourceStrand(slug: string): Promise<string> {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	gitIn(['rm', '-q', `work/tasks/todo/${slug}.md`], repo);
 	gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
 	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
@@ -114,7 +114,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		// The reason is recorded on the lock entry (the refusal message).
 		const lock = await readItemLock({
-			item: 'slice:alpha',
+			item: 'task:alpha',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -147,7 +147,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 		// The checkout was NOT bounced (HEAD still on the work branch).
 		const head = gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim();
-		expect(head).toBe('work/slice-beta');
+		expect(head).toBe('work/task-beta');
 	});
 
 	it('DIVERGED-MAIN refusal is NEVER bounced (env/operator condition, not a stuck slice) — even on the autonomous path', async () => {
@@ -170,7 +170,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		gitIn(['commit', '-q', '-m', 'unpushed local commit'], repo);
 		// Switch onto the work branch (HEAD is reset to the arbiter base for the
 		// work — diverged-main is purely a local-main vs arbiter/main condition).
-		gitIn(['switch', '-q', '-c', 'work/slice-gamma', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 		// Stage the agent's work (so the build path would be reachable past gate).
 		writeFileSync(join(repo, 'feature.txt'), 'work\n');
 		// Run with surfaceArbiter set AND `--merge` (the only mode that runs the
@@ -216,7 +216,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-delta', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-delta', `${ARBITER}/main`], repo);
 		// Do the done-move locally AND commit it (so the source-strand auto-recover
 		// would otherwise fire — we need an explicit IntegrationNothingStaged path).
 		// Re-create in-progress/ alongside (no source-strand) so the front-gate

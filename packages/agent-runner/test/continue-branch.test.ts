@@ -33,7 +33,7 @@ describe('branchAheadOf', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
-			branchAheadOf(repo, 'arbiter/work/slice-alpha', 'arbiter/main', gitEnv()),
+			branchAheadOf(repo, 'arbiter/work/task-alpha', 'arbiter/main', gitEnv()),
 		).toBe(false);
 	});
 
@@ -41,15 +41,15 @@ describe('branchAheadOf', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		// Cut a work branch with a commit beyond main, push it to the arbiter.
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
 		writeFileSync(join(repo, 'prior.txt'), 'prior attempt\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior work'], repo);
-		gitIn(['push', '-q', 'arbiter', 'work/slice-alpha:work/slice-alpha'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-alpha:work/task-alpha'], repo);
 		gitIn(['switch', '-q', 'main'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
-			branchAheadOf(repo, 'arbiter/work/slice-alpha', 'arbiter/main', gitEnv()),
+			branchAheadOf(repo, 'arbiter/work/task-alpha', 'arbiter/main', gitEnv()),
 		).toBe(true);
 	});
 
@@ -57,11 +57,11 @@ describe('branchAheadOf', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		// A work branch at the SAME tip as main (no commits beyond).
-		gitIn(['branch', 'work/slice-alpha', 'arbiter/main'], repo);
-		gitIn(['push', '-q', 'arbiter', 'work/slice-alpha:work/slice-alpha'], repo);
+		gitIn(['branch', 'work/task-alpha', 'arbiter/main'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-alpha:work/task-alpha'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
-			branchAheadOf(repo, 'arbiter/work/slice-alpha', 'arbiter/main', gitEnv()),
+			branchAheadOf(repo, 'arbiter/work/task-alpha', 'arbiter/main', gitEnv()),
 		).toBe(false);
 	});
 
@@ -69,16 +69,16 @@ describe('branchAheadOf', () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		// Push a work branch ahead of main to the arbiter.
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
 		writeFileSync(join(repo, 'prior.txt'), 'prior\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior work'], repo);
-		gitIn(['push', '-q', 'arbiter', 'work/slice-alpha:work/slice-alpha'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-alpha:work/task-alpha'], repo);
 
-		// A bare mirror clone of the arbiter — local heads `main` + `work/slice-alpha`.
+		// A bare mirror clone of the arbiter — local heads `main` + `work/task-alpha`.
 		const mirror = join(scratch.root, 'mirror.git');
 		gitIn(['clone', '-q', '--bare', `file://${arbiter}`, mirror], scratch.root);
-		expect(branchAheadOf(mirror, 'work/slice-alpha', 'main', gitEnv())).toBe(
+		expect(branchAheadOf(mirror, 'work/task-alpha', 'main', gitEnv())).toBe(
 			true,
 		);
 	});
@@ -89,7 +89,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		// Prior attempt branch off the original main.
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
 		writeFileSync(join(repo, 'feature.txt'), 'feature\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior work'], repo);
@@ -103,7 +103,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 
-		gitIn(['switch', '-q', 'work/slice-alpha'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
 		const result = rebaseContinuedBranchOntoMain(
 			repo,
 			'arbiter/main',
@@ -121,7 +121,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		// Prior attempt edits shared.txt.
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
 		writeFileSync(join(repo, 'shared.txt'), 'branch version\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior work edits shared'], repo);
@@ -134,19 +134,19 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 
-		gitIn(['switch', '-q', 'work/slice-alpha'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
 		const result = rebaseContinuedBranchOntoMain(
 			repo,
 			'arbiter/main',
 			gitEnv(),
 		);
 		expect(result.kind).toBe('conflict');
-		// The rebase was aborted: HEAD is back on a clean work/slice-alpha (no rebase
+		// The rebase was aborted: HEAD is back on a clean work/task-alpha (no rebase
 		// in progress), still on its own tip.
 		const status = gitIn(['status', '--porcelain'], repo);
 		expect(status.trim()).toBe('');
 		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim()).toBe(
-			'work/slice-alpha',
+			'work/task-alpha',
 		);
 	});
 
@@ -168,7 +168,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		// The body RESTS in `backlog/` on main (claim no longer moves it, slice 9a).
 		// Cut the work branch off main — it inherits the SAME `work/tasks/todo/alpha.md`
 		// main has, so there is NO transient-status file unique to the branch.
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
 		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
 			true,
 		);
@@ -196,7 +196,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 
 		// The continue-rebase is now a PLAIN rebase (no drop step).
-		gitIn(['switch', '-q', 'work/slice-alpha'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
 		const result = rebaseContinuedBranchOntoMain(
 			repo,
 			'arbiter/main',
@@ -225,7 +225,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 
 /**
  * Build the job-worktree topology of `createJob`'s CONTINUE path: an arbiter
- * holding `work/slice-<slug>` ahead of `main`, a BARE mirror cloned from it, and
+ * holding `work/task-<slug>` ahead of `main`, a BARE mirror cloned from it, and
  * a worktree of that mirror checked out ON the work branch (its `origin` is the
  * real arbiter). Returns the worktree dir, the arbiter path, and the arbiter
  * `work/<branch>` tip the mirror fetched (the value a --force-with-lease push
@@ -240,7 +240,7 @@ function continueWorktree(slug: string): {
 	repo: string;
 	fetchedTip: string;
 } {
-	const branch = `work/slice-${slug}`;
+	const branch = `work/task-${slug}`;
 	const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [slug]);
 	// Put a prior-attempt commit on the work branch on the arbiter (the requeue
 	// keeps it) so the branch is ahead of main — the CONTINUE precondition.

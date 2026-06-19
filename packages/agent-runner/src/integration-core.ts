@@ -1552,7 +1552,7 @@ function resolveWorkBranch(
 	} catch {
 		// detached HEAD or plumbing failure — fall through to the synthesised default
 	}
-	return workBranchRef('slice', slug);
+	return workBranchRef('task', slug);
 }
 
 /**

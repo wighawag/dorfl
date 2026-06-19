@@ -187,7 +187,7 @@ async function runAcquire(
 	// the ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts
 	// a lock is dead via `release-lock` + `gc --ledger`).
 	const lock = await acquireItemLock({
-		item: `prd:${slug}`,
+		item: `brief:${slug}`,
 		action: 'slice',
 		cwd,
 		arbiter,
@@ -326,7 +326,7 @@ async function runRelease(
 	// sliceable pool until a human resolves it (`release-lock`/`resume`).
 	if (options.routeToNeedsAttention !== undefined) {
 		const stuck = await markStuckItemLock({
-			item: `prd:${slug}`,
+			item: `brief:${slug}`,
 			reason: options.routeToNeedsAttention.reason,
 			cwd,
 			arbiter,
@@ -350,7 +350,7 @@ async function runRelease(
 
 	// NORMAL release: delete the lock ref (idempotent).
 	const released = await releaseItemLock({
-		item: `prd:${slug}`,
+		item: `brief:${slug}`,
 		cwd,
 		arbiter,
 		env,

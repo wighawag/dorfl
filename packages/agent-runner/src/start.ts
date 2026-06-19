@@ -225,7 +225,7 @@ async function dispatchFolder(
 		return folder;
 	}
 	// In `backlog/`: claimed-ness + stuck-ness are the per-item lock, not the folder.
-	const lock = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	const lock = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	if (lock && lock.state === 'stuck') {
 		return 'needs-attention';
 	}
@@ -372,7 +372,7 @@ async function continueConflictResult(params: {
 	return {
 		exitCode: 1,
 		outcome: 'needs-attention',
-		branch: workBranchRef('slice', params.slug),
+		branch: workBranchRef('task', params.slug),
 		message,
 	};
 }
@@ -406,7 +406,7 @@ async function continuePushFailureResult(params: {
 	return {
 		exitCode: 1,
 		outcome: 'needs-attention',
-		branch: workBranchRef('slice', params.slug),
+		branch: workBranchRef('task', params.slug),
 		message,
 	};
 }
@@ -431,7 +431,7 @@ async function startFromNeedsAttention(params: {
 	// (slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: the lock
 	// is the sole stuck record — no `needs-attention/` folder file). The full reason
 	// prose + any surfaced questions ride on the lock entry body.
-	const stuck = await readItemLock({item: `slice:${slug}`, cwd, arbiter, env});
+	const stuck = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	if (stuck?.reason) {
 		note(`'${slug}' is stuck (needs-attention): ${stuck.reason}`);
 	} else {
@@ -583,7 +583,7 @@ async function switchToWorkBranch(params: {
 	const {slug, arbiter, cwd, env, note} = params;
 	// `start` is a SLICE-only command: the branch is the slice-namespaced
 	// `work/slice-<slug>` (distinct from a same-slug PRD-slicing branch).
-	const branch = workBranchRef('slice', slug);
+	const branch = workBranchRef('task', slug);
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 
@@ -640,7 +640,7 @@ async function continueFromKeptBranch(params: {
 	note: (m: string) => void;
 }): Promise<SwitchResult> {
 	const {slug, arbiter, cwd, env, note} = params;
-	const branch = workBranchRef('slice', slug);
+	const branch = workBranchRef('task', slug);
 	note(`Continuing '${slug}' from the kept ${arbiter}/${branch} (requeue).`);
 
 	// Land the local work branch ON the kept arbiter tip (force-reset a stale
@@ -765,7 +765,7 @@ function surfaceUnmovedStartResult(params: {
 	return {
 		exitCode: 1,
 		outcome: 'surface-unmoved',
-		branch: workBranchRef('slice', slug),
+		branch: workBranchRef('task', slug),
 		message,
 	};
 }
@@ -792,7 +792,7 @@ async function routeContinueConflict(params: {
 }): Promise<SurfaceToNeedsAttentionResult> {
 	const {slug, arbiter, cwd, env, note} = params;
 	const reason =
-		`continuing the kept ${arbiter}/${workBranchRef('slice', slug)}: rebase onto ` +
+		`continuing the kept ${arbiter}/${workBranchRef('task', slug)}: rebase onto ` +
 		`${arbiter}/main conflicted (aborted, never auto-resolved) — resolve ` +
 		'against the latest main, or `requeue --reset` to discard and start fresh';
 	note(reason);
@@ -835,7 +835,7 @@ async function routeContinuePushFailure(params: {
 }): Promise<SurfaceToNeedsAttentionResult> {
 	const {slug, arbiter, cwd, pushFailure, env, note} = params;
 	const reason =
-		`continuing the kept ${arbiter}/${workBranchRef('slice', slug)}: publishing ` +
+		`continuing the kept ${arbiter}/${workBranchRef('task', slug)}: publishing ` +
 		`the rebased work branch to ${arbiter} failed terminally (${pushFailure}) — ` +
 		'the kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
 		'retry once the churn settles, or `requeue --reset` to discard and start fresh';

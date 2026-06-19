@@ -35,12 +35,12 @@ describe('parseTriageEmit — the conservative auto-disposition decision', () =>
 
 	it('parses a map auto-disposition (unambiguous map onto an existing item)', () => {
 		const emit = parseTriageEmit(
-			'prose before {"auto": true, "kind": "map", "existing": "slice:foo"} prose after',
+			'prose before {"auto": true, "kind": "map", "existing": "task:foo"} prose after',
 		);
 		expect(emit.auto).toBe(true);
 		if (emit.auto) {
 			expect(emit.kind).toBe('map');
-			expect(emit.existing).toBe('slice:foo');
+			expect(emit.existing).toBe('task:foo');
 		}
 	});
 
@@ -61,7 +61,7 @@ describe('parseTriageEmit — the conservative auto-disposition decision', () =>
 		// A malformed "auto" must NEVER win — the safe direction is to surface the
 		// question, never to auto-dispose on a half-baked emit.
 		const emit = parseTriageEmit(
-			JSON.stringify({auto: true, kind: 'promote', existing: 'slice:x'}),
+			JSON.stringify({auto: true, kind: 'promote', existing: 'task:x'}),
 		);
 		expect(emit.auto).toBe(false);
 	});

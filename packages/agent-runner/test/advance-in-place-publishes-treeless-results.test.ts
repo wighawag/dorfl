@@ -72,7 +72,7 @@ function seedPlainRepo(slug: string): SeededRepo {
 /** Commit an ANSWERED sidecar for `<namespace>:<slug>` to the repo's `main`. */
 function commitAnsweredSidecar(
 	repo: string,
-	namespace: 'slice' | 'prd',
+	namespace: 'task' | 'brief',
 	slug: string,
 	answer = 'yes',
 ): void {
@@ -110,7 +110,7 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 				arg: slug,
 				cwd: seed.repo,
 				arbiter: 'arbiter',
-				surfaceGate: surfaceGateStub(`slice:${slug}`),
+				surfaceGate: surfaceGateStub(`task:${slug}`),
 			},
 			performAdvance,
 		);
@@ -118,9 +118,9 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 		expect(result.exitCode).toBe(0);
 		expect(result.rung).toBe('surface');
 		// The OBSERVABLE assertion: the sidecar reached the arbiter (not just the local cwd).
-		expect(
-			pathOnArbiterMain(seed.repo, `work/questions/slice-${slug}.md`),
-		).toBe(true);
+		expect(pathOnArbiterMain(seed.repo, `work/questions/task-${slug}.md`)).toBe(
+			true,
+		);
 	});
 
 	it('SURFACE: multi-item `performAdvanceAuto` (surfaceBlockers on) ff-pushes the sidecar to arbiter/main', async () => {
@@ -130,7 +130,7 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 		const result = await performAdvanceAuto({
 			cwd: seed.repo,
 			arbiter: 'arbiter',
-			surfaceGate: surfaceGateStub(`slice:${slug}`),
+			surfaceGate: surfaceGateStub(`task:${slug}`),
 			config: mergeConfig({autoBuild: true, surfaceBlockers: true}),
 			lifecycleGates: {surface: true},
 			count: 1,
@@ -138,9 +138,9 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 
 		expect(result.exitCode).toBe(0);
 		expect(result.results[0].rung).toBe('surface');
-		expect(
-			pathOnArbiterMain(seed.repo, `work/questions/slice-${slug}.md`),
-		).toBe(true);
+		expect(pathOnArbiterMain(seed.repo, `work/questions/task-${slug}.md`)).toBe(
+			true,
+		);
 	});
 
 	it('APPLY: an answered blocker sidecar applied in-place ff-pushes the resolved item to arbiter/main', async () => {
@@ -148,7 +148,7 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 		const seed = seedRepoWithArbiter(join(scratch.root, slug), [slug], {
 			needsAnswers: true,
 		});
-		commitAnsweredSidecar(seed.repo, 'slice', slug);
+		commitAnsweredSidecar(seed.repo, 'task', slug);
 
 		const result = await runAdvanceTickWithTreelessPublish(
 			{arg: slug, cwd: seed.repo, arbiter: 'arbiter'},
@@ -162,9 +162,9 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 		// sidecar is gone from `work/questions/` on the arbiter (resolved) AND the
 		// item still exists. We check the sidecar's resolved-into-archive state by
 		// asserting it no longer lives at the active path.
-		expect(
-			pathOnArbiterMain(seed.repo, `work/questions/slice-${slug}.md`),
-		).toBe(false);
+		expect(pathOnArbiterMain(seed.repo, `work/questions/task-${slug}.md`)).toBe(
+			false,
+		);
 	});
 
 	it('TRIAGE: an observation triage rung ff-pushes its `triaged:` marker to arbiter/main', async () => {
@@ -266,7 +266,7 @@ describe('advance in-place — the publish GATE matches the existing drivers (no
 		// would) and reports `rung: 'surface'` — but WITHOUT `arbiter` in the
 		// context, the wrapper must NOT push.
 		const run: AdvanceTickRunner = async () => {
-			const item = `slice:${slug}`;
+			const item = `task:${slug}`;
 			const model = newSidecar(item, [{question: 'q?'}]);
 			const abs = join(seed.repo, sidecarPathFor(item));
 			mkdirSync(join(abs, '..'), {recursive: true});
@@ -290,9 +290,9 @@ describe('advance in-place — the publish GATE matches the existing drivers (no
 		expect(after).toBe(before);
 		// The sidecar IS in the local working tree (the rung committed it locally),
 		// proving the no-op was the PUBLISH and not the rung itself.
-		expect(
-			pathOnArbiterMain(seed.repo, `work/questions/slice-${slug}.md`),
-		).toBe(false);
+		expect(pathOnArbiterMain(seed.repo, `work/questions/task-${slug}.md`)).toBe(
+			false,
+		);
 	});
 
 	it('a non-zero tick exit: no tree-less push (failures stay local)', async () => {
@@ -367,7 +367,7 @@ describe('advance in-place — the rebase-retry handles a mid-batch external adv
 				};
 			}
 			// Second tick: a slug-only tree-less commit (a surfaced sidecar).
-			const item = `slice:${surfaceSlug}`;
+			const item = `task:${surfaceSlug}`;
 			const model = newSidecar(item, [{question: 'q?'}]);
 			const abs = join(seed.repo, sidecarPathFor(item));
 			mkdirSync(join(abs, '..'), {recursive: true});
@@ -398,7 +398,7 @@ describe('advance in-place — the rebase-retry handles a mid-batch external adv
 		// the advanced main and landed it).
 		expect(existsOnArbiterMain(seed.repo, 'done', externalSlug)).toBe(true);
 		expect(
-			pathOnArbiterMain(seed.repo, `work/questions/slice-${surfaceSlug}.md`),
+			pathOnArbiterMain(seed.repo, `work/questions/task-${surfaceSlug}.md`),
 		).toBe(true);
 	});
 });
@@ -482,7 +482,7 @@ describe('advance in-place — a failing publish is NON-FATAL (the work stays co
 
 		const notes: string[] = [];
 		const run: AdvanceTickRunner = async () => {
-			const item = `slice:${slug}`;
+			const item = `task:${slug}`;
 			const model = newSidecar(item, [{question: 'q?'}]);
 			const abs = join(seed.repo, sidecarPathFor(item));
 			mkdirSync(join(abs, '..'), {recursive: true});
@@ -517,14 +517,14 @@ describe('advance in-place — a failing publish is NON-FATAL (the work stays co
 		);
 		// The local commit IS still there (the work survives for the next pass).
 		const localHead = gitIn(
-			['cat-file', '-e', `HEAD:${sidecarPathFor(`slice:${slug}`)}`],
+			['cat-file', '-e', `HEAD:${sidecarPathFor(`task:${slug}`)}`],
 			seed.repo,
 		);
 		// (No throw above => the path exists on local HEAD.)
 		expect(localHead).toBeDefined();
 		// Belt-and-suspenders: read the committed sidecar back.
 		const committed = readFileSync(
-			join(seed.repo, sidecarPathFor(`slice:${slug}`)),
+			join(seed.repo, sidecarPathFor(`task:${slug}`)),
 			'utf8',
 		);
 		expect(committed).toContain('q?');

@@ -74,7 +74,7 @@ function seedSlice(
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`prd: ${prd}`,
+		`brief: ${prd}`,
 		'blockedBy: []',
 		'---',
 		'',
@@ -96,7 +96,7 @@ function doneSlice(slug: string, prd = 'my-prd'): string {
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`prd: ${prd}`,
+		`brief: ${prd}`,
 		'blockedBy: []',
 		'---',
 		'',
@@ -295,10 +295,10 @@ describe('buildAgentPrompt', () => {
 	});
 
 	it('only slug/prd vary in the wrapper (two slices share the wrapper text)', () => {
-		const a = buildAgentPrompt('alpha', 'prd-a', 'BODY');
-		const b = buildAgentPrompt('bravo', 'prd-b', 'BODY');
-		const stripA = a.replace(/alpha/g, 'SLUG').replace(/prd-a/g, 'PRD');
-		const stripB = b.replace(/bravo/g, 'SLUG').replace(/prd-b/g, 'PRD');
+		const a = buildAgentPrompt('alpha', 'brief-a', 'BODY');
+		const b = buildAgentPrompt('bravo', 'brief-b', 'BODY');
+		const stripA = a.replace(/alpha/g, 'SLUG').replace(/brief-a/g, 'PRD');
+		const stripB = b.replace(/bravo/g, 'SLUG').replace(/brief-b/g, 'PRD');
 		expect(stripA).toBe(stripB);
 	});
 });
@@ -354,19 +354,19 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 	it('frames continuing + points at the prior diff vs <arbiter>/main', () => {
 		const ctx: ContinueContext = {
 			arbiter: 'origin',
-			branch: 'work/slice-my-slug',
+			branch: 'work/task-my-slug',
 			reason: '',
 			requeueNotes: [],
 		};
 		const block = buildContinueBlock('my-slug', ctx);
 		expect(block).toMatch(/CONTINUING/i);
-		expect(block).toContain('origin/main...work/slice-my-slug');
+		expect(block).toContain('origin/main...work/task-my-slug');
 	});
 
 	it('includes the needs-attention reason when present', () => {
 		const ctx: ContinueContext = {
 			arbiter: 'origin',
-			branch: 'work/slice-my-slug',
+			branch: 'work/task-my-slug',
 			reason: 'the acceptance gate was red',
 			requeueNotes: [],
 		};
@@ -377,7 +377,7 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 	it('includes the requeue handoff note(s) when present', () => {
 		const ctx: ContinueContext = {
 			arbiter: 'origin',
-			branch: 'work/slice-my-slug',
+			branch: 'work/task-my-slug',
 			reason: 'red gate',
 			requeueNotes: ['note A', 'note B'],
 		};
@@ -389,7 +389,7 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 	it('omits the reason/note sub-sections when both are empty', () => {
 		const block = buildContinueBlock('my-slug', {
 			arbiter: 'origin',
-			branch: 'work/slice-my-slug',
+			branch: 'work/task-my-slug',
 			reason: '',
 			requeueNotes: [],
 		});
@@ -415,7 +415,7 @@ describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
 			continueContext: {
 				arbiter: 'origin',
-				branch: 'work/slice-example',
+				branch: 'work/task-example',
 				reason: 'the gate was red',
 				requeueNotes: ['use the v2 helper'],
 			},
@@ -424,7 +424,7 @@ describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
 		expect(out).toContain(wrapper('example', 'my-prd'));
 		expect(out).toContain('SLICE-BODY');
 		expect(out).toMatch(/CONTINUING/i);
-		expect(out).toContain('origin/main...work/slice-example');
+		expect(out).toContain('origin/main...work/task-example');
 		expect(out).toContain('the gate was red');
 		expect(out).toContain('use the v2 helper');
 		// The block precedes the slice body in the assembly.
@@ -450,9 +450,9 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 		writeFileSync(join(repo, 'README.md'), '# x\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'seed'], repo);
-		gitIn(['branch', `work/slice-${slug}`], repo);
+		gitIn(['branch', `work/task-${slug}`], repo);
 		if (ahead) {
-			gitIn(['switch', '-q', `work/slice-${slug}`], repo);
+			gitIn(['switch', '-q', `work/task-${slug}`], repo);
 			writeFileSync(join(repo, 'prior.txt'), 'prior work\n');
 			gitIn(['add', '-A'], repo);
 			gitIn(['commit', '-q', '-m', 'prior attempt'], repo);
@@ -482,7 +482,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 			cwd: repo,
 			slug: 'alpha',
 			arbiter: 'origin',
-			branchRef: 'work/slice-alpha',
+			branchRef: 'work/task-alpha',
 			mainRef: 'main',
 			content: BODY,
 			env: gitEnv(),
@@ -491,7 +491,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 		expect(ctx!.arbiter).toBe('origin');
 		// The namespaced branch is recovered from branchRef (no `<arbiter>/` prefix
 		// to strip here) — the continue-block prose points the agent at it.
-		expect(ctx!.branch).toBe('work/slice-alpha');
+		expect(ctx!.branch).toBe('work/task-alpha');
 		expect(ctx!.reason).toBe('the acceptance gate was red');
 		expect(ctx!.requeueNotes).toEqual(['try the other approach']);
 	});
@@ -502,7 +502,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 			cwd: repo,
 			slug: 'beta',
 			arbiter: 'origin',
-			branchRef: 'work/slice-beta',
+			branchRef: 'work/task-beta',
 			mainRef: 'main',
 			content: BODY,
 			env: gitEnv(),
@@ -516,7 +516,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 			cwd: repo,
 			slug: 'absent-slug',
 			arbiter: 'origin',
-			branchRef: 'work/slice-absent-slug',
+			branchRef: 'work/task-absent-slug',
 			mainRef: 'main',
 			content: BODY,
 			env: gitEnv(),
@@ -574,13 +574,13 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 
 	/**
 	 * Build a throwaway repo whose slice `<slug>` has been DONE-MOVED into
-	 * `work/tasks/done/` on a `work/slice-<slug>` branch, with a sibling `--bare`
+	 * `work/tasks/done/` on a `work/task-<slug>` branch, with a sibling `--bare`
 	 * arbiter. `integrated` controls the tip-vs-arbiter state under test:
 	 *   - `false` (STRANDED): the done-move commit is committed on the branch but
 	 *     NOT pushed to the arbiter — `arbiter/main` lacks it (the strand state).
 	 *   - `true`  (COMPLETE): the done-move commit IS on `arbiter/main` (integrated).
 	 * Returns the working repo path; the branch tip is left checked out, and the
-	 * remote-tracking refs (`arbiter/work/slice-<slug>`, `arbiter/main`) are
+	 * remote-tracking refs (`arbiter/work/task-<slug>`, `arbiter/main`) are
 	 * fetched — exactly the in-place-clone refs the `do` caller feeds the gate.
 	 */
 	function doneMovedRepo(slug: string, integrated: boolean): string {
@@ -597,8 +597,8 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		// A bare arbiter mirroring main at the CLAIM commit.
 		gitIn(['clone', '-q', '--bare', repo, arbiter], scratch.root);
 		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
-		// The done-move commit: in-progress/ -> done/, on a work/slice-<slug> branch.
-		gitIn(['switch', '-q', '-c', `work/slice-${slug}`], repo);
+		// The done-move commit: in-progress/ -> done/, on a work/task-<slug> branch.
+		gitIn(['switch', '-q', '-c', `work/task-${slug}`], repo);
 		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 		gitIn(
 			['mv', `work/in-progress/${slug}.md`, `work/tasks/done/${slug}.md`],
@@ -607,7 +607,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		gitIn(['commit', '-q', '-m', `done: ${slug}`], repo);
 		if (integrated) {
 			// COMPLETE: the done-move tip is published to arbiter/main (integrated).
-			gitIn(['push', '-q', 'arbiter', `work/slice-${slug}:main`], repo);
+			gitIn(['push', '-q', 'arbiter', `work/task-${slug}:main`], repo);
 		}
 		// Else STRANDED: the done-move stays committed-but-unpushed on the branch.
 		gitIn(['fetch', '-q', 'arbiter'], repo);
@@ -618,7 +618,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 	function inPlaceGate(repo: string, slug: string) {
 		return {
 			cwd: repo,
-			branchRef: `arbiter/work/slice-${slug}`,
+			branchRef: `arbiter/work/task-${slug}`,
 			mainRef: 'arbiter/main',
 			env: gitEnv(),
 		};
@@ -628,7 +628,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		const repo = doneMovedRepo('alpha', false);
 		// Push the work branch to the arbiter so the remote-tracking branchRef
 		// resolves (the strand keeps the branch, just NOT merged to main).
-		gitIn(['push', '-q', 'arbiter', 'work/slice-alpha:work/slice-alpha'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-alpha:work/task-alpha'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		const slice = resolveSlice(repo, 'alpha', inPlaceGate(repo, 'alpha'));
 		expect(slice.folder).toBe('done');
@@ -646,7 +646,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 
 	it('does NOT admit done/ on a FRESH claim (no continue gate), even if stranded', () => {
 		const repo = doneMovedRepo('gamma', false);
-		gitIn(['push', '-q', 'arbiter', 'work/slice-gamma:work/slice-gamma'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-gamma:work/task-gamma'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		// No gate => the original ['in-progress','backlog']-only resolution; done/ is
 		// unreachable, so the slug (now only in done/) is "not found".
@@ -667,11 +667,11 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		gitIn(['commit', '-q', '-m', 'seed'], repo);
 		gitIn(['clone', '-q', '--bare', repo, arbiter], scratch.root);
 		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-delta'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-delta'], repo);
 		writeFileSync(join(repo, 'extra.txt'), 'stranded churn\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior'], repo);
-		gitIn(['push', '-q', 'arbiter', 'work/slice-delta:work/slice-delta'], repo);
+		gitIn(['push', '-q', 'arbiter', 'work/task-delta:work/task-delta'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		const slice = resolveSlice(repo, 'delta', inPlaceGate(repo, 'delta'));
 		expect(slice.folder).toBe('in-progress');

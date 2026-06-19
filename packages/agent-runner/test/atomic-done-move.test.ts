@@ -53,7 +53,7 @@ async function claimAndBranch(slug: string) {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return {seeded, repo};
 }

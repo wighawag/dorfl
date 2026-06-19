@@ -56,7 +56,7 @@ import {
  * emits `observation` (its lifecycle pools default to none, see
  * {@link selectPrioritised}).
  */
-export type SelectedNamespace = 'slice' | 'prd' | 'observation';
+export type SelectedNamespace = 'task' | 'brief' | 'observation';
 
 /** One item the selection layer picked, in run order. */
 export interface SelectedItem {
@@ -65,8 +65,8 @@ export interface SelectedItem {
 	/** The bare slug to act on. */
 	slug: string;
 	/**
-	 * `'slice'` ⇒ run the slice-build `do` pipeline; `'prd'` ⇒ dispatch to the
-	 * `do prd:<slug>` slicing path (slicing itself is `autoslice-command`, not
+	 * `'task'` ⇒ run the task-build `do` pipeline; `'brief'` ⇒ dispatch to the
+	 * `do brief:<slug>` slicing path (slicing itself is `autoslice-command`, not
 	 * here); `'observation'` ⇒ (advance only) the triage rung via `obs:<slug>`. The
 	 * caller turns this into the right `do`/`advance` arg/dispatch.
 	 */
@@ -88,14 +88,14 @@ export interface PrdCandidate {
 	slug: string;
 	humanOnly: HumanOnlyGate;
 	needsAnswers: HumanOnlyGate;
-	sliceAfter: string[];
+	briefAfter: string[];
 }
 
 /** Inputs to {@link sliceablePrds}: the raw PRD pool + the gate context. */
 export interface SliceablePrdsInput {
 	/** Every PRD enumerated from `work/prd/` (the auto-slice candidate source). */
 	candidates: PrdCandidate[];
-	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `sliceAfter`). */
+	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
 	slicedSlugs: Set<string>;
 	/** The repo's resolved `autoSlice` policy (`autoslice-gate`'s per-repo key). */
 	autoSlice: boolean;
@@ -105,7 +105,7 @@ export interface SliceablePrdsInput {
  * Filter a raw PRD pool down to the SLICEABLE PRDs, in declaration order, using
  * `autoslice-gate`'s pure predicate ({@link resolveSlicingEligibility}) — NOT a
  * reinvented eligibility model. A PRD is sliceable iff `needsAnswers !== true &&
- * humanOnly !== true && autoSlice` AND every `sliceAfter` PRD is already sliced.
+ * humanOnly !== true && autoSlice` AND every `briefAfter` PRD is already sliced.
  * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
  */
 export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
@@ -114,7 +114,7 @@ export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
 			resolveSlicingEligibility({
 				humanOnly: prd.humanOnly,
 				needsAnswers: prd.needsAnswers,
-				sliceAfter: prd.sliceAfter,
+				briefAfter: prd.briefAfter,
 				slicedSlugs: input.slicedSlugs,
 				autoSlice: input.autoSlice,
 			}).sliceable,
@@ -222,13 +222,13 @@ export function selectPrioritised(
 		.map((candidate: Candidate) => ({
 			repoPath: candidate.repoPath,
 			slug: candidate.slug,
-			namespace: 'slice' as const,
+			namespace: 'task' as const,
 		}));
 
 	const sliceItems: SelectedItem[] = input.prds.map((prd) => ({
 		repoPath: prd.repoPath,
 		slug: prd.slug,
-		namespace: 'prd' as const,
+		namespace: 'brief' as const,
 	}));
 
 	const lifecycle = input.lifecycle;

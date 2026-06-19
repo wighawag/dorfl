@@ -121,7 +121,7 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 		const provider = new GitHubProvider({ghBin: stub.bin});
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 		});
 
@@ -134,7 +134,7 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 		expect(args).toMatch(/^pr$/m);
 		expect(args).toMatch(/^create$/m);
 		expect(args).toMatch(/^--head$/m);
-		expect(args).toMatch(/^work\/slice-feat$/m);
+		expect(args).toMatch(/^work\/task-feat$/m);
 		// Base is main; never --force anywhere.
 		expect(args).toMatch(/^main$/m);
 		expect(args).not.toMatch(/force/);
@@ -145,7 +145,7 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 		const provider = new GitHubProvider({ghBin: stub.bin});
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 		});
 		// No hard failure: the branch is already pushed (safety-bearing), so we
@@ -159,7 +159,7 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 		const provider = new GitHubProvider({ghBin: missingGhBin()});
 		const result = await provider.openRequest({
 			cwd: scratch.root,
-			branch: 'work/slice-feat',
+			branch: 'work/task-feat',
 			arbiter: 'origin',
 		});
 		expect(result.opened).toBe(false);
@@ -246,7 +246,7 @@ describe('runOnce — GitHub provider end-to-end (stubbed gh)', () => {
 		const args = readFileSync(stub.argsFile, 'utf8');
 		expect(args).toMatch(/^pr$/m);
 		expect(args).toMatch(/^create$/m);
-		expect(args).toMatch(/^work\/slice-feat$/m);
+		expect(args).toMatch(/^work\/task-feat$/m);
 
 		// propose never moves done/ onto main; claim writes nothing to main, so the body stays in backlog/.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);

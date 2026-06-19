@@ -235,7 +235,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/intake-slice-add-quiet-flag`,
+				`${ARBITER}/work/intake-task-add-quiet-flag`,
 			],
 			repo,
 		).trim();
@@ -247,7 +247,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-slice-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -271,7 +271,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-slice-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -357,7 +357,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/briefs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-brief-quiet-and-verbose-modes:work/briefs/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -431,7 +431,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			[
 				'rev-list',
 				'--count',
-				`${ARBITER}/main..${ARBITER}/work/intake-slice-add-quiet-flag`,
+				`${ARBITER}/main..${ARBITER}/work/intake-task-add-quiet-flag`,
 			],
 			repo,
 		).trim();
@@ -579,7 +579,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		// generic `complete work slice` fallback the file-read race produced.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(
-			`${ARBITER}/work/intake-slice-add-quiet-flag`,
+			`${ARBITER}/work/intake-task-add-quiet-flag`,
 			repo,
 		);
 		expect(subject).toContain('Add a --quiet flag to suppress progress notes');
@@ -599,7 +599,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-slice-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -652,7 +652,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(
-			`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
+			`${ARBITER}/work/intake-brief-quiet-and-verbose-modes`,
 			repo,
 		);
 		expect(subject).toContain('Quiet and verbose output modes');
@@ -703,7 +703,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const remoteBranches = gitIn(['branch', '-r'], repo);
 		expect(remoteBranches).not.toContain(
-			`${ARBITER}/work/intake-slice-add-quiet-flag`,
+			`${ARBITER}/work/intake-task-add-quiet-flag`,
 		);
 	});
 
@@ -915,7 +915,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
+				`${ARBITER}/work/intake-brief-quiet-and-verbose-modes`,
 			],
 			repo,
 		).trim();
@@ -927,7 +927,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/briefs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-brief-quiet-and-verbose-modes:work/briefs/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -962,7 +962,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-a-coupled-but-small-pair:work/briefs/proposed/a-coupled-but-small-pair.md`,
+				`${ARBITER}/work/intake-brief-a-coupled-but-small-pair:work/briefs/proposed/a-coupled-but-small-pair.md`,
 			],
 			repo,
 		);
@@ -1086,7 +1086,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(gitIn(['branch', '-r'], repo)).not.toContain(
-			`${ARBITER}/work/intake-slice-add-quiet-flag`,
+			`${ARBITER}/work/intake-task-add-quiet-flag`,
 		);
 		// The loser did NOT touch the label — it is still held (only the winner removes
 		// it on its own finish). No add/remove from this backed-off run.
@@ -1292,7 +1292,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/intake-slice-add-quiet-flag`,
+				`${ARBITER}/work/intake-task-add-quiet-flag`,
 			],
 			repo,
 		).trim();
@@ -2295,7 +2295,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			integration: {
 				mode: 'propose',
 				mergedToMain: false,
-				pushedRef: 'work/intake-slice-add-quiet-flag',
+				pushedRef: 'work/intake-task-add-quiet-flag',
 				provider: 'github',
 				requestOpened: true,
 				url: 'https://github.com/o/r/pull/7',

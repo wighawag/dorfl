@@ -104,7 +104,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 		});
 		expect(result.exitCode).toBe(0);
 		// the eligible slice drains first, then the two sliceable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
+		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
 	});
 
 	it('honours the per-action GATES via the mirror scan: gates off ⇒ nothing selected', async () => {

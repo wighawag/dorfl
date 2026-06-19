@@ -98,7 +98,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 	it('classify=surface → spawn the gate, ENGINE writes the sidecar + sets needsAnswers, ONE commit', async () => {
 		const {repo, itemPath} = seedGatedItem();
 		const {gate, spawns} = spyGate({
-			item: 'slice:foo',
+			item: 'task:foo',
 			questions: [
 				{question: 'A?', context: 'ctx-a'},
 				{question: 'B?', default: 'maybe', disposition: undefined},
@@ -120,10 +120,10 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 		expect(result.outcome).toBe('advanced');
 		expect(result.rung).toBe('surface');
 		// The gate WAS spawned (winner) for the right identity.
-		expect(spawns).toEqual(['slice:foo']);
+		expect(spawns).toEqual(['task:foo']);
 
 		// The ENGINE wrote the sidecar (the skill stub wrote nothing).
-		const sidecarPath = join(repo, 'work', 'questions', 'slice-foo.md');
+		const sidecarPath = join(repo, 'work', 'questions', 'task-foo.md');
 		expect(existsSync(sidecarPath)).toBe(true);
 		const model = parseSidecar(readFileSync(sidecarPath, 'utf8'));
 		expect(model.entries.map((e) => e.id)).toEqual(['q1', 'q2']);
@@ -140,7 +140,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 			.split('\n')
 			.map((l) => l.trim())
 			.filter(Boolean);
-		expect(touched).toContain('work/questions/slice-foo.md');
+		expect(touched).toContain('work/questions/task-foo.md');
 	});
 
 	it('surfacing is ALWAYS allowed — no gate, proven with NO autonomy flags threaded', async () => {
@@ -148,7 +148,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 		// runs. (Surfacing + applying are the always-allowed rungs, US #23.)
 		const {repo} = seedGatedItem('bar');
 		const {gate, spawns} = spyGate({
-			item: 'slice:bar',
+			item: 'task:bar',
 			questions: [{question: 'open?'}],
 		});
 		const result = await performAdvance({
@@ -160,8 +160,8 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.rung).toBe('surface');
-		expect(spawns).toEqual(['slice:bar']);
-		expect(existsSync(join(repo, 'work', 'questions', 'slice-bar.md'))).toBe(
+		expect(spawns).toEqual(['task:bar']);
+		expect(existsSync(join(repo, 'work', 'questions', 'task-bar.md'))).toBe(
 			true,
 		);
 	});
@@ -169,7 +169,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 	it('the expensive agent work is POST-lock, winner-only — a CAS LOSER never spawns the gate', async () => {
 		const {repo} = seedGatedItem();
 		const {gate, spawns} = spyGate({
-			item: 'slice:foo',
+			item: 'task:foo',
 			questions: [{question: 'A?'}],
 		});
 		let released = false;
@@ -188,7 +188,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 		expect(result.rung).toBe('surface'); // it DID classify (free, read-only)
 		// …but the loser NEVER spawned the agent and NEVER wrote the sidecar.
 		expect(spawns).toEqual([]);
-		expect(existsSync(join(repo, 'work', 'questions', 'slice-foo.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'questions', 'task-foo.md'))).toBe(
 			false,
 		);
 		expect(released).toBe(false);
@@ -197,7 +197,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 	it('an EMPTY emit (no open judgement) surfaces nothing — no sidecar, a clean no-op', async () => {
 		const {repo, itemPath} = seedGatedItem('empty');
 		const before = readFileSync(join(repo, itemPath), 'utf8');
-		const {gate, spawns} = spyGate({item: 'slice:empty', questions: []});
+		const {gate, spawns} = spyGate({item: 'task:empty', questions: []});
 		const result = await performAdvance({
 			arg: 'empty',
 			cwd: repo,
@@ -206,9 +206,9 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 			releaseLock: async () => RELEASED,
 		});
 		// The gate WAS spawned (we had to ask), but it surfaced nothing.
-		expect(spawns).toEqual(['slice:empty']);
+		expect(spawns).toEqual(['task:empty']);
 		expect(result.outcome).toBe('no-op');
-		expect(existsSync(join(repo, 'work', 'questions', 'slice-empty.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'questions', 'task-empty.md'))).toBe(
 			false,
 		);
 		// The item body is untouched (no needsAnswers churn).
@@ -234,7 +234,7 @@ describe('advance — the SURFACE rung writes the sidecar (engine persists, skil
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
 		// No sidecar written; the lock WAS released (the borrow is short, always freed).
-		expect(existsSync(join(repo, 'work', 'questions', 'slice-boom.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'questions', 'task-boom.md'))).toBe(
 			false,
 		);
 		expect(released).toBe(true);

@@ -34,7 +34,7 @@ import {
  * real GitHub. The produced YAML is structurally validated (the merge-to-main
  * trigger + the invoked close machinery), and shared-write isolation (real
  * `.github/` + real secrets untouched) is pinned. The query's own behaviour is
- * already covered by `prd-complete-query` and is NOT re-tested here.
+ * already covered by `brief-complete-query` and is NOT re-tested here.
  */
 
 const config: ResolvedCIConfig = {

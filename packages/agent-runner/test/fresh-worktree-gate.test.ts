@@ -58,7 +58,7 @@ async function claimAndBranch(slug: string) {
 	});
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['switch', '-q', '-c', `work/slice-${slug}`, `${ARBITER}/main`], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	// Simulate the build agent: leave UNCOMMITTED work (it does no git).
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	return {seeded, repo};
@@ -295,7 +295,7 @@ describe('fresh-worktree gate — failure routing is unchanged (only the gate TR
 
 		expect(core.outcome).toBe('gate-failed');
 		expect(core.routedToNeedsAttention).toBe(true);
-		expect(core.branch).toBe('work/slice-route');
+		expect(core.branch).toBe('work/task-route');
 		expect(core.reason).toMatch(/acceptance gate failed/i);
 		// The bounce is a pure lock amend now (no folder move). Local-only
 		// `performIntegration` records nothing durable; nothing landed on main.

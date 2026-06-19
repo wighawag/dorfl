@@ -57,14 +57,14 @@ function seedSlice(
 /** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
 function seedPrd(
 	slug: string,
-	fm: {humanOnly?: boolean; needsAnswers?: boolean; sliceAfter?: string[]} = {},
+	fm: {humanOnly?: boolean; needsAnswers?: boolean; briefAfter?: string[]} = {},
 ): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.sliceAfter) lines.push(`sliceAfter: [${fm.sliceAfter.join(', ')}]`);
+	if (fm.briefAfter) lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
 	lines.push('---', '', '# PRD');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
@@ -116,7 +116,7 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
-		expect(args).toEqual(['prd:gamma']);
+		expect(args).toEqual(['brief:gamma']);
 	});
 
 	it('an empty backlog + no sliceable PRD is calm-at-rest (exit 0, nothing run)', async () => {
@@ -142,7 +142,7 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 		});
 		expect(result.exitCode).toBe(0);
 		// one eligible slice drains first, then the two sliceable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
+		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
 	});
 
 	it('-n runs the ticks SEQUENTIALLY (no overlap) — a serialised in-flight count', async () => {
@@ -186,12 +186,12 @@ describe('advance <a> <b> — explicit named items, IN SEQUENCE', () => {
 	it('advances the NAMED items in the given order (no pool/priority)', async () => {
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceArgs(
-			['obs:stray', 'prd:thing', 'feature'],
+			['obs:stray', 'brief:thing', 'feature'],
 			{cwd: repo, run, config: cfg()},
 		);
 		expect(result.exitCode).toBe(0);
 		// verbatim, in the operator's order — the tick resolves each namespace.
-		expect(args).toEqual(['obs:stray', 'prd:thing', 'feature']);
+		expect(args).toEqual(['obs:stray', 'brief:thing', 'feature']);
 	});
 });
 

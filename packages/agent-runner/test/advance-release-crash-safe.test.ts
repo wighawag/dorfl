@@ -146,7 +146,7 @@ async function assertNoTransientResidue(
 describe('advance build-slice rung: no transient residue across a failing dispatch', () => {
 	it('leaves NO marker/lock when the recover dispatch hits a rebase conflict (kept work intact)', async () => {
 		const slug = 'alpha';
-		const entry = `slice-${slug}`;
+		const entry = `task-${slug}`;
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 
 		const {branch, keptTip} = seedStrandedWorkBranch(repo, slug, entry);
@@ -154,7 +154,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 
 		const executor = recoverConflictExecutor(branch);
 		const result = await performAdvance({
-			arg: `slice:${slug}`,
+			arg: `task:${slug}`,
 			cwd: repo,
 			arbiter: 'arbiter',
 			executor,
@@ -178,7 +178,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 
 	it('leaves NO marker/lock when the failing dispatch left an UNCOMMITTED DIRTY worktree', async () => {
 		const slug = 'gamma';
-		const entry = `slice-${slug}`;
+		const entry = `task-${slug}`;
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 		git(
@@ -215,7 +215,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 			apply: stub,
 		};
 		const result = await performAdvance({
-			arg: `slice:${slug}`,
+			arg: `task:${slug}`,
 			cwd: repo,
 			arbiter: 'arbiter',
 			executor,
@@ -230,7 +230,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 
 	it('happy path: a successful build-slice dispatch leaves no marker/lock residue', async () => {
 		const slug = 'beta';
-		const entry = `slice-${slug}`;
+		const entry = `task-${slug}`;
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 		git(
@@ -258,7 +258,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 			},
 		};
 		const result = await performAdvance({
-			arg: `slice:${slug}`,
+			arg: `task:${slug}`,
 			cwd: repo,
 			arbiter: 'arbiter',
 			executor,

@@ -20,7 +20,7 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `do prd:<slug>` SLICE-SET ACCEPTANCE GATE tests (slice `slice-acceptance-gate`).
+ * `do prd:<slug>` SLICE-SET ACCEPTANCE GATE tests (slice `task-acceptance-gate`).
  * The slice-path mirror of the build Gate-2: a FRESH-CONTEXT review of the
  * produced slice SET runs BEFORE the slices integrate (riding
  * `performIntegration`'s review-before-integrate block). `--review` on (default)
@@ -68,7 +68,7 @@ function seedPrd(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -83,7 +83,7 @@ function slicingAgent(file = 'child'): SliceAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'prd: it',
+				'brief: it',
 				'---',
 				'',
 				'## Prompt',
@@ -249,7 +249,7 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
 		const entry = await readItemLock({
-			item: 'prd:it',
+			item: 'brief:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -279,7 +279,7 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		const entry = await readItemLock({
-			item: 'prd:it',
+			item: 'brief:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

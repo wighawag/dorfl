@@ -190,14 +190,14 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-feat'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		// The agent's aborted wip is on the pushed branch (not dropped)…
 		expect(
 			gitIn(
-				['cat-file', '-e', 'arbiter/work/slice-feat:agent-output.txt'],
+				['cat-file', '-e', 'arbiter/work/task-feat:agent-output.txt'],
 				repo,
 			),
 		).toBe('');
@@ -524,7 +524,7 @@ describe('runOnce — integration modes', () => {
 		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
 		expect(item.integration?.requestOpened).toBe(true);
-		expect(prBranch).toBe('work/slice-feat');
+		expect(prBranch).toBe('work/task-feat');
 		// PR mode never moves done/ onto main; claim writes nothing to main, so the
 		// slice body stays in backlog/ on main (the done-move is on the pushed branch).
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
@@ -574,7 +574,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		// per-repo `propose` won over global `merge`.
 		expect(item.integration?.mode).toBe('propose');
 		expect(item.integration?.mergedToMain).toBe(false);
-		expect(prBranch).toBe('work/slice-feat');
+		expect(prBranch).toBe('work/task-feat');
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
@@ -618,7 +618,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		// Repo B: own file propose → pushed branch, NOT on main.
 		expect(itemB?.integration?.mode).toBe('propose');
 		expect(itemB?.integration?.mergedToMain).toBe(false);
-		expect(bBranch).toBe('work/slice-fb');
+		expect(bBranch).toBe('work/task-fb');
 		expect(existsOnArbiterMain(b.repo, 'done', 'fb')).toBe(false);
 	});
 });
@@ -650,12 +650,12 @@ describe('runOnce — agent failure', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-feat'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		expect(
-			gitIn(['cat-file', '-e', 'arbiter/work/slice-feat:partial.txt'], repo),
+			gitIn(['cat-file', '-e', 'arbiter/work/task-feat:partial.txt'], repo),
 		).toBe('');
 	});
 });
@@ -760,7 +760,7 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
-			item: 'slice:feat',
+			item: 'task:feat',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -857,13 +857,13 @@ describe('runOnce — runs in a substrate job worktree (one isolation path)', ()
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
 			gitIn(
-				['rev-parse', '--verify', '--quiet', 'arbiter/work/slice-feat'],
+				['rev-parse', '--verify', '--quiet', 'arbiter/work/task-feat'],
 				repo,
 			).trim(),
 		).not.toBe('');
 		expect(
 			gitIn(
-				['cat-file', '-e', 'arbiter/work/slice-feat:agent-output.txt'],
+				['cat-file', '-e', 'arbiter/work/task-feat:agent-output.txt'],
 				repo,
 			),
 		).toBe('');
@@ -921,7 +921,7 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		// The work branch + the agent's (un-rebased) work are on the arbiter. Read the
 		// bare arbiter DIRECTLY via ls-remote (provider-agnostic; does not depend on a
 		// fetch refspec populating a remote-tracking ref).
-		expect(arbiterHasBranch(arbiter, repo, 'work/slice-feat')).toBe(true);
+		expect(arbiterHasBranch(arbiter, repo, 'work/task-feat')).toBe(true);
 		// The needs-attention surface is on the arbiter's main (mode-M), where it is
 		// observable to scan/status/another machine.
 		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);

@@ -108,12 +108,12 @@ describe('autoDispositionObservation — the conservative no-question write', ()
 			item: 'observation:map',
 			itemPath,
 			kind: 'map',
-			existing: 'slice:home',
+			existing: 'task:home',
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('kept');
 		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(body).toContain('slice:home');
+		expect(body).toContain('task:home');
 		expect(isTriagedKeep(body)).toBe(true);
 	});
 });

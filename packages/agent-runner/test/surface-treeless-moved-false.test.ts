@@ -66,7 +66,7 @@ function configFor(overrides: Record<string, unknown> = {}) {
 
 /**
  * Drive a repo into the onboard-time CONTINUE rebase-conflict state: a kept
- * `work/slice-<slug>` (from a requeue) whose commits cannot replay onto a main
+ * `work/task-<slug>` (from a requeue) whose commits cannot replay onto a main
  * that advanced with a CONFLICTING edit. Mirrors the existing do.test.ts
  * conflict scenario. Leaves the repo's local `main` on the advanced arbiter main,
  * ready for a second `performDo`/`runOnce`/`performStart` that hits the continue
@@ -81,7 +81,7 @@ async function intoContinueConflict(slug: string): Promise<{
 	const repo = seeded.repo;
 
 	// First attempt: edit a SHARED file then fail the gate, so the kept
-	// work/slice-<slug> (with that edit) is pushed to the arbiter.
+	// work/task-<slug> (with that edit) is pushed to the arbiter.
 	const first = await performDo({
 		arg: slug,
 		cwd: repo,

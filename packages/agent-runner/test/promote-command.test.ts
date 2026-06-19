@@ -137,9 +137,9 @@ describe('listPromotable — reads the arbiter staging folders', () => {
 		});
 		expect(result.error).toBeUndefined();
 		expect(result.items).toEqual([
-			{namespace: 'slice', slug: 'alpha-slice'},
-			{namespace: 'slice', slug: 'beta-slice'},
-			{namespace: 'prd', slug: 'some-prd'},
+			{namespace: 'task', slug: 'alpha-slice'},
+			{namespace: 'task', slug: 'beta-slice'},
+			{namespace: 'brief', slug: 'some-prd'},
 		]);
 	});
 
@@ -173,8 +173,8 @@ describe('promote [item] — no argument LISTS what is staged', () => {
 		stagePrd(repo, 'my-prd');
 		const {out, code} = await runPromote(repo, []);
 		expect(code, out).toBeUndefined(); // a plain return, not process.exit
-		expect(out).toMatch(/slice:my-slice/);
-		expect(out).toMatch(/prd:my-prd/);
+		expect(out).toMatch(/task:my-slice/);
+		expect(out).toMatch(/brief:my-prd/);
 	});
 
 	it('says nothing is staged when both staging folders are empty', async () => {
@@ -189,8 +189,8 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageSlice(repo, 'feature-x');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(true);
-		const {out} = await runPromote(repo, ['slice:feature-x']);
-		expect(out).toMatch(/Promoted slice 'feature-x' into the pool/);
+		const {out} = await runPromote(repo, ['task:feature-x']);
+		expect(out).toMatch(/Promoted task 'feature-x' into the pool/);
 		expect(onArbiterMain(repo, 'work/tasks/todo/feature-x.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(false);
 	});
@@ -199,7 +199,7 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageSlice(repo, 'bare-one');
 		const {out} = await runPromote(repo, ['bare-one']);
-		expect(out).toMatch(/Promoted slice 'bare-one' into the pool/);
+		expect(out).toMatch(/Promoted task 'bare-one' into the pool/);
 		expect(onArbiterMain(repo, 'work/tasks/todo/bare-one.md')).toBe(true);
 	});
 
@@ -207,8 +207,8 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stagePrd(repo, 'vision');
 		expect(onArbiterMain(repo, 'work/briefs/proposed/vision.md')).toBe(true);
-		const {out} = await runPromote(repo, ['prd:vision']);
-		expect(out).toMatch(/Promoted prd 'vision' into the pool/);
+		const {out} = await runPromote(repo, ['brief:vision']);
+		expect(out).toMatch(/Promoted brief 'vision' into the pool/);
 		expect(onArbiterMain(repo, 'work/briefs/ready/vision.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/proposed/vision.md')).toBe(false);
 	});
@@ -217,7 +217,7 @@ describe('promote <item> — admits a staged item into its pool', () => {
 describe('promote <item> — error cases fail loud', () => {
 	it('a not-staged slug exits non-zero with an honest reason', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		const {err, code} = await runPromote(repo, ['slice:ghost']);
+		const {err, code} = await runPromote(repo, ['task:ghost']);
 		expect(code).toBe(1);
 		expect(err).toMatch(/not staged in work\/pre-backlog\//);
 	});

@@ -16,12 +16,12 @@ import {workItemRel} from './work-layout.js';
  * It GENERALISES the green tracer that proved the dangerous core end-to-end on a
  * bare `file://` arbiter (the tracer is now this file). The one production
  * difference from the tracer is the IDENTITY SEAM: callers pass a NAMESPACED item
- * identity (`slice:<slug>` / `prd:<slug>` / `observation:<slug>` / `obs:<slug>`,
- * or a bare `<slug>` = slice), and this module derives the type-encoded lock
+ * identity (`task:<slug>` / `brief:<slug>` / `observation:<slug>` / `obs:<slug>`,
+ * or a bare `<slug>` = task), and this module derives the type-encoded lock
  * `<entry>` (`<type>-<slug>`) through {@link resolveSidecarIdentity} — the SAME
  * single source of truth the sidecar (`work/questions/<type>-<slug>.md`) and the
  * work branch (`work/<type>-<slug>`) already use. There is deliberately NO second
- * identity scheme: a slice, a PRD,
+ * identity scheme: a task, a brief,
  * and an observation that share a slug get DISTINCT lock refs, and the SAME item
  * under different actions shares ONE ref (so implement / slice / advance on one
  * item are mutually exclusive by construction).
@@ -63,8 +63,8 @@ export const LOCK_REF_PREFIX = 'refs/agent-runner/lock';
  * (`<type>-<slug>`) from a NAMESPACED item identity, through the shared
  * {@link resolveSidecarIdentity} resolver (the single source of truth, which the
  * sidecar filename + the advancing-lock marker also key onto). Accepts the same
- * forms as that resolver: `slice:<slug>` / `prd:<slug>` / `observation:<slug>` /
- * `obs:<slug>`, or a bare `<slug>` (= slice). Acquire/release/read ALL key
+ * forms as that resolver: `task:<slug>` / `brief:<slug>` / `observation:<slug>` /
+ * `obs:<slug>`, or a bare `<slug>` (= task). Acquire/release/read ALL key
  * through THIS function, so there is one — and only one — addressing scheme.
  */
 export function lockEntryFor(item: string): string {
@@ -268,8 +268,8 @@ async function gitHardInput(
 }
 export interface AcquireOptions {
 	/**
-	 * The NAMESPACED item identity to lock (`slice:<slug>` / `prd:<slug>` /
-	 * `observation:<slug>` / `obs:<slug>`, or a bare `<slug>` = slice). Resolved to
+	 * The NAMESPACED item identity to lock (`task:<slug>` / `brief:<slug>` /
+	 * `observation:<slug>` / `obs:<slug>`, or a bare `<slug>` = task). Resolved to
 	 * the type-encoded lock `<entry>` through {@link lockEntryFor}.
 	 */
 	item: string;
@@ -822,22 +822,22 @@ export async function readItemLock(
  * authoritative resting records the cross-substrate reconciliation reads. An
  * item is TERMINAL on `main` iff ANY of these paths exists on `<arbiter>/main`.
  * The won't-proceed terminal is PER-REGIME (the slug-collision correctness fix:
- * a dropped slice and a dropped brief sharing a slug used to collide on one
+ * a dropped task and a dropped brief sharing a slug used to collide on one
  * bare-slug `work/dropped/<slug>.md`):
- *   - a SLICE: `work/tasks/done/<slug>.md` (completed) OR
- *     `work/tasks/cancelled/<slug>.md` (the slice regime's won't-proceed terminal).
- *   - a PRD: `work/briefs/tasked/<slug>.md` (sliced) OR `work/briefs/dropped/<slug>.md`
+ *   - a TASK: `work/tasks/done/<slug>.md` (completed) OR
+ *     `work/tasks/cancelled/<slug>.md` (the task regime's won't-proceed terminal).
+ *   - a BRIEF: `work/briefs/tasked/<slug>.md` (sliced) OR `work/briefs/dropped/<slug>.md`
  *     (the brief regime's won't-proceed terminal).
  *   - an OBSERVATION: NONE. A note has no durable terminal folder — it leaves by
  *     deletion (its absence, not a terminal record, is the end state). A promoted
- *     observation becomes a NEW slice/PRD with its own ref.
+ *     observation becomes a NEW task/brief with its own ref.
  */
 export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 	const file = `${slug}.md`;
 	switch (type) {
-		case 'slice':
+		case 'task':
 			return [workItemRel('done', file), workItemRel('cancelled', file)];
-		case 'prd':
+		case 'brief':
 			return [
 				workItemRel('prd-sliced', file),
 				workItemRel('briefs-dropped', file),
@@ -876,7 +876,7 @@ export interface ReconcileResult {
  *
  * complete's order is hold lock → land the DURABLE `main` move FIRST → release
  * the lock SECOND. A crash BETWEEN the move and the release leaves a
- * terminal-on-`main` item (a completed/cancelled slice or a tasked/dropped brief,
+ * terminal-on-`main` item (a completed/cancelled task or a tasked/dropped brief,
  * per {@link terminalMainPaths}) with a STILL-HELD lock — a stale lock with no
  * in-flight work behind it. This is the recovery that converges it.
  *
@@ -1268,7 +1268,7 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
  * {@link lockEntryFor} for the three known namespaces.
  */
 export function itemFromLockEntry(entry: string): string {
-	for (const prefix of ['slice', 'prd', 'observation'] as const) {
+	for (const prefix of ['task', 'brief', 'observation'] as const) {
 		const tag = `${prefix}-`;
 		if (entry.startsWith(tag)) {
 			return `${prefix}:${entry.slice(tag.length)}`;
@@ -1383,11 +1383,11 @@ export async function listItemLockEntries(
 }
 
 /**
- * List the SLICE slugs currently lock-held on the arbiter — the held-slug set the
- * `backlog/` pool readers SUBTRACT (PRD `ledger-status-per-item-lock-refs` US #15;
+ * List the TASK slugs currently lock-held on the arbiter — the held-slug set the
+ * `todo/` pool readers SUBTRACT (PRD `ledger-status-per-item-lock-refs` US #15;
  * slice `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
- * and keeps only the `slice-<slug>` entries (a PRD/observation lock does not gate
- * the SLICE backlog pool), mapping each to its bare `<slug>`. Best-effort: a fetch
+ * and keeps only the `task-<slug>` entries (a brief/observation lock does not gate
+ * the TASK pool), mapping each to its bare `<slug>`. Best-effort: a fetch
  * fault yields an EMPTY set, so the offline pool read degrades to "subtract
  * nothing" rather than erroring — while the body still moves to `in-progress/` the
  * subtraction is redundant anyway (the moved body already leaves the pool); it is
@@ -1402,7 +1402,7 @@ export async function heldSliceSlugs(
 ): Promise<Set<string>> {
 	try {
 		const entries = await listItemLocks(cwd, arbiter, env);
-		const prefix = 'slice-';
+		const prefix = 'task-';
 		return new Set(
 			entries
 				.filter((e) => e.startsWith(prefix))

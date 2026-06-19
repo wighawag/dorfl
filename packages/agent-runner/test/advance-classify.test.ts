@@ -17,8 +17,8 @@ import {
 // --- Sidecar fixtures (built via the keystone — never hand-rolled) ---------
 
 const IDENTITY_FOR: Record<SidecarType, string> = {
-	slice: 'slice:foo',
-	prd: 'prd:foo',
+	task: 'task:foo',
+	brief: 'brief:foo',
 	observation: 'observation:foo',
 };
 
@@ -43,12 +43,12 @@ function sidecarWith(
 	return model;
 }
 
-const ALL_TYPES: SidecarType[] = ['slice', 'prd', 'observation'];
+const ALL_TYPES: SidecarType[] = ['task', 'brief', 'observation'];
 
 /** The per-type ANALYSE rung (no open questions, no sidecar). */
 const ANALYSE_RUNG: Record<SidecarType, TickRungKind> = {
-	slice: 'build-slice',
-	prd: 'slice-prd',
+	task: 'build-slice',
+	brief: 'slice-prd',
 	observation: 'triage-observation',
 };
 
@@ -56,19 +56,19 @@ const ANALYSE_RUNG: Record<SidecarType, TickRungKind> = {
 
 describe('sidecar fixtures (built via the keystone)', () => {
 	it('a pure-open sidecar is pending (not all answered)', () => {
-		const s = sidecarWith('prd', 2, 0);
+		const s = sidecarWith('brief', 2, 0);
 		expect(allAnswered(s)).toBe(false);
 		expect(pendingEntries(s)).toHaveLength(2);
 	});
 
 	it('a subset-answered sidecar is still pending', () => {
-		const s = sidecarWith('prd', 1, 1);
+		const s = sidecarWith('brief', 1, 1);
 		expect(allAnswered(s)).toBe(false);
 		expect(pendingEntries(s)).toHaveLength(1);
 	});
 
 	it('a fully-answered sidecar is all answered', () => {
-		const s = sidecarWith('prd', 0, 2);
+		const s = sidecarWith('brief', 0, 2);
 		expect(allAnswered(s)).toBe(true);
 		expect(pendingEntries(s)).toHaveLength(0);
 	});
@@ -227,14 +227,14 @@ describe('classifyTick — invariant 2: a pending sidecar ⇒ NO-OP', () => {
 describe('classifyTick — append flips all-answered back to pending (re-pause)', () => {
 	it('appending a new question to an all-answered sidecar re-NO-OPs the tick', () => {
 		// All answered → apply.
-		const answered = sidecarWith('prd', 0, 2);
+		const answered = sidecarWith('brief', 0, 2);
 		expect(
-			classifyTick({type: 'prd', needsAnswers: true, sidecar: answered}).kind,
+			classifyTick({type: 'brief', needsAnswers: true, sidecar: answered}).kind,
 		).toBe('apply');
 		// Apply appends a fresh (pending) question → re-pauses → NO-OP.
 		const repaused = appendQuestions(answered, [{question: 'A follow-up?'}]);
 		const result = classifyTick({
-			type: 'prd',
+			type: 'brief',
 			needsAnswers: true,
 			sidecar: repaused,
 		});
@@ -285,15 +285,15 @@ describe('classifyTick — convergence (read-only, classifier level)', () => {
 		// Three PRD items, each with two open questions. As the human answers, an
 		// item flips pending → (all answered) apply; the NO-OP count only falls.
 		const sidecars = [
-			sidecarWith('prd', 2, 0),
-			sidecarWith('prd', 2, 0),
-			sidecarWith('prd', 2, 0),
+			sidecarWith('brief', 2, 0),
+			sidecarWith('brief', 2, 0),
+			sidecarWith('brief', 2, 0),
 		];
 
 		const noOpCount = () =>
 			sidecars.filter(
 				(sidecar) =>
-					classifyTick({type: 'prd', needsAnswers: true, sidecar}).kind ===
+					classifyTick({type: 'brief', needsAnswers: true, sidecar}).kind ===
 					'no-op',
 			).length;
 
@@ -317,10 +317,10 @@ describe('classifyTick — convergence (read-only, classifier level)', () => {
 	it('a SUBSET-answered item does NOT leave the NO-OP pool (no premature advance)', () => {
 		// Answering only SOME entries keeps the item pending → still NO-OP (the
 		// loop never thrashes on a half-answered item; the human answers all first).
-		let sidecar = sidecarWith('prd', 2, 0);
-		expect(classifyTick({type: 'prd', needsAnswers: true, sidecar}).kind).toBe(
-			'no-op',
-		);
+		let sidecar = sidecarWith('brief', 2, 0);
+		expect(
+			classifyTick({type: 'brief', needsAnswers: true, sidecar}).kind,
+		).toBe('no-op');
 		// Answer ONE of the two.
 		sidecar = {
 			...sidecar,
@@ -328,8 +328,8 @@ describe('classifyTick — convergence (read-only, classifier level)', () => {
 				i === 0 ? {...e, answer: 'a'} : e,
 			),
 		};
-		expect(classifyTick({type: 'prd', needsAnswers: true, sidecar}).kind).toBe(
-			'no-op',
-		);
+		expect(
+			classifyTick({type: 'brief', needsAnswers: true, sidecar}).kind,
+		).toBe('no-op');
 	});
 });

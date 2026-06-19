@@ -245,7 +245,7 @@ function argForSelected(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
+	return item.namespace === 'brief' ? `brief:${item.slug}` : item.slug;
 }
 
 /**

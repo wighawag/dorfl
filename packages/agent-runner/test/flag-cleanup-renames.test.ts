@@ -93,7 +93,7 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', `${ARBITER}/main`], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', `${ARBITER}/main`], repo);
 		// Leave agent work so the bounce saves a wip commit + PUSHES the work branch
 		// (the continue-branch the default requeue's safety guard checks for).
 		writeFileSync(join(repo, 'feature.txt'), 'the work\n');
