@@ -118,3 +118,7 @@ even if the rename never ships.
 > call sites should never need re-touching to rename a folder). If you make a
 > non-obvious in-scope API-shape decision, record it (a `## Decisions` note, or an
 > ADR if it meets the ADR gate in `ADR-FORMAT.md`).
+
+## Requeue 2026-06-19
+
+Gate-2 review harness emitted invalid JSON (Bad escaped character at pos 3822); build+gate fully green (167 files/2366 tests, format:check clean, fresh-worktree gate passed). Branch tip 7fb8619 holds the complete build. Continue from kept branch and re-run Gate-2.
