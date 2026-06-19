@@ -52,13 +52,20 @@ The **only** legitimate per-asset differences are: (1) framing/scale/crop,
 
 ## Current files (v9b canonical + v9a alt)
 
-| File                          | Use                                                |
-| ----------------------------- | -------------------------------------------------- |
-| `dorfl-v9b-head.svg`          | **the mark** — square head + jaw (avatar/tile)     |
-| `dorfl-v9b-lockup.svg`        | horizontal: head + bit of chest + `dorfl` + tagline|
-| `dorfl-v9b-hero.svg`          | full standing golem (illustration only)            |
-| `dorfl-v9b-head-nojaw.svg`    | rejected experiment (why the jaw stays)            |
-| `dorfl-v9a-*.svg`             | tall-head alternative (head-only lockup, icons)    |
+| File                          | Use                                                 |
+| ----------------------------- | --------------------------------------------------- |
+| `dorfl-v9b-head.svg`          | **the mark** — square head + jaw, transparent       |
+| `dorfl-v9b-icon.svg`          | app icon / og-image (head on slate tile)            |
+| `dorfl-v9b-circle.svg`        | circle avatar (GitHub / social profile)             |
+| `dorfl-v9b-favicon.svg`       | tiny size — face+shoulders crop, `>_` stays legible |
+| `dorfl-v9b-mono.svg`          | single-ink (terminal, stamp, print, inverted)       |
+| `dorfl-v9b-lockup.svg`        | horizontal: head + bit of chest + `dorfl` + tagline |
+| `dorfl-v9b-hero.svg`          | full standing golem (illustration only)             |
+| `dorfl-v9b-head-nojaw.svg`    | rejected experiment (why the jaw stays)             |
+| `dorfl-v9a-*.svg`             | tall-head alternative (head-only lockup, icons)     |
+
+This is a complete suite: favicon, app icon, circle avatar, mono, horizontal
+lockup, and hero illustration — all framed/cropped from the one canonical head.
 
 ## The idea
 
