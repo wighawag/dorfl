@@ -3,7 +3,7 @@ title: Phase 1: regroup the notes regime under notes/ and rename the task board 
 slug: regroup-notes-and-task-board-rename
 prd: folder-taxonomy-reorg-and-rename
 blockedBy: [work-layout-module-centralises-all-work-paths]
-covers: [1, 6, 8, 9]
+covers: [6, 8, 9]
 ---
 
 ## What to build

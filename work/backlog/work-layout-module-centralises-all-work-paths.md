@@ -3,7 +3,7 @@ title: Phase 0: a single work-layout module owns every work/ path, folder union,
 slug: work-layout-module-centralises-all-work-paths
 prd: folder-taxonomy-reorg-and-rename
 blockedBy: []
-covers: [4, 5]
+covers: [4, 5, 11]
 ---
 
 ## What to build
