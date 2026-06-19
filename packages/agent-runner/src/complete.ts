@@ -1,5 +1,6 @@
-import {existsSync} from 'node:fs';
-import {workItemPath} from './work-layout.js';
+import {existsSync, readdirSync, type Dirent} from 'node:fs';
+import {basename, join} from 'node:path';
+import {workItemPath, WORK_ROOT} from './work-layout.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
 import {
@@ -521,6 +522,54 @@ async function surfaceAutonomousStrand(params: {
 	};
 }
 
+/**
+ * Locate the slug's ledger record at a RENAMED done-position on the branch tree, to
+ * survive a SELF-RENAMING FOLDER slice (the `folder-taxonomy-reorg-and-rename`
+ * migration).
+ *
+ * The trap: a slice whose job is to `git mv` the ledger folders themselves (e.g.
+ * `done/ -> tasks/done/`) runs through the runner's INSTALLED (pre-rename) binary,
+ * whose compiled-in {@link workItemPath} still resolves `done` to `work/done/`.
+ * When the agent has placed its OWN record at the NEW done-position
+ * (`work/tasks/done/<slug>.md`) as part of the migration, the binary-known
+ * `work/done/<slug>.md` does not exist, and the resolver below would crash with
+ * `nothing to complete`, reaping the build.
+ *
+ * This scan is the layout-agnostic backstop: when the record is at NONE of the
+ * binary-known ledger folders, walk `work/` and return true iff `<slug>.md` exists
+ * directly inside a folder whose LEAF name is `done` (covering BOTH `work/done/`
+ * and a renamed `work/tasks/done/`). It deliberately matches ONLY a `done` leaf:
+ * a record left in a renamed POOL (`tasks/todo/`) is NOT a finished slice and must
+ * still refuse, not be mis-integrated as done. When this fires, the slug is treated
+ * as already-done-moved by the agent into its terminal position, so the runner
+ * SKIPS its own `git mv` (the existing `source: 'done'` / stranded-done path) and
+ * just integrates the agent's tree as-is — no binary-vs-branch folder-name
+ * reconciliation is needed.
+ */
+function recordAtRenamedDonePosition(cwd: string, slug: string): boolean {
+	const file = `${slug}.md`;
+	const workRoot = join(cwd, WORK_ROOT);
+	const found: string[] = [];
+	const walk = (dir: string): void => {
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(dir, {withFileTypes: true});
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			const full = join(dir, entry.name);
+			if (entry.isDirectory()) {
+				walk(full);
+			} else if (entry.name === file && basename(dir) === 'done') {
+				found.push(full);
+			}
+		}
+	};
+	walk(workRoot);
+	return found.length > 0;
+}
+
 async function runComplete(
 	options: CompleteOptions,
 	note: (m: string) => void,
@@ -608,7 +657,18 @@ async function runComplete(
 	const onBacklog = existsSync(backlog);
 	const onInProgress = existsSync(inProgress);
 	const onNeedsAttention = existsSync(needsAttention);
-	const onDone = existsSync(done);
+	// SELF-RENAMING FOLDER slice backstop: the binary-known `work/done/<slug>.md`,
+	// OR — when none of the binary-known ledger folders hold the record — the slug
+	// at a RENAMED done-position the migration agent placed it in (e.g.
+	// `work/tasks/done/<slug>.md`). See {@link recordAtRenamedDonePosition}. The
+	// scan runs ONLY in the all-binary-folders-empty case, so a normal slice's
+	// resolution is byte-for-byte unchanged.
+	const onDone =
+		existsSync(done) ||
+		(!onBacklog &&
+			!onInProgress &&
+			!onNeedsAttention &&
+			recordAtRenamedDonePosition(cwd, slug));
 	// STRANDED-DONE AUTO-RECOVER (PRD `ledger-integrity` story 6, the autonomous
 	// half of `finish-already-committed-branch`). When neither in-progress/ nor
 	// needs-attention/ holds the slug on the BRANCH tree BUT done/ does, the work
