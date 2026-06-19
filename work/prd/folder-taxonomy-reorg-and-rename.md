@@ -2,8 +2,7 @@
 title: Regroup work/ under regime umbrellas (notes/ tasks/ briefs/) and rename slice->task, prd->brief
 slug: folder-taxonomy-reorg-and-rename
 humanOnly: true
-needsAnswers: true
-sliceAfter: [recover-autodetect-and-advancing-lock-crash-safety]
+sliceAfter: []
 ---
 
 > **REVISED 2026-06-19 — reconciled to post-lock/post-position-gate reality (this banner SUPERSEDES the stale body sections below; read it first).** The two prerequisite efforts have now LANDED, which retires several premises this PRD's body still describes:
@@ -14,9 +13,36 @@ sliceAfter: [recover-autodetect-and-advancing-lock-crash-safety]
 >
 > **DECIDED vocabulary (no longer open — fixed by the sibling `staging-pool-position-gate-and-trust-model` STEP-A that landed):** the live folders today are `pre-backlog/` (slice STAGING) → `backlog/` (the agent POOL) → `done/`/`dropped/`, and `pre-prd/` (PRD STAGING) → `prd/` (the auto-slice POOL) → `prd-sliced/`. STEP-B (this PRD) renames the SLICE side: **`backlog → todo`** (the pool keeps being the pool, new name) and **`pre-backlog → backlog`** (staging takes the freed name) — a pure constants-flip behind the `work-layout` module + `git mv`, no behaviour change. The two-phase migration (Phase 0 centralise every `work/...` path behind one module with zero behaviour change; Phase 1 flip the values + `git mv` + mirror both `protocol/` copies) STANDS, as does the `slice->task` / `prd->brief` rename and the regime-umbrella regroup (`notes/`/`tasks/`/`briefs/`) — adapted to the durable-only `tasks/` set.
 >
-> **MUST ALSO UPDATE THE PROTOCOL DOCS for the renames (this is load-bearing, not optional).** US #17 already scopes "update WORK-CONTRACT.md / CLAIM-PROTOCOL.md / ADR-FORMAT.md / skills to the new vocabulary and layout." Make this EXPLICIT: every rename this PRD performs (`backlog→todo`, `pre-backlog→backlog`, the PRD-side rename, `slice→task`, `prd→brief`, the umbrella regroup) MUST be mirrored into BOTH protocol copies (`skills/setup/protocol/*` the SOURCE OF TRUTH, and the propagated `work/protocol/*`) in the SAME effort, keeping `diff -r skills/setup/protocol work/protocol` clean (apart from `VERSION`). The protocol prose was JUST truthed-up (2026-06-19) to the CURRENT names (lock refs; `backlog`=pool, `pre-backlog`=staging); a rename that does not also update the protocol re-drifts the contract `setup` propagates into every adopted repo. Treat "the protocol docs say the new names" as a Phase-1 acceptance criterion.
+> **MUST ALSO UPDATE THE PROTOCOL DOCS for the renames (this is load-bearing, not optional).** US #17 already scopes "update WORK-CONTRACT.md / CLAIM-PROTOCOL.md / ADR-FORMAT.md / skills to the new vocabulary and layout." Make this EXPLICIT: every rename this PRD performs MUST be mirrored into BOTH protocol copies (`skills/setup/protocol/*` the SOURCE OF TRUTH, and the propagated `work/protocol/*`) in the SAME effort, keeping `diff -r skills/setup/protocol work/protocol` clean (apart from `VERSION`). The protocol prose was truthed-up (2026-06-19) to the CURRENT names (lock refs; `backlog`=pool, `pre-backlog`=staging); a rename that does not also update the protocol re-drifts the contract `setup` propagates into every adopted repo. Treat "the protocol docs say the new names" as an acceptance criterion of the rename slices.
 >
-> **OPEN QUESTION (why `needsAnswers: true` — must be resolved before slicing):** the PRD-side rename target is NOT yet decided. The slice side is clear (`backlog→todo`, `pre-backlog→backlog`). For PRDs, the shipped names are `pre-prd`(staging)/`prd`(pool). Options: (a) MIRROR the slice rename — `prd → prd-ready` (pool) + `pre-prd → prd` (staging), so "the bare name is staging, the qualified name is the pool" is consistent across both sides; OR (b) KEEP `pre-prd`/`prd` as-is (rename only the slice side), accepting the two sides name their pool differently; OR (c) under the `slice→task`/`prd→brief` rename, fold into the umbrella verbs (`briefs/untasked → briefs/tasking → briefs/tasked`) and drop the staging/pool distinction's bare-vs-qualified naming entirely. A human must pick (a)/(b)/(c) — it determines the PRD-side `git mv` mapping and the protocol vocabulary. (The slice-template + the `slice->task`/`prd->brief` extent across CLI/frontmatter/skills are the other slicing-level calls, but the PRD-side pool name is the one true blocker.)
+> **RESOLVED END-STATE (2026-06-19, decided conductor + human — `needsAnswers` cleared, this PRD is now SLICEABLE).** The full target `work/` layout:
+>
+> ```
+> work/
+>   notes/                     # CAPTURE regime (do NOT flow; leave by deletion) — UNCHANGED contents
+>     observations/  ideas/  findings/
+>   tasks/                     # BUILD regime — a KANBAN board (was the "slice" family)
+>     backlog/<slug>.md        #   STAGING            (was pre-backlog/)
+>     todo/<slug>.md           #   the agent POOL     (was backlog/ — the pool keeps being the pool)
+>     done/<slug>.md           #   completed          (was done/)
+>     cancelled/<slug>.md      #   won't-proceed terminal (per-regime; reason: in body)
+>   briefs/                    # BRIEF regime — its own lifecycle (was the "PRD" family)
+>     draft/<slug>.md          #   STAGING            (was pre-prd/)
+>     ready/<slug>.md          #   the auto-slice POOL (was prd/)
+>     tasked/<slug>.md         #   decomposed, resting (was prd-sliced/)
+>     dropped/<slug>.md        #   won't-proceed terminal (per-regime; reason: in body)
+>   questions/<slug>.md        # the "what needs me?" queue — stays TOP-LEVEL (NOT under notes/)
+>   protocol/                  # propagated protocol docs (both copies kept byte-identical)
+> ```
+>
+> The DECIDED points (these resolve every open fork; the stale body sections below are superseded by this):
+> - **`tasks/` is a Kanban board** (`backlog` staging → `todo` pool → `done`/`cancelled`); **`briefs/` is NOT a mirror** — it has its own natural lifecycle (`draft` staging → `ready` pool → `tasked`/`dropped`). Each regime gets the nomenclature that fits it; non-mirroring is intentional and fine.
+> - **The transient three (`in-progress`/`needs-attention`/`slicing`) and `advancing` are NOT folders** — they are per-item lock-ref state (the lock work landed). So `tasks/` and `briefs/` are DURABLE-position-only boards.
+> - **The won't-proceed terminal is PER-REGIME**, with its own word each: `tasks/cancelled/` and `briefs/dropped/`. This is load-bearing CORRECTNESS, not just taste: a slice and a PRD (and an observation) can share a slug, and the shipped TOP-LEVEL `work/dropped/` keys by BARE slug, so a dropped task and a dropped brief sharing a slug COLLIDE on `dropped/<slug>.md` (today `item-lock.ts` routes a dropped slice, PRD, AND observation all to one `work/dropped/`). The umbrella gives each regime its own namespace, removing the collision. MIGRATE the existing top-level `work/dropped/` contents into the right regime's terminal (sort each by what it is). A dropped OBSERVATION needs no terminal folder — notes leave by deletion.
+> - **Every reader keys by `(umbrella, slug)`, never bare slug** (e.g. `tasks/todo/foo.md` and `briefs/ready/foo.md` legitimately co-exist). The single `work-layout` module owns the (umbrella, lifecycle) → path mapping and the item-scan predicate; no reader re-derives a bare-slug path.
+> - **HARD CUTOVER, no deprecated aliases** (we have no external users owed a migration window): `do prd:<slug>` / `do slice:<slug>` → `do brief:<slug>` / `do task:<slug>`; the `prd:` frontmatter field → `brief:`; `sliceAfter:` → `briefAfter:`; the `slug-namespace`/identity prefixes (`slice`/`prd`) → (`task`/`brief`) INCLUDING the lock-ref entry encoding (`<type>-<slug>` becomes `task-<slug>`/`brief-<slug>`) and the sidecar/`resolveSidecarIdentity` seam. No old prefix is accepted after cutover.
+> - **Spelling:** `cancelled` (double-l, matching existing protocol prose) for `tasks/`; `dropped` for `briefs/`. `questions/` stays top-level (US #9).
+> - **The `sliceAfter` dependency is cleared** (`[]`): the lock/crash-safety prerequisite it named has landed, so this PRD no longer waits on anything to be sliced.
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices. Originating design: `work/ideas/folder-taxonomy-and-prd-edit-handshake.md` (the full decision trail — `## DECIDED 2026-06-16`, the `LEADING RESOLUTION`, and the `COORDINATION` note). This PRD is the actionable form of that idea.
 
