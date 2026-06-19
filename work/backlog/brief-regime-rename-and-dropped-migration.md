@@ -2,6 +2,7 @@
 title: Phase 1: rename the brief regime (pre-prd->briefs/proposed, prd->briefs/ready, prd-sliced->briefs/tasked) + per-regime terminals (tasks/cancelled, briefs/dropped) + migrate top-level work/dropped
 slug: brief-regime-rename-and-dropped-migration
 prd: folder-taxonomy-reorg-and-rename
+humanOnly: true
 blockedBy: [work-layout-module-centralises-all-work-paths, regroup-notes-and-task-board-rename]
 covers: [1, 7, 10]
 ---
