@@ -119,3 +119,12 @@ flake under full-suite parallel load.
 > git-file://-CAS race test is registered in `RACE_SENSITIVE` (vitest.config.ts),
 > and the full acceptance gate is green. RECORD any non-obvious in-scope decision
 > (e.g. the exact rejection behaviour for a pre-rename ref) per `ADR-FORMAT.md`.
+
+## Requeue 2026-06-19
+
+Gate-2 BLOCK (correct, fixable): the cutover MISSED the two hardcoded CI-matrix legs in the emitted workflow templates. FIX (continue on the kept branch, do NOT restart):
+1. advance-lifecycle-template.ts:314 (the jq in the generated workflow body): flip '"slice:" + .slug' -> '"task:" + .slug' (eligible build items) and '"prd:" + .slug' -> '"brief:" + .slug' (sliceable briefs). The .namespace+':'+.slug and 'obs:' legs already survive.
+2. advance-ci-template.ts: same two hardcoded legs if present there.
+3. The structural validators that ASSERT the old literals: advance-lifecycle-template.ts:675 (explicit-slice-prefix, /"slice:" + .slug/) and :687 (propose-enumerates-sliceable-prds, /"prd:" + .slug/) -> assert the task:/brief: legs instead.
+4. Their tests: advance-ci-template.test.ts:111-112 and advance-lifecycle-template.test.ts:187-188,362 -> update to expect task:/brief:.
+These tests pinned the broken prefixes (why Gate-1 passed). Keep observation/'obs:' unchanged. Then the full gate + Gate-2 should pass.
