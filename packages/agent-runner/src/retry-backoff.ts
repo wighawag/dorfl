@@ -77,7 +77,7 @@ export type RetryResult<T> =
  *
  *   - it RETURNS `{ok: false, error?}` (e.g. a git `RunResult` mapped to a
  *     boolean — a non-zero exit is a failure, not a throw), OR
- *   - it THROWS (e.g. `publishSurfaceCommit`'s `gxHard` fetch on an unreachable
+ *   - it THROWS (e.g. a git plumbing helper's hard-fetch against an unreachable
  *     remote) — the throw is CAUGHT here and treated as a failed attempt.
  *
  * On success it returns `{ok: true, value}`. On exhaustion it returns

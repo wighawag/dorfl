@@ -134,8 +134,8 @@ describe('needs-attention route — honest per-op reporting', () => {
 			env: gitEnv(),
 			...FAST,
 		});
-		// The on-`main` surface half is GONE (the lock is the surface now).
-		expect(routed.surface).toBe('not-attempted');
+		// The on-`main` surface half is GONE (the lock is the surface now); only the
+		// branch-push outcome is reported.
 		expect(routed.branchPush).toBe('pushed');
 		// The stuck state is the lock; the branch really reached the arbiter.
 		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
@@ -156,7 +156,6 @@ describe('needs-attention route — honest per-op reporting', () => {
 			env: gitEnv(),
 			...FAST,
 		});
-		expect(routed.surface).toBe('not-attempted');
 		expect(routed.branchPush).toBe('skipped-empty');
 		// The absent branch did NOT reach the arbiter (nothing to recover yet).
 		gitIn(['fetch', '-q', ARBITER], repo);

@@ -1,8 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {run, runAsync, type RunResult} from './git.js';
+import {runAsync, type RunResult} from './git.js';
 import {
 	Integrator,
 	type IntegrateResult,
@@ -22,12 +19,6 @@ import {
 	type ResolveFromNeedsAttentionResult,
 	type BranchPushOutcome,
 } from './needs-attention.js';
-import {
-	realSleep,
-	type BackoffOptions,
-	type Sleep,
-	retryWithBackoff,
-} from './retry-backoff.js';
 import {
 	markStuckItemLock,
 	resumeItemLock,
@@ -181,23 +172,13 @@ export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
 
 /**
  * The outcome of asking the seam to apply a NEEDS-ATTENTION transition — the
- * move result the folder-native mechanism produces, PLUS the honest per-op
- * outcome of the OBSERVABLE surface push (mode M) the strategy performs on top.
- * The two halves (RECOVERABLE branch push in `branchPush`, OBSERVABLE surface in
- * `surface`) let the caller report EXACTLY what reached the arbiter rather than
- * assuming "surfaced + pushed" off the local move.
+ * move result the folder-native mechanism produces. The RECOVERABLE branch push
+ * outcome rides on `branchPush` (the caller reads it rather than assuming
+ * "pushed" off the local move). The OBSERVABLE half is now the per-item lock
+ * `state: stuck` amend (PRD `ledger-status-per-item-lock-refs`); there is no
+ * separate on-`main` surface outcome to report.
  */
-export type ApplyNeedsAttentionTransitionResult =
-	RouteToNeedsAttentionResult & {
-		/**
-		 * The OBSERVABLE surface push outcome (mode M): `surfaced` / `failed` (after
-		 * bounded backoff) / `nothing-to-surface`, or `not-attempted` when no arbiter
-		 * was given (local-only). Read by the report — never assumed.
-		 */
-		surface?: SurfaceOutcome | 'not-attempted';
-		/** When the surface FAILED after retries, the last git error (for the report). */
-		surfaceError?: string;
-	};
+export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
 
 /**
  * A *prepared* RETURN-TO-BACKLOG transition: re-queue a STUCK item so it can be
@@ -685,7 +666,6 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			// it). The on-`main` surface half is GONE (the lock is the surface now).
 			branchPush: saved.branchPush,
 			pushError: saved.pushError,
-			surface: 'not-attempted',
 		};
 	},
 
@@ -868,249 +848,6 @@ async function bounceToStuckLock(params: {
 		note(reasonNotMoved);
 		return {moved: false, reasonNotMoved};
 	}
-}
-
-/**
- * The DURABLE `work/` folders a slug's ledger file can live in, on `main`, after
- * the capstone cut-over (slice
- * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
- * `ledger-status-per-item-lock-refs`): only the durable resting transitions reach
- * `main`, so the transient `in-progress`/`needs-attention` are GONE (they are
- * per-item lock-ref state now). Kept for the (now-dead) surface-commit probe
- * below.
- */
-const WORK_FOLDERS = ['backlog', 'done'];
-
-/**
- * Publish the EFFECT of a single MOVE-ONLY commit (a `work/` ledger move — a
- * route-to-needs-attention or its reverse) onto the arbiter's `main`, so the
- * stuck state is observable there (mode M). It reproduces the move-only commit's
- * placement of the slug's ledger file (which `work/<folder>/<slug>.md` it lands
- * in, with what body — including the recorded reason) ON TOP of the freshly-
- * fetched `<arbiter>/main`, and fast-forward pushes it. ONLY that one ledger file
- * is touched, so the half-finished wip / the conflicting code never reach `main`.
- *
- * It is built with plumbing on a SCRATCH INDEX (`git read-tree` + `update-index`
- * + `commit-tree`), so it NEVER touches the caller's working tree or HEAD — safe
- * to call from a job worktree mid-flight or from the human's checkout. It is
- * ALL-OR-NOTHING: it computes the full surface commit before pushing, and on any
- * failure pushes nothing (no half-surfaced state). A concurrent advance of `main`
- * is retried a few times (refetch + rebuild against the new base). The push uses
- * `--force-with-lease=main:<base>` (a true fast-forward of the fresh surface
- * commit; the lease guards the CAS) — NEVER a plain `--force` to `main`.
- *
- * Reproducing the move from `main`'s OWN state (not literally cherry-picking the
- * commit) is what makes it robust across both stuck paths: the gate-failed path's
- * commit moves `in-progress → needs-attention` while the rebase-conflict path's
- * moves `done → needs-attention`, but on `main` the item is always in
- * `in-progress/` (the done-move never reached `main`), so we always relocate from
- * wherever it actually is on `main` to the target folder the move-only commit
- * chose.
- *
- * This is the mode-M MECHANISM, deliberately living inside the strategy — NOT in
- * the seam's public contract: a future mode-P strategy would make the same stuck
- * state observable WITHOUT writing `main` (e.g. reading work-branch tips).
- */
-/** The honest per-op outcome of the OBSERVABLE surface push. */
-export type SurfaceOutcome =
-	/** The move-only commit fast-forwarded onto `<arbiter>/main`. */
-	| 'surfaced'
-	/** Nothing to surface (no ledger file in the move commit). */
-	| 'nothing-to-surface'
-	/** Retried with backoff, then gave up — NOT surfaced (saved LOCALLY only). */
-	| 'failed';
-
-export interface PublishSurfaceResult {
-	outcome: SurfaceOutcome;
-	/** When `failed`, the last git error (for the honest report). */
-	error?: string;
-}
-
-async function publishSurfaceCommit(params: {
-	cwd: string;
-	arbiter: string;
-	slug: string;
-	moveCommit: string;
-	env?: NodeJS.ProcessEnv;
-	note?: (message: string) => void;
-	backoff?: BackoffOptions;
-	sleep?: Sleep;
-}): Promise<PublishSurfaceResult> {
-	const {cwd, arbiter, slug, moveCommit, env} = params;
-	const emit = params.note ?? (() => {});
-	const gx = (args: string[], input?: string): RunResult =>
-		run('git', args, cwd, {env, input});
-	const gxHard = (args: string[], input?: string): RunResult => {
-		const r = gx(args, input);
-		if (r.status !== 0) {
-			throw new Error(
-				`git ${args.join(' ')} failed (exit ${r.status}): ${r.stderr.trim()}`,
-			);
-		}
-		return r;
-	};
-
-	// Where the slug's ledger file lands AFTER the move (per the move-only commit's
-	// tree) — the placement we mirror onto main. Exactly one of WORK_FOLDERS holds
-	// it; we read its path + content from the commit's tree (plumbing, no checkout).
-	const target = readLedgerPlacement(gx, moveCommit, slug);
-	if (!target) {
-		emit('could not resolve the surfaced ledger file from the move commit.');
-		return {outcome: 'nothing-to-surface'};
-	}
-
-	// A scratch index so update-index/write-tree never disturb the caller's index.
-	const scratchIndex = join(
-		tmpdir(),
-		`agent-runner-surface-${process.pid}-${Date.now()}.index`,
-	);
-	const withIndex: NodeJS.ProcessEnv = {
-		...(env ?? process.env),
-		GIT_INDEX_FILE: scratchIndex,
-	};
-	const sx = (args: string[], input?: string): RunResult =>
-		run('git', args, cwd, {env: withIndex, input});
-	const sxHard = (args: string[], input?: string): RunResult => {
-		const r = sx(args, input);
-		if (r.status !== 0) {
-			throw new Error(
-				`git ${args.join(' ')} failed (exit ${r.status}): ${r.stderr.trim()}`,
-			);
-		}
-		return r;
-	};
-
-	// ONE publish attempt: fetch the arbiter's main, rebuild the move-only effect
-	// against it, and fast-forward push. Two distinct non-success cases:
-	//   - CONTENTION (push rejected: main moved) — retried INSTANTLY in the inner
-	//     loop (refetch + rebuild against the new base), exactly as before.
-	//   - OUTAGE (fetch unreachable / push connectivity failure) — the fetch is now
-	//     SOFT (no throw) and surfaced as a failure so the OUTER backoff retries it
-	//     with a temporal delay (the remote may come back) before a clean give-up.
-	// The whole attempt NEVER throws (the failure handler must not crash on a git
-	// outage) — a soft fetch/push maps to `{ok:false}`, which the backoff drives.
-	const contentionAttempts = 5;
-	const attemptPublish = async (): Promise<
-		{ok: true; value: undefined} | {ok: false; error?: string}
-	> => {
-		for (let i = 0; i < contentionAttempts; i++) {
-			const fetched = gx([
-				'fetch',
-				'--quiet',
-				arbiter,
-				`+refs/heads/main:refs/remotes/${arbiter}/main`,
-			]);
-			if (fetched.status !== 0) {
-				// OUTAGE: surface as a failure so the OUTER backoff retries with delay.
-				return {ok: false, error: fetched.stderr.trim() || 'fetch failed'};
-			}
-			const base = gxHard(['rev-parse', `${arbiter}/main`]).stdout.trim();
-
-			// Load main's tree into the scratch index, then relocate ONLY this slug's
-			// ledger file to the target folder (remove it from every other work folder,
-			// write the move commit's blob at the target path). One file changes.
-			rmSync(scratchIndex, {force: true});
-			sxHard(['read-tree', base]);
-			for (const folder of WORK_FOLDERS) {
-				const path = `work/${folder}/${slug}.md`;
-				if (path !== target.path) {
-					// Remove if present (force-remove tolerates an absent path).
-					sx(['update-index', '--force-remove', path]);
-				}
-			}
-			sxHard([
-				'update-index',
-				'--add',
-				'--cacheinfo',
-				`100644,${target.blob},${target.path}`,
-			]);
-			const tree = sxHard(['write-tree']).stdout.trim();
-			const commit = gxHard([
-				'commit-tree',
-				tree,
-				'-p',
-				base,
-				'-m',
-				target.message,
-			]).stdout.trim();
-
-			// Fast-forward push the surface commit to main (the lease guards the CAS).
-			// NEVER a plain --force.
-			const push = gx([
-				'push',
-				arbiter,
-				`${commit}:main`,
-				`--force-with-lease=main:${base}`,
-			]);
-			if (push.status === 0) {
-				return {ok: true, value: undefined};
-			}
-			const stderr = push.stderr.trim();
-			// A LEASE/contention rejection means main moved — retry INSTANTLY (refetch
-			// + rebuild). Anything else (connectivity) is an OUTAGE — hand to backoff.
-			const contended =
-				/stale info|rejected|force-with-lease|non-fast-forward/i.test(stderr);
-			if (!contended) {
-				return {ok: false, error: stderr || 'push failed'};
-			}
-			// else: loop to refetch + rebuild against the advanced main.
-		}
-		return {ok: false, error: 'main kept moving (contended)'};
-	};
-
-	try {
-		const result = await retryWithBackoff(attemptPublish, {
-			sleep: params.sleep ?? realSleep,
-			...params.backoff,
-		});
-		if (result.ok) {
-			emit(`Surfaced the stuck state on ${arbiter}/main.`);
-			return {outcome: 'surfaced'};
-		}
-		emit(
-			`could not surface the stuck state on ${arbiter}/main after ` +
-				`${result.attempts} attempt(s) (${result.lastError ?? 'unknown error'}) ` +
-				'— the work is saved LOCALLY only.',
-		);
-		return {outcome: 'failed', error: result.lastError};
-	} finally {
-		rmSync(scratchIndex, {force: true});
-	}
-}
-
-/**
- * Read, from a move-only commit's tree, WHICH `work/<folder>/<slug>.md` the slug
- * lands in, plus that file's blob sha + a surface commit message. Returns
- * `undefined` if the slug's ledger file is not found (nothing to surface). The
- * move commit's tree has exactly one such file for the slug.
- */
-function readLedgerPlacement(
-	gx: (args: string[]) => RunResult,
-	moveCommit: string,
-	slug: string,
-): {path: string; blob: string; message: string} | undefined {
-	// Find THIS slug's ledger file in the move commit's tree (the post-move
-	// placement). Probe each work folder for `work/<folder>/<slug>.md` and read its
-	// blob sha; exactly one holds it after the move.
-	for (const folder of WORK_FOLDERS) {
-		const path = `work/${folder}/${slug}.md`;
-		const ls = gx(['ls-tree', moveCommit, path]);
-		if (ls.status !== 0 || ls.stdout.trim() === '') {
-			continue;
-		}
-		// `<mode> blob <sha>\t<path>`
-		const match = /^\d+ blob ([0-9a-f]+)\t/.exec(ls.stdout.trim());
-		if (!match) {
-			continue;
-		}
-		const blob = match[1];
-		const message =
-			folder === 'needs-attention'
-				? `chore(${slug}): surface needs-attention on main`
-				: `chore(${slug}): clear needs-attention surface on main (${folder})`;
-		return {path, blob, message};
-	}
-	return undefined;
 }
 
 /**
