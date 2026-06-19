@@ -2,7 +2,6 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {run} from './git.js';
-import {listAdvancingMarkers} from './advancing-lock.js';
 
 /**
  * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (PRD
@@ -32,30 +31,33 @@ import {listAdvancingMarkers} from './advancing-lock.js';
 /**
  * The `work/` STATUS folders a slice's ledger file can rest in — the
  * one-slug-one-folder set this lint is asserted over (WORK-CONTRACT.md
- * "status = the folder"). This is the FULL lifecycle set INCLUDING `dropped/`
- * (the GENERIC durable "won't-proceed" record — slice
+ * "status = the folder"). After the capstone cut-over (slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
+ * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
+ * the ONLY `work/` moves on `main` are the DURABLE RESTING transitions, so a
+ * slice's ledger file can rest only in the DURABLE set: the pool `backlog/`, the
+ * terminal `done/`, and the GENERIC "won't-proceed" terminal `dropped/` (slice
  * `generic-terminal-dropped-folder-generalising-out-of-scope`, PRD
  * `staging-pool-position-gate-and-trust-model` US #16/17/18; it GENERALISES the
- * previous `out-of-scope/` folder, with the specific REASON living in the item
- * BODY as a `reason:` value). A strict superset of `integration-core.ts`'s
- * `LEDGER_STATUS_FOLDERS` / `ledger-write.ts`'s `WORK_FOLDERS` (which omit
- * `dropped/` because the runner's transitions never auto-move a slice there —
- * it is a human disposition). A read-side lint must still surface a slug that
- * ends up in `dropped/` AND another status folder, so the lint covers all five.
+ * previous `out-of-scope/`, with the specific REASON living in the item BODY as a
+ * `reason:` value). The transient `in-progress`/`needs-attention`/`slicing`/
+ * `advancing` are GONE from `main`'s tree — they are per-item lock-ref state
+ * (`in-progress` = lock held active, `needs-attention` = lock held stuck), read
+ * via `agent-runner status` / `gc --ledger`'s lock report, NOT an `ls`-able folder.
+ *
+ * A strict superset of `integration-core.ts`'s `LEDGER_STATUS_FOLDERS` /
+ * `ledger-write.ts`'s `WORK_FOLDERS` (which omit `dropped/` because the runner's
+ * transitions never auto-move a slice there — it is a human disposition). A
+ * read-side lint must still surface a slug that ends up in `dropped/` AND another
+ * status folder, so the lint covers all three.
  *
  * The capture buckets (`ideas`/`observations`/`findings`) and the PRD-flow folders
- * (`prd`/`slicing`/`prd-sliced`) are NOT slice-status folders (WORK-CONTRACT.md:
- * the buckets are "exempt from status = folder"; the PRD folders carry PRDs, a
- * separate namespace) — they are deliberately EXCLUDED so a slug that legitimately
- * has both a slice and a same-named note/PRD is never a false positive.
+ * (`prd`/`prd-sliced`) are NOT slice-status folders (WORK-CONTRACT.md: the buckets
+ * are "exempt from status = folder"; the PRD folders carry PRDs, a separate
+ * namespace) — they are deliberately EXCLUDED so a slug that legitimately has both
+ * a slice and a same-named note/PRD is never a false positive.
  */
-export const LEDGER_STATUS_FOLDERS = [
-	'backlog',
-	'in-progress',
-	'needs-attention',
-	'done',
-	'dropped',
-] as const;
+export const LEDGER_STATUS_FOLDERS = ['backlog', 'done', 'dropped'] as const;
 
 /** One of the `work/` status folders a slice can reside in. */
 export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
@@ -71,8 +73,6 @@ export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
 const CANONICAL_PRECEDENCE: readonly LedgerStatusFolder[] = [
 	'done',
 	'dropped',
-	'needs-attention',
-	'in-progress',
 	'backlog',
 ];
 
@@ -272,16 +272,6 @@ export function formatDuplicateWarnings(
 export interface LedgerSweepResult {
 	/** Every slug present in more than one status folder (empty ⇒ clean ledger). */
 	duplicates: DuplicateSlug[];
-	/**
-	 * Every type-encoded entry (`<type>-<slug>`) currently in `work/advancing/`
-	 * (the advancing-lock marker folder), via {@link listAdvancingMarkers}. The
-	 * advancing lock has no liveness heartbeat, so we can never INFER "orphaned"
-	 * — the report is purely advisory: a stuck marker is DISCOVERABLE here, and a
-	 * human invokes `release-advancing <item>` to clear a NAMED marker (slice
-	 * `advancing-lock-human-release-verb-and-surface`). NEVER auto-deleted; there
-	 * is no automatic advancing-lock sweep anywhere in the system.
-	 */
-	advancingMarkers: string[];
 }
 
 /**
@@ -300,10 +290,6 @@ export interface LedgerSweepResult {
 export function sweepLedgerDuplicates(repoPath: string): LedgerSweepResult {
 	return {
 		duplicates: lintLocalLedger(repoPath),
-		// REPORT advancing-lock markers alongside the duplicate-slug surface (slice
-		// `advancing-lock-human-release-verb-and-surface`). Same shape: surveys + a
-		// human-actionable hazard, never auto-deletes.
-		advancingMarkers: listAdvancingMarkers(repoPath),
 	};
 }
 
@@ -311,61 +297,28 @@ export function sweepLedgerDuplicates(repoPath: string): LedgerSweepResult {
  * Format the `gc`-style ledger sweep REPORT for the terminal: one block per
  * duplicate (slug, the folders it appears in, the candidate canonical folder, and
  * the explicit "resolved by a HUMAN, never auto-deleted" note), or a clean line
- * when there is nothing to report.
+ * when there is nothing to report. The transient lock surface (held/stuck/orphaned
+ * per-item locks, incl. the advance holds that used to be `work/advancing/`
+ * markers) is the SEPARATE unified-lock report (`reportItemLocks` /
+ * `formatItemLockReport`, cleared via `release-lock`), not this folder lint.
  */
-/**
- * Convert a type-encoded advancing entry (`<type>-<slug>`) back into the
- * namespaced item form (`<namespace>:<slug>`) that {@link resolveSidecarIdentity}
- * accepts. So a report line for `slice-foo` suggests `release-advancing slice:foo`
- * — the form the verb (and the lock API) consumes. Unknown prefixes fall back to
- * the raw entry so the suggestion is still copyable.
- */
-function itemFromEntry(entry: string): string {
-	for (const prefix of ['slice', 'prd', 'observation'] as const) {
-		const tag = `${prefix}-`;
-		if (entry.startsWith(tag)) {
-			return `${prefix}:${entry.slice(tag.length)}`;
-		}
-	}
-	return entry;
-}
-
 export function formatLedgerSweep(result: LedgerSweepResult): string {
-	const {duplicates, advancingMarkers} = result;
-	if (duplicates.length === 0 && advancingMarkers.length === 0) {
+	const {duplicates} = result;
+	if (duplicates.length === 0) {
 		return 'Ledger clean: every slug is in exactly one work/ status folder.';
 	}
 	const lines: string[] = [];
-	if (duplicates.length > 0) {
+	lines.push(
+		`Ledger SWEEP: ${duplicates.length} slug(s) present in more than one work/ ` +
+			'status folder (REPORT only — a human resolves each; NEVER auto-deleted):',
+	);
+	for (const dup of duplicates) {
+		lines.push(`  ${dup.slug}`);
+		lines.push(`    in: ${dup.folders.map((f) => `work/${f}/`).join(', ')}`);
+		lines.push(`    candidate canonical: work/${dup.candidateCanonical}/`);
 		lines.push(
-			`Ledger SWEEP: ${duplicates.length} slug(s) present in more than one work/ ` +
-				'status folder (REPORT only — a human resolves each; NEVER auto-deleted):',
+			'    resolve: keep the canonical copy, delete the stale one(s), then re-run.',
 		);
-		for (const dup of duplicates) {
-			lines.push(`  ${dup.slug}`);
-			lines.push(`    in: ${dup.folders.map((f) => `work/${f}/`).join(', ')}`);
-			lines.push(`    candidate canonical: work/${dup.candidateCanonical}/`);
-			lines.push(
-				'    resolve: keep the canonical copy, delete the stale one(s), then re-run.',
-			);
-		}
-	}
-	if (advancingMarkers.length > 0) {
-		if (lines.length > 0) {
-			lines.push('');
-		}
-		lines.push(
-			`Advancing-lock markers: ${advancingMarkers.length} entr${advancingMarkers.length === 1 ? 'y' : 'ies'} ` +
-				'present in work/advancing/ (REPORT only — no automatic sweep; the ' +
-				'advancing lock has no liveness heartbeat, so a human names a stuck lock):',
-		);
-		for (const entry of advancingMarkers) {
-			lines.push(`  ${entry}`);
-			lines.push(`    marker: work/advancing/${entry}.md`);
-			lines.push(
-				`    resolve (if the lock is dead): \`agent-runner release-advancing ${itemFromEntry(entry)}\` (never --force).`,
-			);
-		}
 	}
 	return lines.join('\n');
 }

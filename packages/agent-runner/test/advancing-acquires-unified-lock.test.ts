@@ -36,7 +36,11 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Does `<arbiter>/main` track `work/advancing/<entry>.md`? (the marker.) */
+/**
+ * Does `<arbiter>/main` track `work/advancing/<entry>.md`? (the RETIRED marker —
+ * after the capstone cut-over it must NEVER exist; kept here only to assert its
+ * absence.)
+ */
 function advancingMarkerOnArbiter(cwd: string, entry: string): boolean {
 	run('git', ['fetch', '-q', ARBITER], cwd, {env: gitEnv()});
 	return (
@@ -64,8 +68,8 @@ function lockRefOnArbiter(arbiter: string, entry: string): boolean {
 	return r.status === 0 && r.stdout.trim() !== '';
 }
 
-describe('advancing acquire — TREE-LESS rung (acquireUnified) ALSO takes the unified lock', () => {
-	it('takes the unified lock (action: advance) AND still lands the marker for all rungs', async () => {
+describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unified lock (NO marker)', () => {
+	it('takes ONLY the unified lock (action: advance); the retired marker is never written', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({
 			item: 'slice:alpha',
@@ -76,9 +80,9 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) ALSO takes the u
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
-		// The `work/advancing/<entry>.md` marker STILL lands (interim dual-write).
-		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(true);
-		// AND the unified per-item lock (action: advance) is held.
+		// The legacy `work/advancing/<entry>.md` marker is RETIRED — never written.
+		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(false);
+		// The unified per-item lock (action: advance) is the SOLE hold.
 		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(true);
 		const entry = await readItemLock({
 			item: 'slice:alpha',
@@ -92,7 +96,7 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) ALSO takes the u
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 	});
 
-	it('releaseAdvancingLock (releaseUnified) clears BOTH the marker and the unified lock', async () => {
+	it('releaseAdvancingLock (releaseUnified) clears the unified lock', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireAdvancingLock({
 			item: 'slice:alpha',
@@ -131,10 +135,11 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) ALSO takes the u
 	});
 });
 
-describe('advancing acquire — BUILD/SLICE rung (no acquireUnified) does NOT take the unified lock', () => {
-	it('lands the marker but takes NO unified lock (the inner do is the exclusion point)', async () => {
+describe('advancing acquire — BUILD/SLICE rung (no acquireUnified) is a NO-OP hold', () => {
+	it('takes NO unified lock and writes NO marker (the inner do is the exclusion point)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		// Default (acquireUnified omitted) is the build/slice-rung behaviour.
+		// Default (acquireUnified omitted) is the build/slice-rung behaviour: a NO-OP
+		// `acquired` (the inner `do`'s claim/slice lock is the sole exclusion point).
 		const result = await acquireAdvancingLock({
 			item: 'slice:alpha',
 			cwd: repo,
@@ -142,15 +147,16 @@ describe('advancing acquire — BUILD/SLICE rung (no acquireUnified) does NOT ta
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(true);
-		// NO unified lock taken at the advance layer for a build/slice rung.
+		expect(result.outcome).toBe('acquired');
+		// No marker (retired) and NO unified lock at the advance layer for a build rung.
+		expect(advancingMarkerOnArbiter(repo, 'slice-alpha')).toBe(false);
 		expect(lockRefOnArbiter(arbiter, 'slice-alpha')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 });
 
-describe('a unified lock LOST makes the tree-less advancing acquire lose definitively with NO marker', () => {
-	it('a DIFFERENT principal holding the lock makes the tree-less acquire lose, NO marker written', async () => {
+describe('a unified lock LOST makes the tree-less advancing acquire lose definitively', () => {
+	it('a DIFFERENT principal holding the lock makes the tree-less acquire lose', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		// Principal a holds ONLY the unified lock (implement) — no marker; the marker
 		// CAS alone would admit an advancer, only the held lock gates it.
@@ -176,7 +182,7 @@ describe('a unified lock LOST makes the tree-less advancing acquire lose definit
 		});
 		expect(second.exitCode).toBe(2);
 		expect(second.outcome).toBe('lost');
-		// NO marker written by b — the lock and the marker CAS agree on the winner.
+		// No marker is written by b (retired) — the held lock is the sole gate.
 		expect(advancingMarkerOnArbiter(b, 'slice-alpha')).toBe(false);
 		// The lock is still held by principal a exactly once (b did not steal it).
 		expect(await listItemLocks(b, ARBITER, gitEnv())).toEqual(['slice-alpha']);
@@ -284,8 +290,8 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(won).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		// The two mechanisms AGREE: the marker is present once AND the lock held once.
-		expect(advancingMarkerOnArbiter(a, 'slice-solo')).toBe(true);
+		// The unified lock is the sole gate: held exactly once, no marker.
+		expect(advancingMarkerOnArbiter(a, 'slice-solo')).toBe(false);
 		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['slice-solo']);
 	});
 });
@@ -367,7 +373,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		// NO unified lock taken at the advance layer for the build/slice rung.
 		expect(heldDuringExec).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
-		// The marker STILL landed + was released (interim dual-write keeps the marker).
+		// No marker at all (retired); the build rung takes no advance-layer hold.
 		expect(advancingMarkerOnArbiter(repo, 'slice-bar')).toBe(false);
 	});
 });

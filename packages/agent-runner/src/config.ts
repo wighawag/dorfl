@@ -220,7 +220,7 @@ export interface Config {
 	/**
 	 * **Per-TRANSITION override for the PRD→slices (SLICING) transition only.** When
 	 * set, the slicing transition (a `do prd:<slug>` run: emit `work/backlog/*.md` +
-	 * the `work/slicing/ → work/prd-sliced/` lifecycle move) integrates with THIS
+	 * the `work/prd/ → work/prd-sliced/` lifecycle move) integrates with THIS
 	 * mode instead of the flat {@link integration}; the slice-BUILD transition is
 	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ slicing
 	 * falls back to {@link integration} — byte-for-byte today's behaviour for any repo

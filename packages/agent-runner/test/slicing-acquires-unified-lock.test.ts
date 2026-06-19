@@ -60,8 +60,8 @@ const prdOnArbiter = (cwd: string, slug: string): boolean =>
 const slicingOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'slicing', slug);
 
-describe('acquireSlicingLock ALSO acquires the unified per-item lock (interim dual-write)', () => {
-	it('a successful acquire holds the lock (prd:<slug>, action slice) AND still lands the slicing/ marker', async () => {
+describe('acquireSlicingLock acquires the unified per-item lock (the marker is RETIRED)', () => {
+	it('a successful acquire holds the lock (prd:<slug>, action slice); the body stays in prd/ (NO slicing/ marker)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			prds: ['alpha'],
 		});
@@ -73,9 +73,10 @@ describe('acquireSlicingLock ALSO acquires the unified per-item lock (interim du
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
-		// Today's marker STILL lands on main (interim dual-write KEEPS the CAS).
-		expect(slicingOnArbiter(repo, 'alpha')).toBe(true);
-		expect(prdOnArbiter(repo, 'alpha')).toBe(false);
+		// The slicing/ marker is RETIRED — the body stays in prd/ (slice
+		// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`).
+		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		// AND the per-item lock (entry prd-alpha, action slice) is held on the arbiter.
 		expect(lockRefOnArbiter(arbiter, lockEntryFor('prd:alpha'))).toBe(true);
 		const entry = await readItemLock({
@@ -264,16 +265,16 @@ describe('race on a --bare file:// arbiter: two slicers of the SAME PRD', () => 
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(acquired).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		// The two mechanisms AGREE: the marker is held exactly once AND the lock is
-		// held exactly once.
-		expect(slicingOnArbiter(a, 'solo')).toBe(true);
-		expect(prdOnArbiter(a, 'solo')).toBe(false);
+		// The unified lock is the sole gate: held exactly once; the body never moved
+		// (no slicing/ marker).
+		expect(slicingOnArbiter(a, 'solo')).toBe(false);
+		expect(prdOnArbiter(a, 'solo')).toBe(true);
 		expect(await listItemLocks(a, ARBITER, gitEnv())).toEqual(['prd-solo']);
 	});
 });
 
-describe('releaseSlicingLock ALSO releases the unified per-item lock', () => {
-	it('a clean release restores the marker prd/ AND drops the lock', async () => {
+describe('releaseSlicingLock releases the unified per-item lock', () => {
+	it('a clean release drops the lock; the PRD body stays in prd/', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			prds: ['alpha'],
 		});
@@ -295,7 +296,7 @@ describe('releaseSlicingLock ALSO releases the unified per-item lock', () => {
 		});
 		expect(released.exitCode).toBe(0);
 		expect(released.outcome).toBe('released');
-		// Marker restored to prd/ (existing behaviour unchanged) ...
+		// The body stays in prd/ (the release moves no file) ...
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		expect(slicingOnArbiter(repo, 'alpha')).toBe(false);
 		// ... AND the unified lock is released (self-cleaning: no ref left).
@@ -329,54 +330,10 @@ describe('releaseSlicingLock ALSO releases the unified per-item lock', () => {
 	});
 });
 
-describe('the slicing-release STALE-EDIT check still fires (lock stays held on stale)', () => {
-	it('a concurrent edit to the HELD PRD body ⇒ release is STALE, fails loud, and does NOT release the lock', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
-		const acquired = await acquireSlicingLock({
-			slug: 'alpha',
-			cwd: seeded.repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(acquired.exitCode).toBe(0);
-
-		// A second writer edits the HELD PRD body (work/slicing/alpha.md) and pushes.
-		const writer = seeded.clone('writer');
-		gitIn(['checkout', '-q', '-B', 'edit-alpha', 'arbiter/main'], writer);
-		writeFileSync(
-			join(writer, 'work', 'slicing', 'alpha.md'),
-			prdFile('alpha', 'EDITED-UNDER-LOCK'),
-		);
-		gitIn(['add', '-A'], writer);
-		gitIn(['commit', '-q', '-m', 'edit held PRD body'], writer);
-		gitIn(['push', '-q', 'arbiter', 'edit-alpha:main'], writer);
-
-		const released = await releaseSlicingLock({
-			slug: 'alpha',
-			cwd: seeded.repo,
-			arbiter: ARBITER,
-			lockedBlob: acquired.lockedBlob,
-			env: gitEnv(),
-		});
-		expect(released.exitCode).toBe(4);
-		expect(released.outcome).toBe('stale');
-		expect(released.message).toMatch(/STALE/);
-
-		// Arbiter marker untouched (the edit is preserved, the marker still held) AND
-		// the unified lock is STILL held (a stale slicing is not done, so it must not
-		// release the lock — the marker and the lock agree).
-		expect(slicingOnArbiter(seeded.repo, 'alpha')).toBe(true);
-		expect(prdOnArbiter(seeded.repo, 'alpha')).toBe(false);
-		expect(await listItemLocks(seeded.repo, ARBITER, gitEnv())).toEqual([
-			'prd-alpha',
-		]);
-	});
-});
-
-describe('a marker-CAS loss after the lock was taken releases the lock (no orphan)', () => {
-	it('acquiring a non-existent PRD loses with NO marker and NO orphaned lock', async () => {
-		// `nope` has no PRD on main → the marker attempt returns `lost` AFTER the lock
-		// was taken; the lock must be released so it does not orphan.
+describe('a lockable-check loss takes NO lock (no orphan)', () => {
+	it('acquiring a non-existent PRD loses with NO orphaned lock', async () => {
+		// `nope` has no PRD on main → the lockable check returns `lost` BEFORE taking
+		// the lock, so nothing is orphaned.
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			prds: ['alpha'],
 		});
@@ -388,15 +345,7 @@ describe('a marker-CAS loss after the lock was taken releases the lock (no orpha
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
-		// No lock left orphaned for the missing PRD.
 		expect(lockRefOnArbiter(arbiter, 'prd-nope')).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
-		// And cleanup: drop the lock we may have left (defensive, should be a no-op).
-		await releaseItemLock({
-			item: 'prd:nope',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
 	});
 });

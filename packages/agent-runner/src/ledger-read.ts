@@ -60,29 +60,26 @@ export interface LedgerBacklogItem {
 
 /**
  * The result of a PRD-existence read (ADR §3a): does a PRD named `<slug>` exist,
- * and where. A PRD lives at `work/prd/<slug>.md`; WHILE IT IS BEING SLICED it is
- * moved under the slicing lock to `work/slicing/<slug>.md` (a transient held lock);
- * once SLICED it rests at `work/prd-sliced/<slug>.md` (the sliced resting state, the
- * source of truth for sliced-ness — slice `prd-sliced-folder-step-a`). ALL THREE
- * folders are consulted (any is enough): a PRD that is mid-slice OR already sliced
- * still occupies its slug, so collision detection must see it. The slug is resolved
+ * and where. A PRD lives at `work/prd/<slug>.md`; once SLICED it rests at
+ * `work/prd-sliced/<slug>.md` (the sliced resting state, the source of truth for
+ * sliced-ness — slice `prd-sliced-folder-step-a`). BOTH folders are consulted (any
+ * is enough): a PRD that is up-for-slicing OR already sliced still occupies its
+ * slug, so collision detection must see it. While a PRD IS being sliced its body
+ * STAYS in `work/prd/` (the slicing lock no longer moves it — slice
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`; the transient
+ * `slicing/` folder is retired, the in-flight state is the per-item lock ref), so a
+ * mid-slice PRD is detected via its `work/prd/` residence. The slug is resolved
  * from frontmatter `slug:`, falling back to the filename — the SAME shape the slice
  * readers use.
  */
 export interface PrdExistence {
 	/**
-	 * Whether a PRD named `<slug>` exists in `work/prd/`, `work/slicing/`, and/or
-	 * `work/prd-sliced/` (mid-slice under the lock OR already sliced — either still
-	 * claims the slug).
+	 * Whether a PRD named `<slug>` exists in `work/prd/` and/or `work/prd-sliced/`
+	 * (up-for-slicing OR already sliced — either still claims the slug).
 	 */
 	exists: boolean;
 	/** The PRD source file, when present (`work/prd/<slug>.md`). */
 	prdFile: string | undefined;
-	/**
-	 * The slicing-lock file, when present (`work/slicing/<slug>.md`) — i.e. the PRD
-	 * is CURRENTLY being sliced (lock held), not "has been sliced".
-	 */
-	slicingFile: string | undefined;
 	/**
 	 * The sliced resting file, when present (`work/prd-sliced/<slug>.md`) — i.e. the
 	 * PRD HAS BEEN sliced (the source of truth for sliced-ness, slice
@@ -204,7 +201,7 @@ export interface ResolveLocalStateInput {
 
 /** What the PRD-existence resolve method needs: which repo + which slug. */
 export interface ResolvePrdExistenceInput {
-	/** The repo root whose `work/prd/`+`work/slicing/`+`work/prd-sliced/` to read. */
+	/** The repo root whose `work/prd/`+`work/prd-sliced/` to read. */
 	repoPath: string;
 	/** The slug to look up (matched against frontmatter `slug:`, then filename). */
 	slug: string;
@@ -212,7 +209,7 @@ export interface ResolvePrdExistenceInput {
 
 /** What the PRD-pool resolve method needs: which repo's `work/prd/` to enumerate. */
 export interface ResolvePrdPoolInput {
-	/** The repo working-tree root whose `work/prd/` (+`work/slicing/`) to read. */
+	/** The repo working-tree root whose `work/prd/` to read. */
 	repoPath: string;
 }
 
@@ -295,10 +292,10 @@ export interface LedgerReadStrategy {
 	): Promise<LedgerPrdPool>;
 	/**
 	 * Resolve whether a PRD named `<slug>` exists in the LOCAL working tree's
-	 * `work/prd/` (the PRD source), `work/slicing/` (a transient held lock while the
-	 * PRD is being sliced), and/or `work/prd-sliced/` (the sliced resting state).
-	 * The slug is resolved from each candidate file's frontmatter `slug:`, falling
-	 * back to the filename — the SAME shape the slice readers use.
+	 * `work/prd/` (the PRD source — where a mid-slice PRD ALSO rests now that the
+	 * `slicing/` folder is retired) and/or `work/prd-sliced/` (the sliced resting
+	 * state). The slug is resolved from each candidate file's frontmatter `slug:`,
+	 * falling back to the filename — the SAME shape the slice readers use.
 	 *
 	 * This is the FIRST PRD read path in the seam: `ledger-read.ts`/`scan.ts` read
 	 * only `backlog`/`done`/`needs-attention`, NEVER `work/prd/`. It is added here
@@ -414,16 +411,16 @@ function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
 
 /**
  * Does a PRD named `slug` exist in `<repoPath>/work/<folder>/`? A PRD source file
- * is `work/prd/*.md`; a PRD currently held under the slicing lock is
- * `work/slicing/*.md` (in flight); a sliced PRD rests at `work/prd-sliced/*.md`
- * (the source of truth for sliced-ness). We match the slug against each file's
+ * is `work/prd/*.md` (where a mid-slice PRD also rests — the `slicing/` folder is
+ * retired); a sliced PRD rests at `work/prd-sliced/*.md` (the source of truth for
+ * sliced-ness). We match the slug against each file's
  * frontmatter `slug:` (falling back to the filename) — the SAME shape the slice
  * readers use — so a renamed file whose frontmatter slug matches still resolves.
  * Returns the matching filename, or `undefined`.
  */
 function findPrdFileBySlug(
 	repoPath: string,
-	folder: 'prd' | 'slicing' | 'prd-sliced',
+	folder: 'prd' | 'prd-sliced',
 	slug: string,
 ): string | undefined {
 	const dir = join(repoPath, 'work', folder);
@@ -714,15 +711,10 @@ export const currentLedgerRead: LedgerReadStrategy = {
 	},
 	resolvePrdExistence({repoPath, slug}) {
 		const prdFile = findPrdFileBySlug(repoPath, 'prd', slug);
-		const slicingFile = findPrdFileBySlug(repoPath, 'slicing', slug);
 		const prdSlicedFile = findPrdFileBySlug(repoPath, 'prd-sliced', slug);
 		return {
-			exists:
-				prdFile !== undefined ||
-				slicingFile !== undefined ||
-				prdSlicedFile !== undefined,
+			exists: prdFile !== undefined || prdSlicedFile !== undefined,
 			prdFile,
-			slicingFile,
 			prdSlicedFile,
 		};
 	},

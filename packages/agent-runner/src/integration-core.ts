@@ -99,7 +99,7 @@ export type IntegrationCoreOutcome =
  * IDENTICAL; only the "which item move + which file to read the title from" step
  * is caller-supplied. This is the seam the `do prd:<slug>` SLICING transition
  * rides (slice `slice-output-through-integration`): its "item move" is the PRD
- * LIFECYCLE move (`work/slicing/<slug>.md → work/prd-sliced/<slug>.md`, residence =
+ * LIFECYCLE move (`work/prd/<slug>.md → work/prd-sliced/<slug>.md`, residence =
  * sliced-ness) plus its EMITTED backlog files — NOT a slice done-move. Supplying it
  * makes every integrate-time arg (`--propose`/`--merge`, provider, title/body)
  * apply to slicing BY CONSTRUCTION, because they resolve ONCE here.
@@ -116,7 +116,7 @@ export interface IntegrationLifecycle {
 	/**
 	 * Absolute path to the item file whose `title:` frontmatter seeds the default
 	 * commit summary AND the synthesised propose-mode PR title. For the slicing
-	 * transition this is the held PRD (`work/slicing/<slug>.md`) — read BEFORE
+	 * transition this is the held PRD (`work/prd/<slug>.md`) — read BEFORE
 	 * {@link stage} moves it. IGNORED when {@link title} is supplied (the explicit
 	 * title wins — no file read).
 	 */
@@ -135,7 +135,7 @@ export interface IntegrationLifecycle {
 	/**
 	 * STAGE the lifecycle move + emitted files into the index on the current work
 	 * branch (runner-owned git; the agent never does git). For the slicing
-	 * transition: `git mv work/slicing/<slug>.md → work/prd-sliced/<slug>.md`
+	 * transition: `git mv work/prd/<slug>.md → work/prd-sliced/<slug>.md`
 	 * (residence = sliced-ness; no marker), and write+`git add` the produced
 	 * `work/backlog/*.md` files. The band's subsequent `git add -A` + atomic commit
 	 * folds this staging
@@ -440,10 +440,10 @@ export interface IntegrationCoreResult {
 	 * On a `review-blocked` outcome, the review gate's STRUCTURED block reason (the
 	 * `formatBlockReason` of the blocking findings) — so a caller doing its OWN
 	 * needs-attention routing can record the findings as the item-body prose. The
-	 * slicing path (slice `slice-acceptance-gate`) reads this: its held PRD lives in
-	 * `work/slicing/`, which the core's `applyNeedsAttentionTransition` (hard-coded
-	 * to the build lifecycle's in-progress/done) cannot move, so it routes the PRD
-	 * itself via the lock's `slicing/ -> needs-attention/` redirect, using THIS
+	 * slicing path (slice `slice-acceptance-gate`) reads this: the core's build
+	 * `applyNeedsAttentionTransition` is keyed on a SLICE lock, so the slicing path
+	 * routes the PRD itself via the lock release's needs-attention redirect (amend the
+	 * `prd:<slug>` unified lock `active -> stuck`, no folder move), using THIS
 	 * findings text as the body. Absent on every non-`review-blocked` outcome. (The
 	 * build path ignores it — its routing already records the findings in-body.)
 	 */
@@ -1979,19 +1979,20 @@ async function rebaseDroppingNeedsAttentionSurface(
 }
 
 /**
- * The `work/` status folders a slug's ledger file can resting-live in (the
- * one-slug-one-folder set the invariant is asserted over). `done/` is the
- * canonical destination of the done-move; the rest are the legitimate SOURCE
- * folders a build/recovery completes FROM. Mirrors `ledger-write.ts`'s
- * `WORK_FOLDERS` (the surface mechanism's probe) — the same ledger model, not a
- * second one.
+ * The DURABLE `work/` status folders a slug's ledger file can resting-live in (the
+ * one-slug-one-folder set the invariant is asserted over). After the capstone
+ * cut-over (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`,
+ * PRD `ledger-status-per-item-lock-refs`) the ONLY `work/` moves on `main` are the
+ * durable resting transitions, so the source a build completes FROM is `backlog/`
+ * (claim no longer moves the body, slice
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`) and the canonical
+ * done-move destination is `done/`. The generic terminal `dropped/` is also a
+ * durable resting folder, so the one-slug-one-folder guard covers it (a slug in
+ * `dropped/` AND another durable folder is a corrupt ledger to refuse). The
+ * transient `in-progress`/`needs-attention` are GONE from `main`'s tree (they are
+ * per-item lock-ref state now).
  */
-const LEDGER_STATUS_FOLDERS = [
-	'backlog',
-	'in-progress',
-	'needs-attention',
-	'done',
-] as const;
+const LEDGER_STATUS_FOLDERS = ['backlog', 'done', 'dropped'] as const;
 
 /** The result of {@link readArbiterLedgerPlacement}. */
 /** The result of {@link readArbiterLedgerPlacement}. */

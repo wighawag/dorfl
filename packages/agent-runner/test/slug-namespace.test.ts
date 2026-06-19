@@ -17,7 +17,7 @@ let root: string;
 
 /** Seed one `work/<folder>/<file>` with the given frontmatter. */
 function writeItem(
-	folder: 'backlog' | 'in-progress' | 'done' | 'prd' | 'slicing',
+	folder: 'backlog' | 'in-progress' | 'done' | 'prd' | 'prd-sliced',
 	file: string,
 	frontmatter: Record<string, string>,
 	body = 'body',
@@ -122,12 +122,13 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		}
 	});
 
-	it('a bare slug ERRORS on collision even when the PRD is mid-slice (held in work/slicing/)', () => {
-		// A PRD currently being sliced is held under the lock at work/slicing/<slug>.md
-		// (transient, not a "sliced" resting state); the PRD namespace still claims the
-		// slug, so a bare slug is still ambiguous.
+	it('a bare slug ERRORS on collision even when the PRD is mid-slice (body stays in work/prd/)', () => {
+		// A PRD currently being sliced KEEPS its body in work/prd/<slug>.md (the slicing
+		// lock no longer moves it — the `slicing/` folder is retired; the in-flight state
+		// is the per-item lock ref). The PRD namespace still claims the slug via its prd/
+		// residence, so a bare slug is still ambiguous.
 		writeItem('backlog', 'shared.md', {slug: 'shared'});
-		writeItem('slicing', 'shared.md', {slug: 'shared'});
+		writeItem('prd', 'shared.md', {slug: 'shared'});
 
 		expect(() =>
 			resolveSlug({
@@ -361,18 +362,18 @@ describe('ledger-read seam — resolvePrdExistence (the NEW PRD read path)', () 
 		});
 		expect(r.exists).toBe(true);
 		expect(r.prdFile).toBe('p.md');
-		expect(r.slicingFile).toBeUndefined();
+		expect(r.prdSlicedFile).toBeUndefined();
 	});
 
-	it('reports a PRD present only via its work/slicing/ lock file (mid-slice)', () => {
-		writeItem('slicing', 's.md', {slug: 's'});
+	it('reports a PRD present only via its work/prd-sliced/ resting file (already sliced)', () => {
+		writeItem('prd-sliced', 's.md', {slug: 's'});
 		const r = currentLedgerRead.resolvePrdExistence({
 			repoPath: repoPath(),
 			slug: 's',
 		});
 		expect(r.exists).toBe(true);
 		expect(r.prdFile).toBeUndefined();
-		expect(r.slicingFile).toBe('s.md');
+		expect(r.prdSlicedFile).toBe('s.md');
 	});
 
 	it('resolves the slug from frontmatter, falling back to filename', () => {
@@ -394,14 +395,14 @@ describe('ledger-read seam — resolvePrdExistence (the NEW PRD read path)', () 
 		).toBe(true);
 	});
 
-	it('reports absent when no PRD or slicing record names the slug (no throw on missing folders)', () => {
+	it('reports absent when no prd/ or prd-sliced/ record names the slug (no throw on missing folders)', () => {
 		const r = currentLedgerRead.resolvePrdExistence({
 			repoPath: repoPath(),
 			slug: 'nope',
 		});
 		expect(r.exists).toBe(false);
 		expect(r.prdFile).toBeUndefined();
-		expect(r.slicingFile).toBeUndefined();
+		expect(r.prdSlicedFile).toBeUndefined();
 	});
 });
 

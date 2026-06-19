@@ -9,6 +9,7 @@ import {
 	type ReviewVerdict,
 } from '../src/review-gate.js';
 import type {SliceReviewGate} from '../src/slicer-review-loop.js';
+import {readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -237,17 +238,24 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 		expect(gate.calls).toBe(1);
-		// The PRD was routed to needs-attention on main (the slice-path block route,
-		// via the lock's slicing/ → needs-attention/ redirect). The slices did NOT
-		// land, and the PRD is no longer held in slicing/.
-		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(true);
+		// The slice-path block route is a per-item lock `active → stuck` amend now
+		// (slice `cutover-...-trim-folder-sets`), NOT a folder move: the PRD body STAYS
+		// in work/prd/, the slices did NOT land, and NO needs-attention/ or slicing/
+		// folder file is written.
+		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/prd-sliced/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
-		// The gate's blocking findings are recorded in the item body (the reason).
-		const body = showArbiterMain(repo, 'work/needs-attention/it.md');
-		expect(body).toMatch(/coverage gap in the PRD goal/);
+		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
+		const entry = await readItemLock({
+			item: 'prd:it',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(entry?.state).toBe('stuck');
+		expect(entry?.reason).toMatch(/coverage gap in the PRD goal/);
 	});
 
 	it('a BLOCK on the --propose path also routes to needs-attention (no PR of a blocked set)', async () => {
@@ -266,8 +274,17 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('needs-attention');
-		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(true);
+		// The block route is the stuck lock; the PRD body stays in prd/, no PR opened.
+		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prd/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/pre-backlog/child.md')).toBe(false);
+		const entry = await readItemLock({
+			item: 'prd:it',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(entry?.state).toBe('stuck');
 	});
 });
 

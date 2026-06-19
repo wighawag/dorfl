@@ -618,32 +618,32 @@ describe('advanceRegistrySet — the advancing borrow is RACE-CORRECT across bat
 			const all = [...resA.mirrors, ...resB.mirrors].flatMap(
 				(m) => m.batch.items,
 			);
+			// POST-#9 (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`):
+			// for a BUILD-SLICE item the advance layer takes NO borrow — the inner `do`'s
+			// claim lock is the SOLE exclusion. That lock guarantees the
+			// no-double-LAND invariant: at most ONE batch lands each item in `done/`
+			// (`advanced`); the other(s) either lose the claim (`lost`) or build and lose
+			// the integrate race against the winner's advanced `main` (`usage-error`,
+			// routed/aborted — NOT a second land). The marker-era "exactly one non-lost
+			// per item" is no longer asserted (a loser MAY waste a build before losing at
+			// the integrate — the per-item ref makes it LOSE, just not always before the
+			// build), but the durable guarantee — one land, never two — holds.
 			for (const slug of ['r1', 'r2']) {
 				const forSlug = all.filter((i) => i.arg === slug);
-				const wonBorrow = forSlug.filter(
-					(i) =>
-						i.result.outcome !== 'lost' && i.result.outcome !== 'contended',
-				);
-				const backedOff = forSlug.filter(
-					(i) =>
-						i.result.outcome === 'lost' || i.result.outcome === 'contended',
-				);
-				// Exactly one winner of the borrow; the other(s) backed off cleanly.
-				expect(wonBorrow).toHaveLength(1);
-				expect(backedOff).toHaveLength(forSlug.length - 1);
-				// The single winner ADVANCED a rung (built) or hit downstream merge
-				// contention (needs-attention) — never a no-op, never a double-build.
-				expect(['advanced', 'usage-error']).toContain(
-					wonBorrow[0].result.outcome,
-				);
-			}
-			// Across the whole race NO item was advanced more than once (the
-			// no-double-advance invariant, the borrow`s reason for being).
-			for (const slug of ['r1', 'r2']) {
-				const advancedTwice = all.filter(
-					(i) => i.arg === slug && i.result.outcome === 'advanced',
-				).length;
-				expect(advancedTwice).toBeLessThanOrEqual(1);
+				// Each item produced a terminal result in at least one batch.
+				expect(forSlug.length).toBeGreaterThanOrEqual(1);
+				// NO double-LAND: at most one batch `advanced` the item (built + integrated).
+				const advanced = forSlug.filter((i) => i.result.outcome === 'advanced');
+				expect(advanced.length).toBeLessThanOrEqual(1);
+				// Every non-`advanced` outcome is a genuine NON-land (lost the claim, or
+				// built then lost the integrate race) — never a silent second success.
+				for (const i of forSlug) {
+					if (i.result.outcome !== 'advanced') {
+						expect(['lost', 'contended', 'usage-error']).toContain(
+							i.result.outcome,
+						);
+					}
+				}
 			}
 		},
 	);

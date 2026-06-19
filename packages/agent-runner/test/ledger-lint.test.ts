@@ -41,14 +41,14 @@ function place(folder: string, slug: string, content?: string): void {
 describe('detectDuplicateSlugs (pure)', () => {
 	it('flags a slug present in two status folders, lifecycle-ordered', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['in-progress', new Set(['ghost'])],
+			['backlog', new Set(['ghost'])],
 			['done', new Set(['ghost'])],
 		]);
 		const dups = detectDuplicateSlugs(map);
 		expect(dups).toHaveLength(1);
 		expect(dups[0].slug).toBe('ghost');
-		// `done/` outranks `in-progress/` (most-advanced lifecycle stage first).
-		expect(dups[0].folders).toEqual(['done', 'in-progress']);
+		// `done/` outranks `backlog/` (most-advanced lifecycle stage first).
+		expect(dups[0].folders).toEqual(['done', 'backlog']);
 		expect(dups[0].candidateCanonical).toBe('done');
 	});
 
@@ -74,12 +74,12 @@ describe('detectDuplicateSlugs (pure)', () => {
 
 describe('lintLocalLedger (over a working tree)', () => {
 	it('surfaces a slug deliberately placed in two status folders, naming both', () => {
-		place('in-progress', 'orphan');
+		place('backlog', 'orphan');
 		place('done', 'orphan');
 		const dups = lintLocalLedger(root);
 		expect(dups).toHaveLength(1);
 		expect(dups[0].slug).toBe('orphan');
-		expect(dups[0].folders).toContain('in-progress');
+		expect(dups[0].folders).toContain('backlog');
 		expect(dups[0].folders).toContain('done');
 	});
 
@@ -91,12 +91,15 @@ describe('lintLocalLedger (over a working tree)', () => {
 		expect(dups[0].folders).toContain('dropped');
 	});
 
-	it('reports a clean ledger with NO false positives', () => {
+	it('reports a clean ledger with NO false positives (durable set only)', () => {
 		place('backlog', 'a');
-		place('in-progress', 'b');
-		place('needs-attention', 'c');
 		place('done', 'd');
 		place('dropped', 'e');
+		// The transient `in-progress`/`needs-attention` are retired from `main`'s tree
+		// (per-item lock state now); even if present they are NOT lint-set folders, so
+		// they never count.
+		place('in-progress', 'b');
+		place('needs-attention', 'c');
 		expect(lintLocalLedger(root)).toEqual([]);
 	});
 
@@ -132,16 +135,14 @@ describe('lintLocalLedger (over a working tree)', () => {
 
 describe('sweepLedgerDuplicates (the gc-style on-demand REPORT)', () => {
 	it('reports the duplicate set + candidate canonical folder, NEVER deleting', () => {
-		place('needs-attention', 'stuck');
+		place('dropped', 'stuck');
 		place('done', 'stuck');
 		const result = sweepLedgerDuplicates(root);
 		expect(result.duplicates).toHaveLength(1);
 		expect(result.duplicates[0].slug).toBe('stuck');
 		expect(result.duplicates[0].candidateCanonical).toBe('done');
 		// The sweep is REPORT-ONLY: both files are still present afterwards.
-		expect(existsSync(join(root, 'work', 'needs-attention', 'stuck.md'))).toBe(
-			true,
-		);
+		expect(existsSync(join(root, 'work', 'dropped', 'stuck.md'))).toBe(true);
 		expect(existsSync(join(root, 'work', 'done', 'stuck.md'))).toBe(true);
 	});
 
@@ -154,14 +155,14 @@ describe('sweepLedgerDuplicates (the gc-style on-demand REPORT)', () => {
 
 describe('formatting', () => {
 	it('formats a LOUD warning naming the slug and its folders', () => {
-		place('in-progress', 'ghost');
+		place('backlog', 'ghost');
 		place('done', 'ghost');
 		const lines = formatDuplicateWarnings(lintLocalLedger(root));
 		const text = lines.join('\n');
 		expect(text).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(text).toContain('ghost');
 		expect(text).toContain('work/done/');
-		expect(text).toContain('work/in-progress/');
+		expect(text).toContain('work/backlog/');
 	});
 
 	it('a clean ledger produces NO warning lines (silent)', () => {
@@ -188,13 +189,12 @@ describe('formatting', () => {
 });
 
 describe('the status-folder set', () => {
-	it('is exactly the five lifecycle folders (buckets/PRD folders excluded)', () => {
-		expect([...LEDGER_STATUS_FOLDERS]).toEqual([
-			'backlog',
-			'in-progress',
-			'needs-attention',
-			'done',
-			'dropped',
-		]);
+	it('is exactly the durable lifecycle folders (transient/buckets/PRD folders excluded)', () => {
+		// After the capstone cut-over (slice
+		// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the only
+		// `work/` moves on `main` are the durable resting transitions, so a slice's
+		// ledger file rests only in the durable set; the transient
+		// `in-progress`/`needs-attention` are per-item lock state now.
+		expect([...LEDGER_STATUS_FOLDERS]).toEqual(['backlog', 'done', 'dropped']);
 	});
 });

@@ -1,11 +1,5 @@
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	writeFileSync,
-	rmSync,
-} from 'node:fs';
-import {dirname, isAbsolute, join} from 'node:path';
+import {mkdirSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveSidecarIdentity} from './sidecar.js';
@@ -15,108 +9,62 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  * The **advancing-lock BORROW** (PRD `advance-loop`, slice
  * `advancing-lock-borrow`, US #19–24).
  *
- * The surface/apply/triage phase's SHORT borrow — shaped like the slicing lock
- * (`slicing-lock.ts`), reusing the proven CAS ledger-write primitive
- * ({@link ledgerWrite.applyTransition}), NOT a new lock mechanism. ONE lock
- * PRIMITIVE; the lock-FOLDER encodes the ACTION (`advancing`) and the entry name
- * (`<type>-<slug>`) encodes the IDENTITY (the SAME type-encoded scheme the
- * sidecar uses, via {@link resolveSidecarIdentity} — the resolver is the single
- * source of truth). So a slice, a PRD, and an observation that share a slug NEVER
- * collide on the CAS ref, and a PRD may hold an `advancing` borrow and (later,
- * separately) a `slicing` borrow — different actions, different refs, never
- * co-held.
+ * The surface/apply/triage phase's SHORT borrow. As of the capstone cut-over
+ * (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
+ * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
+ * the legacy `work/advancing/<entry>.md` presence-MARKER on `main` is GONE. The
+ * advancing borrow now rides ONLY the UNIFIED per-item lock
+ * (`refs/agent-runner/lock/<entry>`, `action: advance`) — there is no transient
+ * status in `main`'s tree anymore, so a work branch cut from `main` inherits no
+ * stale advancing marker.
  *
- * It differs from the slicing lock + the build claim in ONE deliberate way: it is
- * file-ORTHOGONAL to the item it locks. The slicing lock IS the PRD file moved
- * `prd/ → slicing/`, and the build claim IS the slice file moved
- * `backlog/ → in-progress/`; an advancing borrow is a separate PRESENCE-MARKER
- * file `work/advancing/<type>-<slug>.md`, created by the CAS micro-commit on
- * {@link acquireAdvancingLock} and deleted on {@link releaseAdvancingLock}. The
- * item's own lifecycle file NEVER moves (the borrow is a LOCK, not a lifecycle
- * transition), which is exactly why it can lock items resting in DIFFERENT source
- * folders (a backlog slice, a `prd/` PRD, an `observations/` note) with one
- * uniform mechanism, and why it must be identity-keyed rather than folder-keyed.
+ * The borrow is keyed by item IDENTITY (`<type>-<slug>`, via
+ * {@link resolveSidecarIdentity} — the single source of truth the unified lock,
+ * the sidecar, and the work branch all share), so a slice, a PRD, and an
+ * observation that share a slug NEVER collide, and the SAME `<entry>` ref means an
+ * `advance` hold is MUTUALLY EXCLUSIVE with a claim/slice hold of the SAME item BY
+ * CONSTRUCTION (the second acquirer loses the SAME create-only ref CAS).
  *
- *   - **Acquire** ({@link acquireAdvancingLock}) atomically races a
- *     `+ work/advancing/<type>-<slug>.md` micro-commit through the seam
- *     (transition kind `advancing`), on the branch `advancing/<type>-<slug>` —
- *     DISTINCT from the build-claim's `claim/<slug>`, the slicing lock's
- *     `slicing/<slug>`, and the work branch `work/<type>-<slug>`, so an advancing
- *     borrow can never collide with a slicing borrow or a build claim of the same
- *     slug. The winner HOLDS the lock; a loser gets the CAS's exit-2 ('lost') and
- *     backs off.
- *   - **Release** ({@link releaseAdvancingLock}) deletes the marker
- *     `work/advancing/<type>-<slug>.md` against the CURRENT arbiter `main` (a
- *     normal commit on the latest `main`, CAS-leased so it can only fast-forward,
- *     NEVER `--force`). It moves NO lifecycle file — the item is returned to the
- *     caller exactly where it rested.
+ * It is file-ORTHOGONAL to the item it locks: the item's own lifecycle file NEVER
+ * moves (the borrow is a LOCK, not a lifecycle transition), which is exactly why
+ * it can lock items resting in DIFFERENT source folders (a backlog slice, a `prd/`
+ * PRD, an `observations/` note) with one uniform mechanism.
+ *
+ * **TREE-LESS vs BUILD/SLICE RUNGS (`acquireUnified`).** The advance tick sets
+ * `acquireUnified` PER RUNG (the policy lives in `advance.ts`, where the rung is
+ * known):
+ *
+ *   - **TREE-LESS rungs** (`surface`/`apply`/`triage`) have NO inner `do`, so the
+ *     advancing acquire takes the item's unified `action: advance` lock — that hold
+ *     IS the advance∥claim / advance∥slice exclusion. Acquire/release delegate to
+ *     {@link acquireItemLock} / {@link releaseItemLock} (a parentless ref CAS, no
+ *     working-tree write, no retry budget).
+ *   - **BUILD-SLICE / SLICE-PRD rungs** never take the unified lock at the advance
+ *     layer (`acquireUnified` false): `performAdvance` orchestrates an inner
+ *     `performDo` that ITSELF acquires the SAME `slice-<slug>`/`prd-<slug>` ref
+ *     (the create-only CAS with NO re-entrancy/auto-steal), so taking it again here
+ *     would DEADLOCK the tick against itself. For these rungs the acquire/release
+ *     are a NO-OP (`acquired`/`released`); the inner `do`'s lock is the sole
+ *     exclusion point (the POST-#9 EXCLUSION PROOF, owned by this slice).
+ *
+ * A dry-run never takes the lock (it mutates nothing). This module stays
+ * rung-agnostic — it only knows "unified or not", never the rung kind.
  *
  * This module also delivers {@link createItemThroughCas}: new-item creation routed
- * THROUGH the SAME CAS, keyed on the NEW item's identity (its target path), so the
- * (unlikely) same-slug new-item race needs NO special case — the loser simply
- * fails the CAS and backs off. The triage rung (observation→promote drafting a new
- * `work/backlog/<new-slug>.md`) consumes it.
+ * THROUGH the SAME write-seam CAS, keyed on the NEW item's identity (its target
+ * path), so the (unlikely) same-slug new-item race needs NO special case — the
+ * loser simply fails the CAS and backs off. The triage rung (observation→promote
+ * drafting a new `work/backlog/<new-slug>.md`) consumes it. It is NOT a lock and
+ * was never tied to the marker.
  *
  * Lock discipline: MANDATORY for the autonomous driver (a contender may be active),
- * a no-op formality for a solo human (no contender). The per-repo "agents may
- * advance here" policy is the signal that a contender may be active, so the common
- * solo case stays simple. `needsAnswers` is the PURE answer-required axis, NOT a
- * lock; the human edit-handshake becomes "take the `advancing` lock via CAS"
- * (supersedes `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`). This module
- * provides the lock + creation PRIMITIVES only; the rungs that wire them are LATER
- * slices.
+ * a no-op formality for a solo human (no contender). Every lock acquire/release is
+ * RUNNER-mediated (the agent never touches the lock ref). Recovery is the unified
+ * lock's: `release-lock <item>` + the `gc --ledger` stuck-lock report (no liveness
+ * heartbeat, no auto-sweep; a human asserts a lock is dead).
  */
 
 const DEFAULT_ARBITER = 'origin';
-
-/**
- * The single PATH-CONSTRUCTION SEAM for the advancing borrow's marker file —
- * `work/advancing/<entry>.md`, where `<entry>` is the type-encoded `<type>-<slug>`
- * identity ({@link resolveSidecarIdentity}). Acquire and release BOTH construct
- * the marker through THIS function (do NOT inline the path elsewhere), so the
- * folder-taxonomy reorg slice can repoint the marker's location in ONE place
- * (`work/<entry>/<slug>.lock.md` etc.) without forking the format between
- * acquire and release. `<type>-<slug>` stays in the lock + release BRANCH names
- * (`advancing/<entry>` / `advancing-release/<entry>`) — that is load-bearing for
- * cross-type/cross-repo branch-collision avoidance regardless of where the
- * MARKER FILE later lives.
- */
-export function advancingMarkerPath(entry: string): string {
-	return `work/advancing/${entry}.md`;
-}
-
-/**
- * The single ENUMERATION SEAM for orphaned `work/advancing/<entry>.md` markers
- * in a LOCAL working tree. Returns the sorted list of `<entry>` names
- * (`<type>-<slug>`) currently resident in `work/advancing/`, ignoring non-`.md`
- * files. An absent / empty `work/advancing/` directory ⇒ the empty list.
- *
- * The slice `advancing-lock-human-release-verb-and-surface` introduces this as
- * the one read-side enumeration both the `gc --ledger` report (this slice) and
- * the folder-taxonomy reorg's later relocation slice (`<slug>.lock.md` co-located
- * with the item) consume — so the read shape stays consistent while the marker
- * location later moves. There is deliberately NO automatic sweep based on this
- * list: the advancing lock has no liveness heartbeat, so "provably orphaned"
- * cannot be inferred — the report is advisory and a human invokes
- * `release-advancing <item>` to clear a NAMED marker.
- */
-export function listAdvancingMarkers(repoPath: string): string[] {
-	const dir = join(repoPath, 'work', 'advancing');
-	let entries: string[];
-	try {
-		entries = readdirSync(dir);
-	} catch {
-		return [];
-	}
-	const markers: string[] = [];
-	for (const file of entries) {
-		if (!file.toLowerCase().endsWith('.md')) {
-			continue; // ignore non-marker files (READMEs, .keep, anything else)
-		}
-		markers.push(file.slice(0, -'.md'.length));
-	}
-	return markers.sort();
-}
 
 // --- Acquire --------------------------------------------------------------
 
@@ -143,26 +91,21 @@ export interface AcquireAdvancingLockOptions {
 	arbiter?: string;
 	/** Advisory locker id. Defaults to git user.name, then $USER. */
 	by?: string;
-	/** Cap on push retries when main merely advanced. Default 3. */
+	/** Cap on push retries when main merely advanced. Default 3. (Unified lock is retry-free; retained for API parity.) */
 	retries?: number;
 	/** Show the intended push without mutating the arbiter (`--dry-run`). */
 	dryRun?: boolean;
 	/**
-	 * ALSO acquire the item's UNIFIED per-item lock (`action: advance`) ALONGSIDE
-	 * the `work/advancing/<entry>.md` marker CAS (PRD
-	 * `ledger-status-per-item-lock-refs` US #1/#3/#18; ADR
-	 * `ledger-status-on-per-item-lock-refs`). The advance tick sets this PER RUNG
-	 * (the policy lives where the rung is known — `advance.ts`): `true` for the
-	 * TREE-LESS rungs (`surface`/`apply`/`triage`), which have no inner `do` and so
-	 * genuinely need the unified hold to realise advance∥claim / advance∥slice
-	 * exclusion; `false` (the default) for the build-slice / slice-prd rungs, whose
-	 * inner `performDo` ALREADY takes the SAME `slice-<slug>`/`prd-<slug>` ref —
-	 * taking it again here would DEADLOCK the tick against itself. When `true`, the
-	 * unified lock is acquired FIRST (before the marker race): a lock `lost` makes
-	 * the acquire lose DEFINITIVELY (no retry) and writes NO marker; a subsequent
-	 * marker loss/contention/error releases the lock so it is never orphaned. A
-	 * dry-run never takes the lock (it mutates nothing). This module stays
-	 * rung-agnostic — it only knows "unified or not", never the rung kind.
+	 * Acquire the item's UNIFIED per-item lock (`action: advance`). The advance tick
+	 * sets this PER RUNG (the policy lives where the rung is known — `advance.ts`):
+	 * `true` for the TREE-LESS rungs (`surface`/`apply`/`triage`), which have no
+	 * inner `do` and so genuinely need the unified hold to realise advance∥claim /
+	 * advance∥slice exclusion; `false` (the default) for the build-slice / slice-prd
+	 * rungs, whose inner `performDo` ALREADY takes the SAME `slice-<slug>`/`prd-<slug>`
+	 * ref — taking it again here would DEADLOCK the tick against itself, so for those
+	 * the acquire is a NO-OP `acquired`. When `true`, a lock `lost` makes the acquire
+	 * lose DEFINITIVELY (no retry budget). A dry-run never takes the lock (it mutates
+	 * nothing). This module stays rung-agnostic — it only knows "unified or not".
 	 */
 	acquireUnified?: boolean;
 	/** Environment for child git processes. */
@@ -178,9 +121,8 @@ export interface AcquireAdvancingLockResult {
 	message: string;
 	/**
 	 * The type-encoded lock entry name (`<type>-<slug>`) the borrow keyed onto —
-	 * the marker is `work/advancing/<entry>.md`, the branch `advancing/<entry>`.
-	 * Surfaced so the caller hands the SAME entry back to
-	 * {@link releaseAdvancingLock} (and so tests can assert the type-encoding).
+	 * the unified lock ref is `refs/agent-runner/lock/<entry>`. Surfaced so the
+	 * caller hands the SAME entry back (and so tests can assert the type-encoding).
 	 */
 	entry?: string;
 }
@@ -188,19 +130,12 @@ export interface AcquireAdvancingLockResult {
 /** Raised for usage/environment errors (exit 1). */
 class AdvancingLockUsageError extends Error {}
 
-/** Internal: the result of a single acquire attempt. */
-type AcquireAttemptResult =
-	| {kind: 'acquired'; message: string}
-	| {kind: 'lost'; message: string}
-	| {kind: 'rejected'; message: string};
-
 /**
- * Acquire the advancing borrow for `item`: race a `+ work/advancing/<entry>.md`
- * micro-commit to the arbiter via the seam CAS. Never throws for the expected
- * "lost the race" (exit 2) or "contended" (exit 3) cases — those are returned.
- * Usage/environment problems surface as exit 1; a held lock is exit 0. Mirrors
- * `acquireSlicingLock`'s control flow (it IS the same CAS, on a different folder
- * + branch, creating a marker instead of moving the item).
+ * Acquire the advancing borrow for `item`. For a TREE-LESS rung
+ * (`acquireUnified: true`) this is the item's unified `action: advance` lock (a
+ * parentless ref CAS); for a build/slice rung (the default) it is a NO-OP
+ * `acquired` (the inner `do`'s claim/slice lock is the exclusion). Never throws
+ * for the expected "lost the race" (exit 2) case — it is returned.
  */
 export async function acquireAdvancingLock(
 	options: AcquireAdvancingLockOptions,
@@ -222,7 +157,6 @@ async function runAcquire(
 	note: (m: string) => void,
 ): Promise<AcquireAdvancingLockResult> {
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	const retries = options.retries ?? 3;
 	const dryRun = options.dryRun ?? false;
 	const cwd = options.cwd;
 	const env = options.env;
@@ -233,7 +167,7 @@ async function runAcquire(
 		);
 	}
 	// The type-encoded entry `<type>-<slug>` — the SAME identity scheme the sidecar
-	// uses, derived via the shared resolver (the single source of truth).
+	// and the unified lock use, derived via the shared resolver (the source of truth).
 	const {type, slug} = resolveSidecarIdentity(options.item);
 	const entry = `${type}-${slug}`;
 
@@ -247,257 +181,45 @@ async function runAcquire(
 	}
 	const by = options.by || (await resolveBy(cwd, env));
 
-	// Refuse to run with a dirty tree — the lock must be a clean, isolated commit.
-	const dirtyWorktree =
-		(await gitSoft(['diff', '--quiet'], cwd, env)).status !== 0;
-	const dirtyIndex =
-		(await gitSoft(['diff', '--cached', '--quiet'], cwd, env)).status !== 0;
-	if (dirtyWorktree || dirtyIndex) {
-		throw new AdvancingLockUsageError(
-			'working tree has uncommitted changes; commit/stash them before locking',
-		);
-	}
-
-	const marker = advancingMarkerPath(entry);
-	// DISTINCT from the build-claim's `claim/<slug>`, the slicing lock's
-	// `slicing/<slug>`, and the work branch `work/<type>-<slug>` — an advancing
-	// borrow can never collide with a slicing borrow or a build claim.
-	const lockBranch = `advancing/${entry}`;
-
-	// UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#3/#18;
-	// ADR `ledger-status-on-per-item-lock-refs`). For a TREE-LESS rung the advance
-	// tick sets `acquireUnified` (the policy lives in `advance.ts`, where the rung
-	// is known): take the item's per-item lock (`action: advance`, keyed `item` so
-	// it shares the ONE `<type>-<slug>` ref with claim/slice/advance of the SAME
-	// item) ALONGSIDE today's `work/advancing/<entry>.md` marker CAS. Acquire FIRST
-	// (before the marker race) so a lock `lost` (someone already holds this SAME
-	// item's lock for implement/slice/advance) makes the advancing acquire lose
-	// DEFINITIVELY (no retry budget) WITHOUT ever writing the marker — the lock
-	// exclusion and the existing CAS agree on the single winner. A dry-run takes no
-	// lock (it mutates nothing). When the marker race subsequently
-	// loses/contends/errors the lock we just took is RELEASED so it is never
-	// orphaned (no marker landed, so the item is cleanly left where it rested). The
-	// marker removal + `advancing/` folder retirement are the capstone slice #9;
-	// here the marker STILL lands on `main` for ALL rungs.
+	// BUILD/SLICE rung (or a dry-run): NO advance-layer hold at all. The inner `do`'s
+	// claim/slice unified lock is the sole exclusion point — taking it again here
+	// would deadlock the tick against itself. A NO-OP `acquired`.
 	const acquireUnified = (options.acquireUnified ?? false) && !dryRun;
-	if (acquireUnified) {
-		const lock = await acquireItemLock({
-			item: options.item,
-			action: 'advance',
-			cwd,
-			arbiter,
-			holder: by,
-			env,
-		});
-		if (lock.outcome === 'error') {
-			// Environment/usage problem acquiring the lock — surface as exit 1, never a
-			// false acquire. No marker written.
-			throw new AdvancingLockUsageError(
-				`failed to acquire the item lock for '${entry}': ${lock.message}`,
-			);
-		}
-		if (lock.outcome === 'lost') {
-			// Lost the create-only lock race: another writer holds this SAME item's lock
-			// (implement / slice / advance). DEFINITIVE — exit 2, no retry, NO marker.
-			// No auto-steal of an orphaned lock here, consistent with claim/slice and the
-			// ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts a
-			// lock is dead via `release-lock` + `gc --ledger`).
-			note(lock.message);
-			return {exitCode: 2, outcome: 'lost', message: lock.message, entry};
-		}
-	}
-
-	/** Release the unified lock we just acquired (best-effort) — used when the
-	 * marker race subsequently loses/contends/errors, so the lock is never orphaned
-	 * (no marker landed, so the item is cleanly left where it rested). A no-op when
-	 * we did not take the unified lock (build/slice rung or dry-run). */
-	async function releaseHeldUnifiedLock(): Promise<void> {
-		if (!acquireUnified) {
-			return;
-		}
-		await releaseItemLock({item: options.item, cwd, arbiter, env});
-	}
-
-	const origRef = await originalRef(cwd, env);
-	try {
-		let i = 0;
-		// eslint-disable-next-line no-constant-condition
-		while (true) {
-			const result = await acquireAttempt({
-				entry,
-				by,
-				arbiter,
-				dryRun,
-				cwd,
-				env,
-				marker,
-				lockBranch,
-				note,
-			});
-			if (result.kind === 'acquired') {
-				return {
-					exitCode: 0,
-					outcome: 'acquired',
-					message: result.message,
-					entry,
-				};
-			}
-			if (result.kind === 'lost') {
-				// The shared-`main` marker CAS says we lost. Release the unified lock we
-				// took so it is not orphaned (no marker landed).
-				await releaseHeldUnifiedLock();
-				return {exitCode: 2, outcome: 'lost', message: result.message, entry};
-			}
-			// rejected: main moved under us — retry up to the cap, then back off.
-			i += 1;
-			if (i > retries) {
-				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
-				note(message);
-				await releaseHeldUnifiedLock();
-				return {exitCode: 3, outcome: 'contended', message, entry};
-			}
-			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
-		}
-	} catch (err) {
-		// A marker-write plumbing failure after we took the lock: release it so the
-		// held lock does not orphan an item whose marker never landed, then re-throw
-		// for the top-level handler to classify (exit 1).
-		await releaseHeldUnifiedLock();
-		throw err;
-	} finally {
-		await cleanup(cwd, origRef, lockBranch, env);
-	}
-}
-
-interface AcquireAttemptContext {
-	entry: string;
-	by: string;
-	arbiter: string;
-	dryRun: boolean;
-	cwd: string;
-	env: NodeJS.ProcessEnv | undefined;
-	marker: string;
-	lockBranch: string;
-	note: (m: string) => void;
-}
-
-/** One acquire attempt: branch off arbiter/main, write the marker, CAS-push. */
-async function acquireAttempt(
-	ctx: AcquireAttemptContext,
-): Promise<AcquireAttemptResult> {
-	const {arbiter, entry, marker, lockBranch, cwd, env, note} = ctx;
-
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-
-	// Is the lock still free on the arbiter's main? (the marker absent.)
-	if (await catFileExists(`${arbiter}/main:${marker}`, cwd, env)) {
-		const message = `'${entry}' is already being advanced (advancing lock held) on ${arbiter}/main — someone holds the borrow. Back off.`;
+	if (!acquireUnified) {
+		const message = dryRun
+			? `[dry-run] advancing borrow for '${entry}' (no lock taken).`
+			: `advancing borrow for '${entry}' rides the inner do's lock (no advance-layer hold).`;
 		note(message);
-		return {kind: 'lost', message};
+		return {exitCode: 0, outcome: 'acquired', message, entry};
 	}
 
-	// Fresh lock branch off the latest arbiter main. DETACH first so the throwaway
-	// branch can always be deleted across retries (HEAD may still be ON it).
-	await gitHard(
-		['checkout', '--quiet', '--detach', `${arbiter}/main`],
+	// TREE-LESS rung: take the item's UNIFIED per-item lock (`action: advance`,
+	// keyed `item` so it shares the ONE `<type>-<slug>` ref with claim/slice/advance
+	// of the SAME item). A create-only ref CAS: the winner holds it, the loser is
+	// DEFINITIVELY `lost` (exit 2, no retry budget — a per-item conflict the loser
+	// should lose). No auto-steal of an orphaned lock, consistent with claim/slice
+	// and the ADR's recovery model (no liveness heartbeat / auto-sweep; a human
+	// asserts a lock is dead via `release-lock` + `gc --ledger`).
+	const lock = await acquireItemLock({
+		item: options.item,
+		action: 'advance',
 		cwd,
-		env,
-	);
-	await gitSoft(['branch', '-D', lockBranch], cwd, env);
-	await gitHard(
-		['checkout', '--quiet', '-b', lockBranch, `${arbiter}/main`],
-		cwd,
-		env,
-	);
-
-	// Create the presence marker, then stage + commit it. A failed add must abort
-	// (fatal), never silently continue — guarding against a false "acquired".
-	const markerAbs = join(cwd, marker);
-	mkdirSync(dirname(markerAbs), {recursive: true});
-	writeFileSync(markerAbs, advancingMarkerBody(entry, ctx.by));
-	const add = await gitSoft(['add', '--', marker], cwd, env);
-	if (add.status !== 0) {
-		throw new AdvancingLockUsageError(
-			`git add failed for '${marker}' (unexpected — aborting lock)`,
-		);
-	}
-
-	await gitHard(
-		['commit', '--quiet', '-m', `advancing: lock ${entry} (by ${ctx.by})`],
-		cwd,
-		env,
-	);
-
-	// Sanity: the lock commit MUST be a real child of the arbiter main we branched
-	// from (it actually added the marker) — guarding against a no-op that would
-	// make an "Everything up-to-date" push look like a successful lock.
-	const base = (
-		await gitHard(['rev-parse', `${arbiter}/main`], cwd, env)
-	).stdout.trim();
-	const head = (await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-	if (head === base) {
-		throw new AdvancingLockUsageError(
-			'advancing-lock commit is a no-op (nothing added) — aborting',
-		);
-	}
-	const parent = (
-		await gitHard(['rev-parse', 'HEAD^'], cwd, env)
-	).stdout.trim();
-	if (parent !== base) {
-		throw new AdvancingLockUsageError(
-			`advancing-lock is not a direct child of ${arbiter}/main — aborting`,
-		);
-	}
-
-	// Publish the prepared lock micro-commit THROUGH the write seam (kind
-	// `advancing`) — the same CAS the claim/slicing locks use; the `:main` push +
-	// lease + verify all live inside the strategy, NOT here.
-	if (ctx.dryRun) {
-		const result = await ledgerWrite.applyTransition({
-			kind: 'advancing',
-			arbiter,
-			localBranch: lockBranch,
-			expectedBase: base,
-			head,
-			cwd,
-			dryRun: true,
-			env,
-			note,
-		});
-		return {kind: 'acquired', message: result.message};
-	}
-
-	const result = await ledgerWrite.applyTransition({
-		kind: 'advancing',
 		arbiter,
-		localBranch: lockBranch,
-		expectedBase: base,
-		head,
-		cwd,
+		holder: by,
 		env,
-		note,
 	});
-	if (result.kind === 'published') {
-		const message = `LOCKED '${entry}' for advancing -> work/advancing/ on ${arbiter}/main.`;
-		note(message);
-		return {kind: 'acquired', message};
+	if (lock.outcome === 'error') {
+		throw new AdvancingLockUsageError(
+			`failed to acquire the item lock for '${entry}': ${lock.message}`,
+		);
 	}
-	return {kind: 'rejected', message: result.message};
-}
-
-/** The body of an advancing-lock presence marker (advisory; the lock IS the file). */
-function advancingMarkerBody(entry: string, by: string): string {
-	return [
-		'---',
-		`entry: ${entry}`,
-		`by: ${by}`,
-		'---',
-		'',
-		`Advancing lock held for \`${entry}\`. This is a TRANSIENT borrow — the`,
-		'advance surface/apply/triage rung holds it and releases it; if it is here',
-		'after a run, a tick died mid-borrow and it can be removed.',
-		'',
-	].join('\n');
+	if (lock.outcome === 'lost') {
+		note(lock.message);
+		return {exitCode: 2, outcome: 'lost', message: lock.message, entry};
+	}
+	const message = `LOCKED '${entry}' for advancing on ${arbiter} (unified lock).`;
+	note(message);
+	return {exitCode: 0, outcome: 'acquired', message, entry};
 }
 
 // --- Release --------------------------------------------------------------
@@ -521,17 +243,16 @@ export interface ReleaseAdvancingLockOptions {
 	arbiter?: string;
 	/** Advisory releaser id. Defaults to git user.name, then $USER. */
 	by?: string;
-	/** Cap on push retries when main merely advanced. Default 3. */
+	/** Cap on push retries when main merely advanced. Default 3. (Retained for API parity.) */
 	retries?: number;
 	/**
-	 * ALSO release the item's UNIFIED per-item lock (the complement of
+	 * Release the item's UNIFIED per-item lock (the complement of
 	 * {@link AcquireAdvancingLockOptions.acquireUnified}). The advance tick sets this
 	 * for a TREE-LESS rung (`surface`/`apply`/`triage`), where the acquire took the
 	 * unified lock; `false` (the default) for the build-slice / slice-prd rungs,
 	 * which never took it at the advance layer (the inner `performDo`'s claim/slice
-	 * lock is the exclusion point and is released by the inner `do`). The marker is
-	 * deleted FIRST (as today), then the unified lock released, so a released item
-	 * has neither the marker NOR the lock.
+	 * lock is the exclusion point and is released by the inner `do`) — for those the
+	 * release is a NO-OP `released`.
 	 */
 	releaseUnified?: boolean;
 	/** Environment for child git processes. */
@@ -550,22 +271,16 @@ export interface ReleaseAdvancingLockResult {
 }
 
 /**
- * Release the advancing borrow for `item`: delete the marker
- * `work/advancing/<entry>.md` against the CURRENT arbiter `main` (a normal commit
- * on the latest `main`, CAS-leased so it can only fast-forward — never a
- * force-restore). It moves NO lifecycle file: the borrow is a LOCK, not a
- * lifecycle transition, so the item is returned exactly where it rested.
+ * Release the advancing borrow for `item`. For a TREE-LESS rung
+ * (`releaseUnified: true`) this DELETES the item's unified `action: advance` lock
+ * ref; for a build/slice rung (the default) it is a NO-OP `released` (that rung
+ * never took an advance-layer hold — the inner `do` released its own lock). It
+ * moves NO lifecycle file: the borrow is a LOCK, not a lifecycle transition, so
+ * the item is returned exactly where it rested.
  *
- * Unlike the slicing release there is NO content-identity stale check: the
- * advancing borrow does not HOLD the item's content (the item never moved), so
- * there is no held-body to go stale — a concurrent edit to the item is the apply
- * rung's concern, not the lock's. The borrow's only job is mutual exclusion.
- *
- * Outcomes:
- *   - `released` (0): the marker is gone, `work/advancing/` no longer holds it.
- *   - `usage-error` (1): bad input / environment.
- *   - `lost` (2): the lock is not held (no `work/advancing/<entry>.md` on main).
- *   - `contended` (3): the push kept failing (main churning) — try again.
+ * Idempotent: a unified release of an already-absent ref reports `released` (the
+ * item is returned to rest with no held lock). Best-effort + never throws for the
+ * expected cases.
  */
 export async function releaseAdvancingLock(
 	options: ReleaseAdvancingLockOptions,
@@ -587,7 +302,6 @@ async function runRelease(
 	note: (m: string) => void,
 ): Promise<ReleaseAdvancingLockResult> {
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	const retries = options.retries ?? 3;
 	const cwd = options.cwd;
 	const env = options.env;
 
@@ -607,171 +321,35 @@ async function runRelease(
 			`no git remote named '${arbiter}' (set one, or pass --arbiter)`,
 		);
 	}
-	const by = options.by || (await resolveBy(cwd, env));
 
-	const marker = advancingMarkerPath(entry);
-	const releaseBranch = `advancing-release/${entry}`;
-
-	// CRASH-SAFETY (slice `advancing-lock-release-crash-safe`). A failing post-lock
-	// dispatch (recover/integrate hitting a rebase conflict, a build bailing mid-
-	// flight, …) can leave `cwd` mid-rebase or with uncommitted leftovers. The
-	// release itself uses a SCRATCH branch cut from `<arbiter>/main` (it never
-	// consumes the dirty content), so the dirt is INCIDENTAL — but the scratch
-	// checkout below refuses on a mid-rebase / locally-modified tree. Become
-	// checkout-able FIRST, NEVER destroying committed work: the kept work lives on
-	// the WORK BRANCH REF (commits), not on the dirty tree. `git rebase --abort`
-	// restores the pre-rebase tip; `git checkout HEAD -- .` + `git clean -fdq`
-	// clear ONLY uncommitted/untracked dispatch leftovers. NEVER `git reset --hard`
-	// (no branch-rewinding) — only the worktree dirt that was never committed is
-	// dropped. A happy path's clean tree makes this a no-op.
-	await makeCheckoutAble(cwd, env, note);
-
-	// The complement of the acquire's `acquireUnified`: for a TREE-LESS rung the
-	// unified lock (`action: advance`) was taken at acquire, so release it here. The
-	// marker is deleted FIRST (the loop below), then the lock, so a released item
-	// ends with NEITHER the marker NOR the lock. A no-op for the build/slice rungs
-	// (they never took the unified lock at the advance layer). Done on BOTH the
-	// marker `released` AND the marker `lost` (marker already absent) terminal
-	// states — either way the item is being returned to rest, so the lock must go;
-	// only `contended` (the marker may still be present) keeps it.
+	// BUILD/SLICE rung: nothing was held at the advance layer — a NO-OP `released`.
 	const releaseUnified = options.releaseUnified ?? false;
-	async function releaseHeldUnifiedLock(): Promise<void> {
-		if (!releaseUnified) {
-			return;
-		}
-		await releaseItemLock({item: options.item, cwd, arbiter, env});
-	}
-
-	const origRef = await originalRef(cwd, env);
-	try {
-		let i = 0;
-		// eslint-disable-next-line no-constant-condition
-		while (true) {
-			const result = await releaseAttempt({
-				entry,
-				by,
-				arbiter,
-				cwd,
-				env,
-				marker,
-				releaseBranch,
-				note,
-			});
-			if (result.kind === 'released') {
-				await releaseHeldUnifiedLock();
-				return {
-					exitCode: 0,
-					outcome: 'released',
-					message: result.message,
-					entry,
-				};
-			}
-			if (result.kind === 'lost') {
-				// The marker is already absent — still release the unified lock so a
-				// returned item never keeps an orphaned advance hold.
-				await releaseHeldUnifiedLock();
-				return {exitCode: 2, outcome: 'lost', message: result.message, entry};
-			}
-			// rejected: main moved under us — refetch, re-attempt, cap at retries.
-			i += 1;
-			if (i > retries) {
-				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
-				note(message);
-				return {exitCode: 3, outcome: 'contended', message, entry};
-			}
-			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
-		}
-	} finally {
-		await cleanup(cwd, origRef, releaseBranch, env);
-	}
-}
-
-interface ReleaseAttemptContext {
-	entry: string;
-	by: string;
-	arbiter: string;
-	cwd: string;
-	env: NodeJS.ProcessEnv | undefined;
-	marker: string;
-	releaseBranch: string;
-	note: (m: string) => void;
-}
-
-type ReleaseAttemptResult =
-	| {kind: 'released'; message: string}
-	| {kind: 'lost'; message: string}
-	| {kind: 'rejected'; message: string};
-
-/** One release attempt: branch off current main, rm the marker, CAS-push. */
-async function releaseAttempt(
-	ctx: ReleaseAttemptContext,
-): Promise<ReleaseAttemptResult> {
-	const {arbiter, entry, marker, releaseBranch, cwd, env, note} = ctx;
-
-	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-
-	// The lock must currently be held: work/advancing/<entry>.md present on main.
-	if (!(await catFileExists(`${arbiter}/main:${marker}`, cwd, env))) {
-		const message = `'${entry}' is not locked for advancing on ${arbiter}/main (no ${marker}) — nothing to release.`;
+	if (!releaseUnified) {
+		const message = `advancing borrow for '${entry}' released (no advance-layer hold to drop).`;
 		note(message);
-		return {kind: 'lost', message};
+		return {exitCode: 0, outcome: 'released', message, entry};
 	}
 
-	const base = (
-		await gitHard(['rev-parse', `${arbiter}/main`], cwd, env)
-	).stdout.trim();
-
-	// Fresh release branch on the CURRENT arbiter main, where we remove the marker.
-	await gitHard(
-		['checkout', '--quiet', '--detach', `${arbiter}/main`],
+	// TREE-LESS rung: delete the unified `action: advance` lock ref (idempotent —
+	// an already-absent ref is `not-held`, still mapped to `released`: the item is
+	// returned to rest with no held lock).
+	const released = await releaseItemLock({
+		item: options.item,
 		cwd,
-		env,
-	);
-	await gitSoft(['branch', '-D', releaseBranch], cwd, env);
-	await gitHard(
-		['checkout', '--quiet', '-b', releaseBranch, `${arbiter}/main`],
-		cwd,
-		env,
-	);
-
-	// Remove the marker. A failed rm must abort (fatal), never silently continue.
-	const rm = await gitSoft(['rm', '--quiet', '--', marker], cwd, env);
-	if (rm.status !== 0) {
-		throw new AdvancingLockUsageError(
-			`git rm failed for '${marker}' (unexpected — aborting release)`,
-		);
-	}
-
-	await gitHard(
-		['commit', '--quiet', '-m', `advancing: release ${entry} (by ${ctx.by})`],
-		cwd,
-		env,
-	);
-
-	const head = (await gitHard(['rev-parse', 'HEAD'], cwd, env)).stdout.trim();
-	if (head === base) {
-		throw new AdvancingLockUsageError(
-			'advancing-release commit is a no-op (nothing removed) — aborting',
-		);
-	}
-
-	// CAS-push the release through the seam (kind `advancing`, lease = current main).
-	const result = await ledgerWrite.applyTransition({
-		kind: 'advancing',
 		arbiter,
-		localBranch: releaseBranch,
-		expectedBase: base,
-		head,
-		cwd,
 		env,
-		note,
 	});
-	if (result.kind === 'published') {
-		const message = `RELEASED '${entry}' -> advancing borrow cleared on ${arbiter}/main (item untouched).`;
-		note(message);
-		return {kind: 'released', message};
+	if (released.outcome === 'error') {
+		throw new AdvancingLockUsageError(
+			`failed to release the item lock for '${entry}': ${released.message}`,
+		);
 	}
-	return {kind: 'rejected', message: result.message};
+	const message =
+		released.outcome === 'not-held'
+			? `advancing borrow for '${entry}' was already released (no lock held).`
+			: `RELEASED '${entry}' advancing borrow on ${arbiter} (item untouched).`;
+	note(message);
+	return {exitCode: 0, outcome: 'released', message, entry};
 }
 
 // --- New-item creation through the CAS ------------------------------------
@@ -831,8 +409,8 @@ type CreateAttemptResult =
  * drafts a new `work/backlog/<new-slug>.md`: the (unlikely) same-slug new-item race
  * needs NO special case — exactly one creator lands the file, the loser fails the
  * CAS (exit 2) and backs off. Same CAS-micro-commit / force-with-lease shape as the
- * locks; it is NOT a lock (it does not hold a borrow), it ATOMICALLY publishes a new
- * file iff that path is still absent on the arbiter.
+ * unified lock; it is NOT a lock (it does not hold a borrow), it ATOMICALLY publishes
+ * a new file iff that path is still absent on the arbiter.
  */
 export async function createItemThroughCas(
 	options: CreateItemThroughCasOptions,
@@ -1031,7 +609,7 @@ async function createAttempt(
 	return {kind: 'rejected', message: result.message};
 }
 
-// --- Shared helpers (same shape as claim-cas.ts / slicing-lock.ts) --------
+// --- Shared helpers (same shape as claim-cas.ts) --------------------------
 
 /** The branch (or detached HEAD sha) we should return to afterward. */
 async function originalRef(
@@ -1058,42 +636,6 @@ async function cleanup(
 ): Promise<void> {
 	await gitSoft(['checkout', '--quiet', origRef], cwd, env);
 	await gitSoft(['branch', '-D', branch], cwd, env);
-}
-
-/**
- * Become CHECKOUT-ABLE before the scratch-branch CAS runs (see the call site in
- * {@link runRelease}). A failing post-lock dispatch may leave `cwd` mid-rebase
- * or with uncommitted leftovers; the kept work lives on the WORK BRANCH REF
- * (commits), not on the dirty tree, so we restore the pre-rebase tip and clear
- * UNCOMMITTED dirt only — NEVER `git reset --hard`, NEVER any branch-rewinding,
- * NEVER discarding commits. A clean tree makes this a no-op (the happy path).
- */
-async function makeCheckoutAble(
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-	note: (m: string) => void,
-): Promise<void> {
-	const gitDirRel = (
-		await gitSoft(['rev-parse', '--git-dir'], cwd, env)
-	).stdout.trim();
-	if (gitDirRel !== '') {
-		const gitDirAbs = isAbsolute(gitDirRel) ? gitDirRel : join(cwd, gitDirRel);
-		if (
-			existsSync(join(gitDirAbs, 'rebase-merge')) ||
-			existsSync(join(gitDirAbs, 'rebase-apply'))
-		) {
-			note(
-				'advancing-release: aborting in-progress rebase to make the worktree ' +
-					'checkout-able (kept commits on the branch ref are preserved).',
-			);
-			await gitSoft(['rebase', '--abort'], cwd, env);
-		}
-	}
-	// Discard uncommitted dispatch leftovers in tracked files + the index, then
-	// untracked dropped files — making the scratch `git checkout` below proceed.
-	// The kept work is on the WORK BRANCH REF, so nothing recoverable is lost.
-	await gitSoft(['checkout', 'HEAD', '--', '.'], cwd, env);
-	await gitSoft(['clean', '-fdq'], cwd, env);
 }
 
 /** Resolve the advisory locker: git user.name, else $USER/$USERNAME, else ''. */

@@ -264,22 +264,23 @@ describe('run through performIntegration — one-slug-one-folder invariant FAILS
 	it("an 'invariant-violation' core outcome records needs-attention, NEVER claimed-done", async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feat']);
 		const {repo} = seeded;
-		// Corrupt the arbiter BEFORE the tick: add a stale needs-attention/feat.md
-		// (DISTINCT content from the live backlog copy, so the "provably-safe
-		// identical-content" auto-clean escape hatch does NOT apply) alongside the
-		// slug the run is about to claim. After the claim the arbiter holds 'feat' in
-		// TWO non-done status folders (in-progress/ from the claim + the planted
-		// needs-attention/) — the PR #86 corruption. The local done-move
-		// in-progress→done still has a clean `done/` destination, so it succeeds; the
-		// step-4 arbiter-resolved guard then reads `<arbiter>/main`, sees the slug in
-		// two folders with differing content, and returns `invariant-violation` (it
-		// integrates NOTHING). We assert `run` ROUTES that refusal to needs-attention
-		// rather than mis-recording a completed job.
+		// Corrupt the arbiter BEFORE the tick: add a stale dropped/feat.md (DISTINCT
+		// content from the live backlog copy, so the "provably-safe identical-content"
+		// auto-clean escape hatch does NOT apply) alongside the slug the run is about to
+		// claim+build. The arbiter then holds 'feat' in TWO DURABLE status folders
+		// (backlog/ — where the body rests — + the planted dropped/), the PR #86
+		// corruption. The step-4 arbiter-resolved guard reads `<arbiter>/main`, sees the
+		// slug in two folders with differing content, and returns `invariant-violation`
+		// (it integrates NOTHING). We assert `run` ROUTES that refusal to needs-attention
+		// rather than mis-recording a completed job. (The transient folders are retired
+		// from the lint set; the duplicate must be in the DURABLE set —
+		// backlog/done/dropped — to be detected. `dropped/` does not collide with the
+		// local backlog→done move, so the build runs and the arbiter guard refuses.)
 		const corrupt = seeded.clone('corrupt');
 		gitIn(['switch', '-q', '-c', 'corrupt/feat', 'arbiter/main'], corrupt);
-		mkdirSync(join(corrupt, 'work', 'needs-attention'), {recursive: true});
+		mkdirSync(join(corrupt, 'work', 'dropped'), {recursive: true});
 		writeFileSync(
-			join(corrupt, 'work', 'needs-attention', 'feat.md'),
+			join(corrupt, 'work', 'dropped', 'feat.md'),
 			'---\ntitle: feat\nslug: feat\n---\n\nA DIFFERENT, stale copy.\n',
 		);
 		gitIn(['add', '-A'], corrupt);
