@@ -46,6 +46,25 @@ The `git mv` is on-disk content relocation that the RUNNER/human owns at
 integration, but the work-tree state THIS slice produces (the moved files + the
 flipped constants) must be internally consistent and green.
 
+> FORWARD-POINTER (planted by the conductor, drive-backlog, after a prior attempt
+> lost its build and the runner was fixed in PR #175): this slice RENAMES the very
+> ledger folders the runner reads its OWN record from (`backlog/ -> tasks/todo/`,
+> `done/ -> tasks/done/`). The runner's `complete` now SURVIVES that (PR #175,
+> `complete-self-renaming-folder-slice`): when the slice's own record is at none of
+> the pre-rename ledger folders, it detects the record sitting in a `done`-LEAF
+> folder (so `work/tasks/done/<slug>.md` counts) and integrates the agent's tree
+> as-is, skipping its own `git mv`. For that to fire, YOU (the agent) must place
+> THIS slice's own ledger record at the NEW done-position as the final step of your
+> work: after you `git mv` the folders + flip the `work-layout` values, move this
+> slice's own record from `work/backlog/<this-slug>.md` to
+> `work/tasks/done/<this-slug>.md` (its terminal done-position under the new
+> layout) and `git add -A`. Do NOT leave your own record in `tasks/todo/` (the
+> renamed pool) or at the pre-rename `work/backlog/` — a record left in the pool is
+> treated as UNFINISHED and the runner will (correctly) refuse it. Land every OTHER
+> work item's record at the new-layout equivalent of wherever it currently rests
+> (a `backlog/` item -> `tasks/todo/`, etc.); only THIS in-flight slice goes to
+> `tasks/done/` because it is the one being completed.
+
 ## Acceptance criteria
 
 - [ ] `work-layout` resolves the notes regime to `notes/{observations,ideas,findings}`
