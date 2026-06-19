@@ -107,7 +107,6 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		const result = rebaseContinuedBranchOntoMain(
 			repo,
 			'arbiter/main',
-			'slice-alpha',
 			gitEnv(),
 		);
 		expect(result.kind).toBe('clean');
@@ -139,7 +138,6 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		const result = rebaseContinuedBranchOntoMain(
 			repo,
 			'arbiter/main',
-			'slice-alpha',
 			gitEnv(),
 		);
 		expect(result.kind).toBe('conflict');
@@ -152,376 +150,70 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		);
 	});
 
-	// --- Regression: drop runner-authored bookkeeping move-only commits -------
+	// --- Plain rebase: no transient status on the branch, nothing to drop -------
 	//
-	// Live failure shape: a kept work branch carries `chore(<slug>): route to
-	// needs-attention; <reason>` move-only commits (the runner's own surfacing
-	// bookkeeping). The runner ALSO tree-lessly advances `main`'s `.md` slot on
-	// the next claim (needs-attention→backlog→in-progress). A plain rebase replays
-	// the bookkeeping move onto a main that holds the slug in a DIFFERENT folder
-	// → rename/content conflict → needs-attention. The agent self-conflicted with
-	// the runner's own protocol bookkeeping. The fix DROPS those move-only
-	// commits on replay (slug-anchored subject match) so the wip / `→done` survive
-	// and replay cleanly. Genuine code conflicts (post-drop) still surface.
+	// After the per-item-lock cut-over (PRD `ledger-status-per-item-lock-refs`,
+	// slices 9a–9d) NO transient status lands on a work branch: claim does not move
+	// the body (it rests in `backlog/`), needs-attention is the lock `state: stuck`
+	// (not a `git mv`), and the slicing/advancing markers are gone. So a branch cut
+	// from `main` inherits NO runner-authored move-only bookkeeping commit, and a
+	// continue/rebase onto a freshly-advanced `main` is a PLAIN rebase — there is
+	// nothing to drop and no rename/rename ledger conflict. This proves the
+	// `drop-bookkeeping-rebase` machinery is genuinely dead (9d).
 
-	/** Move `work/<from>/<slug>.md` → `work/<to>/<slug>.md` on the checked-out
-	 * branch as a runner-style tree-less mv + commit, with the GIVEN subject. */
-	function moveLedger(
-		repo: string,
-		slug: string,
-		from: string,
-		to: string,
-		subject: string,
-	): void {
-		const toDir = join(repo, 'work', to);
-		mkdirSync(toDir, {recursive: true});
-		gitIn(['mv', `work/${from}/${slug}.md`, `work/${to}/${slug}.md`], repo);
-		gitIn(['commit', '-q', '-m', subject], repo);
-	}
-
-	/** Seed a repo with `work/in-progress/<slug>.md` so a ledger move has
-	 * something to move (mirrors the runner's claim state at the moment of
-	 * routing-to-needs-attention). Cuts a branch off main and switches HEAD to it. */
-	function seedInProgress(slug: string): {
-		repo: string;
-		arbiter: string;
-		branch: string;
-	} {
-		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [slug]);
-		const branch = `work/slice-${slug}`;
+	it('is a PLAIN continue-rebase: a branch carrying only agent work (the body stays in backlog/) replays clean onto a moved main with no ledger conflict', () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		// Move backlog→in-progress on MAIN first, push.
-		gitIn(['switch', '-q', 'main'], repo);
-		moveLedger(repo, slug, 'backlog', 'in-progress', `claim(${slug})`);
-		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-		// Cut work branch off main— the agent's starting point.
-		gitIn(['switch', '-q', '-c', branch, 'arbiter/main'], repo);
-		return {repo, arbiter, branch};
-	}
 
-	it("drops the kept branch's stale `route to needs-attention` move-only commits and replays cleanly (live regression)", () => {
-		const slug = 'slice-alpha';
-		const {repo, branch} = seedInProgress('alpha');
-
-		// Branch: a wip code commit, then TWO runner-authored route-to-needs-attention
-		// move-only commits (mirroring the live trace 61ea593 + 9e9847c).
+		// The body RESTS in `backlog/` on main (claim no longer moves it, slice 9a).
+		// Cut the work branch off main — it inherits the SAME `work/backlog/alpha.md`
+		// main has, so there is NO transient-status file unique to the branch.
+		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
 		writeFileSync(join(repo, 'feature.txt'), 'agent feature\n');
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip(slice-alpha): agent feature'], repo);
-		const wipSha = gitIn(['rev-parse', 'HEAD'], repo).trim();
-		moveLedger(
-			repo,
-			'alpha',
-			'in-progress',
-			'needs-attention',
-			`chore(${slug}): route to needs-attention; acceptance gate failed (exit 1)`,
-		);
-		// A SECOND route-NA commit (a re-route). It moves needs-attention→needs-attention
-		// in the live trace via edits to the body; here we just edit the body in place
-		// to keep the test focused on the SUBJECT-anchored sed (the dropping logic).
-		writeFileSync(
-			join(repo, 'work', 'needs-attention', `alpha.md`),
-			readFileSync(join(repo, 'work', 'needs-attention', 'alpha.md'), 'utf8') +
-				'\n## Needs attention\n\ncontinuing the kept rebase conflicted\n',
-		);
-		gitIn(['add', '-A'], repo);
-		gitIn(
-			[
-				'commit',
-				'-q',
-				'-m',
-				`chore(${slug}): route to needs-attention; continuing the kept rebase conflicted`,
-			],
-			repo,
-		);
+		gitIn(['commit', '-q', '-m', 'wip(alpha): agent feature'], repo);
 
-		// Main moves the ledger tree-lessly: needs-attention→backlog→in-progress
-		// (the requeue + next-claim sequence). A plain rebase of the branch's two
-		// move-only commits onto this main would conflict; the drop avoids it.
+		// main advances DURABLY and independently: another slice lands a durable
+		// `backlog → done` move for a SIBLING item + an unrelated content change. None
+		// of this touches our slug's `backlog/alpha.md`, so a plain replay is clean.
 		gitIn(['switch', '-q', 'main'], repo);
-		moveLedger(
-			repo,
-			'alpha',
-			'in-progress',
-			'needs-attention',
-			`chore(${slug}): route to needs-attention; surfaced by runner`,
-		);
-		moveLedger(repo, 'alpha', 'needs-attention', 'backlog', `requeue(${slug})`);
-		moveLedger(
-			repo,
-			'alpha',
-			'backlog',
-			'in-progress',
-			`claim(${slug}) re-claim`,
-		);
-		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-
-		gitIn(['switch', '-q', branch], repo);
-		const result = rebaseContinuedBranchOntoMain(
-			repo,
-			'arbiter/main',
-			slug,
-			gitEnv(),
-		);
-		expect(result.kind).toBe('clean');
-		// The wip code commit was preserved (feature.txt content reachable).
-		expect(readFileSync(join(repo, 'feature.txt'), 'utf8')).toBe(
-			'agent feature\n',
-		);
-		// The slug's `.md` is in `work/in-progress/` (from main), NOT `needs-attention/`
-		// (the bookkeeping commits that moved it there were dropped).
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			true,
-		);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(
-			false,
-		);
-		// No `route to needs-attention` commit survives anywhere in the rebased history.
-		const subjects = gitIn(['log', '--format=%s', `arbiter/main..HEAD`], repo);
-		expect(subjects).not.toMatch(/route to needs-attention/);
-		// The wip's SHA was rewritten (rebased onto a moved main), so it differs.
-		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).not.toBe(wipSha);
-	});
-
-	it('preserves an UNRELATED-slug `route to needs-attention` bookkeeping commit (slug-anchored drop)', () => {
-		const slug = 'slice-alpha';
-		const {repo, branch} = seedInProgress('alpha');
-
-		// On the branch: a wip commit, then a route-NA commit for ANOTHER slug.
-		writeFileSync(join(repo, 'feature.txt'), 'agent feature\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip(slice-alpha): feature'], repo);
-		// Seed work/in-progress/beta.md so a route-NA for `beta` has something to move.
-		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'done'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'in-progress', 'beta.md'),
+			join(repo, 'work', 'backlog', 'beta.md'),
 			'---\nslug: beta\n---\nbeta\n',
 		);
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip: seed beta'], repo);
-		moveLedger(
-			repo,
-			'beta',
-			'in-progress',
-			'needs-attention',
-			`chore(slice-beta): route to needs-attention; unrelated`,
-		);
-
-		// Main moves only OUR slug, leaving beta alone.
-		gitIn(['switch', '-q', 'main'], repo);
-		moveLedger(repo, 'alpha', 'in-progress', 'backlog', `requeue(${slug})`);
-		moveLedger(repo, 'alpha', 'backlog', 'in-progress', `claim(${slug})`);
-		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-
-		gitIn(['switch', '-q', branch], repo);
-		const result = rebaseContinuedBranchOntoMain(
-			repo,
-			'arbiter/main',
-			slug,
-			gitEnv(),
-		);
-		expect(result.kind).toBe('clean');
-		// The OTHER slug's route-NA commit was NOT dropped (different slug in subject).
-		const subjects = gitIn(['log', '--format=%s', `arbiter/main..HEAD`], repo);
-		expect(subjects).toMatch(/chore\(slice-beta\): route to needs-attention/);
-	});
-
-	it('still surfaces a GENUINE code conflict (after dropping bookkeeping)', () => {
-		const slug = 'slice-alpha';
-		const {repo, branch} = seedInProgress('alpha');
-
-		// Branch: wip edits shared.txt one way + a bookkeeping route-NA move.
-		writeFileSync(join(repo, 'shared.txt'), 'branch version\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip(slice-alpha): edits shared'], repo);
-		moveLedger(
-			repo,
-			'alpha',
-			'in-progress',
-			'needs-attention',
-			`chore(${slug}): route to needs-attention; gate failed`,
-		);
-
-		// Main edits the SAME file differently — a real CODE conflict.
-		gitIn(['switch', '-q', 'main'], repo);
-		writeFileSync(join(repo, 'shared.txt'), 'main version\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'main edits shared'], repo);
-		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-
-		gitIn(['switch', '-q', branch], repo);
-		const result = rebaseContinuedBranchOntoMain(
-			repo,
-			'arbiter/main',
-			slug,
-			gitEnv(),
-		);
-		expect(result.kind).toBe('conflict');
-		// The rebase was aborted (no rebase-in-progress dir), HEAD is clean on branch.
-		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
-		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim()).toBe(
-			branch,
-		);
-	});
-
-	it('NEVER drops a completed-state `→done` move (atomicity invariant)', () => {
-		const slug = 'slice-alpha';
-		const {repo, branch} = seedInProgress('alpha');
-
-		// Branch: wip code + a `→done` lifecycle move (the slug landed done with
-		// its code) + a later spurious `route to needs-attention` bookkeeping move.
-		writeFileSync(join(repo, 'feature.txt'), 'agent feature\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', `feat(${slug}): agent feature`], repo);
-		moveLedger(
-			repo,
-			'alpha',
-			'in-progress',
-			'done',
-			`feat(${slug}): agent feature; done`,
-		);
-		moveLedger(
-			repo,
-			'alpha',
-			'done',
-			'needs-attention',
-			`chore(${slug}): route to needs-attention; post-done re-route`,
-		);
-
-		// Main: tree-lessly moves the ledger needs-attention→backlog→in-progress
-		// (requeue+claim) so the route-NA on the branch would conflict.
-		gitIn(['switch', '-q', 'main'], repo);
-		moveLedger(
-			repo,
-			'alpha',
-			'in-progress',
-			'needs-attention',
-			`chore(${slug}): route to needs-attention; surfaced`,
-		);
-		moveLedger(repo, 'alpha', 'needs-attention', 'backlog', `requeue(${slug})`);
-		moveLedger(repo, 'alpha', 'backlog', 'in-progress', `claim(${slug})`);
-		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-
-		gitIn(['switch', '-q', branch], repo);
-		const result = rebaseContinuedBranchOntoMain(
-			repo,
-			'arbiter/main',
-			slug,
-			gitEnv(),
-		);
-		expect(result.kind).toBe('clean');
-		// The `→done` move SURVIVED: the slug's `.md` lands in `work/done/` with
-		// the code, atomically (the artifact the done-move asserts).
-		expect(existsSync(join(repo, 'work', 'done', 'alpha.md'))).toBe(true);
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
-			false,
-		);
-		expect(readFileSync(join(repo, 'feature.txt'), 'utf8')).toBe(
-			'agent feature\n',
-		);
-		// And the `route to needs-attention` commits are gone; the `feat … done` is not.
-		const subjects = gitIn(['log', '--format=%s', `arbiter/main..HEAD`], repo);
-		expect(subjects).not.toMatch(/route to needs-attention/);
-		expect(subjects).toMatch(new RegExp(`feat\\(${slug}\\).*done`));
-	});
-
-	it('drops INTERLEAVED bookkeeping commits, preserving every wip / `→done` in order', () => {
-		const slug = 'slice-alpha';
-		const {repo, branch} = seedInProgress('alpha');
-
-		// Branch shape (matches the real live shape: route-NA bodies don't move the
-		// `.md` between wips — only the first surface does the actual mv; subsequent
-		// route-NA commits just re-stamp the reason body in place):
-		//   wip-1 (a.txt) → route-NA → wip-2 (b.txt) → route-NA (body re-stamp)
-		//                                                 → done-move (→done)
-		writeFileSync(join(repo, 'a.txt'), 'wip-1\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip(slice-alpha): step 1'], repo);
-		moveLedger(
-			repo,
-			'alpha',
-			'in-progress',
-			'needs-attention',
-			`chore(${slug}): route to needs-attention; first surface`,
-		);
-		writeFileSync(join(repo, 'b.txt'), 'wip-2\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip(slice-alpha): step 2'], repo);
-		// A second route-NA that just edits the .md body in place (the re-route
-		// pattern observed live), NOT a second mv. Subject still matches the anchor.
-		writeFileSync(
-			join(repo, 'work', 'needs-attention', 'alpha.md'),
-			'slug: alpha\nupdated reason\n',
-		);
-		gitIn(['add', '-A'], repo);
-		gitIn(
-			[
-				'commit',
-				'-q',
-				'-m',
-				`chore(${slug}): route to needs-attention; second surface`,
-			],
-			repo,
-		);
-
-		// Main: tree-lessly progress to in-progress (so the slug `.md` survives on main).
-		gitIn(['switch', '-q', 'main'], repo);
-		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-
-		gitIn(['switch', '-q', branch], repo);
-		const result = rebaseContinuedBranchOntoMain(
-			repo,
-			'arbiter/main',
-			slug,
-			gitEnv(),
-		);
-		expect(result.kind).toBe('clean');
-		// Every wip file is present in the final tree (a.txt + b.txt).
-		expect(readFileSync(join(repo, 'a.txt'), 'utf8')).toBe('wip-1\n');
-		expect(readFileSync(join(repo, 'b.txt'), 'utf8')).toBe('wip-2\n');
-		// Subjects: NO route-NA, BOTH wip commits remain in order.
-		const subjects = gitIn(
-			['log', '--format=%s', '--reverse', `arbiter/main..HEAD`],
-			repo,
-		)
-			.split('\n')
-			.filter((l) => l.trim() !== '');
-		expect(subjects.some((s) => /route to needs-attention/.test(s))).toBe(
-			false,
-		);
-		const wipIdx1 = subjects.findIndex((s) => /step 1/.test(s));
-		const wipIdx2 = subjects.findIndex((s) => /step 2/.test(s));
-		expect(wipIdx1).toBeGreaterThanOrEqual(0);
-		expect(wipIdx2).toBeGreaterThan(wipIdx1);
-	});
-
-	it('degrades to a plain rebase when slug is empty (back-compat for non-slice callers)', () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		gitIn(['fetch', '-q', 'arbiter'], repo);
-		gitIn(['switch', '-q', '-c', 'work/slice-alpha', 'arbiter/main'], repo);
-		writeFileSync(join(repo, 'feature.txt'), 'f\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'wip'], repo);
-		gitIn(['switch', '-q', 'main'], repo);
-		writeFileSync(join(repo, 'unrelated.txt'), 'u\n');
+		gitIn(['commit', '-q', '-m', 'seed beta'], repo);
+		gitIn(['mv', 'work/backlog/beta.md', 'work/done/beta.md'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(beta): sibling; done'], repo);
+		writeFileSync(join(repo, 'unrelated.txt'), 'unrelated main change\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'main moved'], repo);
 		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		// The continue-rebase is now a PLAIN rebase (no drop step).
 		gitIn(['switch', '-q', 'work/slice-alpha'], repo);
 		const result = rebaseContinuedBranchOntoMain(
 			repo,
 			'arbiter/main',
-			'',
 			gitEnv(),
 		);
 		expect(result.kind).toBe('clean');
+
+		// The agent's wip replayed onto the moved main; main's durable moves came
+		// along; our slug's body is STILL in backlog/ (it never had a transient move).
+		expect(readFileSync(join(repo, 'feature.txt'), 'utf8')).toBe(
+			'agent feature\n',
+		);
+		expect(existsSync(join(repo, 'unrelated.txt'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'done', 'beta.md'))).toBe(true);
+		expect(existsSync(join(repo, 'work', 'backlog', 'alpha.md'))).toBe(true);
+		// No needs-attention / transient move ever existed on the branch to conflict.
+		const subjects = gitIn(['log', '--format=%s', 'arbiter/main..HEAD'], repo);
+		expect(subjects).not.toMatch(/route to needs-attention/);
+		expect(subjects).toMatch(/wip\(alpha\): agent feature/);
 	});
 });
 
@@ -605,7 +297,6 @@ describe('pushContinuedBranchWithStaleLeaseRetry', () => {
 			arbiter: 'origin',
 			mainRef: 'main',
 			expectedRemoteTip: fetchedTip,
-			slug: 'happy',
 			env: gitEnv(),
 		});
 		expect(result.kind).toBe('pushed');
@@ -631,7 +322,6 @@ describe('pushContinuedBranchWithStaleLeaseRetry', () => {
 			arbiter: 'origin',
 			mainRef: 'main',
 			expectedRemoteTip: fetchedTip,
-			slug: 'happy',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -673,7 +363,6 @@ describe('pushContinuedBranchWithStaleLeaseRetry', () => {
 			arbiter: 'origin',
 			mainRef: 'main',
 			expectedRemoteTip: fetchedTip,
-			slug: 'happy',
 			env: gitEnv(),
 		});
 		expect(result.kind).toBe('conflict');
@@ -703,7 +392,6 @@ describe('pushContinuedBranchWithStaleLeaseRetry', () => {
 				arbiter: 'origin',
 				mainRef: 'main',
 				expectedRemoteTip: fetchedTip,
-				slug: 'happy',
 				retries: 0,
 				env: gitEnv(),
 			}),
@@ -733,7 +421,6 @@ describe('pushContinuedBranchWithStaleLeaseRetry', () => {
 				arbiter: 'origin',
 				mainRef: 'main',
 				expectedRemoteTip: fetchedTip,
-				slug: 'happy',
 				env: tracedEnv,
 			}),
 		);

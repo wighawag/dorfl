@@ -9,7 +9,6 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
-import {BOOKKEEPING_TRAILER} from './drop-bookkeeping-rebase.js';
 import {
 	releaseItemLock,
 	readItemLock,
@@ -359,13 +358,13 @@ export async function routeToNeedsAttention(
 	gitHard(['add', '-A'], cwd, env);
 	const hadWip = !nothingStaged(cwd, env);
 	if (hadWip) {
-		// Stamp the durable `Agent-Runner-Bookkeeping` git TRAILER on the wip commit
-		// (a blank line separates it from the subject so git parses it as a trailer).
-		// It marks the commit for the drop-rebase machinery the same way the old
-		// move-only commit was marked, so a kept branch carrying this wip rebases
-		// cleanly. (No `needs-attention/` move lands on the branch anymore — this slice
-		// is what MAKES the drop-rebase deletable, 9d.)
-		const wipBody = `chore(${slug}): save aborted work (wip)\n\n${BOOKKEEPING_TRAILER}`;
+		// Save the agent's uncommitted work as a plain wip commit on the work-branch
+		// tip (the RECOVERABLE half — a `requeue` continues from it). No bookkeeping
+		// trailer: after the per-item-lock cut-over (slices 9a–9d) NO transient status
+		// (no `needs-attention/` move-only commit) lands on a branch, so a branch cut
+		// from `main` rebases PLAINLY with nothing to drop — the `drop-bookkeeping-rebase`
+		// machinery and its `Agent-Runner-Bookkeeping` trailer are gone (9d).
+		const wipBody = `chore(${slug}): save aborted work (wip)`;
 		gitHard(['commit', '-q', '-m', wipBody], cwd, env);
 	}
 	const commitMessage = `chore(${slug}): bounce to stuck; ${options.reason}`;
@@ -1104,174 +1103,6 @@ async function listMarkdownSlugsInTree(
 		.sort();
 }
 
-/**
- * Surface a stuck in-progress item to `needs-attention/` TREE-LESSLY — the
- * SURFACE-direction sibling of {@link returnToBacklog}, sharing its EXACT
- * tree-less recipe ({@link runTreelessLedgerMove}): fetch `<arbiter>/main`, build
- * the one-file `work/in-progress/<slug>.md → work/needs-attention/<slug>.md` move
- * (with the reason appended to its BODY) on a SCRATCH INDEX, point a throwaway
- * ref at the commit, and CAS-publish it via `ledgerWrite.applyTransition` —
- * touching NO worktree/HEAD/index. The reverse of `requeue`'s tree-less move, the
- * same mechanism.
- *
- * The home for the AFTER-COMMIT, LEDGER-ONLY surfaces (continue-push-failure +
- * continue-rebase-conflict): the work is ALREADY committed on the kept
- * `work/<slug>` branch (intact on the arbiter, recoverable), so the surface is
- * PURELY the one-file ledger move + reason — it needs no `pushBranch` and no
- * checkout. It is NOT for the wip-save / gate-failed / agent-failed surfaces,
- * which may carry UN-committed work that needs the cwd commit path
- * ({@link routeToNeedsAttention}); the tree-less move only relocates a committed
- * `.md`.
- *
- * REQUIRES an arbiter (the tree-less CAS needs a ref to push to). NEVER throws
- * for the expected "not on the arbiter" / contention-exhausted cases — it returns
- * `{moved: false, reasonNotMoved}`.
- */
-export async function surfaceToNeedsAttention(
-	options: SurfaceToNeedsAttentionOptions,
-): Promise<SurfaceToNeedsAttentionResult> {
-	const note = options.note ?? (() => {});
-	const {cwd, slug, reason, questions, env} = options;
-
-	if (!options.arbiter) {
-		return {
-			moved: false,
-			reasonNotMoved:
-				`surface for '${slug}' needs an --arbiter: the move is published as a ` +
-				'tree-less compare-and-swap to the arbiter ref (like requeue/claim), so ' +
-				'there is no local-only mode — pass --arbiter.',
-		};
-	}
-	const arbiter = options.arbiter;
-
-	if (
-		(await gitSoftAsync(['remote', 'get-url', arbiter], cwd, env)).status !== 0
-	) {
-		return {
-			moved: false,
-			reasonNotMoved: `no git remote named '${arbiter}' (set one, or pass --arbiter).`,
-		};
-	}
-
-	// Refresh the remote-tracking `<arbiter>/main` so the source-residence probe +
-	// the CAS base see the arbiter's TRUTH. EXPLICIT refspec
-	// (`+refs/heads/main:refs/remotes/<arbiter>/main`): the surface runs from a JOB
-	// WORKTREE whose remote may not map `main → refs/remotes/<arbiter>/main` under a
-	// plain fetch (a bare-mirror worktree), so we name it (mirrors
-	// `publishSurfaceCommit`). A fetch, not a checkout — the working tree is untouched.
-	await gitSoftAsync(
-		[
-			'fetch',
-			'--quiet',
-			arbiter,
-			`+refs/heads/main:refs/remotes/${arbiter}/main`,
-		],
-		cwd,
-		env,
-	);
-
-	// Probe up front purely for the EARLY-EXIT message (the per-attempt `plan` is
-	// the authoritative resolution against the live base). At the after-commit
-	// surface sites the claim landed, so the item is in `in-progress/`; an
-	// `needs-attention/` source is an IDEMPOTENT re-surface. Absent from BOTH ⇒
-	// nothing to surface.
-	const sourceRel = await resolveSurfaceSourceRel(arbiter, slug, cwd, env);
-	if (!sourceRel) {
-		const message =
-			`'${slug}' is in none of work/backlog/, work/in-progress/, or ` +
-			`work/needs-attention/ on ${arbiter}/main — nothing to surface to ` +
-			'needs-attention (wrong slug, or not claimed?).';
-		note(message);
-		return {moved: false, reasonNotMoved: message};
-	}
-	const destRel = `work/needs-attention/${slug}.md`;
-	// The body now RESTS in `backlog/` while claimed (slice
-	// `cutover-claim-body-stays-and-complete-sources-from-backlog`); `in-progress/`
-	// is the legacy landed-claim source. Probe `backlog/` FIRST in the per-attempt
-	// planner (the same order `resolveSurfaceSourceRel` uses).
-	const backlogRel = `work/backlog/${slug}.md`;
-	const inProgressRel = `work/in-progress/${slug}.md`;
-
-	const commitMessage = `chore(${slug}): route to needs-attention; ${reason}`;
-	// The message handed to `commit-tree` carries the durable
-	// `Agent-Runner-Bookkeeping: route-to-needs-attention` git TRAILER (blank line
-	// before it so git parses it as a trailer, distinct from the reason prose) —
-	// the SAME mark the in-worktree author site stamps, so BOTH move-only author
-	// sites produce a trailer'd commit the rebase drop identifies by plumbing
-	// (never by the version-unstable rendered todo). The returned `commitMessage`
-	// stays the bare subject for reporting; the trailer lives on the COMMIT.
-	const commitBody = `${commitMessage}\n\n${BOOKKEEPING_TRAILER}`;
-	// Append the reason (+ any surfaced questions) to the item BODY before the move
-	// — the PURE-string sibling of `appendReasonBlock`, applied to the blob read off
-	// `<arbiter>/main` (never a cwd file). Idempotent on a re-surface whose body
-	// already ends with this exact reason block.
-	const transformBody = (body: string): string =>
-		appendReasonBlockText(body, reason, questions);
-	const moved = await runTreelessLedgerMove({
-		cwd,
-		slug,
-		arbiter,
-		kind: 'needs-attention',
-		onContended: 'surface',
-		// The surface runs from a job worktree; name the main refspec so
-		// `<arbiter>/main` resolves even when the remote's default refspec does not
-		// map it (a bare-mirror worktree).
-		explicitMainRefspec: true,
-		env,
-		note,
-		// Plan FRESH per attempt against the live base. If the item is ALREADY at the
-		// destination with the reason block present, a prior attempt landed (or it is
-		// an idempotent re-surface) → done, no push (never thrash the file). Otherwise
-		// move from wherever it currently is (in-progress, OR needs-attention for an
-		// idempotent reason-refresh) to needs-attention with the reason appended.
-		plan: (base) => {
-			const atDest = pathInCommit(base, destRel, cwd, env);
-			const src = atDest
-				? destRel
-				: pathInCommit(base, backlogRel, cwd, env)
-					? backlogRel
-					: pathInCommit(base, inProgressRel, cwd, env)
-						? inProgressRel
-						: undefined;
-			if (!src) {
-				return 'missing';
-			}
-			if (atDest) {
-				// Already surfaced: skip if the reason block is already present (the
-				// idempotent re-surface), else refresh the body in place at dest.
-				const body = catBlob(`${base}:${destRel}`, cwd, env);
-				if (transformBody(body) === body) {
-					return 'already-done';
-				}
-			}
-			return prepareTreelessMoveCommit({
-				cwd,
-				slug,
-				base,
-				sourceRel: src,
-				destRel,
-				transformBody,
-				// The trailer'd message (subject + Agent-Runner-Bookkeeping trailer) is
-				// what gets committed; the bare `commitMessage` is returned for reporting.
-				commitMessage: commitBody,
-				refNamespace: 'surface',
-				env,
-			});
-		},
-	});
-	if (moved) {
-		note(`Surfaced '${slug}' to needs-attention: ${reason}`);
-		return {moved: true, commitMessage};
-	}
-
-	const message2 =
-		`surface for '${slug}': the arbiter's main kept moving (contended) after ` +
-		`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in in-progress (no ` +
-		'surface). Try again shortly.';
-	note(message2);
-	return {moved: false, reasonNotMoved: message2};
-}
-
 /** The contention-retry cap shared by the tree-less requeue + surface moves. */
 const TREELESS_CONTENTION_ATTEMPTS = 5;
 
@@ -1425,43 +1256,6 @@ async function resolveRequeueSourceRel(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string | undefined> {
 	for (const folder of ['needs-attention', 'in-progress']) {
-		const rel = `work/${folder}/${slug}.md`;
-		if (
-			(
-				await gitSoftAsync(
-					['cat-file', '-e', `${arbiter}/main:${rel}`],
-					cwd,
-					env,
-				)
-			).status === 0
-		) {
-			return rel;
-		}
-	}
-	return undefined;
-}
-
-/**
- * Resolve the slug's ACTUAL current folder ON THE ARBITER for a SURFACE source
- * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). Since claim no
- * longer moves the body (slice
- * `cutover-claim-body-stays-and-complete-sources-from-backlog`), a CLAIMED-AND-
- * IN-FLIGHT item RESTS in `backlog/` on the arbiter — so the after-commit surface
- * sites (autonomous strand / continue-conflict) source the move from there;
- * `in-progress/` is retained for the legacy landed-claim surfaces, and an
- * `needs-attention/` source is an IDEMPOTENT re-surface (the
- * continue-rebase-conflict re-route of an item the arbiter already shows
- * surfaced). Returns the source `work/<folder>/<slug>.md` rel path, or `undefined`
- * when the slug is in NONE. `backlog/` is probed FIRST (the body-stays reality);
- * the one-slug-one-folder invariant means at most one holds it.
- */
-async function resolveSurfaceSourceRel(
-	arbiter: string,
-	slug: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string | undefined> {
-	for (const folder of ['backlog', 'in-progress', 'needs-attention']) {
 		const rel = `work/${folder}/${slug}.md`;
 		if (
 			(

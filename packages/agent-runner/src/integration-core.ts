@@ -25,7 +25,6 @@ import {parseFrontmatter} from './frontmatter.js';
 import {git, run, runAsync, type RunResult} from './git.js';
 import {workBranchRef} from './slug-namespace.js';
 import {isAncestor} from './gc.js';
-import {rebaseDroppingBookkeepingMoves} from './drop-bookkeeping-rebase.js';
 
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
@@ -942,12 +941,18 @@ export async function performIntegration(
 					};
 				}
 			}
-			// A SLICING transition (a non-slice `lifecycle`) never recovers a surfaced
-			// needs-attention move, so it always uses the plain rebase.
-			const rebase =
-				recovering && !lifecycle
-					? await rebaseDroppingNeedsAttentionSurface(cwd, arbiter, slug, env)
-					: await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+			// PLAIN rebase. After the per-item-lock cut-over (PRD
+			// `ledger-status-per-item-lock-refs`, slices 9a–9d) no transient status
+			// lands on a work branch: needs-attention is the lock `state: stuck` (not a
+			// `git mv` to `needs-attention/`), the body rests in `backlog/` while
+			// claimed, and the slicing/advancing markers are gone. So a recovery
+			// complete's kept branch carries NO historical route-to-needs-attention
+			// move-only commit to drop — the old `rebaseDroppingNeedsAttentionSurface`
+			// (drop-bookkeeping-rebase) is deleted and BOTH recovering and lifecycle
+			// rebases are the same plain replay onto `<arbiter>/main`.
+			void recovering;
+			void lifecycle;
+			const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
 			if (rebase.status !== 0) {
 				// NEVER auto-resolve a genuine CODE conflict. But FIRST, a SIBLING-SLUG
 				// LEDGER conflict (the replay conflicts ONLY on OTHER slugs'
@@ -1928,54 +1933,6 @@ async function stagedCaptureNotes(
 		.map((line) => line.trim())
 		.filter((path) => CAPTURE_NOTE_DIRS.some((dir) => path.startsWith(dir)))
 		.sort();
-}
-
-/**
- * The RECOVERY rebase: rebase the work branch onto `<arbiter>/main` while
- * DROPPING the historical `in-progress → needs-attention` move-only commit, so
- * the replay does not conflict with the surfaced needs-attention state already
- * on `main`.
- *
- * The work branch (as the autonomous `do`/`run` path left it) carries, ABOVE the
- * claim-time main: a `wip` commit (the aborted agent work), the route-to-
- * needs-attention `chore(<slug>): route to needs-attention; …` MOVE-ONLY commit,
- * and (just committed by `complete`) the `needs-attention → done` done-move. The
- * arbiter's `main` was surfaced to ALSO hold the item in needs-attention/, so a
- * plain rebase replays the historical move-only commit (in-progress → needs-
- * attention) onto a main that has no in-progress/<slug>.md → conflict.
- *
- * We rebase the whole range `(merge-base, HEAD]` `--onto <arbiter>/main`,
- * IDENTIFYING the move-only commit by its durable `Agent-Runner-Bookkeeping`
- * trailer (read via plumbing) and DRIVING the rebase from a self-generated
- * `pick <fullsha>` todo that omits it — never matching git's version-unstable
- * rendered todo text (see `drop-bookkeeping-rebase.ts`). The remaining
- * `wip + (needs-attention → done)` replays cleanly: wip touches only the agent's
- * files, and the done-move's `git mv work/needs-attention/<slug>.md →
- * work/done/<slug>.md` applies because the surfaced main HAS the item in
- * needs-attention/. Result: the done-move supersedes the surfaced state, and the
- * human never sees a conflict.
- *
- * When the branch carries NO such move-only commit (e.g. a needs-attention item
- * placed by hand, never autonomously surfaced), the regenerated todo keeps every
- * commit and this degrades to a normal rebase. The seam returns the rebase
- * RunResult so the caller's existing conflict-abort path handles a genuine
- * (non-surface) conflict unchanged.
- */
-async function rebaseDroppingNeedsAttentionSurface(
-	cwd: string,
-	arbiter: string,
-	slug: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<RunResult> {
-	// Delegate to the SHARED drop-mechanism (`drop-bookkeeping-rebase.ts`) — ONE
-	// home for the trailer-identify / sha-driven drop logic, called at both rebase
-	// sites (the onboard continue-rebase in `continue-branch.ts` calls the same helper).
-	return rebaseDroppingBookkeepingMoves({
-		cwd,
-		ontoRef: `${arbiter}/main`,
-		slug,
-		env,
-	});
 }
 
 /**
