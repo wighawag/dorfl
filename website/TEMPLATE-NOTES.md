@@ -126,11 +126,28 @@ not recorded as drift.
   AGENTS.md framing itself states `website/` "is just another workspace member", so
   this is the wiring that makes that true. It is the minimal possible root touch
   (one line) and changes nothing about the existing `packages/*` members.
-- **Reviewer note:** This is the only file changed outside `website/`. The root
-  build/format scripts are scoped to `./packages/*`, so adding `website` to the
-  workspace does NOT pull the site into the CLI's `pnpm -r build`/`test` unless you
-  choose to. The site has its own `build` / `check` / `format` / `format:check`
+- **Reviewer note:** The root `build`/`dev` scripts stay scoped to `./packages/*`,
+  so adding `website` to the workspace does NOT pull the site into the CLI's
+  `build`/`dev`. The site has its own `build` / `check` / `format` / `format:check`
   scripts.
+
+### R2. Wired the website's format gate into the root `format` / `format:check`
+
+- **What:** The root `format` / `format:check` scripts now run
+  `prettier --write/--check .` AND then delegate into the website
+  (`&& pnpm --filter @agent-runner/website format[:check]`). Also added `website/`
+  to the **root** `.prettierignore`.
+- **Why:** The root prettier config has no plugins, but `website/.prettierrc`
+  declares `prettier-plugin-svelte` / `-tailwindcss`. When root `prettier --check .`
+  descended into `website/` it picked up that config and crashed with
+  "Cannot find package 'prettier-plugin-svelte'". Ignoring `website/` at root alone
+  would leave the site UNCHECKED by the repo gate, so instead the root gate skips it
+  with root-prettier and re-enters it through the website's OWN format script (which
+  has the plugins). The site stays covered by `pnpm format:check`, using its own
+  config.
+- **Reviewer note:** This touches two more root files (`package.json` scripts,
+  `.prettierignore`). Self-contained nested workspaces with their own prettier
+  plugin set are a general monorepo gotcha (see backport candidate B5).
 
 ## Candidate backports to `template-svelte-tailwind`
 
@@ -153,6 +170,16 @@ A short, actionable list for the human (we do not apply these):
   sizes" recipe. A tiny script (or documented `magick` one-liners) for
   `favicon.png` (32), `icon.png` (512 / apple-touch), and `og-image.png`
   (1200x630, on brand bg) would save every instantiation from hand-rolling it.
+
+- **B5 — Document the nested-prettier-plugin gotcha for monorepo instantiations.**
+  When a workspace member (like this site) brings its own `prettier-plugin-svelte` /
+  `-tailwindcss` but the monorepo root prettier does not, a root `prettier --check .`
+  crashes the moment it descends into the member. The fix is twofold: ignore the
+  member in the ROOT `.prettierignore` AND delegate the root `format` /
+  `format:check` into the member's own format script. The `web/`-wrapped template
+  sidesteps this by living one level down; a flat workspace member (the
+  monorepo-already case this site is) needs the wiring spelled out. Worth a note in
+  the template's monorepo/adoption docs.
 
 - **B4 — Confirm the template's `tsconfig`/`svelte.config`/`vite.config` trio is
   the canonical minimal set.** What we used here (copied from `pi-remote/site`:

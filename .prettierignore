@@ -4,3 +4,8 @@ pnpm-lock.yaml
 *.json
 *.md
 !skills/**/*.md
+
+# website/ is a self-contained workspace member with its own prettier config
+# (it declares prettier-plugin-svelte / -tailwindcss, not installed at root) and
+# its own format:check. The root gate must not descend into it.
+website/
