@@ -214,7 +214,7 @@ export interface IntegrationCoreInput {
 	 * {@link committedRecovery} only when it is CLEAN; they cannot both be set
 	 * for the same call). See `docs/adr/continue-build-already-done-moved.md`.
 	 */
-	source: 'backlog' | 'in-progress' | 'needs-attention' | 'done';
+	source: 'tasks-todo' | 'in-progress' | 'needs-attention' | 'done';
 	/**
 	 * True iff completing FROM `needs-attention/` (a recovery finish). A red re-gate
 	 * here keeps the item in needs-attention/ (no re-route); the rebase drops the
@@ -2225,7 +2225,7 @@ async function reconcileDivergentDoneMove(params: {
 	slug: string;
 	branch: string;
 	/** The folder the LOCAL done-move removed the slug from (its `git mv` source). */
-	localSource: 'backlog' | 'in-progress' | 'needs-attention';
+	localSource: 'tasks-todo' | 'in-progress' | 'needs-attention';
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<boolean> {

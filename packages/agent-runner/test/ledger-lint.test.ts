@@ -42,20 +42,20 @@ function place(folder: string, slug: string, content?: string): void {
 describe('detectDuplicateSlugs (pure)', () => {
 	it('flags a slug present in two status folders, lifecycle-ordered', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['backlog', new Set(['ghost'])],
+			['tasks-todo', new Set(['ghost'])],
 			['done', new Set(['ghost'])],
 		]);
 		const dups = detectDuplicateSlugs(map);
 		expect(dups).toHaveLength(1);
 		expect(dups[0].slug).toBe('ghost');
-		// `done/` outranks `backlog/` (most-advanced lifecycle stage first).
-		expect(dups[0].folders).toEqual(['done', 'backlog']);
+		// `done/` outranks `tasks-todo/` (most-advanced lifecycle stage first).
+		expect(dups[0].folders).toEqual(['done', 'tasks-todo']);
 		expect(dups[0].candidateCanonical).toBe('done');
 	});
 
 	it('reports clean (no duplicates) when every slug is in exactly one folder', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['backlog', new Set(['a', 'b'])],
+			['tasks-todo', new Set(['a', 'b'])],
 			['done', new Set(['c'])],
 		]);
 		expect(detectDuplicateSlugs(map)).toEqual([]);
@@ -63,7 +63,7 @@ describe('detectDuplicateSlugs (pure)', () => {
 
 	it('sorts multiple duplicates by slug', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['backlog', new Set(['zebra', 'apple'])],
+			['tasks-todo', new Set(['zebra', 'apple'])],
 			['done', new Set(['zebra', 'apple'])],
 		]);
 		expect(detectDuplicateSlugs(map).map((d) => d.slug)).toEqual([
@@ -80,7 +80,7 @@ describe('lintLocalLedger (over a working tree)', () => {
 		const dups = lintLocalLedger(root);
 		expect(dups).toHaveLength(1);
 		expect(dups[0].slug).toBe('orphan');
-		expect(dups[0].folders).toContain('backlog');
+		expect(dups[0].folders).toContain('tasks-todo');
 		expect(dups[0].folders).toContain('done');
 	});
 
@@ -204,7 +204,7 @@ describe('the status-folder set', () => {
 		// ledger file rests only in the durable set; the transient
 		// `in-progress`/`needs-attention` are per-item lock state now.
 		expect([...LEDGER_STATUS_FOLDERS]).toEqual([
-			'backlog',
+			'tasks-todo',
 			'done',
 			'cancelled',
 		]);

@@ -170,6 +170,6 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		const dups = lintLocalLedger(join(root, 'repo'));
 		expect(dups.map((d) => d.slug)).toEqual(['both']);
 		expect(dups[0].folders).toContain('cancelled');
-		expect(dups[0].folders).toContain('backlog');
+		expect(dups[0].folders).toContain('tasks-todo');
 	});
 });

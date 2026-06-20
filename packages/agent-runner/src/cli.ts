@@ -3074,8 +3074,8 @@ export function buildProgram(): Command {
 			}
 			const dest =
 				namespace === 'brief'
-					? workFolderPrefix('prd')
-					: workFolderPrefix('backlog');
+					? workFolderPrefix('briefs-ready')
+					: workFolderPrefix('tasks-todo');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
 					namespace === 'brief' ? 'auto-sliceable' : 'claimable'

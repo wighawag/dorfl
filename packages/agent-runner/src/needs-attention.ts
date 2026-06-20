@@ -288,7 +288,7 @@ function findSourceFolder(
 	// move from there. `in-progress` is retained for the legacy/recovery surfaces; on
 	// the rebase-conflict path (after the done-move) the body is in `done/`.
 	const lookupFolders: readonly WorkFolderKey[] = [
-		'backlog',
+		'tasks-todo',
 		'in-progress',
 		'done',
 		'needs-attention',
@@ -645,7 +645,7 @@ export async function returnToBacklog(
 		options.message && options.message.trim() !== ''
 			? options.message.trim()
 			: undefined;
-	const backlogRel = workItemRel('backlog', `${slug}.md`);
+	const backlogRel = workItemRel('tasks-todo', `${slug}.md`);
 
 	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
 	// section to the item BODY in `work/backlog/` (where it already rests) before the
@@ -797,8 +797,8 @@ export async function promoteFromPreBacklog(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	const sourceRel = workItemRel('pre-backlog', `${slug}.md`);
-	const destRel = workItemRel('backlog', `${slug}.md`);
+	const sourceRel = workItemRel('tasks-backlog', `${slug}.md`);
+	const destRel = workItemRel('tasks-todo', `${slug}.md`);
 
 	// Early-exit message: if NEITHER staged nor already-in-pool, there is nothing
 	// to promote (the per-attempt `plan` is the authoritative resolution against
@@ -954,8 +954,8 @@ export async function promoteFromPrePrd(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	const sourceRel = workItemRel('pre-prd', `${slug}.md`);
-	const destRel = workItemRel('prd', `${slug}.md`);
+	const sourceRel = workItemRel('briefs-proposed', `${slug}.md`);
+	const destRel = workItemRel('briefs-ready', `${slug}.md`);
 
 	const hasSource =
 		(
@@ -975,16 +975,16 @@ export async function promoteFromPrePrd(
 		).status === 0;
 	if (!hasSource && !hasDest) {
 		const message =
-			`'${slug}' is not staged in ${workFolderPrefix('pre-prd')} on ${arbiter}/main ` +
-			`(and not already in ${workFolderPrefix('prd')}) — nothing to promote ` +
+			`'${slug}' is not staged in ${workFolderPrefix('briefs-proposed')} on ${arbiter}/main ` +
+			`(and not already in ${workFolderPrefix('briefs-ready')}) — nothing to promote ` +
 			'(wrong slug, or never staged?).';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	}
 
 	const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
-		'pre-prd',
-	)} -> ${workFolderPrefix('prd')}`;
+		'briefs-proposed',
+	)} -> ${workFolderPrefix('briefs-ready')}`;
 	const moved = await runTreelessLedgerMove({
 		cwd,
 		slug,
@@ -1079,12 +1079,12 @@ export async function listPromotable(
 	// functions do before their residence probe.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 	const slices = await listMarkdownSlugsInTree(
-		`${arbiter}/main:${workFolderRel('pre-backlog')}`,
+		`${arbiter}/main:${workFolderRel('tasks-backlog')}`,
 		cwd,
 		env,
 	);
 	const prds = await listMarkdownSlugsInTree(
-		`${arbiter}/main:${workFolderRel('pre-prd')}`,
+		`${arbiter}/main:${workFolderRel('briefs-proposed')}`,
 		cwd,
 		env,
 	);

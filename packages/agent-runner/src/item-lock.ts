@@ -839,7 +839,7 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 			return [workItemRel('done', file), workItemRel('cancelled', file)];
 		case 'brief':
 			return [
-				workItemRel('prd-sliced', file),
+				workItemRel('briefs-tasked', file),
 				workItemRel('briefs-dropped', file),
 			];
 		case 'observation':

@@ -14,8 +14,9 @@ import {join} from 'node:path';
  *
  * The whole point of the seam: the LATER rename slices flip the VALUES in
  * {@link WORK_FOLDER_NAME} (and `git mv` the on-disk folders) and NOTHING ELSE.
- * Call sites reference folders by their SYMBOLIC key (`'backlog'`, `'prd'`, …),
- * never by a raw string, so renaming a folder never re-touches a single call site.
+ * Call sites reference folders by their SYMBOLIC key (`'tasks-todo'`,
+ * `'briefs-ready'`, …), never by a raw string, so renaming a folder never
+ * re-touches a single call site.
  *
  * Domain note (crown-jewel invariant): a `work/` tree is a set of governance
  * folders where "status IS the folder" — a CAS `git mv` between durable folders is
@@ -42,16 +43,14 @@ export const WORK_ROOT = 'work' as const;
  * a value-only flip of the right-hand side here.
  *
  * Folder kinds (kept here as a single registry, but their distinct roles matter):
- *   - SLICE lifecycle, the `tasks/` Kanban board: `tasks/backlog` (staging, the
- *     symbolic key stays `pre-backlog`) → `tasks/todo` (the agent pool, key
- *     `backlog`) → `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed
- *     terminal, key `cancelled`).
- *   - BRIEF lifecycle, the `briefs/` regime (renamed from the old flat
- *     `pre-prd`/`prd`/`prd-sliced`; the symbolic keys are UNCHANGED, only the
- *     values moved): `briefs/proposed` (staging, key `pre-prd`) → `briefs/ready`
- *     (auto-slice pool, key `prd`) → `briefs/tasked` (sliced, resting, key
- *     `prd-sliced`) / `briefs/dropped` (the PER-REGIME won't-proceed terminal, key
- *     `briefs-dropped`).
+ *   - TASK lifecycle, the `tasks/` Kanban board: `tasks/backlog` (staging, key
+ *     `tasks-backlog`) → `tasks/todo` (the agent pool, key `tasks-todo`) →
+ *     `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed terminal, key
+ *     `cancelled`).
+ *   - BRIEF lifecycle, the `briefs/` regime: `briefs/proposed` (staging, key
+ *     `briefs-proposed`) → `briefs/ready` (auto-slice pool, key `briefs-ready`) →
+ *     `briefs/tasked` (sliced, resting, key `briefs-tasked`) / `briefs/dropped`
+ *     (the PER-REGIME won't-proceed terminal, key `briefs-dropped`).
  *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `briefs/dropped`)
  *     replace the previous shared top-level `work/dropped/`: a dropped task and a
  *     dropped brief sharing a slug used to COLLIDE on one bare-slug
@@ -65,25 +64,26 @@ export const WORK_ROOT = 'work' as const;
  *     and `needs-attention` (both are really lock-ref state, NOT durable folders;
  *     routed here only so no reader hand-writes the literal).
  *
- * NOTE on the notes-regroup + task-board-rename flip (`folder-taxonomy-reorg-and-rename`
- * Phase 1): the SYMBOLIC KEYS below are deliberately UNCHANGED (a value-only flip),
- * so no call site moves. The `backlog` key now resolves to the `tasks/todo` POOL
- * and the `pre-backlog` key to the `tasks/backlog` STAGING slot — i.e. the key
- * names are the OLD vocabulary, the values are the NEW layout. The key-name
- * vocabulary cutover (`backlog`→`todo`, `pre-backlog`→`backlog`, the
- * `slice`/`prd`→`task`/`brief` identity) is a SEPARATE sibling slice; this slice
- * only moves the on-disk paths.
+ * NOTE on the symbolic-key vocabulary cutover
+ * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`): the KEYS below now
+ * read in the NEW task/brief vocabulary (`tasks-backlog`/`tasks-todo`,
+ * `briefs-proposed`/`briefs-ready`/`briefs-tasked`). This is a PURE in-code symbol
+ * rename — the VALUE strings are byte-identical to before, so no on-disk folder
+ * moved. An earlier sibling slice (`folder-taxonomy-reorg-and-rename` Phase 1)
+ * flipped the VALUES (`tasks/todo`, `briefs/ready`, …) while deliberately leaving
+ * the KEYS on the old words; this slice flips only the KEYS so the registry reads
+ * coherently. The folder-as-status invariant and every resolved path are unchanged.
  */
 export const WORK_FOLDER_NAME = {
-	'pre-backlog': 'tasks/backlog',
-	backlog: 'tasks/todo',
+	'tasks-backlog': 'tasks/backlog',
+	'tasks-todo': 'tasks/todo',
 	'in-progress': 'in-progress',
 	'needs-attention': 'needs-attention',
 	done: 'tasks/done',
 	cancelled: 'tasks/cancelled',
-	'pre-prd': 'briefs/proposed',
-	prd: 'briefs/ready',
-	'prd-sliced': 'briefs/tasked',
+	'briefs-proposed': 'briefs/proposed',
+	'briefs-ready': 'briefs/ready',
+	'briefs-tasked': 'briefs/tasked',
 	'briefs-dropped': 'briefs/dropped',
 	observations: 'notes/observations',
 	ideas: 'notes/ideas',
@@ -184,47 +184,47 @@ export function isWorkItemFile(name: string): boolean {
 // --- Folder-name unions / arrays (one definition, derived from the registry) --
 
 /**
- * The SLICE-RESOLUTION folders `resolveSlice` (prompt.ts) walks, in precedence
- * order: `in-progress` over `backlog`, with `done` appended only behind the
+ * The TASK-RESOLUTION folders `resolveSlice` (prompt.ts) walks, in precedence
+ * order: `in-progress` over `tasks-todo`, with `done` appended only behind the
  * stranded-continue gate. Order is load-bearing — kept exactly as the original
- * `SliceFolder` union/array.
+ * union/array.
  */
-export const SLICE_RESOLUTION_FOLDERS = [
+export const TASK_RESOLUTION_FOLDERS = [
 	'in-progress',
-	'backlog',
+	'tasks-todo',
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the folders a slice can be RESOLVED from (prompt.ts `SliceFolder`). */
-export type SliceResolutionFolder = (typeof SLICE_RESOLUTION_FOLDERS)[number];
+/** One of the folders a task can be RESOLVED from (prompt.ts `TaskFolder`). */
+export type TaskResolutionFolder = (typeof TASK_RESOLUTION_FOLDERS)[number];
 
 /**
- * The slice LIFECYCLE folders a `prd:<slug>` slice / lone-slice `issue:` can reside
- * in (prd-complete.ts + close-job.ts `SLICE_FOLDERS`): `backlog`, `in-progress`,
+ * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside
+ * in (prd-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-todo`, `in-progress`,
  * `needs-attention`, `done`.
  */
-export const SLICE_LIFECYCLE_FOLDERS = [
-	'backlog',
+export const TASK_LIFECYCLE_FOLDERS = [
+	'tasks-todo',
 	'in-progress',
 	'needs-attention',
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the slice lifecycle folders (prd-complete.ts / close-job.ts). */
-export type SliceLifecycleFolder = (typeof SLICE_LIFECYCLE_FOLDERS)[number];
+/** One of the task lifecycle folders (prd-complete.ts / close-job.ts). */
+export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
 
 /**
- * The DURABLE slice-status folders the ledger lint / integration core treat as the
- * one-slug-one-folder state machine: `backlog`, `done`, `cancelled`
+ * The DURABLE task-status folders the ledger lint / integration core treat as the
+ * one-slug-one-folder state machine: `tasks-todo`, `done`, `cancelled`
  * (ledger-lint.ts + integration-core.ts `LEDGER_STATUS_FOLDERS`). The transient
  * `in-progress`/`needs-attention`/`slicing` are NOT here (they are lock-ref state).
- * `cancelled` is the slice regime's won't-proceed terminal (the per-regime split
+ * `cancelled` is the task regime's won't-proceed terminal (the per-regime split
  * of the previous shared `dropped/`); the brief regime's terminal `briefs-dropped`
- * is NOT here (this set is the SLICE board's state machine, keyed by `tasks/`-slug,
- * and a brief never co-resides with a slice on the tasks board).
+ * is NOT here (this set is the TASK board's state machine, keyed by `tasks/`-slug,
+ * and a brief never co-resides with a task on the tasks board).
  */
 export const LEDGER_STATUS_FOLDERS = [
-	'backlog',
+	'tasks-todo',
 	'done',
 	'cancelled',
 ] as const satisfies readonly WorkFolderKey[];
@@ -233,13 +233,14 @@ export const LEDGER_STATUS_FOLDERS = [
 export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
 
 /**
- * The PRD-lifecycle folders an `issue:`-bearing PRD / a sliced PRD can reside in:
- * `prd` (source / pool), `prd-sliced` (sliced, resting) — close-job.ts `PRD_FOLDERS`.
+ * The BRIEF-lifecycle folders an `issue:`-bearing brief / a tasked brief can reside
+ * in: `briefs-ready` (source / pool), `briefs-tasked` (sliced, resting) —
+ * close-job.ts `BRIEF_FOLDERS`.
  */
-export const PRD_FOLDERS = [
-	'prd',
-	'prd-sliced',
+export const BRIEF_FOLDERS = [
+	'briefs-ready',
+	'briefs-tasked',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the PRD-lifecycle folders (close-job.ts / ledger-read.ts). */
-export type PrdFolder = (typeof PRD_FOLDERS)[number];
+/** One of the brief-lifecycle folders (close-job.ts / ledger-read.ts). */
+export type BriefFolder = (typeof BRIEF_FOLDERS)[number];

@@ -368,13 +368,14 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * The lifecycle folders each item type may rest in (frontmatter source). After
  * the capstone cut-over (slice
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the transient
- * `slicing/` folder is GONE — a brief rests in `prd/` (source) or `prd-sliced/`
- * (sliced); while it is being sliced the body STAYS in `prd/` (the lock no longer
- * moves it), so `slicing/` is never a frontmatter source.
+ * `slicing/` folder is GONE — a brief rests in `briefs/ready` (source) or
+ * `briefs/tasked` (sliced); while it is being sliced the body STAYS in
+ * `briefs/ready` (the lock no longer moves it), so `slicing/` is never a
+ * frontmatter source.
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
-	task: ['backlog', 'in-progress', 'done'],
-	brief: ['prd', 'prd-sliced'],
+	task: ['tasks-todo', 'in-progress', 'done'],
+	brief: ['briefs-ready', 'briefs-tasked'],
 	observation: ['observations'],
 };
 

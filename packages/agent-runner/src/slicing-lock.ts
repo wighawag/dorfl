@@ -159,7 +159,7 @@ async function runAcquire(
 
 	// Is the PRD still lockable (present in work/prd/ on the arbiter's main)?
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const prd = workItemRel('prd', `${slug}.md`);
+	const prd = workItemRel('briefs-ready', `${slug}.md`);
 	const prdBlob = await gitSoft(
 		['rev-parse', `${arbiter}/main:${prd}`],
 		cwd,
