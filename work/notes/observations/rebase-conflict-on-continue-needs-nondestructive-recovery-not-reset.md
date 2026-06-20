@@ -47,6 +47,48 @@ the work branch work/slice-… isn't on origin (the continue branch a cross-mach
 
 So to do the harmless thing (move a needs-attention slice with NO branch back to backlog for a fresh build) the user is again told to use `--reset` — the guarded, destructive verb — even though there is literally nothing to discard. The default requeue conflates "move the .md back to backlog" with "continue from a branch", and refuses the move when the (optional) branch is absent. A needs-attention slice with no work branch should requeue to backlog WITHOUT requiring the destructive flag (keep+continue and start-fresh are identical when there is no branch). This further entrenches `--reset` as the path of least resistance.
 
+## Update (2026-06-20, triage)
+
+Re-investigated against current `main`. The HEADLINE ask (point 1 above: auto-resolve
+protocol-mechanical / bookkeeping conflicts) is now STRUCTURALLY DISSOLVED, but the
+recovery-ergonomics residue (points 2-3 + the addendum) is STILL LIVE. Narrowing the
+note to that residue.
+
+RESOLVED (delete from this note's scope):
+- The self-conflict / bookkeeping-rebase class is gone at the SOURCE. The per-item-lock
+  cutover (PRD `ledger-status-per-item-lock-refs`) means NO transient status lands on
+  `main` (claim/needs-attention/slicing/advancing are lock-ref state, not folder moves),
+  so a continue rebase (`rebaseContinuedBranchOntoMain`, `continue-branch.ts`) is now a
+  PLAIN rebase with NO runner-authored move-only commit to self-conflict on (the old
+  `drop-bookkeeping-rebase` machinery was DELETED). Task
+  `continue-rebase-auto-resolves-protocol-bookkeeping-conflicts` is in `tasks/done/`.
+  So a single agent no longer hits a human-surfacing rebase conflict from agent-runner's
+  OWN bookkeeping of its slug; only GENUINE content conflicts surface, which was the
+  whole point. The specific run in "What was seen" (a `.md`-lifecycle-move self-conflict)
+  can no longer occur.
+
+STILL LIVE (this note's remaining, narrowed scope):
+1. NO non-destructive recovery verb. There is still no `requeue --reconcile` /
+   `requeue --rebase` (verified: no such flag in `cli.ts`). On a GENUINE content conflict
+   the only offered escape is still keep+continue (which re-hits the conflict) or the
+   destructive `requeue --reset`. The DEFAULT escape from a real continue-conflict should
+   KEEP the work (re-sync the mirror + retry the rebase), reserving `--reset` for
+   genuinely worthless branches, and the message should lead with the non-destructive
+   option.
+2. "Resolve against latest main" is still not ACTIONABLE for an isolated/mirror-side
+   branch (no supported command fetches the kept branch into a scratch worktree, rebases,
+   and re-pushes; the human is told to do raw git on a branch the skill forbids touching).
+3. THE HIGH-SEV ADDENDUM (default requeue REFUSES when no branch exists): not confirmed
+   fixed. The requeue help (`cli.ts`) still describes only keep+continue / `--reset`, and
+   `do.ts` still emits "`requeue --reset` to discard" nudges. A needs-attention item with
+   NO work branch should requeue to backlog WITHOUT the destructive flag (keep+continue
+   and start-fresh are identical when there is no branch to lose).
+
+Disposition: kept as a LIVE recovery-ergonomics signal narrowed to the three points
+above. The bookkeeping-conflict half is discharged (structurally dissolved); these are a
+distinct, unbuilt UX/affordance concern. `needsAnswers` stands (whether to add a
+non-destructive verb vs. make the no-branch requeue succeed by default is a design call).
+
 ## Cross-refs
 
 - `requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md` — the stale-mirror root cause that made the conflict recur and made `--reset` ineffective.
