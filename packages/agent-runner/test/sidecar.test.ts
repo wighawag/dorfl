@@ -13,38 +13,36 @@ import {
 	type SidecarModel,
 } from '../src/sidecar.js';
 
-/** A canonical two-entry sidecar text (one answered, one open). */
+/** A canonical two-entry sidecar text in the new human-readable format. */
 const SAMPLE = [
-	'---',
-	'item: brief:autoslice',
-	'type: brief',
-	'slug: autoslice',
-	'allAnswered: false',
-	'---',
+	'<!-- agent-runner-sidecar: item=brief:autoslice type=brief slug=autoslice allAnswered=false -->',
 	'',
 	'## Q1',
-	'id: q1',
-	'question: |',
-	'  Should the slicer fan PRDs in parallel?',
-	'context: |',
-	'  The runner already parallelises builds.',
-	'answered: true',
-	'answer: |',
-	'  Yes, bounded at 4.',
+	'',
+	'**Should the slicer fan PRDs in parallel?**',
+	'',
+	'> The runner already parallelises builds.',
+	'',
+	'<!-- q1 fields: id=q1 -->',
+	'',
+	'**Your answer** (write below this line):',
+	'',
+	'Yes, bounded at 4.',
 	'',
 	'## Q2',
-	'id: q2',
-	'question: |',
-	'  What is the default churn cap?',
-	'context: |',
-	'  Open question from the PRD.',
-	'answered: false',
-	'answer: |',
+	'',
+	'**What is the default churn cap?**',
+	'',
+	'> Open question from the PRD.',
+	'',
+	'<!-- q2 fields: id=q2 -->',
+	'',
+	'**Your answer** (write below this line):',
 	'',
 ].join('\n');
 
-describe('parseSidecar', () => {
-	it('parses identity frontmatter and ordered entries', () => {
+describe('parseSidecar — new human-readable format', () => {
+	it('parses identity from the top HTML comment and ordered entries', () => {
 		const model = parseSidecar(SAMPLE);
 		expect(model.item).toBe('brief:autoslice');
 		expect(model.type).toBe('brief');
@@ -53,94 +51,126 @@ describe('parseSidecar', () => {
 		expect(model.entries[0].question).toBe(
 			'Should the slicer fan PRDs in parallel?',
 		);
+		expect(model.entries[0].context).toBe(
+			'The runner already parallelises builds.',
+		);
 		expect(model.entries[0].answer).toBe('Yes, bounded at 4.');
 		expect(model.entries[1].answer).toBe('');
 	});
 
 	it('IGNORES the derived allAnswered mirror on read (recomputed from entries)', () => {
-		// The frontmatter lies (allAnswered: true) but only q1 is answered.
-		const lying = SAMPLE.replace('allAnswered: false', 'allAnswered: true');
+		// The identity comment lies (allAnswered=true) but only q1 is answered.
+		const lying = SAMPLE.replace('allAnswered=false', 'allAnswered=true');
 		const model = parseSidecar(lying);
 		expect(allAnswered(model)).toBe(false);
 	});
 
-	it('is tolerant of the human writing only answer: (no answered: line)', () => {
-		const text = [
-			'---',
-			'item: task:foo',
-			'type: task',
-			'slug: foo',
-			'allAnswered: false',
-			'---',
-			'',
-			'## Q1',
-			'id: q1',
-			'question: |',
-			'  Pick a default?',
-			'answer: |',
-			'  blue',
-			'',
-		].join('\n');
-		const model = parseSidecar(text);
-		expect(model.entries[0].answeredOverride).toBeUndefined();
-		expect(isEntryAnswered(model.entries[0])).toBe(true);
+	it('TOLERANT EDIT: human types only under the answer marker (no comment edit)', () => {
+		// Q2's machine comment still says no override; the human just typed
+		// prose under the answer marker. The parser derives answered=true from
+		// the non-empty answer; the override is NOT sticky. Replace the LAST
+		// occurrence of the answer marker (Q2's, since Q1 already has an answer).
+		const marker = '**Your answer** (write below this line):';
+		const lastIdx = SAMPLE.lastIndexOf(marker);
+		const edited =
+			SAMPLE.slice(0, lastIdx) +
+			marker +
+			'\n\ncap at 5\n' +
+			SAMPLE.slice(lastIdx + marker.length + 1);
+		const model = parseSidecar(edited);
+		expect(model.entries[1].answer).toBe('cap at 5');
+		expect(model.entries[1].answeredOverride).toBeUndefined();
+		expect(isEntryAnswered(model.entries[1])).toBe(true);
+		expect(allAnswered(model)).toBe(true);
 	});
 
-	it('throws on a missing frontmatter fence', () => {
-		expect(() => parseSidecar('## Q1\nid: q1\n')).toThrow(SidecarParseError);
+	it('throws on a missing identity HTML comment', () => {
+		expect(() => parseSidecar('## Q1\n\n**hi**\n')).toThrow(SidecarParseError);
 	});
 
-	it('throws on a missing item: identity', () => {
-		const text = ['---', 'type: task', 'slug: foo', '---', ''].join('\n');
+	it('throws on a missing item= in the identity comment', () => {
+		const text =
+			'<!-- agent-runner-sidecar: type=task slug=foo allAnswered=false -->\n';
 		expect(() => parseSidecar(text)).toThrow(SidecarParseError);
 	});
 
-	it('parses an optional default and a disposition', () => {
+	it('throws on an entry missing its id (per-entry HTML comment)', () => {
 		const text = [
-			'---',
-			'item: observation:dup',
-			'type: observation',
-			'slug: dup',
-			'allAnswered: false',
-			'---',
+			'<!-- agent-runner-sidecar: item=task:foo type=task slug=foo allAnswered=false -->',
 			'',
 			'## Q1',
-			'id: q1',
-			'question: |',
-			'  Promote, keep, or delete?',
-			'default: |',
-			'  keep',
-			'answered: false',
-			'answer: |',
-			'disposition: keep',
+			'',
+			'**A question?**',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+		expect(() => parseSidecar(text)).toThrow(SidecarParseError);
+	});
+
+	it('parses an optional default and a disposition (in the entry comment)', () => {
+		const text = [
+			'<!-- agent-runner-sidecar: item=observation:dup type=observation slug=dup allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**Promote, keep, or delete?**',
+			'',
+			'> Body has a clear conservative routing.',
+			'',
+			'_Suggested default: keep_',
+			'',
+			'<!-- q1 fields: id=q1 disposition=keep -->',
+			'',
+			'**Your answer** (write below this line):',
 			'',
 		].join('\n');
 		const model = parseSidecar(text);
 		expect(model.entries[0].default).toBe('keep');
 		expect(model.entries[0].disposition).toBe('keep');
+		expect(model.entries[0].context).toBe(
+			'Body has a clear conservative routing.',
+		);
 	});
 });
 
-describe('serialiseSidecar — round-trip stable + canonical', () => {
-	it('round-trips a parsed sample byte-stable (canonical output)', () => {
+describe('serialiseSidecar — canonical shape + semantic round-trip', () => {
+	it('emits a human-readable shape: identity comment + bold/blockquote/italic + answer marker', () => {
 		const model = parseSidecar(SAMPLE);
 		const out = serialiseSidecar(model);
-		// Re-parsing the serialised text yields an equivalent model.
+		// Identity comment at the top (HTML comment, no YAML frontmatter).
+		expect(out.startsWith('<!-- agent-runner-sidecar:')).toBe(true);
+		expect(out).toContain('item=brief:autoslice');
+		expect(out).toContain('allAnswered=false');
+		// No literal block-scalar `|` pipes anywhere (the old format's giveaway).
+		expect(out).not.toContain('question: |');
+		expect(out).not.toContain('answer: |');
+		// Bold question line, blockquote context, fixed answer marker per entry.
+		expect(out).toContain('**Should the slicer fan PRDs in parallel?**');
+		expect(out).toContain('> The runner already parallelises builds.');
+		expect(out).toContain('**Your answer** (write below this line):');
+		// Per-entry HTML comment carries the id.
+		expect(out).toContain('<!-- q1 fields: id=q1 -->');
+	});
+
+	it('round-trips SEMANTICALLY: parse → serialise → parse recovers an equal model', () => {
+		const model = parseSidecar(SAMPLE);
+		const out = serialiseSidecar(model);
 		const reparsed = parseSidecar(out);
 		expect(reparsed).toEqual(model);
-		// And serialising again is a fixed point (canonical).
+		// And re-serialising is a fixed point (canonical text).
 		expect(serialiseSidecar(reparsed)).toBe(out);
 	});
 
 	it('recomputes the allAnswered mirror on every write', () => {
 		const model = parseSidecar(SAMPLE);
-		expect(serialiseSidecar(model)).toContain('allAnswered: false');
+		expect(serialiseSidecar(model)).toContain('allAnswered=false');
 		// Answer q2 → all answered → the mirror flips on the next serialise.
 		model.entries[1].answer = 'cap at 5';
-		expect(serialiseSidecar(model)).toContain('allAnswered: true');
+		expect(serialiseSidecar(model)).toContain('allAnswered=true');
 	});
 
-	it('normalises answered: true for a non-empty answer with no explicit override', () => {
+	it('normalises answered=true for a non-empty answer with no explicit override', () => {
 		const model: SidecarModel = {
 			item: 'task:foo',
 			type: 'task',
@@ -148,10 +178,13 @@ describe('serialiseSidecar — round-trip stable + canonical', () => {
 			entries: [{id: 'q1', question: 'q?', context: '', answer: 'an answer'}],
 		};
 		const out = serialiseSidecar(model);
-		expect(out).toContain('answered: true');
+		// The override field is OMITTED when the derived predicate already
+		// matches (so a stale comment cannot become a sticky override).
+		expect(out).toContain('<!-- q1 fields: id=q1 -->');
+		expect(out).not.toContain('answered=');
 	});
 
-	it('preserves an explicit answered: false override over a non-empty answer', () => {
+	it('preserves an explicit answered=false override over a non-empty answer', () => {
 		const model: SidecarModel = {
 			item: 'task:foo',
 			type: 'task',
@@ -167,7 +200,123 @@ describe('serialiseSidecar — round-trip stable + canonical', () => {
 			],
 		};
 		expect(isEntryAnswered(model.entries[0])).toBe(false);
-		expect(serialiseSidecar(model)).toContain('answered: false');
+		const out = serialiseSidecar(model);
+		expect(out).toContain('answered=false');
+		// And a parse-back recovers the override (it DISAGREES with the
+		// answer-derived predicate, so it is a genuine override).
+		const reparsed = parseSidecar(out);
+		expect(reparsed.entries[0].answeredOverride).toBe(false);
+		expect(isEntryAnswered(reparsed.entries[0])).toBe(false);
+	});
+
+	it('preserves an explicit answered=true override over an empty answer', () => {
+		const model: SidecarModel = {
+			item: 'task:foo',
+			type: 'task',
+			slug: 'foo',
+			entries: [
+				{
+					id: 'q1',
+					question: 'q?',
+					context: '',
+					answer: '',
+					answeredOverride: true,
+				},
+			],
+		};
+		const out = serialiseSidecar(model);
+		expect(out).toContain('answered=true');
+		const reparsed = parseSidecar(out);
+		expect(reparsed.entries[0].answeredOverride).toBe(true);
+		expect(isEntryAnswered(reparsed.entries[0])).toBe(true);
+	});
+
+	it('emits the italic suggested default on a serialised entry', () => {
+		const model = newSidecar('task:foo', [
+			{question: 'pick a colour?', context: 'no rush', default: 'blue'},
+		]);
+		const out = serialiseSidecar(model);
+		expect(out).toContain('_Suggested default: blue_');
+		const reparsed = parseSidecar(out);
+		expect(reparsed.entries[0].default).toBe('blue');
+		expect(reparsed.entries[0].context).toBe('no rush');
+	});
+
+	it('preserves a disposition on round-trip', () => {
+		const model = newSidecar('observation:dup', [
+			{
+				question: 'promote, keep, or delete?',
+				context: 'an observation',
+				default: 'keep',
+				disposition: 'keep',
+			},
+		]);
+		const out = serialiseSidecar(model);
+		expect(out).toContain('disposition=keep');
+		const reparsed = parseSidecar(out);
+		expect(reparsed.entries[0].disposition).toBe('keep');
+	});
+});
+
+describe('answer boundary is HEADING-DELIMITED (ADR trade-off b)', () => {
+	it('an answer containing a literal `---` line still parses as ONE answer', () => {
+		const text = [
+			'<!-- agent-runner-sidecar: item=task:foo type=task slug=foo allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**Pick an option?**',
+			'',
+			'<!-- q1 fields: id=q1 -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+			'before the rule',
+			'',
+			'---',
+			'',
+			'after the rule',
+			'',
+			'## Q2',
+			'',
+			'**Second?**',
+			'',
+			'<!-- q2 fields: id=q2 -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+			'just the second answer',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect(model.entries).toHaveLength(2);
+		expect(model.entries[0].answer).toBe(
+			'before the rule\n\n---\n\nafter the rule',
+		);
+		expect(model.entries[1].answer).toBe('just the second answer');
+		// Round-trips semantically.
+		const reparsed = parseSidecar(serialiseSidecar(model));
+		expect(reparsed).toEqual(model);
+	});
+
+	it('an answer with a `## ` mid-line (NOT at the start of a line) is one answer', () => {
+		const text = [
+			'<!-- agent-runner-sidecar: item=task:foo type=task slug=foo allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**A question?**',
+			'',
+			'<!-- q1 fields: id=q1 -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+			'see issue ## 42 for context',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect(model.entries).toHaveLength(1);
+		expect(model.entries[0].answer).toBe('see issue ## 42 for context');
 	});
 });
 
@@ -182,7 +331,7 @@ describe('the answered predicate (MAINTAINER-RESOLVED §1)', () => {
 			isEntryAnswered({id: 'q1', question: '', context: '', answer: '   '}),
 		).toBe(false);
 	});
-	it('explicit answered: false overrides a non-empty answer', () => {
+	it('explicit override false beats a non-empty answer', () => {
 		expect(
 			isEntryAnswered({
 				id: 'q1',
@@ -193,7 +342,7 @@ describe('the answered predicate (MAINTAINER-RESOLVED §1)', () => {
 			}),
 		).toBe(false);
 	});
-	it('explicit answered: true overrides an empty answer', () => {
+	it('explicit override true beats an empty answer', () => {
 		expect(
 			isEntryAnswered({
 				id: 'q1',
@@ -220,11 +369,12 @@ describe('allAnswered / pendingEntries — derived from entries', () => {
 		expect(pendingEntries(model).map((e) => e.id)).toEqual(['q2']);
 	});
 
-	it('all answered ⇒ allAnswered true', () => {
+	it('all answered ⇒ allAnswered true (and the comment mirror reflects it)', () => {
 		const model = newSidecar('task:foo', [{question: 'a?'}]);
 		model.entries[0].answer = 'yes';
 		expect(allAnswered(model)).toBe(true);
 		expect(pendingEntries(model)).toEqual([]);
+		expect(serialiseSidecar(model)).toContain('allAnswered=true');
 	});
 
 	it('an empty sidecar is NOT all-answered (keeps pending⇒NO-OP honest)', () => {

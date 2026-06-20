@@ -149,42 +149,15 @@ A per-item SIDECAR file, flat, `work/questions/<type>-<slug>.md` (e.g. `work/que
 3. **Terminal cleanup** — deleted by the advance tick when the item reaches a terminal state (one owner, one deletion point).
 4. **Atomic apply** — mutate the item body AND update/remove the sidecar entry in ONE commit.
 
-### The sidecar FORMAT (RESOLVED here — the one PRD-time detail)
+### The sidecar FORMAT (RESOLVED — see the ADR)
 
-A strict, tooling-owned Markdown file: YAML frontmatter for identity + the answered predicate, then one fenced/structured entry per question. Concrete decided shape (the slicer/an ADR may finalise exact byte details, but THIS is the spec to build to):
+The concrete on-disk format is RESOLVED in ADR `docs/adr/question-sidecar-human-readable-format.md` (accepted 2026-06-20) and IMPLEMENTED in `packages/agent-runner/src/sidecar.ts` + documented for hand-writers in `skills/surface-questions/SKILL.md`. The sidecar is a HUMAN-READABLE Markdown file (bold question / blockquote context / italic suggested-default / fixed `**Your answer** (write below this line):` marker) with all MACHINE state in HTML comments (an identity comment at the top carrying `item`/`type`/`slug`/`allAnswered`; a per-entry comment carrying `id` and optional `disposition`). The original `key: |` YAML-block-scalar shape that lived here is SUPERSEDED — see the ADR for context, the three ratified trade-offs (semantic round-trip; heading-delimited answer; clean cutover + migrate), and the consequences. The load-bearing rules are unchanged:
 
-```
----
-item: prd:autoslice          # the NAMESPACED identity (resolver is source of truth)
-type: prd                    # prd | slice | observation  (redundant w/ filename; explicit for the parser)
-slug: autoslice
-allAnswered: false           # DERIVED convenience mirror (entries are the source of truth)
----
-
-## Q1
-id: q1                       # stable per-entry id (q1, q2, … monotonic; never reused)
-question: |
-  <the question, verbatim>
-context: |
-  <inline context so the human need not open the item>
-default: |                  # optional suggested default (the surface-questions humility aid)
-  <suggested default, if any>
-answered: false             # the per-entry source of truth
-answer: |                   # filled by the HUMAN; empty/absent while unanswered
-disposition:                # optional, for triage entries: promote-slice | promote-adr | keep | delete | out-of-scope | needs-attention
-
-## Q2
-id: q2
-...
-```
-
-Decided rules for the format:
-
-- **`answered: bool` per entry is the source of truth**; `allAnswered` in frontmatter is a DERIVED mirror the classifier MAY read but must not trust over the entries (it is a convenience for cheap scanning; recompute from entries on apply).
-- **Entry ids are stable + monotonic** (`q1`, `q2`, …), never reused — so APPEND adds `qN+1` and the history is unambiguous; the agent keys "already asked/answered" off the id.
-- **The human authors only `answer:` (and flips `answered: true`)** — or, friendlier, the apply rung treats a non-empty `answer:` as answered and normalises `answered: true` on apply. (Decide one at slice-time; both are testable. Recommended: a non-empty `answer:` ⇒ answered, with `answered:` as an explicit override, so the human writes the least.)
-- **The item↔sidecar pointer convention:** the sidecar is found PURELY from the item's namespaced identity (`work/questions/<type>-<slug>.md`) — there is NO back-pointer field needed in the item body (deriving the path from identity keeps the item body free of tooling cruft and avoids a second thing to keep in sync). The ONLY signal in the item body is the existing `needsAnswers` flag.
-- **`disposition` is present only on triage/terminal-routing entries** and carries the answered routing (promote-slice / promote-adr / keep / delete / out-of-scope / needs-attention) the apply rung executes.
+- **A non-empty answer ⇒ answered** (with an explicit `answered=true|false` override in the per-entry HTML comment when it disagrees with the derivation; emitted only on disagreement so a stale comment cannot become a sticky override). `allAnswered` in the identity comment is a DERIVED mirror — the classifier MAY read it for cheap scanning but MUST recompute from entries on apply.
+- **Entry ids are stable + monotonic** (`q1`, `q2`, …), never reused — APPEND adds `qN+1`; the agent keys "already asked/answered" off the id.
+- **The human authors only the answer prose** under the answer marker; no `key:`, no escaping, no fence. The answer is HEADING-DELIMITED (spans from the marker up to the next `## ` heading), so a literal `---` inside an answer cannot break parsing.
+- **The item↔sidecar pointer convention** is unchanged: the sidecar is found PURELY from the item's namespaced identity (`work/questions/<type>-<slug>.md`) — NO back-pointer field in the item body; the ONLY signal in the body is the existing `needsAnswers` flag.
+- **`disposition` is present only on triage/terminal-routing entries** and carries the answered routing (promote-slice / promote-adr / keep / delete / dropped / needs-attention) the apply rung executes.
 
 ### The lock model
 
