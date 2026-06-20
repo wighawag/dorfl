@@ -543,8 +543,10 @@ describe('resolveSlice — in-progress over backlog', () => {
 
 	it('falls back to work/tasks/todo/ when not in-progress', () => {
 		seedSlice(scratch.root, 'backlog', 'bar', '> backlog body');
+		// `resolveSlice` returns the resolved folder by its symbolic KEY, which now
+		// reads in the new task vocabulary (`tasks-todo`).
 		const slice = resolveSlice(scratch.root, 'bar');
-		expect(slice.folder).toBe('backlog');
+		expect(slice.folder).toBe('tasks-todo');
 		expect(slice.slicePrompt).toContain('backlog body');
 	});
 

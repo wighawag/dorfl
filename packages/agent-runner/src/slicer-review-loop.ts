@@ -480,10 +480,10 @@ function applyEdits(
 ): void {
 	for (const edit of edits) {
 		const normalized = edit.path.replace(/\\/g, '/');
-		const filename = stripWorkFolderPrefix(normalized, 'pre-backlog');
+		const filename = stripWorkFolderPrefix(normalized, 'tasks-backlog');
 		if (filename === undefined || normalized.includes('..')) {
 			note(
-				`Skipped a review edit outside ${workFolderPrefix('pre-backlog')} (${edit.path}) — the ` +
+				`Skipped a review edit outside ${workFolderPrefix('tasks-backlog')} (${edit.path}) — the ` +
 					'loop only improves candidate slices.',
 			);
 			continue;
@@ -522,7 +522,7 @@ function newOrChangedBacklog(
 	cwd: string,
 	before: Map<string, string>,
 ): string[] {
-	const dir = workFolderPath(cwd, 'pre-backlog');
+	const dir = workFolderPath(cwd, 'tasks-backlog');
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
@@ -536,7 +536,7 @@ function newOrChangedBacklog(
 		}
 		const content = readFileSync(join(dir, name), 'utf8');
 		if (before.get(name) !== content) {
-			out.push(workItemRel('pre-backlog', name));
+			out.push(workItemRel('tasks-backlog', name));
 		}
 	}
 	return out.sort();

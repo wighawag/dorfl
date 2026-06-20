@@ -328,7 +328,7 @@ const DEFAULT_ARBITER = 'origin';
  * `needs-attention.ts`) moves an approved item `pre-backlog/ → backlog/` to make
  * it claimable. STEP A: ADDITIVE — no `work/backlog/` reader changes here.
  */
-export const STAGED_SLICES_DIR = workFolderRel('pre-backlog');
+export const STAGED_SLICES_DIR = workFolderRel('tasks-backlog');
 
 /**
  * The POOL folder slices land in when the runner-deterministic placement
@@ -339,7 +339,7 @@ export const STAGED_SLICES_DIR = workFolderRel('pre-backlog');
  * time. PRD US #4 / the governing ADR: the agent cannot self-place into the
  * pool. Slice `runner-deterministic-slice-placement-policy-and-precedence`.
  */
-const POOL_SLICES_DIR = workFolderRel('backlog');
+const POOL_SLICES_DIR = workFolderRel('tasks-todo');
 
 /** The placement slots for the SLICE lifecycle (folder names). */
 const SLICE_PLACEMENT_SLOTS = {
@@ -389,9 +389,9 @@ export async function performSlice(
 
 	// 0. The PRD must exist in the checkout (`work/prd/<slug>.md`) — it is the
 	//    source the agent slices + the file the lock holds.
-	const prdPath = workItemPath(cwd, 'prd', slug);
+	const prdPath = workItemPath(cwd, 'briefs-ready', slug);
 	if (!existsSync(prdPath)) {
-		const message = `no PRD '${slug}' found at ${workFolderRel('prd')}/${slug}.md.`;
+		const message = `no PRD '${slug}' found at ${workFolderRel('briefs-ready')}/${slug}.md.`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', slug, message};
 	}
@@ -668,7 +668,7 @@ export async function performSlice(
 			type: 'slicing',
 			lifecycle: {
 				// Read the PR title / commit summary from the held PRD (before it moves).
-				titlePath: workItemPath(cwd, 'prd', slug),
+				titlePath: workItemPath(cwd, 'briefs-ready', slug),
 				commitTag: 'sliced',
 				stage: () =>
 					stageSlicingLifecycle({
@@ -886,7 +886,10 @@ async function heldPrdIsStale(
 	}
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const held = await gitSoft(
-		['rev-parse', `${arbiter}/main:${workFolderRel('prd')}/${slug}.md`],
+		[
+			'rev-parse',
+			`${arbiter}/main:${workFolderRel('briefs-ready')}/${slug}.md`,
+		],
 		cwd,
 		env,
 	);
@@ -947,8 +950,8 @@ async function stageSlicingLifecycle(params: {
 		note,
 		env,
 	} = params;
-	const prd = workItemRel('prd', `${slug}.md`);
-	const prdSliced = workItemRel('prd-sliced', `${slug}.md`);
+	const prd = workItemRel('briefs-ready', `${slug}.md`);
+	const prdSliced = workItemRel('briefs-tasked', `${slug}.md`);
 	// PROPAGATE the origin-trust PROVENANCE (slice
 	// `untrusted-origin-forces-build-propose`): read the held PRD's `origin`/
 	// `originTrust` stamp BEFORE the move, so each emitted slice can carry it. A
@@ -1023,7 +1026,7 @@ async function scrubPoolDrift(
 	poolBefore: Map<string, string>,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
-	const dir = workFolderPath(cwd, 'backlog');
+	const dir = workFolderPath(cwd, 'tasks-todo');
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
@@ -1042,7 +1045,7 @@ async function scrubPoolDrift(
 			}
 			// The agent edited a pre-existing pool slice — restore it from HEAD.
 			await gitSoft(
-				['checkout', 'HEAD', '--', workItemRel('backlog', name)],
+				['checkout', 'HEAD', '--', workItemRel('tasks-todo', name)],
 				cwd,
 				env,
 			);
@@ -1237,7 +1240,7 @@ function gateRefusalReason(
  */
 function readSlicedSlugs(cwd: string): Set<string> {
 	const slugs = new Set<string>();
-	const dir = workFolderPath(cwd, 'prd-sliced');
+	const dir = workFolderPath(cwd, 'briefs-tasked');
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -1341,9 +1344,9 @@ function newOrChangedStagedSlices(
 	return changed.sort();
 }
 
-/** Snapshot the POOL `work/backlog/` (for the agent-write fence at stage time). */
+/** Snapshot the POOL `work/tasks/todo/` (for the agent-write fence at stage time). */
 function snapshotPool(cwd: string): Map<string, string> {
-	const dir = workFolderPath(cwd, 'backlog');
+	const dir = workFolderPath(cwd, 'tasks-todo');
 	const snap = new Map<string, string>();
 	for (const file of listMarkdown(dir)) {
 		snap.set(file, readFileSync(join(dir, file), 'utf8'));

@@ -109,6 +109,9 @@ import {
 	reportItemLocks,
 	formatItemLockReport,
 	itemLockReportNeedsAttention,
+	reapStaleItemLocks,
+	formatReapReport,
+	reapReportNeedsAttention,
 } from './item-lock.js';
 import {
 	promoteFromPreBacklog,
@@ -698,6 +701,7 @@ interface GcFlags {
 	arbiter?: string;
 	cwd?: string;
 	dryRun?: boolean;
+	reapStaleLocks?: boolean;
 }
 
 interface StatusFlags {
@@ -2704,6 +2708,10 @@ export function buildProgram(): Command {
 			'SWEEP the work/ lifecycle LEDGER instead of job worktrees: REPORT (never delete) every slug present in more than one work/ status folder (the one-slug-one-folder belt-and-suspenders), with its folders + candidate canonical folder, for a HUMAN to resolve. Defaults to the cwd repo.',
 		)
 		.option(
+			'--reap-stale-locks',
+			'(with --ledger) OPT-IN: also CLEAR every STALE terminal lock the report finds (a held `active` per-item lock whose item is already TERMINAL on <arbiter>/main — the `cleared-stale` class) via the SAME leased delete `release-lock` uses, so one command sweeps all orphaned terminal locks instead of N hand-run release-locks. SCOPED to `cleared-stale` ONLY: a `kept-stuck` (terminal + stuck) or a `kept-in-flight` (active, non-terminal) lock is NEVER reaped, even with this flag. A concurrent change to a lock ref makes its leased delete REJECT (reported), never --force. WITHOUT this flag `gc --ledger` stays report-only (fail-loud, deletes nothing).',
+		)
+		.option(
 			'--remote-branches',
 			'SWEEP the arbiter’s remote work/* BRANCHES instead of job worktrees: delete (via git push --delete, NEVER --force) exactly those PROVABLY MERGED into <arbiter>/main (git merge-base --is-ancestor, the SAME predicate the worktree reaper uses), and RETAIN the rest with a reason. An in-flight/un-merged branch (the recovery point) is NEVER touched. Provider-agnostic plain git — works on a --bare arbiter. The merged-only complement of `requeue --reset`.',
 		)
@@ -2745,6 +2753,47 @@ export function buildProgram(): Command {
 				// held/stuck lock from a stale-active lock over a terminal item WITHOUT
 				// clearing (no auto-sweep; a human asserts a lock is dead via
 				// `release-lock`).
+				// OPT-IN SWEEP (`--reap-stale-locks`): the WRITE twin of the report. A
+				// human asserting "clear the dead TERMINAL locks now": for EXACTLY the
+				// `cleared-stale` class (terminal-on-main + active = stranded) perform the
+				// SAME leased delete `release-lock` / the recovery use, so one command
+				// sweeps every orphaned terminal lock. A `kept-stuck` / `kept-in-flight`
+				// lock is NEVER reaped (scope fence); a concurrent change makes a clear
+				// REJECT (reported `lost`), never --force. WITHOUT the flag the surface
+				// below stays report-only (fail-loud, deletes nothing).
+				if (flags.reapStaleLocks) {
+					const reap = await reapStaleItemLocks(
+						flags.cwd ?? repoPath,
+						flags.arbiter ?? 'origin',
+						process.env,
+					);
+					if (flags.json) {
+						console.log(JSON.stringify({...result, reap}, null, 2));
+					} else {
+						const reapLines = formatReapReport(reap);
+						const blocks: string[] = [];
+						if (result.duplicates.length > 0) {
+							blocks.push(formatLedgerSweep(result));
+						}
+						if (reapLines.length > 0) {
+							blocks.push(reapLines.join('\n'));
+						}
+						console.log(
+							blocks.length > 0
+								? blocks.join('\n\n')
+								: formatLedgerSweep(result),
+						);
+					}
+					// Fail-loud AFTER the sweep: a `kept-stuck` (rightly left for a human) or
+					// a `lost`/`error` (a stale lock whose leased delete lost the race) still
+					// needs attention; a clean sweep that reaped every stale lock and left
+					// only healthy in-flight holds exits 0.
+					process.exit(
+						result.duplicates.length > 0 || reapReportNeedsAttention(reap)
+							? 1
+							: 0,
+					);
+				}
 				const lockReport = await reportItemLocks(
 					flags.cwd ?? repoPath,
 					flags.arbiter ?? 'origin',
@@ -3074,8 +3123,8 @@ export function buildProgram(): Command {
 			}
 			const dest =
 				namespace === 'brief'
-					? workFolderPrefix('prd')
-					: workFolderPrefix('backlog');
+					? workFolderPrefix('briefs-ready')
+					: workFolderPrefix('tasks-todo');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
 					namespace === 'brief' ? 'auto-sliceable' : 'claimable'

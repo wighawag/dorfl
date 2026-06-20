@@ -38,8 +38,8 @@
 import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {
-	SLICE_LIFECYCLE_FOLDERS,
-	PRD_FOLDERS as WORK_LAYOUT_PRD_FOLDERS,
+	TASK_LIFECYCLE_FOLDERS,
+	BRIEF_FOLDERS as WORK_LAYOUT_BRIEF_FOLDERS,
 	type WorkFolderKey,
 	workFolderPath,
 	workItemRel,
@@ -53,11 +53,11 @@ import {
 	GitHubIssueProvider,
 } from './issue-provider.js';
 
-/** The slice lifecycle folders a lone-slice `issue:` can reside in. */
-const SLICE_FOLDERS = SLICE_LIFECYCLE_FOLDERS;
+/** The task lifecycle folders a lone-task `issue:` can reside in. */
+const TASK_FOLDERS = TASK_LIFECYCLE_FOLDERS;
 
-/** The PRD folders an `issue:`-bearing PRD can reside in. */
-const PRD_FOLDERS = WORK_LAYOUT_PRD_FOLDERS;
+/** The brief folders an `issue:`-bearing brief can reside in. */
+const BRIEF_FOLDERS = WORK_LAYOUT_BRIEF_FOLDERS;
 
 /** Why the close-job acted (or did not act) on a candidate issue. */
 export type CloseDecision =
@@ -116,7 +116,7 @@ function listMarkdown(repoPath: string, folder: WorkFolderKey): string[] {
  * issue, or a typo'd `prd:` hop — degrades to "no issue to close", never crashes).
  */
 function prdIssueNumber(repoPath: string, prdSlug: string): number | undefined {
-	for (const folder of PRD_FOLDERS) {
+	for (const folder of BRIEF_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
 				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
@@ -155,7 +155,7 @@ function resolveCandidates(repoPath: string): {
 		[];
 
 	// PRD candidates: a PRD's `issue:` closes when ITS query is complete.
-	for (const folder of PRD_FOLDERS) {
+	for (const folder of BRIEF_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
 				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
@@ -174,7 +174,7 @@ function resolveCandidates(repoPath: string): {
 
 	// Lone-slice candidates: a slice with `issue:` and NO `prd:` closes its OWN
 	// issue directly when it lands in work/done/.
-	for (const folder of SLICE_FOLDERS) {
+	for (const folder of TASK_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
 				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),

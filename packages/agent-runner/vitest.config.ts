@@ -25,6 +25,13 @@ import {defineConfig} from 'vitest/config';
  */
 const RACE_SENSITIVE = [
 	'test/claim-cas.test.ts',
+	// The `gc --ledger --reap-stale-locks` SWEEP (`gc-ledger-reap-stale-locks-opt-in-flag`):
+	// the opt-in reaper clears `cleared-stale` per-item locks via the shared leased
+	// delete against a --bare arbiter, and runs an in-process TWO-REAPER race (two
+	// clones sweeping the SAME stale lock ref) proving the leased delete REJECTS the
+	// loser, never --force; keep it out of file-parallel pressure for the same
+	// deterministic lock-CAS reasoning as slicing-lock.test.ts.
+	'test/gc-reap-stale-locks.test.ts',
 	// The slicing concurrency lock reuses the claim CAS (prd → slicing/ → prd)
 	// against a --bare arbiter and runs an in-process two-slicer race plus a
 	// release-rebase-conflict test that writes main; keep it out of file-parallel

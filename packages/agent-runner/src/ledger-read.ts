@@ -4,7 +4,7 @@ import {parseFrontmatter} from './frontmatter.js';
 import {runAsync, type RunResult} from './git.js';
 import {
 	type WorkFolderKey,
-	type PrdFolder,
+	type BriefFolder,
 	workFolderPath,
 	workFolderRel,
 	isWorkItemFile,
@@ -346,7 +346,7 @@ function slugForFile(dir: string, file: string): string {
 
 /** Read `work/backlog/*.md` from the local tree, parsed and sorted by slug. */
 function readLocalBacklog(repoPath: string): LedgerBacklogItem[] {
-	const dir = workFolderPath(repoPath, 'backlog');
+	const dir = workFolderPath(repoPath, 'tasks-todo');
 	const items: LedgerBacklogItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -427,7 +427,7 @@ function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
  */
 function findPrdFileBySlug(
 	repoPath: string,
-	folder: PrdFolder,
+	folder: BriefFolder,
 	slug: string,
 ): string | undefined {
 	const dir = workFolderPath(repoPath, folder);
@@ -453,7 +453,7 @@ function findPrdFileBySlug(
  * matches `slicing.ts`'s `readSlicedSlugs`. Missing folders read as empty.
  */
 function readLocalPrdPool(repoPath: string): LocalPrdPool {
-	const dir = workFolderPath(repoPath, 'prd');
+	const dir = workFolderPath(repoPath, 'briefs-ready');
 	const prds: LedgerPrdItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -473,7 +473,7 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 	// `remove-sliced-marker-step-b`), mirroring slicing.ts's readSlicedSlugs. Missing
 	// folder reads as empty.
 	const slicedSlugs = new Set<string>();
-	const slicedDir = workFolderPath(repoPath, 'prd-sliced');
+	const slicedDir = workFolderPath(repoPath, 'briefs-tasked');
 	for (const file of listMarkdown(slicedDir)) {
 		const content = readFileSync(join(slicedDir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -505,7 +505,7 @@ async function readSliceOnArbiter(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string | undefined> {
-	for (const folder of ['backlog', 'in-progress'] as const) {
+	for (const folder of ['tasks-todo', 'in-progress'] as const) {
 		const object = `${arbiter}/main:${workFolderRel(folder)}/${slug}.md`;
 		const show = await gitSoft(['show', object], cwd, env);
 		if (show.status === 0) {
@@ -588,7 +588,7 @@ async function readBacklogFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerBacklogItem[]> {
-	const base = `${ref}:${workFolderRel('backlog')}`;
+	const base = `${ref}:${workFolderRel('tasks-todo')}`;
 	const items: LedgerBacklogItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
@@ -619,7 +619,7 @@ async function readPrdPoolFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerPrdPool> {
-	const prdBase = `${ref}:${workFolderRel('prd')}`;
+	const prdBase = `${ref}:${workFolderRel('briefs-ready')}`;
 	const prds: LedgerPrdItem[] = [];
 	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
 		const content = await showInTree(prdBase, file, cwd, env);
@@ -640,7 +640,7 @@ async function readPrdPoolFromTree(
 	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
 	// truth (the `sliced:` marker was removed in `remove-sliced-marker-step-b`),
 	// exactly as the working-tree reader resolves it.
-	const slicedBase = `${ref}:${workFolderRel('prd-sliced')}`;
+	const slicedBase = `${ref}:${workFolderRel('briefs-tasked')}`;
 	const slicedSlugs = new Set<string>();
 	for (const file of await listMarkdownInTree(slicedBase, cwd, env)) {
 		const content = await showInTree(slicedBase, file, cwd, env);
@@ -721,8 +721,8 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		return {slice, doneSlugs};
 	},
 	resolvePrdExistence({repoPath, slug}) {
-		const prdFile = findPrdFileBySlug(repoPath, 'prd', slug);
-		const prdSlicedFile = findPrdFileBySlug(repoPath, 'prd-sliced', slug);
+		const prdFile = findPrdFileBySlug(repoPath, 'briefs-ready', slug);
+		const prdSlicedFile = findPrdFileBySlug(repoPath, 'briefs-tasked', slug);
 		return {
 			exists: prdFile !== undefined || prdSlicedFile !== undefined,
 			prdFile,
