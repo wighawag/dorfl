@@ -2,6 +2,7 @@
 title: run-internal-error-tests "config-error" case flakes as "lost-race" under full-suite parallel load
 date: 2026-06-18
 status: open
+needsAnswers: true
 ---
 
 ## What I saw
