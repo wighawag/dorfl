@@ -14,28 +14,56 @@ import {workItemRel} from './work-layout.js';
  * It builds NOTHING above the contract — no tick, no verb, no lock, no rungs;
  * later slices of the family consume these.
  *
- * The format is RESOLVED in the PRD ("The sidecar FORMAT (RESOLVED here)" +
- * "MAINTAINER-RESOLVED SLICE-TIME DECISIONS §1") — this is a faithful build of
- * that spec, not a re-opening. The load-bearing rules:
+ * # On-disk text format (REFORMATTED — ADR `question-sidecar-human-readable-format`)
+ *
+ * The sidecar is the HUMAN-FACING surface of the answer loop: humans read the
+ * question and write the answer in this file, very often through the GitHub web
+ * UI. The original `key: |` YAML-block-scalar format rendered as run-together
+ * noise on GitHub (literal `|` pipes, collapsed indentation). The on-disk format
+ * is now **real Markdown with machine state in HTML comments**:
+ *
+ *   - An IDENTITY HTML comment at the top carries `item`/`type`/`slug`/
+ *     `allAnswered` (`<!-- agent-runner-sidecar: item=... type=... slug=... allAnswered=... -->`).
+ *   - Per entry: a `## Qn` heading (entry separator + answer boundary), a BOLD
+ *     question line, a BLOCKQUOTE context, an ITALIC suggested-default
+ *     (`_Suggested default: …_`), a per-entry HTML COMMENT carrying
+ *     `id=…` (and optional `disposition=…` and an explicit `answered=…` OVERRIDE
+ *     when it disagrees with the answer-derived predicate), a fixed answer
+ *     marker `**Your answer** (write below this line):`, then the human's
+ *     answer prose.
+ *   - The answer is HEADING-DELIMITED: it spans from the answer marker up to
+ *     the next entry `## ` heading (NOT a `---` rule), so a literal `---`
+ *     inside an answer cannot break parsing.
+ *
+ * GitHub renders HTML comments as nothing, so the machine state is invisible to
+ * the human and unbreakable by their edit. The human just types prose under the
+ * answer marker with no format knowledge.
+ *
+ * Round-trip is **SEMANTIC** (model-equal, not byte-equal): a parse → serialise
+ * canonicalises whitespace; the MODEL (entries, ids, answers, answered-state,
+ * dispositions) is preserved. The load-bearing rules are kept:
  *
  *   - **Identity-keyed, NOT folder-keyed.** The path is derived PURELY from the
  *     item's NAMESPACED identity (`<type>-<slug>`, `:`→`-` for the filename),
  *     using {@link parseSlugArg} (the `slug-namespace.ts` resolver) as the single
  *     source of truth for the identity. There is NO back-pointer field in the
  *     item body — the only in-body signal is the existing `needsAnswers` flag —
- *     so the sidecar survives the item's `git mv`s between lifecycle folders with
- *     no lock-step move.
- *   - **The answered predicate (MAINTAINER-RESOLVED §1):** a non-empty `answer:`
- *     ⇒ ANSWERED, with an explicit `answered:` line as an OVERRIDE. The human
- *     writes the LEAST (just `answer:`); the serialiser normalises `answered:
- *     true` on the next write; an explicit `answered: false` overrides a
- *     non-empty answer.
+ *     so the sidecar survives the item's `git mv`s between lifecycle folders
+ *     with no lock-step move.
+ *   - **The answered predicate (MAINTAINER-RESOLVED §1):** a non-empty
+ *     `answer` ⇒ ANSWERED, with an explicit `answered=…` HTML-comment field as
+ *     an OVERRIDE. The override is encoded in the per-entry HTML comment ONLY
+ *     when it DISAGREES with the derived predicate (an empty answer with
+ *     `answered=true`, or a non-empty answer with `answered=false`); otherwise
+ *     the field is omitted so a tolerant "human only types under the answer
+ *     marker" edit cannot be re-interpreted as a sticky override on the next
+ *     parse.
  *   - **`allAnswered` is DERIVED** — recomputed from the entries on every
  *     serialise; the classifier MAY read it for a cheap scan but MUST NOT trust
  *     it over the entries.
- *   - **Entry ids are stable + monotonic** (`q1`, `q2`, …), NEVER reused. APPEND
- *     adds `qN+1` and never mutates an existing answered entry (the sidecar is
- *     the item's full Q&A history).
+ *   - **Entry ids are stable + monotonic** (`q1`, `q2`, …), NEVER reused.
+ *     APPEND adds `qN+1` and never mutates an existing answered entry (the
+ *     sidecar is the item's full Q&A history).
  */
 
 /** The three item-types a sidecar can key onto (the slug-namespace + obs). */
@@ -76,7 +104,7 @@ export interface SidecarEntry {
 	 */
 	answer: string;
 	/**
-	 * The explicit `answered:` OVERRIDE, when the human/tooling wrote one. `true`
+	 * The explicit `answered` OVERRIDE, when the human/tooling wrote one. `true`
 	 * forces answered; `false` overrides a non-empty answer back to unanswered.
 	 * `undefined` ⇒ no override (the answered-ness derives from `answer`).
 	 */
@@ -107,10 +135,10 @@ export class SidecarParseError extends Error {
 
 /**
  * Is this entry ANSWERED? The MAINTAINER-RESOLVED §1 predicate: a non-empty
- * `answer:` ⇒ answered, with the explicit `answered:` override winning when
- * present. An explicit `answered: false` overrides a non-empty answer back to
- * unanswered; an explicit `answered: true` forces answered even with an empty
- * answer.
+ * `answer` ⇒ answered, with the explicit `answered=…` override (carried in the
+ * per-entry HTML comment) winning when present. An explicit `answered=false`
+ * overrides a non-empty answer back to unanswered; an explicit `answered=true`
+ * forces answered even with an empty answer.
  */
 export function isEntryAnswered(entry: SidecarEntry): boolean {
 	if (entry.answeredOverride !== undefined) {
@@ -126,9 +154,9 @@ export function pendingEntries(model: SidecarModel): SidecarEntry[] {
 
 /**
  * Is the WHOLE sidecar answered? DERIVED from the entries (never read off the
- * frontmatter mirror). An EMPTY sidecar (no entries) is NOT all-answered — a
- * sidecar with no open questions should not exist (it would be deleted on full
- * resolution), so `allAnswered` over zero entries is `false`, keeping the
+ * identity comment mirror). An EMPTY sidecar (no entries) is NOT all-answered —
+ * a sidecar with no open questions should not exist (it would be deleted on
+ * full resolution), so `allAnswered` over zero entries is `false`, keeping the
  * "pending ⇒ NO-OP" classifier honest.
  */
 export function allAnswered(model: SidecarModel): boolean {
@@ -206,6 +234,20 @@ export function sidecarPathFor(identity: string): string {
 	return workItemRel('questions', `${type}-${slug}.md`);
 }
 
+// --- Format constants -----------------------------------------------------
+
+/** The fixed answer marker the human types prose under. */
+const ANSWER_MARKER = '**Your answer** (write below this line):';
+
+const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
+	'promote-slice',
+	'promote-adr',
+	'keep',
+	'delete',
+	'dropped',
+	'needs-attention',
+]);
+
 // --- Parse ----------------------------------------------------------------
 
 /** Pull the next monotonic id given the highest existing id number. */
@@ -223,196 +265,239 @@ function nextId(entries: SidecarEntry[]): string {
 	return `q${max + 1}`;
 }
 
-/** Strip a trailing newline-run, leaving inner blank lines intact. */
-function trimBlock(value: string): string {
-	return value.replace(/\n+$/, '');
+/** Normalise CRLF → LF and strip a leading BOM. */
+function normaliseText(text: string): string {
+	return text.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
 }
 
-interface RawFrontmatter {
-	item?: string;
-	type?: string;
-	slug?: string;
+/** Strip leading + trailing blank lines, leaving inner blanks intact. */
+function trimBlankLines(value: string): string {
+	return value.replace(/^\n+/, '').replace(/\n+$/, '');
 }
 
-/** Split the document into its frontmatter block + the body after it. */
-function splitDocument(text: string): {fm: string; body: string} {
-	const normalized = text.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
-	if (!normalized.startsWith('---\n')) {
+interface IdentityFields {
+	item: string;
+	allAnswered?: boolean;
+}
+
+/** Parse the top identity HTML comment. */
+function parseIdentityComment(line: string): IdentityFields | undefined {
+	const match = /^<!--\s*agent-runner-sidecar:\s*(.*?)\s*-->\s*$/.exec(line);
+	if (!match) {
+		return undefined;
+	}
+	const fields: Record<string, string> = {};
+	for (const token of match[1].split(/\s+/)) {
+		if (token === '') {
+			continue;
+		}
+		const eq = token.indexOf('=');
+		if (eq === -1) {
+			continue;
+		}
+		fields[token.slice(0, eq)] = token.slice(eq + 1);
+	}
+	const item = fields['item'];
+	if (item === undefined || item === '') {
+		return undefined;
+	}
+	const out: IdentityFields = {item};
+	if (fields['allAnswered'] !== undefined) {
+		out.allAnswered = fields['allAnswered'] === 'true';
+	}
+	return out;
+}
+
+interface EntryFields {
+	id?: string;
+	answered?: boolean;
+	disposition?: SidecarDisposition;
+}
+
+/** Parse a per-entry `<!-- qN fields: key=val … -->` HTML comment. */
+function parseEntryComment(line: string): EntryFields | undefined {
+	const match = /^<!--\s*q\d+\s+fields:\s*(.*?)\s*-->\s*$/.exec(line);
+	if (!match) {
+		return undefined;
+	}
+	const out: EntryFields = {};
+	for (const token of match[1].split(/\s+/)) {
+		if (token === '') {
+			continue;
+		}
+		const eq = token.indexOf('=');
+		if (eq === -1) {
+			continue;
+		}
+		const key = token.slice(0, eq);
+		const value = token.slice(eq + 1);
+		if (key === 'id') {
+			out.id = value;
+		} else if (key === 'answered') {
+			if (value === 'true') {
+				out.answered = true;
+			} else if (value === 'false') {
+				out.answered = false;
+			}
+		} else if (key === 'disposition' && DISPOSITIONS.has(value)) {
+			out.disposition = value as SidecarDisposition;
+		}
+	}
+	return out;
+}
+
+/** Parse one entry's content lines (between two `## ` headings) into an entry. */
+function parseEntrySection(lines: string[]): SidecarEntry {
+	let id = '';
+	let question = '';
+	const contextLines: string[] = [];
+	let inBlockquote = false;
+	let defaultVal: string | undefined;
+	let answeredOverride: boolean | undefined;
+	let disposition: SidecarDisposition | undefined;
+	let answerStart = -1;
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line === ANSWER_MARKER) {
+			answerStart = i + 1;
+			break;
+		}
+		const entryFields = parseEntryComment(line);
+		if (entryFields) {
+			if (entryFields.id !== undefined) {
+				id = entryFields.id;
+			}
+			if (entryFields.answered !== undefined) {
+				answeredOverride = entryFields.answered;
+			}
+			if (entryFields.disposition !== undefined) {
+				disposition = entryFields.disposition;
+			}
+			inBlockquote = false;
+			continue;
+		}
+		// Blockquote context: collect the FIRST contiguous run of `> …` lines.
+		// Once a non-quote line breaks the run, later `>` lines (e.g. the human
+		// quoting something in their answer's preamble) are ignored as context.
+		const blockquoteMatch = /^>\s?(.*)$/.exec(line);
+		if (blockquoteMatch && (contextLines.length === 0 || inBlockquote)) {
+			contextLines.push(blockquoteMatch[1]);
+			inBlockquote = true;
+			continue;
+		}
+		if (inBlockquote && !blockquoteMatch && line.trim() !== '') {
+			inBlockquote = false;
+		}
+		// Italic "_Suggested default: …_" line.
+		const defaultMatch = /^_Suggested default:\s*(.+?)_\s*$/.exec(line);
+		if (defaultMatch && defaultVal === undefined) {
+			defaultVal = defaultMatch[1];
+			continue;
+		}
+		// Bold question line (first one wins; skip the answer marker line which
+		// has trailing `(write below this line):` and so does not match this regex).
+		const questionMatch = /^\*\*(.+?)\*\*\s*$/.exec(line);
+		if (questionMatch && question === '') {
+			question = questionMatch[1];
+			continue;
+		}
+	}
+
+	if (id === '') {
 		throw new SidecarParseError(
-			'sidecar must open with a `---` frontmatter fence',
+			'sidecar entry is missing its id (HTML comment)',
 		);
 	}
-	const lines = normalized.split('\n');
-	const closing = lines.indexOf('---', 1);
-	if (closing === -1) {
-		throw new SidecarParseError('sidecar frontmatter fence is not closed');
+
+	const context = trimBlankLines(contextLines.join('\n'));
+	let answer = '';
+	if (answerStart >= 0) {
+		answer = trimBlankLines(lines.slice(answerStart).join('\n'));
 	}
-	return {
-		fm: lines.slice(1, closing).join('\n'),
-		body: lines.slice(closing + 1).join('\n'),
+
+	// Re-interpret the override: store it ONLY when it DISAGREES with the
+	// answer-derived predicate (so a redundant `answered=false` over an empty
+	// answer cannot become a sticky override that freezes a later tolerant edit).
+	const derivedAnswered = answer.trim() !== '';
+	let finalOverride: boolean | undefined;
+	if (answeredOverride === true && !derivedAnswered) {
+		finalOverride = true;
+	} else if (answeredOverride === false && derivedAnswered) {
+		finalOverride = false;
+	}
+
+	const entry: SidecarEntry = {
+		id,
+		question,
+		context,
+		answer,
 	};
-}
-
-/** Parse the small slice of frontmatter the sidecar uses (scalar keys only). */
-function parseRawFrontmatter(fm: string): RawFrontmatter {
-	const result: RawFrontmatter = {};
-	for (const line of fm.split('\n')) {
-		const match = /^([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/.exec(line);
-		if (!match) {
-			continue;
-		}
-		const [, key, value] = match;
-		if (key === 'item') {
-			result.item = value;
-		} else if (key === 'type') {
-			result.type = value;
-		} else if (key === 'slug') {
-			result.slug = value;
-		}
-		// `allAnswered` is a DERIVED mirror — IGNORED on read (recomputed on write).
+	if (defaultVal !== undefined) {
+		entry.default = defaultVal;
 	}
-	return result;
+	if (finalOverride !== undefined) {
+		entry.answeredOverride = finalOverride;
+	}
+	if (disposition !== undefined) {
+		entry.disposition = disposition;
+	}
+	return entry;
 }
-
-/** Per-entry scalar key with a block-scalar (`|`) or inline value. */
-type EntryKey =
-	| 'id'
-	| 'question'
-	| 'context'
-	| 'default'
-	| 'answered'
-	| 'answer'
-	| 'disposition';
-
-const ENTRY_KEYS: ReadonlySet<string> = new Set<EntryKey>([
-	'id',
-	'question',
-	'context',
-	'default',
-	'answered',
-	'answer',
-	'disposition',
-]);
-
-const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
-	'promote-slice',
-	'promote-adr',
-	'keep',
-	'delete',
-	'dropped',
-	'needs-attention',
-]);
 
 /**
- * Parse a sidecar document into its typed model. TOLERANT of the human writing
- * only `answer:` (the answered-ness derives from it). Block scalars (`key: |`)
- * collect the following more-indented lines; inline scalars (`key: value`) take
- * the rest of the line.
+ * Parse a sidecar document into its typed model. The on-disk format is the
+ * human-readable Markdown + HTML-comments form (see the module doc); the
+ * identity comment lives at the top, each entry opens with a `## ` heading, and
+ * the answer is heading-delimited (everything between the answer marker and the
+ * next `## ` heading is the answer). TOLERANT of the human typing only under
+ * the answer marker: a non-empty answer ⇒ answered (no comment edit needed).
  */
 export function parseSidecar(text: string): SidecarModel {
-	const {fm, body} = splitDocument(text);
-	const raw = parseRawFrontmatter(fm);
-	if (raw.item === undefined || raw.item === '') {
-		throw new SidecarParseError('sidecar frontmatter is missing `item:`');
-	}
-	const resolved = resolveSidecarIdentity(raw.item);
+	const lines = normaliseText(text).split('\n');
 
-	const entries: SidecarEntry[] = [];
-	const lines = body.split('\n');
-	let i = 0;
-	while (i < lines.length) {
-		const line = lines[i];
-		// An entry opens with a `## ...` heading. Skip anything before the first.
-		if (!/^##\s+/.test(line)) {
-			i++;
+	// Find the identity HTML comment (scan from the top, skipping blank lines).
+	let identity: IdentityFields | undefined;
+	let cursor = 0;
+	while (cursor < lines.length) {
+		const line = lines[cursor];
+		cursor++;
+		if (line.trim() === '') {
 			continue;
 		}
-		i++;
-		const fields = new Map<EntryKey, string>();
-		while (i < lines.length && !/^##\s+/.test(lines[i])) {
-			const keyMatch = /^([A-Za-z][A-Za-z0-9_]*)\s*:\s*(.*)$/.exec(lines[i]);
-			if (!keyMatch) {
-				i++;
-				continue;
-			}
-			const key = keyMatch[1];
-			const rest = keyMatch[2];
-			if (!ENTRY_KEYS.has(key)) {
-				i++;
-				continue;
-			}
-			if (rest.trim() === '|') {
-				// Block scalar: collect following lines more-indented than the key.
-				i++;
-				const blockLines: string[] = [];
-				while (i < lines.length && !/^##\s+/.test(lines[i])) {
-					const l = lines[i];
-					if (l.trim() === '') {
-						blockLines.push('');
-						i++;
-						continue;
-					}
-					const indent = /^(\s+)/.exec(l);
-					if (!indent) {
-						break;
-					}
-					blockLines.push(l.replace(/^ {2}/, '').replace(/^\t/, ''));
-					i++;
-				}
-				fields.set(key as EntryKey, trimBlock(blockLines.join('\n')));
-			} else {
-				fields.set(key as EntryKey, rest.trim());
-				i++;
-			}
+		identity = parseIdentityComment(line);
+		if (identity) {
+			break;
 		}
+		throw new SidecarParseError(
+			'sidecar must open with an `<!-- agent-runner-sidecar: … -->` identity comment',
+		);
+	}
+	if (!identity) {
+		throw new SidecarParseError('sidecar is missing its identity HTML comment');
+	}
+	const resolved = resolveSidecarIdentity(identity.item);
 
-		const id = fields.get('id') ?? '';
-		if (id === '') {
-			throw new SidecarParseError('sidecar entry is missing `id:`');
-		}
-		const answerText = fields.get('answer') ?? '';
-		const derivedAnswered = answerText.trim() !== '';
-		const answeredRaw = fields.get('answered');
-		let answeredOverride: boolean | undefined;
-		if (answeredRaw !== undefined && answeredRaw !== '') {
-			const v = answeredRaw.toLowerCase();
-			// The `answered:` line is an OVERRIDE — store it ONLY when it DISAGREES
-			// with the answer-derived predicate. A redundant `answered: false` over an
-			// empty answer (or `answered: true` over a non-empty one) carries no
-			// information and must NOT become a sticky override — otherwise the
-			// serialiser's normalised `answered:` line would re-parse into a frozen
-			// override, and later filling `answer:` could never flip the entry.
-			if (v === 'true' && !derivedAnswered) {
-				answeredOverride = true;
-			} else if (v === 'false' && derivedAnswered) {
-				answeredOverride = false;
+	// Split the rest into per-entry sections on `## ` headings. Anything before
+	// the first heading is preamble we ignore (a stray human note, or the blank
+	// line after the identity comment).
+	const entries: SidecarEntry[] = [];
+	let sectionLines: string[] | undefined;
+	for (let i = cursor; i < lines.length; i++) {
+		const line = lines[i];
+		if (/^##\s+/.test(line)) {
+			if (sectionLines !== undefined) {
+				entries.push(parseEntrySection(sectionLines));
 			}
+			sectionLines = [];
+			continue;
 		}
-		const dispositionRaw = fields.get('disposition');
-		const disposition =
-			dispositionRaw !== undefined &&
-			dispositionRaw !== '' &&
-			DISPOSITIONS.has(dispositionRaw)
-				? (dispositionRaw as SidecarDisposition)
-				: undefined;
-
-		const entry: SidecarEntry = {
-			id,
-			question: fields.get('question') ?? '',
-			context: fields.get('context') ?? '',
-			answer: answerText,
-		};
-		const def = fields.get('default');
-		if (def !== undefined && def !== '') {
-			entry.default = def;
+		if (sectionLines !== undefined) {
+			sectionLines.push(line);
 		}
-		if (answeredOverride !== undefined) {
-			entry.answeredOverride = answeredOverride;
-		}
-		if (disposition !== undefined) {
-			entry.disposition = disposition;
-		}
-		entries.push(entry);
+	}
+	if (sectionLines !== undefined) {
+		entries.push(parseEntrySection(sectionLines));
 	}
 
 	return {
@@ -425,55 +510,77 @@ export function parseSidecar(text: string): SidecarModel {
 
 // --- Serialise ------------------------------------------------------------
 
-/** Emit a block-scalar field (`key: |` + indented body), or skip if empty. */
-function blockField(key: string, value: string): string[] {
-	const out = [`${key}: |`];
-	const trimmed = trimBlock(value);
+/** Collapse internal newlines so a value renders as a single Markdown line. */
+function singleLine(value: string): string {
+	return value.replace(/\s*\n\s*/g, ' ').trim();
+}
+
+/** Render a multi-line value as a Markdown blockquote (each line `> …`). */
+function blockquote(value: string): string[] {
+	const trimmed = trimBlankLines(value);
 	if (trimmed === '') {
-		return out;
+		return [];
 	}
-	for (const line of trimmed.split('\n')) {
-		out.push(line === '' ? '' : `  ${line}`);
-	}
-	return out;
+	return trimmed.split('\n').map((line) => (line === '' ? '>' : `> ${line}`));
 }
 
 /**
- * Serialise a model to its CANONICAL text: identity frontmatter with the
- * recomputed `allAnswered` mirror, then the ordered entries with `answered:`
- * normalised (a non-empty answer with no explicit override emits `answered:
- * true`; an explicit override is preserved verbatim). Round-trip stable:
- * `parseSidecar(serialiseSidecar(m))` ≡ `m` (modulo the derived mirror).
+ * Serialise a model to its CANONICAL human-readable Markdown text. The identity
+ * HTML comment at the top carries `item`/`type`/`slug` + the derived
+ * `allAnswered` mirror; each entry is a `## Qn` heading, a bold question line,
+ * a blockquote context (when non-empty), an italic suggested-default (when
+ * present), a per-entry HTML comment carrying `id` (and `disposition` and an
+ * explicit `answered` override when it disagrees with the derived predicate),
+ * the fixed answer marker, then the answer prose. Round-trip is SEMANTIC:
+ * `parseSidecar(serialiseSidecar(m))` recovers an equal MODEL; re-serialising
+ * canonicalises the text.
  */
 export function serialiseSidecar(model: SidecarModel): string {
 	const out: string[] = [];
-	out.push('---');
-	out.push(`item: ${model.item}`);
-	out.push(`type: ${model.type}`);
-	out.push(`slug: ${model.slug}`);
-	out.push(`allAnswered: ${allAnswered(model)}`);
-	out.push('---');
-	out.push('');
+	const identityParts = [
+		`item=${model.item}`,
+		`type=${model.type}`,
+		`slug=${model.slug}`,
+		`allAnswered=${allAnswered(model)}`,
+	];
+	out.push(`<!-- agent-runner-sidecar: ${identityParts.join(' ')} -->`);
 
-	model.entries.forEach((entry, idx) => {
+	model.entries.forEach((entry) => {
+		out.push('');
 		const heading = entry.id.replace(/^q/, 'Q');
 		out.push(`## ${heading}`);
-		out.push(`id: ${entry.id}`);
-		out.push(...blockField('question', entry.question));
-		out.push(...blockField('context', entry.context));
-		if (entry.default !== undefined) {
-			out.push(...blockField('default', entry.default));
-		}
-		// Normalise the answered line: an explicit override is preserved, else the
-		// derived predicate is emitted (non-empty answer ⇒ `answered: true`).
-		const answered = isEntryAnswered(entry);
-		out.push(`answered: ${answered}`);
-		out.push(...blockField('answer', entry.answer));
-		if (entry.disposition !== undefined) {
-			out.push(`disposition: ${entry.disposition}`);
-		}
-		if (idx < model.entries.length - 1) {
+		out.push('');
+		out.push(`**${singleLine(entry.question)}**`);
+		const ctx = blockquote(entry.context);
+		if (ctx.length > 0) {
 			out.push('');
+			out.push(...ctx);
+		}
+		if (entry.default !== undefined && entry.default.trim() !== '') {
+			out.push('');
+			out.push(`_Suggested default: ${singleLine(entry.default)}_`);
+		}
+		out.push('');
+		// Per-entry machine comment. The override is emitted ONLY when it
+		// DISAGREES with the answer-derived predicate (otherwise the
+		// just-serialised line would re-parse as a sticky override).
+		const fields: string[] = [`id=${entry.id}`];
+		const derivedAnswered = entry.answer.trim() !== '';
+		if (entry.answeredOverride === true && !derivedAnswered) {
+			fields.push('answered=true');
+		} else if (entry.answeredOverride === false && derivedAnswered) {
+			fields.push('answered=false');
+		}
+		if (entry.disposition !== undefined) {
+			fields.push(`disposition=${entry.disposition}`);
+		}
+		out.push(`<!-- ${entry.id} fields: ${fields.join(' ')} -->`);
+		out.push('');
+		out.push(ANSWER_MARKER);
+		const answerText = trimBlankLines(entry.answer);
+		if (answerText !== '') {
+			out.push('');
+			out.push(answerText);
 		}
 	});
 	out.push('');

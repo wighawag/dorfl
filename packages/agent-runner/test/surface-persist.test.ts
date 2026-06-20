@@ -163,7 +163,7 @@ describe('persistSurfacedQuestions — append-never-overwrite (re-surface)', () 
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'all answered'], repo);
 		// Sanity: the seed sidecar reports allAnswered.
-		expect(serialiseSidecar(model)).toMatch(/allAnswered: true/);
+		expect(serialiseSidecar(model)).toMatch(/allAnswered=true/);
 
 		persistSurfacedQuestions({
 			cwd: repo,
@@ -175,7 +175,7 @@ describe('persistSurfacedQuestions — append-never-overwrite (re-surface)', () 
 
 		const text = readFileSync(join(repo, sidecarPath), 'utf8');
 		// The newly-appended pending entry flips allAnswered back to false.
-		expect(text).toMatch(/allAnswered: false/);
+		expect(text).toMatch(/allAnswered=false/);
 	});
 });
 

@@ -190,7 +190,7 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 		expect(model.entries[1].question).toBe('follow-up?');
 		expect(model.entries[1].answer).toBe('');
 		expect(readFileSync(join(repo, sidecarPath), 'utf8')).toMatch(
-			/allAnswered: false/,
+			/allAnswered=false/,
 		);
 	});
 });

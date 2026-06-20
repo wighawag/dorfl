@@ -80,7 +80,40 @@ If the item carries **no open judgement** (review approves with no blocking find
 You stay **human-invokable**. A human with no runner can invoke this skill by hand, take the emitted questions, and persist them one of two ways:
 
 - **Persist via the `advance` verb** — the apply/surface rung of the `advance` command (a **sibling top-level verb**, like `do` and `run`). It is `advance`, **NOT `do advance`** — `advance` is its own verb, and `do` subcommands are REJECTED in the `advance-loop` brief. (The `advance` verb is built in a later task; until it lands, use the hand-written path below.)
-- **Hand-write the documented sidecar format** — write `work/questions/<type>-<slug>.md` by hand per the format in `advance-sidecar-contract` (frontmatter + one entry per emitted question; you fill `id`/`answered:` as the format documents). Because the emitted shape already matches the sidecar entry, this is a transcription, not a translation.
+- **Hand-write the documented sidecar format** — write `work/questions/<type>-<slug>.md` by hand per the human-readable Markdown shape below (defined by ADR `docs/adr/question-sidecar-human-readable-format.md`). Because the emitted shape already matches the sidecar entry, this is a transcription, not a translation.
+
+The hand-written sidecar shape (the SAME file is both human-readable on GitHub and machine-parseable — the machine fields hide in HTML comments that GitHub renders as nothing, the human content is real Markdown):
+
+```
+<!-- agent-runner-sidecar: item=<type>:<slug> type=<type> slug=<slug> allAnswered=false -->
+
+## Q1
+
+**<the question, verbatim>**
+
+> <inline context so the human need not open the item>
+
+_Suggested default: <optional default; omit the whole line if none>_
+
+<!-- q1 fields: id=q1 disposition=<optional — triage entries only> -->
+
+**Your answer** (write below this line):
+
+## Q2
+
+**<next question…>**
+
+…
+```
+
+Notes for the hand-writer:
+
+- The **identity HTML comment** at the top carries `item`/`type`/`slug` and the derived `allAnswered` mirror. Set `allAnswered=false` on first write (no answers yet); the engine recomputes it on every subsequent serialise.
+- Each entry opens with a `## Qn` heading (`Q1`, `Q2`, …, monotonic — never reused). The heading is BOTH the entry separator and the answer-region boundary.
+- The **question is a bold line**, the **context is a Markdown blockquote** (each line prefixed `> `), the **default is one italic line** prefixed `_Suggested default: ` and closed with `_`. Omit context/default lines entirely when absent.
+- The **per-entry HTML comment** carries `id=qN` and, on a triage entry only, `disposition=<value>`. Do NOT add an `answered=` field — the engine derives answered-ness from the answer text and only emits the override when it disagrees with that derivation.
+- The fixed marker `**Your answer** (write below this line):` is followed by an empty region; the answer is everything from the marker up to the next `## ` heading (heading-delimited so a `---` inside an answer cannot break parsing).
+- The human just types prose under the answer marker — no `key:`, no escaping, no fence.
 
 **No separate write-skill is added.** Hand-writing the sidecar (or the `advance` verb) is enough; a dedicated `record-questions` write-skill is DEFERRED in the brief unless hand-writing proves annoying. Do not invent one here.
 
