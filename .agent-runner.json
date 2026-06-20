@@ -3,9 +3,9 @@
   "verify": "pnpm format:check && pnpm build && pnpm test",
   "harness": "pi",
   "autoBuild": true,
-  "autoSlice": false,
-  "observationTriage": "off",
-  "surfaceBlockers": false,
+  "autoSlice": true,
+  "observationTriage": "auto",
+  "surfaceBlockers": true,
   "review": true,
   "integration": "propose"
 }
