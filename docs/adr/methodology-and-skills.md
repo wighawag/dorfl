@@ -13,7 +13,7 @@ Records the decisions about how this monorepo's `work/` methodology relates to t
 
 ## 1. The monorepo owns the methodology skills
 
-`skills/to-slices/` (the slicer + the `work/` contract: `WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `scripts/claim.sh`) and `skills/to-prd/` live in this monorepo. `packages/agent-runner` _consumes_ them. The contract stays tool-agnostic (any repo can adopt `work/`); the monorepo is just its home.
+`skills/to-slices/` (the slicer + the `work/` contract: `WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`) and `skills/to-prd/` live in this monorepo. (The portable `scripts/claim.sh` reference implementation was retired 2026-06-20 once the per-item lock ref superseded its direct-`main` claim mechanism — see `execution-substrate-decisions.md` §9; the tool-agnostic claim PROTOCOL stays in `CLAIM-PROTOCOL.md`.) `packages/agent-runner` _consumes_ them. The contract stays tool-agnostic (any repo can adopt `work/`); the monorepo is just its home.
 
 ## 2. Matt's tracker skills are disabled; we use `work/`-native equivalents
 

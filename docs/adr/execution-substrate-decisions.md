@@ -7,7 +7,7 @@ created: 2026-06-03
 
 # Execution substrate decisions (ADR)
 
-> **Forward note (2026-06-19 — `folder-taxonomy-reorg-and-rename`):** skill/vocabulary renames landed after this ADR. Read `to-slices` below as **`skills/to-task/`** and the `work/` folders per the new layout (`work/tasks/todo/`, `work/briefs/ready/`, …). The substrate decisions recorded here are unchanged; only the names moved. (`claim.sh` keeps its name; it is now under `skills/to-task/scripts/`.)
+> **Forward note (2026-06-19 — `folder-taxonomy-reorg-and-rename`):** skill/vocabulary renames landed after this ADR. Read `to-slices` below as **`skills/to-task/`** and the `work/` folders per the new layout (`work/tasks/todo/`, `work/briefs/ready/`, …). The substrate decisions recorded here are unchanged; only the names moved. (`claim.sh` was later RETIRED on 2026-06-20 — see §9; the per-item lock ref superseded its direct-`main` claim mechanism.)
 
 Captures the load-bearing decisions for how agent-runner runs work concurrently and safely, agreed during design before any of the B/C-tier slices were built. The slices `agent-workspaces`, `claim-command`, `arbiter-management`, `harness-pi`, `integration-github`, and `watch` all depend on these.
 
@@ -116,7 +116,7 @@ agent-runner and the `to-slices` skill (the `work/` contract, `CLAIM-PROTOCOL.md
 > **Note (ledger-transition seam):** the claim CAS's direct write to `main` described throughout this ADR is the **current (only) strategy** behind the ledger-transition seam (`docs/adr/claim-ledger-vs-protected-main.md`, accepted). The three `work/` transitions now route through that read+write seam; behaviour is byte-identical (one strategy, `main`-writing), but the `main`-write is no longer hard-wired — a future strategy could differ. This ADR's `main`-write descriptions remain accurate for today's single strategy.
 
 - The **contract docs stay tool-agnostic and primary** (the stable interface).
-- **`claim.sh` is retained** as the zero-dependency, portable bootstrap / reference implementation (it is how the very first slice gets claimed before agent-runner can build anything).
+- **`claim.sh` was RETIRED (2026-06-20).** It was originally retained as a zero-dependency, portable bootstrap / reference implementation of the claim CAS. That rationale lapsed: the claim mechanism moved to the per-item lock ref (`refs/agent-runner/lock/<entry>`, ADR `ledger-status-on-per-item-lock-refs`) and the body no longer moves to `in-progress/` on claim, so the script's `git mv work/backlog → work/in-progress` direct-`main` CAS implemented the SUPERSEDED mechanism against retired folder names. A zero-dep bootstrap that performs the OLD claim is worse than none (it would mis-claim against the current ledger), and the first-slice bootstrap need is now served by `agent-runner claim` itself. The portable CLAIM PROTOCOL lives in `CLAIM-PROTOCOL.md` (tool-agnostic); only the drifted shell reference implementation is gone.
 - The other behaviours designed here (isolation §2, deletion §4, integration §6) are likewise **protocols**, not just features. Follow-up (own task, not these slices): author companion contract docs in the skill repo (e.g. `EXECUTION-PROTOCOL.md`, `INTEGRATION-PROTOCOL.md`) once the implementation proves them out, so other tools can implement the same protocols.
 
 ## 10. Merge conflicts: rebase-or-abort, never auto-resolve
