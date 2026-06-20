@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: context-md-claim-glossary-describes-superseded-direct-main-mechanism
+needsAnswers: true
 ---
 
 ## What was seen
