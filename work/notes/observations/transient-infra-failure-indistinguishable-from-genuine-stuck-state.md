@@ -3,6 +3,7 @@ title: a TRANSIENT-INFRA build failure (401 OAuth expiry, outage) is routed to n
 date: 2026-06-16
 status: open
 slug: transient-infra-failure-indistinguishable-from-genuine-stuck-state
+needsAnswers: true
 ---
 
 ## What was observed
