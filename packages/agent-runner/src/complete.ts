@@ -752,9 +752,8 @@ async function runComplete(
 	// anyway, so there is nothing this check needs to protect for that branch.
 	if (!committedRecovery && source !== 'done' && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
-			`work/backlog/${slug}.md (nor work/in-progress/${slug}.md nor ` +
-				`work/needs-attention/${slug}.md) found — nothing to complete ` +
-				'(already done, or wrong slug?).',
+			`work/tasks/todo/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
+				'nothing to complete (already done, or wrong slug?).',
 			'source-strand',
 			slug,
 		);
