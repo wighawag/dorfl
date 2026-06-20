@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'question-sidecar-human-readable-format
 date: 2026-06-20
 status: open
 reviewOf: question-sidecar-human-readable-format
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
