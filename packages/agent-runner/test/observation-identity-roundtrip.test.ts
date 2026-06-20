@@ -1,13 +1,12 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {
-	existsSync,
 	mkdirSync,
 	writeFileSync,
 	readdirSync,
 	rmSync,
 	readFileSync,
 } from 'node:fs';
-import {dirname, join, resolve} from 'node:path';
+import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performAdvance} from '../src/advance.js';
@@ -221,35 +220,50 @@ describe('observation identity = filename — a vanished lifecycle leg is a BENI
 	});
 });
 
-describe('observation identity = filename — the 17 migrated review-nits obs each round-trip', () => {
-	it('every `work/notes/observations/review-nits-*.md` in THIS repo enumerates with slug = its filename (no foreign slug)', () => {
-		// This is a snapshot check against the actual repo — the migration is the
-		// DATA half of this slice. We do not start a throwaway tree here: we read
-		// the live observations and assert the invariant on each one. Walk up from
-		// the test file until we find a `work/notes/observations` dir (the test runs with
-		// `cwd` = the package, not the repo root).
-		let repoPath = resolve(__dirname, '..');
-		while (
-			repoPath !== dirname(repoPath) &&
-			!existsSync(join(repoPath, 'work', 'notes', 'observations'))
-		) {
-			repoPath = dirname(repoPath);
+describe('observation identity = filename — MANY minted review-nits obs each round-trip', () => {
+	it('every minted `review-nits-*.md` enumerates with slug = its filename (no foreign slug)', async () => {
+		// SELF-SEEDED (was a snapshot scan of the live repo's review-nits files,
+		// which coupled the test to mutable capture-bucket content: once those
+		// observations are legitimately triaged out of the inbox the count drops and
+		// a live-repo `>= 17` assertion goes red even though the INVARIANT still
+		// holds. The invariant — an observation's identity is its FILENAME, never a
+		// foreign frontmatter `slug:` — is what this asserts; mint several review-nits
+		// observations through the REAL gate path in a throwaway tree and check each
+		// round-trips, with NO dependency on the live inbox).
+		// Mint ONE review-nits observation through the real gate path (this also
+		// gives us a seeded repo), then add a couple MORE review-nits files whose
+		// frontmatter carries a FOREIGN `slug:` (the exact pre-fix hazard) to prove
+		// identity still resolves to the FILENAME, not the foreign slug — across many
+		// files, with no dependency on the live inbox.
+		const reviewedSlug = 'nits-one';
+		const {repo, observationFile} =
+			await mintReviewNitsObservation(reviewedSlug);
+		const obsDir = join(repo, 'work', 'notes', 'observations');
+		// Two extra review-nits files, each deliberately carrying a foreign `slug:`
+		// in frontmatter (the old foreign-slug-identity trap).
+		for (const foreign of ['nits-two', 'nits-three']) {
+			const fname = `review-nits-${foreign}-2026-06-20.md`;
+			writeFileSync(
+				join(obsDir, fname),
+				`---\nslug: ${foreign}\nreviewOf: ${foreign}\n---\n\nnits.\n`,
+			);
 		}
-		const obsDir = join(repoPath, 'work', 'notes', 'observations');
+
 		const files = readdirSync(obsDir).filter((f) =>
 			/^review-nits-.+\.md$/.test(f),
 		);
-		// Sanity: the slice noted exactly 17 minted review-nits observations; a
-		// later run-of-the-mill review-nits-* observation file may also be present
-		// (e.g. the slug-defect observation itself), so we tolerate ≥ 17.
-		expect(files.length).toBeGreaterThanOrEqual(17);
+		expect(files.length).toBeGreaterThanOrEqual(3);
 
-		const enumerated = ledgerRead.resolveLocalState({repoPath}).observations;
+		const enumerated = ledgerRead.resolveLocalState({
+			repoPath: repo,
+		}).observations;
 		for (const file of files) {
 			const item = enumerated.find((o) => o.file === file);
 			expect(item, `observation ${file} must enumerate`).toBeDefined();
-			// Identity = filename stem (no foreign slug snuck through).
+			// Identity = filename stem (a foreign frontmatter `slug:` is IGNORED).
 			expect(item!.slug).toBe(file.replace(/\.md$/, ''));
 		}
+		// The minted file specifically must not have collided with its reviewed slug.
+		expect(observationFile.replace(/\.md$/, '')).not.toBe(reviewedSlug);
 	});
 });
