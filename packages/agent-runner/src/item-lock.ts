@@ -559,6 +559,49 @@ async function amendHeldEntry(
 	};
 }
 
+/** Verdict of the SHARED leased delete {@link leasedDeleteLockRef}: `deleted` (the
+ * ref was removed), `lost` (a concurrent change moved the ref between the read and
+ * the delete — the lease was REJECTED, never `--force`d), or `error`. */
+export type LeasedDeleteOutcome = 'deleted' | 'lost' | 'error';
+
+/**
+ * The ONE leased-delete CLEAR path shared by every code path that removes a held
+ * lock ref by lease (the recovery {@link reconcileItemLockAgainstMain}, the
+ * human-invoked {@link reapStaleItemLocks} sweep, …): delete `ref` on the arbiter
+ * with `--force-with-lease=<ref>:<expectedSha>`, so the arbiter accepts ONLY if the
+ * ref is UNCHANGED since the caller read `expectedSha`. A concurrent writer who
+ * moved the ref (e.g. a racer who just marked it `stuck`) makes the lease FAIL →
+ * `lost` (reported, NEVER force-deleted). On success the local copy is dropped too
+ * (best-effort). It is the SAME leased delete `release-lock` / requeue use — there
+ * is no second clear mechanism.
+ */
+async function leasedDeleteLockRef(
+	ref: string,
+	expectedSha: string,
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LeasedDeleteOutcome> {
+	const del = await gitSoft(
+		[
+			'push',
+			arbiter,
+			'--delete',
+			ref,
+			`--force-with-lease=${ref}:${expectedSha}`,
+		],
+		cwd,
+		env,
+	);
+	if (del.status !== 0) {
+		return 'lost';
+	}
+	// Drop our local copy of the ref too (best-effort) so a subsequent read in the
+	// same clone does not see the now-deleted lock.
+	await gitSoft(['update-ref', '-d', ref], cwd, env);
+	return 'deleted';
+}
+
 export interface MarkStuckOptions {
 	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
 	item: string;
@@ -971,20 +1014,10 @@ export async function reconcileItemLockAgainstMain(
 		}
 		// Terminal on `main` + an `active` lock = a STALE lock (the crash was after
 		// the durable move, before the release). The `main` record is authoritative:
-		// clear the stale lock with the SAME leased delete `releaseItemLock` uses.
-		const del = await gitSoft(
-			[
-				'push',
-				arbiter,
-				'--delete',
-				ref,
-				`--force-with-lease=${ref}:${held.sha}`,
-			],
-			cwd,
-			env,
-		);
-		if (del.status === 0) {
-			await gitSoft(['update-ref', '-d', ref], cwd, env);
+		// clear the stale lock with the SHARED leased delete (the SAME one
+		// `release-lock` / requeue / the reaper use).
+		const cleared = await leasedDeleteLockRef(ref, held.sha, cwd, arbiter, env);
+		if (cleared === 'deleted') {
 			return {
 				outcome: 'cleared-stale',
 				entry,
@@ -1000,7 +1033,7 @@ export async function reconcileItemLockAgainstMain(
 			entry,
 			ref,
 			terminalOnMain,
-			message: `stale-lock clear for '${entry}' rejected (changed concurrently): ${del.stderr.trim()}`,
+			message: `stale-lock clear for '${entry}' rejected (changed concurrently); a racer may have moved the ref. Re-run after re-checking.`,
 		};
 	} catch (err) {
 		return {
@@ -1257,6 +1290,185 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
 		case 'error':
 			return 'reconciliation against main could not be determined (left untouched — the safe direction).';
 	}
+}
+
+/** Per-lock outcome of the human-invoked {@link reapStaleItemLocks} SWEEP:
+ *   - `reaped`        — a `cleared-stale` lock (terminal-on-main + active) cleared
+ *                       via the SHARED leased delete.
+ *   - `kept-stuck`    — left untouched (terminal + stuck — human attention; US #10).
+ *   - `kept-in-flight`— left untouched (active, non-terminal — a healthy build).
+ *   - `lost`          — a `cleared-stale` candidate whose leased delete was REJECTED
+ *                       (the ref changed concurrently); REPORTED, never `--force`d.
+ *   - `error`         — a per-item classification/clear fault (left untouched). */
+export type ReapOutcome =
+	| 'reaped'
+	| 'kept-stuck'
+	| 'kept-in-flight'
+	| 'lost'
+	| 'error';
+
+/** One lock's disposition in the {@link ReapReport}. */
+export interface ReapEntry {
+	/** The full lock entry as the report saw it (action × state + holder/since). */
+	lock: LockEntry;
+	/** The lock ref (`refs/agent-runner/lock/<entry>`). */
+	ref: string;
+	/** What the sweep DID with this lock. */
+	outcome: ReapOutcome;
+	/** A human-readable note (the clear message, or why it was kept). */
+	message: string;
+}
+
+/** The result of {@link reapStaleItemLocks}: every held lock with what the sweep
+ * did to it, plus convenience counts. A lock NEEDS HUMAN ATTENTION after the sweep
+ * iff it is `kept-stuck` or `lost` (a `cleared-stale` whose leased delete lost the
+ * race); a `kept-in-flight` is the normal healthy state and does NOT. */
+export interface ReapReport {
+	entries: ReapEntry[];
+	reaped: number;
+	kept: number;
+	lost: number;
+}
+
+/**
+ * The OPT-IN `gc --ledger --reap-stale-locks` SWEEP (PRD
+ * `ledger-status-per-item-lock-refs` US #14): a human asserting "clear the dead
+ * TERMINAL locks now", so one command sweeps every orphaned terminal lock instead
+ * of N hand-run `release-lock`s. It is the WRITE twin of {@link reportItemLocks}
+ * (the default report-only surface): it enumerates the SAME held locks, classifies
+ * each read-only, and for EXACTLY the `cleared-stale` class (terminal-on-`main` +
+ * `active` = stranded) performs the SHARED leased delete via
+ * {@link reconcileItemLockAgainstMain} (the recovery's clear, re-checked fresh per
+ * item) — there is NO parallel clear mechanism.
+ *
+ * SCOPE FENCE (the trust model the default preserves):
+ *   - it clears ONLY `cleared-stale`. A `kept-stuck` (terminal + stuck — human
+ *     attention) and a `kept-in-flight` (active + non-terminal — a healthy build)
+ *     are NEVER reaped, even here. Because each clear goes through
+ *     {@link reconcileItemLockAgainstMain}, which RE-reads + RE-classifies before
+ *     deleting, a lock that turned stuck/in-flight between the report and the sweep
+ *     is still safe (reconcile returns `kept-*`, not a delete).
+ *   - the clear is a LEASED delete: a concurrent change to the ref makes it REJECT
+ *     (`lost`), reported — never a blind `--force`.
+ *
+ * The DEFAULT `gc --ledger` (no flag) never calls this: it stays report-only,
+ * fail-loud, delete-nothing. This is gated behind the explicit `--reap-stale-locks`
+ * flag (a human authorising the clear), exactly as `release-lock`'s trust model.
+ */
+export async function reapStaleItemLocks(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<ReapReport> {
+	const report = await reportItemLocks(cwd, arbiter, env);
+	const entries: ReapEntry[] = [];
+	let reaped = 0;
+	let kept = 0;
+	let lost = 0;
+	for (const {lock, ref, reconcile} of report.locks) {
+		const item = itemFromLockEntry(lock.entry);
+		if (reconcile === 'cleared-stale') {
+			// Re-check + clear through the recovery's SHARED leased delete. Reconcile
+			// re-reads the live ref, so a lock that turned stuck/in-flight since the
+			// report is left alone; a concurrent change to the ref makes the lease lose.
+			const rec = await reconcileItemLockAgainstMain({
+				item,
+				cwd,
+				arbiter,
+				env,
+			});
+			if (rec.outcome === 'cleared-stale') {
+				reaped++;
+				entries.push({lock, ref, outcome: 'reaped', message: rec.message});
+			} else if (
+				rec.outcome === 'kept-stuck' ||
+				rec.outcome === 'kept-in-flight'
+			) {
+				// The lock changed between the report and the sweep — no longer stale.
+				kept++;
+				entries.push({lock, ref, outcome: rec.outcome, message: rec.message});
+			} else {
+				// A lost lease (the ref changed concurrently) or an error — REPORTED,
+				// never forced. Counts as needing attention after the sweep.
+				lost++;
+				entries.push({lock, ref, outcome: 'lost', message: rec.message});
+			}
+			continue;
+		}
+		// NOT a cleared-stale candidate: a stuck or in-flight lock the reaper must
+		// NEVER touch, even with the flag.
+		if (reconcile === 'kept-stuck' || reconcile === 'kept-in-flight') {
+			kept++;
+			entries.push({
+				lock,
+				ref,
+				outcome: reconcile,
+				message: reconcileNote(reconcile),
+			});
+		} else {
+			// no-lock / error from the classifier — nothing to reap; surface verbatim.
+			lost++;
+			entries.push({
+				lock,
+				ref,
+				outcome: 'error',
+				message: reconcileNote(reconcile),
+			});
+		}
+	}
+	return {entries, reaped, kept, lost};
+}
+
+/**
+ * Does a {@link reapStaleItemLocks} sweep leave a lock that STILL needs human
+ * attention? TRUE iff some entry is `kept-stuck` (a stuck lock the reaper rightly
+ * left) or `lost`/`error` (a `cleared-stale` whose leased delete lost the race, or
+ * an unresolvable fault). A `reaped` (successfully cleared) or a `kept-in-flight`
+ * (healthy build) lock does NOT count — so a sweep that cleared every stale lock
+ * and left only healthy in-flight holds exits 0. This is the post-sweep analogue of
+ * {@link itemLockReportNeedsAttention}.
+ */
+export function reapReportNeedsAttention(report: ReapReport): boolean {
+	return report.entries.some(
+		(e) =>
+			e.outcome === 'kept-stuck' ||
+			e.outcome === 'lost' ||
+			e.outcome === 'error',
+	);
+}
+
+/**
+ * Format the `gc --ledger --reap-stale-locks` sweep for the terminal: a header
+ * line with the reaped/kept counts, then one line per lock (what was reaped vs
+ * kept vs lost). An EMPTY sweep (no locks held) yields NO lines (silent, like the
+ * report). The wording keeps the no-blind-force contract explicit.
+ */
+export function formatReapReport(report: ReapReport): string[] {
+	if (report.entries.length === 0) {
+		return [];
+	}
+	const lines = [
+		`Per-item lock sweep (--reap-stale-locks): reaped ${report.reaped} stale ` +
+			`terminal lock(s), kept ${report.kept} (stuck/in-flight, never reaped)` +
+			(report.lost > 0
+				? `, ${report.lost} could not be cleared (lease lost / error — reported, NEVER forced)`
+				: '') +
+			':',
+	];
+	for (const {lock, outcome, message} of report.entries) {
+		const tag =
+			outcome === 'reaped'
+				? '[reaped]  '
+				: outcome === 'lost'
+					? '[lost]    '
+					: outcome === 'error'
+						? '[error]   '
+						: '[kept]    ';
+		lines.push(
+			`  ${tag} ${lock.entry}  [${lock.action}/${lock.state}]  ${message}`,
+		);
+	}
+	return lines;
 }
 
 /**
