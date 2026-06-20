@@ -2,8 +2,8 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {parseFrontmatter} from './frontmatter.js';
 import {
-	SLICE_LIFECYCLE_FOLDERS,
-	type SliceLifecycleFolder,
+	TASK_LIFECYCLE_FOLDERS,
+	type TaskLifecycleFolder,
 	workFolderPath,
 	workItemRel,
 	isWorkItemFile,
@@ -32,11 +32,11 @@ import {
  * means the PRD is not yet complete.
  */
 
-/** The slice lifecycle folders a `prd:<slug>` slice can reside in. */
-const SLICE_FOLDERS = SLICE_LIFECYCLE_FOLDERS;
+/** The task lifecycle folders a `brief:<slug>` task can reside in. */
+const TASK_FOLDERS = TASK_LIFECYCLE_FOLDERS;
 
-/** Where a slice resides — the folder name under `work/`. */
-type SliceFolder = SliceLifecycleFolder;
+/** Where a task resides — the folder name under `work/`. */
+type TaskFolder = TaskLifecycleFolder;
 
 /** What the query needs: which repo's `work/` tree to scan + which PRD slug. */
 export interface PrdCompleteInput {
@@ -53,7 +53,7 @@ export interface PrdSlice {
 	/** The slice's resolved slug (frontmatter `slug:`, falling back to filename). */
 	slug: string;
 	/** Which slice folder it resides in. */
-	folder: SliceFolder;
+	folder: TaskFolder;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface PrdCompleteResult {
 }
 
 /** List the `.md` filenames in `<repoPath>/work/<folder>/`, sorted; `[]` if absent. */
-function listMarkdown(repoPath: string, folder: SliceFolder): string[] {
+function listMarkdown(repoPath: string, folder: TaskFolder): string[] {
 	const dir = workFolderPath(repoPath, folder);
 	let entries: string[];
 	try {
@@ -94,7 +94,7 @@ function listMarkdown(repoPath: string, folder: SliceFolder): string[] {
 export function isPrdComplete(input: PrdCompleteInput): PrdCompleteResult {
 	const {repoPath, slug} = input;
 	const slices: PrdSlice[] = [];
-	for (const folder of SLICE_FOLDERS) {
+	for (const folder of TASK_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const content = readFileSync(
 				join(repoPath, workItemRel(folder, file)),

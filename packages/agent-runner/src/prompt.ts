@@ -26,7 +26,7 @@ import {
 	workFolderName,
 	workItemPath,
 	workFolderRel,
-	type SliceResolutionFolder,
+	type TaskResolutionFolder,
 } from './work-layout.js';
 import {run, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
@@ -435,15 +435,15 @@ export function buildAgentPrompt(
  * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE slice
  * (see {@link resolveSlice} + {@link ContinueResolutionGate}).
  */
-export type SliceFolder = SliceResolutionFolder;
+export type TaskFolder = TaskResolutionFolder;
 
 export interface ResolvedSlice {
 	/** The slug of the resolved slice. */
 	slug: string;
 	/** Absolute path to the slice file that was read. */
 	path: string;
-	/** The folder the slice was resolved from (in-progress wins over backlog). */
-	folder: SliceFolder;
+	/** The folder the slice was resolved from (in-progress wins over tasks-todo). */
+	folder: TaskFolder;
 	/** The slice's source brief slug (frontmatter `brief:`), if any. */
 	prd: string | undefined;
 	/** The extracted `## Prompt` body. */
@@ -539,14 +539,14 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
  * resolved, so onboard cannot resurrect a finished slice (defect 3 / story 5).
  * The `in-progress`/`backlog` resolution is UNCHANGED in every case; `done/` is
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
- * is byte-identical to the original `['in-progress','backlog']`-only resolution.
+ * is byte-identical to the original `['in-progress','tasks-todo']`-only resolution.
  */
 export function resolveSlice(
 	cwd: string,
 	slug: string,
 	continueGate?: ContinueResolutionGate,
 ): ResolvedSlice {
-	const order: SliceFolder[] = ['in-progress', 'backlog'];
+	const order: TaskFolder[] = ['in-progress', 'tasks-todo'];
 	// `done/` is appended ONLY on a continue whose work-branch tip is STRANDED —
 	// the tip-vs-arbiter gate (NEVER folder name alone). A complete slice (tip on
 	// the arbiter) leaves the order untouched, so onboard never re-runs it.

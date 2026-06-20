@@ -650,7 +650,7 @@ async function runComplete(
 	// PREFER `backlog/` as the build source; `in-progress/` is RETAINED below for the
 	// legacy/bounce surfaces that may still source from it until its folder removal
 	// (9c), and `needs-attention/` for the runner-owned recovery finish.
-	const backlog = workItemPath(cwd, 'backlog', slug);
+	const backlog = workItemPath(cwd, 'tasks-todo', slug);
 	const inProgress = workItemPath(cwd, 'in-progress', slug);
 	const needsAttention = workItemPath(cwd, 'needs-attention', slug);
 	const done = workItemPath(cwd, 'done', slug);
@@ -713,16 +713,16 @@ async function runComplete(
 	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
 	// slice's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
 	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
-	const source: 'backlog' | 'in-progress' | 'needs-attention' | 'done' =
+	const source: 'tasks-todo' | 'in-progress' | 'needs-attention' | 'done' =
 		dirtyContinue
 			? 'done'
 			: onBacklog
-				? 'backlog'
+				? 'tasks-todo'
 				: onInProgress
 					? 'in-progress'
 					: 'needs-attention';
 	const sourcePath =
-		source === 'backlog'
+		source === 'tasks-todo'
 			? backlog
 			: source === 'in-progress'
 				? inProgress

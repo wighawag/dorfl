@@ -196,7 +196,7 @@ export type {
 export {resolveCwdSection} from './cwd-section.js';
 
 export type {
-	SliceFolder,
+	TaskFolder,
 	ResolvedSlice,
 	PromptOptions,
 	ContinueContext,

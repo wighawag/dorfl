@@ -10,21 +10,46 @@ import {
 } from '../../src/work-layout.js';
 
 /**
+ * The OLD-vocabulary fixture status words the test call sites speak, mapped to the
+ * CURRENT `work-layout` symbolic KEYS. After the symbolic-key vocabulary cutover
+ * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) the registry keys
+ * read in the new task/brief words (`tasks-todo`, `briefs-ready`, …), but the ~60
+ * fixture call sites still speak the stable old status words (`backlog`, `prd`,
+ * `prd-sliced`, `pre-backlog`, `pre-prd`). This is the single seam they route
+ * through, so the cutover is one alias-map flip HERE rather than a 60-file sweep
+ * (the design intent of {@link fixtureFolderRel}).
+ */
+const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
+	'pre-backlog': 'tasks-backlog',
+	backlog: 'tasks-todo',
+	'pre-prd': 'briefs-proposed',
+	prd: 'briefs-ready',
+	'prd-sliced': 'briefs-tasked',
+};
+
+/**
  * Map a fixture's STATUS/folder KEY (the OLD-vocabulary symbolic name a test
  * passes, e.g. `'backlog'`/`'done'`/`'observations'`) to its CURRENT on-disk
- * repo-relative folder path via `work-layout`. After the notes-regroup +
- * task-board-rename flip these resolve to the NEW layout (`tasks/todo`,
- * `tasks/done`, `notes/observations`, …) while leaving the test call sites,
- * which still speak the old status words, untouched. This is the single seam the
- * parameter-driven fixture helpers (which cannot be statically swept) route
- * through, so a later folder rename is a `work-layout` value flip here too.
+ * repo-relative folder path via `work-layout`. It first translates the old fixture
+ * status WORDS the call sites speak to the current registry KEYS (via
+ * {@link FIXTURE_WORD_TO_KEY}), then resolves the key to its on-disk name. After
+ * the notes-regroup + task-board-rename flip + the symbolic-key cutover these
+ * resolve to the NEW layout (`tasks/todo`, `tasks/done`, `briefs/ready`,
+ * `notes/observations`, …) while leaving the test call sites, which still speak the
+ * old status words, untouched. This is the single seam the parameter-driven fixture
+ * helpers (which cannot be statically swept) route through, so a later folder/key
+ * rename is a flip HERE too.
  *
- * LOOSE on purpose: a name that is NOT a known `work-layout` folder key (e.g. the
- * legacy transient `'slicing'` some readers still probe) passes through
- * UNCHANGED, so callers that mix durable keys with such literals keep working.
+ * LOOSE on purpose: a name that is NEITHER an old fixture word NOR a known
+ * `work-layout` folder key (e.g. the legacy transient `'slicing'` some readers
+ * still probe) passes through UNCHANGED, so callers that mix durable keys with such
+ * literals keep working.
  */
 export function fixtureFolderRel(key: string): string {
-	return key in WORK_FOLDER_NAME ? workFolderName(key as WorkFolderKey) : key;
+	const resolvedKey = FIXTURE_WORD_TO_KEY[key] ?? key;
+	return resolvedKey in WORK_FOLDER_NAME
+		? workFolderName(resolvedKey as WorkFolderKey)
+		: resolvedKey;
 }
 
 /**
@@ -442,7 +467,7 @@ export function registerMirrorWithWork(
 		if (!files) {
 			return;
 		}
-		const dir = join(src, 'work', fixtureFolderRel(folder as WorkFolderKey));
+		const dir = join(src, 'work', fixtureFolderRel(folder));
 		mkdirSync(dir, {recursive: true});
 		for (const [file, content] of Object.entries(files)) {
 			writeFileSync(join(dir, file), content);
