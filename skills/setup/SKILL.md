@@ -95,7 +95,7 @@ Then **STOP and WAIT for the user's reply.** Do not write `CONTEXT.md`/`.agent-r
 
 ### A5. Write the scaffold (create-only) + run the gate once
 
-Once description + gate are confirmed: create the missing `work/` folders (+ `.gitkeep`) in the **regime-umbrella layout** — NOT a legacy flat tree:
+Once description + gate are confirmed: create the missing `work/` folders in the **regime-umbrella layout** — NOT a legacy flat tree. Create the folders setup actually populates (the capture buckets it writes notes into, the staging/pool folders, `questions/`, `protocol/`); the empty TERMINAL/status sub-folders (`tasks/done`, `tasks/cancelled`, `briefs/tasked`, `briefs/dropped`) do NOT need eager creation with a `.gitkeep` — they are created LAZILY on first use (whoever first `git mv`s an item into them makes the dir; `git mv` auto-creates the destination, and the runner `mkdir`s on demand where it writes). An absent empty status folder is NOT a broken contract. The full intended tree, for reference:
 
 ```
 work/
