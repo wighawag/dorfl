@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-17
 slug: vscode-flags-node-types-missing-but-tsc-passes-clean
+needsAnswers: true
 ---
 
 ## What was seen
