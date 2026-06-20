@@ -50,12 +50,30 @@ Insert the override as two more spread layers in the existing per-key shallow me
 in `resolveRepoConfigFromLoaded` (the source-agnostic core both
 `resolveRepoConfig` and `do --remote` feed):
 
+The current core is `mergeConfig({...global, ...repo.config, ...envOverrides(env),
+...(flags ?? {})})`. Insert the override spreads BETWEEN `repo.config` and
+`envOverrides(env)`:
+
 ```
-mergeConfig({ ...global, ...committedRepo, ...override["*"], ...override[hubKey], ...env, ...flags })
+mergeConfig({
+  ...global,
+  ...repo.config,              // committed per-repo (host-only already stripped)
+  ...override["*"],            // override: all-repos bucket
+  ...override[hubKey],         // override: this-repo (beats "*")
+  ...envOverrides(env),        // NOTE: the COERCED PartialConfig, not the raw EnvMap
+  ...(flags ?? {}),
+})
 ```
 
-An override touches ONLY the keys it lists; unlisted keys resolve through the rest
-of the chain (this is the existing shallow-merge behaviour, not a new rule).
+Keep `envOverrides(env)` exactly as today (it coerces the `AGENT_RUNNER_*` vars);
+do NOT spread the raw `env` map. An override touches ONLY the keys it lists;
+unlisted keys resolve through the rest of the chain (this is the existing
+shallow-merge behaviour, not a new rule).
+
+Fallback keys compose for free: `slicingIntegration ?? integration` (and peers)
+fall back at their READ site against the POST-merge `config`, so an override that
+sets `integration` is inherited by an unset `slicingIntegration` with no special
+handling needed.
 
 ### May set ANY key (host-only included)
 
