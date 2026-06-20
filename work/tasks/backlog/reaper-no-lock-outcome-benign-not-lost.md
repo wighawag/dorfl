@@ -151,6 +151,28 @@ never written down (see the Decisions criterion below).
 > recorded in a `## Decisions` block; and `pnpm -r build && pnpm -r test &&
 > pnpm format:check` is green.
 
+## Live repro (2026-06-20)
+
+This fired in the wild on a SINGLE reap (not just the concurrent double-reap the
+original note described). Running `gc --ledger --reap-stale-locks` against a lingering
+lock produced:
+
+```
+Per-item lock sweep (--reap-stale-locks): reaped 0 stale terminal lock(s), kept 0
+(stuck/in-flight, never reaped), 1 could not be cleared (lease lost / error —
+reported, NEVER forced):
+  [error]    slice-claim-cas-spinner  [implement/stuck]  no lock (already at rest).
+```
+
+The `no lock (already at rest)` reconcile outcome was bucketed as `[error]` (“could not
+be cleared”), exactly the mislabel this task fixes — `no-lock` is the DESIRED end state
+(the lock is gone), not an error. So the benign-`no-lock` classification must hold for
+the SINGLE-reap path too, not only the concurrent double-reap. (Note: in this specific
+incident the lock was actually a `slice-`-prefixed pre-cutover STUCK lock that the
+reaper never reaps anyway — see the sibling observations on the done+stuck reap gap and
+the un-releasable pre-cutover entries; THIS task is only about the `no-lock` → benign
+classification, keep it scoped to that.)
+
 ---
 
 ### Claiming this task
