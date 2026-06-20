@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: reaper-never-clears-a-done-plus-stuck-lock-orphans-forever
+needsAnswers: true
 ---
 
 ## What was seen
