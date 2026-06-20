@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: release-lock-cannot-name-pre-cutover-slice-prefixed-lock-entries
+needsAnswers: true
 ---
 
 ## What was seen

@@ -3,6 +3,7 @@ title: Question sidecar files (work/questions/<type>-<slug>.md) render as run-to
 type: observation
 status: spotted
 spotted: 2026-06-17
+triaged: keep
 ---
 
 ## What was seen
@@ -79,3 +80,11 @@ revisits a PRD-RESOLVED format.
   MAINTAINER-RESOLVED §1 (the answered predicate); the PRD that froze the shape.
 - `skills/surface-questions/SKILL.md` — the documented sidecar format the surface
   rung hand-writes.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:question-sidecar-human-readable-format` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: The observation describes exactly the problem (sidecar `key: |` block scalars render as run-together noise on GitHub) that the now-DONE task `work/tasks/done/question-sidecar-human-readable-format.md` was built to solve — same file (`packages/agent-runner/src/sidecar.ts`), same symptoms, same three candidate directions, resolved via the accepted ADR `docs/adr/question-sidecar-human-readable-format.md` with bold question + blockquote context + HTML-comment machine fields + labelled answer marker. Already covered.

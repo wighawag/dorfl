@@ -1,6 +1,7 @@
 ---
 date: 2026-06-19
 slug: build-slice-advance-may-waste-a-build-before-losing-at-inner-claim
+needsAnswers: true
 ---
 
 Noticed while building `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`
