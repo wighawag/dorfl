@@ -29,6 +29,40 @@ The runner classified it `[agent-failed]`, SAVED the partial work (pushed `work/
 - Confirm Problem A is covered by the `branch-carries-code-not-ledger-status-main-owns-status` PRD (it is — add it as a motivating example there: an unrelated merge must never be able to revert another slug's ledger status).
 - Open a SEPARATE slice (or fold into a failure-cause PRD) for Problem B: (1) classify a 401 OAuth-expiry / auth-required as `transient-infra`, not `agent-failed`; (2) decide the ROUTING for `transient-infra` — it should not land in `needs-attention` as a work-stuck signal (auto-retry with backoff, or a distinct infra-blocked surface that does not ask a human to inspect the work). Until then, a transient infra failure mis-presents as "the slice is stuck."
 
+## Update (2026-06-20, triage)
+
+Re-investigated against current `main`. PROBLEM A is RESOLVED; PROBLEM B is STILL LIVE.
+Narrowing this note to Problem B.
+
+PROBLEM A (silent revert via sibling-ledger reconcile) — RESOLVED (out of this note's
+scope now). The per-item-lock cutover (PRD `ledger-status-per-item-lock-refs`) means a
+work branch carries NO ledger-status move on `main` (claim/needs-attention/slicing/
+advancing are lock-ref state, not folder moves), so an unrelated PR's merge can no longer
+revert another slug's needs-attention surface — exactly the
+`branch-carries-code-not-ledger-status-main-owns-status` fix the note predicted covers A.
+The `R098`-style cross-slug ledger clobber can no longer happen.
+
+PROBLEM B (a transient-infra failure is indistinguishable from a genuine stuck-state) —
+STILL LIVE, in two halves:
+1. CLASSIFICATION gap. `failure-cause.ts` now HAS a `transient-infra` cause with lexical
+   signatures (`classifyFailureCause` + `TRANSIENT_INFRA_SIGNATURES`), but the list covers
+   network / `ECONN*` / 5xx / 429 / rate-limit / overloaded — it does NOT match the
+   specific 401 `authentication_required` / "OAuth refresh token expired or revoked" that
+   triggered this observation. So that 401 still falls through to the generic
+   `agent-failed` and is surfaced as if the WORK is stuck. Fix: add an auth-expiry /
+   401-authentication-required signature to `TRANSIENT_INFRA_SIGNATURES` (a credential
+   expiry is an INFRA condition, not bad agent output).
+2. ROUTING question (open). Even once classified `transient-infra`, the routing of that
+   cause should be decided: a transient-infra failure should NOT land in `needs-attention`
+   as a work-stuck signal that asks a human to inspect the WORK — it wants auto-retry with
+   backoff, or a distinct "infra-blocked, not work-blocked" surface. (A credential expiry
+   specifically may want a different surface than a transient model outage: the former
+   needs a human to RE-AUTH, not to look at the slice; the latter just needs a retry.)
+
+Disposition: kept as a LIVE failure-cause-classification + routing signal narrowed to
+Problem B. The fix homes are `failure-cause.ts` (classification) + the transient-infra
+routing in `run.ts`/`do.ts` (auto-retry vs surface). Not promoted to a task here.
+
 ## Provenance
 
 Observed live this session: the `advance` run log for `onboard-and-reset-reconcile-mirror-to-arbiter` (401 OAuth expiry → `agent-failed` → needs-attention), and the PR #139 merge commit (`95da72e`) whose `R098` rename moved the slug `needs-attention/ → backlog/`. The sibling-ledger reconcile is `reconcileSiblingLedgerConflict` in `src/integration-core.ts` (takes the arbiter's version of sibling ledger files on a rebase CONFLICT — but a clean squash-merge of a branch carrying a stale placement bypasses that and the branch's placement wins). The user identified Problem B as the real defect and challenged the assumption that the branch-carries-code PRD covers it — it does not; it covers only A.
