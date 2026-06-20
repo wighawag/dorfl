@@ -1026,14 +1026,35 @@ export async function reconcileItemLockAgainstMain(
 				message: `cleared the stale lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
 			};
 		}
-		// A concurrent change moved the ref between our read and the delete — back
-		// off rather than force (a racer may have just transitioned it to stuck).
+		// The leased delete was REJECTED. Distinguish two sub-cases at the recovery
+		// boundary so callers (the reaper) can route them differently:
+		//   (a) the remote ref is ALREADY GONE — a concurrent reaper / release-lock /
+		//       requeue cleared the SAME stale lock first. The desired end state;
+		//       benign — we report `no-lock` (the existing "already at rest" verdict).
+		//   (b) the remote ref still exists but at a DIFFERENT sha than we leased
+		//       against — a genuine concurrent mutation (e.g. a racer just marked it
+		//       `stuck`). Back off rather than force; this is the real `error`.
+		const remote = await gitSoft(['ls-remote', arbiter, ref], cwd, env);
+		const remoteEmpty = remote.status === 0 && remote.stdout.trim() === '';
+		if (remoteEmpty) {
+			// Drop our stale local copy too — a non-pruning fetch left it pointing at
+			// the now-gone sha; with it gone locally a subsequent read in this clone
+			// sees the correct (deleted) state.
+			await gitSoft(['update-ref', '-d', ref], cwd, env);
+			return {
+				outcome: 'no-lock',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `'${entry}' has no lock to reconcile (already cleared by another reaper / release-lock / requeue)`,
+			};
+		}
 		return {
 			outcome: 'error',
 			entry,
 			ref,
 			terminalOnMain,
-			message: `stale-lock clear for '${entry}' rejected (changed concurrently); a racer may have moved the ref. Re-run after re-checking.`,
+			message: `stale-lock clear for '${entry}' rejected (changed concurrently to a different value); a racer may have moved the ref. Re-run after re-checking.`,
 		};
 	} catch (err) {
 		return {
@@ -1293,15 +1314,23 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
 }
 
 /** Per-lock outcome of the human-invoked {@link reapStaleItemLocks} SWEEP:
- *   - `reaped`        — a `cleared-stale` lock (terminal-on-main + active) cleared
- *                       via the SHARED leased delete.
- *   - `kept-stuck`    — left untouched (terminal + stuck — human attention; US #10).
- *   - `kept-in-flight`— left untouched (active, non-terminal — a healthy build).
- *   - `lost`          — a `cleared-stale` candidate whose leased delete was REJECTED
- *                       (the ref changed concurrently); REPORTED, never `--force`d.
- *   - `error`         — a per-item classification/clear fault (left untouched). */
+ *   - `reaped`         — a `cleared-stale` lock (terminal-on-main + active) cleared
+ *                        via the SHARED leased delete.
+ *   - `already-reaped` — BENIGN: the lock was already gone by the time the sweep
+ *                        re-read the ref (`no-lock`) — another reaper / a
+ *                        `release-lock` / a `requeue` got there first; the ref is
+ *                        at the desired end state. NOT `lost` and does NOT count
+ *                        as needs-attention (see the exit-code contract recorded
+ *                        in this task's done record).
+ *   - `kept-stuck`     — left untouched (terminal + stuck — human attention; US #10).
+ *   - `kept-in-flight` — left untouched (active, non-terminal — a healthy build).
+ *   - `lost`           — a `cleared-stale` candidate whose leased delete was REJECTED
+ *                        (the ref changed concurrently to a DIFFERENT value);
+ *                        REPORTED, never `--force`d.
+ *   - `error`          — a per-item classification/clear fault (left untouched). */
 export type ReapOutcome =
 	| 'reaped'
+	| 'already-reaped'
 	| 'kept-stuck'
 	| 'kept-in-flight'
 	| 'lost'
@@ -1326,6 +1355,10 @@ export interface ReapEntry {
 export interface ReapReport {
 	entries: ReapEntry[];
 	reaped: number;
+	/** BENIGN already-reaped count: the sweep found the ref already gone (`no-lock`)
+	 * — another reaper / release-lock / requeue cleared it first. The desired end
+	 * state; NOT `lost`, does NOT contribute to needs-attention / a non-zero exit. */
+	alreadyReaped: number;
 	kept: number;
 	lost: number;
 }
@@ -1363,6 +1396,7 @@ export async function reapStaleItemLocks(
 	const report = await reportItemLocks(cwd, arbiter, env);
 	const entries: ReapEntry[] = [];
 	let reaped = 0;
+	let alreadyReaped = 0;
 	let kept = 0;
 	let lost = 0;
 	for (const {lock, ref, reconcile} of report.locks) {
@@ -1380,6 +1414,21 @@ export async function reapStaleItemLocks(
 			if (rec.outcome === 'cleared-stale') {
 				reaped++;
 				entries.push({lock, ref, outcome: 'reaped', message: rec.message});
+			} else if (rec.outcome === 'no-lock') {
+				// BENIGN: the ref is already gone — the desired end state. The LOSER of
+				// a concurrent double-reap (another reaper deleted the ref between our
+				// report and our re-read), or a `release-lock`/`requeue` that cleared
+				// the same stale lock in the meantime. NOT a lost lease (the lease was
+				// not REJECTED; there was simply nothing left to delete), so this does
+				// NOT count as needs-attention. Kept SEPARATE from `reaped` so the
+				// summary does not lie about who did the deleting.
+				alreadyReaped++;
+				entries.push({
+					lock,
+					ref,
+					outcome: 'already-reaped',
+					message: rec.message,
+				});
 			} else if (
 				rec.outcome === 'kept-stuck' ||
 				rec.outcome === 'kept-in-flight'
@@ -1388,8 +1437,9 @@ export async function reapStaleItemLocks(
 				kept++;
 				entries.push({lock, ref, outcome: rec.outcome, message: rec.message});
 			} else {
-				// A lost lease (the ref changed concurrently) or an error — REPORTED,
-				// never forced. Counts as needing attention after the sweep.
+				// A lost lease (the ref was REJECTED because it changed concurrently to
+				// a DIFFERENT value) or a per-item error — REPORTED, never forced.
+				// Counts as needing attention after the sweep.
 				lost++;
 				entries.push({lock, ref, outcome: 'lost', message: rec.message});
 			}
@@ -1416,7 +1466,7 @@ export async function reapStaleItemLocks(
 			});
 		}
 	}
-	return {entries, reaped, kept, lost};
+	return {entries, reaped, alreadyReaped, kept, lost};
 }
 
 /**
@@ -1429,6 +1479,12 @@ export async function reapStaleItemLocks(
  * {@link itemLockReportNeedsAttention}.
  */
 export function reapReportNeedsAttention(report: ReapReport): boolean {
+	// EXIT-CODE CONTRACT (recorded in this task's done record): the reaper exits 0
+	// when all stale locks are reaped and only healthy in-flight locks remain;
+	// exits 1 when a `kept-stuck` survives or a delete genuinely lost the race /
+	// errored. An `already-reaped` (the loser of a concurrent double-reap saw the
+	// ref already gone via `no-lock`) is BENIGN — the desired end state — and is
+	// NOT in this set.
 	return report.entries.some(
 		(e) =>
 			e.outcome === 'kept-stuck' ||
@@ -1450,6 +1506,9 @@ export function formatReapReport(report: ReapReport): string[] {
 	const lines = [
 		`Per-item lock sweep (--reap-stale-locks): reaped ${report.reaped} stale ` +
 			`terminal lock(s), kept ${report.kept} (stuck/in-flight, never reaped)` +
+			(report.alreadyReaped > 0
+				? `, ${report.alreadyReaped} already reaped by another sweep (no-lock — benign, the desired end state)`
+				: '') +
 			(report.lost > 0
 				? `, ${report.lost} could not be cleared (lease lost / error — reported, NEVER forced)`
 				: '') +
@@ -1459,11 +1518,13 @@ export function formatReapReport(report: ReapReport): string[] {
 		const tag =
 			outcome === 'reaped'
 				? '[reaped]  '
-				: outcome === 'lost'
-					? '[lost]    '
-					: outcome === 'error'
-						? '[error]   '
-						: '[kept]    ';
+				: outcome === 'already-reaped'
+					? '[already] '
+					: outcome === 'lost'
+						? '[lost]    '
+						: outcome === 'error'
+							? '[error]   '
+							: '[kept]    ';
 		lines.push(
 			`  ${tag} ${lock.entry}  [${lock.action}/${lock.state}]  ${message}`,
 		);

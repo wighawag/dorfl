@@ -265,7 +265,7 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 });
 
 describe('gc --ledger --reap-stale-locks — a lost lease is REPORTED, never --force', () => {
-	it('two concurrent reapers on the same stale lock: exactly one reaps, the other loses the lease', async () => {
+	it('two concurrent reapers on the same stale lock: one reaps, the other sees the BENIGN already-reaped (no-lock); neither needs attention', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['raced']);
 		const {arbiter} = seeded;
 		// A single held active lock made terminal-on-main (a stale lock).
@@ -278,9 +278,10 @@ describe('gc --ledger --reap-stale-locks — a lost lease is REPORTED, never --f
 		});
 		seedTerminalOnArbiter(arbiter, 'done', 'raced');
 
-		// Two independent clones each run the sweep against the SAME arbiter ref. The
-		// leased delete (`--force-with-lease`) makes the loser's clear REJECT — never
-		// a blind --force — so the ref is deleted exactly once.
+		// Two independent clones each run the sweep against the SAME arbiter ref.
+		// The leased delete (`--force-with-lease`) makes the loser's clear path
+		// observe the ref already GONE on the re-read (`no-lock`) — the BENIGN
+		// already-reaped outcome — never a blind --force, never a spurious `lost`.
 		const a = seeded.clone('reaper-a');
 		const b = seeded.clone('reaper-b');
 		const [ra, rb] = await Promise.all([
@@ -289,14 +290,90 @@ describe('gc --ledger --reap-stale-locks — a lost lease is REPORTED, never --f
 		]);
 
 		const reaped = ra.reaped + rb.reaped;
+		const alreadyReaped = ra.alreadyReaped + rb.alreadyReaped;
 		const lost = ra.lost + rb.lost;
-		// Exactly one reaper won; the other either lost the lease OR saw the ref
-		// already gone (no-lock) — never a double-force.
+		// Exactly one reaper won; the other saw `no-lock` and recorded the BENIGN
+		// already-reaped outcome. NEITHER counted a `lost` lease — a clean
+		// concurrent double-reap of the SAME stale lock is not a race we lost.
 		expect(reaped).toBe(1);
-		expect(lost).toBeLessThanOrEqual(1);
+		expect(alreadyReaped).toBe(1);
+		expect(lost).toBe(0);
+		// One reaper has a single `reaped`, the other a single `already-reaped`.
+		const outcomesA = ra.entries.map((e) => e.outcome);
+		const outcomesB = rb.entries.map((e) => e.outcome);
+		expect([outcomesA, outcomesB].sort()).toEqual(
+			[['already-reaped'], ['reaped']].sort(),
+		);
+		// NEITHER report needs attention — both processes exit 0. This is the
+		// exit-code contract: an already-reaped (`no-lock`) is the DESIRED end
+		// state, not a lost lease.
+		expect(reapReportNeedsAttention(ra)).toBe(false);
+		expect(reapReportNeedsAttention(rb)).toBe(false);
 		// The ref is gone exactly once on the ARBITER (the authoritative check — a
 		// loser's clone may still hold a stale LOCAL tracking ref, since a non-pruning
 		// fetch does not drop a deleted remote ref; that is git, not the reaper).
 		expect(lockRefOnArbiter(arbiter, 'task-raced')).toBe(false);
+		// The benign already-reaped tag prints distinctly (not `[kept]`), so a
+		// reaped-by-other lock is never misreported as one the reaper left behind.
+		const loserText = formatReapReport(ra.alreadyReaped === 1 ? ra : rb).join(
+			'\n',
+		);
+		expect(loserText).toMatch(/\[already\]/);
+		expect(loserText).toMatch(/already reaped by another sweep/);
+	});
+
+	it('a genuine `lost` outcome (lease genuinely rejected / error) STILL needs attention — the real-race path is not collapsed into the benign one', () => {
+		// The two paths must stay SEPARABLE: `already-reaped` is benign
+		// (`reapReportNeedsAttention` false), `lost`/`error` is the real race
+		// (true). Constructed from a synthetic report — reproducing a deterministic
+		// leased-delete REJECTION end-to-end requires a TOCTOU window inside
+		// `reconcileItemLockAgainstMain` that is not exposed for testing, so we
+		// pin the exit-code contract at the predicate boundary instead.
+		const lostOnly: import('../src/item-lock.js').ReapReport = {
+			entries: [
+				{
+					lock: {
+						entry: 'task-raced',
+						action: 'implement',
+						state: 'active',
+						holder: 'reaper-a',
+						since: '2026-06-20T00:00:00Z',
+						reason: '',
+					},
+					ref: 'refs/agent-runner/lock/task-raced',
+					outcome: 'lost',
+					message:
+						"stale-lock clear for 'task-raced' rejected (changed concurrently)",
+				},
+			],
+			reaped: 0,
+			alreadyReaped: 0,
+			kept: 0,
+			lost: 1,
+		};
+		expect(reapReportNeedsAttention(lostOnly)).toBe(true);
+
+		const alreadyOnly: import('../src/item-lock.js').ReapReport = {
+			entries: [
+				{
+					lock: {
+						entry: 'task-raced',
+						action: 'implement',
+						state: 'active',
+						holder: 'reaper-b',
+						since: '2026-06-20T00:00:00Z',
+						reason: '',
+					},
+					ref: 'refs/agent-runner/lock/task-raced',
+					outcome: 'already-reaped',
+					message: "'task-raced' has no lock to reconcile",
+				},
+			],
+			reaped: 0,
+			alreadyReaped: 1,
+			kept: 0,
+			lost: 0,
+		};
+		expect(reapReportNeedsAttention(alreadyOnly)).toBe(false);
 	});
 });
