@@ -110,8 +110,8 @@ export interface Config {
 	 * Per-repo policy: may agents auto-BUILD *undeclared* (not `humanOnly`) slices
 	 * in this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
 	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
-	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > per-repo >
-	 * global > default. The build member of the per-action gate family
+	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > `AGENT_RUNNER_AUTO_BUILD`
+	 * env > per-repo > global > default. The build member of the per-action gate family
 	 * (`autoBuild`/`autoSlice` + the question-surfacing gates `observationTriage`/
 	 * `surfaceBlockers`).
 	 */
