@@ -27,3 +27,11 @@ siblings, not a wide matrix.
 
 Not fixing here: this is a doc-vs-code drift signal + a CI-shape upgrade
 opportunity, not a change to make mid-discussion.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `briefs/ready:land-time-reverify-and-parallel-merge-ceiling` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: The observation is explicitly cited in this brief's launch snapshot as one of its originating design-trail observations, and its substance (docs/ci/README.md's 'parallel merge thrashes CAS' justification is stale given integrateLock + mergeRetries; CI shape should fan out merge) is directly covered by the brief's Problem Statement §2, User Story 6, and the CI-template solution. No additional signal to extract.
