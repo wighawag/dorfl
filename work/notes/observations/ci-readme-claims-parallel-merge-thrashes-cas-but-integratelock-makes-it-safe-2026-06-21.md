@@ -3,6 +3,7 @@ title: '`docs/ci/README.md` still says parallel merge thrashes the CAS, but `int
 type: observation
 status: spotted
 spotted: 2026-06-21
+triaged: keep
 ---
 
 # `docs/ci/README.md` still says parallel merge thrashes the CAS, but `integrateLock` + `mergeRetries` now make concurrent merge safe
@@ -50,3 +51,11 @@ covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
 Reason: Observation already self-declares it maps onto this brief (cited in launch snapshot; substance covered by Problem Statement §2, User Story 6, CI-template solution). Brief file confirms the reference.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `briefs/ready:land-time-reverify-and-parallel-merge-ceiling` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation is explicitly cited in the brief's launch snapshot as an originating signal, and its substance (stale docs/ci/README.md justification vs. integrateLock + mergeRetries enabling concurrent merge; CI shape upgrade) is directly covered by the brief's Problem Statement §2, User Story 6, and CI-template solution. Observation self-declares the mapping.
