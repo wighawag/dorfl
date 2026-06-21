@@ -165,7 +165,10 @@ function toBoolean(value: string): boolean | undefined {
  * candidate slice as `needsAnswers: true` (open questions block autonomous build;
  * a human must answer them). If a `needsAnswers:` line already exists it is
  * REPLACED (idempotent); otherwise it is appended as the last line inside the
- * frontmatter fence. A document with no frontmatter fence is returned unchanged.
+ * frontmatter fence. A document with NO frontmatter fence gets one PREPENDED (see
+ * {@link setFrontmatterMarker}) — observations are born fence-less (the
+ * `capture-signal` skill writes prose), so the tooling-owned `needsAnswers` axis
+ * MUST be settable on them rather than silently dropped.
  */
 export function setNeedsAnswersMarker(content: string, value: boolean): string {
 	return setFrontmatterMarker(content, 'needsAnswers', String(value));
@@ -178,9 +181,21 @@ export function setNeedsAnswersMarker(content: string, value: boolean): string {
  * `triaged: keep` marker (US #30) on an item a human answered "keep" — so a
  * settled observation drops out of the candidate pool and is never re-asked. If a
  * `<key>:` line already exists it is REPLACED (idempotent); otherwise it is
- * appended as the last line inside the frontmatter fence. A document with no
- * frontmatter fence is returned unchanged (state stays the folder — this is a
- * tooling-owned axis marker, never prose).
+ * appended as the last line inside the frontmatter fence.
+ *
+ * A document with NO frontmatter fence gets ONE PREPENDED carrying just this
+ * marker (`---\n<key>: <value>\n---\n\n<body>`). This is the load-bearing fix for
+ * `sidecar-without-needsAnswers`: observations are routinely created fence-less
+ * (the `capture-signal` skill writes free-form prose), and the OLD behaviour
+ * silently returned the body UNCHANGED — so `persistSurfacedQuestions` wrote the
+ * sidecar while the `needsAnswers:true` flag it believed it set was discarded,
+ * tearing the `needsAnswers ⟺ active sidecar` invariant a later tick refused to
+ * classify. These markers (`needsAnswers`, `triaged`) are tooling-owned axes, not
+ * prose, so the tool is entitled to introduce the fence it needs.
+ *
+ * The ONE remaining return-unchanged case is a MALFORMED doc that opens a fence
+ * (`---\n`) but never closes it: rewriting that risks corrupting hand-authored
+ * content, so it is left untouched (a degenerate input no writer produces).
  */
 export function setFrontmatterMarker(
 	content: string,
@@ -189,11 +204,17 @@ export function setFrontmatterMarker(
 ): string {
 	const normalized = content.replace(/\r\n/g, '\n');
 	if (!normalized.startsWith('---\n')) {
-		return content;
+		// Fence-less document: PREPEND a minimal fence carrying just this marker,
+		// preserving the body verbatim (no leading blank between fence and body is
+		// collapsed — exactly one blank line separates the fence from the content).
+		const body = normalized.replace(/^\n+/, '');
+		return `---\n${key}: ${value}\n---\n\n${body}`;
 	}
 	const lines = normalized.split('\n');
 	const closing = lines.indexOf('---', 1);
 	if (closing === -1) {
+		// Malformed: an opening fence with no close. Leave it untouched rather than
+		// risk corrupting hand-authored content.
 		return content;
 	}
 	const pattern = new RegExp(`^${key}\\s*:`);
@@ -215,8 +236,9 @@ export function setFrontmatterMarker(
  * BUILD transition reads. IDEMPOTENT: each present source field is written via
  * {@link setFrontmatterMarker} (replace-or-append). When the source has NO `origin`
  * (a human/local-authored PRD ⇒ trusted), the target is returned UNCHANGED — the
- * normal path is never stamped (zero behaviour change). A target with no
- * frontmatter fence is returned unchanged (setFrontmatterMarker's contract).
+ * normal path is never stamped (zero behaviour change). When a stamp IS applied to
+ * a fence-less target, {@link setFrontmatterMarker} now prepends a fence to carry
+ * it (slices the slicer emits always have a fence, so this is the defensive path).
  */
 export function propagateOrigin(
 	source: Pick<Frontmatter, 'origin' | 'originTrust'>,

@@ -1,5 +1,10 @@
 import {describe, it, expect} from 'vitest';
-import {parseFrontmatter, resolveClosingIssue} from '../src/frontmatter.js';
+import {
+	parseFrontmatter,
+	resolveClosingIssue,
+	setFrontmatterMarker,
+	setNeedsAnswersMarker,
+} from '../src/frontmatter.js';
 
 describe('parseFrontmatter', () => {
 	it('extracts slug, humanOnly, needsAnswers and blockedBy from a full frontmatter block', () => {
@@ -324,5 +329,63 @@ describe('resolveClosingIssue', () => {
 		expect(
 			resolveClosingIssue({brief: undefined, issue: undefined}),
 		).toBeUndefined();
+	});
+});
+
+describe('setFrontmatterMarker', () => {
+	it('REPLACES an existing key inside the fence (idempotent)', () => {
+		const md = '---\nslug: foo\nneedsAnswers: false\n---\n\nbody\n';
+		const out = setFrontmatterMarker(md, 'needsAnswers', 'true');
+		expect(parseFrontmatter(out).needsAnswers).toBe(true);
+		expect(parseFrontmatter(out).slug).toBe('foo');
+		// Body preserved; no duplicate key appended.
+		expect(out.match(/needsAnswers/g)).toHaveLength(1);
+		expect(out).toContain('body');
+	});
+
+	it('APPENDS a new key as the last line inside an existing fence', () => {
+		const md = '---\nslug: foo\n---\n\nbody\n';
+		const out = setFrontmatterMarker(md, 'triaged', 'keep');
+		expect(parseFrontmatter(out).triaged).toBe('keep');
+		expect(parseFrontmatter(out).slug).toBe('foo');
+	});
+
+	// The load-bearing regression: a fence-less document (how observations are born
+	// via capture-signal) must get a fence PREPENDED, NOT be returned unchanged.
+	// The old silent no-op is what tore the needsAnswers ⟺ sidecar invariant and
+	// produced the `sidecar-without-needsAnswers` advance refusal.
+	it('PREPENDS a fence to a FENCE-LESS document (was: returned unchanged)', () => {
+		const md = '# `integrateLock` is in-process only\n\nsome prose here\n';
+		const out = setFrontmatterMarker(md, 'needsAnswers', 'true');
+		expect(out).not.toBe(md);
+		expect(out.startsWith('---\n')).toBe(true);
+		expect(parseFrontmatter(out).needsAnswers).toBe(true);
+		// The original prose is preserved verbatim after the new fence.
+		expect(out).toContain('# `integrateLock` is in-process only');
+		expect(out).toContain('some prose here');
+		expect(out).toBe(
+			'---\nneedsAnswers: true\n---\n\n' +
+				'# `integrateLock` is in-process only\n\nsome prose here\n',
+		);
+	});
+
+	it('collapses leading blank lines before the body when prepending a fence', () => {
+		const md = '\n\n# heading\n\nbody\n';
+		const out = setFrontmatterMarker(md, 'needsAnswers', 'true');
+		expect(out).toBe('---\nneedsAnswers: true\n---\n\n# heading\n\nbody\n');
+	});
+
+	it('round-trips a re-set on a now-fenced doc (idempotent after the prepend)', () => {
+		const md = '# heading\n\nbody\n';
+		const once = setNeedsAnswersMarker(md, true);
+		const twice = setNeedsAnswersMarker(once, false);
+		expect(parseFrontmatter(twice).needsAnswers).toBe(false);
+		// Still exactly one needsAnswers line (replaced, not duplicated).
+		expect(twice.match(/needsAnswers/g)).toHaveLength(1);
+	});
+
+	it('leaves a MALFORMED doc (open fence, no close) untouched', () => {
+		const md = '---\nslug: foo\nno closing fence here\n';
+		expect(setFrontmatterMarker(md, 'needsAnswers', 'true')).toBe(md);
 	});
 });

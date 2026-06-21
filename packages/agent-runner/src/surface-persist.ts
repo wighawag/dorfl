@@ -1,7 +1,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {run, type RunResult} from './git.js';
-import {setNeedsAnswersMarker} from './frontmatter.js';
+import {parseFrontmatter, setNeedsAnswersMarker} from './frontmatter.js';
 import {
 	appendQuestions,
 	newSidecar,
@@ -169,10 +169,26 @@ export function persistSurfacedQuestions(
 
 	// Set `needsAnswers:true` on the item body (the only in-body signal — the
 	// sidecar path is identity-derived, no back-pointer). The item file may not
-	// have a `needsAnswers` line yet; `setNeedsAnswersMarker` appends it idempotently.
+	// have a `needsAnswers` line yet (and may be fence-less — observations are born
+	// that way); `setNeedsAnswersMarker` prepends a fence when needed and is
+	// idempotent otherwise.
 	const itemAbs = join(cwd, itemPath);
 	const itemBody = readItem(itemAbs, cwd, itemPath, env);
-	writeFileSync(itemAbs, setNeedsAnswersMarker(itemBody, true));
+	const flagged = setNeedsAnswersMarker(itemBody, true);
+
+	// DEFENSE IN DEPTH (the `sidecar-without-needsAnswers` guard): the surface
+	// commit is only atomic if the flag ACTUALLY landed. If — for any reason — the
+	// flag did not parse back as `true` (e.g. a degenerate body the marker writer
+	// cannot annotate), ABORT BEFORE writing the sidecar, so we never produce the
+	// torn invariant (sidecar present, flag absent) a later tick refuses to advance.
+	if (parseFrontmatter(flagged).needsAnswers !== true) {
+		throw new SurfacePersistError(
+			`surface ${item}: could not set needsAnswers:true on '${itemPath}' ` +
+				`(the item body could not be annotated) — refusing to write the sidecar ` +
+				`without the flag (that would tear the needsAnswers ⟺ sidecar invariant).`,
+		);
+	}
+	writeFileSync(itemAbs, flagged);
 
 	// Write the appended/created sidecar.
 	mkdirSync(dirname(sidecarAbs), {recursive: true});

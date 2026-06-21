@@ -1,3 +1,10 @@
+---
+title: "Propose mode's re-gate covers the PR-PUSH tip, not the PR-MERGE-time tip: a human merging later (after `main` moved) is outside the runner's fresh-worktree gate"
+type: observation
+status: spotted
+spotted: 2026-06-21
+---
+
 # Propose mode's re-gate covers the PR-PUSH tip, not the PR-MERGE-time tip: a human merging later (after `main` moved) is outside the runner's fresh-worktree gate
 
 2026-06-21

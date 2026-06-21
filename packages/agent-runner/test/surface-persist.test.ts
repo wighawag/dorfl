@@ -204,6 +204,61 @@ describe('persistSurfacedQuestions — the empty emit is a clean no-op', () => {
 	});
 });
 
+describe('persistSurfacedQuestions — fence-less observation (the sidecar-without-needsAnswers regression)', () => {
+	/**
+	 * The exact CI failure: an observation created by `capture-signal` is plain
+	 * markdown with NO `---` frontmatter fence. The OLD `setNeedsAnswersMarker`
+	 * silently returned the body unchanged, so the sidecar was written WITHOUT the
+	 * `needsAnswers:true` flag — a torn invariant a later `advance` tick refused to
+	 * classify (`sidecar-without-needsAnswers`). The flag must now land (via a
+	 * prepended fence) in the SAME atomic commit as the sidecar.
+	 */
+	function seedFenceLessObservation(slug: string): {
+		repo: string;
+		itemPath: string;
+	} {
+		const repo = join(scratch.root, 'project');
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		const itemPath = `work/notes/observations/${slug}.md`;
+		// No frontmatter fence — free-form prose, exactly how capture-signal writes it.
+		const itemBody = `# \`integrateLock\` is in-process only\n\nsome prose.\n`;
+		mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
+		writeFileSync(join(repo, itemPath), itemBody);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed fence-less observation'], repo);
+		return {repo, itemPath};
+	}
+
+	it('sets needsAnswers:true (prepending a fence) AND writes the sidecar in ONE commit', () => {
+		const slug = 'integratelock-is-in-process-only';
+		const {repo, itemPath} = seedFenceLessObservation(slug);
+
+		const result = persistSurfacedQuestions({
+			cwd: repo,
+			item: `observation:${slug}`,
+			itemPath,
+			questions: [{question: 'Size the retry cap for the matrix width?'}],
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('surfaced');
+		expect(result.sidecarPath).toBe(`work/questions/observation-${slug}.md`);
+
+		// The flag actually LANDED (a fence was prepended), so the invariant holds.
+		const body = readFileSync(join(repo, itemPath), 'utf8');
+		expect(parseFrontmatter(body).needsAnswers).toBe(true);
+		expect(body.startsWith('---\n')).toBe(true);
+		expect(body).toContain('some prose.');
+
+		// The sidecar exists AND the commit carried BOTH paths (truly atomic).
+		expect(existsSync(join(repo, result.sidecarPath))).toBe(true);
+		const touched = filesInHeadCommit(repo);
+		expect(touched).toContain(itemPath);
+		expect(touched).toContain(result.sidecarPath);
+	});
+});
+
 describe('persistSurfacedQuestions — usage errors', () => {
 	it('throws when not inside a git repository', () => {
 		const dir = join(scratch.root, 'not-a-repo');

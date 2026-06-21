@@ -1,3 +1,10 @@
+---
+title: '`docs/ci/README.md` still says parallel merge thrashes the CAS, but `integrateLock` + `mergeRetries` now make concurrent merge safe'
+type: observation
+status: spotted
+spotted: 2026-06-21
+---
+
 # `docs/ci/README.md` still says parallel merge thrashes the CAS, but `integrateLock` + `mergeRetries` now make concurrent merge safe
 
 2026-06-21
