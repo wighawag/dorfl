@@ -47,7 +47,11 @@ const ALLOW = 'work-layout.ts';
 /**
  * The path-construction matcher. A string-literal CONTENT matches iff it is, in its
  * entirety, a `work/<folder>` path:
- *   - an OPTIONAL git-ref prefix ending in `:` (e.g. `${ref}:`, `${arbiter}/main:`),
+ *   - an OPTIONAL prefix before `work/`, EITHER a git-ref prefix ending in `:`
+ *     (e.g. `${ref}:`, `${arbiter}/main:`) OR a single interpolated path-prefix
+ *     segment ending in `/` (e.g. `${root}/`, `${cwd}/`) — the latter admits
+ *     the ABSOLUTE form `${root}/work/<folder>/...` alongside the repo-relative
+ *     and git-ref forms,
  *   - the `work/` root + one of the known folder NAMES (not a longer word that
  *     merely starts with one — the `(?![A-Za-z-])` boundary stops a folder name
  *     from matching only a PREFIX of a longer same-rooted token, e.g.
@@ -62,10 +66,20 @@ function buildPathLiteralRegex(): RegExp {
 	const folderAlt = FOLDER_NAMES.map((n) => n.replace(/[-]/g, '\\$&')).join(
 		'|',
 	);
-	const refPrefix = `(?:[A-Za-z0-9_.$\\{\\}/-]*:)?`;
+	// Two parallel OPTIONAL prefix branches before `work/`, kept separate so a
+	// bare unrelated prefix is not absorbed by either:
+	//   - refPrefix: a git-ref prefix ending in `:` (e.g. `${ref}:`,
+	//     `${arbiter}/main:`) — the originally-shipped branch.
+	//   - pathPrefix: a single interpolated path-prefix segment ending in `/`
+	//     (e.g. `${root}/`, `${cwd}/`) — admits the ABSOLUTE form
+	//     `${root}/work/<folder>/...`. The `${…}/` shape is REQUIRED so
+	//     `${root}/something` (no `work/<folder>` body) is NOT flagged.
+	const refPrefix = `[A-Za-z0-9_.$\\{\\}/-]*:`;
+	const pathPrefix = `\\$\\{[^}]*\\}/`;
+	const prefix = `(?:${refPrefix}|${pathPrefix})?`;
 	const segment = `(?:\\$\\{[^}]*\\}|<[^>]*>|[A-Za-z0-9_.-]+)+`;
 	return new RegExp(
-		`^${refPrefix}work/(?:${folderAlt})(?![A-Za-z-])(?:/(?:${segment})?)*$`,
+		`^${prefix}work/(?:${folderAlt})(?![A-Za-z-])(?:/(?:${segment})?)*$`,
 	);
 }
 
@@ -185,6 +199,10 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 			'${ref}:work/tasks/done',
 			'${ref}:work/tasks/todo',
 			'${arbiter}/main:work/tasks/backlog',
+			// Absolute interpolated-prefix forms: a future regression that
+			// re-scatters a `${root}/work/<folder>/...` literal must also flag.
+			'${root}/work/tasks/backlog/${slug}.md',
+			'${cwd}/work/tasks/done',
 		]) {
 			expect(isRawWorkPathLiteral(path), `should flag: ${path}`).toBe(true);
 		}
@@ -198,6 +216,9 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 			'(A repo participates iff it has a work/tasks/todo/ with >= 1 .md file.)',
 			'work/questions/**', // the advance-CI template push-trigger glob
 			'workspace', // a word that merely starts with "work"
+			// A bare interpolated prefix with NO `work/<folder>` body must not be
+			// absorbed by the new `${…}/`-prefix branch.
+			'${root}/something',
 		]) {
 			expect(isRawWorkPathLiteral(prose), `should NOT flag: ${prose}`).toBe(
 				false,
