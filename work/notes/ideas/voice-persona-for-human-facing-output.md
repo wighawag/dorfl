@@ -60,6 +60,15 @@ Open sub-questions for the explore-later pass:
 
 This makes the persona surface THREE orthogonal knobs: `voice` (WHERE) × `voiceCasing` (BASELINE register) × `voiceEmphasis` (the load-bearing span). To be designed and spiked in a later pass; recorded here so the observation is not lost.
 
+## A Hebrew-style font is NOT a CLI capability (recorded so it is not re-asked)
+
+Golem speech in the books is set in a Hebrew-like display font. A CLI CANNOT reproduce that: a command-line program emits only bytes (characters + ANSI escapes for color/bold); the TYPEFACE is the terminal emulator's setting, chosen by the USER, not by the program. So `agent-runner` cannot render Dorfl's words in a Hebrew-style font the way the printed page does. The honest options:
+
+- **ANSI styling only (safe, already planned)** — bold/color/dim, i.e. the `voiceEmphasis: bold` channel. Changes weight, not typeface. Portable.
+- **Unicode look-alike characters — DO NOT.** Hebrew letters that resemble Latin, or "faux" styled alphabets, break copy-paste, grep, screen readers, and width math, and would corrupt the FACTS / leak persona onto machine-read paths. Rejected on principle (the golem does not disguise its words as other words).
+- **Recommended terminal font (the real answer)** — the program still emits plain Latin; the USER opts in by installing a faux-Hebrew display font and setting their terminal to it. Doc-note only; fits the defaults-plain philosophy (user-controlled, opt-in). This is the ONLY route to a true Hebrew-style typeface.
+- **A figlet/ASCII-art banner** is a DIFFERENT, independent idea (it is real ASCII, works regardless of the persona work) — split out to its own idea `cli-ascii-art-banner.md`. Do NOT fold it in here.
+
 ## Hard invariants (the persona is prose-only)
 
 At EVERY level, including `all`, the voice MUST NOT touch:
