@@ -1,6 +1,7 @@
 ---
 name: drive-backlog
-description: "Drive a whole work/ board of ready TASKS to exhaustion as a CONDUCTOR over the agent-runner worker: pick the ready, fresh (non-drifted) tasks AND a practical order, build each with `agent-runner do task:<slug> --isolated` (ALWAYS isolated, a worktree off the arbiter, never the human checkout; review/integration mode left to config), review the diff yourself against the task's criteria, merge, and continue until no ready task can advance, accumulating anything stuck/uncertain into a stuck-set (ask the human if present, else report) rather than stalling, and never forcing a blocked one. Use when asked to 'drive/work through the backlog', 'implement every ready task', 'build the ready tasks in a loop'. The SUPERVISED conductor (distinct from `run`, the unattended parallel daemon); the survey-everything-and-fill-gaps conductor is `orchestrate`, which delegates building here. Composes `review` and `to-task`. NEVER force-merges a red/blocked task. REQUIRES the agent-runner CLI plus the work/ contract."
+disable-model-invocation: true
+description: 'The supervised conductor: build every ready work/ task in a loop via agent-runner, reviewing each diff and merging, until none can advance. Requires the agent-runner CLI.'
 ---
 
 # drive-backlog

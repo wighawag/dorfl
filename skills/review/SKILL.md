@@ -1,6 +1,6 @@
 ---
 name: review
-description: 'A standalone, protocol-native discipline for reviewing work/-protocol artifacts (tasks, briefs, code-vs-its-task, and captured notes such as observations/findings/ADRs) thoroughly and adversarially, ending in a destination check against the brief/ADR goal. Use when reviewing a task before it lands or is claimed, code in a work PR against the task that specified it, a brief before slicing, or a captured note for bucket/quality: before any protocol artifact is trusted. Reviews AGAINST the work/ contract and its design (it assumes the protocol). Emits a verdict; the caller routes it.'
+description: 'Thoroughly and adversarially review a work/-protocol artifact against the work/ contract, ending in a destination check against the brief/ADR goal. Use before any artifact is trusted: a task before it lands, code in a work PR against its task, a brief before slicing, or a captured note. Emits a verdict; the caller routes it.'
 ---
 
 # review

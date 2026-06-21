@@ -1,6 +1,7 @@
 ---
 name: to-brief
-description: "Turn the current conversation + codebase understanding into a brief written as a file in a repo's work/briefs/ready/ folder, as the LAUNCH source material for the file-based work/ workflow (sliced into tasks by the to-task skill). Use when the user wants to create a brief from the current context. NOT for an issue-tracker handoff (this writes a file, not a tracker issue)."
+disable-model-invocation: true
+description: 'Turn the current conversation into a launch brief file in work/briefs/ready/ (sliced into tasks by to-task).'
 ---
 
 # to-brief

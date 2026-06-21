@@ -1,6 +1,6 @@
 ---
 name: surface-questions
-description: "GATHER the open-judgement residue for ONE work/ item and EMIT questions; write NOTHING (doc-shaped, mirrors review). Compose review (task/brief/code) plus the native observation-triage question (promote/keep/delete) plus the item's pre-existing needsAnswers / ## Open questions, each emitted question carrying inline context plus an optional suggested default, in the sidecar entry shape the advance engine persists with zero translation. Use as the advance engine's surface-question rung (spawned fresh-context, the engine writes the sidecar CAS-atomically), or human-invoked for the no-runner path. The humility rule: surface the residue, NEVER invent an answer. Composes review/to-task UNCHANGED; the INVERSE of applying answers."
+description: "GATHER the open-judgement residue for ONE work/ item and EMIT questions; write nothing (mirrors review). Use as the advance engine's surface-question rung, or human-invoked for the no-runner path. Surface the residue; NEVER invent an answer."
 ---
 
 # surface-questions

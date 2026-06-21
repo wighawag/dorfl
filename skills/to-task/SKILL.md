@@ -1,6 +1,7 @@
 ---
 name: to-task
-description: "Break a brief, plan, or design doc into independently-grabbable, file-based work tasks stored as markdown in a repo's work/ folder, using tracer-bullet vertical tasks. Use when the user wants to turn a plan into work items, create implementation tickets as files (not an issue tracker), slice a design into AFK-grabbable units, or set up file-based work tracking for parallel agents."
+disable-model-invocation: true
+description: 'Slice a brief or plan into independently-grabbable, file-based work tasks using tracer-bullet vertical slices.'
 ---
 
 # to-task

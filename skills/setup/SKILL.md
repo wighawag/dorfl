@@ -1,6 +1,7 @@
 ---
 name: setup
-description: "The ONE skill to onboard ANY repo onto the file-based work/ contract (the protocol agent-runner consumes); auto-detects repo state and does the right DEPTH. Empty repo: scaffolds (work/ skeleton, work/protocol/ docs verbatim, CONTEXT.md, a stack-appropriate .agent-runner.json verify gate plus a detected prepare step) after a short adoption chat. Populated/legacy repo: ALSO converts existing material. Trackers/TODOs/design docs become briefs, tasks, or ideas (a vague wish is an idea, NOT a needsAnswers task). Code splits by polarity (external behaviour it integrates with goes to work/notes/findings/ with provenance; our own code's shape goes to CONTEXT.md/docs, NOT findings). Decisions become ADRs only by ELICITING the why from the human (asked live, NEVER inferred: no why, no ADR). Always presents an inventory plus plan and STOPS for confirmation before judgement-heavy writes; never clobbers or auto-commits. Use to set up, adopt, onboard, or migrate any repo to the work/ contract: the single entry point."
+disable-model-invocation: true
+description: 'Onboard a repo onto the file-based work/ contract: scaffold an empty repo, or also migrate existing trackers/docs/code in a populated one. The single adoption entry point.'
 ---
 
 # setup

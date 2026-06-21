@@ -1,6 +1,7 @@
 ---
 name: orchestrate
-description: "The human-in-the-loop META conductor over a whole work/ tree: survey EVERYTHING (observations, ideas, briefs, tasks, needs-attention) in one pass by reading the work/ files directly, advance every autonomous rung it can (triage observations, slice ready briefs, build ready tasks), and at the genuine judgement residue ASK the human conversationally, regrouped into efficient batches, filling the gaps until NEW tasks are READY, then build them by following the `drive-backlog` skill. Use when asked to 'orchestrate the project', 'figure out what to work on and drive it', 'advance the work/ tree', 'review everything and tell me what needs me', or to drain a populated work/ toward 'all ready tasks built' while keeping the human's only job 'answer the questions'. Composes `review`, `to-task`, `to-brief`, and `drive-backlog`; it asks rather than guesses, and NEVER invents an answer to an open question."
+disable-model-invocation: true
+description: 'The human-in-the-loop meta-conductor: survey the whole work/ tree, advance every autonomous rung, batch the judgement residue to the human, then build the ready tasks via drive-backlog.'
 ---
 
 # orchestrate

@@ -1,6 +1,7 @@
 ---
 name: triage-observations
-description: "Drain the work/notes/observations/ inbox ONE note at a time as a human-in-the-loop triage loop: for each observation, READ it, INVESTIGATE its claim against current reality (code/tasks/briefs/ADRs), RECOMMEND exactly one disposition (leave / delete / make-task / amend / fold-into-ADR), WAIT for the human's decision, then EXECUTE it with writes plus scoped commits. Defaults to alphabetical (folder-listing) order for a deterministic full pass; the human may override. Use when asked to triage/trim/prune/clean the observations backlog, decide what to do with each observation, or drain work/notes/observations/ toward a live-only inbox. Protocol-native (assumes the work/ contract); the INVERSE of capture-signal. NEVER auto-decides: the human owns each call. The investigate-before-judging discipline is the point, because an observation is a SPOTTED, often-stale signal, not ground truth."
+disable-model-invocation: true
+description: 'Drain the work/notes/observations/ inbox one note at a time, human-in-the-loop: investigate each, recommend a disposition, the human decides, execute.'
 ---
 
 # Triage observations

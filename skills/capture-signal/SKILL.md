@@ -1,6 +1,6 @@
 ---
 name: capture-signal
-description: "Record a noticed signal into the file-based work/ contract before it evaporates, routing it to the RIGHT bucket (observations / findings / ideas / docs/adr / needs-attention). Use the MOMENT you notice something worth remembering that is off the current task's path: a spotted discrepancy or drift (docs vs code), a recurring tool/process failure, surprising external/domain behaviour, a 'we should note this' / 'isn't that worth capturing?' moment, an out-of-scope opportunity, or a decision worth recording. Also use when the user says to capture/record/note something, or asks 'shouldn't that be an observation?'. The trigger is NOTICING, not being asked: a description in CONTEXT.md is not enough to fire this reflex; this skill is."
+description: "Record a noticed signal into the right work/ bucket (observations / findings / ideas / ADR / needs-attention) before it evaporates. Fire the MOMENT you notice something off the current task's path: drift (docs vs code), a recurring failure, surprising external behaviour, an out-of-scope opportunity, or a decision worth recording. The trigger is NOTICING, not being asked."
 ---
 
 # capture-signal
