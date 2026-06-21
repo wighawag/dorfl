@@ -51,4 +51,35 @@ The kind axis already exists as a prefix; promoting it to a SUBFOLDER trades the
 - Shares the SIDECAR-KEYING question with `work/notes/findings/advance-surface-apply-rungs-can-carry-merge-questions-for-unmerged-branches-2026-06-21.md` and `work/notes/observations/needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21.md` (can a sidecar key to a lock-ref/branch identity, not only a file path?). Folder shape + keying should be decided TOGETHER.
 - The `land-time-reverify-and-parallel-merge-ceiling` brief now points here (its "Part of a larger generalization" section): how merge-questions are placed/scanned depends on (B).
 
-Its own signal; likely an ADR (folder structure is load-bearing here, status=folder). Do NOT guess the rename/restructure \u2014 surface it.
+---
+
+## Discussion round 2 (wighawag): flat-vs-subfolder DISMANTLED as a non-issue; the real questions are (a) shared-main staleness and (b) phase-exclusion
+
+wighawag pushed on the analysis above and was right on several counts. Recording the conclusions; the residue is OPEN QUESTIONS below.
+
+### CONCLUDED: flat vs subfolder is a NON-DIFFERENCE for safety
+The "silent-lookup" hazard attributed to SUBFOLDERS is NOT subfolder-specific: if KIND is encoded in the path at all (a filename PREFIX `merge-slice-foo.md` vs a SUBFOLDER `merge/slice-foo.md`), an identity-only `sidecarPathFor` lookup misses a stale-kind file IDENTICALLY. The real axis is "does the path encode a MUTABLE axis (kind)?", NOT "flat vs subfolder." So flat vs subfolder is a COSMETIC/ergonomic choice (`ls questions/merge/` vs `ls questions/ | grep '^merge-'`), not a correctness one. This RETRACTS the remaining flat-vs-subfolder framing earlier in this note. Likewise "moves"/"content-matching" were never real operations: each sidecar is a distinct file with distinct content at one identity-derived path; git tracks each path independently, nothing is moved or content-matched (wighawag's point 4).
+
+### CONCLUDED (with wighawag's caveat): kinds are TEMPORALLY mutually exclusive, not concurrent
+wighawag: an item cannot hold two kinds at once. A STUCK item failed DURING build (not awaiting a merge answer); a MERGE question only exists once BUILT and NOT stuck; a SPEC question is PRE-build. Sequential PHASES: spec -> [build] -> stuck OR merge. At any instant, at most one kind, so the "two kinds at once" hazard does NOT arise.
+  - CAVEAT (wighawag, important): phase-exclusion is NOT GUARANTEED over time, because a HUMAN can FORCE-RESOLVE (skip-verify, or manually move an item on) while FORGETTING TO DELETE the sidecar. So a stale ORPHAN sidecar from a prior phase CAN persist into the next. The surviving risk is not "two at once" but "a stale orphan from phase N still on disk at phase N+1."
+
+### INVESTIGATED (a): a branch carrying a past (stale/orphan) sidecar across rebase (VERIFIED in code)
+Scenario: sidecars live committed under `work/questions/` on `main` (how a human answers via the GitHub UI). A branch cut from `main` carries them as of cut time; `main` advances; at land the branch rebases onto current `main`. Findings:
+- **A hard invariant exists**: `needsAnswers:false <=> NO active sidecar` (`advance-classify.ts`). A sidecar present while `needsAnswers` is not true is the DEFINED violation `sidecar-without-needsAnswers` -> `invariant-violation`.
+- **DETECTED + HALTS, not auto-repaired**: `advance.ts` (~L859) returns exitCode 1, outcome `invariant-violation`, "refusing to advance ... the needsAnswers flag and the sidecar disagree ... A human must reconcile them." So an orphan sidecar (the (b) case) is CAUGHT loudly at that item's next advance tick and BLOCKS it until a human fixes it. NOT silent. Good.
+- **The LAND/integrate path does NOT touch sidecars**: `integration-core.ts` / `complete.ts` / `needs-attention.ts` have ZERO `questions/`/sidecar references. Rebase/integrate does NOT reconcile a stale/orphan sidecar; it carries the files and lets git's per-PATH merge resolve them. The safety net is the downstream `classifyTick` invariant, NOT the land path.
+- **No auto-cleaner**: nothing auto-deletes an orphan sidecar; `ledger-lint.ts` does not check sidecar-vs-needsAnswers. The invariant REFUSES to advance but does not self-heal.
+- **Flat-vs-subfolder is IRRELEVANT to (a)**: carry/stale/orphan reconciliation is per git PATH, identical flat or subfoldered. Confirms wighawag's intuition.
+
+### NET
+Flat vs subfolder: decide on ERGONOMICS alone (no safety difference). The real, layout-INDEPENDENT risks are (i) a stale sidecar carried by a branch across rebase and (ii) a human-forced resolution that orphans a sidecar. Both are CAUGHT (not silently) by the `needsAnswers <=> sidecar` invariant at the next tick, which HALTS for human reconciliation, but neither is AUTO-HEALED, and the land path does no sidecar reconciliation.
+
+### OPEN QUESTIONS (for later)
+1. Should land/integrate (or `gc`) actively reconcile/clean stale+orphan sidecars instead of relying on the downstream invariant-violation HALT? (self-heal vs halt-and-ask)
+2. Should force-resolve paths (skip-verify / manual move-on) ALSO delete the sidecar, closing the orphan source at creation rather than catching it later? (wighawag's (b) root-cause fix)
+3. Can a branch carrying a STALE-CONTENT (not just orphan) sidecar across rebase ever produce a WRONG merged sidecar that STILL satisfies the invariant (so it is NOT caught)? Needs a concrete trace of the rebase reconciliation of a diverged `questions/<id>.md`.
+4. (unchanged) the SIDECAR-KEYING question (lock-ref/branch identity vs file path), shared with the merge-question + needs-attention notes.
+5. (unchanged) RENAME `questions/` (the code calls it the "what needs me?" queue; most entries are decisions/an inbox).
+
+Its own signal; likely an ADR (folder structure is load-bearing here, status=folder). (Round 2 below supersedes the flat-vs-subfolder framing as a non-issue.) Do NOT guess the rename/restructure \u2014 surface it.
