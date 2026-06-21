@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'apply-reconciles-stale-open-questions'
 date: 2026-06-21
 status: open
 reviewOf: apply-reconciles-stale-open-questions
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
