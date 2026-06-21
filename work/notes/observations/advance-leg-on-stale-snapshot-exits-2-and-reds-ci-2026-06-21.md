@@ -3,6 +3,7 @@ title: A stale-snapshot `advance` leg (item already done/removed) exits 2 and RE
 type: observation
 status: spotted
 spotted: 2026-06-21
+needsAnswers: true
 ---
 
 ## What was seen
