@@ -42,3 +42,11 @@ is additive, never the gate.
 
 Not fixing here: this is the residual design gap + the two-tier (bare-floor /
 host-ceiling) plan to close it, captured for the propose-mode-landing-safety slice.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `brief:land-time-reverify-and-parallel-merge-ceiling` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: The observation is one of the three originating design-trail notes explicitly cited in the brief's launch snapshot, and its content (propose mode gates push-time tip not merge-time tip; two-tier git-alone floor + GitHub ceiling) is fully folded into Problem Statement §3, Solution's propose two-tier section, user stories 7–11, and OPEN QUESTION 2. Already covered.
