@@ -3,6 +3,7 @@ title: The triage-observations skill ignores pending questions (sidecars / needs
 type: observation
 status: spotted
 spotted: 2026-06-20
+needsAnswers: true
 ---
 
 ## What was seen
