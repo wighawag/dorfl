@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'work-layout-guard-catch-absolute-prefi
 date: 2026-06-20
 status: open
 reviewOf: work-layout-guard-catch-absolute-prefix-path-literals
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
