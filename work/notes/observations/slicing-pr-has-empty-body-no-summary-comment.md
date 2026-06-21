@@ -2,6 +2,7 @@
 title: The slicing path opens a PR with an EMPTY body (no summary of what was sliced); build path threads a body but slicing does not
 date: 2026-06-21
 status: open
+needsAnswers: true
 ---
 
 ## What was spotted
