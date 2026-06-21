@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Should `work/questions/` be renamed, and is the question KIND a filename-prefix or a subfolder (or a typed field)?
 
 2026-06-21
