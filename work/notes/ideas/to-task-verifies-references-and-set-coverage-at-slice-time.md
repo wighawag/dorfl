@@ -1,0 +1,161 @@
+---
+title: to-task verifies references and set-coverage while drafting (gated behind skill evals)
+slug: to-task-verifies-references-and-set-coverage-at-slice-time
+type: idea
+status: incubating
+---
+
+# to-task verifies references + set-coverage at slice time (pre-PRD / incubating idea)
+
+> This is a **pre-PRD idea**, not a committed change. It is **deliberately NOT applied to main.** The maintainer's explicit reason: **skill evals must be in place BEFORE making substantive changes to skills**, so a wording change like this can be measured rather than merged on vibes. Park it here until the eval harness exists; then apply the patch below and let the evals judge it.
+
+## What it is
+
+A strengthening of the `to-task` skill so the slicer, _while drafting_, does two things it currently only gestures at:
+
+1. **Verifies every reference a task names** (a "reuse X", a symbol / path / signature, an assumed seam, a module home) against the **real code** — a ghost path or a private/wrongly-shaped "reuse X" is the classic expensive defect (the agent builds confidently on a false premise). On a miss: fix the task to the real shape, or set `needsAnswers: true` with the unverified premise in the body.
+2. **Confirms the whole SET reaches the goal** (a "destination check"): if every task is built exactly as written, do we end up with the system the brief/ADR describes? Map every element of the brief's `## End state` to a delivering task; check coverage is complete + non-duplicated, the deletion sweep is owned, and there are no orphans.
+
+It also adds a durable **`## End state`** section to the brief template + a `to-brief` step (2b) to write it, because the destination check needs a concrete spec to map against.
+
+## Where this came from
+
+A skills-improvement session (2026-06). The original ask was "bring the `review` skill's strong points into `to-task` so it slices better in the first place, instead of always needing a review pass after." That intent is sound — defects concentrate in slicing, and these are exactly the two checks a reviewer would run. The maintainer then clarified two things that shaped the final form:
+
+- **No dependency on the `review` skill.** `to-task` should be stronger _on its own_, not refer out to `/review`. So the checks are phrased as native slicing discipline, not imported "lenses".
+- **No "internal review pass" framing.** Telling a _producer_ to "turn adversarial / run a self-review pass" reads as bolted-on ceremony. Verifying that a "reuse X" exists is just _drafting a correct task_, not reviewing one. The chosen form (below) folds the checks into the existing **step 3 (Draft vertical tasks)** as plain drafting rules, with no "pressure-test / adversarial" wrapper.
+
+## Why gated (do NOT just apply it)
+
+These are **prompt-docs for an LLM**. Whether "verify every reference" and "destination check" actually change slicing behaviour for the better is **empirical and untested**. The maintainer wants **skill evals** in place first so this can be A/B'd against the current `to-task`, rather than assumed to help. Adding more words to an already-dense skill has a real cost (dilution); only an eval can say whether the net is positive. So: **evals first, then apply + measure.**
+
+## The decision that was made (B over A)
+
+Two framings were drafted and committed to throwaway local branches:
+
+- **Variant A** — a dedicated new **step 3c** ("Pressure-test the cut") with the two checks as an explicit adversarial pass. **Rejected:** the "internal review pass" framing is weird for a producer (see above), and it grows the skill with a whole new section.
+- **Variant B** — the checks **folded into step 3** (verify-references as the action-side of the existing `needsAnswers` bullet; the destination check as a final step-3 bullet). **Chosen:** no review framing, smaller footprint, reads as "how to draft a task well". This is the patch captured below.
+
+(The local branches `slice-variant-a` / `slice-variant-b` were the working copies; do not rely on them surviving. The patch below IS variant B and is the source of truth for reviving this.)
+
+## How to revive (apply the exact change)
+
+The patch below is **Variant B**, generated against base commit `542465f` ("skills: clean up descriptions…"), which is an ancestor of `main`. As of capture, the four target files were **untouched on `main` since that base**, so the patch applies cleanly. If `main` has since edited `skills/to-task/SKILL.md`, `skills/to-brief/SKILL.md`, or either `brief-template.md`, re-resolve by hand.
+
+To apply from the repo root (the patch is this idea's co-located sidecar asset, per WORK-CONTRACT rule 7):
+
+    git apply work/notes/ideas/to-task-verifies-references-and-set-coverage-at-slice-time/variant-b.patch
+
+…or copy the fenced diff below into a `.patch` file first. Note the brief-template lives in TWO places that must stay byte-identical (`skills/setup/protocol/brief-template.md` is the SOURCE; `work/protocol/brief-template.md` is the propagated copy — see this repo's AGENTS.md); the patch already edits both. After applying: run `pnpm format`, then the verify gate.
+
+```diff
+diff --git a/skills/setup/protocol/brief-template.md b/skills/setup/protocol/brief-template.md
+index da8e1e0..65b9cfc 100644
+--- a/skills/setup/protocol/brief-template.md
++++ b/skills/setup/protocol/brief-template.md
+@@ -7,7 +7,7 @@ slug: <url-safe-slug>
+ # briefAfter: []      # optional: brief slugs that must be SLICED first (so this brief's tasks can reference their slugs in blockedBy).
+ ---
+ 
+-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/todo/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is sliced — they move into tasks/ADRs and this brief settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
++> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/todo/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is sliced — they move into tasks/ADRs and this brief settles to its durable framing: Problem / Solution / End state / User Stories / Out of Scope.)
+ 
+ ## Problem Statement
+ 
+@@ -17,6 +17,10 @@ The problem the user faces, from the user's perspective.
+ 
+ The solution, from the user's perspective.
+ 
++## End state
++
++What the system LOOKS LIKE once this brief is fully delivered: the concrete elements that must exist, AND (critically) what OLD surface is GONE (replaced/removed), if anything. Keep it to the end-state itself, not the steps to get there (those become tasks). This is DURABLE (it survives the slice-time trim) because it is the spec `to-task`'s destination check maps every task against: every promised element must map to a delivering task (a hole = an element no task delivers), and every removal must be owned by exactly one task (the deletion sweep). It is what "are we done?" is measured against.
++
+ ## User Stories
+ 
+ A LONG, numbered list — the heart of the brief. Format:
+diff --git a/skills/to-brief/SKILL.md b/skills/to-brief/SKILL.md
+index 44d9627..b64665c 100644
+--- a/skills/to-brief/SKILL.md
++++ b/skills/to-brief/SKILL.md
+@@ -23,6 +23,8 @@ Put a one-line banner at the top of every brief you write:
+ 
+ 2. **Sketch the seams** at which the feature will be tested. Prefer existing seams; use the highest seam possible. Confirm the seams match the user's expectations.
+ 
++2b. **Sketch the END STATE explicitly** (the durable spec the slicer checks tasks against). State, in a short `## End state` section, what the system LOOKS LIKE once this brief is fully delivered: the concrete elements that must exist, AND (critically) what OLD surface is GONE (replaced/removed), if anything. This is the spec `to-task`'s destination check maps every task against: every promised element should map to a delivering task (a hole = an element no task delivers), and every removal should be owned by exactly one task (the deletion sweep). Keep it to the end-state itself, not the steps to get there (those become tasks). Unlike the technical-detail sections, this end-state framing is DURABLE: it survives the slice-time trim alongside Problem / Solution / User Stories / Out of Scope, because it is what "are we done?" is measured against.
++
+ 3. **Set the two autonomy axes (the brief now CARRIES the gate).** Because a brief may be AUTO-sliced by an agent with no human in the loop, decide and record both:
+    - **`humanOnly` (DECIDED):** set `humanOnly: true` on the brief ONLY to mean "a human must drive the SLICING of this brief" (its sole effect: an agent may not auto-slice it). This is DISJOINT from any task's `humanOnly` — it does NOT propagate to or guide the gates of the tasks it produces (a `humanOnly` brief can yield fully agent-buildable tasks). Describe judgement-heavy areas in prose as ordinary domain context, but do NOT treat the brief flag as a way to pre-set task gates (the slicer decides each task's gate from that task's own build-nature — see the `to-task` skill §3b).
+    - **`needsAnswers` (DISCOVERED):** if the conversation did NOT fully resolve the spec, set `needsAnswers: true` and **list the open questions in the brief body** — the auto-slicer refuses to slice until they are answered and the flag cleared. Be honest: flag an incomplete brief rather than let it produce wrongly-cut tasks. Omit both flags when everything is resolved and agent-sliceable.
+diff --git a/skills/to-task/SKILL.md b/skills/to-task/SKILL.md
+index 6929d09..9754aac 100644
+--- a/skills/to-task/SKILL.md
++++ b/skills/to-task/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: to-task
+-description: "Break a brief, plan, or design doc into independently-grabbable, file-based work tasks stored as markdown in a repo's work/ folder, using tracer-bullet vertical tasks. Use when the user wants to turn a plan into work items, create implementation tickets as files (not an issue tracker), slice a design into AFK-grabbable units, or set up file-based work tracking for parallel agents."
++description: "Break a brief, plan, or design doc into independently-grabbable, file-based work tasks stored as markdown in a repo's work/ folder, using tracer-bullet vertical tasks. While drafting, it verifies every reference a task names (a reuse-X, a path, a seam) against the real code and checks the whole set actually reaches the brief's end-state (coverage complete, deletions owned, no orphans), so tasks are well-formed before they land. Use when the user wants to turn a plan into work items, create implementation tickets as files (not an issue tracker), slice a design into AFK-grabbable units, or set up file-based work tracking for parallel agents."
+ ---
+ 
+ # to-task
+@@ -37,7 +37,9 @@ Each task is a **tracer bullet** — a thin path through ALL layers end-to-end,
+   - **A task's `humanOnly` is decided from the nature of BUILDING THAT TASK — never inherited from the brief.** Evaluate each task on its own merits (does _building it_ genuinely need to be done by a human BY NATURE — secrets handling, release pipeline, hard security boundary, an AGENTS.md prohibition?), AS IF the brief's `humanOnly` field did not exist. (The two flags are disjoint — see §3b.)
+   - **Do NOT stamp `humanOnly` to mean "a human should REVIEW this before the agent builds it"** — that is the POSITION's job, not the flag's. The runner BIRTHS tasks STAGED in `work/tasks/backlog/` (not eligible); a human promotes the approved ones into the pool `work/tasks/todo/`. Review-first is encoded by the staging position; `humanOnly` is reserved for the rare never-by-nature case. (Stamping `humanOnly` for review was the overloaded reading and is RETIRED — see WORK-CONTRACT.md "Task `humanOnly` is NARROW".)
+   - **Do NOT be shy about `needsAnswers` — when genuinely unsure, FLAG, don't guess.** `needsAnswers` is cheap (a human clears it in seconds) and a confidently-underspecified task is expensive (an agent builds the wrong thing, convincingly). Empirically, defects concentrate in SLICING far more than in implementation: an ambiguous premise, an unresolved design fork, a "reuse X" where X's shape is unverified, or a seam you _assume_ exists — each is a `needsAnswers` with the open question written in the body, NOT a guess dressed as a spec. The asymmetry is the whole point: a false `needsAnswers` costs one human glance; a false confidence ships wrong-but-compiling work.
++  - **VERIFY every reference a task names, don't assume it.** This is the action side of the bullet above: for each concrete thing a task names (a "reuse X", a symbol / path / signature, an assumed seam, a module home), CHECK against the real code that it exists with the assumed shape (read what ACTUALLY landed, don't trust memory). A ghost path or a private/wrongly-shaped "reuse X" is the classic expensive defect: the agent builds confidently on a false premise. When a reference doesn't check out, fix the task to the real shape, or set `needsAnswers: true` with the unverified premise in the body.
+ - **Prefer file-orthogonal tasks to minimise merge conflicts.** `blockedBy` encodes logical ordering, but two independent tasks that edit the SAME files will conflict when the second integrates after the first. Parallel agents make this real. So: slice along file/module boundaries where you can; and when two tasks are known to touch the same module, add a `blockedBy` to **serialize** them even if there's no strict logical dependency. The runner only rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at slice time is the cheap win.
++- **Confirm the SET reaches the goal (the destination check) before you finish drafting.** Per-task correctness isn't enough: ask _if every task is built exactly as written, do we END UP WITH the system the brief/ADR describes?_ Map every element of the brief's **`## End state`** (or, lacking one, its User Stories + Solution) to a delivering task: a hole = an element no task delivers; confirm coverage is complete and non-duplicated; confirm the deletion sweep (each OLD-surface removal owned by exactly one task); check for orphans (a task delivering something unneeded). A hole is the most important thing to fix before the tasks land: add a task, or flag the deliberate non-delivery as a named follow-up.
+ 
+ ### 3b. Brief gate vs task gate are DISJOINT + honour cross-brief `briefAfter`
+ 
+@@ -51,9 +53,9 @@ Each task is a **tracer bullet** — a thin path through ALL layers end-to-end,
+ 
+ ### 4. Quiz the user — OR (no human present) do a confidence check
+ 
+-**If a human is present** (the normal interactive path): present the breakdown as a numbered list — Title, the two gate axes, Blocked-by, and (if the source has them) which user stories it covers. Ask: granularity right? dependencies right? merge/split any? gates correct? Iterate until approved.
++**If a human is present** (the normal interactive path): present the breakdown as a numbered list (Title, the two gate axes, Blocked-by, and, if the source has them, which user stories it covers). Having verified references and run the destination check in step 3, also surface what they found: any reference that didn't check out (now fixed or flagged) and any coverage hole/orphan. Ask: granularity right? dependencies right? merge/split any? gates correct? coverage complete? Iterate until approved.
+ 
+-**If NO human is present** (an agent auto-slicing in CI): step 4 is replaced by a **confidence check**, because there is no one to quiz. Do NOT emit guessed tasks. The source brief should already be clear (the auto-slicer only runs on a brief that is not `humanOnly` and not `needsAnswers`). If, while slicing, ANY of {granularity, dependency order, a gate, a seam} is genuinely unresolved by the brief/ADR, do not guess: either set `needsAnswers: true` (with the open questions in the body) on the specific uncertain task, or — if the whole decomposition is unclear — stop and route the brief to needs-attention with the questions, rather than emitting a wrongly-cut task. Only emit tasks you would have gotten the human to approve.
++**If NO human is present** (an agent auto-slicing in CI): step 4 is replaced by a **confidence check**, because there is no one to quiz. Do NOT emit guessed tasks. The source brief should already be clear (the auto-slicer only runs on a brief that is not `humanOnly` and not `needsAnswers`). If, while slicing, ANY of {granularity, dependency order, a gate, a seam, set-level coverage} is genuinely unresolved by the brief/ADR, do not guess: either set `needsAnswers: true` (with the open questions in the body) on the specific uncertain task, or, if the whole decomposition is unclear or the destination check found an unfillable hole, stop and route the brief to needs-attention with the questions, rather than emitting a wrongly-cut task. Only emit tasks you would have gotten the human to approve.
+ 
+ ### 5. Write the task files
+ 
+@@ -65,7 +67,7 @@ The brief is a launch snapshot (see the `to-brief` skill). Now that the work is
+ 
+ - The tasks now own _what to build_ (Implementation/Testing detail) — remove those sections from the brief.
+ - Any **durable rationale** worth keeping (the _why_ of a decision) is RELOCATED to an ADR (`docs/adr/<slug>.md`), not deleted.
+-- The brief settles to its durable framing: Problem / Solution / User Stories / Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that detail moved to tasks/ADRs.
++- The brief settles to its durable framing: Problem / Solution / End state / User Stories / Out of Scope (+ its launch-snapshot banner). KEEP the `## End state` section (the spec the destination check in step 3 was measured against; it is what "are we done?" maps to, so it must survive the trim); only the technical-detail sections (Implementation / Testing) go. Leave a one-line pointer that detail moved to tasks/ADRs.
+ - **Move the brief to `work/briefs/tasked/`** to record that it has been sliced: `git mv work/briefs/ready/<slug>.md work/briefs/tasked/<slug>.md` (residence in `work/briefs/tasked/` IS tasked-ness — the build-machine `tasks/done/` analogue for briefs, the sole signal). Do NOT add a `sliced:` frontmatter marker: that marker was removed from the protocol; the folder is the source of truth. (On the agent/runner path `do brief:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock slicing path.)
+ 
+ This is a hand-off transition, not ongoing maintenance — after this single trim the brief is stable because the stale-prone part was relocated, not because it is kept in sync. (Nothing is lost: detail → tasks; rationale → ADR.)
+diff --git a/work/protocol/brief-template.md b/work/protocol/brief-template.md
+index da8e1e0..65b9cfc 100644
+--- a/work/protocol/brief-template.md
++++ b/work/protocol/brief-template.md
+@@ -7,7 +7,7 @@ slug: <url-safe-slug>
+ # briefAfter: []      # optional: brief slugs that must be SLICED first (so this brief's tasks can reference their slugs in blockedBy).
+ ---
+ 
+-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/todo/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is sliced — they move into tasks/ADRs and this brief settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
++> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/todo/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is sliced — they move into tasks/ADRs and this brief settles to its durable framing: Problem / Solution / End state / User Stories / Out of Scope.)
+ 
+ ## Problem Statement
+ 
+@@ -17,6 +17,10 @@ The problem the user faces, from the user's perspective.
+ 
+ The solution, from the user's perspective.
+ 
++## End state
++
++What the system LOOKS LIKE once this brief is fully delivered: the concrete elements that must exist, AND (critically) what OLD surface is GONE (replaced/removed), if anything. Keep it to the end-state itself, not the steps to get there (those become tasks). This is DURABLE (it survives the slice-time trim) because it is the spec `to-task`'s destination check maps every task against: every promised element must map to a delivering task (a hole = an element no task delivers), and every removal must be owned by exactly one task (the deletion sweep). It is what "are we done?" is measured against.
++
+ ## User Stories
+ 
+ A LONG, numbered list — the heart of the brief. Format:
+```
+
+## Related
+
+- The companion **`## End state` brief-template section is part of THIS idea** (it is the spec the destination check reads). Do not apply it separately.
+- When evals exist, the natural eval is: feed both `to-task` variants the same brief + codebase and compare the sliced tasks for ghost-reference rate and end-state coverage holes.
