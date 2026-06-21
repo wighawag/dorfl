@@ -3,6 +3,7 @@ title: "Propose mode's re-gate covers the PR-PUSH tip, not the PR-MERGE-time tip
 type: observation
 status: spotted
 spotted: 2026-06-21
+triaged: keep
 ---
 
 # Propose mode's re-gate covers the PR-PUSH tip, not the PR-MERGE-time tip: a human merging later (after `main` moved) is outside the runner's fresh-worktree gate
@@ -65,3 +66,11 @@ covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
 Reason: Observation self-declares (and content confirms) it is one of the originating design-trail notes for this brief; the push-time vs merge-time gap and the two-tier git-alone floor + GitHub ceiling are fully folded into the brief's Problem Statement §3, Solution, user stories 7–11, and OPEN QUESTION 2.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `brief:land-time-reverify-and-parallel-merge-ceiling` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation self-declares and content confirms it is one of the originating design-trail notes for this brief; push-time vs merge-time gap and two-tier git-alone-floor/GitHub-ceiling plan are fully folded into the brief's Problem Statement §3, Solution, user stories 7–11, and OPEN QUESTION 2.
