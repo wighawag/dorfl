@@ -3,6 +3,7 @@ title: A question sidecar has no human-VISIBLE link to the item it asks about â€
 type: observation
 status: spotted
 spotted: 2026-06-20
+needsAnswers: true
 ---
 
 ## What was seen
