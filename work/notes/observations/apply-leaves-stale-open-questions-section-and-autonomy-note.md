@@ -2,6 +2,7 @@
 title: The apply rung appends '## Applied answers' but leaves the now-stale '## Open questions' section AND the 'Set needsAnswers:true' autonomy note in the brief body
 date: 2026-06-21
 status: open
+triaged: keep
 ---
 
 ## What was spotted
@@ -31,3 +32,11 @@ The honest end state: after apply, the brief body reads as RESOLVED, with the an
 ## Provenance
 
 Spotted by the user + investigation while testing the apply step during the v1.0.0-skills-alignment session (2026-06-21). The apply itself succeeded (invariants held); this is a body-reconciliation quality gap, not a correctness failure of the flag/sidecar invariant.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `brief:apply-reconciles-stale-open-questions` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: The ready brief `apply-reconciles-stale-open-questions` explicitly cites this observation as its originating signal and captures the exact problem (apply appends `## Applied answers` but leaves the stale `## Open questions` section and autonomy note), with decisions/tests already drafted. The observation is already covered.
