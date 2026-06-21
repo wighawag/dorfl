@@ -16,11 +16,26 @@ const base = {voice: 'cli' as const, stream: tty, env: {} as NodeJS.ProcessEnv};
 function show(casing: 'title' | 'caps' | 'plain') {
 	const ctx: VoiceContext = {...base, voiceCasing: casing};
 	console.log(`\n=== voiceCasing: ${casing} ===`);
-	console.log('claim won   :', flavour(ctx, 'Claimed work/foo.', DORFL_LINES.claimWon));
-	console.log('claim lost  :', flavour(ctx, 'Already claimed; next.', DORFL_LINES.claimLost));
-	console.log('gate red    :', flavour(ctx, 'Gate failed; needs-attention.', DORFL_LINES.gateRed));
-	console.log('pushed      :', flavour(ctx, 'Pushed work/foo.', DORFL_LINES.pushedPropose));
-	console.log('signature   :', flavour(ctx, 'agent-runner', DORFL_LINES.signature));
+	console.log(
+		'claim won   :',
+		flavour(ctx, 'Claimed work/foo.', DORFL_LINES.claimWon),
+	);
+	console.log(
+		'claim lost  :',
+		flavour(ctx, 'Already claimed; next.', DORFL_LINES.claimLost),
+	);
+	console.log(
+		'gate red    :',
+		flavour(ctx, 'Gate failed; needs-attention.', DORFL_LINES.gateRed),
+	);
+	console.log(
+		'pushed      :',
+		flavour(ctx, 'Pushed work/foo.', DORFL_LINES.pushedPropose),
+	);
+	console.log(
+		'signature   :',
+		flavour(ctx, 'agent-runner', DORFL_LINES.signature),
+	);
 }
 
 show('title');
@@ -30,8 +45,14 @@ show('plain');
 // Off-paths: persona disabled, and machine-read (non-TTY) forced off.
 const off: VoiceContext = {voice: 'plain', stream: tty, env: {}};
 console.log('\n=== voice: plain (off) ===');
-console.log('claim won   :', flavour(off, 'Claimed work/foo.', DORFL_LINES.claimWon));
+console.log(
+	'claim won   :',
+	flavour(off, 'Claimed work/foo.', DORFL_LINES.claimWon),
+);
 
 const piped: VoiceContext = {voice: 'cli', stream: {isTTY: false}, env: {}};
 console.log('\n=== piped / non-TTY (forced off) ===');
-console.log('claim won   :', flavour(piped, 'Claimed work/foo.', DORFL_LINES.claimWon));
+console.log(
+	'claim won   :',
+	flavour(piped, 'Claimed work/foo.', DORFL_LINES.claimWon),
+);

@@ -129,8 +129,10 @@ export const DORFL_LINES = {
 	claimWon: 'Claimed. The work is mine now.',
 	claimLost: 'Another took it first. I look for other work.',
 	gateGreen: 'The gate is green. The work is sound.',
-	gateRed: 'The gate is red. I did not finish. A job done badly is a job done twice.',
-	pushedPropose: 'The work is on the branch. A human must say the word to land it.',
+	gateRed:
+		'The gate is red. I did not finish. A job done badly is a job done twice.',
+	pushedPropose:
+		'The work is on the branch. A human must say the word to land it.',
 	gcReaped: 'The work is safe on the arbiter. I put away the tools.',
 	nothingToDo: 'There is no work I may take. I wait.',
 	signature: 'Words in the heart can not be taken.',
