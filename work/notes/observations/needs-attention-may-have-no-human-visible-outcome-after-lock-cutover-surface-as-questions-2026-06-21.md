@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # needs-attention has NO on-main human-visible outcome after the lock cutover (CONFIRMED in code); surface stuck items as questions whose apply requeues (optional --reset)
 
 2026-06-21
