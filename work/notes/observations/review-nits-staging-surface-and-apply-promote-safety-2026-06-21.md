@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'staging-surface-and-apply-promote-safe
 date: 2026-06-21
 status: open
 reviewOf: staging-surface-and-apply-promote-safety
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
