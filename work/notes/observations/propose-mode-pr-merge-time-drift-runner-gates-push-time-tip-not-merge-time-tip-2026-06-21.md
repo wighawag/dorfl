@@ -50,3 +50,11 @@ covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
 Reason: The observation is one of the three originating design-trail notes explicitly cited in the brief's launch snapshot, and its content (propose mode gates push-time tip not merge-time tip; two-tier git-alone floor + GitHub ceiling) is fully folded into Problem Statement §3, Solution's propose two-tier section, user stories 7–11, and OPEN QUESTION 2. Already covered.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `brief:land-time-reverify-and-parallel-merge-ceiling` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation self-declares (and content confirms) it is one of the originating design-trail notes for this brief; the push-time vs merge-time gap and the two-tier git-alone floor + GitHub ceiling are fully folded into the brief's Problem Statement §3, Solution, user stories 7–11, and OPEN QUESTION 2.
