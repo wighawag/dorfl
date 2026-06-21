@@ -1,6 +1,7 @@
 ---
 title: "Three coupled fixes from the incomplete lock+rename migration: backlog/pool vocabulary drift, surface questions on staging (safely), and the apply x promote concurrency hole"
 slug: staging-surface-and-apply-promote-safety
+needsAnswers: true
 ---
 
 > Launch snapshot, records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) plus the code; remaining work: `work/tasks/todo/` tasks. Governing context: `work/briefs/tasked/folder-taxonomy-reorg-and-rename.md` (the STEP-B rename, still partly deferred), `work/briefs/ready/ledger-status-per-item-lock-refs.md` (the per-item two-axis lock), `work/briefs/ready/staging-pool-position-gate-and-trust-model.md` (the staging gate + `slicesLandIn`/`prdsLandIn`). Found 2026-06-21 while testing the advance apply step: a sliced brief's `needsAnswers` task never surfaced a question because it sat in staging, which uncovered all three issues below.
