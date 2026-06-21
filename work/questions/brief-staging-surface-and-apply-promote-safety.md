@@ -12,6 +12,8 @@ _Suggested default: Scoped slice: only the readers F2/F3 touch, and explicitly r
 
 **Your answer** (write below this line):
 
+Scoped slice. F1 here fixes ONLY the `backlog`-means-pool readers that F2/F3 actually touch (ledger-read, lifecycle-gather, scan, the `config.ts` doc-comments + the `slicesLandIn`/`prdsLandIn` value space where `'backlog'` still means "pool"), renaming the pool noun to `todo` and keeping `tasks/backlog` = staging. Do NOT pull the whole STEP-B mechanical rename in here. Reference the tasked brief `folder-taxonomy-reorg-and-rename` so the remainder is not orphaned, AND update that brief to record that this brief consumed its surface-pool-reader slice, so the two cannot silently overlap or re-do each other's work.
+
 ## Q2
 
 **F3b lock discipline: should `promote` TAKE the per-item `advancing` lock for its CAS window (briefly held, serialises silently with apply), or REFUSE while an `advance` lock is held (louder, simpler, human retries)?**
@@ -23,6 +25,8 @@ _Suggested default: Promote TAKES the per-item `advancing` lock for its CAS wind
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Promote TAKES the per-item `advancing` lock for its CAS window. The decisive reason is architectural, not UX: the per-item two-axis lock (`ledger-status-per-item-lock-refs`) exists precisely so that implement/slice/advance on one item are mutually exclusive BY CONSTRUCTION, atomic, not advisory. "Refuse while an advance lock is held" is a check-then-act against the lock, which reintroduces exactly the check-then-act race the lock was built to eliminate, and makes promote advisory where every other transition is atomic. So take-the-lock is the only option consistent with WHY the lock exists. Promote acquires the item lock (action axis: a position/promote transition, or reuse `advance` if a distinct action value is over-engineering), does its tree-less position CAS, releases. An apply already holding the lock makes promote lose cleanly, and vice versa.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: F3 lands before F2 — either as a strictly earlier slice, o
 
 **Your answer** (write below this line):
 
+F3 STRICTLY BEFORE F2, as a SEPARATE slice (not the earlier half of one combined slice). Reason: F3 is a correctness fix that is valuable on its own and fixes a concurrency hole that exists TODAY, independent of F2; it should ship and be verified as its own demoable tracer-bullet slice. F2 is a behaviour change that only becomes SAFE once F3 has landed, so F2's slice declares `blockedBy: [<F3 slice>]` and its tests assert the F3 invariants are green as a precondition. Shipping F2 before F3 is ruled out entirely. Combining them into one slice is rejected because the behaviour change (F2) could mask an F3 regression, and because two independently-verifiable correctness/behaviour concerns deserve two slices. (F1 the vocabulary fix is a prefactor that lands first or alongside F3, since both touch the same readers.)
+
 ## Q4
 
 **Do briefs (`briefs/proposed` -> `briefs/ready`, with `needsAnswers`) need the SAME surface-on-staging + apply-vs-promote fixes symmetrically in this brief, or are briefs explicitly out of scope for this pass?**
@@ -47,3 +53,11 @@ _Suggested default: Out of scope for this pass: tasks-only here; file a follow-u
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Do NOT blanket-defer briefs; SPLIT by concern, because we have DIRECT evidence briefs share at least F2 (this very `needsAnswers` brief is being surfaced via the brief surface pool right now, and `prdsLandIn` mirrors `slicesLandIn` exactly).
+
+- **F1 (vocabulary):** covers briefs inherently (the pool-noun fix touches the shared readers). In scope.
+- **F2 (surface on staging):** IN SCOPE for briefs symmetrically. The surface pool already enumerates `namespace: 'brief'` legs, so `surfaceStaging` must cover the brief staging folder (`briefs/proposed/`) too, not only `tasks/backlog/`. A `needsAnswers` brief in staging should surface its questions before promotion, exactly like a task.
+- **F3 (apply x promote):** the PROMOTE-respects-the-lock half covers briefs too (briefs are promoted `proposed -> ready` via the same position-CAS verb, so the lock fix must apply to the brief promote path). The APPLY-folder-agnostic half is task/brief-symmetric where briefs carry `needsAnswers` and get an apply, so include it for briefs as well; only any genuinely task-only apply specifics (if found during slicing) are scoped out, and the slicer should call them out explicitly rather than blanket-excluding briefs.
+
+Net: briefs are in scope across F1/F2/F3; the slicer only carves out a brief-specific case if it finds one, and names it.
