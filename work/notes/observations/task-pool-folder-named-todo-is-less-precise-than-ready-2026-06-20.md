@@ -3,6 +3,7 @@ title: The claimable task-pool folder is named `todo/` — `ready/` would be mor
 type: observation
 status: spotted
 spotted: 2026-06-20
+needsAnswers: true
 ---
 
 ## What was seen
