@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'f2-surface-staging-config-and-pool-ext
 date: 2026-06-22
 status: open
 reviewOf: f2-surface-staging-config-and-pool-extension
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
