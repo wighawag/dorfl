@@ -51,6 +51,8 @@ Derive the **project name** from the repo (folder/remote name) for the CONTEXT t
 
 **Nudge for a per-change convention (language-agnostic — never tool-specific).** Many repos require something extra on every change: a changeset, a `CHANGELOG` entry, a news fragment, etc. setup does NOT detect or assume any of these — there is no generic signal and guessing one (e.g. keying off `.changeset/`) would smuggle ecosystem favouritism into a deliberately language-agnostic skill (the A3 rule). Instead, ASK once, generically: **"Any standing per-change rule agents must follow in this repo — e.g. a changeset, a CHANGELOG entry, a news fragment? I'll note it under `## Conventions` in CONTEXT.md."** If they give one, record it in the CONTEXT.md `## Conventions` section (fold this into the A4 plan, do NOT make it a separate question round); if they skip, leave the commented stub. Mention the homes a convention can live in: **CONTEXT.md** (the in-band slot agents read), **their own agent config** (e.g. an `AGENTS.md` their harness reads), and — if they want it _enforced_ rather than merely stated — **their own check wired into the `verify` gate** (their command, e.g. `changeset status --since=main`; setup never injects one, per A3 — it only points out that `verify` is where enforcement would go).
 
+**Nudge for `promptGuidance.testFirst` (a prompt nudge, NOT a gate — fold into the A4 plan, do NOT add a separate question round).** `promptGuidance` is a per-repo NUDGE namespace in `.agent-runner.json` that strengthens the worker's in-band prompt without changing what the `verify` gate accepts; its first member is `testFirst`. ASK once, phrased AS a nudge so it is obvious this is guidance and not an acceptance bar: **"Should AFK builds in this repo default to writing the failing test BEFORE the production code? Your `verify` gate still decides pass/fail either way — this just strengthens the wording the worker is given (`promptGuidance.testFirst` in `.agent-runner.json`; a NUDGE, not a gate)."** On **yes** → MERGE-IN `promptGuidance: { testFirst: true }` into `.agent-runner.json` per A1's merge-don't-clobber rule (preserve every other existing key VERBATIM; if `promptGuidance` already exists, add/set only `testFirst` and leave any sibling members in place). On **no / skip / don't know / absent user** → write NOTHING for this key (the runtime default is `false`, so omitting it IS the negative answer; do not write `testFirst: false`, do not create the `promptGuidance` object just to leave it empty). AGENTS.md is **never** written or modified by this nudge (host-owned — see the Boundary section); the load-bearing channel is the in-band prompt, which the runner already strengthens from `CLAIM-PROTOCOL.md` when the resolved value is `true`.
+
 ### A3. Discover the real `verify` gate FROM THE REPO (detect, never assume)
 
 The `.agent-runner.json` `verify` gate is the protocol's per-project, **language-agnostic** acceptance gate (build + test + format/lint, all green). The single rule: **discover the gate from THIS repo; never write a canned, stack-shaped guess.**
@@ -90,6 +92,7 @@ Present, in one message:
 - the **proposed description** (A2) — "correct/refine or accept?";
 - the **detected `verify` gate** (A3) — "confirm?";
 - the **detected `prepare` env-prep step** (A3b), if any — "confirm?" (or "none needed?" when the repo has no deps to install);
+- the **`promptGuidance.testFirst` nudge** (A2) — "default to test-first AFK builds in this repo? (NUDGE, not a gate — `verify` still decides pass/fail.)" Default = no (omit the key);
 - **IF Phase-B material was detected (A1): the inventory → bucket mapping table** (see B1) — "is this routing right?".
 
 Then **STOP and WAIT for the user's reply.** Do not write `CONTEXT.md`/`.agent-runner.json` with an unconfirmed description/gate, and do not start Phase-B conversion, until they answer. (You MAY create the deterministic skeleton — empty `work/` folders + `work/protocol/` copies — without waiting, since those are content-free; but anything carrying judgement waits.) Narrating "I'll show the plan first" and then barrelling ahead in the same turn defeats the checkpoint — the STOP is real.
@@ -218,6 +221,7 @@ The domain glossary for `<project>`. Agents and skills use THIS vocabulary when 
 ## Core domain terms
 
 - **<term>** — <meaning> (seeded from the adoption conversation; refine as you go).
+- **promptGuidance** — the per-repo NUDGE namespace in `.agent-runner.json` whose members (currently just `testFirst`) strengthen the wording in the worker's in-band prompt. NOT a gate: the `verify` step is still the only acceptance bar. Omitted ⇒ off; absence is the default.
 - **work/ contract** — the on-disk system this repo uses, defined by the reference docs in **`work/protocol/`** (copied here by `setup`): `WORK-CONTRACT.md` (the contract), `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `brief-template.md`, `ADR-FORMAT.md`. Three REGIME umbrellas — `notes/` (capture buckets), `tasks/` (the build board), `briefs/` (the brief lifecycle) — plus top-level `questions/` and `protocol/`. One markdown file per item, status = the folder it lives in (never a field). Capture buckets: `notes/ideas/` (proposed), `notes/observations/` (spotted, unverified, append-only), `notes/findings/` (verified external/domain ground truth, each with a `source:`). ADRs (`docs/adr/`, format in `work/protocol/ADR-FORMAT.md`) record what WE decided and why.
 
 ## Conventions
@@ -240,9 +244,12 @@ Standing per-change rules agents must follow in this repo.
 	"verify": "<stack-appropriate command from A3>",
 	"harness": "pi",
 	"autoBuild": false,
-	"autoSlice": false
+	"autoSlice": false,
+	"promptGuidance": {"testFirst": true}
 }
 ```
+
+> Only include `promptGuidance` if the maintainer answered YES to the A2 nudge question. If they said no / skip / don't know, OMIT the whole `promptGuidance` object — the runtime default (`false`) takes over.
 
 > `prepare` — the env-prep / install step the runner runs ONCE before the first `verify` on a fresh worktree (install deps / submodules / codegen, from A3b). The sibling of `verify`, NOT baked into it (`prepare` = env-ready, `verify` = tree-green). **OMIT it entirely if the repo has no deps to install** (unset ⇒ a no-op; never write a default `pnpm install` into a repo with no lockfile). `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep — that lives in `prepare`). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoSlice` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). `noPR` — the PR-INTENT axis (default off = "open a PR"): set `true` (or pass `--no-pr`) to push the branch but deliberately SKIP the review request even on an authed GitHub arbiter (the explicit suppress-PR intent). The review-request PROVIDER itself is NOT a config key — it is purely arbiter-derived (a GitHub remote ⇒ the GitHub provider, else push-only), with the identity's `providers.github` / ambient `gh` auth deciding whether `gh` can open the PR; there is no `provider`/`--provider` override. Add `defaultArbiter`, `integration`, `noPR`, `model` only as the repo needs them.
 
