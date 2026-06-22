@@ -760,7 +760,7 @@ function findItemPath(
 }
 
 /**
- * Does the OBSERVATION's answered sidecar carry a `promote-slice`/`promote-adr`
+ * Does the OBSERVATION's answered sidecar carry a `promote-task`/`promote-adr`
  * disposition on an ANSWERED entry? The signal the apply rung uses to route to the
  * triage rung's new-item-creation CAS (US #24) instead of the plain resolve. Read
  * from disk (the classifier already confirmed all-answered; this only reads the
@@ -780,7 +780,7 @@ function isPromoteAnswered(cwd: string, item: string): boolean {
 	return model.entries.some(
 		(entry) =>
 			isEntryAnswered(entry) &&
-			(entry.disposition === 'promote-slice' ||
+			(entry.disposition === 'promote-task' ||
 				entry.disposition === 'promote-adr'),
 	);
 }

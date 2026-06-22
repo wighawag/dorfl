@@ -350,7 +350,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 		const {itemPath, sidecarPath} = seedAnsweredObservation(
 			seeded.repo,
 			'prom',
-			'promote-slice',
+			'promote-task',
 		);
 		gitIn(['add', '-A'], seeded.repo);
 		gitIn(['commit', '-q', '-m', 'seed answered promote'], seeded.repo);
@@ -389,7 +389,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 		for (const dir of [a, b]) {
-			seedAnsweredObservation(dir, 'dupprom', 'promote-slice');
+			seedAnsweredObservation(dir, 'dupprom', 'promote-task');
 			gitIn(['add', '-A'], dir);
 			gitIn(['commit', '-q', '-m', 'answered promote'], dir);
 		}
@@ -432,7 +432,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 			// IDENTICAL identity in both clones (NOT raceClone's distinct identities).
 			gitIn(['config', 'user.name', 'One Bot'], dir);
 			gitIn(['config', 'user.email', 'one-bot@example.com'], dir);
-			seedAnsweredObservation(dir, 'dupprom', 'promote-slice');
+			seedAnsweredObservation(dir, 'dupprom', 'promote-task');
 			gitIn(['add', '-A'], dir);
 			gitIn(['commit', '-q', '-m', 'answered promote'], dir);
 		}
@@ -464,7 +464,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 
 	it('the promote new-item creation is routed THROUGH the injected CAS seam, keyed on the new identity', async () => {
 		const {repo} = seedObservation('seamprom');
-		seedAnsweredObservation(repo, 'seamprom', 'promote-slice');
+		seedAnsweredObservation(repo, 'seamprom', 'promote-task');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'answered promote'], repo);
 

@@ -89,12 +89,12 @@ describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestio
 		const emit: SurfaceEmit = {
 			questions: [
 				{question: 'q1?', context: 'ctx', default: 'd'},
-				{question: 'q2?', disposition: 'promote-slice'},
+				{question: 'q2?', disposition: 'promote-task'},
 			],
 		};
 		expect(toNewQuestions(emit)).toEqual([
 			{question: 'q1?', context: 'ctx', default: 'd'},
-			{question: 'q2?', disposition: 'promote-slice'},
+			{question: 'q2?', disposition: 'promote-task'},
 		]);
 	});
 });
