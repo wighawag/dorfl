@@ -1,5 +1,6 @@
 ---
 needsAnswers: false
+triaged: keep
 ---
 
 # Should `work/questions/` be renamed, and is the question KIND a filename-prefix or a subfolder (or a typed field)?
@@ -90,3 +91,11 @@ Its own signal; likely an ADR (folder structure is load-bearing here, status=fol
 
 Promoted to a new backlog slice `work/tasks/todo/questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `slice:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation explicitly states it was promoted to the slice of the same slug under work/tasks/todo/, and its body ends with a 'Triaged: promoted' section identifying that slice as the carrier of the work. Unambiguous 1:1 mapping.
