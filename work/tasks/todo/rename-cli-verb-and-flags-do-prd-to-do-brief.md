@@ -49,3 +49,7 @@ agent-runner claim rename-cli-verb-and-flags-do-prd-to-do-brief --arbiter <remot
 git fetch <remote> && git switch -c work/rename-cli-verb-and-flags-do-prd-to-do-brief <remote>/main
 git mv work/tasks/todo/rename-cli-verb-and-flags-do-prd-to-do-brief.md work/tasks/done/rename-cli-verb-and-flags-do-prd-to-do-brief.md
 ```
+
+## Requeue 2026-06-22
+
+Gate-2 review verdict crashed with a JSON parse error (position 7593) AFTER a green Gate-1 build (2585 tests) — the SAME recurring infra/gate fault as task rename-config-keys. The work is fine; continue from the kept branch and re-run gate + Gate-2.
