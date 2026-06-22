@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'rename-slice-stop-sentinel-to-task-sto
 date: 2026-06-22
 status: open
 reviewOf: rename-slice-stop-sentinel-to-task-stop
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
