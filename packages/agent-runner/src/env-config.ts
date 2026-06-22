@@ -86,12 +86,15 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	slicingIntegration: {enum: ['propose', 'merge']},
 	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default — PRD
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
-	// `pre-backlog`/`backlog` enum, so `AGENT_RUNNER_SLICES_LAND_IN=backlog` works
-	// and a typo FAILS LOUDLY. Same precedence chain as `slicingIntegration`
-	// (flag > env > per-repo > global > built-in `pre-backlog`); fed into the
-	// runner-deterministic placement resolver (`src/placement.ts`) as the
-	// configured-default rung.
-	slicesLandIn: {enum: ['pre-backlog', 'backlog']},
+	// `pre-backlog`/`todo` enum, so `AGENT_RUNNER_SLICES_LAND_IN=todo` works and a
+	// typo FAILS LOUDLY. The POOL value was renamed `'backlog'` → `'todo'` (slice
+	// `f1-pool-noun-todo-in-surface-and-apply-readers`); a legacy
+	// `AGENT_RUNNER_SLICES_LAND_IN=backlog` is migrated to `'todo'` with a one-line
+	// deprecation warning in `envOverrides`, so existing setups keep working. Same
+	// precedence chain as `slicingIntegration` (flag > env > per-repo > global >
+	// built-in `pre-backlog`); fed into the runner-deterministic placement
+	// resolver (`src/placement.ts`) as the configured-default rung.
+	slicesLandIn: {enum: ['pre-backlog', 'todo']},
 	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — PRD
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
 	// `pre-prd`/`prd` enum, so `AGENT_RUNNER_PRDS_LAND_IN=prd` works and a typo
@@ -225,9 +228,23 @@ export function envOverrides(
 		if (raw === undefined) {
 			continue;
 		}
-		const value = coerceValue(varName, raw, coercion);
+		// Value-rename shim for `slicesLandIn` (slice
+		// `f1-pool-noun-todo-in-surface-and-apply-readers`): the POOL value was
+		// `'backlog'` and is now `'todo'` (staging stays `'pre-backlog'`). A legacy
+		// `AGENT_RUNNER_SLICES_LAND_IN=backlog` is migrated to `'todo'` with a one-
+		// line deprecation warning — mirrors the removed-`provider` deprecation
+		// pattern (ignored-with-warning, never a hard error).
+		const coerced =
+			key === 'slicesLandIn' && raw === 'backlog'
+				? (warn(
+						`${varName}='backlog' is deprecated (the pool value was renamed to ` +
+							`'todo'; \`backlog\` is the on-disk staging folder name). Treating ` +
+							`as 'todo'. Set ${varName}=todo to silence this warning.`,
+					),
+					'todo')
+				: coerceValue(varName, raw, coercion);
 		// Type matches by construction: each coercion yields the key's value type.
-		(overrides as Record<string, unknown>)[key] = value;
+		(overrides as Record<string, unknown>)[key] = coerced;
 	}
 	return overrides;
 }

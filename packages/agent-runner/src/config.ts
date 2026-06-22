@@ -23,15 +23,21 @@ export type IntegrationMode = 'propose' | 'merge';
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
  * folder the runner lands the slicer's emitted slice files in BY DEFAULT —
  * `'pre-backlog'` (staging — durable + readable but NOT in the agent-eligible
- * pool; a runner/human promotion is needed to make an item claimable) or
- * `'backlog'` (the agent-eligible POOL — the trusted fast-path landing). The
- * runner-deterministic placement RESOLVER (`src/placement.ts`) layers on top:
- * `explicit operator flag > untrusted-origin ⇒ pre-backlog > slicesLandIn
- * default > built-in (pre-backlog)`. An untrusted-origin slicer output is
- * FORCED to staging even in a `'backlog'` repo (the positional analogue of
- * the existing `untrusted-origin-forces-build-propose` rule).
+ * POOL; a runner/human promotion is needed to make an item claimable; the on-disk
+ * folder for this value is `work/tasks/backlog/`) or `'todo'` (the agent-eligible
+ * POOL — the trusted fast-path landing, on-disk `work/tasks/todo/`). The pool
+ * value was RENAMED from `'backlog'` to `'todo'` (slice
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`) so `backlog` stops meaning two
+ * things in the readers; a legacy `'backlog'` config value is migrated to `'todo'`
+ * with a one-line deprecation warning in `env-config.ts` / per-repo config (the
+ * same pattern as the removed `provider` override). The runner-deterministic
+ * placement RESOLVER (`src/placement.ts`) layers on top: `explicit operator flag
+ * > untrusted-origin ⇒ pre-backlog > slicesLandIn default > built-in
+ * (pre-backlog)`. An untrusted-origin slicer output is FORCED to staging even in
+ * a `'todo'` repo (the positional analogue of the existing
+ * `untrusted-origin-forces-build-propose` rule).
  */
-export type SlicesLandIn = 'pre-backlog' | 'backlog';
+export type SlicesLandIn = 'pre-backlog' | 'todo';
 
 /**
  * **Per-repo PRD-PLACEMENT default** (PRD
@@ -484,6 +490,31 @@ export const DEPRECATED_CONFIG_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Translate any DEPRECATED VALUE in a parsed config object onto its current
+ * spelling, with a one-line warning per offending key. Today this is the
+ * `slicesLandIn` POOL value rename `'backlog'` → `'todo'` (slice
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`): pre-rename `'backlog'`
+ * meant the agent POOL; post-rename the POOL value is `'todo'` and the
+ * staging on-disk folder is `tasks/backlog/`. A legacy config keeps working
+ * (we migrate the value), never an error — mirrors `warnDeprecatedConfigKeys`'s
+ * ignored-with-warning shape for VALUE renames instead of KEY removals.
+ */
+export function warnDeprecatedConfigValues(
+	parsed: Record<string, unknown>,
+	source: string,
+	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
+): void {
+	if (parsed.slicesLandIn === 'backlog') {
+		warn(
+			`Migrating deprecated value 'backlog' for 'slicesLandIn' in ${source} to ` +
+				`'todo' (the POOL value was renamed; \`backlog\` is the on-disk staging ` +
+				`folder name). Set 'slicesLandIn' to 'todo' to silence this warning.`,
+		);
+		parsed.slicesLandIn = 'todo';
+	}
+}
+
+/**
  * Warn (once per offending key) for any DEPRECATED key present in a parsed config
  * object, then DELETE it from the object so it never lingers in the resolved
  * config. A stale key is IGNORED, not an error — an existing config keeps working.
@@ -649,6 +680,7 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 	// Drop (with a one-line warning) any DEPRECATED key (e.g. the removed `provider`
 	// override) so an existing config keeps working — ignored, never a hard error.
 	warnDeprecatedConfigKeys(parsed as Record<string, unknown>, path);
+	warnDeprecatedConfigValues(parsed as Record<string, unknown>, path);
 	// Validate a present identity at LOAD time (dumb — no arbiter URL resolution;
 	// the transport-coherence check is push-time). A bad identity is a hard config
 	// error, never a silent ambient fallback.

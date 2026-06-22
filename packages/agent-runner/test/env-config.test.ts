@@ -203,10 +203,13 @@ describe('envOverrides — enum coercion', () => {
 		);
 		// `slicesLandIn` (the per-repo SLICE-PLACEMENT default, slice
 		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as
-		// the `pre-backlog`/`backlog` enum, on the SAME flag > env > per-repo >
-		// global > built-in chain as `slicingIntegration`.
-		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'backlog'})).toEqual({
-			slicesLandIn: 'backlog',
+		// the `pre-backlog`/`todo` enum (the POOL value was renamed `'backlog'` →
+		// `'todo'`, slice `f1-pool-noun-todo-in-surface-and-apply-readers`), on the
+		// SAME flag > env > per-repo > global > built-in chain as
+		// `slicingIntegration`. Legacy `'backlog'` is migrated to `'todo'` with a
+		// one-line deprecation warning (covered in its own test below).
+		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'todo'})).toEqual({
+			slicesLandIn: 'todo',
 		});
 		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'pre-backlog'})).toEqual({
 			slicesLandIn: 'pre-backlog',
