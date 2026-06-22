@@ -299,6 +299,58 @@ describe('parseFrontmatter', () => {
 		expect(fm.slug).toBe('crlf');
 		expect(fm.humanOnly).toBe(true);
 	});
+
+	describe('promptGuidance.testFirst per-item override', () => {
+		it('defaults to undefined when omitted (⇒ inherit the next layer)', () => {
+			const md = ['---', 'slug: a', '---'].join('\n');
+			expect(parseFrontmatter(md).promptGuidance.testFirst).toBeUndefined();
+		});
+
+		it('parses `promptGuidance.testFirst: true` as the per-item opt-in', () => {
+			const md = [
+				'---',
+				'slug: a',
+				'promptGuidance.testFirst: true',
+				'---',
+			].join('\n');
+			expect(parseFrontmatter(md).promptGuidance.testFirst).toBe(true);
+		});
+
+		it('parses `promptGuidance.testFirst: false` as the per-item opt-out', () => {
+			const md = [
+				'---',
+				'slug: a',
+				'promptGuidance.testFirst: false',
+				'---',
+			].join('\n');
+			expect(parseFrontmatter(md).promptGuidance.testFirst).toBe(false);
+		});
+
+		it('strips quotes around the value ("true" still reads as boolean true)', () => {
+			const md = [
+				'---',
+				'slug: a',
+				'promptGuidance.testFirst: "true"',
+				'---',
+			].join('\n');
+			expect(parseFrontmatter(md).promptGuidance.testFirst).toBe(true);
+		});
+
+		it('rejects a mistyped scalar ("yes") the same way humanOnly does — undefined, no silent coerce', () => {
+			const md = [
+				'---',
+				'slug: a',
+				'promptGuidance.testFirst: yes',
+				'humanOnly: yes',
+				'---',
+			].join('\n');
+			const fm = parseFrontmatter(md);
+			// The cross-reference: BOTH axes silently degrade to undefined on a
+			// non-boolean scalar (no silent coerce to true/false).
+			expect(fm.humanOnly).toBeUndefined();
+			expect(fm.promptGuidance.testFirst).toBeUndefined();
+		});
+	});
 });
 
 describe('resolveClosingIssue', () => {

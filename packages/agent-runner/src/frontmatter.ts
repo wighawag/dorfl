@@ -102,6 +102,23 @@ export interface Frontmatter {
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
 	briefAfter: string[];
+	/**
+	 * The per-item override layer for the `promptGuidance` NUDGE namespace
+	 * (slice `prompt-guidance-testfirst-item-override`, brief US #5). A task or
+	 * brief may carry one or more `promptGuidance.<member>: true | false`
+	 * frontmatter lines to OVERRIDE the resolved repo policy for THAT ITEM only.
+	 * Each member is `undefined` when omitted (⇒ inherit the next layer down in
+	 * the precedence chain: per-task > per-brief > repo-resolved). The override
+	 * is honoured at the prompt-assembly seam (`prompt.ts`); it never affects
+	 * the `verify` gate.
+	 *
+	 * Parsed from the DOTTED scalar form `promptGuidance.testFirst: true`
+	 * (single-line, mirroring the flat shape `humanOnly`/`needsAnswers` use at the
+	 * item level). A mistyped value (e.g. `"yes"`) reads as `undefined`, the same
+	 * silent-on-malformed behaviour the existing `humanOnly` parsing has — no
+	 * silent coerce to true/false.
+	 */
+	promptGuidance: {testFirst: boolean | undefined};
 }
 
 /**
@@ -270,6 +287,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		triaged: undefined,
 		blockedBy: [],
 		briefAfter: [],
+		promptGuidance: {testFirst: undefined},
 	};
 	if (block === undefined) {
 		return result;
@@ -283,7 +301,11 @@ export function parseFrontmatter(content: string): Frontmatter {
 		if (line.trim() === '' || line.trimStart().startsWith('#')) {
 			continue;
 		}
-		const match = /^([A-Za-z0-9_]+)\s*:\s*(.*)$/.exec(line);
+		// Top-level keys are alphanumeric / `_`; the dot is allowed so the per-item
+		// override for the `promptGuidance` namespace can be parsed in its DOTTED
+		// scalar form (e.g. `promptGuidance.testFirst: true`) without introducing a
+		// nested-mapping parser.
+		const match = /^([A-Za-z0-9_.]+)\s*:\s*(.*)$/.exec(line);
 		if (!match) {
 			continue;
 		}
@@ -311,6 +333,12 @@ export function parseFrontmatter(content: string): Frontmatter {
 			const n = Number(unquote(rawValue));
 			result.issue =
 				rawValue !== '' && Number.isInteger(n) && n > 0 ? n : undefined;
+		} else if (key === 'promptGuidance.testFirst') {
+			// Per-item override for the `promptGuidance.testFirst` nudge. An empty or
+			// malformed value reads as `undefined` (⇒ inherit the next layer), the
+			// same silent-on-malformed shape `humanOnly` uses — never a silent coerce.
+			result.promptGuidance.testFirst =
+				rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'humanOnly') {
 			result.humanOnly = rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'needsAnswers') {
