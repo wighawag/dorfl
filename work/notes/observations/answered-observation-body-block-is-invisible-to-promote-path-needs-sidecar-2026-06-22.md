@@ -3,7 +3,7 @@ title: An observation answered with an in-BODY "Applied answers" block (not a qu
 type: observation
 status: spotted
 spotted: 2026-06-22
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
