@@ -11,6 +11,7 @@ import {
 import {run, runAsync, type RunResult} from './git.js';
 import {branchAheadOf} from './continue-branch.js';
 import {
+	acquireItemLock,
 	releaseItemLock,
 	readItemLock,
 	itemLockRef,
@@ -758,84 +759,120 @@ export async function promoteFromPreBacklog(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	const sourceRel = workItemRel('tasks-backlog', `${slug}.md`);
-	const destRel = workItemRel('tasks-todo', `${slug}.md`);
-
-	// Early-exit message: if NEITHER staged nor already-in-pool, there is nothing
-	// to promote (the per-attempt `plan` is the authoritative resolution against
-	// the live base).
-	const hasSource =
-		(
-			await gitSoftAsync(
-				['cat-file', '-e', `${arbiter}/main:${sourceRel}`],
-				cwd,
-				env,
-			)
-		).status === 0;
-	const hasDest =
-		(
-			await gitSoftAsync(
-				['cat-file', '-e', `${arbiter}/main:${destRel}`],
-				cwd,
-				env,
-			)
-		).status === 0;
-	if (!hasSource && !hasDest) {
+	// UNIFIED PER-ITEM LOCK around the CAS window (PRD
+	// `staging-surface-and-apply-promote-safety`, slice
+	// `f3b-promote-takes-per-item-advancing-lock`): promote and apply BOTH key onto
+	// the item's `refs/agent-runner/lock/<entry>` ref with `action: advance` (the
+	// SAME action `apply` takes via `advancing-lock.ts`), so an apply mid-flight
+	// and a promote attempt on the SAME item are mutually exclusive BY
+	// CONSTRUCTION (the second acquirer loses the create-only ref CAS). Reusing
+	// the existing `advance` action value (rather than introducing a distinct
+	// `'promote'` axis) is deliberate — the lock entry is keyed on the item
+	// identity, and what matters is that ALL three transitions of one item
+	// (implement/slice/advance) serialise on ONE ref. A lock `lost` exits CLEAN
+	// (no partial state on `main`, mirroring claim-cas loss semantics); on success
+	// or failure we release the lock in `finally`. Crash-safe release mirrors the
+	// apply rung: a crashed promote leaves an `advance`-active lock that the
+	// existing `release-lock` / `gc --ledger` recovery surface clears.
+	const item = `task:${slug}`;
+	const acquired = await acquireItemLock({
+		item,
+		action: 'advance',
+		cwd,
+		arbiter,
+		env,
+	});
+	if (acquired.outcome !== 'acquired') {
 		const message =
-			`'${slug}' is not staged in work/pre-backlog/ on ${arbiter}/main (and not ` +
-			'already in work/backlog/) — nothing to promote (wrong slug, or never ' +
-			'staged?).';
+			acquired.outcome === 'lost'
+				? `promote for '${slug}' lost the per-item lock race (another implement/slice/advance hold is in flight). No move on ${arbiter}/main. Try again shortly.`
+				: `promote for '${slug}': could not acquire the per-item lock (${acquired.message}).`;
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	}
+	try {
+		const sourceRel = workItemRel('tasks-backlog', `${slug}.md`);
+		const destRel = workItemRel('tasks-todo', `${slug}.md`);
 
-	const commitMessage = `chore(${slug}): promote work/pre-backlog/ -> work/backlog/`;
-	const moved = await runTreelessLedgerMove({
-		cwd,
-		slug,
-		arbiter,
-		kind: 'promote',
-		onContended: 'promote',
-		// The surface direction's main-only refspec works here too: this runs in
-		// the project checkout, but we only need `<arbiter>/main` resolved, and
-		// the explicit refspec is the safer default (mirrors `surface`).
-		explicitMainRefspec: true,
-		env,
-		note,
-		plan: (base) => {
-			// If already in the pool on this base, a prior attempt landed (idempotent).
-			if (pathInCommit(base, destRel, cwd, env)) {
-				return 'already-done';
-			}
-			if (!pathInCommit(base, sourceRel, cwd, env)) {
-				return 'missing';
-			}
-			return prepareTreelessMoveCommit({
-				cwd,
-				slug,
-				base,
-				sourceRel,
-				destRel,
-				// The body is carried byte-for-byte from pre-backlog into the pool —
-				// promotion is a placement decision, not a content transform.
-				transformBody: (body) => body,
-				commitMessage,
-				refNamespace: 'promote',
-				env,
-			});
-		},
-	});
-	if (moved) {
-		note(`Promoted '${slug}' from pre-backlog to backlog (claimable).`);
-		return {moved: true, commitMessage};
+		// Early-exit message: if NEITHER staged nor already-in-pool, there is
+		// nothing to promote (the per-attempt `plan` is the authoritative
+		// resolution against the live base).
+		const hasSource =
+			(
+				await gitSoftAsync(
+					['cat-file', '-e', `${arbiter}/main:${sourceRel}`],
+					cwd,
+					env,
+				)
+			).status === 0;
+		const hasDest =
+			(
+				await gitSoftAsync(
+					['cat-file', '-e', `${arbiter}/main:${destRel}`],
+					cwd,
+					env,
+				)
+			).status === 0;
+		if (!hasSource && !hasDest) {
+			const message =
+				`'${slug}' is not staged in work/pre-backlog/ on ${arbiter}/main (and not ` +
+				'already in work/backlog/) — nothing to promote (wrong slug, or never ' +
+				'staged?).';
+			note(message);
+			return {moved: false, reasonNotMoved: message};
+		}
+
+		const commitMessage = `chore(${slug}): promote work/pre-backlog/ -> work/backlog/`;
+		const moved = await runTreelessLedgerMove({
+			cwd,
+			slug,
+			arbiter,
+			kind: 'promote',
+			onContended: 'promote',
+			// The surface direction's main-only refspec works here too: this runs in
+			// the project checkout, but we only need `<arbiter>/main` resolved, and
+			// the explicit refspec is the safer default (mirrors `surface`).
+			explicitMainRefspec: true,
+			env,
+			note,
+			plan: (base) => {
+				// If already in the pool on this base, a prior attempt landed
+				// (idempotent).
+				if (pathInCommit(base, destRel, cwd, env)) {
+					return 'already-done';
+				}
+				if (!pathInCommit(base, sourceRel, cwd, env)) {
+					return 'missing';
+				}
+				return prepareTreelessMoveCommit({
+					cwd,
+					slug,
+					base,
+					sourceRel,
+					destRel,
+					// The body is carried byte-for-byte from pre-backlog into the
+					// pool — promotion is a placement decision, not a content transform.
+					transformBody: (body) => body,
+					commitMessage,
+					refNamespace: 'promote',
+					env,
+				});
+			},
+		});
+		if (moved) {
+			note(`Promoted '${slug}' from pre-backlog to backlog (claimable).`);
+			return {moved: true, commitMessage};
+		}
+
+		const message =
+			`promote for '${slug}': the arbiter's main kept moving (contended) after ` +
+			`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-backlog (no ` +
+			'move). Try again shortly.';
+		note(message);
+		return {moved: false, reasonNotMoved: message};
+	} finally {
+		await releaseItemLock({item, cwd, arbiter, env});
 	}
-
-	const message =
-		`promote for '${slug}': the arbiter's main kept moving (contended) after ` +
-		`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-backlog (no ` +
-		'move). Try again shortly.';
-	note(message);
-	return {moved: false, reasonNotMoved: message};
 }
 
 /**
@@ -915,79 +952,108 @@ export async function promoteFromPrePrd(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	const sourceRel = workItemRel('briefs-proposed', `${slug}.md`);
-	const destRel = workItemRel('briefs-ready', `${slug}.md`);
-
-	const hasSource =
-		(
-			await gitSoftAsync(
-				['cat-file', '-e', `${arbiter}/main:${sourceRel}`],
-				cwd,
-				env,
-			)
-		).status === 0;
-	const hasDest =
-		(
-			await gitSoftAsync(
-				['cat-file', '-e', `${arbiter}/main:${destRel}`],
-				cwd,
-				env,
-			)
-		).status === 0;
-	if (!hasSource && !hasDest) {
+	// UNIFIED PER-ITEM LOCK around the CAS window — symmetric with
+	// {@link promoteFromPreBacklog} (PRD `staging-surface-and-apply-promote-safety`,
+	// slice `f3b-promote-takes-per-item-advancing-lock`, decisive PRD q4 answer:
+	// briefs share the apply×promote mutual-exclusion fix with tasks). The lock
+	// keys on `brief:${slug}` (a distinct ref from a task with the same slug, via
+	// {@link lockEntryFor}'s `<type>-<slug>` encoding), with `action: advance` —
+	// the SAME action an apply for a brief would take — so brief promote and brief
+	// apply on the same item are mutually exclusive by construction. Loss / crash
+	// semantics mirror the task case.
+	const item = `brief:${slug}`;
+	const acquired = await acquireItemLock({
+		item,
+		action: 'advance',
+		cwd,
+		arbiter,
+		env,
+	});
+	if (acquired.outcome !== 'acquired') {
 		const message =
-			`'${slug}' is not staged in ${workFolderPrefix('briefs-proposed')} on ${arbiter}/main ` +
-			`(and not already in ${workFolderPrefix('briefs-ready')}) — nothing to promote ` +
-			'(wrong slug, or never staged?).';
+			acquired.outcome === 'lost'
+				? `promote-prd for '${slug}' lost the per-item lock race (another implement/slice/advance hold is in flight). No move on ${arbiter}/main. Try again shortly.`
+				: `promote-prd for '${slug}': could not acquire the per-item lock (${acquired.message}).`;
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	}
+	try {
+		const sourceRel = workItemRel('briefs-proposed', `${slug}.md`);
+		const destRel = workItemRel('briefs-ready', `${slug}.md`);
 
-	const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
-		'briefs-proposed',
-	)} -> ${workFolderPrefix('briefs-ready')}`;
-	const moved = await runTreelessLedgerMove({
-		cwd,
-		slug,
-		arbiter,
-		kind: 'promote',
-		onContended: 'promote',
-		explicitMainRefspec: true,
-		env,
-		note,
-		plan: (base) => {
-			if (pathInCommit(base, destRel, cwd, env)) {
-				return 'already-done';
-			}
-			if (!pathInCommit(base, sourceRel, cwd, env)) {
-				return 'missing';
-			}
-			return prepareTreelessMoveCommit({
-				cwd,
-				slug,
-				base,
-				sourceRel,
-				destRel,
-				// The body is carried byte-for-byte from pre-prd into the pool —
-				// promotion is a placement decision, not a content transform.
-				transformBody: (body) => body,
-				commitMessage,
-				refNamespace: 'promote',
-				env,
-			});
-		},
-	});
-	if (moved) {
-		note(`Promoted PRD '${slug}' from pre-prd to prd (auto-sliceable).`);
-		return {moved: true, commitMessage};
+		const hasSource =
+			(
+				await gitSoftAsync(
+					['cat-file', '-e', `${arbiter}/main:${sourceRel}`],
+					cwd,
+					env,
+				)
+			).status === 0;
+		const hasDest =
+			(
+				await gitSoftAsync(
+					['cat-file', '-e', `${arbiter}/main:${destRel}`],
+					cwd,
+					env,
+				)
+			).status === 0;
+		if (!hasSource && !hasDest) {
+			const message =
+				`'${slug}' is not staged in ${workFolderPrefix('briefs-proposed')} on ${arbiter}/main ` +
+				`(and not already in ${workFolderPrefix('briefs-ready')}) — nothing to promote ` +
+				'(wrong slug, or never staged?).';
+			note(message);
+			return {moved: false, reasonNotMoved: message};
+		}
+
+		const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
+			'briefs-proposed',
+		)} -> ${workFolderPrefix('briefs-ready')}`;
+		const moved = await runTreelessLedgerMove({
+			cwd,
+			slug,
+			arbiter,
+			kind: 'promote',
+			onContended: 'promote',
+			explicitMainRefspec: true,
+			env,
+			note,
+			plan: (base) => {
+				if (pathInCommit(base, destRel, cwd, env)) {
+					return 'already-done';
+				}
+				if (!pathInCommit(base, sourceRel, cwd, env)) {
+					return 'missing';
+				}
+				return prepareTreelessMoveCommit({
+					cwd,
+					slug,
+					base,
+					sourceRel,
+					destRel,
+					// The body is carried byte-for-byte from pre-prd into the pool —
+					// promotion is a placement decision, not a content transform.
+					transformBody: (body) => body,
+					commitMessage,
+					refNamespace: 'promote',
+					env,
+				});
+			},
+		});
+		if (moved) {
+			note(`Promoted PRD '${slug}' from pre-prd to prd (auto-sliceable).`);
+			return {moved: true, commitMessage};
+		}
+
+		const message =
+			`promote-prd for '${slug}': the arbiter's main kept moving (contended) ` +
+			`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-prd ` +
+			'(no move). Try again shortly.';
+		note(message);
+		return {moved: false, reasonNotMoved: message};
+	} finally {
+		await releaseItemLock({item, cwd, arbiter, env});
 	}
-
-	const message =
-		`promote-prd for '${slug}': the arbiter's main kept moving (contended) ` +
-		`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-prd ` +
-		'(no move). Try again shortly.';
-	note(message);
-	return {moved: false, reasonNotMoved: message};
 }
 
 /** One staged item awaiting promotion (a task in `pre-backlog/` or a brief in `pre-prd/`). */
