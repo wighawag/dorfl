@@ -243,9 +243,9 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 			agentRunner: () => ({
 				ok: true,
 				output: [
-					'=== SLICE-STOP ===',
-					'drifted: this slice depends on a flag that was removed.',
-					'=== END SLICE-STOP ===',
+					'=== TASK-STOP ===',
+					'drifted: this task depends on a flag that was removed.',
+					'=== END TASK-STOP ===',
 				].join('\n'),
 			}),
 			env: gitEnv(),
