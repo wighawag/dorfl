@@ -132,6 +132,40 @@ describe('parseSidecar — new human-readable format', () => {
 			'Body has a clear conservative routing.',
 		);
 	});
+
+	it('accepts the renamed `promote-task` disposition (the post-vocab-cutover value)', () => {
+		const text = [
+			'<!-- agent-runner-sidecar: item=observation:prom type=observation slug=prom allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**Promote?**',
+			'',
+			'<!-- q1 fields: id=q1 disposition=promote-task -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect(model.entries[0].disposition).toBe('promote-task');
+	});
+
+	it('hard-cutover: the legacy `promote-slice` disposition is no longer recognised and is parsed as undefined (no alias, aligned with the sibling slice→task hard cutover)', () => {
+		const text = [
+			'<!-- agent-runner-sidecar: item=observation:legacy type=observation slug=legacy allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**Promote?**',
+			'',
+			'<!-- q1 fields: id=q1 disposition=promote-slice -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect(model.entries[0].disposition).toBeUndefined();
+	});
 });
 
 describe('serialiseSidecar — canonical shape + semantic round-trip', () => {

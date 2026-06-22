@@ -89,34 +89,40 @@ describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestio
 		const emit: SurfaceEmit = {
 			questions: [
 				{question: 'q1?', context: 'ctx', default: 'd'},
-				{question: 'q2?', disposition: 'promote-slice'},
+				{question: 'q2?', disposition: 'promote-task'},
 			],
 		};
 		expect(toNewQuestions(emit)).toEqual([
 			{question: 'q1?', context: 'ctx', default: 'd'},
-			{question: 'q2?', disposition: 'promote-slice'},
+			{question: 'q2?', disposition: 'promote-task'},
 		]);
 	});
 });
 
 describe('buildSurfacePrompt — frames the fresh-context surface + the required output', () => {
-	it('names the item, the surface-questions skill, and demands the JSON {questions}', () => {
+	it('names the item, references the in-band SURFACE-PROTOCOL doc, demands the JSON {questions}', () => {
 		const p = buildSurfacePrompt('brief:autoslice');
-		expect(p).toMatch(/surface-questions` skill|surface-questions\b/);
 		expect(p).toContain('brief:autoslice');
+		// Points at the protocol doc (in-band discipline), not at a host-installed skill.
+		expect(p).toMatch(/work\/protocol\/SURFACE-PROTOCOL\.md/);
 		expect(p).toMatch(/"questions"/);
 		// Fresh-context surfacer that EDITS nothing and EMITS only (mirrors review).
 		expect(p).toMatch(/EMIT questions only|Do NOT edit/);
-		expect(p).toMatch(/write NOTHING|writes nothing|PERSIST/i);
-	});
-
-	it('states the humility rule (surface the residue, NEVER invent an answer) + empty is valid', () => {
-		const p = buildSurfacePrompt('task:foo');
-		expect(p).toMatch(/NEVER invent an answer/i);
-		// An empty questions array (no open judgement) is an explicitly valid result.
-		expect(p).toMatch(/EMPTY questions[\s\S]*array/i);
 		// The skill JUDGES, the engine PERSISTS — the division of labour is named.
 		expect(p).toMatch(/engine PERSISTS|engine persists/i);
+	});
+
+	it('does NOT re-inline the discipline prose (laws + humility rule live in SURFACE-PROTOCOL.md)', () => {
+		const p = buildSurfacePrompt('task:foo');
+		// The two-laws + humility-rule prose has moved OUT into the protocol doc;
+		// the builder must not carry a duplicate (the drift this slice exists to fix).
+		expect(p).not.toMatch(/NEVER invent an answer/i);
+		expect(p).not.toMatch(/GATHER-only/);
+		expect(p).not.toMatch(/PERSIST-NEVER/);
+		expect(p).not.toMatch(/HUMILITY RULE/i);
+		// And the "use the surface-questions skill" framing is gone — we reference
+		// the protocol DOC the skill points at, not the host-installed skill.
+		expect(p).not.toMatch(/Run the `surface-questions` skill/);
 	});
 });
 

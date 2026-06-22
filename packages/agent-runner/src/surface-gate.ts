@@ -128,7 +128,7 @@ export function parseSurfaceEmit(output: string): SurfaceEmit {
 }
 
 const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
-	'promote-slice',
+	'promote-task',
 	'promote-adr',
 	'keep',
 	'delete',
@@ -200,50 +200,48 @@ export function toNewQuestions(emit: SurfaceEmit): NewQuestion[] {
 }
 
 /**
- * Render the surface-agent PROMPT: instruct a fresh-context agent to run the
- * `surface-questions` SKILL for `item` and to EMIT a single `{item, questions}`
- * JSON object (so {@link parseSurfaceEmit} can read it). The skill itself carries
- * the GATHER-only / PERSIST-NEVER laws and the humility rule (surface the
- * residue, never invent an answer); this prompt frames the artifact (ONE item)
- * and the required output shape. It MIRRORS {@link buildReviewPrompt}: a
- * fresh-context agent that EDITS nothing and EMITS a single structured object the
- * ENGINE routes/persists.
+ * Render the surface-agent PROMPT: instruct a fresh-context agent to apply the
+ * **surface-questions discipline** (`work/protocol/SURFACE-PROTOCOL.md`) to ONE
+ * `work/` item and to EMIT a single `{item, questions}` JSON object (so
+ * {@link parseSurfaceEmit} can read it). The discipline body (the two laws —
+ * GATHER-only / PERSIST-NEVER — the humility rule, the composed sources, the
+ * emitted-question shape) lives in `SURFACE-PROTOCOL.md` — NOT inlined here
+ * (slice `surface-protocol-doc-and-prompt`). The shape's source of truth is
+ * {@link parseSurfaceEmit}; the doc DESCRIBES it (D2).
+ *
+ * This builder owns ONLY the PER-BUILDER framing: who you are (a fresh-context
+ * question-surfacer, the engine's surface-question rung), what you are
+ * surfacing (ONE namespaced item), and the required JSON output shape. It
+ * MIRRORS {@link buildReviewPrompt}: a fresh-context agent that EDITS nothing
+ * and EMITS a single structured object the ENGINE routes/persists.
  */
 export function buildSurfacePrompt(item: string): string {
 	return [
-		`You are a FRESH-CONTEXT question-surfacer. Run the \`surface-questions\``,
-		`skill for the work/ item "${item}": GATHER its open-judgement residue and`,
-		`EMIT the questions. You write NOTHING — no sidecar, no \`needsAnswers\` edit,`,
-		`no \`git mv\`, no commit (the advance ENGINE persists what you emit, exactly`,
-		`as the review gate persists a \`review\` verdict). The skill JUDGES; the`,
-		`engine PERSISTS.`,
-		``,
-		`Apply the skill's two laws: GATHER-only (formulate the open questions by`,
-		`composing the existing reviewing/triage judgement — \`review\` for a slice /`,
-		`PRD / code, the native triage question for an observation, plus the item's`,
-		`pre-existing \`needsAnswers\` / \`## Open questions\`) and PERSIST-NEVER (emit`,
-		`only). The HUMILITY RULE: surface the residue, NEVER invent an answer — a`,
-		`\`default\` is a SUGGESTED default for the human's convenience, never a`,
-		`decision. If the item carries NO open judgement, emit an EMPTY questions`,
-		`array — surfacing nothing is a valid, honest result; do NOT manufacture a`,
-		`question to look busy.`,
+		`You are a FRESH-CONTEXT question-surfacer for the work/ item "${item}".`,
+		`Apply the surface-questions discipline defined in`,
+		`\`work/protocol/SURFACE-PROTOCOL.md\` (the in-band, protocol-native`,
+		`surface-questions protocol every set-up repo carries; the human-facing`,
+		`pointer is \`skills/surface-questions/SKILL.md\`) to this ONE item:`,
+		`formulate its open questions and EMIT them. Its two laws, its humility`,
+		`aid, the composed sources you draw from, and the emitted-question shape`,
+		`ALL live in that doc — read them there.`,
+		`The skill JUDGES; the engine PERSISTS.`,
 		``,
 		`Do NOT edit any files, run no git — you EMIT questions only.`,
 		``,
-		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
+		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it;`,
+		`see \`SURFACE-PROTOCOL.md\` → "The emitted question shape" for the`,
+		`prose-described contract this mirrors):`,
 		`{"item": "${item}",`,
 		` "questions": [`,
 		`   {"question": "…",`,
 		`    "context": "…",`,
 		`    "default": "… (optional; omit if none)",`,
-		`    "disposition": "promote-slice|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
+		`    "disposition": "promote-task|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
 		` ]}`,
-		`Each question carries inline \`context\` so the human need not open the item,`,
-		`and an OPTIONAL suggested \`default\`. \`disposition\` is present ONLY on a`,
-		`triage / terminal-routing question (the observation case). You do NOT assign`,
-		`ids, \`answered\`, \`answer\`, or \`allAnswered\` — those are the sidecar's`,
-		`machine-owned fields the engine owns. It is plain text inside the JSON`,
-		`string (escape newlines as \\n).`,
+		`An EMPTY \`questions\` array is a VALID, honest result (no open judgement);`,
+		`absence of the field is NOT. It is plain text inside the JSON string`,
+		`(escape newlines as \\n).`,
 	].join('\n');
 }
 
