@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'f3b-promote-takes-per-item-advancing-l
 date: 2026-06-22
 status: open
 reviewOf: f3b-promote-takes-per-item-advancing-lock
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
