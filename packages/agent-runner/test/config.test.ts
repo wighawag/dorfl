@@ -49,9 +49,9 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).autoBuild).toBe(false);
 	});
 
-	it('defaults autoSlice to false (human-first slicing)', () => {
-		expect(DEFAULT_CONFIG.autoSlice).toBe(false);
-		expect(mergeConfig({}).autoSlice).toBe(false);
+	it('defaults autoTask to false (human-first slicing)', () => {
+		expect(DEFAULT_CONFIG.autoTask).toBe(false);
+		expect(mergeConfig({}).autoTask).toBe(false);
 	});
 
 	it('defaults surfaceBlockers to false (declared blocked work stays calm)', () => {

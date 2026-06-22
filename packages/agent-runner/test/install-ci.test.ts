@@ -579,7 +579,7 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 	it('install-ci emits a completion message explaining CI autonomy is OFF by default + HOW to enable it (config OR workflow env)', async () => {
 		// Slice `install-ci-emits-no-gate-env-let-config-decide`: the emitted
 		// advance workflow carries NO AGENT_RUNNER_* gate env, so a config-less
-		// repo resolves to the built-in strict defaults (autoBuild/autoSlice: false,
+		// repo resolves to the built-in strict defaults (autoBuild/autoTask: false,
 		// observationTriage: 'off', surfaceBlockers: false) and CI claims nothing.
 		// That posture would be surprising without a heads-up; `install-ci` calls
 		// the existing `log()` sink after writing artifacts to explain it AND name
@@ -609,9 +609,9 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		// Names both enable paths: the per-repo config keys AND the CI-only env.
 		expect(/\.agent-runner\.json/.test(joined)).toBe(true);
 		expect(/"autoBuild":\s*true/.test(joined)).toBe(true);
-		expect(/"autoSlice":\s*true/.test(joined)).toBe(true);
+		expect(/"autoTask":\s*true/.test(joined)).toBe(true);
 		expect(/AGENT_RUNNER_AUTO_BUILD:\s*'true'/.test(joined)).toBe(true);
-		expect(/AGENT_RUNNER_AUTO_SLICE:\s*'true'/.test(joined)).toBe(true);
+		expect(/AGENT_RUNNER_AUTO_TASK:\s*'true'/.test(joined)).toBe(true);
 	});
 });
 
@@ -1009,7 +1009,7 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 			.filter((line) => !/^\s*#/.test(line))
 			.join('\n');
 		expect(/AGENT_RUNNER_AUTO_BUILD\s*:/.test(operative)).toBe(false);
-		expect(/AGENT_RUNNER_AUTO_SLICE\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_AUTO_TASK\s*:/.test(operative)).toBe(false);
 		expect(/AGENT_RUNNER_OBSERVATION_TRIAGE\s*:/.test(operative)).toBe(false);
 		expect(/AGENT_RUNNER_SURFACE_BLOCKERS\s*:/.test(operative)).toBe(false);
 	});

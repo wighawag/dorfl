@@ -91,7 +91,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', WORK);
 		const result = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoTask: true}),
 			lifecycleGates: {triage: true, surface: true},
 			env: gitEnv(),
 		});
@@ -108,7 +108,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', WORK);
 		const result = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoTask: true}),
 			// no lifecycleGates → create-gates OFF.
 			env: gitEnv(),
 		});
@@ -128,7 +128,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', WORK);
 		const mirror = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoTask: true}),
 			lifecycleGates: gates,
 			env: gitEnv(),
 		});
@@ -175,7 +175,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 		});
 		const pool = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoTask: true}),
 			lifecycleGates: {triage: true, surface: true},
 			env: gitEnv(),
 		});

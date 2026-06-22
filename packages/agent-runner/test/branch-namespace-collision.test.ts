@@ -113,7 +113,7 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 			issueProvider: minimalIssueProvider(),
 			decide: async () => verdict,
 			reviewSlice: async () => ({verdict: 'approve', findings: []}),
-			integration: {slice: 'merge', prd: 'merge'},
+			integration: {task: 'merge', brief: 'merge'},
 			env: gitEnv(),
 		});
 		expect(intake.exitCode).toBe(0);

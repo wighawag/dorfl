@@ -38,7 +38,7 @@ import type {
  *   - the eligible set comes from the SHARED `mirror-side-eligible-pool-scan`
  *     ({@link scanMirrorPool}) — the SAME enumeration the one-shot/CI `advance`
  *     driver + `do --remote -n` consume (NOT invented twice), gated per-action
- *     (build→`autoBuild`, slice→`autoSlice`) by the SELECTION layer;
+ *     (build→`autoBuild`, slice→`autoTask`) by the SELECTION layer;
  *   - parallelism is the SAME bounded scheduler `run`'s build tick uses
  *     ({@link runConcurrent}) — `maxParallel` global / `perRepoMax` per repo;
  *   - the per-item `advancing` borrow is held INSIDE {@link performAdvance}
@@ -67,7 +67,7 @@ export interface AdvanceOnceOptions {
 	/** The bare hub mirror whose committed `main` the eligible pool is scanned from. */
 	mirrorPath: string;
 	/**
-	 * The resolved (remote) repo config — `autoBuild`/`autoSlice` gate the pool
+	 * The resolved (remote) repo config — `autoBuild`/`autoTask` gate the pool
 	 * scan, `selectionOrder` the cross-pool order. The per-action gate family is
 	 * applied at the SELECTION layer, exactly as the one-shot driver applies it.
 	 */
@@ -141,7 +141,7 @@ export async function advanceOnce(
 	const perRepoMax = options.perRepoMax ?? options.config.perRepoMax;
 
 	// Enumerate the eligible pool from the bare mirror's committed `main` — the
-	// SHARED `mirror-side-eligible-pool-scan` (gated on `autoBuild`/`autoSlice`).
+	// SHARED `mirror-side-eligible-pool-scan` (gated on `autoBuild`/`autoTask`).
 	const scan = await scanMirrorPool({
 		mirrorPath: options.mirrorPath,
 		config: options.config,
@@ -343,7 +343,7 @@ export interface AdvanceRegistrySetOptions {
 	/**
 	 * The per-machine config-override map (ADR
 	 * `per-machine-config-override-layer`), forwarded to the registry {@link scan}
-	 * so per-mirror `autoSlice`/`observationTriage`/`surfaceBlockers` resolutions
+	 * so per-mirror `autoTask`/`observationTriage`/`surfaceBlockers` resolutions
 	 * honour the override. Default: empty (no override).
 	 */
 	override?: import('./config-override.js').ConfigOverrideMap;

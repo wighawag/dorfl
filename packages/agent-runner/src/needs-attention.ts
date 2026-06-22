@@ -884,7 +884,7 @@ export async function promoteFromPreBacklog(
  * `work/pre-prd/<slug>.md → work/prd/<slug>.md` as a durable `main` move
  * (tree-less CAS via {@link runTreelessLedgerMove}). After this transition
  * the PRD is in the auto-slice POOL and eligible to be auto-sliced (subject
- * to the existing `autoSlice`/`humanOnly`/`needsAnswers`/`briefAfter` gates,
+ * to the existing `autoTask`/`humanOnly`/`needsAnswers`/`briefAfter` gates,
  * which are UNCHANGED — the staging/pool split changes only WHICH folder is
  * the auto-slice pool, not the gates).
  *

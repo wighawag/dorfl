@@ -5,13 +5,13 @@ import {
 	resolveSlicingEligibility,
 } from '../src/slicing-eligibility.js';
 
-describe('resolveSliceGate — the humanOnly × needsAnswers × autoSlice matrix', () => {
-	it('humanOnly: true is never agent-sliceable regardless of autoSlice', () => {
+describe('resolveSliceGate — the humanOnly × needsAnswers × autoTask matrix', () => {
+	it('humanOnly: true is never agent-sliceable regardless of autoTask', () => {
 		expect(resolveSliceGate(true, undefined, false)).toBe(false);
 		expect(resolveSliceGate(true, undefined, true)).toBe(false);
 	});
 
-	it('needsAnswers: true is never agent-sliceable regardless of autoSlice', () => {
+	it('needsAnswers: true is never agent-sliceable regardless of autoTask', () => {
 		expect(resolveSliceGate(undefined, true, false)).toBe(false);
 		expect(resolveSliceGate(undefined, true, true)).toBe(false);
 	});
@@ -22,27 +22,27 @@ describe('resolveSliceGate — the humanOnly × needsAnswers × autoSlice matrix
 		expect(resolveSliceGate(false, true, true)).toBe(false);
 	});
 
-	it('undeclared on both axes is sliceable iff autoSlice is on', () => {
+	it('undeclared on both axes is sliceable iff autoTask is on', () => {
 		expect(resolveSliceGate(undefined, undefined, false)).toBe(false);
 		expect(resolveSliceGate(undefined, undefined, true)).toBe(true);
 	});
 
 	// An explicit `false` on either axis is treated as "not gated" (undeclared),
 	// per the binary model: the only meaningful declaration is `true`.
-	it('explicit false on both axes behaves like undeclared (sliceable iff autoSlice)', () => {
+	it('explicit false on both axes behaves like undeclared (sliceable iff autoTask)', () => {
 		expect(resolveSliceGate(false, false, false)).toBe(false);
 		expect(resolveSliceGate(false, false, true)).toBe(true);
 	});
 
-	// The full truth table: all four humanOnly×needsAnswers states × autoSlice on/off.
+	// The full truth table: all four humanOnly×needsAnswers states × autoTask on/off.
 	const axisStates: Array<boolean | undefined> = [undefined, false, true];
 	for (const humanOnly of axisStates) {
 		for (const needsAnswers of axisStates) {
-			for (const autoSlice of [false, true]) {
+			for (const autoTask of [false, true]) {
 				const gated = humanOnly === true || needsAnswers === true;
-				const expected = gated ? false : autoSlice;
-				it(`humanOnly=${String(humanOnly)} needsAnswers=${String(needsAnswers)} autoSlice=${autoSlice} → ${expected}`, () => {
-					expect(resolveSliceGate(humanOnly, needsAnswers, autoSlice)).toBe(
+				const expected = gated ? false : autoTask;
+				it(`humanOnly=${String(humanOnly)} needsAnswers=${String(needsAnswers)} autoTask=${autoTask} → ${expected}`, () => {
+					expect(resolveSliceGate(humanOnly, needsAnswers, autoTask)).toBe(
 						expected,
 					);
 				});
@@ -51,14 +51,14 @@ describe('resolveSliceGate — the humanOnly × needsAnswers × autoSlice matrix
 	}
 });
 
-describe('resolveSliceGate — explicit naming satisfies the autoSlice policy term', () => {
+describe('resolveSliceGate — explicit naming satisfies the autoTask policy term', () => {
 	// `explicit: true` mirrors `do <slice>` building regardless of `autoBuild`:
-	// naming the PRD IS the authorization, so the `autoSlice` policy term drops.
-	it('explicit + autoSlice OFF is sliceable (the policy term is satisfied by naming)', () => {
+	// naming the PRD IS the authorization, so the `autoTask` policy term drops.
+	it('explicit + autoTask OFF is sliceable (the policy term is satisfied by naming)', () => {
 		expect(resolveSliceGate(undefined, undefined, false, true)).toBe(true);
 	});
 
-	it('explicit defaults false (the pool path) ⇒ autoSlice still gates', () => {
+	it('explicit defaults false (the pool path) ⇒ autoTask still gates', () => {
 		expect(resolveSliceGate(undefined, undefined, false)).toBe(false);
 		expect(resolveSliceGate(undefined, undefined, false, false)).toBe(false);
 	});
@@ -69,32 +69,32 @@ describe('resolveSliceGate — explicit naming satisfies the autoSlice policy te
 		expect(resolveSliceGate(true, true, true, true)).toBe(false);
 	});
 
-	it('explicit is harmless when autoSlice is already on (both authorize)', () => {
+	it('explicit is harmless when autoTask is already on (both authorize)', () => {
 		expect(resolveSliceGate(undefined, undefined, true, true)).toBe(true);
 	});
 });
 
 describe('resolveSlicingEligibility — explicit drops the policy term but keeps briefAfter', () => {
-	it('explicit + autoSlice OFF + no briefAfter ⇒ sliceable', () => {
+	it('explicit + autoTask OFF + no briefAfter ⇒ sliceable', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			briefAfter: [],
 			slicedSlugs: new Set(),
-			autoSlice: false,
+			autoTask: false,
 			explicit: true,
 		});
 		expect(r.sliceable).toBe(true);
 		expect(r.gatePass).toBe(true);
 	});
 
-	it('explicit + autoSlice OFF but an UNSLICED briefAfter ⇒ gate passes, still blocked', () => {
+	it('explicit + autoTask OFF but an UNSLICED briefAfter ⇒ gate passes, still blocked', () => {
 		const r = resolveSlicingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			briefAfter: ['other'],
 			slicedSlugs: new Set(),
-			autoSlice: false,
+			autoTask: false,
 			explicit: true,
 		});
 		expect(r.gatePass).toBe(true);
@@ -108,7 +108,7 @@ describe('resolveSlicingEligibility — explicit drops the policy term but keeps
 			needsAnswers: undefined,
 			briefAfter: [],
 			slicedSlugs: new Set(),
-			autoSlice: false,
+			autoTask: false,
 			explicit: true,
 		});
 		expect(r.gatePass).toBe(false);
@@ -151,67 +151,67 @@ describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced f
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
-		autoSlice: boolean;
+		autoTask: boolean;
 		briefAfter: string[];
 		sliced: Set<string>;
 		sliceable: boolean;
 		gatePass: boolean;
 	}> = [
-		// undeclared + autoSlice on + no briefAfter ⇒ sliceable
+		// undeclared + autoTask on + no briefAfter ⇒ sliceable
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: [],
 			sliced: new Set(),
 			sliceable: true,
 			gatePass: true,
 		},
-		// undeclared + autoSlice on + an UNSLICED blocker ⇒ gate passes but blocked
+		// undeclared + autoTask on + an UNSLICED blocker ⇒ gate passes but blocked
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: ['other'],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: true,
 		},
-		// undeclared + autoSlice on + the blocker IS sliced ⇒ sliceable
+		// undeclared + autoTask on + the blocker IS sliced ⇒ sliceable
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: ['other'],
 			sliced: new Set(['other']),
 			sliceable: true,
 			gatePass: true,
 		},
-		// undeclared + autoSlice off ⇒ never (gate fails)
+		// undeclared + autoTask off ⇒ never (gate fails)
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			autoSlice: false,
+			autoTask: false,
 			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
 		},
-		// humanOnly + autoSlice on ⇒ never (gate fails regardless of briefAfter)
+		// humanOnly + autoTask on ⇒ never (gate fails regardless of briefAfter)
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: ['other'],
 			sliced: new Set(['other']),
 			sliceable: false,
 			gatePass: false,
 		},
-		// needsAnswers + autoSlice on ⇒ never (the discovered axis blocks)
+		// needsAnswers + autoTask on ⇒ never (the discovered axis blocks)
 		{
 			humanOnly: undefined,
 			needsAnswers: true,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
@@ -221,27 +221,27 @@ describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced f
 		{
 			humanOnly: false,
 			needsAnswers: true,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
 		},
-		// both axes set + autoSlice on ⇒ never
+		// both axes set + autoTask on ⇒ never
 		{
 			humanOnly: true,
 			needsAnswers: true,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
 			gatePass: false,
 		},
-		// humanOnly + autoSlice off ⇒ never
+		// humanOnly + autoTask off ⇒ never
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
-			autoSlice: false,
+			autoTask: false,
 			briefAfter: [],
 			sliced: new Set(),
 			sliceable: false,
@@ -251,7 +251,7 @@ describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced f
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: ['a', 'b'],
 			sliced: new Set(['a']),
 			sliceable: false,
@@ -262,7 +262,7 @@ describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced f
 	for (const c of cases) {
 		const label =
 			`humanOnly=${String(c.humanOnly)} needsAnswers=${String(c.needsAnswers)} ` +
-			`autoSlice=${c.autoSlice} ` +
+			`autoTask=${c.autoTask} ` +
 			`briefAfter=${
 				c.briefAfter.length === 0
 					? 'none'
@@ -276,7 +276,7 @@ describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced f
 				needsAnswers: c.needsAnswers,
 				briefAfter: c.briefAfter,
 				slicedSlugs: c.sliced,
-				autoSlice: c.autoSlice,
+				autoTask: c.autoTask,
 			});
 			expect(r.sliceable).toBe(c.sliceable);
 			expect(r.gatePass).toBe(c.gatePass);
@@ -289,7 +289,7 @@ describe('resolveSlicingEligibility — gate × briefAfter (sliced-vs-unsliced f
 			needsAnswers: undefined,
 			briefAfter: ['other'],
 			slicedSlugs: new Set(),
-			autoSlice: true,
+			autoTask: true,
 		});
 		expect(r.briefAfter.satisfied).toBe(false);
 		expect(r.briefAfter.missing).toEqual(['other']);

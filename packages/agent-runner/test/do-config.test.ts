@@ -60,18 +60,18 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 		expect(doFlagOverrides({}).integration).toBeUndefined();
 	});
 
-	it('an explicit --merge/--propose ALSO sets `slicingIntegration` so the typed flag wins for the SLICING transition too', () => {
+	it('an explicit --merge/--propose ALSO sets `taskingIntegration` so the typed flag wins for the SLICING transition too', () => {
 		// `per-transition-integration-mode-slicing-vs-build`: the flag is
 		// transition-AGNOSTIC (each command runs ONE transition), so it must override
-		// BOTH the build mode (`integration`) AND the slicing mode (`slicingIntegration`,
-		// which the slicing caller reads as `slicingIntegration ?? integration`).
-		// Otherwise a `--propose` on a `slicingIntegration:'merge'` repo would be
+		// BOTH the build mode (`integration`) AND the slicing mode (`taskingIntegration`,
+		// which the slicing caller reads as `taskingIntegration ?? integration`).
+		// Otherwise a `--propose` on a `taskingIntegration:'merge'` repo would be
 		// shadowed by the config override.
-		expect(doFlagOverrides({}, 'merge').slicingIntegration).toBe('merge');
-		expect(doFlagOverrides({}, 'propose').slicingIntegration).toBe('propose');
-		// No flag mode ⇒ `slicingIntegration` is left to per-repo/global (and then
+		expect(doFlagOverrides({}, 'merge').taskingIntegration).toBe('merge');
+		expect(doFlagOverrides({}, 'propose').taskingIntegration).toBe('propose');
+		// No flag mode ⇒ `taskingIntegration` is left to per-repo/global (and then
 		// falls back to `integration`) — the flag-override layer adds NOTHING.
-		expect(doFlagOverrides({}).slicingIntegration).toBeUndefined();
+		expect(doFlagOverrides({}).taskingIntegration).toBeUndefined();
 	});
 
 	it('sets only what was passed (absent flags ⇒ absent keys)', () => {

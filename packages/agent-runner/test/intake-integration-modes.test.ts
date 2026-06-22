@@ -27,10 +27,10 @@ import {
  */
 
 const both = (
-	mode: IntakeIntegrationModes['slice'],
+	mode: IntakeIntegrationModes['task'],
 ): IntakeIntegrationModes => ({
-	slice: mode,
-	prd: mode,
+	task: mode,
+	brief: mode,
 });
 
 describe('resolveIntakeIntegrationModes — the per-outcome resolution table', () => {
@@ -48,17 +48,17 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		);
 	});
 
-	it('--merge-prd routes per type: merges a PRD, leaves a slice at the default', () => {
+	it('--merge-prd routes per type: merges a brief, leaves a task at the default', () => {
 		expect(resolveIntakeIntegrationModes({mergePrd: true})).toEqual({
-			prd: 'merge',
-			slice: 'propose',
+			brief: 'merge',
+			task: 'propose',
 		});
 	});
 
-	it('--merge-slice routes per type: merges a slice, leaves a PRD at the default', () => {
+	it('--merge-slice routes per type: merges a task, leaves a brief at the default', () => {
 		expect(resolveIntakeIntegrationModes({mergeSlice: true})).toEqual({
-			prd: 'propose',
-			slice: 'merge',
+			brief: 'propose',
+			task: 'merge',
 		});
 	});
 
@@ -68,16 +68,16 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		);
 	});
 
-	it('GRANULAR OVERRIDES AGGREGATE: --merge --propose-slice ⇒ PRD merge, slice propose', () => {
+	it('GRANULAR OVERRIDES AGGREGATE: --merge --propose-slice ⇒ brief merge, task propose', () => {
 		expect(
 			resolveIntakeIntegrationModes({merge: true, proposeSlice: true}),
-		).toEqual({prd: 'merge', slice: 'propose'});
+		).toEqual({brief: 'merge', task: 'propose'});
 	});
 
-	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-prd ⇒ PRD merge, slice propose', () => {
+	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-prd ⇒ brief merge, task propose', () => {
 		expect(
 			resolveIntakeIntegrationModes({propose: true, mergePrd: true}),
-		).toEqual({prd: 'merge', slice: 'propose'});
+		).toEqual({brief: 'merge', task: 'propose'});
 	});
 
 	it('both granular flags override the aggregate on BOTH axes', () => {
@@ -116,8 +116,8 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		expect(
 			resolveIntakeIntegrationModes({proposeSlice: true}, 'merge'),
 		).toEqual({
-			prd: 'merge',
-			slice: 'propose',
+			brief: 'merge',
+			task: 'propose',
 		});
 		// An aggregate flag also wins over the config default.
 		expect(resolveIntakeIntegrationModes({propose: true}, 'merge')).toEqual(
@@ -125,15 +125,15 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		);
 	});
 
-	// `per-transition-integration-mode-slicing-vs-build`: the NEW `slicingIntegration`
+	// `per-transition-integration-mode-slicing-vs-build`: the NEW `taskingIntegration`
 	// key is a DIFFERENT resolver (per-LIFECYCLE-TRANSITION, inside the trust
-	// boundary), NOT intake's per-EMITTED-TYPE `{slice, prd}` (front door,
+	// boundary), NOT intake's per-EMITTED-TYPE `{task, brief}` (front door,
 	// author-trust). intake's resolver takes a FLAT `IntegrationMode` default (the
-	// CLI passes `config.integration`, never `config.slicingIntegration`), so it is
+	// CLI passes `config.integration`, never `config.taskingIntegration`), so it is
 	// structurally independent of the new key.
-	it('the intake default is the FLAT `integration` (the CLI passes `config.integration`); it never consults `slicingIntegration`', () => {
+	it('the intake default is the FLAT `integration` (the CLI passes `config.integration`); it never consults `taskingIntegration`', () => {
 		// The fallback the CLI supplies is `config.integration`. A repo that ALSO sets
-		// `slicingIntegration:'merge'` must NOT change intake's resolution — the only
+		// `taskingIntegration:'merge'` must NOT change intake's resolution — the only
 		// default intake sees is the `integration` value handed in here.
 		expect(resolveIntakeIntegrationModes({}, 'propose')).toEqual(
 			both('propose'),

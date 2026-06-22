@@ -132,7 +132,7 @@ export function validateAdvanceCiTemplate(
 		'(`agent-runner scan --json`).');
 	// The `enumerate` `jq` must UNION sliceable BRIEFS into the matrix
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
-	// task-only `jq` would render `AGENT_RUNNER_AUTO_SLICE` dead on the hourly
+	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK` dead on the hourly
 	// cron — a ready ungated BRIEF would never become a matrix leg. The `jq` must
 	// read `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
 	// and emit `brief:<slug>` legs alongside the `task:<slug>` legs.

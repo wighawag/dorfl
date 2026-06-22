@@ -1,13 +1,13 @@
 /**
  * Pure slicing-eligibility resolution — the auto-slice decision layer, one level
  * UP from the build gate (`eligibility.ts`). No I/O: callers pass in the PRD's
- * two autonomy axes (`humanOnly`, `needsAnswers`), the repo's `autoSlice` policy,
+ * two autonomy axes (`humanOnly`, `needsAnswers`), the repo's `autoTask` policy,
  * the PRD's `briefAfter` slugs, and the set of slugs whose PRDs are already
  * SLICED (resolved against `work/prd-sliced/` residence, NOT `work/done/`).
  *
  * This mirrors the build-gate shape deliberately (CONTEXT.md / the `auto-slice`
  * PRD): the same `needsAnswers !== true && humanOnly !== true && <repo policy>`
- * predicate, applied to a PRD's two axes + the repo's `autoSlice` toggle — and a
+ * predicate, applied to a PRD's two axes + the repo's `autoTask` toggle — and a
  * cross-PRD ordering check that resolves against sliced-ness rather than done-ness.
  */
 
@@ -32,16 +32,16 @@ export interface SlicingEligibilityInput {
 	briefAfter: string[];
 	/** Slugs of PRDs that are already SLICED (residence in `work/prd-sliced/`). */
 	slicedSlugs: Set<string>;
-	/** Per-repo policy: may an agent auto-slice *undeclared* PRDs in this repo? */
-	autoSlice: boolean;
+	/** Per-repo policy: may an agent auto-task *undeclared* PRDs in this repo? */
+	autoTask: boolean;
 	/**
 	 * The target was named EXPLICITLY by the operator (`do prd:<slug>`), so the
-	 * `autoSlice` POLICY is already satisfied — naming the PRD IS the authorization,
+	 * `autoTask` POLICY is already satisfied — naming the PRD IS the authorization,
 	 * exactly as `do <slice>` builds a named slice regardless of `autoBuild` (the
 	 * `autoBuild` precedent: the pool/scan gates the policy, the explicit claim path
 	 * never re-checks it). When `true`, the policy term drops from the gate and ONLY
 	 * the PRD's own readiness axes (`humanOnly`/`needsAnswers`) + `briefAfter` bind.
-	 * Defaults `false` (the AUTO-PICK pool path, where the `autoSlice` policy DOES
+	 * Defaults `false` (the AUTO-PICK pool path, where the `autoTask` policy DOES
 	 * gate). The pool is the single policy-enforcement point; the per-invocation gate
 	 * applies the policy only when NOT explicit.
 	 */
@@ -58,8 +58,8 @@ export interface SlicingEligibilityResult {
 
 /**
  * Resolve the slicing autonomy gate: agent-sliceable iff `needsAnswers` is not
- * `true` AND `humanOnly` is not `true` AND the repo's `autoSlice` POLICY is
- * satisfied — where the policy is satisfied either by the repo's `autoSlice`
+ * `true` AND `humanOnly` is not `true` AND the repo's `autoTask` POLICY is
+ * satisfied — where the policy is satisfied either by the repo's `autoTask`
  * toggle being on (the AUTO-PICK pool path) OR by the target being named
  * EXPLICITLY (`explicit: true` — `do prd:<slug>`, where naming IS the
  * authorization, mirroring `do <slice>` vs `autoBuild`). Both readiness axes
@@ -70,15 +70,15 @@ export interface SlicingEligibilityResult {
 export function resolveSliceGate(
 	humanOnly: HumanOnlyGate,
 	needsAnswers: HumanOnlyGate,
-	autoSlice: boolean,
+	autoTask: boolean,
 	explicit = false,
 ): boolean {
 	if (needsAnswers === true || humanOnly === true) {
 		return false;
 	}
 	// EXPLICIT naming satisfies the policy term (the build path's autoBuild
-	// precedent); otherwise the repo's autoSlice toggle gates the auto-pick pool.
-	return explicit || autoSlice;
+	// precedent); otherwise the repo's autoTask toggle gates the auto-pick pool.
+	return explicit || autoTask;
 }
 
 /**
@@ -102,7 +102,7 @@ export function resolveSlicingEligibility(
 	const gatePass = resolveSliceGate(
 		input.humanOnly,
 		input.needsAnswers,
-		input.autoSlice,
+		input.autoTask,
 		input.explicit,
 	);
 	const briefAfter = resolveSliceAfter(input.briefAfter, input.slicedSlugs);

@@ -59,7 +59,7 @@ type Coercion =
  */
 const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	autoBuild: 'boolean',
-	autoSlice: 'boolean',
+	autoTask: 'boolean',
 	// The observation-triage gate is a 3-state ENUM coercion (like `integration`),
 	// so `AGENT_RUNNER_OBSERVATION_TRIAGE=off|ask|auto` works and a typo FAILS
 	// LOUDLY naming the variable + the valid options.
@@ -87,29 +87,26 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	arbitersDir: 'string',
 	humanWorktreesDir: 'string',
 	integration: {enum: ['propose', 'merge']},
-	// `slicingIntegration` (the per-TRANSITION SLICING override) coerces as the SAME
-	// `propose`/`merge` enum as `integration`, so `AGENT_RUNNER_SLICING_INTEGRATION`
-	// works and a typo FAILS LOUDLY. Unset ⇒ the slicing transition falls back to
+	// `taskingIntegration` (the per-TRANSITION TASKING override) coerces as the SAME
+	// `propose`/`merge` enum as `integration`, so `AGENT_RUNNER_TASKING_INTEGRATION`
+	// works and a typo FAILS LOUDLY. Unset ⇒ the tasking transition falls back to
 	// `integration` (the flat value). It NEVER touches the build transition or intake.
-	slicingIntegration: {enum: ['propose', 'merge']},
-	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default — PRD
+	taskingIntegration: {enum: ['propose', 'merge']},
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — PRD
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
-	// `pre-backlog`/`todo` enum, so `AGENT_RUNNER_SLICES_LAND_IN=todo` works and a
-	// typo FAILS LOUDLY. The POOL value was renamed `'backlog'` → `'todo'` (slice
-	// `f1-pool-noun-todo-in-surface-and-apply-readers`); a legacy
-	// `AGENT_RUNNER_SLICES_LAND_IN=backlog` is migrated to `'todo'` with a one-line
-	// deprecation warning in `envOverrides`, so existing setups keep working. Same
-	// precedence chain as `slicingIntegration` (flag > env > per-repo > global >
+	// `pre-backlog`/`todo` enum, so `AGENT_RUNNER_TASKS_LAND_IN=todo` works and a
+	// typo FAILS LOUDLY. Same
+	// precedence chain as `taskingIntegration` (flag > env > per-repo > global >
 	// built-in `pre-backlog`); fed into the runner-deterministic placement
 	// resolver (`src/placement.ts`) as the configured-default rung.
-	slicesLandIn: {enum: ['pre-backlog', 'todo']},
-	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — PRD
+	tasksLandIn: {enum: ['pre-backlog', 'todo']},
+	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — PRD
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
-	// `pre-prd`/`prd` enum, so `AGENT_RUNNER_PRDS_LAND_IN=prd` works and a typo
-	// FAILS LOUDLY. Same precedence chain as `slicesLandIn` (flag > env > per-repo
-	// > global > built-in `pre-prd`); fed into the shared placement resolver
-	// (`src/placement.ts`) as the configured-default rung for the PRD lifecycle.
-	prdsLandIn: {enum: ['pre-prd', 'prd']},
+	// `pre-proposed`/`ready` enum, so `AGENT_RUNNER_BRIEFS_LAND_IN=ready` works and a typo
+	// FAILS LOUDLY. Same precedence chain as `tasksLandIn` (flag > env > per-repo
+	// > global > built-in `pre-proposed`); fed into the shared placement resolver
+	// (`src/placement.ts`) as the configured-default rung for the brief lifecycle.
+	briefsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `AGENT_RUNNER_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `AGENT_RUNNER_PROVIDER` is ignored
@@ -279,21 +276,7 @@ export function envOverrides(
 		if (raw === undefined) {
 			continue;
 		}
-		// Value-rename shim for `slicesLandIn` (slice
-		// `f1-pool-noun-todo-in-surface-and-apply-readers`): the POOL value was
-		// `'backlog'` and is now `'todo'` (staging stays `'pre-backlog'`). A legacy
-		// `AGENT_RUNNER_SLICES_LAND_IN=backlog` is migrated to `'todo'` with a one-
-		// line deprecation warning — mirrors the removed-`provider` deprecation
-		// pattern (ignored-with-warning, never a hard error).
-		const coerced =
-			key === 'slicesLandIn' && raw === 'backlog'
-				? (warn(
-						`${varName}='backlog' is deprecated (the pool value was renamed to ` +
-							`'todo'; \`backlog\` is the on-disk staging folder name). Treating ` +
-							`as 'todo'. Set ${varName}=todo to silence this warning.`,
-					),
-					'todo')
-				: coerceValue(varName, raw, coercion);
+		const coerced = coerceValue(varName, raw, coercion);
 		// Type matches by construction: each coercion yields the key's value type.
 		(overrides as Record<string, unknown>)[key] = coerced;
 	}

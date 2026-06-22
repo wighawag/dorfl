@@ -1634,11 +1634,11 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.slug).toBe('alpha');
 	});
 
-	it('do prd:<slug> dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoSlice OFF (naming IS the authorization)', async () => {
+	it('do prd:<slug> dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoTask OFF (naming IS the authorization)', async () => {
 		// The build/slice symmetry (slice `explicit-do-prd-not-gated-by-autoslice`):
 		// `do prd:<slug>` is an EXPLICIT target the operator named, so it slices
-		// REGARDLESS of the repo's `autoSlice` POLICY — EXACTLY as `do <slice>` builds a
-		// named slice regardless of `autoBuild`. autoSlice OFF (the default) no longer
+		// REGARDLESS of the repo's `autoTask` POLICY — EXACTLY as `do <slice>` builds a
+		// named slice regardless of `autoBuild`. autoTask OFF (the default) no longer
 		// refuses the explicit form (the policy gates the auto-pick POOL only).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'somePrd');
@@ -1648,7 +1648,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
-			// autoSlice deliberately OMITTED (defaults off) — explicit naming authorizes.
+			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				agentRan = true;
@@ -1690,11 +1690,11 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.slug).toBe('somePrd');
 		expect(result.message).toMatch(/humanOnly/);
 		// The policy is NEVER the named reason on the explicit path.
-		expect(result.message).not.toMatch(/autoSlice/);
+		expect(result.message).not.toMatch(/autoTask/);
 		expect(agentRan).toBe(false);
 	});
 
-	it('do prd:<slug> with autoSlice on slices the PRD (runner owns the git)', async () => {
+	it('do prd:<slug> with autoTask on slices the PRD (runner owns the git)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'somePrd');
 
@@ -1703,7 +1703,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			// `--merge`: the slice output now integrates through the shared core; merge
 			// lands it on the arbiter main (propose would open a PR instead).
 			integration: 'merge',
@@ -1830,11 +1830,11 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 /**
  * Per-TRANSITION integration mode
  * (`per-transition-integration-mode-slicing-vs-build`): the option-threading
- * caller (`performDo`) threads `slicingIntegration ?? integration` into the
+ * caller (`performDo`) threads `taskingIntegration ?? integration` into the
  * SLICING transition, but plain `integration` into the slice-BUILD transition. So
- * a repo with `integration:'propose'` + `slicingIntegration:'merge'` lands the
+ * a repo with `integration:'propose'` + `taskingIntegration:'merge'` lands the
  * slice FILES on main when slicing a PRD, yet does NOT auto-land code on main when
- * building a slice. UNSET `slicingIntegration` ⇒ slicing falls back to
+ * building a slice. UNSET `taskingIntegration` ⇒ slicing falls back to
  * `integration` (byte-for-byte today's behaviour). An explicit `--merge`/`--propose`
  * is resolved into BOTH keys upstream (`do-config.ts`, covered in do-config.test.ts).
  */
@@ -1858,8 +1858,8 @@ const slicingAgent: DoAgentRunner = ({cwd}) => {
 	return {ok: true};
 };
 
-describe('do — per-transition integration mode (slicingIntegration vs integration)', () => {
-	it('the SLICING transition uses `slicingIntegration` over `integration`: `integration:propose` + `slicingIntegration:merge` lands the slice FILES on main', async () => {
+describe('do — per-transition integration mode (taskingIntegration vs integration)', () => {
+	it('the SLICING transition uses `taskingIntegration` over `integration`: `integration:propose` + `taskingIntegration:merge` lands the slice FILES on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'somePrd');
 
@@ -1867,11 +1867,11 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			// The maintainer's target: build proposes, slicing merges. The caller threads
-			// `slicingIntegration ?? integration` (= 'merge') into the SLICING transition.
+			// `taskingIntegration ?? integration` (= 'merge') into the SLICING transition.
 			integration: 'propose',
-			slicingIntegration: 'merge',
+			taskingIntegration: 'merge',
 			agentRunner: slicingAgent,
 			env: gitEnv(),
 		});
@@ -1879,7 +1879,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		expect(result.outcome).toBe('sliced');
 
 		// merge ⇒ the produced slice + the PRD lifecycle move landed on the arbiter main
-		// (NOT on a work branch awaiting a PR). This is `slicingIntegration:'merge'`
+		// (NOT on a work branch awaiting a PR). This is `taskingIntegration:'merge'`
 		// winning over `integration:'propose'`.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
@@ -1904,7 +1904,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		).toBe(0);
 	});
 
-	it('the slice-BUILD transition keeps using `integration` (never `slicingIntegration`): `integration:propose` + `slicingIntegration:merge` does NOT auto-land code on main', async () => {
+	it('the slice-BUILD transition keeps using `integration` (never `taskingIntegration`): `integration:propose` + `taskingIntegration:merge` does NOT auto-land code on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 
 		const result = await performDo({
@@ -1912,9 +1912,9 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 			cwd: repo,
 			arbiter: ARBITER,
 			// The SAME options as the slicing test above. The build path reads `integration`
-			// (propose), so `slicingIntegration:'merge'` MUST NOT leak into it.
+			// (propose), so `taskingIntegration:'merge'` MUST NOT leak into it.
 			integration: 'propose',
-			slicingIntegration: 'merge',
+			taskingIntegration: 'merge',
 			verify: PASS,
 			agentRunner: editingAgent,
 			env: gitEnv(),
@@ -1930,7 +1930,7 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		).toBe('');
 	});
 
-	it('UNSET `slicingIntegration` ⇒ slicing falls back to `integration` (byte-for-byte today): `integration:merge` with no override lands the slice files on main', async () => {
+	it('UNSET `taskingIntegration` ⇒ slicing falls back to `integration` (byte-for-byte today): `integration:merge` with no override lands the slice files on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'somePrd');
 
@@ -1938,8 +1938,8 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
-			// No `slicingIntegration` ⇒ the caller threads `undefined ?? 'merge'` = 'merge'.
+			autoTask: true,
+			// No `taskingIntegration` ⇒ the caller threads `undefined ?? 'merge'` = 'merge'.
 			integration: 'merge',
 			agentRunner: slicingAgent,
 			env: gitEnv(),
@@ -1960,9 +1960,9 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 		).toBe(0);
 	});
 
-	it('an explicit slicing mode wins over the config: passing `slicingIntegration:propose` (the resolved flag) on an `integration:propose` repo does NOT land slice files on main', async () => {
+	it('an explicit slicing mode wins over the config: passing `taskingIntegration:propose` (the resolved flag) on an `integration:propose` repo does NOT land slice files on main', async () => {
 		// `do-config.ts` resolves an explicit `--propose`/`--merge` into BOTH
-		// `integration` AND `slicingIntegration`, so the operator's flag wins for the
+		// `integration` AND `taskingIntegration`, so the operator's flag wins for the
 		// SLICING transition too. Here we pin the threaded effect: a `propose`-resolved
 		// slicing transition pushes the work branch + leaves main untouched (no PR
 		// provider needed for a local --bare arbiter; selectProvider derives `none`).
@@ -1973,9 +1973,9 @@ describe('do — per-transition integration mode (slicingIntegration vs integrat
 			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'propose',
-			slicingIntegration: 'propose',
+			taskingIntegration: 'propose',
 			agentRunner: slicingAgent,
 			env: gitEnv(),
 		});

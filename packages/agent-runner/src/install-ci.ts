@@ -241,12 +241,12 @@ export async function installCI(
 	}
 	// CI-autonomy posture (slice `install-ci-emits-no-gate-env-let-config-decide`):
 	// the emitted advance workflow carries NO AGENT_RUNNER_AUTO_BUILD /
-	// AGENT_RUNNER_AUTO_SLICE / AGENT_RUNNER_OBSERVATION_TRIAGE /
+	// AGENT_RUNNER_AUTO_TASK / AGENT_RUNNER_OBSERVATION_TRIAGE /
 	// AGENT_RUNNER_SURFACE_BLOCKERS env line. Gate policy is resolved through the
 	// same `flag > env > per-repo > global > default` chain the engine uses
 	// everywhere, so CI is treated like any other config consumer. A config-less
 	// repo therefore lands on the strict built-in defaults (autoBuild: false,
-	// autoSlice: false, observationTriage: 'off', surfaceBlockers: false) and CI
+	// autoTask: false, observationTriage: 'off', surfaceBlockers: false) and CI
 	// claims nothing until you opt in. Tell the user that loudly so a now-quiet CI
 	// is not a surprise, and how to enable it.
 	log('');
@@ -258,12 +258,12 @@ export async function installCI(
 	log('To enable CI autonomy, EITHER:');
 	log(
 		'  - set the gate(s) in `.agent-runner.json` (applies everywhere), e.g.\n' +
-			'      { "autoBuild": true, "autoSlice": true }',
+			'      { "autoBuild": true, "autoTask": true }',
 	);
 	log(
 		"  - OR add the env var(s) to the workflow's `env:` block yourself (CI-only override), e.g.\n" +
 			"      AGENT_RUNNER_AUTO_BUILD: 'true'\n" +
-			"      AGENT_RUNNER_AUTO_SLICE: 'true'",
+			"      AGENT_RUNNER_AUTO_TASK: 'true'",
 	);
 	return {outcome: 'generated', config, written, secrets};
 }

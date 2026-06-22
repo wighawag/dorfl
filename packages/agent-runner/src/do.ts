@@ -184,15 +184,15 @@ export interface DoOptions {
 	 */
 	identity?: Identity;
 	/**
-	 * Per-repo `autoSlice` policy (resolved by `autoslice-gate`: flag > env >
+	 * Per-repo `autoTask` policy (resolved by `autotask-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
-	 * (`do-autopick.ts`'s sliceable-PRD pool): "may an agent auto-slice an
-	 * UNDECLARED PRD in this repo?". An EXPLICITLY-named `do prd:<slug>` slices
+	 * (`do-autopick.ts`'s sliceable-PRD pool): "may an agent auto-task an
+	 * UNDECLARED brief in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
-	 * `performSlice` — naming the PRD IS the authorization, exactly as `do <slice>`
+	 * `performSlice` — naming the brief IS the authorization, exactly as `do <slice>`
 	 * builds regardless of `autoBuild`). Ignored by the slice-build path.
 	 */
-	autoSlice?: boolean;
+	autoTask?: boolean;
 	/**
 	 * The resolved {@link PromptGuidance} NUDGE namespace (e.g. `testFirst`),
 	 * threaded from the per-repo config by the CLI and forwarded INTO
@@ -233,15 +233,15 @@ export interface DoOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the SLICING transition only** (config
-	 * `slicingIntegration`). Consumed ONLY by the `do prd:<slug>` slicing path: the
-	 * value threaded into {@link performSlice} is `slicingIntegration ?? integration`,
+	 * `taskingIntegration`). Consumed ONLY by the `do prd:<slug>` slicing path: the
+	 * value threaded into {@link performSlice} is `taskingIntegration ?? integration`,
 	 * so an unset override is byte-for-byte today's behaviour (slicing uses
 	 * `integration`). The slice-BUILD path ALWAYS threads `integration` (never this
 	 * key). An explicit `--merge`/`--propose` flag wins over BOTH (the flag-override
-	 * layer sets `integration` AND `slicingIntegration` to the typed mode — see
-	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{slice, prd}` resolver.
+	 * layer sets `integration` AND `taskingIntegration` to the typed mode — see
+	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{task, brief}` resolver.
 	 */
-	slicingIntegration?: IntegrationMode;
+	taskingIntegration?: IntegrationMode;
 	/**
 	 * **The per-repo SLICE-PLACEMENT default** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #5, slice
@@ -249,20 +249,20 @@ export interface DoOptions {
 	 * the `do prd:<slug>` slicing path: the value is fed as the
 	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
 	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
-	 * `slicingIntegration` (flag > env > per-repo > global > built-in
+	 * `taskingIntegration` (flag > env > per-repo > global > built-in
 	 * `pre-backlog`). The slice-BUILD path ignores it (placement is a SLICING
 	 * lifecycle concern).
 	 */
-	slicesLandIn?: 'pre-backlog' | 'todo';
+	tasksLandIn?: 'pre-backlog' | 'todo';
 	/**
-	 * **The OPERATOR's EXPLICIT slice-placement override** (the TOP precedence
+	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung in the placement resolver). Set ONLY when the operator typed
 	 * `--slices-land-in <where>` on this invocation; never when the value came
 	 * from config. Wins over `originTrust: untrusted` (the operator is present;
 	 * CLI always wins, no special force-key) — the positional analogue of
 	 * `explicitMerge` overriding the untrusted-origin build-propose rule.
 	 */
-	explicitSlicesLandIn?: 'pre-backlog' | 'todo';
+	explicitTasksLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
 	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
@@ -448,12 +448,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	arbiter?: string;
 	/**
-	 * Per-repo `autoSlice` policy — gates the AUTO-PICK / pool path only. An
-	 * EXPLICITLY-named `do --remote prd:<slug>` slices regardless of it (the
+	 * Per-repo `autoTask` policy — gates the AUTO-PICK / pool path only. An
+	 * EXPLICITLY-named `do --remote prd:<slug>` tasks regardless of it (the
 	 * dispatch passes `explicit: true`), mirroring `do <slice>` vs `autoBuild`.
 	 * Ignored by the slice-build path.
 	 */
-	autoSlice?: boolean;
+	autoTask?: boolean;
 	/** The slicer review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
 	reviewLoop?: SliceReviewGate;
 	/** The slicer improver loop's `slicerLoopMax` cap. Loop only. */
@@ -471,24 +471,24 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the SLICING transition only** (config
-	 * `slicingIntegration`) on the `do --remote prd:<slug>` path: threaded into
-	 * {@link performSlice} as `slicingIntegration ?? integration`. Unset ⇒ slicing
+	 * `taskingIntegration`) on the `do --remote prd:<slug>` path: threaded into
+	 * {@link performSlice} as `taskingIntegration ?? integration`. Unset ⇒ slicing
 	 * uses `integration` (today's behaviour); the slice-BUILD path always threads
-	 * `integration`. See {@link DoOptions.slicingIntegration}.
+	 * `integration`. See {@link DoOptions.taskingIntegration}.
 	 */
-	slicingIntegration?: IntegrationMode;
+	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo SLICE-PLACEMENT default** (PRD
+	 * **The per-repo TASK-PLACEMENT default** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
 	 * prd:<slug>` path: threaded into {@link performSlice} as the
-	 * configured-default rung. See {@link DoOptions.slicesLandIn}.
+	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
 	 */
-	slicesLandIn?: 'pre-backlog' | 'todo';
+	tasksLandIn?: 'pre-backlog' | 'todo';
 	/**
-	 * **The OPERATOR's EXPLICIT slice-placement override** on the `do --remote
-	 * prd:` path. See {@link DoOptions.explicitSlicesLandIn}.
+	 * **The OPERATOR's EXPLICIT task-placement override** on the `do --remote
+	 * prd:` path. See {@link DoOptions.explicitTasksLandIn}.
 	 */
-	explicitSlicesLandIn?: 'pre-backlog' | 'todo';
+	explicitTasksLandIn?: 'pre-backlog' | 'todo';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
 	prepare?: VerifyConfig;
@@ -672,11 +672,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			cwd,
 			arbiter,
 			doer: 'agent',
-			autoSlice: options.autoSlice,
+			autoTask: options.autoTask,
 			// EXPLICIT dispatch: a `do prd:<slug>` target was NAMED (the operator typed
-			// it, or the auto-pick POOL already filtered it on `autoSlice` before
+			// it, or the auto-pick POOL already filtered it on `autoTask` before
 			// dispatching here — the single policy-enforcement point). So the slicing gate
-			// drops the `autoSlice` policy term and binds only the PRD's own readiness
+			// drops the `autoTask` policy term and binds only the PRD's own readiness
 			// (`humanOnly`/`needsAnswers`) + `briefAfter`, EXACTLY as `do <slice>` builds a
 			// named slice regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
@@ -692,19 +692,19 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// The integrate-time args (slice `slice-output-through-integration`): the
 			// `provider` is the SAME the slice-build path threads (arg parity), but the
 			// MODE is the per-TRANSITION SLICING resolution (`per-transition-integration-
-			// mode-slicing-vs-build`): `slicingIntegration ?? integration`. Unset override ⇒
+			// mode-slicing-vs-build`): `taskingIntegration ?? integration`. Unset override ⇒
 			// falls back to `integration` (today's behaviour); a repo with
-			// `integration:'propose'` + `slicingIntegration:'merge'` lands the slice FILES
+			// `integration:'propose'` + `taskingIntegration:'merge'` lands the slice FILES
 			// on main here while the BUILD path below still threads plain `integration`.
-			integration: options.slicingIntegration ?? options.integration,
-			// The per-repo SLICE-PLACEMENT default + the operator's explicit
+			integration: options.taskingIntegration ?? options.integration,
+			// The per-repo TASK-PLACEMENT default + the operator's explicit
 			// override (slice `runner-deterministic-slice-placement-policy-and-
 			// precedence`). The slicer reads them as the configured-default + the
 			// top rung of the runner-deterministic placement resolver; the
 			// `originTrust: untrusted` force is read inside the slicer from the
 			// PRD's stamped frontmatter.
-			slicesLandIn: options.slicesLandIn,
-			explicitSlicesLandIn: options.explicitSlicesLandIn,
+			tasksLandIn: options.tasksLandIn,
+			explicitTasksLandIn: options.explicitTasksLandIn,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
 			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
@@ -1814,9 +1814,9 @@ export async function performDoRemote(
 				cwd: claimDir,
 				arbiter: 'origin',
 				doer: 'agent',
-				autoSlice: options.autoSlice,
+				autoTask: options.autoTask,
 				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
-				// NAMED (typed, or pool-filtered on `autoSlice` before reaching here), so the
+				// NAMED (typed, or pool-filtered on `autoTask` before reaching here), so the
 				// slicing gate drops the policy term — only the PRD's own readiness +
 				// `briefAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
@@ -1829,14 +1829,14 @@ export async function performDoRemote(
 				// `provider` is the SAME the slice-build path threads (arg parity), but the
 				// MODE is the per-TRANSITION SLICING resolution
 				// (`per-transition-integration-mode-slicing-vs-build`):
-				// `slicingIntegration ?? integration`, so the `--remote prd:` output ALSO
+				// `taskingIntegration ?? integration`, so the `--remote prd:` output ALSO
 				// routes through the shared core with the slicing-resolved mode.
-				integration: options.slicingIntegration ?? options.integration,
-				// The per-repo SLICE-PLACEMENT default + the operator's explicit
+				integration: options.taskingIntegration ?? options.integration,
+				// The per-repo TASK-PLACEMENT default + the operator's explicit
 				// override (slice `runner-deterministic-slice-placement-policy-and-
 				// precedence`). Same threading as the in-place `do prd:` path.
-				slicesLandIn: options.slicesLandIn,
-				explicitSlicesLandIn: options.explicitSlicesLandIn,
+				tasksLandIn: options.tasksLandIn,
+				explicitTasksLandIn: options.explicitTasksLandIn,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
@@ -2462,7 +2462,7 @@ export function jobWorktreeDoDriver(closure: {
 			workspacesDir: closure.workspacesDir,
 			arbiter: options.arbiter,
 			identity: options.identity,
-			autoSlice: options.autoSlice,
+			autoTask: options.autoTask,
 			reviewLoop: options.reviewLoop,
 			slicerLoopMax: options.slicerLoopMax,
 			slicerLoopModel: options.slicerLoopModel,

@@ -125,11 +125,11 @@ export interface IntakeGateState {
 	 */
 	autoBuild: boolean;
 	/**
-	 * `autoSlice` — whether an agent will AUTO-SLICE an undeclared PRD next. ON ⇒ a
-	 * PRD needs a human PR checkpoint NOW (`--propose-prd`); OFF ⇒ a human must
-	 * slice it, so it may `--merge-prd`.
+	 * `autoTask` — whether an agent will AUTO-TASK an undeclared brief next. ON ⇒ a
+	 * brief needs a human PR checkpoint NOW (`--propose-prd`); OFF ⇒ a human must
+	 * task it, so it may `--merge-prd`.
 	 */
-	autoSlice: boolean;
+	autoTask: boolean;
 }
 
 /**
@@ -140,7 +140,7 @@ export interface IntakeGateState {
  * event payload and sets the flags accordingly):
  *
  *   - **PRD** — gate-derived ONLY (author-trust does NOT bite): `--merge-prd` iff
- *     `autoSlice` is OFF (a human must slice the PRD before anything autonomous
+ *     `autoTask` is OFF (a human must task the brief before anything autonomous
  *     acts on it — the human checkpoint stays AHEAD even for an untrusted author),
  *     else `--propose-prd`.
  *   - **SLICE** — `--propose-slice` iff (`autoBuild` ON) OR (author UNTRUSTED);
@@ -148,7 +148,7 @@ export interface IntakeGateState {
  *     author can never auto-merge a slice from a public-front-door issue.
  *
  * So the only way to `--merge-slice` is a TRUSTED author with `autoBuild` OFF —
- * and the fully-gateless "merge everything" path additionally needs `autoSlice`
+ * and the fully-gateless "merge everything" path additionally needs `autoTask`
  * OFF; both gates off + a trusted author is the LOUD, NON-DEFAULT opt-in. The
  * conservative case (untrusted author, or any gate on) keeps a human in the loop.
  */
@@ -159,7 +159,7 @@ export function deriveIntakeFlags(options: {
 	const {gate, authorTrusted} = options;
 	// PRD: gate-derived only — a human-slices-it checkpoint stays ahead regardless
 	// of author-trust, so an untrusted author may still --merge-prd.
-	const prd: 'merge' | 'propose' = gate.autoSlice ? 'propose' : 'merge';
+	const prd: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
 	// SLICE: propose if the agent will auto-build it (gate ON) OR the author is
 	// untrusted; merge ONLY when both are safe (gate OFF AND author trusted).
 	const slice: 'merge' | 'propose' =
@@ -307,7 +307,7 @@ env:
   # permissive merge side; author-trust then forces propose for a slice from an
   # untrusted author.
   AGENT_RUNNER_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted slice next?
-  AGENT_RUNNER_AUTO_SLICE: 'false' # gate: will an agent auto-slice the emitted PRD next?
+  AGENT_RUNNER_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted brief next?
 
 jobs:
   intake:
@@ -327,7 +327,7 @@ jobs:
         # The merge-vs-propose POLICY, executed at runtime — the SAME rule
         # \`deriveIntakeFlags\` unit-tests (they cannot desync; the test asserts this
         # shell matches the function):
-        #   * PRD  — gate-derived ONLY: --merge-prd iff autoSlice OFF (a human
+        #   * PRD  — gate-derived ONLY: --merge-prd iff autoTask OFF (a human
         #            slices it before anything autonomous acts — the checkpoint
         #            stays ahead even for an UNTRUSTED author), else --propose-prd.
         #   * SLICE — --propose-slice iff (autoBuild ON) OR (author UNTRUSTED);
@@ -341,7 +341,7 @@ jobs:
           set -euo pipefail
 
           # PRD flag: gate-derived only (author-trust does NOT bite a PRD).
-          if [ "\${AGENT_RUNNER_AUTO_SLICE}" = "true" ]; then
+          if [ "\${AGENT_RUNNER_AUTO_TASK}" = "true" ]; then
             prd_flag="--propose-prd"
           else
             prd_flag="--merge-prd"
@@ -516,7 +516,7 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		'mergeable even for an untrusted author — the human-slices-it checkpoint).');
 	require('derives-propose-prd', /--propose-prd\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--propose-prd` (autoSlice on).');
+	), 'the policy derivation must be able to emit `--propose-prd` (autoTask on).');
 	// ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose): the shell
 	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
 	// case it uses for the slice/PRD modes, and pass it to `intake` so the emitted
@@ -537,9 +537,9 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	require('reads-auto-build-gate', /AGENT_RUNNER_AUTO_BUILD\b/.test(
 		text,
 	), 'the policy derivation must read the `AGENT_RUNNER_AUTO_BUILD` gate.');
-	require('reads-auto-slice-gate', /AGENT_RUNNER_AUTO_SLICE\b/.test(
+	require('reads-auto-task-gate', /AGENT_RUNNER_AUTO_TASK\b/.test(
 		text,
-	), 'the policy derivation must read the `AGENT_RUNNER_AUTO_SLICE` gate.');
+	), 'the policy derivation must read the `AGENT_RUNNER_AUTO_TASK` gate.');
 
 	// --- Insertion point E: the issue-thread review surface ---------------------
 	// E is REUSED via `intake` (which runs the lone-slice review and posts to the

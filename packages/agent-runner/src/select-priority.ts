@@ -97,15 +97,15 @@ export interface SliceablePrdsInput {
 	candidates: PrdCandidate[];
 	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
 	slicedSlugs: Set<string>;
-	/** The repo's resolved `autoSlice` policy (`autoslice-gate`'s per-repo key). */
-	autoSlice: boolean;
+	/** The repo's resolved `autoTask` policy (`autotask-gate`'s per-repo key). */
+	autoTask: boolean;
 }
 
 /**
  * Filter a raw PRD pool down to the SLICEABLE PRDs, in declaration order, using
  * `autoslice-gate`'s pure predicate ({@link resolveSlicingEligibility}) — NOT a
  * reinvented eligibility model. A PRD is sliceable iff `needsAnswers !== true &&
- * humanOnly !== true && autoSlice` AND every `briefAfter` PRD is already sliced.
+ * humanOnly !== true && autoTask` AND every `briefAfter` PRD is already sliced.
  * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
  */
 export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
@@ -116,7 +116,7 @@ export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
 				needsAnswers: prd.needsAnswers,
 				briefAfter: prd.briefAfter,
 				slicedSlugs: input.slicedSlugs,
-				autoSlice: input.autoSlice,
+				autoTask: input.autoTask,
 			}).sliceable,
 	);
 }

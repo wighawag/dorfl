@@ -63,7 +63,7 @@ import type {ReviewGate} from './review-gate.js';
  *
  *   1. **Resolve the gate** (agent path): refuse to slice a PRD that is
  *      `humanOnly`/`needsAnswers`, or whose `briefAfter` PRDs are not yet sliced.
- *      The repo's `autoSlice` POLICY also refuses on the AUTO-PICK pool path, but
+ *      The repo's `autoTask` POLICY also refuses on the AUTO-PICK pool path, but
  *      NOT when the PRD was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
  *      naming it IS the authorization, exactly as `do <slice>` builds regardless of
  *      `autoBuild` (the pool, not the explicit claim, gates the policy). The HUMAN
@@ -101,7 +101,7 @@ import type {ReviewGate} from './review-gate.js';
 /** The terminal status of one `do prd:<slug>` slicing run. */
 export type SliceOutcome =
 	| 'sliced' // gate passed (agent) / unbound (human) → lock → agent → committed
-	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoSlice/briefAfter)
+	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoTask/briefAfter)
 	| 'lock-lost' // the lock was lost/contended (another slicer holds it)
 	| 'agent-failed' // the agent invocation itself errored
 	| 'stale' // the held PRD was edited under the lock → the slicing is stale
@@ -167,18 +167,18 @@ export interface PerformSliceOptions {
 	 * WITHOUT the lock). The human-vs-agent choice the command wires.
 	 */
 	doer?: 'agent' | 'human';
-	/** Per-repo `autoSlice` policy (resolved by `autoslice-gate`). Agent path only. */
-	autoSlice?: boolean;
+	/** Per-repo `autoTask` policy (resolved by `autotask-gate`). Agent path only. */
+	autoTask?: boolean;
 	/**
 	 * The PRD was named EXPLICITLY by the operator (`do prd:<slug>`), so the
-	 * `autoSlice` POLICY is already satisfied — naming the PRD IS the authorization,
+	 * `autoTask` POLICY is already satisfied — naming the PRD IS the authorization,
 	 * EXACTLY as `do <slice>` builds a named slice regardless of `autoBuild` (the
 	 * build path's precedent: `autoBuild` gates the scan/selection POOL only, never
 	 * `performDo`'s explicit claim). When `true`, the agent slicing gate drops the
-	 * `autoSlice` policy term and binds ONLY the PRD's own readiness axes
+	 * `autoTask` policy term and binds ONLY the PRD's own readiness axes
 	 * (`humanOnly`/`needsAnswers`) + `briefAfter`. Defaults `false`. Both the
 	 * explicit `do prd:` dispatch AND the auto-pick path pass `true` here: the
-	 * auto-pick POOL (`do-autopick.ts`) is the single `autoSlice`-enforcement point
+	 * auto-pick POOL (`do-autopick.ts`) is the single `autoTask`-enforcement point
 	 * (a pool-ineligible PRD is never selected), so once a PRD is dispatched its
 	 * policy is already settled. Agent path only.
 	 */
@@ -253,22 +253,22 @@ export interface PerformSliceOptions {
 	 * resolved per-repo default landing for the slicer's emitted slices, fed as
 	 * the CONFIGURED-DEFAULT rung into the runner-deterministic placement
 	 * resolver (`src/placement.ts`). The resolver overlays an EXPLICIT operator
-	 * flag ({@link explicitSlicesLandIn}, top) and the UNTRUSTED-ORIGIN force
+	 * flag ({@link explicitTasksLandIn}, top) and the UNTRUSTED-ORIGIN force
 	 * (`originTrust: untrusted` ⇒ staging) on top. Unset ⇒ the resolver's
 	 * built-in floor applies (`staging` = `pre-backlog/`, the conservative
 	 * landing that preserves zero behaviour change for the normal path).
 	 */
-	slicesLandIn?: 'pre-backlog' | 'todo';
+	tasksLandIn?: 'pre-backlog' | 'todo';
 	/**
-	 * **The OPERATOR's EXPLICIT slice-placement override** (the TOP precedence
-	 * rung). When set, the runner-deterministic resolver lands the slices HERE
-	 * regardless of `originTrust` or {@link slicesLandIn} — the positional
+	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
+	 * rung). When set, the runner-deterministic resolver lands the tasks HERE
+	 * regardless of `originTrust` or {@link tasksLandIn} — the positional
 	 * analogue of `explicitMerge` overriding the untrusted-origin
 	 * build-propose rule ("the operator is present; CLI always wins, no special
 	 * force-key"). Set ONLY when the operator typed `--slices-land-in <where>`;
 	 * never when the value came from config.
 	 */
-	explicitSlicesLandIn?: 'pre-backlog' | 'todo';
+	explicitTasksLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The slicer review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES PRD
 	 * `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
@@ -332,8 +332,8 @@ export const STAGED_SLICES_DIR = workFolderRel('tasks-backlog');
 
 /**
  * The POOL folder slices land in when the runner-deterministic placement
- * resolver chooses the pool side (`slicesLandIn: 'backlog'` and a trusted
- * origin, or an `--slices-land-in backlog` operator override). The agent NEVER
+ * resolver chooses the pool side (`tasksLandIn: 'todo'` and a trusted
+ * origin, or an `--slices-land-in todo` operator override). The agent NEVER
  * writes here — it always writes to {@link STAGED_SLICES_DIR}; the runner
  * redirects the emitted files to the resolved destination at integrate-stage
  * time. PRD US #4 / the governing ADR: the agent cannot self-place into the
@@ -348,20 +348,18 @@ const SLICE_PLACEMENT_SLOTS = {
 } as const;
 
 /**
- * Map the `slicesLandIn` value spelling (`pre-backlog` | `todo`) onto the
- * resolver's lifecycle-generic side enum (`staging` | `pool`). The POOL value
- * was renamed `'backlog'` → `'todo'` (slice
- * `f1-pool-noun-todo-in-surface-and-apply-readers`); the legacy `'backlog'`
- * spelling is still mapped to `'pool'` defensively so any caller that bypassed
- * the config-migration shim (env / `loadConfig` / `loadRepoConfigFromContent`)
- * still resolves cleanly. Returns `undefined` when no value is set, so the
- * resolver's next precedence rung applies (the built-in floor).
+ * Map the `tasksLandIn` value spelling (`pre-backlog` | `todo`) onto the
+ * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
+ * `undefined` when no value is set, so the resolver's next precedence rung
+ * applies (the built-in floor). The legacy `'backlog'` pool spelling is NOT
+ * accepted (clean break — the value was renamed `'backlog'` → `'todo'` and the
+ * deprecation shim is removed).
  */
 function landingToSide(
-	landing: 'pre-backlog' | 'todo' | 'backlog' | undefined,
+	landing: 'pre-backlog' | 'todo' | undefined,
 ): 'staging' | 'pool' | undefined {
 	if (landing === 'pre-backlog') return 'staging';
-	if (landing === 'todo' || landing === 'backlog') return 'pool';
+	if (landing === 'todo') return 'pool';
 	return undefined;
 }
 
@@ -409,7 +407,7 @@ export async function performSlice(
 			cwd,
 			slug,
 			prdFm,
-			options.autoSlice,
+			options.autoTask,
 			options.explicit ?? false,
 		);
 		if (!eligibility.sliceable) {
@@ -574,14 +572,14 @@ export async function performSlice(
 	// `runner-deterministic-slice-placement-policy-and-precedence`). Resolve which
 	// folder the runner lands the emitted slices in BEFORE handing them to the
 	// shared integrate band: precedence `explicit > untrusted-origin ⇒ staging >
-	// slicesLandIn > built-in (staging)`, all from unforgeable inputs (the PRD's
+	// tasksLandIn > built-in (staging)`, all from unforgeable inputs (the PRD's
 	// stamped `originTrust:` + the resolved per-repo default + the operator's
 	// explicit flag). The agent NEVER influences this; it always writes to
 	// `work/pre-backlog/`, and the runner redirects at `stage()` time.
 	const placementDecision = resolvePlacement({
-		explicit: landingToSide(options.explicitSlicesLandIn),
+		explicit: landingToSide(options.explicitTasksLandIn),
 		originTrust: prdFm.originTrust,
-		configuredDefault: landingToSide(options.slicesLandIn),
+		configuredDefault: landingToSide(options.tasksLandIn),
 	});
 	const placementDir = placementFolder(
 		SLICE_PLACEMENT_SLOTS,
@@ -929,7 +927,7 @@ async function stageSlicingLifecycle(params: {
 	 * The runner-resolved destination folder (slice
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Computed
 	 * ONCE in `performSlice` via the shared {@link resolvePlacement} from the
-	 * PRD's `originTrust:` stamp + the configured `slicesLandIn` default + the
+	 * PRD's `originTrust:` stamp + the configured `tasksLandIn` default + the
 	 * operator's explicit override, then passed in here — so the call site sees
 	 * exactly where the emitted slices landed (the placement decision is not
 	 * buried in the stage closure).
@@ -970,7 +968,7 @@ async function stageSlicingLifecycle(params: {
 	if (placementReason === 'untrusted-origin') {
 		note(
 			`Untrusted-origin PRD '${slug}': forcing the emitted slices STAGED ` +
-				`(${placementDir}/) regardless of slicesLandIn (a human promotes ` +
+				`(${placementDir}/) regardless of tasksLandIn (a human promotes ` +
 				'them into work/tasks/todo/). Pass --slices-land-in <where> to override.',
 		);
 	}
@@ -1173,7 +1171,7 @@ function appendQuestionsBlock(content: string, questions: string[]): string {
 
 /**
  * Resolve the AGENT slicing gate for `slug`: the pure predicate
- * (`needsAnswers !== true && humanOnly !== true && autoSlice`) plus the
+ * (`needsAnswers !== true && humanOnly !== true && autoTask`) plus the
  * cross-PRD `briefAfter` ordering, resolved against `work/prd-sliced/` residence of
  * the PRDs present in the checkout.
  */
@@ -1181,7 +1179,7 @@ function resolveAgentGate(
 	cwd: string,
 	slug: string,
 	prdFm: {humanOnly?: boolean; needsAnswers?: boolean; briefAfter: string[]},
-	autoSlice: boolean | undefined,
+	autoTask: boolean | undefined,
 	explicit: boolean,
 ): SlicingEligibilityResult {
 	return resolveSlicingEligibility({
@@ -1189,7 +1187,7 @@ function resolveAgentGate(
 		needsAnswers: prdFm.needsAnswers,
 		briefAfter: prdFm.briefAfter,
 		slicedSlugs: readSlicedSlugs(cwd),
-		autoSlice: autoSlice ?? false,
+		autoTask: autoTask ?? false,
 		explicit,
 	});
 }
@@ -1210,16 +1208,16 @@ function gateRefusalReason(
 			'the PRD has needsAnswers (open questions block auto-slicing)',
 		);
 	}
-	// The autoSlice POLICY only refuses on the NON-explicit (auto-pick pool) path:
+	// The autoTask POLICY only refuses on the NON-explicit (auto-pick pool) path:
 	// an explicitly-named `do prd:<slug>` is authorized by the naming itself (the
 	// build path's autoBuild precedent), so the policy is never the reason there.
 	if (
 		options.explicit !== true &&
 		prdFm.humanOnly !== true &&
 		prdFm.needsAnswers !== true &&
-		(options.autoSlice ?? false) !== true
+		(options.autoTask ?? false) !== true
 	) {
-		reasons.push("the repo's autoSlice policy is off");
+		reasons.push("the repo's autoTask policy is off");
 	}
 	if (!eligibility.briefAfter.satisfied) {
 		reasons.push(

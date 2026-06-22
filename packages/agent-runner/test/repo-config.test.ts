@@ -27,9 +27,9 @@ describe('repo-config constants', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('verify');
 		expect(REPO_ALLOWED_KEYS).toContain('defaultArbiter');
 		expect(REPO_ALLOWED_KEYS).toContain('autoBuild');
-		// `autoSlice` is the slicing-autonomy mirror of `autoBuild` — a genuine
+		// `autoTask` is the slicing-autonomy mirror of `autoBuild` — a genuine
 		// repo property, resolved per-repo through the same chain.
-		expect(REPO_ALLOWED_KEYS).toContain('autoSlice');
+		expect(REPO_ALLOWED_KEYS).toContain('autoTask');
 		// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
 		// INBOX) is the observation-side question-surfacing gate (ADR `ci-config-
 		// policy-and-gate-family`), resolved per-repo through the same chain. It
@@ -49,11 +49,11 @@ describe('repo-config constants', () => {
 		// The removed `provider` OVERRIDE is NOT allowed (it is gone entirely).
 		expect(REPO_ALLOWED_KEYS).toContain('noPR');
 		expect(REPO_ALLOWED_KEYS).not.toContain('provider');
-		// `slicingIntegration` (the per-TRANSITION SLICING override) is a genuine repo
+		// `taskingIntegration` (the per-TRANSITION SLICING override) is a genuine repo
 		// property like `integration`: whether THIS repo slices a PRD straight onto main
 		// while still building each slice as a PR is agreed by all collaborators + travels
 		// with the repo. (`per-transition-integration-mode-slicing-vs-build`.)
-		expect(REPO_ALLOWED_KEYS).toContain('slicingIntegration');
+		expect(REPO_ALLOWED_KEYS).toContain('taskingIntegration');
 		// `promptGuidance` (the NUDGE namespace — prompt-text knobs, NOT a gate) is a
 		// genuine repo property: "is this repo nudged toward test-first?" travels with
 		// the repo and is agreed by all collaborators. Resolved per-repo through the
@@ -275,7 +275,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 		// advance workflow carries no gate env, so a config-less repo running in CI
 		// hits the resolver with `env: {}` and falls through to DEFAULT_CONFIG.
 		// This pins that the four gate keys resolve to their strict-default values
-		// (autoBuild/autoSlice: false, observationTriage: 'off', surfaceBlockers:
+		// (autoBuild/autoTask: false, observationTriage: 'off', surfaceBlockers:
 		// false) — i.e. CI claims nothing until the user opts in via config or env.
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
@@ -283,7 +283,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 			env: {},
 		});
 		expect(resolved.config.autoBuild).toBe(false);
-		expect(resolved.config.autoSlice).toBe(false);
+		expect(resolved.config.autoTask).toBe(false);
 		expect(resolved.config.observationTriage).toBe('off');
 		expect(resolved.config.surfaceBlockers).toBe(false);
 	});
@@ -297,19 +297,19 @@ describe('resolveRepoConfig — per-key layering', () => {
 		// resolution seam by passing `env: {}` (the post-change workflow state).
 		writeRepoConfig(repo, {
 			autoBuild: true,
-			autoSlice: true,
+			autoTask: true,
 			observationTriage: 'ask',
 			surfaceBlockers: true,
 		});
 		const global = mergeConfig({
 			autoBuild: false,
-			autoSlice: false,
+			autoTask: false,
 			observationTriage: 'off',
 			surfaceBlockers: false,
 		});
 		const resolved = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(resolved.config.autoBuild).toBe(true);
-		expect(resolved.config.autoSlice).toBe(true);
+		expect(resolved.config.autoTask).toBe(true);
 		expect(resolved.config.observationTriage).toBe('ask');
 		expect(resolved.config.surfaceBlockers).toBe(true);
 	});
@@ -328,108 +328,108 @@ describe('resolveRepoConfig — per-key layering', () => {
 		expect(resolved.config.verify).toBe('make test');
 	});
 
-	// `slicingIntegration` (the per-TRANSITION SLICING override,
+	// `taskingIntegration` (the per-TRANSITION SLICING override,
 	// `per-transition-integration-mode-slicing-vs-build`) resolves through the SAME
 	// chain as `integration` and is read by the slicing-transition caller as
-	// `slicingIntegration ?? integration` (the FALLBACK is asserted at the do.ts
+	// `taskingIntegration ?? integration` (the FALLBACK is asserted at the do.ts
 	// option-threading seam; here we pin the config-resolution half).
-	it('a per-repo `slicingIntegration` overrides the global for the slicing transition; `integration` is independent', () => {
+	it('a per-repo `taskingIntegration` overrides the global for the slicing transition; `integration` is independent', () => {
 		writeRepoConfig(repo, {
 			integration: 'propose',
-			slicingIntegration: 'merge',
+			taskingIntegration: 'merge',
 		});
 		const global = mergeConfig({integration: 'propose'});
 		const {config} = resolveRepoConfig({repoPath: repo, global, env: {}});
 		// The maintainer's target: build proposes, slicing merges.
 		expect(config.integration).toBe('propose');
-		expect(config.slicingIntegration).toBe('merge');
+		expect(config.taskingIntegration).toBe('merge');
 	});
 
-	it("UNSET `slicingIntegration` resolves to undefined (the caller falls back to `integration` ⇒ byte-for-byte today's behaviour)", () => {
+	it("UNSET `taskingIntegration` resolves to undefined (the caller falls back to `integration` ⇒ byte-for-byte today's behaviour)", () => {
 		writeRepoConfig(repo, {integration: 'merge'});
 		const global = mergeConfig({integration: 'propose'});
 		const {config} = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(config.integration).toBe('merge');
 		// No default in DEFAULT_CONFIG — unset means "fall back to integration", which
-		// the slicing-transition caller does with `slicingIntegration ?? integration`.
-		expect(config.slicingIntegration).toBeUndefined();
+		// the slicing-transition caller does with `taskingIntegration ?? integration`.
+		expect(config.taskingIntegration).toBeUndefined();
 	});
 
-	it("resolves `slicingIntegration` flag > env > per-repo > global (the new key rides `integration`'s chain)", () => {
+	it("resolves `taskingIntegration` flag > env > per-repo > global (the new key rides `integration`'s chain)", () => {
 		// per-repo opts the slicing override to merge over an unset global.
-		writeRepoConfig(repo, {slicingIntegration: 'merge'});
+		writeRepoConfig(repo, {taskingIntegration: 'merge'});
 		const global = mergeConfig({integration: 'propose'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config
-				.slicingIntegration,
+				.taskingIntegration,
 		).toBe('merge');
-		// env (AGENT_RUNNER_SLICING_INTEGRATION) beats the per-repo file.
+		// env (AGENT_RUNNER_TASKING_INTEGRATION) beats the per-repo file.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_SLICING_INTEGRATION: 'propose'},
-			}).config.slicingIntegration,
+				env: {AGENT_RUNNER_TASKING_INTEGRATION: 'propose'},
+			}).config.taskingIntegration,
 		).toBe('propose');
 		// a flag beats env.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_SLICING_INTEGRATION: 'propose'},
-				flags: {slicingIntegration: 'merge'},
-			}).config.slicingIntegration,
+				env: {AGENT_RUNNER_TASKING_INTEGRATION: 'propose'},
+				flags: {taskingIntegration: 'merge'},
+			}).config.taskingIntegration,
 		).toBe('merge');
 	});
 
-	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default, slice
+	// `tasksLandIn` (the per-repo SLICE-PLACEMENT default, slice
 	// `runner-deterministic-slice-placement-policy-and-precedence`) is resolved
-	// EXACTLY like `slicingIntegration`: a config-resolved per-repo default fed
+	// EXACTLY like `taskingIntegration`: a config-resolved per-repo default fed
 	// into the shared placement resolver (`src/placement.ts`) as the
 	// CONFIGURED-DEFAULT rung. The runner-deterministic precedence (explicit >
 	// untrusted-origin > configured > built-in) is end-to-end-tested in
 	// `placement-precedence.test.ts`; here we pin the config-resolution half.
-	it('`slicesLandIn` is a per-repo allowed key', () => {
-		expect(REPO_ALLOWED_KEYS).toContain('slicesLandIn');
+	it('`tasksLandIn` is a per-repo allowed key', () => {
+		expect(REPO_ALLOWED_KEYS).toContain('tasksLandIn');
 	});
 
-	it('resolves `slicesLandIn` flag > env > per-repo > global > built-in (`pre-backlog`)', () => {
+	it('resolves `tasksLandIn` flag > env > per-repo > global > built-in (`pre-backlog`)', () => {
 		// Built-in floor: unset everywhere ⇒ `pre-backlog` (the conservative
 		// landing that preserves the tracer slice's behaviour).
 		const bare = mergeConfig({});
 		expect(
 			resolveRepoConfig({repoPath: repo, global: bare, env: {}}).config
-				.slicesLandIn,
+				.tasksLandIn,
 		).toBe('pre-backlog');
 		// global override: the user's global config sets the POOL value `todo`
 		// (renamed from `'backlog'` in slice
 		// `f1-pool-noun-todo-in-surface-and-apply-readers`; staging is still
 		// `'pre-backlog'`).
-		const global = mergeConfig({slicesLandIn: 'todo'});
+		const global = mergeConfig({tasksLandIn: 'todo'});
 		expect(
-			resolveRepoConfig({repoPath: repo, global, env: {}}).config.slicesLandIn,
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.tasksLandIn,
 		).toBe('todo');
 		// per-repo file overrides the global.
-		writeRepoConfig(repo, {slicesLandIn: 'pre-backlog'});
+		writeRepoConfig(repo, {tasksLandIn: 'pre-backlog'});
 		expect(
-			resolveRepoConfig({repoPath: repo, global, env: {}}).config.slicesLandIn,
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.tasksLandIn,
 		).toBe('pre-backlog');
-		// env (AGENT_RUNNER_SLICES_LAND_IN) beats the per-repo file.
+		// env (AGENT_RUNNER_TASKS_LAND_IN) beats the per-repo file.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_SLICES_LAND_IN: 'todo'},
-			}).config.slicesLandIn,
+				env: {AGENT_RUNNER_TASKS_LAND_IN: 'todo'},
+			}).config.tasksLandIn,
 		).toBe('todo');
 		// a flag beats env.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_SLICES_LAND_IN: 'todo'},
-				flags: {slicesLandIn: 'pre-backlog'},
-			}).config.slicesLandIn,
+				env: {AGENT_RUNNER_TASKS_LAND_IN: 'todo'},
+				flags: {tasksLandIn: 'pre-backlog'},
+			}).config.tasksLandIn,
 		).toBe('pre-backlog');
 	});
 
@@ -466,34 +466,34 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe(false);
 	});
 
-	it('resolves `autoSlice` flag > env > per-repo > global > default false (like autoBuild)', () => {
+	it('resolves `autoTask` flag > env > per-repo > global > default false (like autoBuild)', () => {
 		// default false; bare global ⇒ stays the built-in default false.
 		expect(
 			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
-				.config.autoSlice,
+				.config.autoTask,
 		).toBe(false);
 		// per-repo opts in over a false global.
-		writeRepoConfig(repo, {autoSlice: true});
-		const global = mergeConfig({autoSlice: false});
+		writeRepoConfig(repo, {autoTask: true});
+		const global = mergeConfig({autoTask: false});
 		expect(
-			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoSlice,
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.autoTask,
 		).toBe(true);
-		// env (AGENT_RUNNER_AUTO_SLICE) beats the per-repo file.
+		// env (AGENT_RUNNER_AUTO_TASK) beats the per-repo file.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_AUTO_SLICE: 'false'},
-			}).config.autoSlice,
+				env: {AGENT_RUNNER_AUTO_TASK: 'false'},
+			}).config.autoTask,
 		).toBe(false);
 		// a flag beats env, per-repo, and global.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_AUTO_SLICE: 'false'},
-				flags: {autoSlice: true},
-			}).config.autoSlice,
+				env: {AGENT_RUNNER_AUTO_TASK: 'false'},
+				flags: {autoTask: true},
+			}).config.autoTask,
 		).toBe(true);
 	});
 

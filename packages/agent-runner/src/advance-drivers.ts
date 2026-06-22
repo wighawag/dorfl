@@ -49,7 +49,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  *
  * **The FLAT per-action gate family (US #23)** falls out of the SELECTION layer,
  * exactly as it does for `do`: the eligible-pool scan only SURFACES a build item
- * when `autoBuild` is on and a slice-a-PRD item when `autoSlice` is on (the gate
+ * when `autoBuild` is on and a slice-a-PRD item when `autoTask` is on (the gate
  * is a policy on the autonomous-SELECTION step, NOT on the explicit verb a human
  * typed — an explicitly-NAMED `advance <slug>` builds regardless, mirroring
  * `do <slice>` vs `autoBuild`). SURFACE + APPLY are ALWAYS allowed — they run
@@ -83,7 +83,7 @@ type SharedAdvanceContext = AdvanceContext;
 export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
 	 * The resolved repo config — provides `autoBuild` (the build gate for the
-	 * slice pool), `autoSlice` (the slice-a-PRD gate for the PRD pool), and
+	 * slice pool), `autoTask` (the slice-a-PRD gate for the PRD pool), and
 	 * `selectionOrder` (the configurable cross-pool order). The per-action gate
 	 * family is APPLIED HERE, at the selection layer (the policy-on-autonomous-
 	 * selection point).
@@ -146,7 +146,7 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Run the BARE / `-n <x>` form: build the two ELIGIBLE pools for `cwd` (eligible
- * SLICES gated by `autoBuild`, sliceable PRDs gated by `autoSlice`), order them
+ * SLICES gated by `autoBuild`, sliceable PRDs gated by `autoTask`), order them
  * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
  * pinned first, take `count` (default 1), and run the EXISTING advance tick per
  * selected item, SEQUENTIALLY. The pools are the EXACT
@@ -180,7 +180,7 @@ export async function performAdvanceAuto(
 	);
 
 	// Pool 2 — SLICEABLE PRDs filtered by `autoslice-gate`'s predicate (gated on
-	// `autoSlice`). With `autoSlice` off NO PRD is selected — the slice rung is
+	// `autoTask`). With `autoTask` off NO PRD is selected — the slice rung is
 	// never reached by the bare/`-n` selection.
 	const pool = read.resolvePrdPool({repoPath: cwd});
 	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
@@ -193,7 +193,7 @@ export async function performAdvanceAuto(
 	const eligiblePrds = sliceablePrds({
 		candidates: prdCandidates,
 		slicedSlugs: pool.slicedSlugs,
-		autoSlice: options.config.autoSlice,
+		autoTask: options.config.autoTask,
 	});
 
 	// Pools 3 + 4 — the LIFECYCLE pools (untriaged observations + `needsAnswers`-

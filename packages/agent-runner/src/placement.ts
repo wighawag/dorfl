@@ -19,10 +19,10 @@
  *
  * LIFECYCLE-GENERIC. The folder names + the configured-default value are
  * PARAMETERS (`slots`, `configuredDefault`), so the same resolver serves the
- * SLICE lifecycle (`slicesLandIn`: `pre-backlog`/`todo` — the POOL value was
+ * TASK lifecycle (`tasksLandIn`: `pre-backlog`/`todo` — the POOL value was
  * renamed from `'backlog'` in slice
- * `f1-pool-noun-todo-in-surface-and-apply-readers`) AND the PRD-
- * placement slice (`prdsLandIn`: `prd`/`prd-ready`) without forking. A future
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`) AND the BRIEF-
+ * placement slice (`briefsLandIn`: `pre-proposed`/`ready`) without forking. A future
  * lifecycle (e.g. intake's lone-slice) plugs its own `slots` in and reuses the
  * exact precedence — no second implementation.
  */
@@ -70,8 +70,8 @@ export interface ResolvePlacementInput {
 	 */
 	originTrust?: 'trusted' | 'untrusted';
 	/**
-	 * The repo's resolved configured DEFAULT landing (`slicesLandIn` /
-	 * `prdsLandIn`). Caller resolves it like the existing `slicingIntegration`
+	 * The repo's resolved configured DEFAULT landing (`tasksLandIn` /
+	 * `briefsLandIn`). Caller resolves it like the existing `taskingIntegration`
 	 * (flag > env > per-repo > global > built-in) and passes the result; this
 	 * resolver just consumes it.
 	 */

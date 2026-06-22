@@ -365,14 +365,14 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(onBranch).toMatch(/^originTrust: untrusted$/m);
 	});
 
-	it('is GATE-FREE: it proceeds with the autonomous gates (autoBuild/autoSlice) OFF', async () => {
+	it('is GATE-FREE: it proceeds with the autonomous gates (autoBuild/autoTask) OFF', async () => {
 		// Prove `intake` does not consult the autonomous-selection gates: even with a
 		// per-repo config that turns the build gate (autoBuild) AND the slice gate
-		// (autoSlice) OFF, the explicit invocation authorizes the run and the slice is
+		// (autoTask) OFF, the explicit invocation authorizes the run and the slice is
 		// emitted. (`intake` takes NO autonomy config at all — the explicit invocation
 		// IS the authorization, exactly as `do`; the gates are the autonomous path's.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		const config = mergeConfig({autoBuild: false, autoSlice: false});
+		const config = mergeConfig({autoBuild: false, autoTask: false});
 		// `intake` never reads these; we assert the run SUCCEEDS regardless — the
 		// gate-free property (PRD US #7).
 		void config;
@@ -619,7 +619,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
 			reviewSlice: convergingReviewGate,
-			integration: {slice: 'merge', prd: 'propose'},
+			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -897,7 +897,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(result.outcome).toBe('prd');
 		expect(result.emittedSlug).toBe('quiet-and-verbose-modes');
 		// The built-in PRD-placement floor stages the intake-authored PRD (the PRD
-		// twin of `slicesLandIn`'s `pre-backlog` floor) — it lands at
+		// twin of `tasksLandIn`'s `pre-backlog` floor) — it lands at
 		// `work/briefs/proposed/`, NOT directly in the auto-slice pool, until promoted.
 		expect(result.emitted).toBe(
 			'work/briefs/proposed/quiet-and-verbose-modes.md',
@@ -1251,7 +1251,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			reviewSlice: convergingReviewGate,
 			// The SLICE mode resolves to merge (e.g. from `--merge-slice`); the PRD mode
 			// is irrelevant for a slice verdict.
-			integration: {slice: 'merge', prd: 'propose'},
+			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
 
@@ -1278,7 +1278,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			issueProvider: stubIssueProvider(),
 			decide: async () => SLICE_VERDICT,
 			reviewSlice: convergingReviewGate,
-			integration: {slice: 'propose', prd: 'merge'},
+			integration: {task: 'propose', brief: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -1312,7 +1312,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 				prdTitle: 'Quiet and verbose output modes',
 			}),
 			// The PRD mode resolves to merge; the SLICE mode must NOT route the PRD.
-			integration: {slice: 'propose', prd: 'merge'},
+			integration: {task: 'propose', brief: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -1347,7 +1347,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
-			integration: {slice: 'merge', prd: 'merge'},
+			integration: {task: 'merge', brief: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -2271,7 +2271,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			issueProvider,
 			decide: async () => SLICE_VERDICT,
 			reviewSlice: convergingReviewGate,
-			integration: {slice: 'merge', prd: 'propose'},
+			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');

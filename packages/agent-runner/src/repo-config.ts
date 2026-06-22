@@ -3,7 +3,6 @@ import {join} from 'node:path';
 import {
 	mergeConfig,
 	warnDeprecatedConfigKeys,
-	warnDeprecatedConfigValues,
 	type Config,
 	type PartialConfig,
 } from './config.js';
@@ -62,37 +61,37 @@ export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
  */
 export const REPO_ALLOWED_KEYS = [
 	'integration',
-	// `slicingIntegration` (the per-TRANSITION override for the PRD→slices SLICING
+	// `taskingIntegration` (the per-TRANSITION override for the brief→tasks TASKING
 	// transition ONLY) is a genuine repo property exactly like `integration`: whether
-	// THIS repo slices a PRD straight onto `main` (slice FILES land, no PR) while it
+	// THIS repo tasks a brief straight onto `main` (task FILES land, no PR) while it
 	// still BUILDS each slice as a reviewable PR is agreed by all collaborators +
 	// travels with the repo. Resolved per-repo through the SAME chain as
 	// `integration`, then falls back to `integration` when unset. DISTINCT from
-	// intake's per-EMITTED-TYPE `{slice, prd}` resolver (front door, author-trust):
+	// intake's per-EMITTED-TYPE `{task, brief}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
-	'slicingIntegration',
-	// `slicesLandIn` (the per-repo SLICE-PLACEMENT default — staging vs pool, PRD
+	'taskingIntegration',
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, PRD
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
-	// exactly like `slicingIntegration`/`integration`: whether THIS repo's slicer
+	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker
 	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
-	// straight in the agent-eligible POOL (`backlog/`, trusted fast-path) is agreed
+	// straight in the agent-eligible POOL (`todo/`, trusted fast-path) is agreed
 	// by all collaborators + travels with the repo. Resolved per-repo through the
-	// SAME chain as `slicingIntegration` (flag > env > per-repo > global > built-in
+	// SAME chain as `taskingIntegration` (flag > env > per-repo > global > built-in
 	// `pre-backlog`). DISTINCT from intake's per-emitted-type stamps (front door):
 	// this is a per-lifecycle PLACEMENT knob, inside the trust boundary,
 	// config-resolved. Fed into the shared placement resolver as the
 	// configured-default rung (`src/placement.ts`).
-	'slicesLandIn',
-	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — staging vs pool, PRD
+	'tasksLandIn',
+	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — staging vs pool, PRD
 	// `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12) is a genuine
-	// repo property exactly like `slicesLandIn`: whether THIS repo's intake-
-	// authored PRDs land STAGED (`pre-prd/`, review-without-PR human-promote path)
-	// or straight in the auto-slice POOL (`prd/`, trusted fast-path) is agreed by
+	// repo property exactly like `tasksLandIn`: whether THIS repo's intake-
+	// authored briefs land STAGED (`pre-proposed/`, review-without-PR human-promote path)
+	// or straight in the auto-tasking POOL (`ready/`, trusted fast-path) is agreed by
 	// all collaborators + travels with the repo. Resolved per-repo through the
-	// SAME chain as `slicesLandIn` (flag > env > per-repo > global > built-in
-	// `pre-prd`). Fed into the shared placement resolver as the configured-default
-	// rung for the PRD lifecycle (`src/placement.ts`).
-	'prdsLandIn',
+	// SAME chain as `tasksLandIn` (flag > env > per-repo > global > built-in
+	// `pre-proposed`). Fed into the shared placement resolver as the configured-default
+	// rung for the brief lifecycle (`src/placement.ts`).
+	'briefsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with
@@ -113,10 +112,10 @@ export const REPO_ALLOWED_KEYS = [
 	// this repo?) is a genuine repo property — the build member of the symmetric
 	// per-action gate family.
 	'autoBuild',
-	// `autoSlice` (may an agent auto-slice undeclared PRDs in this repo?) is a
-	// genuine repo property — the slicing-autonomy mirror of `autoBuild`
-	// (`work/prd/auto-slice.md`), resolved per-repo through the same chain.
-	'autoSlice',
+	// `autoTask` (may an agent auto-task undeclared briefs in this repo?) is a
+	// genuine repo property — the tasking-autonomy mirror of `autoBuild`
+	// (`work/briefs/auto-task.md`), resolved per-repo through the same chain.
+	'autoTask',
 	// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
 	// INBOX) is a genuine repo property — the observation-side question-surfacing
 	// gate (ADR `ci-config-policy-and-gate-family`), resolved per-repo through the
@@ -140,7 +139,7 @@ export const REPO_ALLOWED_KEYS = [
 	// `selectionOrder` (the configurable order across the four orderable auto-pick
 	// pools — build/slice/surface/triage; `apply` is pinned first) is a genuine repo
 	// property — the per-repo selection-order field ADR `ci-config-policy-and-gate-
-	// family` specifies, resolved per-repo like `autoSlice`. SUBSUMES the removed
+	// family` specifies, resolved per-repo like `autoTask`. SUBSUMES the removed
 	// `prdsFirst` boolean (a preset keyword or an explicit pool-name list).
 	'selectionOrder',
 	// `model` (which model this repo's work runs on) and `harness` (which adapter)
@@ -299,7 +298,6 @@ export function loadRepoConfigFromContent(
 	// override) before the allow/reject split, so an existing committed config keeps
 	// working — ignored, never an error, and never mistaken for an unknown key.
 	warnDeprecatedConfigKeys(parsed, sourceLabel);
-	warnDeprecatedConfigValues(parsed, sourceLabel);
 
 	const config: PartialConfig = {};
 	const rejected: string[] = [];

@@ -110,13 +110,13 @@ export function doFlagOverrides(
 		// command runs. `do` runs EITHER the build transition (a slice) OR the slicing
 		// transition (a `do prd:`) per invocation, and the typed flag is
 		// transition-AGNOSTIC, so it must override BOTH the build mode (`integration`)
-		// AND the slicing mode (`slicingIntegration`). Setting both at the top of the
-		// precedence chain means a `--propose` on a `slicingIntegration:'merge'` repo
-		// proposes the slicing too (the slicing path reads `slicingIntegration ??
-		// integration`, and the flag-set `slicingIntegration` shadows the config one).
+		// AND the tasking mode (`taskingIntegration`). Setting both at the top of the
+		// precedence chain means a `--propose` on a `taskingIntegration:'merge'` repo
+		// proposes the tasking too (the tasking path reads `taskingIntegration ??
+		// integration`, and the flag-set `taskingIntegration` shadows the config one).
 		// (`per-transition-integration-mode-slicing-vs-build`.)
 		overrides.integration = integration;
-		overrides.slicingIntegration = integration;
+		overrides.taskingIntegration = integration;
 	}
 	return overrides;
 }

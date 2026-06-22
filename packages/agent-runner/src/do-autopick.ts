@@ -41,9 +41,9 @@ type SharedDoOptions = Omit<DoOptions, 'arg'>;
 
 export interface PerformDoMultiOptions extends SharedDoOptions {
 	/**
-	 * The resolved repo config (provides `autoSlice` for the PRD gate,
+	 * The resolved repo config (provides `autoTask` for the PRD gate,
 	 * `selectionOrder` for the pool order, and the slice-pool selection caps). The
-	 * per-item runs still receive `autoSlice`/`integration`/etc. via the spread
+	 * per-item runs still receive `autoTask`/`integration`/etc. via the spread
 	 * `SharedDoOptions`.
 	 */
 	config: Config;
@@ -129,7 +129,7 @@ export async function performDoAuto(
 	const eligiblePrds = sliceablePrds({
 		candidates: prdCandidates,
 		slicedSlugs: pool.slicedSlugs,
-		autoSlice: options.config.autoSlice,
+		autoTask: options.config.autoTask,
 	});
 
 	// Order across both pools per the resolved `selectionOrder` + bound by count. The

@@ -279,11 +279,11 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 });
 
 describe('do --remote — slug resolution parity with do-in-place', () => {
-	it('a prd: arg dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoSlice OFF (no worktree)', async () => {
+	it('a prd: arg dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoTask OFF (no worktree)', async () => {
 		// Slug-resolution parity + the build/slice symmetry (slice
 		// `explicit-do-prd-not-gated-by-autoslice`): `do --remote prd:<slug>` is an
-		// EXPLICIT target, so it slices REGARDLESS of the repo's `autoSlice` POLICY
-		// (autoSlice OFF / default), exactly as `do <slice>` builds regardless of
+		// EXPLICIT target, so it slices REGARDLESS of the repo's `autoTask` POLICY
+		// (autoTask OFF / default), exactly as `do <slice>` builds regardless of
 		// `autoBuild`. The agent RUNS (the policy no longer gate-refuses the explicit
 		// form); no job worktree is cut for a prd: arg (slicing is not a build pipeline).
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
@@ -296,7 +296,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 			arg: 'brief:someprd',
 			remote: remoteUrl(arbiter),
 			workspacesDir: ws,
-			// autoSlice deliberately OMITTED (defaults off) — explicit naming authorizes.
+			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				agentRan = true;

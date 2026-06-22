@@ -104,7 +104,7 @@ function recordingRunner(): {run: AdvanceTickRunner; args: string[]} {
 }
 
 function cfg(over: Partial<Config> = {}): Config {
-	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
+	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
 /** The internal hook the gate slices will wire to config: force the create-gates on. */

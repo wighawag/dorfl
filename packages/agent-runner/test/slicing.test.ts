@@ -143,7 +143,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			lock: noLock,
 			agentRunner: () => {
 				agentRan = true;
@@ -164,7 +164,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			lock: noLock,
 			agentRunner: slicingAgent(),
 			env: gitEnv(),
@@ -173,8 +173,8 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		expect(result.message).toMatch(/needsAnswers/);
 	});
 
-	it('refuses when autoSlice is off on the AUTO-PICK pool path (names autoSlice)', async () => {
-		// The NON-explicit (pool) dispatch: `explicit` unset ⇒ the `autoSlice` POLICY
+	it('refuses when autoTask is off on the AUTO-PICK pool path (names autoTask)', async () => {
+		// The NON-explicit (pool) dispatch: `explicit` unset ⇒ the `autoTask` POLICY
 		// still gates. (The pool itself never selects such a PRD; this asserts the
 		// per-invocation gate's policy term survives for the pool path.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
@@ -183,18 +183,18 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: false,
+			autoTask: false,
 			lock: noLock,
 			agentRunner: slicingAgent(),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('gate-refused');
-		expect(result.message).toMatch(/autoSlice/);
+		expect(result.message).toMatch(/autoTask/);
 	});
 
-	it('an EXPLICITLY-named PRD slices with autoSlice OFF (no config, no env) — naming IS the authorization', async () => {
+	it('an EXPLICITLY-named PRD slices with autoTask OFF (no config, no env) — naming IS the authorization', async () => {
 		// The slice-path mirror of `do <slice>` building regardless of `autoBuild`:
-		// `explicit: true` (the `do prd:<slug>` dispatch) drops the `autoSlice` POLICY
+		// `explicit: true` (the `do prd:<slug>` dispatch) drops the `autoTask` POLICY
 		// term, so an explicit slice-now proceeds to the lock/agent with the policy
 		// unset. (A real lock is taken here — the gate does NOT refuse, so the noLock
 		// stub would throw; we let the real CAS run and assert it sliced.)
@@ -205,7 +205,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			// autoSlice deliberately OMITTED (defaults off) — explicit alone authorizes.
+			// autoTask deliberately OMITTED (defaults off) — explicit alone authorizes.
 			explicit: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('it-explicit', () => {
@@ -266,8 +266,8 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
 		expect(result.message).toMatch(/briefAfter/);
-		// The autoSlice policy is NEVER the named reason on the explicit path.
-		expect(result.message).not.toMatch(/autoSlice/);
+		// The autoTask policy is NEVER the named reason on the explicit path.
+		expect(result.message).not.toMatch(/autoTask/);
 	});
 
 	it('refuses when a briefAfter PRD is not yet sliced (names it)', async () => {
@@ -279,7 +279,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			lock: noLock,
 			agentRunner: slicingAgent(),
 			env: gitEnv(),
@@ -300,7 +300,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			agentRunner: slicingAgent(),
 			env: gitEnv(),
 		});
@@ -319,7 +319,7 @@ describe('performSlice — agent gate refusal (honest, names why it skipped)', (
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			lock: noLock,
 			agentRunner: slicingAgent(),
 			env: gitEnv(),
@@ -365,7 +365,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			// `--merge`: land the produced slices on the arbiter main (the output now
 			// integrates through the shared core; propose would open a PR instead).
 			integration: 'merge',
@@ -404,7 +404,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				// The lock already moved the PRD to slicing/ on the arbiter; the agent
@@ -483,7 +483,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				const out = join(cwd, 'work', 'tasks', 'backlog');
@@ -522,7 +522,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
 				// Write a slice (as normal)…
@@ -552,7 +552,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('it-first'),
 			env: gitEnv(),
@@ -580,7 +580,7 @@ describe('performSlice — slices + commits the runner-owned transition', () => 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('it-second'),
 			env: gitEnv(),
@@ -661,7 +661,7 @@ describe('performSlice — lock lost / agent failed', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			lock: {
 				acquire: async () => ({
 					exitCode: 2,
@@ -691,7 +691,7 @@ describe('performSlice — lock lost / agent failed', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			lock: {
 				acquire: async () => ({
 					exitCode: 0,
@@ -735,7 +735,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: loopGate([
@@ -778,7 +778,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: loopGate([
@@ -812,7 +812,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			agentRunner: slicingAgent('child'),
 			reviewLoop: loopGate([
 				{
@@ -869,7 +869,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			agentRunner: slicingAgent('child'),
 			reviewLoop: gate,
 			slicerLoopMax: 2,
@@ -912,7 +912,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
@@ -965,7 +965,7 @@ describe('performSlice — the slicer review→edit→converge loop', () => {
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			reviewLoop: gate,
@@ -1001,7 +1001,7 @@ describe('performSlice — usage', () => {
 			slug: 'nope',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			agentRunner: slicingAgent(),
 			env: gitEnv(),
 		});

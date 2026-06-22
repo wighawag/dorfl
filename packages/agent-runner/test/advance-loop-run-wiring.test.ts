@@ -53,7 +53,7 @@ function slice(slug: string): string {
 const config = () =>
 	mergeConfig({
 		autoBuild: true,
-		autoSlice: true,
+		autoTask: true,
 		maxParallel: 4,
 		perRepoMax: 4,
 	});
@@ -184,7 +184,7 @@ describe('run --advance: the loop driver wired into runLoop via the RunTick seam
 		const summary = await runLoop({
 			config: mergeConfig({
 				autoBuild: true,
-				autoSlice: true,
+				autoTask: true,
 				// ONE item per tick so the pool shrinks observably, tick by tick.
 				maxParallel: 1,
 				perRepoMax: 1,
