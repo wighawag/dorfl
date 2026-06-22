@@ -3,7 +3,7 @@ title: a TRANSIENT-INFRA build failure (401 OAuth expiry, outage) is routed to n
 date: 2026-06-16
 status: open
 slug: transient-infra-failure-indistinguishable-from-genuine-stuck-state
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was observed
@@ -67,3 +67,17 @@ routing in `run.ts`/`do.ts` (auto-retry vs surface). Not promoted to a task here
 ## Provenance
 
 Observed live this session: the `advance` run log for `onboard-and-reset-reconcile-mirror-to-arbiter` (401 OAuth expiry → `agent-failed` → needs-attention), and the PR #139 merge commit (`95da72e`) whose `R098` rename moved the slug `needs-attention/ → backlog/`. The sibling-ledger reconcile is `reconcileSiblingLedgerConflict` in `src/integration-core.ts` (takes the arbiter's version of sibling ledger files on a rebase CONFLICT — but a clean squash-merge of a branch carrying a stale placement bypasses that and the branch's placement wins). The user identified Problem B as the real defect and challenged the assumption that the branch-carries-code PRD covers it — it does not; it covers only A.
+
+## Applied answers 2026-06-22
+
+### q1: Promote Problem B to a slice / failure-cause PRD, or keep as an observation?
+
+promote-slice. Land half-1 (the classification change) as a small, well-scoped slice: add the credential-expiry signature and a dedicated failure cause (see Q3). The routing half (Q2) is a real open design question — capture it in an ADR rather than guessing it inside the slice. Disposition: promote-slice (classification), with an accompanying ADR for routing.
+
+### q2: Once a failure is classified `transient-infra`, what should the routing be: auto-retry with backoff, a distinct 'infra-blocked, not work-blocked' surface, or both (per sub-cause)?
+
+Split by sub-cause (route to an ADR). Model-outage / 5xx / 429 → bounded auto-retry with backoff, then a distinct infra-blocked surface if retries exhaust. Credential-expiry / 401 auth-required → straight to an infra-blocked / needs-reauth surface (no retry helps), kept SEPARATE from work-stuck `needs-attention` (which means "a human must look at the WORK" — the wrong signal here). The dedicated cause from Q3 is the natural carrier of this split.
+
+### q3: Should a 401 `authentication_required` / 'OAuth refresh token expired or revoked' be classified `transient-infra` at all, or a new dedicated cause (e.g. `needs-reauth` / `credential-expired`)?
+
+Add a NEW dedicated cause (`needs-reauth` / `credential-expired`), do NOT fold 401 into `transient-infra`. Credential expiry behaves fundamentally differently from a transient outage — no amount of retry fixes it; it needs human re-auth — so giving it its own `FailureCause` variant keeps the taxonomy honest and lets Q2's routing branch on it cleanly instead of re-splitting a conflated `transient-infra` bucket downstream. Adding the variant is a contained cross-file change (the union's three declaration sites). This pairs with the Q2 split.
