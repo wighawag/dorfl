@@ -11,7 +11,7 @@ You **emit task files; you do not act on them** — see [Git protocol](#git-prot
 ## When to use vs. not
 
 - **Use** when slicing a `work/briefs/ready/<slug>.md`, a design doc, or a plan into grabbable units for solo-with-agents (incl. parallel AFK) work.
-- **Don't** use to _write_ the brief (that's a separate step — `to-brief`) or to _claim/run_ a task (that's the runner: `agent-runner claim`/`do`/`complete`, or the `drive-backlog` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
+- **Don't** use to _write_ the brief (that's a separate step — `to-brief`) or to _claim/run_ a task (that's the runner: `agent-runner claim`/`do`/`complete`, or the `drive-tasks` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
 
 ## Process
 

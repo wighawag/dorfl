@@ -110,7 +110,7 @@ Any unrecognised field is ignored by the parser; the caller routes on `verdict`/
 ### How callers route your verdict (not your job — for orientation only)
 
 - a **review GATE** routes a `block` → set `needsAnswers: true` on the artifact (question in its body) or mark its per-item lock `state: stuck` (needs-attention); `approve` → let it land / auto-merge.
-- a **conductor** (e.g. `drive-backlog`/`orchestrate`) routes a `block` → into its stuck-set / batched questions for the human; `approve` → merge / advance.
+- a **conductor** (e.g. `drive-tasks`/`orchestrate`) routes a `block` → into its stuck-set / batched questions for the human; `approve` → merge / advance.
 
 ## Scope fence
 

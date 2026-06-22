@@ -1,12 +1,12 @@
 ---
-name: drive-backlog
+name: drive-tasks
 disable-model-invocation: true
 description: 'The supervised conductor: build every ready work/ task in a loop via agent-runner, reviewing each diff and merging, until none can advance. Requires the agent-runner CLI.'
 ---
 
-# drive-backlog
+# drive-tasks
 
-**Be the conductor, not the player.** `agent-runner do task:<slug> --isolated` already builds ONE task autonomously (claim → build agent → acceptance gate → optional Gate-2 review → PR) in a worktree off the arbiter. `drive-backlog` is the layer ABOVE: it looks at the _whole_ board, checks each ready task is still _fresh_, decides _what_ to build and in _what order_, drives `do` per task, then acts as a **third reviewer** (Gate-3, the conductor's own diff-vs-criteria pass — see step 4b) over each PR before merging it.
+**Be the conductor, not the player.** `agent-runner do task:<slug> --isolated` already builds ONE task autonomously (claim → build agent → acceptance gate → optional Gate-2 review → PR) in a worktree off the arbiter. `drive-tasks` is the layer ABOVE: it looks at the _whole_ board, checks each ready task is still _fresh_, decides _what_ to build and in _what order_, drives `do` per task, then acts as a **third reviewer** (Gate-3, the conductor's own diff-vs-criteria pass — see step 4b) over each PR before merging it.
 
 It is a **methodology skill** (prose you follow), like `to-task` / `review` — NOT a runner command. **Precondition:** it drives the **`agent-runner` CLI** over a repo using the **`work/` contract** — if neither is present, this skill does not apply. (It is the ONE skill that leans on the runner CLI directly; that is its job. The other skills stay protocol-native.) It composes:
 
@@ -14,7 +14,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 - **`review`** (`skills/review/`) — the discipline for your own diff-vs-criteria pass over each opened PR.
 - **`to-task`** (`skills/to-task/`) — for the forward-note step and any re-slice the human asks for.
 
-It is **scoped to building ready TASKS.** The broader job — survey _everything_ (observations, ideas, briefs, tasks), figure out what can advance, fill judgement gaps conversationally until new tasks are READY, then build them — is `orchestrate`, which delegates the BUILDING back to this skill. Keep `drive-backlog` focused on building ready tasks; hand the deep survey up to `orchestrate`.
+It is **scoped to building ready TASKS.** The broader job — survey _everything_ (observations, ideas, briefs, tasks), figure out what can advance, fill judgement gaps conversationally until new tasks are READY, then build them — is `orchestrate`, which delegates the BUILDING back to this skill. Keep `drive-tasks` focused on building ready tasks; hand the deep survey up to `orchestrate`.
 
 ## How it stalls (the stuck-set)
 
@@ -38,7 +38,7 @@ The loop, selection, freshness check, Gate-3 review, and stuck-set are exactly a
 ## When to use vs. not
 
 - **Use** to take a `work/tasks/todo/` from "N ready tasks" to "no ready task can advance", building + reviewing + merging each, in dependency-and-practical order; to conduct the agent-runner worker through a phase of task-building; as the building engine `orchestrate` delegates to.
-- **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no human). `drive-backlog` is **one task at a time, end-to-end**. Don't use it to _author_ tasks from scratch (that's `to-task`), or to _slice briefs / triage observations / fill judgement gaps / answer scattered open questions across the whole tree_ (that's `orchestrate`). Don't use it to FORCE a blocked task — it respects the gate.
+- **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no human). `drive-tasks` is **one task at a time, end-to-end**. Don't use it to _author_ tasks from scratch (that's `to-task`), or to _slice briefs / triage observations / fill judgement gaps / answer scattered open questions across the whole tree_ (that's `orchestrate`). Don't use it to FORCE a blocked task — it respects the gate.
 
 ## The golden rules (do not violate)
 
@@ -90,6 +90,20 @@ Read every `work/tasks/todo/*.md` frontmatter (`slug`, `blockedBy`/`deps`, `need
 - **GATED** = `needsAnswers: true` OR `humanOnly: true` (needs a human first, by question or by drive-ownership; NEVER agent-buildable; list it but do not build it, even once its deps land). The agent-buildable READY set is the tasks that are neither blocked nor gated by EITHER field.
 
 (A task in the STAGING slot `tasks/backlog/` is review-first, awaiting a human's promotion into the pool `tasks/todo/`; it is NOT in the READY set — surface it, don't build it.) Note which tasks **unlock the most downstream work** when they land — those go first.
+
+> **This is the DEFAULT and it does NOT change:** the READY set is computed from the agent POOL `work/tasks/todo/`, and `work/tasks/backlog/` is review-first STAGING the conductor does NOT build (it surfaces those, it never dispatches `do` against them). Unless the caller explicitly opts into the drive-from-backlog mode below, behave exactly as documented above.
+
+#### Opt-in: drive tasks from `tasks/backlog/` (the staging folder)
+
+**OPT-IN ONLY — never the default.** When, and ONLY when, the **caller EXPLICITLY instructs** this skill to drive tasks from the staging folder `work/tasks/backlog/` (e.g. "drive the tasks in backlog/", "build the backlog tasks <slugs>", an explicit drive-from-backlog mode), the conductor builds those staged tasks too, using the **identical** loop, selection, freshness check, Gate-3 review, requeue recovery, and stuck-set discipline described in this whole skill — the ONLY change is WHERE the READY set is read from. Absent that explicit instruction, `tasks/backlog/` stays review-first staging you surface but do NOT build (the default above). If you are unsure whether the caller meant this, do NOT assume it — treat the staging folder as review-first and ask.
+
+In this mode the READY computation reads **`work/tasks/backlog/`** instead of `work/tasks/todo/` (or, if the caller explicitly says to drive BOTH, the UNION of `tasks/backlog/` + `tasks/todo/`). Everything else is unchanged:
+
+- **READY** = every `blockedBy` is in `work/tasks/done/` AND `needsAnswers !== true` AND `humanOnly !== true` — the SAME gating, just over the staging set (and, when the caller scopes the run to specific slugs, restricted to those). `blockedBy` still resolves against `work/tasks/done/` exactly as in the default; deps held in `tasks/backlog/` (or `tasks/todo/`) that are not yet `done/` are BLOCKED, so honour the same dependency ordering.
+- **GATED** (`needsAnswers`/`humanOnly`) and **BLOCKED** mean exactly what they mean above; a `humanOnly`/`needsAnswers` staged task is NEVER agent-buildable here either.
+- The build is the SAME `agent-runner do task:<slug> --isolated`, the SAME Gate-3 diff-vs-criteria review, the SAME merge-via-PR-comment, and the SAME accumulate-don't-block stuck-set. (The staged task must be on the arbiter's `main` for the isolated build to see it — per [Selection + isolation](#selection--isolation), push it and its deps first if they are local-only.)
+
+This mode exists so a caller who has already decided a set of staged tasks is good can have the conductor build them straight from `tasks/backlog/` without first promoting them into `tasks/todo/`. It does NOT relax the review-first nature of staging for any OTHER caller or run; it is a per-invocation, explicitly-requested override of the read location only.
 
 ### 1. CHECK freshness / up-to-dateness of each ready task
 
@@ -189,7 +203,7 @@ The batch is conversational (asked) or reported (unattended), not a written file
 This skill builds READY TASKS. Two things sit ABOVE it, sharing its loop shape:
 
 - **`orchestrate`** — the human-in-the-loop META conductor: surveys _everything_ (observations / ideas / briefs / tasks), advances what it can (slicing briefs, triaging), fills judgement gaps with the human conversationally until new tasks are READY, then **delegates the building to THIS skill** and surfaces the stuck-set to the human.
-- **`advance` (the `advance-loop` brief, not yet built)** — the AUTONOMOUS, file-mediated version of the same idea, driven by `run`/CI with a `work/questions/` sidecar. `drive-backlog` + `orchestrate` are the human-agency, synchronous siblings of `advance`; expect them to converge on the same tick contract.
+- **`advance` (the `advance-loop` brief, not yet built)** — the AUTONOMOUS, file-mediated version of the same idea, driven by `run`/CI with a `work/questions/` sidecar. `drive-tasks` + `orchestrate` are the human-agency, synchronous siblings of `advance`; expect them to converge on the same tick contract.
 
 The conductor is **tick-agnostic**: today the per-item action is `agent-runner do task:<slug>` (build a task); as `advance`-class ticks land (slice / triage / surface / apply), the SAME loop applies — only the per-item command in step 4a changes. (Mirrors the loop/tick split in `run`: the conductor is a _loop_; the per-item command is the _tick_.)
 
