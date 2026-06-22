@@ -3,7 +3,7 @@ title: The advance-lifecycle propose matrix enumerates items whose per-item lock
 type: observation
 status: spotted
 spotted: 2026-06-22
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
