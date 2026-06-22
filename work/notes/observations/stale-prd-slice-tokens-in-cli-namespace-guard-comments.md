@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Stale `slice:`/`prd:` tokens in the slice-only-command guard comments (cli.ts)
 
 2026-06-22 (noticed during `rename-cli-verb-and-flags-do-prd-to-do-brief`).
