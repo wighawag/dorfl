@@ -19,7 +19,9 @@
  *
  * LIFECYCLE-GENERIC. The folder names + the configured-default value are
  * PARAMETERS (`slots`, `configuredDefault`), so the same resolver serves the
- * SLICE lifecycle (`slicesLandIn`: `pre-backlog`/`backlog`) AND the PRD-
+ * SLICE lifecycle (`slicesLandIn`: `pre-backlog`/`todo` — the POOL value was
+ * renamed from `'backlog'` in slice
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`) AND the PRD-
  * placement slice (`prdsLandIn`: `prd`/`prd-ready`) without forking. A future
  * lifecycle (e.g. intake's lone-slice) plugs its own `slots` in and reuses the
  * exact precedence — no second implementation.
@@ -32,7 +34,7 @@
  * - `'staging'` — land in the staging area (slices: `pre-backlog/`; PRDs:
  *   `prd/`). Not in the agent pool; a human/runner promotion is needed to make
  *   the item eligible. Review-without-PR review surface.
- * - `'pool'` — land directly in the agent-eligible pool (slices: `backlog/`;
+ * - `'pool'` — land directly in the agent-eligible pool (slices: `tasks/todo/`;
  *   PRDs: `prd-ready/`). The trusted-fast-path landing.
  */
 export type PlacementSide = 'staging' | 'pool';
@@ -40,7 +42,7 @@ export type PlacementSide = 'staging' | 'pool';
 /**
  * The two folder names a lifecycle uses for its staging/pool split. Supplied by
  * the caller so this resolver stays lifecycle-generic (the SLICE caller passes
- * `{staging: 'pre-backlog', pool: 'backlog'}`; the PRD-placement caller passes
+ * `{staging: 'pre-backlog', pool: 'tasks/todo'}`; the PRD-placement caller passes
  * `{staging: 'prd', pool: 'prd-ready'}`).
  */
 export interface PlacementSlots {

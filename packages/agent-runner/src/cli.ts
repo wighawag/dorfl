@@ -586,13 +586,27 @@ interface CompleteFlags {
  */
 function explicitSlicesLandInFromFlag(
 	raw: string | undefined,
-): 'pre-backlog' | 'backlog' | undefined {
+	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
+): 'pre-backlog' | 'todo' | undefined {
 	if (raw === undefined) {
 		return undefined;
 	}
-	if (raw !== 'pre-backlog' && raw !== 'backlog') {
+	// The POOL value was renamed `'backlog'` → `'todo'` (slice
+	// `f1-pool-noun-todo-in-surface-and-apply-readers`). Accept the legacy
+	// `'backlog'` spelling with a one-line deprecation warning and migrate it
+	// to `'todo'` — mirrors the env / config-file shim (ignored-with-warning,
+	// never a hard error).
+	if (raw === 'backlog') {
+		warn(
+			`--slices-land-in 'backlog' is deprecated (the pool value was renamed ` +
+				`to 'todo'; \`backlog\` is the on-disk staging folder name). Treating ` +
+				`as 'todo'. Pass --slices-land-in todo to silence this warning.`,
+		);
+		return 'todo';
+	}
+	if (raw !== 'pre-backlog' && raw !== 'todo') {
 		throw new Error(
-			`--slices-land-in must be 'pre-backlog' or 'backlog' (got '${raw}').`,
+			`--slices-land-in must be 'pre-backlog' or 'todo' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -639,7 +653,7 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--slices-land-in <pre-backlog|backlog>`: the explicit operator placement override for `do prd:` slicing output (top of the placement precedence). */
+	/** `--slices-land-in <pre-backlog|todo>`: the explicit operator placement override for `do prd:` slicing output (top of the placement precedence). The pool value was renamed `'backlog'` → `'todo'` (slice `f1-pool-noun-todo-in-surface-and-apply-readers`); the legacy `'backlog'` is still accepted with a deprecation warning. */
 	slicesLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
@@ -1802,7 +1816,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--slices-land-in <where>',
-			'where `do prd:<slug>` slicing output lands: `pre-backlog` (staged, not agent-eligible) or `backlog` (the pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > slicesLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in.',
+			'where `do prd:<slug>` slicing output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > slicesLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in. The legacy pool value `backlog` is accepted with a deprecation warning and migrated to `todo`.',
 		)
 		.option(
 			'--no-pr',
@@ -2327,7 +2341,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--slices-land-in <where>',
-			'where `advance prd:<slug>` slicing output lands: `pre-backlog` (staged) or `backlog` (the pool). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in.',
+			'where `advance prd:<slug>` slicing output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in. The legacy pool value `backlog` is accepted with a deprecation warning and migrated to `todo`.',
 		)
 		.option(
 			'--watch',

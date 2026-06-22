@@ -115,7 +115,7 @@ export {
 } from './slicing-eligibility.js';
 
 export type {
-	LedgerBacklogItem,
+	LedgerTodoItem,
 	LedgerObservationItem,
 	LedgerPrdItem,
 	LedgerPrdPool,
@@ -152,8 +152,20 @@ export type {
 } from './ledger-write.js';
 export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
 
-export type {BacklogItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
-export {scan, scanRepoPaths, readBacklogItems, readDoneSlugs} from './scan.js';
+export type {
+	TodoItem,
+	BacklogItem,
+	ScannedItem,
+	RepoReport,
+	ScanReport,
+} from './scan.js';
+export {
+	scan,
+	scanRepoPaths,
+	readTodoItems,
+	readBacklogItems,
+	readDoneSlugs,
+} from './scan.js';
 
 export type {
 	SlugNamespace,

@@ -216,7 +216,7 @@ function sliceExists(
 	// local state's backlog covers the up-for-grabs case, which is what a bare
 	// `<slug>` collision check needs.
 	const state = read.resolveLocalState({repoPath});
-	return state.backlog.some((item) => item.slug === slug);
+	return state.todo.some((item) => item.slug === slug);
 }
 
 /** Does a BRIEF named `slug` exist (ready or being sliced) in this repo? */

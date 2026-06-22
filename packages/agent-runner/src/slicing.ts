@@ -258,7 +258,7 @@ export interface PerformSliceOptions {
 	 * built-in floor applies (`staging` = `pre-backlog/`, the conservative
 	 * landing that preserves zero behaviour change for the normal path).
 	 */
-	slicesLandIn?: 'pre-backlog' | 'backlog';
+	slicesLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The OPERATOR's EXPLICIT slice-placement override** (the TOP precedence
 	 * rung). When set, the runner-deterministic resolver lands the slices HERE
@@ -268,7 +268,7 @@ export interface PerformSliceOptions {
 	 * force-key"). Set ONLY when the operator typed `--slices-land-in <where>`;
 	 * never when the value came from config.
 	 */
-	explicitSlicesLandIn?: 'pre-backlog' | 'backlog';
+	explicitSlicesLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The slicer review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES PRD
 	 * `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
@@ -348,16 +348,20 @@ const SLICE_PLACEMENT_SLOTS = {
 } as const;
 
 /**
- * Map the `slicesLandIn` folder-name spelling (`pre-backlog` | `backlog`) onto
- * the resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
- * `undefined` when no value is set, so the resolver's next precedence rung
- * applies (the built-in floor).
+ * Map the `slicesLandIn` value spelling (`pre-backlog` | `todo`) onto the
+ * resolver's lifecycle-generic side enum (`staging` | `pool`). The POOL value
+ * was renamed `'backlog'` → `'todo'` (slice
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`); the legacy `'backlog'`
+ * spelling is still mapped to `'pool'` defensively so any caller that bypassed
+ * the config-migration shim (env / `loadConfig` / `loadRepoConfigFromContent`)
+ * still resolves cleanly. Returns `undefined` when no value is set, so the
+ * resolver's next precedence rung applies (the built-in floor).
  */
 function landingToSide(
-	landing: 'pre-backlog' | 'backlog' | undefined,
+	landing: 'pre-backlog' | 'todo' | 'backlog' | undefined,
 ): 'staging' | 'pool' | undefined {
 	if (landing === 'pre-backlog') return 'staging';
-	if (landing === 'backlog') return 'pool';
+	if (landing === 'todo' || landing === 'backlog') return 'pool';
 	return undefined;
 }
 

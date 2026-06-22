@@ -24,7 +24,7 @@ import type {SelectedLifecyclePools} from './select-priority.js';
  *   - MIRROR-SIDE (async, a bare hub mirror's committed `main`) \u2014
  *     {@link gatherLifecycleMirror}: reads the SAME logical inputs from the mirror's
  *     committed tree via `git show` (the sidecar) + the read seam's
- *     `resolveMirrorState` (observations + the `needsAnswers` backlog), so the
+ *     `resolveMirrorState` (observations + the `needsAnswers` pool), so the
  *     two substrates AGREE.
  *
  * Both then call the SAME {@link buildLifecyclePools} \u2014 so the in-place and
@@ -69,7 +69,7 @@ function blockedItemsInPlace(
 ): BlockedItem[] {
 	const out: BlockedItem[] = [];
 	const state = read.resolveLocalState({repoPath});
-	for (const item of state.backlog) {
+	for (const item of state.todo) {
 		if (item.needsAnswers === true) {
 			out.push({namespace: 'task', slug: item.slug});
 		}
@@ -140,7 +140,7 @@ async function readSidecarMirror(
 /**
  * Gather + build the lifecycle pools for a MIRROR-SIDE bare hub mirror (async).
  * Reads the SAME logical inputs as {@link gatherLifecycleInPlace} \u2014 observations +
- * the `needsAnswers` backlog from the mirror's committed `main` (via
+ * the `needsAnswers` pool from the mirror's committed `main` (via
  * `resolveMirrorState`), the PRD pool via `resolveMirrorPrdPool`, and each item's
  * sidecar via `git show` \u2014 then hands them to the SAME shared
  * {@link buildLifecyclePools}, so the in-place + mirror enumerations AGREE.
@@ -161,7 +161,7 @@ export async function gatherLifecycleMirror(input: {
 	const prdPool = await read.resolveMirrorPrdPool({mirrorPath, ref, env});
 
 	const blocked: BlockedItem[] = [];
-	for (const item of state.backlog) {
+	for (const item of state.todo) {
 		if (item.needsAnswers === true) {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
