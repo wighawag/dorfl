@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # work-layout-guard.test.ts flakes under full parallel `pnpm -r test`
 
 2026-06-22. During the `rename-config-keys-slicing-to-tasking` task, one full
