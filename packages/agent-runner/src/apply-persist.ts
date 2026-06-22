@@ -77,6 +77,27 @@ function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
 /** Marker that opens the applied-answers record in an item body. */
 const APPLIED_HEADING = '## Applied answers';
 
+/**
+ * The STRUCTURAL fence the templates wrap the transient open-questions block in
+ * — an HTML-comment marker pair, mirroring the existing `<!-- agent-runner-…
+ * -->` style in `sidecar.ts`. Apply's reconcile (full-resolution route only)
+ * strips everything between the OPEN and CLOSE markers (inclusive) when it folds
+ * answers in and clears `needsAnswers`, so the resolved item body reads as
+ * resolved (no leftover "these are still open" prose above `## Applied answers`).
+ *
+ * The strip is STRUCTURAL (marker-pair based), NOT a heading-text regex — the
+ * brief's D1 decision: a `## Open questions` heading match would be fragile to
+ * author wording (`## Open questions (clear needsAnswers when resolved)` vs.
+ * `## Open questions`). Items authored WITHOUT the markers are left untouched
+ * (backward compat — no marker ⇒ nothing to strip ⇒ identical bytes).
+ *
+ * The sibling slice `templates-mark-transient-open-questions-block` introduces
+ * the markers in the brief/task templates; this slice exports the constants so
+ * the two slices agree on the literal byte sequence.
+ */
+export const OPEN_QUESTIONS_MARKER_OPEN = '<!-- open-questions -->';
+export const OPEN_QUESTIONS_MARKER_CLOSE = '<!-- /open-questions -->';
+
 /** The frontmatter marker a "keep" disposition stamps (US #30). */
 const TRIAGED_KEEP = 'keep';
 
@@ -284,6 +305,48 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
 }
 
 /**
+ * Strip ALL marker-fenced open-questions blocks from an item body — the FULL
+ * RESOLUTION reconcile step (brief `apply-reconciles-stale-open-questions`,
+ * decisions D1 / D3). Removes each `<!-- open-questions -->` … `<!--
+ * /open-questions -->` pair (markers included) plus the blank lines that
+ * flanked it, so the answers in `## Applied answers` no longer sit beneath a
+ * stale "these are still open" section.
+ *
+ * Behavioural choices (recorded in the done note):
+ *   - strips EVERY well-formed marker pair, not just the first (an authoring
+ *     template may legitimately fence more than one transient block — e.g.
+ *     open-questions plus an autonomy-note — and partial strips would re-create
+ *     the same drift the reconcile exists to prevent);
+ *   - FAIL-SAFE on a malformed fence (a lone opener with no matching closer):
+ *     the regex simply doesn't match, the body is returned unchanged. A
+ *     fail-loud throw would block the apply commit on a template authoring bug;
+ *     leaving the body intact preserves the answer-application invariant and
+ *     surfaces the stale block to a human reviewer instead;
+ *   - collapses runs of 3+ newlines down to 2 after a strip, so removing a
+ *     block doesn't leave a triple-blank gap between the surrounding paragraphs.
+ *
+ * Called ONLY from the full-resolution path. The re-pause path (follow-up
+ * questions appended, `needsAnswers` stays true) NEVER calls this — the
+ * open-questions block is still legitimately open there (D3).
+ */
+function stripOpenQuestionsBlocks(body: string): string {
+	const escOpen = OPEN_QUESTIONS_MARKER_OPEN.replace(
+		/[.*+?^${}()|[\]\\]/g,
+		'\\$&',
+	);
+	const escClose = OPEN_QUESTIONS_MARKER_CLOSE.replace(
+		/[.*+?^${}()|[\]\\]/g,
+		'\\$&',
+	);
+	const re = new RegExp(
+		`\\n*[ \\t]*${escOpen}[\\s\\S]*?${escClose}[ \\t]*\\n*`,
+		'g',
+	);
+	if (!re.test(body)) return body;
+	return body.replace(re, '\n\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * Apply a FULLY-ANSWERED sidecar's answers to its item ATOMICALLY, then route to
  * the right terminal. The keystone APPLY rung the advance engine dispatches into
  * once the classifier said `apply` (all entries answered) AND the `advancing`
@@ -367,7 +430,12 @@ export function applyAnsweredQuestions(
 		picked === 'dropped' && dropTerminalFolder(itemType) === undefined
 			? 'delete'
 			: picked;
-	const resolvedBody = withAppliedAnswers(baseBody, model.entries);
+	// Full-resolution reconcile (D1): strip the now-stale marker-fenced
+	// open-questions block(s) so the resolved body reads as resolved. Backward
+	// compatible — no marker ⇒ identical bytes. The re-pause path above is
+	// deliberately untouched (D3): its open-questions block is still open.
+	const reconciledBody = stripOpenQuestionsBlocks(baseBody);
+	const resolvedBody = withAppliedAnswers(reconciledBody, model.entries);
 
 	if (terminal === 'keep') {
 		return resolveWithKeepMarker({
