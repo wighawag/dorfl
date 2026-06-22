@@ -3,7 +3,7 @@ title: review-gate non-blocking nits for 'prompt-guidance-test-first' (Gate 2 ap
 date: 2026-06-21
 status: open
 reviewOf: prompt-guidance-test-first
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## Non-blocking review findings
@@ -18,3 +18,8 @@ is their durable home for triage — promote-to-slice / keep / delete.
   (Keystone slice §2 of 'End-to-end behaviour' hedges the env-var spelling; downstream tests will need a concrete name.)
 - The item-override slice asserts a per-task > per-brief > repo precedence; the brief states the override shape but does not explicitly rank task vs brief — is this ordering already implied by how humanOnly/autoBuild compose, or is the slicer making a fresh design call that deserves an ADR?
   (prompt-guidance-testfirst-item-override.md §3 introduces the three-tier precedence; brief 'Implementation Decisions' bullet 3 says 'per-item override' without ranking task vs brief explicitly.)
+
+## Triaged: promoted
+
+Promoted to a new backlog slice `work/tasks/todo/review-nits-prompt-guidance-test-first-2026-06-21.md` (a human answered
+"promote"). This observation is resolved; the new item carries the work.
