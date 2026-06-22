@@ -128,7 +128,7 @@ export function parseSurfaceEmit(output: string): SurfaceEmit {
 }
 
 const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
-	'promote-slice',
+	'promote-task',
 	'promote-adr',
 	'keep',
 	'delete',
@@ -236,7 +236,7 @@ export function buildSurfacePrompt(item: string): string {
 		`   {"question": "…",`,
 		`    "context": "…",`,
 		`    "default": "… (optional; omit if none)",`,
-		`    "disposition": "promote-slice|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
+		`    "disposition": "promote-task|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
 		` ]}`,
 		`Each question carries inline \`context\` so the human need not open the item,`,
 		`and an OPTIONAL suggested \`default\`. \`disposition\` is present ONLY on a`,

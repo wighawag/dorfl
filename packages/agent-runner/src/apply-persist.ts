@@ -234,7 +234,7 @@ const TERMINAL_PRECEDENCE: SidecarDisposition[] = [
 
 /**
  * Pick the SINGLE terminal disposition to execute from the answered entries (the
- * most-decisive present), or `undefined` for a plain resolve. `promote-slice` /
+ * most-decisive present), or `undefined` for a plain resolve. `promote-task` /
  * `promote-adr` are NOT terminals HERE — they are the triage rung's new-item
  * creation (slice `advance-rung-triage` consumes the CAS-create helper); the apply
  * rung treats a promote as a plain resolve of THIS item (the promotion is a

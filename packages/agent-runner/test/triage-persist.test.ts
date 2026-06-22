@@ -136,7 +136,7 @@ function seedAnsweredPromote(repo: string, slug: string): string {
 		].join('\n'),
 	);
 	let model: SidecarModel = newSidecar(`observation:${slug}`, [
-		{question: 'Promote?', disposition: 'promote-slice'},
+		{question: 'Promote?', disposition: 'promote-task'},
 	]);
 	model = {
 		...model,
