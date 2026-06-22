@@ -68,7 +68,7 @@ describe('SURFACE-PROTOCOL.md \u2014 the new in-band surface-questions disciplin
 		expect(doc).toMatch(/\bdefault\b/);
 		expect(doc).toMatch(/\bdisposition\b/);
 		// The disposition vocabulary (the live sidecar values, verbatim).
-		expect(doc).toMatch(/promote-slice/);
+		expect(doc).toMatch(/promote-task/);
 		expect(doc).toMatch(/promote-adr/);
 		expect(doc).toMatch(/needs-attention/);
 		expect(doc).toMatch(/dropped/);

@@ -44,7 +44,7 @@ Emit a single JSON object of this exact shape (no prose OUTSIDE it):
 			"question": "…",
 			"context": "…",
 			"default": "… (optional; omit if none)",
-			"disposition": "promote-slice|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"
+			"disposition": "promote-task|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"
 		}
 	]
 }
@@ -55,7 +55,7 @@ Emit a single JSON object of this exact shape (no prose OUTSIDE it):
   - **`question`** — REQUIRED, the question verbatim. An all-whitespace question is dropped as a placeholder.
   - **`context`** — OPTIONAL, inline context so the human need not open the item (the relevant excerpt / `file:line` / reasoning).
   - **`default`** — OPTIONAL, the suggested default — the humility aid; omit when you cannot honestly suggest one (never fabricate a default just to fill the field).
-  - **`disposition`** — OPTIONAL, present ONLY on a triage / terminal-routing question (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's (these are the live code constants the engine parses — carry them VERBATIM so the engine needs zero translation): **`promote-slice` | `promote-adr` | `keep` | `delete` | `dropped` | `needs-attention`**. `dropped` is the GENERIC "won't-proceed" terminal (the runner routes a dropped item to its regime's terminal — `tasks/cancelled/` for a task, `briefs/dropped/` for a brief; the specific REASON — `out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned` — lives in the item body as `reason:`, NOT in the disposition). A plain task/brief answer-question carries NO `disposition`. An unrecognised disposition is dropped by the parser.
+  - **`disposition`** — OPTIONAL, present ONLY on a triage / terminal-routing question (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's (these are the live code constants the engine parses — carry them VERBATIM so the engine needs zero translation): **`promote-task` | `promote-adr` | `keep` | `delete` | `dropped` | `needs-attention`**. `dropped` is the GENERIC "won't-proceed" terminal (the runner routes a dropped item to its regime's terminal — `tasks/cancelled/` for a task, `briefs/dropped/` for a brief; the specific REASON — `out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned` — lives in the item body as `reason:`, NOT in the disposition). A plain task/brief answer-question carries NO `disposition`. An unrecognised disposition is dropped by the parser.
 
 You do NOT assign ids, `answered:`, `answer:`, or `allAnswered`. Those are the SIDECAR's machine-owned fields — the engine assigns the stable monotonic id (`q1`, `q2`, …), the human fills `answer:`, and the serialiser derives `answered:`/`allAnswered`. You emit only the four authoring fields above; the engine owns the rest. (This is precisely why you must not write the sidecar: you do not own its machine fields.)
 
