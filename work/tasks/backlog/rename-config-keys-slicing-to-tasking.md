@@ -2,7 +2,7 @@
 title: Rename config keys (slicingIntegration/slicesLandIn/prdsLandIn/autoSlice/intake {slice,prd}) to tasking vocabulary
 slug: rename-config-keys-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
-blockedBy: [rename-lock-cli-namespace-tokens-prd-slice-to-brief-task]
+blockedBy: []
 covers: []
 ---
 
@@ -36,7 +36,7 @@ Update the config parser/resolver, every reader, the env-var layer if any siblin
 
 ## Blocked by
 
-- `rename-lock-cli-namespace-tokens-prd-slice-to-brief-task` — shares `cli.ts`/config-resolution surface; serialize to avoid merge conflicts.
+- None. (Originally `blockedBy: [rename-lock-cli-namespace-tokens-prd-slice-to-brief-task]` to serialize the shared `cli.ts`/config-resolution surface, but that task was CANCELLED as superseded by PR #179 on 2026-06-22 — its token cutover already landed — so this is now startable. See the cancelled task's body.)
 
 ## Prompt
 

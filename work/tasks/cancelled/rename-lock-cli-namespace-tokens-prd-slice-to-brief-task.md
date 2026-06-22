@@ -4,7 +4,23 @@ slug: rename-lock-cli-namespace-tokens-prd-slice-to-brief-task
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []
 covers: []
+reason: superseded
 ---
+
+> **CANCELLED / SUPERSEDED 2026-06-22 (decided conductor + human, during the `drive-tasks` backlog drive).**
+> This task's load-bearing premise — that the per-item-lock + CLI/advance namespace TOKENS still
+> spell `prd:`/`slice:` and must be cut over to `brief:`/`task:` — was already STALE at decomposition
+> time. The token cutover landed in PR #179 (`slice-task-prd-brief-vocabulary-hard-cutover`, merged
+> 2026-06-19), BEFORE this task was decomposed from the brief on 2026-06-22. Live code already
+> constructs/parses ONLY the new tokens at every seam this task named: `slug-namespace.ts`
+> (`TASK_PREFIX='task:'`/`BRIEF_PREFIX='brief:'`, old prefixes gone), `item-lock.ts`/`sidecar.ts`
+> (lock entry = `task-<slug>`/`brief-<slug>`), the advance arg resolver (bare/`task:`/`brief:`/`obs:`),
+> and the CI emitters (they emit `task:`/`brief:`/`obs:` legs). No `slice:`/`prd:` token literal remains
+> in live code. The 3rd criterion (document the one-shot orphan-lock sweep) needs NO code: `release-lock`
+> / `gc --ledger` already name lock refs by raw ref string, so they can clear an old-token (`slice-`/`prd-`)
+> ref already (6 such orphaned `slice-*` locks were observed lingering on the local hub mirror at drive time
+> — harmless, and clearable with the existing `release-lock`). The dependent `rename-config-keys-slicing-to-tasking`
+> had its `blockedBy` updated to drop this slug, since this task's substance is already on `main`.
 
 ## What to build
 
