@@ -699,9 +699,18 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 			appendQuestions: context.applyFollowups,
 			note,
 		});
+		// Map the apply persist's outcome to the rung's outcome. `vanished` is the
+		// F3a clean-exit case (item was gone between capture and write, e.g. a
+		// concurrent promote); benign skip, exitCode 0, distinct from `no-op`.
+		const mapped: AdvanceOutcome =
+			result.outcome === 'repaused'
+				? 'no-op'
+				: result.outcome === 'vanished'
+					? 'vanished'
+					: 'advanced';
 		return {
 			exitCode: 0,
-			outcome: result.outcome === 'repaused' ? 'no-op' : 'advanced',
+			outcome: mapped,
 			message: result.message,
 		};
 	} catch (err) {
