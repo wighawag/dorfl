@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was noticed
