@@ -392,9 +392,9 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
  * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). The CI
  * propose-matrix `jq` reads `repos[].prds[]` + `cwd.repo.prds[]` and unions them
  * with the slice legs; before this slice landed, the pool was invisible there
- * and `AGENT_RUNNER_AUTO_SLICE` was dead on the hourly cron. The eligibility
+ * and `AGENT_RUNNER_AUTO_TASK` was dead on the hourly cron. The eligibility
  * predicate REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate the
- * autopick paths run) — a config-less repo with `autoSlice` off yields an
+ * autopick paths run) — a config-less repo with `autoTask` off yields an
  * all-`eligible:false` pool (no `prd:` legs).
  */
 function writePrd(
@@ -414,11 +414,11 @@ function writePrd(
 }
 
 describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
-	it('a ready ungated PRD appears as sliceable when autoSlice is on (no per-repo config)', () => {
+	it('a ready ungated PRD appears as sliceable when autoTask is on (no per-repo config)', () => {
 		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
-			mergeConfig({autoSlice: true}),
+			mergeConfig({autoTask: true}),
 		);
 		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
 		expect(prd).toBeDefined();
@@ -432,7 +432,7 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 		writePrd('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
-			mergeConfig({autoSlice: true}),
+			mergeConfig({autoTask: true}),
 		);
 		const byslug = new Map(report.repos[0].prds.map((p) => [p.slug, p]));
 		expect(byslug.get('ready')!.eligibility.eligible).toBe(true);
@@ -441,25 +441,25 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 		expect(byslug.get('after')!.eligibility.eligible).toBe(false);
 	});
 
-	it('an autoSlice:false repo yields no SLICEABLE PRD legs (the gate still binds)', () => {
+	it('an autoTask:false repo yields no SLICEABLE PRD legs (the gate still binds)', () => {
 		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
-			mergeConfig({autoSlice: false}),
+			mergeConfig({autoTask: false}),
 		);
 		const ready = report.repos[0].prds.find((p) => p.slug === 'ready')!;
 		expect(ready.eligibility.eligible).toBe(false);
 	});
 
-	it('honours the per-repo `.agent-runner.json` autoSlice override (off globally, on per-repo)', () => {
+	it('honours the per-repo `.agent-runner.json` autoTask override (off globally, on per-repo)', () => {
 		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		writeFileSync(
 			join(root, 'repo', '.agent-runner.json'),
-			JSON.stringify({autoSlice: true}),
+			JSON.stringify({autoTask: true}),
 		);
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
-			mergeConfig({autoSlice: false}),
+			mergeConfig({autoTask: false}),
 		);
 		expect(
 			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
@@ -472,7 +472,7 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 		writePrd('repo', 'prd-sliced', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
-			mergeConfig({autoSlice: true}),
+			mergeConfig({autoTask: true}),
 		);
 		expect(
 			report.repos[0].prds.find((p) => p.slug === 'after')!.eligibility
@@ -488,7 +488,7 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 			writePrd('repo', 'prd', 'cut.md', {slug: 'cut'});
 			const report = scanRepoPaths(
 				[join(root, 'repo')],
-				mergeConfig({autoBuild: true, autoSlice: true}),
+				mergeConfig({autoBuild: true, autoTask: true}),
 			);
 			const slice = report.repos[0].items.find((i) => i.slug === 'go')!;
 			const prd = report.repos[0].prds.find((p) => p.slug === 'cut')!;
@@ -499,19 +499,19 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 });
 
 describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
-	it('reports a ready ungated PRD as sliceable from the bare mirror main (autoSlice on)', async () => {
+	it('reports a ready ungated PRD as sliceable from the bare mirror main (autoTask on)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 		});
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), autoSlice: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
 		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
 		expect(prd).toBeDefined();
 		expect(prd!.eligibility.eligible).toBe(true);
 	});
 
-	it('a humanOnly / needsAnswers / autoSlice:false PRD is NOT sliceable (gate still binds)', async () => {
+	it('a humanOnly / needsAnswers / autoTask:false PRD is NOT sliceable (gate still binds)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			prd: {
 				'ready.md': `---\nslug: ready\n---\n# PRD`,
@@ -519,16 +519,16 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 				'asks.md': `---\nslug: asks\nneedsAnswers: true\n---\n# PRD`,
 			},
 		});
-		// autoSlice OFF globally + no committed per-repo override ⇒ NO sliceable PRDs.
+		// autoTask OFF globally + no committed per-repo override ⇒ NO sliceable PRDs.
 		const offReport = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), autoSlice: false}),
+			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
 			offReport.repos[0].prds.every((p) => p.eligibility.eligible === false),
 		).toBe(true);
-		// autoSlice ON ⇒ only `ready` is sliceable; the gated PRDs are NOT.
+		// autoTask ON ⇒ only `ready` is sliceable; the gated PRDs are NOT.
 		const onReport = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), autoSlice: true}),
+			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
 		const by = new Map(onReport.repos[0].prds.map((p) => [p.slug, p]));
 		expect(by.get('ready')!.eligibility.eligible).toBe(true);
@@ -536,14 +536,14 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 		expect(by.get('asks')!.eligibility.eligible).toBe(false);
 	});
 
-	it('honours the COMMITTED per-repo `.agent-runner.json` autoSlice override on the mirror', async () => {
+	it('honours the COMMITTED per-repo `.agent-runner.json` autoTask override on the mirror', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
-			repoConfig: {autoSlice: true},
+			repoConfig: {autoTask: true},
 		});
 		// Global is OFF, but the mirror's committed file opts in ⇒ sliceable.
 		const report = await scan(
-			mergeConfig({workspacesDir: workspacesDir(), autoSlice: false}),
+			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
 			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
@@ -560,7 +560,7 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 			mergeConfig({
 				workspacesDir: workspacesDir(),
 				autoBuild: true,
-				autoSlice: true,
+				autoTask: true,
 			}),
 		);
 		expect(

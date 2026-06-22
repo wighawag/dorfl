@@ -112,7 +112,7 @@ function seedSidecar(
 }
 
 function cfg(over: Partial<Config> = {}): Config {
-	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
+	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
 describe('surfaceStaging defaults to true (Config + gate-family contract)', () => {

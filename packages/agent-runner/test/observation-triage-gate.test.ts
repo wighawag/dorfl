@@ -119,7 +119,7 @@ describe('observationTriage — the SELECTION-layer gate over the observation po
 	}
 
 	function cfg(over: Partial<Config> = {}): Config {
-		return mergeConfig({autoBuild: true, autoSlice: true, ...over});
+		return mergeConfig({autoBuild: true, autoTask: true, ...over});
 	}
 
 	it('off ⇒ the observation pool is NOT enumerated (a bare advance picks NOTHING)', async () => {
@@ -420,7 +420,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 			run,
 			config: mergeConfig({
 				autoBuild: true,
-				autoSlice: true,
+				autoTask: true,
 				observationTriage: 'off',
 			}),
 			// observationTriage off ⇒ triage pool dropped; apply is NOT gated.

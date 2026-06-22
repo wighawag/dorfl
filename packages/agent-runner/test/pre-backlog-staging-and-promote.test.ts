@@ -146,7 +146,7 @@ describe('STEP A — slicer output lands STAGED in pre-backlog/, not backlog/', 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: stagingAgent('child'),
 			env: gitEnv(),
@@ -169,7 +169,7 @@ describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (reade
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: stagingAgent('staged-only'),
 			env: gitEnv(),
@@ -209,7 +209,7 @@ describe('STEP A — the runner-owned promotion makes a staged slice claimable',
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: stagingAgent('to-promote'),
 			env: gitEnv(),
@@ -270,7 +270,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: selfPlacingAgent('legit', 'hijack'),
 			env: gitEnv(),
@@ -311,7 +311,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: tamperingAgent,
 			env: gitEnv(),
@@ -329,10 +329,10 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 /**
  * THE CLI WIRE (the Gate-2 block this slice was bounced for, now closed). The
  * resolver + the `performSlice` options + the per-repo/env config keys all worked
- * in isolation, but `config.slicesLandIn` and the `--slices-land-in` flag were
+ * in isolation, but `config.tasksLandIn` and the `--slices-land-in` flag were
  * NEVER threaded from `cli.ts` into the `DoOptions` the `do prd:` path builds, so
  * the configured-default + explicit-flag rungs were dead from the shipped binary
- * (a user setting `slicesLandIn: 'backlog'` saw the built-in `pre-backlog` floor).
+ * (a user setting `tasksLandIn: 'todo'` saw the built-in `pre-backlog` floor).
  * These tests drive the REAL `buildProgram()` `do prd:` path end-to-end on a
  * `--bare file://` arbiter, with the slicer STUBBED by a trivial `agentCmd` bash
  * command (the null harness shells `bash -c <agentCmd>` in the worktree), and
@@ -347,7 +347,7 @@ const STUB_SLICER_AGENT_CMD =
 	"'slug: child' 'brief: it' '---' '' '## Prompt' '' '> build it' " +
 	'> work/tasks/backlog/child.md';
 
-/** Write a per-repo `.agent-runner.json` (the `slicesLandIn` default under test) + push it. */
+/** Write a per-repo `.agent-runner.json` (the `tasksLandIn` default under test) + push it. */
 function writeRepoConfig(repo: string, config: Record<string, unknown>): void {
 	writeFileSync(
 		join(repo, '.agent-runner.json'),
@@ -419,12 +419,12 @@ async function runDo(
 	return {captured, code};
 }
 
-describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slicer (the wire)', () => {
-	it('a per-repo `slicesLandIn: backlog` reaches performSlice via `do prd:` (slice lands in the POOL, not pre-backlog/)', async () => {
+describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the slicer (the wire)', () => {
+	it('a per-repo `tasksLandIn: todo` reaches performSlice via `do prd:` (slice lands in the POOL, not pre-backlog/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		// The key under test: a per-repo configured default of `backlog` (the pool).
-		writeRepoConfig(repo, {autoSlice: true, slicesLandIn: 'backlog'});
+		// The key under test: a per-repo configured default of `todo` (the pool).
+		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
 		const {code, captured} = await runDo(repo, [
 			'brief:it',
 			'--arbiter',
@@ -438,11 +438,11 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('the built-in floor still STAGES when no slicesLandIn is configured (control: proves the case above is the config, not a default)', async () => {
+	it('the built-in floor still STAGES when no tasksLandIn is configured (control: proves the case above is the config, not a default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		// No slicesLandIn — the resolver's built-in floor stages.
-		writeRepoConfig(repo, {autoSlice: true});
+		// No tasksLandIn — the resolver's built-in floor stages.
+		writeRepoConfig(repo, {autoTask: true});
 		const {code, captured} = await runDo(repo, [
 			'brief:it',
 			'--arbiter',
@@ -455,10 +455,10 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});
 
-	it('the explicit `--slices-land-in pre-backlog` flag OVERRIDES a `slicesLandIn: backlog` config (operator flag wins)', async () => {
+	it('the explicit `--slices-land-in pre-backlog` flag OVERRIDES a `tasksLandIn: todo` config (operator flag wins)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		writeRepoConfig(repo, {autoSlice: true, slicesLandIn: 'backlog'});
+		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
 		const {code, captured} = await runDo(repo, [
 			'brief:it',
 			'--arbiter',
@@ -469,7 +469,7 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 			'pre-backlog',
 		]);
 		expect(code, captured).toBe(0);
-		// The flag beat the config: STAGED despite `slicesLandIn: backlog`.
+		// The flag beat the config: STAGED despite `tasksLandIn: todo`.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});
@@ -477,8 +477,8 @@ describe('STEP 2 — the CLI threads slicesLandIn from config/flag into the slic
 	it('`--slices-land-in <bad>` FAILS LOUDLY (a usage error, never a silent drop)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		writeRepoConfig(repo, {autoSlice: true});
-		// `explicitSlicesLandInFromFlag` throws on a bad value; the action surfaces it
+		writeRepoConfig(repo, {autoTask: true});
+		// `explicitTasksLandInFromFlag` throws on a bad value; the action surfaces it
 		// as a fatal usage error (a non-zero exit / thrown error), never a silent
 		// fall-through to the built-in floor. Assert the run did NOT succeed and
 		// nothing was sliced.

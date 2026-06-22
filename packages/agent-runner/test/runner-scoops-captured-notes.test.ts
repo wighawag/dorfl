@@ -267,7 +267,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgentWithNote(
 				'work/notes/observations/slicer-spotted-drift.md',
@@ -301,7 +301,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'propose',
 			agentRunner: slicingAgentWithNote(
 				'work/notes/findings/slicer-external-fact.md',
@@ -338,7 +338,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgentWithNote(undefined),
 			env: gitEnv(),

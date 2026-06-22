@@ -182,8 +182,8 @@ on:
           - ''
           - 'true'
           - 'false'
-      autoSlice:
-        description: 'One-shot override of the autoSlice gate (AGENT_RUNNER_AUTO_SLICE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+      autoTask:
+        description: 'One-shot override of the autoTask gate (AGENT_RUNNER_AUTO_TASK) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -241,17 +241,17 @@ env:
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
   # > default. The SAME .agent-runner.json the laptop uses applies here. This
-  # workflow emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_SLICE /
+  # workflow emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_TASK /
   # AGENT_RUNNER_OBSERVATION_TRIAGE / AGENT_RUNNER_SURFACE_BLOCKERS line on a
   # SCHEDULE/PUSH tick, so the env layer carries NO defaults there — your committed
   # .agent-runner.json wins (then the global config, then the strict built-in
-  # defaults autoBuild:false / autoSlice:false / observationTriage:'off' /
+  # defaults autoBuild:false / autoTask:false / observationTriage:'off' /
   # surfaceBlockers:false). The ONE exception is a manual \`workflow_dispatch\` where
   # you fill a gate override input (above): the per-job step then exports that ONE
   # AGENT_RUNNER_* for that run only (blank input ⇒ still nothing). The override
   # MUST be wired into every job that resolves the gate family — including the
   # \`enumerate\` scan (it gates the matrix pools via observationTriage/surfaceBlockers
-  # /autoSlice/autoBuild), not just the agent-running jobs — or the override is inert
+  # /autoTask/autoBuild), not just the agent-running jobs — or the override is inert
   # for the very pools it targets. To enable CI autonomy durably, set the gate(s) in
   # .agent-runner.json (applies everywhere) — NOT by re-running install-ci (ADR §6:
   # install-ci is one-time).
@@ -285,7 +285,7 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
       - name: apply dispatch gate overrides (one-shot, this run only)
         # MUST run BEFORE \`scan\`: scan's matrix pools are gated by the SAME engine
-        # gate family (autoSlice/autoBuild + lifecycle observationTriage/
+        # gate family (autoTask/autoBuild + lifecycle observationTriage/
         # surfaceBlockers), so an override that does not reach this job produces an
         # empty matrix and is silently inert. \`if:\` + the inner \`[ -n ... ]\` guard
         # keep schedule/push (and a blank dispatch field) exporting NOTHING — an
@@ -293,7 +293,7 @@ jobs:
         if: \${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=\${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "\${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=\${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
@@ -302,7 +302,7 @@ jobs:
         # uses explicit \`slice:\` / \`prd:\` / \`obs:\` prefixes, never bare (ADR
         # command-surface §3a). Eligible TASKS ⇒ \`task:<slug>\` legs (\`advance\`
         # builds them); SLICEABLE BRIEFS ⇒ \`brief:<slug>\` legs (\`advance\` auto-slices
-        # them, capability B — \`AGENT_RUNNER_AUTO_SLICE\` above). LIFECYCLE pools:
+        # them, capability B — \`AGENT_RUNNER_AUTO_TASK\` above). LIFECYCLE pools:
         # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here;
         # observations have no slice/prd namespace), \`lifecycle.surface[]\` +
         # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`slice:\`/\`prd:\` legs
@@ -346,7 +346,7 @@ jobs:
         if: \${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=\${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "\${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=\${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
@@ -392,7 +392,7 @@ jobs:
         if: \${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=\${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "\${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=\${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
@@ -562,9 +562,9 @@ export function validateAdvanceLifecycleWorkflow(
 		operative,
 	), 'the workflow must NOT emit an `AGENT_RUNNER_AUTO_BUILD:` env assignment ' +
 		'(env carries no defaults; the gate is resolved from per-repo config / built-in default).');
-	require('no-gate-env-auto-slice', !/AGENT_RUNNER_AUTO_SLICE\s*:/.test(
+	require('no-gate-env-auto-task', !/AGENT_RUNNER_AUTO_TASK\s*:/.test(
 		operative,
-	), 'the workflow must NOT emit an `AGENT_RUNNER_AUTO_SLICE:` env assignment ' +
+	), 'the workflow must NOT emit an `AGENT_RUNNER_AUTO_TASK:` env assignment ' +
 		'(env carries no defaults; the gate is resolved from per-repo config / built-in default).');
 	require('no-gate-env-observation-triage', !/AGENT_RUNNER_OBSERVATION_TRIAGE\s*:/.test(
 		operative,
@@ -580,11 +580,11 @@ export function validateAdvanceLifecycleWorkflow(
 	// `no-gate-env-*` invariants above still hold) into EVERY job that resolves the
 	// gate family: `enumerate` (it gates the matrix pools via `scan`), plus the two
 	// agent-running jobs. The enumerate wiring is the load-bearing one: without it a
-	// dispatch override of `observationTriage`/`surfaceBlockers`/`autoSlice` produces
+	// dispatch override of `observationTriage`/`surfaceBlockers`/`autoTask` produces
 	// an empty matrix and is silently inert (the bug this slice's review caught).
 	for (const input of [
 		'autoBuild',
-		'autoSlice',
+		'autoTask',
 		'observationTriage',
 		'surfaceBlockers',
 	]) {
@@ -596,7 +596,7 @@ export function validateAdvanceLifecycleWorkflow(
 	}
 	for (const [input, envVar] of [
 		['autoBuild', 'AGENT_RUNNER_AUTO_BUILD'],
-		['autoSlice', 'AGENT_RUNNER_AUTO_SLICE'],
+		['autoTask', 'AGENT_RUNNER_AUTO_TASK'],
 		['observationTriage', 'AGENT_RUNNER_OBSERVATION_TRIAGE'],
 		['surfaceBlockers', 'AGENT_RUNNER_SURFACE_BLOCKERS'],
 	] as const) {
@@ -680,7 +680,7 @@ export function validateAdvanceLifecycleWorkflow(
 
 	// --- The propose `enumerate` matrix must UNION sliceable BRIEFS --------------
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
-	// task-only `jq` would render `AGENT_RUNNER_AUTO_SLICE: 'true'` dead on the
+	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK: 'true'` dead on the
 	// hourly cron — a ready ungated BRIEF would never become a matrix leg. The `jq`
 	// must enumerate `brief:<slug>` ids from `scan --json`'s sliceable-BRIEF pool
 	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-task legs.

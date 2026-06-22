@@ -36,7 +36,7 @@ import type {
  *   (a) an `intake`-authored PRD lands STAGED in `work/briefs/proposed/`, NOT in
  *       `work/briefs/ready/`, by default (the built-in floor) AND under
  *       `originTrust: untrusted` (the untrusted-origin force) even when the
- *       repo configures `prdsLandIn: 'prd'`;
+ *       repo configures `briefsLandIn: 'ready'`;
  *   (b) `work/briefs/ready/` STILL means the auto-slice POOL: the pool reader
  *       (`createLocalLedgerReadStrategy().resolvePrdPool`) reads `work/briefs/ready/`
  *       byte-for-byte unchanged and a staged PRD is NOT in the pool; the
@@ -184,7 +184,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 		);
 	});
 
-	it('originTrust: untrusted FORCES staging even when prdsLandIn: prd (the untrusted-origin force)', async () => {
+	it('originTrust: untrusted FORCES staging even when briefsLandIn: ready (the untrusted-origin force)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 7,
@@ -194,7 +194,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			decide: async () => PRD_VERDICT,
 			// The repo says "land PRDs in the pool" \u2014 but the trust signal
 			// overrides it (PRD US #12).
-			prdsLandIn: 'prd',
+			briefsLandIn: 'ready',
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
@@ -214,14 +214,14 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			// override beats it (mirrors `explicitMerge` overriding the
 			// untrusted-origin build-propose rule).
 			originTrust: 'untrusted',
-			explicitPrdsLandIn: 'prd',
+			explicitBriefsLandIn: 'ready',
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('prd');
 		expect(result.emitted).toBe('work/briefs/ready/shiny-new-vision.md');
 	});
 
-	it('prdsLandIn: prd (configured default, trusted origin) lands the PRD in the pool', async () => {
+	it('briefsLandIn: ready (configured default, trusted origin) lands the PRD in the pool', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 9,
@@ -229,7 +229,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 9}}),
 			decide: async () => PRD_VERDICT,
-			prdsLandIn: 'prd',
+			briefsLandIn: 'ready',
 			originTrust: 'trusted',
 			env: gitEnv(),
 		});
@@ -262,7 +262,7 @@ describe('STEP A (PRD) \u2014 work/briefs/ready/ STILL means the auto-slice POOL
 		const eligibility = resolveSlicingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: [],
 			slicedSlugs: new Set(),
 		});
@@ -412,7 +412,7 @@ describe('STEP A (PRD) \u2014 briefAfter (prd-sliced/) and blockedBy (done/) res
 		const okIfPriorSliced = resolveSlicingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: ['already-sliced'],
 			slicedSlugs: pool.slicedSlugs,
 		});
@@ -424,7 +424,7 @@ describe('STEP A (PRD) \u2014 briefAfter (prd-sliced/) and blockedBy (done/) res
 		const blockedByStaged = resolveSlicingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
-			autoSlice: true,
+			autoTask: true,
 			briefAfter: ['staged-not-sliced'],
 			slicedSlugs: pool.slicedSlugs,
 		});

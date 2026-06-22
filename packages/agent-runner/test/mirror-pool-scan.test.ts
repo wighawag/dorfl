@@ -87,7 +87,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 
 		const result = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoTask: true}),
 			env: gitEnv(),
 		});
 
@@ -100,7 +100,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		expect(result.prds.map((p) => p.slug).sort()).toEqual(['sliceme']);
 	});
 
-	it('honours the GATES: autoBuild off ⇒ no eligible slice; autoSlice off ⇒ no sliceable PRD', async () => {
+	it('honours the GATES: autoBuild off ⇒ no eligible slice; autoTask off ⇒ no sliceable PRD', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': slice({slug: 'ready'})},
 			prd: {'sliceme.md': prd({slug: 'sliceme'})},
@@ -108,7 +108,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 
 		const strict = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: false, autoSlice: false}),
+			config: mergeConfig({autoBuild: false, autoTask: false}),
 			env: gitEnv(),
 		});
 		expect(strict.eligibleSlices).toEqual([]);
@@ -116,7 +116,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 
 		const permissive = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: true, autoSlice: true}),
+			config: mergeConfig({autoBuild: true, autoTask: true}),
 			env: gitEnv(),
 		});
 		expect(permissive.eligibleSlices.map((s) => s.slug)).toEqual(['ready']);
@@ -130,12 +130,12 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': slice({slug: 'ready'})},
 			prd: {'sliceme.md': prd({slug: 'sliceme'})},
-			repoConfig: {autoBuild: true, autoSlice: true},
+			repoConfig: {autoBuild: true, autoTask: true},
 		});
 
 		const result = await scanMirrorPool({
 			mirrorPath,
-			config: mergeConfig({autoBuild: false, autoSlice: false}),
+			config: mergeConfig({autoBuild: false, autoTask: false}),
 			env: gitEnv(),
 		});
 		expect(result.eligibleSlices.map((s) => s.slug)).toEqual(['ready']);
@@ -147,7 +147,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
 			prd: {'after.md': prd({slug: 'after', briefAfter: '[alpha]'})},
 		});
-		const cfg = mergeConfig({autoBuild: true, autoSlice: true});
+		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
 		// a not done, alpha not sliced ⇒ neither eligible.
 		const before = await scanMirrorPool({
@@ -195,7 +195,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			},
 			prdSliced: {'alpha.md': prd({slug: 'alpha'})},
 		};
-		const cfg = mergeConfig({autoBuild: true, autoSlice: true});
+		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
 		// MIRROR side (bare ref).
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', mixed);
@@ -239,7 +239,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			slicedSlugs: (
 				await import('../src/ledger-read.js')
 			).ledgerRead.resolvePrdPool({repoPath: checkout}).slicedSlugs,
-			autoSlice: cfg.autoSlice,
+			autoTask: cfg.autoTask,
 		});
 
 		// PARITY: the eligible slice slugs + sliceable PRD slugs match exactly.
@@ -264,7 +264,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 			},
 			prd: {'gamma.md': prd({slug: 'gamma'})},
 		});
-		const cfg = mergeConfig({autoBuild: true, autoSlice: true});
+		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 		const pool = await scanMirrorPool({mirrorPath, config: cfg, env: gitEnv()});
 
 		// Build the PRD candidate list the SAME way do-autopick does, from the pool the

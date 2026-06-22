@@ -24,7 +24,7 @@ import type {Config} from './config.js';
  * parallelism over a remote pool is `run`'s concurrent loop or the CI matrix,
  * NEVER `-n`. The per-action gate family is honoured by the SELECTION layer: the
  * mirror scan only enumerates eligible slices (gated on `autoBuild`) + sliceable
- * PRDs (gated on `autoSlice`), so with a gate off that pool is empty.
+ * PRDs (gated on `autoTask`), so with a gate off that pool is empty.
  *
  * Each `performDoRemote` call idempotently `ensureMirror`s + re-fetches the SAME
  * bare mirror (no re-clone), so looping it per item is cheap; the mirror scan
@@ -39,7 +39,7 @@ type SharedRemoteOptions = Omit<DoRemoteOptions, 'arg'>;
 
 export interface PerformDoRemoteAutoOptions extends SharedRemoteOptions {
 	/**
-	 * The resolved (remote) repo config — provides `autoBuild`/`autoSlice` (the
+	 * The resolved (remote) repo config — provides `autoBuild`/`autoTask` (the
 	 * mirror scan applies them) and `selectionOrder` (the cross-pool order). The
 	 * per-action gates are applied at the SELECTION layer, exactly as in-place.
 	 */
@@ -97,7 +97,7 @@ export async function performDoRemoteAuto(
 
 	// Scan the mirror's committed `main` for the SAME two pools the in-place scan
 	// enumerates (eligible slices gated on `autoBuild`, sliceable PRDs gated on
-	// `autoSlice`), through the EXACT in-place predicates.
+	// `autoTask`), through the EXACT in-place predicates.
 	const scan = await scanMirrorPool({
 		mirrorPath: mirror.path,
 		config: options.config,

@@ -9,7 +9,7 @@ import {
 } from './integration-core.js';
 import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
-import type {IntegrationMode, PrdsLandIn} from './config.js';
+import type {IntegrationMode, BriefsLandIn} from './config.js';
 import type {OriginTrust} from './frontmatter.js';
 import {
 	placementFolder,
@@ -50,7 +50,7 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  * **`intake <N>`** (PRD `issue-intake`, slice `intake-tracer-slice-outcome`): the
  * KEYSTONE of the issue front-door. A new, GATE-FREE command — explicit invocation
  * IS the authorization (precedent: `explicit-do-prd-not-gated-by-autoslice`), so
- * `autoSlice`/`autoBuild` config does NOT apply — that reads a GitHub issue + its
+ * `autoTask`/`autoBuild` config does NOT apply — that reads a GitHub issue + its
  * thread through the {@link IssueProvider} seam, runs the decision as a
  * **prompt → VERDICT**, and DISPATCHES on the verdict.
  *
@@ -247,8 +247,8 @@ export interface PerformIntakeOptions {
 	/**
 	 * The PER-OUTCOME integration modes (PRD US #9) the emitted artifact integrates
 	 * THROUGH the shared core with. Because `intake` decides the artifact TYPE at
-	 * RUNTIME, the mode is keyed per type: an emitted slice integrates with
-	 * `integration.slice`, an emitted PRD with `integration.prd` (`propose` =
+	 * RUNTIME, the mode is keyed per type: an emitted task integrates with
+	 * `integration.task`, an emitted brief with `integration.brief` (`propose` =
 	 * push the `work/<slug>` branch + open a PR, NO `main` touch; `merge` = land on
 	 * `main`). The CLI resolves this from the granular + aggregate flags via
 	 * {@link resolveIntakeIntegrationModes}; ask/bounce emit nothing, so the modes
@@ -277,29 +277,29 @@ export interface PerformIntakeOptions {
 	 */
 	noPR?: boolean;
 	/**
-	 * **The per-repo PRD-PLACEMENT default, passed IN** (PRD
+	 * **The per-repo BRIEF-PLACEMENT default, passed IN** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5, slice
 	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The resolved
-	 * per-repo default landing for `intake`-authored PRDs (`pre-prd` =
-	 * staging; `prd` = the auto-slice pool), fed as the CONFIGURED-DEFAULT rung
+	 * per-repo default landing for `intake`-authored briefs (`pre-proposed` =
+	 * staging; `ready` = the auto-tasking pool), fed as the CONFIGURED-DEFAULT rung
 	 * into the shared placement resolver (`src/placement.ts`). The resolver
-	 * overlays an EXPLICIT operator flag ({@link explicitPrdsLandIn}, top) and
+	 * overlays an EXPLICIT operator flag ({@link explicitBriefsLandIn}, top) and
 	 * the UNTRUSTED-ORIGIN force (`originTrust: untrusted` ⇒ staging) on top.
-	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `pre-prd/`,
-	 * the conservative landing). The PRD TWIN of `slicesLandIn` on the slicer
+	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `briefs/proposed/`,
+	 * the conservative landing). The BRIEF TWIN of `tasksLandIn` on the tasker
 	 * path — one resolver, two lifecycles.
 	 */
-	prdsLandIn?: PrdsLandIn;
+	briefsLandIn?: BriefsLandIn;
 	/**
-	 * **The OPERATOR's EXPLICIT PRD-placement override** (the TOP precedence
-	 * rung). When set, the runner-deterministic resolver lands the PRD HERE
-	 * regardless of `originTrust` or {@link prdsLandIn} — the positional
+	 * **The OPERATOR's EXPLICIT brief-placement override** (the TOP precedence
+	 * rung). When set, the runner-deterministic resolver lands the brief HERE
+	 * regardless of `originTrust` or {@link briefsLandIn} — the positional
 	 * analogue of `explicitMerge` overriding the untrusted-origin
 	 * build-propose rule ("the operator is present; CLI always wins, no
 	 * special force-key"). Set ONLY when the operator typed
 	 * `--prds-land-in <where>`; never when the value came from config.
 	 */
-	explicitPrdsLandIn?: PrdsLandIn;
+	explicitBriefsLandIn?: BriefsLandIn;
 	/**
 	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
 	 * `run`/`do` expose; forwarded to `performIntegration` as `providerInstance`).
@@ -343,8 +343,8 @@ export const STAGED_PRDS_DIR = workFolderRel('briefs-proposed');
 
 /**
  * The POOL folder PRDs land in when the runner-deterministic placement
- * resolver chooses the pool side (`prdsLandIn: 'prd'` + a trusted origin, or
- * an `--prds-land-in prd` operator override). STEP A: the name stays `prd`
+ * resolver chooses the pool side (`briefsLandIn: 'ready'` + a trusted origin, or
+ * an `--prds-land-in ready` operator override). STEP A: the name stays `prd`
  * (it KEEPS its "the auto-slice candidate pool" meaning); the STEP-B taxonomy
  * rename to `prd-ready/` is deferred.
  */
@@ -357,17 +357,17 @@ const PRD_PLACEMENT_SLOTS: PlacementSlots = {
 };
 
 /**
- * Map the `prdsLandIn` folder-name spelling (`pre-prd` | `prd`) onto the
+ * Map the `briefsLandIn` value spelling (`pre-proposed` | `ready`) onto the
  * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
  * `undefined` when no value is set, so the resolver's next precedence rung
- * applies (the built-in floor). The PRD twin of `landingToSide` on the
- * slicer path — same shape, different slots.
+ * applies (the built-in floor). The brief twin of `landingToSide` on the
+ * tasker path — same shape, different slots.
  */
-function prdLandingToSide(
-	landing: PrdsLandIn | undefined,
+function briefLandingToSide(
+	landing: BriefsLandIn | undefined,
 ): 'staging' | 'pool' | undefined {
-	if (landing === 'pre-prd') return 'staging';
-	if (landing === 'prd') return 'pool';
+	if (landing === 'pre-proposed') return 'staging';
+	if (landing === 'ready') return 'pool';
 	return undefined;
 }
 
@@ -410,10 +410,10 @@ export interface IntakeIntegrationFlags {
 
 /** Both per-type integration modes, resolved from the flag set in ONE eager pass. */
 export interface IntakeIntegrationModes {
-	/** The mode an EMITTED slice integrates with. */
-	slice: IntegrationMode;
-	/** The mode an EMITTED PRD integrates with. */
-	prd: IntegrationMode;
+	/** The mode an EMITTED task integrates with. */
+	task: IntegrationMode;
+	/** The mode an EMITTED brief integrates with. */
+	brief: IntegrationMode;
 }
 
 /** Default per-outcome integration mode when no flag selects one — propose (matches `do`). */
@@ -491,9 +491,11 @@ export function resolveIntakeIntegrationModes(
 		flags.proposeSlice,
 	);
 	// GRANULAR OVERRIDES AGGREGATE; aggregate over the (config/propose) default.
+	// The result KEYS carry the task/brief vocabulary; the per-type flag axes
+	// (`--merge-prd`/`--merge-slice`) keep their user-facing spelling.
 	return {
-		prd: prdGranular ?? aggregate ?? defaultMode,
-		slice: sliceGranular ?? aggregate ?? defaultMode,
+		brief: prdGranular ?? aggregate ?? defaultMode,
+		task: sliceGranular ?? aggregate ?? defaultMode,
 	};
 }
 
@@ -811,7 +813,7 @@ async function decideAndDispatch(
 	// artifact TYPE — a `slice` verdict integrates with the SLICE mode, a `prd`
 	// verdict with the PRD mode. Unset ⇒ propose for both. ask/bounce never
 	// integrate, so the modes are no-ops for them.
-	const modes = options.integration ?? {slice: 'propose', prd: 'propose'};
+	const modes = options.integration ?? {task: 'propose', brief: 'propose'};
 	// The per-run `seen=` DELTA (the HUMAN comment ids intake READ this run, excluding
 	// its own marker-comments + already-seen ids) the marker records on every comment
 	// intake posts — the chain-model primitive the TRIAGE unions into `seenSet`.
@@ -823,7 +825,7 @@ async function decideAndDispatch(
 				issueNumber,
 				cwd,
 				arbiter,
-				integration: modes.slice,
+				integration: modes.task,
 				// The origin-trust STAMP, passed IN (not resolved here): the emitted slice
 				// carries `origin: issue` + this verdict so the becomes-code checkpoint is
 				// not laundered. Unset ⇒ unstamped (a local intake ⇒ human/trusted).
@@ -847,7 +849,7 @@ async function decideAndDispatch(
 				issueNumber,
 				cwd,
 				arbiter,
-				integration: modes.prd,
+				integration: modes.brief,
 				// Same origin-trust stamp on the PRD outcome (propagated onto its slices
 				// later by the slicer). Passed IN; not resolved here.
 				originTrust: options.originTrust,
@@ -858,8 +860,8 @@ async function decideAndDispatch(
 				// resolver alongside the `originTrust` stamp above. The resolver decides
 				// `pre-prd/` (staging) vs `prd/` (the auto-slice pool); `intake` never
 				// places itself.
-				prdsLandIn: options.prdsLandIn,
-				explicitPrdsLandIn: options.explicitPrdsLandIn,
+				briefsLandIn: options.briefsLandIn,
+				explicitBriefsLandIn: options.explicitBriefsLandIn,
 				providerInstance: options.providerInstance,
 				issueProvider,
 				seen: seenDelta,
@@ -1220,10 +1222,10 @@ async function dispatchPrd(params: {
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
-	/** The per-repo PRD-PLACEMENT default (configured-default rung of the placement chain). */
-	prdsLandIn: PrdsLandIn | undefined;
-	/** The OPERATOR's EXPLICIT PRD-placement override (the TOP rung). */
-	explicitPrdsLandIn: PrdsLandIn | undefined;
+	/** The per-repo BRIEF-PLACEMENT default (configured-default rung of the placement chain). */
+	briefsLandIn: BriefsLandIn | undefined;
+	/** The OPERATOR's EXPLICIT brief-placement override (the TOP rung). */
+	explicitBriefsLandIn: BriefsLandIn | undefined;
 	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
@@ -1240,8 +1242,8 @@ async function dispatchPrd(params: {
 		integration,
 		originTrust,
 		noPR,
-		prdsLandIn,
-		explicitPrdsLandIn,
+		briefsLandIn,
+		explicitBriefsLandIn,
 		providerInstance,
 		issueProvider,
 		seen,
@@ -1264,14 +1266,14 @@ async function dispatchPrd(params: {
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
 	// which folder the runner writes the intake-authored PRD into BEFORE handing
 	// it to the shared integrate band: the SAME precedence chain the slicer uses
-	// (`explicit > untrusted-origin ⇒ staging > prdsLandIn > built-in (staging)`),
+	// (`explicit > untrusted-origin ⇒ staging > briefsLandIn > built-in (staging)`),
 	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
 	// (the intake decider) never influences placement; it returns the verdict and
 	// the runner computes the destination from unforgeable inputs.
 	const placementDecision = resolvePlacement({
-		explicit: prdLandingToSide(explicitPrdsLandIn),
+		explicit: briefLandingToSide(explicitBriefsLandIn),
 		originTrust,
-		configuredDefault: prdLandingToSide(prdsLandIn),
+		configuredDefault: briefLandingToSide(briefsLandIn),
 	});
 	const placementDir = placementFolder(
 		PRD_PLACEMENT_SLOTS,

@@ -3,7 +3,7 @@
   "verify": "pnpm format:check && pnpm build && pnpm test",
   "harness": "pi",
   "autoBuild": true,
-  "autoSlice": true,
+  "autoTask": true,
   "observationTriage": "auto",
   "surfaceBlockers": true,
   "review": true,

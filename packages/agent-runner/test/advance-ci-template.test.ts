@@ -104,7 +104,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` fix)',
 		() => {
 			const text = loadAdvanceCiTemplate();
-			// The task-only jq this fix replaced left `AGENT_RUNNER_AUTO_SLICE` dead on
+			// The task-only jq this fix replaced left `AGENT_RUNNER_AUTO_TASK` dead on
 			// the hourly cron — a ready ungated BRIEF never became a matrix leg. The new jq
 			// must read `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` +
 			// `cwd.repo.prds[]`) and emit `brief:<slug>` legs alongside `task:<slug>`.

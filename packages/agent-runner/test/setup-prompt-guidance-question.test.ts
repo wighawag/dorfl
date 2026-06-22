@@ -126,7 +126,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 			JSON.stringify({
 				verify: 'true',
 				autoBuild: false,
-				autoSlice: false,
+				autoTask: false,
 				promptGuidance: {testFirst: true},
 			}),
 		);
@@ -148,7 +148,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 			JSON.stringify({
 				verify: 'true',
 				autoBuild: false,
-				autoSlice: false,
+				autoTask: false,
 			}),
 		);
 		const cfg = loadConfig(cfgPath);
@@ -169,7 +169,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 			prepare: 'pnpm install',
 			harness: 'pi',
 			autoBuild: true,
-			autoSlice: false,
+			autoTask: false,
 			noPR: true,
 			model: 'sonnet',
 			// `promptGuidance` PRE-EXISTS with a sibling member we have not yet
@@ -199,7 +199,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 		expect(after.prepare).toBe(pre.prepare);
 		expect(after.harness).toBe(pre.harness);
 		expect(after.autoBuild).toBe(true);
-		expect(after.autoSlice).toBe(false);
+		expect(after.autoTask).toBe(false);
 		expect(after.noPR).toBe(true);
 		expect(after.model).toBe('sonnet');
 		// \u2026the pre-existing sibling under `promptGuidance` is preserved\u2026

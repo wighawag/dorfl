@@ -23,7 +23,7 @@ import type {ConfigOverrideMap} from '../src/config-override.js';
  * is sufficient.
  *
  * Proves: one-shot sequential `-n`; the bare/`-n` selection respects the FLAT
- * per-action gates (build→`autoBuild`, slice→`autoSlice`) by SELECTION; surface/
+ * per-action gates (build→`autoBuild`, slice→`autoTask`) by SELECTION; surface/
  * apply are ALWAYS allowed even with every flag off (the named path); and the
  * drain/idle convergence (US #31).
  */
@@ -96,7 +96,7 @@ function recordingRunner(
 function cfg(over: Partial<Config> = {}): Config {
 	// Both gates default OFF (the per-action gate family); the tests opt in
 	// explicitly to assert the gate composition.
-	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
+	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
 describe('advance (auto-pick) — applies the per-machine override over the committed .agent-runner.json', () => {
@@ -256,17 +256,17 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('with autoSlice OFF, the bare/-n selection picks NO PRD (slice gated)', async () => {
+	it('with autoTask OFF, the bare/-n selection picks NO PRD (slice gated)', async () => {
 		seedPrd('gamma');
 		seedPrd('delta');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
 			run,
-			config: cfg({autoSlice: false}),
+			config: cfg({autoTask: false}),
 			count: 5,
 		});
-		// slice→autoSlice: off ⇒ no PRD surfaces in the autonomous pool.
+		// slice→autoTask: off ⇒ no PRD surfaces in the autonomous pool.
 		expect(args).toEqual([]);
 	});
 
@@ -281,7 +281,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 			run: bareRun,
 			config: cfg({
 				autoBuild: false,
-				autoSlice: false,
+				autoTask: false,
 				observationTriage: 'off',
 			}),
 			count: 5,
@@ -298,7 +298,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 			run: namedRun,
 			config: cfg({
 				autoBuild: false,
-				autoSlice: false,
+				autoTask: false,
 				observationTriage: 'off',
 			}),
 		});

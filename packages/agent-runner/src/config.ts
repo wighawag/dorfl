@@ -17,48 +17,47 @@ import {
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
- * **Per-repo SLICE-PLACEMENT default** (PRD
+ * **Per-repo TASK-PLACEMENT default** (PRD
  * `staging-pool-position-gate-and-trust-model`, slice
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
- * folder the runner lands the slicer's emitted slice files in BY DEFAULT —
+ * folder the runner lands the tasker's emitted task files in BY DEFAULT —
  * `'pre-backlog'` (staging — durable + readable but NOT in the agent-eligible
  * POOL; a runner/human promotion is needed to make an item claimable; the on-disk
  * folder for this value is `work/tasks/backlog/`) or `'todo'` (the agent-eligible
  * POOL — the trusted fast-path landing, on-disk `work/tasks/todo/`). The pool
  * value was RENAMED from `'backlog'` to `'todo'` (slice
  * `f1-pool-noun-todo-in-surface-and-apply-readers`) so `backlog` stops meaning two
- * things in the readers; a legacy `'backlog'` config value is migrated to `'todo'`
- * with a one-line deprecation warning in `env-config.ts` / per-repo config (the
- * same pattern as the removed `provider` override). The runner-deterministic
+ * things in the readers. The runner-deterministic
  * placement RESOLVER (`src/placement.ts`) layers on top: `explicit operator flag
- * > untrusted-origin ⇒ pre-backlog > slicesLandIn default > built-in
- * (pre-backlog)`. An untrusted-origin slicer output is FORCED to staging even in
+ * > untrusted-origin ⇒ pre-backlog > tasksLandIn default > built-in
+ * (pre-backlog)`. An untrusted-origin tasker output is FORCED to staging even in
  * a `'todo'` repo (the positional analogue of the existing
  * `untrusted-origin-forces-build-propose` rule).
  */
-export type SlicesLandIn = 'pre-backlog' | 'todo';
+export type TasksLandIn = 'pre-backlog' | 'todo';
 
 /**
- * **Per-repo PRD-PLACEMENT default** (PRD
+ * **Per-repo BRIEF-PLACEMENT default** (PRD
  * `staging-pool-position-gate-and-trust-model`, slice
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
- * folder the runner lands `intake`-authored PRD files in BY DEFAULT —
- * `'pre-prd'` (staging — durable + readable but NOT in the auto-slice POOL; a
- * runner/human promotion is needed to make the PRD auto-sliceable) or
- * `'prd'` (the auto-slice POOL — the trusted fast-path landing). The same
- * runner-deterministic placement RESOLVER (`src/placement.ts`) layers on top:
- * `explicit operator flag > untrusted-origin ⇒ pre-prd > prdsLandIn
- * default > built-in (pre-prd)`. An untrusted-origin intake PRD is FORCED to
- * staging even in a `'prd'` repo (the positional analogue of the existing
- * `untrusted-origin-forces-build-propose` rule). The PRD twin of
- * {@link SlicesLandIn}; the SAME shape, the SAME precedence chain. STEP A
- * (this slice) keeps `prd/` as the auto-slice pool name; the STEP-B taxonomy
- * rename to `prd-ready/` is deferred to
- * `work/prd/folder-taxonomy-reorg-and-rename.md`.
+ * folder the runner lands `intake`-authored brief files in BY DEFAULT —
+ * `'pre-proposed'` (staging — durable + readable but NOT in the auto-tasking
+ * POOL; a runner/human promotion is needed to make the brief auto-taskable; the
+ * on-disk folder for this value is `work/briefs/proposed/`) or `'ready'` (the
+ * auto-tasking POOL — the trusted fast-path landing, on-disk
+ * `work/briefs/ready/`). The same runner-deterministic placement RESOLVER
+ * (`src/placement.ts`) layers on top:
+ * `explicit operator flag > untrusted-origin ⇒ pre-proposed > briefsLandIn
+ * default > built-in (pre-proposed)`. An untrusted-origin intake brief is FORCED
+ * to staging even in a `'ready'` repo (the positional analogue of the existing
+ * `untrusted-origin-forces-build-propose` rule). The BRIEF twin of
+ * {@link TasksLandIn}; the SAME shape, the SAME precedence chain. The value
+ * spellings mirror the live brief folders (`briefs/proposed/` staging,
+ * `briefs/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
  */
-export type PrdsLandIn = 'pre-prd' | 'prd';
+export type BriefsLandIn = 'pre-proposed' | 'ready';
 
 /**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
@@ -156,7 +155,7 @@ export interface Config {
 	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
 	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > `AGENT_RUNNER_AUTO_BUILD`
 	 * env > per-repo > global > default. The build member of the per-action gate family
-	 * (`autoBuild`/`autoSlice` + the question-surfacing gates `observationTriage`/
+	 * (`autoBuild`/`autoTask` + the question-surfacing gates `observationTriage`/
 	 * `surfaceBlockers`).
 	 */
 	autoBuild: boolean;
@@ -173,15 +172,15 @@ export interface Config {
 	 */
 	promptGuidance: PromptGuidance;
 	/**
-	 * Per-repo policy: may an agent auto-slice *undeclared* (not `humanOnly`,
-	 * no open questions) PRDs in this repo? `false` (default, strict, human-first)
-	 * ⇒ a human must drive every PRD's slicing; `true` ⇒ an agent may auto-slice
-	 * any PRD that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
-	 * `autoBuild`: flag > `AGENT_RUNNER_AUTO_SLICE` env > per-repo > global >
-	 * default. The two-axis slicing gate (`work/prd/auto-slice.md`), one level up
+	 * Per-repo policy: may an agent auto-task *undeclared* (not `humanOnly`,
+	 * no open questions) briefs in this repo? `false` (default, strict, human-first)
+	 * ⇒ a human must drive every brief's tasking; `true` ⇒ an agent may auto-task
+	 * any brief that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
+	 * `autoBuild`: flag > `AGENT_RUNNER_AUTO_TASK` env > per-repo > global >
+	 * default. The two-axis tasking gate (`work/briefs/auto-task.md`), one level up
 	 * from the build gate's `autoBuild`.
 	 */
-	autoSlice: boolean;
+	autoTask: boolean;
 	/**
 	 * Per-repo policy governing the OBSERVATION INBOX (raw captured signal) — the
 	 * 3-state member of the question-surfacing gate family (its sibling is
@@ -250,7 +249,7 @@ export interface Config {
 	 * REORDERS pools; the gates decide what is PRESENT (a gated-off pool named in
 	 * the order is a no-op). SUBSUMES the old `prdsFirst` boolean: `drain`
 	 * reproduces its default, `[slice, build, ...]` reproduces `prdsFirst: true`.
-	 * Resolved per-repo like `autoBuild`/`autoSlice`: flag
+	 * Resolved per-repo like `autoBuild`/`autoTask`: flag
 	 * (`--selection-order`) > `AGENT_RUNNER_SELECTION_ORDER` env (the `'list'`
 	 * coercion) > per-repo > global > default (`drain`). An unknown name/keyword
 	 * FAILS LOUDLY (`select-order.ts` `resolveSelectionOrder`).
@@ -292,53 +291,53 @@ export interface Config {
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
-	 * **Per-TRANSITION override for the PRD→slices (SLICING) transition only.** When
-	 * set, the slicing transition (a `do prd:<slug>` run: emit `work/backlog/*.md` +
-	 * the `work/prd/ → work/prd-sliced/` lifecycle move) integrates with THIS
-	 * mode instead of the flat {@link integration}; the slice-BUILD transition is
-	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ slicing
+	 * **Per-TRANSITION override for the brief→tasks (TASKING) transition only.** When
+	 * set, the tasking transition (a `do brief:<slug>` run: emit `work/tasks/backlog/*.md` +
+	 * the `work/briefs/ready/ → work/briefs/tasked/` lifecycle move) integrates with THIS
+	 * mode instead of the flat {@link integration}; the task-BUILD transition is
+	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ tasking
 	 * falls back to {@link integration} — byte-for-byte today's behaviour for any repo
 	 * that does not set it. The maintainer's target is `integration: 'propose'` +
-	 * `slicingIntegration: 'merge'`: slice a PRD straight onto `main` (the slice FILES
-	 * land, no PR) but build each slice as a reviewable PR. Resolved per-repo like
+	 * `taskingIntegration: 'merge'`: task a brief straight onto `main` (the task FILES
+	 * land, no PR) but build each task as a reviewable PR. Resolved per-repo like
 	 * {@link integration}: flag (`--merge`/`--propose`) > env
-	 * (`AGENT_RUNNER_SLICING_INTEGRATION`) > per-repo > global > (fall back to)
+	 * (`AGENT_RUNNER_TASKING_INTEGRATION`) > per-repo > global > (fall back to)
 	 * `integration` > default `propose`. DISTINCT from intake's per-EMITTED-TYPE
-	 * `{slice, prd}` resolver (front door, author-trust-resolved): this is a
+	 * `{task, brief}` resolver (front door, author-trust-resolved): this is a
 	 * per-LIFECYCLE-TRANSITION knob, inside the trust boundary, operator/config-only.
 	 */
-	slicingIntegration?: IntegrationMode;
+	taskingIntegration?: IntegrationMode;
 	/**
-	 * **Per-repo DEFAULT landing for the SLICER's emitted slices** (PRD
+	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #5, slice
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved
-	 * per-repo EXACTLY like {@link slicingIntegration} (flag `--slices-land-in`
-	 * > env `AGENT_RUNNER_SLICES_LAND_IN` > per-repo > global > built-in
-	 * `'pre-backlog'`). The slicing path reads it and passes it as the
+	 * per-repo EXACTLY like {@link taskingIntegration} (flag `--slices-land-in`
+	 * > env `AGENT_RUNNER_TASKS_LAND_IN` > per-repo > global > built-in
+	 * `'pre-backlog'`). The tasking path reads it and passes it as the
 	 * CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order. The
-	 * slicer NEVER sets placement itself. PRD US #6 / the governing ADR: the
+	 * tasker NEVER sets placement itself. PRD US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it.
 	 */
-	slicesLandIn: SlicesLandIn;
+	tasksLandIn: TasksLandIn;
 	/**
-	 * **Per-repo DEFAULT landing for `intake`-authored PRD files** (PRD
+	 * **Per-repo DEFAULT landing for `intake`-authored brief files** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12, slice
-	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The PRD twin of
-	 * {@link slicesLandIn}: resolved per-repo EXACTLY like it (flag
-	 * `--prds-land-in` > env `AGENT_RUNNER_PRDS_LAND_IN` > per-repo > global >
-	 * built-in `'pre-prd'`). `intake`'s `prd` dispatch reads it and passes it as
+	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The BRIEF twin of
+	 * {@link tasksLandIn}: resolved per-repo EXACTLY like it (flag
+	 * `--prds-land-in` > env `AGENT_RUNNER_BRIEFS_LAND_IN` > per-repo > global >
+	 * built-in `'pre-proposed'`). `intake`'s brief dispatch reads it and passes it as
 	 * the CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order.
 	 * `intake` NEVER sets placement itself. PRD US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
-	 * influence it. KEY-LEVEL SYMMETRY with `slicesLandIn` — one resolver, two
+	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
 	 */
-	prdsLandIn: PrdsLandIn;
+	briefsLandIn: BriefsLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
@@ -567,31 +566,6 @@ export const DEPRECATED_CONFIG_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Translate any DEPRECATED VALUE in a parsed config object onto its current
- * spelling, with a one-line warning per offending key. Today this is the
- * `slicesLandIn` POOL value rename `'backlog'` → `'todo'` (slice
- * `f1-pool-noun-todo-in-surface-and-apply-readers`): pre-rename `'backlog'`
- * meant the agent POOL; post-rename the POOL value is `'todo'` and the
- * staging on-disk folder is `tasks/backlog/`. A legacy config keeps working
- * (we migrate the value), never an error — mirrors `warnDeprecatedConfigKeys`'s
- * ignored-with-warning shape for VALUE renames instead of KEY removals.
- */
-export function warnDeprecatedConfigValues(
-	parsed: Record<string, unknown>,
-	source: string,
-	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
-): void {
-	if (parsed.slicesLandIn === 'backlog') {
-		warn(
-			`Migrating deprecated value 'backlog' for 'slicesLandIn' in ${source} to ` +
-				`'todo' (the POOL value was renamed; \`backlog\` is the on-disk staging ` +
-				`folder name). Set 'slicesLandIn' to 'todo' to silence this warning.`,
-		);
-		parsed.slicesLandIn = 'todo';
-	}
-}
-
-/**
  * Warn (once per offending key) for any DEPRECATED key present in a parsed config
  * object, then DELETE it from the object so it never lingers in the resolved
  * config. A stale key is IGNORED, not an error — an existing config keeps working.
@@ -631,9 +605,9 @@ export const DEFAULT_CONFIG: Config = {
 	// worker prompt is byte-identical to today when no repo opts in. NOT a gate;
 	// `verify` remains the sole acceptance bar regardless.
 	promptGuidance: {testFirst: false},
-	// Auto-slicing is human-first by default: an agent slices nothing unless a
-	// repo opts in via `autoSlice` (mirrors `autoBuild`, one level up).
-	autoSlice: false,
+	// Auto-tasking is human-first by default: an agent tasks nothing unless a
+	// repo opts in via `autoTask` (mirrors `autoBuild`, one level up).
+	autoTask: false,
 	// The observation INBOX is calm by default (`off`): the triage pool is dropped
 	// from the auto-pick selection, so observations are left untouched unless a repo
 	// opts in via `observationTriage` (`ask` ⇒ surface a question for each; `auto` ⇒
@@ -670,22 +644,22 @@ export const DEFAULT_CONFIG: Config = {
 	// branch but deliberately skip the PR (the explicit suppress-PR intent that
 	// re-homes the old `provider: none` use). NOT a provider choice.
 	noPR: false,
-	// The slicer's emitted slices land STAGED (`pre-backlog/`) by default — the
-	// conservative landing that preserves the tracer slice's behaviour: an item is
+	// The tasker's emitted tasks land STAGED (`pre-backlog/`) by default — the
+	// conservative landing that preserves the tracer task's behaviour: an item is
 	// durable + readable but NOT in the agent-eligible pool until a human/runner
-	// promotes it. A repo opts into the trusted fast-path with `slicesLandIn:
-	// 'backlog'` (or `--slices-land-in backlog` / `AGENT_RUNNER_SLICES_LAND_IN=backlog`).
+	// promotes it. A repo opts into the trusted fast-path with `tasksLandIn:
+	// 'todo'` (or `--slices-land-in todo` / `AGENT_RUNNER_TASKS_LAND_IN=todo`).
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
-	slicesLandIn: 'pre-backlog',
-	// `intake`-authored PRDs land STAGED (`pre-prd/`) by default — the
-	// conservative landing that mirrors `slicesLandIn`'s built-in floor: a PRD is
-	// durable + readable but NOT in the auto-slice POOL until a human/runner
-	// promotes it. A repo opts into the trusted fast-path with `prdsLandIn: 'prd'`
-	// (or `--prds-land-in prd` / `AGENT_RUNNER_PRDS_LAND_IN=prd`). The same
+	tasksLandIn: 'pre-backlog',
+	// `intake`-authored briefs land STAGED (`pre-proposed/`) by default — the
+	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a brief is
+	// durable + readable but NOT in the auto-tasking POOL until a human/runner
+	// promotes it. A repo opts into the trusted fast-path with `briefsLandIn: 'ready'`
+	// (or `--prds-land-in ready` / `AGENT_RUNNER_BRIEFS_LAND_IN=ready`). The same
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
-	prdsLandIn: 'pre-prd',
+	briefsLandIn: 'pre-proposed',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically
@@ -769,7 +743,6 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 	// Drop (with a one-line warning) any DEPRECATED key (e.g. the removed `provider`
 	// override) so an existing config keeps working — ignored, never a hard error.
 	warnDeprecatedConfigKeys(parsed as Record<string, unknown>, path);
-	warnDeprecatedConfigValues(parsed as Record<string, unknown>, path);
 	// Validate a present identity at LOAD time (dumb — no arbiter URL resolution;
 	// the transport-coherence check is push-time). A bad identity is a hard config
 	// error, never a silent ambient fallback.

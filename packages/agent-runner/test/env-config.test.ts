@@ -11,13 +11,13 @@ describe('envVarName', () => {
 		expect(envVarName('defaultArbiter')).toBe('AGENT_RUNNER_DEFAULT_ARBITER');
 		// A single-word key stays a single SCREAMING word.
 		expect(envVarName('model')).toBe('AGENT_RUNNER_MODEL');
-		// `autoSlice` gets its env var for free off the mechanical mapping.
-		expect(envVarName('autoSlice')).toBe('AGENT_RUNNER_AUTO_SLICE');
-		// `slicingIntegration` (the per-TRANSITION SLICING override) maps mechanically,
-		// so `AGENT_RUNNER_SLICING_INTEGRATION` resolves
+		// `autoTask` gets its env var for free off the mechanical mapping.
+		expect(envVarName('autoTask')).toBe('AGENT_RUNNER_AUTO_TASK');
+		// `taskingIntegration` (the per-TRANSITION SLICING override) maps mechanically,
+		// so `AGENT_RUNNER_TASKING_INTEGRATION` resolves
 		// (`per-transition-integration-mode-slicing-vs-build`).
-		expect(envVarName('slicingIntegration')).toBe(
-			'AGENT_RUNNER_SLICING_INTEGRATION',
+		expect(envVarName('taskingIntegration')).toBe(
+			'AGENT_RUNNER_TASKING_INTEGRATION',
 		);
 	});
 });
@@ -67,12 +67,12 @@ describe('envOverrides — boolean coercion', () => {
 		expect(envOverrides({AGENT_RUNNER_AUTO_BUILD: 'false'})).toEqual({
 			autoBuild: false,
 		});
-		// `autoSlice` coerces as a boolean exactly like `autoBuild`.
-		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'true'})).toEqual({
-			autoSlice: true,
+		// `autoTask` coerces as a boolean exactly like `autoBuild`.
+		expect(envOverrides({AGENT_RUNNER_AUTO_TASK: 'true'})).toEqual({
+			autoTask: true,
 		});
-		expect(envOverrides({AGENT_RUNNER_AUTO_SLICE: 'false'})).toEqual({
-			autoSlice: false,
+		expect(envOverrides({AGENT_RUNNER_AUTO_TASK: 'false'})).toEqual({
+			autoTask: false,
 		});
 		// `surfaceBlockers` (the blocked-work gate) coerces as a boolean too.
 		expect(envOverrides({AGENT_RUNNER_SURFACE_BLOCKERS: 'true'})).toEqual({
@@ -92,11 +92,11 @@ describe('envOverrides — boolean coercion', () => {
 		);
 	});
 
-	it('rejects an invalid autoSlice value LOUDLY, naming the variable', () => {
-		expect(() => envOverrides({AGENT_RUNNER_AUTO_SLICE: 'yes'})).toThrow(
-			/AGENT_RUNNER_AUTO_SLICE/,
+	it('rejects an invalid autoTask value LOUDLY, naming the variable', () => {
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_TASK: 'yes'})).toThrow(
+			/AGENT_RUNNER_AUTO_TASK/,
 		);
-		expect(() => envOverrides({AGENT_RUNNER_AUTO_SLICE: 'yes'})).toThrow(
+		expect(() => envOverrides({AGENT_RUNNER_AUTO_TASK: 'yes'})).toThrow(
 			/true.*false/i,
 		);
 	});
@@ -215,28 +215,27 @@ describe('envOverrides — enum coercion', () => {
 			integration: 'propose',
 		});
 		expect(envOverrides({AGENT_RUNNER_HARNESS: 'pi'})).toEqual({harness: 'pi'});
-		// `slicingIntegration` coerces as the SAME propose/merge enum as `integration`
+		// `taskingIntegration` coerces as the SAME propose/merge enum as `integration`
 		// (`per-transition-integration-mode-slicing-vs-build`).
-		expect(envOverrides({AGENT_RUNNER_SLICING_INTEGRATION: 'merge'})).toEqual({
-			slicingIntegration: 'merge',
+		expect(envOverrides({AGENT_RUNNER_TASKING_INTEGRATION: 'merge'})).toEqual({
+			taskingIntegration: 'merge',
 		});
-		expect(envOverrides({AGENT_RUNNER_SLICING_INTEGRATION: 'propose'})).toEqual(
+		expect(envOverrides({AGENT_RUNNER_TASKING_INTEGRATION: 'propose'})).toEqual(
 			{
-				slicingIntegration: 'propose',
+				taskingIntegration: 'propose',
 			},
 		);
-		// `slicesLandIn` (the per-repo SLICE-PLACEMENT default, slice
+		// `tasksLandIn` (the per-repo TASK-PLACEMENT default, slice
 		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as
-		// the `pre-backlog`/`todo` enum (the POOL value was renamed `'backlog'` →
-		// `'todo'`, slice `f1-pool-noun-todo-in-surface-and-apply-readers`), on the
+		// the `pre-backlog`/`todo` enum, on the
 		// SAME flag > env > per-repo > global > built-in chain as
-		// `slicingIntegration`. Legacy `'backlog'` is migrated to `'todo'` with a
-		// one-line deprecation warning (covered in its own test below).
-		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'todo'})).toEqual({
-			slicesLandIn: 'todo',
+		// `taskingIntegration`. The legacy `'backlog'` pool spelling is NOT accepted
+		// (clean break — the value rename shim is removed).
+		expect(envOverrides({AGENT_RUNNER_TASKS_LAND_IN: 'todo'})).toEqual({
+			tasksLandIn: 'todo',
 		});
-		expect(envOverrides({AGENT_RUNNER_SLICES_LAND_IN: 'pre-backlog'})).toEqual({
-			slicesLandIn: 'pre-backlog',
+		expect(envOverrides({AGENT_RUNNER_TASKS_LAND_IN: 'pre-backlog'})).toEqual({
+			tasksLandIn: 'pre-backlog',
 		});
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
 		expect(envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'off'})).toEqual({

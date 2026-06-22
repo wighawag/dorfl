@@ -376,16 +376,16 @@ function buildRegistrySetAdvanceTick(options: {
 				cwd: treelessCwd,
 				arbiter: arbiter ?? config.defaultArbiter,
 				identity: config.identity,
-				autoSlice: config.autoSlice,
+				autoTask: config.autoTask,
 				integration: config.integration,
-				// The per-TRANSITION SLICING override: the `do prd:` slicing path threads
-				// `slicingIntegration ?? integration`; the build path stays on `integration`.
-				slicingIntegration: config.slicingIntegration,
-				// The SLICE-PLACEMENT configured default (`do prd:` slicing output:
-				// `pre-backlog` staged vs `backlog` pool). No operator flag on this
+				// The per-TRANSITION TASKING override: the `do prd:` tasking path threads
+				// `taskingIntegration ?? integration`; the build path stays on `integration`.
+				taskingIntegration: config.taskingIntegration,
+				// The TASK-PLACEMENT configured default (`do prd:` tasking output:
+				// `pre-backlog` staged vs `todo` pool). No operator flag on this
 				// registry-driven advance context, so only the configured default rung is
 				// threaded (the resolver still layers untrusted-origin force + built-in floor).
-				slicesLandIn: config.slicesLandIn,
+				tasksLandIn: config.tasksLandIn,
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -629,31 +629,17 @@ interface CompleteFlags {
  * (the top of the `do prd:` slicing-placement precedence — slice
  * `runner-deterministic-slice-placement-policy-and-precedence`). Mirrors the
  * `flagMode === 'merge'` ⇒ `explicitMerge: true` shape: it contributes
- * `explicitSlicesLandIn` ONLY when the operator actually typed the flag, so an
+ * `explicitTasksLandIn` ONLY when the operator actually typed the flag, so an
  * untrusted-origin's staging force still wins when the value came from config, not
  * the flag. An invalid value FAILS LOUDLY (a usage error, never silently dropped
  * — the SAME discipline the `--observation-triage` enum + the
- * `AGENT_RUNNER_SLICES_LAND_IN` env coercion use).
+ * `AGENT_RUNNER_TASKS_LAND_IN` env coercion use).
  */
 function explicitSlicesLandInFromFlag(
 	raw: string | undefined,
-	warn: (message: string) => void = (m) => console.error(`>> ${m}`),
 ): 'pre-backlog' | 'todo' | undefined {
 	if (raw === undefined) {
 		return undefined;
-	}
-	// The POOL value was renamed `'backlog'` → `'todo'` (slice
-	// `f1-pool-noun-todo-in-surface-and-apply-readers`). Accept the legacy
-	// `'backlog'` spelling with a one-line deprecation warning and migrate it
-	// to `'todo'` — mirrors the env / config-file shim (ignored-with-warning,
-	// never a hard error).
-	if (raw === 'backlog') {
-		warn(
-			`--slices-land-in 'backlog' is deprecated (the pool value was renamed ` +
-				`to 'todo'; \`backlog\` is the on-disk staging folder name). Treating ` +
-				`as 'todo'. Pass --slices-land-in todo to silence this warning.`,
-		);
-		return 'todo';
 	}
 	if (raw !== 'pre-backlog' && raw !== 'todo') {
 		throw new Error(
@@ -668,21 +654,21 @@ function explicitSlicesLandInFromFlag(
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). Resolve the
  * EXPLICIT operator PRD-placement override from `--prds-land-in <where>` for
  * `intake`'s `prd` dispatch — the TOP of the same precedence chain that the
- * slicer placement uses. Contributes `explicitPrdsLandIn` ONLY when the
+ * slicer placement uses. Contributes `explicitBriefsLandIn` ONLY when the
  * operator actually typed the flag, so an untrusted-origin's staging force
  * still wins when the value came from config. An invalid value FAILS LOUDLY
  * (a usage error, never silently dropped), mirroring the slice helper above
- * and the `AGENT_RUNNER_PRDS_LAND_IN` env coercion.
+ * and the `AGENT_RUNNER_BRIEFS_LAND_IN` env coercion.
  */
 function explicitPrdsLandInFromFlag(
 	raw: string | undefined,
-): 'pre-prd' | 'prd' | undefined {
+): 'pre-proposed' | 'ready' | undefined {
 	if (raw === undefined) {
 		return undefined;
 	}
-	if (raw !== 'pre-prd' && raw !== 'prd') {
+	if (raw !== 'pre-proposed' && raw !== 'ready') {
 		throw new Error(
-			`--prds-land-in must be 'pre-prd' or 'prd' (got '${raw}').`,
+			`--prds-land-in must be 'pre-proposed' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -704,7 +690,7 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--slices-land-in <pre-backlog|todo>`: the explicit operator placement override for `do prd:` slicing output (top of the placement precedence). The pool value was renamed `'backlog'` → `'todo'` (slice `f1-pool-noun-todo-in-surface-and-apply-readers`); the legacy `'backlog'` is still accepted with a deprecation warning. */
+	/** `--slices-land-in <pre-backlog|todo>`: the explicit operator placement override for `do prd:` slicing output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
 	slicesLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
@@ -747,7 +733,7 @@ interface IntakeFlags {
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
 	 */
 	originTrust?: string;
-	/** `--prds-land-in <pre-prd|prd>`: the explicit operator PRD-placement override (top of the precedence). */
+	/** `--prds-land-in <pre-proposed|ready>`: the explicit operator brief-placement override (top of the precedence). Resolves into the `briefsLandIn` config key. */
 	prdsLandIn?: string;
 	agentCmd?: string;
 	model?: string;
@@ -1888,7 +1874,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--slices-land-in <where>',
-			'where `do prd:<slug>` slicing output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > slicesLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in. The legacy pool value `backlog` is accepted with a deprecation warning and migrated to `todo`.',
+			'where `do prd:<slug>` slicing output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--no-pr',
@@ -2109,23 +2095,21 @@ export function buildProgram(): Command {
 					// Host-only runner IDENTITY — scopes git/provider ops only (not the
 					// agent launch); absent ⇒ ambient.
 					identity: remoteConfig.identity,
-					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
-					autoSlice: remoteConfig.autoSlice,
+					// `do --remote prd:<slug>` tasking-gate policy (slice-build path ignores it).
+					autoTask: remoteConfig.autoTask,
 					// The resolved `promptGuidance` nudge — threaded into the remote worker
 					// prompt (runRemotePipeline → buildAgentPrompt), mirroring in-place `do`.
 					promptGuidance: resolvePromptGuidance(remoteConfig),
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION SLICING override (the `do --remote prd:` slicing path).
-					slicingIntegration: remoteConfig.slicingIntegration,
-					// SLICE-PLACEMENT: the configured default + the EXPLICIT operator override
+					// Per-TRANSITION TASKING override (the `do --remote prd:` tasking path).
+					taskingIntegration: remoteConfig.taskingIntegration,
+					// TASK-PLACEMENT: the configured default + the EXPLICIT operator override
 					// (`--slices-land-in`), the top of the placement precedence — mirrors
 					// `explicitMerge` (set only when the flag was typed).
-					slicesLandIn: remoteConfig.slicesLandIn,
-					explicitSlicesLandIn: explicitSlicesLandInFromFlag(
-						flags.slicesLandIn,
-					),
+					tasksLandIn: remoteConfig.tasksLandIn,
+					explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2254,8 +2238,8 @@ export function buildProgram(): Command {
 				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
 				// ambient (today's behaviour). Mapped Config → DoOptions like model/agentCmd.
 				identity: config.identity,
-				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
-				autoSlice: config.autoSlice,
+				// `do prd:<slug>` tasking-gate policy (the slice-build path ignores it).
+				autoTask: config.autoTask,
 				// The resolved `promptGuidance` NUDGE namespace (e.g. `testFirst`),
 				// threaded into the worker prompt by performDo → buildAgentPrompt so a
 				// per-repo `promptGuidance.testFirst:true` actually strengthens the
@@ -2267,17 +2251,17 @@ export function buildProgram(): Command {
 				// typed `--merge` (`flagMode`), never when `merge` came from config — so an
 				// untrusted-origin slice still forces propose under a config `merge`.
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION SLICING override: the `do prd:` slicing path threads
-				// `slicingIntegration ?? integration`; the slice-build path stays on
-				// `integration`. Unset ⇒ slicing falls back to `integration` (today's behaviour).
-				slicingIntegration: config.slicingIntegration,
-				// SLICE-PLACEMENT (`do prd:` slicing output): the configured default rung +
+				// Per-TRANSITION TASKING override: the `do prd:` tasking path threads
+				// `taskingIntegration ?? integration`; the slice-build path stays on
+				// `integration`. Unset ⇒ tasking falls back to `integration` (today's behaviour).
+				taskingIntegration: config.taskingIntegration,
+				// TASK-PLACEMENT (`do prd:` tasking output): the configured default rung +
 				// the EXPLICIT operator override `--slices-land-in` (top of the precedence).
-				// `explicitSlicesLandIn` is set ONLY when the flag was typed (mirrors
+				// `explicitTasksLandIn` is set ONLY when the flag was typed (mirrors
 				// `explicitMerge`), so an untrusted-origin staging force still wins under a
 				// config default.
-				slicesLandIn: config.slicesLandIn,
-				explicitSlicesLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
+				tasksLandIn: config.tasksLandIn,
+				explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
@@ -2379,7 +2363,7 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (BRIEF advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance brief:<slug> (the BRIEF slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoSlice, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (BRIEF advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance brief:<slug> (the BRIEF slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
@@ -2424,7 +2408,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--slices-land-in <where>',
-			'where `advance prd:<slug>` slicing output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_SLICES_LAND_IN) > per-repo > global > built-in. The legacy pool value `backlog` is accepted with a deprecation warning and migrated to `todo`.',
+			'where `advance prd:<slug>` slicing output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--watch',
@@ -2526,7 +2510,7 @@ export function buildProgram(): Command {
 				}
 				// Source the arbiter's COMMITTED `.agent-runner.json` from `<arbiter>/main`
 				// via the hub mirror + layer ONLY its whitelisted keys — the SAME
-				// resolution `do --isolated` uses, so the gate family (autoBuild/autoSlice/
+				// resolution `do --isolated` uses, so the gate family (autoBuild/autoTask/
 				// observationTriage/surfaceBlockers) + selectionOrder + integration resolve
 				// off the arbiter exactly as the in-place advance resolves them off cwd.
 				const remoteConfig = resolveRemoteRepoConfig({
@@ -2556,18 +2540,16 @@ export function buildProgram(): Command {
 					watch: flags.watch === true,
 					arbiter: flags.arbiter ?? remoteConfig.defaultArbiter,
 					identity: remoteConfig.identity,
-					autoSlice: remoteConfig.autoSlice,
+					autoTask: remoteConfig.autoTask,
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION SLICING override (the isolated `do --remote prd:` path).
-					slicingIntegration: remoteConfig.slicingIntegration,
-					// SLICE-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
+					// Per-TRANSITION TASKING override (the isolated `do --remote prd:` path).
+					taskingIntegration: remoteConfig.taskingIntegration,
+					// TASK-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
 					// (set only when typed, mirroring `explicitMerge`).
-					slicesLandIn: remoteConfig.slicesLandIn,
-					explicitSlicesLandIn: explicitSlicesLandInFromFlag(
-						flags.slicesLandIn,
-					),
+					tasksLandIn: remoteConfig.tasksLandIn,
+					explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2691,18 +2673,18 @@ export function buildProgram(): Command {
 				watch: flags.watch === true,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				identity: config.identity,
-				autoSlice: config.autoSlice,
+				autoTask: config.autoTask,
 				integration: config.integration,
 				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (a
 				// bare `advance` auto-pick passes no flag ⇒ unset ⇒ untrusted forces propose).
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION SLICING override (the `do prd:` slicing path threads
-				// `slicingIntegration ?? integration`; the build path stays on `integration`).
-				slicingIntegration: config.slicingIntegration,
-				// SLICE-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
+				// Per-TRANSITION TASKING override (the `do prd:` tasking path threads
+				// `taskingIntegration ?? integration`; the build path stays on `integration`).
+				taskingIntegration: config.taskingIntegration,
+				// TASK-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
 				// (set only when typed, mirroring `explicitMerge`).
-				slicesLandIn: config.slicesLandIn,
-				explicitSlicesLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
+				tasksLandIn: config.tasksLandIn,
+				explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -3338,7 +3320,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoSlice/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-slice/--propose-slice override per type; granular overrides the aggregate; unset ⇒ propose for both.',
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-slice/--propose-slice override per type; granular overrides the aggregate; unset ⇒ propose for both.',
 		)
 		.argument(
 			'<number>',
@@ -3383,7 +3365,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--prds-land-in <where>',
-			'where an intake-authored PRD lands: `pre-prd` (staged, not auto-sliceable) or `prd` (the auto-slice pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > prdsLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_PRDS_LAND_IN) > per-repo > global > built-in.',
+			'where an intake-authored brief lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > briefsLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_BRIEFS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
@@ -3435,7 +3417,7 @@ export function buildProgram(): Command {
 			// a type-conditional policy. The granular flags override the aggregate; an
 			// UNSET type falls back to the per-repo/global `integration` (the SAME chain
 			// `do`/`complete` use — flag > per-repo > global > default propose). `intake`
-			// is GATE-FREE, so autoSlice/autoBuild are NOT consulted (the explicit
+			// is GATE-FREE, so autoTask/autoBuild are NOT consulted (the explicit
 			// invocation is its own authorization). `intake` owns only these KNOBS; WHICH
 			// knobs CI sets is CI's POLICY (`runner-in-ci`), NOT here.
 			let modes;
@@ -3470,12 +3452,12 @@ export function buildProgram(): Command {
 				harness: config.harness,
 				piBin: config.piBin,
 			});
-			// The OPERATOR's EXPLICIT PRD-placement override (`--prds-land-in`), the TOP
+			// The OPERATOR's EXPLICIT brief-placement override (`--prds-land-in`), the TOP
 			// of the placement precedence — mirrors `explicitSlicesLandInFromFlag` on
 			// the `do prd:` path. Fails loudly on a bad value.
-			let explicitPrdsLandIn: 'pre-prd' | 'prd' | undefined;
+			let explicitBriefsLandIn: 'pre-proposed' | 'ready' | undefined;
 			try {
-				explicitPrdsLandIn = explicitPrdsLandInFromFlag(flags.prdsLandIn);
+				explicitBriefsLandIn = explicitPrdsLandInFromFlag(flags.prdsLandIn);
 			} catch (err) {
 				console.error(
 					`error: ${err instanceof Error ? err.message : String(err)}`,
@@ -3493,8 +3475,8 @@ export function buildProgram(): Command {
 				// PRD-PLACEMENT: the configured-default rung + the EXPLICIT
 				// `--prds-land-in` override (top of the precedence). The shared placement
 				// resolver in `intake.ts` overlays the untrusted-origin staging force.
-				prdsLandIn: config.prdsLandIn,
-				explicitPrdsLandIn,
+				briefsLandIn: config.briefsLandIn,
+				explicitBriefsLandIn,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,

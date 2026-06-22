@@ -245,7 +245,7 @@ type SharedIsolatedContext = IsolatedAdvanceContext;
 
 export interface PerformAdvanceIsolatedMultiOptions extends SharedIsolatedContext {
 	/**
-	 * The resolved (remote) repo config — provides `autoBuild`/`autoSlice` (the
+	 * The resolved (remote) repo config — provides `autoBuild`/`autoTask` (the
 	 * mirror scan applies them at the SELECTION layer) + `selectionOrder` (the
 	 * cross-pool order), exactly as the in-place one-shot driver applies them.
 	 */
@@ -326,7 +326,7 @@ export async function performAdvanceIsolatedAuto(
 
 	// Scan the mirror's committed `main` for the SAME pools the in-place scan
 	// enumerates (eligible slices gated on `autoBuild`, sliceable PRDs gated on
-	// `autoSlice`, + the lifecycle sub-pools), through the SHARED mirror-pool scan.
+	// `autoTask`, + the lifecycle sub-pools), through the SHARED mirror-pool scan.
 	const scan = await scanMirrorPool({
 		mirrorPath: mirror.path,
 		config: options.config,

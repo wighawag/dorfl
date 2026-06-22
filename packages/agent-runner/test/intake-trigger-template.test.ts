@@ -90,7 +90,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 	it('TRUSTED author + both gates OFF ⇒ merge BOTH (the human acts next; permissive)', () => {
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoSlice: false},
+				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: true,
 			}),
 		).toEqual({prd: 'merge', slice: 'merge', originTrust: 'trusted'});
@@ -102,7 +102,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		// slices it before anything autonomous acts — the checkpoint is intact).
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoSlice: false},
+				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: false,
 			}),
 		).toEqual({prd: 'merge', slice: 'propose', originTrust: 'untrusted'});
@@ -111,16 +111,16 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 	it('autoBuild ON forces --propose-slice even for a TRUSTED author (an agent will auto-build it)', () => {
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: true, autoSlice: false},
+				gate: {autoBuild: true, autoTask: false},
 				authorTrusted: true,
 			}),
 		).toEqual({prd: 'merge', slice: 'propose', originTrust: 'trusted'});
 	});
 
-	it('autoSlice ON forces --propose-prd (an agent will auto-slice it → human PR checkpoint now)', () => {
+	it('autoTask ON forces --propose-prd (an agent will auto-slice it → human PR checkpoint now)', () => {
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoSlice: true},
+				gate: {autoBuild: false, autoTask: true},
 				authorTrusted: true,
 			}),
 		).toEqual({prd: 'propose', slice: 'merge', originTrust: 'trusted'});
@@ -130,14 +130,14 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		// The stamp is derived from the SAME authorTrusted input as the modes, so it
 		// cannot desync; it does not depend on the gate state.
 		for (const autoBuild of [false, true]) {
-			for (const autoSlice of [false, true]) {
+			for (const autoTask of [false, true]) {
 				expect(
-					deriveIntakeFlags({gate: {autoBuild, autoSlice}, authorTrusted: true})
+					deriveIntakeFlags({gate: {autoBuild, autoTask}, authorTrusted: true})
 						.originTrust,
 				).toBe('trusted');
 				expect(
 					deriveIntakeFlags({
-						gate: {autoBuild, autoSlice},
+						gate: {autoBuild, autoTask},
 						authorTrusted: false,
 					}).originTrust,
 				).toBe('untrusted');
@@ -146,13 +146,13 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 	});
 
 	it('the PRD flag is gate-derived ONLY — author-trust does NOT bite a PRD', () => {
-		// autoSlice off ⇒ --merge-prd for BOTH a trusted and an untrusted author.
+		// autoTask off ⇒ --merge-prd for BOTH a trusted and an untrusted author.
 		const trusted = deriveIntakeFlags({
-			gate: {autoBuild: true, autoSlice: false},
+			gate: {autoBuild: true, autoTask: false},
 			authorTrusted: true,
 		});
 		const untrusted = deriveIntakeFlags({
-			gate: {autoBuild: true, autoSlice: false},
+			gate: {autoBuild: true, autoTask: false},
 			authorTrusted: false,
 		});
 		expect(trusted.prd).toBe('merge');
@@ -173,7 +173,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		for (const row of grid) {
 			expect(
 				deriveIntakeFlags({
-					gate: {autoBuild: row.autoBuild, autoSlice: false},
+					gate: {autoBuild: row.autoBuild, autoTask: false},
 					authorTrusted: row.authorTrusted,
 				}).slice,
 			).toBe(row.slice);
@@ -181,29 +181,29 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 	});
 
 	it('the FULLY-GATELESS merge-everything path needs both gates off AND a trusted author (a loud, non-default combination)', () => {
-		// Merge both ⇒ exactly: autoSlice off + autoBuild off + trusted author.
+		// Merge both ⇒ exactly: autoTask off + autoBuild off + trusted author.
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoSlice: false},
+				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: true,
 			}),
 		).toEqual({prd: 'merge', slice: 'merge', originTrust: 'trusted'});
 		// Flip ANY one of the three and it is no longer merge-everything.
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoSlice: false},
+				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: false,
 			}).slice,
 		).toBe('propose');
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: true, autoSlice: false},
+				gate: {autoBuild: true, autoTask: false},
 				authorTrusted: true,
 			}).slice,
 		).toBe('propose');
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoSlice: true},
+				gate: {autoBuild: false, autoTask: true},
 				authorTrusted: true,
 			}).prd,
 		).toBe('propose');
@@ -294,21 +294,21 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(text).toContain('--propose-prd');
 		// The derivation reads the gate env block.
 		expect(/AGENT_RUNNER_AUTO_BUILD\b/.test(text)).toBe(true);
-		expect(/AGENT_RUNNER_AUTO_SLICE\b/.test(text)).toBe(true);
+		expect(/AGENT_RUNNER_AUTO_TASK\b/.test(text)).toBe(true);
 	});
 
 	it('the workflow SHELL derivation matches deriveIntakeFlags (they cannot desync)', () => {
 		const text = generateIntakeWorkflow(config);
 		// Reproduce the workflow's shell logic in JS and assert it agrees with the
-		// pure function for every (autoBuild × autoSlice × trust) combination. This
+		// pure function for every (autoBuild × autoTask × trust) combination. This
 		// pins "the artifact encodes the SAME rule the function unit-tests".
 		const shell = (
 			autoBuild: boolean,
-			autoSlice: boolean,
+			autoTask: boolean,
 			trusted: boolean,
 		): {prd: string; slice: string; originTrust: string} => {
-			// PRD: --propose-prd iff autoSlice true, else --merge-prd.
-			const prd = autoSlice ? '--propose-prd' : '--merge-prd';
+			// PRD: --propose-prd iff autoTask true, else --merge-prd.
+			const prd = autoTask ? '--propose-prd' : '--merge-prd';
 			// SLICE: --propose-slice iff autoBuild true OR not trusted.
 			const slice = autoBuild || !trusted ? '--propose-slice' : '--merge-slice';
 			// ORIGIN-TRUST: the same `trusted` case, carried to the stamp flag.
@@ -318,11 +318,11 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 			return {prd, slice, originTrust};
 		};
 		for (const autoBuild of [false, true]) {
-			for (const autoSlice of [false, true]) {
+			for (const autoTask of [false, true]) {
 				for (const trusted of [false, true]) {
-					const fromShell = shell(autoBuild, autoSlice, trusted);
+					const fromShell = shell(autoBuild, autoTask, trusted);
 					const fromFn = deriveIntakeFlags({
-						gate: {autoBuild, autoSlice},
+						gate: {autoBuild, autoTask},
 						authorTrusted: trusted,
 					});
 					expect(fromShell.prd).toBe(`--${fromFn.prd}-prd`);

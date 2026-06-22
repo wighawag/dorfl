@@ -83,14 +83,14 @@ describe('slice `humanOnly` (NARROWED) — never agent-eligible, even in the poo
 });
 
 describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
-	it('PRD humanOnly:true blocks the slicing gate even when autoSlice is on', () => {
+	it('PRD humanOnly:true blocks the slicing gate even when autoTask is on', () => {
 		expect(resolveSliceGate(true, undefined, true)).toBe(false);
 		const r = resolveSlicingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
 			briefAfter: [],
 			slicedSlugs: new Set(),
-			autoSlice: true,
+			autoTask: true,
 		});
 		expect(r.gatePass).toBe(false);
 		expect(r.sliceable).toBe(false);
@@ -102,7 +102,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
 			needsAnswers: true,
 			briefAfter: [],
 			slicedSlugs: new Set(),
-			autoSlice: true,
+			autoTask: true,
 		});
 		expect(r.gatePass).toBe(false);
 	});
@@ -179,7 +179,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 			slug: 'it',
 			cwd: repo,
 			arbiter: 'arbiter',
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner,
 			env: gitEnv(),

@@ -157,7 +157,7 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
@@ -214,7 +214,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'propose',
 			providerInstance: new GitHubProvider({ghBin: gh}),
 			agentRunner: slicingAgent('child'),
@@ -278,7 +278,7 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 				slug: 'it',
 				cwd: repo,
 				arbiter: ARBITER,
-				autoSlice: true,
+				autoTask: true,
 				// The integrate-time arg — the SAME knob `do slice:`/`complete` thread into
 				// `performIntegration.mode` — with NO slicing-specific parser.
 				integration: row.mode,
@@ -311,7 +311,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			// Slicing may MERGE the slice FILES onto main (a file is inert); the BUILD
 			// transition is where untrusted bites. The propagation must happen here so
 			// the build can later read it.
@@ -340,7 +340,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
@@ -362,7 +362,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),

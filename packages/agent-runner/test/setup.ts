@@ -19,9 +19,9 @@
  *
  *  2. `AGENT_RUNNER_*` CONFIG LEAKAGE. `loadConfig` reads `AGENT_RUNNER_*` env
  *     vars and lets them OVERRIDE per-call config. CI exports gate vars
- *     (`AGENT_RUNNER_AUTO_BUILD=true`, `AGENT_RUNNER_AUTO_SLICE=true`, …) for the
+ *     (`AGENT_RUNNER_AUTO_BUILD=true`, `AGENT_RUNNER_AUTO_TASK=true`, …) for the
  *     `advance`/`run` steps; if those leak into the unit-test process they
- *     silently override the `autoBuild:false` / `autoSlice:false` setups that
+ *     silently override the `autoBuild:false` / `autoTask:false` setups that
  *     gating tests rely on, so gated-off pools come back populated and counts are
  *     wrong. We delete every `AGENT_RUNNER_*` var up-front so the tests see ONLY
  *     the config they pass explicitly — identical on a dev box and on CI.

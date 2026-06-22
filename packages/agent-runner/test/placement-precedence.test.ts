@@ -22,7 +22,7 @@ import {run} from '../src/git.js';
  *
  * The four rungs (highest wins):
  *
- *   explicit operator flag  >  untrusted-origin \u21d2 staging  >  slicesLandIn
+ *   explicit operator flag  >  untrusted-origin \u21d2 staging  >  tasksLandIn
  *     default  >  built-in (staging)
  *
  * The seam under test: the agent ALWAYS writes to `work/tasks/backlog/`; the
@@ -153,7 +153,7 @@ const onArbiterMain = (repo: string, path: string): boolean => {
 // --------------------------------------------------------------------------
 // RUNG 4 (lowest): the BUILT-IN floor \u2014 unset everywhere \u21d2 staging.
 // --------------------------------------------------------------------------
-describe('placement rung 4: built-in floor (no slicesLandIn, no explicit, trusted origin) \u21d2 staging', () => {
+describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted origin) \u21d2 staging', () => {
 	it('lands the slice in work/tasks/backlog/ on the arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
@@ -161,10 +161,10 @@ describe('placement rung 4: built-in floor (no slicesLandIn, no explicit, truste
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			agentRunner: slicingAgent('child'),
-			// No slicesLandIn, no explicitSlicesLandIn \u2014 the resolver's built-in
+			// No tasksLandIn, no explicitTasksLandIn \u2014 the resolver's built-in
 			// floor applies (`staging` = `pre-backlog/`).
 			env: gitEnv(),
 		});
@@ -180,17 +180,17 @@ describe('placement rung 4: built-in floor (no slicesLandIn, no explicit, truste
 // --------------------------------------------------------------------------
 // RUNG 3: the configured default \u2014 BOTH landings verified.
 // --------------------------------------------------------------------------
-describe('placement rung 3: slicesLandIn default \u2014 both landings verified', () => {
-	it('slicesLandIn: backlog + trusted origin \u21d2 lands in work/tasks/todo/ (the pool)', async () => {
+describe('placement rung 3: tasksLandIn default \u2014 both landings verified', () => {
+	it('tasksLandIn: todo + trusted origin \u21d2 lands in work/tasks/todo/ (the pool)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
-			slicesLandIn: 'backlog',
+			tasksLandIn: 'todo',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -202,16 +202,16 @@ describe('placement rung 3: slicesLandIn default \u2014 both landings verified',
 		expect(result.emitted).toEqual(['work/tasks/todo/child.md']);
 	});
 
-	it('slicesLandIn: pre-backlog + trusted origin \u21d2 lands STAGED in work/tasks/backlog/', async () => {
+	it('tasksLandIn: pre-backlog + trusted origin \u21d2 lands STAGED in work/tasks/backlog/', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
-			slicesLandIn: 'pre-backlog',
+			tasksLandIn: 'pre-backlog',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -224,19 +224,19 @@ describe('placement rung 3: slicesLandIn default \u2014 both landings verified',
 // --------------------------------------------------------------------------
 // RUNG 2: the UNTRUSTED-ORIGIN force.
 // --------------------------------------------------------------------------
-describe('placement rung 2: untrusted-origin forces STAGING even on a slicesLandIn: backlog repo', () => {
-	it('untrusted PRD + slicesLandIn: backlog \u21d2 staged in work/tasks/backlog/ (untrusted force overrides configured default)', async () => {
+describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandIn: todo repo', () => {
+	it('untrusted PRD + tasksLandIn: todo \u21d2 staged in work/tasks/backlog/ (untrusted force overrides configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			// The repo's configured default would land slices in the POOL \u2014 but
 			// the PRD is untrusted-origin, so the runner forces STAGING.
-			slicesLandIn: 'backlog',
+			tasksLandIn: 'todo',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -245,16 +245,16 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a slicesLand
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});
 
-	it('a TRUSTED PRD on a slicesLandIn: backlog repo still lands in the pool (the untrusted force only fires on untrusted; zero behaviour change for the normal path)', async () => {
+	it('a TRUSTED PRD on a tasksLandIn: todo repo still lands in the pool (the untrusted force only fires on untrusted; zero behaviour change for the normal path)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
-			slicesLandIn: 'backlog',
+			tasksLandIn: 'todo',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -270,9 +270,9 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a slicesLand
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
-			slicesLandIn: 'backlog',
+			tasksLandIn: 'todo',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -285,21 +285,21 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a slicesLand
 // RUNG 1 (top): the EXPLICIT OPERATOR FLAG.
 // --------------------------------------------------------------------------
 describe('placement rung 1: explicit operator flag wins over the untrusted-origin force', () => {
-	it('explicit --slices-land-in backlog + untrusted PRD \u21d2 lands in work/tasks/todo/ (operator override beats the untrusted force)', async () => {
+	it('explicit --slices-land-in todo + untrusted PRD \u21d2 lands in work/tasks/todo/ (operator override beats the untrusted force)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			// A repo whose configured default is staging \u2026
-			slicesLandIn: 'pre-backlog',
-			// \u2026 but the operator EXPLICITLY typed --slices-land-in backlog. The
+			tasksLandIn: 'pre-backlog',
+			// \u2026 but the operator EXPLICITLY typed --slices-land-in todo. The
 			// operator is present; CLI always wins (no special force-key), exactly
 			// like `--merge` overriding the untrusted-origin build-propose rule.
-			explicitSlicesLandIn: 'backlog',
+			explicitTasksLandIn: 'todo',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -308,17 +308,17 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('explicit --slices-land-in pre-backlog + slicesLandIn: backlog + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
+	it('explicit --slices-land-in pre-backlog + tasksLandIn: todo + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performSlice({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
-			slicesLandIn: 'backlog',
-			explicitSlicesLandIn: 'pre-backlog',
+			tasksLandIn: 'todo',
+			explicitTasksLandIn: 'pre-backlog',
 			agentRunner: slicingAgent('child'),
 			env: gitEnv(),
 		});
@@ -339,12 +339,12 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			// The repo's resolved default lands in STAGING; the agent's
 			// attempted self-placement into the pool is scrubbed; the runner's
 			// commit reflects ONLY the policy-resolved destination.
-			slicesLandIn: 'pre-backlog',
+			tasksLandIn: 'pre-backlog',
 			agentRunner: selfPlacingAgent('child'),
 			env: gitEnv(),
 		});
@@ -362,12 +362,12 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
-			autoSlice: true,
+			autoTask: true,
 			integration: 'merge',
 			// Even on a repo that defaults to landing in the pool, the runner
 			// FORCES staging for the untrusted origin and scrubs the agent's
 			// pool write.
-			slicesLandIn: 'backlog',
+			tasksLandIn: 'todo',
 			agentRunner: selfPlacingAgent('child'),
 			env: gitEnv(),
 		});

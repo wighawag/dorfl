@@ -49,7 +49,7 @@ function prd(slug: string, extra: Partial<PrdCandidate> = {}): PrdCandidate {
 }
 
 describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)', () => {
-	it('keeps only PRDs the gate passes (autoSlice on, not humanOnly/needsAnswers)', () => {
+	it('keeps only PRDs the gate passes (autoTask on, not humanOnly/needsAnswers)', () => {
 		const candidates = [
 			prd('ok'),
 			prd('human', {humanOnly: true}),
@@ -58,16 +58,16 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 		const out = sliceablePrds({
 			candidates,
 			slicedSlugs: new Set(),
-			autoSlice: true,
+			autoTask: true,
 		});
 		expect(out.map((p) => p.slug)).toEqual(['ok']);
 	});
 
-	it('autoSlice off ⇒ nothing is sliceable (mirrors autoBuild off)', () => {
+	it('autoTask off ⇒ nothing is sliceable (mirrors autoBuild off)', () => {
 		const out = sliceablePrds({
 			candidates: [prd('ok')],
 			slicedSlugs: new Set(),
-			autoSlice: false,
+			autoTask: false,
 		});
 		expect(out).toEqual([]);
 	});
@@ -76,14 +76,14 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 		const candidates = [prd('beta', {briefAfter: ['alpha']})];
 		// alpha not yet sliced ⇒ beta not sliceable.
 		expect(
-			sliceablePrds({candidates, slicedSlugs: new Set(), autoSlice: true}),
+			sliceablePrds({candidates, slicedSlugs: new Set(), autoTask: true}),
 		).toEqual([]);
 		// alpha sliced ⇒ beta becomes sliceable.
 		expect(
 			sliceablePrds({
 				candidates,
 				slicedSlugs: new Set(['alpha']),
-				autoSlice: true,
+				autoTask: true,
 			}).map((p) => p.slug),
 		).toEqual(['beta']);
 	});

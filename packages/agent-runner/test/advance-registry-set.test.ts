@@ -118,7 +118,7 @@ function config(overrides: Partial<Config> = {}): Config {
 		agentCmd: 'true',
 		verify: PASS,
 		autoBuild: true,
-		autoSlice: true,
+		autoTask: true,
 		...overrides,
 	});
 }
@@ -172,7 +172,7 @@ function contextForFactory(opts: {
 			arbiter: 'origin',
 			integration: 'merge',
 			verify: PASS,
-			autoSlice: true,
+			autoTask: true,
 			agentRunner: opts.agentRunner ?? editingDoAgent,
 			env: gitEnv(),
 		};

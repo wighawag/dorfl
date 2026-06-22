@@ -50,7 +50,7 @@ import {heldSliceSlugs} from './item-lock.js';
  * Per-repo policy parity: a bare mirror has no checked-out `.agent-runner.json`,
  * but the COMMITTED one is reachable on `main` (the `do --remote` per-repo seam).
  * We layer it via {@link resolveRepoConfigFromMirror} so the same logical `work/`
- * state yields the SAME `autoBuild`/`autoSlice` decision an in-place checkout
+ * state yields the SAME `autoBuild`/`autoTask` decision an in-place checkout
  * would — that is what makes the mirror scan PARITY-equal to the in-place one.
  */
 
@@ -60,7 +60,7 @@ export interface ScanMirrorPoolOptions {
 	mirrorPath: string;
 	/**
 	 * The global + default config layer. The repo's COMMITTED `.agent-runner.json`
-	 * (read from the mirror's `main`) is layered on top, so `autoBuild`/`autoSlice`
+	 * (read from the mirror's `main`) is layered on top, so `autoBuild`/`autoTask`
 	 * resolve per-repo exactly as the in-place scan resolves them from the checkout.
 	 */
 	config: Config;
@@ -192,7 +192,7 @@ export async function scanMirrorPool(
 			briefAfter: p.briefAfter,
 		})),
 		slicedSlugs: pool.slicedSlugs,
-		autoSlice: repoConfig.autoSlice,
+		autoTask: repoConfig.autoTask,
 	});
 	// The one-slug-one-folder LINT is a HUMAN-FACING surface (`scan`/`status`); this
 	// mirror-side pool scan exists only to SCORE the slice/PRD candidate pools for
@@ -217,7 +217,7 @@ export async function scanMirrorPool(
 	const repo: RepoReport = {
 		path: mirrorPath,
 		items,
-		prds: scorePrds(mirrorPath, pool, repoConfig.autoSlice),
+		prds: scorePrds(mirrorPath, pool, repoConfig.autoTask),
 		// The propose-matrix lifecycle pool on this mirror's `RepoReport` — the SAME
 		// `gatherLifecycleMirror` result projected onto the `scan --json` shape, so
 		// the dashboard/matrix surface agrees with the selection scoring below.

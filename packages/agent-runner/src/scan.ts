@@ -132,9 +132,9 @@ export interface ScannedItem extends TodoItem {
  * A PRD entry in `scan --json`'s sliceable-PRD pool — the SAME shape an eligible
  * slice carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
- * | "brief:" + .slug`. "Eligible" here means SLICEABLE — the per-repo `autoSlice`
+ * | "brief:" + .slug`. "Eligible" here means SLICEABLE — the per-repo `autoTask`
  * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `sliceablePrds`
- * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
+ * (`autotask-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
  * the cwd section's `repo.prds`), DISTINCT from the slice-only `items[]` because
  * slices and PRDs are different verbs and project to different `task:`/`brief:`
  * prefixes — a discriminator on `items[]` would pollute the surface other readers
@@ -163,7 +163,7 @@ export interface RepoReport {
 	 * ungated PRDs alongside `task:<slug>` legs for eligible slices (the
 	 * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` slice): the
 	 * propose `enumerate` `jq` unions both pools and emits one matrix leg per item.
-	 * The `autoSlice` gate still BINDS — a repo with `autoSlice` off yields an
+	 * The `autoTask` gate still BINDS — a repo with `autoTask` off yields an
 	 * all-`eligible:false` pool (so no `prd:` legs).
 	 */
 	prds: ScannedPrd[];
@@ -251,13 +251,13 @@ export function readBacklogItems(repoPath: string): TodoItem[] {
  * the SAME `autoslice-gate` predicate the mirror-side `scanMirrorPool` + the
  * in-place `do-autopick` pool already run — so what is sliceable does not
  * fork between the autopick paths and the propose-matrix `scan --json` pool.
- * The `autoSlice` gate BINDS through that predicate; a config-less repo with
- * `autoSlice` off yields an all-`eligible:false` pool (no `prd:` legs).
+ * The `autoTask` gate BINDS through that predicate; a config-less repo with
+ * `autoTask` off yields an all-`eligible:false` pool (no `prd:` legs).
  */
 export function scorePrds(
 	repoPath: string,
 	pool: LedgerPrdPool,
-	autoSlice: boolean,
+	autoTask: boolean,
 ): ScannedPrd[] {
 	const sliceable = new Set(
 		sliceablePrds({
@@ -269,7 +269,7 @@ export function scorePrds(
 				briefAfter: p.briefAfter,
 			})),
 			slicedSlugs: pool.slicedSlugs,
-			autoSlice,
+			autoTask,
 		}).map((p) => p.slug),
 	);
 	return pool.prds.map((p) => ({
@@ -431,33 +431,33 @@ export async function scan(
 		);
 		// PRD pool — the SLICEABLE-PRD companion of the slice pool above
 		// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). Resolve
-		// `autoSlice` PER REPO from the mirror's COMMITTED `.agent-runner.json`
+		// `autoTask` PER REPO from the mirror's COMMITTED `.agent-runner.json`
 		// (exactly as the mirror-side pool scan does — NOT forked); a read fault is
 		// non-fatal (warn + global fall-back), since `scan` is read-only and must
 		// degrade gracefully (ADR §5/§6).
-		let repoAutoSlice = config.autoSlice;
+		let repoAutoTask = config.autoTask;
 		try {
-			repoAutoSlice = resolveRepoConfigFromMirror({
+			repoAutoTask = resolveRepoConfigFromMirror({
 				mirrorPath: mirror.path,
 				global: config,
 				env: options.env,
 				override: options.override,
-			}).autoSlice;
+			}).autoTask;
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
 			options.warn?.(
 				`could not read the target repo's config from ${mirror.path}/main; ` +
-					`resolving autoSlice from global + default. ${reason}`,
+					`resolving autoTask from global + default. ${reason}`,
 			);
 		}
 		const prdPool = await ledgerRead.resolveMirrorPrdPool({
 			mirrorPath: mirror.path,
 			env: options.env,
 		});
-		const prds = scorePrds(mirror.path, prdPool, repoAutoSlice);
+		const prds = scorePrds(mirror.path, prdPool, repoAutoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this mirror's question-surfacing config (resolved from its committed
-		// `.agent-runner.json`, with the same non-fatal global fall-back as `autoSlice`
+		// `.agent-runner.json`, with the same non-fatal global fall-back as `autoTask`
 		// above) and computed by REUSING `gatherLifecycleMirror` → `buildLifecyclePools`
 		// (NOT a forked predicate), so it AGREES with the `run` selection.
 		let repoLifecycleConfig = {
@@ -478,7 +478,7 @@ export async function scan(
 				surfaceStaging: resolved.surfaceStaging,
 			};
 		} catch {
-			// Non-fatal: a config read fault already WARNED on the `autoSlice` read
+			// Non-fatal: a config read fault already WARNED on the `autoTask` read
 			// above; fall back to the global-resolved gates (scan is read-only and must
 			// degrade gracefully, ADR §5/§6).
 		}
@@ -551,16 +551,16 @@ export function scanRepoPaths(
 			override,
 		}).config;
 		// PRD pool — the SLICEABLE-PRD companion of the slice pool. Resolve
-		// `autoSlice` PER REPO from the working-tree `.agent-runner.json` (the same
-		// way `autoBuild` is resolved); `sliceablePrds` (the SAME `autoslice-gate`
+		// `autoTask` PER REPO from the working-tree `.agent-runner.json` (the same
+		// way `autoBuild` is resolved); `sliceablePrds` (the SAME `autotask-gate`
 		// predicate the autopick paths run) decides what is sliceable — no forked
 		// predicate. This is what makes the propose-mode CI matrix enumerate `prd:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
 		const prdPool = ledgerRead.resolvePrdPool({repoPath: path});
-		const prds = scorePrds(path, prdPool, resolved.autoSlice);
+		const prds = scorePrds(path, prdPool, resolved.autoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this working tree's `observationTriage` / `surfaceBlockers` (resolved
-		// the same way as `autoBuild`/`autoSlice`) and computed by REUSING
+		// the same way as `autoBuild`/`autoTask`) and computed by REUSING
 		// `gatherLifecycleInPlace` → `buildLifecyclePools` (NOT a forked predicate). CI
 		// runs IN-PLACE, so this is the surface the propose matrix reads.
 		const lifecycle = toScannedLifecycle(

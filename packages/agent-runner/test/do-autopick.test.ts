@@ -108,9 +108,9 @@ function recordingRunner(): {run: DoRunner; args: string[]} {
 }
 
 function cfg(over: Partial<Config> = {}): Config {
-	// autoBuild on so seeded slices are eligible; autoSlice on so PRDs are
+	// autoBuild on so seeded slices are eligible; autoTask on so PRDs are
 	// sliceable. Both default OFF, so the tests opt in explicitly.
-	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
+	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
 /** The minimal shared `DoOptions` base the layer threads to each run. */
@@ -292,12 +292,12 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 });
 
 describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
-	it('autoSlice OFF ⇒ no PRD is selected even with no slices', async () => {
+	it('autoTask OFF ⇒ no PRD is selected even with no slices', async () => {
 		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
 			...base(run),
-			config: cfg({autoSlice: false}),
+			config: cfg({autoTask: false}),
 			count: 5,
 		});
 		expect(args).toEqual([]);

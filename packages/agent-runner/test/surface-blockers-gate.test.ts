@@ -154,7 +154,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	}
 
 	function cfg(over: Partial<Config> = {}): Config {
-		return mergeConfig({autoBuild: true, autoSlice: true, ...over});
+		return mergeConfig({autoBuild: true, autoTask: true, ...over});
 	}
 
 	it('off ⇒ the needsAnswers-blocked pool is NOT enumerated (a bare advance picks NOTHING; no sidecar)', async () => {
@@ -388,7 +388,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 		// work alone.
 		const config = mergeConfig({
 			autoBuild: true,
-			autoSlice: true,
+			autoTask: true,
 			observationTriage: 'ask',
 			surfaceBlockers: false,
 		});

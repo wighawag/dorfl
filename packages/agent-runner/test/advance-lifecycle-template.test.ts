@@ -180,7 +180,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`)',
 		() => {
 			const text = generateAdvanceLifecycleWorkflow(config);
-			// Without this, `AGENT_RUNNER_AUTO_SLICE: 'true'` above is dead on the hourly
+			// Without this, `AGENT_RUNNER_AUTO_TASK: 'true'` above is dead on the hourly
 			// cron — a ready ungated BRIEF never becomes a matrix leg. The `jq` must read
 			// `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
 			// AND the task pool, and emit BOTH `task:<slug>` and `brief:<slug>` ids.
@@ -232,7 +232,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			.filter((line) => !/^\s*#/.test(line))
 			.join('\n');
 		expect(/AGENT_RUNNER_AUTO_BUILD\s*:/.test(operative)).toBe(false);
-		expect(/AGENT_RUNNER_AUTO_SLICE\s*:/.test(operative)).toBe(false);
+		expect(/AGENT_RUNNER_AUTO_TASK\s*:/.test(operative)).toBe(false);
 		expect(/AGENT_RUNNER_OBSERVATION_TRIAGE\s*:/.test(operative)).toBe(false);
 		expect(/AGENT_RUNNER_SURFACE_BLOCKERS\s*:/.test(operative)).toBe(false);
 		// No `autoAdvance` gate either (the lifecycle decomposes into the family).
@@ -246,14 +246,14 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		// Slice `advance-lifecycle-dispatch-gate-inputs`: a human can flip a gate ON
 		// for ONE manual run. The review fix: the override MUST reach the `enumerate`
 		// job (which gates the matrix pools via `scan`), not just the agent jobs —
-		// otherwise an `observationTriage`/`surfaceBlockers`/`autoSlice` override
+		// otherwise an `observationTriage`/`surfaceBlockers`/`autoTask` override
 		// yields an empty matrix and is silently inert.
 		const text = generateAdvanceLifecycleWorkflow(config);
 
 		// (a) Each gate is a workflow_dispatch input.
 		for (const input of [
 			'autoBuild',
-			'autoSlice',
+			'autoTask',
 			'observationTriage',
 			'surfaceBlockers',
 		]) {
@@ -270,7 +270,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		// schedule / push emit nothing — an empty value would make env coercion throw).
 		for (const [input, envVar] of [
 			['autoBuild', 'AGENT_RUNNER_AUTO_BUILD'],
-			['autoSlice', 'AGENT_RUNNER_AUTO_SLICE'],
+			['autoTask', 'AGENT_RUNNER_AUTO_TASK'],
 			['observationTriage', 'AGENT_RUNNER_OBSERVATION_TRIAGE'],
 			['surfaceBlockers', 'AGENT_RUNNER_SURFACE_BLOCKERS'],
 		] as const) {
@@ -461,13 +461,13 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		);
 	});
 
-	it('flags a re-introduced active AGENT_RUNNER_AUTO_SLICE env assignment', () => {
+	it('flags a re-introduced active AGENT_RUNNER_AUTO_TASK env assignment', () => {
 		expectFlagged(
 			base.replace(
 				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
-				"$1  AGENT_RUNNER_AUTO_SLICE: 'true'\n",
+				"$1  AGENT_RUNNER_AUTO_TASK: 'true'\n",
 			),
-			'no-gate-env-auto-slice',
+			'no-gate-env-auto-task',
 		);
 	});
 
@@ -506,7 +506,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 			'matrix must enumerate the sliceable-BRIEF pool',
 		() => {
 			// Pre-fix shape: task-only `jq` over `items[]` only. Reintroducing it must
-			// be flagged so `AGENT_RUNNER_AUTO_SLICE` is never silently dead on the cron.
+			// be flagged so `AGENT_RUNNER_AUTO_TASK` is never silently dead on the cron.
 			const broken = base
 				.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
 				.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
