@@ -16,8 +16,8 @@ import {doFlagOverrides} from '../src/do-config.js';
  * (`slicer-review-edit-loop`): it resolves per-repo through the SAME chain as
  * `integration`/`reviewMaxRounds` — flag > env > per-repo > global > cheap
  * default. Pure logic (no git). Distinct from Gate-2's `reviewMaxRounds` (which
- * lives on the gate); `slicerLoopMax` lives on the LOOP (the `--slicer-loop*`
- * family, never sharing a name with the gate's `--review*`).
+ * lives on the gate); `slicerLoopMax` lives on the LOOP (the `--tasker-loop*`
+ * flag family, never sharing a name with the gate's `--review*`).
  */
 
 describe('slicerLoopMax — default + carry-through', () => {
@@ -88,7 +88,7 @@ describe('slicerLoopMax — the full precedence chain (flag > env > per-repo > g
 				repoPath: repoDir,
 				global: mergeConfig({slicerLoopMax: 2}),
 				env: {AGENT_RUNNER_SLICER_LOOP_MAX: '6'},
-				flags: doFlagOverrides({slicerLoopMax: '9'}),
+				flags: doFlagOverrides({taskerLoopMax: '9'}),
 			});
 			expect(flagWins.config.slicerLoopMax).toBe(9);
 		} finally {
@@ -111,16 +111,16 @@ describe('slicerLoopMax — the full precedence chain (flag > env > per-repo > g
 	});
 });
 
-describe('slicerLoopMax — the --slicer-loop-max flag override', () => {
+describe('slicerLoopMax — the --tasker-loop-max flag override (flag field bridges onto the slicerLoopMax config key)', () => {
 	it('parses a numeric flag', () => {
-		expect(doFlagOverrides({slicerLoopMax: '8'}).slicerLoopMax).toBe(8);
+		expect(doFlagOverrides({taskerLoopMax: '8'}).slicerLoopMax).toBe(8);
 	});
 
 	it('drops a non-numeric flag (lower layer / default decides)', () => {
 		expect(
-			doFlagOverrides({slicerLoopMax: 'abc'}).slicerLoopMax,
+			doFlagOverrides({taskerLoopMax: 'abc'}).slicerLoopMax,
 		).toBeUndefined();
-		expect(doFlagOverrides({slicerLoopMax: ''}).slicerLoopMax).toBeUndefined();
+		expect(doFlagOverrides({taskerLoopMax: ''}).slicerLoopMax).toBeUndefined();
 	});
 });
 

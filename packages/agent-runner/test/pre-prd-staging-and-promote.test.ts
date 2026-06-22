@@ -210,7 +210,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 8}}),
 			decide: async () => PRD_VERDICT,
-			// Untrusted origin would force STAGING; the explicit --prds-land-in
+			// Untrusted origin would force STAGING; the explicit --briefs-land-in
 			// override beats it (mirrors `explicitMerge` overriding the
 			// untrusted-origin build-propose rule).
 			originTrust: 'untrusted',

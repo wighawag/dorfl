@@ -285,7 +285,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 // RUNG 1 (top): the EXPLICIT OPERATOR FLAG.
 // --------------------------------------------------------------------------
 describe('placement rung 1: explicit operator flag wins over the untrusted-origin force', () => {
-	it('explicit --slices-land-in todo + untrusted PRD \u21d2 lands in work/tasks/todo/ (operator override beats the untrusted force)', async () => {
+	it('explicit --tasks-land-in todo + untrusted PRD \u21d2 lands in work/tasks/todo/ (operator override beats the untrusted force)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performSlice({
@@ -296,7 +296,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			integration: 'merge',
 			// A repo whose configured default is staging \u2026
 			tasksLandIn: 'pre-backlog',
-			// \u2026 but the operator EXPLICITLY typed --slices-land-in todo. The
+			// \u2026 but the operator EXPLICITLY typed --tasks-land-in todo. The
 			// operator is present; CLI always wins (no special force-key), exactly
 			// like `--merge` overriding the untrusted-origin build-propose rule.
 			explicitTasksLandIn: 'todo',
@@ -308,7 +308,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('explicit --slices-land-in pre-backlog + tasksLandIn: todo + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
+	it('explicit --tasks-land-in pre-backlog + tasksLandIn: todo + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performSlice({

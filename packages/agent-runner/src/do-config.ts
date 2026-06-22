@@ -67,7 +67,7 @@ export function harnessFlagOverrides(flags: HarnessFlags): PartialConfig {
 export function doFlagOverrides(
 	flags: HarnessFlags &
 		ReviewFlags &
-		SlicerLoopFlags &
+		TaskerLoopFlags &
 		FreshWorktreeGateFlags &
 		SelectionOrderFlags &
 		ObservationTriageFlags &
@@ -93,10 +93,11 @@ export function doFlagOverrides(
 		// `--review`/`--review-model`/`--review-max-rounds` resolve
 		// flag > env > per-repo > global > default, exactly like the harness flags.
 		...reviewFlagOverrides(flags),
-		// The slicer IMPROVER-loop family (`--slicer-loop`/`--no-slicer-loop`/
-		// `--slicer-loop-max`/`--slicer-loop-model`) rides the same chain — a DISTINCT
+		// The tasker IMPROVER-loop family (`--tasker-loop`/`--no-tasker-loop`/
+		// `--tasker-loop-max`/`--tasker-loop-model`) rides the same chain — a DISTINCT
 		// family from the gate's `--review*`, never sharing a flag/key/field name.
-		...slicerLoopFlagOverrides(flags),
+		// The flag fields bridge onto the `slicerLoop*` config keys (key rename deferred).
+		...taskerLoopFlagOverrides(flags),
 		// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` (run the acceptance gate
 		// against the REBASED tip in a clean throwaway worktree, ON by default) rides
 		// the SAME chain — a DISTINCT family from `--review*`/`--slicer-loop*`.
@@ -137,20 +138,26 @@ export interface ReviewFlags {
 }
 
 /**
- * The slicer IMPROVER-loop CLI flags (`do` only): `--slicer-loop` /
- * `--no-slicer-loop` (the on/off toggle), `--slicer-loop-max <n>` (the in-context
- * convergence cap), and `--slicer-loop-model <id>` (the loop reviewer's
+ * The tasker IMPROVER-loop CLI flags (`do` only): `--tasker-loop` /
+ * `--no-tasker-loop` (the on/off toggle), `--tasker-loop-max <n>` (the in-context
+ * convergence cap), and `--tasker-loop-model <id>` (the loop reviewer's
  * de-correlated model). A DISTINCT family from the acceptance gate's `--review*`
  * (see {@link ReviewFlags}) — no flag/key/field name spans both. Resolved through
  * the SAME `flag > env > per-repo > global > default` chain.
+ *
+ * NOTE the flag NAMES are tasking-vocabulary (`--tasker-loop*`, so commander
+ * populates the `taskerLoop*` fields below), but they still resolve into the
+ * `slicerLoop*` CONFIG KEYS — the config-key + symbol rename for this loop family
+ * is deferred to the modules/symbols task, so {@link taskerLoopFlagOverrides}
+ * bridges the new flag fields onto the existing config keys.
  */
-export interface SlicerLoopFlags {
-	/** `--slicer-loop` ⇒ true, `--no-slicer-loop` ⇒ false, absent ⇒ undefined. */
-	slicerLoop?: boolean;
-	/** `--slicer-loop-max <n>` — the loop's in-context convergence cap (parsed to a number). */
-	slicerLoopMax?: string;
-	/** `--slicer-loop-model <id>` — the loop reviewer's de-correlated model (routing intent). */
-	slicerLoopModel?: string;
+export interface TaskerLoopFlags {
+	/** `--tasker-loop` ⇒ true, `--no-tasker-loop` ⇒ false, absent ⇒ undefined. */
+	taskerLoop?: boolean;
+	/** `--tasker-loop-max <n>` — the loop's in-context convergence cap (parsed to a number). */
+	taskerLoopMax?: string;
+	/** `--tasker-loop-model <id>` — the loop reviewer's de-correlated model (routing intent). */
+	taskerLoopModel?: string;
 }
 
 /**
@@ -178,25 +185,30 @@ export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
 }
 
 /**
- * Map the slicer IMPROVER-loop flags into a {@link PartialConfig} of overrides.
+ * Map the tasker IMPROVER-loop flags into a {@link PartialConfig} of overrides.
  * Only flags actually present contribute (absent flag ⇒ absent key), so the
  * override layer never clobbers a lower-precedence source with `undefined`.
- * `--slicer-loop-max` is parsed to a number; a non-numeric value is dropped (the
+ * `--tasker-loop-max` is parsed to a number; a non-numeric value is dropped (the
  * lower layer / default decides). A DISTINCT family from {@link reviewFlagOverrides}.
+ *
+ * The tasking-vocabulary FLAG fields (`taskerLoop*`) bridge onto the existing
+ * `slicerLoop*` CONFIG KEYS (the config-key rename is deferred to the
+ * modules/symbols task), so the operator types `--tasker-loop` and the value
+ * still resolves through the standard precedence into `config.slicerLoop`.
  */
-export function slicerLoopFlagOverrides(flags: SlicerLoopFlags): PartialConfig {
+export function taskerLoopFlagOverrides(flags: TaskerLoopFlags): PartialConfig {
 	const overrides: PartialConfig = {};
-	if (flags.slicerLoop !== undefined) {
-		overrides.slicerLoop = flags.slicerLoop;
+	if (flags.taskerLoop !== undefined) {
+		overrides.slicerLoop = flags.taskerLoop;
 	}
-	if (flags.slicerLoopMax !== undefined) {
-		const n = Number(flags.slicerLoopMax);
-		if (flags.slicerLoopMax.trim() !== '' && !Number.isNaN(n)) {
+	if (flags.taskerLoopMax !== undefined) {
+		const n = Number(flags.taskerLoopMax);
+		if (flags.taskerLoopMax.trim() !== '' && !Number.isNaN(n)) {
 			overrides.slicerLoopMax = n;
 		}
 	}
-	if (flags.slicerLoopModel !== undefined) {
-		overrides.slicerLoopModel = flags.slicerLoopModel;
+	if (flags.taskerLoopModel !== undefined) {
+		overrides.slicerLoopModel = flags.taskerLoopModel;
 	}
 	return overrides;
 }
@@ -207,7 +219,7 @@ export function slicerLoopFlagOverrides(flags: SlicerLoopFlags): PartialConfig {
  * (default ON) toggling whether the acceptance gate (`prepare` then `verify`)
  * runs against the REBASED tip in a clean throwaway worktree (the merged
  * artifact) or in the agent's build worktree (the pre-rebase tree). Modelled
- * EXACTLY on {@link SlicerLoopFlags}'s on/off toggle; a DISTINCT family (no
+ * EXACTLY on {@link TaskerLoopFlags}'s on/off toggle; a DISTINCT family (no
  * flag/key/field name spans both). Resolved through the SAME
  * `flag > env > per-repo > global > default` chain.
  */

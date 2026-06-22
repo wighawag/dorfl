@@ -378,10 +378,10 @@ function buildRegistrySetAdvanceTick(options: {
 				identity: config.identity,
 				autoTask: config.autoTask,
 				integration: config.integration,
-				// The per-TRANSITION TASKING override: the `do prd:` tasking path threads
+				// The per-TRANSITION TASKING override: the `do brief:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`.
 				taskingIntegration: config.taskingIntegration,
-				// The TASK-PLACEMENT configured default (`do prd:` tasking output:
+				// The TASK-PLACEMENT configured default (`do brief:` tasking output:
 				// `pre-backlog` staged vs `todo` pool). No operator flag on this
 				// registry-driven advance context, so only the configured default rung is
 				// threaded (the resolver still layers untrusted-origin force + built-in floor).
@@ -625,8 +625,8 @@ interface CompleteFlags {
 }
 
 /**
- * Resolve the EXPLICIT operator placement override from `--slices-land-in <where>`
- * (the top of the `do prd:` slicing-placement precedence — slice
+ * Resolve the EXPLICIT operator placement override from `--tasks-land-in <where>`
+ * (the top of the `do brief:` tasking-placement precedence — slice
  * `runner-deterministic-slice-placement-policy-and-precedence`). Mirrors the
  * `flagMode === 'merge'` ⇒ `explicitMerge: true` shape: it contributes
  * `explicitTasksLandIn` ONLY when the operator actually typed the flag, so an
@@ -635,7 +635,7 @@ interface CompleteFlags {
  * — the SAME discipline the `--observation-triage` enum + the
  * `AGENT_RUNNER_TASKS_LAND_IN` env coercion use).
  */
-function explicitSlicesLandInFromFlag(
+function explicitTasksLandInFromFlag(
 	raw: string | undefined,
 ): 'pre-backlog' | 'todo' | undefined {
 	if (raw === undefined) {
@@ -643,24 +643,24 @@ function explicitSlicesLandInFromFlag(
 	}
 	if (raw !== 'pre-backlog' && raw !== 'todo') {
 		throw new Error(
-			`--slices-land-in must be 'pre-backlog' or 'todo' (got '${raw}').`,
+			`--tasks-land-in must be 'pre-backlog' or 'todo' (got '${raw}').`,
 		);
 	}
 	return raw;
 }
 
 /**
- * The PRD twin of {@link explicitSlicesLandInFromFlag} (slice
+ * The BRIEF twin of {@link explicitTasksLandInFromFlag} (slice
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). Resolve the
- * EXPLICIT operator PRD-placement override from `--prds-land-in <where>` for
- * `intake`'s `prd` dispatch — the TOP of the same precedence chain that the
- * slicer placement uses. Contributes `explicitBriefsLandIn` ONLY when the
+ * EXPLICIT operator brief-placement override from `--briefs-land-in <where>` for
+ * `intake`'s `brief` dispatch — the TOP of the same precedence chain that the
+ * tasking placement uses. Contributes `explicitBriefsLandIn` ONLY when the
  * operator actually typed the flag, so an untrusted-origin's staging force
  * still wins when the value came from config. An invalid value FAILS LOUDLY
- * (a usage error, never silently dropped), mirroring the slice helper above
+ * (a usage error, never silently dropped), mirroring the task helper above
  * and the `AGENT_RUNNER_BRIEFS_LAND_IN` env coercion.
  */
-function explicitPrdsLandInFromFlag(
+function explicitBriefsLandInFromFlag(
 	raw: string | undefined,
 ): 'pre-proposed' | 'ready' | undefined {
 	if (raw === undefined) {
@@ -668,7 +668,7 @@ function explicitPrdsLandInFromFlag(
 	}
 	if (raw !== 'pre-proposed' && raw !== 'ready') {
 		throw new Error(
-			`--prds-land-in must be 'pre-proposed' or 'ready' (got '${raw}').`,
+			`--briefs-land-in must be 'pre-proposed' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -690,8 +690,8 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--slices-land-in <pre-backlog|todo>`: the explicit operator placement override for `do prd:` slicing output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
-	slicesLandIn?: string;
+	/** `--tasks-land-in <pre-backlog|todo>`: the explicit operator placement override for `do brief:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
+	tasksLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
 	ignoreDivergedMain?: boolean;
@@ -704,12 +704,12 @@ interface DoFlags {
 	review?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
-	/** `--slicer-loop` / `--no-slicer-loop` — the slicer improver loop on/off toggle (`do prd:` path). */
-	slicerLoop?: boolean;
-	/** `--slicer-loop-max <n>` — the slicer improver loop's in-context convergence cap (`do prd:` path). */
-	slicerLoopMax?: string;
-	/** `--slicer-loop-model <id>` — the slicer improver loop reviewer's de-correlated model (`do prd:` path). */
-	slicerLoopModel?: string;
+	/** `--tasker-loop` / `--no-tasker-loop` — the tasker improver loop on/off toggle (`do brief:` path). Resolves into the `slicerLoop` config key (key rename deferred to the modules/symbols task). */
+	taskerLoop?: boolean;
+	/** `--tasker-loop-max <n>` — the tasker improver loop's in-context convergence cap (`do brief:` path). Resolves into the `slicerLoopMax` config key. */
+	taskerLoopMax?: string;
+	/** `--tasker-loop-model <id>` — the tasker improver loop reviewer's de-correlated model (`do brief:` path). Resolves into the `slicerLoopModel` config key. */
+	taskerLoopModel?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
 }
@@ -733,8 +733,8 @@ interface IntakeFlags {
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
 	 */
 	originTrust?: string;
-	/** `--prds-land-in <pre-proposed|ready>`: the explicit operator brief-placement override (top of the precedence). Resolves into the `briefsLandIn` config key. */
-	prdsLandIn?: string;
+	/** `--briefs-land-in <pre-proposed|ready>`: the explicit operator brief-placement override (top of the precedence). Resolves into the `briefsLandIn` config key. */
+	briefsLandIn?: string;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -1873,8 +1873,8 @@ export function buildProgram(): Command {
 			'integrate in propose mode this invocation (default; mutually exclusive with --merge; overrides config)',
 		)
 		.option(
-			'--slices-land-in <where>',
-			'where `do prd:<slug>` slicing output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'--tasks-land-in <where>',
+			'where `do brief:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--no-pr',
@@ -1922,20 +1922,20 @@ export function buildProgram(): Command {
 			'bound the revise/review loop; on exhaustion force needs-attention (default 2)',
 		)
 		.option(
-			'--slicer-loop',
-			'run the slicer IMPROVER loop on `do prd:<slug>` (review→edit→converge over the produced slice set). ON by default; --no-slicer-loop skips it. DISTINCT from the acceptance gate (--review).',
+			'--tasker-loop',
+			'run the tasker IMPROVER loop on `do brief:<slug>` (review→edit→converge over the produced task set). ON by default; --no-tasker-loop skips it. DISTINCT from the acceptance gate (--review).',
 		)
 		.option(
-			'--no-slicer-loop',
-			'skip the slicer improver loop on `do prd:<slug>`',
+			'--no-tasker-loop',
+			'skip the tasker improver loop on `do brief:<slug>`',
 		)
 		.option(
-			'--slicer-loop-max <n>',
-			'cap the slicer improver loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the PRD to needs-attention (default 3)',
+			'--tasker-loop-max <n>',
+			'cap the tasker improver loop on `do brief:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the brief to needs-attention (default 3)',
 		)
 		.option(
-			'--slicer-loop-model <id>',
-			'model the slicer improver loop review agent runs on (de-correlated from the slicer; routing intent). Resolved flag > env > per-repo > global > default. DISTINCT from --review-model.',
+			'--tasker-loop-model <id>',
+			'model the tasker improver loop review agent runs on (de-correlated from the tasker; routing intent). Resolved flag > env > per-repo > global > default. DISTINCT from --review-model.',
 		)
 		.option(
 			'--fresh-worktree-gate',
@@ -2095,7 +2095,7 @@ export function buildProgram(): Command {
 					// Host-only runner IDENTITY — scopes git/provider ops only (not the
 					// agent launch); absent ⇒ ambient.
 					identity: remoteConfig.identity,
-					// `do --remote prd:<slug>` tasking-gate policy (slice-build path ignores it).
+					// `do --remote brief:<slug>` tasking-gate policy (slice-build path ignores it).
 					autoTask: remoteConfig.autoTask,
 					// The resolved `promptGuidance` nudge — threaded into the remote worker
 					// prompt (runRemotePipeline → buildAgentPrompt), mirroring in-place `do`.
@@ -2103,13 +2103,13 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION TASKING override (the `do --remote prd:` tasking path).
+					// Per-TRANSITION TASKING override (the `do --remote brief:` tasking path).
 					taskingIntegration: remoteConfig.taskingIntegration,
 					// TASK-PLACEMENT: the configured default + the EXPLICIT operator override
 					// (`--slices-land-in`), the top of the placement precedence — mirrors
 					// `explicitMerge` (set only when the flag was typed).
 					tasksLandIn: remoteConfig.tasksLandIn,
-					explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
+					explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2128,7 +2128,7 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					// The slicer IMPROVER loop on the `do --remote prd:` path is ON by default
+					// The slicer IMPROVER loop on the `do --remote brief:` path is ON by default
 					// (auto-slicing has no `verify` floor, so the loop is the slice path's
 					// quality engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
 					// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
@@ -2141,7 +2141,7 @@ export function buildProgram(): Command {
 						: undefined,
 					slicerLoopMax: remoteConfig.slicerLoopMax,
 					slicerLoopModel: remoteConfig.slicerLoopModel,
-					// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
+					// The slice-SET ACCEPTANCE GATE on the `do --remote brief:` path too.
 					sliceReviewGate: remoteConfig.review
 						? harnessSliceAcceptanceGate({
 								harness: remoteHarness,
@@ -2238,7 +2238,7 @@ export function buildProgram(): Command {
 				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
 				// ambient (today's behaviour). Mapped Config → DoOptions like model/agentCmd.
 				identity: config.identity,
-				// `do prd:<slug>` tasking-gate policy (the slice-build path ignores it).
+				// `do brief:<slug>` tasking-gate policy (the slice-build path ignores it).
 				autoTask: config.autoTask,
 				// The resolved `promptGuidance` NUDGE namespace (e.g. `testFirst`),
 				// threaded into the worker prompt by performDo → buildAgentPrompt so a
@@ -2251,17 +2251,17 @@ export function buildProgram(): Command {
 				// typed `--merge` (`flagMode`), never when `merge` came from config — so an
 				// untrusted-origin slice still forces propose under a config `merge`.
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION TASKING override: the `do prd:` tasking path threads
+				// Per-TRANSITION TASKING override: the `do brief:` tasking path threads
 				// `taskingIntegration ?? integration`; the slice-build path stays on
 				// `integration`. Unset ⇒ tasking falls back to `integration` (today's behaviour).
 				taskingIntegration: config.taskingIntegration,
-				// TASK-PLACEMENT (`do prd:` tasking output): the configured default rung +
+				// TASK-PLACEMENT (`do brief:` tasking output): the configured default rung +
 				// the EXPLICIT operator override `--slices-land-in` (top of the precedence).
 				// `explicitTasksLandIn` is set ONLY when the flag was typed (mirrors
 				// `explicitMerge`), so an untrusted-origin staging force still wins under a
 				// config default.
 				tasksLandIn: config.tasksLandIn,
-				explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
+				explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
 				prepare: config.prepare,
@@ -2288,7 +2288,7 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				// The slicer IMPROVER loop on the `do prd:` slicing path is ON by default
+				// The slicer IMPROVER loop on the `do brief:` slicing path is ON by default
 				// (auto-slicing has no `verify` floor — the loop is the slice path's quality
 				// engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
 				// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
@@ -2355,7 +2355,7 @@ export function buildProgram(): Command {
 	// It reuses the SAME shared `prefix:arg` resolver `do` uses, EXTENDED with the
 	// `obs:` namespace, and wires the classify → lock → execute SKELETON: classify
 	// the rung (read-only, no model, no lock), take the `advancing` CAS borrow, then
-	// dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:` (never a
+	// dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do brief:` (never a
 	// duplicate), surface/apply/triage dispatch to a named executor seam later
 	// slices fill. The DRIVERS (one-shot/loop) + `-n` + per-action gates and the
 	// rung BODIES are LATER slices; the bare eligible-SET form errors clearly here.
@@ -2363,7 +2363,7 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (BRIEF advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance brief:<slug> (the BRIEF slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (BRIEF advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance brief:<slug> (the BRIEF slice rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/slice rungs ORCHESTRATE `do`/`do brief:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, slice→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
@@ -2407,8 +2407,8 @@ export function buildProgram(): Command {
 			'integrate the advanced item(s) in propose mode this invocation (default; mutually exclusive with --merge; overrides config). The CI propose shape is the parallel matrix (one PR per item).',
 		)
 		.option(
-			'--slices-land-in <where>',
-			'where `advance prd:<slug>` slicing output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'--tasks-land-in <where>',
+			'where `advance brief:<slug>` tasking output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--watch',
@@ -2544,12 +2544,12 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION TASKING override (the isolated `do --remote prd:` path).
+					// Per-TRANSITION TASKING override (the isolated `do --remote brief:` path).
 					taskingIntegration: remoteConfig.taskingIntegration,
 					// TASK-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
 					// (set only when typed, mirroring `explicitMerge`).
 					tasksLandIn: remoteConfig.tasksLandIn,
-					explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
+					explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2678,13 +2678,13 @@ export function buildProgram(): Command {
 				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (a
 				// bare `advance` auto-pick passes no flag ⇒ unset ⇒ untrusted forces propose).
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION TASKING override (the `do prd:` tasking path threads
+				// Per-TRANSITION TASKING override (the `do brief:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`).
 				taskingIntegration: config.taskingIntegration,
 				// TASK-PLACEMENT: configured default + EXPLICIT `--slices-land-in` override
 				// (set only when typed, mirroring `explicitMerge`).
 				tasksLandIn: config.tasksLandIn,
-				explicitTasksLandIn: explicitSlicesLandInFromFlag(flags.slicesLandIn),
+				explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -3364,7 +3364,7 @@ export function buildProgram(): Command {
 			"the author-trust verdict to STAMP onto the emitted PRD/slice (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the slice's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
 		)
 		.option(
-			'--prds-land-in <where>',
+			'--briefs-land-in <where>',
 			'where an intake-authored brief lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > briefsLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_BRIEFS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
@@ -3452,12 +3452,12 @@ export function buildProgram(): Command {
 				harness: config.harness,
 				piBin: config.piBin,
 			});
-			// The OPERATOR's EXPLICIT brief-placement override (`--prds-land-in`), the TOP
-			// of the placement precedence — mirrors `explicitSlicesLandInFromFlag` on
-			// the `do prd:` path. Fails loudly on a bad value.
+			// The OPERATOR's EXPLICIT brief-placement override (`--briefs-land-in`), the TOP
+			// of the placement precedence — mirrors `explicitTasksLandInFromFlag` on
+			// the `do brief:` path. Fails loudly on a bad value.
 			let explicitBriefsLandIn: 'pre-proposed' | 'ready' | undefined;
 			try {
-				explicitBriefsLandIn = explicitPrdsLandInFromFlag(flags.prdsLandIn);
+				explicitBriefsLandIn = explicitBriefsLandInFromFlag(flags.briefsLandIn);
 			} catch (err) {
 				console.error(
 					`error: ${err instanceof Error ? err.message : String(err)}`,
