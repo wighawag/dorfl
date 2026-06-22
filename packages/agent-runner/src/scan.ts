@@ -2,7 +2,7 @@ import type {Config} from './config.js';
 import {resolveEligibility, type EligibilityResult} from './eligibility.js';
 import {
 	ledgerRead,
-	type LedgerBacklogItem,
+	type LedgerTodoItem,
 	type LedgerPrdPool,
 	type LocalLedgerState,
 } from './ledger-read.js';
@@ -97,14 +97,24 @@ export interface ScannedLifecycle {
 }
 
 /**
- * A backlog item with its parsed gate/deps, before eligibility resolution. This
- * IS the read seam's resolved backlog shape ({@link LedgerBacklogItem}) — scan
- * keeps the historical name as its public type.
+ * One agent-POOL task with its parsed gate/deps, before eligibility resolution.
+ * This IS the read seam's resolved pool shape ({@link LedgerTodoItem}); the
+ * `Todo` noun follows the agent-pool folder `work/tasks/todo/` (staging is
+ * `work/tasks/backlog/`). The legacy export {@link BacklogItem} is kept as a
+ * deprecated alias of this type so existing consumers compile during the
+ * F1/F2/F3 vocabulary cutover.
  */
-export type BacklogItem = LedgerBacklogItem;
+export type TodoItem = LedgerTodoItem;
+/**
+ * @deprecated Renamed to {@link TodoItem} (F1 pool-noun cleanup,
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`). The pool is `todo`; staging
+ * is `backlog`. Kept as an alias so this slice does not boil the ocean; remove
+ * once consumers migrate.
+ */
+export type BacklogItem = TodoItem;
 
-/** A backlog item plus its resolved eligibility verdict. */
-export interface ScannedItem extends BacklogItem {
+/** A pool item plus its resolved eligibility verdict. */
+export interface ScannedItem extends TodoItem {
 	eligibility: EligibilityResult;
 }
 
@@ -125,7 +135,7 @@ export interface ScannedPrd {
 	eligibility: {eligible: boolean};
 }
 
-/** All scanned backlog items for one participating repo. */
+/** All scanned pool (`work/tasks/todo/`) items for one participating repo. */
 export interface RepoReport {
 	/**
 	 * The repo identity for this row. In the registry model (`scan`) it is the
@@ -174,7 +184,7 @@ export interface RepoReport {
 	 * repo's `refs/agent-runner/lock/*` refs — `active` holds (in-progress) and
 	 * `stuck` holds (needs-attention) + reasons. ADDITIVE to the folder-based pool
 	 * view above (the interim dual-write half; eligibility/selection stay OFFLINE on
-	 * `main` from `backlog/`, with held slugs SUBTRACTED — this field is the
+	 * `main` from the pool `tasks/todo/`, with held slugs SUBTRACTED — this field is the
 	 * read-only surface, NOT a selection input). Empty on a repo with no held locks
 	 * or when the lock refs could not be read (best-effort, see
 	 * {@link listItemLockEntries}). Optional so older literals stay valid.
@@ -200,11 +210,21 @@ export function readDoneSlugs(repoPath: string): Set<string> {
 }
 
 /**
- * Read and parse every `work/backlog/*.md` for a repo, sorted by slug. Resolves
- * THROUGH the read seam's local-tree method ({@link ledgerRead}).
+ * Read and parse every `work/tasks/todo/*.md` (the agent POOL) for a repo, sorted
+ * by slug. Resolves THROUGH the read seam's local-tree method
+ * ({@link ledgerRead}).
  */
-export function readBacklogItems(repoPath: string): BacklogItem[] {
-	return ledgerRead.resolveLocalState({repoPath}).backlog;
+export function readTodoItems(repoPath: string): TodoItem[] {
+	return ledgerRead.resolveLocalState({repoPath}).todo;
+}
+
+/**
+ * @deprecated Renamed to {@link readTodoItems} (F1 pool-noun cleanup,
+ * `f1-pool-noun-todo-in-surface-and-apply-readers`). Kept as an alias during the
+ * vocabulary cutover.
+ */
+export function readBacklogItems(repoPath: string): TodoItem[] {
+	return readTodoItems(repoPath);
 }
 
 /**
@@ -280,20 +300,21 @@ export function toScannedLifecycle(pools: {
 }
 
 export function scoreItems(
-	state: Pick<LocalLedgerState, 'backlog' | 'doneSlugs'>,
+	state: Pick<LocalLedgerState, 'todo' | 'doneSlugs'>,
 	autoBuild: boolean,
 	counts: {totalItems: number; totalEligible: number},
 	heldSlugs: Set<string> = new Set(),
 ): ScannedItem[] {
 	// HELD-SLUG SUBTRACTION (PRD `ledger-status-per-item-lock-refs` US #15; slice
-	// `claim-acquires-unified-lock-no-body-move`): exclude any `backlog/` slug whose
-	// per-item lock is currently held — the eligible pool is "in `backlog/` on `main`
-	// AND no lock held". While the body still moves to `in-progress/` on claim this
-	// is REDUNDANT-but-harmless (the moved body already left the pool); it is wired
-	// now so the capstone that stops the body move (slice #9) needs no reader change.
-	// The held set is gathered by the CALLER (which holds the arbiter handle) and is
-	// EMPTY when unavailable/offline, so this degrades to "subtract nothing".
-	return state.backlog
+	// `claim-acquires-unified-lock-no-body-move`): exclude any pool slug whose
+	// per-item lock is currently held — the eligible pool is "in `tasks/todo/` on
+	// `main` AND no lock held". While the body still moves to `in-progress/` on
+	// claim this is REDUNDANT-but-harmless (the moved body already left the pool);
+	// it is wired now so the capstone that stops the body move (slice #9) needs no
+	// reader change. The held set is gathered by the CALLER (which holds the
+	// arbiter handle) and is EMPTY when unavailable/offline, so this degrades to
+	// "subtract nothing".
+	return state.todo
 		.filter((item) => !heldSlugs.has(item.slug))
 		.map((item) => {
 			const eligibility = resolveEligibility({
@@ -477,7 +498,7 @@ export function scanRepoPaths(
 	repoPaths: string[],
 	config: Config,
 	/**
-	 * The HELD-SLUG set to SUBTRACT from each repo's `backlog/` pool (PRD
+	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/todo/`) (PRD
 	 * `ledger-status-per-item-lock-refs` US #15). This is a WORKING-TREE, OFFLINE
 	 * scan (it has no arbiter handle to fetch the lock refs from — that is the
 	 * registry `scan`'s job), so the held set is supplied by the in-place CALLER

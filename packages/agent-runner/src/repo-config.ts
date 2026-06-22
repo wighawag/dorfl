@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {
 	mergeConfig,
 	warnDeprecatedConfigKeys,
+	warnDeprecatedConfigValues,
 	type Config,
 	type PartialConfig,
 } from './config.js';
@@ -279,6 +280,7 @@ export function loadRepoConfigFromContent(
 	// override) before the allow/reject split, so an existing committed config keeps
 	// working — ignored, never an error, and never mistaken for an unknown key.
 	warnDeprecatedConfigKeys(parsed, sourceLabel);
+	warnDeprecatedConfigValues(parsed, sourceLabel);
 
 	const config: PartialConfig = {};
 	const rejected: string[] = [];

@@ -243,7 +243,7 @@ export interface DoOptions {
 	 * `pre-backlog`). The slice-BUILD path ignores it (placement is a SLICING
 	 * lifecycle concern).
 	 */
-	slicesLandIn?: 'pre-backlog' | 'backlog';
+	slicesLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The OPERATOR's EXPLICIT slice-placement override** (the TOP precedence
 	 * rung in the placement resolver). Set ONLY when the operator typed
@@ -252,7 +252,7 @@ export interface DoOptions {
 	 * CLI always wins, no special force-key) — the positional analogue of
 	 * `explicitMerge` overriding the untrusted-origin build-propose rule.
 	 */
-	explicitSlicesLandIn?: 'pre-backlog' | 'backlog';
+	explicitSlicesLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
 	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
@@ -464,12 +464,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * prd:<slug>` path: threaded into {@link performSlice} as the
 	 * configured-default rung. See {@link DoOptions.slicesLandIn}.
 	 */
-	slicesLandIn?: 'pre-backlog' | 'backlog';
+	slicesLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The OPERATOR's EXPLICIT slice-placement override** on the `do --remote
 	 * prd:` path. See {@link DoOptions.explicitSlicesLandIn}.
 	 */
-	explicitSlicesLandIn?: 'pre-backlog' | 'backlog';
+	explicitSlicesLandIn?: 'pre-backlog' | 'todo';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
 	prepare?: VerifyConfig;

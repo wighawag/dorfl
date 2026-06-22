@@ -396,11 +396,14 @@ describe('resolveRepoConfig — per-key layering', () => {
 			resolveRepoConfig({repoPath: repo, global: bare, env: {}}).config
 				.slicesLandIn,
 		).toBe('pre-backlog');
-		// global override: the user's global config sets `backlog`.
-		const global = mergeConfig({slicesLandIn: 'backlog'});
+		// global override: the user's global config sets the POOL value `todo`
+		// (renamed from `'backlog'` in slice
+		// `f1-pool-noun-todo-in-surface-and-apply-readers`; staging is still
+		// `'pre-backlog'`).
+		const global = mergeConfig({slicesLandIn: 'todo'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config.slicesLandIn,
-		).toBe('backlog');
+		).toBe('todo');
 		// per-repo file overrides the global.
 		writeRepoConfig(repo, {slicesLandIn: 'pre-backlog'});
 		expect(
@@ -411,15 +414,15 @@ describe('resolveRepoConfig — per-key layering', () => {
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_SLICES_LAND_IN: 'backlog'},
+				env: {AGENT_RUNNER_SLICES_LAND_IN: 'todo'},
 			}).config.slicesLandIn,
-		).toBe('backlog');
+		).toBe('todo');
 		// a flag beats env.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_SLICES_LAND_IN: 'backlog'},
+				env: {AGENT_RUNNER_SLICES_LAND_IN: 'todo'},
 				flags: {slicesLandIn: 'pre-backlog'},
 			}).config.slicesLandIn,
 		).toBe('pre-backlog');
