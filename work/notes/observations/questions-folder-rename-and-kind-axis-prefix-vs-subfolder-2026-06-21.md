@@ -1,5 +1,5 @@
 ---
-needsAnswers: true
+needsAnswers: false
 ---
 
 # Should `work/questions/` be renamed, and is the question KIND a filename-prefix or a subfolder (or a typed field)?
@@ -85,3 +85,8 @@ Flat vs subfolder: decide on ERGONOMICS alone (no safety difference). The real, 
 5. (unchanged) RENAME `questions/` (the code calls it the "what needs me?" queue; most entries are decisions/an inbox).
 
 Its own signal; likely an ADR (folder structure is load-bearing here, status=folder). (Round 2 below supersedes the flat-vs-subfolder framing as a non-issue.) Do NOT guess the rename/restructure \u2014 surface it.
+
+## Triaged: promoted
+
+Promoted to a new backlog slice `work/tasks/todo/questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21.md` (a human answered
+"promote"). This observation is resolved; the new item carries the work.
