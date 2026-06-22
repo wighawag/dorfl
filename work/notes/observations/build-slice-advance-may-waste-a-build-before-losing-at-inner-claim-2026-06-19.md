@@ -1,7 +1,8 @@
 ---
 date: 2026-06-19
 slug: build-slice-advance-may-waste-a-build-before-losing-at-inner-claim
-needsAnswers: true
+needsAnswers: false
+triaged: keep
 ---
 
 Noticed while building `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`
@@ -66,3 +67,11 @@ the eligibility subtraction already handles the common case, this is a
 micro-optimization on an already-rare event of debatable value — recorded so it is
 not re-litigated, deliberately NOT promoted to a task. The note stays as a live
 design signal documenting the accepted residual cost.
+
+## Applied answers 2026-06-22
+
+### q1: Triage disposition for this observation: keep as a live design signal documenting an accepted marginal residual, or route otherwise?
+
+KEEP as a live design signal documenting an accepted marginal residual. Verified: the wide eligibility hole is already closed in code (scan eligibility subtracts held-lock slugs via `heldSlugs`), so only the narrow photo-finish residual remains — one wasted build when two builders pass eligibility in the same instant and one loses at the inner claim CAS. No correctness loss (one-slug-one-folder holds; no double-LAND), the event is rare, and a claim-time terminal recheck would shrink but not close the window. The residual is explicitly accepted; no open sub-questions remain. Disposition: keep.
+
+disposition: keep
