@@ -48,3 +48,7 @@ agent-runner claim rename-docs-prose-slicing-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-docs-prose-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-docs-prose-slicing-to-tasking.md work/tasks/done/rename-docs-prose-slicing-to-tasking.md
 ```
+
+## Requeue 2026-06-22
+
+Gate-2 fix: docs/ci/README.md must point at work/briefs/tasked/runner-in-ci.md, NOT briefs/ready/. The runner-in-ci brief lives in briefs/tasked/ (decomposed-and-resting), confirmed via find. Fix BOTH occurrences your commit introduced (lines 13 and 125), AND the pre-existing same-class miss at line ~85 (land-time-reverify reference, also written 'ready/' but the brief is in 'tasked/') — all three are in this same file you own for the docs coherence sweep, and the acceptance criterion is 'docs use the current folder names', so a path that does not resolve is a violation, not a nit. Ignore the task PROMPT's stale hint 'work/briefs/ready/' — the correct current home for a TASKED brief is work/briefs/tasked/ (briefs/ready/ is the auto-tasking pool, a different folder). Keep all other docs-prose edits from your prior commit; just correct these brief-path references. Re-verify: grep docs/ci/README.md for 'briefs/ready/runner-in-ci' returns nothing.
