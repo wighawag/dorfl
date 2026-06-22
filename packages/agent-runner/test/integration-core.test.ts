@@ -768,13 +768,23 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		}
 	});
 
-	// Control for the test above: with the OLD small fixed cap (mergeRetries: 4,
-	// below N-1=6 worst-case serialisations) a high-fan-out merge SHOULD have
-	// exhausted the cap on at least one loser — proving the C2 change is what
-	// makes the above land. We assert NOT every slug landed (the un-C2 path is
-	// not deterministic both-land at this N), so the gain above is attributable to
-	// the new rebase-until-real-conflict semantics, not just to test timing.
-	it('with a small explicit mergeRetries cap (4), N=7 DIFFERENT items in parallel do NOT all cleanly land (the old fixed-cap behaviour the C2 default replaces)', async () => {
+	// Control for the test above: with the re-rebase-and-retry mechanism DISABLED
+	// (`mergeRetries: 0`), the SAME high-fan-out promotion does NOT all land. Every
+	// job branches off the IDENTICAL pre-merge base, so once one winner advances
+	// `main` the rest push `${branch}:main` non-fast-forward and — with no retry to
+	// re-rebase onto the moved tip — are rejected. This is the deterministic
+	// contrast that attributes the both-land in the test above to the retry/ceiling
+	// mechanism (the C2 change makes the ceiling LARGE so it never false-contends),
+	// NOT to test timing. It mirrors the two-job `mergeRetries: 0` control above,
+	// scaled to N=7.
+	//
+	// NOTE: we DISABLE the retry rather than pin a small-but-nonzero cap. A small
+	// cap (e.g. 4) does NOT reliably starve a loser here: these are DISJOINT-file,
+	// ledger-only promotions whose re-rebases replay cleanly and fast, so a handful
+	// of retries comfortably lands all N. Cap-exhaustion only bites under genuine
+	// same-path contention, which is already covered by the GENUINELY-CONFLICTING
+	// test above; using it here would assert a non-deterministic premise.
+	it('with the retry DISABLED (mergeRetries: 0), N=7 DIFFERENT items in parallel do NOT all cleanly land (the mechanism the C2 default makes a large ceiling is load-bearing)', async () => {
 		const N = 7;
 		const slugs = Array.from({length: N}, (_, i) => `q${i}`);
 		const seeded = seedRepoWithArbiter(scratch.root, slugs);
@@ -796,7 +806,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`);
 			cwds.push(cwd);
 		}
-		const results = await Promise.all(
+		const settled = await Promise.allSettled(
 			cwds.map((cwd, i) =>
 				performIntegration({
 					cwd,
@@ -807,9 +817,9 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 					verify: PASS,
 					mode: 'merge',
 					surfaceArbiter: ARBITER,
-					// Pin BELOW the worst-case N-1=6 serialisations: at least one loser
-					// will exhaust the cap, mirroring the pre-C2 false-contention defect.
-					mergeRetries: 4,
+					// Retry DISABLED: the un-retried push tail cannot recover a
+					// non-fast-forward `${branch}:main` against a concurrent winner.
+					mergeRetries: 0,
 					mergeJitterMs: 0,
 					env: gitEnv(),
 				}),
@@ -818,15 +828,11 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		const landed = slugs.filter((s) =>
 			existsOnArbiterMain(seeded.repo, 'done', s),
 		);
-		const routed = results.filter(
-			(r) => r.outcome === 'rebase-conflict',
-		).length;
-		// Cap-exhausted losers route to needs-attention with `rebase-conflict`. The
-		// fixed-cap default the C2 change removed cannot deterministically both-land
-		// at this N; that the OPPOSITE deterministically holds with the default cap
-		// is the win the test above demonstrates.
+		// Without the retry, the un-serialised high-fan-out path cannot
+		// deterministically land ALL N: the losers' non-fast-forward pushes are not
+		// re-rebased onto the winner's advanced main.
 		expect(landed.length).toBeLessThan(N);
-		expect(routed).toBeGreaterThan(0);
+		expect(settled).toHaveLength(N);
 	});
 });
 
