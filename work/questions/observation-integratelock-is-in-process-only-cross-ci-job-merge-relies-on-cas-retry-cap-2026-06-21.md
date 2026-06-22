@@ -11,3 +11,5 @@ _Suggested default: promote-adr — record the rule (CAS = cross-runner queue; i
 <!-- q1 fields: id=q1 disposition=promote-adr -->
 
 **Your answer** (write below this line):
+
+promote-adr — record the rule, defer the change. Verified: the integrate-lock is in-process only (serialises land-tails within ONE `run` process), and cross-job/cross-runner merge serialisation relies on the bounded CAS retry (`DEFAULT_MERGE_RETRIES = 5`), which was sized for in-process siblings, not a wide CI matrix. The ADR should capture the durable rule (CAS = the cross-runner queue; the in-process lock is only a within-runner optimisation) plus the sizing obligation (retry cap vs expected matrix width, and/or a cross-job concurrency-group mutex). Do NOT implement the sizing/mutex change now — the parallel-merge CI shape is not yet designed. Note: a ready brief (`land-time-reverify-and-parallel-merge-ceiling`) already cites this observation, so prefer FOLDING this rule into that brief's eventual ADR rather than spinning a standalone one. Disposition: promote-adr.

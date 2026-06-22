@@ -11,3 +11,5 @@ _Suggested default: promote-slice — fix shape and test are already sketched, a
 <!-- q1 fields: id=q1 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice. Verified live divergence: the autoBuild gate uses the working-tree reader against the bare mirror (which cannot read a committed `.agent-runner.json` → falls back to global/default), while the autoSlice + lifecycle gates use the mirror-ref reader (which CAN read the committed value). So a repo with a committed per-repo override of both gates gets disagreeing gates within one iteration. Fix: point the autoBuild gate at `resolveRepoConfigFromMirror` in the bare-mirror branch + test that a committed override is observed by both. Narrow (read-only scan, degrades to global fallback, never corrupts) but a real correctness divergence. Disposition: promote-slice.

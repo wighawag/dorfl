@@ -11,3 +11,5 @@ _Suggested default: promote-slice — ship the escape-hatch (b) + report-literal
 <!-- q1 fields: id=q1 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice, shipping the escape-hatch (b) + report-literal-names (c) together; leave the migration (a) as a follow-up only if more pre-cutover orphans surface. Verified: `release-lock` resolves through the namespaced mapping (task/brief/observation only), so it cannot name a residual `slice-*`/`prd-*` lock entry, and there is no `--entry` escape hatch today; the only current recourse is raw `git push --delete` (the plumbing the protocol tells operators to avoid). (b) `release-lock --entry <literal>` deletes the literal ref via the same leased delete, preserving the human-asserts-liveness model; (c) print literal entry names in `gc --ledger` + document the workaround. Cross-ref the reaper orphan sidecar (same orphan, two angles). Disposition: promote-slice.

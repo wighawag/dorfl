@@ -12,6 +12,8 @@ _Suggested default: promote-adr (record the emit-only-on-disagreement rule as a 
 
 **Your answer** (write below this line):
 
+KEEP / ratify the module JSDoc as the durable record — no separate ADR. The emit-only-on-disagreement rule (and dropping a redundant override on parse) IS implemented and documented in the module doc next to the code it governs; that is an adequate durable home for a parser invariant. This is part of a recurring "decision recorded as JSDoc, not a `## Decisions` block" pattern across several review-nit sidecars; rather than reopen each, the pattern itself is being captured as one meta-observation (enforce-or-relax the `## Decisions` convention). Disposition: keep.
+
 ## Q2
 
 **How should we triage the nit: identity HTML comment's redundant `type=`/`slug=` fields are IGNORED on parse — parser re-derives from `item=` via `resolveSidecarIdentity` and never validates them?**
@@ -23,6 +25,8 @@ _Suggested default: promote-slice (small follow-up slice: either drop the redund
 <!-- q2 fields: id=q2 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice, option (c): REFUSE on mismatch. Of the three options, refusing when `type=`/`slug=` disagree with the re-derived identity preserves the human-readable header (the whole point of this format) while removing the silent-tolerance footgun — better than dropping the fields (option b loses the at-a-glance readability) or keeping silent re-derivation (option a). Disposition: promote-slice.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: promote-slice (tiny docs slice: add the one-line note to SKI
 
 **Your answer** (write below this line):
 
+promote-slice — a one-line SKILL.md hand-writer note that the heading case is cosmetic (a separator) and the per-entry comment `id=` is what the parser uses. BUNDLE this with Q5 (also a SKILL.md hand-writer note) into a single docs slice, not two. Disposition: promote-slice (bundled with Q5).
+
 ## Q4
 
 **How should we triage the nit: a question text containing `**…**` markup will be truncated by the non-greedy bold-question regex `^\*\*(.+?)\*\*\s*$`?**
@@ -48,6 +54,8 @@ _Suggested default: keep (latent corner case unlikely to fire in practice; leave
 
 **Your answer** (write below this line):
 
+KEEP — latent corner that does not fire in practice (surfacers do not nest bold in question text). The observation is the durable record; hardening a regex for an input that never occurs is churn. Disposition: keep.
+
 ## Q5
 
 **How should we triage the nit: multi-paragraph context only keeps the FIRST contiguous blockquote run — a non-quoted blank-content paragraph between two `>` runs loses the second run on parse?**
@@ -59,3 +67,5 @@ _Suggested default: promote-slice (tiny docs slice: add a sentence to SKILL.md h
 <!-- q5 fields: id=q5 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice — a one-sentence SKILL.md hand-writer note that every paragraph in a context block must keep the `>` prefix (a blank-line-separated unquoted paragraph silently loses the second blockquote run on parse). BUNDLE with Q3 into the SAME single docs slice. Disposition: promote-slice (bundled with Q3).

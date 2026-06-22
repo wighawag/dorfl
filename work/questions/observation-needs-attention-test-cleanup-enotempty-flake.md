@@ -11,3 +11,5 @@ _Suggested default: promote-slice — small, well-localised fix in `test/helpers
 <!-- q1 fields: id=q1 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice (small, localised). The cleanup race is real: the test-repo `cleanup()` does `rmSync(root, {recursive: true, force: true})` which can ENOTEMPTY when in-flight git/fs ops are still touching the tree. Fix: await in-flight ops before cleanup, or retry `rmSync` on ENOTEMPTY. Note the cited path is stale — the real `rmSync` is at `gitRepo.ts:150`, not `:102`; whoever writes the slice should update the reference. Disposition: promote-slice.

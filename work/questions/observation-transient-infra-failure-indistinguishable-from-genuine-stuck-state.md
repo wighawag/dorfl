@@ -12,6 +12,8 @@ _Suggested default: promote-slice — the classification half is a small, well-s
 
 **Your answer** (write below this line):
 
+promote-slice. Land half-1 (the classification change) as a small, well-scoped slice: add the credential-expiry signature and a dedicated failure cause (see Q3). The routing half (Q2) is a real open design question — capture it in an ADR rather than guessing it inside the slice. Disposition: promote-slice (classification), with an accompanying ADR for routing.
+
 ## Q2
 
 **Once a failure is classified `transient-infra`, what should the routing be: auto-retry with backoff, a distinct 'infra-blocked, not work-blocked' surface, or both (per sub-cause)?**
@@ -24,6 +26,8 @@ _Suggested default: Split by sub-cause: model-outage / 5xx / 429 → bounded aut
 
 **Your answer** (write below this line):
 
+Split by sub-cause (route to an ADR). Model-outage / 5xx / 429 → bounded auto-retry with backoff, then a distinct infra-blocked surface if retries exhaust. Credential-expiry / 401 auth-required → straight to an infra-blocked / needs-reauth surface (no retry helps), kept SEPARATE from work-stuck `needs-attention` (which means "a human must look at the WORK" — the wrong signal here). The dedicated cause from Q3 is the natural carrier of this split.
+
 ## Q3
 
 **Should a 401 `authentication_required` / 'OAuth refresh token expired or revoked' be classified `transient-infra` at all, or a new dedicated cause (e.g. `needs-reauth` / `credential-expired`)?**
@@ -35,3 +39,5 @@ _Suggested default: Start by folding into `transient-infra` (smallest change, ma
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Add a NEW dedicated cause (`needs-reauth` / `credential-expired`), do NOT fold 401 into `transient-infra`. Credential expiry behaves fundamentally differently from a transient outage — no amount of retry fixes it; it needs human re-auth — so giving it its own `FailureCause` variant keeps the taxonomy honest and lets Q2's routing branch on it cleanly instead of re-splitting a conflated `transient-infra` bucket downstream. Adding the variant is a contained cross-file change (the union's three declaration sites). This pairs with the Q2 split.

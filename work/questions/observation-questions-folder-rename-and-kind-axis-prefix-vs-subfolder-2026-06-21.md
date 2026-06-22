@@ -12,6 +12,8 @@ _Suggested default: promote-adr_
 
 **Your answer** (write below this line):
 
+promote-adr. Folder structure is load-bearing ("status IS the folder") and there is no prior folder-structure ADR, so the rename + the KIND layout + the gating invariant (Q4) + the merge-kind keying (the sibling sidecar-keying question) all belong recorded in ONE ADR, decided together with the merge-questions finding and the needs-attention observation. The ADR should ratify the Q2/Q3/Q4 decisions below. Disposition: promote-adr.
+
 ## Q2
 
 **Question A — Rename `work/questions/` to something broader (e.g. `inbox/`, `attention/`, `decisions/`, `pending/`), or keep the name `questions/`?**
@@ -23,6 +25,10 @@ _Suggested default: keep `questions/` for now (defer rename until B is decided, 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Rename `questions/` → `inbox/`. The four flows (merge / stuck / triage / spec) are a human-action inbox ("approve this land?", "requeue/reset/drop?", "disposition this", "answer this spec"), not literally questions, and `inbox/` reads as "what needs me?" — which is how `work-layout.ts` already glosses the folder. Churn is low (one value flip in the folder registry + a `git mv` + CONTEXT/contract text). Do the rename as part of the same ADR cutover as Q3 so naming + structure change once together.
+
+IMPORTANT axis note for the ADR: the subfolders are the question KIND (merge / stuck / triage / spec), NOT the item TYPE (observation / task / brief). The item type already lives in the sidecar identity and the filename (`<type>-<slug>.md`); do not make item-type the folder level. So the layout is `inbox/<kind>/<type>-<slug>.md`, e.g. `inbox/triage/observation-foo.md`, `inbox/merges/slice-bar.md`.
 
 ## Q3
 
@@ -36,6 +42,8 @@ _Suggested default: flat + typed `kind` field with per-kind views rendered by `s
 
 **Your answer** (write below this line):
 
+SUBFOLDER per kind (`inbox/<kind>/<type>-<slug>.md`), made safe by the ENFORCED one-open-kind-per-item invariant (see Q4). This deliberately differs from the sidecar's "flat + typed field" default, BECAUSE Q4 is answered YES-and-enforced: once the tool guarantees an item has at most one open kind at a time, the kind subfolder IS a pure function of identity again, so the silent-lookup hazard the note worried about is removed and we get the scannable per-kind queue that matches the repo's status=folder idiom. The safety is NOT "assume the invariant" — it is "the tool enforces it" (see Q4). Thread the kind through `sidecarPathFor` as part of the cutover; because only one kind is ever open, the lookup is unambiguous.
+
 ## Q4
 
 **Sub-invariant gating B: is it a DESIGN INVARIANT that an item has at most ONE open question-kind at a time (so kind is 1:1 with identity), or can one item legitimately carry e.g. a SPEC question at build time and later a MERGE question at land time?**
@@ -47,3 +55,7 @@ _Suggested default: NOT an invariant — a slice can plausibly carry spec-then-m
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+YES — it IS a design invariant that an item has at most ONE open question-kind at a time — AND it must be ENFORCED by the tool, not merely assumed, precisely because a human can otherwise screw it up. Enforcement: opening a sidecar is a create that first checks no OTHER-kind open sidecar exists for the same identity, and refuses (rather than silently creating a second) if one does. This is what makes the Q3 subfolder layout safe: with the invariant enforced, kind is 1:1 with identity and `inbox/<kind>/<type>-<slug>.md` is a pure function of identity, so an identity lookup can never silently miss a second-kind file (there is never a second).
+
+Note one honest residual for the ADR (shared with the sidecar-keying question): a MERGE-kind question can exist for an item whose `work/<slug>.md` body does not exist (an unmerged branch). So the `merges/` kind specifically may need the lock-ref / branch-identity keying that the needs-attention sidecar's Q2 is about — resolve that in the same ADR. The spec-then-merge-over-time worry the note raised is handled by the invariant being TEMPORAL (at most one open AT A TIME): a spec question is resolved/removed before a later merge question opens, so they never coexist.

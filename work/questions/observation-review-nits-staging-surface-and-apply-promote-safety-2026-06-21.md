@@ -12,6 +12,8 @@ _Suggested default: keep — record as a hint for the runner that the dependency
 
 **Your answer** (write below this line):
 
+KEEP — record as a runner hint that the `blockedBy: [f1]` is a serialisation hedge (touches overlapping readers / config doc-comments), not a semantic prerequisite; dispatch may override it if F1 stalls. Do not spend a slice re-examining it now. Disposition: keep.
+
 ## Q2
 
 **Finding 2 — should F2 (new `surfaceStaging` config key) and F3b (changed lock discipline of `promote`) mirror anything into `skills/setup/protocol/` and `work/protocol/`, and if so should that mirroring be promoted as its own slice, folded into the existing F2/F3b slices, or dropped as a no-op?**
@@ -23,3 +25,5 @@ _Suggested default: keep — perform the quick grep during F2/F3b build; promote
 <!-- q2 fields: id=q2 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP — do the quick grep during F2/F3b build; promote a follow-up only if a protocol doc is actually found to document the affected surface. Heads-up for the builder: the staging/pool composition and the per-item lock discipline ARE documented in `work/protocol/WORK-CONTRACT.md` (and CLAIM-PROTOCOL.md), so the "likely a no-op" assumption must be ACTIVELY confirmed, and any protocol-doc edit must be mirrored `skills/setup/protocol/` ↔ `work/protocol/` byte-identically per AGENTS.md. Disposition: keep.

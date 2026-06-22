@@ -12,6 +12,8 @@ _Suggested default: promote-slice (small, well-scoped fix touching `claim-cas.ts
 
 **Your answer** (write below this line):
 
+promote-slice. Verified: the two claim-CAS sites emit the IDENTICAL "not found on main (already done/removed, or wrong slug)" message and both exit 2, conflating a benign already-done race with a real typo; ADR `ci-config-policy-and-gate-family` §7 calls the race benign-by-design. The message-conflation fix is uncontested and wanted regardless; the benign-skip-exit change needs Q2/Q3 baked into the slice spec. Disposition: promote-slice (carrying the Q2/Q3 decisions below).
+
 ## Q2
 
 **Should a stale-snapshot leg whose item is already in a TERMINAL folder exit 0 (silent benign skip, leg green) or exit a NEW distinct non-zero code that the workflow specifically tolerates (skip recorded, but still observable)?**
@@ -24,6 +26,8 @@ _Suggested default: exit 0 with a clear SKIP message — matches ADR §7 intent 
 
 **Your answer** (write below this line):
 
+Lean: a NEW distinct tolerated non-zero code (skip recorded, still observable), rather than a silent exit 0. Rationale: the codebase ALREADY distinguishes `contended` (exit 3, a tolerated "this is fine" outcome) from gone-from-main (exit 2), and the matrix workflow already tolerates `contended` legs — so a distinct tolerated code for "item already terminal" is consistent with the existing design and keeps the skipped-leg signal visible, whereas exit 0 loses it. (Exit 0 with a clear SKIP message is also defensible and matches §7 intent — either is acceptable; I prefer the observable code.)
+
 ## Q3
 
 **Should the benign-skip behaviour be the DEFAULT for all callers, or gated behind an opt-in flag (e.g. `--quiet-if-gone`) that CI sets while interactive humans keep the loud exit-2?**
@@ -35,3 +39,5 @@ _Suggested default: flag-gated (`--quiet-if-gone` or similar) set by `advance-li
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Flag-gated (e.g. `--quiet-if-gone`) set by the matrix leg in the workflow; keep the interactive default LOUD so a human who typos an already-done slug still gets the error. INDEPENDENTLY and regardless of the flag, ALWAYS fix the message conflation so the three cases (terminal / staged-but-not-pool / nowhere) are distinguishable in output — that fix is wanted on its own merits.

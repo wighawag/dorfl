@@ -11,3 +11,5 @@ _Suggested default: keep — accept the triage update's conclusion: leave as a l
 <!-- q1 fields: id=q1 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP as a live design signal documenting an accepted marginal residual. Verified: the wide eligibility hole is already closed in code (scan eligibility subtracts held-lock slugs via `heldSlugs`), so only the narrow photo-finish residual remains — one wasted build when two builders pass eligibility in the same instant and one loses at the inner claim CAS. No correctness loss (one-slug-one-folder holds; no double-LAND), the event is rare, and a claim-time terminal recheck would shrink but not close the window. The residual is explicitly accepted; no open sub-questions remain. Disposition: keep.

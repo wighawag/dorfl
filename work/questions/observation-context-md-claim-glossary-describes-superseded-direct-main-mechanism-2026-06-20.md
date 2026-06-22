@@ -11,3 +11,5 @@ _Suggested default: promote-slice — author already scoped it as a deliberate r
 <!-- q1 fields: id=q1 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+DROP — overtaken by events. The load-bearing premise is no longer true: CONTEXT.md's `claim (CAS)` glossary entry already describes the per-item-lock-ref model ("acquiring an item's per-item lock ... the claim writes NOTHING to `main`"), and the status/needs-attention entries already state the transient states are "NO LONGER folders". No "direct-`main` micro-commit" or "ledger-transition seam" text remains to rewrite. Disposition: dropped.

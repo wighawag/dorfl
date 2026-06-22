@@ -11,3 +11,5 @@ _Suggested default: keep — single occurrence so far, and the author's stated b
 <!-- q1 fields: id=q1 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP — observed once; the bar for promotion is recurrence. The test logic is green; it flaked as `lost-race` once under full-suite parallel load. Preserve the signal so the next recurrence (or a batched test-isolation pass over all "green logic, racy under load" siblings) can promote it. Honest note: that pattern is demonstrably recurring (one open sibling + three landed `serialise-*` fixes), so a one-off serialise slice here would be cheap and pattern-consistent if we later prefer to stop accumulating racy-test debt — but per the recurrence bar, keep for now. Disposition: keep.

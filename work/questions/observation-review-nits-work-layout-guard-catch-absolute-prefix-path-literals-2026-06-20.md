@@ -11,3 +11,5 @@ _Suggested default: dropped — the in-source comment in the test file captures 
 <!-- q1 fields: id=q1 disposition=dropped -->
 
 **Your answer** (write below this line):
+
+DROPPED — the rationale is durably recorded at the choice site (the in-source comment in `test/work-layout-guard.test.ts` documenting the parallel `refPrefix`/`pathPrefix` alternation), Gate 2 already approved without a `## Decisions` block, and a retroactive done-file edit is churn for one nit. Part of the recurring "decision recorded in-source, not in a `## Decisions` block" pattern captured in the meta-observation — if it recurs a third time, that pattern is worth its own "enforce-or-relax the Decisions convention" item rather than chasing this one retroactively. Disposition: dropped.

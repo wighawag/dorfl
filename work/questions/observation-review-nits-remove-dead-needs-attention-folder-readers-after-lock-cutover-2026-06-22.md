@@ -12,6 +12,8 @@ _Suggested default: Ratify (a) — decision is sound and matches the slice's sta
 
 **Your answer** (write below this line):
 
+KEEP / ratify (a). Verified: `readNeedsAttentionItems` is gone (no matches anywhere) and de-exported — the cut happened, and it matches the slice's recommended default. Accept the missing `## Decisions` line as a process nit (part of the recurring pattern captured in the meta-observation), not a reason to reopen. Disposition: keep.
+
 ## Q2
 
 **Ratify the rewritten `ApplyResolveNeedsAttentionTransitionInput/Result` shape — dropping the `moveCommit` / `commitMessage` fields the old `ResolveFromNeedsAttentionResult` type declared. OK?**
@@ -24,6 +26,8 @@ _Suggested default: Ratify the drop — fields were vestigial (declared but neve
 
 **Your answer** (write below this line):
 
+KEEP / ratify the drop. Verified: the old `ResolveFromNeedsAttentionResult` type is gone; the new `{moved, reasonNotMoved?}` shape matches what the strategy body produces and what the sole consumer (`start.ts`) reads. The dropped `moveCommit`/`commitMessage` fields were vestigial (declared but never produced or consumed). Disposition: keep.
+
 ## Q3
 
 **Ratify deferring the residual folder prose + the live `existsSync(work/needs-attention/<slug>.md)` probe in `complete.ts`'s source resolver to a follow-up slice. OK?**
@@ -35,3 +39,5 @@ _Suggested default: Ratify the deferral — the probe is on the committed-recove
 <!-- q3 fields: id=q3 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP / ratify the deferral. Verified: `complete.ts`'s `existsSync(work/needs-attention/<slug>.md)` probe is on the committed-recovery path (a runner-owned recovery SOURCE folder), NOT a reader of the retired needs-attention surface, so it was defensibly out of scope for this slice. Track the residual folder prose + this probe via the existing follow-up observation (`stale-needs-attention-folder-prose-...`) rather than reopening this slice. Disposition: keep.

@@ -12,6 +12,8 @@ _Suggested default: keep — ratify the JSDoc as the recorded contract (spirit s
 
 **Your answer** (write below this line):
 
+KEEP — ratify the JSDoc on `reapReportNeedsAttention` as the recorded exit-code contract. The contract is durably captured in the code next to the predicate it governs; that satisfies the spirit of the acceptance criterion. (The missing literal `## Decisions` block is part of a recurring pattern being captured as one meta-observation rather than reopened per-slice.) Disposition: keep.
+
 ## Q2
 
 **Nit #2: is the new `reconcileItemLockAgainstMain` behaviour (extra `git ls-remote` round-trip on every leased-delete rejection, plus local `update-ref -d` of a stale tracking ref when the remote ref is empty) the intended contract for ALL callers (recovery, not just the reaper), or should it be refactored into a reaper-internal helper?**
@@ -23,6 +25,8 @@ _Suggested default: promote-slice — at minimum a small slice to either (i) ren
 <!-- q2 fields: id=q2 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice, option (ii): DOCUMENT the broadened contract on `reconcileItemLockAgainstMain` and AUDIT non-reaper callers for the `error`→`no-lock` shape change. This is the one genuine non-churn item in this sidecar: the extra `ls-remote` round-trip + local stale-ref drop now fire for ALL callers (including recovery), so a rejected leased delete that used to surface as `error` may now surface as `no-lock` — a real shared-behaviour change worth pinning + auditing. A full rename/split (option i) is likely over-engineering given the codebase already separates the read-only classifier from this mutating reconcile. Disposition: promote-slice.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: keep — accept the predicate-boundary pin as a deliberate t
 
 **Your answer** (write below this line):
 
+KEEP — accept the predicate-boundary regression guard as a deliberate trade-off. Exposing a TOCTOU seam purely to drive an end-to-end test of the real-race branch is a poor trade (production complexity for test-only benefit). Revisit only if the real-race branch regresses in the wild. Disposition: keep.
+
 ## Q4
 
 **After per-nit triage, what is the terminal routing for this observation as a whole?**
@@ -47,3 +53,5 @@ _Suggested default: delete — once each nit is individually dispositioned (e.g.
 <!-- q4 fields: id=q4 disposition=delete -->
 
 **Your answer** (write below this line):
+
+DELETE — once the nits are dispositioned (Q1 keep, Q2 promoted to a follow-up slice, Q3 keep) the observation has served its purpose. Delete it rather than leave a stale open note, CONTINGENT on Q2's follow-up slice actually being created so the promote-slice content is not lost. Disposition: delete (after Q2's slice exists).

@@ -12,6 +12,8 @@ _Suggested default: keep — aliases are non-load-bearing and removing them is p
 
 **Your answer** (write below this line):
 
+KEEP — the `SliceReviewVerdict` / `LoneSliceReviewVerdict` aliases are an acceptable permanent soft landing. The shape and parser ARE unified; only the names persist, and removing them is pure rename churn with no behaviour change. (Note the acceptance line said the type was "removed" while the NAME persists — a letter-vs-spirit gap worth acknowledging, not reopening.) Disposition: keep.
+
 ## Q2
 
 **Should the unauthorised `parseSliceReviewVerdict` / `parseLoneSliceReviewVerdict` parser aliases be swept away (callers migrated to the single `parseReviewVerdict`), or accepted as backwards-compat re-exports alongside the type aliases?**
@@ -23,6 +25,8 @@ _Suggested default: keep — same disposition as the type aliases; bundle any fu
 <!-- q2 fields: id=q2 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP — same disposition as the type aliases. The parser is genuinely unified (one `parseReviewVerdict`); the `parseSliceReviewVerdict`/`parseLoneSliceReviewVerdict` aliases are import-compat re-exports only. Bundle with Q1 if ever cleaned up. Disposition: keep.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: promote-slice — a small setup-execution test closes a real
 
 **Your answer** (write below this line):
 
+promote-slice — add a setup-skill end-to-end propagation test. This is a genuine (non-churn) coverage gap: the existing mirror test only asserts `skills/setup/protocol/` ↔ `work/protocol/` byte-identity WITHIN this repo, which structurally CANNOT catch a broken setup COPY step into a fresh target repo. A test that invokes the setup skill on a throwaway target and asserts `work/protocol/` lands with the new doc closes it. Disposition: promote-slice.
+
 ## Q4
 
 **Should a follow-up retroactively add a `## Decisions` block to the integration record (or future PR template enforcement) capturing the alias-instead-of-removal choice, the new `resolveReviewProtocolPath` helper, and the shared `verdictContractPrompt` with per-builder 'do NOT fill' instructions — or is recording them only in this observation enough?**
@@ -47,3 +53,5 @@ _Suggested default: keep — the decisions are now durably captured HERE (the ob
 <!-- q4 fields: id=q4 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP — recording the three decisions HERE (the observation) is sufficient; no retroactive `## Decisions` block needed. The decisions (alias-instead-of-removal, the `resolveReviewProtocolPath` helper, the shared `verdictContractPrompt` with per-builder "do NOT fill" instructions) are real and verified, and this observation is an adequate durable record. Part of the recurring pattern captured in the meta-observation. Disposition: keep.

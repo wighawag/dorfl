@@ -11,3 +11,5 @@ _Suggested default: promote-slice — serialise this specific test (option a), m
 <!-- q1 fields: id=q1 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice, option (a): serialise the test (mirroring the `serialise-review-gate-test-under-parallel-load` precedent). The product CAS is structurally sound (injected seam + `--force-with-lease` per-attempt nonce); this is a test-harness contention-timing flake, not a product bug. Strong evidence against option (b): PR #90 (`triage-cas-race-test-models-real-contention`, DONE) already took the tighten-the-contention-model approach and the flake survived full parallel load, whereas the serialise precedent is a clean template. A flaky acceptance-gate test erodes gate trust, so fix it deterministically. Disposition: promote-slice.

@@ -12,6 +12,8 @@ _Suggested default: keep — leaving the picker to resolve via ADR is the docume
 
 **Your answer** (write below this line):
 
+KEEP — resolved, overtaken by events. The keystone slice is now `needsAnswers:false` and carries an "Applied answers 2026-06-22" section that resolves BOTH deferred decisions: seam = Option A (single wrapper, conditional HTML-comment-delimited fragment, declared ADR-worthy), and replace-vs-append = REPLACE. The keystone is already immediately pickable; no pre-decision is needed. Disposition: keep.
+
 ## Q2
 
 **Nit 2 — Should the env-var name be pinned now (at slicing time) rather than left as 'AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST or whatever matches existing naming'? Promote to a slice/ADR that fixes the name, keep, or drop?**
@@ -24,6 +26,8 @@ _Suggested default: promote-slice — a tiny naming-decision slice (or amendment
 
 **Your answer** (write below this line):
 
+Pin it now as a one-line amendment to the keystone slice (not a separate slice/ADR): `AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST`. The name is mechanically determined by the existing `AGENT_RUNNER_<UPPER_SNAKE>` convention (cf. `AGENT_RUNNER_AUTO_BUILD`, `AGENT_RUNNER_AUTO_SLICE`) for config key `promptGuidance.testFirst`. Replacing the §2 hedge with the concrete symbol gives downstream tests something to assert. Disposition: promote-slice (tiny keystone amendment).
+
 ## Q3
 
 **Nit 3 — The item-override slice asserts per-task > per-brief > repo precedence, but the brief only says 'per-item override' without ranking task vs brief. Is the ordering already implied by how humanOnly/autoBuild compose (so this is keep), or is the slicer making a fresh design call deserving an ADR (promote-adr)?**
@@ -35,3 +39,5 @@ _Suggested default: promote-adr — a fresh precedence ordering across two scope
 <!-- q3 fields: id=q3 disposition=promote-adr -->
 
 **Your answer** (write below this line):
+
+promote-adr, but the ADR records INHERITANCE WITH OVERRIDE, not the bare ladder the slice asserts. Decision: a brief's `promptGuidance.testFirst` PROPAGATES to the tasks sliced from it, at slicing time, as a default the task inherits; an explicit value on the task overrides the inherited one. At build time only the task's resolved value is read. So the effective precedence (task-explicit > brief-inherited > repo-default) is realized by COPY-AT-SLICE, not a runtime brief lookup. This is deliberately UNLIKE `humanOnly` (which is phase-orthogonal with no inheritance: brief-`humanOnly` gates slicing, task-`humanOnly` gates building, they never compose). Correct the item-override slice's §3 wording accordingly. Disposition: promote-adr.

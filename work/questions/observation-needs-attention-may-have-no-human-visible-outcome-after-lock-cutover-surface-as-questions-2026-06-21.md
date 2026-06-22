@@ -12,6 +12,8 @@ _Suggested default: keep — the sidecar-keying architectural question is shared
 
 **Your answer** (write below this line):
 
+KEEP — until the sidecar-keying design (Q2) resolves; this observation is the de-facto idea capture meanwhile, and shaping a slice before the keying contract is decided risks shaping it wrong. Note Q2 below is being investigated (a spike), so this stays open pending that. Disposition: keep.
+
 ## Q2
 
 **Shared architectural prereq: can the advance sidecar mechanism (`sidecar-apply.ts`, which today writes item-body + sidecar in one commit keyed to an item PATH) attach to a LOCK-REF / branch identity rather than only to a `work/<slug>.md` file path? A stuck item's body still rests in `backlog/` (only transient status left the folder), so keying to that body MAY work for needs-attention; but the sibling merge-questions case surfaces unmerged branches that may have NO `work/<slug>.md` at all, so a path-only keying is insufficient for the generalization.**
@@ -33,3 +35,5 @@ _Suggested default: split out as independent chores — they are doc/reference f
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Mostly DONE — do not split out. Two of the three adjacent cleanups are already fixed in the tree: (a) CONTEXT.md already describes the per-item-lock model (the old `needs-attention/ (stuck) ... Transitions are git mv` prose is gone); (b) `needs-attention.ts`'s header already reads "a COMMAND a human runs, not an `ls` of a folder". For (c), `item-lock.ts` no longer cites the dangling idea-file path (it cites this existing observation instead), though the planned idea file itself was never created. Residual = at most an optional "create the idea file, or accept this observation as its capture" micro-decision — nothing worth splitting into chores.

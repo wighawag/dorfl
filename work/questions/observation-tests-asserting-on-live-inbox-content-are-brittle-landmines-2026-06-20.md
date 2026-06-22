@@ -11,3 +11,5 @@ _Suggested default: promote-slice — the audit is bounded (grep for resolve(__d
 <!-- q1 fields: id=q1 disposition=promote-slice -->
 
 **Your answer** (write below this line):
+
+promote-slice, scoped to part (a): audit the test suite for any other assertion that reads the LIVE `work/notes/` tree and convert those to self-seeded fixtures (in a throwaway tree). The original RED is already fixed on main (the identity-roundtrip test now self-seeds), and the audit scope is bounded (~10 candidate files). DEFER part (b) the lint/guard — it is the over-engineering risk; add it only if a second instance appears (the existing work-layout-guard is the precedent shape if we ever do). Disposition: promote-slice (audit only).

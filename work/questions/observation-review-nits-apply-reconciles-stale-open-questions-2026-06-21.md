@@ -11,3 +11,5 @@ _Suggested default: keep — the mitigation (both slices cite the same example a
 <!-- q1 fields: id=q1 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP — the current "both cite the same example from brief D1" arrangement is enough. Verified: both slices are still pending and parallel; slice A is STRUCTURAL (it matches the marker PAIR and reads the brief, it does NOT hardcode the literal tag), and slice B owns the template tag. So even if B picks a different literal, A matches whatever pair B emits — the coordination risk is genuinely low and a landing-time reviewer eyeball is proportionate. Promote a canonical-source slice only if the two slices later actually pick different tags. Disposition: keep.

@@ -11,3 +11,5 @@ _Suggested default: keep — HOLD still stands; leave the observation as the sta
 <!-- q1 fields: id=q1 disposition=keep -->
 
 **Your answer** (write below this line):
+
+KEEP — the HOLD still stands; the situation is unchanged. Verified: the build-path Gate-2 loop still has NO revise step between rounds (the loop re-reviews up to `reviewMaxRounds`, with a comment marking where "a future builder-revise step plugs in here"), and the config docstring still flags `reviewMaxRounds` as an orphan belonging to that future loop. Re-reviewing the same unchanged diff N times is a no-op, so acting now is premature; deleting the parameter in isolation would lose what the future revise↔review loop needs. The natural resolution remains MOVE-when-the-loop-is-designed, not delete-in-isolation. Disposition: keep.
