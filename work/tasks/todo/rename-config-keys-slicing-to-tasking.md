@@ -59,3 +59,7 @@ agent-runner claim rename-config-keys-slicing-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-config-keys-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-config-keys-slicing-to-tasking.md work/tasks/done/rename-config-keys-slicing-to-tasking.md
 ```
+
+## Requeue 2026-06-22
+
+Gate-2 review verdict crashed with a JSON parse error (verdict not valid JSON at position 8101) AFTER a fully GREEN Gate-1 build (2585 tests). Infra/gate fault, not the work. Kept branch pushed to origin. Continue from it; just re-run gate + Gate-2.
