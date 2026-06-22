@@ -750,7 +750,7 @@ export async function performSlice(
 	const message =
 		`Sliced '${slug}' -> ${emitted.length} backlog slice` +
 		`${emitted.length === 1 ? '' : 's'} (human path, no lock). Inspect + commit ` +
-		`the produced files (and move the PRD into work/prd-sliced/) yourself.`;
+		`the produced files (and move the brief into work/briefs/tasked/) yourself.`;
 	note(message);
 	return {
 		exitCode: 0,
@@ -817,7 +817,7 @@ function integrationToSliceResult(
 		const message =
 			`Sliced '${slug}' -> ${emitted.length} backlog slice` +
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +
-			`through the shared core (moved work/prd/ -> work/prd-sliced/, the ` +
+			`through the shared core (moved work/briefs/ready/ -> work/briefs/tasked/, the ` +
 			`sliced resting state) and ${landed}.`;
 		return {exitCode: 0, outcome: 'sliced', slug, emitted, loop, message};
 	}
@@ -971,7 +971,7 @@ async function stageSlicingLifecycle(params: {
 		note(
 			`Untrusted-origin PRD '${slug}': forcing the emitted slices STAGED ` +
 				`(${placementDir}/) regardless of slicesLandIn (a human promotes ` +
-				'them into work/backlog/). Pass --slices-land-in <where> to override.',
+				'them into work/tasks/todo/). Pass --slices-land-in <where> to override.',
 		);
 	}
 	// Move the held PRD prd/ -> prd-sliced/ (the SLICED resting state — folder =
@@ -1253,37 +1253,57 @@ function readSlicedSlugs(cwd: string): Set<string> {
 	return slugs;
 }
 
-/** Build the `to-slices` brief the agent runs against the PRD. */
+/**
+ * Build the slicing PROMPT: instruct a fresh-context agent to apply the
+ * **slicing discipline** (`work/protocol/SLICING-PROTOCOL.md`) to the held
+ * brief at `work/briefs/ready/<slug>.md` and to EMIT tracer-bullet vertical
+ * tasks under `work/tasks/backlog/`. The discipline body (the tracer-bullet
+ * rules, the two-axis gate guidance, the confidence check, file-orthogonality,
+ * the emitted slice shape) lives in `SLICING-PROTOCOL.md` — NOT inlined here
+ * (slice `slicing-protocol-doc-and-vocabulary-fix`). The shape's source of
+ * truth is the frontmatter parser + the task template (`work/protocol/
+ * task-template.md`); the doc DESCRIBES it (D2).
+ *
+ * This builder owns ONLY the PER-BUILDER framing: who you are (a fresh-context
+ * slicer for ONE brief), where the held brief is, where the emitted task files
+ * MUST land (the staging folder, never the pool), and the runner-owns-git
+ * boundary on the agent path. The shared discipline body is NOT duplicated
+ * here.
+ */
 function buildSlicingBrief(slug: string, _prd: string | undefined): string {
 	return [
-		`Use the **to-slices** skill to slice the PRD \`work/prd/${slug}.md\` into`,
-		`independently-grabbable \`${STAGED_SLICES_DIR}/<slug>.md\` slices (tracer-`,
-		'bullet vertical slices). Read the PRD fully first.',
-		'',
-		`WRITE EVERY emitted slice file under \`${STAGED_SLICES_DIR}/\` — NEVER`,
-		'`work/backlog/`. `work/backlog/` is the agent-eligible POOL and the runner',
-		'owns the runner/human-only promotion into it; the slicer’s STAGING folder is',
-		`\`${STAGED_SLICES_DIR}/\`. A write outside the staging folder is dropped.`,
-		'',
-		'No human is present, so do the CONFIDENCE CHECK (to-slices step 4): only emit',
-		'slices you would have gotten a human to approve. If granularity, dependency',
-		'order, a gate, or a seam is genuinely unresolved, set `needsAnswers: true`',
-		'on the specific uncertain slice (questions in its body) rather than guessing.',
-		'',
-		'SLICE `humanOnly` IS NARROW. Only flag `humanOnly: true` on a slice when',
-		'building THAT slice is genuinely never-for-agents BY NATURE (secrets/release/',
-		'security/AGENTS.md prohibition) — a `humanOnly` slice is not agent-claimable',
-		'EVEN from the pool `work/backlog/`. Do NOT stamp `humanOnly` to mean "a human',
-		'should REVIEW this first": that is the POSITION’s job — every emitted slice',
-		'is BIRTHED STAGED in `work/pre-backlog/` (not eligible), and a human promotes',
-		'the approved ones into the pool. Review-first is the staging position; the',
-		'overloaded "stamp `humanOnly` for review" reading is retired.',
-		'',
-		'WRITE the slice files only. Do NOT perform any git operations — do not stage,',
-		'commit, push, or move any files. The RUNNER owns every git-state transition',
-		'(it commits the produced slices, releases the slicing lock, and moves the PRD',
-		'into work/prd-sliced/). Set each slice\u2019s `prd:` field to the source PRD slug so the link',
-		'back to the PRD survives.',
+		`You are a FRESH-CONTEXT slicer for the brief \`work/briefs/ready/${slug}.md\`.`,
+		`Apply the slicing discipline defined in \`work/protocol/SLICING-PROTOCOL.md\``,
+		`(the in-band, protocol-native slicing protocol every set-up repo carries; the`,
+		`human-facing pointer is \`skills/to-task/SKILL.md\`) to this ONE brief:`,
+		`decompose it into independently-grabbable, tracer-bullet vertical tasks.`,
+		`Read the brief fully first.`,
+		``,
+		`The discipline rules — the tracer-bullet test, the two-axis gate guidance`,
+		`(\`humanOnly\` is NARROW; \`needsAnswers\` flags genuine uncertainty), the`,
+		`confidence check that REPLACES the human-quiz step when no human is present,`,
+		`the file-orthogonality preference, the brief-vs-task gate disjointness, and`,
+		`the emitted slice shape — ALL live in that doc. Read them there.`,
+		``,
+		`No human is present, so apply the CONFIDENCE CHECK (\`SLICING-PROTOCOL.md\``,
+		`step 4): only emit tasks you would have gotten a human to approve. If`,
+		`granularity, dependency order, a gate, or a seam is genuinely unresolved, set`,
+		`\`needsAnswers: true\` on the specific uncertain task (questions in its body)`,
+		`rather than guessing — or, if the whole decomposition is unclear, stop and`,
+		`route the brief to needs-attention with the questions.`,
+		``,
+		`WRITE EVERY emitted task file under \`${STAGED_SLICES_DIR}/\` (the STAGING folder)`,
+		`— NEVER \`work/tasks/todo/\`. \`work/tasks/todo/\` is the agent-eligible POOL and`,
+		`the runner owns the runner/human-only promotion into it; the slicer's staging`,
+		`folder is \`work/tasks/backlog/\`. A write outside the staging folder is dropped`,
+		`by the runner-deterministic placement resolver.`,
+		``,
+		`Set each task's \`brief:\` field to the source brief slug (\`${slug}\`) so the`,
+		`link back to the brief survives.`,
+		``,
+		`Do NOT perform any git operations — do not stage, commit, push, or move any`,
+		`files. The RUNNER owns every git-state transition (it commits the produced`,
+		`tasks, releases the slicing lock, and moves the brief into \`work/briefs/tasked/\`).`,
 	].join('\n');
 }
 

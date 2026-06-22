@@ -1,7 +1,8 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync} from 'node:fs';
+import {mkdtempSync, rmSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, resolve, dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {resolveEligibility, resolveGate} from '../src/eligibility.js';
 import {
@@ -184,12 +185,22 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
-		// The brief carries the de-overloaded language: birth in staging, narrow
-		// humanOnly to never-by-nature, do NOT stamp humanOnly for review.
-		expect(capturedPrompt).toMatch(/work\/pre-backlog/);
-		expect(capturedPrompt).toMatch(/never-for-agents BY NATURE/);
-		expect(capturedPrompt).toMatch(/Do NOT stamp `humanOnly` to mean "a human/);
-		expect(capturedPrompt).toMatch(/Review-first is the staging position/);
+		// AFTER the relocation (slice `slicing-protocol-doc-and-vocabulary-fix`):
+		// the de-overloaded language lives in `SLICING-PROTOCOL.md`, NOT inlined in
+		// the prompt. The prompt now POINTS at the doc + names the staging folder.
+		expect(capturedPrompt).toMatch(/work\/protocol\/SLICING-PROTOCOL\.md/);
+		expect(capturedPrompt).toMatch(/work\/tasks\/backlog/);
+		expect(capturedPrompt).not.toMatch(/work\/pre-backlog/);
+		// The destination check: the doc carries the de-overloaded language.
+		const HERE = dirname(fileURLToPath(import.meta.url));
+		const REPO = resolve(HERE, '..', '..', '..');
+		const doc = readFileSync(
+			resolve(REPO, 'skills', 'setup', 'protocol', 'SLICING-PROTOCOL.md'),
+			'utf8',
+		);
+		expect(doc).toMatch(/NEVER-for-agents BY NATURE/i);
+		expect(doc).toMatch(/Do NOT stamp `humanOnly` to mean "a human/);
+		expect(doc).toMatch(/Review-first is encoded by the staging position/);
 	});
 
 	it('the slicer-review-loop prompt carries the same narrowed `humanOnly` guidance', () => {
