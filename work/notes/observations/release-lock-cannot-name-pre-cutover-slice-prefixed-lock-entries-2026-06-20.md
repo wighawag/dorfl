@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: release-lock-cannot-name-pre-cutover-slice-prefixed-lock-entries
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -71,3 +71,9 @@ One or more of:
   cutover), cleared by raw ref-delete 2026-06-20.
 - Sibling: `reaper-never-clears-a-done-plus-stuck-lock-orphans-forever` (why the reaper
   did not clear it either).
+
+## Applied answers 2026-06-22
+
+### q1: Triage this observation: does the un-nameable pre-cutover lock entry (release-lock + reaper both key off the current `task-`/`brief-`/`observation-` mapping and so cannot address residual `slice-<slug>` / `prd-<slug>` lock refs left over from the vocabulary cutover) become a slice, an ADR, get kept as a watch-item, dropped, or flagged needs-attention? The note proposes three non-exclusive fix shapes — pick whichever the disposition implies: (a) one-time MIGRATION renaming `refs/agent-runner/lock/slice-<slug>` -> `task-<slug>` and `prd-<slug>` -> `brief-<slug>` on arbiter + mirrors (possibly folded into `gc --ledger`); (b) raw-entry ESCAPE HATCH on `release-lock` (e.g. `release-lock --entry slice-foo`) so a human can name a literal entry regardless of current mapping — preserves the un-guessable-liveness trust model; (c) at minimum, make `gc --ledger`'s REPORT surface the literal entry names and DOCUMENT the raw ref-delete workaround until a migration exists.
+
+promote-slice, shipping the escape-hatch (b) + report-literal-names (c) together; leave the migration (a) as a follow-up only if more pre-cutover orphans surface. Verified: `release-lock` resolves through the namespaced mapping (task/brief/observation only), so it cannot name a residual `slice-*`/`prd-*` lock entry, and there is no `--entry` escape hatch today; the only current recourse is raw `git push --delete` (the plumbing the protocol tells operators to avoid). (b) `release-lock --entry <literal>` deletes the literal ref via the same leased delete, preserving the human-asserts-liveness model; (c) print literal entry names in `gc --ledger` + document the workaround. Cross-ref the reaper orphan sidecar (same orphan, two angles). Disposition: promote-slice.
