@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'surface-protocol-doc-and-prompt' (Gate
 date: 2026-06-22
 status: open
 reviewOf: surface-protocol-doc-and-prompt
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
