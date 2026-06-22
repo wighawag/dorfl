@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: context-md-claim-glossary-describes-superseded-direct-main-mechanism
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -54,3 +54,9 @@ framing changed under the migration.
 - `docs/adr/ledger-status-on-per-item-lock-refs.md` — the decision.
 - Sibling already-discharged note: `claim-sh-still-describes-superseded-direct-main-claim`
   (the `claim.sh` script half; retired 2026-06-20).
+
+## Applied answers 2026-06-22
+
+### q1: Is this observation actionable as a slice (rewrite CONTEXT.md's `claim (CAS)` glossary entry — and any sibling 'ledger-transition seam' framing it implies — to match the per-item-lock-refs reality), or should it be folded into a broader CONTEXT.md docs-drift sweep, or dropped?
+
+DROP — overtaken by events. The load-bearing premise is no longer true: CONTEXT.md's `claim (CAS)` glossary entry already describes the per-item-lock-ref model ("acquiring an item's per-item lock ... the claim writes NOTHING to `main`"), and the status/needs-attention entries already state the transient states are "NO LONGER folders". No "direct-`main` micro-commit" or "ledger-transition seam" text remains to rewrite. Disposition: dropped.
