@@ -913,10 +913,10 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 		ok: true,
 		output: [
 			'I ran the slice drift-check.',
-			'=== SLICE-STOP ===',
-			'The slice rests on premise X which is false against current src/foo.ts.',
+			'=== TASK-STOP ===',
+			'The task rests on premise X which is false against current src/foo.ts.',
 			'Re-scope before re-claiming.',
-			'=== END SLICE-STOP ===',
+			'=== END TASK-STOP ===',
 		].join('\n'),
 	});
 
@@ -1005,16 +1005,16 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 				return {
 					ok: true,
 					output: [
-						'=== SLICE-STOP ===',
-						'drifted: the API this slice targets was removed.',
-						'=== END SLICE-STOP ===',
+						'=== TASK-STOP ===',
+						'drifted: the API this task targets was removed.',
+						'=== END TASK-STOP ===',
 					].join('\n'),
 				};
 			},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('agent-stopped');
-		expect(result.message).toMatch(/the API this slice targets was removed/);
+		expect(result.message).toMatch(/the API this task targets was removed/);
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});

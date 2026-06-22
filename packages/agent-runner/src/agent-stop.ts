@@ -29,9 +29,9 @@ import {JOB_RECORD_FILENAME} from './workspace.js';
  */
 
 /** The exact opening marker line of the STOP sentinel block. */
-export const STOP_SENTINEL_OPEN = '=== SLICE-STOP ===';
+export const STOP_SENTINEL_OPEN = '=== TASK-STOP ===';
 /** The exact closing marker line of the STOP sentinel block. */
-export const STOP_SENTINEL_CLOSE = '=== END SLICE-STOP ===';
+export const STOP_SENTINEL_CLOSE = '=== END TASK-STOP ===';
 
 /** A parsed STOP verdict raised by the build agent on its output channel. */
 export interface StopSentinel {
@@ -92,7 +92,7 @@ export function parseStopSentinel(
 	return {
 		reason:
 			reason === ''
-				? 'the agent raised a SLICE-STOP with no reason (the slice could not be ' +
+				? 'the agent raised a TASK-STOP with no reason (the task could not be ' +
 					'built as written — re-scope or re-claim).'
 				: reason,
 	};

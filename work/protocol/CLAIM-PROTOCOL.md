@@ -124,9 +124,9 @@ machine-readable block (the runner detects it, routes the item to
 needs-attention with your reason VERBATIM, and SKIPS the gate + review — so put
 the specific drift report INSIDE it):
 
-=== SLICE-STOP ===
+=== TASK-STOP ===
 <the specific reason: which premises are false, where, and a suggested re-scope>
-=== END SLICE-STOP ===
+=== END TASK-STOP ===
 
 The decision bar between "resolve and proceed" and "STOP" / "record a decision":
 A genuinely small, certain, SELF-CONTAINED factual gap you can resolve from the

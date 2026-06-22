@@ -192,8 +192,8 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 	it('the assembled wrapper carries the machine-readable STOP sentinel form (Part A)', () => {
 		const emitted = wrapper('example', 'my-prd');
 		// The runner detects this EXACT block; it must be in-band in the prompt.
-		expect(emitted).toContain('=== SLICE-STOP ===');
-		expect(emitted).toContain('=== END SLICE-STOP ===');
+		expect(emitted).toContain('=== TASK-STOP ===');
+		expect(emitted).toContain('=== END TASK-STOP ===');
 		// The reason goes INSIDE the block (it becomes the needs-attention reason).
 		expect(emitted).toMatch(/reason.*INSIDE it|INSIDE it/i);
 	});

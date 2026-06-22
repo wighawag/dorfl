@@ -798,9 +798,9 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		const stoppingAgent: AgentRunner = () => ({
 			ok: true,
 			output: [
-				'=== SLICE-STOP ===',
-				'drifted: the seam this slice targets already landed elsewhere.',
-				'=== END SLICE-STOP ===',
+				'=== TASK-STOP ===',
+				'drifted: the seam this task targets already landed elsewhere.',
+				'=== END TASK-STOP ===',
 			].join('\n'),
 		});
 		const result = await runOnce({
