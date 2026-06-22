@@ -94,9 +94,10 @@ export type LockState = 'active' | 'stuck';
  * span multiple lines — a red-gate excerpt, a rebase-conflict report, an agent's
  * ambiguity note), and `questions` carries any agent-surfaced questions for the
  * human. Both ride in the lock blob BODY (not a single frontmatter field) so they
- * round-trip richly, in a shape a future advance-surface rung
- * (`work/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md`) can
- * render into a `work/questions/` sidecar. `questions` is present (non-empty) only
+ * round-trip richly, in a shape a future advance-surface rung (the
+ * surface-stuck-locks-as-questions direction captured in
+ * `work/notes/observations/needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21.md`)
+ * can render into a `work/questions/` sidecar. `questions` is present (non-empty) only
  * for a stuck entry that recorded them.
  */
 export interface LockEntry {
