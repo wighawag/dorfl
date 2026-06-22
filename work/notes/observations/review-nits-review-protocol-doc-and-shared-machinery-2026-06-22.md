@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'review-protocol-doc-and-shared-machine
 date: 2026-06-22
 status: open
 reviewOf: review-protocol-doc-and-shared-machinery
+needsAnswers: true
 ---
 
 ## Non-blocking review findings

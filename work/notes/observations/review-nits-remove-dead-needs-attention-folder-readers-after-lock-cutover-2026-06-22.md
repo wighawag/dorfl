@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'remove-dead-needs-attention-folder-rea
 date: 2026-06-22
 status: open
 reviewOf: remove-dead-needs-attention-folder-readers-after-lock-cutover
+needsAnswers: true
 ---
 
 ## Non-blocking review findings

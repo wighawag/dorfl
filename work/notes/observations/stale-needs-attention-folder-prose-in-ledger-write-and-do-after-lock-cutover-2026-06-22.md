@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Stale `work/needs-attention/` folder prose in `ledger-write.ts`, `complete.ts`, `do.ts`, `integration-core.ts` after the lock cutover
 
 2026-06-22
