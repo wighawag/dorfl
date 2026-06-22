@@ -3,7 +3,7 @@ title: review-gate non-blocking nits for 'question-sidecar-human-readable-format
 date: 2026-06-20
 status: open
 reviewOf: question-sidecar-human-readable-format
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## Non-blocking review findings
@@ -22,3 +22,8 @@ is their durable home for triage — promote-to-slice / keep / delete.
   (`parseEntrySection` matches the first `**…**` and stops; a question like `**Why does `**bold**` mean X?**` would parse as `Why does ` plus stray text. Surfacers presumably do not nest bold, so this is a latent corner — flagging only so the next surface-questions change keeps it in mind.)
 - Edge case: multi-paragraph context only keeps the FIRST contiguous blockquote run; a context with a non-quoted blank-content paragraph between two `>` runs loses the second run on parse.
   (`parseEntrySection` flips `inBlockquote=false` once a non-quoted non-blank line breaks the run, then ignores later `> …` lines (so the human's incidental `>` in their preamble cannot be re-absorbed as context). The serialiser emits blank lines inside the blockquote as `>` so its own output round-trips, but a hand-author who blank-line-separates two paragraphs without the `>` prefix will silently lose the second. Acceptable trade-off; worth a sentence in SKILL.md.)
+
+## Triaged: promoted
+
+Promoted to a new backlog slice `work/tasks/todo/review-nits-question-sidecar-human-readable-format-2026-06-20.md` (a human answered
+"promote"). This observation is resolved; the new item carries the work.
