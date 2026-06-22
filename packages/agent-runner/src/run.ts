@@ -20,7 +20,7 @@ import type {Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
 import {
-	resolveSlice,
+	resolveTask,
 	buildAgentPrompt,
 	resolveContinueContext,
 	resolvePromptGuidanceForItem,
@@ -772,7 +772,7 @@ async function runOneItem(
 			// arbiter `work/<slug>`) may the slice already be in `work/done/`; admit
 			// `done/` ONLY behind the tip-vs-arbiter stranded gate (story 5). In a bare
 			// hub mirror's worktree the refs are the LOCAL heads `work/<slug>` / `main`.
-			const slice = resolveSlice(
+			const task = resolveTask(
 				tree.dir,
 				slug,
 				tree.continued
@@ -796,7 +796,7 @@ async function runOneItem(
 						arbiter: tree.arbiterRemote,
 						branchRef: tree.branch,
 						mainRef: 'main',
-						content: readFileSync(slice.path, 'utf8'),
+						content: readFileSync(task.path, 'utf8'),
 						env: gitEnv,
 					})
 				: undefined;
@@ -806,9 +806,9 @@ async function runOneItem(
 			const itemGuidance = resolvePromptGuidanceForItem({
 				cwd: tree.dir,
 				repoResolved: resolvePromptGuidance(config),
-				taskContent: readFileSync(slice.path, 'utf8'),
+				taskContent: readFileSync(task.path, 'utf8'),
 			});
-			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+			prompt = buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
 				cwd: tree.dir,
 				continueContext,
 				promptGuidance: itemGuidance,

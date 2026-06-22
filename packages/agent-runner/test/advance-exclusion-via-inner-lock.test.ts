@@ -90,7 +90,7 @@ function claimOnlyDoDriver(
 }
 
 /** Drive a real build-slice advance whose inner `do` is the claim-only driver. */
-function advanceBuildSlice(cwd: string, slug: string, label: string) {
+function advanceBuildTask(cwd: string, slug: string, label: string) {
 	return performAdvance({
 		arg: `task:${slug}`,
 		cwd,
@@ -122,11 +122,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		// The advance build-slice rung orchestrates its inner `do` → performClaim,
 		// which loses the SAME `task-solo` create-only ref CAS. The advance layer took
 		// NO hold of its own; the inner claim lock is the sole gate.
-		const adv = await advanceBuildSlice(
-			raceClone(seeded, 'adv'),
-			'solo',
-			'adv',
-		);
+		const adv = await advanceBuildTask(raceClone(seeded, 'adv'), 'solo', 'adv');
 		expect(adv.exitCode).not.toBe(0);
 		expect(adv.outcome).toBe('lost');
 
@@ -160,7 +156,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		// the SAME `task-solo` ref. Exactly one wins (the inner claim lock arbitrates;
 		// the advance layer takes no hold).
 		const [adv, clm] = await Promise.all([
-			advanceBuildSlice(a, 'solo', 'adv'),
+			advanceBuildTask(a, 'solo', 'adv'),
 			performClaim({
 				slug: 'solo',
 				cwd: b,
@@ -197,8 +193,8 @@ describe('advance-layer TOCTOU resolves to one winner at the inner claim lock', 
 		// window) and both orchestrate an inner `do` → performClaim. The inner claim
 		// lock resolves it: exactly one wins the `task-solo` ref CAS.
 		const [ra, rb] = await Promise.all([
-			advanceBuildSlice(a, 'solo', 'a'),
-			advanceBuildSlice(b, 'solo', 'b'),
+			advanceBuildTask(a, 'solo', 'a'),
+			advanceBuildTask(b, 'solo', 'b'),
 		]);
 
 		const won = [ra, rb].filter((r) => r.exitCode === 0);

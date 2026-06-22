@@ -16,28 +16,28 @@ import {
 	verdictContractPrompt,
 	type ReviewFinding,
 	type ReviewVerdict,
-	type SliceEdit,
-	type UncertainSlice,
+	type TaskEdit,
+	type UncertainTask,
 } from './review-verdict.js';
 
-// Re-export the shared SliceEdit + UncertainSlice sub-shapes (callers consume
-// them via the slicer-loop entry-point). The verdict ITSELF is the unified
-// ReviewVerdict from `review-verdict.ts` — SliceReviewVerdict is removed (slice
+// Re-export the shared TaskEdit + UncertainTask sub-shapes (callers consume
+// them via the tasker-loop entry-point). The verdict ITSELF is the unified
+// ReviewVerdict from `review-verdict.ts` — TaskReviewVerdict is removed (task
 // `review-protocol-doc-and-shared-machinery`).
-export type {SliceEdit, UncertainSlice} from './review-verdict.js';
-export {parseReviewVerdict as parseSliceReviewVerdict} from './review-verdict.js';
+export type {TaskEdit, UncertainTask} from './review-verdict.js';
+export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js';
 
 /**
- * **The slicer review→edit→re-review→converge LOOP** (`slicer-review-edit-loop`,
- * GATES PRD `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point A).
+ * **The tasker review→edit→re-review→converge LOOP** (`slicer-review-edit-loop`,
+ * GATES brief `work/briefs/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A).
  *
- * On the `do prd:<slug>` slicing path (`slicing.ts`/`performSlice`), AFTER the
- * agent produces a candidate set of `work/pre-backlog/<slug>.md` slices and BEFORE the
+ * On the `do brief:<slug>` tasking path (`tasking.ts`/`performTask`), AFTER the
+ * agent produces a candidate set of `work/tasks/backlog/<slug>.md` tasks and BEFORE the
  * runner finalises/lands them, this loop RUNS the `review` SKILL
- * (`skills/review/SKILL.md`), APPLIES its findings as EDITS to the candidate slice
+ * (`skills/review/SKILL.md`), APPLIES its findings as EDITS to the candidate task
  * files, then re-reviews — until a pass finds NO NEW blocking issue (the natural
  * terminator) or the `slicerLoopMax` hard cap is hit. It is an IMPROVER, NOT a one-shot
- * gate: slices measurably keep getting better when reviewed, so the findings feed
+ * gate: tasks measurably keep getting better when reviewed, so the findings feed
  * back into edits, repeatedly. The destination/goal check is part of the SAME
  * review pass (it can itself trigger edits — which is why it is a loop).
  *
@@ -47,17 +47,17 @@ export {parseReviewVerdict as parseSliceReviewVerdict} from './review-verdict.js
  *     N so the loop can never run forever.
  *
  *     ⚠️ ASPIRATION-VS-BUILT (2026-06-10): the "single context" wording above is the
- *     PRD's ASPIRATION, NOT what this module does at runtime. The ACTUAL N loop is
+ *     brief's ASPIRATION, NOT what this module does at runtime. The ACTUAL N loop is
  *     RUNNER-DRIVEN and PER-PASS: `runOneExecution` does `for (pass …) { gate(…);
  *     applyEdits(…to disk…) }` — ONE agent LAUNCH per pass, the runner writing the
- *     agent's edits to the candidate slice FILES (`work/pre-backlog/`) between passes, the
+ *     agent's edits to the candidate task FILES (`work/tasks/backlog/`) between passes, the
  *     next pass's agent re-reading the edited files. Accumulation is via DISK +
- *     re-launch, NOT one agent retaining context. `prd/review.md` §Shape 2 is internally
+ *     re-launch, NOT one agent retaining context. `brief/review.md` §Shape 2 is internally
  *     contradictory on this (single-context headline vs "edit the files" operative spec);
  *     this code implements the operative reading. See
  *     `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`.
- *     (Relevant to intake: PR #62's lone-slice loop mirrors this per-pass STRUCTURE but
- *     accumulates IN-MEMORY, because intake must not write to `work/pre-backlog/` pre-emit.)
+ *     (Relevant to intake: PR #62's lone-task loop mirrors this per-pass STRUCTURE but
+ *     accumulates IN-MEMORY, because intake must not write to `work/tasks/backlog/` pre-emit.)
  *   - **M** — fresh-context re-executions: a fresh context is simply a NEW EXECUTION
  *     of that same loop in a fresh harness launch (like the Gate-2 reviewer). The
  *     loop is implemented ONCE; M is invoking it again. `M=1` is the cheap default;
@@ -66,20 +66,20 @@ export {parseReviewVerdict as parseSliceReviewVerdict} from './review-verdict.js
  * This module wires the loop + edit-application + verdict routing AROUND the
  * `review` SKILL — it does NOT re-author the protocol (the lenses + the destination
  * check live in the skill). The agent makes the review/edit JUDGEMENTS through the
- * {@link SliceReviewGate} seam; this module applies the edits to disk and routes
+ * {@link TaskReviewGate} seam; this module applies the edits to disk and routes
  * the final verdict to the THREE outcomes (folded in from the deleted
  * `autoslice-confidence`, decision B):
  *
- *   - **converge** (a pass found no NEW blocking issue) → the improved slices land
+ *   - **converge** (a pass found no NEW blocking issue) → the improved tasks land
  *     claimable.
- *   - **a specific uncertain slice** → emit it `needsAnswers: true` with the
+ *   - **a specific uncertain task** → emit it `needsAnswers: true` with the
  *     questions in its body (created, not agent-buildable until a human answers).
  *   - **the whole decomposition unclear / `slicerLoopMax` exhausted with blockers** →
- *     route the PRD to `work/needs-attention/<slug>.md` with the questions as the
- *     reason, emitting NO guessed slices.
+ *     route the brief to `work/needs-attention/<slug>.md` with the questions as the
+ *     reason, emitting NO guessed tasks.
  *
  * The verdict sink itself (the git transitions for those three outcomes) is the
- * caller's (`slicing.ts`): this module decides WHICH outcome and prepares the
+ * caller's (`tasking.ts`): this module decides WHICH outcome and prepares the
  * edits/questions; the runner owns every git-state transition (the agent does no
  * git, here as everywhere).
  */
@@ -88,36 +88,36 @@ export {parseReviewVerdict as parseSliceReviewVerdict} from './review-verdict.js
  * Backwards-compatible alias for {@link ReviewFinding}. Existing imports keep
  * compiling; new code should reach for `ReviewFinding` from `review-verdict.ts`.
  */
-export type SliceReviewFinding = ReviewFinding;
+export type TaskReviewFinding = ReviewFinding;
 
 /**
- * The slicer-loop verdict shape is now the UNIFIED {@link ReviewVerdict}
- * (slice `review-protocol-doc-and-shared-machinery`). The slicer consumes the
- * `edits` / `uncertainSlices` / `decompositionUnclear` channels; other review
+ * The tasker-loop verdict shape is now the UNIFIED {@link ReviewVerdict}
+ * (task `review-protocol-doc-and-shared-machinery`). The tasker consumes the
+ * `edits` / `uncertainTasks` / `decompositionUnclear` channels; other review
  * callers consume different channels of the same wide type. This alias keeps
- * existing imports compiling; the standalone `SliceReviewVerdict` is retired.
+ * existing imports compiling; the standalone `TaskReviewVerdict` is retired.
  */
-export type SliceReviewVerdict = ReviewVerdict;
+export type TaskReviewVerdict = ReviewVerdict;
 
 /** What the review gate needs to launch a fresh-context review+edit pass. */
-export interface SliceReviewGateInput {
-	/** The PRD slug whose candidate slices are under review. */
+export interface TaskReviewGateInput {
+	/** The brief slug whose candidate tasks are under review. */
 	slug: string;
-	/** The working clone/checkout the loop runs in (candidate slices live here). */
+	/** The working clone/checkout the loop runs in (candidate tasks live here). */
 	cwd: string;
-	/** Repo-relative paths of the candidate slices currently on disk. */
-	candidateSlices: string[];
+	/** Repo-relative paths of the candidate tasks currently on disk. */
+	candidateTasks: string[];
 	/** Which review PASS this is (1-based) within the current fresh context (the N). */
 	pass: number;
 	/** Which fresh-context EXECUTION this is (1-based) — the M. */
 	execution: number;
 	/**
 	 * The model the IMPROVER-loop REVIEW agent runs on (de-correlated from the
-	 * slicer; the `--slicer-loop-model` family). `undefined` ⇒ no forced model.
+	 * tasker; the `--tasker-loop-model` family). `undefined` ⇒ no forced model.
 	 * Flows through `LaunchInput.model` / `substituteModel`. DISTINCT from the
 	 * acceptance gate's `reviewModel`.
 	 */
-	slicerLoopModel?: string;
+	taskerLoopModel?: string;
 	/** The HOST-ONLY sessions root the review session FILE is generated under. */
 	sessionsDir?: string;
 	/** Environment for the review-agent launch. */
@@ -125,46 +125,46 @@ export interface SliceReviewGateInput {
 }
 
 /**
- * The slicer-review-loop SEAM: run ONE fresh-context review+edit pass of the
- * candidate slices and return a parsed verdict (incl. the edits to apply). Injected
+ * The tasker-review-loop SEAM: run ONE fresh-context review+edit pass of the
+ * candidate tasks and return a parsed verdict (incl. the edits to apply). Injected
  * by tests (a canned verdict+edits, no real model); production uses
- * {@link harnessSliceReviewGate}. Mirrors `do`'s `DoAgentRunner` / Gate-2's
+ * {@link harnessTaskReviewGate}. Mirrors `do`'s `DoAgentRunner` / Gate-2's
  * `ReviewGate` injectable-seam shape so the loop wiring is testable as pure logic.
  */
-export type SliceReviewGate = (
-	input: SliceReviewGateInput,
-) => Promise<SliceReviewVerdict>;
+export type TaskReviewGate = (
+	input: TaskReviewGateInput,
+) => Promise<TaskReviewVerdict>;
 
 /** The terminal disposition of the loop — the three RESOLVED-DESIGN outcomes. */
 export type LoopOutcome =
-	/** A pass found no NEW blocking issue: the improved slices land claimable. */
+	/** A pass found no NEW blocking issue: the improved tasks land claimable. */
 	| 'converged'
-	/** `slicerLoopMax` hit with blockers → specific uncertain slice(s) → needsAnswers. */
+	/** `slicerLoopMax` hit with blockers → specific uncertain task(s) → needsAnswers. */
 	| 'uncertain-slices'
-	/** `slicerLoopMax` hit / decomposition unclear → route the PRD to needs-attention. */
+	/** `slicerLoopMax` hit / decomposition unclear → route the brief to needs-attention. */
 	| 'decomposition-unclear';
 
 /** The result of running the loop — the disposition the caller's sink routes. */
-export interface RunSliceReviewLoopResult {
+export interface RunTaskReviewLoopResult {
 	/** Which of the three outcomes the loop reached. */
 	outcome: LoopOutcome;
 	/**
-	 * The candidate slices as they stand AFTER all applied edits, keyed by
+	 * The candidate tasks as they stand AFTER all applied edits, keyed by
 	 * repo-relative path → final content. The caller commits these (on
 	 * `converged`/`uncertain-slices`) — on `decomposition-unclear` it emits NO
-	 * slices, so this is informational only.
+	 * tasks, so this is informational only.
 	 */
-	slices: Record<string, string>;
+	tasks: Record<string, string>;
 	/**
-	 * On `uncertain-slices`: the specific slices to emit `needsAnswers: true` with
+	 * On `uncertain-slices`: the specific tasks to emit `needsAnswers: true` with
 	 * the questions recorded in their bodies. Empty otherwise.
 	 */
-	uncertainSlices: UncertainSlice[];
+	uncertainTasks: UncertainTask[];
 	/**
-	 * On `decomposition-unclear`: the questions to record as the PRD's
-	 * needs-attention reason (no guessed slices emitted). Empty otherwise.
+	 * On `decomposition-unclear`: the questions to record as the brief's
+	 * needs-attention reason (no guessed tasks emitted). Empty otherwise.
 	 */
-	prdQuestions: string[];
+	briefQuestions: string[];
 	/** How many review passes ran in total across all M executions. */
 	passes: number;
 	/** How many fresh-context executions (M) ran. */
@@ -173,23 +173,23 @@ export interface RunSliceReviewLoopResult {
 	message: string;
 }
 
-export interface RunSliceReviewLoopOptions {
-	/** The PRD slug whose candidate slices are being improved. */
+export interface RunTaskReviewLoopOptions {
+	/** The brief slug whose candidate tasks are being improved. */
 	slug: string;
 	/** The working clone/checkout the loop runs in. */
 	cwd: string;
 	/** The review+edit gate seam (tests inject a canned verdict; production: harness). */
-	gate: SliceReviewGate;
+	gate: TaskReviewGate;
 	/**
-	 * **The SCOPING FENCE (the requeue fix).** A snapshot of `work/pre-backlog/` taken
-	 * BEFORE this slicing run produced its candidate slices (filename → content;
-	 * the `before` map `performSlice` already computes at step 3). The loop reviews,
-	 * edits, and flags ONLY the slices that are NEW or CHANGED vs this snapshot —
-	 * i.e. THIS run's own output — NEVER the pre-existing, already-landed slices
-	 * that share the same `work/pre-backlog/` directory (the normal steady state). On a
+	 * **The SCOPING FENCE (the requeue fix).** A snapshot of `work/tasks/backlog/` taken
+	 * BEFORE this tasking run produced its candidate tasks (filename → content;
+	 * the `before` map `performTask` already computes at step 3). The loop reviews,
+	 * edits, and flags ONLY the tasks that are NEW or CHANGED vs this snapshot —
+	 * i.e. THIS run's own output — NEVER the pre-existing, already-landed tasks
+	 * that share the same `work/tasks/backlog/` directory (the normal steady state). On a
 	 * populated backlog this is what keeps the loop from editing / `needsAnswers`-
-	 * flagging unrelated slices and sweeping them into the runner-owned slicing
-	 * commit. Omitted ⇒ an EMPTY snapshot (every `work/pre-backlog/*.md` is treated as
+	 * flagging unrelated tasks and sweeping them into the runner-owned tasking
+	 * commit. Omitted ⇒ an EMPTY snapshot (every `work/tasks/backlog/*.md` is treated as
 	 * this run's output — the legacy whole-directory behaviour, kept only for the
 	 * degenerate empty-backlog case / direct callers that pass none).
 	 */
@@ -199,7 +199,7 @@ export interface RunSliceReviewLoopOptions {
 	 * with unresolved blockers REJECTS via the sink (never an infinite loop). The
 	 * natural terminator (no new blocking issue) usually fires first.
 	 */
-	slicerLoopMax: number;
+	taskerLoopMax: number;
 	/**
 	 * How many fresh-context EXECUTIONS (M) to run — each a NEW launch of the same
 	 * loop in a fresh context. Default 1 (the cheap degenerate case). `M>1` runs M
@@ -207,8 +207,8 @@ export interface RunSliceReviewLoopOptions {
 	 * execution's blocking verdict is routed.
 	 */
 	executions?: number;
-	/** The model the improver-loop review agent runs on (de-correlation; `--slicer-loop-model`). */
-	slicerLoopModel?: string;
+	/** The model the improver-loop review agent runs on (de-correlation; `--tasker-loop-model`). */
+	taskerLoopModel?: string;
 	/** The HOST-ONLY sessions root for the review session file. */
 	sessionsDir?: string;
 	/** Environment for child processes. */
@@ -218,32 +218,32 @@ export interface RunSliceReviewLoopOptions {
 }
 
 /**
- * Run the slicer review→edit→converge loop over the candidate slices currently on
- * disk under `work/pre-backlog/`. Implements the loop ONCE; M (fresh-context
+ * Run the tasker review→edit→converge loop over the candidate tasks currently on
+ * disk under `work/tasks/backlog/`. Implements the loop ONCE; M (fresh-context
  * re-executions) is just invoking the inner loop again with a fresh launch.
  *
  * Within ONE execution (the N): run the gate (a review+edit pass), APPLY its edits
- * to the candidate slice files, then re-review — until `verdict === 'approve'` (no
+ * to the candidate task files, then re-review — until `verdict === 'approve'` (no
  * NEW blocking issue → converged) or the pass count reaches `slicerLoopMax`. On the cap
  * with a still-`block` verdict, ROUTE per the verdict's channels:
- *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (PRD → needs-attention,
- *     no guessed slices);
- *   - else `uncertainSlices` (or, as a floor, every candidate slice) ⇒
- *     `uncertain-slices` (those slices emitted `needsAnswers: true` + questions).
+ *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (brief → needs-attention,
+ *     no guessed tasks);
+ *   - else `uncertainTasks` (or, as a floor, every candidate task) ⇒
+ *     `uncertain-slices` (those tasks emitted `needsAnswers: true` + questions).
  *
  * With `executions > 1`, the WHOLE loop is re-run in a fresh context; the first
  * execution that converges short-circuits and lands, otherwise the LAST
  * execution's blocking routing is taken (a persistent block across M fresh
  * contexts is a strong signal).
  */
-export async function runSliceReviewLoop(
-	options: RunSliceReviewLoopOptions,
-): Promise<RunSliceReviewLoopResult> {
+export async function runTaskReviewLoop(
+	options: RunTaskReviewLoopOptions,
+): Promise<RunTaskReviewLoopResult> {
 	const note = options.note ?? (() => {});
 	const executions = Math.max(1, options.executions ?? 1);
-	const slicerLoopMax = Math.max(1, options.slicerLoopMax);
+	const taskerLoopMax = Math.max(1, options.taskerLoopMax);
 	// The SCOPING FENCE: review/edit/flag ONLY this run's own new-or-changed
-	// slices, never pre-existing landed ones (the requeue fix). No snapshot ⇒ an
+	// tasks, never pre-existing landed ones (the requeue fix). No snapshot ⇒ an
 	// empty one (the legacy whole-directory behaviour for the empty-backlog case).
 	const before = options.before ?? new Map<string, string>();
 
@@ -257,10 +257,10 @@ export async function runSliceReviewLoop(
 			slug: options.slug,
 			cwd: options.cwd,
 			gate: options.gate,
-			slicerLoopMax,
+			taskerLoopMax,
 			execution: m,
 			before,
-			slicerLoopModel: options.slicerLoopModel,
+			taskerLoopModel: options.taskerLoopModel,
 			sessionsDir: options.sessionsDir,
 			env: options.env,
 			note,
@@ -275,9 +275,9 @@ export async function runSliceReviewLoop(
 			);
 			return {
 				outcome: 'converged',
-				slices: readCandidates(options.cwd, before),
-				uncertainSlices: [],
-				prdQuestions: [],
+				tasks: readCandidates(options.cwd, before),
+				uncertainTasks: [],
+				briefQuestions: [],
 				passes: totalPasses,
 				executions: m,
 				message:
@@ -294,34 +294,34 @@ export async function runSliceReviewLoop(
 	if (verdict.decompositionUnclear) {
 		const questions = verdict.decompositionUnclear.questions;
 		note(
-			`Slicer review loop did not converge within slicerLoopMax=${slicerLoopMax} ` +
+			`Slicer review loop did not converge within slicerLoopMax=${taskerLoopMax} ` +
 				`across ${executions} fresh context(s); the whole decomposition is ` +
 				'unclear — routing the PRD to needs-attention (no guessed slices).',
 		);
 		return {
 			outcome: 'decomposition-unclear',
-			slices: readCandidates(options.cwd, before),
-			uncertainSlices: [],
-			prdQuestions: questions,
+			tasks: readCandidates(options.cwd, before),
+			uncertainTasks: [],
+			briefQuestions: questions,
 			passes: totalPasses,
 			executions,
 			message:
 				`The decomposition of '${options.slug}' is still unclear after ` +
-				`slicerLoopMax=${slicerLoopMax} review pass(es) across ${executions} fresh ` +
+				`slicerLoopMax=${taskerLoopMax} review pass(es) across ${executions} fresh ` +
 				'context(s); routing the PRD to needs-attention with the open ' +
 				'questions, emitting no guessed slices.',
 		};
 	}
 
-	// A specific-slice rejection: emit the uncertain slice(s) `needsAnswers: true`.
+	// A specific-task rejection: emit the uncertain task(s) `needsAnswers: true`.
 	// SCOPED to THIS run's own output (the requeue fix): an agent-named uncertain
-	// slice that is NOT one of this run's new-or-changed slices is DROPPED (the
-	// agent must never flag a pre-existing landed slice). Floor: if the agent named
+	// task that is NOT one of this run's new-or-changed tasks is DROPPED (the
+	// agent must never flag a pre-existing landed task). Floor: if the agent named
 	// none (or named only out-of-scope ones) but still blocks, treat THIS run's own
-	// candidates as uncertain — never land a slice the loop could not approve, never
-	// silently drop the rejection, but never escape to unrelated slices.
+	// candidates as uncertain — never land a task the loop could not approve, never
+	// silently drop the rejection, but never escape to unrelated tasks.
 	const ownPaths = new Set(newOrChangedBacklog(options.cwd, before));
-	const named = (verdict.uncertainSlices ?? []).filter((u) => {
+	const named = (verdict.uncertainTasks ?? []).filter((u) => {
 		const normalized = u.path.replace(/\\/g, '/');
 		if (ownPaths.has(normalized)) {
 			return true;
@@ -340,19 +340,19 @@ export async function runSliceReviewLoop(
 					questions: blockingQuestions(verdict),
 				}));
 	note(
-		`Slicer review loop did not converge within slicerLoopMax=${slicerLoopMax} across ` +
+		`Slicer review loop did not converge within slicerLoopMax=${taskerLoopMax} across ` +
 			`${executions} fresh context(s); emitting ${uncertain.length} uncertain ` +
 			'slice(s) with needsAnswers + questions.',
 	);
 	return {
 		outcome: 'uncertain-slices',
-		slices: readCandidates(options.cwd, before),
-		uncertainSlices: uncertain,
-		prdQuestions: [],
+		tasks: readCandidates(options.cwd, before),
+		uncertainTasks: uncertain,
+		briefQuestions: [],
 		passes: totalPasses,
 		executions,
 		message:
-			`Slicing '${options.slug}' did not converge after slicerLoopMax=${slicerLoopMax} ` +
+			`Slicing '${options.slug}' did not converge after slicerLoopMax=${taskerLoopMax} ` +
 			`review pass(es) across ${executions} fresh context(s); ` +
 			`${uncertain.length} slice(s) emitted needsAnswers: true with the open ` +
 			'questions in their bodies (a human must answer before they are buildable).',
@@ -364,7 +364,7 @@ interface SingleExecutionResult {
 	/** True iff a pass found no NEW blocking issue (the natural terminator). */
 	converged: boolean;
 	/** The last verdict seen (carries the routing channels on a non-converge). */
-	lastVerdict: SliceReviewVerdict;
+	lastVerdict: TaskReviewVerdict;
 	/** How many review passes ran in this execution. */
 	passes: number;
 }
@@ -373,41 +373,41 @@ interface SingleExecutionResult {
 async function runOneExecution(params: {
 	slug: string;
 	cwd: string;
-	gate: SliceReviewGate;
-	slicerLoopMax: number;
+	gate: TaskReviewGate;
+	taskerLoopMax: number;
 	execution: number;
 	before: Map<string, string>;
-	slicerLoopModel?: string;
+	taskerLoopModel?: string;
 	sessionsDir?: string;
 	env?: NodeJS.ProcessEnv;
 	note: (message: string) => void;
 }): Promise<SingleExecutionResult> {
-	const {slug, cwd, gate, slicerLoopMax, execution, before, note} = params;
-	let lastVerdict: SliceReviewVerdict = {verdict: 'block', findings: []};
+	const {slug, cwd, gate, taskerLoopMax, execution, before, note} = params;
+	let lastVerdict: TaskReviewVerdict = {verdict: 'block', findings: []};
 	let passes = 0;
-	for (let pass = 1; pass <= slicerLoopMax; pass++) {
-		// SCOPED: only THIS run's own new-or-changed slices are reviewed — a slice
+	for (let pass = 1; pass <= taskerLoopMax; pass++) {
+		// SCOPED: only THIS run's own new-or-changed tasks are reviewed — a task
 		// the loop CREATED in an earlier pass is new-vs-`before` so it is in scope;
-		// a pre-existing landed slice is unchanged so it is NOT (the requeue fix).
-		const candidateSlices = newOrChangedBacklog(cwd, before);
+		// a pre-existing landed task is unchanged so it is NOT (the requeue fix).
+		const candidateTasks = newOrChangedBacklog(cwd, before);
 		const verdict = await gate({
 			slug,
 			cwd,
-			candidateSlices,
+			candidateTasks,
 			pass,
 			execution,
-			slicerLoopModel: params.slicerLoopModel,
+			taskerLoopModel: params.taskerLoopModel,
 			sessionsDir: params.sessionsDir,
 			env: params.env,
 		});
 		passes = pass;
 		lastVerdict = verdict;
 
-		// APPLY the edits to the candidate slice files (the improver step) — the
+		// APPLY the edits to the candidate task files (the improver step) — the
 		// runner writes the agent's full-content edits; the agent does no disk/git.
-		// SCOPED to this run's own output: an edit may improve a slice THIS run
+		// SCOPED to this run's own output: an edit may improve a task THIS run
 		// produced or CREATE a new candidate, but NEVER overwrite a pre-existing
-		// landed slice (the requeue fix).
+		// landed task (the requeue fix).
 		if (verdict.edits && verdict.edits.length > 0) {
 			applyEdits(cwd, verdict.edits, before, note);
 		}
@@ -416,7 +416,7 @@ async function runOneExecution(params: {
 			return {converged: true, lastVerdict: verdict, passes};
 		}
 		note(
-			`Slicer review pass ${pass}/${slicerLoopMax} (context ${execution}) found ` +
+			`Slicer review pass ${pass}/${taskerLoopMax} (context ${execution}) found ` +
 				`${blockingCount(verdict)} blocking issue(s); ` +
 				`${verdict.edits?.length ?? 0} edit(s) applied — re-reviewing.`,
 		);
@@ -425,23 +425,23 @@ async function runOneExecution(params: {
 }
 
 /**
- * Apply the review agent's full-content edits to the candidate slice files. ONLY
- * paths under `work/pre-backlog/` are written — the loop improves the CANDIDATE SLICES,
+ * Apply the review agent's full-content edits to the candidate task files. ONLY
+ * paths under `work/tasks/backlog/` are written — the loop improves the CANDIDATE TASKS,
  * never escapes to other parts of the tree (a defensive scope fence; the runner,
- * not the agent, performs the write). An edit may CREATE a new candidate slice file
- * (e.g. the review split one slice into two) — that is in-scope.
+ * not the agent, performs the write). An edit may CREATE a new candidate task file
+ * (e.g. the review split one task into two) — that is in-scope.
  *
  * **SCOPED to this run's own output (the requeue fix).** Beyond the
- * `work/pre-backlog/` prefix fence, an edit is only applied when its target is THIS
- * run's own slice: either a path NOT present in the `before` snapshot (a slice this
+ * `work/tasks/backlog/` prefix fence, an edit is only applied when its target is THIS
+ * run's own task: either a path NOT present in the `before` snapshot (a task this
  * run created, or a new file the review is splitting out) OR one this run already
- * changed vs `before`. A pre-existing, unchanged landed slice (present in `before`
+ * changed vs `before`. A pre-existing, unchanged landed task (present in `before`
  * with identical content) is REFUSED — the loop must never edit an unrelated,
- * already-landed slice and sweep it into the runner-owned slicing commit.
+ * already-landed task and sweep it into the runner-owned tasking commit.
  */
 function applyEdits(
 	cwd: string,
-	edits: SliceEdit[],
+	edits: TaskEdit[],
 	before: Map<string, string>,
 	note: (message: string) => void,
 ): void {
@@ -455,7 +455,7 @@ function applyEdits(
 			);
 			continue;
 		}
-		// A pre-existing slice this run did NOT touch must not be overwritten: it is
+		// A pre-existing task this run did NOT touch must not be overwritten: it is
 		// in `before` and the current on-disk content still equals the snapshot.
 		if (before.has(filename)) {
 			const abs = join(cwd, normalized);
@@ -479,11 +479,11 @@ function applyEdits(
 }
 
 /**
- * Repo-relative paths of the `work/pre-backlog/*.md` files that are NEW or CHANGED vs
- * the `before` snapshot — exactly THIS slicing run's own output (the requeue-fix
- * scoping fence). A pre-existing slice present in `before` with identical content
+ * Repo-relative paths of the `work/tasks/backlog/*.md` files that are NEW or CHANGED vs
+ * the `before` snapshot — exactly THIS tasking run's own output (the requeue-fix
+ * scoping fence). A pre-existing task present in `before` with identical content
  * is excluded; a file the loop created (absent from `before`) or improved (content
- * differs) is included. Mirrors `slicing.ts`'s `newOrChangedBacklog`.
+ * differs) is included. Mirrors `tasking.ts`'s `newOrChangedBacklog`.
  */
 function newOrChangedBacklog(
 	cwd: string,
@@ -510,8 +510,8 @@ function newOrChangedBacklog(
 }
 
 /**
- * THIS run's candidate slices keyed by repo-relative path → current content —
- * scoped to the new-or-changed set (never the pre-existing landed slices).
+ * THIS run's candidate tasks keyed by repo-relative path → current content —
+ * scoped to the new-or-changed set (never the pre-existing landed tasks).
  */
 function readCandidates(
 	cwd: string,
@@ -525,12 +525,12 @@ function readCandidates(
 }
 
 /** Count blocking findings in a verdict. */
-function blockingCount(verdict: SliceReviewVerdict): number {
+function blockingCount(verdict: TaskReviewVerdict): number {
 	return verdict.findings.filter((f) => f.severity === 'blocking').length;
 }
 
 /** The blocking findings' questions (the floor questions for an unnamed rejection). */
-function blockingQuestions(verdict: SliceReviewVerdict): string[] {
+function blockingQuestions(verdict: TaskReviewVerdict): string[] {
 	const blocking = verdict.findings.filter((f) => f.severity === 'blocking');
 	const source = blocking.length > 0 ? blocking : verdict.findings;
 	return source.map((f) =>
@@ -540,15 +540,15 @@ function blockingQuestions(verdict: SliceReviewVerdict): string[] {
 
 // --- The production harness-backed gate ------------------------------------
 
-/** What a harness-backed slice-review gate needs to launch the review agent. */
-export interface HarnessSliceReviewGateOptions {
+/** What a harness-backed task-review gate needs to launch the review agent. */
+export interface HarnessTaskReviewGateOptions {
 	/** The harness seam used to launch the fresh-context review+edit agent. */
 	harness?: Harness;
 	/** The agent command the null/shell adapter shells out to (`{model}`-aware). */
 	agentCmd?: string;
 	/**
 	 * Read the review agent's textual output for parsing. Production reads
-	 * `launched.output` (the harness seam's ANSWER channel, slice
+	 * `launched.output` (the harness seam's ANSWER channel, task
 	 * `harness-agent-output`); tests inject `readOutput` to stub a canned verdict
 	 * string. Defaults to the launch's `output` verbatim.
 	 */
@@ -559,11 +559,11 @@ export interface HarnessSliceReviewGateOptions {
  * Backwards-compatible alias for {@link ReviewParseError} — unified across all
  * review callers. New code should reach for `ReviewParseError` directly.
  */
-export const SliceReviewParseError = ReviewParseError;
-export type SliceReviewParseError = ReviewParseError;
+export const TaskReviewParseError = ReviewParseError;
+export type TaskReviewParseError = ReviewParseError;
 
 /**
- * The PRODUCTION slicer-review gate: launch the `review` SKILL as a fresh-context
+ * The PRODUCTION tasker-review gate: launch the `review` SKILL as a fresh-context
  * agent through the EXISTING harness seam (a fresh context per pass = a fresh
  * launch, like the Gate-2 reviewer), routing the `reviewModel` override via
  * `LaunchInput.model` (the §13 model-routing intent — NOT a new mechanism), then
@@ -574,19 +574,19 @@ export type SliceReviewParseError = ReviewParseError;
  * verdict. The runner (the loop) applies the edits to disk and routes the verdict —
  * the agent does no git / no escaping disk writes.
  */
-export function harnessSliceReviewGate(
-	options: HarnessSliceReviewGateOptions = {},
-): SliceReviewGate {
+export function harnessTaskReviewGate(
+	options: HarnessTaskReviewGateOptions = {},
+): TaskReviewGate {
 	const harness = options.harness ?? new NullHarness();
 	const readOutput = options.readOutput ?? ((output) => output ?? '');
-	return async (input: SliceReviewGateInput): Promise<ReviewVerdict> => {
+	return async (input: TaskReviewGateInput): Promise<ReviewVerdict> => {
 		const launched = await launchWithOptionalWatch({
 			harness,
 			dir: input.cwd,
 			slug: input.slug,
 			command: options.agentCmd ?? '',
-			prompt: buildSliceReviewPrompt(input),
-			model: input.slicerLoopModel,
+			prompt: buildTaskReviewPrompt(input),
+			model: input.taskerLoopModel,
 			// A DISTINCT session id per pass + fresh context so launches never collide.
 			sessionId: `slice-review-${input.slug}-m${input.execution}-n${input.pass}`,
 			sessionsDir: input.sessionsDir,
@@ -604,17 +604,17 @@ export function harnessSliceReviewGate(
 }
 
 /**
- * Render the slice-review-loop PROMPT: instruct a fresh-context agent to run the
- * `review` SKILL on the candidate slices for `slug` (the lenses IN ORDER, ENDING in
+ * Render the task-review-loop PROMPT: instruct a fresh-context agent to run the
+ * `review` SKILL on the candidate tasks for `slug` (the lenses IN ORDER, ENDING in
  * the destination/goal check — which may itself trigger edits), and to EMIT a
  * single JSON object carrying the verdict, the findings, the EDITS to apply, and
- * the routing channels (so {@link parseSliceReviewVerdict} can read it). The skill
+ * the routing channels (so {@link parseTaskReviewVerdict} can read it). The skill
  * carries the protocol; this prompt frames the artifact (a candidate decomposition)
  * + the required output shape (incl. the improver `edits` and the two non-converge
  * routing channels).
  */
-export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
-	const list = input.candidateSlices.map((p) => `  - ${p}`).join('\n');
+export function buildTaskReviewPrompt(input: TaskReviewGateInput): string {
+	const list = input.candidateTasks.map((p) => `  - ${p}`).join('\n');
 	return [
 		`You are a FRESH-CONTEXT reviewer in the SLICER review→edit→converge LOOP`,
 		`(insertion point A). Review the CANDIDATE SLICES just produced for the PRD`,
@@ -643,7 +643,7 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 		`Fill the channels appropriate to THIS caller (the slicer improver loop):`,
 		`  - "edits" — full-content replacements for candidate slice files when you`,
 		`    can FIX a finding by editing (the natural improver step).`,
-		`  - "uncertainSlices" — specific slices you cannot make buildable (each gets`,
+		`  - "uncertainTasks" — specific slices you cannot make buildable (each gets`,
 		`    \`needsAnswers: true\` with the questions in its body).`,
 		`  - "decompositionUnclear" — the WHOLE decomposition is unsound (the PRD is`,
 		`    routed to needs-attention; emit no guessed slices).`,
@@ -663,9 +663,9 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 	].join('\n');
 }
 
-// Parsing of the slicer-loop verdict is now the SHARED `parseReviewVerdict`
-// from `review-verdict.ts` (re-exported above as `parseSliceReviewVerdict` for
+// Parsing of the tasker-loop verdict is now the SHARED `parseReviewVerdict`
+// from `review-verdict.ts` (re-exported above as `parseTaskReviewVerdict` for
 // backwards compatibility). The unified parser validates the SAME shape this
 // loop's prompt asks for; routing reads `findings` / `edits` /
-// `uncertainSlices` / `decompositionUnclear` off the unified `ReviewVerdict`,
+// `uncertainTasks` / `decompositionUnclear` off the unified `ReviewVerdict`,
 // identical to the old typed-narrow validator.

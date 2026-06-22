@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 /** A scratch project + bare arbiter seeded with one `needsAnswers:true` slice. */
-function seedBlockedSliceRepo(slug: string): SeededRepo {
+function seedBlockedTaskRepo(slug: string): SeededRepo {
 	return seedRepoWithArbiter(join(scratch.root, slug), [slug], {
 		needsAnswers: true,
 	});
@@ -101,7 +101,7 @@ function surfaceGateStub(
 describe('advance in-place — surface / triage / apply rung commits land on the arbiter', () => {
 	it('SURFACE: a single named blocker `advance <slug>` ff-pushes the sidecar to arbiter/main (the easy-to-miss single-arg path)', async () => {
 		const slug = 'in-place-surface';
-		const seed = seedBlockedSliceRepo(slug);
+		const seed = seedBlockedTaskRepo(slug);
 
 		// The CLI single-named-item path: `performAdvance` wrapped in the in-place
 		// tree-less publish (the SAME wrapper the CLI uses for `advance <slug>`).
@@ -125,7 +125,7 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 
 	it('SURFACE: multi-item `performAdvanceAuto` (surfaceBlockers on) ff-pushes the sidecar to arbiter/main', async () => {
 		const slug = 'auto-pick-blocker';
-		const seed = seedBlockedSliceRepo(slug);
+		const seed = seedBlockedTaskRepo(slug);
 
 		const result = await performAdvanceAuto({
 			cwd: seed.repo,
@@ -259,7 +259,7 @@ describe('advance in-place — the publish GATE matches the existing drivers (no
 
 	it('no arbiter configured (the laptop live-checkout case): no tree-less push fires', async () => {
 		const slug = 'no-arbiter-blocker';
-		const seed = seedBlockedSliceRepo(slug);
+		const seed = seedBlockedTaskRepo(slug);
 		const before = gitIn(['rev-parse', 'arbiter/main'], seed.repo).trim();
 
 		// A stub runner that commits a sidecar locally (as the real surface rung

@@ -21,7 +21,7 @@
  * silently-breakable) find/replace across the codebase.
  *
  * SCOPE: only the PROTOCOL surface (where a miss BREAKS things). The ~600
- * cosmetic doc/prose mentions of "agent-runner" (ADRs, PRDs, CONTEXT.md, slices,
+ * cosmetic doc/prose mentions of "agent-runner" (ADRs, briefs, CONTEXT.md, tasks,
  * comments) are NOT indirected through this module — they should read as the real
  * name and are handled at actual rebrand time by `change-name` (multi-case-aware
  * recursive rename of file names + contents). The two are complementary: this

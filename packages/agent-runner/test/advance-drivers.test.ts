@@ -42,7 +42,7 @@ afterEach(() => {
 });
 
 /** Seed a `work/tasks/todo/<slug>.md` slice with the given gate frontmatter. */
-function seedSlice(
+function seedTask(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
 ): void {
@@ -56,7 +56,7 @@ function seedSlice(
 }
 
 /** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
-function seedPrd(
+function seedBrief(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; briefAfter?: string[]} = {},
 ): void {
@@ -107,7 +107,7 @@ describe('advance (auto-pick) — applies the per-machine override over the comm
 	// {autoBuild: true}` (eligible) ⇒ the slice MUST advance. Before `override`
 	// was threaded into `performAdvanceAuto`, the committed `false` stood.
 	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (slice advances)', async () => {
-		seedSlice('alpha');
+		seedTask('alpha');
 		writeFileSync(
 			join(repo, '.agent-runner.json'),
 			JSON.stringify({autoBuild: false}),
@@ -127,7 +127,7 @@ describe('advance (auto-pick) — applies the per-machine override over the comm
 	// CONTROL: same fixture, NO override ⇒ committed `autoBuild: false` stands, so
 	// nothing advances.
 	it('control: WITHOUT the override the committed autoBuild:false stands (nothing advances)', async () => {
-		seedSlice('alpha');
+		seedTask('alpha');
 		writeFileSync(
 			join(repo, '.agent-runner.json'),
 			JSON.stringify({autoBuild: false}),
@@ -145,9 +145,9 @@ describe('advance (auto-pick) — applies the per-machine override over the comm
 
 describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 	it('auto-picks the first eligible SLICE when slices exist', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedTask('beta');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -156,8 +156,8 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 	});
 
 	it('auto-picks a PRD (advance prd:<slug>) when NO slice is eligible', async () => {
-		seedSlice('humanly', {humanOnly: true}); // not eligible
-		seedPrd('gamma');
+		seedTask('humanly', {humanOnly: true}); // not eligible
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -175,9 +175,9 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 
 describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () => {
 	it('takes x items, slices first then PRDs, in order', async () => {
-		seedSlice('alpha');
-		seedPrd('gamma');
-		seedPrd('delta');
+		seedTask('alpha');
+		seedBrief('gamma');
+		seedBrief('delta');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -191,8 +191,8 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 	});
 
 	it('-n runs the ticks SEQUENTIALLY (no overlap) — a serialised in-flight count', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
+		seedTask('alpha');
+		seedTask('beta');
 		let inFlight = 0;
 		let maxInFlight = 0;
 		const order: string[] = [];
@@ -218,9 +218,9 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 	});
 
 	it('-n bounds the count (does not over-take)', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedTask('beta');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({cwd: repo, run, config: cfg(), count: 2});
 		expect(args).toHaveLength(2);
@@ -242,8 +242,8 @@ describe('advance <a> <b> — explicit named items, IN SEQUENCE', () => {
 
 describe('advance — the FLAT per-action gate family (US #23) by SELECTION', () => {
 	it('with autoBuild OFF, the bare/-n selection picks NO slice (build gated)', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
+		seedTask('alpha');
+		seedTask('beta');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -257,8 +257,8 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 	});
 
 	it('with autoTask OFF, the bare/-n selection picks NO PRD (slice gated)', async () => {
-		seedPrd('gamma');
-		seedPrd('delta');
+		seedBrief('gamma');
+		seedBrief('delta');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -271,8 +271,8 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 	});
 
 	it('with EVERY gate off, the bare selection is empty (zero autonomy) BUT a NAMED surface/apply still runs (always-allowed)', async () => {
-		seedSlice('alpha');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedBrief('gamma');
 		// Bare form with all flags off: the "question loop with ZERO autonomy" case
 		// — nothing autonomous is selected.
 		const {run: bareRun, args: bareArgs} = recordingRunner();
@@ -310,9 +310,9 @@ describe('advance — convergence: the loop DRAINS + IDLES at rest (US #31)', ()
 	it('a pending-sidecar pool IDLES — every tick a clean NO-OP, nothing advances, STABLE', async () => {
 		// Three eligible slices whose ticks classify NO-OP (a pending sidecar awaiting
 		// a human). The driver selects them but each tick no-ops — the pool is stable.
-		seedSlice('alpha');
-		seedSlice('beta');
-		seedSlice('gamma');
+		seedTask('alpha');
+		seedTask('beta');
+		seedTask('gamma');
 		const {run, args} = recordingRunner(() => 'no-op');
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -328,9 +328,9 @@ describe('advance — convergence: the loop DRAINS + IDLES at rest (US #31)', ()
 	});
 
 	it('the pool DRAINS monotonically as answers arrive (a no-op item flips to advanced)', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
-		seedSlice('gamma');
+		seedTask('alpha');
+		seedTask('beta');
+		seedTask('gamma');
 
 		// Pass 1: all three pending ⇒ all no-op (calm).
 		const pass1 = await performAdvanceAuto({

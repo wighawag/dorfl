@@ -75,10 +75,10 @@ function blockedItemsInPlace(
 			out.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	const pool = read.resolvePrdPool({repoPath});
-	for (const prd of pool.prds) {
-		if (prd.needsAnswers === true) {
-			out.push({namespace: 'brief', slug: prd.slug});
+	const pool = read.resolveBriefPool({repoPath});
+	for (const brief of pool.briefs) {
+		if (brief.needsAnswers === true) {
+			out.push({namespace: 'brief', slug: brief.slug});
 		}
 	}
 	// SURFACE-on-STAGING widening (brief
@@ -94,9 +94,9 @@ function blockedItemsInPlace(
 				out.push({namespace: 'task', slug: item.slug});
 			}
 		}
-		for (const prd of read.resolveLocalBriefStaging({repoPath})) {
-			if (prd.needsAnswers === true) {
-				out.push({namespace: 'brief', slug: prd.slug});
+		for (const brief of read.resolveLocalBriefStaging({repoPath})) {
+			if (brief.needsAnswers === true) {
+				out.push({namespace: 'brief', slug: brief.slug});
 			}
 		}
 	}
@@ -180,7 +180,7 @@ export async function gatherLifecycleMirror(input: {
 	const env = input.env;
 
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
-	const prdPool = await read.resolveMirrorPrdPool({mirrorPath, ref, env});
+	const briefPool = await read.resolveMirrorBriefPool({mirrorPath, ref, env});
 	const surfaceStaging = input.gates?.surfaceStaging === true;
 	const [taskStaging, briefStaging] = surfaceStaging
 		? await Promise.all([
@@ -195,9 +195,9 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	for (const prd of prdPool.prds) {
-		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'brief', slug: prd.slug});
+	for (const brief of briefPool.briefs) {
+		if (brief.needsAnswers === true) {
+			blocked.push({namespace: 'brief', slug: brief.slug});
 		}
 	}
 	// SURFACE-on-STAGING widening (brief
@@ -212,9 +212,9 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	for (const prd of briefStaging) {
-		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'brief', slug: prd.slug});
+	for (const brief of briefStaging) {
+		if (brief.needsAnswers === true) {
+			blocked.push({namespace: 'brief', slug: brief.slug});
 		}
 	}
 

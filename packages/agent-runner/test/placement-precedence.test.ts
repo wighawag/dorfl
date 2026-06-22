@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
-import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
+import {performTask, type TaskAgentRunner} from '../src/tasking.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -50,7 +50,7 @@ afterEach(() => {
  * this stamp from the held PRD and feeds it as the trust signal into the
  * runner-deterministic placement resolver.
  */
-function seedPrd(
+function seedBrief(
 	repo: string,
 	slug: string,
 	originTrust?: 'trusted' | 'untrusted',
@@ -83,7 +83,7 @@ function seedPrd(
  * placement; the runner does). The runner redirects the emitted file to the
  * resolved destination at integrate-stage time.
  */
-function slicingAgent(file = 'child'): SliceAgentRunner {
+function taskingAgent(file = 'child'): TaskAgentRunner {
 	return ({cwd}) => {
 		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
@@ -114,7 +114,7 @@ function slicingAgent(file = 'child'): SliceAgentRunner {
  * committing, and the resolver decides the actual destination from unforgeable
  * inputs.
  */
-function selfPlacingAgent(file = 'child'): SliceAgentRunner {
+function selfPlacingAgent(file = 'child'): TaskAgentRunner {
 	return ({cwd}) => {
 		const staging = join(cwd, 'work', 'tasks', 'backlog');
 		const pool = join(cwd, 'work', 'tasks', 'todo');
@@ -156,14 +156,14 @@ const onArbiterMain = (repo: string, path: string): boolean => {
 describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted origin) \u21d2 staging', () => {
 	it('lands the slice in work/tasks/backlog/ on the arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		const result = await performSlice({
+		seedBrief(repo, 'it');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			// No tasksLandIn, no explicitTasksLandIn \u2014 the resolver's built-in
 			// floor applies (`staging` = `pre-backlog/`).
 			env: gitEnv(),
@@ -183,15 +183,15 @@ describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted
 describe('placement rung 3: tasksLandIn default \u2014 both landings verified', () => {
 	it('tasksLandIn: todo + trusted origin \u21d2 lands in work/tasks/todo/ (the pool)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'trusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'trusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'todo',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -204,15 +204,15 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 
 	it('tasksLandIn: pre-backlog + trusted origin \u21d2 lands STAGED in work/tasks/backlog/', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'trusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'trusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'pre-backlog',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -227,8 +227,8 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandIn: todo repo', () => {
 	it('untrusted PRD + tasksLandIn: todo \u21d2 staged in work/tasks/backlog/ (untrusted force overrides configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'untrusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'untrusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -237,7 +237,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			// The repo's configured default would land slices in the POOL \u2014 but
 			// the PRD is untrusted-origin, so the runner forces STAGING.
 			tasksLandIn: 'todo',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -247,15 +247,15 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 
 	it('a TRUSTED PRD on a tasksLandIn: todo repo still lands in the pool (the untrusted force only fires on untrusted; zero behaviour change for the normal path)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'trusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'trusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'todo',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -265,15 +265,15 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 
 	it('an UNSTAMPED PRD (no origin/originTrust) follows the configured default (untrusted force does not fire; trusted-by-default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it'); // no origin/originTrust stamp \u2014 treated as trusted
-		const result = await performSlice({
+		seedBrief(repo, 'it'); // no origin/originTrust stamp \u2014 treated as trusted
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'todo',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -287,8 +287,8 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 describe('placement rung 1: explicit operator flag wins over the untrusted-origin force', () => {
 	it('explicit --tasks-land-in todo + untrusted PRD \u21d2 lands in work/tasks/todo/ (operator override beats the untrusted force)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'untrusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'untrusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -300,7 +300,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			// operator is present; CLI always wins (no special force-key), exactly
 			// like `--merge` overriding the untrusted-origin build-propose rule.
 			explicitTasksLandIn: 'todo',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -310,8 +310,8 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 
 	it('explicit --tasks-land-in pre-backlog + tasksLandIn: todo + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'trusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'trusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -319,7 +319,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			integration: 'merge',
 			tasksLandIn: 'todo',
 			explicitTasksLandIn: 'pre-backlog',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -334,8 +334,8 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 describe("the agent's emitted output lands where the RUNNER's policy dictates, not where the agent wrote", () => {
 	it('a SELF-PLACING agent (writes to both pre-backlog AND backlog) is scrubbed; the runner places the slice via the resolver', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'trusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'trusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -357,8 +357,8 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 
 	it('a SELF-PLACING agent on an UNTRUSTED PRD lands STAGED \u2014 the agent cannot bypass the untrusted-origin force by writing into the pool', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it', 'untrusted');
-		const result = await performSlice({
+		seedBrief(repo, 'it', 'untrusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,

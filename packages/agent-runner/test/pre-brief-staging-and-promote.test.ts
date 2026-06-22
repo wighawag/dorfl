@@ -2,9 +2,9 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {performIntake} from '../src/intake.js';
-import {promoteFromPrePrd} from '../src/needs-attention.js';
+import {promoteFromPreBrief} from '../src/needs-attention.js';
 import {ledgerRead} from '../src/ledger-read.js';
-import {resolveSlicingEligibility} from '../src/slicing-eligibility.js';
+import {resolveTaskingEligibility} from '../src/tasking-eligibility.js';
 import {resolveEligibility} from '../src/eligibility.js';
 import {
 	makeScratch,
@@ -254,23 +254,23 @@ describe('STEP A (PRD) \u2014 work/briefs/ready/ STILL means the auto-slice POOL
 
 		// THE POOL READER (`createLocalLedgerReadStrategy().resolvePrdPool`) reads
 		// `work/briefs/ready/` BYTE-FOR-BYTE UNCHANGED: a staged PRD is NOT in the pool.
-		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
-		expect(pool.prds.map((p) => p.slug)).not.toContain('shiny-new-vision');
+		const pool = ledgerRead.resolveBriefPool({repoPath: repo});
+		expect(pool.briefs.map((p) => p.slug)).not.toContain('shiny-new-vision');
 
 		// AND the slicing-eligibility gate refuses an autonomous slice of a staged
 		// PRD (by RESIDENCE \u2014 it is not in the pool to begin with).
-		const eligibility = resolveSlicingEligibility({
+		const eligibility = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
 			briefAfter: [],
-			slicedSlugs: new Set(),
+			taskedSlugs: new Set(),
 		});
 		// The gate itself is open (no axes block it); the POSITION (residence
 		// outside `work/briefs/ready/`) is what keeps the staged PRD out of the candidate
 		// pool the selector consults. So we ALSO assert the file is not in
 		// `work/briefs/ready/` on main (the structural fence).
-		expect(eligibility.sliceable).toBe(true); // axes-only, sanity
+		expect(eligibility.taskable).toBe(true); // axes-only, sanity
 		expect(onArbiterMain(repo, 'work/briefs/ready/shiny-new-vision.md')).toBe(
 			false,
 		);
@@ -300,7 +300,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		);
 
 		// PROMOTE (runner-owned).
-		const promoted = await promoteFromPrePrd({
+		const promoted = await promoteFromPreBrief({
 			slug: 'shiny-new-vision',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -321,13 +321,13 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 
 		// AND the pool reader now sees it (the auto-slice candidate pool).
 		gitIn(['pull', '--ff-only', '-q', ARBITER, 'main'], repo);
-		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
-		expect(pool.prds.map((p) => p.slug)).toContain('shiny-new-vision');
+		const pool = ledgerRead.resolveBriefPool({repoPath: repo});
+		expect(pool.briefs.map((p) => p.slug)).toContain('shiny-new-vision');
 	});
 
 	it('promote on a slug not in pre-prd/ refuses cleanly (no main move)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		const result = await promoteFromPrePrd({
+		const result = await promoteFromPreBrief({
 			slug: 'nope',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -349,7 +349,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		});
 		expect(result.outcome).toBe('prd');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
-		const first = await promoteFromPrePrd({
+		const first = await promoteFromPreBrief({
 			slug: 'shiny-new-vision',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -359,7 +359,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		// A second promote call (the source is gone; the dest is there) does not
 		// CRASH; it returns a clean refusal/no-op (the dest-already-in-pool branch
 		// of the `plan` resolver).
-		const second = await promoteFromPrePrd({
+		const second = await promoteFromPreBrief({
 			slug: 'shiny-new-vision',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -402,33 +402,33 @@ describe('STEP A (PRD) \u2014 briefAfter (prd-sliced/) and blockedBy (done/) res
 		gitIn(['push', '-q', ARBITER, 'main'], repo);
 
 		// The pool reader reads `work/briefs/ready/` (the auto-slice pool, unchanged).
-		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
+		const pool = ledgerRead.resolveBriefPool({repoPath: repo});
 		// `slicedSlugs` is RESIDENCE in `work/briefs/tasked/` (mirror of `done/` for
 		// blockedBy). The staged PRD in `work/briefs/proposed/` must NOT appear here.
-		expect(pool.slicedSlugs.has('already-sliced')).toBe(true);
-		expect(pool.slicedSlugs.has('staged-not-sliced')).toBe(false);
+		expect(pool.taskedSlugs.has('already-sliced')).toBe(true);
+		expect(pool.taskedSlugs.has('staged-not-sliced')).toBe(false);
 
 		// `briefAfter: [already-sliced]` is satisfied (the sliced set includes it).
-		const okIfPriorSliced = resolveSlicingEligibility({
+		const okIfPriorTasked = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
 			briefAfter: ['already-sliced'],
-			slicedSlugs: pool.slicedSlugs,
+			taskedSlugs: pool.taskedSlugs,
 		});
-		expect(okIfPriorSliced.sliceable).toBe(true);
-		expect(okIfPriorSliced.briefAfter.satisfied).toBe(true);
+		expect(okIfPriorTasked.taskable).toBe(true);
+		expect(okIfPriorTasked.briefAfter.satisfied).toBe(true);
 
 		// `briefAfter: [staged-not-sliced]` is NOT satisfied \u2014 a STAGED PRD
 		// (residence in `work/briefs/proposed/`) does NOT count as already-sliced.
-		const blockedByStaged = resolveSlicingEligibility({
+		const blockedByStaged = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
 			briefAfter: ['staged-not-sliced'],
-			slicedSlugs: pool.slicedSlugs,
+			taskedSlugs: pool.taskedSlugs,
 		});
-		expect(blockedByStaged.sliceable).toBe(false);
+		expect(blockedByStaged.taskable).toBe(false);
 		expect(blockedByStaged.briefAfter.satisfied).toBe(false);
 		expect(blockedByStaged.briefAfter.missing).toEqual(['staged-not-sliced']);
 	});

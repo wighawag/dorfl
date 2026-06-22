@@ -4,7 +4,7 @@ import {resolveEligibility, type EligibilityResult} from './eligibility.js';
 import {
 	ledgerRead,
 	type LedgerTodoItem,
-	type LedgerPrdPool,
+	type LedgerBriefPool,
 	type LocalLedgerState,
 } from './ledger-read.js';
 import {listMirrors} from './registry.js';
@@ -13,7 +13,7 @@ import {
 	resolveRepoConfigFromMirror,
 } from './repo-mirror.js';
 import {resolveRepoConfig} from './repo-config.js';
-import {sliceablePrds} from './select-priority.js';
+import {taskableBriefs} from './select-priority.js';
 import {
 	lintLocalLedger,
 	lintRefLedger,
@@ -25,7 +25,7 @@ import {
 } from './lifecycle-gather.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
 import {
-	heldSliceSlugs,
+	heldTaskSlugs,
 	listItemLockEntries,
 	type LockEntry,
 } from './item-lock.js';
@@ -140,7 +140,7 @@ export interface ScannedItem extends TodoItem {
  * prefixes — a discriminator on `items[]` would pollute the surface other readers
  * already consume.
  */
-export interface ScannedPrd {
+export interface ScannedBrief {
 	slug: string;
 	eligibility: {eligible: boolean};
 }
@@ -166,7 +166,7 @@ export interface RepoReport {
 	 * The `autoTask` gate still BINDS — a repo with `autoTask` off yields an
 	 * all-`eligible:false` pool (so no `prd:` legs).
 	 */
-	prds: ScannedPrd[];
+	briefs: ScannedBrief[];
 	/**
 	 * The per-repo LIFECYCLE pool (the `triage`/`surface`/`apply` companion of
 	 * `items[]`/`prds[]`): untriaged observations + `needsAnswers` slices/PRDs split
@@ -254,27 +254,27 @@ export function readBacklogItems(repoPath: string): TodoItem[] {
  * The `autoTask` gate BINDS through that predicate; a config-less repo with
  * `autoTask` off yields an all-`eligible:false` pool (no `prd:` legs).
  */
-export function scorePrds(
+export function scoreBriefs(
 	repoPath: string,
-	pool: LedgerPrdPool,
+	pool: LedgerBriefPool,
 	autoTask: boolean,
-): ScannedPrd[] {
-	const sliceable = new Set(
-		sliceablePrds({
-			candidates: pool.prds.map((p) => ({
+): ScannedBrief[] {
+	const taskable = new Set(
+		taskableBriefs({
+			candidates: pool.briefs.map((p) => ({
 				repoPath,
 				slug: p.slug,
 				humanOnly: p.humanOnly,
 				needsAnswers: p.needsAnswers,
 				briefAfter: p.briefAfter,
 			})),
-			slicedSlugs: pool.slicedSlugs,
+			taskedSlugs: pool.taskedSlugs,
 			autoTask,
 		}).map((p) => p.slug),
 	);
-	return pool.prds.map((p) => ({
+	return pool.briefs.map((p) => ({
 		slug: p.slug,
-		eligibility: {eligible: sliceable.has(p.slug)},
+		eligibility: {eligible: taskable.has(p.slug)},
 	}));
 }
 
@@ -415,7 +415,7 @@ export async function scan(
 		// Held-slug subtraction: a bare hub mirror's arbiter is its `origin`. Reads
 		// the lock refs from the mirror's origin; non-fatal (empty set on any fault),
 		// so the read-only scan degrades gracefully exactly as its config reads do.
-		const heldSlugs = await heldSliceSlugs(mirror.path, 'origin', options.env);
+		const heldSlugs = await heldTaskSlugs(mirror.path, 'origin', options.env);
 		// The PER-ITEM LOCK in-flight view (PRD US #8; slice
 		// `needs-attention-as-stuck-lock-state`): ADDITIONALLY read the full held
 		// lock entries (action × state + reason) from the mirror's lock refs, so the
@@ -450,11 +450,11 @@ export async function scan(
 					`resolving autoTask from global + default. ${reason}`,
 			);
 		}
-		const prdPool = await ledgerRead.resolveMirrorPrdPool({
+		const briefPool = await ledgerRead.resolveMirrorBriefPool({
 			mirrorPath: mirror.path,
 			env: options.env,
 		});
-		const prds = scorePrds(mirror.path, prdPool, repoAutoTask);
+		const briefs = scoreBriefs(mirror.path, briefPool, repoAutoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this mirror's question-surfacing config (resolved from its committed
 		// `.agent-runner.json`, with the same non-fatal global fall-back as `autoTask`
@@ -496,7 +496,7 @@ export async function scan(
 		repos.push({
 			path: mirror.path,
 			items: scoreItems(state, autoBuild, counts, heldSlugs),
-			prds,
+			briefs,
 			lifecycle,
 			ledgerDuplicates,
 			lockHeld,
@@ -556,8 +556,8 @@ export function scanRepoPaths(
 		// predicate the autopick paths run) decides what is sliceable — no forked
 		// predicate. This is what makes the propose-mode CI matrix enumerate `prd:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
-		const prdPool = ledgerRead.resolvePrdPool({repoPath: path});
-		const prds = scorePrds(path, prdPool, resolved.autoTask);
+		const briefPool = ledgerRead.resolveBriefPool({repoPath: path});
+		const briefs = scoreBriefs(path, briefPool, resolved.autoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this working tree's `observationTriage` / `surfaceBlockers` (resolved
 		// the same way as `autoBuild`/`autoTask`) and computed by REUSING
@@ -578,7 +578,7 @@ export function scanRepoPaths(
 		repos.push({
 			path,
 			items: scoreItems(state, resolved.autoBuild, counts, heldSlugs),
-			prds,
+			briefs,
 			lifecycle,
 			ledgerDuplicates,
 		});

@@ -3,7 +3,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {scanMirrorPool} from '../src/mirror-pool-scan.js';
 import {scanRepoPaths} from '../src/scan.js';
-import {sliceablePrds, selectPrioritised} from '../src/select-priority.js';
+import {taskableBriefs, selectPrioritised} from '../src/select-priority.js';
 import {mergeConfig} from '../src/config.js';
 import {
 	makeScratch,
@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 /** A minimal slice markdown body with the given frontmatter fields. */
-function slice(frontmatter: Record<string, string>): string {
+function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
 		lines.push(`${k}: ${v}`);
@@ -50,7 +50,7 @@ function slice(frontmatter: Record<string, string>): string {
 }
 
 /** A minimal PRD markdown body with the given frontmatter fields. */
-function prd(frontmatter: Record<string, string>): string {
+function brief(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
 		lines.push(`${k}: ${v}`);
@@ -64,24 +64,24 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
 				// eligible
-				'ready.md': slice({slug: 'ready'}),
+				'ready.md': task({slug: 'ready'}),
 				// gated out
-				'human.md': slice({slug: 'human', humanOnly: 'true'}),
-				'asks.md': slice({slug: 'asks', needsAnswers: 'true'}),
+				'human.md': task({slug: 'human', humanOnly: 'true'}),
+				'asks.md': task({slug: 'asks', needsAnswers: 'true'}),
 				// blocked (dep not done)
-				'blocked.md': slice({slug: 'blocked', blockedBy: '[missing]'}),
+				'blocked.md': task({slug: 'blocked', blockedBy: '[missing]'}),
 				// blocked-but-satisfied (dep IS done)
-				'unblocked.md': slice({slug: 'unblocked', blockedBy: '[dep]'}),
+				'unblocked.md': task({slug: 'unblocked', blockedBy: '[dep]'}),
 			},
-			done: {'dep.md': slice({slug: 'dep'})},
-			prd: {
+			done: {'dep.md': task({slug: 'dep'})},
+			brief: {
 				// sliceable
-				'sliceme.md': prd({slug: 'sliceme'}),
+				'sliceme.md': brief({slug: 'sliceme'}),
 				// gated out
-				'brief-human.md': prd({slug: 'brief-human', humanOnly: 'true'}),
-				'brief-asks.md': prd({slug: 'brief-asks', needsAnswers: 'true'}),
+				'brief-human.md': brief({slug: 'brief-human', humanOnly: 'true'}),
+				'brief-asks.md': brief({slug: 'brief-asks', needsAnswers: 'true'}),
 				// briefAfter not satisfied (unsliced-dep is NOT in prd-sliced/)
-				'after.md': prd({slug: 'after', briefAfter: '[unsliced-dep]'}),
+				'after.md': brief({slug: 'after', briefAfter: '[unsliced-dep]'}),
 			},
 		});
 
@@ -92,18 +92,18 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		});
 
 		// Exactly the eligible slices.
-		expect(result.eligibleSlices.map((s) => s.slug).sort()).toEqual([
+		expect(result.eligibleTasks.map((s) => s.slug).sort()).toEqual([
 			'ready',
 			'unblocked',
 		]);
 		// Exactly the sliceable PRDs.
-		expect(result.prds.map((p) => p.slug).sort()).toEqual(['sliceme']);
+		expect(result.briefs.map((p) => p.slug).sort()).toEqual(['sliceme']);
 	});
 
 	it('honours the GATES: autoBuild off ⇒ no eligible slice; autoTask off ⇒ no sliceable PRD', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'ready.md': slice({slug: 'ready'})},
-			prd: {'sliceme.md': prd({slug: 'sliceme'})},
+			backlog: {'ready.md': task({slug: 'ready'})},
+			brief: {'sliceme.md': brief({slug: 'sliceme'})},
 		});
 
 		const strict = await scanMirrorPool({
@@ -111,16 +111,16 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			config: mergeConfig({autoBuild: false, autoTask: false}),
 			env: gitEnv(),
 		});
-		expect(strict.eligibleSlices).toEqual([]);
-		expect(strict.prds).toEqual([]);
+		expect(strict.eligibleTasks).toEqual([]);
+		expect(strict.briefs).toEqual([]);
 
 		const permissive = await scanMirrorPool({
 			mirrorPath,
 			config: mergeConfig({autoBuild: true, autoTask: true}),
 			env: gitEnv(),
 		});
-		expect(permissive.eligibleSlices.map((s) => s.slug)).toEqual(['ready']);
-		expect(permissive.prds.map((p) => p.slug)).toEqual(['sliceme']);
+		expect(permissive.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
+		expect(permissive.briefs.map((p) => p.slug)).toEqual(['sliceme']);
 	});
 
 	it('layers the COMMITTED per-repo .agent-runner.json from the mirror main (parity with the working checkout that reads it)', async () => {
@@ -128,8 +128,8 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		// it from `main:.agent-runner.json` (the `do --remote` per-repo seam), so the
 		// slice/PRD become eligible exactly as an in-place checkout would resolve them.
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'ready.md': slice({slug: 'ready'})},
-			prd: {'sliceme.md': prd({slug: 'sliceme'})},
+			backlog: {'ready.md': task({slug: 'ready'})},
+			brief: {'sliceme.md': brief({slug: 'sliceme'})},
 			repoConfig: {autoBuild: true, autoTask: true},
 		});
 
@@ -138,14 +138,14 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			config: mergeConfig({autoBuild: false, autoTask: false}),
 			env: gitEnv(),
 		});
-		expect(result.eligibleSlices.map((s) => s.slug)).toEqual(['ready']);
-		expect(result.prds.map((p) => p.slug)).toEqual(['sliceme']);
+		expect(result.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
+		expect(result.briefs.map((p) => p.slug)).toEqual(['sliceme']);
 	});
 
 	it('resolves blockedBy / briefAfter against the mirror own folders (per-repo, like in-place)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
-			prd: {'after.md': prd({slug: 'after', briefAfter: '[alpha]'})},
+			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
+			brief: {'after.md': brief({slug: 'after', briefAfter: '[alpha]'})},
 		});
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
@@ -155,28 +155,28 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			config: cfg,
 			env: gitEnv(),
 		});
-		expect(before.eligibleSlices).toEqual([]);
-		expect(before.prds).toEqual([]);
+		expect(before.eligibleTasks).toEqual([]);
+		expect(before.briefs).toEqual([]);
 
 		// Re-seed with the deps satisfied (fresh mirror).
 		scratch.cleanup();
 		scratch = makeScratch('agent-runner-mirror-pool-scan-');
 		ws = join(scratch.root, '.agent-runner');
 		const second = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
-			done: {'a.md': slice({slug: 'a'})},
-			prd: {
-				'after.md': prd({slug: 'after', briefAfter: '[alpha]'}),
+			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
+			done: {'a.md': task({slug: 'a'})},
+			brief: {
+				'after.md': brief({slug: 'after', briefAfter: '[alpha]'}),
 			},
-			prdSliced: {'alpha.md': prd({slug: 'alpha'})},
+			briefTasked: {'alpha.md': brief({slug: 'alpha'})},
 		});
 		const after = await scanMirrorPool({
 			mirrorPath: second.mirrorPath,
 			config: cfg,
 			env: gitEnv(),
 		});
-		expect(after.eligibleSlices.map((s) => s.slug)).toEqual(['b']);
-		expect(after.prds.map((p) => p.slug)).toEqual(['after']);
+		expect(after.eligibleTasks.map((s) => s.slug)).toEqual(['b']);
+		expect(after.briefs.map((p) => p.slug)).toEqual(['after']);
 	});
 });
 
@@ -184,16 +184,16 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 	it('mirror-side scan returns the same eligible slices + sliceable PRDs as scanRepoPaths + sliceablePrds in-place', async () => {
 		const mixed = {
 			backlog: {
-				'ready.md': slice({slug: 'ready'}),
-				'human.md': slice({slug: 'human', humanOnly: 'true'}),
-				'unblocked.md': slice({slug: 'unblocked', blockedBy: '[dep]'}),
+				'ready.md': task({slug: 'ready'}),
+				'human.md': task({slug: 'human', humanOnly: 'true'}),
+				'unblocked.md': task({slug: 'unblocked', blockedBy: '[dep]'}),
 			},
-			done: {'dep.md': slice({slug: 'dep'})},
-			prd: {
-				'sliceme.md': prd({slug: 'sliceme'}),
-				'after.md': prd({slug: 'after', briefAfter: '[alpha]'}),
+			done: {'dep.md': task({slug: 'dep'})},
+			brief: {
+				'sliceme.md': brief({slug: 'sliceme'}),
+				'after.md': brief({slug: 'after', briefAfter: '[alpha]'}),
 			},
-			prdSliced: {'alpha.md': prd({slug: 'alpha'})},
+			briefTasked: {'alpha.md': brief({slug: 'alpha'})},
 		};
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
@@ -216,7 +216,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			const dir = join(
 				checkout,
 				'work',
-				fixtureFolderRel(folder === 'prdSliced' ? 'prd-sliced' : folder),
+				fixtureFolderRel(folder === 'briefTasked' ? 'briefTasked' : folder),
 			);
 			mkdirSync(dir, {recursive: true});
 			for (const [file, content] of Object.entries(
@@ -226,31 +226,31 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			}
 		}
 		const inPlaceReport = scanRepoPaths([checkout], cfg);
-		const inPlacePrds = sliceablePrds({
+		const inPlaceBriefs = taskableBriefs({
 			candidates: (await import('../src/ledger-read.js')).ledgerRead
-				.resolvePrdPool({repoPath: checkout})
-				.prds.map((p) => ({
+				.resolveBriefPool({repoPath: checkout})
+				.briefs.map((p) => ({
 					repoPath: checkout,
 					slug: p.slug,
 					humanOnly: p.humanOnly,
 					needsAnswers: p.needsAnswers,
 					briefAfter: p.briefAfter,
 				})),
-			slicedSlugs: (
+			taskedSlugs: (
 				await import('../src/ledger-read.js')
-			).ledgerRead.resolvePrdPool({repoPath: checkout}).slicedSlugs,
+			).ledgerRead.resolveBriefPool({repoPath: checkout}).taskedSlugs,
 			autoTask: cfg.autoTask,
 		});
 
 		// PARITY: the eligible slice slugs + sliceable PRD slugs match exactly.
-		expect(mirror.eligibleSlices.map((s) => s.slug).sort()).toEqual(
+		expect(mirror.eligibleTasks.map((s) => s.slug).sort()).toEqual(
 			inPlaceReport.repos[0].items
 				.filter((i) => i.eligibility.eligible)
 				.map((i) => i.slug)
 				.sort(),
 		);
-		expect(mirror.prds.map((p) => p.slug).sort()).toEqual(
-			inPlacePrds.map((p) => p.slug).sort(),
+		expect(mirror.briefs.map((p) => p.slug).sort()).toEqual(
+			inPlaceBriefs.map((p) => p.slug).sort(),
 		);
 	});
 });
@@ -259,17 +259,17 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 	it('feeds selectPrioritised identically for a LOOP shape (take all) and a ONE-SHOT shape (sequential count)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'alpha.md': slice({slug: 'alpha'}),
-				'beta.md': slice({slug: 'beta'}),
+				'alpha.md': task({slug: 'alpha'}),
+				'beta.md': task({slug: 'beta'}),
 			},
-			prd: {'gamma.md': prd({slug: 'gamma'})},
+			brief: {'gamma.md': brief({slug: 'gamma'})},
 		});
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 		const pool = await scanMirrorPool({mirrorPath, config: cfg, env: gitEnv()});
 
 		// Build the PRD candidate list the SAME way do-autopick does, from the pool the
 		// mirror scan returns (no duplicated enumeration).
-		const prdCandidates = pool.prds;
+		const briefCandidates = pool.briefs;
 
 		// LOOP driver shape (`run`): take ALL eligible, parallelism is the loop's job.
 		const loopSelection = selectPrioritised({
@@ -278,7 +278,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			prds: prdCandidates,
+			briefs: briefCandidates,
 		});
 		expect(loopSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:alpha',
@@ -294,7 +294,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			prds: prdCandidates,
+			briefs: briefCandidates,
 			count: 2,
 		});
 		expect(oneShotSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([

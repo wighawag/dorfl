@@ -1,9 +1,9 @@
 import {selectCandidates, type Candidate, type SelectCaps} from './select.js';
 import type {ScanReport} from './scan.js';
 import {
-	resolveSlicingEligibility,
+	resolveTaskingEligibility,
 	type HumanOnlyGate,
-} from './slicing-eligibility.js';
+} from './tasking-eligibility.js';
 import {
 	resolveSelectionOrder,
 	DEFAULT_SELECTION_ORDER,
@@ -83,7 +83,7 @@ export interface SelectedItem {
 export type LifecycleSelectedItem = SelectedItem;
 
 /** A PRD candidate for the slicing pool, before the eligibility gate runs. */
-export interface PrdCandidate {
+export interface BriefCandidate {
 	repoPath: string;
 	slug: string;
 	humanOnly: HumanOnlyGate;
@@ -92,11 +92,11 @@ export interface PrdCandidate {
 }
 
 /** Inputs to {@link sliceablePrds}: the raw PRD pool + the gate context. */
-export interface SliceablePrdsInput {
+export interface TaskableBriefsInput {
 	/** Every PRD enumerated from `work/prd/` (the auto-slice candidate source). */
-	candidates: PrdCandidate[];
+	candidates: BriefCandidate[];
 	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
-	slicedSlugs: Set<string>;
+	taskedSlugs: Set<string>;
 	/** The repo's resolved `autoTask` policy (`autotask-gate`'s per-repo key). */
 	autoTask: boolean;
 }
@@ -108,16 +108,16 @@ export interface SliceablePrdsInput {
  * humanOnly !== true && autoTask` AND every `briefAfter` PRD is already sliced.
  * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
  */
-export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
+export function taskableBriefs(input: TaskableBriefsInput): BriefCandidate[] {
 	return input.candidates.filter(
-		(prd) =>
-			resolveSlicingEligibility({
-				humanOnly: prd.humanOnly,
-				needsAnswers: prd.needsAnswers,
-				briefAfter: prd.briefAfter,
-				slicedSlugs: input.slicedSlugs,
+		(brief) =>
+			resolveTaskingEligibility({
+				humanOnly: brief.humanOnly,
+				needsAnswers: brief.needsAnswers,
+				briefAfter: brief.briefAfter,
+				taskedSlugs: input.taskedSlugs,
 				autoTask: input.autoTask,
-			}).sliceable,
+			}).taskable,
 	);
 }
 
@@ -136,7 +136,7 @@ export interface SelectPrioritisedInput {
 	 * The ALREADY-FILTERED sliceable PRD pool (run {@link sliceablePrds} first).
 	 * In declaration order; this helper does not re-gate them.
 	 */
-	prds: PrdCandidate[];
+	briefs: BriefCandidate[];
 	/**
 	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
 	 * `slice` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
@@ -225,9 +225,9 @@ export function selectPrioritised(
 			namespace: 'task' as const,
 		}));
 
-	const sliceItems: SelectedItem[] = input.prds.map((prd) => ({
-		repoPath: prd.repoPath,
-		slug: prd.slug,
+	const taskItems: SelectedItem[] = input.briefs.map((brief) => ({
+		repoPath: brief.repoPath,
+		slug: brief.slug,
 		namespace: 'brief' as const,
 	}));
 
@@ -239,7 +239,7 @@ export function selectPrioritised(
 	// item namespaces (slice `advance-selection-order-config`).
 	const byPool: Record<SelectionPool, SelectedItem[]> = {
 		build: buildItems,
-		slice: sliceItems,
+		slice: taskItems,
 		surface: lifecycle?.surface ?? [],
 		triage: lifecycle?.triage ?? [],
 	};

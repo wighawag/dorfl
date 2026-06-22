@@ -68,11 +68,11 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 			'reason: superseded by live\n\nbody',
 		);
 
-		const pool = currentLedgerRead.resolvePrdPool({
+		const pool = currentLedgerRead.resolveBriefPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(pool.prds.map((p) => p.slug)).toEqual(['live']);
-		expect(pool.slicedSlugs).toEqual(new Set());
+		expect(pool.briefs.map((p) => p.slug)).toEqual(['live']);
+		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 
 	it('a slice resting in work/tasks/cancelled/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
@@ -121,10 +121,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		expect(report.repos[0].ledgerDuplicates).toEqual([]);
 		// Neither is in any pool (both are terminal residences).
 		expect(report.repos[0].items).toEqual([]);
-		const prdPool = currentLedgerRead.resolvePrdPool({
+		const briefPool = currentLedgerRead.resolveBriefPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(prdPool.prds).toEqual([]);
+		expect(briefPool.briefs).toEqual([]);
 	});
 
 	it('the `reason:` is preserved in the item BODY (status is the folder; no frontmatter status field is read)', () => {
@@ -143,10 +143,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 
 		// Sanity: still excluded from every pool (residence rule), and the body
 		// reason text was not coerced into frontmatter.
-		const prdPool = currentLedgerRead.resolvePrdPool({
+		const briefPool = currentLedgerRead.resolveBriefPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(prdPool.prds).toEqual([]);
+		expect(briefPool.briefs).toEqual([]);
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoBuild: true}),

@@ -38,14 +38,14 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-function slice(frontmatter: Record<string, string>): string {
+function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', 'body');
 	return lines.join('\n');
 }
 
-function prd(frontmatter: Record<string, string>): string {
+function brief(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', '# PRD');
@@ -70,8 +70,8 @@ function recordingRunner(): {run: DoRemoteRunner; args: string[]} {
 describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () => {
 	it('auto-picks ONE eligible item (a slice) from the bare mirror', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'alpha.md': slice({slug: 'alpha'})},
-			prd: {'gamma.md': prd({slug: 'gamma'})},
+			backlog: {'alpha.md': task({slug: 'alpha'})},
+			brief: {'gamma.md': brief({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await performDoRemoteAuto({
@@ -87,10 +87,10 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 
 	it('-n <x> takes x items, slices-first then PRDs, IN SEQUENCE', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'alpha.md': slice({slug: 'alpha'})},
-			prd: {
-				'gamma.md': prd({slug: 'gamma'}),
-				'delta.md': prd({slug: 'delta'}),
+			backlog: {'alpha.md': task({slug: 'alpha'})},
+			brief: {
+				'gamma.md': brief({slug: 'gamma'}),
+				'delta.md': brief({slug: 'delta'}),
 			},
 		});
 		const {run, args} = recordingRunner();
@@ -109,8 +109,8 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 
 	it('honours the per-action GATES via the mirror scan: gates off ⇒ nothing selected', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'alpha.md': slice({slug: 'alpha'})},
-			prd: {'gamma.md': prd({slug: 'gamma'})},
+			backlog: {'alpha.md': task({slug: 'alpha'})},
+			brief: {'gamma.md': brief({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await performDoRemoteAuto({
@@ -130,8 +130,8 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 	it('runs the selected items SEQUENTIALLY (never two in flight)', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'alpha.md': slice({slug: 'alpha'}),
-				'beta.md': slice({slug: 'beta'}),
+				'alpha.md': task({slug: 'alpha'}),
+				'beta.md': task({slug: 'beta'}),
 			},
 		});
 		let inFlight = 0;

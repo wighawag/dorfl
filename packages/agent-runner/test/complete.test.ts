@@ -244,10 +244,10 @@ describe('complete — done-move + commit', () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['theslug']);
 		const repo = seeded.repo;
 		// Rewrite the slice title to the realistic "slug — summary" form.
-		const slicePath = join(repo, 'work', 'tasks', 'todo', 'theslug.md');
-		const original = readFileSync(slicePath, 'utf8');
+		const taskPath = join(repo, 'work', 'tasks', 'todo', 'theslug.md');
+		const original = readFileSync(taskPath, 'utf8');
 		writeFileSync(
-			slicePath,
+			taskPath,
 			original.replace(
 				/^title: .*$/m,
 				'title: theslug — do the important thing',

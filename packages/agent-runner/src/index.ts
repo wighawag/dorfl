@@ -110,27 +110,27 @@ export {
 } from './eligibility.js';
 
 export type {
-	SliceAfterResult,
-	SlicingEligibilityInput,
-	SlicingEligibilityResult,
-} from './slicing-eligibility.js';
+	TaskAfterResult,
+	TaskingEligibilityInput,
+	TaskingEligibilityResult,
+} from './tasking-eligibility.js';
 export {
-	resolveSliceGate,
-	resolveSliceAfter,
-	resolveSlicingEligibility,
-} from './slicing-eligibility.js';
+	resolveTaskGate,
+	resolveTaskAfter,
+	resolveTaskingEligibility,
+} from './tasking-eligibility.js';
 
 export type {
 	LedgerTodoItem,
 	LedgerObservationItem,
-	LedgerPrdItem,
-	LedgerPrdPool,
-	PrdExistence,
+	LedgerBriefItem,
+	LedgerBriefPool,
+	BriefExistence,
 	LocalLedgerState,
 	ArbiterLedgerState,
 	ResolveLocalStateInput,
-	ResolvePrdExistenceInput,
-	ResolvePrdPoolInput,
+	ResolveBriefExistenceInput,
+	ResolveBriefPoolInput,
 	ResolveArbiterStateInput,
 	ResolveMirrorStateInput,
 	LedgerReadStrategy,
@@ -138,11 +138,11 @@ export type {
 export {currentLedgerRead, ledgerRead} from './ledger-read.js';
 
 export type {
-	PrdCompleteInput,
-	PrdSlice,
-	PrdCompleteResult,
-} from './prd-complete.js';
-export {isPrdComplete} from './prd-complete.js';
+	BriefCompleteInput,
+	BriefTask,
+	BriefCompleteResult,
+} from './brief-complete.js';
+export {isBriefComplete} from './brief-complete.js';
 
 export type {
 	LedgerTransitionKind,
@@ -183,7 +183,7 @@ export {
 	SlugResolutionError,
 	parseSlugArg,
 	resolveSlug,
-	resolveSliceOnlyArg,
+	resolveTaskOnlyArg,
 } from './slug-namespace.js';
 
 export type {
@@ -214,7 +214,7 @@ export {resolveCwdSection} from './cwd-section.js';
 
 export type {
 	TaskFolder,
-	ResolvedSlice,
+	ResolvedTask,
 	PromptOptions,
 	ContinueContext,
 	ContinueResolutionGate,
@@ -228,7 +228,7 @@ export {
 	buildContinueBlock,
 	extractRequeueNotes,
 	resolveContinueContext,
-	resolveSlice,
+	resolveTask,
 	inferSlugFromBranch,
 	renderPrompt,
 	PromptError,
@@ -242,11 +242,11 @@ export type {
 	SelectedItem,
 	LifecycleSelectedItem,
 	SelectedLifecyclePools,
-	PrdCandidate,
-	SliceablePrdsInput,
+	BriefCandidate,
+	TaskableBriefsInput,
 	SelectPrioritisedInput,
 } from './select-priority.js';
-export {sliceablePrds, selectPrioritised} from './select-priority.js';
+export {taskableBriefs, selectPrioritised} from './select-priority.js';
 
 export type {
 	ClaimExitCode,
@@ -310,7 +310,7 @@ export {
 	terminalMainPaths,
 	listItemLocks,
 	listItemLockEntries,
-	heldSliceSlugs,
+	heldTaskSlugs,
 	resolveLockHolder,
 	serialiseLockEntry,
 	parseLockEntry,
@@ -364,13 +364,13 @@ export type {
 export {performDoAuto, performDoArgs} from './do-autopick.js';
 
 export type {
-	SliceOutcome,
-	SliceResult,
-	SliceAgentRunner,
-	SlicingLockSeam,
-	PerformSliceOptions,
-} from './slicing.js';
-export {performSlice} from './slicing.js';
+	TaskOutcome,
+	TaskResult,
+	TaskAgentRunner,
+	TaskingLockSeam,
+	PerformTaskOptions,
+} from './tasking.js';
+export {performTask} from './tasking.js';
 
 export type {
 	Issue,
@@ -574,9 +574,9 @@ export {
 	ReviewParseError,
 	parseReviewVerdict,
 	buildReviewPrompt,
-	buildSliceAcceptancePrompt,
+	buildTaskAcceptancePrompt,
 	harnessReviewGate,
-	harnessSliceAcceptanceGate,
+	harnessTaskAcceptanceGate,
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
 } from './review-gate.js';

@@ -99,10 +99,10 @@ import {
 	freshWorktreeGateFlagOverrides,
 	noPRFlagOverrides,
 } from './do-config.js';
-import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
+import {harnessReviewGate, harnessTaskAcceptanceGate} from './review-gate.js';
 import {harnessSurfaceGate} from './surface-gate.js';
 import {harnessTriageGate} from './triage-gate.js';
-import {harnessSliceReviewGate} from './slicer-review-loop.js';
+import {harnessTaskReviewGate} from './tasker-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {resolvePromptGuidance} from './config.js';
@@ -122,13 +122,13 @@ import {
 } from './item-lock.js';
 import {
 	promoteFromPreBacklog,
-	promoteFromPrePrd,
+	promoteFromPreBrief,
 	listPromotable,
 } from './needs-attention.js';
 import {parseSlugArg} from './slug-namespace.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 import {
-	resolveSliceOnlyArg,
+	resolveTaskOnlyArg,
 	workBranchRef,
 	SlugResolutionError,
 } from './slug-namespace.js';
@@ -401,13 +401,13 @@ function buildRegistrySetAdvanceTick(options: {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				reviewLoop: config.slicerLoop
-					? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
+				reviewLoop: config.taskerLoop
+					? harnessTaskReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				slicerLoopMax: config.slicerLoopMax,
-				slicerLoopModel: config.slicerLoopModel,
-				sliceReviewGate: config.review
-					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+				taskerLoopMax: config.taskerLoopMax,
+				taskerLoopModel: config.taskerLoopModel,
+				taskReviewGate: config.review
+					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
@@ -721,10 +721,10 @@ interface IntakeFlags {
 	propose?: boolean;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
-	mergePrd?: boolean;
-	proposePrd?: boolean;
-	mergeSlice?: boolean;
-	proposeSlice?: boolean;
+	mergeBrief?: boolean;
+	proposeBrief?: boolean;
+	mergeTask?: boolean;
+	proposeTask?: boolean;
 	/**
 	 * `--origin-trust <trusted|untrusted>` — the author-trust verdict the CI shell
 	 * passes IN so `intake` STAMPS the emitted PRD/slice (slice
@@ -835,12 +835,12 @@ interface CloseMergedIssuesFlags {
  * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`
  * slice. This guard is the slice-only half of ADR §3a.
  */
-function resolveSliceOnlySlug(slug: string | undefined): string | undefined {
+function resolveTaskOnlySlug(slug: string | undefined): string | undefined {
 	if (slug === undefined) {
 		return undefined;
 	}
 	try {
-		return resolveSliceOnlyArg(slug);
+		return resolveTaskOnlyArg(slug);
 	} catch (err) {
 		if (err instanceof SlugResolutionError) {
 			console.error(`error: ${err.message}`);
@@ -921,7 +921,7 @@ async function runStartAction(
 	resume: boolean,
 ): Promise<void> {
 	// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-	const slug = resolveSliceOnlySlug(rawSlug);
+	const slug = resolveTaskOnlySlug(rawSlug);
 	const cwd = process.cwd();
 
 	// `resume --isolated <slug>`: re-engage the slug's RETAINED job worktree (the
@@ -1337,7 +1337,7 @@ export function buildProgram(): Command {
 		)
 		.action(async (rawSlug: string, flags: ClaimFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug) as string;
+			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			// Wrap ONLY this CLI surface's `performClaim` call with the spinner
 			// helper (slice `claim-cas-spinner`): the push can take seconds, so the
 			// terminal looked frozen. In non-TTY mode the helper is a no-op and
@@ -1543,7 +1543,7 @@ export function buildProgram(): Command {
 					? flags.remote
 					: undefined;
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const theSlug = resolveSliceOnlySlug(rawSlug) as string;
+			const theSlug = resolveTaskOnlySlug(rawSlug) as string;
 
 			const configPath = flags.config ?? defaultConfigPath();
 			const {dir: configuredRoot, config} = loadHumanWorktreesDir(configPath);
@@ -1602,7 +1602,7 @@ export function buildProgram(): Command {
 		)
 		.action((rawSlug: string | undefined) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug);
+			const slug = resolveTaskOnlySlug(rawSlug);
 			// Resolve the `promptGuidance` NUDGE namespace through the SAME chain the
 			// gate family uses (env > per-repo > global > default), so e.g. a
 			// `promptGuidance.testFirst:true` in `.agent-runner.json` strengthens the
@@ -1705,7 +1705,7 @@ export function buildProgram(): Command {
 		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug);
+			const slug = resolveTaskOnlySlug(rawSlug);
 			const cwd = process.cwd();
 			const {global, override} = loadGlobalAndOverride(flags.config);
 
@@ -2133,17 +2133,17 @@ export function buildProgram(): Command {
 					// quality engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
 					// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
 					// > global > default). DISTINCT from the gate's `--review*` family.
-					reviewLoop: remoteConfig.slicerLoop
-						? harnessSliceReviewGate({
+					reviewLoop: remoteConfig.taskerLoop
+						? harnessTaskReviewGate({
 								harness: remoteHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					slicerLoopMax: remoteConfig.slicerLoopMax,
-					slicerLoopModel: remoteConfig.slicerLoopModel,
+					taskerLoopMax: remoteConfig.taskerLoopMax,
+					taskerLoopModel: remoteConfig.taskerLoopModel,
 					// The slice-SET ACCEPTANCE GATE on the `do --remote brief:` path too.
-					sliceReviewGate: remoteConfig.review
-						? harnessSliceAcceptanceGate({
+					taskReviewGate: remoteConfig.review
+						? harnessTaskAcceptanceGate({
 								harness: remoteHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
@@ -2294,19 +2294,19 @@ export function buildProgram(): Command {
 				// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
 				// > global > default); the slice-build path ignores all of these. DISTINCT
 				// from the acceptance gate's `--review*` family.
-				reviewLoop: config.slicerLoop
-					? harnessSliceReviewGate({
+				reviewLoop: config.taskerLoop
+					? harnessTaskReviewGate({
 							harness,
 							agentCmd: config.agentCmd,
 						})
 					: undefined,
-				slicerLoopMax: config.slicerLoopMax,
-				slicerLoopModel: config.slicerLoopModel,
+				taskerLoopMax: config.taskerLoopMax,
+				taskerLoopModel: config.taskerLoopModel,
 				// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): the slice-path
 				// mirror of Gate-2, on the SAME `--review` family (so `--no-review` skips
 				// it). ONE-SHOT (no rounds); production wires the slice-SET-prompt gate.
-				sliceReviewGate: config.review
-					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+				taskReviewGate: config.review
+					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
@@ -2568,16 +2568,16 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					reviewLoop: remoteConfig.slicerLoop
-						? harnessSliceReviewGate({
+					reviewLoop: remoteConfig.taskerLoop
+						? harnessTaskReviewGate({
 								harness: isoHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					slicerLoopMax: remoteConfig.slicerLoopMax,
-					slicerLoopModel: remoteConfig.slicerLoopModel,
-					sliceReviewGate: remoteConfig.review
-						? harnessSliceAcceptanceGate({
+					taskerLoopMax: remoteConfig.taskerLoopMax,
+					taskerLoopModel: remoteConfig.taskerLoopModel,
+					taskReviewGate: remoteConfig.review
+						? harnessTaskAcceptanceGate({
 								harness: isoHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
@@ -2700,13 +2700,13 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				reviewLoop: config.slicerLoop
-					? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
+				reviewLoop: config.taskerLoop
+					? harnessTaskReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				slicerLoopMax: config.slicerLoopMax,
-				slicerLoopModel: config.slicerLoopModel,
-				sliceReviewGate: config.review
-					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+				taskerLoopMax: config.taskerLoopMax,
+				taskerLoopModel: config.taskerLoopModel,
+				taskReviewGate: config.review
+					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
@@ -3132,7 +3132,7 @@ export function buildProgram(): Command {
 		)
 		.action(async (rawSlug: string, flags: RequeueFlags) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug) as string;
+			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
 			// Route the requeue (default keep+continue / --reset discard / -m handoff)
 			// THROUGH the ledger write seam's transition (same seam the needs-attention
@@ -3235,7 +3235,7 @@ export function buildProgram(): Command {
 			const slug = parsed.slug;
 			const result =
 				namespace === 'brief'
-					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
+					? await promoteFromPreBrief({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
 				console.error(`error: ${result.reasonNotMoved}`);

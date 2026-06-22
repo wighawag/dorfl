@@ -61,8 +61,8 @@ function spyExecutor(): {executor: RungExecutor; calls: string[]} {
 	return {
 		calls,
 		executor: {
-			buildSlice: record('build-slice'),
-			slicePrd: record('slice-prd'),
+			buildTask: record('build-slice'),
+			taskBrief: record('slice-prd'),
 			triageObservation: record('triage-observation'),
 			surface: record('surface'),
 			apply: record('apply'),
@@ -180,11 +180,11 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 				return RELEASED;
 			},
 			executor: {
-				buildSlice: async () => {
+				buildTask: async () => {
 					order.push('execute');
 					return {exitCode: 0, outcome: 'advanced', message: 'built'};
 				},
-				slicePrd: async () => ({
+				taskBrief: async () => ({
 					exitCode: 0,
 					outcome: 'advanced',
 					message: '',

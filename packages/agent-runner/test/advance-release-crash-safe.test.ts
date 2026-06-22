@@ -104,7 +104,7 @@ function recoverConflictExecutor(branch: string): RungExecutor {
 		message: '',
 	});
 	return {
-		async buildSlice(input) {
+		async buildTask(input) {
 			const c = input.context.cwd;
 			const arb = input.context.arbiter ?? 'origin';
 			git(
@@ -123,7 +123,7 @@ function recoverConflictExecutor(branch: string): RungExecutor {
 			}
 			return {exitCode: 0, outcome: 'advanced', message: 'rebased clean'};
 		},
-		slicePrd: stub,
+		taskBrief: stub,
 		triageObservation: stub,
 		surface: stub,
 		apply: stub,
@@ -195,7 +195,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 			message: '',
 		});
 		const executor: RungExecutor = {
-			async buildSlice(input) {
+			async buildTask(input) {
 				const c = input.context.cwd;
 				// Mid-build failure: a step wrote new content to the worktree but
 				// errored before committing — the cwd is left UNCOMMITTED-DIRTY.
@@ -209,7 +209,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 					message: 'build failed mid-flight, tree dirty',
 				};
 			},
-			slicePrd: stub,
+			taskBrief: stub,
 			triageObservation: stub,
 			surface: stub,
 			apply: stub,
@@ -241,10 +241,10 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 		git(['push', '-q', 'arbiter', 'main:main'], repo);
 
 		const executor: RungExecutor = {
-			async buildSlice() {
+			async buildTask() {
 				return {exitCode: 0, outcome: 'advanced', message: 'ok'};
 			},
-			async slicePrd() {
+			async taskBrief() {
 				return {exitCode: 0, outcome: 'advanced', message: ''};
 			},
 			async triageObservation() {

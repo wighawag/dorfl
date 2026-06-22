@@ -132,9 +132,9 @@ export type AdvanceExitCode = 0 | 1 | 2 | 3;
  */
 export interface RungExecutor {
 	/** A ready slice → build it by ORCHESTRATING `do <slug>` (NOT a re-implementation). */
-	buildSlice(input: RungExecInput): Promise<RungExecResult>;
+	buildTask(input: RungExecInput): Promise<RungExecResult>;
 	/** A ready PRD → slice it by ORCHESTRATING `do prd:<slug>` (NOT a re-implementation). */
-	slicePrd(input: RungExecInput): Promise<RungExecResult>;
+	taskBrief(input: RungExecInput): Promise<RungExecResult>;
 	/** An untriaged observation → triage it (LATER slice fills this body). */
 	triageObservation(input: RungExecInput): Promise<RungExecResult>;
 	/** `needsAnswers` but no sidecar → surface the questions (LATER slice fills this). */
@@ -404,10 +404,10 @@ function readNeedsAnswers(
  * 2026-06-09 UPDATE confirms routes through `performIntegration`).
  */
 export const defaultRungExecutor: RungExecutor = {
-	async buildSlice(input) {
+	async buildTask(input) {
 		return orchestrateDo(input);
 	},
-	async slicePrd(input) {
+	async taskBrief(input) {
 		return orchestrateDo(input);
 	},
 	async triageObservation(input) {
@@ -996,9 +996,9 @@ function dispatchRung(
 ): Promise<RungExecResult> {
 	switch (input.classification.kind) {
 		case 'build-slice':
-			return executor.buildSlice(input);
+			return executor.buildTask(input);
 		case 'slice-prd':
-			return executor.slicePrd(input);
+			return executor.taskBrief(input);
 		case 'triage-observation':
 			return executor.triageObservation(input);
 		case 'surface':

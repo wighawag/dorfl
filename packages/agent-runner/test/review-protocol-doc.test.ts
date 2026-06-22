@@ -24,9 +24,9 @@ import {fileURLToPath} from 'node:url';
 import {parseReviewVerdict, type ReviewVerdict} from '../src/review-verdict.js';
 import {
 	buildReviewPrompt,
-	buildSliceAcceptancePrompt,
+	buildTaskAcceptancePrompt,
 } from '../src/review-gate.js';
-import {buildSliceReviewPrompt} from '../src/slicer-review-loop.js';
+import {buildTaskReviewPrompt} from '../src/tasker-review-loop.js';
 import {buildLoneSliceReviewPrompt} from '../src/intake.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -117,7 +117,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 canonical fixture parses AND m
 		],
 		edit: '## What to build\n\nthe tightened body',
 		questions: ['what should X do when Y?'],
-		uncertainSlices: [
+		uncertainTasks: [
 			{
 				path: 'work/tasks/backlog/b.md',
 				questions: ['can this be made buildable?'],
@@ -135,7 +135,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 canonical fixture parses AND m
 		expect(parsed.edits?.[0].path).toBe('work/tasks/backlog/a.md');
 		expect(parsed.edit).toMatch(/tightened body/);
 		expect(parsed.questions).toEqual(['what should X do when Y?']);
-		expect(parsed.uncertainSlices?.[0].path).toBe('work/tasks/backlog/b.md');
+		expect(parsed.uncertainTasks?.[0].path).toBe('work/tasks/backlog/b.md');
 		expect(parsed.decompositionUnclear?.questions).toHaveLength(1);
 	});
 
@@ -152,7 +152,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 canonical fixture parses AND m
 		expect(doc).toMatch(/\bedits\b/);
 		expect(doc).toMatch(/\bedit\b/);
 		expect(doc).toMatch(/\bquestions\b/);
-		expect(doc).toMatch(/\buncertainSlices\b/);
+		expect(doc).toMatch(/\buncertainTasks\b/);
 		expect(doc).toMatch(/\bdecompositionUnclear\b/);
 	});
 
@@ -165,7 +165,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 canonical fixture parses AND m
 			v.review,
 			v.edits?.length,
 			v.edit,
-			v.uncertainSlices?.length,
+			v.uncertainTasks?.length,
 		];
 		expect(_check[0]).toBe('block');
 	});
@@ -176,14 +176,14 @@ describe('The four review-prompt builders \u2014 in-band reference + no re-inlin
 		{name: 'buildReviewPrompt', text: buildReviewPrompt('alpha')},
 		{
 			name: 'buildSliceAcceptancePrompt',
-			text: buildSliceAcceptancePrompt('alpha'),
+			text: buildTaskAcceptancePrompt('alpha'),
 		},
 		{
 			name: 'buildSliceReviewPrompt',
-			text: buildSliceReviewPrompt({
+			text: buildTaskReviewPrompt({
 				slug: 'alpha',
 				cwd: '/tmp/x',
-				candidateSlices: ['work/tasks/backlog/a.md'],
+				candidateTasks: ['work/tasks/backlog/a.md'],
 				pass: 1,
 				execution: 1,
 			}),

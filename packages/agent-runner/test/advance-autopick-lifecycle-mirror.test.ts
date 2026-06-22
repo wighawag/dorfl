@@ -38,14 +38,14 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-function slice(fm: Record<string, string>): string {
+function task(fm: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(fm)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', 'body');
 	return lines.join('\n');
 }
 
-function prd(fm: Record<string, string>): string {
+function brief(fm: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(fm)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', '# PRD');
@@ -68,12 +68,12 @@ function sidecar(item: string, answered: boolean): string {
 /** The logical `work/` tree used by both substrates in the agreement test. */
 const WORK = {
 	backlog: {
-		'blocked-slice.md': slice({slug: 'blocked-slice', needsAnswers: 'true'}),
-		'answered-slice.md': slice({slug: 'answered-slice', needsAnswers: 'true'}),
-		'half-slice.md': slice({slug: 'half-slice', needsAnswers: 'true'}),
+		'blocked-slice.md': task({slug: 'blocked-slice', needsAnswers: 'true'}),
+		'answered-slice.md': task({slug: 'answered-slice', needsAnswers: 'true'}),
+		'half-slice.md': task({slug: 'half-slice', needsAnswers: 'true'}),
 	},
-	prd: {
-		'answered-prd.md': prd({slug: 'answered-prd', needsAnswers: 'true'}),
+	brief: {
+		'answered-prd.md': brief({slug: 'answered-prd', needsAnswers: 'true'}),
 	},
 	observations: {
 		'open.md': obs({slug: 'open'}),
@@ -158,12 +158,12 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 	it('feeds selectPrioritised identically for the FOUR-pool order (loop shape)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'build-me.md': slice({slug: 'build-me'}),
-				'answered-slice.md': slice({
+				'build-me.md': task({slug: 'build-me'}),
+				'answered-slice.md': task({
 					slug: 'answered-slice',
 					needsAnswers: 'true',
 				}),
-				'blocked-slice.md': slice({
+				'blocked-slice.md': task({
 					slug: 'blocked-slice',
 					needsAnswers: 'true',
 				}),
@@ -186,7 +186,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			prds: pool.prds,
+			briefs: pool.briefs,
 			lifecycle: pool.lifecycle,
 		});
 		expect(selected.map((s) => `${s.namespace}:${s.slug}`)).toEqual([

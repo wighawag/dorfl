@@ -154,7 +154,7 @@ export function buildReviewPrompt(slug: string): string {
 		`("Let me check…"). Make it as long or as short as the review genuinely`,
 		`needs — there is NO length limit and no need to pad. It is plain text inside`,
 		`the JSON string (escape newlines as \\n). Do NOT fill "edits"/"edit"/`,
-		`"questions"/"uncertainSlices"/"decompositionUnclear" — those channels are`,
+		`"questions"/"uncertainTasks"/"decompositionUnclear" — those channels are`,
 		`for other review callers (the slicer loop / the lone-slice review), not this`,
 		`code-review gate.`,
 	].join('\n');
@@ -260,7 +260,7 @@ export function harnessReviewGate(
  * `work/protocol/REVIEW-PROTOCOL.md`; the JSON shape comes from
  * {@link verdictContractPrompt}.
  */
-export function buildSliceAcceptancePrompt(slug: string): string {
+export function buildTaskAcceptancePrompt(slug: string): string {
 	return [
 		`You are a FRESH-CONTEXT reviewer (the slice-SET ACCEPTANCE GATE). Review`,
 		`the candidate slices this slicing run produced for the PRD "${slug}" — the`,
@@ -293,7 +293,7 @@ export function buildSliceAcceptancePrompt(slug: string): string {
 		`human deciding whether to land these slices. LEAD with the verdict`,
 		`("Approved" or "Blocked") and then give the lenses' reasoning and the`,
 		`destination check. Do NOT fill the improver-loop channels ("edits",`,
-		`"uncertainSlices", "decompositionUnclear") — this is a terminal gate, not the`,
+		`"uncertainTasks", "decompositionUnclear") — this is a terminal gate, not the`,
 		`loop.`,
 	].join('\n');
 }
@@ -316,7 +316,7 @@ export function buildSliceAcceptancePrompt(slug: string): string {
  * `harnessSliceReviewGate` (the IMPROVER loop seam, which EDITS slices) — the two
  * are non-overlapping concepts (gate = terminal pass/fail; loop = review→edit).
  */
-export function harnessSliceAcceptanceGate(
+export function harnessTaskAcceptanceGate(
 	options: HarnessReviewGateOptions = {},
 ): ReviewGate {
 	const harness = options.harness ?? new NullHarness();
@@ -338,7 +338,7 @@ export function harnessSliceAcceptanceGate(
 			dir: input.cwd,
 			slug: input.slug,
 			command: options.agentCmd ?? '',
-			prompt: buildSliceAcceptancePrompt(input.slug),
+			prompt: buildTaskAcceptancePrompt(input.slug),
 			model: input.reviewModel,
 			sessionId: `${input.slug}-slice-acceptance`,
 			sessionsDir: input.sessionsDir,

@@ -49,7 +49,7 @@ function writeSidecar(
 let root: string;
 
 /** A minimal slice markdown body with the given frontmatter fields. */
-function slice(frontmatter: Record<string, string>): string {
+function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
 		lines.push(`${k}: ${v}`);
@@ -153,8 +153,8 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 	it('produces a per-repo queue with resolved eligibility', async () => {
 		const m = registerMirrorWithWork(workspacesDir(), 'repo-a', {
 			backlog: {
-				'ready.md': slice({slug: 'ready'}),
-				'human.md': slice({slug: 'human', humanOnly: 'true'}),
+				'ready.md': task({slug: 'ready'}),
+				'human.md': task({slug: 'human', humanOnly: 'true'}),
 			},
 		});
 		const config = mergeConfig({
@@ -179,8 +179,8 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 	it('gates needsAnswers: true items independently of humanOnly', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo-na', {
 			backlog: {
-				'ready.md': slice({slug: 'ready'}),
-				'answers.md': slice({slug: 'answers', needsAnswers: 'true'}),
+				'ready.md': task({slug: 'ready'}),
+				'answers.md': task({slug: 'answers', needsAnswers: 'true'}),
 			},
 		});
 		const report = await scan(
@@ -199,7 +199,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 	it('resolves blockedBy against the same mirror work/tasks/done/', async () => {
 		// dependency not yet done
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
+			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
 		});
 		const config = mergeConfig({
 			workspacesDir: workspacesDir(),
@@ -213,8 +213,8 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		// now satisfy the dependency: a fresh fixture with a done/ alongside backlog/.
 		rmSync(workspacesDir(), {recursive: true, force: true});
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'b.md': slice({slug: 'b', blockedBy: '[a]'})},
-			done: {'a.md': slice({slug: 'a'})},
+			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
+			done: {'a.md': task({slug: 'a'})},
 		});
 		report = await scan(config);
 		b = report.repos[0].items[0];
@@ -224,10 +224,10 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 
 	it('does NOT resolve blockedBy across mirrors', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo-a', {
-			done: {'dep.md': slice({slug: 'dep'})},
+			done: {'dep.md': task({slug: 'dep'})},
 		});
 		registerMirrorWithWork(workspacesDir(), 'repo-b', {
-			backlog: {'needs.md': slice({slug: 'needs', blockedBy: '[dep]'})},
+			backlog: {'needs.md': task({slug: 'needs', blockedBy: '[dep]'})},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
@@ -242,7 +242,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 
 	it('honours autoBuild for undeclared (no humanOnly) items', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'u.md': slice({slug: 'u', blockedBy: '[]'})},
+			backlog: {'u.md': task({slug: 'u', blockedBy: '[]'})},
 		});
 
 		const strict = await scan(
@@ -265,9 +265,9 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 	it('counts eligible items in the report summary', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {
-				'a.md': slice({slug: 'a'}),
-				'b.md': slice({slug: 'b', humanOnly: 'true'}),
-				'c.md': slice({slug: 'c'}),
+				'a.md': task({slug: 'a'}),
+				'b.md': task({slug: 'b', humanOnly: 'true'}),
+				'c.md': task({slug: 'c'}),
 			},
 		});
 		const report = await scan(
@@ -283,14 +283,14 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 		// Register a mirror with one backlog item, then push a SECOND item onto the
 		// mirror's origin (source repo) only — the bare mirror's `main` is now stale.
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'first.md': slice({slug: 'first'})},
+			backlog: {'first.md': task({slug: 'first'})},
 		});
 		pushWorkToMirrorOrigin(
 			workspacesDir(),
 			'repo',
 			'backlog',
 			'second.md',
-			slice({slug: 'second'}),
+			task({slug: 'second'}),
 		);
 
 		const report = await scan(
@@ -303,7 +303,7 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 
 	it('WARNS and falls back to last-known when the fetch FAILS (never errors)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'known.md': slice({slug: 'known'})},
+			backlog: {'known.md': task({slug: 'known'})},
 		});
 		// A later push the broken fetch can never see.
 		pushWorkToMirrorOrigin(
@@ -311,7 +311,7 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 			'repo',
 			'backlog',
 			'unseen.md',
-			slice({slug: 'unseen'}),
+			task({slug: 'unseen'}),
 		);
 		breakMirrorOrigin(mirrorPath);
 
@@ -397,7 +397,7 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
  * autopick paths run) — a config-less repo with `autoTask` off yields an
  * all-`eligible:false` pool (no `prd:` legs).
  */
-function writePrd(
+function writeBrief(
 	repo: string,
 	status: 'prd' | 'prd-sliced',
 	file: string,
@@ -415,26 +415,26 @@ function writePrd(
 
 describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 	it('a ready ungated PRD appears as sliceable when autoTask is on (no per-repo config)', () => {
-		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
-		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
-		expect(prd).toBeDefined();
-		expect(prd!.eligibility.eligible).toBe(true);
+		const brief = report.repos[0].briefs.find((p) => p.slug === 'ready');
+		expect(brief).toBeDefined();
+		expect(brief!.eligibility.eligible).toBe(true);
 	});
 
 	it('gates humanOnly / needsAnswers / unsatisfied briefAfter PRDs out of the sliceable pool', () => {
-		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
-		writePrd('repo', 'prd', 'human.md', {slug: 'human', humanOnly: 'true'});
-		writePrd('repo', 'prd', 'asks.md', {slug: 'asks', needsAnswers: 'true'});
-		writePrd('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
+		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'prd', 'human.md', {slug: 'human', humanOnly: 'true'});
+		writeBrief('repo', 'prd', 'asks.md', {slug: 'asks', needsAnswers: 'true'});
+		writeBrief('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
-		const byslug = new Map(report.repos[0].prds.map((p) => [p.slug, p]));
+		const byslug = new Map(report.repos[0].briefs.map((p) => [p.slug, p]));
 		expect(byslug.get('ready')!.eligibility.eligible).toBe(true);
 		expect(byslug.get('human')!.eligibility.eligible).toBe(false);
 		expect(byslug.get('asks')!.eligibility.eligible).toBe(false);
@@ -442,17 +442,17 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 	});
 
 	it('an autoTask:false repo yields no SLICEABLE PRD legs (the gate still binds)', () => {
-		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: false}),
 		);
-		const ready = report.repos[0].prds.find((p) => p.slug === 'ready')!;
+		const ready = report.repos[0].briefs.find((p) => p.slug === 'ready')!;
 		expect(ready.eligibility.eligible).toBe(false);
 	});
 
 	it('honours the per-repo `.agent-runner.json` autoTask override (off globally, on per-repo)', () => {
-		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
 		writeFileSync(
 			join(root, 'repo', '.agent-runner.json'),
 			JSON.stringify({autoTask: true}),
@@ -462,20 +462,20 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 			mergeConfig({autoTask: false}),
 		);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
+			report.repos[0].briefs.find((p) => p.slug === 'ready')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
 
 	it('a briefAfter dep already in work/briefs/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
-		writePrd('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
-		writePrd('repo', 'prd-sliced', 'dep.md', {slug: 'dep'});
+		writeBrief('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
+		writeBrief('repo', 'prd-sliced', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'after')!.eligibility
+			report.repos[0].briefs.find((p) => p.slug === 'after')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
@@ -485,15 +485,15 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 			'⇒ both surface (the propose-matrix `jq` reads BOTH `items[]` AND `prds[]`)',
 		() => {
 			writeItem('repo', 'backlog', 'go.md', {slug: 'go', blockedBy: '[]'});
-			writePrd('repo', 'prd', 'cut.md', {slug: 'cut'});
+			writeBrief('repo', 'prd', 'cut.md', {slug: 'cut'});
 			const report = scanRepoPaths(
 				[join(root, 'repo')],
 				mergeConfig({autoBuild: true, autoTask: true}),
 			);
-			const slice = report.repos[0].items.find((i) => i.slug === 'go')!;
-			const prd = report.repos[0].prds.find((p) => p.slug === 'cut')!;
-			expect(slice.eligibility.eligible).toBe(true);
-			expect(prd.eligibility.eligible).toBe(true);
+			const task = report.repos[0].items.find((i) => i.slug === 'go')!;
+			const brief = report.repos[0].briefs.find((p) => p.slug === 'cut')!;
+			expect(task.eligibility.eligible).toBe(true);
+			expect(brief.eligibility.eligible).toBe(true);
 		},
 	);
 });
@@ -501,19 +501,19 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 	it('reports a ready ungated PRD as sliceable from the bare mirror main (autoTask on)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
+			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
-		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
-		expect(prd).toBeDefined();
-		expect(prd!.eligibility.eligible).toBe(true);
+		const brief = report.repos[0].briefs.find((p) => p.slug === 'ready');
+		expect(brief).toBeDefined();
+		expect(brief!.eligibility.eligible).toBe(true);
 	});
 
 	it('a humanOnly / needsAnswers / autoTask:false PRD is NOT sliceable (gate still binds)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			prd: {
+			brief: {
 				'ready.md': `---\nslug: ready\n---\n# PRD`,
 				'human.md': `---\nslug: human\nhumanOnly: true\n---\n# PRD`,
 				'asks.md': `---\nslug: asks\nneedsAnswers: true\n---\n# PRD`,
@@ -524,13 +524,13 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
-			offReport.repos[0].prds.every((p) => p.eligibility.eligible === false),
+			offReport.repos[0].briefs.every((p) => p.eligibility.eligible === false),
 		).toBe(true);
 		// autoTask ON ⇒ only `ready` is sliceable; the gated PRDs are NOT.
 		const onReport = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
-		const by = new Map(onReport.repos[0].prds.map((p) => [p.slug, p]));
+		const by = new Map(onReport.repos[0].briefs.map((p) => [p.slug, p]));
 		expect(by.get('ready')!.eligibility.eligible).toBe(true);
 		expect(by.get('human')!.eligibility.eligible).toBe(false);
 		expect(by.get('asks')!.eligibility.eligible).toBe(false);
@@ -538,7 +538,7 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 
 	it('honours the COMMITTED per-repo `.agent-runner.json` autoTask override on the mirror', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
+			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 			repoConfig: {autoTask: true},
 		});
 		// Global is OFF, but the mirror's committed file opts in ⇒ sliceable.
@@ -546,15 +546,15 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
+			report.repos[0].briefs.find((p) => p.slug === 'ready')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
 
 	it('end-to-end: ONE eligible slice + ONE sliceable PRD on the SAME mirror ⇒ both surface', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'go.md': slice({slug: 'go'})},
-			prd: {'cut.md': `---\nslug: cut\n---\n# PRD`},
+			backlog: {'go.md': task({slug: 'go'})},
+			brief: {'cut.md': `---\nslug: cut\n---\n# PRD`},
 		});
 		const report = await scan(
 			mergeConfig({
@@ -567,7 +567,8 @@ describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
 			report.repos[0].items.find((i) => i.slug === 'go')!.eligibility.eligible,
 		).toBe(true);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'cut')!.eligibility.eligible,
+			report.repos[0].briefs.find((p) => p.slug === 'cut')!.eligibility
+				.eligible,
 		).toBe(true);
 	});
 });
@@ -579,9 +580,9 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 		// DURABLE folders now (`backlog`/`done`/`cancelled`) — the transient ones are
 		// retired from `main`.
 		const m = registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'live.md': slice({slug: 'live'})},
-			cancelled: {'ghost.md': slice({slug: 'ghost'})},
-			done: {'ghost.md': slice({slug: 'ghost'})},
+			backlog: {'live.md': task({slug: 'live'})},
+			cancelled: {'ghost.md': task({slug: 'ghost'})},
+			done: {'ghost.md': task({slug: 'ghost'})},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
@@ -601,10 +602,10 @@ describe('scan — one-slug-one-folder LINT (PRD ledger-integrity story 3)', () 
 
 	it('a CLEAN mirror ledger reports no duplicates (no false positives; buckets excluded)', async () => {
 		const m = registerMirrorWithWork(workspacesDir(), 'repo', {
-			backlog: {'a.md': slice({slug: 'a'})},
-			inProgress: {'b.md': slice({slug: 'b'})},
-			done: {'c.md': slice({slug: 'c'})},
-			cancelled: {'d.md': slice({slug: 'd'})},
+			backlog: {'a.md': task({slug: 'a'})},
+			inProgress: {'b.md': task({slug: 'b'})},
+			done: {'c.md': task({slug: 'c'})},
+			cancelled: {'d.md': task({slug: 'd'})},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
@@ -684,7 +685,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		writePrd('repo', 'prd', 'blocked-prd.md', {
+		writeBrief('repo', 'prd', 'blocked-prd.md', {
 			slug: 'blocked-prd',
 			needsAnswers: 'true',
 		});
@@ -790,7 +791,7 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			observations: {'obs-a.md': `---\nslug: obs-a\n---\nsignal`},
 			backlog: {
-				'blocked.md': slice({slug: 'blocked', needsAnswers: 'true'}),
+				'blocked.md': task({slug: 'blocked', needsAnswers: 'true'}),
 			},
 		});
 		const report = await scan(mergeConfig({workspacesDir: workspacesDir()}));
@@ -804,7 +805,7 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			observations: {'obs-a.md': `---\nslug: obs-a\n---\nsignal`},
 			backlog: {
-				'blocked.md': slice({slug: 'blocked', needsAnswers: 'true'}),
+				'blocked.md': task({slug: 'blocked', needsAnswers: 'true'}),
 			},
 			repoConfig: {observationTriage: 'ask', surfaceBlockers: true},
 		});
@@ -818,7 +819,7 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 	it('APPLY is ALWAYS-ON on the mirror: an answered sidecar applies with calm gates', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {
-				'answered.md': slice({slug: 'answered', needsAnswers: 'true'}),
+				'answered.md': task({slug: 'answered', needsAnswers: 'true'}),
 			},
 			questions: {
 				'task-answered.md': serialiseSidecar(

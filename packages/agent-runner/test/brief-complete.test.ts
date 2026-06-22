@@ -1,0 +1,155 @@
+import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fixtureFolderRel} from './helpers/gitRepo.js';
+import {isBriefComplete} from '../src/brief-complete.js';
+
+let root: string;
+
+/** Seed one `work/<folder>/<file>` task with the given frontmatter. */
+function writeTask(
+	folder: 'backlog' | 'in-progress' | 'needs-attention' | 'done',
+	file: string,
+	frontmatter: Record<string, string>,
+	body = 'body',
+): void {
+	const dir = join(root, 'repo', 'work', fixtureFolderRel(folder));
+	mkdirSync(dir, {recursive: true});
+	const lines = ['---'];
+	for (const [k, v] of Object.entries(frontmatter)) {
+		lines.push(`${k}: ${v}`);
+	}
+	lines.push('---', '', body);
+	writeFileSync(join(dir, file), lines.join('\n'));
+}
+
+function repoPath(): string {
+	return join(root, 'repo');
+}
+
+beforeEach(() => {
+	root = mkdtempSync(join(tmpdir(), 'agent-runner-prd-complete-'));
+});
+
+afterEach(() => {
+	rmSync(root, {recursive: true, force: true});
+});
+
+describe('isBriefComplete — the read-only "is this PRD complete?" core query', () => {
+	it('NOT complete when NO slice carries prd:<slug> (≥1 is required)', () => {
+		// A `work/` tree with tasks, but none link to this brief — even other briefs'
+		// done tasks do not count.
+		writeTask('done', 'unrelated-done.md', {slug: 'unrelated-done'});
+		writeTask('done', 'other-prd.md', {
+			slug: 'other-prd',
+			brief: 'some-other-prd',
+		});
+		writeTask('backlog', 'standalone.md', {slug: 'standalone'});
+
+		const result = isBriefComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(false);
+		expect(result.tasks).toEqual([]);
+	});
+
+	it('NOT complete when ≥1 prd:<slug> slice exists but some are NOT in work/tasks/done/', () => {
+		// Three tasks link the brief; two are done, one is still in backlog.
+		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
+		writeTask('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
+		writeTask('backlog', 'c.md', {slug: 'c', brief: 'issue-intake'});
+
+		const result = isBriefComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(false);
+		// All three are matched (across folders), sorted by slug.
+		expect(result.tasks.map((s) => s.slug)).toEqual(['a', 'b', 'c']);
+	});
+
+	it('NOT complete when a matching slice is in in-progress or needs-attention (not done)', () => {
+		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
+		writeTask('in-progress', 'b.md', {slug: 'b', brief: 'issue-intake'});
+
+		expect(
+			isBriefComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
+		).toBe(false);
+
+		// And the needs-attention case is likewise incomplete.
+		rmSync(join(root, 'repo', 'work', 'in-progress'), {
+			recursive: true,
+			force: true,
+		});
+		writeTask('needs-attention', 'b.md', {slug: 'b', brief: 'issue-intake'});
+
+		expect(
+			isBriefComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
+		).toBe(false);
+	});
+
+	it('COMPLETE when ≥1 prd:<slug> slice exists and ALL are in work/tasks/done/', () => {
+		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
+		writeTask('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
+		// An unrelated, not-done task for a different brief must not block completion.
+		writeTask('backlog', 'elsewhere.md', {
+			slug: 'elsewhere',
+			brief: 'other-prd',
+		});
+
+		const result = isBriefComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(true);
+		expect(result.tasks.map((s) => s.slug)).toEqual(['a', 'b']);
+		expect(result.tasks.every((s) => s.folder === 'done')).toBe(true);
+	});
+
+	it('COMPLETE with a single done slice (≥1 is enough)', () => {
+		writeTask('done', 'only.md', {slug: 'only', brief: 'issue-intake'});
+
+		const result = isBriefComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(true);
+		expect(result.tasks).toHaveLength(1);
+	});
+
+	it('matches on the parsed prd: field — resolves slice slug from frontmatter, falling back to filename', () => {
+		// Frontmatter slug wins; filename fallback when no slug.
+		writeTask('done', 'on-disk-name.md', {
+			slug: 'real-slug',
+			brief: 'issue-intake',
+		});
+		writeTask('done', 'filename-fallback.md', {brief: 'issue-intake'});
+
+		const result = isBriefComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(true);
+		expect(result.tasks.map((s) => s.slug).sort()).toEqual([
+			'filename-fallback',
+			'real-slug',
+		]);
+	});
+
+	it('reads cleanly with NO work/ folders present (no throw, NOT complete)', () => {
+		// An empty repo (no work/ tree at all) → no tasks → not complete.
+		const result = isBriefComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+		expect(result.complete).toBe(false);
+		expect(result.tasks).toEqual([]);
+	});
+});

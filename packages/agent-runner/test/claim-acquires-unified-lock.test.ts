@@ -6,7 +6,7 @@ import {
 	listItemLocks,
 	readItemLock,
 	itemLockRef,
-	heldSliceSlugs,
+	heldTaskSlugs,
 } from '../src/item-lock.js';
 import {scanRepoPaths, scoreItems} from '../src/scan.js';
 import {selectPrioritised} from '../src/select-priority.js';
@@ -295,7 +295,7 @@ describe('held-slug subtraction in the pool readers', () => {
 				{
 					path: '/repo',
 					items: scoreItems(state, true, {totalItems: 0, totalEligible: 0}),
-					prds: [],
+					briefs: [],
 					lifecycle: {triage: [], surface: [], apply: []},
 					ledgerDuplicates: [],
 				},
@@ -306,7 +306,7 @@ describe('held-slug subtraction in the pool readers', () => {
 		const picked = selectPrioritised({
 			report,
 			caps: {maxParallel: 10, perRepoMax: 10},
-			prds: [],
+			briefs: [],
 			heldSlugs: new Set(['alpha']),
 		});
 		expect(picked.map((p) => p.slug)).toEqual(['beta']);
@@ -330,7 +330,7 @@ describe('held-slug subtraction in the pool readers', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		const held = await heldSliceSlugs(repo, ARBITER, gitEnv());
+		const held = await heldTaskSlugs(repo, ARBITER, gitEnv());
 		expect([...held]).toEqual(['alpha']);
 	});
 });

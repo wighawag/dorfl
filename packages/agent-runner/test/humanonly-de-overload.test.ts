@@ -6,14 +6,14 @@ import {fileURLToPath} from 'node:url';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {resolveEligibility, resolveGate} from '../src/eligibility.js';
 import {
-	resolveSliceGate,
-	resolveSlicingEligibility,
-} from '../src/slicing-eligibility.js';
+	resolveTaskGate,
+	resolveTaskingEligibility,
+} from '../src/tasking-eligibility.js';
 import {scan} from '../src/scan.js';
 import {mergeConfig} from '../src/config.js';
 import {registerMirrorWithWork} from './helpers/gitRepo.js';
-import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
-import {buildSliceReviewPrompt} from '../src/slicer-review-loop.js';
+import {performTask, type TaskAgentRunner} from '../src/tasking.js';
+import {buildTaskReviewPrompt} from '../src/tasker-review-loop.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -84,24 +84,24 @@ describe('slice `humanOnly` (NARROWED) — never agent-eligible, even in the poo
 
 describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
 	it('PRD humanOnly:true blocks the slicing gate even when autoTask is on', () => {
-		expect(resolveSliceGate(true, undefined, true)).toBe(false);
-		const r = resolveSlicingEligibility({
+		expect(resolveTaskGate(true, undefined, true)).toBe(false);
+		const r = resolveTaskingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
 			briefAfter: [],
-			slicedSlugs: new Set(),
+			taskedSlugs: new Set(),
 			autoTask: true,
 		});
 		expect(r.gatePass).toBe(false);
-		expect(r.sliceable).toBe(false);
+		expect(r.taskable).toBe(false);
 	});
 
 	it('PRD needsAnswers:true is unchanged (orthogonal to humanOnly)', () => {
-		const r = resolveSlicingEligibility({
+		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: true,
 			briefAfter: [],
-			slicedSlugs: new Set(),
+			taskedSlugs: new Set(),
 			autoTask: true,
 		});
 		expect(r.gatePass).toBe(false);
@@ -125,13 +125,13 @@ describe('pool residency — humanOnly slice in `work/tasks/todo/` (the pool) is
 			backlog: {
 				// Lives in the AGENT POOL `work/tasks/todo/` — even there, the narrowed
 				// `humanOnly: true` survives (never-by-nature guard).
-				'never-by-nature.md': slice({
+				'never-by-nature.md': task({
 					slug: 'never-by-nature',
 					humanOnly: 'true',
 				}),
 				// Undeclared neighbour in the SAME pool: eligible under autoBuild (the
 				// review-first signal lives at POSITION, not on this flag).
-				'ordinary.md': slice({slug: 'ordinary'}),
+				'ordinary.md': task({slug: 'ordinary'}),
 			},
 		});
 		const report = await scan(mergeConfig({workspacesDir, autoBuild: true}));
@@ -162,9 +162,9 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// Seed a PRD.
 		run('git', ['fetch', '-q', 'arbiter', 'main'], repo, {env: gitEnv()});
-		seedPrdRaw(repo, 'it');
+		seedBriefRaw(repo, 'it');
 		let capturedPrompt = '';
-		const agentRunner: SliceAgentRunner = ({cwd, prompt}) => {
+		const agentRunner: TaskAgentRunner = ({cwd, prompt}) => {
 			capturedPrompt = prompt;
 			// Honour the brief: birth in STAGING, do not stamp humanOnly for review.
 			const dir = join(cwd, 'work', 'tasks', 'backlog');
@@ -175,7 +175,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 			);
 			return {ok: true};
 		};
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -204,10 +204,10 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 	});
 
 	it('the slicer-review-loop prompt carries the same narrowed `humanOnly` guidance', () => {
-		const prompt = buildSliceReviewPrompt({
+		const prompt = buildTaskReviewPrompt({
 			slug: 'it',
 			cwd: '/tmp/x',
-			candidateSlices: ['work/tasks/backlog/it-a.md'],
+			candidateTasks: ['work/tasks/backlog/it-a.md'],
 			pass: 1,
 			execution: 1,
 		});
@@ -223,7 +223,7 @@ function resolveGateInputs(input: {humanOnly?: boolean}): boolean {
 	return resolveGate(input.humanOnly, undefined, true);
 }
 
-function slice(frontmatter: Record<string, string>): string {
+function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
 		lines.push(`${k}: ${v}`);
@@ -232,7 +232,7 @@ function slice(frontmatter: Record<string, string>): string {
 	return lines.join('\n');
 }
 
-function seedPrdRaw(repo: string, slug: string): void {
+function seedBriefRaw(repo: string, slug: string): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(

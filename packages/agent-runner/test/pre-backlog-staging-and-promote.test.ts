@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
-import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
+import {performTask, type TaskAgentRunner} from '../src/tasking.js';
 import {performClaim} from '../src/claim-cas.js';
 import {promoteFromPreBacklog} from '../src/needs-attention.js';
 import {
@@ -51,7 +51,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-function seedPrd(repo: string, slug: string): void {
+function seedBrief(repo: string, slug: string): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
@@ -74,7 +74,7 @@ function seedPrd(repo: string, slug: string): void {
 }
 
 /** An agent that writes one staged slice file under `work/tasks/backlog/`. */
-function stagingAgent(file = 'child'): SliceAgentRunner {
+function stagingAgent(file = 'child'): TaskAgentRunner {
 	return ({cwd}) => {
 		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
@@ -104,7 +104,7 @@ function stagingAgent(file = 'child'): SliceAgentRunner {
  *    (an attempt to self-promote into the agent-eligible pool, PRD US #4 / ADR).
  * The runner's pool-placement fence must scrub the second.
  */
-function selfPlacingAgent(legit: string, hijack: string): SliceAgentRunner {
+function selfPlacingAgent(legit: string, hijack: string): TaskAgentRunner {
 	return ({cwd}) => {
 		const staged = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(staged, {recursive: true});
@@ -141,8 +141,8 @@ function showArbiterMain(repo: string, path: string): string {
 describe('STEP A — slicer output lands STAGED in pre-backlog/, not backlog/', () => {
 	it('a --merge slicing run commits the emitted slice under work/tasks/backlog/ (the pool is untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		const result = await performSlice({
+		seedBrief(repo, 'it');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -164,8 +164,8 @@ describe('STEP A — slicer output lands STAGED in pre-backlog/, not backlog/', 
 describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (readers unchanged)', () => {
 	it('a STAGED slug is NOT claimable (the claim CAS reads work/tasks/todo/ only)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		await performSlice({
+		seedBrief(repo, 'it');
+		await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -204,8 +204,8 @@ describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (reade
 describe('STEP A — the runner-owned promotion makes a staged slice claimable', () => {
 	it('promoteFromPreBacklog moves work/tasks/backlog/<slug>.md -> work/tasks/todo/<slug>.md on the arbiter; afterwards the slug claims', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		await performSlice({
+		seedBrief(repo, 'it');
+		await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -265,8 +265,8 @@ describe('STEP A — the runner-owned promotion makes a staged slice claimable',
 describe('STEP A — the agent cannot self-place into the pool (pool-placement fence)', () => {
 	it('an agent that writes work/tasks/todo/<hijack>.md during slicing has its write scrubbed; only work/tasks/backlog/<legit>.md lands', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		const result = await performSlice({
+		seedBrief(repo, 'it');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -292,9 +292,9 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 		// Seed a pool slice on the arbiter first.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['poolitem']);
 		const poolBefore = showArbiterMain(repo, 'work/tasks/todo/poolitem.md');
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		// Agent writes a legit staged slice AND tampers with the pre-existing pool slice.
-		const tamperingAgent: SliceAgentRunner = ({cwd}) => {
+		const tamperingAgent: TaskAgentRunner = ({cwd}) => {
 			const staged = join(cwd, 'work', 'tasks', 'backlog');
 			mkdirSync(staged, {recursive: true});
 			writeFileSync(
@@ -307,7 +307,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 			);
 			return {ok: true};
 		};
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -342,7 +342,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 // it writes ONE staged slice under `work/tasks/backlog/`. `agentCmd` is a HOST-ONLY
 // key (a repo's `.agent-runner.json` may NOT dictate the command the runner
 // shells out to), so it is passed via the `--agent-cmd` FLAG, not the repo config.
-const STUB_SLICER_AGENT_CMD =
+const STUB_TASKER_AGENT_CMD =
 	"mkdir -p work/tasks/backlog && printf '%s\\n' '---' 'title: child' " +
 	"'slug: child' 'brief: it' '---' '' '## Prompt' '' '> build it' " +
 	'> work/tasks/backlog/child.md';
@@ -393,7 +393,7 @@ async function runDo(
 			'--harness',
 			'null',
 			'--agent-cmd',
-			STUB_SLICER_AGENT_CMD,
+			STUB_TASKER_AGENT_CMD,
 			// Skip the tasker IMPROVER loop + the task-SET acceptance gate: both would
 			// launch the stub as a REVIEW agent and try to parse a JSON verdict (the
 			// trivial tasker emits none). This test exercises the PLACEMENT wire, not the
@@ -422,7 +422,7 @@ async function runDo(
 describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the slicer (the wire)', () => {
 	it('a per-repo `tasksLandIn: todo` reaches performSlice via `do brief:` (slice lands in the POOL, not pre-backlog/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		// The key under test: a per-repo configured default of `todo` (the pool).
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
 		const {code, captured} = await runDo(repo, [
@@ -440,7 +440,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the slice
 
 	it('the built-in floor still STAGES when no tasksLandIn is configured (control: proves the case above is the config, not a default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		// No tasksLandIn — the resolver's built-in floor stages.
 		writeRepoConfig(repo, {autoTask: true});
 		const {code, captured} = await runDo(repo, [
@@ -457,7 +457,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the slice
 
 	it('the explicit `--tasks-land-in pre-backlog` flag OVERRIDES a `tasksLandIn: todo` config (operator flag wins)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
 		const {code, captured} = await runDo(repo, [
 			'brief:it',
@@ -476,7 +476,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the slice
 
 	it('`--tasks-land-in <bad>` FAILS LOUDLY (a usage error, never a silent drop)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		writeRepoConfig(repo, {autoTask: true});
 		// `explicitTasksLandInFromFlag` throws on a bad value; the action surfaces it
 		// as a fatal usage error (a non-zero exit / thrown error), never a silent

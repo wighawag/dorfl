@@ -1669,7 +1669,7 @@ export async function listItemLockEntries(
  * "in `backlog/` on `main` AND no lock held" already in force without re-touching
  * the readers.
  */
-export async function heldSliceSlugs(
+export async function heldTaskSlugs(
 	cwd: string,
 	arbiter = 'origin',
 	env?: NodeJS.ProcessEnv,

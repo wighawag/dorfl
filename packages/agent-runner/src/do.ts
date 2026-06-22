@@ -8,10 +8,10 @@ import {
 	SlugResolutionError,
 	workBranchRef,
 } from './slug-namespace.js';
-import {performSlice, type SliceResult} from './slicing.js';
-import type {SliceReviewGate} from './slicer-review-loop.js';
+import {performTask, type TaskResult} from './tasking.js';
+import type {TaskReviewGate} from './tasker-review-loop.js';
 import {
-	resolveSlice,
+	resolveTask,
 	buildAgentPrompt,
 	resolveContinueContext,
 	resolvePromptGuidanceForItem,
@@ -211,11 +211,11 @@ export interface DoOptions {
 	 * as-is). Production wires {@link harnessSliceReviewGate}; tests inject a canned
 	 * verdict+edits.
 	 */
-	reviewLoop?: SliceReviewGate;
+	reviewLoop?: TaskReviewGate;
 	/** The slicer improver loop's `slicerLoopMax` cap (flag > env > per-repo > global > default). Loop only. */
-	slicerLoopMax?: number;
+	taskerLoopMax?: number;
 	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
-	slicerLoopModel?: string;
+	taskerLoopModel?: string;
 	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
@@ -335,7 +335,7 @@ export interface DoOptions {
 	 * diff) and from the slicer improver loop ({@link reviewLoop}). Production wires
 	 * `harnessSliceAcceptanceGate`; tests inject a canned verdict. Omitted ⇒ no gate.
 	 */
-	sliceReviewGate?: ReviewGate;
+	taskReviewGate?: ReviewGate;
 	/**
 	 * The autonomous agent invocation. Tests inject this to edit files directly;
 	 * production wires the harness seam (the prompt-fed, run-to-completion launch
@@ -455,11 +455,11 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	autoTask?: boolean;
 	/** The slicer review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
-	reviewLoop?: SliceReviewGate;
+	reviewLoop?: TaskReviewGate;
 	/** The slicer improver loop's `slicerLoopMax` cap. Loop only. */
-	slicerLoopMax?: number;
+	taskerLoopMax?: number;
 	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
-	slicerLoopModel?: string;
+	taskerLoopModel?: string;
 	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
@@ -532,7 +532,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
 	/** The slice-SET ACCEPTANCE GATE seam — `do --remote prd:<slug>` path only (see {@link DoOptions.sliceReviewGate}). */
-	sliceReviewGate?: ReviewGate;
+	taskReviewGate?: ReviewGate;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/** Sink for human-readable progress notes. */
@@ -551,10 +551,10 @@ const DEFAULT_ARBITER = 'origin';
  * the `do` exit contract (`0|1|2|3`) as exit 1 — the needs-attention-class
  * failure code, same as a stuck build.
  */
-function sliceResultToDoResult(sliced: SliceResult): DoResult {
+function taskResultToDoResult(tasked: TaskResult): DoResult {
 	let outcome: DoOutcome;
 	let exitCode: 0 | 1 | 2 | 3;
-	switch (sliced.outcome) {
+	switch (tasked.outcome) {
 		case 'sliced':
 			outcome = 'sliced';
 			exitCode = 0;
@@ -564,7 +564,7 @@ function sliceResultToDoResult(sliced: SliceResult): DoResult {
 			exitCode = 1;
 			break;
 		case 'lock-lost':
-			if (sliced.exitCode === 3) {
+			if (tasked.exitCode === 3) {
 				outcome = 'contended';
 				exitCode = 3;
 			} else {
@@ -591,7 +591,7 @@ function sliceResultToDoResult(sliced: SliceResult): DoResult {
 			outcome = 'usage-error';
 			exitCode = 1;
 	}
-	return {exitCode, outcome, slug: sliced.slug, message: sliced.message};
+	return {exitCode, outcome, slug: tasked.slug, message: tasked.message};
 }
 
 /**
@@ -667,7 +667,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    slice files — the runner owns every git transition (same boundary as the
 	//    build path). It does NOT run the slice-build pipeline below.
 	if (resolved.namespace === 'brief') {
-		const sliced = await performSlice({
+		const tasked = await performTask({
 			slug: resolved.slug,
 			cwd,
 			arbiter,
@@ -711,21 +711,21 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// candidate slices in place + routes the verdict through the needsAnswers /
 			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
 			reviewLoop: options.reviewLoop,
-			slicerLoopMax: options.slicerLoopMax,
+			taskerLoopMax: options.taskerLoopMax,
 			reviewExecutions: options.reviewExecutions,
-			slicerLoopModel: options.slicerLoopModel,
+			taskerLoopModel: options.taskerLoopModel,
 			// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): rides the BUILD
 			// `--review`/`--review-model` family — a fresh-context review of the produced
 			// SET before it integrates, ONE-SHOT, independent of the improver loop above.
 			review: options.review,
-			reviewGate: options.sliceReviewGate,
+			reviewGate: options.taskReviewGate,
 			acceptanceReviewModel: options.reviewModel,
 			env,
 			// The slicer + review AGENTS launch AMBIENT, never the identity env.
 			agentEnv: options.env,
 			note,
 		});
-		return sliceResultToDoResult(sliced);
+		return taskResultToDoResult(tasked);
 	}
 
 	const slug = resolved.slug;
@@ -966,7 +966,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// `work/<slug>` whose tip is STRANDED off main) the slice may already be in
 		// `work/done/`; admit `done/` ONLY behind the tip-vs-arbiter stranded gate
 		// (story 5), reusing the SAME refs the continue-detection uses.
-		const slice = resolveSlice(tree.dir, slug, {
+		const task = resolveTask(tree.dir, slug, {
 			cwd: tree.dir,
 			branchRef: `${tree.arbiterRemote}/${tree.branch}`,
 			mainRef: `${tree.arbiterRemote}/main`,
@@ -983,7 +983,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			arbiter: tree.arbiterRemote,
 			branchRef: `${tree.arbiterRemote}/${tree.branch}`,
 			mainRef: `${tree.arbiterRemote}/main`,
-			content: readFileSync(slice.path, 'utf8'),
+			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
 		// Per-item override layer: a task or brief may pin `promptGuidance.testFirst`
@@ -991,9 +991,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		const itemGuidance = resolvePromptGuidanceForItem({
 			cwd: tree.dir,
 			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
-			taskContent: readFileSync(slice.path, 'utf8'),
+			taskContent: readFileSync(task.path, 'utf8'),
 		});
-		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+		prompt = buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
 			cwd: tree.dir,
 			continueContext,
 			promptGuidance: itemGuidance,
@@ -1809,7 +1809,7 @@ export async function performDoRemote(
 			// mirror's main). No job worktree is needed — the slicing transition is a
 			// runner-owned `prd → slicing → prd` move + emit-backlog on the arbiter, not
 			// a build pipeline. The agent only writes slice files; the runner does all git.
-			const sliced = await performSlice({
+			const tasked = await performTask({
 				slug: resolved.slug,
 				cwd: claimDir,
 				arbiter: 'origin',
@@ -1841,19 +1841,19 @@ export async function performDoRemote(
 				providerInstance: options.providerInstance,
 				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
 				reviewLoop: options.reviewLoop,
-				slicerLoopMax: options.slicerLoopMax,
+				taskerLoopMax: options.taskerLoopMax,
 				reviewExecutions: options.reviewExecutions,
-				slicerLoopModel: options.slicerLoopModel,
+				taskerLoopModel: options.taskerLoopModel,
 				// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
 				review: options.review,
-				reviewGate: options.sliceReviewGate,
+				reviewGate: options.taskReviewGate,
 				acceptanceReviewModel: options.reviewModel,
 				env,
 				// The slicer + review AGENTS launch AMBIENT, never the identity env.
 				agentEnv: options.env,
 				note,
 			});
-			return sliceResultToDoResult(sliced);
+			return taskResultToDoResult(tasked);
 		}
 		const slug = resolved.slug;
 
@@ -2118,7 +2118,7 @@ async function runRemotePipeline(
 		// CONTINUE-aware resolution (job-worktree path): admit `work/done/` ONLY
 		// behind the tip-vs-arbiter stranded gate (story 5), using the worktree's
 		// primed `<origin>/work/<slug>` vs `<origin>/main` tracking refs.
-		const slice = resolveSlice(cwd, slug, {
+		const task = resolveTask(cwd, slug, {
 			cwd,
 			branchRef: `${arbiterRemote}/${branch}`,
 			mainRef: `${arbiterRemote}/main`,
@@ -2133,7 +2133,7 @@ async function runRemotePipeline(
 			arbiter: arbiterRemote,
 			branchRef: `${arbiterRemote}/${branch}`,
 			mainRef: `${arbiterRemote}/main`,
-			content: readFileSync(slice.path, 'utf8'),
+			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
 		// Per-item override layer (mirrors in-place `do`): the task/brief frontmatter
@@ -2141,9 +2141,9 @@ async function runRemotePipeline(
 		const itemGuidance = resolvePromptGuidanceForItem({
 			cwd,
 			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
-			taskContent: readFileSync(slice.path, 'utf8'),
+			taskContent: readFileSync(task.path, 'utf8'),
 		});
-		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+		prompt = buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
 			cwd,
 			continueContext,
 			promptGuidance: itemGuidance,
@@ -2464,8 +2464,8 @@ export function jobWorktreeDoDriver(closure: {
 			identity: options.identity,
 			autoTask: options.autoTask,
 			reviewLoop: options.reviewLoop,
-			slicerLoopMax: options.slicerLoopMax,
-			slicerLoopModel: options.slicerLoopModel,
+			taskerLoopMax: options.taskerLoopMax,
+			taskerLoopModel: options.taskerLoopModel,
 			reviewExecutions: options.reviewExecutions,
 			integration: options.integration,
 			// The explicit `--merge` override for the untrusted-origin build-propose rule.
@@ -2477,7 +2477,7 @@ export function jobWorktreeDoDriver(closure: {
 			reviewModel: options.reviewModel,
 			reviewMaxRounds: options.reviewMaxRounds,
 			reviewGate: options.reviewGate,
-			sliceReviewGate: options.sliceReviewGate,
+			taskReviewGate: options.taskReviewGate,
 			agentRunner: options.agentRunner,
 			harness: options.harness,
 			agentCmd: options.agentCmd,

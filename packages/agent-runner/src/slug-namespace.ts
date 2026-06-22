@@ -205,7 +205,7 @@ export interface ResolveSlugInput {
 }
 
 /** Does a TASK named `slug` exist (backlog or in-progress) in this repo? */
-function sliceExists(
+function taskExists(
 	read: LedgerReadStrategy,
 	repoPath: string,
 	slug: string,
@@ -220,12 +220,12 @@ function sliceExists(
 }
 
 /** Does a BRIEF named `slug` exist (ready or being sliced) in this repo? */
-function prdExists(
+function briefExists(
 	read: LedgerReadStrategy,
 	repoPath: string,
 	slug: string,
 ): boolean {
-	return read.resolvePrdExistence({repoPath, slug}).exists;
+	return read.resolveBriefExistence({repoPath, slug}).exists;
 }
 
 /**
@@ -263,7 +263,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 
 	// Bare slug: resolve to the task, but ONLY after the cross-namespace check.
 	// A task/brief collision is a loud ERROR — never a silent guess.
-	if (prdExists(read, input.repoPath, parsed.slug)) {
+	if (briefExists(read, input.repoPath, parsed.slug)) {
 		throw new SlugResolutionError(
 			`'${parsed.slug}' is ambiguous: both a task and a brief share that slug. ` +
 				`Use \`task:${parsed.slug}\` or \`brief:${parsed.slug}\` to disambiguate.`,
@@ -305,7 +305,7 @@ export function resolveAdvanceArg(input: ResolveSlugInput): ResolvedSlug {
 
 	// Bare slug: the SAME task/brief cross-namespace check `do` makes — bare = task,
 	// a task/brief collision is a loud ERROR, never a silent guess.
-	if (prdExists(read, input.repoPath, parsed.slug)) {
+	if (briefExists(read, input.repoPath, parsed.slug)) {
 		throw new SlugResolutionError(
 			`'${parsed.slug}' is ambiguous: both a task and a brief share that slug. ` +
 				`Use \`task:${parsed.slug}\` or \`brief:${parsed.slug}\` to disambiguate.`,
@@ -330,7 +330,7 @@ export function resolveAdvanceArg(input: ResolveSlugInput): ResolvedSlug {
  * start, …). PURE: it touches no files (no existence read needed — `brief:` is
  * rejected on the prefix alone, bare/`task:` resolve to the task slug).
  */
-export function resolveSliceOnlyArg(arg: string): string {
+export function resolveTaskOnlyArg(arg: string): string {
 	const parsed = parseSlugArg(arg);
 	if (parsed.explicit === 'brief') {
 		throw new SlugResolutionError(

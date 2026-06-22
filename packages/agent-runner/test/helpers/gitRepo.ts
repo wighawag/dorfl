@@ -23,8 +23,16 @@ const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
 	'pre-backlog': 'tasks-backlog',
 	backlog: 'tasks-todo',
 	'pre-prd': 'briefs-proposed',
+	// The BRIEF pool (`work/briefs/ready/`). Accept BOTH the legacy fixture words
+	// (`prd`) and the current vocabulary (`brief`) so mixed-vocabulary call sites
+	// resolve identically (this fixture-word layer is intentionally tolerant).
 	prd: 'briefs-ready',
+	brief: 'briefs-ready',
+	// The TASKED-brief residence (`work/briefs/tasked/`). Same dual-vocabulary
+	// tolerance (`prd-sliced`/`prdSliced` legacy; `briefTasked` current).
 	'prd-sliced': 'briefs-tasked',
+	prdSliced: 'briefs-tasked',
+	briefTasked: 'briefs-tasked',
 };
 
 /**
@@ -202,7 +210,7 @@ export function seedRepoWithArbiter(
 		blockedBy?: string[];
 		promptBody?: string;
 		/** PRD slugs to seed under `work/briefs/ready/<slug>.md` (for the slicing lock). */
-		prds?: string[];
+		briefs?: string[];
 		/**
 		 * Commit a `.agent-runner.json` at the repo root (so it travels onto
 		 * `<arbiter>/main`) — the per-repo config the no-checkout `do --remote` reads
@@ -220,13 +228,13 @@ export function seedRepoWithArbiter(
 	const backlog = join(repo, 'work', 'tasks', 'todo');
 	mkdirSync(backlog, {recursive: true});
 	for (const slug of slugs) {
-		writeFileSync(join(backlog, `${slug}.md`), sliceFile(slug, opts));
+		writeFileSync(join(backlog, `${slug}.md`), taskFile(slug, opts));
 	}
-	if (opts.prds && opts.prds.length > 0) {
-		const prdDir = join(repo, 'work', 'briefs', 'ready');
-		mkdirSync(prdDir, {recursive: true});
-		for (const slug of opts.prds) {
-			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
+	if (opts.briefs && opts.briefs.length > 0) {
+		const briefDir = join(repo, 'work', 'briefs', 'ready');
+		mkdirSync(briefDir, {recursive: true});
+		for (const slug of opts.briefs) {
+			writeFileSync(join(briefDir, `${slug}.md`), briefFile(slug));
 		}
 	}
 	if (opts.repoConfig) {
@@ -259,7 +267,7 @@ export function seedRepoWithArbiter(
 	};
 }
 
-function sliceFile(
+function taskFile(
 	slug: string,
 	opts: {
 		humanOnly?: boolean;
@@ -301,7 +309,7 @@ function sliceFile(
 }
 
 /** A minimal PRD file body for `work/briefs/ready/<slug>.md` (slicing-lock fixtures). */
-export function prdFile(slug: string, marker = 'ORIGINAL'): string {
+export function briefFile(slug: string, marker = 'ORIGINAL'): string {
 	return [
 		'---',
 		`title: ${slug}`,
@@ -328,7 +336,7 @@ export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
 	gx(['checkout', '-q', '-B', `seed-done/${slug}`, 'arbiter/main'], dest);
 	const doneDir = join(dest, 'work', 'tasks', 'done');
 	mkdirSync(doneDir, {recursive: true});
-	writeFileSync(join(doneDir, `${slug}.md`), sliceFile(slug, {}));
+	writeFileSync(join(doneDir, `${slug}.md`), taskFile(slug, {}));
 	gx(['add', '-A'], dest);
 	gx(['commit', '-q', '-m', `done: ${slug}`], dest);
 	gx(['push', '-q', 'arbiter', `seed-done/${slug}:main`], dest);
@@ -445,9 +453,9 @@ export function registerMirrorWithWork(
 		 */
 		briefsDropped?: Record<string, string>;
 		/** PRDs to slice, committed under `work/briefs/ready/` on the mirror's `main`. */
-		prd?: Record<string, string>;
+		brief?: Record<string, string>;
 		/** Already-SLICED PRDs, committed under `work/briefs/tasked/` (sliced-ness residence). */
-		prdSliced?: Record<string, string>;
+		briefTasked?: Record<string, string>;
 		/** Observations committed under `work/notes/observations/` (the triage candidate pool). */
 		observations?: Record<string, string>;
 		/** Sidecars committed under `work/questions/` (`<type>-<slug>.md`). */
@@ -479,8 +487,8 @@ export function registerMirrorWithWork(
 	writeAll('needs-attention', work.needsAttention);
 	writeAll('cancelled', work.cancelled);
 	writeAll('briefs-dropped', work.briefsDropped);
-	writeAll('prd', work.prd);
-	writeAll('prd-sliced', work.prdSliced);
+	writeAll('prd', work.brief);
+	writeAll('prd-sliced', work.briefTasked);
 	writeAll('observations', work.observations);
 	writeAll('questions', work.questions);
 	if (work.repoConfig) {

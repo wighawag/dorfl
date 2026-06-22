@@ -2261,7 +2261,7 @@ export function buildLoneSliceReviewPrompt(
 		'    not yet emitted) when tightening the draft fixes the finding.',
 		'  - `questions` — the open question(s) for the human when a blocking issue',
 		'    has no clear thread answer.',
-		'Do NOT fill `review` / `edits` / `uncertainSlices` / `decompositionUnclear`',
+		'Do NOT fill `review` / `edits` / `uncertainTasks` / `decompositionUnclear`',
 		"— those are other callers' channels.",
 	].join('\n');
 }
