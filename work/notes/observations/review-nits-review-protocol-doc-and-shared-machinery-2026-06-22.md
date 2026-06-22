@@ -3,7 +3,8 @@ title: review-gate non-blocking nits for 'review-protocol-doc-and-shared-machine
 date: 2026-06-22
 status: open
 reviewOf: review-protocol-doc-and-shared-machinery
-needsAnswers: true
+needsAnswers: false
+triaged: keep
 ---
 
 ## Non-blocking review findings
@@ -20,3 +21,27 @@ is their durable home for triage — promote-to-slice / keep / delete.
   (packages/agent-runner/test/review-protocol-doc.test.ts asserts SOURCE ↔ `work/protocol/` byte-identity + VERSION > 2026-06-09; no test invokes the setup skill on a fresh target repo to prove propagation end-to-end.)
 - The PR description / commit message has no `## Decisions` block. The agent should record in-scope decisions (the alias-instead-of-removal choice above, the new `resolveReviewProtocolPath` thin helper, the shared `verdictContractPrompt` enumerating ALL channels with per-builder "do NOT fill" instructions) so the human can ratify them in one place.
   (git log -1 fdb802f shows only the slug/title line; no Decisions block.)
+
+## Applied answers 2026-06-22
+
+### q1: Should a follow-up slice sweep away the `SliceReviewVerdict` / `LoneSliceReviewVerdict` type aliases (and rename callers to use the unified `ReviewVerdict`), or are the aliases an acceptable permanent soft landing?
+
+KEEP — the `SliceReviewVerdict` / `LoneSliceReviewVerdict` aliases are an acceptable permanent soft landing. The shape and parser ARE unified; only the names persist, and removing them is pure rename churn with no behaviour change. (Note the acceptance line said the type was "removed" while the NAME persists — a letter-vs-spirit gap worth acknowledging, not reopening.) Disposition: keep.
+
+disposition: keep
+
+### q2: Should the unauthorised `parseSliceReviewVerdict` / `parseLoneSliceReviewVerdict` parser aliases be swept away (callers migrated to the single `parseReviewVerdict`), or accepted as backwards-compat re-exports alongside the type aliases?
+
+KEEP — same disposition as the type aliases. The parser is genuinely unified (one `parseReviewVerdict`); the `parseSliceReviewVerdict`/`parseLoneSliceReviewVerdict` aliases are import-compat re-exports only. Bundle with Q1 if ever cleaned up. Disposition: keep.
+
+disposition: keep
+
+### q3: Is the indirect coverage of the setup-skill propagation sufficient, or should a follow-up slice add a test that invokes the setup skill on a fresh target repo and asserts `work/protocol/` lands with the new doc?
+
+promote-slice — add a setup-skill end-to-end propagation test. This is a genuine (non-churn) coverage gap: the existing mirror test only asserts `skills/setup/protocol/` ↔ `work/protocol/` byte-identity WITHIN this repo, which structurally CANNOT catch a broken setup COPY step into a fresh target repo. A test that invokes the setup skill on a throwaway target and asserts `work/protocol/` lands with the new doc closes it. Disposition: promote-slice.
+
+### q4: Should a follow-up retroactively add a `## Decisions` block to the integration record (or future PR template enforcement) capturing the alias-instead-of-removal choice, the new `resolveReviewProtocolPath` helper, and the shared `verdictContractPrompt` with per-builder 'do NOT fill' instructions — or is recording them only in this observation enough?
+
+KEEP — recording the three decisions HERE (the observation) is sufficient; no retroactive `## Decisions` block needed. The decisions (alias-instead-of-removal, the `resolveReviewProtocolPath` helper, the shared `verdictContractPrompt` with per-builder "do NOT fill" instructions) are real and verified, and this observation is an adequate durable record. Part of the recurring pattern captured in the meta-observation. Disposition: keep.
+
+disposition: keep
