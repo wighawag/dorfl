@@ -32,6 +32,24 @@ import {runAsync} from './git.js';
  *     it before pushing. The tree-less commit touches only the slug's sidecar/marker,
  *     so the rebase applies cleanly.
  *
+ * **C2 rebase-until-real-conflict (task `c2-rebase-until-real-on-durable-main-
+ * promotions`).** This same `HEAD:main` push carries the won't-proceed terminal
+ * `tasks/todo → tasks/cancelled` / `briefs/ready → briefs/dropped` (slug-RELOCATION
+ * family) when `apply-persist.ts` resolves a `dropped` disposition; under sustained
+ * parallel load on the shared `main` ref two DIFFERENT items' concurrent promotions
+ * can falsely-contend even though nothing tree-conflicts, exhausting a small fixed
+ * cap. C2 turns the existing bounded retry into rebase-until-real-conflict: the
+ * GENUINE conflict terminator is REUSED — a rebase replay that fails (the slug is
+ * gone from its expected source folder on the new `main`, e.g. a concurrent
+ * legitimate same-item transition already moved it) STOPS the loop with the
+ * existing definitive outcome (the `rebase --abort` + note path below). A CLEAN
+ * re-rebase no longer counts against a tiny budget; `retries` is now a LARGE
+ * LIVENESS CEILING on the pathological livelock tail. Modest jitter on the refetch
+ * desynchronises the herd. SCOPE caveat (the SCOPE box in the design trail): a
+ * relocation MUST keep its source-folder precondition recheck — the rebase replay
+ * IS that recheck (the `git mv` fails when the source path is missing on new
+ * `main`), so the genuine-conflict signal is preserved verbatim.
+ *
  * NEVER `--force`. A push that keeps failing (or a genuine rebase conflict) is
  * REPORTED via `note` but does NOT crash the tick — the work stays committed in the
  * clone for the next pass / a human.
@@ -41,12 +59,41 @@ export interface PushTreelessResultParams {
 	cwd: string;
 	/** Name of the arbiter git remote in `cwd` (the ledger to publish to). */
 	arbiter: string;
-	/** How many re-fetch+rebase retries to make on a non-fast-forward push. */
+	/**
+	 * LIVENESS CEILING for the re-fetch+rebase retry on a non-fast-forward push.
+	 * Under C2 (task `c2-rebase-until-real-on-durable-main-promotions`) this is no
+	 * longer a small false-contention budget: a CLEAN re-rebase loops without
+	 * counting against a tiny cap; a GENUINE conflict (the rebase fails because the
+	 * slug's source path is gone on the new `main` — a concurrent legitimate
+	 * same-item transition already moved it) STOPS definitively. The ceiling bounds
+	 * only the pathological livelock tail; pass a small value (e.g. `0`) in tests
+	 * to exercise the un-retried / cap-exhausted path deterministically.
+	 */
 	retries: number;
+	/**
+	 * Modest jitter (ms) on the refetch between retries — load-bearing under
+	 * sustained parallel load to desynchronise a thundering-herd lockstep loop (C2,
+	 * task `c2-rebase-until-real-on-durable-main-promotions`). Each non-final
+	 * attempt sleeps a uniformly-random integer in `[0, jitterMs]` ms. Defaults to
+	 * {@link DEFAULT_TREELESS_JITTER_MS}; pass `0` in tests for deterministic,
+	 * latency-free retries.
+	 */
+	jitterMs?: number;
 	/** Environment for child git processes. */
 	env: NodeJS.ProcessEnv | undefined;
 	/** Sink for the non-fatal "could not publish" note. */
 	note: (m: string) => void;
+}
+
+/**
+ * Default modest jitter (ms) on the refetch between {@link pushTreelessResult}
+ * retries — see the `PushTreelessResultParams.jitterMs` doc + the C2 block at the
+ * top of this file. Mirrors `integration-core.ts`'s `DEFAULT_MERGE_JITTER_MS`.
+ */
+export const DEFAULT_TREELESS_JITTER_MS = 25;
+
+function sleepMs(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -60,6 +107,7 @@ export async function pushTreelessResult(
 	params: PushTreelessResultParams,
 ): Promise<void> {
 	const {cwd, arbiter, retries, env, note} = params;
+	const jitterMs = params.jitterMs ?? DEFAULT_TREELESS_JITTER_MS;
 	for (let i = 0; i <= retries; i++) {
 		const push = await runAsync(
 			'git',
@@ -81,7 +129,21 @@ export async function pushTreelessResult(
 			);
 			return;
 		}
+		// Modest jitter on the refetch (C2, task `c2-rebase-until-real-on-durable-main-
+		// promotions`): an instant lockstep refetch→re-push loop maximises mutual
+		// rejection under sustained parallel load (thundering herd). A uniformly-
+		// random `[0, jitterMs]` ms sleep desynchronises the herd; `jitterMs: 0` opts
+		// out (the test seam).
+		if (jitterMs > 0) {
+			await sleepMs(Math.floor(Math.random() * (jitterMs + 1)));
+		}
 		// `main` advanced under us — re-fetch + rebase our (one) commit onto it, retry.
+		// A CLEAN rebase loops; a GENUINE conflict (the slug's source path is gone on
+		// the new `main` because a concurrent legitimate same-item transition already
+		// moved it — the slug-relocation source-folder precondition recheck) STOPS
+		// definitively below. The natural rebase-conflict IS the C2 terminator (we add
+		// no new conflict-detection path; the SCOPE box requires reusing the existing
+		// recheck).
 		await runAsync('git', ['fetch', '--quiet', arbiter], cwd, {env});
 		const rebase = await runAsync(
 			'git',

@@ -209,7 +209,10 @@ export async function advanceOnce(
 				await pushTreelessResult({
 					cwd: options.context.cwd,
 					arbiter: options.context.arbiter ?? 'origin',
-					retries: 3,
+					// Large liveness ceiling (C2, task `c2-rebase-until-real-on-durable-main-
+					// promotions`): a clean re-rebase no longer counts against a small
+					// budget; a genuine same-path conflict still stops definitively.
+					retries: 1000,
 					env: options.env,
 					note: options.context.note ?? (() => {}),
 				});

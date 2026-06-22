@@ -706,6 +706,128 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			false,
 		);
 	});
+
+	// C2 rebase-until-real-conflict (task `c2-rebase-until-real-on-durable-main-
+	// promotions`): N>5 (above the OLD fixed Race-1 cap of 5) DIFFERENT items
+	// promoting `tasks/todo → tasks/done` in parallel must ALL land. Pre-C2 the
+	// last loser would have exhausted its tiny budget on false contention; post-C2
+	// a clean re-rebase no longer counts, so the herd serialises and each lands.
+	it('N=7 DIFFERENT items promoting tasks/todo → tasks/done in parallel ALL land (no false-contention cap exhaustion)', async () => {
+		const N = 7;
+		const slugs = Array.from({length: N}, (_, i) => `p${i}`);
+		const seeded = seedRepoWithArbiter(scratch.root, slugs);
+		const arbiterUrl = `file://${seeded.arbiter}`;
+		void arbiterUrl;
+		// Claim each in its own clone so each ends up branched off the SAME shared
+		// pre-merge base on the arbiter (the IDENTICAL base every job rebases from).
+		const cwds: string[] = [];
+		for (const slug of slugs) {
+			const cwd = seeded.clone(`job-${slug}`);
+			const claim = await performClaim({
+				slug,
+				cwd,
+				arbiter: ARBITER,
+				env: gitEnv(),
+			});
+			expect(claim.exitCode).toBe(0);
+			gitIn(['fetch', '-q', ARBITER], cwd);
+			gitIn(
+				['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`],
+				cwd,
+			);
+			writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`);
+			cwds.push(cwd);
+		}
+		// All N concurrent integrations onto the shared `main`. NO lock. NO explicit
+		// mergeRetries (the DEFAULT large liveness ceiling applies). jitterMs:0 keeps
+		// the test deterministic (no real sleep); the C2 win is the cap semantics, not
+		// the sleep.
+		const results = await Promise.all(
+			cwds.map((cwd, i) =>
+				performIntegration({
+					cwd,
+					arbiter: ARBITER,
+					slug: slugs[i],
+					source: 'tasks-todo',
+					recovering: false,
+					verify: PASS,
+					mode: 'merge',
+					surfaceArbiter: ARBITER,
+					mergeJitterMs: 0,
+					env: gitEnv(),
+				}),
+			),
+		);
+		// EVERY job completed; EVERY slug is in done/ on the arbiter; no stuck locks.
+		for (let i = 0; i < N; i++) {
+			expect(results[i].outcome, `slug ${slugs[i]} should complete`).toBe(
+				'completed',
+			);
+			expect(existsOnArbiterMain(seeded.repo, 'done', slugs[i])).toBe(true);
+			expect(stuckLockOnArbiter(seeded.repo, slugs[i])).toBe(false);
+		}
+	});
+
+	// Control for the test above: with the OLD small fixed cap (mergeRetries: 4,
+	// below N-1=6 worst-case serialisations) a high-fan-out merge SHOULD have
+	// exhausted the cap on at least one loser — proving the C2 change is what
+	// makes the above land. We assert NOT every slug landed (the un-C2 path is
+	// not deterministic both-land at this N), so the gain above is attributable to
+	// the new rebase-until-real-conflict semantics, not just to test timing.
+	it('with a small explicit mergeRetries cap (4), N=7 DIFFERENT items in parallel do NOT all cleanly land (the old fixed-cap behaviour the C2 default replaces)', async () => {
+		const N = 7;
+		const slugs = Array.from({length: N}, (_, i) => `q${i}`);
+		const seeded = seedRepoWithArbiter(scratch.root, slugs);
+		const cwds: string[] = [];
+		for (const slug of slugs) {
+			const cwd = seeded.clone(`job-${slug}`);
+			const claim = await performClaim({
+				slug,
+				cwd,
+				arbiter: ARBITER,
+				env: gitEnv(),
+			});
+			expect(claim.exitCode).toBe(0);
+			gitIn(['fetch', '-q', ARBITER], cwd);
+			gitIn(
+				['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`],
+				cwd,
+			);
+			writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`);
+			cwds.push(cwd);
+		}
+		const results = await Promise.all(
+			cwds.map((cwd, i) =>
+				performIntegration({
+					cwd,
+					arbiter: ARBITER,
+					slug: slugs[i],
+					source: 'tasks-todo',
+					recovering: false,
+					verify: PASS,
+					mode: 'merge',
+					surfaceArbiter: ARBITER,
+					// Pin BELOW the worst-case N-1=6 serialisations: at least one loser
+					// will exhaust the cap, mirroring the pre-C2 false-contention defect.
+					mergeRetries: 4,
+					mergeJitterMs: 0,
+					env: gitEnv(),
+				}),
+			),
+		);
+		const landed = slugs.filter((s) =>
+			existsOnArbiterMain(seeded.repo, 'done', s),
+		);
+		const routed = results.filter(
+			(r) => r.outcome === 'rebase-conflict',
+		).length;
+		// Cap-exhausted losers route to needs-attention with `rebase-conflict`. The
+		// fixed-cap default the C2 change removed cannot deterministically both-land
+		// at this N; that the OPPOSITE deterministically holds with the default cap
+		// is the win the test above demonstrates.
+		expect(landed.length).toBeLessThan(N);
+		expect(routed).toBeGreaterThan(0);
+	});
 });
 
 describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation', () => {

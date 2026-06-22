@@ -326,7 +326,11 @@ export async function runAdvanceTickWithTreelessPublish(
 		await pushTreelessResult({
 			cwd: options.cwd,
 			arbiter: options.arbiter,
-			retries: 3,
+			// Large liveness ceiling — see `pushTreelessResult`'s C2 docs (task
+			// `c2-rebase-until-real-on-durable-main-promotions`). A clean re-rebase
+			// no longer counts against a small budget; a genuine conflict (slug gone
+			// from its source folder on the new `main`) still stops definitively.
+			retries: 1000,
 			env: undefined,
 			note: options.note ?? (() => {}),
 		});

@@ -160,15 +160,57 @@ export interface IntegrationLifecycle {
 }
 
 /**
- * The default Race-1 bounded re-rebase-and-retry cap for the merge-mode
- * `${branch}:main` push (slice
- * `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). A small cap is
- * enough: each retry re-runs the step-4 rebase (reconciling sibling-ledger
- * divergence) against the freshly-advanced `<arbiter>/main`, so it converges in
- * O(concurrent same-repo siblings) attempts. A pathological storm gives up cleanly
- * (routes to needs-attention) rather than looping forever or force-pushing main.
+ * The default LIVENESS CEILING for the merge-mode `${branch}:main` push (the
+ * durable promotions `tasks/todo → tasks/done` and, via `lifecycle`, `briefs/ready
+ * → briefs/tasked`). Task `c2-rebase-until-real-on-durable-main-promotions` turned
+ * the previous SMALL FIXED CAP (was 5, the `run-fleet-claim-integrate-and-sibling-
+ * rebase-concurrency-safe` Race-1 budget) into rebase-until-real-conflict: a CLEAN
+ * re-rebase no longer counts against a tiny give-up budget — only a GENUINE
+ * conflict surfaced by {@link rebaseOntoMainWithReconcile} stops the loop (the
+ * step-4 rebase IS the source-folder precondition recheck for the slug-relocation
+ * family: if the slug is GONE from its expected source folder on the new `main`,
+ * the `git mv` replay fails and `rebaseConflictRoute` routes definitively — never a
+ * silent re-push that would clobber a concurrent legitimate same-item winner).
+ *
+ * The cap survives only as a LARGE liveness ceiling that bounds the pathological
+ * livelock tail (a sustained-parallel-load hot ref where the loser's round-trip is
+ * always beaten by another winner — classic CAS livelock). Combined with the
+ * modest jitter on the refetch below it desynchronises the herd, so a route-to-
+ * needs-attention from this loop becomes a RARE livelock signal rather than the
+ * ROUTINE false-contention signal it was at the old cap of 5.
+ *
+ * SCOPE (`work/notes/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-
+ * conflict.md` `### C2` SCOPE box, repeated here because over-applying C2 is the
+ * one near-fatal mistake): the durable promotions are slug RELOCATIONS, not the
+ * same-path / append family. They MUST keep their source-folder precondition
+ * recheck — reused here verbatim as `rebaseOntoMainWithReconcile`'s rebase replay
+ * + arbiter ledger-placement read. Do NOT add a new conflict-detection path; the
+ * existing one IS the genuine-conflict terminator.
+ *
+ * Tests inject a small `mergeRetries` (or `0`) to exercise the old un-retried /
+ * cap-exhausted route deterministically — that test seam is preserved.
  */
-const DEFAULT_MERGE_RETRIES = 5;
+const DEFAULT_MERGE_RETRIES = 1000;
+
+/**
+ * Default modest jitter (ms) on the refetch between merge-push retries — load-
+ * bearing under sustained parallel load: an instant lockstep refetch→re-push loop
+ * maximises mutual rejection (a thundering herd), fattening the livelock tail.
+ * Modest randomisation desynchronises the herd. Each attempt sleeps a UNIFORMLY-
+ * random integer in `[0, DEFAULT_MERGE_JITTER_MS]` ms. Small enough (≤25ms) that
+ * the additional latency under realistic contention is negligible vs the
+ * round-trip cost of a rebase+push, and small enough that the in-tree concurrency
+ * tests are not slowed measurably. Tests override via `mergeJitterMs: 0`.
+ */
+const DEFAULT_MERGE_JITTER_MS = 25;
+
+/**
+ * Promise-based sleep, used for the {@link DEFAULT_MERGE_JITTER_MS} merge-push
+ * retry jitter (C2). Internal — the only sleep this module uses.
+ */
+function sleepMs(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export interface IntegrationCoreInput {
 	/** The working clone/checkout (in-place) OR worktree dir the work branch lives in. */
@@ -389,8 +431,26 @@ export interface IntegrationCoreInput {
 	 * retry (not the lock) is what makes claim-vs-integrate deterministic. Absent ⇒
 	 * {@link DEFAULT_MERGE_RETRIES}. Tests inject a small cap (or `0` to assert the
 	 * un-retried non-fast-forward route).
+	 *
+	 * **C2 rebase-until-real-conflict (task `c2-rebase-until-real-on-durable-main-
+	 * promotions`):** the SEMANTICS changed — a CLEAN re-rebase no longer counts
+	 * against a give-up budget; only a GENUINE conflict surfaced by the rebase
+	 * (`rebaseConflictRoute` / `invariant-violation`) stops the loop. This value
+	 * now serves as a LARGE liveness ceiling (default {@link DEFAULT_MERGE_RETRIES}
+	 * = 1000) that bounds the pathological livelock tail, not as a small Race-1
+	 * contention budget. The test seam is preserved: a small explicit cap (or `0`)
+	 * still forces the un-retried / cap-exhausted route.
 	 */
 	mergeRetries?: number;
+	/**
+	 * Modest jitter (ms) on the refetch between merge-push retries — load-bearing
+	 * under sustained parallel load (desynchronises a thundering-herd lockstep,
+	 * task `c2-rebase-until-real-on-durable-main-promotions`). Each attempt sleeps
+	 * a uniformly-random integer in `[0, mergeJitterMs]` ms. Defaults to
+	 * {@link DEFAULT_MERGE_JITTER_MS} (25ms); tests can pass `0` for deterministic,
+	 * latency-free retries.
+	 */
+	mergeJitterMs?: number;
 	/**
 	 * Environment for the REVIEW-AGENT launch (Gate 2). Distinct from {@link env}
 	 * because the review agent is an AGENT — it must NOT carry the runner identity
@@ -1250,7 +1310,22 @@ export async function performIntegration(
 		// on a re-rebase routes to needs-attention via the SAME `route` the up-front
 		// rebase uses. A persistent non-fast-forward past the cap also routes (never a
 		// silent drop). `input.mergeRetries` overrides the cap (tests; `0` ⇒ no retry).
+		//
+		// **C2 rebase-until-real-conflict (task `c2-rebase-until-real-on-durable-main-
+		// promotions`):** the loop's TERMINATION CHANGED. A CLEAN re-rebase no longer
+		// counts against a tiny give-up budget — only a GENUINE conflict surfaced by
+		// `rebaseOntoMainWithReconcile` (a `route` ⇒ `rebase-conflict` or
+		// `invariant-violation`) stops the loop. The step-4 rebase IS the source-folder
+		// precondition recheck reused verbatim: if the slug is GONE from its expected
+		// source folder on the new `main` (a concurrent legitimate same-item winner
+		// already moved it), the `git mv` replay fails and `rebaseConflictRoute` routes
+		// definitively — never a silent re-push that would clobber the winner. The
+		// `maxMergeRetries` cap survives ONLY as a large liveness ceiling on the
+		// pathological livelock tail (default {@link DEFAULT_MERGE_RETRIES} = 1000);
+		// modest jitter on the refetch desynchronises a herd so the tail is not
+		// reached under sustained parallel load.
 		const maxMergeRetries = input.mergeRetries ?? DEFAULT_MERGE_RETRIES;
+		const mergeJitterMs = input.mergeJitterMs ?? DEFAULT_MERGE_JITTER_MS;
 		let integration!: IntegrateResult;
 		for (let mergeAttempt = 0; ; mergeAttempt++) {
 			integration = await ledgerWrite.applyCompleteTransition({
@@ -1284,16 +1359,31 @@ export async function performIntegration(
 				break;
 			}
 			if (mergeAttempt >= maxMergeRetries) {
-				// Persistent contention past the cap: route to needs-attention rather than
-				// looping forever or force-pushing main.
+				// LIVENESS CEILING hit (default 1000; previously the small Race-1 cap of 5,
+				// now reinterpreted by C2 as the pathological-livelock-tail bound, NOT a
+				// false-contention budget). Route to needs-attention rather than looping
+				// forever or force-pushing main. A RARE outcome under realistic load thanks
+				// to the jitter below + the rebase-until-real-conflict semantics; tests
+				// reach it deterministically by injecting a small `mergeRetries`.
 				return await mergeNonFastForwardRoute(
 					`integrating ${branch} onto ${arbiter}/main kept hitting a ` +
 						`non-fast-forward push (a sibling advanced main ${mergeAttempt + 1} ` +
 						`times); gave up cleanly without --force`,
 				);
 			}
+			// Modest jitter on the refetch (C2): an instant lockstep refetch→re-push loop
+			// maximises mutual rejection under sustained parallel load (thundering herd).
+			// A uniformly-random `[0, mergeJitterMs]` ms sleep desynchronises the herd.
+			// Skipped when `mergeJitterMs === 0` (the test seam).
+			if (mergeJitterMs > 0) {
+				await sleepMs(Math.floor(Math.random() * (mergeJitterMs + 1)));
+			}
 			// A sibling advanced main: re-run the step-4 rebase (with the reconcile arms)
-			// before retrying the push. A genuine conflict on the re-rebase routes.
+			// before retrying the push. A genuine conflict on the re-rebase routes via
+			// `rebaseOntoMainWithReconcile`'s `route` (the existing source-folder /
+			// one-slug placement recheck IS the genuine-conflict terminator — see the
+			// `DEFAULT_MERGE_RETRIES` docstring for the C2 SCOPE box). A clean re-rebase
+			// (no route) loops without counting against a small budget.
 			const reRebase = await rebaseOntoMainWithReconcile();
 			if (reRebase.route) {
 				return reRebase.route;
