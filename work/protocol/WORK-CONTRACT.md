@@ -215,7 +215,6 @@ Each nudge member resolves INDEPENDENTLY — a task's `promptGuidance.testFirst`
 
 Authority: a per-item override binds the AGENT exactly like the gate-family overrides do. A human may always ignore it on a manual run (the prompt is generated; the human decides what to type).
 
-
 ### Task `humanOnly` is NARROW — POSITION carries "review-first"; `humanOnly` carries "never-by-nature"
 
 Three orthogonal axes, each meaning EXACTLY one thing (governing ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement`):
