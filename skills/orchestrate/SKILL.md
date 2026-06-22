@@ -13,6 +13,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 - **`drive-backlog`** (`skills/drive-backlog/`) — to BUILD the ready tasks (you load and FOLLOW it for the build loop; it owns the runner-CLI mechanics).
 - **`review`** (`skills/review/`) — to judge any artifact (task / brief / observation / code).
 - **`to-task`** (`skills/to-task/`) — to slice a ready brief into tasks (the `tasks/backlog` staging slot).
+- **`promote`** (`skills/promote/`) — to judge a STAGED task/brief (`tasks/backlog/` / `briefs/proposed/`) against its acceptance + destination before recommending its promotion into the pool.
 - **`to-brief`** (`skills/to-brief/`) — when an idea/observation has matured enough to become a brief.
 
 ## When to use vs. not
@@ -37,7 +38,8 @@ Read across ALL buckets and build a single picture of state + what each item nee
 - **`work/notes/observations/`** — untriaged signals. Each wants: promote to a task/brief/ADR? keep as a note? delete? (a judgement rung — compose `review`).
 - **`work/notes/ideas/`** — incubating. Any matured enough to become a brief (`to-brief`)? Most are left alone (no readiness to force) — note them, don't push.
 - **`work/briefs/ready/`** — for each brief: is it already sliced (does it RESIDE in `work/briefs/tasked/`)? `humanOnly`/`needsAnswers`? `briefAfter:` satisfied? → **sliceable now**, **blocked on a dep**, or **blocked on a human answer**. (Tasked-ness is folder residence, not a `sliced:` marker.)
-- **`work/tasks/todo/`** — the task dependency graph (READY / BLOCKED / GATED), AND each ready task's **freshness** (drifted vs current `tasks/done/`+code — same check `drive-backlog` step 1 does). (`work/tasks/backlog/` is the STAGING slot — review-first tasks awaiting promotion into the pool; surface them as "awaiting promotion", don't build them.)
+- **STAGING** — `work/tasks/backlog/` (review-first tasks) and `work/briefs/proposed/` (review-first briefs), the items awaiting human promotion into the pool. NOT built/sliced here; they are a **promotion rung** (step 2, compose `promote`). Either folder may be absent when empty per the contract — treat a missing staging folder as "nothing awaiting promotion", not an error.
+- **`work/tasks/todo/`** — the task dependency graph (READY / BLOCKED / GATED), AND each ready task's **freshness** (drifted vs current `tasks/done/`+code — same check `drive-backlog` step 1 does).
 - **needs-attention** — stuck items (their per-item lock is `state: stuck`) + the recorded reason; each wants a human decision (requeue-continue / requeue-reset / re-scope / drop). Read them via `agent-runner status`/`scan` (which read the lock refs).
 
 Produce a short **state map**: what's ready to build, what's sliceable, what's triageable, and what's parked on a human.
@@ -51,6 +53,7 @@ Do the autonomous rungs that PREPARE work — i.e. everything EXCEPT building re
   - **`to-task`** (the skill) — the CONVERSATIONAL, human-in-the-loop, protocol-only path (no agent-runner dependency). Use it for a **`humanOnly` / unclear / not-yet-ready brief**, or whenever a conversation is wanted. (`to-task` deliberately stays runner-agnostic — it never points BACK at `do brief:`; this routing lives HERE, in the runner-aware conductor, by design.)
   - The choice is "unattended run vs conversation", decided by the brief classification you already did in step 1 (`humanOnly`/`needsAnswers`/`briefAfter`). A `do brief:` on a brief it cannot take (e.g. `humanOnly`) correctly REFUSES on the agent path — that refusal IS the protocol routing you to `to-task`.
   - Then **review the produced tasks** (compose `review`; the slicer's own review→edit loop also runs on the `do brief:` path). Newly-produced tasks feed back into the survey (they may be READY, or carry their own questions).
+- **Staged items awaiting promotion** (`tasks/backlog/`, `briefs/proposed/`) → run the **promotion rung**: for each, compose `promote` (review + freshness + pool-readiness gate) and emit promote / keep-staged / drop. A clear PROMOTE is recommended to the human (you never move it yourself — the runner's `promote` verb / the human does the `git mv`); a KEEP-STAGED with a fixable gap, or a judgement-call promotion, becomes a step-3 question; a clear DROP routes to the regime terminal. Promotion is the human review-gate, so the MOVE is always the human's/runner's — you surface the verdict.
 - **Clearly-dispositionable observations** → triage them (route/keep/delete) where the disposition is obvious; the ambiguous ones become questions (step 3).
 - **Apply any human answers** you already have from earlier in the session → flip the relevant `needsAnswers`, fill the task/brief gap, which may make new items advanceable (re-run step 1's classification for them).
 
