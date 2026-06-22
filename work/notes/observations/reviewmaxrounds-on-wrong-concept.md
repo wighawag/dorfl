@@ -2,7 +2,8 @@
 title: reviewMaxRounds was built onto the review GATE by miscommunication — it belongs to the slicer EDIT LOOP, not the gate
 date: 2026-06-06
 status: open
-needsAnswers: true
+needsAnswers: false
+triaged: keep
 ---
 
 ## The signal
@@ -42,3 +43,11 @@ Maintainer decision: **HOLD the build-path Gate-2 cleanup** (removing the rounds
 ## Update 2026-06-12 (re-verified during triage — HOLD still stands)
 
 Re-checked against current code: the orphan is STILL LIVE and the HOLD is still correct. The build-path Gate-2 still runs the `for (round = 1..reviewMaxRounds)` loop (`integration-core.ts` ~L437) with NO revise step between rounds — it re-invokes `reviewGate` on the IDENTICAL diff (same slug/cwd; nothing mutates between iterations), exactly the "re-review the same artifact N times → does nothing useful" orphan. The code comment itself marks it: "a future builder-revise step plugs in here" (~L461) — i.e. that revise loop does NOT exist yet. Meanwhile the SLICER edit loop DID land with its OWN distinct bound `slicerLoopMax` (`config.ts` ~L256, `slicer-review-loop.ts`), settling the "where the bound belongs" half — but that does NOT resolve the build-gate orphan. So: keep this note as the standing record; remove `reviewMaxRounds` from the build gate (or give it a REAL builder-revise step) only when that revise↔review loop is designed/built — never delete the live config axis in isolation.
+
+## Applied answers 2026-06-22
+
+### q1: Does this observation's HOLD still stand, or has the build-path Gate-2 situation changed enough to act now (e.g. design the builder revise↔review loop and MOVE `reviewMaxRounds` there, or just delete it from the gate)?
+
+KEEP — the HOLD still stands; the situation is unchanged. Verified: the build-path Gate-2 loop still has NO revise step between rounds (the loop re-reviews up to `reviewMaxRounds`, with a comment marking where "a future builder-revise step plugs in here"), and the config docstring still flags `reviewMaxRounds` as an orphan belonging to that future loop. Re-reviewing the same unchanged diff N times is a no-op, so acting now is premature; deleting the parameter in isolation would lose what the future revise↔review loop needs. The natural resolution remains MOVE-when-the-loop-is-designed, not delete-in-isolation. Disposition: keep.
+
+disposition: keep
