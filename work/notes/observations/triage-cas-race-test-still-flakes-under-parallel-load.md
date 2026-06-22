@@ -2,7 +2,7 @@
 title: the same-slug promote CAS-race test in advance-triage.test.ts STILL flakes "2 winners" under full-suite parallel load (despite PR #90's deterministic-contention fix)
 date: 2026-06-13
 status: open
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was observed
@@ -26,3 +26,9 @@ i.e. BOTH concurrent promotes "won" the CAS instead of exactly one. The other 17
 ## Recommendation (for triage)
 
 PR #90's fix REDUCED but did NOT eliminate the flake under heavy parallel load. The race test models contention via injected seams but still occasionally lets both promotes observe a pre-CAS arbiter state. Consider either (a) serialising this specific test (`describe.sequential` / run it outside the parallel pool), or (b) tightening the injected-contention model so the loser's CAS lease is provably stale before its push. This is a TEST-only concern; the product CAS (`applyTransition` --force-with-lease) is sound. Sibling note: the existing `serialise-review-gate-test-under-parallel-load` slice solved a structurally identical "green logic, racy under load" problem by serialising the test.
+
+## Applied answers 2026-06-22
+
+### q1: How should this observation be dispositioned: promote it to a slice that fixes the residual flake (and if so, via option (a) serialising the test à la the sibling `serialise-review-gate-test-under-parallel-load` slice, or option (b) tightening the injected-contention model so the loser's CAS lease is provably stale before its push), or keep it open for more evidence, or drop it?
+
+promote-slice, option (a): serialise the test (mirroring the `serialise-review-gate-test-under-parallel-load` precedent). The product CAS is structurally sound (injected seam + `--force-with-lease` per-attempt nonce); this is a test-harness contention-timing flake, not a product bug. Strong evidence against option (b): PR #90 (`triage-cas-race-test-models-real-contention`, DONE) already took the tighten-the-contention-model approach and the flake survived full parallel load, whereas the serialise precedent is a clean template. A flaky acceptance-gate test erodes gate trust, so fix it deterministically. Disposition: promote-slice.
