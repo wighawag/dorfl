@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'state-portability-rule-in-methodology-
 date: 2026-06-22
 status: open
 reviewOf: state-portability-rule-in-methodology-adr
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
