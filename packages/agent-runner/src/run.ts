@@ -23,6 +23,7 @@ import {
 	resolveSlice,
 	buildAgentPrompt,
 	resolveContinueContext,
+	resolvePromptGuidanceForItem,
 	PromptError,
 } from './prompt.js';
 import {type IntegrateResult, type ReviewProvider} from './integrator.js';
@@ -799,12 +800,18 @@ async function runOneItem(
 						env: gitEnv,
 					})
 				: undefined;
+			// Thread the resolved per-repo nudge through the per-item override layer
+			// (a task or brief may pin `promptGuidance.testFirst` in its frontmatter,
+			// superseding the repo policy for THIS item) before the wrapper is built.
+			const itemGuidance = resolvePromptGuidanceForItem({
+				cwd: tree.dir,
+				repoResolved: resolvePromptGuidance(config),
+				taskContent: readFileSync(slice.path, 'utf8'),
+			});
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 				cwd: tree.dir,
 				continueContext,
-				// Thread the resolved per-repo nudge so the autonomous `run` worker
-				// prompt carries `promptGuidance.testFirst` (mirrors `do`).
-				promptGuidance: resolvePromptGuidance(config),
+				promptGuidance: itemGuidance,
 			});
 		} catch (err) {
 			if (err instanceof PromptError) {

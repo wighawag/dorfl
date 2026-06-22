@@ -5,6 +5,7 @@ slug: <url-safe-slug>
 # humanOnly: true     # optional: a HUMAN must drive the slicing of this brief (a decision). OMIT otherwise.
 # needsAnswers: true  # optional: open questions block AUTO-slicing (spec incomplete). OMIT otherwise. List the questions in the body.
 # briefAfter: []      # optional: brief slugs that must be SLICED first (so this brief's tasks can reference their slugs in blockedBy).
+# promptGuidance.testFirst: true  # optional per-item NUDGE override: pin the test-first nudge ON (true) or OFF (false) for every task this brief fans out, regardless of the repo's resolved policy. A per-task override still wins over this. OMIT to inherit the repo policy. NEVER an acceptance criterion — `verify` still decides pass/fail.
 ---
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/todo/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is sliced — they move into tasks/ADRs and this brief settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)

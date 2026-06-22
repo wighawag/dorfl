@@ -4,6 +4,7 @@ slug: <url-safe-slug>
 brief: <source-brief-slug> # slug of the work/briefs/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
 # humanOnly: true     # gate axis 1 (DECIDED, NARROW): NEVER-for-agents BY NATURE (secrets/release/security). Survives even in the pool work/tasks/todo/. OMIT otherwise — "review this before the agent builds" is the POSITION's job (the task is BIRTHED in work/tasks/backlog/), NOT humanOnly's.
 # needsAnswers: true  # gate axis 2 (DISCOVERED): open questions block autonomous work. OMIT otherwise. List them in the body.
+# promptGuidance.testFirst: true  # optional per-item NUDGE override: pin the test-first nudge ON (true) or OFF (false) for THIS task, regardless of the repo's resolved policy. OMIT to inherit (brief, else repo). NEVER an acceptance criterion — `verify` still decides pass/fail.
 blockedBy: [] # slugs that must reach work/tasks/done/ first; [] = startable now
 covers: [] # optional: user-story numbers within `brief` this task covers
 ---

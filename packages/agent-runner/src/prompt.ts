@@ -20,7 +20,8 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseFrontmatter} from './frontmatter.js';
+import {parseFrontmatter, type Frontmatter} from './frontmatter.js';
+import type {PromptGuidance} from './config.js';
 import {
 	WORK_ROOT,
 	workFolderName,
@@ -619,6 +620,77 @@ export function inferSlugFromBranch(
  * `## Prompt`. Pure with respect to the repo (read-only) — the caller writes the
  * result to stdout.
  */
+/**
+ * Resolve the EFFECTIVE `promptGuidance` for an item by walking the precedence
+ * chain (highest → lowest): the per-task frontmatter override, the per-brief
+ * frontmatter override (only when the task carries a `brief:`), then the
+ * already-resolved repo policy. Each nudge member resolves independently — a
+ * task's `promptGuidance.testFirst` override never bleeds into a sibling
+ * member — mirroring the `humanOnly`/`autoBuild` per-item override shape.
+ *
+ * A task may carry the override even when it has NO `brief:` (a self-contained
+ * chore), by symmetry with `humanOnly` at the item level; `briefFrontmatter`
+ * is then simply absent and the chain reads task ⇒ repo.
+ */
+export function resolveItemPromptGuidance(
+	repoResolved: PromptGuidance,
+	taskFrontmatter?: Frontmatter,
+	briefFrontmatter?: Frontmatter,
+): PromptGuidance {
+	const taskTestFirst = taskFrontmatter?.promptGuidance.testFirst;
+	const briefTestFirst = briefFrontmatter?.promptGuidance.testFirst;
+	return {
+		testFirst: taskTestFirst ?? briefTestFirst ?? repoResolved.testFirst,
+	};
+}
+
+/**
+ * Locate a brief's file on disk: prefer `work/briefs/ready/<slug>.md` (the
+ * auto-slice pool), then fall back to `work/briefs/tasked/<slug>.md` (sliced,
+ * resting). Returns `undefined` when neither exists — the caller treats that
+ * as "no brief-level override available" and the precedence chain falls
+ * through to the repo policy (a missing brief is NOT an error at this seam;
+ * the per-item override is OPTIONAL by design).
+ */
+export function findBriefPath(
+	cwd: string,
+	briefSlug: string,
+): string | undefined {
+	const candidates = [
+		workItemPath(cwd, 'briefs-ready', briefSlug),
+		workItemPath(cwd, 'briefs-tasked', briefSlug),
+	];
+	for (const path of candidates) {
+		if (existsSync(path)) {
+			return path;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * The convenience seam every caller of {@link buildAgentPrompt} reuses to
+ * resolve the per-item override: load the task frontmatter from its file +
+ * (when the task carries `brief:`) the brief frontmatter, then walk
+ * {@link resolveItemPromptGuidance}. Pure-ish (reads at most two files);
+ * returns the repo policy verbatim when neither item layer overrides anything.
+ */
+export function resolvePromptGuidanceForItem(options: {
+	cwd: string;
+	repoResolved: PromptGuidance;
+	taskContent: string;
+}): PromptGuidance {
+	const taskFm = parseFrontmatter(options.taskContent);
+	let briefFm: Frontmatter | undefined;
+	if (taskFm.brief !== undefined) {
+		const briefPath = findBriefPath(options.cwd, taskFm.brief);
+		if (briefPath !== undefined) {
+			briefFm = parseFrontmatter(readFileSync(briefPath, 'utf8'));
+		}
+	}
+	return resolveItemPromptGuidance(options.repoResolved, taskFm, briefFm);
+}
+
 export function renderPrompt(options: PromptOptions): string {
 	const slug = options.slug || inferSlugFromBranch(options.cwd, options.env);
 	if (!slug) {
@@ -628,9 +700,19 @@ export function renderPrompt(options: PromptOptions): string {
 		);
 	}
 	const slice = resolveSlice(options.cwd, slug);
+	// Per-item override layer: a task or brief may pin `promptGuidance.testFirst`
+	// in its frontmatter, superseding the resolved repo policy for THIS item.
+	// We ALWAYS walk the resolver (even when no repo policy was threaded), so a
+	// task can opt IN to the strengthened nudge even on a repo whose default is
+	// off (and vice-versa) — the per-item override is the escape hatch.
+	const resolvedGuidance = resolvePromptGuidanceForItem({
+		cwd: options.cwd,
+		repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
+		taskContent: readFileSync(slice.path, 'utf8'),
+	});
 	return buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 		protocolPath: options.protocolPath,
 		cwd: options.cwd,
-		promptGuidance: options.promptGuidance,
+		promptGuidance: resolvedGuidance,
 	});
 }

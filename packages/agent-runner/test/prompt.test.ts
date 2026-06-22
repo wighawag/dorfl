@@ -15,9 +15,13 @@ import {
 	resolveSlice,
 	inferSlugFromBranch,
 	renderPrompt,
+	resolveItemPromptGuidance,
+	resolvePromptGuidanceForItem,
+	findBriefPath,
 	PromptError,
 	type ContinueContext,
 } from '../src/prompt.js';
+import {parseFrontmatter} from '../src/frontmatter.js';
 import {
 	makeScratch,
 	gitEnv,
@@ -869,5 +873,289 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 		expect(() => renderPrompt({cwd: scratch.root, env: gitEnv()})).toThrow(
 			PromptError,
 		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Per-item override layer for `promptGuidance.testFirst`
+// (slice `prompt-guidance-testfirst-item-override`, brief US #5).
+//
+// Precedence chain (highest → lowest):
+//   per-task frontmatter
+//   > per-brief frontmatter (when the task carries `brief:`)
+//   > repo-resolved policy (CLI flag > env > per-repo > global > default false)
+//
+// We test at TWO seams:
+//   - {@link resolveItemPromptGuidance}: the pure precedence resolver,
+//     parameterised over the full (repo × brief × task) matrix.
+//   - {@link renderPrompt}: the prompt-assembly seam, end-to-end — a task or
+//     brief frontmatter override changes the strengthened/soft text the worker
+//     actually receives.
+//
+// We deliberately do NOT test process-level behaviour ("the agent really wrote
+// a test first"): the strengthened line is a NUDGE; only its PRESENCE in the
+// assembled prompt is observable here. The acceptance gate is `verify`.
+// ---------------------------------------------------------------------------
+
+describe('resolveItemPromptGuidance — the precedence matrix', () => {
+	/** Helper: produce a parsed frontmatter object stamped with a given testFirst value. */
+	function fm(testFirst: boolean | undefined) {
+		return {
+			...parseFrontmatter('---\nslug: x\n---\n'),
+			promptGuidance: {testFirst},
+		};
+	}
+
+	it('repo-only: with no task / no brief, the repo policy wins', () => {
+		expect(resolveItemPromptGuidance({testFirst: false})).toEqual({
+			testFirst: false,
+		});
+		expect(resolveItemPromptGuidance({testFirst: true})).toEqual({
+			testFirst: true,
+		});
+	});
+
+	it('brief overrides repo when the task does not override', () => {
+		expect(
+			resolveItemPromptGuidance({testFirst: false}, fm(undefined), fm(true)),
+		).toEqual({testFirst: true});
+		expect(
+			resolveItemPromptGuidance({testFirst: true}, fm(undefined), fm(false)),
+		).toEqual({testFirst: false});
+	});
+
+	it('task overrides brief AND repo (the highest tier wins outright)', () => {
+		expect(
+			resolveItemPromptGuidance({testFirst: false}, fm(true), fm(false)),
+		).toEqual({testFirst: true});
+		expect(
+			resolveItemPromptGuidance({testFirst: true}, fm(false), fm(true)),
+		).toEqual({testFirst: false});
+	});
+
+	it('a task `false` override is honoured (it is NOT confused with omitted)', () => {
+		// The escape hatch: an exploratory task pins testFirst:false even when the
+		// repo + brief both default it on. Critical guard against `?? false` bugs.
+		expect(
+			resolveItemPromptGuidance({testFirst: true}, fm(false), fm(true)),
+		).toEqual({testFirst: false});
+	});
+
+	it('a task with NO `brief:` (chore) can still carry the override (by symmetry with humanOnly)', () => {
+		// Recorded decision: a brief-less chore task may still pin the nudge in
+		// its own frontmatter — the brief layer is simply absent and the chain
+		// reads task ⇒ repo.
+		expect(
+			resolveItemPromptGuidance({testFirst: false}, fm(true), undefined),
+		).toEqual({testFirst: true});
+	});
+});
+
+describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('agent-runner-prompt-override-resolve-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	/** Write a brief file with the given testFirst marker (or none). */
+	function seedBrief(
+		root: string,
+		folder: 'briefs-ready' | 'briefs-tasked',
+		slug: string,
+		testFirst: boolean | undefined,
+	): void {
+		const dir = join(
+			root,
+			'work',
+			folder === 'briefs-ready' ? 'briefs/ready' : 'briefs/tasked',
+		);
+		mkdirSync(dir, {recursive: true});
+		const body = ['---', `slug: ${slug}`];
+		if (testFirst !== undefined) {
+			body.push(`promptGuidance.testFirst: ${String(testFirst)}`);
+		}
+		body.push('---', '', '## Problem Statement', '', 'thing', '');
+		writeFileSync(join(dir, `${slug}.md`), body.join('\n'));
+	}
+
+	function taskContent(
+		slug: string,
+		brief: string | undefined,
+		testFirst: boolean | undefined,
+	): string {
+		const body = ['---', `slug: ${slug}`];
+		if (brief !== undefined) {
+			body.push(`brief: ${brief}`);
+		}
+		if (testFirst !== undefined) {
+			body.push(`promptGuidance.testFirst: ${String(testFirst)}`);
+		}
+		body.push('---', '', '## Prompt', '', '> body', '');
+		return body.join('\n');
+	}
+
+	it('loads the brief at briefs/ready and applies its override over the repo policy', () => {
+		seedBrief(scratch.root, 'briefs-ready', 'my-brief', true);
+		const content = taskContent('t', 'my-brief', undefined);
+		const out = resolvePromptGuidanceForItem({
+			cwd: scratch.root,
+			repoResolved: {testFirst: false},
+			taskContent: content,
+		});
+		expect(out).toEqual({testFirst: true});
+	});
+
+	it('falls back to briefs/tasked when the brief is not in briefs/ready', () => {
+		seedBrief(scratch.root, 'briefs-tasked', 'sliced-brief', true);
+		const out = resolvePromptGuidanceForItem({
+			cwd: scratch.root,
+			repoResolved: {testFirst: false},
+			taskContent: taskContent('t', 'sliced-brief', undefined),
+		});
+		expect(out).toEqual({testFirst: true});
+	});
+
+	it('a task override beats the brief override (per-task wins)', () => {
+		seedBrief(scratch.root, 'briefs-ready', 'my-brief', true);
+		const out = resolvePromptGuidanceForItem({
+			cwd: scratch.root,
+			repoResolved: {testFirst: false},
+			taskContent: taskContent('t', 'my-brief', false),
+		});
+		expect(out).toEqual({testFirst: false});
+	});
+
+	it('a missing brief file silently falls through to the repo policy (the override is OPTIONAL)', () => {
+		const out = resolvePromptGuidanceForItem({
+			cwd: scratch.root,
+			repoResolved: {testFirst: true},
+			taskContent: taskContent('t', 'absent-brief', undefined),
+		});
+		expect(out).toEqual({testFirst: true});
+	});
+
+	it('findBriefPath returns undefined when the brief is in neither folder', () => {
+		expect(findBriefPath(scratch.root, 'nope')).toBeUndefined();
+	});
+});
+
+describe('renderPrompt — per-item override is honoured at the assembly seam', () => {
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('agent-runner-prompt-override-render-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	/** Write a task + (optional) brief, with explicit per-item testFirst overrides. */
+	function seedItem(
+		root: string,
+		slug: string,
+		opts: {
+			brief?: string;
+			taskTestFirst?: boolean;
+			briefTestFirst?: boolean;
+		},
+	): void {
+		const taskDir = join(root, 'work', 'tasks', 'todo');
+		mkdirSync(taskDir, {recursive: true});
+		const t = ['---', `slug: ${slug}`];
+		if (opts.brief !== undefined) {
+			t.push(`brief: ${opts.brief}`);
+		}
+		if (opts.taskTestFirst !== undefined) {
+			t.push(`promptGuidance.testFirst: ${String(opts.taskTestFirst)}`);
+		}
+		t.push('---', '', '## Prompt', '', '> SLICE-BODY', '');
+		writeFileSync(join(taskDir, `${slug}.md`), t.join('\n'));
+		if (opts.brief !== undefined) {
+			const briefDir = join(root, 'work', 'briefs', 'ready');
+			mkdirSync(briefDir, {recursive: true});
+			const b = ['---', `slug: ${opts.brief}`];
+			if (opts.briefTestFirst !== undefined) {
+				b.push(`promptGuidance.testFirst: ${String(opts.briefTestFirst)}`);
+			}
+			b.push('---', '', '## Problem Statement', '', 'thing', '');
+			writeFileSync(join(briefDir, `${opts.brief}.md`), b.join('\n'));
+		}
+	}
+
+	/** The marker line ONLY the strengthened (ON) wrapper text carries. */
+	const STRONG = 'failing test BEFORE the production code';
+	/** The marker line ONLY the historic (OFF/soft) wrapper text carries. */
+	const SOFT = 'TDD where the task asks for';
+
+	it('repo=OFF, task=ON → strengthened (per-task opt-in beats repo default)', () => {
+		seedItem(scratch.root, 'a', {taskTestFirst: true});
+		const out = renderPrompt({
+			slug: 'a',
+			cwd: scratch.root,
+			promptGuidance: {testFirst: false},
+		});
+		expect(out).toContain(STRONG);
+		expect(out).not.toContain(SOFT);
+	});
+
+	it('repo=ON, task=OFF → soft (per-task opt-out beats repo default)', () => {
+		seedItem(scratch.root, 'b', {taskTestFirst: false});
+		const out = renderPrompt({
+			slug: 'b',
+			cwd: scratch.root,
+			promptGuidance: {testFirst: true},
+		});
+		expect(out).toContain(SOFT);
+		expect(out).not.toContain(STRONG);
+	});
+
+	it('repo=OFF, brief=ON, task=(omit) → strengthened (inherits the brief)', () => {
+		seedItem(scratch.root, 'c', {brief: 'feature-x', briefTestFirst: true});
+		const out = renderPrompt({
+			slug: 'c',
+			cwd: scratch.root,
+			promptGuidance: {testFirst: false},
+		});
+		expect(out).toContain(STRONG);
+		expect(out).not.toContain(SOFT);
+	});
+
+	it('repo=OFF, brief=ON, task=OFF → soft (per-task beats per-brief)', () => {
+		seedItem(scratch.root, 'd', {
+			brief: 'feature-x',
+			briefTestFirst: true,
+			taskTestFirst: false,
+		});
+		const out = renderPrompt({
+			slug: 'd',
+			cwd: scratch.root,
+			promptGuidance: {testFirst: false},
+		});
+		expect(out).toContain(SOFT);
+		expect(out).not.toContain(STRONG);
+	});
+
+	it('repo=OFF, no overrides → soft (the unchanged default path)', () => {
+		seedItem(scratch.root, 'e', {});
+		const out = renderPrompt({
+			slug: 'e',
+			cwd: scratch.root,
+			promptGuidance: {testFirst: false},
+		});
+		expect(out).toContain(SOFT);
+		expect(out).not.toContain(STRONG);
+	});
+
+	it('repo=ON, no overrides → strengthened (the repo-policy path)', () => {
+		seedItem(scratch.root, 'f', {});
+		const out = renderPrompt({
+			slug: 'f',
+			cwd: scratch.root,
+			promptGuidance: {testFirst: true},
+		});
+		expect(out).toContain(STRONG);
+		expect(out).not.toContain(SOFT);
 	});
 });

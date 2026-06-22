@@ -153,6 +153,7 @@ humanOnly: true # gate axis 1 (DECIDED): a human must drive this. true | omitted
 needsAnswers: true # gate axis 2 (DISCOVERED): open questions block autonomous work. true | omitted.
 blockedBy: [] # list of slugs that must reach tasks/done/ first; [] = startable now
 covers: [] # optional: user-story numbers (within `brief`) this task covers
+promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for THIS task, regardless of the repo's resolved `promptGuidance.testFirst` policy. true | false | omitted (= inherit brief, else repo policy). NEVER an acceptance criterion — `verify` still decides pass/fail. See "`promptGuidance.*` per-item override" below.
 ---
 ```
 
@@ -166,6 +167,7 @@ issue: 123 # optional: the issue this brief was spawned from (the surviving thre
 humanOnly: true # optional: a human must drive the SLICING of this brief. true | omitted.
 needsAnswers: true # optional: open questions block AUTO-slicing this brief. true | omitted.
 briefAfter: [] # optional: brief slugs that must be SLICED first (see below). [] = sliceable now.
+promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for every task this brief fans out, regardless of the repo's resolved policy. A per-task override still wins over this. true | false | omitted (= inherit repo policy). See "`promptGuidance.*` per-item override" below.
 # tasked-ness has NO frontmatter marker: it is RESIDENCE in work/briefs/tasked/ (the release transition moves the brief there).
 ---
 ```
@@ -198,6 +200,21 @@ The autonomy gate is TWO orthogonal binary fields (both default to omitted = fal
 **Predicate (same shape at both levels):** an item is **auto-eligible** iff `needsAnswers` is not `true` AND `humanOnly` is not `true` AND `autoBuild` is `true`. A human is never bound by it (a human may slice/build a flagged item — the gate binds the agent, like the runner-vs-human stance on `verify`).
 
 (This supersedes the older single `humanOnly`-only gate, which itself replaced the three-state `afk` field + `allowUnspecifiedGate`.)
+
+### `promptGuidance.*` per-item override (the same precedence shape as `humanOnly`/`autoBuild`)
+
+The `promptGuidance` NAMESPACE is a per-repo + per-item layer of PROMPT-TEXT NUDGES the runner folds into the worker's in-band prompt (currently one member, `testFirst`; the namespace is designed to grow). It is CATEGORICALLY SEPARATE from the gate family (`verify`/`autoBuild`/`humanOnly`): a nudge changes the agent's DISPOSITION, never the acceptance bar — the `verify` gate still decides pass/fail regardless of any value here.
+
+The repo policy resolves like every other gate-family field: **CLI flag > env (`AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST`) > per-repo config > global config > built-in default (`false`)**. On top of THAT, a single task or brief may OVERRIDE the resolved repo policy for THAT item only by setting `promptGuidance.<member>: true | false` in its frontmatter — the same repo-default-plus-item-override shape `humanOnly`/`autoBuild` use. The per-item precedence chain (highest → lowest) is:
+
+1. **Per-task frontmatter** — the task's own `promptGuidance.<member>` line (when present).
+2. **Per-brief frontmatter** — the brief's `promptGuidance.<member>` line, consulted ONLY when the task carries a `brief:` and the brief file is found in `work/briefs/ready/` or `work/briefs/tasked/`.
+3. **Repo-resolved policy** — the value the chain above resolves to, with the built-in default `false`.
+
+Each nudge member resolves INDEPENDENTLY — a task's `promptGuidance.testFirst` override never bleeds into a sibling member. A task with no `brief:` (a self-contained chore) MAY still carry the override; the brief layer is simply absent and the chain reads task ⇒ repo. A missing brief file is NOT an error: the override is OPTIONAL by design, so the chain silently falls through to the repo policy. Form: the frontmatter parser reads the DOTTED scalar form `promptGuidance.<member>: <bool>` (a single line, mirroring the flat shape `humanOnly`/`needsAnswers` use at the item level); a mistyped value (e.g. `"yes"`) reads as undefined — the same silent-on-malformed behaviour `humanOnly` has — never a silent coerce.
+
+Authority: a per-item override binds the AGENT exactly like the gate-family overrides do. A human may always ignore it on a manual run (the prompt is generated; the human decides what to type).
+
 
 ### Task `humanOnly` is NARROW — POSITION carries "review-first"; `humanOnly` carries "never-by-nature"
 

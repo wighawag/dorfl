@@ -14,6 +14,7 @@ import {
 	resolveSlice,
 	buildAgentPrompt,
 	resolveContinueContext,
+	resolvePromptGuidanceForItem,
 	PromptError,
 } from './prompt.js';
 import {NullHarness, type Harness} from './harness.js';
@@ -985,10 +986,17 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			content: readFileSync(slice.path, 'utf8'),
 			env,
 		});
+		// Per-item override layer: a task or brief may pin `promptGuidance.testFirst`
+		// in its frontmatter, superseding the resolved repo policy for THIS item.
+		const itemGuidance = resolvePromptGuidanceForItem({
+			cwd: tree.dir,
+			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
+			taskContent: readFileSync(slice.path, 'utf8'),
+		});
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 			cwd: tree.dir,
 			continueContext,
-			promptGuidance: options.promptGuidance,
+			promptGuidance: itemGuidance,
 		});
 	} catch (err) {
 		if (err instanceof PromptError) {
@@ -2128,10 +2136,17 @@ async function runRemotePipeline(
 			content: readFileSync(slice.path, 'utf8'),
 			env,
 		});
+		// Per-item override layer (mirrors in-place `do`): the task/brief frontmatter
+		// may override the resolved repo `promptGuidance.testFirst` for THIS item.
+		const itemGuidance = resolvePromptGuidanceForItem({
+			cwd,
+			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
+			taskContent: readFileSync(slice.path, 'utf8'),
+		});
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 			cwd,
 			continueContext,
-			promptGuidance: options.promptGuidance,
+			promptGuidance: itemGuidance,
 		});
 	} catch (err) {
 		if (err instanceof PromptError) {
