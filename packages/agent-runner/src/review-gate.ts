@@ -1,7 +1,21 @@
 import {NullHarness, substituteModel, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {boundaryLine} from './watch-session.js';
-import {extractJsonObjectSpan} from './verdict-json.js';
+import {
+	parseReviewVerdict,
+	ReviewParseError,
+	reviewDisciplinePrompt,
+	verdictContractPrompt,
+	type ReviewFinding,
+	type ReviewVerdict,
+} from './review-verdict.js';
+
+export {
+	parseReviewVerdict,
+	ReviewParseError,
+	type ReviewFinding,
+	type ReviewVerdict,
+} from './review-verdict.js';
 
 /**
  * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`), the
@@ -26,41 +40,6 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * replacement for `verify`. `verify` stays the non-skippable model-free floor;
  * review runs ON TOP, only when `review` resolves on.
  */
-
-/** A single review finding, mirroring the `review` SKILL's verdict shape. */
-export interface ReviewFinding {
-	/** Whether this finding blocks (keeps the work out of "ready") or is a nit. */
-	severity: 'blocking' | 'non-blocking';
-	/** The question / defect, with enough context to act. */
-	question: string;
-	/** The relevant excerpt, `file:line`, or reasoning. */
-	context?: string;
-}
-
-/**
- * The verdict the `review` SKILL emits (and this gate parses): `approve` lets the
- * work proceed to integrate; `block` routes it to needs-attention. The skill
- * EMITS the verdict; the caller (the gate) routes it — see `skills/review/SKILL.md`
- * → "Your output".
- */
-export interface ReviewVerdict {
-	verdict: 'approve' | 'block';
-	findings: ReviewFinding[];
-	/**
-	 * The deliberately-authored, human-readable REVIEW prose the agent emits as a
-	 * FIELD inside the single verdict JSON object (slice `review-comment-prose-field`):
-	 * it leads with Approved/Blocked and gives the lenses + destination-check
-	 * reasoning, written FOR a human landing on the PR. This is what the in-core
-	 * PR-comment poster posts — a first-class authored artifact, NOT the unstructured
-	 * residue around the JSON (the old verbatim-output path posted the agent's
-	 * stream-of-consciousness; see
-	 * `work/findings/review-comment-posts-agent-thinking-not-a-review.md`). Advisory
-	 * only — it gates nothing; the verdict/routing decision uses ONLY
-	 * `verdict`/`findings`. Absent when the agent emitted no `review` field (e.g. an
-	 * older test stub) ⇒ the poster no-ops.
-	 */
-	review?: string;
-}
 
 /** What the review gate needs to launch a fresh-context review of one slice. */
 export interface ReviewGateInput {
@@ -109,110 +88,38 @@ export interface ReviewGateInput {
  */
 export type ReviewGate = (input: ReviewGateInput) => Promise<ReviewVerdict>;
 
-/** Raised when the review agent ran but produced no parseable verdict. */
-export class ReviewParseError extends Error {}
-
 /**
- * Parse the `review` SKILL's emitted verdict out of the review agent's textual
- * output. The skill emits `{verdict, findings[…]}` (see its "Your output"); the
- * agent may wrap it in prose / a fenced block, so we extract the first JSON
- * object carrying a `verdict` field and validate its shape. Throws
- * {@link ReviewParseError} when no valid verdict is present (the caller treats an
- * unparseable verdict as an error → needs-attention, never a silent approve).
- */
-export function parseReviewVerdict(output: string): ReviewVerdict {
-	const span = extractJsonObjectSpan(output);
-	if (span === undefined) {
-		throw new ReviewParseError(
-			'review agent produced no parseable {verdict, findings} result',
-		);
-	}
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(output.slice(span.start, span.end));
-	} catch (err) {
-		throw new ReviewParseError(
-			`review verdict was not valid JSON: ${(err as Error).message}`,
-		);
-	}
-	// The verdict carries the agent's authored `review` prose FIELD (validated
-	// below); the in-core PR-comment poster posts that field. Routing still uses
-	// ONLY `verdict`/`findings`.
-	return validateVerdict(parsed);
-}
-
-/** Validate a parsed object is a `{verdict, review?, findings}` shape; normalise it. */
-function validateVerdict(parsed: unknown): ReviewVerdict {
-	if (typeof parsed !== 'object' || parsed === null) {
-		throw new ReviewParseError('review verdict was not an object');
-	}
-	const obj = parsed as Record<string, unknown>;
-	const verdict = obj.verdict;
-	if (verdict !== 'approve' && verdict !== 'block') {
-		throw new ReviewParseError(
-			`review verdict was not 'approve' or 'block' (got ${JSON.stringify(verdict)})`,
-		);
-	}
-	const rawFindings = Array.isArray(obj.findings) ? obj.findings : [];
-	const findings: ReviewFinding[] = rawFindings.map((f) => {
-		const item = (typeof f === 'object' && f !== null ? f : {}) as Record<
-			string,
-			unknown
-		>;
-		const severity = item.severity === 'blocking' ? 'blocking' : 'non-blocking';
-		return {
-			severity,
-			question: typeof item.question === 'string' ? item.question : '',
-			...(typeof item.context === 'string' ? {context: item.context} : {}),
-		};
-	});
-	return {
-		verdict,
-		...(typeof obj.review === 'string' ? {review: obj.review} : {}),
-		findings,
-	};
-}
-
-/**
- * Render the review-agent PROMPT: instruct a fresh-context agent to run the
- * `review` SKILL on the diff for `slug` against the slice that specified it, and
- * to EMIT a single `{verdict, review, findings[…]}` JSON object (so
- * {@link parseReviewVerdict} can read it). The single-JSON-object contract does
- * two jobs we keep BOTH of: it carries the machine verdict for routing AND it
- * STRUCTURES the agent's output. The `review` FIELD is the deliberately-authored,
- * human-readable review the PR-comment poster posts — so the comment is a
- * first-class authored artifact, not the agent's stream-of-consciousness around
- * the JSON (slice `review-comment-prose-field`;
- * `work/findings/review-comment-posts-agent-thinking-not-a-review.md`). The skill
- * itself carries the lenses + the destination check; this prompt frames the
- * artifact (code-vs-its-slice) and the required output shape.
+ * Render the review-agent PROMPT: instruct a fresh-context agent to apply the
+ * **review discipline** (`work/protocol/REVIEW-PROTOCOL.md`) to the code
+ * changes on this work branch against the slice that specified them, and to
+ * EMIT a single unified `ReviewVerdict` JSON object (so
+ * {@link parseReviewVerdict} can read it). The discipline body (the lenses +
+ * the destination check) lives in `REVIEW-PROTOCOL.md` — NOT inlined here —
+ * and the JSON-emitted-shape contract comes from
+ * {@link verdictContractPrompt}, the ONE shared helper called by all four
+ * review-prompt builders (slice `review-protocol-doc-and-shared-machinery`).
+ *
+ * This builder owns ONLY the PER-BUILDER framing: who you are (Gate 2 — PR/code
+ * review), what you are reviewing (code-vs-its-slice, the diff on this work
+ * branch), and which optional verdict channels to fill (the `review` prose for
+ * the in-core PR-comment poster; an in-scope DECISION ratification hunt; a
+ * conceptual-coherence check). The shared discipline body and the verdict
+ * contract are NOT duplicated here.
  */
 export function buildReviewPrompt(slug: string): string {
 	return [
-		`You are a FRESH-CONTEXT reviewer (Gate 2 — PR/code review). Run the`,
-		`\`review\` skill on the work for slice "${slug}": review the code changes`,
-		`on this work branch AGAINST the slice that specified it`,
+		`You are a FRESH-CONTEXT reviewer (Gate 2 — PR/code review). Review the`,
+		`code changes on this work branch AGAINST the slice that specified them`,
 		`(work/in-progress/${slug}.md or work/done/${slug}.md) and its source PRD.`,
 		``,
-		`Apply the review skill's lenses IN ORDER, ending in the destination check`,
-		`("if merged exactly as written, do we reach the slice/PRD goal?"). You are`,
-		`ADVERSARIAL and verify against what ACTUALLY LANDED (the diff), not intent.`,
+		reviewDisciplinePrompt(),
+		``,
 		`The acceptance gate (Gate 1 — build + tests + format) has ALREADY passed`,
 		`and is GREEN before you run (review runs only on a green gate), so ASSUME`,
 		`it is green and do NOT re-run build/tests/format — that is settled. You may`,
 		`still READ and reason about the tests for coverage/judgement; just do not`,
 		`re-execute the suite. Spend your budget on JUDGEMENT.`,
 		`Do NOT edit any files, run no git — you EMIT a verdict only.`,
-		``,
-		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
-		`{"verdict": "approve" | "block",`,
-		` "review": "<the review prose — see below>",`,
-		` "findings": [`,
-		`   {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}`,
-		` ]}`,
-		`Use "block" with at least one blocking finding if the diff does not deliver`,
-		`the slice, drifts from its premise, or hides a defect a human reviewer would`,
-		`flag; otherwise "approve".`,
 		``,
 		`ALSO HUNT for IN-SCOPE DECISIONS THE SLICE DID NOT SPECIFY — a non-obvious`,
 		`design choice the agent made on its own while building: a CROSS-SLICE`,
@@ -235,17 +142,21 @@ export function buildReviewPrompt(slug: string): string {
 		`reuse or rename instead of forking? A mechanism that is correct in isolation but`,
 		`INCOHERENT against the system's language is a defect — BLOCK if it re-means or`,
 		`forks a load-bearing concept or sits at the wrong layer; otherwise flag it as a`,
-		`coherence finding. (This is how a single concept gets applied at the wrong layer`,
-		`and the inconsistency survives many slices — consistency/coherence is a`,
-		`first-class quality, not a nicety.)`,
+		`coherence finding.`,
 		``,
-		`The "review" field is a human-readable REVIEW that gets posted as a comment on`,
-		`the PR — write it FOR a human landing there, NOT as scratch thinking. LEAD with`,
-		`the verdict ("Approved" or "Blocked") and then give the lenses' reasoning and`,
-		`the destination check ("merged as written, do we reach the slice/PRD goal?").`,
-		`Write it deliberately; do NOT narrate your process ("Let me check…"). Make it as`,
-		`long or as short as the review genuinely needs — there is NO length limit and no`,
-		`need to pad. It is plain text inside the JSON string (escape newlines as \\n).`,
+		verdictContractPrompt(),
+		``,
+		`Fill the "review" field: a human-readable REVIEW that gets posted as a`,
+		`comment on the PR — write it FOR a human landing there, NOT as scratch`,
+		`thinking. LEAD with the verdict ("Approved" or "Blocked") and then give the`,
+		`lenses' reasoning and the destination check ("merged as written, do we reach`,
+		`the slice/PRD goal?"). Write it deliberately; do NOT narrate your process`,
+		`("Let me check…"). Make it as long or as short as the review genuinely`,
+		`needs — there is NO length limit and no need to pad. It is plain text inside`,
+		`the JSON string (escape newlines as \\n). Do NOT fill "edits"/"edit"/`,
+		`"questions"/"uncertainSlices"/"decompositionUnclear" — those channels are`,
+		`for other review callers (the slicer loop / the lone-slice review), not this`,
+		`code-review gate.`,
 	].join('\n');
 }
 
@@ -332,31 +243,35 @@ export function harnessReviewGate(
 
 /**
  * Render the SLICE-SET acceptance-gate PROMPT — the slice-path mirror of
- * {@link buildReviewPrompt} (slice `slice-acceptance-gate`). Instead of reviewing
- * a code diff against ONE slice, this instructs a FRESH-CONTEXT agent to review
- * the WHOLE candidate SET of `work/backlog/*` slices produced for PRD `slug`,
- * using the `review` skill's SET-OF-SLICES lens (coherence / dependency graph /
- * gaps + overlap / "if every slice is built exactly as written, do we reach the
- * system the PRD describes, and is each slice correct-if-implemented?"). It emits
- * the SAME single `{verdict, review, findings[…]}` object so
- * {@link parseReviewVerdict} reads it identically.
+ * {@link buildReviewPrompt} (slice `slice-acceptance-gate`). Instead of
+ * reviewing a code diff against ONE slice, this instructs a FRESH-CONTEXT
+ * agent to review the WHOLE candidate SET of slices produced for PRD `slug`,
+ * using the **review discipline**'s SET-OF-SLICES lens (coherence / dependency
+ * graph / gaps + overlap / "if every slice is built exactly as written, do we
+ * reach the system the PRD describes, and is each slice
+ * correct-if-implemented?"). It emits the SAME unified `ReviewVerdict` shape
+ * so {@link parseReviewVerdict} reads it identically.
  *
- * This is a TERMINAL, ONE-SHOT accept/reject gate (it runs BEFORE the slice set
- * integrates) — NOT the slicer IMPROVER loop (`slicer-review-loop.ts`), which
- * EDITS slices between passes. This prompt explicitly forbids editing: the agent
- * EMITS a verdict only; an `approve` lands the set, a `block` routes it to
- * needs-attention.
+ * This is a TERMINAL, ONE-SHOT accept/reject gate (it runs BEFORE the slice
+ * set integrates) — NOT the slicer IMPROVER loop (`slicer-review-loop.ts`),
+ * which EDITS slices between passes. This prompt explicitly forbids editing.
+ *
+ * Per-builder framing only — the discipline body lives in
+ * `work/protocol/REVIEW-PROTOCOL.md`; the JSON shape comes from
+ * {@link verdictContractPrompt}.
  */
 export function buildSliceAcceptancePrompt(slug: string): string {
 	return [
-		`You are a FRESH-CONTEXT reviewer (the slice-SET ACCEPTANCE GATE). Run the`,
-		`\`review\` skill in its SET-OF-SLICES mode over the candidate slices this`,
-		`slicing run produced for the PRD "${slug}" — the new/changed`,
-		`\`work/backlog/*.md\` files on this work branch — AGAINST their source PRD`,
-		`(work/prd/${slug}.md — the held PRD stays in prd/ while it is being sliced).`,
+		`You are a FRESH-CONTEXT reviewer (the slice-SET ACCEPTANCE GATE). Review`,
+		`the candidate slices this slicing run produced for the PRD "${slug}" — the`,
+		`new/changed candidate slice files on this work branch — AGAINST their source`,
+		`PRD (work/prd/${slug}.md — the held PRD stays in prd/ while it is being`,
+		`sliced).`,
 		``,
-		`Review the WHOLE SET as a SET, not each slice in isolation. Apply the review`,
-		`skill's set-of-slices lens, ending in the destination check:`,
+		reviewDisciplinePrompt(),
+		``,
+		`Review the WHOLE SET as a SET, not each slice in isolation. The set-level`,
+		`framings the review discipline names:`,
 		`  - COHERENCE — do the slices speak the PRD's (and the system's) language`,
 		`    consistently; no slice re-means or forks a concept another slice/the PRD`,
 		`    already owns?`,
@@ -368,28 +283,18 @@ export function buildSliceAcceptancePrompt(slug: string): string {
 		`    reach the system the PRD describes, and is each slice individually`,
 		`    correct-if-implemented (no slice that compiles but builds the wrong thing)?`,
 		``,
-		`You are ADVERSARIAL and judge the slices AS WRITTEN, not the PRD's intent.`,
 		`This is a TERMINAL one-shot accept/reject gate: do NOT edit any slice, do NOT`,
 		`run git — you EMIT a verdict only (the slicer improver loop, a SEPARATE`,
 		`concept, is what edits slices; this gate does not).`,
 		``,
-		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
-		`{"verdict": "approve" | "block",`,
-		` "review": "<the review prose — see below>",`,
-		` "findings": [`,
-		`   {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}`,
-		` ]}`,
-		`Use "block" with at least one blocking finding if the SET is incoherent, the`,
-		`dependency graph is unsound, the PRD is not covered (a gap) or is double-`,
-		`covered (an overlap), or a slice would build the wrong thing; otherwise`,
-		`"approve".`,
+		verdictContractPrompt(),
 		``,
-		`The "review" field is a human-readable REVIEW of the SET — write it FOR a`,
-		`human deciding whether to land these slices. LEAD with the verdict ("Approved"`,
-		`or "Blocked") and then give the lenses' reasoning and the destination check`,
-		`("if every slice is built as written, do we reach the PRD's system?"). Write`,
-		`it deliberately; do NOT narrate your process. It is plain text inside the JSON`,
-		`string (escape newlines as \\n).`,
+		`Fill the "review" field: a human-readable REVIEW of the SET — write it FOR a`,
+		`human deciding whether to land these slices. LEAD with the verdict`,
+		`("Approved" or "Blocked") and then give the lenses' reasoning and the`,
+		`destination check. Do NOT fill the improver-loop channels ("edits",`,
+		`"uncertainSlices", "decompositionUnclear") — this is a terminal gate, not the`,
+		`loop.`,
 	].join('\n');
 }
 

@@ -295,14 +295,34 @@ describe('parseReviewVerdict — reads the review SKILL verdict shape', () => {
 });
 
 describe('buildReviewPrompt — frames code-vs-its-slice + the required output', () => {
-	it('names the slug, the review skill, and demands the JSON verdict shape', () => {
+	it('names the slug, the in-band REVIEW-PROTOCOL.md, and demands the JSON verdict shape', () => {
 		const p = buildReviewPrompt('my-slice');
-		expect(p).toMatch(/review` skill/);
+		// The discipline is pointed at IN-BAND (`work/protocol/REVIEW-PROTOCOL.md`)
+		// — NOT "the review skill" by name (slice
+		// `review-protocol-doc-and-shared-machinery`: skill-named prompts that are
+		// not resolvable in-band silently degrade in target repos).
+		expect(p).toMatch(/work\/protocol\/REVIEW-PROTOCOL\.md/);
 		expect(p).toContain('my-slice');
 		expect(p).toMatch(/"verdict"/);
 		expect(p).toMatch(/approve.*block|block.*approve/s);
 		// Fresh-context reviewer that EDITS nothing.
 		expect(p).toMatch(/EMIT a verdict only|Do NOT edit/i);
+	});
+
+	it("does NOT re-inline the review discipline's lenses or verdict-contract prose", () => {
+		// Prompt-snapshot guard (slice `review-protocol-doc-and-shared-machinery`):
+		// the discipline body lives ONCE in `REVIEW-PROTOCOL.md`, and the
+		// JSON-emitted-shape prose lives ONCE in `verdictContractPrompt`. The
+		// builder must NOT re-inline lens prose verbatim. We check for distinctive
+		// markers of the OLD inlined discipline that would indicate drift.
+		const p = buildReviewPrompt('my-slice');
+		// The old prompt re-stated the discipline's tagline "lenses IN ORDER" —
+		// that prose is now in REVIEW-PROTOCOL.md and the shared discipline-prompt
+		// helper, NOT a per-builder copy. The shared helper itself uses the same
+		// phrase (it lives in `review-verdict.ts`), so only ONE occurrence is
+		// allowed in any given builder's output.
+		const matches = p.match(/lenses IN ORDER/g) ?? [];
+		expect(matches.length).toBeLessThanOrEqual(1);
 	});
 
 	it('tells the reviewer Gate 1 (build+tests+format) already passed → assume green, do NOT re-run the suite', () => {
@@ -377,8 +397,8 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 		});
 		// The reviewModel override rode the EXISTING LaunchInput.model seam.
 		expect(seenModel).toBe('review/override');
-		// The review prompt (the skill framing) was fed to the launch.
-		expect(seenPrompt).toMatch(/review` skill/);
+		// The review prompt (the in-band discipline framing) was fed to the launch.
+		expect(seenPrompt).toMatch(/work\/protocol\/REVIEW-PROTOCOL\.md/);
 		expect(verdict.verdict).toBe('approve');
 	});
 

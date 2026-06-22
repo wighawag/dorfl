@@ -33,6 +33,13 @@ import {
 } from './issue-provider.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
 import {
+	parseReviewVerdict,
+	reviewDisciplinePrompt,
+	verdictContractPrompt,
+	type ReviewFinding,
+	type ReviewVerdict,
+} from './review-verdict.js';
+import {
 	stampIntakeMarker,
 	computeSeenDelta,
 	type IntakeMarkerKind,
@@ -1894,43 +1901,20 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 const LONE_SLICE_REVIEW_MAX_ROUNDS = 3;
 
 /**
- * A single finding from the lone-slice review pass — mirrors the `review` SKILL's
- * finding shape (and the slicer loop's `SliceReviewFinding`), scoped to ONE slice.
+ * Backwards-compatible alias for {@link ReviewFinding} (slice
+ * `review-protocol-doc-and-shared-machinery`). Existing imports keep compiling;
+ * new code should reach for `ReviewFinding` from `review-verdict.ts`.
  */
-export interface LoneSliceReviewFinding {
-	/** Whether this finding BLOCKS (keeps the slice from emitting) or is a nit. */
-	severity: 'blocking' | 'non-blocking';
-	/** The question / defect, with enough context to act. */
-	question: string;
-	/** The relevant excerpt / reasoning. */
-	context?: string;
-}
+export type LoneSliceReviewFinding = ReviewFinding;
 
 /**
- * The verdict the lone-slice review agent emits PER ROUND. Mirrors the slicer
- * loop's `{verdict, findings, edit}` conventions but for the SINGLE drafted slice:
- *   - `verdict` — `approve` = no NEW blocking issue (CONVERGE); `block` = a blocking
- *     issue remains (keep iterating / flip to ASK).
- *   - `edit` — an OPTIONAL full REPLACEMENT slice body (the markdown AFTER the
- *     frontmatter) the runner applies IN MEMORY to the candidate before the next
- *     round. No `work/backlog/` write happens (the slice is not emitted yet).
- *   - `questions` — the open question(s) carried into the ASK comment body when a
- *     blocking issue has NO clear thread answer (the non-converge sink).
- *
- * The SET/graph/overlap lenses are N=1 and are OFF (the prompt says so); there is
- * no `uncertainSlices` / `decompositionUnclear` channel (those are slicer-loop
- * SET-level sinks intake deliberately does NOT have).
+ * The lone-slice review verdict shape is now the UNIFIED {@link ReviewVerdict}.
+ * The lone-slice caller consumes the `edit` / `questions` channels of the wide
+ * type; other review callers consume different channels. The SET/graph/overlap
+ * lenses are still N=1-OFF in the PROMPT (intake never spawns the slicer loop's
+ * set-level sinks); the type itself is shared.
  */
-export interface LoneSliceReviewVerdict {
-	/** `approve` = converge (no new blocking issue); `block` = a blocking issue remains. */
-	verdict: 'approve' | 'block';
-	/** The findings this round surfaced. */
-	findings: LoneSliceReviewFinding[];
-	/** An OPTIONAL full replacement slice BODY applied IN MEMORY before the next round. */
-	edit?: string;
-	/** The open question(s) for the ASK comment body on a non-converge. */
-	questions?: string[];
-}
+export type LoneSliceReviewVerdict = ReviewVerdict;
 
 /** What the lone-slice review gate needs to launch / answer ONE review round. */
 export interface LoneSliceReviewGateInput {
@@ -2204,18 +2188,23 @@ export function harnessLoneSliceReviewGate(
 				}`,
 			);
 		}
-		return parseLoneSliceReviewVerdict(launched.output ?? '');
+		return parseReviewVerdict(launched.output ?? '');
 	};
 }
 
 /**
- * Build the LONE-SLICE review PROMPT: instruct an agent to run the `review` skill's
- * lenses on the SINGLE drafted slice — per-slice WELL-FORMEDNESS + the DESTINATION
- * check ("if this slice is built exactly as written, do we end up with the behaviour
- * issue #N asks for?"). The SET/graph/overlap lenses are N=1 and are EXPLICITLY OFF
- * (there is no set to compose). A round may propose an EDIT (the FULL replacement
- * slice body) the runner applies IN MEMORY and re-reviews; converge when a round
- * finds NO new blocking issue, else flag the open question(s) for the human.
+ * Build the LONE-SLICE review PROMPT: instruct a fresh-context agent to apply
+ * the **review discipline** (`work/protocol/REVIEW-PROTOCOL.md`) to the SINGLE
+ * drafted slice — per-slice well-formedness + the destination check ("if this
+ * slice is built exactly as written, do we end up with the behaviour issue #N
+ * asks for?"). The SET / graph / overlap lenses are N=1 and EXPLICITLY OFF.
+ * A round may propose an `edit` (the FULL replacement slice body) the runner
+ * applies IN MEMORY and re-reviews; converge when a round finds NO new blocking
+ * issue, else carry the open `questions` into the ASK comment for the human.
+ *
+ * The discipline body and the JSON-emitted-shape contract are SHARED helpers
+ * (slice `review-protocol-doc-and-shared-machinery`); this builder owns ONLY
+ * the lone-slice-specific framing.
  */
 export function buildLoneSliceReviewPrompt(
 	input: LoneSliceReviewGateInput,
@@ -2223,8 +2212,9 @@ export function buildLoneSliceReviewPrompt(
 	return [
 		`You are a FRESH-CONTEXT reviewer in intake's BOUNDED lone-slice review. A`,
 		`single slice has just been drafted from GitHub issue #${input.issueNumber}.`,
-		`Review THIS ONE slice adversarially with the \`review\` skill (round`,
-		`${input.round} of at most ${LONE_SLICE_REVIEW_MAX_ROUNDS}).`,
+		`Review THIS ONE slice adversarially (round ${input.round} of at most ${LONE_SLICE_REVIEW_MAX_ROUNDS}).`,
+		'',
+		reviewDisciplinePrompt(),
 		'',
 		`Drafted slice slug: ${input.slug}`,
 		`Drafted slice title: ${input.title}`,
@@ -2262,80 +2252,25 @@ export function buildLoneSliceReviewPrompt(
 		'human, not another edit — `block` and put it in `questions`: the runner asks the',
 		'human, carrying this draft. Flag, do not guess.',
 		'',
-		'## Output — ONE fenced JSON block (and nothing else that looks like JSON)',
+		verdictContractPrompt(),
 		'',
-		'```json',
-		'{"verdict": "approve" | "block", "findings": [{"severity": "blocking" | "non-blocking", "question": "…", "context": "…"}], "edit": "<full replacement slice body>", "questions": ["…"]}',
-		'```',
-		'',
-		'- Use `approve` with no blocking findings to CONVERGE (the natural terminator).',
-		'- Supply `edit` only when tightening the draft fixes the finding; omit it',
-		'  otherwise.',
-		'- Supply `questions` only when a blocking issue needs the HUMAN (no clear thread',
-		'  answer); omit it otherwise. `verdict` MUST be exactly `approve` or `block`.',
+		'Fill the channels appropriate to THIS caller (the lone-slice review):',
+		'  - `edit` — a single full-replacement slice body (NOT a path; the slice is',
+		'    not yet emitted) when tightening the draft fixes the finding.',
+		'  - `questions` — the open question(s) for the human when a blocking issue',
+		'    has no clear thread answer.',
+		'Do NOT fill `review` / `edits` / `uncertainSlices` / `decompositionUnclear`',
+		"— those are other callers' channels.",
 	].join('\n');
 }
 
 /**
- * Parse the lone-slice review verdict out of the review agent's textual output.
- * Mirrors {@link parseIntakeVerdict} / `parseSliceReviewVerdict`: pull the first JSON
- * object carrying a `"verdict"` field via the SHARED {@link extractJsonObjectSpan},
- * `JSON.parse` it, and validate the shape. THROWS on no JSON / invalid JSON / a
- * `verdict` not in `{approve,block}` — the caller maps any throw onto `agent-failed`
- * (never a silent emit of the un-reviewed slice).
+ * Backwards-compatible alias for the unified {@link parseReviewVerdict}
+ * (slice `review-protocol-doc-and-shared-machinery`). The lone-slice review
+ * verdict is now the unified {@link ReviewVerdict}; the alias keeps existing
+ * tests/callers compiling.
  */
-export function parseLoneSliceReviewVerdict(
-	output: string,
-): LoneSliceReviewVerdict {
-	const span = extractJsonObjectSpan(output, 'verdict');
-	if (span === undefined) {
-		throw new Error(
-			'intake lone-slice review agent produced no parseable {verdict, …} result.',
-		);
-	}
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(output.slice(span.start, span.end));
-	} catch (err) {
-		throw new Error(
-			`intake lone-slice review verdict was not valid JSON: ${(err as Error).message}`,
-		);
-	}
-	if (typeof parsed !== 'object' || parsed === null) {
-		throw new Error('intake lone-slice review verdict was not an object.');
-	}
-	const obj = parsed as Record<string, unknown>;
-	const verdict = obj.verdict;
-	if (verdict !== 'approve' && verdict !== 'block') {
-		throw new Error(
-			`intake lone-slice review verdict was not 'approve' or 'block' (got ` +
-				`${JSON.stringify(verdict)}).`,
-		);
-	}
-	const rawFindings = Array.isArray(obj.findings) ? obj.findings : [];
-	const findings: LoneSliceReviewFinding[] = rawFindings.map((f) => {
-		const item = (typeof f === 'object' && f !== null ? f : {}) as Record<
-			string,
-			unknown
-		>;
-		const severity = item.severity === 'blocking' ? 'blocking' : 'non-blocking';
-		return {
-			severity,
-			question: typeof item.question === 'string' ? item.question : '',
-			...(typeof item.context === 'string' ? {context: item.context} : {}),
-		};
-	});
-	const edit = typeof obj.edit === 'string' ? obj.edit : undefined;
-	const questions = Array.isArray(obj.questions)
-		? obj.questions.filter((q): q is string => typeof q === 'string')
-		: [];
-	return {
-		verdict,
-		findings,
-		...(edit !== undefined ? {edit} : {}),
-		...(questions.length > 0 ? {questions} : {}),
-	};
-}
+export const parseLoneSliceReviewVerdict = parseReviewVerdict;
 
 /**
  * Build the intake decision BRIEF (an inline prompt builder, like `buildSlicingBrief`

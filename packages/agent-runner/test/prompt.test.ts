@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {
 	extractPromptSection,
 	extractCanonicalWrapperTemplate,
-	resolveClaimProtocolPath,
+	resolveProtocolDoc,
 	wrapper,
 	buildAgentPrompt,
 	buildContinueBlock,
@@ -166,12 +166,19 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(emitted).not.toContain('<prd>');
 	});
 
-	it('resolveClaimProtocolPath finds the bundled contract by default', () => {
-		const resolved = resolveClaimProtocolPath();
+	it('resolveProtocolDoc finds the bundled contract by default', () => {
+		const resolved = resolveProtocolDoc('CLAIM-PROTOCOL.md');
 		expect(resolved.endsWith('CLAIM-PROTOCOL.md')).toBe(true);
 		expect(readFileSync(resolved, 'utf8')).toContain(
 			'prompt handed to the work agent',
 		);
+	});
+
+	it('resolveProtocolDoc finds REVIEW-PROTOCOL.md by default (the set-vendor proof)', () => {
+		const resolved = resolveProtocolDoc('REVIEW-PROTOCOL.md');
+		expect(resolved.endsWith('REVIEW-PROTOCOL.md')).toBe(true);
+		// The discipline body is present (a strong marker of the canonical doc).
+		expect(readFileSync(resolved, 'utf8')).toMatch(/destination check/i);
 	});
 
 	it('the assembled wrapper carries the machine-readable STOP sentinel form (Part A)', () => {
@@ -196,7 +203,7 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 	});
 });
 
-describe('resolveClaimProtocolPath — packaged-CLI-safe resolution order', () => {
+describe('resolveProtocolDoc — packaged-CLI-safe resolution order', () => {
 	let scratch: Scratch;
 	beforeEach(() => {
 		scratch = makeScratch('agent-runner-protocol-resolve-');
@@ -206,42 +213,42 @@ describe('resolveClaimProtocolPath — packaged-CLI-safe resolution order', () =
 	});
 
 	/** The vendored in-package copy the build step writes (`dist/protocol/`). */
-	const VENDORED = resolve(HERE, '..', 'dist', 'protocol', 'CLAIM-PROTOCOL.md');
+	const vendored = (name: string) =>
+		resolve(HERE, '..', 'dist', 'protocol', name);
 
-	it('prefers the TARGET repo work/protocol/ copy when present', () => {
-		// A set-up target repo carries its adopted copy; it must WIN over the
-		// bundled/dev fallbacks (it reflects the protocol version that repo adopted).
-		const protoDir = join(scratch.root, 'work', 'protocol');
-		mkdirSync(protoDir, {recursive: true});
-		const target = join(protoDir, 'CLAIM-PROTOCOL.md');
-		writeFileSync(target, 'TARGET-REPO PROTOCOL COPY\n');
+	for (const name of ['CLAIM-PROTOCOL.md', 'REVIEW-PROTOCOL.md']) {
+		it(`prefers the TARGET repo work/protocol/ copy when present (${name})`, () => {
+			// A set-up target repo carries its adopted copy; it must WIN over the
+			// bundled/dev fallbacks (it reflects the protocol version that repo adopted).
+			const protoDir = join(scratch.root, 'work', 'protocol');
+			mkdirSync(protoDir, {recursive: true});
+			const target = join(protoDir, name);
+			writeFileSync(target, `TARGET-REPO PROTOCOL COPY (${name})\n`);
 
-		const resolved = resolveClaimProtocolPath(scratch.root);
-		expect(resolved).toBe(target);
-		expect(readFileSync(resolved, 'utf8')).toContain(
-			'TARGET-REPO PROTOCOL COPY',
-		);
-	});
+			const resolved = resolveProtocolDoc(name, scratch.root);
+			expect(resolved).toBe(target);
+			expect(readFileSync(resolved, 'utf8')).toContain(
+				'TARGET-REPO PROTOCOL COPY',
+			);
+		});
 
-	it('falls back to the VENDORED in-package copy in a simulated installed layout', () => {
-		// Installed-CLI shape: the target repo has NO work/protocol/ and there is no
-		// reachable sibling skills/ tree. The resolver must pick the bundled copy
-		// (ranked above the dev-only skills/ walk) so prompt assembly never ENOENTs.
-		const resolved = resolveClaimProtocolPath(scratch.root);
-		expect(resolved).toBe(VENDORED);
-		expect(readFileSync(resolved, 'utf8')).toContain(
-			'prompt handed to the work agent',
-		);
-	});
+		it(`falls back to the VENDORED in-package copy in a simulated installed layout (${name})`, () => {
+			// Installed-CLI shape: the target repo has NO work/protocol/ and there is no
+			// reachable sibling skills/ tree. The resolver must pick the bundled copy
+			// (ranked above the dev-only skills/ walk) so prompt assembly never ENOENTs.
+			const resolved = resolveProtocolDoc(name, scratch.root);
+			expect(resolved).toBe(vendored(name));
+		});
 
-	it('the override short-circuits ahead of every other source', () => {
-		const protoDir = join(scratch.root, 'work', 'protocol');
-		mkdirSync(protoDir, {recursive: true});
-		writeFileSync(join(protoDir, 'CLAIM-PROTOCOL.md'), 'TARGET\n');
-		const override = join(scratch.root, 'explicit.md');
-		writeFileSync(override, 'OVERRIDE\n');
-		expect(resolveClaimProtocolPath(scratch.root, override)).toBe(override);
-	});
+		it(`the override short-circuits ahead of every other source (${name})`, () => {
+			const protoDir = join(scratch.root, 'work', 'protocol');
+			mkdirSync(protoDir, {recursive: true});
+			writeFileSync(join(protoDir, name), 'TARGET\n');
+			const override = join(scratch.root, 'explicit.md');
+			writeFileSync(override, 'OVERRIDE\n');
+			expect(resolveProtocolDoc(name, scratch.root, override)).toBe(override);
+		});
+	}
 });
 
 describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
@@ -269,7 +276,10 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		// we can prove THAT copy (not the bundled one) was the source.
 		// 'complete brief' is inside the canonical wrapper template; tagging it in the
 		// target copy proves THAT copy (not the bundled one) was the prompt source.
-		const bundled = readFileSync(resolveClaimProtocolPath(), 'utf8');
+		const bundled = readFileSync(
+			resolveProtocolDoc('CLAIM-PROTOCOL.md'),
+			'utf8',
+		);
 		expect(bundled).toContain('complete brief');
 		const tagged = bundled.replace(
 			'complete brief',

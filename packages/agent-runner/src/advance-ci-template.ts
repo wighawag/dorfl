@@ -62,7 +62,7 @@ export interface AdvanceCiTemplateValidation {
  * Locate the workflow template `docs/ci/advance-loop.yml.template`. It is a
  * REPO doc (the maintainer copies it into a consumer's `.github/workflows/`), so
  * it is resolved relative to this source file's monorepo position — the same
- * dev-monorepo walk `resolveClaimProtocolPath`'s last candidates use. `override`
+ * dev-monorepo walk `resolveProtocolDoc`'s last candidates use. `override`
  * short-circuits for tests / unusual layouts.
  */
 export function resolveAdvanceCiTemplatePath(override?: string): string {
