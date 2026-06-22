@@ -12,11 +12,14 @@ Rename the namespaced item-identity TOKENS used on per-item lock refs and in the
 
 Because existing per-item lock refs in a live arbiter are keyed by the OLD token (`refs/agent-runner/lock/prd-<slug>` / `slice-<slug>` and the `action`/identity body), they become unreachable after the cutover. Provide the one-shot recovery: ensure `gc --ledger` (the existing stuck/orphan-lock report + `release-lock`) can NAME and clear an old-token lock, and document the manual sweep step in the cutover notes. Do NOT add a long-lived back-compat reader.
 
+GENERATED CI is in scope: the CI template emitters (`advance-ci-template.ts`, `advance-lifecycle-template.ts`, `close-job-template.ts`, `intake-trigger-template.ts`) bake the `prd:`/`slice:` namespace tokens into the workflow YAML they emit (e.g. `advance prd:<slug>` legs, `.namespace + ":" + .slug` jq). These MUST be renamed WITH the tokens or freshly-generated CI emits dead `prd:`/`slice:` legs against a runner that no longer understands them. Rename the emitted tokens and update the template-snapshot tests in this task. (Agents never edit `.github/workflows/*` directly — you edit the EMITTERS, the source; see CONTEXT.md.)
+
 ## Acceptance criteria
 
 - [ ] No live (non-test-fixture, non-`work/`-history) code constructs or matches the tokens `prd:` / `slice:` / `prd-<slug>` / `slice-<slug>` as an item-identity namespace; the live tokens are `brief:` / `task:` (and the ref spelling `brief-<slug>` / `task-<slug>`).
 - [ ] Lock acquire / release / status / scan, the advance tick arg resolver (bare / `brief:` / `task:` / `obs:`), and the apply/surface identity strings all round-trip the new tokens.
 - [ ] `gc --ledger` (and `release-lock`) can name and clear a lock ref written under the OLD token; the cutover note documents the one-shot manual sweep.
+- [ ] The CI template emitters (`advance-ci-template.ts`, `advance-lifecycle-template.ts`, `close-job-template.ts`, `intake-trigger-template.ts`) emit the NEW tokens; their snapshot tests are updated; no emitted workflow carries `prd:`/`slice:` legs.
 - [ ] Tests cover the new tokens (rename the asserting fixtures/expectations in the SAME task); the suite is green.
 - [ ] No shared/global write is introduced; tests stay isolated to throwaway repos + local `--bare` arbiters.
 

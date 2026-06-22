@@ -11,15 +11,18 @@ covers: []
 Rename the operator-facing CLI surface as a CLEAN BREAK (Decision 3):
 
 - `do prd:<slug>` → `do brief:<slug>` (the tasking-transition invocation)
-- `--prds-land-in` → `--briefs-land-in`
+- the flag NAMES `--prds-land-in` → `--briefs-land-in` and `--slices-land-in` → `--tasks-land-in` (commander option definitions + help text)
 - `--slicer-loop` / `--no-slicer-loop` / `--slicer-loop-max` / `--slicer-loop-model` → `--tasker-loop*`
+
+SCOPE BOUNDARY (avoid double-ownership with the config task): the blocking task `rename-config-keys-slicing-to-tasking` already renamed the underlying config KEYS (`tasksLandIn`/`briefsLandIn`), their VALUE sets, and removed the `backlog`-alias shim. THIS task renames only the operator-facing FLAG NAMES + the `do` verb namespace, and rewires them to the already-renamed keys. Do not re-touch the config-key values or the shim.
 
 Update the commander wiring, help text, the arg validation/rejection messages (e.g. "operates on tasks, not briefs"), and every test asserting the old verb/flag spellings (in the SAME task).
 
 ## Acceptance criteria
 
 - [ ] `do brief:<slug>` is the live verb; `do prd:<slug>` is no longer accepted (clean break).
-- [ ] `--briefs-land-in` and `--tasker-loop*` are the live flags; the old spellings are gone (not aliased).
+- [ ] `--briefs-land-in`, `--tasks-land-in`, and `--tasker-loop*` are the live flag NAMES; the old spellings are gone (not aliased), resolving into the already-renamed config keys.
+- [ ] No config-KEY value or the `backlog` shim is re-touched here (owned by the blocking config task).
 - [ ] Help text + validation/rejection messages use task/brief/tasking vocabulary.
 - [ ] Tests assert the new verb/flags (renamed in this task); suite green.
 

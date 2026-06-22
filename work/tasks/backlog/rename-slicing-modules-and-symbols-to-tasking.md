@@ -12,7 +12,9 @@ Rename the source MODULE files and the in-code SYMBOLS that still carry slice/PR
 
 Module/file renames (and their test files): `slicing.ts`, `slicing-lock.ts`, `slicing-eligibility.ts`, `slicer-review-loop.ts`, `prd-complete.ts` → tasking-named equivalents (e.g. `tasking.ts`, `tasking-lock.ts`, `tasking-eligibility.ts`, `tasker-review-loop.ts`, `brief-complete.ts`).
 
-Symbol renames: `UncertainSlice` / `uncertainSlices`, `decompositionUnclear` (and the "PRD" in its doc comment), `buildSlicingBrief`, `markSliceNeedsAnswers`, `readCandidates`/`slices` fields, and the slice/PRD wording in doc comments across the touched modules. Keep the `SidecarDisposition` VALUE constants as already-correct (`promote-task` etc.); only fix stale slice/PRD wording in their comments.
+Symbol renames: `UncertainSlice` / `uncertainSlices`, `decompositionUnclear` (and the "PRD" in its doc comment), `buildSlicingBrief`, `markSliceNeedsAnswers`, `readCandidates`/`slices` fields, and the slice/PRD wording in doc comments across the touched modules (incl. `brand.ts`'s "PRDs, slices" mention). Keep the `SidecarDisposition` VALUE constants as already-correct (`promote-task` etc.); only fix stale slice/PRD wording in their comments.
+
+Standalone TEST-file renames (these carry slice/prd in the NAME but do not pair 1:1 with a renamed src module — rename them too, via `git mv`, updating their describe/it text): `slice-acceptance-gate.test.ts`, `intake-lone-slice-review.test.ts`, `pre-prd-staging-and-promote.test.ts`, `slicer-maxreview-config.test.ts`, plus the per-module test files paired with the renamed sources (`slicing*.test.ts`, `slicer-review-loop.test.ts`, `prd-complete.test.ts`). EXCLUDE `slicing-protocol-doc.test.ts` — it is renamed by the dependent protocol-doc task, not here.
 
 NOTE: this task does NOT rename the protocol-doc FILE or its inlined path in the tasking-brief prompt builder — that is the separate `rename-protocol-doc-to-tasking` task, which is blockedBy this one. Leave the `work/protocol/SLICING-PROTOCOL.md` path string for that task to avoid a double-touch conflict.
 
