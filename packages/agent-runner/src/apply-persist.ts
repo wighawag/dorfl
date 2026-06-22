@@ -20,6 +20,57 @@ import type {SidecarType} from './sidecar.js';
 import type {WorkFolderKey} from './work-layout.js';
 
 /**
+ * The lifecycle folders an item may rest in at APPLY-write-time, BY TYPE — the
+ * scan set for the identity-keyed item-path resolver below. Includes the
+ * STAGING folders (`tasks-backlog`, `briefs-proposed`) on purpose: a concurrent
+ * `promote` may have just `git mv`'d the item from staging into the pool
+ * between this apply's CAPTURE and WRITE, and the apply must resolve to the
+ * post-move path — the whole point of folder-agnostic apply (F3a of brief
+ * `staging-surface-and-apply-promote-safety`). Terminal-only folders
+ * (`cancelled`, `briefs-dropped`, `needs-attention`) are NOT here — once an
+ * item has reached a terminal, the apply is OVER, and a re-resolve into a
+ * terminal would mean the item has effectively vanished from the active
+ * lifecycle (callers handle that as the clean-exit `vanished` outcome below).
+ */
+const APPLY_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
+	task: ['tasks-backlog', 'tasks-todo', 'in-progress', 'done'],
+	brief: ['briefs-proposed', 'briefs-ready', 'briefs-tasked'],
+	observation: ['observations'],
+};
+
+/**
+ * Resolve the item's CURRENT on-disk path by IDENTITY — the apply-side
+ * folder-agnostic resolver, the symmetric twin of `sidecarPathFor`. Mirrors the
+ * sidecar's identity-keyed resolution shape: the path is derived from the
+ * `(type, slug)` identity at WRITE-TIME, never from a captured `ItemPath`.
+ *
+ * Scans the lifecycle folders the type may rest in (`APPLY_LIFECYCLE_FOLDERS`),
+ * including STAGING, and returns the FIRST match (one slug per type, so there
+ * is at most one). Returns `undefined` when the item file is GONE between
+ * capture and write (a concurrent `promote` to a terminal, a human delete, or a
+ * sibling triage move) — the apply rung then exits CLEAN (no commit, no ghost
+ * file), routed as the `vanished` outcome.
+ *
+ * This is the F3a fix from brief `staging-surface-and-apply-promote-safety`:
+ * the sidecar is already identity-keyed and folder-agnostic; the item path is
+ * now the same. A concurrent `promote` that `git mv`'d the item out from under
+ * a captured path can no longer cause a stale-path write.
+ */
+export function resolveItemPathByIdentity(
+	cwd: string,
+	item: string,
+): string | undefined {
+	const {type, slug} = resolveSidecarIdentity(item);
+	for (const folder of APPLY_LIFECYCLE_FOLDERS[type]) {
+		const rel = workItemRel(folder, `${slug}.md`);
+		if (existsSync(join(cwd, rel))) {
+			return rel;
+		}
+	}
+	return undefined;
+}
+
+/**
  * The PER-REGIME won't-proceed terminal a `dropped` disposition routes an item to,
  * by its TYPE — the slug-collision correctness fix (PRD
  * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped brief
@@ -130,7 +181,15 @@ export type ApplyTerminal =
 	/** Moved to `work/needs-attention/` (the existing bounce — a human must look). */
 	| 'needs-attention'
 	/** A "delete" answer RECOMMENDED deletion (the human deletes — never auto-delete). */
-	| 'delete-recommended';
+	| 'delete-recommended'
+	/**
+	 * The item file was GONE by the time apply tried to write (a concurrent
+	 * promote/terminal-move/delete between capture and write). Apply exited
+	 * CLEAN: no commit, no ghost file at the stale path. The matching benign
+	 * skip the surface/triage rungs already use (`advance.ts` `vanishedSkip`),
+	 * extended into the apply rung by the F3a folder-agnostic resolver.
+	 */
+	| 'vanished';
 
 export interface ApplyAnsweredQuestionsResult {
 	/** The terminal the apply reached. */
@@ -306,7 +365,7 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
 export function applyAnsweredQuestions(
 	options: ApplyAnsweredQuestionsOptions,
 ): ApplyAnsweredQuestionsResult {
-	const {cwd, item, itemPath, env} = options;
+	const {cwd, item, itemPath: capturedItemPath, env} = options;
 	const note = options.note ?? (() => {});
 
 	if (gitSoft(['rev-parse', '--git-dir'], cwd, env).status !== 0) {
@@ -314,6 +373,31 @@ export function applyAnsweredQuestions(
 	}
 
 	const {model, path: sidecarPath} = readSidecar(cwd, item);
+
+	// FOLDER-AGNOSTIC at WRITE-TIME (F3a, brief
+	// `staging-surface-and-apply-promote-safety`): re-resolve the item's CURRENT
+	// path by IDENTITY, mirroring the sidecar's already-folder-agnostic
+	// resolution. The captured `itemPath` is ADVISORY — a concurrent `promote`
+	// (`tasks/backlog → tasks/todo`, `briefs/proposed → briefs/ready`) may have
+	// moved the item between capture and now, and we MUST write the post-move
+	// path, never the stale one. If the item has vanished entirely, exit CLEAN
+	// (no commit, no ghost file) — the matching benign skip the surface/triage
+	// rungs already use.
+	const resolvedItemPath = resolveItemPathByIdentity(cwd, item);
+	if (resolvedItemPath === undefined) {
+		const message =
+			`apply ${item}: item file is gone (captured '${capturedItemPath}' is ` +
+			`stale and no current path resolves by identity) — exiting clean (no ` +
+			`commit), the apply rung does not recreate a vanished item.`;
+		note(message);
+		return {
+			outcome: 'vanished',
+			sidecarPath,
+			itemPath: capturedItemPath,
+			message,
+		};
+	}
+	const itemPath = resolvedItemPath;
 
 	// NEVER invent an answer: the apply only ever runs on a FULLY-answered sidecar
 	// (the classifier NO-OPs a subset). Assert the boundary so a mis-call is loud,
