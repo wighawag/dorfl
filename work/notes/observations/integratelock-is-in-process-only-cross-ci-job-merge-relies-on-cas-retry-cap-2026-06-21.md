@@ -3,6 +3,7 @@ title: '`integrateLock` is in-process only; cross-CI-job parallel merge relies o
 type: observation
 status: spotted
 spotted: 2026-06-21
+needsAnswers: true
 ---
 
 # `integrateLock` is in-process only; cross-CI-job parallel merge relies on the CAS retry loop, whose cap (5) was sized for in-process siblings
