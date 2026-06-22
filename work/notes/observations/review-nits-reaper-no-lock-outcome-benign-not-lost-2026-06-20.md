@@ -3,7 +3,7 @@ title: review-gate non-blocking nits for 'reaper-no-lock-outcome-benign-not-lost
 date: 2026-06-20
 status: open
 reviewOf: reaper-no-lock-outcome-benign-not-lost
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
