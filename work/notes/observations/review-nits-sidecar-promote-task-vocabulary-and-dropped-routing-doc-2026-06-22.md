@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'sidecar-promote-task-vocabulary-and-dr
 date: 2026-06-22
 status: open
 reviewOf: sidecar-promote-task-vocabulary-and-dropped-routing-doc
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
