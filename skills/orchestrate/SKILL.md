@@ -14,6 +14,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 - **`review`** (`skills/review/`) — to judge any artifact (task / brief / observation / code).
 - **`to-task`** (`skills/to-task/`) — to slice a ready brief into tasks (the `tasks/backlog` staging slot).
 - **`promote`** (`skills/promote/`) — to judge a STAGED task/brief (`tasks/backlog/` / `briefs/proposed/`) against its acceptance + destination before recommending its promotion into the pool.
+- **`answer-questions`** (`skills/answer-questions/`) — to walk the open `work/questions/` sidecars, DRAFT answers to the factual ones for the human to ratify, and DEFER the genuine-judgement ones into the step-3 batch.
 - **`to-brief`** (`skills/to-brief/`) — when an idea/observation has matured enough to become a brief.
 
 ## When to use vs. not
@@ -27,7 +28,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 
 ## Core invariant
 
-**Advance every rung you can; for everything else, ASK — never invent an answer.** Each `work/` item has autonomous rungs (triage, slice, build, apply-answer, surface-question) and a judgement residue (ambiguity, design forks, `needsAnswers`, stale premises). Do the autonomous part; surface the residue as batched questions; apply the answers; repeat. The human's throughput is the only limit; everything else is automatic.
+**Advance every rung you can; for everything else, ASK — never invent an answer.** Each `work/` item has autonomous rungs (triage, slice, build, promote, surface-question, answer/apply) and a judgement residue (ambiguity, design forks, `needsAnswers`, stale premises). Do the autonomous part; surface the residue as batched questions; apply the answers; repeat. The human's throughput is the only limit; everything else is automatic.
 
 ## The loop
 
@@ -40,6 +41,7 @@ Read across ALL buckets and build a single picture of state + what each item nee
 - **`work/briefs/ready/`** — for each brief: is it already sliced (does it RESIDE in `work/briefs/tasked/`)? `humanOnly`/`needsAnswers`? `briefAfter:` satisfied? → **sliceable now**, **blocked on a dep**, or **blocked on a human answer**. (Tasked-ness is folder residence, not a `sliced:` marker.)
 - **STAGING** — `work/tasks/backlog/` (review-first tasks) and `work/briefs/proposed/` (review-first briefs), the items awaiting human promotion into the pool. NOT built/sliced here; they are a **promotion rung** (step 2, compose `promote`). Either folder may be absent when empty per the contract — treat a missing staging folder as "nothing awaiting promotion", not an error.
 - **`work/tasks/todo/`** — the task dependency graph (READY / BLOCKED / GATED), AND each ready task's **freshness** (drifted vs current `tasks/done/`+code — same check `drive-backlog` step 1 does).
+- **`work/questions/`** — open question sidecars (a `<type>-<slug>.md` with an unanswered entry). Each is an item PAUSED on an answer; classify each open question factual-vs-judgement for the answer rung (step 2, compose `answer-questions`). A missing/empty `work/questions/` means "no pending questions", per the empty-folder rule — not an error.
 - **needs-attention** — stuck items (their per-item lock is `state: stuck`) + the recorded reason; each wants a human decision (requeue-continue / requeue-reset / re-scope / drop). Read them via `agent-runner status`/`scan` (which read the lock refs).
 
 Produce a short **state map**: what's ready to build, what's sliceable, what's triageable, and what's parked on a human.
@@ -55,7 +57,8 @@ Do the autonomous rungs that PREPARE work — i.e. everything EXCEPT building re
   - Then **review the produced tasks** (compose `review`; the slicer's own review→edit loop also runs on the `do brief:` path). Newly-produced tasks feed back into the survey (they may be READY, or carry their own questions).
 - **Staged items awaiting promotion** (`tasks/backlog/`, `briefs/proposed/`) → run the **promotion rung**: for each, compose `promote` (review + freshness + pool-readiness gate) and emit promote / keep-staged / drop. A clear PROMOTE is recommended to the human (you never move it yourself — the runner's `promote` verb / the human does the `git mv`); a KEEP-STAGED with a fixable gap, or a judgement-call promotion, becomes a step-3 question; a clear DROP routes to the regime terminal. Promotion is the human review-gate, so the MOVE is always the human's/runner's — you surface the verdict.
 - **Clearly-dispositionable observations** → triage them (route/keep/delete) where the disposition is obvious; the ambiguous ones become questions (step 3).
-- **Apply any human answers** you already have from earlier in the session → flip the relevant `needsAnswers`, fill the task/brief gap, which may make new items advanceable (re-run step 1's classification for them).
+- **Open question sidecars** (`work/questions/`) → run the **answer rung**: compose `answer-questions` over the pending sidecars. It DRAFTS answers to the factual ones (each cited to its evidence) for the human to RATIFY — a ratified draft is a human-authored answer you then apply — and DEFERS the genuine-judgement ones into the step-3 batch. You never invent/finalise an answer (the human is the clock); you draft for ratification and surface the rest.
+- **Apply any human answers** you already have (ratified drafts from the answer rung, plus answers from earlier in the session) → flip the relevant `needsAnswers`, fill the task/brief gap, which may make new items advanceable (re-run step 1's classification for them).
 
 (Ready tasks are NOT built here — they accumulate for step 4, after the residue is resolved.)
 

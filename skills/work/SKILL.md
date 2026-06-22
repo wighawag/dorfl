@@ -1,7 +1,7 @@
 ---
 name: work
 disable-model-invocation: true
-description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-brief / to-task / drive-backlog / orchestrate / triage-observations / review / surface-questions / capture-signal to use."
+description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-brief / to-task / drive-backlog / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
 ---
 
 # Work (the router)
@@ -30,6 +30,8 @@ A starting situation that generates work, then merges onto the main flow.
 - **`capture-signal`**: the REFLEX. The moment you NOTICE something off the current task's path (drift, a recurring failure, surprising external behaviour, an out-of-scope opportunity, a decision worth recording), record it into the right `work/` bucket before it evaporates. The INVERSE of `triage-observations`.
 - **`review`**: the adversarial review discipline for any `work/`-protocol artifact (task, brief, code-vs-its-task, captured note). Emits a verdict; the caller routes it. Composed by `drive-backlog` / `orchestrate` / the review gate.
 - **`surface-questions`**: GATHER the open-judgement residue for ONE item and EMIT questions; write nothing. The advance engine's surface-question rung (or the no-runner manual path). Composes `review` / `to-task` unchanged.
+- **`promote`** (human-invoked): the pre-promotion checklist. Judge ONE staged item (`tasks/backlog/` / `briefs/proposed/`) — review + freshness + pool-readiness — and emit promote / keep-staged / drop. Writes/moves nothing; the human or the runner's `promote` verb does the move. The staging→pool review-gate discipline.
+- **`answer-questions`** (human-invoked): the read-side mirror of `surface-questions`. Walk the open `work/questions/` sidecars, DRAFT answers to the factual ones for the human to ratify (cited to evidence), DEFER the genuine-judgement ones with context + a suggested default. Proposes; never finalises — the human is the clock.
 
 ## What this repo deliberately does NOT have
 
