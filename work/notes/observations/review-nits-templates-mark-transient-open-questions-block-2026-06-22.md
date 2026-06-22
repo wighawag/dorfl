@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'templates-mark-transient-open-question
 date: 2026-06-22
 status: open
 reviewOf: templates-mark-transient-open-questions-block
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
