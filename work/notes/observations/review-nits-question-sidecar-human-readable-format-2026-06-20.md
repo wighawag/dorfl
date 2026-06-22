@@ -4,6 +4,7 @@ date: 2026-06-20
 status: open
 reviewOf: question-sidecar-human-readable-format
 needsAnswers: false
+triaged: keep
 ---
 
 ## Non-blocking review findings
@@ -27,3 +28,11 @@ is their durable home for triage — promote-to-slice / keep / delete.
 
 Promoted to a new backlog slice `work/tasks/todo/review-nits-question-sidecar-human-readable-format-2026-06-20.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:review-nits-question-sidecar-human-readable-format-2026-06-20` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation's own body already records it was triaged and promoted to work/tasks/todo/review-nits-question-sidecar-human-readable-format-2026-06-20.md; this is an unambiguous map to that existing slice.
