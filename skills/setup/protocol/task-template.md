@@ -8,6 +8,23 @@ blockedBy: [] # slugs that must reach work/tasks/done/ first; [] = startable now
 covers: [] # optional: user-story numbers within `brief` this task covers
 ---
 
+<!-- open-questions -->
+<!--
+  TRANSIENT BLOCK — stripped by the apply rung on full resolution.
+  While the task has unresolved questions blocking autonomous build:
+    1. Set `needsAnswers: true` in the frontmatter above.
+    2. List the questions under the `## Open questions` heading below.
+    3. Clear the flag (and let apply strip this block) once they are answered.
+  Delete the whole fenced block — markers and all — if the task launches fully resolved.
+-->
+
+## Open questions
+
+1. <question one>
+2. <question two>
+
+<!-- /open-questions -->
+
 ## What to build
 
 A concise description of this vertical slice — the end-to-end behaviour (a thin path through every layer: schema → logic → API/UI → tests), NOT a layer-by-layer implementation plan. Avoid specific file paths / code snippets (they go stale).

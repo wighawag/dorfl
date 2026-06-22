@@ -72,16 +72,17 @@ export type SidecarType = 'brief' | 'task' | 'observation';
 /**
  * The optional triage/terminal routing an answered triage entry carries.
  *
- * `dropped` is the GENERIC "won't-proceed" terminal — it ROUTES the item to
- * `work/dropped/` (slice `generic-terminal-dropped-folder-generalising-out-of-scope`,
- * PRD `staging-pool-position-gate-and-trust-model` US #16/17/18). It GENERALISES
- * the previous `out-of-scope` disposition (which routed to `work/out-of-scope/`):
- * the specific REASON an item was dropped (`superseded by <x>` / `out-of-scope` /
- * `duplicate` / `abandoned`) lives in the item BODY (a `reason:` line), NOT in
- * the disposition or the folder — status is the folder (WORK-CONTRACT rule 3).
+ * `dropped` is the GENERIC "won't-proceed" terminal — it routes the item to its
+ * per-regime terminal (`work/tasks/cancelled/` for a task, `work/briefs/dropped/`
+ * for a brief; the flat top-level `work/dropped/` was retired by the
+ * `folder-taxonomy-reorg-and-rename` migration as a slug-collision fix). It
+ * GENERALISES the previous `out-of-scope` disposition: the specific REASON an
+ * item was dropped (`superseded by <x>` / `out-of-scope` / `duplicate` /
+ * `abandoned`) lives in the item BODY (a `reason:` line), NOT in the disposition
+ * or the folder — status is the folder (WORK-CONTRACT rule 3).
  */
 export type SidecarDisposition =
-	| 'promote-slice'
+	| 'promote-task'
 	| 'promote-adr'
 	| 'keep'
 	| 'delete'
@@ -240,7 +241,7 @@ export function sidecarPathFor(identity: string): string {
 const ANSWER_MARKER = '**Your answer** (write below this line):';
 
 const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
-	'promote-slice',
+	'promote-task',
 	'promote-adr',
 	'keep',
 	'delete',

@@ -30,7 +30,7 @@ import {fileURLToPath} from 'node:url';
  * `resolveProtocolDoc`. Data-driven on purpose — adding a new runner-invoked
  * discipline appends its doc here (no per-doc copy step).
  */
-const DOCS = ['CLAIM-PROTOCOL.md', 'REVIEW-PROTOCOL.md'];
+const DOCS = ['CLAIM-PROTOCOL.md', 'REVIEW-PROTOCOL.md', 'SURFACE-PROTOCOL.md'];
 
 const here = dirname(fileURLToPath(import.meta.url));
 // here = .../packages/agent-runner/scripts; the source lives at the monorepo root.

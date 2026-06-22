@@ -1,0 +1,22 @@
+---
+title: review-gate non-blocking nits for 'apply-reconciles-resolved-brief-body' (Gate 2 approve)
+date: 2026-06-22
+status: open
+reviewOf: apply-reconciles-resolved-brief-body
+needsAnswers: true
+---
+
+## Non-blocking review findings
+
+The PR/code review gate (Gate 2) APPROVED 'apply-reconciles-resolved-brief-body' but raised the
+following non-blocking findings (nits). They do not block integration; this
+is their durable home for triage — promote-to-slice / keep / delete.
+
+- Decisions block is in the code docstring but not in the PR / done record — should the three behavioural choices (strip-all-pairs, fail-safe on unmatched fence, collapse `\n{3,}` → `\n\n`) also be surfaced in the PR description / a `## Decisions` block on the task file for the human to ratify without reading the source?
+  (The slice prompt explicitly asks: 'Record non-obvious in-scope decisions in the done record / PR description (e.g. whether reconciliation also strips multiple marker pairs vs. exactly one; behaviour when an opening marker lacks a matching closing one — fail-loud vs. fail-safe; whether trailing whitespace around the stripped block is collapsed).' The choices ARE recorded — but only inside the `stripOpenQuestionsBlocks` JSDoc in `packages/agent-runner/src/apply-persist.ts` (lines ~307-331). The commit message is a single line and the done task file has no Decisions block. The choices themselves all look right; this is a ratification/visibility nit.)
+- Implicit cross-slice contract: this slice EXPORTS `OPEN_QUESTIONS_MARKER_OPEN` / `OPEN_QUESTIONS_MARKER_CLOSE` (`<!-- open-questions -->` / `<!-- /open-questions -->`) from `apply-persist.ts`, locking the literal byte sequence for the sibling slice `templates-mark-transient-open-questions-block`. The brief offered the strings as an example (`e.g. <!-- open-questions -->`); this slice has now made them load-bearing. Worth flagging so the templates slice imports the same literal (or at least references this module in a comment) rather than hand-retyping.
+  (`packages/agent-runner/src/apply-persist.ts` exports the two constants. `work/tasks/todo/templates-mark-transient-open-questions-block.md` is still un-claimed and will likely hardcode the strings in markdown templates (markdown can't import TS). A drift between the two byte sequences would silently break the reconcile.)
+- Coherence with the existing `<!-- agent-runner-sidecar: … -->` namespacing in `sidecar.ts`: this slice introduces un-prefixed markers `<!-- open-questions -->` / `<!-- /open-questions -->`. Is that intentional (the brief used the un-prefixed example), or should the markers carry an `agent-runner-` prefix (e.g. `<!-- agent-runner-open-questions -->`) to avoid colliding with author-written HTML comments and to match the namespaced style the sidecar already uses?
+  (`packages/agent-runner/src/sidecar.ts` line 26 / 473 / 546: existing HTML-comment marker style is `<!-- agent-runner-sidecar: … -->` — namespaced under `agent-runner-`. The brief D1 wrote `<!-- open-questions -->` as an example, so this is not a violation, but the brief did say 'mirroring how the sidecar already uses HTML-comment markers' — strictly mirroring would have included the prefix. Author of a brief who writes `<!-- open-questions -->` in their own narrative prose would now trigger the strip. Probability is low but the namespace was free.)
+- The reconcile fires on ALL full-resolution routes, including the terminal-disposition routes (`keep` / `delete` / `dropped` / `needs-attention`), not just the plain 'resolve fully' default. The slice phrases reconcile as gated on 'FULL-RESOLUTION (no `appendQuestions`)' — confirm this scoping (reconcile on every terminal route) is what was intended; reading the slice strictly, one could imagine reconcile only on the default resolve. The code's reading aligns with the brief ('full resolution' = anything that clears `needsAnswers`), but the test suite only exercises the default resolve path — none of the terminal-disposition routes (`keep`/`delete`/`dropped`/`needs-attention`) is tested with a marker-fenced body. A single belt-and-braces test on (say) the `keep` route would lock that the strip also reaches there.
+  (`packages/agent-runner/src/apply-persist.ts` line ~430: `const reconciledBody = stripOpenQuestionsBlocks(baseBody);` sits BEFORE the `terminal === 'keep'` branch and feeds the keep/delete/default branches alike. The three new tests in `packages/agent-runner/test/apply-persist.test.ts` only cover the default resolve plus re-pause.)

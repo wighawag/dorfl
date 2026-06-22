@@ -5,6 +5,9 @@ import {
 	applyAnsweredQuestions,
 	ApplyPersistError,
 	isTriagedKeep,
+	resolveItemPathByIdentity,
+	OPEN_QUESTIONS_MARKER_OPEN,
+	OPEN_QUESTIONS_MARKER_CLOSE,
 } from '../src/apply-persist.js';
 import {
 	newSidecar,
@@ -429,6 +432,153 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 	});
 });
 
+describe('applyAnsweredQuestions — full-resolution RECONCILES the body (strips the marker-fenced open-questions block, brief `apply-reconciles-stale-open-questions`)', () => {
+	/**
+	 * Re-seed with a body that carries a marker-fenced open-questions block (the
+	 * shape the templates sibling slice will introduce). The reconcile must strip
+	 * exactly that block on a full-resolution apply, leave it intact on a re-pause,
+	 * and behave as today on items WITHOUT the marker pair.
+	 */
+	function seedWithMarkerBlock(opts: {
+		slug?: string;
+		questions: string[];
+		answers?: string[];
+	}): {repo: string; itemPath: string; sidecarPath: string} {
+		const slug = opts.slug ?? 'foo';
+		const repo = join(scratch.root, 'project');
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+
+		const itemPath = `work/${fixtureFolderRel('backlog')}/${slug}.md`;
+		mkdirSync(join(repo, 'work', fixtureFolderRel('backlog')), {
+			recursive: true,
+		});
+		writeFileSync(
+			join(repo, itemPath),
+			[
+				'---',
+				`title: ${slug}`,
+				`slug: ${slug}`,
+				'needsAnswers: true',
+				'blockedBy: []',
+				'---',
+				'',
+				'## What to build',
+				'',
+				'a thing',
+				'',
+				OPEN_QUESTIONS_MARKER_OPEN,
+				'',
+				'## Open questions (clear needsAnswers when resolved)',
+				'',
+				'- STALE-OPEN-QUESTION-MARKER',
+				'',
+				OPEN_QUESTIONS_MARKER_CLOSE,
+				'',
+				'## Tail',
+				'',
+				'tail prose',
+				'',
+			].join('\n'),
+		);
+
+		let model: SidecarModel = newSidecar(
+			`task:${slug}`,
+			opts.questions.map((q) => ({question: q})),
+		);
+		model = {
+			...model,
+			entries: model.entries.map((e, i) => ({
+				...e,
+				answer: opts.answers?.[i] ?? `answer-${e.id}`,
+			})),
+		};
+		const sidecarPath = `work/questions/task-${slug}.md`;
+		mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(join(repo, sidecarPath), serialiseSidecar(model));
+
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed item (marker-fenced) + sidecar'], repo);
+		return {repo, itemPath, sidecarPath};
+	}
+
+	it('marker-present full-resolution → strips the fenced block, records ## Applied answers, deletes the sidecar, clears needsAnswers', () => {
+		const {repo, itemPath, sidecarPath} = seedWithMarkerBlock({
+			questions: ['A?'],
+			answers: ['a'],
+		});
+
+		applyAnsweredQuestions({
+			cwd: repo,
+			item: 'task:foo',
+			itemPath,
+			env: gitEnv(),
+		});
+
+		const body = readFileSync(join(repo, itemPath), 'utf8');
+		// The fenced transient block is GONE — markers AND fenced content stripped.
+		expect(body).not.toContain(OPEN_QUESTIONS_MARKER_OPEN);
+		expect(body).not.toContain(OPEN_QUESTIONS_MARKER_CLOSE);
+		expect(body).not.toContain('STALE-OPEN-QUESTION-MARKER');
+		// The surrounding body content is preserved.
+		expect(body).toContain('## What to build');
+		expect(body).toContain('## Tail');
+		expect(body).toContain('tail prose');
+		// The full-resolution invariants still hold: applied-answers recorded,
+		// sidecar deleted, needsAnswers cleared.
+		expect(body).toContain('## Applied answers');
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		expect(parseFrontmatter(body).needsAnswers).toBe(false);
+	});
+
+	it('marker-present RE-PAUSE → block is RETAINED (reconcile only fires on full resolution, D3)', () => {
+		const {repo, itemPath, sidecarPath} = seedWithMarkerBlock({
+			questions: ['A?'],
+			answers: ['a'],
+		});
+
+		applyAnsweredQuestions({
+			cwd: repo,
+			item: 'task:foo',
+			itemPath,
+			appendQuestions: [{question: 'follow-up?'}],
+			env: gitEnv(),
+		});
+
+		const body = readFileSync(join(repo, itemPath), 'utf8');
+		// The block is STILL open: markers AND fenced content preserved verbatim.
+		expect(body).toContain(OPEN_QUESTIONS_MARKER_OPEN);
+		expect(body).toContain(OPEN_QUESTIONS_MARKER_CLOSE);
+		expect(body).toContain('STALE-OPEN-QUESTION-MARKER');
+		// Re-pause invariants hold: sidecar present, needsAnswers stays true.
+		expect(existsSync(join(repo, sidecarPath))).toBe(true);
+		expect(parseFrontmatter(body).needsAnswers).toBe(true);
+	});
+
+	it('marker-ABSENT full-resolution → behaves exactly as today (no strip, no crash, backward compat D1)', () => {
+		// The default seed() body carries NO marker pair — apply must be a pure
+		// append, byte-for-byte identical to today's behaviour on legacy items.
+		const {repo, itemPath} = seed({questions: ['A?'], answers: ['a']});
+		const before = readFileSync(join(repo, itemPath), 'utf8');
+		// Slice the post-frontmatter prose; the frontmatter legitimately changes
+		// (`needsAnswers: true` → `false`), but the BODY prose must be preserved as
+		// a prefix — backward compat for items authored without the marker pair.
+		const stripFm = (s: string) => s.replace(/^---[\s\S]*?\n---\n/, '');
+		const proseBefore = stripFm(before).replace(/\s*$/, '');
+
+		applyAnsweredQuestions({
+			cwd: repo,
+			item: 'task:foo',
+			itemPath,
+			env: gitEnv(),
+		});
+
+		const after = readFileSync(join(repo, itemPath), 'utf8');
+		expect(stripFm(after)).toContain(proseBefore);
+		expect(after).toContain('## Applied answers');
+	});
+});
+
 describe('applyAnsweredQuestions — only the repo it is pointed at is touched', () => {
 	it('commits into the test fixture repo, no shared/global location', () => {
 		const {repo, itemPath} = seed({questions: ['A?'], answers: ['a']});
@@ -442,5 +592,145 @@ describe('applyAnsweredQuestions — only the repo it is pointed at is touched',
 		const after = gitIn(['rev-parse', 'HEAD'], repo).trim();
 		expect(after).not.toBe(before);
 		expect(repo.startsWith(scratch.root)).toBe(true);
+	});
+});
+
+/**
+ * F3a (brief `staging-surface-and-apply-promote-safety`) — the apply rung is
+ * FOLDER-AGNOSTIC: at write-time it re-resolves the item's CURRENT path by
+ * IDENTITY (the symmetric twin of `sidecarPathFor`'s identity-keyed resolution).
+ * A concurrent `promote` that `git mv`'d the item from staging into the pool
+ * between capture and write MUST NOT cause a stale-path write — the apply
+ * commits to the post-move path. If the item has vanished entirely, apply
+ * exits clean (the `vanished` outcome, no commit, no ghost file).
+ */
+describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time (F3a, folder-agnostic)', () => {
+	it('TASK: a concurrent promote `tasks/backlog → tasks/todo` between capture and write — apply commits at the POST-MOVE path, no ghost at the stale path', () => {
+		// Seed in STAGING (fixture word `pre-backlog` → `tasks-backlog`).
+		const {repo, itemPath, sidecarPath} = seed({
+			folder: 'pre-backlog',
+			questions: ['ship it?'],
+			answers: ['yes'],
+		});
+		expect(itemPath).toBe('work/tasks/backlog/foo.md');
+
+		// Simulate a concurrent `promote` happening AFTER the caller captured the
+		// staging path but BEFORE apply writes: a `git mv` from staging into the
+		// pool, committed on the same `main`.
+		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+		gitIn(['mv', 'work/tasks/backlog/foo.md', 'work/tasks/todo/foo.md'], repo);
+		gitIn(['commit', '-q', '-m', 'promote: foo backlog → todo'], repo);
+
+		// Apply is called with the STALE captured path — it MUST re-resolve to the
+		// post-move path and write there.
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'task:foo',
+			itemPath /* STALE */,
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('resolved');
+		expect(result.itemPath).toBe('work/tasks/todo/foo.md');
+		// The rewrite landed at the POST-MOVE path.
+		const touched = filesInHeadCommit(repo);
+		expect(touched).toContain('work/tasks/todo/foo.md');
+		expect(touched).toContain(sidecarPath);
+		// NO ghost file at the stale path — neither in the index nor on disk.
+		expect(existsSync(join(repo, 'work/tasks/backlog/foo.md'))).toBe(false);
+		expect(trackedInHead(repo, 'work/tasks/backlog/foo.md')).toBe(false);
+		// The invariant: needsAnswers cleared + sidecar deleted in the same commit.
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		const fm = parseFrontmatter(
+			readFileSync(join(repo, 'work/tasks/todo/foo.md'), 'utf8'),
+		);
+		expect(fm.needsAnswers).toBe(false);
+	});
+
+	it('BRIEF (symmetric): a concurrent promote `briefs/proposed → briefs/ready` — apply commits at the POST-MOVE path', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			slug: 'bar',
+			folder: 'pre-prd',
+			type: 'brief',
+			questions: ['scope?'],
+			answers: ['narrow'],
+		});
+		expect(itemPath).toBe('work/briefs/proposed/bar.md');
+
+		mkdirSync(join(repo, 'work', 'briefs', 'ready'), {recursive: true});
+		gitIn(
+			['mv', 'work/briefs/proposed/bar.md', 'work/briefs/ready/bar.md'],
+			repo,
+		);
+		gitIn(['commit', '-q', '-m', 'promote: bar proposed → ready'], repo);
+
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'brief:bar',
+			itemPath /* STALE */,
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('resolved');
+		expect(result.itemPath).toBe('work/briefs/ready/bar.md');
+		const touched = filesInHeadCommit(repo);
+		expect(touched).toContain('work/briefs/ready/bar.md');
+		expect(touched).toContain(sidecarPath);
+		expect(existsSync(join(repo, 'work/briefs/proposed/bar.md'))).toBe(false);
+		expect(trackedInHead(repo, 'work/briefs/proposed/bar.md')).toBe(false);
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+	});
+
+	it('VANISHED: the item file is gone between capture and write — apply exits clean, no commit, no ghost file, sidecar UNTOUCHED', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			questions: ['ship?'],
+			answers: ['yes'],
+		});
+		// Simulate the item being removed entirely (cancelled/deleted) between
+		// capture and write — the sidecar stays (identity-keyed, survives).
+		gitIn(['rm', '-q', itemPath], repo);
+		gitIn(['commit', '-q', '-m', 'remove item entirely'], repo);
+		const headBefore = gitIn(['rev-parse', 'HEAD'], repo).trim();
+
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'task:foo',
+			itemPath /* STALE — the file is gone */,
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('vanished');
+		expect(result.commit).toBeUndefined();
+		const headAfter = gitIn(['rev-parse', 'HEAD'], repo).trim();
+		// No NEW commit — HEAD is exactly where the deletion left it.
+		expect(headAfter).toBe(headBefore);
+		// The sidecar is UNTOUCHED — apply did not recreate the item or delete the
+		// sidecar; the loop simply exited clean.
+		expect(existsSync(join(repo, sidecarPath))).toBe(true);
+		// No ghost file at the stale path either.
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+	});
+
+	it('resolveItemPathByIdentity: identity-keyed, finds the item across lifecycle folders + returns undefined when gone', () => {
+		const {repo} = seed({
+			folder: 'pre-backlog',
+			questions: ['ship?'],
+			answers: ['yes'],
+		});
+		// Initially in staging.
+		expect(resolveItemPathByIdentity(repo, 'task:foo')).toBe(
+			'work/tasks/backlog/foo.md',
+		);
+		// After a promote, it resolves to the pool path — the resolver is folder-agnostic.
+		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+		gitIn(['mv', 'work/tasks/backlog/foo.md', 'work/tasks/todo/foo.md'], repo);
+		gitIn(['commit', '-q', '-m', 'promote'], repo);
+		expect(resolveItemPathByIdentity(repo, 'task:foo')).toBe(
+			'work/tasks/todo/foo.md',
+		);
+		// After a full remove, it returns undefined.
+		gitIn(['rm', '-q', 'work/tasks/todo/foo.md'], repo);
+		gitIn(['commit', '-q', '-m', 'remove'], repo);
+		expect(resolveItemPathByIdentity(repo, 'task:foo')).toBeUndefined();
 	});
 });

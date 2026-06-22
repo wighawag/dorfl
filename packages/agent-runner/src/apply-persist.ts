@@ -20,6 +20,57 @@ import type {SidecarType} from './sidecar.js';
 import type {WorkFolderKey} from './work-layout.js';
 
 /**
+ * The lifecycle folders an item may rest in at APPLY-write-time, BY TYPE — the
+ * scan set for the identity-keyed item-path resolver below. Includes the
+ * STAGING folders (`tasks-backlog`, `briefs-proposed`) on purpose: a concurrent
+ * `promote` may have just `git mv`'d the item from staging into the pool
+ * between this apply's CAPTURE and WRITE, and the apply must resolve to the
+ * post-move path — the whole point of folder-agnostic apply (F3a of brief
+ * `staging-surface-and-apply-promote-safety`). Terminal-only folders
+ * (`cancelled`, `briefs-dropped`, `needs-attention`) are NOT here — once an
+ * item has reached a terminal, the apply is OVER, and a re-resolve into a
+ * terminal would mean the item has effectively vanished from the active
+ * lifecycle (callers handle that as the clean-exit `vanished` outcome below).
+ */
+const APPLY_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
+	task: ['tasks-backlog', 'tasks-todo', 'in-progress', 'done'],
+	brief: ['briefs-proposed', 'briefs-ready', 'briefs-tasked'],
+	observation: ['observations'],
+};
+
+/**
+ * Resolve the item's CURRENT on-disk path by IDENTITY — the apply-side
+ * folder-agnostic resolver, the symmetric twin of `sidecarPathFor`. Mirrors the
+ * sidecar's identity-keyed resolution shape: the path is derived from the
+ * `(type, slug)` identity at WRITE-TIME, never from a captured `ItemPath`.
+ *
+ * Scans the lifecycle folders the type may rest in (`APPLY_LIFECYCLE_FOLDERS`),
+ * including STAGING, and returns the FIRST match (one slug per type, so there
+ * is at most one). Returns `undefined` when the item file is GONE between
+ * capture and write (a concurrent `promote` to a terminal, a human delete, or a
+ * sibling triage move) — the apply rung then exits CLEAN (no commit, no ghost
+ * file), routed as the `vanished` outcome.
+ *
+ * This is the F3a fix from brief `staging-surface-and-apply-promote-safety`:
+ * the sidecar is already identity-keyed and folder-agnostic; the item path is
+ * now the same. A concurrent `promote` that `git mv`'d the item out from under
+ * a captured path can no longer cause a stale-path write.
+ */
+export function resolveItemPathByIdentity(
+	cwd: string,
+	item: string,
+): string | undefined {
+	const {type, slug} = resolveSidecarIdentity(item);
+	for (const folder of APPLY_LIFECYCLE_FOLDERS[type]) {
+		const rel = workItemRel(folder, `${slug}.md`);
+		if (existsSync(join(cwd, rel))) {
+			return rel;
+		}
+	}
+	return undefined;
+}
+
+/**
  * The PER-REGIME won't-proceed terminal a `dropped` disposition routes an item to,
  * by its TYPE — the slug-collision correctness fix (PRD
  * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped brief
@@ -77,6 +128,27 @@ function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
 /** Marker that opens the applied-answers record in an item body. */
 const APPLIED_HEADING = '## Applied answers';
 
+/**
+ * The STRUCTURAL fence the templates wrap the transient open-questions block in
+ * — an HTML-comment marker pair, mirroring the existing `<!-- agent-runner-…
+ * -->` style in `sidecar.ts`. Apply's reconcile (full-resolution route only)
+ * strips everything between the OPEN and CLOSE markers (inclusive) when it folds
+ * answers in and clears `needsAnswers`, so the resolved item body reads as
+ * resolved (no leftover "these are still open" prose above `## Applied answers`).
+ *
+ * The strip is STRUCTURAL (marker-pair based), NOT a heading-text regex — the
+ * brief's D1 decision: a `## Open questions` heading match would be fragile to
+ * author wording (`## Open questions (clear needsAnswers when resolved)` vs.
+ * `## Open questions`). Items authored WITHOUT the markers are left untouched
+ * (backward compat — no marker ⇒ nothing to strip ⇒ identical bytes).
+ *
+ * The sibling slice `templates-mark-transient-open-questions-block` introduces
+ * the markers in the brief/task templates; this slice exports the constants so
+ * the two slices agree on the literal byte sequence.
+ */
+export const OPEN_QUESTIONS_MARKER_OPEN = '<!-- open-questions -->';
+export const OPEN_QUESTIONS_MARKER_CLOSE = '<!-- /open-questions -->';
+
 /** The frontmatter marker a "keep" disposition stamps (US #30). */
 const TRIAGED_KEEP = 'keep';
 
@@ -130,7 +202,15 @@ export type ApplyTerminal =
 	/** Moved to `work/needs-attention/` (the existing bounce — a human must look). */
 	| 'needs-attention'
 	/** A "delete" answer RECOMMENDED deletion (the human deletes — never auto-delete). */
-	| 'delete-recommended';
+	| 'delete-recommended'
+	/**
+	 * The item file was GONE by the time apply tried to write (a concurrent
+	 * promote/terminal-move/delete between capture and write). Apply exited
+	 * CLEAN: no commit, no ghost file at the stale path. The matching benign
+	 * skip the surface/triage rungs already use (`advance.ts` `vanishedSkip`),
+	 * extended into the apply rung by the F3a folder-agnostic resolver.
+	 */
+	| 'vanished';
 
 export interface ApplyAnsweredQuestionsResult {
 	/** The terminal the apply reached. */
@@ -234,7 +314,7 @@ const TERMINAL_PRECEDENCE: SidecarDisposition[] = [
 
 /**
  * Pick the SINGLE terminal disposition to execute from the answered entries (the
- * most-decisive present), or `undefined` for a plain resolve. `promote-slice` /
+ * most-decisive present), or `undefined` for a plain resolve. `promote-task` /
  * `promote-adr` are NOT terminals HERE — they are the triage rung's new-item
  * creation (slice `advance-rung-triage` consumes the CAS-create helper); the apply
  * rung treats a promote as a plain resolve of THIS item (the promotion is a
@@ -284,6 +364,48 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
 }
 
 /**
+ * Strip ALL marker-fenced open-questions blocks from an item body — the FULL
+ * RESOLUTION reconcile step (brief `apply-reconciles-stale-open-questions`,
+ * decisions D1 / D3). Removes each `<!-- open-questions -->` … `<!--
+ * /open-questions -->` pair (markers included) plus the blank lines that
+ * flanked it, so the answers in `## Applied answers` no longer sit beneath a
+ * stale "these are still open" section.
+ *
+ * Behavioural choices (recorded in the done note):
+ *   - strips EVERY well-formed marker pair, not just the first (an authoring
+ *     template may legitimately fence more than one transient block — e.g.
+ *     open-questions plus an autonomy-note — and partial strips would re-create
+ *     the same drift the reconcile exists to prevent);
+ *   - FAIL-SAFE on a malformed fence (a lone opener with no matching closer):
+ *     the regex simply doesn't match, the body is returned unchanged. A
+ *     fail-loud throw would block the apply commit on a template authoring bug;
+ *     leaving the body intact preserves the answer-application invariant and
+ *     surfaces the stale block to a human reviewer instead;
+ *   - collapses runs of 3+ newlines down to 2 after a strip, so removing a
+ *     block doesn't leave a triple-blank gap between the surrounding paragraphs.
+ *
+ * Called ONLY from the full-resolution path. The re-pause path (follow-up
+ * questions appended, `needsAnswers` stays true) NEVER calls this — the
+ * open-questions block is still legitimately open there (D3).
+ */
+function stripOpenQuestionsBlocks(body: string): string {
+	const escOpen = OPEN_QUESTIONS_MARKER_OPEN.replace(
+		/[.*+?^${}()|[\]\\]/g,
+		'\\$&',
+	);
+	const escClose = OPEN_QUESTIONS_MARKER_CLOSE.replace(
+		/[.*+?^${}()|[\]\\]/g,
+		'\\$&',
+	);
+	const re = new RegExp(
+		`\\n*[ \\t]*${escOpen}[\\s\\S]*?${escClose}[ \\t]*\\n*`,
+		'g',
+	);
+	if (!re.test(body)) return body;
+	return body.replace(re, '\n\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * Apply a FULLY-ANSWERED sidecar's answers to its item ATOMICALLY, then route to
  * the right terminal. The keystone APPLY rung the advance engine dispatches into
  * once the classifier said `apply` (all entries answered) AND the `advancing`
@@ -306,7 +428,7 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
 export function applyAnsweredQuestions(
 	options: ApplyAnsweredQuestionsOptions,
 ): ApplyAnsweredQuestionsResult {
-	const {cwd, item, itemPath, env} = options;
+	const {cwd, item, itemPath: capturedItemPath, env} = options;
 	const note = options.note ?? (() => {});
 
 	if (gitSoft(['rev-parse', '--git-dir'], cwd, env).status !== 0) {
@@ -314,6 +436,31 @@ export function applyAnsweredQuestions(
 	}
 
 	const {model, path: sidecarPath} = readSidecar(cwd, item);
+
+	// FOLDER-AGNOSTIC at WRITE-TIME (F3a, brief
+	// `staging-surface-and-apply-promote-safety`): re-resolve the item's CURRENT
+	// path by IDENTITY, mirroring the sidecar's already-folder-agnostic
+	// resolution. The captured `itemPath` is ADVISORY — a concurrent `promote`
+	// (`tasks/backlog → tasks/todo`, `briefs/proposed → briefs/ready`) may have
+	// moved the item between capture and now, and we MUST write the post-move
+	// path, never the stale one. If the item has vanished entirely, exit CLEAN
+	// (no commit, no ghost file) — the matching benign skip the surface/triage
+	// rungs already use.
+	const resolvedItemPath = resolveItemPathByIdentity(cwd, item);
+	if (resolvedItemPath === undefined) {
+		const message =
+			`apply ${item}: item file is gone (captured '${capturedItemPath}' is ` +
+			`stale and no current path resolves by identity) — exiting clean (no ` +
+			`commit), the apply rung does not recreate a vanished item.`;
+		note(message);
+		return {
+			outcome: 'vanished',
+			sidecarPath,
+			itemPath: capturedItemPath,
+			message,
+		};
+	}
+	const itemPath = resolvedItemPath;
 
 	// NEVER invent an answer: the apply only ever runs on a FULLY-answered sidecar
 	// (the classifier NO-OPs a subset). Assert the boundary so a mis-call is loud,
@@ -367,7 +514,12 @@ export function applyAnsweredQuestions(
 		picked === 'dropped' && dropTerminalFolder(itemType) === undefined
 			? 'delete'
 			: picked;
-	const resolvedBody = withAppliedAnswers(baseBody, model.entries);
+	// Full-resolution reconcile (D1): strip the now-stale marker-fenced
+	// open-questions block(s) so the resolved body reads as resolved. Backward
+	// compatible — no marker ⇒ identical bytes. The re-pause path above is
+	// deliberately untouched (D3): its open-questions block is still open.
+	const reconciledBody = stripOpenQuestionsBlocks(baseBody);
+	const resolvedBody = withAppliedAnswers(reconciledBody, model.entries);
 
 	if (terminal === 'keep') {
 		return resolveWithKeepMarker({

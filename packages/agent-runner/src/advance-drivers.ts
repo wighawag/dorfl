@@ -307,7 +307,7 @@ async function runSelectedInSequence(
  * runner — the easy-to-miss site).
  *
  * The promote-apply edge mirrors the existing drivers without a special case: an
- * `apply` rung whose answer is `promote-slice`/`promote-adr` runs
+ * `apply` rung whose answer is `promote-task`/`promote-adr` runs
  * `promoteObservation`'s OWN arbiter CAS and commits NOTHING tree-less, so the
  * ff-push here is a harmless no-op (a `HEAD` with nothing new) — it does NOT
  * double-publish nor clobber the promote CAS.
