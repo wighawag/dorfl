@@ -9,7 +9,7 @@ import {workItemRel} from './work-layout.js';
 /**
  * The **tasking concurrency lock** (brief `auto-slice`, task `autoslice-lock`).
  *
- * Serialises *concurrent* slicers (two CI runs, or human + CI) so a brief is never
+ * Serialises *concurrent* taskers (two CI runs, or human + CI) so a brief is never
  * double-tasked. As of the capstone cut-over (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, brief
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
@@ -166,7 +166,7 @@ async function runAcquire(
 		env,
 	);
 	if (briefBlob.status !== 0) {
-		const message = `'${brief}' not found on ${arbiter}/main (no such PRD, or it was already moved/sliced).`;
+		const message = `'${brief}' not found on ${arbiter}/main (no such brief, or it was already moved/tasked).`;
 		note(message);
 		return {exitCode: 2, outcome: 'lost', message};
 	}
@@ -175,7 +175,7 @@ async function runAcquire(
 	// A dry-run takes no lock (it mutates nothing) but still reports the lockable
 	// snapshot it WOULD take.
 	if (dryRun) {
-		const message = `[dry-run] would acquire the slicing lock for '${slug}' (work/prd/${slug}.md present on ${arbiter}/main).`;
+		const message = `[dry-run] would acquire the tasking lock for '${slug}' (${brief} present on ${arbiter}/main).`;
 		note(message);
 		return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 	}
@@ -203,7 +203,7 @@ async function runAcquire(
 		note(lock.message);
 		return {exitCode: 2, outcome: 'lost', message: lock.message};
 	}
-	const message = `LOCKED '${slug}' for slicing on ${arbiter} (unified lock).`;
+	const message = `LOCKED '${slug}' for tasking on ${arbiter} (unified lock).`;
 	note(message);
 	return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 }
@@ -334,12 +334,12 @@ async function runRelease(
 		});
 		if (stuck.outcome === 'transitioned' || stuck.outcome === 'wrong-state') {
 			// `wrong-state` (already stuck) is a tolerated idempotent re-surface.
-			const message = `Routed the slicing of '${slug}' to needs-attention (per-item lock marked stuck).`;
+			const message = `Routed the tasking of '${slug}' to needs-attention (per-item lock marked stuck).`;
 			note(message);
 			return {exitCode: 0, outcome: 'released', message};
 		}
 		if (stuck.outcome === 'not-held') {
-			const message = `'${slug}' is not locked for slicing — nothing to mark stuck.`;
+			const message = `'${slug}' is not locked for tasking — nothing to mark stuck.`;
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};
 		}
@@ -362,8 +362,8 @@ async function runRelease(
 	}
 	const message =
 		released.outcome === 'not-held'
-			? `'${slug}' was not locked for slicing (already released).`
-			: `RELEASED the slicing lock for '${slug}' on ${arbiter}.`;
+			? `'${slug}' was not locked for tasking (already released).`
+			: `RELEASED the tasking lock for '${slug}' on ${arbiter}.`;
 	note(message);
 	return {exitCode: 0, outcome: 'released', message};
 }

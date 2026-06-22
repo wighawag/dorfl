@@ -56,7 +56,7 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  *
  * The engine shape MIRRORS the review gate (prompt → `approve|block` → dispatch):
  * the decision prompt is an INLINE builder ({@link buildIntakeDecisionBrief}, like
- * `buildSlicingBrief`); the **dispatcher is the testable seam** — a STUBBED verdict
+ * `buildTaskingBrief`); the **dispatcher is the testable seam** — a STUBBED verdict
  * (injected, no model/network) drives it, exactly as `ReviewGate` is injected. The
  * prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not); only the
  * dispatch is.
@@ -2275,7 +2275,7 @@ export function buildLoneSliceReviewPrompt(
 export const parseLoneSliceReviewVerdict = parseReviewVerdict;
 
 /**
- * Build the intake decision BRIEF (an inline prompt builder, like `buildSlicingBrief`
+ * Build the intake decision BRIEF (an inline prompt builder, like `buildTaskingBrief`
  * in `slicing.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
  * asset/`.md` file; no such convention exists in this package). It encodes the FULL
  * four-outcome decision table (PRD `issue-intake` — the source of truth) and the

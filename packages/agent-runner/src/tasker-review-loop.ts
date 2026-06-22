@@ -36,14 +36,14 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  * runner finalises/lands them, this loop RUNS the `review` SKILL
  * (`skills/review/SKILL.md`), APPLIES its findings as EDITS to the candidate task
  * files, then re-reviews — until a pass finds NO NEW blocking issue (the natural
- * terminator) or the `slicerLoopMax` hard cap is hit. It is an IMPROVER, NOT a one-shot
+ * terminator) or the `taskerLoopMax` hard cap is hit. It is an IMPROVER, NOT a one-shot
  * gate: tasks measurably keep getting better when reviewed, so the findings feed
  * back into edits, repeatedly. The destination/goal check is part of the SAME
  * review pass (it can itself trigger edits — which is why it is a loop).
  *
  * Two axes (the M×N grid from the idea file):
  *   - **N** — the in-context multipass: ONE agent reviews AND edits in a single
- *     context, accumulating findings across angle-switched passes. `slicerLoopMax` caps
+ *     context, accumulating findings across angle-switched passes. `taskerLoopMax` caps
  *     N so the loop can never run forever.
  *
  *     ⚠️ ASPIRATION-VS-BUILT (2026-06-10): the "single context" wording above is the
@@ -74,7 +74,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  *     claimable.
  *   - **a specific uncertain task** → emit it `needsAnswers: true` with the
  *     questions in its body (created, not agent-buildable until a human answers).
- *   - **the whole decomposition unclear / `slicerLoopMax` exhausted with blockers** →
+ *   - **the whole decomposition unclear / `taskerLoopMax` exhausted with blockers** →
  *     route the brief to `work/needs-attention/<slug>.md` with the questions as the
  *     reason, emitting NO guessed tasks.
  *
@@ -139,9 +139,9 @@ export type TaskReviewGate = (
 export type LoopOutcome =
 	/** A pass found no NEW blocking issue: the improved tasks land claimable. */
 	| 'converged'
-	/** `slicerLoopMax` hit with blockers → specific uncertain task(s) → needsAnswers. */
+	/** `taskerLoopMax` hit with blockers → specific uncertain task(s) → needsAnswers. */
 	| 'uncertain-slices'
-	/** `slicerLoopMax` hit / decomposition unclear → route the brief to needs-attention. */
+	/** `taskerLoopMax` hit / decomposition unclear → route the brief to needs-attention. */
 	| 'decomposition-unclear';
 
 /** The result of running the loop — the disposition the caller's sink routes. */
@@ -224,7 +224,7 @@ export interface RunTaskReviewLoopOptions {
  *
  * Within ONE execution (the N): run the gate (a review+edit pass), APPLY its edits
  * to the candidate task files, then re-review — until `verdict === 'approve'` (no
- * NEW blocking issue → converged) or the pass count reaches `slicerLoopMax`. On the cap
+ * NEW blocking issue → converged) or the pass count reaches `taskerLoopMax`. On the cap
  * with a still-`block` verdict, ROUTE per the verdict's channels:
  *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (brief → needs-attention,
  *     no guessed tasks);
@@ -251,7 +251,7 @@ export async function runTaskReviewLoop(
 	let last: SingleExecutionResult | undefined;
 	for (let m = 1; m <= executions; m++) {
 		if (executions > 1) {
-			note(`Slicer review loop — fresh context ${m}/${executions}.`);
+			note(`Tasker review loop — fresh context ${m}/${executions}.`);
 		}
 		const exec = await runOneExecution({
 			slug: options.slug,
@@ -269,9 +269,9 @@ export async function runTaskReviewLoop(
 		last = exec;
 		if (exec.converged) {
 			note(
-				`Slicer review loop converged after ${exec.passes} pass(es)` +
+				`Tasker review loop converged after ${exec.passes} pass(es)` +
 					(executions > 1 ? ` in fresh context ${m}/${executions}` : '') +
-					'; the improved slices land.',
+					'; the improved tasks land.',
 			);
 			return {
 				outcome: 'converged',
@@ -281,22 +281,22 @@ export async function runTaskReviewLoop(
 				passes: totalPasses,
 				executions: m,
 				message:
-					`Sliced '${options.slug}' — the review→edit loop converged ` +
+					`Tasked '${options.slug}' — the review→edit loop converged ` +
 					`(${totalPasses} pass(es), ${m} fresh context(s)); no new blocking ` +
-					'issue. The improved slices land claimable.',
+					'issue. The improved tasks land claimable.',
 			};
 		}
 	}
 
-	// Every execution hit `slicerLoopMax` with unresolved blockers — REJECT via the
+	// Every execution hit `taskerLoopMax` with unresolved blockers — REJECT via the
 	// sink. The LAST execution's verdict carries the routing channels.
 	const verdict = last!.lastVerdict;
 	if (verdict.decompositionUnclear) {
 		const questions = verdict.decompositionUnclear.questions;
 		note(
-			`Slicer review loop did not converge within slicerLoopMax=${taskerLoopMax} ` +
+			`Tasker review loop did not converge within taskerLoopMax=${taskerLoopMax} ` +
 				`across ${executions} fresh context(s); the whole decomposition is ` +
-				'unclear — routing the PRD to needs-attention (no guessed slices).',
+				'unclear — routing the brief to needs-attention (no guessed tasks).',
 		);
 		return {
 			outcome: 'decomposition-unclear',
@@ -307,9 +307,9 @@ export async function runTaskReviewLoop(
 			executions,
 			message:
 				`The decomposition of '${options.slug}' is still unclear after ` +
-				`slicerLoopMax=${taskerLoopMax} review pass(es) across ${executions} fresh ` +
-				'context(s); routing the PRD to needs-attention with the open ' +
-				'questions, emitting no guessed slices.',
+				`taskerLoopMax=${taskerLoopMax} review pass(es) across ${executions} fresh ` +
+				'context(s); routing the brief to needs-attention with the open ' +
+				'questions, emitting no guessed tasks.',
 		};
 	}
 
@@ -327,8 +327,8 @@ export async function runTaskReviewLoop(
 			return true;
 		}
 		note(
-			`Dropped an uncertain-slice flag on ${u.path} — not one of THIS run’s ` +
-				'own candidate slices (the loop never flags pre-existing landed slices).',
+			`Dropped an uncertain-task flag on ${u.path} — not one of THIS run’s ` +
+				'own candidate tasks (the loop never flags pre-existing landed tasks).',
 		);
 		return false;
 	});
@@ -340,9 +340,9 @@ export async function runTaskReviewLoop(
 					questions: blockingQuestions(verdict),
 				}));
 	note(
-		`Slicer review loop did not converge within slicerLoopMax=${taskerLoopMax} across ` +
+		`Tasker review loop did not converge within taskerLoopMax=${taskerLoopMax} across ` +
 			`${executions} fresh context(s); emitting ${uncertain.length} uncertain ` +
-			'slice(s) with needsAnswers + questions.',
+			'task(s) with needsAnswers + questions.',
 	);
 	return {
 		outcome: 'uncertain-slices',
@@ -352,9 +352,9 @@ export async function runTaskReviewLoop(
 		passes: totalPasses,
 		executions,
 		message:
-			`Slicing '${options.slug}' did not converge after slicerLoopMax=${taskerLoopMax} ` +
+			`Tasking '${options.slug}' did not converge after taskerLoopMax=${taskerLoopMax} ` +
 			`review pass(es) across ${executions} fresh context(s); ` +
-			`${uncertain.length} slice(s) emitted needsAnswers: true with the open ` +
+			`${uncertain.length} task(s) emitted needsAnswers: true with the open ` +
 			'questions in their bodies (a human must answer before they are buildable).',
 	};
 }
@@ -416,7 +416,7 @@ async function runOneExecution(params: {
 			return {converged: true, lastVerdict: verdict, passes};
 		}
 		note(
-			`Slicer review pass ${pass}/${taskerLoopMax} (context ${execution}) found ` +
+			`Tasker review pass ${pass}/${taskerLoopMax} (context ${execution}) found ` +
 				`${blockingCount(verdict)} blocking issue(s); ` +
 				`${verdict.edits?.length ?? 0} edit(s) applied — re-reviewing.`,
 		);
@@ -451,7 +451,7 @@ function applyEdits(
 		if (filename === undefined || normalized.includes('..')) {
 			note(
 				`Skipped a review edit outside ${workFolderPrefix('tasks-backlog')} (${edit.path}) — the ` +
-					'loop only improves candidate slices.',
+					'loop only improves candidate tasks.',
 			);
 			continue;
 		}
@@ -467,8 +467,8 @@ function applyEdits(
 			}
 			if (current !== undefined && current === before.get(filename)) {
 				note(
-					`Skipped a review edit to the pre-existing landed slice ${edit.path} ` +
-						'— the loop only improves THIS run’s own candidate slices.',
+					`Skipped a review edit to the pre-existing landed task ${edit.path} ` +
+						'— the loop only improves THIS run’s own candidate tasks.',
 				);
 				continue;
 			}
@@ -594,7 +594,7 @@ export function harnessTaskReviewGate(
 		});
 		if (!launched.ok) {
 			throw new ReviewParseError(
-				`slice review agent launch failed${
+				`task review agent launch failed${
 					launched.detail ? `: ${launched.detail}` : ''
 				}`,
 			);
@@ -616,47 +616,47 @@ export function harnessTaskReviewGate(
 export function buildTaskReviewPrompt(input: TaskReviewGateInput): string {
 	const list = input.candidateTasks.map((p) => `  - ${p}`).join('\n');
 	return [
-		`You are a FRESH-CONTEXT reviewer in the SLICER review→edit→converge LOOP`,
-		`(insertion point A). Review the CANDIDATE SLICES just produced for the PRD`,
+		`You are a FRESH-CONTEXT reviewer in the TASKER review→edit→converge LOOP`,
+		`(insertion point A). Review the CANDIDATE TASKS just produced for the brief`,
 		`"${input.slug}":`,
-		list || '  (no candidate slices found)',
+		list || '  (no candidate tasks found)',
 		``,
 		reviewDisciplinePrompt(),
 		``,
-		`Read the source PRD (work/prd/${input.slug}.md) and review the candidate`,
+		`Read the source brief (work/briefs/ready/${input.slug}.md) and review the candidate`,
 		`decomposition ADVERSARIALLY. Review the WHOLE SET — graph coherence / gaps /`,
 		`overlap / goal-composition (dependency-graph coherence, set-level gaps,`,
-		`overlapping/duplicated slices, and "does the set compose into the PRD goal")`,
-		`— not just per-slice well-formedness. The DESTINATION CHECK ("if every slice`,
-		`is built exactly as written, do we end up with the system the PRD describes?")`,
+		`overlapping/duplicated tasks, and "does the set compose into the brief goal")`,
+		`— not just per-task well-formedness. The DESTINATION CHECK ("if every task`,
+		`is built exactly as written, do we end up with the system the brief describes?")`,
 		`is PART OF this pass and may ITSELF trigger edits — that is why this is a`,
 		`loop, not a one-shot gate.`,
 		``,
 		`This is review pass ${input.pass} (fresh context ${input.execution}). You`,
 		`do NOT edit files or run git yourself — you EMIT the edits to apply as FULL`,
-		`replacement content and the runner applies them, then re-reviews. Slices`,
+		`replacement content and the runner applies them, then re-reviews. Tasks`,
 		`measurably keep improving when reviewed, so propose edits that fix the`,
 		`findings; converge when a pass finds NO NEW blocking issue.`,
 		``,
 		verdictContractPrompt(),
 		``,
-		`Fill the channels appropriate to THIS caller (the slicer improver loop):`,
-		`  - "edits" — full-content replacements for candidate slice files when you`,
+		`Fill the channels appropriate to THIS caller (the tasker improver loop):`,
+		`  - "edits" — full-content replacements for candidate task files when you`,
 		`    can FIX a finding by editing (the natural improver step).`,
-		`  - "uncertainTasks" — specific slices you cannot make buildable (each gets`,
+		`  - "uncertainTasks" — specific tasks you cannot make buildable (each gets`,
 		`    \`needsAnswers: true\` with the questions in its body).`,
-		`  - "decompositionUnclear" — the WHOLE decomposition is unsound (the PRD is`,
-		`    routed to needs-attention; emit no guessed slices).`,
+		`  - "decompositionUnclear" — the WHOLE decomposition is unsound (the brief is`,
+		`    routed to needs-attention; emit no guessed tasks).`,
 		`Do NOT fill "review" / "edit" / "questions" — those are other callers'`,
 		`channels. Flag, do not guess: a flagged question costs one human glance; a`,
-		`guessed slice ships wrong-but-compiling work.`,
+		`guessed task ships wrong-but-compiling work.`,
 		``,
-		`SLICE \`humanOnly\` IS NARROW. Only edit a slice to add \`humanOnly: true\``,
-		`when building THAT slice is genuinely never-for-agents BY NATURE (secrets/`,
-		`release/security/AGENTS.md prohibition) — a \`humanOnly\` slice is not agent-`,
-		`claimable EVEN from the pool \`work/backlog/\`. Do NOT stamp \`humanOnly\` to`,
+		`TASK \`humanOnly\` IS NARROW. Only edit a task to add \`humanOnly: true\``,
+		`when building THAT task is genuinely never-for-agents BY NATURE (secrets/`,
+		`release/security/AGENTS.md prohibition) — a \`humanOnly\` task is not agent-`,
+		`claimable EVEN from the pool \`work/tasks/todo/\`. Do NOT stamp \`humanOnly\` to`,
 		`mean "a human should review this first": that is the POSITION's job — every`,
-		`candidate slice is BIRTHED STAGED in \`work/pre-backlog/\` (not eligible) and a`,
+		`candidate task is BIRTHED STAGED in \`work/tasks/backlog/\` (not eligible) and a`,
 		`human promotes the approved ones into the pool.`,
 		`Review-first is the staging position; the overloaded "stamp \`humanOnly\` for`,
 		`review" reading is retired.`,

@@ -3,7 +3,7 @@
  * UP from the build gate (`eligibility.ts`). No I/O: callers pass in the brief's
  * two autonomy axes (`humanOnly`, `needsAnswers`), the repo's `autoTask` policy,
  * the brief's `briefAfter` slugs, and the set of slugs whose briefs are already
- * SLICED (resolved against `work/briefs/tasked/` residence, NOT `work/done/`).
+ * TASKED (resolved against `work/briefs/tasked/` residence, NOT `work/done/`).
  *
  * This mirrors the build-gate shape deliberately (CONTEXT.md / the `auto-slice`
  * brief): the same `needsAnswers !== true && humanOnly !== true && <repo policy>`
@@ -30,7 +30,7 @@ export interface TaskingEligibilityInput {
 	needsAnswers: HumanOnlyGate;
 	/** Cross-brief order: brief slugs that must already be tasked before this one. */
 	briefAfter: string[];
-	/** Slugs of briefs that are already SLICED (residence in `work/briefs/tasked/`). */
+	/** Slugs of briefs that are already TASKED (residence in `work/briefs/tasked/`). */
 	taskedSlugs: Set<string>;
 	/** Per-repo policy: may an agent auto-task *undeclared* briefs in this repo? */
 	autoTask: boolean;
@@ -82,9 +82,9 @@ export function resolveTaskGate(
 }
 
 /**
- * Resolve a brief's `briefAfter` against the slugs of briefs already SLICED (NOT
- * `done/`): satisfied iff every listed brief is present in `slicedSlugs`. An
- * unsliced blocker ⇒ not yet taskable (so this brief's emitted tasks can
+ * Resolve a brief's `briefAfter` against the slugs of briefs already TASKED (NOT
+ * `done/`): satisfied iff every listed brief is present in `taskedSlugs`. An
+ * untasked blocker ⇒ not yet taskable (so this brief's emitted tasks can
  * reference the real slugs of those briefs' tasks).
  */
 export function resolveTaskAfter(

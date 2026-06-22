@@ -211,7 +211,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 			pass: 1,
 			execution: 1,
 		});
-		expect(prompt).toMatch(/SLICE `humanOnly` IS NARROW/);
+		expect(prompt).toMatch(/TASK `humanOnly` IS NARROW/);
 		expect(prompt).toMatch(/never-for-agents BY NATURE/);
 		expect(prompt).toMatch(/Review-first is the staging position/);
 	});

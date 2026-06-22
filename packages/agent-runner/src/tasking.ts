@@ -69,7 +69,7 @@ import type {ReviewGate} from './review-gate.js';
  *      `autoBuild` (the pool, not the explicit claim, gates the policy). The HUMAN
  *      path is unbound by the gate entirely.
  *   2. **Acquire the lock** (agent path) via the unified per-item lock CAS —
- *      serialising concurrent slicers on the `brief:<slug>` ref (the body STAYS in
+ *      serialising concurrent taskers on the `brief:<slug>` ref (the body STAYS in
  *      `work/briefs/ready/`; the lock no longer moves it). The HUMAN path with no contention
  *      may task on `main` directly WITHOUT the lock.
  *   3. **Invoke the agent harness** with the `to-task` brief — the agent runs the
@@ -241,7 +241,7 @@ export interface PerformTaskOptions {
 	/**
 	 * The model the task-SET acceptance-gate reviewer runs on (the BUILD
 	 * `--review-model`, de-correlated from the tasker). DISTINCT from the improver
-	 * loop's {@link slicerLoopModel} — see the note there.
+	 * loop's {@link taskerLoopModel} — see the note there.
 	 */
 	acceptanceReviewModel?: string;
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
@@ -334,7 +334,7 @@ export const STAGED_TASKS_DIR = workFolderRel('tasks-backlog');
  * The POOL folder tasks land in when the runner-deterministic placement
  * resolver chooses the pool side (`tasksLandIn: 'todo'` and a trusted
  * origin, or an `--tasks-land-in todo` operator override). The agent NEVER
- * writes here — it always writes to {@link STAGED_SLICES_DIR}; the runner
+ * writes here — it always writes to {@link STAGED_TASKS_DIR}; the runner
  * redirects the emitted files to the resolved destination at integrate-stage
  * time. brief US #4 / the governing ADR: the agent cannot self-place into the
  * pool. Task `runner-deterministic-slice-placement-policy-and-precedence`.
@@ -363,7 +363,7 @@ function landingToSide(
 	return undefined;
 }
 
-/** The repo-relative path of a staged task's `.md` (per {@link STAGED_SLICES_DIR}). */
+/** The repo-relative path of a staged task's `.md` (per {@link STAGED_TASKS_DIR}). */
 function stagedTaskPath(name: string): string {
 	return `${STAGED_TASKS_DIR}/${name}`;
 }
@@ -393,7 +393,7 @@ export async function performTask(
 	//    source the agent tasks + the file the lock holds.
 	const briefPath = workItemPath(cwd, 'briefs-ready', slug);
 	if (!existsSync(briefPath)) {
-		const message = `no PRD '${slug}' found at ${workFolderRel('briefs-ready')}/${slug}.md.`;
+		const message = `no brief '${slug}' found at ${workFolderRel('briefs-ready')}/${slug}.md.`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', slug, message};
 	}
@@ -485,8 +485,8 @@ export async function performTask(
 		};
 	}
 	if (!agent.ok) {
-		const detail = agent.detail ?? `the agent failed to slice '${slug}'.`;
-		const message = `Agent failed slicing '${slug}' (${detail}).`;
+		const detail = agent.detail ?? `the agent failed to task '${slug}'.`;
+		const message = `Agent failed tasking '${slug}' (${detail}).`;
 		note(message);
 		// The lock stays held (the runner did not release it): a stuck tasking is
 		// recoverable / re-runnable. Surfacing it is the review/edit loop's job.
@@ -612,10 +612,11 @@ export async function performTask(
 		// completing commit now.
 		const stale = await heldBriefIsStale(cwd, arbiter, slug, lockedBlob, env);
 		if (stale) {
+			const briefRel = workItemRel('briefs-ready', `${slug}.md`);
 			const message =
-				`RELEASE CONFLICT for '${slug}': the PRD was edited (work/prd/${slug}.md ` +
-				`changed on ${arbiter}/main) while the slicing lock was held. The slicing is ` +
-				`STALE — re-slice from the edited PRD or route it to needs-attention. ` +
+				`RELEASE CONFLICT for '${slug}': the brief was edited (${briefRel} ` +
+				`changed on ${arbiter}/main) while the tasking lock was held. The tasking is ` +
+				`STALE — re-task from the edited brief or route it to needs-attention. ` +
 				`The arbiter was NOT modified (lock still held).`;
 			note(message);
 			return {exitCode: 4, outcome: 'stale', slug, message};
@@ -720,8 +721,8 @@ export async function performTask(
 				outcome: 'needs-attention',
 				slug,
 				message:
-					`The slice acceptance gate blocked the set produced for '${slug}'; ` +
-					`marked the per-item lock stuck (needs attention; no slices landed).`,
+					`The task acceptance gate blocked the set produced for '${slug}'; ` +
+					`marked the per-item lock stuck (needs attention; no tasks landed).`,
 			};
 		}
 		if (core.outcome === 'completed') {
@@ -746,7 +747,7 @@ export async function performTask(
 	// `work/briefs/tasked/` (residence = tasked-ness) and committing is the human's to
 	// do, as with the human `complete`.
 	const message =
-		`Sliced '${slug}' -> ${emitted.length} backlog slice` +
+		`Tasked '${slug}' -> ${emitted.length} backlog task` +
 		`${emitted.length === 1 ? '' : 's'} (human path, no lock). Inspect + commit ` +
 		`the produced files (and move the brief into work/briefs/tasked/) yourself.`;
 	note(message);
@@ -794,7 +795,7 @@ function releaseFailureToResult(
  * a `gate-failed` cannot occur (the tasking path passes `skipVerify`) but maps to
  * a usage error defensively. A `review-blocked` (the task-SET ACCEPTANCE GATE
  * blocked the set, task `slice-acceptance-gate`) is handled by `performTask`
- * BEFORE this mapper — it routes the held brief `tasking/ -> needs-attention/` via
+ * BEFORE this mapper — it routes the held brief to needs-attention via
  * the lock release (the task-path needs-attention route) — so it never reaches
  * here; it is mapped defensively to a usage error if it ever does.
  */
@@ -813,10 +814,10 @@ function integrationToTaskResult(
 				? 'landed them on the arbiter main'
 				: 'opened a PR carrying them (main untouched)';
 		const message =
-			`Sliced '${slug}' -> ${emitted.length} backlog slice` +
+			`Tasked '${slug}' -> ${emitted.length} backlog task` +
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +
 			`through the shared core (moved work/briefs/ready/ -> work/briefs/tasked/, the ` +
-			`sliced resting state) and ${landed}.`;
+			`tasked resting state) and ${landed}.`;
 		return {exitCode: 0, outcome: 'sliced', slug, emitted, loop, message};
 	}
 	if (core.outcome === 'rebase-conflict') {
@@ -826,8 +827,8 @@ function integrationToTaskResult(
 			slug,
 			message:
 				core.reason ??
-				`Integrating the slicing of '${slug}' conflicted against the latest ` +
-					`${slug} main — the slicing is stale; re-slice from the current PRD.`,
+				`Integrating the tasking of '${slug}' conflicted against the latest ` +
+					`${slug} main — the tasking is stale; re-task from the current brief.`,
 		};
 	}
 	return {
@@ -836,7 +837,7 @@ function integrationToTaskResult(
 		slug,
 		message:
 			core.reason ??
-			`Integrating the slicing of '${slug}' failed unexpectedly.`,
+			`Integrating the tasking of '${slug}' failed unexpectedly.`,
 	};
 }
 
@@ -906,7 +907,7 @@ async function heldBriefIsStale(
 /**
  * STAGE the tasking lifecycle into the index on the `work/<slug>` branch (the
  * {@link performIntegration} lifecycle seam): move the held brief
- * `git mv work/briefs/ready/<slug>.md -> work/briefs/tasked/<slug>.md` (the SLICED resting
+ * `git mv work/briefs/ready/<slug>.md -> work/briefs/tasked/<slug>.md` (the TASKED resting
  * state — the build-machine `done/` analogue, the SOURCE OF TRUTH for tasked-ness),
  * and write+`git add` the produced `work/tasks/backlog/*.md` files. The band's subsequent
  * `git add -A` + atomic commit folds this AND the agent's uncommitted backlog writes
@@ -967,12 +968,12 @@ async function stageTaskingLifecycle(params: {
 		: {origin: undefined, originTrust: undefined};
 	if (placementReason === 'untrusted-origin') {
 		note(
-			`Untrusted-origin PRD '${slug}': forcing the emitted slices STAGED ` +
+			`Untrusted-origin brief '${slug}': forcing the emitted tasks STAGED ` +
 				`(${placementDir}/) regardless of tasksLandIn (a human promotes ` +
-				'them into work/tasks/todo/). Pass --slices-land-in <where> to override.',
+				'them into work/tasks/todo/). Pass --tasks-land-in <where> to override.',
 		);
 	}
-	// Move the held brief brief/ -> brief-tasked/ (the SLICED resting state — folder =
+	// Move the held brief brief/ -> brief-tasked/ (the TASKED resting state — folder =
 	// source of truth, like done/ for tasks). This is the DURABLE `brief → brief-tasked`
 	// success move, owned by THIS transition's commit (the lock no longer moved the
 	// body, so the source is `work/briefs/ready/`, never `work/tasking/`).
@@ -1096,9 +1097,9 @@ function taskGateBlockedReason(
 	findingsReason: string | undefined,
 ): string {
 	const head =
-		`The slice acceptance gate (fresh-context review of the produced SET) blocked ` +
-		`'${slug}'. The PRD is routed to needs-attention with no slices landed; a human ` +
-		`must resolve the blocking findings, then re-slice.`;
+		`The task acceptance gate (fresh-context review of the produced SET) blocked ` +
+		`'${slug}'. The brief is routed to needs-attention with no tasks landed; a human ` +
+		`must resolve the blocking findings, then re-task.`;
 	return findingsReason ? `${head}\n\n${findingsReason}` : head;
 }
 
@@ -1109,9 +1110,9 @@ function taskGateBlockedReason(
  */
 function decompositionUnclearReason(slug: string, questions: string[]): string {
 	const head =
-		`The slicer review→edit loop could not converge on a sound decomposition of ` +
-		`'${slug}' (--slicer-loop-max exhausted with unresolved blockers). The PRD is routed ` +
-		`to needs-attention with no guessed slices; a human must resolve:`;
+		`The tasker review→edit loop could not converge on a sound decomposition of ` +
+		`'${slug}' (--tasker-loop-max exhausted with unresolved blockers). The brief is routed ` +
+		`to needs-attention with no guessed tasks; a human must resolve:`;
 	const body =
 		questions.length > 0
 			? questions.map((q) => `- ${q}`).join('\n')
@@ -1144,7 +1145,7 @@ function markTaskNeedsAnswers(
 	}
 	const abs = join(cwd, normalized);
 	if (!existsSync(abs)) {
-		note(`Skipped a needsAnswers mark for missing candidate slice ${relPath}.`);
+		note(`Skipped a needsAnswers mark for missing candidate task ${relPath}.`);
 		return;
 	}
 	const current = readFileSync(abs, 'utf8');
@@ -1201,11 +1202,11 @@ function gateRefusalReason(
 ): string {
 	const reasons: string[] = [];
 	if (briefFm.humanOnly === true) {
-		reasons.push('the PRD is humanOnly (a human must drive its slicing)');
+		reasons.push('the brief is humanOnly (a human must drive its tasking)');
 	}
 	if (briefFm.needsAnswers === true) {
 		reasons.push(
-			'the PRD has needsAnswers (open questions block auto-slicing)',
+			'the brief has needsAnswers (open questions block auto-tasking)',
 		);
 	}
 	// The autoTask POLICY only refuses on the NON-explicit (auto-pick pool) path:
@@ -1221,16 +1222,16 @@ function gateRefusalReason(
 	}
 	if (!eligibility.briefAfter.satisfied) {
 		reasons.push(
-			`briefAfter PRD(s) not yet sliced: ${eligibility.briefAfter.missing.join(', ')}`,
+			`briefAfter brief(s) not yet tasked: ${eligibility.briefAfter.missing.join(', ')}`,
 		);
 	}
 	const why =
-		reasons.length > 0 ? reasons.join('; ') : 'the slicing gate refused';
-	return `Skipped slicing '${slug}': ${why}.`;
+		reasons.length > 0 ? reasons.join('; ') : 'the tasking gate refused';
+	return `Skipped tasking '${slug}': ${why}.`;
 }
 
 /**
- * Read the set of slugs whose briefs are already SLICED in this checkout — RESIDENCE
+ * Read the set of slugs whose briefs are already TASKED in this checkout — RESIDENCE
  * in `work/briefs/tasked/` (the tasked resting state, task `prd-sliced-folder-step-a`
  * / brief `slicing-coherence` US #9), the build-machine `done/` analogue. The FOLDER
  * is the source of truth; the `tasked:` frontmatter marker was removed entirely in
@@ -1270,9 +1271,9 @@ function readTaskedSlugs(cwd: string): Set<string> {
  */
 function buildTaskingBrief(slug: string, _brief: string | undefined): string {
 	return [
-		`You are a FRESH-CONTEXT slicer for the brief \`work/briefs/ready/${slug}.md\`.`,
-		`Apply the slicing discipline defined in \`work/protocol/SLICING-PROTOCOL.md\``,
-		`(the in-band, protocol-native slicing protocol every set-up repo carries; the`,
+		`You are a FRESH-CONTEXT tasker for the brief \`work/briefs/ready/${slug}.md\`.`,
+		`Apply the tasking discipline defined in \`work/protocol/SLICING-PROTOCOL.md\``,
+		`(the in-band, protocol-native tasking protocol every set-up repo carries; the`,
 		`human-facing pointer is \`skills/to-task/SKILL.md\`) to this ONE brief:`,
 		`decompose it into independently-grabbable, tracer-bullet vertical tasks.`,
 		`Read the brief fully first.`,
@@ -1281,7 +1282,7 @@ function buildTaskingBrief(slug: string, _brief: string | undefined): string {
 		`(\`humanOnly\` is NARROW; \`needsAnswers\` flags genuine uncertainty), the`,
 		`confidence check that REPLACES the human-quiz step when no human is present,`,
 		`the file-orthogonality preference, the brief-vs-task gate disjointness, and`,
-		`the emitted slice shape — ALL live in that doc. Read them there.`,
+		`the emitted task shape — ALL live in that doc. Read them there.`,
 		``,
 		`No human is present, so apply the CONFIDENCE CHECK (\`SLICING-PROTOCOL.md\``,
 		`step 4): only emit tasks you would have gotten a human to approve. If`,
@@ -1292,7 +1293,7 @@ function buildTaskingBrief(slug: string, _brief: string | undefined): string {
 		``,
 		`WRITE EVERY emitted task file under \`${STAGED_TASKS_DIR}/\` (the STAGING folder)`,
 		`— NEVER \`work/tasks/todo/\`. \`work/tasks/todo/\` is the agent-eligible POOL and`,
-		`the runner owns the runner/human-only promotion into it; the slicer's staging`,
+		`the runner owns the runner/human-only promotion into it; the tasker's staging`,
 		`folder is \`work/tasks/backlog/\`. A write outside the staging folder is dropped`,
 		`by the runner-deterministic placement resolver.`,
 		``,
@@ -1301,7 +1302,7 @@ function buildTaskingBrief(slug: string, _brief: string | undefined): string {
 		``,
 		`Do NOT perform any git operations — do not stage, commit, push, or move any`,
 		`files. The RUNNER owns every git-state transition (it commits the produced`,
-		`tasks, releases the slicing lock, and moves the brief into \`work/briefs/tasked/\`).`,
+		`tasks, releases the tasking lock, and moves the brief into \`work/briefs/tasked/\`).`,
 	].join('\n');
 }
 
@@ -1334,7 +1335,7 @@ async function runTaskAgent(
 	return {ok: launched.ok, detail: launched.detail};
 }
 
-/** A snapshot of {@link STAGED_SLICES_DIR}: filename → file content. */
+/** A snapshot of {@link STAGED_TASKS_DIR}: filename → file content. */
 function snapshotStagedTasks(cwd: string): Map<string, string> {
 	const dir = join(cwd, STAGED_TASKS_DIR);
 	const snap = new Map<string, string>();
@@ -1345,7 +1346,7 @@ function snapshotStagedTasks(cwd: string): Map<string, string> {
 }
 
 /**
- * Repo-relative paths of the {@link STAGED_SLICES_DIR}`/*.md` files the agent
+ * Repo-relative paths of the {@link STAGED_TASKS_DIR}`/*.md` files the agent
  * NEWLY created or CHANGED vs the pre-run snapshot — exactly what the runner
  * captures + commits. (An untouched pre-existing staged task is NOT
  * re-committed.) The agent's staging folder is `work/tasks/backlog/`; writes to
