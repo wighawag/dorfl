@@ -1,6 +1,20 @@
 @import 'tailwindcss';
 
 /*
+ * Hananiah (OFL-1.1) — a Hebrew-SIMULATION display face: Latin letters drawn to
+ * read as Hebrew script. Used ONLY for the one-line golem signature accent. This
+ * is faithful to the books, where golem writing is "a corrupted form of the
+ * Hebrew alphabet made to appear as roman letters". Display-only, never body.
+ */
+@font-face {
+	font-family: 'Hananiah';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/hananiah.woff2') format('woff2');
+}
+
+/*
  * Dorfl theme. Palette from website/branding/README.md.
  * Clay golem on slate, with one warm amber pop for the visor / accents.
  */
@@ -23,7 +37,8 @@
 	--color-bone: #e9d9c7;
 	--color-bone-muted: #a89b8a;
 
-	/* Wordmark serif (the "carved" feel) + mono tagline, per the brand doc */
+	/* The `dorfl` wordmark + all serif text: the original Georgia stack. */
+	--font-wordmark: Georgia, 'Times New Roman', serif;
 	--font-serif: Georgia, 'Times New Roman', serif;
 	--font-mono:
 		ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
@@ -50,4 +65,24 @@ body {
 		rgba(164, 84, 60, 0.18),
 		transparent 70%
 	);
+}
+
+/*
+ * The golem's signature line, set as if carved into clay: the Hebraic serif in
+ * full caps, letter-spaced, low-contrast bone with a faint inset shadow so it
+ * reads as INCISED stone rather than printed ink. Deadpan, never decorative.
+ */
+.carved {
+	font-weight: 700;
+	letter-spacing: 0.18em;
+	color: #b8a48f;
+	text-shadow:
+		0 1px 0 rgba(0, 0, 0, 0.45),
+		0 -1px 0 rgba(233, 217, 199, 0.04);
+}
+
+/* The faux-Hebrew register (Hananiah) for the carved signature accent. */
+.faux-hebrew {
+	font-family: 'Hananiah', var(--font-serif);
+	letter-spacing: 0.08em;
 }

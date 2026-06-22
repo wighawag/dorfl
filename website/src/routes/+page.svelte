@@ -97,7 +97,7 @@
 <!-- Hero -->
 <section
 	id="top"
-	class="relative overflow-hidden px-4 pt-28 pb-20 sm:px-6 sm:pt-36 sm:pb-28"
+	class="relative overflow-hidden px-4 pt-28 pb-10 sm:px-6 sm:pt-32 sm:pb-12"
 >
 	<div class="clay-glow pointer-events-none absolute inset-0"></div>
 	<div class="relative z-10 mx-auto max-w-3xl text-center">
@@ -133,13 +133,20 @@
 				View on GitHub
 			</a>
 		</div>
+		<!-- Dorfl's signature line, set as carved clay (his vow in Feet of Clay).
+		     Set in Hananiah, a Hebrew-SIMULATION face (Latin drawn to read as Hebrew)
+		     — faithful to the books, where golem writing is "a corrupted form of the
+		     Hebrew alphabet made to appear as roman letters". A deadpan accent. -->
+		<p class="carved faux-hebrew mt-10 text-base sm:mt-12 sm:text-lg">
+			Words In The Heart Can Not Be Taken
+		</p>
 	</div>
 </section>
 
 <!-- What it is -->
-<section id="what" class="px-4 py-20 sm:px-6 sm:py-28">
+<section id="what" class="px-4 py-12 sm:px-6 sm:py-16">
 	<div class="mx-auto max-w-6xl">
-		<div class="mb-14 text-center">
+		<div class="mb-10 text-center">
 			<h2 class="font-serif text-3xl font-bold text-bone sm:text-4xl">
 				What it is
 			</h2>
@@ -166,9 +173,9 @@
 </section>
 
 <!-- How it works -->
-<section id="how" class="border-t border-border px-4 py-20 sm:px-6 sm:py-28">
+<section id="how" class="border-t border-border px-4 py-14 sm:px-6 sm:py-20">
 	<div class="mx-auto max-w-4xl">
-		<div class="mb-14 text-center">
+		<div class="mb-10 text-center">
 			<h2 class="font-serif text-3xl font-bold text-bone sm:text-4xl">
 				How it works
 			</h2>
@@ -200,7 +207,7 @@
 <!-- Install -->
 <section
 	id="install"
-	class="border-t border-border px-4 py-20 sm:px-6 sm:py-28"
+	class="border-t border-border px-4 py-14 sm:px-6 sm:py-20"
 >
 	<div class="mx-auto max-w-3xl text-center">
 		<h2 class="font-serif text-3xl font-bold text-bone sm:text-4xl">

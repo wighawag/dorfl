@@ -10,7 +10,7 @@
 	<DorflHead class="h-28 w-auto shrink-0 sm:h-36 md:h-44" />
 	<div class="text-left">
 		<div
-			class="font-serif text-6xl leading-none font-bold tracking-[0.06em] text-bone sm:text-7xl md:text-8xl"
+			class="font-wordmark text-6xl leading-none font-bold tracking-[0.06em] text-bone sm:text-7xl md:text-8xl"
 		>
 			dorfl
 		</div>

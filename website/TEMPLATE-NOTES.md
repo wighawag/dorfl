@@ -112,6 +112,36 @@ not recorded as drift.
 - **Tag:** **Dorfl-specific** for the exact sizes; the underlying gap (no
   documented web-asset/OG rasterization step) is noted as backport candidate B3.
 
+### D8. (withdrawn) Frank Ruhl Libre was trialled, then removed
+
+- **What:** Frank Ruhl Libre (OFL-1.1 Hebraic serif) was briefly self-hosted for
+  the wordmark/headings/signature, then **removed entirely** by maintainer
+  preference. The `frank-ruhl-libre-*.woff2` files are deleted; `--font-serif` is
+  back to the original `Georgia, 'Times New Roman', serif` stack, so the wordmark,
+  nav mark, and section headings all use Georgia again.
+- **Net effect on the template:** none from this entry — the typography matches
+  the template/Georgia baseline. Kept as a record of the trial-and-revert.
+- **Tag:** **Dorfl-specific** (no longer applies). The self-host pattern it
+  surfaced still lives on as backport candidate B6, exercised now only by
+  Hananiah (D9).
+
+### D9. Hananiah faux-Hebrew signature accent
+
+- **What:** Added `static/fonts/hananiah.woff2` (OFL-1.1, a Hebrew-SIMULATION
+  display face) + a `@font-face` and `.faux-hebrew` utility in `app.css`. The
+  hero signature `Words In The Heart Can Not Be Taken` is set in Hananiah (Latin
+  glyphs drawn to read as Hebrew). Font license documented in
+  `static/fonts/README.md`. (Earlier trials of a genuine-Hebrew `דורפל` accent
+  beside the wordmark and a genuine-Hebrew vow line beneath the signature were
+  both removed by preference, so no genuine-Hebrew text or `.hebrew` /
+  `--font-hebrew` rule remains.)
+- **Why:** Canon-faithful: golem writing in the books is "a corrupted form of the
+  Hebrew alphabet made to appear as roman letters" (Feet of Clay), which is
+  exactly what a faux-Hebrew face is. Used as a one-line display accent only,
+  never body text, keeping the deadpan dignity the brand doc asks for.
+- **Tag:** **Dorfl-specific** (brand content). Note the `npx ttf2woff2` TTF->woff2
+  step used here, since the source was TTF-only — relevant to backport B6.
+
 ## Root-of-repo change required (outside `website/`)
 
 > `website/AGENTS.md` says "touch only `website/`". This single change is the
@@ -180,6 +210,13 @@ A short, actionable list for the human (we do not apply these):
   sidesteps this by living one level down; a flat workspace member (the
   monorepo-already case this site is) needs the wiring spelled out. Worth a note in
   the template's monorepo/adoption docs.
+
+- **B6 — A documented "self-host an OFL font" recipe.** The clean pattern used
+  here (drop latin-subset `*.woff2` into `static/fonts/`, write minimal
+  `@font-face` with `font-display: swap`, point `--font-serif` at it; no Google
+  Fonts CDN, no `@fontsource` build dep) is the privacy-respecting, zero-runtime
+  default most instantiations want. A short note (or a tiny fetch script) in the
+  template would save rediscovering the woff2 URLs each time.
 
 - **B4 — Confirm the template's `tsconfig`/`svelte.config`/`vite.config` trio is
   the canonical minimal set.** What we used here (copied from `pi-remote/site`:
