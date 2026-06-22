@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'apply-reconciles-resolved-brief-body' 
 date: 2026-06-22
 status: open
 reviewOf: apply-reconciles-resolved-brief-body
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
