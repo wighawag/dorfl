@@ -4,6 +4,7 @@ date: 2026-06-21
 status: open
 reviewOf: prompt-guidance-test-first
 needsAnswers: false
+triaged: keep
 ---
 
 ## Non-blocking review findings
@@ -23,3 +24,11 @@ is their durable home for triage — promote-to-slice / keep / delete.
 
 Promoted to a new backlog slice `work/tasks/todo/review-nits-prompt-guidance-test-first-2026-06-21.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:review-nits-prompt-guidance-test-first-2026-06-21` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation is already marked Triaged: promoted and resolved; it maps unambiguously onto the existing backlog slice of the same slug created from it.
