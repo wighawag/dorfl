@@ -36,19 +36,24 @@ import {
 } from './retry-backoff.js';
 
 /**
- * The folder-native **needs-attention mechanism** (ADR §12; WORK-CONTRACT
- * `needs-attention/` section). Every "couldn't finish, a human must look"
- * outcome — a failed acceptance gate (red `verify`), a rebase/merge conflict
- * (ADR §10), a slice the agent reported too ambiguous to build, a timeout, or a
- * rejected review — resolves to ONE move: the RUNNER `git mv`s the claimed item
- * from `work/in-progress/<slug>.md` to `work/needs-attention/<slug>.md`, writing
- * the reason (+ any agent-surfaced questions) into the file BODY, and commits it
- * exactly like the done-move.
+ * The **needs-attention mechanism** (ADR `ledger-status-on-per-item-lock-refs`;
+ * PRD `ledger-status-per-item-lock-refs`; ADR §12 for the original folder model).
+ * Every "couldn't finish, a human must look" outcome (a failed acceptance gate
+ * (red `verify`), a rebase/merge conflict (ADR §10), a slice the agent reported
+ * too ambiguous to build, a timeout, or a rejected review) resolves to ONE
+ * observable move: the RUNNER AMENDS the claimed item's HELD per-item lock
+ * `active → stuck` (`refs/agent-runner/lock/<entry>`), writing the reason (+ any
+ * agent-surfaced questions) into the lock-entry BODY. There is NO `git mv` to a
+ * `work/needs-attention/` folder and NO on-`main` surface (the lock cut-over,
+ * slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`): so a
+ * protected-`main` bounce succeeds, and a work branch cut from `main` inherits no
+ * stuck record. The RECOVERABLE half is the kept `work/<slug>` branch.
  *
- * This is the conflict-safe form of "surfacing": the surface is a folder you can
- * `ls`, read by `scan`/`status` — there is **no status/label field** (honours
- * WORK-CONTRACT rule 3: status = the folder). The reason is prose in the body,
- * never a source-of-truth frontmatter field.
+ * This is the conflict-safe form of "surfacing": the surface is the lock
+ * `state: stuck`, read by `scan`/`status`/`gc --ledger` reading the lock refs (a
+ * COMMAND a human runs, not an `ls` of a folder). There is **no status/label
+ * field** on `main` (honours WORK-CONTRACT rule 3). The reason is prose in the
+ * lock-entry body, never a source-of-truth frontmatter field.
  *
  * Ownership: this module OWNS the mechanism (the move helper + the surface
  * reader + the return path). Consumers (`complete.ts`'s gate-failed/rebase-
