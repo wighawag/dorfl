@@ -2,6 +2,7 @@
 title: Gate-2 review verdict crashes with "review verdict was not valid JSON" on large-diff builds
 date: 2026-06-22
 status: open
+needsAnswers: true
 ---
 
 ## Signal (recurring failure, observed twice in one drive)

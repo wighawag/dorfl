@@ -1,0 +1,13 @@
+<!-- agent-runner-sidecar: item=observation:gate2-review-verdict-json-parse-crash-on-large-diffs type=observation slug=gate2-review-verdict-json-parse-crash-on-large-diffs allAnswered=false -->
+
+## Q1
+
+**What becomes of this signal — promote to a task that hardens the Gate-2 verdict parse path (fault-tolerant parse + route-to-needs-attention + push-kept-branch-on-crash), promote to an ADR about the review-verdict output contract, keep as an open observation, or drop?**
+
+> Observation `work/notes/observations/gate2-review-verdict-json-parse-crash-on-large-diffs.md` (status: open, 2026-06-22). Reproduced TWICE in one drive on the two largest-diff tasks (`rename-config-keys-slicing-to-tasking`, `rename-cli-verb-and-flags-do-prd-to-do-brief`); the two small-diff tasks in the same drive parsed fine. Symptom: `error: review verdict was not valid JSON: Expected ',' or '}' after property value in JSON at position 8101 / 7593` thrown as an UNHANDLED exception AFTER a green Gate-1 (2585 tests). Impact is concrete and operational: orphaned `active` lock on origin+mirror, work branch NOT pushed to origin (only survives on hub mirror), no PR opened, recovery requires manual mirror→origin push + `requeue` + manual mirror-lock clear + re-`do` which then SKIPS Gate-1/Gate-2 on the recovered branch, forcing conductor to do full manual Gate-3 + gate re-verify. Hypothesised cause: strict `JSON.parse` of review-agent output with no salvage/repair, no length cap, no retry; large diffs produce verdicts with unescaped control chars / raw newlines / over-long fields deep in the payload. The observation already lists three concrete fix directions (fault-tolerant parse + route to needs-attention/config-error; harden review-agent output contract with strict minified JSON + escape + per-finding cap + lenient repair pass; push-kept-branch + mark-lock-stuck on crash). This is gate-robustness behaviour squarely inside the agent-runner protocol's verify/review surface, not a one-off transient — recurrence rate was 2-of-4 on this drive, correlated with diff size.
+
+_Suggested default: promote-task — file a task to make the Gate-2 verdict parse fault-tolerant (route to needs-attention with `transient-infra`/`config-error` cause instead of throwing) AND ensure the kept work branch is pushed to origin + the lock marked stuck on parse-crash, so a verdict-parse failure never strands a green build. The output-contract hardening (direction 2) is a natural sub-task or companion ADR but the operational bleeding is the unhandled-exception/stranded-lock path — fix that first._
+
+<!-- q1 fields: id=q1 disposition=promote-task -->
+
+**Your answer** (write below this line):
