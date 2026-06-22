@@ -205,7 +205,7 @@ export type {
 export {
 	extractPromptSection,
 	extractCanonicalWrapperTemplate,
-	resolveClaimProtocolPath,
+	resolveProtocolDoc,
 	wrapper,
 	buildAgentPrompt,
 	buildContinueBlock,

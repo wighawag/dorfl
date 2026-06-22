@@ -74,27 +74,32 @@ export function extractPromptSection(content: string): string | undefined {
 }
 
 /**
- * Locate the canonical work-contract document (`CLAIM-PROTOCOL.md`) the prompt
- * assembly reads at RUNTIME. Resolution order, highest authority first:
+ * Locate one of the runtime-read protocol docs (`CLAIM-PROTOCOL.md`,
+ * `REVIEW-PROTOCOL.md`, …) the runner reads at RUNTIME. Resolution order,
+ * highest authority first:
  *
  *   1. `override` — explicit, for tests / unusual layouts (short-circuits).
- *   2. `<cwd>/work/protocol/CLAIM-PROTOCOL.md` — the TARGET repo's adopted copy.
- *      `setup` copies the doc verbatim into every repo's `work/protocol/` (ADR
- *      `methodology-and-skills.md` §5, the `work/protocol/` propagation), so a
- *      set-up repo carries the protocol VERSION it adopted; that copy wins.
- *   3. `dist/protocol/CLAIM-PROTOCOL.md` — a copy VENDORED inside this package
- *      (by the `vendor-protocol` build step). The published-CLI fallback: an
- *      installed CLI has no sibling `skills/` tree, and the target repo may not
- *      be set up yet (no `work/protocol/`), so the package ships its own copy.
- *   4. the legacy monorepo-relative `skills/...` paths — DEV-only, kept LAST
- *      (they only resolve inside this dev monorepo; an installed CLI's walks
- *      escape into the consumer's filesystem → ENOENT, which is why they cannot
- *      be the primary source).
+ *   2. `<cwd>/work/protocol/<name>` — the TARGET repo's adopted copy. `setup`
+ *      copies the protocol docs verbatim into every repo's `work/protocol/`
+ *      (ADR `methodology-and-skills.md` §5, the `work/protocol/` propagation),
+ *      so a set-up repo carries the protocol VERSION it adopted; that copy
+ *      wins.
+ *   3. `dist/protocol/<name>` — a copy VENDORED inside this package (by the
+ *      `vendor-protocol` build step). The published-CLI fallback: an installed
+ *      CLI has no sibling `skills/` tree, and the target repo may not be set
+ *      up yet (no `work/protocol/`), so the package ships its own copy of the
+ *      SET of runtime-read protocol docs.
+ *   4. the legacy monorepo-relative `skills/setup/protocol/<name>` walk —
+ *      DEV-only, kept LAST (it only resolves inside this dev monorepo; an
+ *      installed CLI's walks escape into the consumer's filesystem → ENOENT,
+ *      which is why it cannot be the primary source).
  *
  * `cwd` is the target repo root (threaded from `renderPrompt`/`do`/`run`/the
  * `render-prompt` CLI). When omitted, the target-repo step is simply skipped.
+ * `name` is the doc's BASENAME (e.g. `'CLAIM-PROTOCOL.md'`).
  */
-export function resolveClaimProtocolPath(
+export function resolveProtocolDoc(
+	name: string,
 	cwd?: string,
 	override?: string,
 ): string {
@@ -106,53 +111,19 @@ export function resolveClaimProtocolPath(
 	const candidates: string[] = [];
 	// 2. The target repo's adopted copy (authoritative when present).
 	if (cwd) {
-		candidates.push(
-			resolve(cwd, WORK_ROOT, workFolderName('protocol'), 'CLAIM-PROTOCOL.md'),
-		);
+		candidates.push(resolve(cwd, WORK_ROOT, workFolderName('protocol'), name));
 	}
 	// 3. The copy vendored inside this package (published-CLI fallback). From
 	//    `src/` (tsx) `dist/` is a sibling; from `dist/` it is the dir itself.
 	candidates.push(
-		resolve(here, '..', 'dist', 'protocol', 'CLAIM-PROTOCOL.md'),
-		resolve(here, 'protocol', 'CLAIM-PROTOCOL.md'),
+		resolve(here, '..', 'dist', 'protocol', name),
+		resolve(here, 'protocol', name),
 	);
-	// 4. The legacy monorepo-relative `skills/...` paths — DEV-only, LAST. The
-	//    docs are OWNED by the `setup` skill (`skills/setup/protocol/`); the old
-	//    `to-slices/` paths are kept as a fallback for a not-yet-migrated layout.
+	// 4. The legacy monorepo-relative `skills/setup/protocol/` walks — DEV-only,
+	//    LAST. The docs are OWNED by the `setup` skill (`skills/setup/protocol/`).
 	candidates.push(
-		resolve(
-			here,
-			'..',
-			'..',
-			'..',
-			'skills',
-			'setup',
-			'protocol',
-			'CLAIM-PROTOCOL.md',
-		),
-		resolve(
-			here,
-			'..',
-			'..',
-			'..',
-			'..',
-			'skills',
-			'setup',
-			'protocol',
-			'CLAIM-PROTOCOL.md',
-		),
-		// legacy location (pre-move) — fallback only
-		resolve(here, '..', '..', '..', 'skills', 'to-slices', 'CLAIM-PROTOCOL.md'),
-		resolve(
-			here,
-			'..',
-			'..',
-			'..',
-			'..',
-			'skills',
-			'to-slices',
-			'CLAIM-PROTOCOL.md',
-		),
+		resolve(here, '..', '..', '..', 'skills', 'setup', 'protocol', name),
+		resolve(here, '..', '..', '..', '..', 'skills', 'setup', 'protocol', name),
 	);
 	for (const candidate of candidates) {
 		if (existsSync(candidate)) {
@@ -232,7 +203,8 @@ export function wrapper(
 	prd: string | undefined,
 	options: {protocolPath?: string; cwd?: string} = {},
 ): string {
-	const protocolPath = resolveClaimProtocolPath(
+	const protocolPath = resolveProtocolDoc(
+		'CLAIM-PROTOCOL.md',
 		options.cwd,
 		options.protocolPath,
 	);

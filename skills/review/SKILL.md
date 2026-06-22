@@ -5,109 +5,12 @@ description: 'Thoroughly and adversarially review a work/-protocol artifact agai
 
 # review
 
-A **standalone reviewing discipline** that makes your review of a `work/`-protocol artifact **more thorough and easier**. Reach for it whenever an artifact is about to be _trusted_ — a task before it lands/is claimed, code in a work PR against the task that specified it, a brief before slicing, or a captured note (observation / finding / ADR) for correct bucket + quality.
+**The review discipline lives in `work/protocol/REVIEW-PROTOCOL.md`** (the in-band protocol doc every set-up repo carries; the source-of-truth is `skills/setup/protocol/REVIEW-PROTOCOL.md`). This skill is the **human-facing pointer** to that standard — the operator/agent entry point a person reaches for to invoke the discipline interactively. The standard itself (the lenses, the destination check, the emitted-verdict shape) is stated ONCE in the protocol doc so the autonomous runner and the human caller cannot drift.
 
-It is **protocol-native**: it is meant for a repo that uses the `work/` contract, so it _assumes the protocol's rules and design_ and reviews the artifact **against them**. That assumption is the point — it makes the review catch real, protocol-specific defects (a dishonest gate axis, a wrong bucket, a missing isolation test, drift) instead of offering a generic checklist.
+## How to use
 
-> The protocol's rules live in the repo's **`work/protocol/`** (copied there by `setup`): every bare "WORK-CONTRACT" / "ADR-FORMAT" mention below refers to `work/protocol/<doc>` in the repo under review.
+1. Read `work/protocol/REVIEW-PROTOCOL.md` in the repo you are working in.
+2. Apply its lenses IN ORDER to the artifact under review, ENDING in the destination check.
+3. Emit the verdict it specifies (`{verdict, findings, …}`); the caller routes it (you write nothing — see "Your output" in the protocol doc).
 
-You **emit a verdict; you do not act on it** — see [Your output](#your-output). Routing the verdict (to `needsAnswers`, needs-attention, a batch file, a merge) is the caller's job. This skill is the _assessment_, not the disposition.
-
-## When to use vs. not
-
-- **Use** to review: a **task** (well-cut? claim-ready?); **code** in a work PR (does it deliver the task it claims?); a **brief** (sliceable? gate axes honest?); a **note** (right bucket? actionable?); or a **set of tasks** — the whole-SET lens: **graph coherence / gaps / overlap / goal-composition** (does the dependency graph cohere, are there set-level gaps or overlapping/duplicated tasks, and do they compose into the brief/ADR goal?). The set-level checks live in lens 3 (cross-artifact composition) and lens 5 (the destination check).
-- **Don't** use it to _produce_ the artifact (that's `to-brief` / `to-task` / the build agent), nor to _route_ the verdict (that's the caller — a review gate, a conductor skill, or a human). This skill only assesses.
-
-## The core disciplines (what makes a review thorough, not shallow)
-
-These are _why_ this beats a single "looks fine" pass — apply them throughout:
-
-1. **Run a SEQUENCE of distinct angles, not one pass.** Each lens below is a different framing. Re-running the _same_ angle converges on nothing fast; changing the angle keeps finding distinct _classes_ of defect. Stop when a full pass across the angles finds nothing NEW.
-2. **A reviewer is ADVERSARIAL.** Try to _break_ the artifact ("attack these tasks: granularity? dependency order? gate correctness? drift? a missed seam?"), don't confirm it. Self-review in the producing context rubber-stamps; review as if someone else wrote it (ideally a fresh/cold read).
-3. **Verify against what ACTUALLY LANDED, not intent or memory.** Read the real code / the committed artifact — not what you _think_ a change did. Edits silently fail; specs drift. Trust the bytes on disk.
-4. **A SECOND instance of the same finding is a SIGNAL, not noise.** "I've seen this shape before" → generalise the fix, don't patch instances one by one (this applies to the artifact's defects _and_ to your own repeated mistakes).
-5. **Defects concentrate in the TASK/SPEC more than in the code.** Agents build what they're told, correctly; the expensive bugs are an ambiguous premise, a wrong "reuse X", an assumed-but-absent seam, a stale central assumption. Spend the most scrutiny on the spec.
-6. **Flag, don't guess.** When something is genuinely unresolved, that is a `block`/`needsAnswers` finding — not a guess dressed as approval. A false "looks fine" ships wrong-but-compiling work; a flagged question costs one human glance.
-7. **Weight findings by REAL impact — do not cargo-cult the lenses.** A finding is only worth raising if acting on it changes an outcome someone would actually hit. A technically-true nit that no reader/builder/runtime will ever be bitten by is NOT a `block` (often not even worth recording). Running a lens as a checklist and reporting conformance misses ("this optional field is empty", "a list could be renumbered") as blocking is the failure mode this rule exists to stop: it buries the findings that matter under bookkeeping noise. Ask of each finding: _who hits this, and what breaks?_ No answer → drop it. The lenses find candidates; impact decides severity.
-
-## The lenses — apply IN ORDER, ending in the destination check
-
-For each lens: _what it catches_ + _how to apply it (against the contract)_.
-
-### 1. Claim-vs-reality
-
-Every concrete claim the artifact makes, checked against the real world.
-
-- Task/brief: each referenced symbol, path, function signature, "reuse X" — does it exist and have the assumed shape? (Catches ghost paths, wrong module homes, "reuse X" where X is private / wrongly-shaped.)
-- Code: does the diff actually do what its task/commit claims?
-- Any doc: does it match what landed in `tasks/done/` and the relevant ADRs/findings?
-- **Drift is a `needs-attention` / `needsAnswers` signal**, never something to paper over (WORK-CONTRACT.md). A task built on a stale premise is a `block`.
-
-### 2. Cleanup-vs-behaviour
-
-Anything framed as removal / dead-code / no-op, checked for **hidden live behaviour**. (Real catch: a `--by` flag "just cleanup" was actually feeding the claim commit and being read back.) If a "cleanup" changes behaviour, that's a defect or an unowned scope.
-
-This lens also owns **acceptance-criteria conformance** for code:
-
-- Does the code meet every acceptance criterion of its task?
-- **Shared-write isolation rule (WORK-CONTRACT.md):** if the code writes to a shared/global location (a real home/config dir, a system path, a shared service, an external tool's store), do its tests ISOLATE that location (temp/scratch via the named env/config lever) AND assert the real one is UNTOUCHED? A missing isolation test is a `block` — it silently pollutes and can crash unrelated tools.
-
-### 3. Cross-artifact composition (contract conformance)
-
-Do the artifacts COMPOSE, and do they obey the contract?
-
-- **Composition:** handoffs (one task ships a stub another fills), shared helpers with no owner, two tasks editing the SAME file/command in parallel (a merge conflict waiting to happen — should carry a `blockedBy` to serialise), one task deleting another's live tooling, cross-task side-effects.
-- **Contract conformance (assume these rules; flag violations):**
-  - **status = folder**, never a frontmatter field; **one file per item**; **no shared index/manifest**.
-  - **content-derived slug**, never a counter; **camelCase** field names (`humanOnly`, `needsAnswers`, `blockedBy`, `briefAfter`).
-  - **gate axes set HONESTLY** — `humanOnly` (a human must drive this) and `needsAnswers` (open questions, listed in the body) reflect the artifact's real nature; a task's gate is decided from _building that task_, NOT inherited from its brief; a falsely-complete `needsAnswers:false` is a defect.
-  - **`blockedBy` / `brief` / `covers`** present and correct (`brief` required iff `covers` is set); deps reference real slugs.
-  - **bucket polarity** for notes: _observation_ = spotted/unverified (append-only); _finding_ = verified EXTERNAL/domain ground truth; _ADR_ = a decision WE made + why (in `docs/adr/`). A note in the wrong bucket is a finding.
-  - **a task's `## Prompt`** is self-contained (an AFK agent could start from the file alone) and includes the drift-check.
-
-### 4. Conceptual coherence (does it fit the system's LANGUAGE?)
-
-The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — it is how, in practice, a single concept got applied at the WRONG LAYER and the inconsistency survived multiple tasks + briefs (the `autoSlice` gate that gated the `do brief:` VERB when it should have gated only the autonomous SELECTION — see `work/notes/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md`).
-
-For each concept / flag / config key / verb / status the artifact introduces or touches, ask three questions:
-
-- **(a) Consistent meaning?** Is the term used the SAME way it is already defined elsewhere (the project's `CONTEXT.md` glossary is the source of truth, plus the ADRs, other tasks, the code)? A term that silently RE-MEANS an existing word — or means two different things in two places — is incoherent.
-- **(b) Right layer?** Is the concept placed at the conceptual layer it actually belongs to? (A policy gate on the autonomous-SELECTION step vs on the explicit VERB; a knob on the loop vs on the one-shot; a check on "who invoked" when the system cannot even distinguish the invokers.) A correct mechanism at the wrong layer is incoherent.
-- **(c) Duplicate / overlap?** Does it FORK an existing concept under a new name instead of reusing or renaming the one that already exists? (Two flags meaning "isolate"; a new status that is really an existing one; a second lock primitive.) If it overlaps, the artifact should reuse/rename, not add.
-
-A concept that is coherent in ISOLATION but incoherent against the system's existing language is a `block` (or, for a task/brief not yet built, a `needsAnswers` / re-scope). Coherence is a first-class quality, not a nicety: an incoherent concept is debt that compounds silently across every artifact that later reuses the muddled term. When you spot the muddle, also check whether the GLOSSARY (`CONTEXT.md`) needs the term pinned so the next author cannot re-fork it.
-
-### 5. The destination check (the final, highest-value move)
-
-_"If every task is built / the code is merged exactly as written, do we END UP WITH the system the brief/ADR describes?"_ — distinct from per-piece correctness, and the strongest signal a decomposition is trustworthy (especially with no human).
-
-- Take the brief/ADR end-state as the spec; **map every promised element to a delivering task** — a hole = an element no task delivers.
-- Confirm **coverage is complete + non-duplicated** — every user story covered exactly once.
-- Audit the **deletion sweep** — a new system means the OLD surface is GONE; every removal owned by exactly one task, none unowned or double-owned.
-- Check for **orphans** (a task delivering something the end-state doesn't need) and that assumed-pre-existing foundations actually exist.
-- Confirm **deliberate non-deliveries are flagged** as named follow-ups, not silently missing.
-
-**`approve` must mean "provably reaches the brief/ADR goal," not "each piece looks fine."** If this lens finds a hole, it is the most important thing to `block`.
-
-## Your output
-
-Emit a verdict per reviewed item — and **write nothing** (no frontmatter edits, no `git mv`, no file changes). The caller routes it.
-
-```
-per item → { verdict: "approve" | "block",
-             findings: [ { severity: "blocking" | "non-blocking",
-                           question: <the question / defect, with enough context to act>,
-                           context:  <the relevant excerpt, file:line, or reasoning> } ] }
-```
-
-- **blocking** keeps the item out of "ready"; **non-blocking** is recorded but does not block (a nit, a future improvement). Be honest about which.
-- Give each finding enough context that a reader can act WITHOUT re-deriving it.
-
-### How callers route your verdict (not your job — for orientation only)
-
-- a **review GATE** routes a `block` → set `needsAnswers: true` on the artifact (question in its body) or mark its per-item lock `state: stuck` (needs-attention); `approve` → let it land / auto-merge.
-- a **conductor** (e.g. `drive-backlog`/`orchestrate`) routes a `block` → into its stuck-set / batched questions for the human; `approve` → merge / advance.
-
-## Scope fence
-
-This skill is the review _protocol/discipline_ only. The review **gates** — _when_ review runs (slice-time / PR-time), per-repo toggles, the model override, the `--propose` PR arbiter, auto-merge-on-approve, the role/seam wiring, the trust resolver — are NOT here; they live in the runner machinery (`work/briefs/tasked/review.md`). This skill assumes nothing about its caller beyond "you will route my verdict."
+> Why the standard lives in `work/protocol/`: a `review`-named discipline that the autonomous runner invokes BY NAME must be in-band in every set-up repo, not host-installed. Operator skills (this file) are human-facing and not copied. See ADR `methodology-and-skills.md` §6.

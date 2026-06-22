@@ -9,7 +9,23 @@ import {
 } from './work-layout.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
-import {extractJsonObjectSpan} from './verdict-json.js';
+import {
+	parseReviewVerdict,
+	ReviewParseError,
+	reviewDisciplinePrompt,
+	verdictContractPrompt,
+	type ReviewFinding,
+	type ReviewVerdict,
+	type SliceEdit,
+	type UncertainSlice,
+} from './review-verdict.js';
+
+// Re-export the shared SliceEdit + UncertainSlice sub-shapes (callers consume
+// them via the slicer-loop entry-point). The verdict ITSELF is the unified
+// ReviewVerdict from `review-verdict.ts` — SliceReviewVerdict is removed (slice
+// `review-protocol-doc-and-shared-machinery`).
+export type {SliceEdit, UncertainSlice} from './review-verdict.js';
+export {parseReviewVerdict as parseSliceReviewVerdict} from './review-verdict.js';
 
 /**
  * **The slicer review→edit→re-review→converge LOOP** (`slicer-review-edit-loop`,
@@ -68,69 +84,20 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * git, here as everywhere).
  */
 
-/** A single review finding, mirroring the `review` SKILL's verdict shape. */
-export interface SliceReviewFinding {
-	/** Whether this finding blocks (keeps the slice out of "ready") or is a nit. */
-	severity: 'blocking' | 'non-blocking';
-	/** The question / defect, with enough context to act. */
-	question: string;
-	/** The relevant excerpt, `file:line`, or reasoning. */
-	context?: string;
-}
+/**
+ * Backwards-compatible alias for {@link ReviewFinding}. Existing imports keep
+ * compiling; new code should reach for `ReviewFinding` from `review-verdict.ts`.
+ */
+export type SliceReviewFinding = ReviewFinding;
 
 /**
- * An EDIT the review agent wants applied to a candidate slice file between passes
- * — the "feed findings back into edits" mechanism (the loop's improver step). The
- * agent emits the FULL replacement content for a `work/pre-backlog/<slug>.md` file (or
- * a new file it adds); the runner writes it (the agent does no git / no direct
- * disk writes that escape the runner's capture).
+ * The slicer-loop verdict shape is now the UNIFIED {@link ReviewVerdict}
+ * (slice `review-protocol-doc-and-shared-machinery`). The slicer consumes the
+ * `edits` / `uncertainSlices` / `decompositionUnclear` channels; other review
+ * callers consume different channels of the same wide type. This alias keeps
+ * existing imports compiling; the standalone `SliceReviewVerdict` is retired.
  */
-export interface SliceEdit {
-	/** Repo-relative path of the candidate slice file to write (`work/pre-backlog/…`). */
-	path: string;
-	/** The full replacement content for that file. */
-	content: string;
-}
-
-/**
- * A specific slice the review judged UNCERTAIN — emit it `needsAnswers: true` with
- * the questions in its body (the first of the three verdict outcomes that is not
- * "converge"). The path points at the candidate slice file; the questions are
- * recorded in its body by the caller.
- */
-export interface UncertainSlice {
-	/** Repo-relative path of the uncertain candidate slice (`work/pre-backlog/…`). */
-	path: string;
-	/** The open questions to record in the slice body (a human answers them). */
-	questions: string[];
-}
-
-/**
- * The verdict the review agent emits PER PASS (and this loop interprets). It
- * mirrors the `review` SKILL's `{verdict, findings}` and EXTENDS it with the loop's
- * three improver/routing channels:
- *   - `edits` — full-content edits to APPLY to the candidate slices before the next
- *     pass (the improver step). Empty ⇒ no edits this pass.
- *   - `uncertainSlices` — specific slices to emit `needsAnswers: true` + questions
- *     (routing outcome 2). Used when the loop hits `slicerLoopMax` with blockers.
- *   - `decompositionUnclear` — the whole decomposition is still unclear (routing
- *     outcome 3: route the PRD to needs-attention, emit no guessed slices).
- *
- * Routing decisions use `verdict`/`findings`/`uncertainSlices`/
- * `decompositionUnclear`; `edits` drive the in-context improvement.
- */
-export interface SliceReviewVerdict {
-	/** `approve` = no new blocking issue (the natural terminator); `block` = keep iterating. */
-	verdict: 'approve' | 'block';
-	/** The findings this pass surfaced. */
-	findings: SliceReviewFinding[];
-	/** Full-content edits to apply to the candidate slices before the next pass. */
-	edits?: SliceEdit[];
-	/** Specific slices to emit `needsAnswers: true` + questions (cap-hit routing). */
-	uncertainSlices?: UncertainSlice[];
-	/** The whole decomposition is unclear → route the PRD to needs-attention. */
-	decompositionUnclear?: {questions: string[]};
-}
+export type SliceReviewVerdict = ReviewVerdict;
 
 /** What the review gate needs to launch a fresh-context review+edit pass. */
 export interface SliceReviewGateInput {
@@ -588,8 +555,12 @@ export interface HarnessSliceReviewGateOptions {
 	readOutput?: (output: string | undefined) => string;
 }
 
-/** Raised when the review agent ran but produced no parseable verdict. */
-export class SliceReviewParseError extends Error {}
+/**
+ * Backwards-compatible alias for {@link ReviewParseError} — unified across all
+ * review callers. New code should reach for `ReviewParseError` directly.
+ */
+export const SliceReviewParseError = ReviewParseError;
+export type SliceReviewParseError = ReviewParseError;
 
 /**
  * The PRODUCTION slicer-review gate: launch the `review` SKILL as a fresh-context
@@ -608,7 +579,7 @@ export function harnessSliceReviewGate(
 ): SliceReviewGate {
 	const harness = options.harness ?? new NullHarness();
 	const readOutput = options.readOutput ?? ((output) => output ?? '');
-	return async (input: SliceReviewGateInput): Promise<SliceReviewVerdict> => {
+	return async (input: SliceReviewGateInput): Promise<ReviewVerdict> => {
 		const launched = await launchWithOptionalWatch({
 			harness,
 			dir: input.cwd,
@@ -622,13 +593,13 @@ export function harnessSliceReviewGate(
 			env: input.env,
 		});
 		if (!launched.ok) {
-			throw new SliceReviewParseError(
+			throw new ReviewParseError(
 				`slice review agent launch failed${
 					launched.detail ? `: ${launched.detail}` : ''
 				}`,
 			);
 		}
-		return parseSliceReviewVerdict(readOutput(launched.output));
+		return parseReviewVerdict(readOutput(launched.output));
 	};
 }
 
@@ -646,19 +617,20 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 	const list = input.candidateSlices.map((p) => `  - ${p}`).join('\n');
 	return [
 		`You are a FRESH-CONTEXT reviewer in the SLICER review→edit→converge LOOP`,
-		`(insertion point A). Run the \`review\` skill on the CANDIDATE SLICES just`,
-		`produced for the PRD "${slugPrd(input.slug)}":`,
+		`(insertion point A). Review the CANDIDATE SLICES just produced for the PRD`,
+		`"${input.slug}":`,
 		list || '  (no candidate slices found)',
 		``,
+		reviewDisciplinePrompt(),
+		``,
 		`Read the source PRD (work/prd/${input.slug}.md) and review the candidate`,
-		`decomposition ADVERSARIALLY. Apply the review skill's lenses IN ORDER,`,
-		`reviewing the WHOLE SET — graph coherence / gaps / overlap / goal-composition`,
-		`(dependency-graph coherence, set-level gaps, overlapping/duplicated slices,`,
-		`and "does the set compose into the PRD goal") — not just per-slice`,
-		`well-formedness, and ENDING in the DESTINATION CHECK ("if every slice is`,
-		`built exactly as written, do we end up with the system the PRD describes?").`,
-		`The destination check is PART OF this pass and may ITSELF trigger edits —`,
-		`that is why this is a loop, not a one-shot gate.`,
+		`decomposition ADVERSARIALLY. Review the WHOLE SET — graph coherence / gaps /`,
+		`overlap / goal-composition (dependency-graph coherence, set-level gaps,`,
+		`overlapping/duplicated slices, and "does the set compose into the PRD goal")`,
+		`— not just per-slice well-formedness. The DESTINATION CHECK ("if every slice`,
+		`is built exactly as written, do we end up with the system the PRD describes?")`,
+		`is PART OF this pass and may ITSELF trigger edits — that is why this is a`,
+		`loop, not a one-shot gate.`,
 		``,
 		`This is review pass ${input.pass} (fresh context ${input.execution}). You`,
 		`do NOT edit files or run git yourself — you EMIT the edits to apply as FULL`,
@@ -666,22 +638,18 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 		`measurably keep improving when reviewed, so propose edits that fix the`,
 		`findings; converge when a pass finds NO NEW blocking issue.`,
 		``,
-		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it):`,
-		`{"verdict": "approve" | "block",`,
-		` "findings": [ {"severity": "blocking" | "non-blocking", "question": "…", "context": "…"} ],`,
-		` "edits": [ {"path": "work/pre-backlog/<slug>.md", "content": "<full new file content>"} ],`,
-		` "uncertainSlices": [ {"path": "work/pre-backlog/<slug>.md", "questions": ["…"]} ],`,
-		` "decompositionUnclear": {"questions": ["…"]} }`,
+		verdictContractPrompt(),
 		``,
-		`Use "approve" with no blocking findings when the decomposition reaches the`,
-		`PRD goal and no edit is needed (the natural terminator). Otherwise "block"`,
-		`and supply "edits" that fix the findings. Only when you CANNOT fix it by`,
-		`editing — a genuinely unresolved design decision — set "uncertainSlices"`,
-		`(for a specific slice you cannot make buildable) and/or`,
-		`"decompositionUnclear" (when the WHOLE decomposition is unsound). Flag, do`,
-		`not guess: a flagged question costs one human glance; a guessed slice ships`,
-		`wrong-but-compiling work. Omit "edits"/"uncertainSlices"/`,
-		`"decompositionUnclear" when not applicable.`,
+		`Fill the channels appropriate to THIS caller (the slicer improver loop):`,
+		`  - "edits" — full-content replacements for candidate slice files when you`,
+		`    can FIX a finding by editing (the natural improver step).`,
+		`  - "uncertainSlices" — specific slices you cannot make buildable (each gets`,
+		`    \`needsAnswers: true\` with the questions in its body).`,
+		`  - "decompositionUnclear" — the WHOLE decomposition is unsound (the PRD is`,
+		`    routed to needs-attention; emit no guessed slices).`,
+		`Do NOT fill "review" / "edit" / "questions" — those are other callers'`,
+		`channels. Flag, do not guess: a flagged question costs one human glance; a`,
+		`guessed slice ships wrong-but-compiling work.`,
 		``,
 		`SLICE \`humanOnly\` IS NARROW. Only edit a slice to add \`humanOnly: true\``,
 		`when building THAT slice is genuinely never-for-agents BY NATURE (secrets/`,
@@ -695,126 +663,9 @@ export function buildSliceReviewPrompt(input: SliceReviewGateInput): string {
 	].join('\n');
 }
 
-/** Helper for the prompt: the PRD reference (kept simple — the slug names the PRD). */
-function slugPrd(slug: string): string {
-	return slug;
-}
-
-/**
- * Parse the slice-review verdict out of the review agent's textual output. The
- * agent may wrap the JSON object in prose / a fenced block, so we extract the first
- * JSON object carrying a `verdict` field (brace-matched, string-aware) and validate
- * its shape. Throws {@link SliceReviewParseError} when no valid verdict is present
- * (the caller treats an unparseable verdict as an error → the rejection sink, never
- * a silent approve).
- */
-export function parseSliceReviewVerdict(output: string): SliceReviewVerdict {
-	const span = extractJsonObjectSpan(output);
-	if (span === undefined) {
-		throw new SliceReviewParseError(
-			'slice review agent produced no parseable {verdict, …} result',
-		);
-	}
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(output.slice(span.start, span.end));
-	} catch (err) {
-		throw new SliceReviewParseError(
-			`slice review verdict was not valid JSON: ${(err as Error).message}`,
-		);
-	}
-	return validateVerdict(parsed);
-}
-
-/** Validate + normalise a parsed object into a {@link SliceReviewVerdict}. */
-function validateVerdict(parsed: unknown): SliceReviewVerdict {
-	if (typeof parsed !== 'object' || parsed === null) {
-		throw new SliceReviewParseError('slice review verdict was not an object');
-	}
-	const obj = parsed as Record<string, unknown>;
-	const verdict = obj.verdict;
-	if (verdict !== 'approve' && verdict !== 'block') {
-		throw new SliceReviewParseError(
-			`slice review verdict was not 'approve' or 'block' (got ${JSON.stringify(
-				verdict,
-			)})`,
-		);
-	}
-	const rawFindings = Array.isArray(obj.findings) ? obj.findings : [];
-	const findings: SliceReviewFinding[] = rawFindings.map((f) => {
-		const item = (typeof f === 'object' && f !== null ? f : {}) as Record<
-			string,
-			unknown
-		>;
-		const severity = item.severity === 'blocking' ? 'blocking' : 'non-blocking';
-		return {
-			severity,
-			question: typeof item.question === 'string' ? item.question : '',
-			...(typeof item.context === 'string' ? {context: item.context} : {}),
-		};
-	});
-	const edits = parseEdits(obj.edits);
-	const uncertainSlices = parseUncertainSlices(obj.uncertainSlices);
-	const decompositionUnclear = parseDecompositionUnclear(
-		obj.decompositionUnclear,
-	);
-	return {
-		verdict,
-		findings,
-		...(edits.length > 0 ? {edits} : {}),
-		...(uncertainSlices.length > 0 ? {uncertainSlices} : {}),
-		...(decompositionUnclear ? {decompositionUnclear} : {}),
-	};
-}
-
-function parseEdits(raw: unknown): SliceEdit[] {
-	if (!Array.isArray(raw)) {
-		return [];
-	}
-	const out: SliceEdit[] = [];
-	for (const e of raw) {
-		if (typeof e !== 'object' || e === null) {
-			continue;
-		}
-		const item = e as Record<string, unknown>;
-		if (typeof item.path === 'string' && typeof item.content === 'string') {
-			out.push({path: item.path, content: item.content});
-		}
-	}
-	return out;
-}
-
-function parseUncertainSlices(raw: unknown): UncertainSlice[] {
-	if (!Array.isArray(raw)) {
-		return [];
-	}
-	const out: UncertainSlice[] = [];
-	for (const u of raw) {
-		if (typeof u !== 'object' || u === null) {
-			continue;
-		}
-		const item = u as Record<string, unknown>;
-		if (typeof item.path !== 'string') {
-			continue;
-		}
-		out.push({path: item.path, questions: stringList(item.questions)});
-	}
-	return out;
-}
-
-function parseDecompositionUnclear(
-	raw: unknown,
-): {questions: string[]} | undefined {
-	if (typeof raw !== 'object' || raw === null) {
-		return undefined;
-	}
-	const item = raw as Record<string, unknown>;
-	return {questions: stringList(item.questions)};
-}
-
-function stringList(raw: unknown): string[] {
-	if (!Array.isArray(raw)) {
-		return [];
-	}
-	return raw.filter((q): q is string => typeof q === 'string');
-}
+// Parsing of the slicer-loop verdict is now the SHARED `parseReviewVerdict`
+// from `review-verdict.ts` (re-exported above as `parseSliceReviewVerdict` for
+// backwards compatibility). The unified parser validates the SAME shape this
+// loop's prompt asks for; routing reads `findings` / `edits` /
+// `uncertainSlices` / `decompositionUnclear` off the unified `ReviewVerdict`,
+// identical to the old typed-narrow validator.
