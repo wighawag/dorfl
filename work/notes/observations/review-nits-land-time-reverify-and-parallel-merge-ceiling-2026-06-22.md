@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'land-time-reverify-and-parallel-merge-
 date: 2026-06-22
 status: open
 reviewOf: land-time-reverify-and-parallel-merge-ceiling
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
