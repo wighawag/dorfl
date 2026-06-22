@@ -1,15 +1,8 @@
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	writeFileSync,
-	rmSync,
-} from 'node:fs';
+import {existsSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
 	type WorkFolderKey,
-	workFolderPath,
 	workFolderPrefix,
 	workFolderRel,
 	workItemRel,
@@ -25,7 +18,6 @@ import {
 	parseLockEntry,
 	type LockEntry,
 } from './item-lock.js';
-import {ledgerRead} from './ledger-read.js';
 import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
 import {
@@ -209,28 +201,6 @@ export interface ReturnToBacklogResult {
 	reasonNotMoved?: string;
 }
 
-export interface ResolveFromNeedsAttentionOptions {
-	/** The working clone the `work/` tree lives in. */
-	cwd: string;
-	/** The slug of the needs-attention item to resolve back to in-progress. */
-	slug: string;
-	/** Environment for child git processes. */
-	env?: NodeJS.ProcessEnv;
-	/** Sink for human-readable progress notes. */
-	note?: (message: string) => void;
-}
-
-export interface ResolveFromNeedsAttentionResult {
-	/** True iff the item was moved back to in-progress + committed. */
-	moved: boolean;
-	/** When `moved`, the committed transition message. */
-	commitMessage?: string;
-	/** When `moved`, the sha of the reverse move-only commit (the new tip). */
-	moveCommit?: string;
-	/** When NOT moved, why (e.g. the slug was not in needs-attention). */
-	reasonNotMoved?: string;
-}
-
 export interface SurfaceToNeedsAttentionOptions {
 	/**
 	 * The working clone the move is ORIGINATED from — purely the ORIGIN SOURCE
@@ -306,20 +276,6 @@ function findSourceFolder(
 		}
 	}
 	return undefined;
-}
-
-/** One needs-attention item as the surface (`status`) reads it. */
-export interface NeedsAttentionItem {
-	/** Filename within `work/needs-attention/` (e.g. `alpha.md`). */
-	file: string;
-	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
-	slug: string;
-	/**
-	 * The recorded reason prose (the text under the `## Needs attention` heading),
-	 * when present — surfaced by `status`. Empty string when no reason block was
-	 * written (e.g. an item moved here by hand).
-	 */
-	reason: string;
 }
 
 /**
@@ -1397,138 +1353,13 @@ function appendRequeueNoteText(content: string, message: string): string {
 }
 
 /**
- * Resolve a stuck item back to `in-progress/` (the reverse of the
- * needs-attention move) so a human can pick it up again. The clean-up half of
- * the surfacing design (PRD `needs-attention-cherry-pick`): once a human starts
- * a stuck slice, the needs-attention surface must be CLEARED and the item
- * restored to in-progress. It `git mv work/needs-attention/<slug>.md →
- * work/in-progress/<slug>.md` and commits the MOVE-ONLY transition (the recorded
- * reason stays in the body as a durable note). Returns the move commit sha so a
- * surfacing strategy can publish the reverse move to clear the ledger surface.
- *
- * Like the other moves, NEVER throws for the expected "not in needs-attention"
- * case — it returns `{moved: false, reasonNotMoved}`.
- */
-export function resolveFromNeedsAttention(
-	options: ResolveFromNeedsAttentionOptions,
-): ResolveFromNeedsAttentionResult {
-	const note = options.note ?? (() => {});
-	const {cwd, slug, env} = options;
-
-	const naRel = workItemRel('needs-attention', `${slug}.md`);
-	const naAbs = join(cwd, naRel);
-	if (!existsSync(naAbs)) {
-		return {
-			moved: false,
-			reasonNotMoved:
-				`work/needs-attention/${slug}.md not found — nothing to resolve back ` +
-				'to in-progress (wrong slug, or not in needs-attention?).',
-		};
-	}
-
-	const destDir = workFolderPath(cwd, 'in-progress');
-	mkdirSync(destDir, {recursive: true});
-	const destRel = workItemRel('in-progress', `${slug}.md`);
-	gitHard(['mv', naRel, destRel], cwd, env);
-
-	gitHard(['add', '-A'], cwd, env);
-	const commitMessage = `chore(${slug}): resolve needs-attention; return to in-progress`;
-	gitHard(['commit', '-q', '-m', commitMessage], cwd, env);
-	const moveCommit = revParseHead(cwd, env);
-	note(`Resolved '${slug}' from needs-attention back to in-progress.`);
-
-	return {moved: true, commitMessage, moveCommit};
-}
-
-/**
- * List the `work/needs-attention/*.md` items for a repo with their recorded
- * reason — the "look here" surface `status` renders. Read-only; returns `[]`
- * when the folder is absent (the common case). Skipped by `scan`/eligibility for
- * claiming (those read only `work/backlog/`), this is the surface companion.
- */
-export function readNeedsAttentionItems(
-	repoPath: string,
-): NeedsAttentionItem[] {
-	// Resolve the needs-attention surface THROUGH the read seam's local-tree
-	// method (offline). The seam returns each item's raw `content`; we extract the
-	// reason prose here, exactly as the inline read did.
-	const {needsAttention} = ledgerRead.resolveLocalState({repoPath});
-	return needsAttention.map((item) => ({
-		file: item.file,
-		slug: item.slug,
-		reason: extractReason(item.content),
-	}));
-}
-
-/**
- * Append the reason (and any surfaced questions) to an item file as a body
- * block. We add ONLY to the body, never the frontmatter — state stays the folder
- * (WORK-CONTRACT rule 3); the reason is durable prose. A single trailing block
- * keeps it idempotent-ish and easy to read in `ls`/`status`.
- */
-function appendReasonBlock(
-	path: string,
-	reason: string,
-	questions: string[] | undefined,
-): void {
-	const current = readFileSync(path, 'utf8');
-	writeFileSync(path, appendReasonBlockText(current, reason, questions));
-}
-
-/**
- * Append the reason (+ any surfaced questions) to an item body's TEXT — the
- * PURE-string sibling of {@link appendReasonBlock} (it operates on body CONTENT,
- * not a file path), so the tree-less surface can apply it to the blob read off
- * `<arbiter>/main` without touching the cwd working tree. IDEMPOTENT: if the body
- * ALREADY ends with this exact reason block (a re-surface with an unchanged
- * reason), it returns the body unchanged — re-surfacing must not thrash the file
- * nor accrete duplicate blocks. Shared by both the cwd-bound and tree-less paths
- * so the two agree byte-for-byte on what "the same reason block" is.
- */
-function appendReasonBlockText(
-	content: string,
-	reason: string,
-	questions: string[] | undefined,
-): string {
-	// Ensure a clear separation from whatever the body ended with.
-	const base = content.replace(/\s*$/, '');
-	const block = reasonBlockText(reason, questions);
-	// IDEMPOTENT re-surface: if the body ALREADY ends with this exact reason block
-	// (the continue-conflict re-route of an item already in needs-attention with an
-	// unchanged reason), do NOT append a duplicate — re-surfacing must not thrash the
-	// file. The move-only commit then carries no content change.
-	if (base.endsWith(block.replace(/\s*$/, ''))) {
-		return content;
-	}
-	return `${base}\n${block}`;
-}
-
-/**
- * The body block text for a reason (+ any surfaced questions), without the
- * leading separator. Shared by the append + the idempotent-re-surface guard so
- * the two agree byte-for-byte on what "the same reason block" is.
- */
-function reasonBlockText(
-	reason: string,
-	questions: string[] | undefined,
-): string {
-	const lines: string[] = ['', REASON_HEADING, '', reason];
-	if (questions && questions.length > 0) {
-		lines.push('');
-		lines.push('### Surfaced questions');
-		lines.push('');
-		for (const q of questions) {
-			lines.push(`- ${q}`);
-		}
-	}
-	lines.push('');
-	return lines.join('\n');
-}
-
-/**
- * Extract the prose written under the `## Needs attention` heading — the reason
- * `status` surfaces. Returns the first non-empty line(s) of the block as a
- * single line (stops at the next `## ` heading); '' when no block is present.
+ * Extract the prose written under the `## Needs attention` heading from an item
+ * body. Returns the first non-empty line(s) of the block as a single line
+ * (stops at the next `## ` heading); '' when no block is present. The
+ * needs-attention REASON is now recorded on the per-item lock entry (slice
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+),
+ * NOT in the body, but this extractor stays for any historical body text that
+ * still carries the heading (a tolerant best-effort read).
  */
 export function extractReason(content: string): string {
 	const normalized = content.replace(/\r\n/g, '\n');

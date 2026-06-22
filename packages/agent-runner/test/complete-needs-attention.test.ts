@@ -2,7 +2,6 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performComplete} from '../src/complete.js';
-import {readNeedsAttentionItems} from '../src/needs-attention.js';
 import {readItemLock} from '../src/item-lock.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
