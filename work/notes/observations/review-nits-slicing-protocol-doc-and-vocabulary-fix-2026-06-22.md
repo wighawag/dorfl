@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'slicing-protocol-doc-and-vocabulary-fi
 date: 2026-06-22
 status: open
 reviewOf: slicing-protocol-doc-and-vocabulary-fix
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
