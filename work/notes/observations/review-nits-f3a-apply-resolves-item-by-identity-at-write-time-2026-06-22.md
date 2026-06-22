@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'f3a-apply-resolves-item-by-identity-at
 date: 2026-06-22
 status: open
 reviewOf: f3a-apply-resolves-item-by-identity-at-write-time
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
