@@ -1,0 +1,19 @@
+---
+title: review-gate non-blocking nits for 'f2-surface-staging-config-and-pool-extension' (Gate 2 approve)
+date: 2026-06-22
+status: open
+reviewOf: f2-surface-staging-config-and-pool-extension
+---
+
+## Non-blocking review findings
+
+The PR/code review gate (Gate 2) APPROVED 'f2-surface-staging-config-and-pool-extension' but raised the
+following non-blocking findings (nits). They do not block integration; this
+is their durable home for triage — promote-to-slice / keep / delete.
+
+- The commit/PR body is empty — no `## Decisions` block, despite the slice prompt explicitly asking the agent to RECORD non-obvious in-scope decisions. Please ratify (or reverse) the decisions made silently: (1) `LifecyclePoolGates.surfaceStaging` defaults to `false` at the library boundary while `Config.surfaceStaging` defaults `true` (the user-visible default), with the calm-default being load-bearing for any direct caller of `gatherLifecycle*` that doesn't thread CLI gates; (2) four new methods (`resolveLocalTaskStaging` / `resolveLocalBriefStaging` / `resolveMirrorTaskStaging` / `resolveMirrorBriefStaging`) added to the public `LedgerReadStrategy` interface — exported from `index.ts` — rather than reusing/extending `resolveLocalState`/`resolveMirrorState` to also enumerate staging behind a flag; (3) the gate is consumed by the GATHER, NOT by the pure `buildLifecyclePools`, even though the gate field lives on `LifecyclePoolGates` (acknowledged in the doc comment but worth ratifying as the intended placement); (4) `surfaceStaging` added to `REPO_ALLOWED_KEYS` so a repo's `.agent-runner.json` can flip it — the slice implies this via the resolution chain but doesn't spell it out.
+  (`git log -1 HEAD` shows only the title; no body. The recurring observation `decisions-block-convention-repeatedly-skipped` already exists, and this slice perpetuates the pattern.)
+- There is no direct test of `gatherLifecycleMirror`'s staging widening — neither `advance-autopick-lifecycle-mirror.test.ts` nor `mirror-pool-scan.test.ts` was extended, and no test grep-matches `surfaceStaging` AND a mirror call site. The new mirror readers (`readTaskStagingFromTree`, `readBriefStagingFromTree`) parse `<ref>:work/tasks/backlog/*.md` / `<ref>:work/briefs/proposed/*.md` via `git ls-tree`+`git show`, which is the actual code path CI's propose-matrix executes against the bare hub mirror. The in-place path is well-covered; the mirror path is unverified by the new test file. Worth a single test that seeds a staged `needsAnswers` item, pushes to a bare mirror, and asserts `gatherLifecycleMirror({...,gates:{surface:true,surfaceStaging:true}}).surface` enumerates it (and is empty when `surfaceStaging:false`).
+  (`packages/agent-runner/test/surface-staging-config-and-pool.test.ts` exercises `gatherLifecycleInPlace` and `scanRepoPaths` (which dispatches to the in-place gather), plus a real-git apply/lock pair — but never invokes `gatherLifecycleMirror` or the new `resolveMirror*Staging` methods directly.)
+- Edge case: an answered sidecar can become STRANDED if `surfaceStaging` is flipped from `true` to `false` after the surface tick has minted+answered. Under `surfaceStaging:false` the gather no longer enumerates the staged item into `needsAnswers[]`, so `buildLifecyclePools` cannot route it to `apply` either — even though apply is documented as 'CONSUME, always-on'. In practice the off→on flip is the realistic direction and the answered sidecar only exists if surfacing minted it (so the user opted in), so impact is small; flagging in case the intended invariant is 'apply consumes regardless of gate state'.
+  (`lifecycle-gather.ts` `gatherLifecycleInPlace` skips the staging read entirely when `surfaceStaging:false`; `buildLifecyclePools` then never sees the candidate. Cf. ADR `ci-config-policy-and-gate-family` §4 (create-vs-consume invariant).)

@@ -69,6 +69,20 @@ export interface LifecyclePoolGates {
 	 * gate replaces this). OFF \u21d2 blocked items are never auto-surfaced.
 	 */
 	surface?: boolean;
+	/**
+	 * Does the SURFACE candidate set widen to include STAGING (`tasks/backlog/` +
+	 * `briefs/proposed/`), or stay POOL-ONLY? This field is CONSUMED BY THE
+	 * GATHER (`lifecycle-gather.ts`), NOT by {@link buildLifecyclePools} — the
+	 * builder is pure and only routes already-resolved candidates between surface
+	 * / apply by sidecar-answered-state. The gather decides WHICH items become
+	 * candidates in the first place; this gate widens that input set when `true`.
+	 * Default `false` at THIS library boundary (calm; the CLI threads
+	 * `config.surfaceStaging` which itself defaults to `true`, so the user-visible
+	 * default is `true`). Brief `staging-surface-and-apply-promote-safety` F2.
+	 * BUILD/claim eligibility is UNCHANGED in either mode — staging items stay
+	 * non-claimable, the trust model is untouched.
+	 */
+	surfaceStaging?: boolean;
 }
 
 /**

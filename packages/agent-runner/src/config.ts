@@ -171,6 +171,24 @@ export interface Config {
 	 */
 	surfaceBlockers: boolean;
 	/**
+	 * Per-repo policy governing whether SURFACING (the question-minting polarity)
+	 * inspects STAGING in addition to the agent pool — the BOOLEAN gate-family
+	 * member added by brief `staging-surface-and-apply-promote-safety` (F2). The
+	 * BUILD polarity is UNCHANGED in either mode: staging items stay non-claimable,
+	 * the trust model is untouched. `true` (default) ⇒ the SURFACE candidate set
+	 * draws from STAGING (`tasks/backlog/`, `briefs/proposed/`) PLUS the pool, so
+	 * a `needsAnswers` task/brief in staging surfaces its questions BEFORE a human
+	 * promotes it (you promote an already-clarified item, not blind and then get
+	 * asked after); `false` ⇒ the legacy POOL-ONLY behaviour (staging is not
+	 * inspected for questions). Resolved like `surfaceBlockers`/`autoBuild`:
+	 * flag > `AGENT_RUNNER_SURFACE_STAGING` env > per-repo > global > default
+	 * `true`. Surfacing is read-only-ish (writes a question sidecar; touches only
+	 * the item's per-item lock), so widening it into staging does NOT loosen the
+	 * BUILD trust gate — it only stops the surface polarity from being
+	 * gratuitously trust-gated identically to it.
+	 */
+	surfaceStaging: boolean;
+	/**
 	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
 	 * eligible slices, `slice` = sliceable PRDs, `surface` = `needsAnswers`
 	 * blockers, `triage` = untriaged observations). `apply` (consume a committed
@@ -564,6 +582,14 @@ export const DEFAULT_CONFIG: Config = {
 	// `surfaceBlockers`. Orthogonal PEER to `observationTriage`; `needs-attention`
 	// (a stuck build) is separate + always-on. ADR `ci-config-policy-and-gate-family` §3.
 	surfaceBlockers: false,
+	// SURFACING widens to STAGING by default (`true`) — a `needsAnswers` task in
+	// `tasks/backlog/` or a `needsAnswers` brief in `briefs/proposed/` surfaces
+	// its questions BEFORE promotion, so a human promotes an already-clarified
+	// item. Brief `staging-surface-and-apply-promote-safety` (F2). BUILD/claim
+	// stays pool-only + trust-gated regardless: this widens ONLY the surface
+	// polarity, not the build polarity. Set `false` to restore the legacy
+	// pool-only surface behaviour.
+	surfaceStaging: true,
 	// The `drain` selection-order preset by default (ADR `ci-config-policy-and-gate-
 	// family`, selection-order section): drain ready work (build eligible slices →
 	// slice sliceable PRDs) before creating/asking (surface → triage); `apply` is

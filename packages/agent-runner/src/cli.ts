@@ -299,6 +299,12 @@ function buildRegistrySetAdvanceTick(options: {
 		lifecycleGates: {
 			triage: config.observationTriage !== 'off',
 			surface: config.surfaceBlockers,
+			// `surfaceStaging` widens the SURFACE candidate set into STAGING (brief
+			// `staging-surface-and-apply-promote-safety` F2). Default `true` — a
+			// sliced `needsAnswers` task in `tasks/backlog/` (or brief in
+			// `briefs/proposed/`) surfaces its questions BEFORE promotion. BUILD/claim
+			// stays pool-only either way.
+			surfaceStaging: config.surfaceStaging,
 		},
 		// Build the per-mirror advance CONTEXT the registry-set driver injects its
 		// per-mirror job-worktree `doDriver` on top of: the build/slice `doOptions`
@@ -2557,6 +2563,7 @@ export function buildProgram(): Command {
 						lifecycleGates: {
 							triage: remoteConfig.observationTriage !== 'off',
 							surface: remoteConfig.surfaceBlockers,
+							surfaceStaging: remoteConfig.surfaceStaging,
 						},
 					});
 					console.error(`>> ${multi.message}`);
@@ -2702,6 +2709,7 @@ export function buildProgram(): Command {
 					lifecycleGates: {
 						triage: config.observationTriage !== 'off',
 						surface: config.surfaceBlockers,
+						surfaceStaging: config.surfaceStaging,
 					},
 				});
 				console.error(`>> ${multi.message}`);

@@ -319,6 +319,41 @@ export interface LedgerReadStrategy {
 	 * {@link resolveLocalState}.
 	 */
 	resolvePrdPool(input: ResolvePrdPoolInput): LedgerPrdPool;
+	/**
+	 * Enumerate `work/tasks/backlog/*.md` (the TASK STAGING folder) into the SAME
+	 * {@link LedgerTodoItem} shape `resolveLocalState().todo` returns for the pool
+	 * — the SURFACE-on-staging widening (brief
+	 * `staging-surface-and-apply-promote-safety` F2). Synchronous + OFFLINE
+	 * (working-tree read), like {@link resolveLocalState}. The pool / staging
+	 * folders are distinct durable status folders (one-slug-one-folder — a slug
+	 * is in at most one), so the two reads compose without de-duplication
+	 * gymnastics. Missing folder reads as empty. CONSUMED ONLY by the lifecycle
+	 * GATHER under the `surfaceStaging` gate — the BUILD/claim pool stays
+	 * pool-only (`resolveLocalState().todo`), untouched by this read.
+	 */
+	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerTodoItem[];
+	/**
+	 * Enumerate `work/briefs/proposed/*.md` (the BRIEF STAGING folder) into the
+	 * SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns for the
+	 * pool — the BRIEF-symmetric `surfaceStaging` widening (brief
+	 * `staging-surface-and-apply-promote-safety` F2, PRD q4 answer). Sync + OFFLINE.
+	 */
+	resolveLocalBriefStaging(input: ResolvePrdPoolInput): LedgerPrdItem[];
+	/**
+	 * Mirror-ref counterpart of {@link resolveLocalTaskStaging}: read
+	 * `<ref>:work/tasks/backlog/*.md` from a BARE hub mirror via `git ls-tree` +
+	 * `git show` (the SAME mechanism `resolveMirrorState` uses for the pool).
+	 */
+	resolveMirrorTaskStaging(
+		input: ResolveMirrorStateInput,
+	): Promise<LedgerTodoItem[]>;
+	/**
+	 * Mirror-ref counterpart of {@link resolveLocalBriefStaging}: read
+	 * `<ref>:work/briefs/proposed/*.md` from a bare mirror.
+	 */
+	resolveMirrorBriefStaging(
+		input: ResolveMirrorPrdPoolInput,
+	): Promise<LedgerPrdItem[]>;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -339,9 +374,18 @@ function slugForFile(dir: string, file: string): string {
 	return fm.slug ?? basename(file, '.md');
 }
 
-/** Read `work/tasks/todo/*.md` (the agent POOL) from the local tree, parsed and sorted by slug. */
-function readLocalTodo(repoPath: string): LedgerTodoItem[] {
-	const dir = workFolderPath(repoPath, 'tasks-todo');
+/**
+ * Read a folder of TASK items (`tasks-todo` or `tasks-backlog`) from the local
+ * tree into the {@link LedgerTodoItem[]} shape. Factored so the POOL reader
+ * (`tasks/todo`) and the STAGING reader (`tasks/backlog`, the `surfaceStaging`
+ * widening) share one parse path — the two folders carry the SAME item shape
+ * (frontmatter + body), only the trust polarity differs.
+ */
+function readLocalTaskFolder(
+	repoPath: string,
+	folder: 'tasks-todo' | 'tasks-backlog',
+): LedgerTodoItem[] {
+	const dir = workFolderPath(repoPath, folder);
 	const items: LedgerTodoItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -355,6 +399,43 @@ function readLocalTodo(repoPath: string): LedgerTodoItem[] {
 		});
 	}
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/** Read `work/tasks/todo/*.md` (the agent POOL) from the local tree, parsed and sorted by slug. */
+function readLocalTodo(repoPath: string): LedgerTodoItem[] {
+	return readLocalTaskFolder(repoPath, 'tasks-todo');
+}
+
+/**
+ * Read `work/tasks/backlog/*.md` (the TASK STAGING folder, brief
+ * `staging-surface-and-apply-promote-safety` F2) from the local tree. Same
+ * {@link LedgerTodoItem} shape as the pool reader — the SURFACE-on-staging
+ * widening only enumerates items; it does NOT promote them.
+ */
+function readLocalTaskStaging(repoPath: string): LedgerTodoItem[] {
+	return readLocalTaskFolder(repoPath, 'tasks-backlog');
+}
+
+/**
+ * Read `work/briefs/proposed/*.md` (the BRIEF STAGING folder, the brief twin
+ * of {@link readLocalTaskStaging}, PRD q4 answer) from the local tree. Returns
+ * the SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns.
+ */
+function readLocalBriefStaging(repoPath: string): LedgerPrdItem[] {
+	const dir = workFolderPath(repoPath, 'briefs-proposed');
+	const prds: LedgerPrdItem[] = [];
+	for (const file of listMarkdown(dir)) {
+		const content = readFileSync(join(dir, file), 'utf8');
+		const fm = parseFrontmatter(content);
+		prds.push({
+			file,
+			slug: fm.slug ?? basename(file, '.md'),
+			humanOnly: fm.humanOnly,
+			needsAnswers: fm.needsAnswers,
+			briefAfter: fm.briefAfter,
+		});
+	}
+	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /** Collect the slugs present in `work/done/` on the local tree. */
@@ -561,13 +642,18 @@ async function readDoneSlugsFromTree(
 	return slugs;
 }
 
-/** Parse `<ref>:work/tasks/todo/*.md` into pool items, sorted by slug. */
-async function readTodoFromTree(
+/**
+ * Parse `<ref>:work/tasks/<folder>/*.md` from a committed tree into
+ * {@link LedgerTodoItem[]}, sorted by slug. Factored so the POOL + STAGING
+ * mirror reads share ONE parse path (mirrors `readLocalTaskFolder`).
+ */
+async function readTaskFolderFromTree(
+	folder: 'tasks-todo' | 'tasks-backlog',
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerTodoItem[]> {
-	const base = `${ref}:${workFolderRel('tasks-todo')}`;
+	const base = `${ref}:${workFolderRel(folder)}`;
 	const items: LedgerTodoItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
@@ -584,6 +670,49 @@ async function readTodoFromTree(
 		});
 	}
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/** Parse `<ref>:work/tasks/todo/*.md` into pool items, sorted by slug. */
+async function readTodoFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerTodoItem[]> {
+	return readTaskFolderFromTree('tasks-todo', ref, cwd, env);
+}
+
+/** Parse `<ref>:work/tasks/backlog/*.md` (TASK STAGING) into items, sorted by slug. */
+async function readTaskStagingFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerTodoItem[]> {
+	return readTaskFolderFromTree('tasks-backlog', ref, cwd, env);
+}
+
+/** Parse `<ref>:work/briefs/proposed/*.md` (BRIEF STAGING) into PRD items, sorted by slug. */
+async function readBriefStagingFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerPrdItem[]> {
+	const base = `${ref}:${workFolderRel('briefs-proposed')}`;
+	const prds: LedgerPrdItem[] = [];
+	for (const file of await listMarkdownInTree(base, cwd, env)) {
+		const content = await showInTree(base, file, cwd, env);
+		if (content === undefined) {
+			continue;
+		}
+		const fm = parseFrontmatter(content);
+		prds.push({
+			file,
+			slug: fm.slug ?? basename(file, '.md'),
+			humanOnly: fm.humanOnly,
+			needsAnswers: fm.needsAnswers,
+			briefAfter: fm.briefAfter,
+		});
+	}
+	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /**
@@ -690,6 +819,18 @@ export const currentLedgerRead: LedgerReadStrategy = {
 	},
 	resolvePrdPool({repoPath}) {
 		return readLocalPrdPool(repoPath);
+	},
+	resolveLocalTaskStaging({repoPath}) {
+		return readLocalTaskStaging(repoPath);
+	},
+	resolveLocalBriefStaging({repoPath}) {
+		return readLocalBriefStaging(repoPath);
+	},
+	async resolveMirrorTaskStaging({mirrorPath, ref = 'main', env}) {
+		return readTaskStagingFromTree(ref, mirrorPath, env);
+	},
+	async resolveMirrorBriefStaging({mirrorPath, ref = 'main', env}) {
+		return readBriefStagingFromTree(ref, mirrorPath, env);
 	},
 	async resolveMirrorState({mirrorPath, ref = 'main', env}) {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed

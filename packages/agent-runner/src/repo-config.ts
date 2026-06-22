@@ -126,6 +126,14 @@ export const REPO_ALLOWED_KEYS = [
 	// family (ADR `ci-config-policy-and-gate-family`), the orthogonal peer of
 	// `observationTriage`, resolved per-repo through the same chain as `autoBuild`.
 	'surfaceBlockers',
+	// `surfaceStaging` (the BOOLEAN gate-family member that widens SURFACE into
+	// STAGING — brief `staging-surface-and-apply-promote-safety` F2) is a genuine
+	// repo property exactly like its siblings (`surfaceBlockers`/`autoBuild`):
+	// whether THIS repo inspects staging for questions is agreed by all
+	// collaborators + travels with the repo. Default `true`; resolved per-repo
+	// through the SAME chain (flag > env > per-repo > global > built-in `true`).
+	// Does NOT touch the BUILD/claim candidate set — staging stays non-claimable.
+	'surfaceStaging',
 	// `selectionOrder` (the configurable order across the four orderable auto-pick
 	// pools — build/slice/surface/triage; `apply` is pinned first) is a genuine repo
 	// property — the per-repo selection-order field ADR `ci-config-policy-and-gate-
