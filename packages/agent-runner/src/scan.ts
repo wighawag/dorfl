@@ -50,10 +50,19 @@ import {
 export function lifecycleGatesFrom(config: {
 	observationTriage: string;
 	surfaceBlockers: boolean;
+	/**
+	 * Brief `staging-surface-and-apply-promote-safety` F2 — the gate that widens
+	 * the SURFACE candidate set into STAGING (`tasks/backlog/` + `briefs/proposed/`).
+	 * Threaded here so the `scan --json` `lifecycle.surface[]` reflects the
+	 * expanded pool and the CI matrix enumerates staging surface legs. BUILD/claim
+	 * stays pool-only — only this lifecycle path widens.
+	 */
+	surfaceStaging: boolean;
 }): LifecyclePoolGates {
 	return {
 		triage: config.observationTriage !== 'off',
 		surface: config.surfaceBlockers === true,
+		surfaceStaging: config.surfaceStaging === true,
 	};
 }
 
@@ -440,6 +449,7 @@ export async function scan(
 		let repoLifecycleConfig = {
 			observationTriage: config.observationTriage as string,
 			surfaceBlockers: config.surfaceBlockers,
+			surfaceStaging: config.surfaceStaging,
 		};
 		try {
 			const resolved = resolveRepoConfigFromMirror({
@@ -450,6 +460,7 @@ export async function scan(
 			repoLifecycleConfig = {
 				observationTriage: resolved.observationTriage,
 				surfaceBlockers: resolved.surfaceBlockers,
+				surfaceStaging: resolved.surfaceStaging,
 			};
 		} catch {
 			// Non-fatal: a config read fault already WARNED on the `autoSlice` read
@@ -533,6 +544,7 @@ export function scanRepoPaths(
 				gates: lifecycleGatesFrom({
 					observationTriage: resolved.observationTriage,
 					surfaceBlockers: resolved.surfaceBlockers,
+					surfaceStaging: resolved.surfaceStaging,
 				}),
 			}),
 		);

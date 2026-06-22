@@ -67,6 +67,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// The surface-blockers gate is a BOOLEAN coercion (like `autoBuild`), so
 	// `AGENT_RUNNER_SURFACE_BLOCKERS=true|false` works and a typo FAILS LOUDLY.
 	surfaceBlockers: 'boolean',
+	// `surfaceStaging` (the BOOLEAN gate-family member that widens the SURFACE
+	// candidate set to include STAGING — `tasks/backlog/` + `briefs/proposed/` —
+	// not only the agent pool; brief
+	// `staging-surface-and-apply-promote-safety` F2) coerces as a BOOLEAN like
+	// `autoBuild`/`surfaceBlockers`, so `AGENT_RUNNER_SURFACE_STAGING=true|false`
+	// works and a typo FAILS LOUDLY. Resolution chain identical to the other
+	// gate-family members (flag > env > per-repo > global > built-in `true`).
+	surfaceStaging: 'boolean',
 	// `selectionOrder` coerces as a `'list'` (comma form
 	// `AGENT_RUNNER_SELECTION_ORDER=build,slice,surface,triage`); a single-element
 	// list whose one entry is a preset keyword (`=drain`) is expanded by the
