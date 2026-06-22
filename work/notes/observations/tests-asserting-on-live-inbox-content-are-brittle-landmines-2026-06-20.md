@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: tests-asserting-on-live-inbox-content-are-brittle-landmines
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -50,3 +50,9 @@ inbox (the desired end state) because doing so breaks the build.
 - The contract that guarantees the inbox shrinks: `work/protocol/WORK-CONTRACT.md`
   ("Discharge by deletion" / capture buckets leave by deletion).
 - The triage session that exposed it (the review-nits drain).
+
+## Applied answers 2026-06-22
+
+### q1: Disposition for this observation: promote to a slice that (a) audits the test suite for any other assertion reading the live work/notes/ tree and converts them to self-seeded fixtures, and (b) adds a lightweight guard/lint (sibling to work-layout-guard) flagging tests that scan live-repo work/notes/ paths — or keep as a spotted note, or drop?
+
+promote-slice, scoped to part (a): audit the test suite for any other assertion that reads the LIVE `work/notes/` tree and convert those to self-seeded fixtures (in a throwaway tree). The original RED is already fixed on main (the identity-roundtrip test now self-seeds), and the audit scope is bounded (~10 candidate files). DEFER part (b) the lint/guard — it is the over-engineering risk; add it only if a second instance appears (the existing work-layout-guard is the precedent shape if we ever do). Disposition: promote-slice (audit only).
