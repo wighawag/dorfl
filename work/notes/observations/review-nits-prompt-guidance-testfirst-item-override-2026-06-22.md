@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'prompt-guidance-testfirst-item-overrid
 date: 2026-06-22
 status: open
 reviewOf: prompt-guidance-testfirst-item-override
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
