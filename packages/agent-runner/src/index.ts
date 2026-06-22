@@ -33,6 +33,12 @@ export {
 	resolveRepoConfig,
 } from './repo-config.js';
 
+export type {ConfigOverrideMap} from './config-override.js';
+export {
+	defaultConfigOverridePath,
+	loadConfigOverride,
+} from './config-override.js';
+
 export type {EnvMap} from './env-config.js';
 export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 

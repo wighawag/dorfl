@@ -90,6 +90,12 @@ export interface ScanMirrorPoolOptions {
 	 * is always-on). The mirror enumeration mirrors the in-place one exactly.
 	 */
 	lifecycleGates?: LifecyclePoolGates;
+	/**
+	 * The per-machine config-override map (ADR
+	 * `per-machine-config-override-layer`), threaded into the mirror-side per-repo
+	 * resolution so the override applies to the autopick pool scan. Default: empty.
+	 */
+	override?: import('./config-override.js').ConfigOverrideMap;
 }
 
 /**
@@ -145,7 +151,12 @@ export async function scanMirrorPool(
 	// a config-less repo or a read fault falls back to global + default.
 	let repoConfig: Config;
 	try {
-		repoConfig = resolveRepoConfigFromMirror({mirrorPath, global: config, env});
+		repoConfig = resolveRepoConfigFromMirror({
+			mirrorPath,
+			global: config,
+			env,
+			override: options.override,
+		});
 	} catch (err) {
 		const reason = err instanceof Error ? err.message : String(err);
 		warn?.(

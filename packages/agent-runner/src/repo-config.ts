@@ -9,6 +9,9 @@ import {
 } from './config.js';
 import {envOverrides, type EnvMap} from './env-config.js';
 import {brand} from './brand.js';
+import {encodeRepoKey} from './repo-key.js';
+import type {ConfigOverrideMap} from './config-override.js';
+import {run} from './git.js';
 
 /**
  * The per-repo config layer.
@@ -348,6 +351,46 @@ export interface ResolveRepoConfigOptions {
 	 * real `process.env`.
 	 */
 	env?: EnvMap;
+	/**
+	 * The per-machine {@link ConfigOverrideMap} (from `loadConfigOverride`),
+	 * inserted between the committed per-repo file and env in the precedence chain
+	 * (ADR `per-machine-config-override-layer`). The hub-key bucket beats the
+	 * `"*"` bucket. Default: empty (no override applied) — byte-identical to the
+	 * pre-override behaviour. Injectable so tests need not touch the real
+	 * `~/.config/agent-runner/`.
+	 */
+	override?: ConfigOverrideMap;
+	/**
+	 * The resolved arbiter URL used to compute the hub key (via
+	 * {@link encodeRepoKey}) for the override lookup. If omitted, the URL is
+	 * resolved from `repoPath` + `global.defaultArbiter` (`git remote get-url`).
+	 * Unresolvable ⇒ the hub-key bucket is SKIPPED and only the `"*"` bucket
+	 * applies (graceful degrade, never an error).
+	 */
+	arbiterUrl?: string;
+}
+
+/**
+ * The thin `git remote get-url <name>` reader used by {@link resolveRepoConfig}
+ * to derive a CHECKOUT's arbiter URL for the override hub-key lookup. Mirrors
+ * `resolveArbiterUrlFromCheckout` in `do.ts` (which is the same primitive on the
+ * `do --isolated` path); duplicated here — a single-line `run('git', …)` call —
+ * to avoid a `repo-config.ts` → `do.ts` dependency that would close a cycle
+ * (`do.ts` → `repo-mirror.ts` → `repo-config.ts`). Returns `undefined` when the
+ * remote is unset or the cwd is not a git repo — the override layer DEGRADES
+ * GRACEFULLY on an unresolvable URL.
+ */
+function gitRemoteGetUrl(
+	cwd: string,
+	remote: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+	const res = run('git', ['remote', 'get-url', remote], cwd, {env});
+	if (res.status !== 0) {
+		return undefined;
+	}
+	const url = res.stdout.trim();
+	return url === '' ? undefined : url;
 }
 
 /** The effective config for one repo, plus any rejected-key diagnostics. */
@@ -380,9 +423,22 @@ export interface ResolvedRepoConfig {
 export function resolveRepoConfig(
 	options: ResolveRepoConfigOptions,
 ): ResolvedRepoConfig {
-	const {repoPath, global, flags, env} = options;
+	const {repoPath, global, flags, env, override} = options;
 	const repo = loadRepoConfig(repoPath);
-	return resolveRepoConfigFromLoaded(repo, {global, flags, env});
+	// Resolve the arbiter URL for the override hub-key lookup from the CHECKOUT's
+	// configured `<defaultArbiter>` remote (the working-tree analogue of the
+	// mirror's `origin`). Unresolvable (no remote, not a git repo) ⇒ hub-key
+	// lookup skipped; the `"*"` bucket still applies (graceful degrade).
+	const arbiterRemote = flags?.defaultArbiter ?? global.defaultArbiter;
+	const arbiterUrl =
+		options.arbiterUrl ?? gitRemoteGetUrl(repoPath, arbiterRemote, env);
+	return resolveRepoConfigFromLoaded(repo, {
+		global,
+		flags,
+		env,
+		override,
+		...(arbiterUrl !== undefined ? {arbiterUrl} : {}),
+	});
 }
 
 /**
@@ -400,15 +456,48 @@ export function resolveRepoConfig(
  */
 export function resolveRepoConfigFromLoaded(
 	repo: LoadedRepoConfig,
-	options: {global: Config; flags?: PartialConfig; env?: EnvMap},
+	options: {
+		global: Config;
+		flags?: PartialConfig;
+		env?: EnvMap;
+		/**
+		 * The per-machine {@link ConfigOverrideMap}; default empty (no override).
+		 * Inserted between the committed per-repo file and env in the precedence
+		 * chain (ADR `per-machine-config-override-layer`).
+		 */
+		override?: ConfigOverrideMap;
+		/**
+		 * The resolved arbiter URL used to look up the hub-key override bucket
+		 * (via {@link encodeRepoKey}). Unresolvable ⇒ skip the hub-key bucket;
+		 * the `"*"` bucket still applies (graceful degrade).
+		 */
+		arbiterUrl?: string;
+	},
 ): ResolvedRepoConfig {
-	const {global, flags, env} = options;
+	const {global, flags, env, override, arbiterUrl} = options;
+	// The per-machine override layer (ADR `per-machine-config-override-layer`):
+	// the `"*"` (all-repos) bucket then the hub-key (this-repo) bucket, spread
+	// BETWEEN the committed per-repo file and env. Hub-key beats `"*"`. An
+	// unresolvable arbiter URL skips the hub-key lookup but keeps `"*"` — never
+	// an error. The override may set ANY key (host-only included): it is a
+	// per-machine source like env / flag / the global file, NOT subject to the
+	// per-repo allow/reject split.
+	const overrideStar = override?.['*'] ?? {};
+	const hubKey =
+		arbiterUrl !== undefined ? encodeRepoKey(arbiterUrl) : undefined;
+	const overrideHub =
+		hubKey !== undefined && override !== undefined
+			? (override[hubKey] ?? {})
+			: {};
 	// mergeConfig copies `global` (spreads DEFAULT_CONFIG then assigns) so the
-	// shared global object is never mutated. Layer per-repo, then env (a
-	// per-machine source — may set host-only keys), then flags on top.
+	// shared global object is never mutated. Layer per-repo, then the override
+	// (`"*"` then hub-key — hub-key wins), then env (a per-machine source — may
+	// set host-only keys), then flags on top.
 	const config = mergeConfig({
 		...global,
 		...repo.config,
+		...overrideStar,
+		...overrideHub,
 		...envOverrides(env),
 		...(flags ?? {}),
 	});

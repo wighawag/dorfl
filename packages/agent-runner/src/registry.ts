@@ -1,7 +1,12 @@
 import {existsSync, readdirSync, rmSync, statSync} from 'node:fs';
 import {join} from 'node:path';
 import {run} from './git.js';
-import {encodeRepoKey, ensureMirror, mirrorPath} from './repo-mirror.js';
+import {
+	encodeRepoKey,
+	ensureMirror,
+	mirrorPath,
+	readOriginUrl,
+} from './repo-mirror.js';
 import {arbiterInit, type ArbiterInitResult} from './arbiter.js';
 import {
 	discoverJobs,
@@ -102,19 +107,6 @@ export function projectIdFromKey(key: string): string {
  */
 function keyFromMirrorDir(name: string): string {
 	return name.endsWith('.git') ? name.slice(0, -'.git'.length) : name;
-}
-
-/** Read a mirror's `origin` URL (`git -C <mirror> remote get-url origin`). */
-function readOriginUrl(
-	mirrorDir: string,
-	env: NodeJS.ProcessEnv | undefined,
-): string | undefined {
-	const result = run('git', ['remote', 'get-url', 'origin'], mirrorDir, {env});
-	if (result.status !== 0) {
-		return undefined;
-	}
-	const url = result.stdout.trim();
-	return url === '' ? undefined : url;
 }
 
 /** True iff `path` is (or contains) an initialised git repository. */

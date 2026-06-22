@@ -1,5 +1,6 @@
 import type {Config} from './config.js';
 import {resolveRepoConfig} from './repo-config.js';
+import type {ConfigOverrideMap} from './config-override.js';
 import {scan, type ScanReport} from './scan.js';
 import {selectCandidates, type Candidate} from './select.js';
 import {performClaim, type ClaimCasResult} from './claim-cas.js';
@@ -293,6 +294,13 @@ export interface RunOnceOptions {
 	 */
 	onWarn?: (message: string) => void;
 	/**
+	 * The per-machine {@link ConfigOverrideMap} (from `loadConfigOverride`),
+	 * threaded into the per-repo resolution `runOneItem` performs so the override
+	 * applies to every tick item (ADR `per-machine-config-override-layer`).
+	 * Default: empty (no override).
+	 */
+	override?: ConfigOverrideMap;
+	/**
 	 * Bounded-backoff bounds for the needs-attention route's git network ops
 	 * (surface fetch+push, branch push). Defaults to the shared `DEFAULT_BACKOFF`.
 	 * Threaded into the failure-routing seam so a degraded run gives up cleanly
@@ -324,7 +332,8 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	// on WORKING CHECKOUTS (the CLI / its tests) inject an explicit `report` built
 	// from working-tree paths ({@link scanRepoPaths}); without an injected report
 	// we fall back to the registry scan (async).
-	const report = options.report ?? (await scan(config));
+	const report =
+		options.report ?? (await scan(config, {override: options.override}));
 	const candidates = selectCandidates(report, {
 		maxParallel: config.maxParallel,
 		perRepoMax: config.perRepoMax,
@@ -395,6 +404,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 		worker: (candidate) =>
 			runOneItem(candidate, {
 				config,
+				override: options.override,
 				workspace,
 				agentRunner: options.agentRunner,
 				harness,
@@ -459,6 +469,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 
 interface OneItemContext {
 	config: Config;
+	override?: ConfigOverrideMap;
 	workspace: string;
 	agentRunner?: AgentRunner;
 	harness: Harness;
@@ -523,7 +534,11 @@ async function runOneItem(
 	// layered over the global config (flag > per-repo > global > default). Each
 	// repo gets its own integration mode / arbiter, so repo A can be `merge`
 	// while repo B is `propose` in one tick.
-	const resolved = resolveRepoConfig({repoPath, global: ctx.config});
+	const resolved = resolveRepoConfig({
+		repoPath,
+		global: ctx.config,
+		override: ctx.override,
+	});
 	const config = resolved.config;
 	if (resolved.message) {
 		ctx.onWarn?.(resolved.message);

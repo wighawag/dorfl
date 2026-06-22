@@ -2,12 +2,36 @@ import {existsSync, mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {git, run} from './git.js';
 import type {Config, PartialConfig} from './config.js';
+import type {ConfigOverrideMap} from './config-override.js';
 import {
 	REPO_CONFIG_FILENAME,
 	loadRepoConfigFromContent,
 	resolveRepoConfigFromLoaded,
 	type LoadedRepoConfig,
 } from './repo-config.js';
+import {encodeRepoKey} from './repo-key.js';
+
+export {encodeRepoKey} from './repo-key.js';
+
+/**
+ * Read a bare hub mirror's `origin` URL (`git -C <mirror> remote get-url
+ * origin`). Returns the trimmed URL, or `undefined` when the mirror has no
+ * `origin` or the read fails (a malformed mirror). The single helper both the
+ * registry enumeration (`remote ls`) and the per-machine override layer (the
+ * hub-key lookup in {@link resolveRepoConfigFromMirror}) use; defining it here
+ * avoids duplicating the `git remote get-url origin` call across modules.
+ */
+export function readOriginUrl(
+	mirrorDir: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+	const result = run('git', ['remote', 'get-url', 'origin'], mirrorDir, {env});
+	if (result.status !== 0) {
+		return undefined;
+	}
+	const url = result.stdout.trim();
+	return url === '' ? undefined : url;
+}
 
 /**
  * The shared **hub-mirror primitive**: one bare mirror per repo under
@@ -21,69 +45,6 @@ import {
  * locates / creates / fetches the mirror. It is STATE, not cache (ADR §3): it
  * lives under `~/.agent-runner/` (config `workspacesDir`), never `~/.cache`.
  */
-
-/**
- * Deterministically encode an arbiter remote URL into a hierarchical hub key:
- * drop the scheme / user / `.git` suffix, then replace `.` → `-` **per path
- * segment** (lossless and reversible; avoids the dotted-segment hazard that
- * trips editors / tools and our own dotdir-pruning). E.g.
- * `git@github.com:wighawag/agent-runner.git` → `github-com/wighawag/agent-runner`.
- */
-export function encodeRepoKey(url: string): string {
-	const segments = urlSegments(url);
-	return segments.map(dashDots).join('/');
-}
-
-/**
- * Split a remote URL into its host + path segments (lossy only of scheme/user/
- * port/`.git`, which carry no identity for keying). Handles the four shapes the
- * arbiter can take: scp-like ssh (`git@host:org/repo.git`), `ssh://`, `https://`
- * / `http://`, `file://`, and a plain local filesystem path to a bare repo.
- */
-function urlSegments(url: string): string[] {
-	const trimmed = url.trim();
-
-	// scp-like ssh: [user@]host:path  (no `://`, has a `:` before the path).
-	const scp = /^(?:[^@/]+@)?([^/:]+):(.+)$/;
-	if (!trimmed.includes('://')) {
-		const m = scp.exec(trimmed);
-		if (m && !trimmed.startsWith('/')) {
-			return [m[1], ...pathSegments(m[2])];
-		}
-		// Otherwise a plain local path (e.g. `/srv/git/org/repo.git`).
-		return pathSegments(trimmed);
-	}
-
-	// scheme://[user@]host[:port]/path  — or file:///abs/path (empty host).
-	const schemeEnd = trimmed.indexOf('://');
-	const rest = trimmed.slice(schemeEnd + 3);
-	const slash = rest.indexOf('/');
-	const authority = slash === -1 ? rest : rest.slice(0, slash);
-	const path = slash === -1 ? '' : rest.slice(slash + 1);
-	const host = stripUserAndPort(authority);
-	const hostSegments = host === '' ? [] : [host];
-	return [...hostSegments, ...pathSegments(path)];
-}
-
-/** Drop `user@` and `:port` from an authority, leaving the bare host. */
-function stripUserAndPort(authority: string): string {
-	const afterUser = authority.includes('@')
-		? authority.slice(authority.lastIndexOf('@') + 1)
-		: authority;
-	const colon = afterUser.indexOf(':');
-	return colon === -1 ? afterUser : afterUser.slice(0, colon);
-}
-
-/** Split a `/`-path into non-empty segments, dropping a trailing `.git`. */
-function pathSegments(path: string): string[] {
-	const noGit = path.replace(/\.git\/?$/, '');
-	return noGit.split('/').filter((s) => s.length > 0);
-}
-
-/** Replace every `.` with `-` within a single segment (per-segment, lossless). */
-function dashDots(segment: string): string {
-	return segment.replace(/\./g, '-');
-}
 
 /**
  * The on-disk location of the bare hub mirror for `url`:
@@ -332,15 +293,34 @@ export function resolveRepoConfigFromMirror(options: {
 	/** Optional flag overrides (highest precedence). */
 	flags?: PartialConfig;
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * The per-machine override map (from `loadConfigOverride`), inserted between
+	 * the committed per-repo file and env in the precedence chain. The hub key is
+	 * derived from the mirror's own `origin` URL (via {@link readOriginUrl}); if
+	 * unresolvable, the hub-key bucket is skipped and only the `"*"` bucket
+	 * applies. Default: empty map (no override applied) — byte-identical to the
+	 * pre-override behaviour.
+	 */
+	override?: ConfigOverrideMap;
 }): Config {
-	const {mirrorPath, global, flags, env} = options;
+	const {mirrorPath, global, flags, env, override} = options;
 	const content = readRepoConfigFromMirrorMain(mirrorPath, env);
 	const label = `${mirrorPath}#main:${REPO_CONFIG_FILENAME}`;
 	const loaded: LoadedRepoConfig =
 		content === undefined
 			? {path: label, config: {}, rejected: []}
 			: loadRepoConfigFromContent(content, label);
-	return resolveRepoConfigFromLoaded(loaded, {global, flags}).config;
+	// The hub key for the override lookup comes from the mirror's OWN `origin`
+	// URL (the more reliable source for a no-checkout path — the mirror is what
+	// the runner actually operates on). Unresolvable ⇒ hub-key lookup skipped
+	// (graceful degrade); the `"*"` bucket still applies.
+	const arbiterUrl = readOriginUrl(mirrorPath, env);
+	return resolveRepoConfigFromLoaded(loaded, {
+		global,
+		flags,
+		override,
+		...(arbiterUrl !== undefined ? {arbiterUrl} : {}),
+	}).config;
 }
 
 /** The bare mirror's `main` tip (40-hex sha), as freshly fetched. */

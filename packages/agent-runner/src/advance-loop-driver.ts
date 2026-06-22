@@ -340,6 +340,13 @@ export interface AdvanceRegistrySetOptions {
 	 * path does.
 	 */
 	lifecycleGates?: LifecyclePoolGates;
+	/**
+	 * The per-machine config-override map (ADR
+	 * `per-machine-config-override-layer`), forwarded to the registry {@link scan}
+	 * so per-mirror `autoSlice`/`observationTriage`/`surfaceBlockers` resolutions
+	 * honour the override. Default: empty (no override).
+	 */
+	override?: import('./config-override.js').ConfigOverrideMap;
 }
 
 /**
@@ -382,7 +389,11 @@ export async function advanceRegistrySet(
 	// `runOnce` uses. Each row's `path` is a bare hub mirror to drain.
 	const report =
 		options.report ??
-		(await scan(config, {warn: options.warn, env: options.env}));
+		(await scan(config, {
+			warn: options.warn,
+			env: options.env,
+			override: options.override,
+		}));
 	const mirrors = report.repos.map((repo) => repo.path);
 
 	// GENUINELY CONCURRENT ACROSS REPOS (the registry-set point) under the SAME
@@ -634,6 +645,7 @@ export function advanceRegistrySetRunTick(
 	return async (options: RunOnceOptions): Promise<RunOnceResult> => {
 		const result = await advanceRegistrySet({
 			config: deps.config,
+			override: deps.override,
 			contextFor: deps.contextFor,
 			workspace: deps.workspace,
 			run: deps.run,

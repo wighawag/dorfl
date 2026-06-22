@@ -1,4 +1,5 @@
 import type {Config} from './config.js';
+import type {ConfigOverrideMap} from './config-override.js';
 import {resolveEligibility, type EligibilityResult} from './eligibility.js';
 import {
 	ledgerRead,
@@ -370,7 +371,18 @@ export function scoreItems(
  */
 export async function scan(
 	config: Config,
-	options: {warn?: (message: string) => void; env?: NodeJS.ProcessEnv} = {},
+	options: {
+		warn?: (message: string) => void;
+		env?: NodeJS.ProcessEnv;
+		/**
+		 * The per-machine {@link ConfigOverrideMap} (from `loadConfigOverride`),
+		 * threaded into the SAME per-repo resolution `do`/`run` use so the override
+		 * applies to the registry-scan path too (ADR
+		 * `per-machine-config-override-layer`). Default: empty (no override) —
+		 * byte-identical to pre-override behaviour.
+		 */
+		override?: ConfigOverrideMap;
+	} = {},
 ): Promise<ScanReport> {
 	const mirrors = listMirrors({
 		workspacesDir: config.workspacesDir,
@@ -398,6 +410,7 @@ export async function scan(
 		const autoBuild = resolveRepoConfig({
 			repoPath: mirror.path,
 			global: config,
+			override: options.override,
 		}).config.autoBuild;
 		// Held-slug subtraction: a bare hub mirror's arbiter is its `origin`. Reads
 		// the lock refs from the mirror's origin; non-fatal (empty set on any fault),
@@ -428,6 +441,7 @@ export async function scan(
 				mirrorPath: mirror.path,
 				global: config,
 				env: options.env,
+				override: options.override,
 			}).autoSlice;
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
@@ -456,6 +470,7 @@ export async function scan(
 				mirrorPath: mirror.path,
 				global: config,
 				env: options.env,
+				override: options.override,
 			});
 			repoLifecycleConfig = {
 				observationTriage: resolved.observationTriage,
@@ -518,13 +533,23 @@ export function scanRepoPaths(
 	 * it preserves the offline read while keeping the seam in place for slice #9.
 	 */
 	heldSlugs: Set<string> = new Set(),
+	/**
+	 * The per-machine {@link ConfigOverrideMap} — threaded into the per-repo
+	 * resolution so the override applies to the in-place scan path too. Default:
+	 * empty (no override).
+	 */
+	override?: ConfigOverrideMap,
 ): ScanReport {
 	const repos: RepoReport[] = [];
 	const counts = {totalItems: 0, totalEligible: 0};
 
 	for (const path of repoPaths) {
 		const state = ledgerRead.resolveLocalState({repoPath: path});
-		const resolved = resolveRepoConfig({repoPath: path, global: config}).config;
+		const resolved = resolveRepoConfig({
+			repoPath: path,
+			global: config,
+			override,
+		}).config;
 		// PRD pool — the SLICEABLE-PRD companion of the slice pool. Resolve
 		// `autoSlice` PER REPO from the working-tree `.agent-runner.json` (the same
 		// way `autoBuild` is resolved); `sliceablePrds` (the SAME `autoslice-gate`

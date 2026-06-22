@@ -13,6 +13,11 @@ import {
 	type Config,
 	type PartialConfig,
 } from './config.js';
+import {
+	defaultConfigOverridePath,
+	loadConfigOverride,
+	type ConfigOverrideMap,
+} from './config-override.js';
 import {envOverrides} from './env-config.js';
 import {scan} from './scan.js';
 import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
@@ -190,6 +195,24 @@ function resolveGlobalConfig(
 }
 
 /**
+ * Load BOTH the global config file AND the per-machine `config.override.json`
+ * sibling for the given `--config` flag (or the default paths). This is the
+ * SINGLE entry point CLI commands use so the override layer is wired uniformly
+ * everywhere a per-repo resolution happens (ADR
+ * `per-machine-config-override-layer`); a missing override file is a no-op
+ * (empty map) — byte-identical to the pre-override behaviour.
+ */
+function loadGlobalAndOverride(configPath: string | undefined): {
+	global: Config;
+	override: ConfigOverrideMap;
+} {
+	return {
+		global: loadConfig(configPath),
+		override: loadConfigOverride(defaultConfigOverridePath(configPath)),
+	};
+}
+
+/**
  * Resolve the effective config for a `do --remote <r>` run, layering the target
  * repo's COMMITTED `.agent-runner.json` (read from `<arbiter>/main` via the hub
  * mirror) into the SAME `flag > env > per-repo > global > default` chain in-place
@@ -222,8 +245,16 @@ function resolveRemoteRepoConfig(options: {
 	flags: PartialConfig;
 	identity: Identity | undefined;
 	note: (message: string) => void;
+	/**
+	 * The per-machine override map (from `loadConfigOverride`). The hub key is
+	 * derived from `remote` (the URL is in hand), so the per-repo entry applies
+	 * without a git read. Default: empty (no override) — byte-identical to
+	 * pre-override behaviour.
+	 */
+	override?: ConfigOverrideMap;
 }): Config {
-	const {remote, workspacesDir, global, flags, identity, note} = options;
+	const {remote, workspacesDir, global, flags, identity, note, override} =
+		options;
 	let loaded: LoadedRepoConfig;
 	try {
 		const env = identityEnv(identity, process.env);
@@ -253,7 +284,12 @@ function resolveRemoteRepoConfig(options: {
 	if (loaded.message) {
 		note(loaded.message);
 	}
-	return resolveRepoConfigFromLoaded(loaded, {global, flags}).config;
+	return resolveRepoConfigFromLoaded(loaded, {
+		global,
+		flags,
+		override,
+		arbiterUrl: remote,
+	}).config;
 }
 
 /**
@@ -283,12 +319,19 @@ function buildRegistrySetAdvanceTick(options: {
 	workspace: string;
 	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * The per-machine {@link ConfigOverrideMap} — threaded into the registry-set
+	 * advance driver so per-mirror config resolution honours the override (ADR
+	 * `per-machine-config-override-layer`).
+	 */
+	override?: ConfigOverrideMap;
 }): RunTick {
-	const {config, workspace, arbiter, env} = options;
+	const {config, workspace, arbiter, env, override} = options;
 	const gitEnv = identityEnv(config.identity, env);
 	const harness = createHarness({harness: config.harness, piBin: config.piBin});
 	return advanceRegistrySetRunTick({
 		config,
+		override,
 		workspace,
 		// The SELECTION-layer gates for the loop/CI path, IDENTICAL to the
 		// single-mirror wiring above: `observationTriage != off` enumerates the
@@ -403,12 +446,13 @@ function resolveDefaultArbiterForCwd(
 	cwd: string,
 	global: Config,
 	flags: PartialConfig,
+	override?: ConfigOverrideMap,
 ): string {
 	// The SAME per-repo config read in-place `do` uses (`resolveRepoConfig` on the
 	// cwd), so `--isolated` resolves the arbiter remote NAME (`defaultArbiter`)
 	// through the identical `flag > env > per-repo > global > default` chain. An
 	// absent `.agent-runner.json` falls back to the global/default (`origin`).
-	return resolveRepoConfig({repoPath: cwd, global, flags}).config
+	return resolveRepoConfig({repoPath: cwd, global, flags, override}).config
 		.defaultArbiter;
 }
 
@@ -845,11 +889,11 @@ function buildInteractiveLauncher(
 	if (flags.agent !== true) {
 		return undefined;
 	}
-	const global = loadConfig(configPath);
+	const {global, override} = loadGlobalAndOverride(configPath);
 	const overrides = harnessFlagOverrides(flags);
 	const config =
 		repoPath !== undefined
-			? resolveRepoConfig({repoPath, global, flags: overrides}).config
+			? resolveRepoConfig({repoPath, global, flags: overrides, override}).config
 			: resolveGlobalConfig(global, overrides);
 	const harness = createHarness({
 		harness: config.harness,
@@ -1004,12 +1048,15 @@ export function buildProgram(): Command {
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: ScanFlags, command: Commander) => {
 			const fileConfig = loadConfig(flags.config);
+			const override = loadConfigOverride(
+				defaultConfigOverridePath(flags.config),
+			);
 			const config = resolveGlobalConfig(
 				fileConfig,
 				flagOverrides(flags, command),
 			);
 			const warn = (message: string) => console.error(`>> ${message}`);
-			const report = await scan(config, {warn});
+			const report = await scan(config, {warn, override});
 			// The cwd-local section (the `scan-status-read-cwd-repo` slice): when run
 			// INSIDE a participating repo, ALSO report it as a separately-counted local
 			// block (fetch-its-arbiter-first), distinct from the registry view.
@@ -1126,6 +1173,9 @@ export function buildProgram(): Command {
 		.option('--json', 'output the raw result as JSON')
 		.action(async (flags: RunFlags, command: Commander) => {
 			const fileConfig = loadConfig(flags.config);
+			const override = loadConfigOverride(
+				defaultConfigOverridePath(flags.config),
+			);
 			const config = resolveGlobalConfig(
 				fileConfig,
 				runFlagOverrides(flags, command),
@@ -1159,6 +1209,7 @@ export function buildProgram(): Command {
 				workspace,
 				arbiter: flags.arbiter,
 				env: process.env,
+				override,
 			});
 			// `--advance` is now a DEPRECATED NO-OP ALIAS: plain `run` already IS advance,
 			// so there is no separate mode to opt into. Warn (but do not fail) so an
@@ -1657,7 +1708,7 @@ export function buildProgram(): Command {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug);
 			const cwd = process.cwd();
-			const global = loadConfig(flags.config);
+			const {global, override} = loadGlobalAndOverride(flags.config);
 
 			// `--isolated`: FINISH a stranded isolated worktree (the recover-already-
 			// committed path) instead of completing the current checkout. It LOCATES the
@@ -1675,6 +1726,7 @@ export function buildProgram(): Command {
 				const resolved = resolveRepoConfig({
 					repoPath: cwd,
 					global,
+					override,
 					flags: {
 						...(flagMode ? {integration: flagMode} : {}),
 						...noPRFlagOverrides(flags),
@@ -1708,6 +1760,7 @@ export function buildProgram(): Command {
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
+				override,
 				// The integrate-time mode AND the Gate-2 review flags ride the SAME
 				// flag > env > per-repo > global > default chain.
 				flags: {
@@ -1921,7 +1974,7 @@ export function buildProgram(): Command {
 			}
 
 			const cwd = process.cwd();
-			const global = loadConfig(flags.config);
+			const {global, override} = loadGlobalAndOverride(flags.config);
 			// Resolve the integration mode at integrate-time, highest first:
 			//   --merge/--propose flag > per-repo .agent-runner.json > global > default.
 			// (Same chain `complete` uses — `do` is the autonomous twin.)
@@ -1983,7 +2036,7 @@ export function buildProgram(): Command {
 					).identity;
 					const arbiterName =
 						flags.arbiter ??
-						resolveDefaultArbiterForCwd(cwd, global, remoteFlags);
+						resolveDefaultArbiterForCwd(cwd, global, remoteFlags, override);
 					const resolvedUrl = resolveArbiterUrlFromCheckout(
 						cwd,
 						arbiterName,
@@ -2023,6 +2076,7 @@ export function buildProgram(): Command {
 					flags: remoteFlags,
 					identity: bootstrap.identity,
 					note: (message) => console.error(`>> ${message}`),
+					override,
 				});
 				if (doNeedsAgentCmd(remoteConfig)) {
 					console.error(`error: ${NO_AGENT_CMD_MESSAGE}`);
@@ -2157,6 +2211,7 @@ export function buildProgram(): Command {
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
+				override,
 				flags: doFlagOverrides(flags, flagMode),
 			});
 			if (resolved.message) {
@@ -2381,7 +2436,7 @@ export function buildProgram(): Command {
 			}
 
 			const cwd = process.cwd();
-			const global = loadConfig(flags.config);
+			const {global, override} = loadGlobalAndOverride(flags.config);
 			// Resolve the integration mode this invocation asks for, highest first:
 			//   --merge/--propose flag > per-repo .agent-runner.json > global > default.
 			// The SAME chain `do`/`complete` use (via `integrationFromFlags`), so the
@@ -2429,7 +2484,7 @@ export function buildProgram(): Command {
 				const bootstrap = resolveGlobalConfig(global, doOverrides);
 				const arbiterName =
 					flags.arbiter ??
-					resolveDefaultArbiterForCwd(cwd, global, doOverrides);
+					resolveDefaultArbiterForCwd(cwd, global, doOverrides, override);
 				const arbiterUrl = resolveArbiterUrlFromCheckout(
 					cwd,
 					arbiterName,
@@ -2459,6 +2514,7 @@ export function buildProgram(): Command {
 					flags: doOverrides,
 					identity: bootstrap.identity,
 					note: (message) => console.error(`>> ${message}`),
+					override,
 				});
 				if (doNeedsAgentCmd(remoteConfig)) {
 					console.error(`error: ${NO_AGENT_CMD_MESSAGE}`);
@@ -2591,6 +2647,7 @@ export function buildProgram(): Command {
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
+				override,
 				flags: doOverrides,
 			});
 			if (resolved.message) {
@@ -3331,10 +3388,11 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const cwd = process.cwd();
-			const global = loadConfig(flags.config);
+			const {global, override} = loadGlobalAndOverride(flags.config);
 			const resolved = resolveRepoConfig({
 				repoPath: cwd,
 				global,
+				override,
 				flags: {
 					...harnessFlagOverrides(flags),
 					// `--no-pr` (the PR-INTENT axis) rides the SAME chain.
