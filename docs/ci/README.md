@@ -51,7 +51,7 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
 | `integrationMode` | shape                        | `advance` invocation              | why                                                                                       |
 | ----------------- | ---------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------- |
 | `propose`         | a MATRIX of independent jobs | `advance <item> --propose`        | propose-mode items are independent PRs → true parallelism; `-n` not even needed.          |
-| `merge`           | a SINGLE SEQUENTIAL job      | `advance -n <x> --merge`          | merge-mode items chain via rebase (ADR §10); parallel merge jobs would thrash the main-CAS. |
+| `merge`           | a SINGLE SEQUENTIAL job      | `advance -n <x> --merge`          | merge-mode items land on `main` via rebase (ADR §10); this template keeps merge a single sequential job today (see the note below). |
 
 **One word, one meaning.** The dispatch input is `integrationMode` — the SAME
 vocabulary as `.agent-runner.json`'s `integration` and `advance --propose`/
@@ -68,7 +68,22 @@ consumes), so CI fans out over exactly the eligible pool. Each leg passes
 one-shot driver `agent-runner advance -n <x> --merge` (`-n` is ALWAYS sequential —
 parallelism comes only from the propose matrix, never from `-n`); `--merge` rides
 ONLY this single sequential job, so a parallel merge-to-`main` is structurally
-impossible.
+impossible in the SHIPPED template.
+
+> **Why a single sequential merge job (and why that is a TEMPLATE choice, not a
+> hard engine limit).** An earlier rationale here said parallel merge jobs "would
+> thrash the main-CAS." That is no longer accurate: the engine now serialises ONLY
+> the land-on-`main` TAIL via `integrateLock` (keyed per repo, in
+> `integration-core.ts`/`run.ts`) while build/gate/review run concurrently, and a
+> sibling that advanced `main` during the push window is handled by `mergeRetries`
+> (re-rebase + re-gate + retry, never a `--force`), not a thrash. So concurrent
+> merge is land-SAFE in-process. The CI template still ships merge as a single
+> sequential `advance -n` job because the in-memory `integrateLock` does not span
+> SEPARATE CI jobs (cross-job landing would fall back to the CAS-retry loop alone)
+> and the retry cap was sized for in-process siblings, not a wide matrix. Driving a
+> parallel merge matrix in CI is the open `land-time-reverify-and-parallel-merge-ceiling`
+> brief (`work/briefs/ready/land-time-reverify-and-parallel-merge-ceiling.md`); do
+> NOT change the shipped shape here ahead of it.
 
 ### Matrix enumeration scope
 
