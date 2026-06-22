@@ -10,7 +10,7 @@ superseded_by:
 
 > **STATUS: proposed.** Pins the WHY behind the `folder-taxonomy-reorg-and-rename`
 > migration. Full design + the exact old→new mapping live in
-> `work/briefs/tasked/folder-taxonomy-reorg-and-rename.md` (the PRD) and the six
+> `work/briefs/tasked/folder-taxonomy-reorg-and-rename.md` (the brief) and the six
 > task records in `work/tasks/done/` (`work-layout-module-centralises-all-work-paths`,
 > `guard-test-no-raw-work-literal-outside-work-layout`,
 > `regroup-notes-and-task-board-rename`, `brief-regime-rename-and-dropped-migration`,
@@ -29,7 +29,7 @@ plus two folders that stay at the top level:
   (`backlog` = staging, `todo` = the agent pool, `done`, `cancelled` = the
   won't-proceed terminal).
 - **`briefs/`** — the BRIEF lifecycle: `briefs/{proposed,ready,tasked,dropped}`
-  (`proposed` = staging gate, `ready` = the auto-slice pool, `tasked` = decomposed
+  (`proposed` = staging gate, `ready` = the auto-tasking pool, `tasked` = decomposed
   and resting, `dropped` = the won't-proceed terminal).
 - **`questions/`** stays TOP-LEVEL (NOT under `notes/`).
 - **`protocol/`** stays top-level (the propagated contract docs).
@@ -63,8 +63,8 @@ frontmatter `brief:` / `briefAfter:`, lock-ref entries `task-<slug>` /
 
 3. **The brief staging slot is `proposed`, NOT `draft`, because it names an
    ADMISSION/TRUST gate, not an unfinished document.** A brief is authored when it
-   is already ready to slice; the staging slot is about whether the brief is
-   admitted into the auto-slice pool (`ready`), not about the document being a rough
+   is already ready to task; the staging slot is about whether the brief is
+   admitted into the auto-tasking pool (`ready`), not about the document being a rough
    draft. `proposed` carries the trust-gate meaning; `draft` would wrongly imply
    "not finished writing it yet."
 

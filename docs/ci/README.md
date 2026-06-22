@@ -2,15 +2,15 @@
 
 This directory holds the **GitHub Actions workflow TEMPLATE** that wires the
 `advance` loop into CI: "on cron / on-answer-committed, run the right shape"
-(PRD `advance-loop`, US #27/28). It is the lightweight, advance-loop-specific CI
+(brief `advance-loop`, US #27/28). It is the lightweight, advance-loop-specific CI
 deliverable: CI adoption is **one step** and is **not entangled with the tick**
 (the workflow only INVOKES the existing `advance` driver).
 
 > **This template is the advance-loop CAPABILITY, not the whole CI story.** The
 > unified, per-capability `install-ci` CLI (auth/secrets wizard, GitHub adapter,
 > issue intake, the close-job, the gc sweep, and this advance loop, each
-> independently selectable) is owned by the separate **`runner-in-ci`** PRD
-> (`work/prd/runner-in-ci.md`). That command will EMIT this very template as its
+> independently selectable) is owned by the separate **`runner-in-ci`** brief
+> (`work/briefs/ready/runner-in-ci.md`). That command will EMIT this very template as its
 > advance-loop capability. Until then, copy this template by hand (below). See
 > "Relationship to the `install-ci` CLI" at the bottom.
 
@@ -29,7 +29,7 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
 2. Provide the `agent-runner-setup` composite action the template references at
    `.github/actions/agent-runner-setup` (installs Node + `agent-runner` + the
    agent harness, configures git identity + provider auth). Its auth/secrets shape
-   is the separate `runner-in-ci` PRD's concern — this template only assumes such a
+   is the separate `runner-in-ci` brief's concern — this template only assumes such a
    setup step exists and INVOKES the driver.
 
 3. Pick the integration mode with the `workflow_dispatch` `integrationMode` input
@@ -87,14 +87,14 @@ impossible in the SHIPPED template.
 
 ### Matrix enumeration scope
 
-`agent-runner scan --json` reports eligible **slices** from BOTH the hub-mirror
+`agent-runner scan --json` reports eligible **tasks** from BOTH the hub-mirror
 queue (`repos[].items[]`) AND the in-place working checkout (`cwd.repo.items[]`);
 the enumeration unions both pools, because CI runs in-place (a fresh runner has no
-registered mirror, so the eligible slices live in `cwd.repo.items[]`). So the
-propose **matrix** fans out over eligible slices — one PR per slice. Sliceable **PRDs** (the `do prd:`/slice rung) are advanced via
+registered mirror, so the eligible tasks live in `cwd.repo.items[]`). So the
+propose **matrix** fans out over eligible tasks — one PR per task. Taskable **briefs** (the `do brief:`/tasking rung) are advanced via
 the **sequential** path instead: the `merge` job's `advance -n <x>` covers both
 pools (it drives the full eligible set sequentially), or you dispatch a named
-`advance prd:<slug>`. This keeps the matrix to genuinely-independent PRs and does
+`advance brief:<slug>`. This keeps the matrix to genuinely-independent PRs and does
 NOT mint a new mirror-pool JSON CLI surface (that enumeration lives in
 `scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a separate
 concern, not this template's).
@@ -117,14 +117,14 @@ becomes live when a consumer copies it into their own `.github/workflows/`.
 
 ## Relationship to the `install-ci` CLI (a documented copy, for now)
 
-The `advance-loop` slice shipped this as a **documented template copy**, not a CLI
+The `advance-loop` brief shipped this as a **documented template copy**, not a CLI
 verb, on purpose:
 
 - it is the lighter deliverable (a file + this doc, no new CLI verb, no wizard);
-- the **`install-ci` CLI surface is owned by the separate `runner-in-ci` PRD**
-  (`work/prd/runner-in-ci.md`): a per-capability, provider-pluggable scaffolder
+- the **`install-ci` CLI surface is owned by the separate `runner-in-ci` brief**
+  (`work/briefs/ready/runner-in-ci.md`): a per-capability, provider-pluggable scaffolder
   (auth/secrets wizard + GitHub adapter) that wires EVERY autonomous CI rung
-  (auto-build / auto-slice via `do`/`advance`, the advance answer loop, issue
+  (auto-build / auto-task via `do`/`advance`, the advance answer loop, issue
   `intake`, the issue close-job, and the `gc` merged-branch sweep), each
   independently selectable and independently integration-moded. Minting an
   `install-ci` CLI verb HERE would fork that broader concept.

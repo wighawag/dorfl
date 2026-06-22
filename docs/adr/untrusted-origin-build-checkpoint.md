@@ -9,6 +9,8 @@ superseded_by:
 
 # ADR: Untrusted-origin build-propose rule — its two surprising edges
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, and `PRD → slice` provenance propagation as **brief → task**. The decision this ADR records (untrusted-origin forces build-propose) is unchanged; only the names moved, and the original text is left intact to preserve the decision history.
+
 ## Context
 
 The slice `untrusted-origin-forces-build-propose` closes a trust-laundering gap:
