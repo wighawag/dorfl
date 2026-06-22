@@ -109,6 +109,9 @@ describe('Gate 2 — approve proceeds to integrate (merge IS the auto-land mode)
 			integration: 'merge',
 			verify: PASS,
 			review: true,
+			// reviewMaxRounds=1 isolates the single-round approve path (the corroborated
+			// two-round approve has its own test); keeps this a focused smoke check.
+			reviewMaxRounds: 1,
 			reviewGate: gate,
 			agentRunner: editingAgent,
 			env: gitEnv(),
@@ -326,6 +329,8 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 			verify: PASS,
 			review: true,
 			reviewModel: 'review/override',
+			// One round keeps the model-threading assertion to a single launch.
+			reviewMaxRounds: 1,
 			reviewGate: gate,
 			agentRunner: editingAgent,
 			env: gitEnv(),
@@ -333,7 +338,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 		expect(gate.models).toEqual(['review/override']);
 	});
 
-	it('reviewMaxRounds exhaustion: a persistent BLOCK loops the bound then forces needs-attention (exit 1)', async () => {
+	it('TERMINAL BLOCK: a block short-circuits the round loop (gate ran ONCE, never re-rolled) and forces needs-attention (exit 1)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(BLOCK); // always blocks → never approves
 		const result = await performDo({
@@ -348,15 +353,16 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 			agentRunner: editingAgent,
 			env: gitEnv(),
 		});
-		// Drove the loop to exhaustion: the gate was invoked exactly reviewMaxRounds
-		// times (rounds 1,2,3), never approved, then forced needs-attention.
-		expect(gate.calls).toBe(3);
-		expect(gate.rounds).toEqual([1, 2, 3]);
+		// A block is TERMINAL: even with reviewMaxRounds=3 the gate is invoked EXACTLY
+		// once (no retry-until-pass — re-rolling an unchanged tip is forbidden), then
+		// forces needs-attention.
+		expect(gate.calls).toBe(1);
+		expect(gate.rounds).toEqual([1]);
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
-		// The exhaustion reason is recorded on the stuck lock entry (never a silent
+		// The block reason is recorded on the stuck lock entry (never a silent
 		// merge/loop).
 		const lock = await readItemLock({
 			item: 'task:alpha',
@@ -367,7 +373,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 		expect(lock?.reason).toMatch(/reviewMaxRounds=3/);
 	});
 
-	it('reviewMaxRounds default (2): a persistent block invokes the gate twice then bounces', async () => {
+	it('reviewMaxRounds default (2): a block at round 1 is terminal — the gate is invoked ONCE then bounces (no second-chance re-roll)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const gate = stubGate(BLOCK);
 		const result = await performDo({
@@ -381,7 +387,7 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 			agentRunner: editingAgent,
 			env: gitEnv(),
 		});
-		expect(gate.calls).toBe(2); // the default bound
+		expect(gate.calls).toBe(1); // terminal block, NOT the old retry-to-the-bound
 		expect(result.outcome).toBe('needs-attention');
 	});
 });

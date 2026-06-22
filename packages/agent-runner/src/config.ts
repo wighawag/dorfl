@@ -451,9 +451,18 @@ export interface Config {
 	 */
 	reviewModel?: string;
 	/**
-	 * Bound the revise↔review loop (Gate 2). On exhaustion the gate ERRORS OUT and
-	 * forces `needs-attention/` (never silently merges or loops), per the maintainer
-	 * decision. Default a small N (2). Resolved like `integration`: flag
+	 * How many CORROBORATING review rounds Gate 2 runs on the SAME tip. Semantics are
+	 * UNANIMOUS-APPROVAL, not retry-until-pass: the gate approves ONLY if EVERY round
+	 * approves, and a `block` is TERMINAL (it short-circuits the loop and is never
+	 * re-rolled — re-reviewing an unchanged tip after a block would just be a
+	 * stochastic dice re-roll that could launder a real reject into a pass). So a
+	 * value > 1 makes a FALSE APPROVE harder to slip through (each extra round is a
+	 * veto), it does NOT give blocked work a second chance. A non-approve forces
+	 * `needs-attention/` (never silently merges or loops), per the maintainer
+	 * decision. Default a small N (2): two independent approvals required. (A future
+	 * builder-REVISE step that MUTATES the tree between rounds is the only thing that
+	 * should make a block retryable, because it changes the artifact under review; it
+	 * is not implemented yet.) Resolved like `integration`: flag
 	 * (`--review-max-rounds`) > env > per-repo > global > default.
 	 */
 	reviewMaxRounds: number;

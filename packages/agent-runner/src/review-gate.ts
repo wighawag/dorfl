@@ -373,11 +373,15 @@ export function formatBlockReason(verdict: ReviewVerdict): string {
 	return lines.length > 0 ? `${head}\n${lines.join('\n')}` : head;
 }
 
-/** The needs-attention reason when the revise↔review loop hits `reviewMaxRounds`. */
+/**
+ * The needs-attention reason when Gate 2 does not reach a UNANIMOUS approve —
+ * either a round returned a (terminal) block, or not all `reviewMaxRounds` rounds
+ * corroborated the approve.
+ */
 export function reviewRoundsExhaustedReason(maxRounds: number): string {
 	return (
-		`PR/code review (Gate 2) did not reach an approve verdict within ` +
-		`reviewMaxRounds=${maxRounds} round(s); forcing needs-attention (never ` +
-		`silently merged or looped).`
+		`PR/code review (Gate 2) did not reach a unanimous approve across ` +
+		`reviewMaxRounds=${maxRounds} round(s) (a block is terminal and is never ` +
+		`re-rolled); forcing needs-attention (never silently merged or looped).`
 	);
 }

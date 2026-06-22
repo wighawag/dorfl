@@ -128,6 +128,9 @@ describe('do --review --watch — the review gate session is tailed too', () => 
 			// The PRODUCTION gate, harness-backed — the SAME pi harness the build
 			// uses, so its review session is tailed by the same shared helper.
 			review: true,
+			// One review round: this test asserts exactly one build stream + one review
+			// stream is tailed (the corroborated two-round approve is covered elsewhere).
+			reviewMaxRounds: 1,
 			reviewGate: harnessReviewGate({harness}),
 			watch: true,
 			watchSink: (line) => surfaced.push(line),

@@ -71,6 +71,23 @@ function stubGate(verdict: ReviewVerdict): StubGate {
 	return gate;
 }
 
+/**
+ * A stubbed review gate that returns a DIFFERENT verdict per round (round 1 →
+ * verdicts[0], round 2 → verdicts[1], …; the last entry repeats if called more).
+ * Used to prove the corroborated-approval semantics: block is terminal, approve
+ * requires every round to agree.
+ */
+function sequenceGate(verdicts: ReviewVerdict[]): StubGate {
+	let calls = 0;
+	const gate = (async () => {
+		const v = verdicts[Math.min(calls, verdicts.length - 1)];
+		calls++;
+		return v;
+	}) as StubGate;
+	Object.defineProperty(gate, 'calls', {get: () => calls});
+	return gate;
+}
+
 const APPROVE: ReviewVerdict = {verdict: 'approve', findings: []};
 const BLOCK: ReviewVerdict = {
 	verdict: 'block',
@@ -128,7 +145,9 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 
 	it('review on + an APPROVE verdict integrates normally (the gate ran, did not block)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
-		const config = configFor({review: true});
+		// reviewMaxRounds=1 isolates the single-round approve path (default is 2; the
+		// corroboration behaviour at the default is covered by its own test below).
+		const config = configFor({review: true, reviewMaxRounds: 1});
 		const gate = stubGate(APPROVE);
 		const result = await runOnce({
 			config,
@@ -139,6 +158,66 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 			env: gitEnv(),
 		});
 		expect(gate.calls).toBe(1);
+		expect(result.items[0].status).toBe('claimed-done');
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(true);
+	});
+
+	it('CORROBORATION: a round-1 APPROVE then a round-2 BLOCK (reviewMaxRounds=2) is BLOCKED, not integrated (a second reviewer catches a false approve)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor({review: true, reviewMaxRounds: 2});
+		const gate = sequenceGate([APPROVE, BLOCK]);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			reviewGate: gate,
+			env: gitEnv(),
+		});
+		// Both rounds ran (the approve did NOT short-circuit), and the round-2 block
+		// vetoed the merge: the item is surfaced, never integrated.
+		expect(gate.calls).toBe(2);
+		expect(result.items[0].status).toBe('needs-attention');
+		expect(result.claimedAndDone).toBe(0);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+	});
+
+	it('TERMINAL BLOCK: a round-1 BLOCK (reviewMaxRounds=2) short-circuits — the reviewer is NOT re-rolled and the work stays blocked (no retry-until-pass)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor({review: true, reviewMaxRounds: 2});
+		// If round 1 blocks and the loop wrongly re-rolled, round 2's approve would
+		// launder the block into a pass. The terminal-block rule must prevent that.
+		const gate = sequenceGate([BLOCK, APPROVE]);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			reviewGate: gate,
+			env: gitEnv(),
+		});
+		// The block short-circuited: the gate ran EXACTLY once and the work is blocked.
+		expect(gate.calls).toBe(1);
+		expect(result.items[0].status).toBe('needs-attention');
+		expect(result.claimedAndDone).toBe(0);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+	});
+
+	it('UNANIMOUS APPROVE: two approving rounds (reviewMaxRounds=2) integrate, and the gate ran BOTH rounds (corroboration, not first-approve-wins)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor({review: true, reviewMaxRounds: 2});
+		const gate = sequenceGate([APPROVE, APPROVE]);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: editingAgent,
+			reviewGate: gate,
+			env: gitEnv(),
+		});
+		expect(gate.calls).toBe(2);
 		expect(result.items[0].status).toBe('claimed-done');
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(true);
 	});

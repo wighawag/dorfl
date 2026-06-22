@@ -2459,6 +2459,16 @@ async function runGate2Review(params: {
 	}
 	const maxRounds = Math.max(1, input.reviewMaxRounds ?? 2);
 	note('Running the PR/code review gate (Gate 2)…');
+	// CORROBORATED-APPROVAL semantics (NOT retry-until-pass): the gate runs the
+	// reviewer up to `reviewMaxRounds` times on the SAME tip and approves ONLY if
+	// EVERY round approves. A `block` is TERMINAL — it short-circuits the loop and
+	// is never re-rolled, because the reviewer is stochastic and re-reviewing an
+	// UNCHANGED tip after a block would just be a dice re-roll that could launder a
+	// real reject into a pass. The extra rounds therefore exist to make a FALSE
+	// APPROVE harder to slip through (a second reviewer gets a veto), never to give
+	// blocked work a second chance. (A future builder-REVISE step that mutates the
+	// tree between rounds is the ONLY thing that should make a block retryable; it
+	// would change the artifact under review and is not implemented here.)
 	let approved = false;
 	let lastVerdict: ReviewVerdict | undefined;
 	for (let round = 1; round <= maxRounds; round++) {
@@ -2479,18 +2489,22 @@ async function runGate2Review(params: {
 			env: input.agentEnv ?? env,
 		});
 		lastVerdict = verdict;
-		if (verdict.verdict === 'approve') {
-			approved = true;
+		if (verdict.verdict !== 'approve') {
+			// A `block` is TERMINAL: stop now (never re-roll an unchanged tip) and route
+			// the blocking findings to needs-attention below. `approved` stays false.
+			approved = false;
 			break;
 		}
-		// A `block`: re-review up to `reviewMaxRounds` (a future builder-revise step
-		// plugs in here). A persistent block exhausts the loop → routed below.
+		// An `approve`: provisionally approved, but keep going — every remaining round
+		// must ALSO approve for the gate to pass (corroboration, not first-approve-wins).
+		approved = true;
 	}
 	if (!approved) {
 		// NON-approve verdict: route to needs-attention via the SAME seam the red gate
-		// uses, NEVER integrate. The reason records the blocking findings AND (since the
-		// loop ran every allowed round without an approve) notes the `reviewMaxRounds`
-		// bound was hit — a single block IS exhaustion when maxRounds=1.
+		// uses, NEVER integrate. We reach here EITHER because a round returned a
+		// (terminal) block, OR because not every round corroborated the approve. The
+		// reason records the last verdict's blocking findings (the proximate cause) plus
+		// the `reviewMaxRounds` note (so a single-round block also reads correctly).
 		const findingsReason = lastVerdict ? formatBlockReason(lastVerdict) : '';
 		const reason =
 			(findingsReason ? findingsReason + '\n' : '') +
