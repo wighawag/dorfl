@@ -9,6 +9,8 @@ created: 2026-06-03
 
 > **Forward note (2026-06-19 — `folder-taxonomy-reorg-and-rename`):** skill/vocabulary renames landed after this ADR. Read `to-slices` below as **`skills/to-task/`** and the `work/` folders per the new layout (`work/tasks/todo/`, `work/briefs/ready/`, …). The substrate decisions recorded here are unchanged; only the names moved. (`claim.sh` was later RETIRED on 2026-06-20 — see §9; the per-item lock ref superseded its direct-`main` claim mechanism.)
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking**: read every conceptual `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking**. The decisions are unchanged; only the names moved. Any `slice:`/`prd:` namespace tokens or `slicing` symbols still in the CODE are the as-yet-unrenamed identifiers tracked by `code-identifier-slice-prd-to-task-brief-rename`.
+
 Captures the load-bearing decisions for how agent-runner runs work concurrently and safely, agreed during design before any of the B/C-tier slices were built. The slices `agent-workspaces`, `claim-command`, `arbiter-management`, `harness-pi`, `integration-github`, and `watch` all depend on these.
 
 ## 1. Jobs, not agents

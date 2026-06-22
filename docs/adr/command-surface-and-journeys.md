@@ -11,6 +11,8 @@ superseded_by:
 
 > **Forward note (2026-06-19 — `folder-taxonomy-reorg-and-rename`):** vocabulary/skill renames landed after this ADR. Read `to-slices`→**`skills/to-task/`**, `to-prd`→**`skills/to-brief/`**, the verbs `do prd:`/`do slice:`→**`do brief:`/`do task:`**, and the `work/` folders per the new `notes/`/`tasks/`/`briefs/` layout. The journey/command DECISIONS are unchanged; only the names moved.
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the vocabulary cutover above is now complete in prose: read every conceptual `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking** (the agent that does it is the **tasker**). §3a's `slice:`/`prd:` namespace prefixes are the user-facing `task:`/`brief:` today; any residual `slice:`/`prd:` strings still in the command CODE are the as-yet-unrenamed identifiers tracked by `code-identifier-slice-prd-to-task-brief-rename`.
+
 > **STATUS: accepted.** A full journey-model design pass (2026-06-05) reconciled a command surface that had grown slice-by-slice into an incoherent set. This ADR is the durable source of truth for the command model; CONTEXT.md "The faces (commands)" is the short glossary view. It **mandates a reconciliation** of the existing command code + the `runner-in-ci` / `auto-slice` PRDs/slices to this model (see "Reconciliation cadence"); those `work/observations/` notes track the drift this ADR deliberately introduces.
 
 ## The model in one sentence

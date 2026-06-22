@@ -9,6 +9,8 @@ superseded_by:
 
 # ADR: the question sidecar is a human-readable Markdown surface, not a tooling-owned YAML-ish file
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read the one conceptual `PRD` below (“the PRD-resolved … property”) as **brief** — it names the decision recorded in the `advance-loop` brief. The decision is unchanged; only the name moved.
+
 > This REVISITS a resolved format. The original sidecar format is RESOLVED in the `advance-loop`
 > brief (`work/briefs/tasked/advance-loop.md`, "The sidecar FORMAT (RESOLVED here)") and the design
 > note `work/notes/ideas/advance-loop-question-answer-protocol.md`, and was built faithfully to that

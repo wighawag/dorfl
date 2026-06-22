@@ -8,6 +8,8 @@ superseded_by:
 
 # ADR: the staging/pool POSITION is runner-deterministic; humanOnly is agent judgement, they sit on opposite sides of the determinism/trust line
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename` + `folder-taxonomy-reorg-and-rename`):** the vocabulary and the `work/` folder layout were RENAMED after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, the verb `slicing`/`slicer` as **tasking**/**tasker**, and the frontmatter `sliceAfter` as **briefAfter**. The pre-reorg folder names map: `backlog/`→`tasks/todo/` (the agent pool), `prd/`→`briefs/ready/`, `prd-ready/`→`briefs/ready/` (the auto-tasking pool), and `prd-sliced/`→`briefs/tasked/`. The DECISION this ADR records (placement is runner-deterministic; humanOnly is agent judgement) is unchanged; only the names moved, and the original text is left intact to preserve the decision history.
+
 > **STATUS: proposed.** Pins the WHY behind a three-axis autonomy model and a runner-enforced
 > placement gate. Full design + edge cases + config in
 > `work/prd/staging-pool-position-gate-and-trust-model.md`; design trail in

@@ -11,6 +11,8 @@ created: 2026-06-03
 
 > **Forward note (2026-06-21 — Matt Pocock skills v1.0.0 alignment):** §2's heading word "disabled" predates v1.0.0 and now COLLIDES with the real `disable-model-invocation` flag v1 introduced. Read §2's "disabled" as **superseded by a `work/`-native equivalent** (the tracker skills' JOB is done by our file-based skills, not switched off). The new v1 decisions — adopting `disable-model-invocation: true` on our user-invoked orchestration skills, the user-invoked/model-invoked taxonomy, the `work` router, the file-path composition divergence, and the TDD-invisibility gap for the autonomous worker — are recorded in **§6** below. The original §2–§5 text is left intact.
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** beyond the skill/folder renames above, the CONCEPTUAL vocabulary cut over too: read every `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking** (a brief is *tasked* into tasks; the agent is the **tasker**). The DECISIONS are unchanged; only the names moved, and the original text is left intact to preserve the decision history.
+
 Records the decisions about how this monorepo's `work/` methodology relates to the third-party "Matt Pocock" engineering skills, and the PRD/slice/triage/gate shape — so future sessions don't re-litigate them. (This monorepo IS the project: the `work/` methodology + tooling; `packages/agent-runner` is one implementation; `skills/` holds the methodology skills.)
 
 ## 1. The monorepo owns the methodology skills

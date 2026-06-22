@@ -9,6 +9,8 @@ superseded_by:
 
 # ADR: introduce a ledger-transition seam (one strategy today; protected-main is a future possibility)
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read the one conceptual `PRD` below (the “issue→PRD `Fixes #N` loop-closure” aside) as **brief**. The decision is unchanged; only the name moved.
+
 > **STATUS: accepted — for the SEAM decision.** A design session (2026-06-04) resolved the load-bearing question. The decision is deliberately MINIMAL: introduce a **ledger-transition seam** (a read seam + a write seam) inside agent-runner, behind which the **current behaviour is the ONLY strategy**. There is **no mode, no config, nothing selectable** — observable behaviour is byte-identical to today. The seam is **insurance**, not a feature: IF a future protected-`main` strategy is ever needed, it can slot in behind the seam without reworking the claim model.
 >
 > A protected-`main` strategy **does not exist and is not decided** — it is recorded below only as ANALYSIS ("A future protected-main strategy") so a later session has footing. This ADR does NOT introduce a `ledgerMode`/mode concept; the codebase must not grow one until/unless a second strategy is actually built. **Not currently blocking** (the maintainer rarely protects `main`).

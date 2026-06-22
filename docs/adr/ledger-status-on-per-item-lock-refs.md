@@ -8,6 +8,8 @@ superseded_by:
 
 # ADR: transient ledger STATUS lives on per-item lock refs; main holds content + durable resting records only
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename` + `folder-taxonomy-reorg-and-rename`):** the vocabulary and the `work/` folder layout were RENAMED after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, the verb `slicing` as **tasking**, the `slicing` lock action as **tasking**, and the frontmatter `sliceAfter` as **briefAfter**. The pre-reorg folder names map: `backlog/`→`tasks/todo/` (the agent pool), `prd/`→`briefs/ready/`, `prd-ready/`→`briefs/ready/`, `prd-sliced/`→`briefs/tasked/`, and `dropped/` is now the per-regime `tasks/cancelled/` / `briefs/dropped/`. The DECISION this ADR records (transient status on per-item lock refs) is unchanged; only the names moved, and the original text is left intact to preserve the decision history.
+
 > **STATUS: proposed.** Records the decision and its why for a future build. Not yet accepted; the
 > design trail and full edge-case analysis live in
 > `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md` and the PRD
