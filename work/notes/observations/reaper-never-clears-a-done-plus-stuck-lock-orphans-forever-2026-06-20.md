@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: reaper-never-clears-a-done-plus-stuck-lock-orphans-forever
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -71,3 +71,9 @@ still kept.
   `release-lock` could not clear THIS one either).
 - The incident: the orphaned `slice-claim-cas-spinner` lock from PR #140's stranded
   build (2026-06-19), cleared by a manual ref-delete 2026-06-20.
+
+## Applied answers 2026-06-22
+
+### q1: How should this observation be dispositioned: promote to a slice that extends the reaper to treat stuck+terminal-on-main locks as reapable (split kept-stuck into stuck+terminal => reapable vs stuck+in-flight => keep, with a pinning test), keep as an open observation, or another route?
+
+promote-slice, but treat it as a CONTRACT change, not a pure bugfix. Verified: the reaper reaps ONLY the `cleared-stale` class (terminal-on-main + active) and never `kept-stuck` (terminal + stuck), so a `done` + stuck lock orphans forever. The fix — split `kept-stuck` into stuck+terminal (reapable) vs stuck+in-flight (keep), with a pinning test that the non-terminal stuck case still NEVER reaps — loosens the load-bearing "stuck is never auto-cleared, it means human attention" invariant. So ship it WITH the carve-out + pin test AND an ADR note ratifying that terminal-on-main + stuck is now reapable (the cited ADR authorises "main is authoritative" but does not by itself say a stuck lock should be auto-cleared, so record the extension explicitly). Cross-ref the release-lock escape-hatch sidecar (same orphan, complementary recovery path). Disposition: promote-slice (as a contract change).
