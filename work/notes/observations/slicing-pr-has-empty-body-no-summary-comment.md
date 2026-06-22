@@ -2,7 +2,7 @@
 title: The slicing path opens a PR with an EMPTY body (no summary of what was sliced); build path threads a body but slicing does not
 date: 2026-06-21
 status: open
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was spotted
@@ -27,3 +27,13 @@ Relatedly: the build path's Gate-2 review posts a deliberate `review` PROSE comm
 ## Provenance
 
 Spotted by the user reviewing PR #188 during the v1.0.0-skills-alignment session (2026-06-21). Investigation confirmed the build-vs-slicing body asymmetry in `do.ts` vs `slicing.ts`.
+
+## Applied answers 2026-06-22
+
+### q1: How should this observation be triaged — promote it to a slice that threads a PR body / posts a PR comment on the slicing path, keep it as an open observation, or route it elsewhere?
+
+promote-slice. Verified asymmetry: the build path threads `body: agent.output` into `performIntegration` (do.ts:1095, :2205) but the slicing path's `performIntegration` call (slicing.ts) passes no `body`, so slice PRs degrade to `gh pr create --fill` and land empty. The slicer already has the material (slugs/titles/coverage/dep-graph) to compose a summary. Fix is well-localised: add a composed summary as `body` in the slicing.ts `performIntegration` call. Disposition: promote-slice.
+
+### q2: Is the slice-set acceptance gate's `review` prose field currently posted as a PR comment on slice PRs, or is it being silently dropped — and should that be folded into the same slice as the empty-body fix?
+
+Already POSTED, not dropped — so this does NOT expand the empty-body slice's scope. The Gate-2 review-comment poster lives in the SHARED `performIntegration` core (gated on `approvedVerdict?.review !== undefined`), which the slicing path rides with review wired, so the comment posts automatically for both build and slicing callers (no per-caller wiring). Caveat: posting requires review ON, propose mode (a PR exists), and the verdict actually carrying a `review` field. The PR-body gap (Q1) is independent of and orthogonal to this comment path, so keep the empty-body fix narrow (body threading only).
