@@ -2,6 +2,7 @@
 title: fresh-worktree-gate.test.ts gateSandboxCount() assertions flake under full-suite parallel load
 date: 2026-06-22
 status: open
+needsAnswers: true
 ---
 
 ## Signal (spotted, unverified root cause)
