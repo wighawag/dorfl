@@ -104,6 +104,44 @@ export type ReviewProviderName = 'none' | 'github';
 export type VerifyConfig = string | string[];
 
 /**
+ * **The `promptGuidance` NAMESPACE** — per-repo prompt-text NUDGES the runner
+ * folds into the worker's in-band prompt (`prompt.ts` + `CLAIM-PROTOCOL.md`).
+ * Categorically SEPARATE from the gate family (`verify`/`autoBuild`/`humanOnly`):
+ * a nudge changes the agent's DISPOSITION, never the acceptance bar (the `verify`
+ * gate is still the sole pass/fail). The namespace name is deliberate — it
+ * signals "guidance, not guarantee" — and is shaped to grow (`testFirst` is just
+ * the first member; later siblings, e.g. `preferSmallDiffs`, land here too).
+ */
+export interface PromptGuidance {
+	/**
+	 * Strengthen the wrapper's existing soft "TDD where the task asks for it"
+	 * line into an explicit TEST-FIRST nudge ("at the agreed seam, write the
+	 * failing test BEFORE the production code; this is guidance, not a gate —
+	 * the `verify` step still decides pass/fail"). The strengthened text lives
+	 * in `CLAIM-PROTOCOL.md` (the single source of truth), gated by the
+	 * `<!-- if promptGuidance.testFirst --> … <!-- else --> … <!-- /if -->`
+	 * conditional-fragment convention the extractor in `prompt.ts` honours.
+	 * Default `false` (omitted ⇒ false); the worker prompt is byte-identical
+	 * to today when this is off. Resolved like the gate family: flag > env
+	 * (`AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST`) > per-repo > global >
+	 * default (`false`). NEVER an enforced acceptance criterion.
+	 */
+	testFirst: boolean;
+}
+
+/**
+ * Resolve the `promptGuidance` namespace down to its concrete boolean fields
+ * with the documented defaults applied — so callers can read
+ * `resolvePromptGuidance(cfg).testFirst` without re-checking the namespace's
+ * presence (a per-repo file may legitimately omit `promptGuidance` entirely,
+ * or supply only a subset). Mirrors the gate family's defaults-resolved
+ * convention.
+ */
+export function resolvePromptGuidance(cfg: Config): PromptGuidance {
+	return {testFirst: cfg.promptGuidance?.testFirst === true};
+}
+
+/**
  * Resolved runner configuration. There is NO `roots`/`remotes` field: discovery
  * is the registered hub-mirror set under `<workspacesDir>/repos/` (the registry,
  * ADR `command-surface-and-journeys` §1), NOT a config roots walk. `scan` reads
@@ -122,6 +160,18 @@ export interface Config {
 	 * `surfaceBlockers`).
 	 */
 	autoBuild: boolean;
+	/**
+	 * **The `promptGuidance` NUDGE namespace** (see {@link PromptGuidance}). A
+	 * NUDGE modifies the worker's IN-BAND PROMPT text (`prompt.ts` + the
+	 * `CLAIM-PROTOCOL.md` wrapper); it is CATEGORICALLY SEPARATE from the gate
+	 * family (`verify`/`autoBuild`/`humanOnly`) — guidance, never guarantee. The
+	 * `verify` gate's semantics are unaffected regardless of any value here.
+	 * Resolution mirrors the gate family per-member: flag > env > per-repo >
+	 * global > default. Defaults to `{testFirst: false}` (worker prompt is
+	 * byte-identical to today when every member is off). Designed to grow:
+	 * later sibling nudges (e.g. `preferSmallDiffs`) land as new members.
+	 */
+	promptGuidance: PromptGuidance;
 	/**
 	 * Per-repo policy: may an agent auto-slice *undeclared* (not `humanOnly`,
 	 * no open questions) PRDs in this repo? `false` (default, strict, human-first)
@@ -568,6 +618,10 @@ export function warnDeprecatedConfigKeys(
  */
 export const DEFAULT_CONFIG: Config = {
 	autoBuild: false,
+	// The `promptGuidance` nudge namespace defaults to ALL members off — so the
+	// worker prompt is byte-identical to today when no repo opts in. NOT a gate;
+	// `verify` remains the sole acceptance bar regardless.
+	promptGuidance: {testFirst: false},
 	// Auto-slicing is human-first by default: an agent slices nothing unless a
 	// repo opts in via `autoSlice` (mirrors `autoBuild`, one level up).
 	autoSlice: false,

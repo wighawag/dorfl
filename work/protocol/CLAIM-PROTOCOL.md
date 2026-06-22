@@ -93,8 +93,14 @@ file fully; it is your complete brief (What to build, Acceptance criteria, Promp
 Also read its source brief (the task's `brief:` field, at work/briefs/ready/<prd>.md)
 for context.
 
+<!-- if promptGuidance.testFirst -->
+Implement it to satisfy every Acceptance criterion. At the agreed seam, write
+the failing test BEFORE the production code, matching the repo's house style;
+this is guidance, not a gate — the `verify` step still decides pass/fail.
+<!-- else -->
 Implement it to satisfy every Acceptance criterion. TDD where the task asks for
 it; match the repo's house style.
+<!-- /if -->
 
 If you NOTICE a problem OUTSIDE this task's scope (a flaky test, a latent bug, a
 suspicious behaviour), do NOT fix it and do NOT expand your scope. Instead drop a

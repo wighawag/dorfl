@@ -54,6 +54,11 @@ describe('repo-config constants', () => {
 		// while still building each slice as a PR is agreed by all collaborators + travels
 		// with the repo. (`per-transition-integration-mode-slicing-vs-build`.)
 		expect(REPO_ALLOWED_KEYS).toContain('slicingIntegration');
+		// `promptGuidance` (the NUDGE namespace — prompt-text knobs, NOT a gate) is a
+		// genuine repo property: "is this repo nudged toward test-first?" travels with
+		// the repo and is agreed by all collaborators. Resolved per-repo through the
+		// same chain as `autoBuild`. CATEGORICALLY SEPARATE from the gate family.
+		expect(REPO_ALLOWED_KEYS).toContain('promptGuidance');
 	});
 
 	it('treats runner/host-only keys as rejected in a per-repo file', () => {
@@ -489,6 +494,39 @@ describe('resolveRepoConfig — per-key layering', () => {
 				env: {AGENT_RUNNER_AUTO_SLICE: 'false'},
 				flags: {autoSlice: true},
 			}).config.autoSlice,
+		).toBe(true);
+	});
+
+	it('resolves `promptGuidance.testFirst` flag > env > per-repo > global > default false (like autoBuild)', () => {
+		// The NUDGE namespace rides the SAME precedence chain as the gate family
+		// (the brief's acceptance criterion). default false; bare global ⇒ default.
+		expect(
+			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
+				.config.promptGuidance.testFirst,
+		).toBe(false);
+		// per-repo opts in over a false global.
+		writeRepoConfig(repo, {promptGuidance: {testFirst: true}});
+		const global = mergeConfig({promptGuidance: {testFirst: false}});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.promptGuidance
+				.testFirst,
+		).toBe(true);
+		// env (AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST: 'false'},
+			}).config.promptGuidance.testFirst,
+		).toBe(false);
+		// a flag beats env, per-repo, and global.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST: 'false'},
+				flags: {promptGuidance: {testFirst: true}},
+			}).config.promptGuidance.testFirst,
 		).toBe(true);
 	});
 

@@ -7,6 +7,7 @@ import {
 	extractCanonicalWrapperTemplate,
 	resolveProtocolDoc,
 	wrapper,
+	applyPromptGuidance,
 	buildAgentPrompt,
 	buildContinueBlock,
 	extractRequeueNotes,
@@ -137,7 +138,7 @@ describe('extractPromptSection', () => {
 });
 
 describe('canonical wrapper — read from the contract, not a divergent copy', () => {
-	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<prd> substituted', () => {
+	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<prd> substituted (default-OFF nudge applied)', () => {
 		const protocol = readFileSync(CLAIM_PROTOCOL, 'utf8');
 		const template = extractCanonicalWrapperTemplate(protocol);
 
@@ -145,7 +146,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(template).toContain('<slug>');
 
 		const emitted = wrapper('example', 'my-prd');
-		const expected = template
+		// With the nudge OFF (the default), the conditional-fragment transform
+		// strips the markers + the IF-branch and keeps the historic ELSE text
+		// (BYTE-IDENTITY guard — see the `promptGuidance.testFirst` seam tests).
+		const expected = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
 			.replace(/<prd>/g, 'my-prd');
 		expect(emitted).toBe(expected);
@@ -293,6 +297,106 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 			cwd: scratch.root,
 		});
 		expect(out).toContain('TARGET-MARKER complete brief');
+	});
+});
+
+describe('promptGuidance.testFirst nudge — the conditional-fragment seam', () => {
+	it('applyPromptGuidance: OFF ⇒ keeps the ELSE branch verbatim (off-path)', () => {
+		const tmpl =
+			'before\n<!-- if promptGuidance.testFirst -->\nSTRONG\n<!-- else -->\nSOFT\n<!-- /if -->\nafter';
+		expect(applyPromptGuidance(tmpl, {testFirst: false})).toBe(
+			'before\nSOFT\nafter',
+		);
+		// Omitted == false (the documented default).
+		expect(applyPromptGuidance(tmpl)).toBe('before\nSOFT\nafter');
+	});
+
+	it('applyPromptGuidance: ON ⇒ keeps the IF branch verbatim', () => {
+		const tmpl =
+			'before\n<!-- if promptGuidance.testFirst -->\nSTRONG\n<!-- else -->\nSOFT\n<!-- /if -->\nafter';
+		expect(applyPromptGuidance(tmpl, {testFirst: true})).toBe(
+			'before\nSTRONG\nafter',
+		);
+	});
+
+	it('wrapper OFF (default) is byte-identical to the manually-stripped canonical template', () => {
+		// The off-path acceptance criterion: with the nudge off, the assembled
+		// wrapper must be byte-identical to what you would get if the conditional
+		// markers were not in CLAIM-PROTOCOL.md at all (i.e. only the historic
+		// soft TDD line was there). We reconstruct that baseline by stripping the
+		// markers from the canonical template and asserting equality.
+		const protocol = readFileSync(CLAIM_PROTOCOL, 'utf8');
+		const template = extractCanonicalWrapperTemplate(protocol);
+		const baseline = applyPromptGuidance(template, {testFirst: false})
+			.replace(/<slug>/g, 'example')
+			.replace(/<prd>/g, 'my-prd');
+		expect(wrapper('example', 'my-prd')).toBe(baseline);
+		expect(
+			wrapper('example', 'my-prd', {promptGuidance: {testFirst: false}}),
+		).toBe(baseline);
+		// And the byte-identity guard: with the nudge OFF, the strengthened text
+		// must be absent and the soft historic text must be present (the soft line
+		// is the ELSE branch).
+		const off = wrapper('example', 'my-prd');
+		// The historic soft line is hard-wrapped (newline between "for" and "it");
+		// matching the unwrapped prefix is enough to prove it is present.
+		expect(off).toContain('TDD where the task asks for');
+		expect(off).not.toContain('failing test BEFORE the production code');
+		expect(off).not.toContain('<!-- if promptGuidance');
+	});
+
+	it('wrapper ON contains the strengthened test-first text and DROPS the soft phrasing (REPLACE, not append)', () => {
+		const on = wrapper('example', 'my-prd', {
+			promptGuidance: {testFirst: true},
+		});
+		expect(on).toContain('failing test BEFORE the production code');
+		expect(on).toContain('guidance, not a gate');
+		expect(on).toContain('`verify` step still decides pass/fail');
+		// Q2 answer: REPLACE — the original soft phrasing is GONE when on.
+		expect(on).not.toContain('TDD where the task asks for it');
+		expect(on).not.toContain('<!-- if promptGuidance');
+		expect(on).not.toContain('<!-- else -->');
+		expect(on).not.toContain('<!-- /if -->');
+	});
+
+	it('the strengthened text is SOURCED from CLAIM-PROTOCOL.md (not a TS literal)', () => {
+		// Proof-by-divergence: edit ONLY the markdown (a tagged override) and the
+		// emitted wrapper must change accordingly. If the strengthened text lived
+		// in a TS literal, this would be invariant to the markdown edit.
+		const scratch = makeScratch('agent-runner-prompt-guidance-source-');
+		try {
+			const bundled = readFileSync(CLAIM_PROTOCOL, 'utf8');
+			const tagged = bundled.replace(
+				'failing test BEFORE the production code',
+				'failing test BEFORE the production code [MARKDOWN-SOURCED-MARKER]',
+			);
+			const protoDir = join(scratch.root, 'work', 'protocol');
+			mkdirSync(protoDir, {recursive: true});
+			writeFileSync(join(protoDir, 'CLAIM-PROTOCOL.md'), tagged);
+			const on = wrapper('example', 'my-prd', {
+				cwd: scratch.root,
+				promptGuidance: {testFirst: true},
+			});
+			expect(on).toContain('[MARKDOWN-SOURCED-MARKER]');
+		} finally {
+			scratch.cleanup();
+		}
+	});
+
+	it('buildAgentPrompt OFF is byte-identical to the no-options assembly (snapshot guard)', () => {
+		const a = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY');
+		const b = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+			promptGuidance: {testFirst: false},
+		});
+		expect(b).toBe(a);
+	});
+
+	it('buildAgentPrompt ON contains the strengthened line at the wrapper seam', () => {
+		const on = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+			promptGuidance: {testFirst: true},
+		});
+		expect(on).toContain('failing test BEFORE the production code');
+		expect(on).toContain('SLICE-BODY');
 	});
 });
 

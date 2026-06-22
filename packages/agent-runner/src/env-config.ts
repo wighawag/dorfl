@@ -134,6 +134,25 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// `freshWorktreeGate` is a BOOLEAN coercion (like `slicerLoop`), so
 	// `AGENT_RUNNER_FRESH_WORKTREE_GATE=true|false` works and a typo FAILS LOUDLY.
 	freshWorktreeGate: 'boolean',
+	// `promptGuidance` is a STRUCTURED (nested) namespace, so it has no scalar env
+	// var of its own — each MEMBER carries its own env var (the nested-key form
+	// `AGENT_RUNNER_PROMPT_GUIDANCE_<MEMBER>`), handled out-of-band in
+	// `envOverrides` below. Listing the namespace here would imply a single scalar
+	// `AGENT_RUNNER_PROMPT_GUIDANCE` env var, which is NOT how the namespace is
+	// shaped (each nudge member is independently resolvable).
+};
+
+/**
+ * The env vars for the nested members of the `promptGuidance` namespace. The
+ * key is the env var name (`AGENT_RUNNER_PROMPT_GUIDANCE_<MEMBER>`, the nested
+ * naming the brief specifies); the value is the (boolean) coercion. Each member
+ * present in env contributes `{<member>: bool}` into a single
+ * `promptGuidance` partial — mergeConfig replaces the whole namespace per the
+ * layered precedence, which is correct because EVERY member is included (env
+ * supplies a complete inner object whenever ANY member is set).
+ */
+const PROMPT_GUIDANCE_ENV: Readonly<Record<string, 'boolean'>> = {
+	[ENV_PREFIX + 'PROMPT_GUIDANCE_TEST_FIRST']: 'boolean',
 };
 
 /** The `AGENT_RUNNER_*` env var name for a config key (`perRepoMax` →
@@ -226,6 +245,30 @@ export function envOverrides(
 		);
 	}
 	const overrides: PartialConfig = {};
+	// Per-member env layer for the `promptGuidance` NUDGE namespace. Each member
+	// is INDEPENDENTLY resolvable (`AGENT_RUNNER_PROMPT_GUIDANCE_<MEMBER>`); a
+	// present env var sets that member in the partial. We merge ALL set members
+	// into a single inner object, then assign once — the outer mergeConfig
+	// REPLACES the namespace per layer, so we send a coherent partial-inner per
+	// env override (a missing member there reads its default from the lower
+	// layer's namespace, which works because env is precisely a per-machine
+	// SETTER, not a gate).
+	const promptGuidancePartial: Partial<{testFirst: boolean}> = {};
+	for (const [varName, coercion] of Object.entries(PROMPT_GUIDANCE_ENV)) {
+		const raw = env[varName];
+		if (raw === undefined) {
+			continue;
+		}
+		const value = coerceValue(varName, raw, coercion) as boolean;
+		if (varName === ENV_PREFIX + 'PROMPT_GUIDANCE_TEST_FIRST') {
+			promptGuidancePartial.testFirst = value;
+		}
+	}
+	if (Object.keys(promptGuidancePartial).length > 0) {
+		overrides.promptGuidance = {
+			testFirst: promptGuidancePartial.testFirst ?? false,
+		};
+	}
 	for (const key of Object.keys(KEY_COERCIONS) as (keyof Config)[]) {
 		const coercion = KEY_COERCIONS[key];
 		if (coercion === undefined) {

@@ -194,14 +194,54 @@ export function extractCanonicalWrapperTemplate(protocol: string): string {
 }
 
 /**
- * The constant wrapper, parameterised only by the slice slug and its source PRD
- * slug. Read verbatim from the work-contract and substituted — never a divergent
- * hardcoded copy. `prd` may be `undefined` when the slice has no `prd:` field.
+ * The single-pass extractor-post-step for the `promptGuidance` NUDGE namespace.
+ * Resolves every `<!-- if promptGuidance.<member> --> … <!-- else --> … <!-- /if -->`
+ * conditional fragment in the canonical wrapper template ("Option A" — single
+ * wrapper, conditional fragments — see the ADR + this slice's recorded decision):
+ * when the named nudge member resolves TRUE the IF-branch text is kept and the
+ * markers + ELSE-branch are stripped; when FALSE the ELSE-branch text is kept
+ * and the markers + IF-branch are stripped. The markers' own lines (and the
+ * newlines that terminate them) are consumed too, so the OFF-path output is
+ * BYTE-IDENTICAL to the pre-marker template — the guard the prompt-assembly
+ * byte-identity test pins.
+ *
+ * Pure string transform; runs AFTER `extractCanonicalWrapperTemplate` (a pure
+ * verbatim extractor stays a pure verbatim extractor) and BEFORE the
+ * `<slug>`/`<prd>` substitution.
+ */
+export function applyPromptGuidance(
+	template: string,
+	nudges: {testFirst?: boolean} = {},
+): string {
+	const values: Record<string, boolean> = {
+		testFirst: nudges.testFirst === true,
+	};
+	return template.replace(
+		/<!-- if promptGuidance\.(\w+) -->\n([\s\S]*?)\n<!-- else -->\n([\s\S]*?)\n<!-- \/if -->/g,
+		(_match, member: string, ifBranch: string, elseBranch: string) => {
+			const on = values[member] === true;
+			return on ? ifBranch : elseBranch;
+		},
+	);
+}
+
+/**
+ * The constant wrapper, parameterised only by the slice slug, its source PRD
+ * slug, and (optionally) the resolved {@link PromptGuidance} nudges. Read
+ * verbatim from the work-contract and substituted — never a divergent hardcoded
+ * copy. `prd` may be `undefined` when the slice has no `prd:` field. When
+ * `promptGuidance` is omitted (or every member resolves false) the output is
+ * BYTE-IDENTICAL to today's wrapper (the ELSE-branch of every conditional is
+ * the historic text).
  */
 export function wrapper(
 	slug: string,
 	prd: string | undefined,
-	options: {protocolPath?: string; cwd?: string} = {},
+	options: {
+		protocolPath?: string;
+		cwd?: string;
+		promptGuidance?: {testFirst?: boolean};
+	} = {},
 ): string {
 	const protocolPath = resolveProtocolDoc(
 		'CLAIM-PROTOCOL.md',
@@ -210,7 +250,8 @@ export function wrapper(
 	);
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
-	return template.replace(/<slug>/g, slug).replace(/<prd>/g, prd ?? '<prd>');
+	const resolved = applyPromptGuidance(template, options.promptGuidance);
+	return resolved.replace(/<slug>/g, slug).replace(/<prd>/g, prd ?? '<prd>');
 }
 
 /**
@@ -391,6 +432,7 @@ export function buildAgentPrompt(
 		protocolPath?: string;
 		cwd?: string;
 		continueContext?: ContinueContext;
+		promptGuidance?: {testFirst?: boolean};
 	} = {},
 ): string {
 	const head = wrapper(slug, prd, options);
@@ -431,6 +473,14 @@ export interface PromptOptions {
 	protocolPath?: string;
 	/** Environment for the branch-inference git child. */
 	env?: NodeJS.ProcessEnv;
+	/**
+	 * Resolved {@link PromptGuidance} nudges (the prompt-text knobs the
+	 * `promptGuidance` namespace carries; e.g. `testFirst`). Omitted (the
+	 * common case) ⇒ every member false ⇒ wrapper byte-identical to today.
+	 * The CLI's `prompt` action resolves this from the per-repo config; the
+	 * autonomous `do`/`run` paths thread it through `buildAgentPrompt`.
+	 */
+	promptGuidance?: {testFirst?: boolean};
 }
 
 /** Raised for usage/environment problems (no slug, no slice file, no prompt). */
@@ -581,5 +631,6 @@ export function renderPrompt(options: PromptOptions): string {
 	return buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 		protocolPath: options.protocolPath,
 		cwd: options.cwd,
+		promptGuidance: options.promptGuidance,
 	});
 }

@@ -105,6 +105,7 @@ import {harnessTriageGate} from './triage-gate.js';
 import {harnessSliceReviewGate} from './slicer-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
+import {resolvePromptGuidance} from './config.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {sweepRemoteMergedBranches} from './reap-branches.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
@@ -1616,7 +1617,18 @@ export function buildProgram(): Command {
 		.action((rawSlug: string | undefined) => {
 			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
 			const slug = resolveSliceOnlySlug(rawSlug);
-			const output = renderPrompt({slug, cwd: process.cwd()});
+			// Resolve the `promptGuidance` NUDGE namespace through the SAME chain the
+			// gate family uses (env > per-repo > global > default), so e.g. a
+			// `promptGuidance.testFirst:true` in `.agent-runner.json` strengthens the
+			// wrapper line for `agent-runner prompt` exactly as it would in `do`/`run`.
+			const cwd = process.cwd();
+			const global = loadConfig();
+			const resolved = resolveRepoConfig({repoPath: cwd, global}).config;
+			const output = renderPrompt({
+				slug,
+				cwd,
+				promptGuidance: resolvePromptGuidance(resolved),
+			});
 			process.stdout.write(output);
 		});
 

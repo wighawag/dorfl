@@ -2,7 +2,12 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {DEFAULT_CONFIG, mergeConfig, loadConfig} from '../src/config.js';
+import {
+	DEFAULT_CONFIG,
+	mergeConfig,
+	loadConfig,
+	resolvePromptGuidance,
+} from '../src/config.js';
 
 describe('mergeConfig', () => {
 	it('returns defaults when given no overrides', () => {
@@ -17,6 +22,26 @@ describe('mergeConfig', () => {
 
 	it('has NO `provider` key (the override axis is removed)', () => {
 		expect('provider' in DEFAULT_CONFIG).toBe(false);
+	});
+
+	it('defaults promptGuidance.testFirst to false (a NUDGE, off by default)', () => {
+		expect(DEFAULT_CONFIG.promptGuidance).toEqual({testFirst: false});
+		expect(mergeConfig({}).promptGuidance).toEqual({testFirst: false});
+		// The convenience resolver returns the documented defaults.
+		expect(resolvePromptGuidance(mergeConfig({}))).toEqual({testFirst: false});
+	});
+
+	it('mergeConfig accepts a per-repo `promptGuidance.testFirst: true` override', () => {
+		const merged = mergeConfig({promptGuidance: {testFirst: true}});
+		expect(merged.promptGuidance).toEqual({testFirst: true});
+		expect(resolvePromptGuidance(merged).testFirst).toBe(true);
+	});
+
+	it('promptGuidance is CATEGORICALLY SEPARATE from the gate family (not a verify/autoBuild sibling)', () => {
+		// Sanity: the namespace is its own object — NOT a boolean on the Config root
+		// like `autoBuild`. The name signals "nudge, not gate".
+		expect(typeof DEFAULT_CONFIG.promptGuidance).toBe('object');
+		expect('testFirst' in DEFAULT_CONFIG).toBe(false);
 	});
 
 	it('defaults autoBuild to false (strict)', () => {
@@ -155,6 +180,27 @@ describe('loadConfig', () => {
 		// never maps onto `autoBuild`, which stands on its own value.
 		const cfg = loadConfig(path);
 		expect(cfg.autoBuild).toBe(false);
+	});
+
+	it('parses a per-repo `promptGuidance.testFirst: true` from .json', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(
+			path,
+			JSON.stringify({promptGuidance: {testFirst: true}, autoBuild: false}),
+		);
+		const cfg = loadConfig(path);
+		expect(cfg.promptGuidance.testFirst).toBe(true);
+		// Other defaults still apply (it is its own namespace, not a gate sibling).
+		expect(cfg.autoBuild).toBe(false);
+	});
+
+	it('tolerates an empty `promptGuidance` object (omitted members read defaults)', () => {
+		const path = join(dir, 'config.json');
+		writeFileSync(path, JSON.stringify({promptGuidance: {}}));
+		const cfg = loadConfig(path);
+		// An empty namespace REPLACES the default object; the resolver applies
+		// per-member defaults so callers still get a coherent boolean.
+		expect(resolvePromptGuidance(cfg).testFirst).toBe(false);
 	});
 
 	it('a stale `provider` key is IGNORED with a deprecation warning (never a hard error)', () => {

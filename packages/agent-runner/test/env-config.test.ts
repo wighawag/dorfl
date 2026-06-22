@@ -162,6 +162,30 @@ describe('envOverrides — noPR (the PR-INTENT axis) boolean coercion', () => {
 	});
 });
 
+describe('envOverrides — promptGuidance.testFirst (the NUDGE namespace, nested env)', () => {
+	it('coerces AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST=true to {promptGuidance:{testFirst:true}}', () => {
+		expect(
+			envOverrides({AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST: 'true'}),
+		).toEqual({promptGuidance: {testFirst: true}});
+	});
+
+	it('coerces AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST=false to {promptGuidance:{testFirst:false}}', () => {
+		expect(
+			envOverrides({AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST: 'false'}),
+		).toEqual({promptGuidance: {testFirst: false}});
+	});
+
+	it('an absent env var leaves the namespace untouched (no `promptGuidance` key)', () => {
+		expect(envOverrides({})).toEqual({});
+	});
+
+	it('FAILS LOUDLY on a non-boolean value (the same loud-failure contract as `autoBuild`)', () => {
+		expect(() =>
+			envOverrides({AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST: 'yes'}),
+		).toThrow(/AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST/);
+	});
+});
+
 describe('envOverrides — deprecated AGENT_RUNNER_PROVIDER is IGNORED with a warning', () => {
 	it('ignores AGENT_RUNNER_PROVIDER (no override key) and warns', () => {
 		const warnings: string[] = [];

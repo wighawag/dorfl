@@ -173,6 +173,14 @@ export const REPO_ALLOWED_KEYS = [
 	// artifact (and pays the per-gate install cost) is agreed by all collaborators
 	// + travels with the repo. Resolved per-repo through the SAME chain.
 	'freshWorktreeGate',
+	// `promptGuidance` (the NUDGE namespace — prompt-text knobs that strengthen
+	// the worker's in-band wrapper line, e.g. `testFirst`) is a genuine repo
+	// property: "is this repo nudged toward test-first?" travels with the repo
+	// and is agreed by all collaborators. CATEGORICALLY SEPARATE from the gate
+	// family (`verify`/`autoBuild`/`humanOnly`) — a nudge changes the agent's
+	// disposition, NEVER the acceptance bar. Resolved per-repo through the SAME
+	// chain as `autoBuild` (flag > env > per-repo > global > default).
+	'promptGuidance',
 ] as const satisfies readonly (keyof Config)[];
 
 /** A key honoured in a per-repo file. */
