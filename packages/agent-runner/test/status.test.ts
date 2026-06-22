@@ -11,7 +11,6 @@ import type {Harness, HarnessRecord} from '../src/harness.js';
 import {
 	makeScratch,
 	registerMirrorWithWork,
-	pushWorkToMirrorOrigin,
 	breakMirrorOrigin,
 	type Scratch,
 } from './helpers/gitRepo.js';
@@ -355,106 +354,13 @@ describe('formatStatus — rendering', () => {
 	});
 });
 
-/**
- * Register a BARE hub mirror whose `main` ref carries a
- * `work/needs-attention/<slug>.md` with a reason block in the body (the shape
- * `routeToNeedsAttention` produces). `status` reads it from the mirror's bare
- * `main` ref through the read seam (mirrors have no working tree).
- */
-function seedNeedsAttentionMirror(slug: string, reason: string): string {
-	const content = [
-		'---',
-		`title: ${slug}`,
-		`slug: ${slug}`,
-		'---',
-		'',
-		'## What to build',
-		'',
-		'thing',
-		'',
-		'## Needs attention',
-		'',
-		reason,
-		'',
-	].join('\n');
-	return registerMirrorWithWork(workspacesDir(), 'project', {
-		needsAttention: {[`${slug}.md`]: content},
-	}).mirrorPath;
-}
-
-describe('status — the needs-attention/ FOLDER is RETIRED (stuck = the lock)', () => {
-	it('does NOT surface a work/needs-attention/ folder file (the folder is no longer read)', async () => {
-		// Slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
-		// (decision i+): the stuck-state surface is the per-item lock `state: stuck`,
-		// NOT a `needs-attention/` folder file. A folder file (e.g. a legacy leftover)
-		// is IGNORED by `status` — nothing reads `work/needs-attention/` anymore.
-		const mirror = seedNeedsAttentionMirror(
-			'stuck-slice',
-			'rebase conflict against main',
-		);
-		const report = await status({
-			workspacesDir: workspacesDir(),
-			mirrorPaths: [mirror],
-		});
-		// The folder-native surface is empty (the folder is retired); the lock-ref
-		// surface (`lockHeld`) carries stuck state and there is none here.
-		expect(report.needsAttention).toEqual([]);
-		expect(report.lockHeld).toEqual([]);
-	});
-
-	it('omits the surface entirely when no mirrorPaths are given', async () => {
-		seedNeedsAttentionMirror('ignored', 'should not appear');
-		const report = await status({workspacesDir: workspacesDir()});
-		expect(report.needsAttention).toEqual([]);
-	});
-});
-
-/** A needs-attention slice body (the shape `routeToNeedsAttention` produces). */
-function needsAttentionBody(slug: string, reason: string): string {
-	return [
-		'---',
-		`title: ${slug}`,
-		`slug: ${slug}`,
-		'---',
-		'',
-		'## Needs attention',
-		'',
-		reason,
-		'',
-	].join('\n');
-}
-
-describe('status — fetch-first (ADR §5/§6; folder retired — the fetch still runs)', () => {
-	it('a folder needs-attention file pushed to the arbiter is IGNORED (folder retired)', async () => {
-		// The fetch-first invariant still holds (status refreshes the mirror's main),
-		// but the folder-native surface is retired: even a freshly-fetched
-		// `work/needs-attention/` file is not surfaced.
-		const mirror = registerMirrorWithWork(workspacesDir(), 'project', {
-			needsAttention: {
-				'first.md': needsAttentionBody('first', 'reason one'),
-			},
-		}).mirrorPath;
-		pushWorkToMirrorOrigin(
+describe('status — fetch-first (ADR §5/§6) degrades on a broken mirror origin', () => {
+	it('a broken mirror origin WARNS and never errors (the lock-ref read degrades)', async () => {
+		const {mirrorPath: mirror} = registerMirrorWithWork(
 			workspacesDir(),
 			'project',
-			'needs-attention',
-			'second.md',
-			needsAttentionBody('second', 'reason two'),
+			{backlog: {'open.md': '---\nslug: open\n---\n'}},
 		);
-
-		const report = await status({
-			workspacesDir: workspacesDir(),
-			mirrorPaths: [mirror],
-		});
-		expect(report.needsAttention).toEqual([]);
-	});
-
-	it('a broken mirror origin WARNS and never errors (the lock-ref read degrades)', async () => {
-		const mirror = registerMirrorWithWork(workspacesDir(), 'project', {
-			needsAttention: {
-				'known.md': needsAttentionBody('known', 'known reason'),
-			},
-		}).mirrorPath;
 		breakMirrorOrigin(mirror);
 
 		const warnings: string[] = [];
@@ -464,9 +370,9 @@ describe('status — fetch-first (ADR §5/§6; folder retired — the fetch stil
 			warn: (m) => warnings.push(m),
 		});
 
-		// Did NOT throw; the folder is retired (empty surface) and the lock-ref read
-		// degrades to empty on the broken origin.
-		expect(report.needsAttention).toEqual([]);
+		// Did NOT throw; the lock-ref read degrades to empty on the broken origin
+		// (the stuck-state surface is the per-item lock; the `needs-attention/`
+		// folder is retired).
 		expect(report.lockHeld).toEqual([]);
 		expect(warnings).toHaveLength(1);
 		expect(warnings[0].toLowerCase()).toMatch(/fetch|offline|last-known/);

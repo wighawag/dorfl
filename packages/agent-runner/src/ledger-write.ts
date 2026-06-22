@@ -15,8 +15,6 @@ import {
 	type ReturnToBacklogResult,
 	type SurfaceToNeedsAttentionOptions,
 	type SurfaceToNeedsAttentionResult,
-	type ResolveFromNeedsAttentionOptions,
-	type ResolveFromNeedsAttentionResult,
 	type BranchPushOutcome,
 } from './needs-attention.js';
 import {
@@ -222,27 +220,36 @@ export type ApplyTreelessNeedsAttentionTransitionResult =
 
 /**
  * A *prepared* RESOLVE-NEEDS-ATTENTION transition: a human is picking up a stuck
- * item, so the seam must **clear the stuck surface** and restore the item to
- * `in-progress`. Storage-agnostic, mirroring {@link
- * ResolveFromNeedsAttentionOptions} — it names the slug + the working clone (and
- * an OPTIONAL arbiter to clear the surface on), NOT *where* the surface lives.
- * The mode-M strategy implements "clear the surface" by reverse-moving
- * needs-attention → in-progress on the arbiter's `main`; a future strategy could
- * clear it elsewhere without `start.ts` learning a new mechanism.
+ * item, so the seam must **clear the stuck state** and restore it to `active`.
+ * Storage-agnostic — it names the slug + the working clone (and an OPTIONAL
+ * arbiter to amend the lock on), NOT *where* the stuck state lives. The sole
+ * strategy clears it by amending the per-item lock `stuck → active` on the
+ * arbiter (slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`).
  */
-export type ApplyResolveNeedsAttentionTransitionInput =
-	ResolveFromNeedsAttentionOptions & {
-		/**
-		 * The arbiter remote whose ledger surface to CLEAR (mode M: the reverse move
-		 * is published to its `main`). Omitted ⇒ the local move only (no surface to
-		 * clear). Storage-agnostic: it names the remote, not `main`.
-		 */
-		arbiter?: string;
-	};
+export interface ApplyResolveNeedsAttentionTransitionInput {
+	/** The working clone the `work/` tree lives in. */
+	cwd: string;
+	/** The slug of the stuck item to resolve back to active. */
+	slug: string;
+	/**
+	 * The arbiter remote whose lock ref to amend (`stuck → active`). Omitted ⇒ a
+	 * recorded no-op success (no lock ref to amend; the human-local face).
+	 * Storage-agnostic: it names the remote, not `main`.
+	 */
+	arbiter?: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+	/** Sink for human-readable progress notes. */
+	note?: (message: string) => void;
+}
 
 /** The outcome of asking the seam to apply a RESOLVE-NEEDS-ATTENTION transition. */
-export type ApplyResolveNeedsAttentionTransitionResult =
-	ResolveFromNeedsAttentionResult;
+export interface ApplyResolveNeedsAttentionTransitionResult {
+	/** True iff the lock was amended back to active (or the no-arbiter no-op). */
+	moved: boolean;
+	/** When NOT moved, why (no held stuck lock, contention, …). */
+	reasonNotMoved?: string;
+}
 
 /**
  * A *prepared* transition the caller asks the seam to publish. Storage-agnostic:

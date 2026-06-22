@@ -5,7 +5,6 @@ import {resolveHarness, type Harness} from './harness.js';
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
 import {fetchMirrorMainOrWarn} from './repo-mirror.js';
-import {type NeedsAttentionItem} from './needs-attention.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {listItemLockEntries, type LockEntry} from './item-lock.js';
 import {formatCwdSection} from './format.js';
@@ -35,22 +34,20 @@ import {
  * would mistake a thinking agent for a dead one. The harness answers liveness
  * from the real signal.
  *
- * **Fetch-first (ADR §5/§6):** the folder-native needs-attention surface is read
- * from each registered hub mirror's `main` ref AFTER refreshing that ref — the
- * old "scan is always offline" framing is RETIRED (it was the roots-local model).
- * A failed mirror fetch is NOT fatal: it WARNS and falls back to that mirror's
- * last-known `main`. The ledger read STRATEGY is unchanged
+ * **Fetch-first (ADR §5/§6):** the per-mirror lock-ref + one-slug-one-folder
+ * lint surfaces are read AFTER refreshing each registered hub mirror's `main` —
+ * the old "scan is always offline" framing is RETIRED (it was the roots-local
+ * model). A failed mirror fetch is NOT fatal: it WARNS and falls back to that
+ * mirror's last-known `main`. The ledger read STRATEGY is unchanged
  * (`claim-ledger-vs-protected-main.md`); `status` only ensures the ref is fresh.
  *
  * It is strictly **read-only**: it inspects records/worktrees; it never claims,
- * runs, moves, or deletes (deletion is `gc`; the needs-attention move is the
- * runner's). It reuses the `gc` `discoverJobs` primitive to enumerate jobs (it
- * does NOT re-implement the work-area layout).
+ * runs, moves, or deletes (deletion is `gc`). It reuses the `gc` `discoverJobs`
+ * primitive to enumerate jobs (it does NOT re-implement the work-area layout).
  *
  * Distinct from `scan`: `scan` answers "what work is in the *backlog* and who
  * can take it"; `status` answers "what is *running / stuck / awaiting cleanup*
- * right now". The retained-worktree + needs-attention items are the "look here"
- * set.
+ * right now". The retained-worktree + stuck-lock items are the "look here" set.
  */
 
 /** One job as the operational dashboard sees it (a record + its liveness). */
@@ -83,21 +80,14 @@ export interface JobStatus {
 	dir: string;
 }
 
-/** One repo's `work/needs-attention/` folder, surfaced for the dashboard. */
-export interface RepoNeedsAttention {
-	/** The repo path whose `work/needs-attention/` was read (a hub-mirror path). */
-	repoPath: string;
-	/** The stuck items (slug + recorded reason) in that folder. */
-	items: NeedsAttentionItem[];
-}
-
 /**
  * One repo's PER-ITEM LOCK refs, surfaced for the dashboard (PRD
  * `ledger-status-per-item-lock-refs` US #8; slice
  * `needs-attention-as-stuck-lock-state`). The in-flight view read from the lock
  * refs — held (`active` = in-progress) and stuck (`needs-attention`) entries +
- * their reasons — ADDITIVE to the folder-native `needsAttention` surface above
- * (the interim dual-write half; the folder view is NOT removed here).
+ * their reasons — is the SOLE stuck-state surface (the
+ * `work/needs-attention/` folder is retired, slice
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`).
  */
 export interface RepoLockEntries {
 	/** The repo path whose lock refs were read (a hub-mirror path). */
@@ -121,24 +111,16 @@ export interface StatusReport {
 	/** Stuck (needs-attention), crashed (running-but-dead), or un-reaped (done) jobs. */
 	attention: JobStatus[];
 	/**
-	 * The folder-native needs-attention surface (ADR §12): each registered hub
-	 * mirror's `work/needs-attention/<slug>.md` items (read from the mirror's `main`
-	 * ref) with their recorded reason. This is the durable "look here" set in the
-	 * repo's `work/` tree (distinct from the transient job worktrees above). Empty
-	 * when no `mirrorPaths` were given. Optional in the type so the older job-only
-	 * literals stay valid; `status()` always populates it (possibly empty).
-	 */
-	needsAttention?: RepoNeedsAttention[];
-	/**
 	 * The PER-ITEM LOCK in-flight view (PRD `ledger-status-per-item-lock-refs` US
 	 * #8; slice `needs-attention-as-stuck-lock-state`): per registered hub mirror,
 	 * the held lock entries read from the mirror's `refs/agent-runner/lock/*` refs —
 	 * `active` holds (in-progress) and `stuck` holds (needs-attention) + reasons.
-	 * This is the ADDITIVE substrate the lock work introduces; it does NOT replace
-	 * the folder-native `needsAttention` surface above (interim dual-write). Only
-	 * repos WITH at least one held lock appear. Empty when no `mirrorPaths` were
-	 * given or no locks are held. Optional so older literals stay valid; `status()`
-	 * always populates it (possibly empty).
+	 * This is the SOLE stuck-state surface (the `work/needs-attention/` folder is
+	 * retired, slice
+	 * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`). Only repos
+	 * WITH at least one held lock appear. Empty when no `mirrorPaths` were given or
+	 * no locks are held. Optional so older literals stay valid; `status()` always
+	 * populates it (possibly empty).
 	 */
 	lockHeld?: RepoLockEntries[];
 	/**
@@ -180,13 +162,12 @@ export interface StatusOptions {
 	 */
 	harness?: Harness;
 	/**
-	 * Hub-mirror PATHS whose `work/needs-attention/` to surface (ADR §12), read
-	 * from each mirror's BARE `main` ref THROUGH the read seam (mirrors have no
-	 * working tree). The CLI wires these from the registry's {@link listMirrors}.
-	 * `status` FETCHES each mirror's `main` first (ADR §5/§6 — the registry's remote
-	 * is the source of truth); a failed fetch WARNS and falls back to last-known
-	 * (never errors). Omitted ⇒ the folder-native surface is skipped (only the job
-	 * worktrees are reported).
+	 * Hub-mirror PATHS whose lock refs + one-slug-one-folder lint to surface, read
+	 * from each mirror's BARE `main` ref (mirrors have no working tree). The CLI
+	 * wires these from the registry's {@link listMirrors}. `status` FETCHES each
+	 * mirror's `main` first (ADR §5/§6 — the registry's remote is the source of
+	 * truth); a failed fetch WARNS and falls back to last-known (never errors).
+	 * Omitted ⇒ only the job worktrees are reported.
 	 */
 	mirrorPaths?: string[];
 	/**
@@ -281,7 +262,6 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 	return {
 		active,
 		attention,
-		needsAttention: [],
 		lockHeld,
 		ledgerDuplicates,
 		...(options.arbiter ? {arbiter: options.arbiter} : {}),

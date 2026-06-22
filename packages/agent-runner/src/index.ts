@@ -116,7 +116,6 @@ export {
 
 export type {
 	LedgerBacklogItem,
-	LedgerNeedsAttentionItem,
 	LedgerObservationItem,
 	LedgerPrdItem,
 	LedgerPrdPool,
@@ -585,12 +584,7 @@ export {
 	discoverJobs,
 } from './gc.js';
 
-export type {
-	JobStatus,
-	RepoNeedsAttention,
-	StatusReport,
-	StatusOptions,
-} from './status.js';
+export type {JobStatus, StatusReport, StatusOptions} from './status.js';
 export {status, formatStatus} from './status.js';
 
 export type {
@@ -613,12 +607,10 @@ export type {
 	RouteToNeedsAttentionResult,
 	ReturnToBacklogOptions,
 	ReturnToBacklogResult,
-	NeedsAttentionItem,
 } from './needs-attention.js';
 export {
 	routeToNeedsAttention,
 	returnToBacklog,
-	readNeedsAttentionItems,
 	extractReason,
 } from './needs-attention.js';
 

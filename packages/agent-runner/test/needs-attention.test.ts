@@ -4,7 +4,6 @@ import {join} from 'node:path';
 import {
 	routeToNeedsAttention,
 	returnToBacklog,
-	readNeedsAttentionItems,
 } from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
 import {scanRepoPaths} from '../src/scan.js';
@@ -33,8 +32,7 @@ import type {Config} from '../src/config.js';
  *   - the seam bounce ({@link ledgerWrite.applyNeedsAttentionTransition}) marks the
  *     held lock `active → stuck` (the SOLE stuck record); NO `main` write;
  *   - {@link returnToBacklog} (requeue) RELEASES the stuck lock (the body already
- *     rests in `backlog/`); NO `needs-attention/` folder read;
- *   - {@link readNeedsAttentionItems} (the retired folder reader) returns [].
+ *     rests in `backlog/`); NO `needs-attention/` folder read.
  *
  * All real git against a local `--bare file://` arbiter, writing only into its own
  * temp fixtures.
@@ -214,20 +212,6 @@ describe('needs-attention — not claimable, but surfaced via the lock', () => {
 		const all = report.repos.flatMap((r) => r.items);
 		expect(all.find((i) => i.slug === 'delta')).toBeUndefined();
 		expect(all.find((i) => i.slug === 'stays')).toBeDefined();
-	});
-
-	it('readNeedsAttentionItems (the retired folder reader) returns [] — the folder is gone', async () => {
-		const {repo} = await claimAndBranch('epsilon');
-		agentEdits(repo);
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'epsilon',
-			reason: 'timeout after 30m with no progress',
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		// The folder is retired: nothing reads/writes work/needs-attention/.
-		expect(readNeedsAttentionItems(repo)).toEqual([]);
 	});
 });
 

@@ -9,7 +9,6 @@ import {
 import * as ledgerWriteModule from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performComplete} from '../src/complete.js';
-import {readNeedsAttentionItems} from '../src/needs-attention.js';
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {
 	makeScratch,
@@ -361,8 +360,6 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 		expect(res.moved).toBe(true);
 		expect(existsSync(`${repo}/work/needs-attention/beta.md`)).toBe(false);
 		expect(existsSync(`${repo}/work/tasks/todo/beta.md`)).toBe(true);
-		// The retired folder reader returns nothing.
-		expect(readNeedsAttentionItems(repo)).toEqual([]);
 	});
 
 	it('the return-to-backlog re-queue is dispatched via the seam', async () => {

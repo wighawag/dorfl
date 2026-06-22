@@ -9,7 +9,6 @@ import {
 } from '../src/ledger-read.js';
 import * as ledgerReadModule from '../src/ledger-read.js';
 import {scanRepoPaths, readBacklogItems, readDoneSlugs} from '../src/scan.js';
-import {readNeedsAttentionItems} from '../src/needs-attention.js';
 import {resolveReadiness} from '../src/readiness.js';
 import {mergeConfig} from '../src/config.js';
 import {
@@ -27,7 +26,7 @@ let root: string;
 
 function writeItem(
 	repo: string,
-	status: 'backlog' | 'done' | 'needs-attention',
+	status: 'backlog' | 'done',
 	file: string,
 	frontmatter: Record<string, string>,
 	body = 'body',
@@ -62,7 +61,7 @@ describe('ledger-read seam — shape', () => {
 });
 
 describe('ledger-read seam — local-tree resolve method', () => {
-	it('resolves backlog, done slugs and needs-attention from the local tree', () => {
+	it('resolves backlog and done slugs from the local tree', () => {
 		writeItem('repo', 'backlog', 'b.md', {
 			slug: 'b',
 			humanOnly: 'true',
@@ -70,13 +69,6 @@ describe('ledger-read seam — local-tree resolve method', () => {
 			blockedBy: '[dep]',
 		});
 		writeItem('repo', 'done', 'dep.md', {slug: 'dep'});
-		writeItem(
-			'repo',
-			'needs-attention',
-			'stuck.md',
-			{slug: 'stuck'},
-			'## Needs attention\n\nred gate',
-		);
 
 		const state = currentLedgerRead.resolveLocalState({
 			repoPath: join(root, 'repo'),
@@ -91,8 +83,6 @@ describe('ledger-read seam — local-tree resolve method', () => {
 			blockedBy: ['dep'],
 		});
 		expect(state.doneSlugs).toEqual(new Set(['dep']));
-		expect(state.needsAttention).toHaveLength(1);
-		expect(state.needsAttention[0].slug).toBe('stuck');
 	});
 
 	it('is OFFLINE — synchronous, works on a non-repo dir with no remote', () => {
@@ -202,20 +192,6 @@ describe('ledger-read seam — readers route THROUGH it', () => {
 			expect(Object.keys(call[0])).toEqual(['repoPath']);
 		}
 	});
-
-	it('readNeedsAttentionItems goes through resolveLocalState', () => {
-		writeItem(
-			'repo',
-			'needs-attention',
-			'x.md',
-			{slug: 'x'},
-			'## Needs attention\n\nstuck',
-		);
-		const spy = vi.spyOn(ledgerReadModule.ledgerRead, 'resolveLocalState');
-		const items = readNeedsAttentionItems(join(root, 'repo'));
-		expect(spy).toHaveBeenCalled();
-		expect(items[0].reason).toBe('stuck');
-	});
 });
 
 describe('ledger-read seam — arbiter resolve method', () => {
@@ -291,7 +267,7 @@ describe('ledger-read seam — mirror-ref resolve method (bare hub mirror)', () 
 		return lines.join('\n');
 	}
 
-	it('resolves the FULL work/ lifecycle (backlog + done + needs-attention) from a BARE mirror main ref', async () => {
+	it('resolves the FULL work/ lifecycle (backlog + done) from a BARE mirror main ref', async () => {
 		const ws = join(scratch.root, '.agent-runner');
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
@@ -303,9 +279,6 @@ describe('ledger-read seam — mirror-ref resolve method (bare hub mirror)', () 
 				}),
 			},
 			done: {'dep.md': slice({slug: 'dep'})},
-			needsAttention: {
-				'stuck.md': slice({slug: 'stuck'}, '## Needs attention\n\nred gate'),
-			},
 		});
 
 		// Sanity: it IS bare (no working tree), so resolveLocalState could not read it.
@@ -327,9 +300,6 @@ describe('ledger-read seam — mirror-ref resolve method (bare hub mirror)', () 
 			blockedBy: ['dep'],
 		});
 		expect(state.doneSlugs).toEqual(new Set(['dep']));
-		expect(state.needsAttention).toHaveLength(1);
-		expect(state.needsAttention[0].slug).toBe('stuck');
-		expect(state.needsAttention[0].content).toMatch(/red gate/);
 	});
 
 	it('reads the mirror-LOCAL `main` ref (default), not origin/main', async () => {
@@ -356,7 +326,6 @@ describe('ledger-read seam — mirror-ref resolve method (bare hub mirror)', () 
 			env: gitEnv(),
 		});
 		expect(state.doneSlugs).toEqual(new Set());
-		expect(state.needsAttention).toEqual([]);
 	});
 });
 

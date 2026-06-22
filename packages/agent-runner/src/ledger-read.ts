@@ -28,16 +28,16 @@ import {
  * The seam is honest about the real read sources rather than pretending they are
  * one (per the ADR — do not collapse them):
  *
- *   - **local working tree** — a working clone reads `work/backlog|done|
- *     needs-attention` from its checkout. OFFLINE. (Pre-registry `scan`/`status`
- *     used this; `run`'s in-place checkouts still do.)
+ *   - **local working tree** — a working clone reads `work/backlog|done` from
+ *     its checkout. OFFLINE. (Pre-registry `scan`/`status` used this; `run`'s
+ *     in-place checkouts still do.)
  *   - **arbiter `main`** — the human claim guard (`readiness`) and the claim CAS
  *     read the slice + `work/done/` from `<arbiter>/main`.
  *   - **hub mirror `main`** — `scan`/`status` (registry model, ADR §1) read the
  *     full `work/` lifecycle from each BARE hub mirror's `main` ref. A mirror has
  *     no working tree, so this reads the committed tree via `git ls-tree`/`git
  *     show` (the SAME mechanism the arbiter `done/` read uses, widened to the
- *     full backlog + needs-attention set). This read itself is offline; the
+ *     full backlog set). This read itself is offline; the
  *     fetch-first contract (ADR §5/§6 — the old "scan is always offline" invariant
  *     is retired) lives ONE layer up in `scan`/`status`, which refresh the
  *     mirror's `main` before calling this method. The read STRATEGY here is
@@ -143,7 +143,7 @@ export interface LedgerPrdPool {
  * UNTRIAGED (still in the triage pool); a non-empty `triaged:` value (`keep` /
  * `duplicate`) means it is SETTLED and DROPS OUT of the pool (US #30). This is the
  * FIRST read of `work/observations/` in the seam — `scan`/eligibility read only
- * `backlog`/`done`/`needs-attention`/`prd*`.
+ * `backlog`/`done`/`prd*`.
  */
 export interface LedgerObservationItem {
 	/** Filename within `work/observations/` (e.g. `stray-note.md`). */
@@ -158,16 +158,6 @@ export interface LedgerObservationItem {
 	triaged: string | undefined;
 }
 
-/** One needs-attention item's surface fields, as resolved from the live state. */
-export interface LedgerNeedsAttentionItem {
-	/** Filename within `work/needs-attention/` (e.g. `alpha.md`). */
-	file: string;
-	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
-	slug: string;
-	/** Raw file contents (the reader extracts the reason prose from the body). */
-	content: string;
-}
-
 /**
  * The live `work/` lifecycle state of ONE repo as resolved from the LOCAL
  * working tree. Storage-agnostic in shape: it is "the resolved state", not "the
@@ -178,8 +168,6 @@ export interface LocalLedgerState {
 	backlog: LedgerBacklogItem[];
 	/** Slugs present in `work/done/` (per-repo; resolves `blockedBy`). */
 	doneSlugs: Set<string>;
-	/** `work/needs-attention/*.md` surface items, sorted by filename. */
-	needsAttention: LedgerNeedsAttentionItem[];
 	/**
 	 * `work/observations/*.md` items (sorted by slug) — the triage candidate source
 	 * for the advance auto-pick lifecycle pools (slice
@@ -276,8 +264,8 @@ export interface LedgerReadStrategy {
 		input: ResolveArbiterStateInput,
 	): Promise<ArbiterLedgerState>;
 	/**
-	 * Resolve the FULL live `work/` lifecycle (backlog + done + needs-attention)
-	 * of a repo from its BARE hub mirror's `main` ref. Mirrors have no working
+	 * Resolve the FULL live `work/` lifecycle (backlog + done + observations) of
+	 * a repo from its BARE hub mirror's `main` ref. Mirrors have no working
 	 * tree, so `resolveLocalState`'s `readdirSync`/`readFileSync` cannot read them
 	 * — this reads the committed tree via `git ls-tree`/`git show` (the same
 	 * mechanism the arbiter method uses for `done/`, widened to the full set).
@@ -305,7 +293,7 @@ export interface LedgerReadStrategy {
 	 * falling back to the filename — the SAME shape the slice readers use.
 	 *
 	 * This is the FIRST PRD read path in the seam: `ledger-read.ts`/`scan.ts` read
-	 * only `backlog`/`done`/`needs-attention`, NEVER `work/prd/`. It is added here
+	 * only `backlog`/`done`, NEVER `work/prd/`. It is added here
 	 * so the §3a slug-namespace resolver, and later the autoslice / `do prd:` work,
 	 * share ONE PRD read path rather than each growing a bespoke scan. Synchronous
 	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
@@ -398,22 +386,6 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
 		});
 	}
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
-}
-
-/** Read `work/needs-attention/*.md` (filename-sorted) from the local tree. */
-function readLocalNeedsAttention(repoPath: string): LedgerNeedsAttentionItem[] {
-	const dir = workFolderPath(repoPath, 'needs-attention');
-	const items: LedgerNeedsAttentionItem[] = [];
-	for (const file of listMarkdown(dir)) {
-		const content = readFileSync(join(dir, file), 'utf8');
-		const fm = parseFrontmatter(content);
-		items.push({
-			file,
-			slug: fm.slug ?? basename(file, '.md'),
-			content,
-		});
-	}
-	return items;
 }
 
 /**
@@ -530,7 +502,7 @@ async function readDoneSlugsOnArbiter(
 
 // --- Reading a committed `work/` tree (ref-based; bare-mirror or arbiter) ----
 //
-// These helpers read `work/{backlog,done,needs-attention}` from a git REF via
+// These helpers read `work/{backlog,done}` from a git REF via
 // `git ls-tree`/`git show` — the ONLY mechanism that works against a BARE repo
 // (no working tree). `treeBase` is the `<ref>:work/<folder>` prefix; `cwd` is
 // the repo the `git -C <cwd>` commands run in (the mirror itself for the mirror
@@ -681,25 +653,6 @@ async function readObservationsFromTree(
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-/** Parse `<ref>:work/needs-attention/*.md` into items, sorted by filename. */
-async function readNeedsAttentionFromTree(
-	ref: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerNeedsAttentionItem[]> {
-	const base = `${ref}:${workFolderRel('needs-attention')}`;
-	const items: LedgerNeedsAttentionItem[] = [];
-	for (const file of await listMarkdownInTree(base, cwd, env)) {
-		const content = await showInTree(base, file, cwd, env);
-		if (content === undefined) {
-			continue;
-		}
-		const fm = parseFrontmatter(content);
-		items.push({file, slug: fm.slug ?? basename(file, '.md'), content});
-	}
-	return items;
-}
-
 /**
  * The ONLY ledger-read strategy: current behaviour. The local method reads the
  * working tree (offline); the arbiter method reads `<arbiter>/main`. A future
@@ -711,7 +664,6 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		return {
 			backlog: readLocalBacklog(repoPath),
 			doneSlugs: readLocalDoneSlugs(repoPath),
-			needsAttention: readLocalNeedsAttention(repoPath),
 			observations: readLocalObservations(repoPath),
 		};
 	},
@@ -736,14 +688,12 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed
 		// `<ref>:work/...` tree, running git INSIDE the mirror (`git -C <mirror>`).
 		// The ref is mirror-LOCAL (`main`), never `origin/main`.
-		const [backlog, doneSlugs, needsAttention, observations] =
-			await Promise.all([
-				readBacklogFromTree(ref, mirrorPath, env),
-				readDoneSlugsFromTree(ref, mirrorPath, env),
-				readNeedsAttentionFromTree(ref, mirrorPath, env),
-				readObservationsFromTree(ref, mirrorPath, env),
-			]);
-		return {backlog, doneSlugs, needsAttention, observations};
+		const [backlog, doneSlugs, observations] = await Promise.all([
+			readBacklogFromTree(ref, mirrorPath, env),
+			readDoneSlugsFromTree(ref, mirrorPath, env),
+			readObservationsFromTree(ref, mirrorPath, env),
+		]);
+		return {backlog, doneSlugs, observations};
 	},
 	async resolveMirrorPrdPool({mirrorPath, ref = 'main', env}) {
 		// The PRD pool from the bare mirror's committed `<ref>:work/prd*` tree — the
