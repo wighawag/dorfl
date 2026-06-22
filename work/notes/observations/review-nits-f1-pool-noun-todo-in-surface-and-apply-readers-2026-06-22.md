@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'f1-pool-noun-todo-in-surface-and-apply
 date: 2026-06-22
 status: open
 reviewOf: f1-pool-noun-todo-in-surface-and-apply-readers
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
