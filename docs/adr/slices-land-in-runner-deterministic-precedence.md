@@ -9,6 +9,8 @@ superseded_by:
 
 # ADR: slicesLandIn (the slice-placement default) + the fixed staging/pool precedence
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, the verb `slicing` as **tasking**, and the `slicer` as the **tasker**. The decision this ADR records (a runner-deterministic placement default + the fixed staging/pool precedence) is unchanged; only the names moved, and the original text is left intact to preserve the decision history. The CONFIG KEY this ADR is built around (`slicesLandIn`, surfaced as `--slices-land-in` / `AGENT_RUNNER_SLICES_LAND_IN`) still carries the old word in the live code: the key→`tasksLandIn` rename is the separate code-level brief `code-identifier-slice-prd-to-task-brief-rename`, so the key is kept verbatim here to stay coherent with the code until that rename lands.
+
 ## Context
 
 The slice `runner-deterministic-slice-placement-policy-and-precedence` generalises

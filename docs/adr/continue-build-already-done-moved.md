@@ -9,6 +9,8 @@ superseded_by:
 
 # ADR: The CONTINUE-BUILD lifecycle state (`source: 'done'`) — a third build source for a dirty continue whose slice is already in `work/done/`
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking** (so `work/done/` is the build board's done terminal, now `work/tasks/done/`). The decision this ADR records (the `source: 'done'` continue-build state) is unchanged; only the names moved, and the original text is left intact to preserve the decision history. Where the body names CODE SYMBOLS that still carry the old word (e.g. the `NON-SLICE` `IntegrationLifecycle` seam discussion), those are the as-yet-unrenamed code identifiers tracked by `code-identifier-slice-prd-to-task-brief-rename`.
+
 ## Context
 
 A REQUEUED slice that is CONTINUED runs on a kept work branch whose prior

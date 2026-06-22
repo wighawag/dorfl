@@ -9,6 +9,8 @@ superseded_by:
 
 # ADR: CI config policy, the gate family, and one-time install-ci
 
+> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking**. The decision this ADR records is unchanged; only the names moved, and the original text is left intact to preserve the decision history. Where the body names CODE IDENTIFIERS that still carry the old words (the config keys `autoSlice` and `slicesLandIn`, the env var `AGENT_RUNNER_AUTO_SLICE`), those are the as-yet-unrenamed code identifiers tracked by the code-level rename brief `code-identifier-slice-prd-to-task-brief-rename`; they are kept verbatim here so this doc stays coherent with the live code until that rename lands.
+
 ## Context
 
 `runner-in-ci` (`work/prd/runner-in-ci.md`) makes CI run the autonomous rungs
