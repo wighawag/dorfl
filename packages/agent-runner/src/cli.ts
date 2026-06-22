@@ -1066,6 +1066,7 @@ export function buildProgram(): Command {
 					: await resolveCwdSection({
 							cwd: process.cwd(),
 							config,
+							override,
 							arbiterRemote: flags.arbiterRemote,
 							warn,
 						});
@@ -2322,6 +2323,7 @@ export function buildProgram(): Command {
 				const multi: DoMultiResult = await performDoAuto({
 					...baseDoOptions,
 					config,
+					override,
 					count,
 				});
 				console.error(`>> ${multi.message}`);
@@ -2755,6 +2757,7 @@ export function buildProgram(): Command {
 				const multi: AdvanceMultiResult = await performAdvanceAuto({
 					...advanceContext,
 					config,
+					override,
 					count,
 					// The SELECTION-layer gates: `observationTriage != off` enumerates the
 					// observation (triage) pool into auto-pick; `surfaceBlockers` enumerates
@@ -3057,6 +3060,9 @@ export function buildProgram(): Command {
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: StatusFlags) => {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
+			const override = loadConfigOverride(
+				defaultConfigOverridePath(flags.config),
+			);
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 			const warn = (message: string) => console.error(`>> ${message}`);
 			// Surface the folder-native needs-attention set (ADR §12) from each
@@ -3081,6 +3087,7 @@ export function buildProgram(): Command {
 					: await resolveCwdSection({
 							cwd: process.cwd(),
 							config,
+							override,
 							arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
 							warn,
 						});

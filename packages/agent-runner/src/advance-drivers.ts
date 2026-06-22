@@ -20,6 +20,7 @@ import {
 import {gatherLifecycleInPlace} from './lifecycle-gather.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
 import type {Config} from './config.js';
+import type {ConfigOverrideMap} from './config-override.js';
 
 /**
  * The **`advance` one-shot DRIVER** (PRD `advance-loop`, slice
@@ -88,6 +89,14 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	 * selection point).
 	 */
 	config: Config;
+	/**
+	 * The per-machine {@link ConfigOverrideMap}. Threaded into the in-place pool
+	 * scan (`scanRepoPaths`) so the per-machine override applies to advance
+	 * autopick eligibility — WITHOUT it the committed `.agent-runner.json` silently
+	 * beats the override on this path (the in-place advance autopick mirror of the
+	 * `do` autopick defect).
+	 */
+	override?: ConfigOverrideMap;
 	/**
 	 * `advance -n <x>`: how many eligible items to advance, IN SEQUENCE. Bare
 	 * `advance` (no arg, no count) ⇒ 1. SEQUENTIAL — never a parallelism knob
@@ -163,7 +172,12 @@ export async function performAdvanceAuto(
 	// inside `scanRepoPaths` gates eligibility on `autoBuild` (the build gate), so
 	// with `autoBuild` off NO slice is selected — the build rung is never reached
 	// by the bare/`-n` selection.
-	const report = scanRepoPaths([cwd], options.config);
+	const report = scanRepoPaths(
+		[cwd],
+		options.config,
+		new Set(),
+		options.override,
+	);
 
 	// Pool 2 — SLICEABLE PRDs filtered by `autoslice-gate`'s predicate (gated on
 	// `autoSlice`). With `autoSlice` off NO PRD is selected — the slice rung is

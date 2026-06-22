@@ -10,6 +10,7 @@ import {
 } from '../src/scan.js';
 import {formatReport} from '../src/format.js';
 import {mergeConfig} from '../src/config.js';
+import type {ConfigOverrideMap} from '../src/config-override.js';
 import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
 import {
 	registerMirrorWithWork,
@@ -340,6 +341,47 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoBuild: false}),
+		);
+		expect(report.repos[0].items[0].eligibility.eligible).toBe(true);
+	});
+
+	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
+	// scan MUST apply the per-machine override on top of the committed
+	// `.agent-runner.json`. Both files set the SAME key, in OPPOSITE directions:
+	// committed `autoBuild: true`, override `"*": {autoBuild: false}`. The override
+	// is per-machine and beats the committed file, so the item must be INELIGIBLE.
+	// Using the `"*"` bucket means no git remote / hub-key resolution is needed,
+	// so this isolates the threading defect (override dropped at the call site)
+	// from URL resolution.
+	it('applies the per-machine override ("*" bucket) OVER the committed .agent-runner.json', () => {
+		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
+		writeFileSync(
+			join(root, 'repo', '.agent-runner.json'),
+			JSON.stringify({autoBuild: true}),
+		);
+		const override: ConfigOverrideMap = {'*': {autoBuild: false}};
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({autoBuild: true}),
+			new Set(),
+			override,
+		);
+		// Override `autoBuild:false` wins over committed `autoBuild:true` ⇒ ineligible.
+		expect(report.repos[0].items[0].eligibility.eligible).toBe(false);
+	});
+
+	// CONTROL: WITHOUT the override the committed `autoBuild: true` stands, so the
+	// same item IS eligible — proving the assertion above is the override at work,
+	// not a fixture quirk.
+	it('control: WITHOUT the override the committed autoBuild:true stands (eligible)', () => {
+		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
+		writeFileSync(
+			join(root, 'repo', '.agent-runner.json'),
+			JSON.stringify({autoBuild: true}),
+		);
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({autoBuild: true}),
 		);
 		expect(report.repos[0].items[0].eligibility.eligible).toBe(true);
 	});

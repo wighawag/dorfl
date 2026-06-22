@@ -5,6 +5,7 @@ import {arbiterStatus} from './arbiter.js';
 import {listMirrors} from './registry.js';
 import {encodeRepoKey, mirrorPath} from './repo-mirror.js';
 import type {Config} from './config.js';
+import type {ConfigOverrideMap} from './config-override.js';
 
 /**
  * The CWD-LOCAL section of `scan`/`status` (the `scan-status-read-cwd-repo`
@@ -94,6 +95,12 @@ export interface ResolveCwdSectionOptions {
 	/** Resolved global config (for `workspacesDir` + per-repo `autoBuild`). */
 	config: Config;
 	/**
+	 * The per-machine {@link ConfigOverrideMap}. Threaded into the local
+	 * working-tree scan so the cwd section's eligibility reflects the per-machine
+	 * override (consistent with the autopick / advance paths). Default: none.
+	 */
+	override?: ConfigOverrideMap;
+	/**
 	 * The arbiter remote name to fetch + diff against. Defaults to the same remote
 	 * `status`'s arbiter section resolves; the CLI passes the configured value.
 	 */
@@ -128,7 +135,9 @@ export async function resolveCwdSection(
 	}
 
 	// 1. The cwd's `work/` lifecycle from the LOCAL WORKING TREE (not a mirror ref).
-	const localReport = scanRepoPaths([cwd], config);
+	//    Thread the per-machine override so the cwd section's eligibility matches
+	//    what `do`/`advance` autopick will actually select.
+	const localReport = scanRepoPaths([cwd], config, new Set(), options.override);
 	const repo = localReport.repos[0];
 
 	// 2. The cwd repo's arbiter + fetch-first divergence. We resolve the arbiter

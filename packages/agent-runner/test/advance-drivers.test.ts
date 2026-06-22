@@ -10,6 +10,7 @@ import {
 } from '../src/advance-drivers.js';
 import type {AdvanceResult} from '../src/advance.js';
 import {mergeConfig, type Config} from '../src/config.js';
+import type {ConfigOverrideMap} from '../src/config-override.js';
 
 /**
  * `advance-drivers-and-gates` — the one-shot SEQUENTIAL driver over the advance
@@ -97,6 +98,50 @@ function cfg(over: Partial<Config> = {}): Config {
 	// explicitly to assert the gate composition.
 	return mergeConfig({autoBuild: true, autoSlice: true, ...over});
 }
+
+describe('advance (auto-pick) — applies the per-machine override over the committed .agent-runner.json', () => {
+	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
+	// advance autopick path resolves its pool through `scanRepoPaths` and must
+	// apply the per-machine override on top of the committed `.agent-runner.json`.
+	// Committed `autoBuild: false` (slice ineligible) vs override `"*":
+	// {autoBuild: true}` (eligible) ⇒ the slice MUST advance. Before `override`
+	// was threaded into `performAdvanceAuto`, the committed `false` stood.
+	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (slice advances)', async () => {
+		seedSlice('alpha');
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify({autoBuild: false}),
+		);
+		const override: ConfigOverrideMap = {'*': {autoBuild: true}};
+		const {run, args} = recordingRunner();
+		const result = await performAdvanceAuto({
+			cwd: repo,
+			run,
+			config: cfg({autoBuild: false}),
+			override,
+		});
+		expect(result.exitCode).toBe(0);
+		expect(args).toEqual(['alpha']);
+	});
+
+	// CONTROL: same fixture, NO override ⇒ committed `autoBuild: false` stands, so
+	// nothing advances.
+	it('control: WITHOUT the override the committed autoBuild:false stands (nothing advances)', async () => {
+		seedSlice('alpha');
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify({autoBuild: false}),
+		);
+		const {run, args} = recordingRunner();
+		const result = await performAdvanceAuto({
+			cwd: repo,
+			run,
+			config: cfg({autoBuild: false}),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(args).toEqual([]);
+	});
+});
 
 describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 	it('auto-picks the first eligible SLICE when slices exist', async () => {

@@ -8,6 +8,7 @@ import {
 	type SelectedItem,
 } from './select-priority.js';
 import type {Config} from './config.js';
+import type {ConfigOverrideMap} from './config-override.js';
 
 /**
  * The MULTI-ITEM selection forms of `do` (ADR `command-surface-and-journeys`
@@ -46,6 +47,13 @@ export interface PerformDoMultiOptions extends SharedDoOptions {
 	 * `SharedDoOptions`.
 	 */
 	config: Config;
+	/**
+	 * The per-machine {@link ConfigOverrideMap}. Threaded into the in-place pool
+	 * scan (`scanRepoPaths`) so the override applies to autopick eligibility just
+	 * as it does to the single-`do` resolution — WITHOUT it the committed
+	 * `.agent-runner.json` silently beats the per-machine override on this path.
+	 */
+	override?: ConfigOverrideMap;
 	/**
 	 * `do -n <x>`: how many eligible items to do, in sequence. Auto-pick (no arg,
 	 * no count) ⇒ 1. SEQUENTIAL — never a parallelism knob (advance-loop locks
@@ -98,7 +106,15 @@ export async function performDoAuto(
 	const count = options.count ?? 1;
 
 	// Pool 1 — eligible SLICES via the EXISTING scan/select path (slice-only).
-	const report = scanRepoPaths([cwd], options.config);
+	// Thread `override` so the per-machine override is applied per repo (the
+	// inner `resolveRepoConfig` re-applies it AFTER the committed file, restoring
+	// the override value even though `config` is already resolved).
+	const report = scanRepoPaths(
+		[cwd],
+		options.config,
+		new Set(),
+		options.override,
+	);
 
 	// Pool 2 — SLICEABLE PRDs: the NEW pool from the shared PRD read path
 	// (`resolvePrdPool`) filtered by `autoslice-gate`'s predicate (not reinvented).

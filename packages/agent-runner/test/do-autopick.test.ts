@@ -9,6 +9,7 @@ import {
 } from '../src/do-autopick.js';
 import {performDo, type DoOptions, type DoResult} from '../src/do.js';
 import {mergeConfig, type Config} from '../src/config.js';
+import type {ConfigOverrideMap} from '../src/config-override.js';
 
 /**
  * `do-autopick` — the MULTI-ITEM selection forms (auto-pick / `-n` / multi-arg)
@@ -116,6 +117,50 @@ function cfg(over: Partial<Config> = {}): Config {
 function base(run: DoRunner) {
 	return {cwd: repo, run} satisfies Partial<DoOptions> & {run: DoRunner};
 }
+
+describe('do (auto-pick) — applies the per-machine override over the committed .agent-runner.json', () => {
+	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
+	// autopick path resolves the pool through `scanRepoPaths`, which must apply the
+	// per-machine override on top of the committed `.agent-runner.json`. Committed
+	// `autoBuild: false` (slice ineligible) vs override `"*": {autoBuild: true}`
+	// (slice eligible). The override is per-machine and beats the committed file,
+	// so the seeded slice MUST be auto-picked. Before the override was threaded
+	// into `performDoAuto`, the committed `false` stood and nothing ran.
+	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (slice is auto-picked)', async () => {
+		seedSlice('alpha');
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify({autoBuild: false}),
+		);
+		const override: ConfigOverrideMap = {'*': {autoBuild: true}};
+		const {run, args} = recordingRunner();
+		const result = await performDoAuto({
+			...base(run),
+			// Global ON, but committed file says OFF; the override flips it back ON.
+			config: cfg({autoBuild: false}),
+			override,
+		});
+		expect(result.exitCode).toBe(0);
+		expect(args).toEqual(['alpha']);
+	});
+
+	// CONTROL: same fixture, NO override ⇒ the committed `autoBuild: false` stands,
+	// so the slice is ineligible and nothing is auto-picked.
+	it('control: WITHOUT the override the committed autoBuild:false stands (nothing auto-picked)', async () => {
+		seedSlice('alpha');
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify({autoBuild: false}),
+		);
+		const {run, args} = recordingRunner();
+		const result = await performDoAuto({
+			...base(run),
+			config: cfg({autoBuild: false}),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(args).toEqual([]);
+	});
+});
 
 describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 	it('auto-picks the first eligible SLICE when slices exist', async () => {
