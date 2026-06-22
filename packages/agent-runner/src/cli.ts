@@ -2111,6 +2111,9 @@ export function buildProgram(): Command {
 					identity: remoteConfig.identity,
 					// `do --remote prd:<slug>` slicing-gate policy (slice-build path ignores it).
 					autoSlice: remoteConfig.autoSlice,
+					// The resolved `promptGuidance` nudge — threaded into the remote worker
+					// prompt (runRemotePipeline → buildAgentPrompt), mirroring in-place `do`.
+					promptGuidance: resolvePromptGuidance(remoteConfig),
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
@@ -2253,6 +2256,11 @@ export function buildProgram(): Command {
 				identity: config.identity,
 				// `do prd:<slug>` slicing-gate policy (the slice-build path ignores it).
 				autoSlice: config.autoSlice,
+				// The resolved `promptGuidance` NUDGE namespace (e.g. `testFirst`),
+				// threaded into the worker prompt by performDo → buildAgentPrompt so a
+				// per-repo `promptGuidance.testFirst:true` actually strengthens the
+				// autonomous `do` worker's wrapper line (not just `agent-runner prompt`).
+				promptGuidance: resolvePromptGuidance(config),
 				integration: config.integration,
 				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (slice
 				// `untrusted-origin-forces-build-propose`): true ONLY when the operator

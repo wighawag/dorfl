@@ -140,6 +140,69 @@ describe('do <slug> — in-place happy path → exit', () => {
 	});
 });
 
+describe('do <slug> — promptGuidance.testFirst reaches the AUTONOMOUS worker prompt', () => {
+	// REGRESSION (prompt-guidance-testfirst Gate-2 block): the resolved
+	// `promptGuidance` MUST reach the prompt the autonomous `do` worker is handed.
+	// Before this fix the `do` call site built the prompt WITHOUT promptGuidance,
+	// so a per-repo `promptGuidance.testFirst:true` was a silent no-op on the
+	// build path (only `agent-runner prompt` honoured it). We assert on the
+	// strengthened sentence sourced from CLAIM-PROTOCOL.md.
+	// Both strings are the EXACT (line-wrapped) markdown from CLAIM-PROTOCOL.md.
+	const STRENGTHENED = 'write\nthe failing test BEFORE the production code';
+	const SOFT = 'TDD where the task asks for\nit';
+
+	it('ON: the strengthened test-first line is in the prompt; the soft line is gone', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		let seen: string | undefined;
+		const capturingAgent: DoAgentRunner = ({cwd, prompt}) => {
+			seen = prompt;
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			// The resolved nudge the CLI threads from per-repo config; ON here.
+			promptGuidance: {testFirst: true},
+			agentRunner: capturingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('completed');
+		expect(seen).toBeDefined();
+		expect(seen).toContain(STRENGTHENED);
+		expect(seen).not.toContain(SOFT);
+		// The conditional markers never leak into the worker prompt.
+		expect(seen).not.toContain('<!-- if promptGuidance');
+	});
+
+	it('OFF (default): the soft line stands; the strengthened line is absent', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		let seen: string | undefined;
+		const capturingAgent: DoAgentRunner = ({cwd, prompt}) => {
+			seen = prompt;
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const result = await performDo({
+			arg: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			// No promptGuidance ⇒ default (testFirst false) ⇒ byte-identical to today.
+			agentRunner: capturingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('completed');
+		expect(seen).toBeDefined();
+		expect(seen).toContain(SOFT);
+		expect(seen).not.toContain(STRENGTHENED);
+	});
+});
+
 describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-forces-build-propose)', () => {
 	// Stamp the backlog slice as untrusted-origin + push it to main (a slice born
 	// from an untrusted issue, propagated by the slicer onto the backlog file).

@@ -578,6 +578,66 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
+	it('FULL CHAIN: a per-repo .agent-runner.json promptGuidance.testFirst:true reaches the autonomous run worker prompt', async () => {
+		// REGRESSION (prompt-guidance-testfirst Gate-2 block): the `run` daemon
+		// resolves per-repo config (incl. promptGuidance) and MUST thread the nudge
+		// into the worker prompt. End-to-end: committed config opts in → the
+		// strengthened test-first line (from CLAIM-PROTOCOL.md) reaches the agent.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		writeFileSync(
+			join(repo, '.agent-runner.json'),
+			JSON.stringify({promptGuidance: {testFirst: true}}),
+		);
+		let seen: string | undefined;
+		const capturingAgent: AgentRunner = ({cwd, prompt}) => {
+			seen = prompt;
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const config = configFor(scratch.root, {integration: 'merge'});
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: capturingAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('claimed-done');
+		expect(seen).toBeDefined();
+		expect(seen).toContain(
+			'write\nthe failing test BEFORE the production code',
+		);
+		expect(seen).not.toContain('TDD where the task asks for\nit');
+		expect(seen).not.toContain('<!-- if promptGuidance');
+	});
+
+	it('FULL CHAIN control: NO promptGuidance config ⇒ the soft line stands (byte-identical default)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		void repo;
+		let seen: string | undefined;
+		const capturingAgent: AgentRunner = ({cwd, prompt}) => {
+			seen = prompt;
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const config = configFor(scratch.root, {integration: 'merge'});
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			agentRunner: capturingAgent,
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('claimed-done');
+		expect(seen).toBeDefined();
+		expect(seen).toContain('TDD where the task asks for\nit');
+		expect(seen).not.toContain(
+			'write\nthe failing test BEFORE the production code',
+		);
+	});
+
 	it('resolves each repo against ITS OWN file in one run (A merge, B propose)', async () => {
 		// Two independent repos+arbiters under one root. Global = merge. Repo B
 		// commits propose; repo A has no file. One run → A merges, B proposes.

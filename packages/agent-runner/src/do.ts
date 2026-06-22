@@ -45,7 +45,7 @@ import {
 	detectLockfileOnDisk,
 	detectLockfileOnMirrorMain,
 } from './gate-readiness.js';
-import type {IntegrationMode} from './config.js';
+import type {IntegrationMode, PromptGuidance} from './config.js';
 import type {VerifyConfig} from './verify.js';
 import type {ReviewGate} from './review-gate.js';
 import {git, run, runAsync, localMainAheadCount} from './git.js';
@@ -192,6 +192,15 @@ export interface DoOptions {
 	 * builds regardless of `autoBuild`). Ignored by the slice-build path.
 	 */
 	autoSlice?: boolean;
+	/**
+	 * The resolved {@link PromptGuidance} NUDGE namespace (e.g. `testFirst`),
+	 * threaded from the per-repo config by the CLI and forwarded INTO
+	 * {@link buildAgentPrompt} so the autonomous in-place `do` worker prompt
+	 * actually carries the nudge. Absent ⇒ every member false ⇒ byte-identical to
+	 * today. (Without this the per-repo `promptGuidance.testFirst` was a silent
+	 * no-op on the build path — only `agent-runner prompt` honoured it.)
+	 */
+	promptGuidance?: PromptGuidance;
 	/**
 	 * **The slicer review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
 	 * consumed ONLY by the `do prd:<slug>` slicing path — after the agent produces
@@ -387,6 +396,15 @@ interface DoAgentLaunchOptions {
 	agentCmd?: string;
 	model?: string;
 	sessionsDir?: string;
+	/**
+	 * The resolved {@link PromptGuidance} NUDGE namespace (e.g. `testFirst`),
+	 * threaded from the per-repo config by the CLI and forwarded INTO
+	 * {@link buildAgentPrompt} so the autonomous worker prompt actually carries the
+	 * nudge. Absent ⇒ every member false ⇒ the wrapper is byte-identical to today.
+	 * (Without this the per-repo `promptGuidance.testFirst` was a silent no-op on
+	 * the build path — only `agent-runner prompt` honoured it.)
+	 */
+	promptGuidance?: PromptGuidance;
 	watch?: boolean;
 	watchSink?: (line: string) => void;
 	color?: boolean;
@@ -970,6 +988,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 			cwd: tree.dir,
 			continueContext,
+			promptGuidance: options.promptGuidance,
 		});
 	} catch (err) {
 		if (err instanceof PromptError) {
@@ -2112,6 +2131,7 @@ async function runRemotePipeline(
 		prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 			cwd,
 			continueContext,
+			promptGuidance: options.promptGuidance,
 		});
 	} catch (err) {
 		if (err instanceof PromptError) {

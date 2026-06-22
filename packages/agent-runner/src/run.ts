@@ -1,4 +1,4 @@
-import type {Config} from './config.js';
+import {type Config, resolvePromptGuidance} from './config.js';
 import {resolveRepoConfig} from './repo-config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 import {scan, type ScanReport} from './scan.js';
@@ -802,6 +802,9 @@ async function runOneItem(
 			prompt = buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
 				cwd: tree.dir,
 				continueContext,
+				// Thread the resolved per-repo nudge so the autonomous `run` worker
+				// prompt carries `promptGuidance.testFirst` (mirrors `do`).
+				promptGuidance: resolvePromptGuidance(config),
 			});
 		} catch (err) {
 			if (err instanceof PromptError) {
