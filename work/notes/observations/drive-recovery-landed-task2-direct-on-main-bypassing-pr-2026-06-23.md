@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # drive-tasks recovery landed task #2 directly on main, bypassing the PR/Gate-2/Gate-3 surface (2026-06-23)
 
 While driving the 4 post-rename cleanup tasks (brief `code-identifier-slice-prd-to-task-brief-rename`),
