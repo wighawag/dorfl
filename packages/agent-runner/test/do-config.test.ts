@@ -92,9 +92,9 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 
 	it('maps --selection-order: a comma form becomes a trimmed list (explicit order)', () => {
 		expect(
-			doFlagOverrides({selectionOrder: 'build, slice ,surface,triage'})
+			doFlagOverrides({selectionOrder: 'build, task ,surface,triage'})
 				.selectionOrder,
-		).toEqual(['build', 'slice', 'surface', 'triage']);
+		).toEqual(['build', 'task', 'surface', 'triage']);
 	});
 
 	it('maps --observation-triage: each valid enum value', () => {

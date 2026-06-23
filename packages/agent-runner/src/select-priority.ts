@@ -16,7 +16,7 @@ import {
  * forms (auto-pick / `-n <x>` / `<a> <b> …`) and the CONFIGURABLE selection ORDER
  * (task `advance-selection-order-config`; ADR `ci-config-policy-and-gate-family`,
  * selection-order section). `apply` is PINNED FIRST (consume-always-wins); the
- * other four pools (`build` / `slice` / `surface` / `triage`) are ranked by the
+ * other four pools (`build` / `task` / `surface` / `triage`) are ranked by the
  * per-repo `selectionOrder` field (a PRESET keyword or an explicit pool-name
  * list), whose `drain` default reproduces today's tasks-first "drain ready work
  * before creating more".
@@ -36,7 +36,7 @@ import {
  *     path (round-robin across repos, capped). This is the EXACT task-selection
  *     primitive `run` uses, so `run` and this helper SHARE it (they share
  *     `selectCandidates`, the task-pool core).
- *   - the **`slice` pool** (brief-to-task) — a pool the caller builds from the brief reader
+ *   - the **`task` pool** (brief-to-task) — a pool the caller builds from the brief reader
  *     (`ledgerRead.resolveBriefPool`) filtered by `autoslice-gate`'s pure predicate
  *     ({@link resolveTaskingEligibility}); see {@link taskableBriefs}. The helper
  *     does NOT reinvent brief eligibility.
@@ -139,12 +139,12 @@ export interface SelectPrioritisedInput {
 	briefs: BriefCandidate[];
 	/**
 	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
-	 * `slice` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
+	 * `task` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
 	 * list (task `advance-selection-order-config`; the `selectionOrder` config
 	 * field). Resolved through {@link resolveSelectionOrder} (apply is pinned first
-	 * and NOT nameable here). OMITTED ⇒ the `drain` default (`[build, slice,
+	 * and NOT nameable here). OMITTED ⇒ the `drain` default (`[build, task,
 	 * surface, triage]`), which reproduces today's tasks-first "drain before
-	 * create" two-pool default. `[slice, build, ...]` reproduces the old
+	 * create" two-pool default. `[task, build, ...]` reproduces the old
 	 * `prdsFirst: true`. An unknown name/keyword FAILS LOUDLY.
 	 */
 	selectionOrder?: SelectionOrderConfig;
@@ -164,7 +164,7 @@ export interface SelectPrioritisedInput {
 	 *
 	 * Ordered per the resolved {@link selectionOrder}: `apply` is ALWAYS prepended
 	 * (pinned first — consume-always-wins), then the four orderable pools (`build` /
-	 * `slice` / `surface` / `triage`) in the configured order, truncated to
+	 * `task` / `surface` / `triage`) in the configured order, truncated to
 	 * {@link count}. A pool NAMED in the order but absent here (gated off — empty)
 	 * is simply a no-op (it contributes no items), so the gates (what is PRESENT)
 	 * and `selectionOrder` (what runs first) compose ORTHOGONALLY.
@@ -203,9 +203,9 @@ export interface SelectedLifecyclePools {
  * `surface` / `triage`) are caller-built (none for `do`).
  *
  * Ordering: `apply` is always prepended (consume-always-wins; not orderable),
- * then the four orderable pools (`build` = eligible tasks, `slice` = taskable
+ * then the four orderable pools (`build` = eligible tasks, `task` = taskable
  * briefs, `surface`, `triage`) interleaved in the resolved {@link selectionOrder}
- * (default `drain` = `[build, slice, surface, triage]`, which reproduces today's
+ * (default `drain` = `[build, task, surface, triage]`, which reproduces today's
  * tasks-first two-pool default). A pool named in the order but EMPTY (gated off)
  * contributes nothing — a no-op, not an error (gates decide what is PRESENT,
  * `selectionOrder` ranks what is present). Then truncated to `count`.
@@ -235,11 +235,11 @@ export function selectPrioritised(
 
 	// The per-pool item lists, keyed by the orderable pool name. NOTE the
 	// vocabulary bridge: `build` = the eligible-TASK pool (namespace `task`),
-	// `slice` = the taskable-brief pool (namespace `brief`) — the action names, not the
+	// `task` = the taskable-brief pool (namespace `brief`) — the action names, not the
 	// item namespaces (task `advance-selection-order-config`).
 	const byPool: Record<SelectionPool, SelectedItem[]> = {
 		build: buildItems,
-		slice: taskItems,
+		task: taskItems,
 		surface: lifecycle?.surface ?? [],
 		triage: lifecycle?.triage ?? [],
 	};

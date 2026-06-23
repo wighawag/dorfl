@@ -1854,7 +1854,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--selection-order <order>',
-			'order the auto-pick pools (build/slice/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list (e.g. build,slice,surface,triage). Resolved flag > env > per-repo > global > default.',
+			'order the auto-pick pools (build/task/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list (e.g. build,task,surface,triage). Resolved flag > env > per-repo > global > default.',
 		)
 		.option(
 			'--remote <r>',
@@ -2384,7 +2384,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--selection-order <order>',
-			'order the auto-pick pools (build/slice/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list. Resolved flag > env > per-repo > global > default.',
+			'order the auto-pick pools (build/task/surface/triage; apply is always first): a preset keyword (drain (default) | groom) or an explicit comma-separated pool list. Resolved flag > env > per-repo > global > default.',
 		)
 		.option(
 			'--observation-triage <mode>',

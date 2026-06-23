@@ -301,9 +301,9 @@ describe('envOverrides — list coercion', () => {
 	it('selectionOrder coerces as a `list` (explicit pool order)', () => {
 		expect(
 			envOverrides({
-				AGENT_RUNNER_SELECTION_ORDER: 'build,slice,surface,triage',
+				AGENT_RUNNER_SELECTION_ORDER: 'build,task,surface,triage',
 			}),
-		).toEqual({selectionOrder: ['build', 'slice', 'surface', 'triage']});
+		).toEqual({selectionOrder: ['build', 'task', 'surface', 'triage']});
 	});
 
 	it('selectionOrder env SINGLE-keyword form yields a one-element list (the resolver expands it)', () => {

@@ -262,13 +262,13 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('[slice, build, ...] (== old prdsFirst:true): a sliceable PRD outranks an eligible slice', async () => {
+	it('[task, build, ...] (== old prdsFirst:true): a sliceable PRD outranks an eligible slice', async () => {
 		seedTask('alpha');
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({
 			...base(run),
-			config: cfg({selectionOrder: ['slice', 'build', 'surface', 'triage']}),
+			config: cfg({selectionOrder: ['task', 'build', 'surface', 'triage']}),
 			count: 1,
 		});
 		expect(args).toEqual(['brief:gamma']);
@@ -284,7 +284,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 		const on = recordingRunner();
 		await performDoAuto({
 			...base(on.run),
-			config: cfg({selectionOrder: ['slice', 'build', 'surface', 'triage']}),
+			config: cfg({selectionOrder: ['task', 'build', 'surface', 'triage']}),
 			count: 9,
 		});
 		expect(on.args).toEqual(['brief:gamma', 'alpha']);

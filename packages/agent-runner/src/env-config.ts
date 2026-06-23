@@ -76,7 +76,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// gate-family members (flag > env > per-repo > global > built-in `true`).
 	surfaceStaging: 'boolean',
 	// `selectionOrder` coerces as a `'list'` (comma form
-	// `AGENT_RUNNER_SELECTION_ORDER=build,slice,surface,triage`); a single-element
+	// `AGENT_RUNNER_SELECTION_ORDER=build,task,surface,triage`); a single-element
 	// list whose one entry is a preset keyword (`=drain`) is expanded by the
 	// resolver (`select-order.ts`). Subsumes the removed `prdsFirst` boolean.
 	selectionOrder: 'list',

@@ -20,39 +20,39 @@ describe('resolveSelectionOrder — preset expansion + explicit list (table)', (
 		expected: SelectionPool[];
 	}> = [
 		{
-			name: 'preset `drain` ⇒ [build, slice, surface, triage]',
+			name: 'preset `drain` ⇒ [build, task, surface, triage]',
 			input: 'drain',
-			expected: ['build', 'slice', 'surface', 'triage'],
+			expected: ['build', 'task', 'surface', 'triage'],
 		},
 		{
-			name: 'preset `groom` ⇒ [surface, triage, build, slice]',
+			name: 'preset `groom` ⇒ [surface, triage, build, task]',
 			input: 'groom',
-			expected: ['surface', 'triage', 'build', 'slice'],
+			expected: ['surface', 'triage', 'build', 'task'],
 		},
 		{
 			name: 'the DEFAULT value resolves to the drain order',
 			input: DEFAULT_SELECTION_ORDER,
-			expected: ['build', 'slice', 'surface', 'triage'],
+			expected: ['build', 'task', 'surface', 'triage'],
 		},
 		{
 			name: 'env single-element list `[drain]` ALSO expands the preset',
 			input: ['drain'],
-			expected: ['build', 'slice', 'surface', 'triage'],
+			expected: ['build', 'task', 'surface', 'triage'],
 		},
 		{
 			name: 'env single-element list `[groom]` expands the preset',
 			input: ['groom'],
-			expected: ['surface', 'triage', 'build', 'slice'],
+			expected: ['surface', 'triage', 'build', 'task'],
 		},
 		{
 			name: 'explicit LIST is taken verbatim',
-			input: ['surface', 'build', 'slice', 'triage'],
-			expected: ['surface', 'build', 'slice', 'triage'],
+			input: ['surface', 'build', 'task', 'triage'],
+			expected: ['surface', 'build', 'task', 'triage'],
 		},
 		{
-			name: 'explicit list reproducing prdsFirst:true ([slice, build, ...])',
-			input: ['slice', 'build', 'surface', 'triage'],
-			expected: ['slice', 'build', 'surface', 'triage'],
+			name: 'explicit list reproducing prdsFirst:true ([task, build, ...])',
+			input: ['task', 'build', 'surface', 'triage'],
+			expected: ['task', 'build', 'surface', 'triage'],
 		},
 		{
 			name: 'a single explicit pool name is a one-element list (not a preset)',
@@ -61,13 +61,13 @@ describe('resolveSelectionOrder — preset expansion + explicit list (table)', (
 		},
 		{
 			name: 'a partial explicit list is honoured verbatim (no padding)',
-			input: ['build', 'slice'],
-			expected: ['build', 'slice'],
+			input: ['build', 'task'],
+			expected: ['build', 'task'],
 		},
 		{
 			name: 'list entries are trimmed of surrounding whitespace',
-			input: [' build ', 'slice'],
-			expected: ['build', 'slice'],
+			input: [' build ', 'task'],
+			expected: ['build', 'task'],
 		},
 	];
 
@@ -97,7 +97,7 @@ describe('resolveSelectionOrder — loud failures (table)', () => {
 		},
 		{
 			name: 'unknown pool name in a list fails naming the value',
-			input: ['build', 'nope', 'slice'],
+			input: ['build', 'nope', 'task'],
 			match: /unknown pool 'nope'/,
 		},
 		{
