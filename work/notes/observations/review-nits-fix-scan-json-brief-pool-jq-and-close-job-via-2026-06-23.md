@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'fix-scan-json-brief-pool-jq-and-close-
 date: 2026-06-23
 status: open
 reviewOf: fix-scan-json-brief-pool-jq-and-close-job-via
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
