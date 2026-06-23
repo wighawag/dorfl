@@ -29,8 +29,8 @@
  *     convention is documented in the workflow so a human knows to re-trigger.
  *   - AUTHOR-TRUST → per-outcome FLAGS (Decision 1, {@link deriveIntakeFlags}): an
  *     UNTRUSTED author (`author_association` not in OWNER/MEMBER/COLLABORATOR)
- *     forces `--propose-slice` REGARDLESS of the `autoBuild` gate, while
- *     `--merge-prd` stays allowed (a human still tasks a brief before anything
+ *     forces `--propose-task` REGARDLESS of the `autoBuild` gate, while
+ *     `--merge-brief` stays allowed (a human still tasks a brief before anything
  *     autonomous acts — the checkpoint is intact). A TRUSTED author gets the plain
  *     gate-derived mode for both. The fully-gateless "all gates on + merge
  *     everywhere" path is a LOUD, NON-DEFAULT opt-in — the default is conservative
@@ -100,10 +100,10 @@ export const TRUSTED_AUTHOR_ASSOCIATIONS = [
  * always resolves BOTH types explicitly). Each is `'merge'` or `'propose'`.
  */
 export interface IntakeIntegrationFlags {
-	/** The PRD outcome's mode → `--merge-prd` / `--propose-prd`. */
-	prd: 'merge' | 'propose';
-	/** The slice outcome's mode → `--merge-slice` / `--propose-slice`. */
-	slice: 'merge' | 'propose';
+	/** The brief outcome's mode → `--merge-brief` / `--propose-brief`. */
+	brief: 'merge' | 'propose';
+	/** The task outcome's mode → `--merge-task` / `--propose-task`. */
+	task: 'merge' | 'propose';
 	/**
 	 * The ORIGIN-TRUST verdict CI passes to `intake <N>` via `--origin-trust`
 	 * (task `untrusted-origin-forces-build-propose`) so the emitted brief/task is
@@ -120,14 +120,14 @@ export interface IntakeIntegrationFlags {
 export interface IntakeGateState {
 	/**
 	 * `autoBuild` — whether an agent will AUTO-BUILD an undeclared task next. ON ⇒
-	 * a task needs a human PR checkpoint NOW (`--propose-slice`); OFF ⇒ a human
-	 * must build it, so it may `--merge-slice` (when the author is also trusted).
+	 * a task needs a human PR checkpoint NOW (`--propose-task`); OFF ⇒ a human
+	 * must build it, so it may `--merge-task` (when the author is also trusted).
 	 */
 	autoBuild: boolean;
 	/**
 	 * `autoTask` — whether an agent will AUTO-TASK an undeclared brief next. ON ⇒ a
-	 * brief needs a human PR checkpoint NOW (`--propose-prd`); OFF ⇒ a human must
-	 * task it, so it may `--merge-prd`.
+	 * brief needs a human PR checkpoint NOW (`--propose-brief`); OFF ⇒ a human must
+	 * task it, so it may `--merge-brief`.
 	 */
 	autoTask: boolean;
 }
@@ -139,15 +139,15 @@ export interface IntakeGateState {
  * logic the workflow encodes at runtime (it reads `author_association` off the
  * event payload and sets the flags accordingly):
  *
- *   - **PRD** — gate-derived ONLY (author-trust does NOT bite): `--merge-prd` iff
+ *   - **BRIEF** — gate-derived ONLY (author-trust does NOT bite): `--merge-brief` iff
  *     `autoTask` is OFF (a human must task the brief before anything autonomous
  *     acts on it — the human checkpoint stays AHEAD even for an untrusted author),
- *     else `--propose-prd`.
- *   - **SLICE** — `--propose-slice` iff (`autoBuild` ON) OR (author UNTRUSTED);
- *     `--merge-slice` ONLY iff (`autoBuild` OFF AND author TRUSTED). An untrusted
- *     author can never auto-merge a slice from a public-front-door issue.
+ *     else `--propose-brief`.
+ *   - **TASK** — `--propose-task` iff (`autoBuild` ON) OR (author UNTRUSTED);
+ *     `--merge-task` ONLY iff (`autoBuild` OFF AND author TRUSTED). An untrusted
+ *     author can never auto-merge a task from a public-front-door issue.
  *
- * So the only way to `--merge-slice` is a TRUSTED author with `autoBuild` OFF —
+ * So the only way to `--merge-task` is a TRUSTED author with `autoBuild` OFF —
  * and the fully-gateless "merge everything" path additionally needs `autoTask`
  * OFF; both gates off + a trusted author is the LOUD, NON-DEFAULT opt-in. The
  * conservative case (untrusted author, or any gate on) keeps a human in the loop.
@@ -157,24 +157,24 @@ export function deriveIntakeFlags(options: {
 	authorTrusted: boolean;
 }): IntakeIntegrationFlags {
 	const {gate, authorTrusted} = options;
-	// PRD: gate-derived only — a human-tasks-it checkpoint stays ahead regardless
-	// of author-trust, so an untrusted author may still --merge-prd.
-	const prd: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
-	// SLICE: propose if the agent will auto-build it (gate ON) OR the author is
+	// BRIEF: gate-derived only — a human-tasks-it checkpoint stays ahead regardless
+	// of author-trust, so an untrusted author may still --merge-brief.
+	const brief: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
+	// TASK: propose if the agent will auto-build it (gate ON) OR the author is
 	// untrusted; merge ONLY when both are safe (gate OFF AND author trusted).
-	const slice: 'merge' | 'propose' =
+	const task: 'merge' | 'propose' =
 		gate.autoBuild || !authorTrusted ? 'propose' : 'merge';
 	// ORIGIN-TRUST stamp (task `untrusted-origin-forces-build-propose`): the SAME
 	// author-trust verdict, collapsed to the wire value `intake` stamps onto the
 	// emitted artifact. Derived HERE — next to the integration flags, off the SAME
-	// `authorTrusted` input — so the stamp and the slice/PRD modes cannot desync.
+	// `authorTrusted` input — so the stamp and the task/brief modes cannot desync.
 	// It is NOT a re-resolution of trust (CI already resolved it); it is the verdict
 	// being CARRIED so it survives the brief/task merge boundary (the becomes-code
 	// checkpoint is not laundered when the file lands on main).
 	const originTrust: 'trusted' | 'untrusted' = authorTrusted
 		? 'trusted'
 		: 'untrusted';
-	return {prd, slice, originTrust};
+	return {brief, task, originTrust};
 }
 
 /**
@@ -205,8 +205,8 @@ export function isAuthorTrusted(
  *
  * The per-outcome FLAGS are DERIVED AT RUNTIME by a `bash` step that mirrors
  * {@link deriveIntakeFlags}: it reads the gate env block + the event's
- * `author_association` and sets `--merge-prd`/`--propose-prd` +
- * `--merge-slice`/`--propose-slice` accordingly. The same rule that
+ * `author_association` and sets `--merge-brief`/`--propose-brief` +
+ * `--merge-task`/`--propose-task` accordingly. The same rule that
  * {@link deriveIntakeFlags} unit-tests is what the workflow executes — they cannot
  * desync because the test asserts the SHELL derivation matches the function.
  */
@@ -240,8 +240,8 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 # AUTHOR-TRUST → per-outcome FLAGS (the merge-vs-propose POLICY): because ANYBODY
 # can file an issue, the merge decision composes with WHO authored it. An UNTRUSTED
 # author (\`author_association\` not OWNER/MEMBER/COLLABORATOR) forces
-# \`--propose-slice\` REGARDLESS of the \`autoBuild\` gate — a task from a public
-# front-door issue can never auto-merge — while \`--merge-prd\` stays allowed (a
+# \`--propose-task\` REGARDLESS of the \`autoBuild\` gate — a task from a public
+# front-door issue can never auto-merge — while \`--merge-brief\` stays allowed (a
 # human must still task a brief before anything autonomous acts on it, so the human
 # checkpoint is intact). A TRUSTED author gets the plain gate-derived mode. The
 # fully-gateless "merge everything" path (both gates off + a trusted author) is a
@@ -327,11 +327,11 @@ jobs:
         # The merge-vs-propose POLICY, executed at runtime — the SAME rule
         # \`deriveIntakeFlags\` unit-tests (they cannot desync; the test asserts this
         # shell matches the function):
-        #   * PRD  — gate-derived ONLY: --merge-prd iff autoTask OFF (a human
+        #   * BRIEF — gate-derived ONLY: --merge-brief iff autoTask OFF (a human
         #            tasks it before anything autonomous acts — the checkpoint
-        #            stays ahead even for an UNTRUSTED author), else --propose-prd.
-        #   * SLICE — --propose-slice iff (autoBuild ON) OR (author UNTRUSTED);
-        #            --merge-slice ONLY iff (autoBuild OFF AND author TRUSTED).
+        #            stays ahead even for an UNTRUSTED author), else --propose-brief.
+        #   * TASK  — --propose-task iff (autoBuild ON) OR (author UNTRUSTED);
+        #            --merge-task ONLY iff (autoBuild OFF AND author TRUSTED).
         # author_association comes from the COMMENT on an \`issue_comment\` event,
         # else the ISSUE on an \`issues\` event — read straight off the payload, no
         # extra API call.
@@ -340,11 +340,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # PRD flag: gate-derived only (author-trust does NOT bite a PRD).
+          # BRIEF flag: gate-derived only (author-trust does NOT bite a brief).
           if [ "\${AGENT_RUNNER_AUTO_TASK}" = "true" ]; then
-            prd_flag="--propose-prd"
+            brief_flag="--propose-brief"
           else
-            prd_flag="--merge-prd"
+            brief_flag="--merge-brief"
           fi
 
           # Author-trust: TRUSTED iff OWNER/MEMBER/COLLABORATOR (admin / write-
@@ -355,17 +355,17 @@ jobs:
             OWNER|MEMBER|COLLABORATOR) trusted="true" ;;
           esac
 
-          # SLICE flag: propose if the agent will auto-build it (gate ON) OR the
+          # TASK flag: propose if the agent will auto-build it (gate ON) OR the
           # author is untrusted; merge ONLY when both are safe.
           if [ "\${AGENT_RUNNER_AUTO_BUILD}" = "true" ] || [ "\${trusted}" != "true" ]; then
-            slice_flag="--propose-slice"
+            task_flag="--propose-task"
           else
-            slice_flag="--merge-slice"
+            task_flag="--merge-task"
           fi
 
           # ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose):
           # derived from the SAME \${trusted} case above (one author-trust read,
-          # two consumers — the slice/PRD modes AND the stamp — so they cannot
+          # two consumers — the task/brief modes AND the stamp — so they cannot
           # desync). \`intake\` STAMPS this onto the emitted brief/task frontmatter
           # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
           # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
@@ -377,10 +377,10 @@ jobs:
             origin_trust_flag="--origin-trust=untrusted"
           fi
 
-          echo "prd_flag=\${prd_flag}" >> "\$GITHUB_OUTPUT"
-          echo "slice_flag=\${slice_flag}" >> "\$GITHUB_OUTPUT"
+          echo "brief_flag=\${brief_flag}" >> "\$GITHUB_OUTPUT"
+          echo "task_flag=\${task_flag}" >> "\$GITHUB_OUTPUT"
           echo "origin_trust_flag=\${origin_trust_flag}" >> "\$GITHUB_OUTPUT"
-          echo "intake policy: author_association='\${AUTHOR_ASSOCIATION:-}' trusted=\${trusted} → \${prd_flag} \${slice_flag} \${origin_trust_flag}"
+          echo "intake policy: author_association='\${AUTHOR_ASSOCIATION:-}' trusted=\${trusted} → \${brief_flag} \${task_flag} \${origin_trust_flag}"
 
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -393,8 +393,8 @@ jobs:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         run: |
           agent-runner intake "\${{ github.event.issue.number }}" \\
-            "\${{ steps.policy.outputs.prd_flag }}" \\
-            "\${{ steps.policy.outputs.slice_flag }}" \\
+            "\${{ steps.policy.outputs.brief_flag }}" \\
+            "\${{ steps.policy.outputs.task_flag }}" \\
             "\${{ steps.policy.outputs.origin_trust_flag }}" \\
             --arbiter origin
 `;
@@ -498,25 +498,25 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		text,
 	), 'author-trust must be OWNER/MEMBER/COLLABORATOR (admin / write-collaborator ' +
 		'— the whole signal; Decision 1).');
-	// An untrusted author forces --propose-slice; the derivation must emit both
-	// slice modes (so the untrusted path can reach propose and the trusted-safe
+	// An untrusted author forces --propose-task; the derivation must emit both
+	// task modes (so the untrusted path can reach propose and the trusted-safe
 	// path can reach merge).
-	require('derives-propose-slice', /--propose-slice\b/.test(
+	require('derives-propose-task', /--propose-task\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--propose-slice` (the ' +
+	), 'the policy derivation must be able to emit `--propose-task` (the ' +
 		'untrusted-author / autoBuild-on fallback).');
-	require('derives-merge-slice', /--merge-slice\b/.test(
+	require('derives-merge-task', /--merge-task\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--merge-slice` (the ' +
+	), 'the policy derivation must be able to emit `--merge-task` (the ' +
 		'trusted-author + autoBuild-off path).');
-	// --merge-prd stays allowed even for an untrusted author (PRD checkpoint ahead).
-	require('derives-merge-prd', /--merge-prd\b/.test(
+	// --merge-brief stays allowed even for an untrusted author (brief checkpoint ahead).
+	require('derives-merge-brief', /--merge-brief\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--merge-prd` (a PRD stays ' +
+	), 'the policy derivation must be able to emit `--merge-brief` (a brief stays ' +
 		'mergeable even for an untrusted author — the human-tasks-it checkpoint).');
-	require('derives-propose-prd', /--propose-prd\b/.test(
+	require('derives-propose-brief', /--propose-brief\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--propose-prd` (autoTask on).');
+	), 'the policy derivation must be able to emit `--propose-brief` (autoTask on).');
 	// ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose): the shell
 	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
 	// case it uses for the slice/PRD modes, and pass it to `intake` so the emitted

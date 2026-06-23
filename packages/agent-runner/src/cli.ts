@@ -3320,7 +3320,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-slice/--propose-slice override per type; granular overrides the aggregate; unset ⇒ propose for both.',
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-brief/--propose-brief and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.',
 		)
 		.argument(
 			'<number>',
@@ -3333,35 +3333,35 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--merge',
-			'integrate BOTH outcomes (slice AND PRD) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
+			'integrate BOTH outcomes (task AND brief) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
 		)
 		.option(
 			'--propose',
-			'integrate BOTH outcomes (slice AND PRD) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
+			'integrate BOTH outcomes (task AND brief) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
 		)
 		.option(
 			'--no-pr',
 			'propose without opening a PR for intake emissions: push the branch but deliberately skip the review request (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
-			'--merge-prd',
-			'integrate a PRD outcome in merge mode (granular; overrides --merge/--propose for a PRD; mutually exclusive with --propose-prd)',
+			'--merge-brief',
+			'integrate a brief outcome in merge mode (granular; overrides --merge/--propose for a brief; mutually exclusive with --propose-brief)',
 		)
 		.option(
-			'--propose-prd',
-			'integrate a PRD outcome in propose mode (granular; overrides --merge/--propose for a PRD; mutually exclusive with --merge-prd)',
+			'--propose-brief',
+			'integrate a brief outcome in propose mode (granular; overrides --merge/--propose for a brief; mutually exclusive with --merge-brief)',
 		)
 		.option(
-			'--merge-slice',
-			'integrate a slice outcome in merge mode (granular; overrides --merge/--propose for a slice; mutually exclusive with --propose-slice)',
+			'--merge-task',
+			'integrate a task outcome in merge mode (granular; overrides --merge/--propose for a task; mutually exclusive with --propose-task)',
 		)
 		.option(
-			'--propose-slice',
-			'integrate a slice outcome in propose mode (granular; overrides --merge/--propose for a slice; mutually exclusive with --merge-slice)',
+			'--propose-task',
+			'integrate a task outcome in propose mode (granular; overrides --merge/--propose for a task; mutually exclusive with --merge-task)',
 		)
 		.option(
 			'--origin-trust <trusted|untrusted>',
-			"the author-trust verdict to STAMP onto the emitted PRD/slice (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the slice's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
+			"the author-trust verdict to STAMP onto the emitted brief/task (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the task's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
 		)
 		.option(
 			'--briefs-land-in <where>',

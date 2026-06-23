@@ -91,10 +91,10 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 		// 1. A real intake (merge) that creates the backlog slice. Its onboarding
 		//    branch is the INTAKE-produced `work/intake-task-<slug>`.
 		const verdict: IntakeVerdict = {
-			outcome: 'slice',
-			sliceSlug: slug,
-			sliceTitle: 'Add a --quiet flag',
-			sliceBody: [
+			outcome: 'task',
+			taskSlug: slug,
+			taskTitle: 'Add a --quiet flag',
+			taskBody: [
 				'## What to build',
 				'',
 				'A --quiet flag.',
