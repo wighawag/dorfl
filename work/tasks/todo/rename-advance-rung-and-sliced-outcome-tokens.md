@@ -68,3 +68,7 @@ agent-runner claim rename-advance-rung-and-sliced-outcome-tokens --arbiter <remo
 git fetch <remote> && git switch -c work/rename-advance-rung-and-sliced-outcome-tokens <remote>/main
 git mv work/tasks/todo/rename-advance-rung-and-sliced-outcome-tokens.md work/tasks/done/rename-advance-rung-and-sliced-outcome-tokens.md
 ```
+
+## Requeue 2026-06-23
+
+transient-infra (model overloaded_error) mid-build; the work is fine. Continue from the kept branch tip: complete the TickRungKind build-slice->build-task / slice-prd->task-brief rename + the 'sliced'->'tasked' run-outcome (intake.ts ONLY the 'sliced' arm at L1398, leave kind==='prd' for the dependent task), update all asserting tests, get the gate green.
