@@ -23,6 +23,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 A starting situation that generates work, then merges onto the main flow.
 
+- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be brief-worthy, then sequence `setup` (scaffold the `work/` contract) and `to-brief` (synthesize the idea into a brief in `work/briefs/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the brief-producer (it calls `to-brief`).
 - **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend a disposition, the human decides, execute. Promotes notes into tasks/briefs/ADRs (composes `to-task`) or deletes them.
 
 ## Cross-cutting disciplines (model-invoked, so the agent may also reach for these itself)
