@@ -12,7 +12,7 @@ import type {SelectedLifecyclePools} from './select-priority.js';
 
 /**
  * The per-substrate I/O that FEEDS the shared, pure {@link buildLifecyclePools}
- * enumeration (slice `advance-autopick-lifecycle-pools`). The ENUMERATION LOGIC
+ * enumeration (task `advance-autopick-lifecycle-pools`). The ENUMERATION LOGIC
  * (which item becomes triage / surface / apply, the gates, the four-pool order)
  * lives in ONE place ({@link buildLifecyclePools} + {@link selectPrioritised}); this
  * module only reads the inputs that logic needs from each substrate:
@@ -29,10 +29,10 @@ import type {SelectedLifecyclePools} from './select-priority.js';
  *
  * Both then call the SAME {@link buildLifecyclePools} \u2014 so the in-place and
  * mirror-side enumerations are ONE unit, not two divergent ones. The gates default
- * BOTH OFF (the interim hardcoded-off; the gate slices flip them on).
+ * BOTH OFF (the interim hardcoded-off; the gate tasks flip them on).
  */
 
-/** A `needsAnswers:true` slice/PRD pulled from the live `work/` state (pre-sidecar). */
+/** A `needsAnswers:true` task/brief pulled from the live `work/` state (pre-sidecar). */
 interface BlockedItem {
 	namespace: 'task' | 'brief';
 	slug: string;
@@ -57,10 +57,10 @@ function readSidecarInPlace(
 }
 
 /**
- * Collect every `needsAnswers:true` slice (from `work/backlog`) + PRD (from
- * `work/prd`) for the in-place repo, through the read seam (the SAME readers the
- * build-pool scan uses). These are the SURFACE/APPLY candidates this slice draws
- * into the selection (today they are build/slice-INELIGIBLE, so nothing else
+ * Collect every `needsAnswers:true` task (from `work/backlog`) + brief (from
+ * `work/briefs`) for the in-place repo, through the read seam (the SAME readers the
+ * build-pool scan uses). These are the SURFACE/APPLY candidates this task draws
+ * into the selection (today they are build/task-INELIGIBLE, so nothing else
  * surfaces them).
  */
 function blockedItemsInPlace(
@@ -84,7 +84,7 @@ function blockedItemsInPlace(
 	// SURFACE-on-STAGING widening (brief
 	// `staging-surface-and-apply-promote-safety` F2): when `surfaceStaging` is
 	// ON, the candidate set ADDITIONALLY enumerates `needsAnswers` items resting
-	// in STAGING (`tasks/backlog/` + `briefs/proposed/`), so a sliced item
+	// in STAGING (`tasks/backlog/` + `briefs/proposed/`), so a tasked item
 	// surfaces its questions BEFORE the human promotes it. BUILD/claim still
 	// reads POOL-only (`scoreItems` over `state.todo`); only the surface polarity
 	// widens here.
@@ -163,7 +163,7 @@ async function readSidecarMirror(
  * Gather + build the lifecycle pools for a MIRROR-SIDE bare hub mirror (async).
  * Reads the SAME logical inputs as {@link gatherLifecycleInPlace} \u2014 observations +
  * the `needsAnswers` pool from the mirror's committed `main` (via
- * `resolveMirrorState`), the PRD pool via `resolveMirrorPrdPool`, and each item's
+ * `resolveMirrorState`), the brief pool via `resolveMirrorBriefPool`, and each item's
  * sidecar via `git show` \u2014 then hands them to the SAME shared
  * {@link buildLifecyclePools}, so the in-place + mirror enumerations AGREE.
  */

@@ -96,11 +96,11 @@ export function doFlagOverrides(
 		// The tasker IMPROVER-loop family (`--tasker-loop`/`--no-tasker-loop`/
 		// `--tasker-loop-max`/`--tasker-loop-model`) rides the same chain — a DISTINCT
 		// family from the gate's `--review*`, never sharing a flag/key/field name.
-		// The flag fields bridge onto the `slicerLoop*` config keys (key rename deferred).
+		// The flag fields bridge onto the `taskerLoop*` config keys.
 		...taskerLoopFlagOverrides(flags),
 		// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` (run the acceptance gate
 		// against the REBASED tip in a clean throwaway worktree, ON by default) rides
-		// the SAME chain — a DISTINCT family from `--review*`/`--slicer-loop*`.
+		// the SAME chain — a DISTINCT family from `--review*`/`--tasker-loop*`.
 		...freshWorktreeGateFlagOverrides(flags),
 		// `--no-pr` (the PR-INTENT axis): suppress the PR even on an authed GitHub
 		// arbiter. Rides the SAME flag > env > per-repo > global > default chain.
@@ -108,8 +108,8 @@ export function doFlagOverrides(
 	};
 	if (integration !== undefined) {
 		// An explicit `--merge`/`--propose` flag ALWAYS wins for the transition this
-		// command runs. `do` runs EITHER the build transition (a slice) OR the slicing
-		// transition (a `do prd:`) per invocation, and the typed flag is
+		// command runs. `do` runs EITHER the build transition (a task) OR the tasking
+		// transition (a `do brief:`) per invocation, and the typed flag is
 		// transition-AGNOSTIC, so it must override BOTH the build mode (`integration`)
 		// AND the tasking mode (`taskingIntegration`). Setting both at the top of the
 		// precedence chain means a `--propose` on a `taskingIntegration:'merge'` repo
@@ -146,10 +146,9 @@ export interface ReviewFlags {
  * the SAME `flag > env > per-repo > global > default` chain.
  *
  * NOTE the flag NAMES are tasking-vocabulary (`--tasker-loop*`, so commander
- * populates the `taskerLoop*` fields below), but they still resolve into the
- * `slicerLoop*` CONFIG KEYS — the config-key + symbol rename for this loop family
- * is deferred to the modules/symbols task, so {@link taskerLoopFlagOverrides}
- * bridges the new flag fields onto the existing config keys.
+ * populates the `taskerLoop*` fields below), and they resolve into the
+ * `taskerLoop*` CONFIG KEYS, so {@link taskerLoopFlagOverrides} bridges the
+ * flag fields onto the config keys.
  */
 export interface TaskerLoopFlags {
 	/** `--tasker-loop` ⇒ true, `--no-tasker-loop` ⇒ false, absent ⇒ undefined. */
@@ -191,10 +190,9 @@ export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
  * `--tasker-loop-max` is parsed to a number; a non-numeric value is dropped (the
  * lower layer / default decides). A DISTINCT family from {@link reviewFlagOverrides}.
  *
- * The tasking-vocabulary FLAG fields (`taskerLoop*`) bridge onto the existing
- * `slicerLoop*` CONFIG KEYS (the config-key rename is deferred to the
- * modules/symbols task), so the operator types `--tasker-loop` and the value
- * still resolves through the standard precedence into `config.slicerLoop`.
+ * The tasking-vocabulary FLAG fields (`taskerLoop*`) bridge onto the
+ * `taskerLoop*` CONFIG KEYS, so the operator types `--tasker-loop` and the value
+ * resolves through the standard precedence into `config.taskerLoop`.
  */
 export function taskerLoopFlagOverrides(flags: TaskerLoopFlags): PartialConfig {
 	const overrides: PartialConfig = {};
@@ -232,7 +230,7 @@ export interface FreshWorktreeGateFlags {
  * Map the `--fresh-worktree-gate`/`--no-fresh-worktree-gate` flag into a
  * {@link PartialConfig} override. Only a present flag contributes (absent ⇒
  * absent key), so the override layer never clobbers a lower-precedence source
- * with `undefined`. A negatable boolean (mirrors `slicerLoop`), so the caller
+ * with `undefined`. A negatable boolean (mirrors `taskerLoop`), so the caller
  * leaves `freshWorktreeGate` UNDEFINED unless the user explicitly passed the
  * flag (see the cli's option-source read).
  */
@@ -327,7 +325,7 @@ export function observationTriageFlagOverrides(
 /**
  * The surface-blockers CLI flag (`advance`): `--surface-blockers` /
  * `--no-surface-blockers`, the BOOLEAN gate over DECLARED blocked work (whether a
- * `needsAnswers:true` slice/PRD is rendered into a question sidecar; ADR
+ * `needsAnswers:true` task/brief is rendered into a question sidecar; ADR
  * `ci-config-policy-and-gate-family`). The orthogonal PEER of
  * `--observation-triage`. Resolved through the SAME
  * `flag > env > per-repo > global > default` chain as the other gate flags.

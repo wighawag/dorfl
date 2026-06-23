@@ -91,7 +91,7 @@ import {
  * puts the checkout on `work/<slug>` cut from the freshly-fetched
  * `<arbiter>/main`; its handle's `teardown` is a NO-OP (the checkout is left in a
  * defined state on `work/<slug>`, NEVER reaped). `do --remote` (the job-worktree
- * strategy) is the SEPARATE `do-remote` slice; auto-pick / multi-arg / `-n` is
+ * strategy) is the SEPARATE `do-remote` task; auto-pick / multi-arg / `-n` is
  * `do-autopick`.
  *
  * CLAIM SEMANTICS (autonomous, same as `do --remote`/`run`): the claim is
@@ -108,7 +108,7 @@ import {
  * there). `do` runs UNATTENDED, so it MUST get the autonomous, arbiter-passed
  * surfacing like `run` (the on-`main` cherry-pick that makes a stuck CI run
  * visible to `scan`/`status`/another machine). We achieve this by passing
- * `surfaceArbiter` into `performComplete` (resolution (a) from the slice): the
+ * `surfaceArbiter` into `performComplete` (resolution (a) from the task): the
  * success path reuses `complete`'s machinery; only the NEEDS-ATTENTION routing
  * becomes the autonomous variant.
  *
@@ -125,18 +125,18 @@ export type DoOutcome =
 	| 'surface-unmoved' // the tree-less surface to needs-attention did NOT land on the arbiter (lost the CAS race / no arbiter) — the item is STILL in-progress on the arbiter; retry/resolve
 	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown — work SAVED + surfaced
 	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
-	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the slice (FAILURE-CAUSE axis)
-	| 'agent-stopped' // the agent DELIBERATELY stopped (slice drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
+	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the task (FAILURE-CAUSE axis)
+	| 'agent-stopped' // the agent DELIBERATELY stopped (task drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
-	| 'sliced' // `do prd:<slug>` — the PRD was sliced into work/backlog/ (runner-owned)
-	| 'gate-refused' // `do prd:<slug>` — the slicing gate refused (honest skip)
-	| 'stale'; // `do prd:<slug>` — the held PRD was edited under the lock (stale slicing)
+	| 'sliced' // `do brief:<slug>` — the brief was tasked into work/backlog/ (runner-owned)
+	| 'gate-refused' // `do brief:<slug>` — the tasking gate refused (honest skip)
+	| 'stale'; // `do brief:<slug>` — the held brief was edited under the lock (stale tasking)
 
 export interface DoResult {
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: DoOutcome;
-	/** The resolved bare slug acted on (slice or PRD), when one was resolved. */
+	/** The resolved bare slug acted on (task or brief), when one was resolved. */
 	slug?: string;
 	/** The work branch the run operated on, when one was created/switched-to. */
 	branch?: string;
@@ -170,7 +170,7 @@ export type DoAgentRunner = (input: {
 };
 
 export interface DoOptions {
-	/** The raw CLI slug argument: bare (= slice), `slice:<slug>`, or `prd:<slug>`. */
+	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `brief:<slug>`. */
 	arg: string;
 	/** The working clone/checkout to run in-place in. */
 	cwd: string;
@@ -186,10 +186,10 @@ export interface DoOptions {
 	/**
 	 * Per-repo `autoTask` policy (resolved by `autotask-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
-	 * (`do-autopick.ts`'s sliceable-PRD pool): "may an agent auto-task an
-	 * UNDECLARED brief in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
+	 * (`do-autopick.ts`'s taskable-brief pool): "may an agent auto-task an
+	 * UNDECLARED brief in this repo?". An EXPLICITLY-named `do brief:<slug>` tasks
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
-	 * `performTask` — naming the brief IS the authorization, exactly as `do <slice>`
+	 * `performTask` — naming the brief IS the authorization, exactly as `do <task>`
 	 * builds regardless of `autoBuild`). Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
@@ -204,7 +204,7 @@ export interface DoOptions {
 	promptGuidance?: PromptGuidance;
 	/**
 	 * **The tasker review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
-	 * consumed ONLY by the `do prd:<slug>` tasking path — after the agent produces
+	 * consumed ONLY by the `do brief:<slug>` tasking path — after the agent produces
 	 * candidate tasks, run the `review` SKILL as a review→edit→re-review loop that
 	 * improves them, routing the verdict through the needsAnswers / needs-attention
 	 * sink. Ignored by the task-build path. Omitted ⇒ no loop (candidate tasks land
@@ -212,52 +212,52 @@ export interface DoOptions {
 	 * verdict+edits.
 	 */
 	reviewLoop?: TaskReviewGate;
-	/** The tasker improver loop's `slicerLoopMax` cap (flag > env > per-repo > global > default). Loop only. */
+	/** The tasker improver loop's `taskerLoopMax` cap (flag > env > per-repo > global > default). Loop only. */
 	taskerLoopMax?: number;
-	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
+	/** The tasker improver loop's de-correlated review model (`--tasker-loop-model`). Loop only. */
 	taskerLoopModel?: string;
-	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
+	/** How many fresh-context (M) executions of the tasker loop to run. Default 1. Loop only. */
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
 	/**
 	 * **The explicit `--merge` override** for the untrusted-origin build-propose rule
-	 * (slice `untrusted-origin-forces-build-propose`). `true` iff the operator
+	 * (task `untrusted-origin-forces-build-propose`). `true` iff the operator
 	 * EXPLICITLY typed `--merge` (vs `merge` resolved from config). Forwarded to the
-	 * slice-BUILD `performComplete` → `performIntegration` so an explicit `--merge`
+	 * task-BUILD `performComplete` → `performIntegration` so an explicit `--merge`
 	 * OVERRIDES the untrusted-origin build-propose rule. The autonomous/CI path (a bare
-	 * `advance`/`do` auto-pick) passes no flag ⇒ unset ⇒ an untrusted-origin slice
+	 * `advance`/`do` auto-pick) passes no flag ⇒ unset ⇒ an untrusted-origin task
 	 * reliably forces `propose`. (Build transition only; the tasking transition is
-	 * unaffected — a slice FILE landing on main is inert.)
+	 * unaffected — a task FILE landing on main is inert.)
 	 */
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the TASKING transition only** (config
-	 * `taskingIntegration`). Consumed ONLY by the `do prd:<slug>` tasking path: the
+	 * `taskingIntegration`). Consumed ONLY by the `do brief:<slug>` tasking path: the
 	 * value threaded into {@link performTask} is `taskingIntegration ?? integration`,
-	 * so an unset override is byte-for-byte today's behaviour (slicing uses
-	 * `integration`). The slice-BUILD path ALWAYS threads `integration` (never this
+	 * so an unset override is byte-for-byte today's behaviour (tasking uses
+	 * `integration`). The task-BUILD path ALWAYS threads `integration` (never this
 	 * key). An explicit `--merge`/`--propose` flag wins over BOTH (the flag-override
 	 * layer sets `integration` AND `taskingIntegration` to the typed mode — see
 	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{task, brief}` resolver.
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo SLICE-PLACEMENT default** (PRD
-	 * `staging-pool-position-gate-and-trust-model` US #5, slice
+	 * **The per-repo TASK-PLACEMENT default** (brief
+	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Consumed by
-	 * the `do prd:<slug>` tasking path: the value is fed as the
+	 * the `do brief:<slug>` tasking path: the value is fed as the
 	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
 	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
 	 * `taskingIntegration` (flag > env > per-repo > global > built-in
-	 * `pre-backlog`). The task-BUILD path ignores it (placement is a SLICING
+	 * `pre-backlog`). The task-BUILD path ignores it (placement is a TASKING
 	 * lifecycle concern).
 	 */
 	tasksLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung in the placement resolver). Set ONLY when the operator typed
-	 * `--slices-land-in <where>` on this invocation; never when the value came
+	 * `--tasks-land-in <where>` on this invocation; never when the value came
 	 * from config. Wins over `originTrust: untrusted` (the operator is present;
 	 * CLI always wins, no special force-key) — the positional analogue of
 	 * `explicitMerge` overriding the untrusted-origin build-propose rule.
@@ -311,7 +311,7 @@ export interface DoOptions {
 	 */
 	providerInstance?: ReviewProvider;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`):
+	 * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`):
 	 * threaded VERBATIM into `performComplete` (the gate rides inside the shared
 	 * `do`/`complete` pipeline, so CI inherits it for free). When `review` is on,
 	 * the `review` SKILL runs as a fresh-context agent AFTER the green `verify` and
@@ -324,15 +324,15 @@ export interface DoOptions {
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
 	/**
-	 * **The slice-SET ACCEPTANCE GATE seam** (slice `slice-acceptance-gate`):
-	 * consumed ONLY by the `do prd:<slug>` tasking path. When `review` resolves on,
-	 * a fresh-context review of the produced slice SET runs BEFORE the slices
+	 * **The task-SET ACCEPTANCE GATE seam** (task `slice-acceptance-gate`):
+	 * consumed ONLY by the `do brief:<slug>` tasking path. When `review` resolves on,
+	 * a fresh-context review of the produced task SET runs BEFORE the tasks
 	 * integrate (riding `performIntegration`'s review block); `block` routes the set
 	 * to needs-attention, `approve` lets it integrate. It rides the SAME BUILD
 	 * `--review`/`--no-review`/`--review-model` family as Gate-2 (one gate-config
 	 * story) and is ONE-SHOT (no rounds; it does NOT inherit `reviewMaxRounds`). It
-	 * is DISTINCT from the build {@link reviewGate} (a slice-SET prompt, not a code
-	 * diff) and from the slicer improver loop ({@link reviewLoop}). Production wires
+	 * is DISTINCT from the build {@link reviewGate} (a task-SET prompt, not a code
+	 * diff) and from the tasker improver loop ({@link reviewLoop}). Production wires
 	 * `harnessSliceAcceptanceGate`; tests inject a canned verdict. Omitted ⇒ no gate.
 	 */
 	taskReviewGate?: ReviewGate;
@@ -346,7 +346,7 @@ export interface DoOptions {
 	harness?: Harness;
 	/**
 	 * `do --watch`: stream the agent's high-signal events live by tailing the pi
-	 * session `.jsonl` (slice `do-watch`, option (a)). A READ-ONLY observer — it
+	 * session `.jsonl` (task `do-watch`, option (a)). A READ-ONLY observer — it
 	 * NEVER changes the run's outcome, gate, integration, git, or exit code; only a
 	 * concurrent log-tail is added. REQUIRES the pi harness (the null adapter has
 	 * no session log to tail) — passing it with a non-pi harness is a usage error.
@@ -429,7 +429,7 @@ interface DoAgentLaunchOptions {
  * there is no checkout, so the worktree is materialised under `workspacesDir`.
  */
 export interface DoRemoteOptions extends DoAgentLaunchOptions {
-	/** The raw CLI slug argument: bare (= slice), `slice:<slug>`, or `prd:<slug>`. */
+	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `brief:<slug>`. */
 	arg: string;
 	/**
 	 * The registered remote spec/URL to run against (`do --remote <r>`). Resolved
@@ -449,18 +449,18 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	arbiter?: string;
 	/**
 	 * Per-repo `autoTask` policy — gates the AUTO-PICK / pool path only. An
-	 * EXPLICITLY-named `do --remote prd:<slug>` tasks regardless of it (the
-	 * dispatch passes `explicit: true`), mirroring `do <slice>` vs `autoBuild`.
+	 * EXPLICITLY-named `do --remote brief:<slug>` tasks regardless of it (the
+	 * dispatch passes `explicit: true`), mirroring `do <task>` vs `autoBuild`.
 	 * Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
-	/** The tasker review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
+	/** The tasker review→edit→converge loop seam — `do --remote brief:<slug>` path only (see {@link DoOptions.reviewLoop}). */
 	reviewLoop?: TaskReviewGate;
-	/** The tasker improver loop's `slicerLoopMax` cap. Loop only. */
+	/** The tasker improver loop's `taskerLoopMax` cap. Loop only. */
 	taskerLoopMax?: number;
-	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
+	/** The tasker improver loop's de-correlated review model (`--tasker-loop-model`). Loop only. */
 	taskerLoopModel?: string;
-	/** How many fresh-context (M) executions of the slicer loop to run. Default 1. Loop only. */
+	/** How many fresh-context (M) executions of the tasker loop to run. Default 1. Loop only. */
 	reviewExecutions?: number;
 	/** Integration mode resolved at integrate-time (flag > per-repo > global > default). */
 	integration?: IntegrationMode;
@@ -471,22 +471,22 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the TASKING transition only** (config
-	 * `taskingIntegration`) on the `do --remote prd:<slug>` path: threaded into
-	 * {@link performTask} as `taskingIntegration ?? integration`. Unset ⇒ slicing
-	 * uses `integration` (today's behaviour); the slice-BUILD path always threads
+	 * `taskingIntegration`) on the `do --remote brief:<slug>` path: threaded into
+	 * {@link performTask} as `taskingIntegration ?? integration`. Unset ⇒ tasking
+	 * uses `integration` (today's behaviour); the task-BUILD path always threads
 	 * `integration`. See {@link DoOptions.taskingIntegration}.
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo TASK-PLACEMENT default** (PRD
+	 * **The per-repo TASK-PLACEMENT default** (brief
 	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
-	 * prd:<slug>` path: threaded into {@link performTask} as the
+	 * brief:<slug>` path: threaded into {@link performTask} as the
 	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
 	 */
 	tasksLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** on the `do --remote
-	 * prd:` path. See {@link DoOptions.explicitTasksLandIn}.
+	 * brief:` path. See {@link DoOptions.explicitTasksLandIn}.
 	 */
 	explicitTasksLandIn?: 'pre-backlog' | 'todo';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
@@ -531,7 +531,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewModel?: string;
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
-	/** The slice-SET ACCEPTANCE GATE seam — `do --remote prd:<slug>` path only (see {@link DoOptions.sliceReviewGate}). */
+	/** The task-SET ACCEPTANCE GATE seam — `do --remote brief:<slug>` path only (see {@link DoOptions.taskReviewGate}). */
 	taskReviewGate?: ReviewGate;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
@@ -547,7 +547,7 @@ const DEFAULT_ARBITER = 'origin';
  * Map a `do brief:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
  * contract: outcomes pass through (sliced / gate-refused / stale / agent-failed /
  * usage-error), the lock-lost outcome splits into `lost` (exit 2) vs `contended`
- * (exit 3) by its exit code, and the slicing-only exit 4 (stale) is reported on
+ * (exit 3) by its exit code, and the tasking-only exit 4 (stale) is reported on
  * the `do` exit contract (`0|1|2|3`) as exit 1 — the needs-attention-class
  * failure code, same as a stuck build.
  */
@@ -577,8 +577,8 @@ function taskResultToDoResult(tasked: TaskResult): DoResult {
 			exitCode = 1;
 			break;
 		case 'needs-attention':
-			// The slicer review→edit loop found the decomposition unclear and routed the
-			// PRD to needs-attention (no guessed slices). Same exit class as a stuck
+			// The tasker review→edit loop found the decomposition unclear and routed the
+			// brief to needs-attention (no guessed tasks). Same exit class as a stuck
 			// build (1).
 			outcome = 'needs-attention';
 			exitCode = 1;
@@ -621,7 +621,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
 
-	// 0. `--watch` REQUIRES the pi harness (slice `do-watch`): only the pi adapter
+	// 0. `--watch` REQUIRES the pi harness (task `do-watch`): only the pi adapter
 	//    writes a session `.jsonl` event log to tail. The null/shell adapter has no
 	//    session log / event taxonomy, so there is nothing to observe — ERROR
 	//    CLEARLY here, BEFORE any git transition (no claim, no branch), rather than
@@ -642,8 +642,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	}
 
 	// 1. Resolve the slug across BOTH namespaces — `do` is the ONE command that
-	//    spans them (ADR §3a): bare → slice (after a no-PRD-collision check;
-	//    ERROR on collision), `slice:`/`prd:` explicit. A collision / resolution
+	//    spans them (ADR §3a): bare → task (after a no-brief-collision check;
+	//    ERROR on collision), `task:`/`brief:` explicit. A collision / resolution
 	//    failure is a loud usage error (exit 1).
 	let resolved;
 	try {
@@ -660,12 +660,12 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
 
-	// 2. `do prd:<slug>` → the PRD-SLICING path (`autoslice-command`): the in-place
-	//    `do` worker is AUTONOMOUS, so it slices as the AGENT (gate-bound + lock).
-	//    The orchestration (gate → lock → to-slices harness → runner-owned commit)
-	//    lives in `tasking.ts`; `do` dispatches `prd:` here. The agent only writes
-	//    slice files — the runner owns every git transition (same boundary as the
-	//    build path). It does NOT run the slice-build pipeline below.
+	// 2. `do brief:<slug>` → the brief-TASKING path (`autoslice-command`): the in-place
+	//    `do` worker is AUTONOMOUS, so it tasks as the AGENT (gate-bound + lock).
+	//    The orchestration (gate → lock → to-task harness → runner-owned commit)
+	//    lives in `tasking.ts`; `do` dispatches `brief:` here. The agent only writes
+	//    task files — the runner owns every git transition (same boundary as the
+	//    build path). It does NOT run the task-build pipeline below.
 	if (resolved.namespace === 'brief') {
 		const tasked = await performTask({
 			slug: resolved.slug,
@@ -673,55 +673,55 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			arbiter,
 			doer: 'agent',
 			autoTask: options.autoTask,
-			// EXPLICIT dispatch: a `do prd:<slug>` target was NAMED (the operator typed
+			// EXPLICIT dispatch: a `do brief:<slug>` target was NAMED (the operator typed
 			// it, or the auto-pick POOL already filtered it on `autoTask` before
-			// dispatching here — the single policy-enforcement point). So the slicing gate
-			// drops the `autoTask` policy term and binds only the PRD's own readiness
-			// (`humanOnly`/`needsAnswers`) + `briefAfter`, EXACTLY as `do <slice>` builds a
-			// named slice regardless of `autoBuild` (the pool gates the policy, not the
+			// dispatching here — the single policy-enforcement point). So the tasking gate
+			// drops the `autoTask` policy term and binds only the brief's own readiness
+			// (`humanOnly`/`needsAnswers`) + `briefAfter`, EXACTLY as `do <task>` builds a
+			// named task regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
 			explicit: true,
-			// The injected agent runner (tests) writes slice files directly. The
-			// DoAgentRunner shape is a structural superset of SliceAgentRunner (its
+			// The injected agent runner (tests) writes task files directly. The
+			// DoAgentRunner shape is a structural superset of TaskAgentRunner (its
 			// extra `output` is ignored by the tasking path), so it threads straight in.
 			agentRunner: options.agentRunner,
 			harness: options.harness,
 			agentCmd: options.agentCmd,
 			model: options.model,
 			sessionsDir: options.sessionsDir,
-			// The integrate-time args (slice `slice-output-through-integration`): the
+			// The integrate-time args (task `slice-output-through-integration`): the
 			// `provider` is the SAME the task-build path threads (arg parity), but the
 			// MODE is the per-TRANSITION TASKING resolution (`per-transition-integration-
 			// mode-slicing-vs-build`): `taskingIntegration ?? integration`. Unset override ⇒
 			// falls back to `integration` (today's behaviour); a repo with
-			// `integration:'propose'` + `taskingIntegration:'merge'` lands the slice FILES
+			// `integration:'propose'` + `taskingIntegration:'merge'` lands the task FILES
 			// on main here while the BUILD path below still threads plain `integration`.
 			integration: options.taskingIntegration ?? options.integration,
 			// The per-repo TASK-PLACEMENT default + the operator's explicit
-			// override (slice `runner-deterministic-slice-placement-policy-and-
+			// override (task `runner-deterministic-slice-placement-policy-and-
 			// precedence`). The tasker reads them as the configured-default + the
 			// top rung of the runner-deterministic placement resolver; the
 			// `originTrust: untrusted` force is read inside the tasker from the
-			// PRD's stamped frontmatter.
+			// brief's stamped frontmatter.
 			tasksLandIn: options.tasksLandIn,
 			explicitTasksLandIn: options.explicitTasksLandIn,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
-			// The slicer review→edit→converge loop (slicer-review-edit-loop): improves the
-			// candidate slices in place + routes the verdict through the needsAnswers /
-			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
+			// The tasker review→edit→converge loop (slicer-review-edit-loop): improves the
+			// candidate tasks in place + routes the verdict through the needsAnswers /
+			// needs-attention sink. Threaded only on the `do brief:` path; omitted ⇒ no loop.
 			reviewLoop: options.reviewLoop,
 			taskerLoopMax: options.taskerLoopMax,
 			reviewExecutions: options.reviewExecutions,
 			taskerLoopModel: options.taskerLoopModel,
-			// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): rides the BUILD
+			// The task-SET ACCEPTANCE GATE (slice-acceptance-gate): rides the BUILD
 			// `--review`/`--review-model` family — a fresh-context review of the produced
 			// SET before it integrates, ONE-SHOT, independent of the improver loop above.
 			review: options.review,
 			reviewGate: options.taskReviewGate,
 			acceptanceReviewModel: options.reviewModel,
 			env,
-			// The slicer + review AGENTS launch AMBIENT, never the identity env.
+			// The tasker + review AGENTS launch AMBIENT, never the identity env.
 			agentEnv: options.env,
 			note,
 		});
@@ -734,7 +734,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    REAL checkout (the human's clone / the CI container); it must NOT
 	//    entangle unrelated work or run over uncommitted changes. (Mirrors the
 	//    bash driver: "error: working tree is dirty — commit/stash before
-	//    running a slice.")
+	//    running a task.")
 	if (await isDirtyTree(cwd, env)) {
 		const message =
 			`working tree is dirty — commit or stash before running '${slug}' ` +
@@ -746,7 +746,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	// 3b. Refuse on a DIVERGED local `main` (MERGE MODE ONLY — mirrors `complete`'s
 	//     guard). A local `main` AHEAD of `<arbiter>/main` (unpushed commits) breaks
 	//     ONLY the paths that fast-forward local `main`, and only merge mode ff's it:
-	//     the slice builds off `<arbiter>/main`, so a merge-back ff cannot apply over
+	//     the task builds off `<arbiter>/main`, so a merge-back ff cannot apply over
 	//     a diverged main. Propose mode never ff's local `main` (it pushes the work
 	//     branch + opens a PR; completion only `switch`es to main, no ff), so the
 	//     guard is irrelevant there and must NOT fire. Catch it UP FRONT — before the
@@ -765,7 +765,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		if (ahead > 0) {
 			const message =
 				`local main is ahead of ${arbiter}/main by ${ahead} commit` +
-				`${ahead === 1 ? '' : 's'} (unpushed); the slice builds off ${arbiter}/main ` +
+				`${ahead === 1 ? '' : 's'} (unpushed); the task builds off ${arbiter}/main ` +
 				"and the merge-back can't fast-forward — push or reconcile main first " +
 				'(or re-run with --ignore-diverged-main to proceed anyway).';
 			return {exitCode: 1, outcome: 'refused', slug, message};
@@ -808,14 +808,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		}
 	}
 
-	// 3d. STATIC fresh-worktree-gate readiness guard (slice
+	// 3d. STATIC fresh-worktree-gate readiness guard (task
 	//     `do-fails-fast-when-acceptance-gate-statically-unrunnable`). When the
 	//     fresh-worktree gate is ON AND `prepare` resolves to no commands AND a
 	//     lockfile is present, the throwaway worktree the gate runs in will have no
 	//     `node_modules` and `verify`'s tools (`prettier`/`tsc`/`vitest`) will be
 	//     "command not found" — fail fast HERE, BEFORE the claim and BEFORE spawning
 	//     the build agent, instead of wasting a whole `do` run and (worse) routing
-	//     correct work to needs-attention as if the slice were at fault. A repo with
+	//     correct work to needs-attention as if the task were at fault. A repo with
 	//     NO lockfile is the intentional dep-free case (the design point preserved)
 	//     and proceeds. There is NO verify-unset case — `resolveVerifyCommands`
 	//     substitutes the default gate when verify is unset/all-blank, so verify is
@@ -922,7 +922,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     FAILED terminally (stale-lease cap exhausted, or a non-stale-lease
 	//     rejection / unreachable arbiter). The push helper THROWS; the strategy
 	//     CATCHES it and flags `continuePushFailure` so the run does NOT crash
-	//     leaving the slice silently in-progress. Surface to needs-attention
+	//     leaving the task silently in-progress. Surface to needs-attention
 	//     TREE-LESSLY via the SAME `#89` mechanism `requeue` uses — the kept branch
 	//     is already on the arbiter (after-commit, recoverable), so the surface is
 	//     purely the one-file ledger move + reason (no branch push, no worktree).
@@ -954,7 +954,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	// 5. Run the agent autonomously in the checkout, ON the work branch — the
 	//    SAME prompt assembly `agent-runner prompt` emits (canonical wrapper +
-	//    source PRD + the slice's ## Prompt). The agent only edits code (it does
+	//    source brief + the task's ## Prompt). The agent only edits code (it does
 	//    no git). This is the one NEW middle step `ar-run.sh` shelled out for
 	//    (`prompt | pi`).
 	//    The post-claim pipeline reads the uniform `IsolatedTree` handle (`tree.dir`)
@@ -963,7 +963,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	let prompt: string;
 	try {
 		// CONTINUE-aware resolution: on a continue (the arbiter holds a kept
-		// `work/<slug>` whose tip is STRANDED off main) the slice may already be in
+		// `work/<slug>` whose tip is STRANDED off main) the task may already be in
 		// `work/done/`; admit `done/` ONLY behind the tip-vs-arbiter stranded gate
 		// (story 5), reusing the SAME refs the continue-detection uses.
 		const task = resolveTask(tree.dir, slug, {
@@ -972,7 +972,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			mainRef: `${tree.arbiterRemote}/main`,
 			env,
 		});
-		// CONTINUE-mode (the `agent-prompt-continue-context` slice): if the arbiter
+		// CONTINUE-mode (the `agent-prompt-continue-context` task): if the arbiter
 		// holds a kept `work/<slug>` ahead of main (a requeue) the checkout was
 		// CONTINUED onto it — inject the continue block (prior diff + reason + note).
 		// REUSE the SAME continue-detection the onboarding path used (in-place clone
@@ -1041,9 +1041,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		});
 	}
 
-	// 5b. HONOR a deliberate STOP (slice `agent-stop-signal`). The agent exited
+	// 5b. HONOR a deliberate STOP (task `agent-stop-signal`). The agent exited
 	//     cleanly (`agent.ok`), but the CLAIM-PROTOCOL wrapper tells it to STOP and
-	//     report on a DRIFTED/ambiguous/stale-premise slice WITHOUT building. Detect
+	//     report on a DRIFTED/ambiguous/stale-premise task WITHOUT building. Detect
 	//     that BEFORE the gate via the in-band sentinel (the agent's reason is the
 	//     needs-attention reason VERBATIM); a clean STOP with no source change is the
 	//     deterministic empty-diff backstop. Either routes to needs-attention and
@@ -1097,7 +1097,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		cwd: tree.dir,
 		arbiter: tree.arbiterRemote,
 		integration: options.integration,
-		// An explicit `--merge` overrides the untrusted-origin build-propose rule (slice
+		// An explicit `--merge` overrides the untrusted-origin build-propose rule (task
 		// `untrusted-origin-forces-build-propose`); the autonomous path leaves it
 		// unset so untrusted-origin reliably forces propose.
 		explicitMerge: options.explicitMerge,
@@ -1117,7 +1117,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// Half B (propose-mode PR body): the build agent's FINAL SUMMARY, captured
 		// from the harness seam's `LaunchResult.output` (surfaced by `runDoAgent`
 		// below) and threaded as the PR description. `complete` scaffolds a
-		// deterministic header (slice pointer) above it. Undefined ⇒ no body ⇒ the
+		// deterministic header (task pointer) above it. Undefined ⇒ no body ⇒ the
 		// provider degrades to `gh ... --fill` (no regression).
 		body: agent.output,
 		// Gate 2 (PR/code review) rides INSIDE `complete`: run the `review` SKILL as a
@@ -1128,7 +1128,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
 		reviewGate: options.reviewGate,
-		// `--watch` (slice `watch-review-session`): tail the Gate-2 review agent's
+		// `--watch` (task `watch-review-session`): tail the Gate-2 review agent's
 		// session live too, AFTER the build stream the `runDoAgent` watch surfaced
 		// (the gate prints a build→review boundary). Threaded into the gate launch via
 		// `complete`; OFF ⇒ the review path is byte-identical (sync launch, no tailer).
@@ -1183,7 +1183,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// seam already surfaced the source-strand / empty-staged refusal to
 		// needs-attention on the arbiter) — in-place `performDo` inherits the fix
 		// here, mapped to the SAME `needs-attention` outcome shape `do --remote`
-		// (`runRemotePipeline`) uses, so `advance slice:<slug>` (via the default
+		// (`runRemotePipeline`) uses, so `advance task:<slug>` (via the default
 		// `doDriver = performDo`) agrees with the remote path on the caller-visible
 		// label.
 		return {
@@ -1198,7 +1198,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// Strand-surface could not land on the arbiter (CAS contention exhausted /
 		// no arbiter) — HONESTLY still in-progress on the arbiter. Mirror
 		// `runRemotePipeline`'s `surface-unmoved` mapping so in-place `performDo`
-		// (and `advance slice:<slug>` via the default `doDriver`) agrees with
+		// (and `advance task:<slug>` via the default `doDriver`) agrees with
 		// `do --remote` on the same signal, never a fake success.
 		return {
 			exitCode: 1,
@@ -1239,7 +1239,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
  * RETAINED. It points them straight at the recover-already-committed path
  * (`complete --isolated <slug>`) so they need not reverse-engineer the encoded
  * worktree path \u2014 the FINISH half of try-to-finish / else-surface. Detection is
- * unspoofable (an already-integrated slice is a clean no-op), so re-running it is
+ * unspoofable (an already-integrated task is a clean no-op), so re-running it is
  * always safe.
  *
  * `complete --isolated` recovers the retained WORKTREE, so it ONLY works ON THE
@@ -1307,7 +1307,7 @@ function routeReport(
 
 /**
  * SAVE the partial work of a FAILED agent instead of dropping it (the keystone of
- * the `agent-fail-saves-work` slice). An agent failure (`runDoAgent` returned
+ * the `agent-fail-saves-work` task). An agent failure (`runDoAgent` returned
  * `ok:false`, threw, or the prompt could not be assembled) used to BARE-RETURN
  * `agent-failed`, leaving whatever the agent edited only on the local work branch
  * in the (disposable, possibly remote) job worktree — silently lost.
@@ -1352,7 +1352,7 @@ async function saveAgentFailure(params: {
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiter, detail, env, note} = params;
-	// The work branch is the namespaced build branch (`work/slice-<slug>`; the
+	// The work branch is the namespaced build branch (`work/task-<slug>`; the
 	// onboarding switched the checkout to it before the agent ran); derive it from
 	// the slug so the push target is always defined even when the caller's `branch`
 	// was not narrowed.
@@ -1434,11 +1434,11 @@ function surfaceUnmovedDoResult(params: {
 
 /**
  * Resolve the STOP reason for a clean (`agent.ok`) run, or `undefined` when the
- * run is a genuine build that should proceed to the gate (slice
+ * run is a genuine build that should proceed to the gate (task
  * `agent-stop-signal`). TWO independent triggers, the sentinel winning:
  *
  *   1. The IN-BAND STOP sentinel in the agent's output ({@link parseStopSentinel})
- *      — the principled case: the agent declared the slice drifted/ambiguous and
+ *      — the principled case: the agent declared the task drifted/ambiguous and
  *      reported WHY. Its reason is used VERBATIM (a non-empty diff with a sentinel
  *      is still a STOP — the agent may have left scratch; the sentinel wins).
  *   2. The DETERMINISTIC empty-diff backstop ({@link isWorkBranchDiffEmpty}) — the
@@ -1468,7 +1468,7 @@ async function resolveStopReason(params: {
 }
 
 /**
- * Route a DELIBERATE agent STOP (slice `agent-stop-signal`) to needs-attention
+ * Route a DELIBERATE agent STOP (task `agent-stop-signal`) to needs-attention
  * through the SAME work-preserving seam `saveAgentFailure` uses (save the branch,
  * surface on the arbiter) — but as the DISTINCT `agent-stopped` outcome, NOT
  * `agent-failed` (the agent did not error) nor `needs-attention` (no red gate /
@@ -1498,7 +1498,7 @@ async function saveAgentStop(params: {
 
 	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
-		? `The agent STOPPED building '${slug}' (the slice drifted / is ambiguous / ` +
+		? `The agent STOPPED building '${slug}' (the task drifted / is ambiguous / ` +
 			`produced no change); routed it to work/needs-attention/ (${report!.fragment}) ` +
 			`WITHOUT running the gate or Gate-2 review. Reason: ${reason}`
 		: `The agent STOPPED building '${slug}' but it could not be routed to ` +
@@ -1530,7 +1530,7 @@ async function saveAgentStop(params: {
  * The build session-id is the SLUG (in-place `do` has no work-id), which the
  * helper makes unique per launch; the Gate-2 REVIEW launch uses the SAME helper
  * with a DISTINCT id (`<slug>-review`) so the two sessions never collide — one
- * watch implementation, two callers (slice `watch-review-session`).
+ * watch implementation, two callers (task `watch-review-session`).
  */
 async function runDoAgent(
 	options: DoAgentLaunchOptions,
@@ -1593,7 +1593,7 @@ async function isDirtyTree(
  *
  * **Option A — materialise-then-reuse** (the drift correction; the full
  * IsolatedTree-seam unification is the SEPARATE `do-run-share-isolation-seam`
- * slice). `performDo` composes the human verbs against a literal `cwd`; this
+ * task). `performDo` composes the human verbs against a literal `cwd`; this
  * function does the same — it just points that `cwd` at a freshly-cut job
  * worktree instead of a checkout. It reuses (does NOT reimplement) the pipeline:
  * `performStart` (resume) → agent → `performComplete`.
@@ -1601,7 +1601,7 @@ async function isDirtyTree(
  * **The claim ↔ worktree ↔ start composition.** Both `createJob` (cuts the
  * `work/<slug>` branch off the mirror's fresh main) and `performStart` (claims +
  * switches to `work/<slug>`) overlap. To compose without double-claiming or
- * fighting over the branch we order them as the slice mandates:
+ * fighting over the branch we order them as the task mandates:
  *
  *   1. **CLAIM FIRST** — the CAS push to the arbiter, run in a throwaway clone of
  *      the mirror (the CAS needs a non-bare checkout with an `origin/main`
@@ -1786,7 +1786,7 @@ export async function performDoRemote(
 	try {
 		// 2a. Resolve the slug across BOTH namespaces against the claim clone (it
 		//     carries `work/` from the mirror's main). A collision / resolution
-		//     failure is a loud usage error; a `prd:` arg reaches the not-yet-wired
+		//     failure is a loud usage error; a `brief:` arg reaches the not-yet-wired
 		//     stub — identical behaviour to in-place `do`.
 		let resolved;
 		try {
@@ -1804,20 +1804,20 @@ export async function performDoRemote(
 		}
 
 		if (resolved.namespace === 'brief') {
-			// `do --remote prd:<slug>`: task the brief as the AGENT, against the claim
+			// `do --remote brief:<slug>`: task the brief as the AGENT, against the claim
 			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
-			// mirror's main). No job worktree is needed — the slicing transition is a
-			// runner-owned `prd → slicing → prd` move + emit-backlog on the arbiter, not
-			// a build pipeline. The agent only writes slice files; the runner does all git.
+			// mirror's main). No job worktree is needed — the tasking transition is a
+			// runner-owned `brief → tasking → brief` move + emit-backlog on the arbiter, not
+			// a build pipeline. The agent only writes task files; the runner does all git.
 			const tasked = await performTask({
 				slug: resolved.slug,
 				cwd: claimDir,
 				arbiter: 'origin',
 				doer: 'agent',
 				autoTask: options.autoTask,
-				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
+				// EXPLICIT dispatch (same as the in-place path above): the `brief:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoTask` before reaching here), so the
-				// slicing gate drops the policy term — only the PRD's own readiness +
+				// tasking gate drops the policy term — only the brief's own readiness +
 				// `briefAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
 				agentRunner: options.agentRunner,
@@ -1825,31 +1825,31 @@ export async function performDoRemote(
 				agentCmd: options.agentCmd,
 				model: options.model,
 				sessionsDir: options.sessionsDir,
-				// The integrate-time args (slice `slice-output-through-integration`): the
+				// The integrate-time args (task `slice-output-through-integration`): the
 				// `provider` is the SAME the task-build path threads (arg parity), but the
 				// MODE is the per-TRANSITION TASKING resolution
 				// (`per-transition-integration-mode-slicing-vs-build`):
-				// `taskingIntegration ?? integration`, so the `--remote prd:` output ALSO
-				// routes through the shared core with the slicing-resolved mode.
+				// `taskingIntegration ?? integration`, so the `--remote brief:` output ALSO
+				// routes through the shared core with the tasking-resolved mode.
 				integration: options.taskingIntegration ?? options.integration,
 				// The per-repo TASK-PLACEMENT default + the operator's explicit
-				// override (slice `runner-deterministic-slice-placement-policy-and-
-				// precedence`). Same threading as the in-place `do prd:` path.
+				// override (task `runner-deterministic-slice-placement-policy-and-
+				// precedence`). Same threading as the in-place `do brief:` path.
 				tasksLandIn: options.tasksLandIn,
 				explicitTasksLandIn: options.explicitTasksLandIn,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
-				// The slicer review→edit→converge loop on the `do --remote prd:` path too.
+				// The tasker review→edit→converge loop on the `do --remote brief:` path too.
 				reviewLoop: options.reviewLoop,
 				taskerLoopMax: options.taskerLoopMax,
 				reviewExecutions: options.reviewExecutions,
 				taskerLoopModel: options.taskerLoopModel,
-				// The slice-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
+				// The task-SET ACCEPTANCE GATE on the `do --remote brief:` path too.
 				review: options.review,
 				reviewGate: options.taskReviewGate,
 				acceptanceReviewModel: options.reviewModel,
 				env,
-				// The slicer + review AGENTS launch AMBIENT, never the identity env.
+				// The tasker + review AGENTS launch AMBIENT, never the identity env.
 				agentEnv: options.env,
 				note,
 			});
@@ -2026,7 +2026,7 @@ async function runRemotePipeline(
 	//     exhausted, or a non-stale-lease rejection / unreachable arbiter). The push
 	//     helper THROWS; `createJob` CATCHES it and flags `continuePushFailure`
 	//     rather than letting the throw escape (which crashed the run and left the
-	//     slice silently in `work/in-progress/` on the arbiter, the work stranded in
+	//     task silently in `work/in-progress/` on the arbiter, the work stranded in
 	//     the worktree). Route to needs-attention via the SAME seam the conflict path
 	//     uses — surfaced on the arbiter, the kept branch already on the arbiter from
 	//     the prior requeue (recoverable) — instead of running the agent.
@@ -2191,7 +2191,7 @@ async function runRemotePipeline(
 		});
 	}
 
-	// 6b. HONOR a deliberate STOP (slice `agent-stop-signal`) — the SAME detection
+	// 6b. HONOR a deliberate STOP (task `agent-stop-signal`) — the SAME detection
 	//     in-place `do` runs, shared via `resolveStopReason`/`saveAgentStop`. A
 	//     sentinel STOP (verbatim reason) or an empty work-branch diff routes to
 	//     needs-attention (surfaced on the arbiter) and SKIPS the gate + Gate-2. The
@@ -2224,13 +2224,13 @@ async function runRemotePipeline(
 		cwd,
 		arbiter: arbiterRemote,
 		integration: options.integration,
-		// An explicit `--merge` overrides the untrusted-origin build-propose rule (slice
+		// An explicit `--merge` overrides the untrusted-origin build-propose rule (task
 		// `untrusted-origin-forces-build-propose`); unset on the autonomous path so
 		// untrusted-origin reliably forces propose.
 		explicitMerge: options.explicitMerge,
 		// SCOPE: the divergence guard is in-place only. A job worktree is cut fresh off
 		// the bare mirror and never ff's the operator's local main, so the guard does
-		// not apply here — opt out explicitly (the slice: do NOT touch do --remote/run).
+		// not apply here — opt out explicitly (the task: do NOT touch do --remote/run).
 		ignoreDivergedMain: true,
 		prepare: options.prepare,
 		verify: options.verify,
@@ -2419,12 +2419,12 @@ async function primeWorktreeTrackingRef(
 }
 
 /**
- * Adapt the IN-PLACE {@link DoOptions} build/slice driver onto the WORKTREE-
- * ISOLATED {@link performDoRemote} pipeline (slice
+ * Adapt the IN-PLACE {@link DoOptions} build/task driver onto the WORKTREE-
+ * ISOLATED {@link performDoRemote} pipeline (task
  * `advance-loop-driver-registry-set-job-worktrees`) — the per-mirror job-worktree
  * `doDriver` the registry-set advance driver threads into the advance tick.
  *
- * The advance tick's build/slice rung ORCHESTRATES `do` by calling the
+ * The advance tick's build/task rung ORCHESTRATES `do` by calling the
  * {@link AdvanceContext.doDriver} seam with a resolved {@link DoOptions} (whose
  * `cwd` is the per-mirror in-place checkout). The DEFAULT driver is
  * {@link performDo} (in-place, the cwd checkout IS the isolation — the human-local
@@ -2434,17 +2434,17 @@ async function primeWorktreeTrackingRef(
  * {@link performDoRemote}, which materialises a hub mirror + job worktree off the
  * mirror's arbiter via the EXISTING `jobWorktreeStrategy` (no second isolation
  * mechanism), runs the SAME `do` pipeline there, and reaps per the §4 predicate.
- * The cwd checkout is NEVER touched (the equivalence the slice asserts vs plain
+ * The cwd checkout is NEVER touched (the equivalence the task asserts vs plain
  * `run`).
  *
  * The pipeline knobs (verify / integration / review family / agent launch /
  * identity) ride VERBATIM from the threaded `DoOptions` onto the structurally-
  * matching {@link DoRemoteOptions} fields; `cwd` is DROPPED (the worktree replaces
  * it) and `remote` + `workspacesDir` are supplied from this driver's closure (the
- * mirror's arbiter URL + the agents' execution area). A `prd:` arg flows through
- * unchanged — `performDoRemote` slices it against the claim clone with NO build
- * worktree (the slicing/surface/triage/apply rungs are tree-less ledger moves, the
- * substrate the slice's criterion 4 preserves).
+ * mirror's arbiter URL + the agents' execution area). A `brief:` arg flows through
+ * unchanged — `performDoRemote` tasks it against the claim clone with NO build
+ * worktree (the tasking/surface/triage/apply rungs are tree-less ledger moves, the
+ * substrate the task's criterion 4 preserves).
  */
 export function jobWorktreeDoDriver(closure: {
 	/** The mirror's arbiter URL (`git -C <mirror> remote get-url origin`) — `performDoRemote`'s `remote`. */

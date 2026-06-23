@@ -1,10 +1,10 @@
 /**
- * The pure `advance` TICK classifier (PRD `advance-loop`, slice
+ * The pure `advance` TICK classifier (brief `advance-loop`, task
  * `advance-tick-classifier`) — the substrate-agnostic, read-only seam BOTH the
  * one-shot driver and the loop (`run`) driver wrap. Mirrors the existing pure
  * `categorise.ts` / `eligibility.ts` seams: NO model, NO lock, NO file mutation
  * — it returns WHICH rung on WHICH item from EXACTLY two signals plus the item
- * type, and nothing executes here (the rung EXECUTION is later slices).
+ * type, and nothing executes here (the rung EXECUTION is later tasks).
  *
  * The two signals (and ONLY these two):
  *   1. the item's `needsAnswers` flag (from `frontmatter.ts`); and
@@ -14,8 +14,8 @@
  * The per-item state machine (the deterministic trigger — two signals only):
  *
  *   needsAnswers: true?
- *   ├─ NO  → ANALYSE (state-appropriate rung: build a ready slice / slice a ready
- *   │        PRD / triage an untriaged observation). Analysis MAY advance, OR
+ *   ├─ NO  → ANALYSE (state-appropriate rung: build a ready task / task a ready
+ *   │        brief / triage an untriaged observation). Analysis MAY advance, OR
  *   │        SURFACE questions.
  *   └─ YES → sidecar exists?
  *            ├─ NO  → ANALYSE (first pass: generate questions → write the sidecar)
@@ -39,8 +39,8 @@
  *
  * "ANALYSE" is NOT "always advance" — surface-and-pause is itself a rung, so the
  * ANALYSE branch resolves to the per-TYPE rung the executor will run (the cells
- * of the PRD's "Per-item-type transitions" table): `build-slice` (slice),
- * `slice-prd` (PRD), `triage-observation` (observation) when there are no open
+ * of the brief's "Per-item-type transitions" table): `build-slice` (task),
+ * `slice-prd` (brief), `triage-observation` (observation) when there are no open
  * questions; `surface` (first-pass question generation) when `needsAnswers` but
  * no sidecar yet; `apply` when all entries are answered.
  */
@@ -56,7 +56,7 @@ import {allAnswered} from './sidecar.js';
  * never a third state store.
  */
 export interface TickItem {
-	/** The item type — the state machine is per-TYPE (slice / PRD / observation). */
+	/** The item type — the state machine is per-TYPE (task / brief / observation). */
 	type: SidecarType;
 	/** Autonomy axis 2 (DISCOVERED): `true` ⇒ open questions block autonomous work. */
 	needsAnswers: boolean | undefined;
@@ -72,9 +72,9 @@ export interface TickItem {
  */
 export type TickRungKind =
 	// --- ANALYSE rungs (no open questions; advance one lifecycle rung) ---
-	/** A ready slice → build it (later: invoke the `do <slug>` machinery). */
+	/** A ready task → build it (later: invoke the `do <slug>` machinery). */
 	| 'build-slice'
-	/** A ready PRD → slice it (later: invoke the `do prd:<slug>` machinery). */
+	/** A ready brief → task it (later: invoke the `do brief:<slug>` machinery). */
 	| 'slice-prd'
 	/** An untriaged observation → triage it (auto-disposition or surface a question). */
 	| 'triage-observation'
@@ -126,7 +126,7 @@ const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
  * Classify ONE tick PURELY from the item's two signals + its type — read-only,
  * no model, no lock, no file mutation. Returns the classified rung the executor
  * will later run (or `no-op` / `invariant-violation`). The decision tree is the
- * PRD's per-item state machine, with invariant 1 asserted at the boundary:
+ * brief's per-item state machine, with invariant 1 asserted at the boundary:
  *
  *   - `needsAnswers` NOT true:
  *       - a sidecar present ⇒ INVARIANT 1 BROKEN (`sidecar-without-needsAnswers`)

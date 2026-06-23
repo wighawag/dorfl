@@ -23,7 +23,7 @@ import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
 /**
- * The **`advance` one-shot DRIVER** (PRD `advance-loop`, slice
+ * The **`advance` one-shot DRIVER** (brief `advance-loop`, task
  * `advance-drivers-and-gates`, US #2/7/23/25/26) — the SEQUENTIAL driver that
  * WRAPS the substrate-agnostic advance TICK ({@link performAdvance}) over named
  * item(s) or the bare eligible-SET form. It is the in-place counterpart of
@@ -49,19 +49,19 @@ import type {ConfigOverrideMap} from './config-override.js';
  *
  * **The FLAT per-action gate family (US #23)** falls out of the SELECTION layer,
  * exactly as it does for `do`: the eligible-pool scan only SURFACES a build item
- * when `autoBuild` is on and a slice-a-PRD item when `autoTask` is on (the gate
+ * when `autoBuild` is on and a task-a-brief item when `autoTask` is on (the gate
  * is a policy on the autonomous-SELECTION step, NOT on the explicit verb a human
  * typed — an explicitly-NAMED `advance <slug>` builds regardless, mirroring
- * `do <slice>` vs `autoBuild`). SURFACE + APPLY are ALWAYS allowed — they run
+ * `do <task>` vs `autoBuild`). SURFACE + APPLY are ALWAYS allowed — they run
  * through the tick on any named item and are never pool-gated, so a repo with
  * EVERY flag off still gets the QUESTION LOOP (surface + apply) but no autonomous
- * build/slice in the bare/`-n` selection ("question loop with zero autonomy").
+ * build/task in the bare/`-n` selection ("question loop with zero autonomy").
  * The triage rung's ask-vs-auto distinction (`observationTriage`) is read inside
  * the tick; its SELECTION-layer `off` gate drops the observation pool here.
  *
  * **Isolation + chaining FALL OUT (US #26):** this driver builds NO new isolation
  * or chaining machinery — it threads the SAME `AdvanceContext` the tick already
- * consumes (which orchestrates `do`/`do prd:` through the isolation-strategy seam
+ * consumes (which orchestrates `do`/`do brief:` through the isolation-strategy seam
  * and rebase-before-integrate); a chain conflict routes to needs-attention as
  * today, inside the orchestrated `do`.
  */
@@ -83,7 +83,7 @@ type SharedAdvanceContext = AdvanceContext;
 export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
 	 * The resolved repo config — provides `autoBuild` (the build gate for the
-	 * slice pool), `autoTask` (the slice-a-PRD gate for the PRD pool), and
+	 * task pool), `autoTask` (the task-a-brief gate for the brief pool), and
 	 * `selectionOrder` (the configurable cross-pool order). The per-action gate
 	 * family is APPLIED HERE, at the selection layer (the policy-on-autonomous-
 	 * selection point).
@@ -105,11 +105,11 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	count?: number;
 	/** Override the single-tick runner (tests inject a stub). Defaults to {@link performAdvance}. */
 	run?: AdvanceTickRunner;
-	/** Override the read seam (PRD pool); defaults to the active {@link ledgerRead}. */
+	/** Override the read seam (brief pool); defaults to the active {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/**
-	 * The LIFECYCLE-POOL create-gates (slice `advance-autopick-lifecycle-pools`),
-	 * the internal hook the gate slices (`observation-triage-tri-state-gate` /
+	 * The LIFECYCLE-POOL create-gates (task `advance-autopick-lifecycle-pools`),
+	 * the internal hook the gate tasks (`observation-triage-tri-state-gate` /
 	 * `surface-blockers-gate`) will wire to the `observationTriage` /
 	 * `surfaceBlockers` config read. INTERIM, born OFF: omitted ⇒ BOTH create-gates
 	 * OFF, so the triage + surface sub-pools contribute NOTHING and a bare/`-n`
@@ -137,24 +137,24 @@ export interface AdvanceMultiResult {
 }
 
 /**
- * The slice-pool caps for an in-place `advance` selection. `advance` (one-shot) is
+ * The task-pool caps for an in-place `advance` selection. `advance` (one-shot) is
  * per-repo + SEQUENTIAL, so the REAL bound is the requested `count`. We cap the
- * slice pool at "all eligible" and let {@link selectPrioritised}'s `count` trim
+ * task pool at "all eligible" and let {@link selectPrioritised}'s `count` trim
  * across both pools — identical to `do-autopick`'s {@link performDoAuto}.
  */
 const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Run the BARE / `-n <x>` form: build the two ELIGIBLE pools for `cwd` (eligible
- * SLICES gated by `autoBuild`, sliceable PRDs gated by `autoTask`), order them
+ * TASKS gated by `autoBuild`, taskable briefs gated by `autoTask`), order them
  * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
  * pinned first, take `count` (default 1), and run the EXISTING advance tick per
  * selected item, SEQUENTIALLY. The pools are the EXACT
  * `do-autopick` pools (the SAME `scoreItems`/`taskableBriefs` predicates), so the
  * per-action gate family is honoured by construction.
  *
- * The bare/`-n` selection draws ONLY from the autonomous pools (eligible slices +
- * sliceable PRDs); SURFACE + APPLY of a gated item are reached by NAMING the item
+ * The bare/`-n` selection draws ONLY from the autonomous pools (eligible tasks +
+ * taskable briefs); SURFACE + APPLY of a gated item are reached by NAMING the item
  * ({@link performAdvanceArgs}) — they are always-allowed and not pool-gated, so the
  * bare form with every flag off correctly selects NOTHING (zero autonomy) while a
  * named `advance <slug>` still surfaces/applies.
@@ -168,9 +168,9 @@ export async function performAdvanceAuto(
 	const cwd = options.cwd;
 	const count = options.count ?? 1;
 
-	// Pool 1 — eligible SLICES via the EXISTING scan/select path. `scoreItems`
+	// Pool 1 — eligible TASKS via the EXISTING scan/select path. `scoreItems`
 	// inside `scanRepoPaths` gates eligibility on `autoBuild` (the build gate), so
-	// with `autoBuild` off NO slice is selected — the build rung is never reached
+	// with `autoBuild` off NO task is selected — the build rung is never reached
 	// by the bare/`-n` selection.
 	const report = scanRepoPaths(
 		[cwd],
@@ -179,8 +179,8 @@ export async function performAdvanceAuto(
 		options.override,
 	);
 
-	// Pool 2 — SLICEABLE PRDs filtered by `autoslice-gate`'s predicate (gated on
-	// `autoTask`). With `autoTask` off NO PRD is selected — the slice rung is
+	// Pool 2 — TASKABLE briefs filtered by `autoslice-gate`'s predicate (gated on
+	// `autoTask`). With `autoTask` off NO brief is selected — the task rung is
 	// never reached by the bare/`-n` selection.
 	const pool = read.resolveBriefPool({repoPath: cwd});
 	const briefCandidates: BriefCandidate[] = pool.briefs.map((brief) => ({
@@ -197,7 +197,7 @@ export async function performAdvanceAuto(
 	});
 
 	// Pools 3 + 4 — the LIFECYCLE pools (untriaged observations + `needsAnswers`-
-	// blocked slices/PRDs + answered-sidecar items), built CALLER-SIDE (here, the
+	// blocked tasks/briefs + answered-sidecar items), built CALLER-SIDE (here, the
 	// `advance` caller) through the SHARED enumeration unit and passed in — NOT baked
 	// into `selectPrioritised` (so `do` is provably unchanged). The create-gates
 	// default OFF (interim hardcoded-off): triage + surface contribute nothing; the
@@ -225,7 +225,7 @@ export async function performAdvanceAuto(
 		// select. The question loop (surface/apply) is reached by NAMING an item, not
 		// the bare form — so this is calm-at-rest, NOT a failure.
 		const message =
-			'Nothing eligible to advance (no eligible slices and no sliceable PRDs ' +
+			'Nothing eligible to advance (no eligible tasks and no taskable briefs ' +
 			'under the per-action gates; name an item to surface/apply its questions).';
 		note(message);
 		return {results: [], exitCode: 0, message};
@@ -237,8 +237,8 @@ export async function performAdvanceAuto(
 /**
  * Run the EXPLICIT multi-arg form (`advance <a> <b> …`): the named items in the
  * GIVEN order (no pool/priority — the operator chose them). Each arg is run
- * through the existing advance tick, which itself resolves bare/`slice:`/`prd:`/
- * `obs:` (so a named PRD drives the slice rung, an `obs:` the triage rung, a
+ * through the existing advance tick, which itself resolves bare/`task:`/`brief:`/
+ * `obs:` (so a named brief drives the task rung, an `obs:` the triage rung, a
  * collision errors), SEQUENTIALLY. A NAMED item is the always-allowed path — its
  * surface/apply rung runs regardless of the per-action gates.
  */
@@ -260,8 +260,8 @@ export async function performAdvanceArgs(
 /**
  * Run a list of selected items through the existing advance tick, SEQUENTIALLY
  * (US #25 — `-n` is always sequential), threading the shared context to each. For
- * the pool path the arg encodes the namespace (`prd:<slug>` for a selected PRD,
- * bare slug for a slice); for the explicit-arg path the caller's raw arg is passed
+ * the pool path the arg encodes the namespace (`brief:<slug>` for a selected brief,
+ * bare slug for a task); for the explicit-arg path the caller's raw arg is passed
  * verbatim. Each tick is INDEPENDENTLY `advancing`-lock-guarded inside
  * {@link performAdvance} — sequential here means one item at a time, never a
  * parallelism knob.
@@ -294,7 +294,7 @@ async function runSelectedInSequence(
 
 /**
  * Run ONE in-place advance tick + ff-push a tree-less rung's result to the
- * arbiter — slice `advance-in-place-publishes-treeless-results`. Wraps the
+ * arbiter — task `advance-in-place-publishes-treeless-results`. Wraps the
  * substrate-agnostic tick ({@link AdvanceTickRunner}) with the shared
  * {@link pushTreelessResult} so a surfaced sidecar / `triaged:` marker /
  * applied-answer commit committed LOCALLY in the in-place cwd LANDS on the
@@ -304,11 +304,11 @@ async function runSelectedInSequence(
  *
  *   - gates PURELY on `result.exitCode === 0 && TREELESS_RUNGS.has(result.rung)
  *     && context.arbiter !== undefined` — the SAME gate the existing drivers
- *     use, no cleverer guard (a build/slice rung integrates through the
+ *     use, no cleverer guard (a build/task rung integrates through the
  *     `doDriver` band; a no-arbiter laptop checkout already sits on the real
  *     `main`);
  *   - reuses `pushTreelessResult` VERBATIM (its bounded re-fetch+rebase retry is
- *     LOAD-BEARING for a sequential `-n` batch that integrates a build/slice rung
+ *     LOAD-BEARING for a sequential `-n` batch that integrates a build/task rung
  *     mid-batch and then runs a later tree-less rung whose `HEAD:main` push is
  *     non-fast-forward by construction);
  *   - NEVER `--force`. A push that keeps failing (or a genuine rebase conflict)
@@ -354,16 +354,16 @@ export async function runAdvanceTickWithTreelessPublish(
 
 /**
  * The advance TICK arg for a pool-selected item — the SELECTION->ARG dispatch
- * (slice `advance-autopick-lifecycle-pools`, F-NAMESPACE). The `namespace`
+ * (task `advance-autopick-lifecycle-pools`, F-NAMESPACE). The `namespace`
  * discriminator the selection carried maps to the tick arg the tick then
  * classifies into the right rung:
  *   - `observation` → `obs:<slug>` (the triage rung; bare would resolve to a
- *     slice, so the `obs:` prefix is required);
- *   - `prd` → `prd:<slug>` (a sliceable PRD's slice rung, OR a `needsAnswers` PRD
+ *     task, so the `obs:` prefix is required);
+ *   - `brief` → `brief:<slug>` (a taskable brief's task rung, OR a `needsAnswers` brief
  *     the tick surfaces/applies);
- *   - `slice` → bare `<slug>` (an eligible slice's build rung, OR a `needsAnswers`
- *     slice the tick surfaces/applies).
- * The tick re-classifies each arg, so a `needsAnswers`-blocked slice/PRD reaches
+ *   - `task` → bare `<slug>` (an eligible task's build rung, OR a `needsAnswers`
+ *     task the tick surfaces/applies).
+ * The tick re-classifies each arg, so a `needsAnswers`-blocked task/brief reaches
  * surface/apply and an untriaged observation reaches triage — the classifier +
  * rung bodies are unchanged; only this selection->arg mapping is new.
  */

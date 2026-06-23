@@ -3,16 +3,16 @@ import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 /**
- * The CI-integration deliverable for the `advance` loop (PRD `advance-loop`,
- * slice `advance-install-ci`, US #27/28): the advance-loop CAPABILITY as a
- * DOCUMENTED workflow TEMPLATE (not a CLI subcommand; see the slice's `##
+ * The CI-integration deliverable for the `advance` loop (brief `advance-loop`,
+ * task `advance-install-ci`, US #27/28): the advance-loop CAPABILITY as a
+ * DOCUMENTED workflow TEMPLATE (not a CLI subcommand; see the task's `##
  * Decisions`). The template at `docs/ci/advance-loop.yml.template` wires "on cron
  * / on-answer-committed, run the RIGHT shape" and only INVOKES the existing
  * `advance` driver; it is NOT entangled with the tick.
  *
  * The unified, per-capability `install-ci` CLI (auth/secrets wizard + GitHub
- * adapter) is owned by the separate `runner-in-ci` PRD
- * (`work/prd/runner-in-ci.md`); when built it EMITS this template as its
+ * adapter) is owned by the separate `runner-in-ci` brief
+ * (`work/briefs/tasked/runner-in-ci.md`); when built it EMITS this template as its
  * advance-loop capability. This module's job is unchanged either way: locate +
  * STRUCTURALLY VALIDATE the template, so its shape is a contract the CLI can
  * safely emit (see `docs/ci/README.md` "Relationship to the `install-ci` CLI").
@@ -20,7 +20,7 @@ import {fileURLToPath} from 'node:url';
  * This module locates + reads that template and STRUCTURALLY VALIDATES it. The
  * package depends on NO YAML library (see `frontmatter.ts` for the same
  * constraint), so {@link validateAdvanceCiTemplate} checks the small set of
- * invariants the slice's acceptance criteria require directly:
+ * invariants the task's acceptance criteria require directly:
  *
  *   - triggers on a CRON schedule AND on-answer-committed (a push touching
  *     `work/questions/**`);
@@ -39,7 +39,7 @@ import {fileURLToPath} from 'node:url';
  *
  * The check is deliberately a set of presence/shape assertions over the raw text
  * rather than a full YAML parse — it is the dependency-free counterpart of "the
- * template parses + references the right driver invocations" the slice asks for.
+ * template parses + references the right driver invocations" the task asks for.
  */
 
 /** A single structural problem found in the template. */
@@ -100,7 +100,7 @@ export function loadAdvanceCiTemplate(override?: string): string {
 }
 
 /**
- * Structurally validate the advance-loop CI workflow template against the slice's
+ * Structurally validate the advance-loop CI workflow template against the task's
  * acceptance criteria. Dependency-free (no YAML lib): a set of presence/shape
  * assertions over the raw text.
  */
@@ -130,20 +130,20 @@ export function validateAdvanceCiTemplate(
 		text,
 	), 'the matrix items must be ENUMERATED via the mirror-side pool scan ' +
 		'(`agent-runner scan --json`).');
-	// The `enumerate` `jq` must UNION sliceable BRIEFS into the matrix
+	// The `enumerate` `jq` must UNION taskable briefs into the matrix
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK` dead on the hourly
 	// cron — a ready ungated BRIEF would never become a matrix leg. The `jq` must
-	// read `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+	// read `scan --json`'s taskable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
 	// and emit `brief:<slug>` legs alongside the `task:<slug>` legs.
 	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
 		text,
 	) &&
 		/\.prds\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union sliceable BRIEFS into the ' +
+		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +
 		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-slice ' +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-task ' +
 		'matrix leg alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 	require('propose-one-advance-per-item', /agent-runner advance "?\$\{\{\s*matrix\./.test(

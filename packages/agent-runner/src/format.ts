@@ -105,7 +105,7 @@ function cwdDivergenceLine(
 
 /**
  * Render the CWD-LOCAL section of `scan`/`status` (the `scan-status-read-cwd-repo`
- * slice): a DISTINCT, separately-counted block for the CURRENT repo, read from
+ * task): a DISTINCT, separately-counted block for the CURRENT repo, read from
  * the LOCAL WORKING TREE (NOT the registry's bare mirror ref). Returns `[]` when
  * the cwd does NOT participate (no local section). The section LABELS its source
  * + freshness, shows the divergence-vs-arbiter (`main-divergence-guard` framing),
@@ -185,7 +185,7 @@ export function formatCwdSection(section: CwdSection): string[] {
 export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 	const lines: string[] = [];
 
-	// The cwd-local section (the `scan-status-read-cwd-repo` slice): a DISTINCT,
+	// The cwd-local section (the `scan-status-read-cwd-repo` task): a DISTINCT,
 	// separately-counted block for the CURRENT repo, ABOVE the registry view.
 	const cwdLines = cwd !== undefined ? formatCwdSection(cwd) : [];
 	if (cwdLines.length > 0) {
@@ -223,7 +223,7 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 		const groups = categoriseItems(repo.items);
 		allGroups.push(groups);
 		lines.push(...formatRepo(repo.path, groups));
-		// The one-slug-one-folder LINT (PRD `ledger-integrity` story 3): WARN LOUDLY
+		// The one-slug-one-folder LINT (brief `ledger-integrity` story 3): WARN LOUDLY
 		// when any slug in this repo's ledger resides in >1 status folder (a corrupt
 		// ledger — never a silent pass). Clean ledgers add no lines.
 		const warnings = formatDuplicateWarnings(repo.ledgerDuplicates ?? []);

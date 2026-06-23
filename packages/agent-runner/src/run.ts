@@ -190,8 +190,8 @@ export type ItemStatus =
 	| 'surface-unmoved' // the tree-less surface to needs-attention did NOT land on the arbiter (lost the CAS race / no arbiter) — the item is STILL in-progress on the arbiter; retry/resolve
 	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown
 	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
-	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the slice (FAILURE-CAUSE axis)
-	| 'agent-stopped'; // the agent DELIBERATELY stopped (slice drifted) OR produced no change — gate + Gate-2 skipped
+	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the task (FAILURE-CAUSE axis)
+	| 'agent-stopped'; // the agent DELIBERATELY stopped (task drifted) OR produced no change — gate + Gate-2 skipped
 
 export interface ItemResult {
 	repoPath: string;
@@ -379,7 +379,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 	// claim-vs-integrate race: a sibling same-repo CLAIM advances `<arbiter>/main`
 	// under the SEPARATE `claimLock` (above), which can land INSIDE this job's
 	// integrate push window. That is closed independently by the integrator's
-	// bounded re-rebase-and-retry on a non-fast-forward merge push (slice
+	// bounded re-rebase-and-retry on a non-fast-forward merge push (task
 	// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`, Race 1) — the
 	// two locks are NOT merged (merging would serialise the cheap claim behind the
 	// slow gated integrate, killing run's parallelism), the retry handles the
@@ -581,7 +581,7 @@ async function runOneItem(
 	//    an absent `providers.github` identity falls back to AMBIENT `gh` auth (the
 	//    probe reports it available), so a working ambient setup PROCEEDS. A true
 	//    result returns a CLEAN PRE-CLAIM item result on the `config-error` failure-
-	//    cause status (a wiring/config failure, NOT a slice fault), with NO claim,
+	//    cause status (a wiring/config failure, NOT a task fault), with NO claim,
 	//    build, or half-built needs-attention surface — and it never crashes the tick
 	//    or aborts siblings (the result is returned; `runConcurrent` continues).
 	//    REUSES the predicate + message so the in-place + autonomous paths cannot
@@ -613,7 +613,7 @@ async function runOneItem(
 	}
 
 	// 0b. STATIC fresh-worktree-gate readiness guard — the fleet mirror of
-	//     `performDo` step 3d / `performDoRemote` step 1c (slice
+	//     `performDo` step 3d / `performDoRemote` step 1c (task
 	//     `do-fails-fast-when-acceptance-gate-statically-unrunnable`). When the
 	//     fresh-worktree gate is ON AND `prepare` resolves to no commands AND a
 	//     lockfile is present in the repo, the throwaway worktree the gate runs in
@@ -622,7 +622,7 @@ async function runOneItem(
 	//     fleet tick never burns a build to discover a STATIC config gap and never
 	//     routes correct work to needs-attention for this reason. Surfaced on the
 	//     same `config-error` axis the PR-intent guard above uses (a wiring/config
-	//     fault, not a slice fault). The repo discovery is either a working checkout
+	//     fault, not a task fault). The repo discovery is either a working checkout
 	//     (in-place tests) OR a BARE hub mirror (production fleet); detect the
 	//     lockfile from whichever shape `repoPath` is. Deps-only — there is no
 	//     verify-unset case (the gate substitutes `DEFAULT_VERIFY_COMMAND`).
@@ -738,7 +738,7 @@ async function runOneItem(
 		//     FAILED terminally (stale-lease cap exhausted, or a non-stale-lease
 		//     rejection / unreachable arbiter). The push helper THROWS; `createJob`
 		//     CATCHES it and flags `continuePushFailure` so the tick does NOT crash
-		//     leaving the slice silently in-progress on the arbiter. Surface to
+		//     leaving the task silently in-progress on the arbiter. Surface to
 		//     needs-attention TREE-LESSLY via the SAME `#89` mechanism `requeue` uses —
 		//     the kept branch already on the arbiter from the prior requeue
 		//     (after-commit, recoverable), so the surface is purely the one-file ledger
@@ -765,11 +765,11 @@ async function runOneItem(
 		}
 
 		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
-		//    emits: the canonical wrapper (+ source PRD) + the slice's ## Prompt.
+		//    emits: the canonical wrapper (+ source brief) + the task's ## Prompt.
 		let prompt: string;
 		try {
 			// CONTINUE-aware resolution: only on a continue (the job continued a kept
-			// arbiter `work/<slug>`) may the slice already be in `work/done/`; admit
+			// arbiter `work/<slug>`) may the task already be in `work/done/`; admit
 			// `done/` ONLY behind the tip-vs-arbiter stranded gate (story 5). In a bare
 			// hub mirror's worktree the refs are the LOCAL heads `work/<slug>` / `main`.
 			const task = resolveTask(
@@ -784,7 +784,7 @@ async function runOneItem(
 						}
 					: undefined,
 			);
-			// CONTINUE-mode (the `agent-prompt-continue-context` slice): when the job
+			// CONTINUE-mode (the `agent-prompt-continue-context` task): when the job
 			// CONTINUED a kept arbiter `work/<slug>` (a requeue), inject the continue
 			// block (prior diff + reason + handoff note). REUSE the SAME continue-
 			// detection — in a bare hub mirror's worktree the refs are the LOCAL heads
@@ -854,9 +854,9 @@ async function runOneItem(
 			);
 		}
 
-		// 4b. HONOR a deliberate STOP (slice `agent-stop-signal`) — the SAME detection
+		// 4b. HONOR a deliberate STOP (task `agent-stop-signal`) — the SAME detection
 		//     in-place/remote `do` run, mirrored here. The agent exited cleanly but the
-		//     CLAIM-PROTOCOL wrapper tells it to STOP on a DRIFTED/ambiguous slice; an
+		//     CLAIM-PROTOCOL wrapper tells it to STOP on a DRIFTED/ambiguous task; an
 		//     in-band sentinel carries its reason VERBATIM, and the empty-diff backstop
 		//     catches a stop without one. Either routes to needs-attention (surfaced on
 		//     the arbiter) and SKIPS the gate + Gate-2 (the whole `performIntegration`
@@ -879,7 +879,7 @@ async function runOneItem(
 		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
 		// integrate band — plus the needs-attention routing on any failure — now runs
 		// through the SHARED `performIntegration` core (`integration-core.ts`, the
-		// run/do convergence PRD). `run` no longer forks its own gate / done-move /
+		// run/do convergence brief). `run` no longer forks its own gate / done-move /
 		// completion commit / `Integrator`+`integrateWithRebase`: that closed all
 		// three drift instances at once (the fleet now gets the review gate, the PR
 		// title/body, AND the per-repo language-agnostic `verify` gate instead of the
@@ -922,9 +922,9 @@ async function runOneItem(
 				// `defaultArbiter` name.
 				arbiter: tree.arbiterRemote,
 				slug,
-				// Claim no longer moves the body (slice
+				// Claim no longer moves the body (task
 				// `cutover-claim-body-stays-and-complete-sources-from-backlog`): a
-				// freshly-built slice RESTS in `tasks/todo/` on `main`, so the done-move
+				// freshly-built task RESTS in `tasks/todo/` on `main`, so the done-move
 				// sources from there.
 				source: 'tasks-todo',
 				recovering: false,
@@ -939,12 +939,12 @@ async function runOneItem(
 				// `verify` on the fresh job worktree so it has deps (a fresh worktree off
 				// the mirror has no `node_modules`). Unset ⇒ a no-op; never baked into verify.
 				prepare: config.prepare,
-				// FRESH-WORKTREE GATE (slice `gate-on-rebased-tip-fresh-worktree`): run the
+				// FRESH-WORKTREE GATE (task `gate-on-rebased-tip-fresh-worktree`): run the
 				// acceptance gate against the REBASED tip in a clean throwaway worktree (the
 				// tree that integrates) so a green gate provably describes the merged
 				// artifact. Passed UNCONDITIONALLY (the resolved flag) at ANY `perRepoMax`:
 				// the two PRE-EXISTING run-fleet same-repo races the gate's latency used to
-				// make deterministic are now CLOSED on their own merits (slice
+				// make deterministic are now CLOSED on their own merits (task
 				// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`) — RACE 1
 				// (claim-vs-integrate non-fast-forward push) by the integrator's bounded
 				// re-rebase-and-retry on the merge push, RACE 2 (sibling-slug divergent-base
@@ -977,8 +977,8 @@ async function runOneItem(
 				integrateLock: ctx.integrateLock,
 				integrateLockKey: repoPath,
 				// Half A/B: the synthesised single-line title + the agent's surfaced
-				// final summary as the PR body (the core scaffolds the slice-pointer
-				// header). `title` is synthesised inside the core from the slice's
+				// final summary as the PR body (the core scaffolds the task-pointer
+				// header). `title` is synthesised inside the core from the task's
 				// frontmatter; `body` is the agent output (undefined ⇒ `--fill`).
 				body: agent.output,
 				env: gitEnv,
@@ -1071,7 +1071,7 @@ function runAgent(
 	if (ctx.agentRunner) {
 		return ctx.agentRunner({cwd: tree.dir, prompt, slug, env: ctx.env});
 	}
-	// Generate the full pi session-FILE path (slice `session-path-pi-default`):
+	// Generate the full pi session-FILE path (task `session-path-pi-default`):
 	// `<sessionsDir>/<work-id>-<unique>.jsonl`, or pi's per-cwd default folder when
 	// `sessionsDir` is unset. The work-id (arbiter URL + slug) is `run`'s natural
 	// unique-per-claim id. Threaded through the seam so the pi adapter passes
@@ -1198,7 +1198,7 @@ function surfaceUnmovedItemResult(params: {
 }
 
 /**
- * Route a DELIBERATE agent STOP (slice `agent-stop-signal`) to needs-attention
+ * Route a DELIBERATE agent STOP (task `agent-stop-signal`) to needs-attention
  * through the SAME work-preserving seam `saveAgentFailure` uses, but as the
  * DISTINCT `agent-stopped` status (NOT `agent-failed` — the agent did not error;
  * NOT `tests-failed`/`needs-attention` — there was no red gate / rebase conflict).
@@ -1234,10 +1234,10 @@ export function defaultRunWorkspace(): string {
 
 /**
  * One supervised TICK over the registry, as a swappable unit. Today the tick IS
- * `runOnce` (claim+build+integrate a concurrent batch of eligible SLICES). The
+ * `runOnce` (claim+build+integrate a concurrent batch of eligible TASKS). The
  * loop ({@link runLoop}) is deliberately written against this signature — NOT
- * against `runOnce` directly — so the advance-loop PRD can later swap the tick
- * (build / slice / triage / surface / apply) WITHOUT re-architecting the loop
+ * against `runOnce` directly — so the advance-loop brief can later swap the tick
+ * (build / task / triage / surface / apply) WITHOUT re-architecting the loop
  * (the forward-pointer: the loop owns concurrency/scheduling, the tick owns one
  * item's work). The loop never reaches inside a tick.
  */

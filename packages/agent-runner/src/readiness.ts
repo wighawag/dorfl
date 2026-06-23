@@ -5,18 +5,18 @@ import {ledgerRead} from './ledger-read.js';
 /**
  * The pre-claim readiness guard for the HUMAN `start` / `claim` path. Today the
  * human path decides purely on the FOLDER on `<arbiter>/main` (is the slug in
- * `backlog/`?) and never parses the slice's frontmatter — so it will happily
- * claim a slice whose `blockedBy` deps are not yet in `work/done/`, or one
+ * `backlog/`?) and never parses the task's frontmatter — so it will happily
+ * claim a task whose `blockedBy` deps are not yet in `work/done/`, or one
  * flagged `needsAnswers: true`. The autonomous `run --once` path already filters
  * these out (scan → eligibility → select); this closes that asymmetry for the
  * human path.
  *
- * It reads the SAME source of truth the folder check uses — the slice file and
+ * It reads the SAME source of truth the folder check uses — the task file and
  * the `work/done/` listing on `<arbiter>/main` — and resolves `blockedBy` with
  * the shared {@link resolveBlockedBy} (no reimplemented dep resolution).
  *
  * The two axes are deliberately treated differently (see WORK-CONTRACT and the
- * slice brief):
+ * task brief):
  *
  *   - `blockedBy` unmet is a FACTUAL prerequisite (the dep work does not exist
  *     yet) → REFUSE by default. An override flag is the human escape hatch.
@@ -37,7 +37,7 @@ export interface ReadinessVerdict {
 	refuse: boolean;
 	/** Blocker slugs not present in `work/done/` on the arbiter, in order. */
 	missing: string[];
-	/** Whether the slice declares `needsAnswers: true`. */
+	/** Whether the task declares `needsAnswers: true`. */
 	needsAnswers: boolean;
 	/**
 	 * `true` when an override flag was supplied (the refusal is bypassed and the
@@ -60,24 +60,24 @@ export interface ResolveReadinessOptions {
 }
 
 /**
- * Resolve the readiness of a slice against `<arbiter>/main`. PURE w.r.t. the
- * work tree — it reads only committed objects on the arbiter (the slice file and
+ * Resolve the readiness of a task against `<arbiter>/main`. PURE w.r.t. the
+ * work tree — it reads only committed objects on the arbiter (the task file and
  * the `work/done/` listing), the same source of truth the folder check uses.
  *
  * Assumes the caller has already fetched the arbiter (the human path fetches
- * before deciding on the folder). Missing/unparseable slice frontmatter degrades
+ * before deciding on the folder). Missing/unparseable task frontmatter degrades
  * to "no blockers, no needsAnswers" — the folder check, not this guard, owns the
- * "slice exists / is in backlog" decision.
+ * "task exists / is in backlog" decision.
  */
 export async function resolveReadiness(
 	options: ResolveReadinessOptions,
 ): Promise<ReadinessVerdict> {
 	const {slug, cwd, arbiter, override, env} = options;
 
-	// Resolve the slice + `work/done/` from `<arbiter>/main` THROUGH the read
+	// Resolve the task + `work/done/` from `<arbiter>/main` THROUGH the read
 	// seam's arbiter method — the single insertion point. Same source of truth the
 	// folder check uses; behaviour is byte-identical to the inline reads it
-	// replaced (slice from `backlog/` or `in-progress/`, done slugs from the tree).
+	// replaced (task from `backlog/` or `in-progress/`, done slugs from the tree).
 	const {task, doneSlugs} = await ledgerRead.resolveArbiterState({
 		slug,
 		cwd,

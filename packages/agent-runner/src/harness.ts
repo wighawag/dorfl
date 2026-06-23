@@ -10,10 +10,10 @@ import {spawnSync} from 'node:child_process';
  * mtime would mistake a thinking agent for a dead one. Adapters answer liveness
  * from the real signal (the PID, a session handle, …) — never mtime.
  *
- * This slice ships the **null adapter** (records a PID, runs a configured
+ * This task ships the **null adapter** (records a PID, runs a configured
  * command) so the substrate is testable standalone. The first real target (the
  * `pi` adapter: liveness via PID + a pointer to the pi session dir/log,
- * invocation via the pi CLI) is its own slice.
+ * invocation via the pi CLI) is its own task.
  */
 
 /**
@@ -65,7 +65,7 @@ export interface LaunchInput {
 }
 
 /**
- * What a harness needs to launch one item's harness INTERACTIVELY (slice
+ * What a harness needs to launch one item's harness INTERACTIVELY (task
  * `agent-interactive-launch`): a FOREGROUND human session in `dir`, inherited
  * stdio, NO prepared prompt. This is the OPPOSITE shape to {@link LaunchInput}
  * (which feeds a prompt on stdin and captures output for the autonomous path):
@@ -171,7 +171,7 @@ export interface LaunchResult {
 	/** Failure detail when `ok` is false (the stderr/failure channel). */
 	detail?: string;
 	/**
-	 * The agent's final ANSWER (slice `harness-agent-output`): the concatenated
+	 * The agent's final ANSWER (task `harness-agent-output`): the concatenated
 	 * `text` of the LAST assistant turn the invocation produced. This is the
 	 * channel for the agent's OUTPUT on success — DISTINCT from {@link detail},
 	 * which is the failure/`stderr` channel. `undefined` when the invocation
@@ -198,7 +198,7 @@ export interface Harness {
 	/** Launch the job's command; record the PID + liveness pointer. */
 	launch(input: LaunchInput): LaunchResult;
 	/**
-	 * Launch the harness INTERACTIVELY (slice `agent-interactive-launch`): a
+	 * Launch the harness INTERACTIVELY (task `agent-interactive-launch`): a
 	 * FOREGROUND human session in `input.dir` with INHERITED stdio and NO prepared
 	 * prompt — the human drives it, and control returns when they exit. This is
 	 * the human-facing counterpart to the autonomous {@link launch}; it is NOT a

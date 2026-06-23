@@ -5,7 +5,7 @@ import {resolvePrepareCommands, type PrepareConfig} from './prepare.js';
 
 /**
  * Pre-claim / pre-build startup GUARD for the fresh-worktree acceptance gate
- * (slice `do-fails-fast-when-acceptance-gate-statically-unrunnable`).
+ * (task `do-fails-fast-when-acceptance-gate-statically-unrunnable`).
  *
  * The fresh-worktree gate (`gate-on-rebased-tip-fresh-worktree`, ON by default)
  * runs `prepare` then `verify` in a CLEAN throwaway worktree with NO

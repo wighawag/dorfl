@@ -17,8 +17,8 @@ import {
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
- * **Per-repo TASK-PLACEMENT default** (PRD
- * `staging-pool-position-gate-and-trust-model`, slice
+ * **Per-repo TASK-PLACEMENT default** (brief
+ * `staging-pool-position-gate-and-trust-model`, task
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
  * folder the runner lands the tasker's emitted task files in BY DEFAULT —
@@ -26,7 +26,7 @@ export type IntegrationMode = 'propose' | 'merge';
  * POOL; a runner/human promotion is needed to make an item claimable; the on-disk
  * folder for this value is `work/tasks/backlog/`) or `'todo'` (the agent-eligible
  * POOL — the trusted fast-path landing, on-disk `work/tasks/todo/`). The pool
- * value was RENAMED from `'backlog'` to `'todo'` (slice
+ * value was RENAMED from `'backlog'` to `'todo'` (task
  * `f1-pool-noun-todo-in-surface-and-apply-readers`) so `backlog` stops meaning two
  * things in the readers. The runner-deterministic
  * placement RESOLVER (`src/placement.ts`) layers on top: `explicit operator flag
@@ -38,8 +38,8 @@ export type IntegrationMode = 'propose' | 'merge';
 export type TasksLandIn = 'pre-backlog' | 'todo';
 
 /**
- * **Per-repo BRIEF-PLACEMENT default** (PRD
- * `staging-pool-position-gate-and-trust-model`, slice
+ * **Per-repo BRIEF-PLACEMENT default** (brief
+ * `staging-pool-position-gate-and-trust-model`, task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
  * folder the runner lands `intake`-authored brief files in BY DEFAULT —
@@ -150,9 +150,9 @@ export function resolvePromptGuidance(cfg: Config): PromptGuidance {
  */
 export interface Config {
 	/**
-	 * Per-repo policy: may agents auto-BUILD *undeclared* (not `humanOnly`) slices
+	 * Per-repo policy: may agents auto-BUILD *undeclared* (not `humanOnly`) tasks
 	 * in this repo? `false` (default, strict) ⇒ agents claim nothing automatically;
-	 * `true` ⇒ agents may claim any slice that is not `humanOnly: true`. Resolved
+	 * `true` ⇒ agents may claim any task that is not `humanOnly: true`. Resolved
 	 * like `integration`: flag (`--auto-build`/`--no-auto-build`) > `AGENT_RUNNER_AUTO_BUILD`
 	 * env > per-repo > global > default. The build member of the per-action gate family
 	 * (`autoBuild`/`autoTask` + the question-surfacing gates `observationTriage`/
@@ -202,7 +202,7 @@ export interface Config {
 	 * Per-repo policy governing DECLARED blocked work — the BOOLEAN member of the
 	 * question-surfacing gate family (its orthogonal PEER is `observationTriage`,
 	 * which governs the raw observation INBOX; ADR `ci-config-policy-and-gate-family`
-	 * §2). It gates whether a slice/PRD carrying `needsAnswers: true` is rendered
+	 * §2). It gates whether a task/brief carrying `needsAnswers: true` is rendered
 	 * into an answerable question sidecar (`on`) or left silently blocked in the
 	 * backlog (`off`). `false` (default, calm) ⇒ the `needsAnswers`-blocked pool is
 	 * dropped from the auto-pick SELECTION, so a bare `advance` does NOT proactively
@@ -239,7 +239,7 @@ export interface Config {
 	surfaceStaging: boolean;
 	/**
 	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
-	 * eligible slices, `slice` = sliceable PRDs, `surface` = `needsAnswers`
+	 * eligible tasks, `slice` = taskable briefs, `surface` = `needsAnswers`
 	 * blockers, `triage` = untriaged observations). `apply` (consume a committed
 	 * answer) is PINNED FIRST and is NOT orderable (consume-always-wins). The value
 	 * is EITHER a PRESET keyword (`drain` (default) ⇒ `[build, slice, surface,
@@ -308,31 +308,31 @@ export interface Config {
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (PRD
-	 * `staging-pool-position-gate-and-trust-model` US #5, slice
+	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (brief
+	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved
-	 * per-repo EXACTLY like {@link taskingIntegration} (flag `--slices-land-in`
+	 * per-repo EXACTLY like {@link taskingIntegration} (flag `--tasks-land-in`
 	 * > env `AGENT_RUNNER_TASKS_LAND_IN` > per-repo > global > built-in
 	 * `'pre-backlog'`). The tasking path reads it and passes it as the
 	 * CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order. The
-	 * tasker NEVER sets placement itself. PRD US #6 / the governing ADR: the
+	 * tasker NEVER sets placement itself. Brief US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it.
 	 */
 	tasksLandIn: TasksLandIn;
 	/**
-	 * **Per-repo DEFAULT landing for `intake`-authored brief files** (PRD
-	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12, slice
+	 * **Per-repo DEFAULT landing for `intake`-authored brief files** (brief
+	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12, task
 	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The BRIEF twin of
 	 * {@link tasksLandIn}: resolved per-repo EXACTLY like it (flag
-	 * `--prds-land-in` > env `AGENT_RUNNER_BRIEFS_LAND_IN` > per-repo > global >
+	 * `--briefs-land-in` > env `AGENT_RUNNER_BRIEFS_LAND_IN` > per-repo > global >
 	 * built-in `'pre-proposed'`). `intake`'s brief dispatch reads it and passes it as
 	 * the CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order.
-	 * `intake` NEVER sets placement itself. PRD US #6 / the governing ADR: the
+	 * `intake` NEVER sets placement itself. Brief US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
@@ -354,7 +354,7 @@ export interface Config {
 	 */
 	noPR: boolean;
 	/**
-	 * The command the runner shells out to for one slice. The runner appends the
+	 * The command the runner shells out to for one task. The runner appends the
 	 * built prompt on stdin; the command does NO git ops on the repo (the runner
 	 * owns those). Empty string ⇒ no agent configured (run will refuse). Consumed
 	 * by the **null** harness adapter (it shells out to this verbatim); the **pi**
@@ -421,7 +421,7 @@ export interface Config {
 	prepare?: VerifyConfig;
 	/**
 	 * The per-repo acceptance gate run by `agent-runner verify` (a deterministic
-	 * shell command, or an ordered list of commands). NOT per-slice and NOT model-
+	 * shell command, or an ordered list of commands). NOT per-task and NOT model-
 	 * interpreted — it is declared, auditable config (ADR §8). Unset (omitted) ⇒
 	 * a sensible `pnpm -r build && test && format:check` default; the field is
 	 * intentionally optional so "unset" is distinguishable from "empty". Install
@@ -431,7 +431,7 @@ export interface Config {
 	 */
 	verify?: VerifyConfig;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`): run the
+	 * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`): run the
 	 * `review` SKILL as a fresh-context judgement gate ON TOP of the deterministic
 	 * `verify` floor, AFTER `verify` passes and BEFORE the done-move, on the
 	 * `do`/`complete` path. Default **OFF** (it puts a model on the merge path —
@@ -466,36 +466,36 @@ export interface Config {
 	 */
 	reviewMaxRounds: number;
 	/**
-	 * **The slicer IMPROVER loop on/off toggle** (`--slicer-loop` /
-	 * `--no-slicer-loop`). On the `do prd:<slug>` slicing path the improver loop is
-	 * the slice path's quality engine (auto-slicing has no `verify` floor), so it is
+	 * **The tasker IMPROVER loop on/off toggle** (`--tasker-loop` /
+	 * `--no-tasker-loop`). On the `do brief:<slug>` tasking path the improver loop is
+	 * the task path's quality engine (auto-tasking has no `verify` floor), so it is
 	 * ON by default; setting this false gates wiring the loop seam (the candidate
-	 * slices land as-is). Resolved per-repo like `integration`: flag
-	 * (`--slicer-loop`/`--no-slicer-loop`) > env > per-repo > global > default (on).
+	 * tasks land as-is). Resolved per-repo like `integration`: flag
+	 * (`--tasker-loop`/`--no-tasker-loop`) > env > per-repo > global > default (on).
 	 * DISTINCT from the acceptance gate's `review` toggle.
 	 */
 	taskerLoop: boolean;
 	/**
-	 * **The slicer IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
-	 * GATES PRD `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point
-	 * A). On the `do prd:<slug>` slicing path, AFTER the agent produces candidate
-	 * slices the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
+	 * **The tasker IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
+	 * GATES brief `work/briefs/tasked/review.md` RESOLVED DESIGN — Shape 2 / insertion point
+	 * A). On the `do brief:<slug>` tasking path, AFTER the agent produces candidate
+	 * tasks the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
 	 * until a pass finds no NEW blocking issue (the natural terminator).
-	 * `slicerLoopMax` is the HARD CAP on the in-context review passes (N) so the
+	 * `taskerLoopMax` is the HARD CAP on the in-context review passes (N) so the
 	 * loop can never run forever; on hitting it WITH unresolved blockers the loop
 	 * REJECTS via the needsAnswers / needs-attention sink. It lives on the LOOP,
 	 * never on a gate (the orphaned `reviewMaxRounds` belongs to the Gate-2 path —
 	 * separate cleanup). A cheap default (3). Resolved per-repo like `integration`:
-	 * flag (`--slicer-loop-max`) > env > per-repo > global > default. Distinct from
+	 * flag (`--tasker-loop-max`) > env > per-repo > global > default. Distinct from
 	 * Gate-2's `reviewMaxRounds`.
 	 */
 	taskerLoopMax: number;
 	/**
-	 * The model the slicer IMPROVER loop's review agent runs on (de-correlation
-	 * from the slicer). Optional with NO default so "unset" means "no forced model"
+	 * The model the tasker IMPROVER loop's review agent runs on (de-correlation
+	 * from the tasker). Optional with NO default so "unset" means "no forced model"
 	 * (the harness's own default). Carried to the review-agent launch through the
 	 * EXISTING harness seam (`LaunchInput.model` / `substituteModel`). Resolved like
-	 * `model`: flag (`--slicer-loop-model`) > env > per-repo > global > default
+	 * `model`: flag (`--tasker-loop-model`) > env > per-repo > global > default
 	 * (unset). DISTINCT from the acceptance gate's `reviewModel` (build
 	 * `--review-model`).
 	 */
@@ -514,17 +514,17 @@ export interface Config {
 	 * exactly as before (the PRE-rebase gate) — the opt-out for when the per-gate
 	 * install cost is too high. The throwaway gate worktree is fresh (no deps), so
 	 * `prepare` runs in it before `verify` (the per-gate install cost the opt-out
-	 * exists for). Modelled EXACTLY on `slicerLoop`: a POSITIVE boolean, default
+	 * exists for). Modelled EXACTLY on `taskerLoop`: a POSITIVE boolean, default
 	 * ON, `--no-` negation. Resolved per-repo like `integration`: flag
 	 * (`--fresh-worktree-gate`/`--no-fresh-worktree-gate`) > env > per-repo >
-	 * global > default (on). DISTINCT from `review`/`slicerLoop` (a separate
+	 * global > default (on). DISTINCT from `review`/`taskerLoop` (a separate
 	 * concern: WHICH tree the gate runs against, not whether a review runs).
 	 *
 	 * The shared gate→integrate band (`performIntegration`) simply HONOURS the
 	 * boolean it is handed (caller-agnostic). The `run` FLEET caller passes
 	 * `(resolvedFlag && perRepoMax === 1)` so the fresh gate is used only when
 	 * same-repo concurrency is OFF (two pre-existing run-fleet races would
-	 * otherwise fire at `perRepoMax > 1`; they are their own slice). Single-job
+	 * otherwise fire at `perRepoMax > 1`; they are their own task). Single-job
 	 * callers (`do` in-place / `--isolated` / `--remote` / `complete`) pass the
 	 * resolved flag UNCONDITIONALLY.
 	 */
@@ -628,9 +628,9 @@ export const DEFAULT_CONFIG: Config = {
 	// pool-only surface behaviour.
 	surfaceStaging: true,
 	// The `drain` selection-order preset by default (ADR `ci-config-policy-and-gate-
-	// family`, selection-order section): drain ready work (build eligible slices →
-	// slice sliceable PRDs) before creating/asking (surface → triage); `apply` is
-	// always first. Reproduces today's slices-first two-pool default. Subsumes the
+	// family`, selection-order section): drain ready work (build eligible tasks →
+	// task taskable briefs) before creating/asking (surface → triage); `apply` is
+	// always first. Reproduces today's tasks-first two-pool default. Subsumes the
 	// removed `prdsFirst` boolean (`[slice, build, ...]` reproduces `prdsFirst: true`).
 	selectionOrder: DEFAULT_SELECTION_ORDER,
 	maxParallel: 4,
@@ -648,7 +648,7 @@ export const DEFAULT_CONFIG: Config = {
 	// conservative landing that preserves the tracer task's behaviour: an item is
 	// durable + readable but NOT in the agent-eligible pool until a human/runner
 	// promotes it. A repo opts into the trusted fast-path with `tasksLandIn:
-	// 'todo'` (or `--slices-land-in todo` / `AGENT_RUNNER_TASKS_LAND_IN=todo`).
+	// 'todo'` (or `--tasks-land-in todo` / `AGENT_RUNNER_TASKS_LAND_IN=todo`).
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	tasksLandIn: 'pre-backlog',
@@ -656,7 +656,7 @@ export const DEFAULT_CONFIG: Config = {
 	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a brief is
 	// durable + readable but NOT in the auto-tasking POOL until a human/runner
 	// promotes it. A repo opts into the trusted fast-path with `briefsLandIn: 'ready'`
-	// (or `--prds-land-in ready` / `AGENT_RUNNER_BRIEFS_LAND_IN=ready`). The same
+	// (or `--briefs-land-in ready` / `AGENT_RUNNER_BRIEFS_LAND_IN=ready`). The same
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	briefsLandIn: 'pre-proposed',
@@ -667,11 +667,11 @@ export const DEFAULT_CONFIG: Config = {
 	// The loop bound is a small N so an unattended revise↔review can never run forever.
 	review: false,
 	reviewMaxRounds: 2,
-	// The slicer improver loop is ON by default — auto-slicing has no `verify`
-	// floor, so the loop is the slice path's quality engine (distinct from the
+	// The tasker improver loop is ON by default — auto-tasking has no `verify`
+	// floor, so the loop is the task path's quality engine (distinct from the
 	// acceptance gate's `review`, which defaults OFF).
 	taskerLoop: true,
-	// The slicer improver loop's hard cap on in-context review passes — a cheap
+	// The tasker improver loop's hard cap on in-context review passes — a cheap
 	// default so an unattended review→edit→re-review can never run forever (the
 	// natural terminator is "no new blocking issue"; this is the ceiling on top).
 	taskerLoopMax: 3,
@@ -679,7 +679,7 @@ export const DEFAULT_CONFIG: Config = {
 	// deps so `pnpm install` is fast, so correctness-first (the gate tests what
 	// MERGES, not the agent's pre-rebase checkout) is the right default. The
 	// opt-out (`--no-fresh-worktree-gate`) runs `verify` in the build worktree as
-	// before, for when the per-gate install cost is too high. Mirrors `slicerLoop`
+	// before, for when the per-gate install cost is too high. Mirrors `taskerLoop`
 	// (positive name, default-on).
 	freshWorktreeGate: true,
 };

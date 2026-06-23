@@ -41,8 +41,8 @@ export {synthesiseProposeTitle, composeProposeBody, PR_TITLE_MAX};
  * runner never uses (ADR §8).
  *
  * The item's SOURCE folder is normally `work/in-progress/` (a freshly-built
- * slice). As a RUNNER-OWNED RECOVERY path it ALSO accepts an item in
- * `work/needs-attention/` (a SPURIOUSLY-failed slice — an env-polluted gate, a
+ * task). As a RUNNER-OWNED RECOVERY path it ALSO accepts an item in
+ * `work/needs-attention/` (a SPURIOUSLY-failed task — an env-polluted gate, a
  * transient flake, or a since-fixed cause): when `in-progress/` is absent it
  * falls back to `needs-attention/`, RE-RUNS the gate (authoritative — only a
  * GREEN re-gate completes; a still-red item simply stays in needs-attention/),
@@ -121,12 +121,12 @@ export interface CompleteOptions {
 	integration?: IntegrationMode;
 	/**
 	 * **The explicit `--merge` override** for the untrusted-origin build-propose rule
-	 * (slice `untrusted-origin-forces-build-propose`). `true` iff the operator
+	 * (task `untrusted-origin-forces-build-propose`). `true` iff the operator
 	 * EXPLICITLY typed `--merge` on this invocation (vs `merge` resolved from
 	 * config). Forwarded to {@link performIntegration}'s `explicitMerge`: an explicit
 	 * `--merge` OVERRIDES the untrusted-origin build-propose rule (the operator is
 	 * present; CLI always wins). Unset on the autonomous path ⇒ an untrusted-origin
-	 * slice reliably forces `propose`.
+	 * task reliably forces `propose`.
 	 */
 	explicitMerge?: boolean;
 	/**
@@ -161,7 +161,7 @@ export interface CompleteOptions {
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES PRD `work/prd/review.md`). When
+	 * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`). When
 	 * `true`, after the green `verify` and BEFORE the done-move, run the `review`
 	 * SKILL as a FRESH-CONTEXT agent (its own harness launch) and route its verdict:
 	 * `approve` → proceed to done-move/commit/integrate; `block` → route to
@@ -190,7 +190,7 @@ export interface CompleteOptions {
 	reviewGate?: ReviewGate;
 	/**
 	 * `--watch`: tail the Gate-2 REVIEW agent's pi session `.jsonl` live, the SAME
-	 * way `do --watch` tails the build agent's (slice `watch-review-session`).
+	 * way `do --watch` tails the build agent's (task `watch-review-session`).
 	 * Threaded into the `reviewGate` invocation below so the production gate
 	 * (`harnessReviewGate`) routes its launch through the shared
 	 * `launchWithOptionalWatch` helper. OFF (the default) ⇒ the review path is
@@ -208,7 +208,7 @@ export interface CompleteOptions {
 	sessionsDir?: string;
 	/** Conventional-commit type for the completion commit. Defaults to `feat`. */
 	type?: string;
-	/** Commit summary. Defaults to the slice `title` minus a leading `slug — `. */
+	/** Commit summary. Defaults to the task `title` minus a leading `slug — `. */
 	message?: string;
 	/**
 	 * Optional review-request BODY (propose mode) — the PR/MR DESCRIPTION, DISTINCT
@@ -364,7 +364,7 @@ class CompleteUsageError extends Error {}
  * the AUTONOMOUS path (`surfaceArbiter` set) it surfaces to needs-attention via
  * the tree-less seam so the next tick does not re-claim-and-recrash forever.
  * `diverged-main` is an ENV/OPERATOR condition (local main ahead of
- * `<arbiter>/main`) — NOT a stuck slice, so it is NEVER bounced even on the
+ * `<arbiter>/main`) — NOT a stuck task, so it is NEVER bounced even on the
  * autonomous path; it stays the local `refused`.
  */
 type RefusalKind = 'source-strand' | 'diverged-main' | 'gate-unrunnable';
@@ -392,8 +392,8 @@ export async function performComplete(
 	try {
 		return await runComplete(options, note);
 	} catch (err) {
-		// AUTONOMOUS-STRAND SURFACE (slice
-		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, PRD
+		// AUTONOMOUS-STRAND SURFACE (task
+		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, brief
 		// `ledger-integrity` story 7). On the AUTONOMOUS path (`surfaceArbiter` set
 		// — the human-vs-autonomous gate the core's other failures use), a SOURCE-
 		// STRAND `CompleteRefusal` (the slug-is-stuck `nothing to complete`) and the
@@ -409,7 +409,7 @@ export async function performComplete(
 		// cwd-bound `applyNeedsAttentionTransition` cannot be used — the tree-less
 		// seam resolves the source folder on the arbiter and CAS-publishes the
 		// move-only `.md` relocation. The DIVERGED-MAIN refusal is an env/operator
-		// condition (NOT a stuck slice), so it is excluded — leave it `refused`.
+		// condition (NOT a stuck task), so it is excluded — leave it `refused`.
 		// When the tree-less surface cannot land (CAS contention exhausted, or no
 		// arbiter), report the HONEST still-in-progress signal
 		// (`outcome: 'surface-unmoved'`) the gate-fail path's `moved:false` mirrors
@@ -432,7 +432,7 @@ export async function performComplete(
 			// `IntegrationNothingStaged` is the core's empty-commit refusal — the same
 			// `refused` outcome the inline band raised before the extraction. The
 			// diverged-main `CompleteRefusal` (env/operator condition) also lands here
-			// on the autonomous path, deliberately UNCHANGED: it is NOT a stuck slice.
+			// on the autonomous path, deliberately UNCHANGED: it is NOT a stuck task.
 			return {exitCode: 1, outcome: 'refused', message: err.message};
 		}
 		if (err instanceof CompleteUsageError) {
@@ -452,7 +452,7 @@ export async function performComplete(
  * nothing has moved it since), so the autonomous bounce-set is exactly those
  * two. The `diverged-main` refusal is deliberately EXCLUDED: it is an
  * env/operator condition (local main ahead of `<arbiter>/main`), not a stuck
- * slice; bouncing it would mis-attribute an env problem to the work.
+ * task; bouncing it would mis-attribute an env problem to the work.
  */
 function strandRefusalSlug(err: unknown): string | undefined {
 	if (err instanceof CompleteRefusal && err.kind === 'source-strand') {
@@ -524,10 +524,10 @@ async function surfaceAutonomousStrand(params: {
 
 /**
  * Locate the slug's ledger record at a RENAMED done-position on the branch tree, to
- * survive a SELF-RENAMING FOLDER slice (the `folder-taxonomy-reorg-and-rename`
+ * survive a SELF-RENAMING FOLDER task (the `folder-taxonomy-reorg-and-rename`
  * migration).
  *
- * The trap: a slice whose job is to `git mv` the ledger folders themselves (e.g.
+ * The trap: a task whose job is to `git mv` the ledger folders themselves (e.g.
  * `done/ -> tasks/done/`) runs through the runner's INSTALLED (pre-rename) binary,
  * whose compiled-in {@link workItemPath} still resolves `done` to `work/done/`.
  * When the agent has placed its OWN record at the NEW done-position
@@ -539,7 +539,7 @@ async function surfaceAutonomousStrand(params: {
  * binary-known ledger folders, walk `work/` and return true iff `<slug>.md` exists
  * directly inside a folder whose LEAF name is `done` (covering BOTH `work/done/`
  * and a renamed `work/tasks/done/`). It deliberately matches ONLY a `done` leaf:
- * a record left in a renamed POOL (`tasks/todo/`) is NOT a finished slice and must
+ * a record left in a renamed POOL (`tasks/todo/`) is NOT a finished task and must
  * still refuse, not be mis-integrated as done. When this fires, the slug is treated
  * as already-done-moved by the agent into its terminal position, so the runner
  * SKIPS its own `git mv` (the existing `source: 'done'` / stranded-done path) and
@@ -596,8 +596,8 @@ async function runComplete(
 	// rebases + pushes it), and the branch carries the namespaced `work/<type>-
 	// <slug>` identity. So PREFER the branch HEAD is on (recovering BOTH the type
 	// and the slug from it); only when an explicit slug is given AND HEAD is not on
-	// a work branch do we synthesise the slice-namespaced branch (`complete` is a
-	// slice command).
+	// a work branch do we synthesise the task-namespaced branch (`complete` is a
+	// task command).
 	const headBranch = await currentBranch(cwd, env);
 	const headParsed = parseWorkBranchRef(headBranch);
 	const slug = options.slug || headParsed?.slug || '';
@@ -609,8 +609,8 @@ async function runComplete(
 		);
 	}
 	// The branch HEAD is on when it IS a work branch for this slug (so an explicit
-	// `prd:`-style recovery still completes the branch it is standing on); else
-	// synthesise the slice branch.
+	// `brief:`-style recovery still completes the branch it is standing on); else
+	// synthesise the task branch.
 	const branch =
 		headParsed && headParsed.slug === slug
 			? headBranch
@@ -626,7 +626,7 @@ async function runComplete(
 		);
 	}
 
-	// The slice must be in-progress in the working tree (the normal path), OR —
+	// The task must be in-progress in the working tree (the normal path), OR —
 	// the runner-owned recovery path — in needs-attention/ (a SPURIOUSLY-failed
 	// item the human/runner is finishing: the gate failure was env-pollution / a
 	// transient flake / a since-fixed cause). We prefer in-progress/; we fall back
@@ -643,9 +643,9 @@ async function runComplete(
 	// disagree with what the arbiter holds even when the local tree diverges
 	// (ledger-integrity defect 1). The `source` we pass is the arbiter-content
 	// fallback for the degenerate "arbiter holds nothing" case, not the authority.
-	// THE NORMAL freshly-built path now rests in `work/backlog/` (slice
+	// THE NORMAL freshly-built path now rests in `work/backlog/` (task
 	// `cutover-claim-body-stays-and-complete-sources-from-backlog`): claim acquires
-	// the per-item lock and NO LONGER moves the body out of `backlog/`, so the slice
+	// the per-item lock and NO LONGER moves the body out of `backlog/`, so the task
 	// `.md` the build agent worked under is still at `work/backlog/<slug>.md`. We
 	// PREFER `backlog/` as the build source; `in-progress/` is RETAINED below for the
 	// legacy/bounce surfaces that may still source from it until its folder removal
@@ -657,11 +657,11 @@ async function runComplete(
 	const onBacklog = existsSync(backlog);
 	const onInProgress = existsSync(inProgress);
 	const onNeedsAttention = existsSync(needsAttention);
-	// SELF-RENAMING FOLDER slice backstop: the binary-known `work/done/<slug>.md`,
+	// SELF-RENAMING FOLDER task backstop: the binary-known `work/done/<slug>.md`,
 	// OR — when none of the binary-known ledger folders hold the record — the slug
 	// at a RENAMED done-position the migration agent placed it in (e.g.
 	// `work/tasks/done/<slug>.md`). See {@link recordAtRenamedDonePosition}. The
-	// scan runs ONLY in the all-binary-folders-empty case, so a normal slice's
+	// scan runs ONLY in the all-binary-folders-empty case, so a normal task's
 	// resolution is byte-for-byte unchanged.
 	const onDone =
 		existsSync(done) ||
@@ -669,7 +669,7 @@ async function runComplete(
 			!onInProgress &&
 			!onNeedsAttention &&
 			recordAtRenamedDonePosition(cwd, slug));
-	// STRANDED-DONE AUTO-RECOVER (PRD `ledger-integrity` story 6, the autonomous
+	// STRANDED-DONE AUTO-RECOVER (brief `ledger-integrity` story 6, the autonomous
 	// half of `finish-already-committed-branch`). When neither in-progress/ nor
 	// needs-attention/ holds the slug on the BRANCH tree BUT done/ does, the work
 	// branch was already built + done-moved + committed by a prior run that never
@@ -685,9 +685,9 @@ async function runComplete(
 	// `recovering` flags — the core ignores them when `committedRecovery` is set.
 	const folderShapeStranded =
 		!onBacklog && !onInProgress && !onNeedsAttention && onDone;
-	// DIRTY-CONTINUE GATE (slice `recover-autodetect-gated-on-nothing-to-commit`).
+	// DIRTY-CONTINUE GATE (task `recover-autodetect-gated-on-nothing-to-commit`).
 	// The folder-shape stranded-done auto-detect is necessary but NOT sufficient on
-	// a CONTINUE: a requeued slice whose prior attempt already done-moved the slug
+	// a CONTINUE: a requeued task whose prior attempt already done-moved the slug
 	// into `done/` on the kept branch looks IDENTICAL by folder shape to a genuine
 	// finished strand, even when THIS run's agent produced NEW uncommitted edits.
 	// The recover path skips the build/commit/done-move steps and only rebases the
@@ -699,11 +699,11 @@ async function runComplete(
 	// miss the agent's UNSTAGED edits. NOT the FULL `isWorkBranchDiffEmpty`: its
 	// commits-ahead half is true for a GENUINE STRAND too (the kept tip carries
 	// source commits ahead of main), so it would WRONGLY BLOCK the legitimate
-	// recover and break the slice-1 / finished-strand behaviour.
+	// recover and break the task-1 / finished-strand behaviour.
 	const dirtyContinue =
 		folderShapeStranded && (await hasUncommittedSourceChanges({cwd, env}));
 	const committedRecovery = folderShapeStranded && !dirtyContinue;
-	// CONTINUE-BUILD (slice `complete-builds-on-already-done-moved-continue`,
+	// CONTINUE-BUILD (task `complete-builds-on-already-done-moved-continue`,
 	// scope option A — the explicit `source: 'done'` contract). On a DIRTY
 	// continue whose kept branch already holds the slug in `work/done/`, route
 	// through the build path's NEW continue-build state: the integration core
@@ -711,7 +711,7 @@ async function runComplete(
 	// from the originTrust read + the divergent-done-move reconcile (there is no
 	// first-time move on this commit), but still runs prepare → gate → `git add
 	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
-	// slice's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
+	// task's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
 	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
 	const source: 'tasks-todo' | 'in-progress' | 'needs-attention' | 'done' =
 		dirtyContinue
@@ -736,7 +736,7 @@ async function runComplete(
 		// the new work was built + integrated on top of the kept already-done-moved
 		// tip (no second `git mv`).
 		note(
-			`>> continue-build on '${slug}': the slice is already in work/done/ on the ` +
+			`>> continue-build on '${slug}': the task is already in work/done/ on the ` +
 				'kept branch (a prior attempt done-moved it); building + integrating the ' +
 				'new uncommitted work on top of the kept tip (no second git mv).',
 		);
@@ -747,7 +747,7 @@ async function runComplete(
 	// was established by `folderShapeStranded`/`onDone`, which is LAYOUT-AWARE (it
 	// accepts a renamed `work/tasks/done/<slug>.md` via `recordAtRenamedDonePosition`).
 	// The binary's `sourcePath` (= `done` = `work/done/<slug>.md`) would NOT exist for
-	// a self-renaming-folder slice, so re-checking it here would wrongly refuse a
+	// a self-renaming-folder task, so re-checking it here would wrongly refuse a
 	// build the done-detection already accepted. `source: 'done'` skips the `git mv`
 	// anyway, so there is nothing this check needs to protect for that branch.
 	if (!committedRecovery && source !== 'done' && !existsSync(sourcePath)) {
@@ -800,7 +800,7 @@ async function runComplete(
 	}
 
 	// STATIC fresh-worktree-gate readiness guard — the human/recovery mirror of
-	// `performDo`'s step 3d (slice
+	// `performDo`'s step 3d (task
 	// `do-fails-fast-when-acceptance-gate-statically-unrunnable`). When the fresh-
 	// worktree gate is ON for THIS invocation AND `prepare` resolves to no commands
 	// AND a lockfile is present, the throwaway worktree the gate runs in will have
@@ -845,9 +845,9 @@ async function runComplete(
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
 		skipVerify: options.skipVerify,
-		// The untrusted-origin build-propose rule's override (slice
+		// The untrusted-origin build-propose rule's override (task
 		// `untrusted-origin-forces-build-propose`): an explicit `--merge` lets the
-		// operator land an untrusted-origin slice on main; the autonomous path leaves
+		// operator land an untrusted-origin task on main; the autonomous path leaves
 		// it unset so untrusted-origin reliably forces propose.
 		explicitMerge: options.explicitMerge,
 		review: options.review,
@@ -918,8 +918,8 @@ async function runComplete(
 		// because the work is already integrated and the branch may or may not
 		// still exist locally.
 		//
-		// CROSS-SUBSTRATE RELEASE (PRD `ledger-status-per-item-lock-refs` US #9/#10;
-		// slice `complete-lock-then-durable-main-move-crash-safe`): the durable
+		// CROSS-SUBSTRATE RELEASE (brief `ledger-status-per-item-lock-refs` US #9/#10;
+		// task `complete-lock-then-durable-main-move-crash-safe`): the durable
 		// `main` record is already terminal, so the per-item lock claim took is now
 		// stale — release it SECOND (the move already landed FIRST). Best-effort +
 		// idempotent (`not-held` is fine when a prior reconcile/release cleared it).
@@ -945,21 +945,21 @@ async function runComplete(
 		};
 	}
 
-	// CROSS-SUBSTRATE RELEASE — the HEART of this path's crash-safety (PRD
+	// CROSS-SUBSTRATE RELEASE — the HEART of this path's crash-safety (brief
 	// `ledger-status-per-item-lock-refs` US #9/#10; ADR
-	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; slice
+	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; task
 	// `complete-lock-then-durable-main-move-crash-safe`). ORDER MATTERS: the
 	// DURABLE `main` move (interim `in-progress → done`, atomic with the agent's
 	// code; or `→ dropped`) ALREADY landed FIRST inside `performIntegration`
 	// (the authoritative, referenceable record); the per-item lock that `claim`
-	// ALSO acquired (`action: implement`, keyed `slice:<slug>`) is released SECOND,
+	// ALSO acquired (`action: implement`, keyed `task:<slug>`) is released SECOND,
 	// HERE. A crash BETWEEN them leaves a `done`-on-`main` item with a still-held
 	// lock; `reconcileItemLockAgainstMain` recovers it (the `main` record is
 	// authoritative over the stale lock). The release is best-effort + idempotent
 	// (`not-held` when the body predates the lock or a reconcile already cleared
-	// it), mirroring `slicing`'s symmetric "the integrate core owns the completing
+	// it), mirroring `tasking`'s symmetric "the integrate core owns the completing
 	// commit, so the unified lock is released here". The body-move retarget to
-	// `backlog/` is the capstone slice #9; the ordering + recovery built here is
+	// `backlog/` is the capstone task #9; the ordering + recovery built here is
 	// substrate-agnostic and carries through unchanged.
 	await releaseClaimLockAfterDurableMove(slug, cwd, arbiter, env);
 
@@ -1069,9 +1069,9 @@ async function runComplete(
 
 /**
  * Release the per-item lock `claim` ALSO acquired (`action: implement`, keyed
- * `slice:<slug>`) AFTER the durable `main` move has landed — the SECOND, lock-
- * release half of complete's cross-substrate ordering (PRD
- * `ledger-status-per-item-lock-refs` US #9/#10; slice
+ * `task:<slug>`) AFTER the durable `main` move has landed — the SECOND, lock-
+ * release half of complete's cross-substrate ordering (brief
+ * `ledger-status-per-item-lock-refs` US #9/#10; task
  * `complete-lock-then-durable-main-move-crash-safe`).
  *
  * Called ONLY on the SUCCESS paths (`completed` / `already-integrated`), where
@@ -1118,7 +1118,7 @@ async function releaseClaimLockAfterDurableMove(
  * keeps `outcome: completed` / exit 0). Returns `true` on a normal ff.
  *
  * Only the diverged / ff-cannot-apply case is softened — the `fetch` and `switch`
- * stay `gitHard` (a genuinely different failure is NOT masked, per the slice).
+ * stay `gitHard` (a genuinely different failure is NOT masked, per the task).
  * Exported for direct testing of the softened-vs-fatal boundary in isolation.
  */
 export async function syncLocalMain(

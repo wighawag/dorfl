@@ -2,7 +2,7 @@ import {runAsync} from './git.js';
 import {JOB_RECORD_FILENAME} from './workspace.js';
 
 /**
- * **The build-agent → runner REPORTING CHANNEL** (slice `agent-stop-signal`).
+ * **The build-agent → runner REPORTING CHANNEL** (task `agent-stop-signal`).
  *
  * A build agent reports back to the runner on ONE channel: its FINAL OUTPUT
  * (`LaunchResult.output`, captured as `agent.output`). This module defines the
@@ -10,20 +10,20 @@ import {JOB_RECORD_FILENAME} from './workspace.js';
  * deterministic backstop the runner uses when the agent stopped without one:
  *
  *   1. A HARD **STOP** sentinel ({@link STOP_SENTINEL_OPEN} … {@link
- *      STOP_SENTINEL_CLOSE}): the slice DRIFTED / is ambiguous / rests on a stale
+ *      STOP_SENTINEL_CLOSE}): the task DRIFTED / is ambiguous / rests on a stale
  *      premise, so the agent could not build it. The runner routes the item to
  *      `work/needs-attention/` (the agent's reason VERBATIM) and SKIPS the
  *      acceptance gate + the Gate-2 review (a clean STOP is not a build that
  *      changed nothing). See {@link parseStopSentinel}.
  *   2. A SOFT **`## Decisions`** block ({@link extractDecisionsBlock}): the agent
- *      PROCEEDED but made a non-obvious in-scope decision the slice did not
- *      specify (a cross-slice interaction / a new error/refusal / a user-visible
+ *      PROCEEDED but made a non-obvious in-scope decision the task did not
+ *      specify (a cross-task interaction / a new error/refusal / a user-visible
  *      default). This does NOT stop the build — it just makes the choice visible
  *      for Gate-2 + the human to ratify (it rides the same `agent.output` → PR-body
  *      path the propose-mode summary uses).
  *
  * The sentinel form is documented IN-BAND next to the existing "STOP and report"
- * instruction in the CLAIM-PROTOCOL wrapper (`skills/to-slices/CLAIM-PROTOCOL.md`)
+ * instruction in the CLAIM-PROTOCOL wrapper (`skills/setup/protocol/CLAIM-PROTOCOL.md`)
  * so the agent emits the EXACT shape this module parses — the same "agent edits,
  * runner does git" in-band discipline the rest of the protocol uses.
  */
@@ -211,7 +211,7 @@ export async function isWorkBranchDiffEmpty(params: {
  *   - {@link isWorkBranchDiffEmpty} (the STOP backstop): empty IFF this is FALSE
  *     AND `<arbiter>/main..HEAD` has no source commits.
  *
- *   - `complete.ts`'s stranded-done auto-recover gate (slice
+ *   - `complete.ts`'s stranded-done auto-recover gate (task
  *     `recover-autodetect-gated-on-nothing-to-commit`): on the autonomous path,
  *     `committedRecovery` (the folder-shape stranded-done auto-detect) fires only
  *     when this is FALSE. A dirty tree on a done-stranded branch means the agent

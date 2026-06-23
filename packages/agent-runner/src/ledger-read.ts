@@ -33,7 +33,7 @@ import {
  *     elsewhere). OFFLINE. (Pre-registry `scan`/`status` used this; `run`'s in-place
  *     checkouts still do.)
  *   - **arbiter `main`** — the human claim guard (`readiness`) and the claim CAS
- *     read the slice + `work/done/` from `<arbiter>/main`.
+ *     read the task + `work/done/` from `<arbiter>/main`.
  *   - **hub mirror `main`** — `scan`/`status` (registry model, ADR §1) read the
  *     full `work/` lifecycle from each BARE hub mirror's `main` ref. A mirror has
  *     no working tree, so this reads the committed tree via `git ls-tree`/`git
@@ -72,47 +72,47 @@ export interface LedgerTodoItem {
 }
 
 /**
- * The result of a PRD-existence read (ADR §3a): does a PRD named `<slug>` exist,
- * and where. A PRD lives at `work/prd/<slug>.md`; once SLICED it rests at
- * `work/prd-sliced/<slug>.md` (the sliced resting state, the source of truth for
- * sliced-ness — slice `prd-sliced-folder-step-a`). BOTH folders are consulted (any
- * is enough): a PRD that is up-for-slicing OR already sliced still occupies its
- * slug, so collision detection must see it. While a PRD IS being sliced its body
- * STAYS in `work/prd/` (the slicing lock no longer moves it — slice
+ * The result of a brief-existence read (ADR §3a): does a brief named `<slug>` exist,
+ * and where. A brief lives at `work/briefs/ready/<slug>.md`; once TASKED it rests at
+ * `work/briefs/tasked/<slug>.md` (the tasked resting state, the source of truth for
+ * tasked-ness — task `prd-sliced-folder-step-a`). BOTH folders are consulted (any
+ * is enough): a brief that is up-for-tasking OR already tasked still occupies its
+ * slug, so collision detection must see it. While a brief IS being tasked its body
+ * STAYS in `work/briefs/ready/` (the tasking lock no longer moves it — task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`; the transient
  * `slicing/` folder is retired, the in-flight state is the per-item lock ref), so a
- * mid-slice PRD is detected via its `work/prd/` residence. The slug is resolved
- * from frontmatter `slug:`, falling back to the filename — the SAME shape the slice
+ * mid-tasking brief is detected via its `work/briefs/ready/` residence. The slug is resolved
+ * from frontmatter `slug:`, falling back to the filename — the SAME shape the task
  * readers use.
  */
 export interface BriefExistence {
 	/**
-	 * Whether a PRD named `<slug>` exists in `work/prd/` and/or `work/prd-sliced/`
-	 * (up-for-slicing OR already sliced — either still claims the slug).
+	 * Whether a brief named `<slug>` exists in `work/briefs/ready/` and/or `work/briefs/tasked/`
+	 * (up-for-tasking OR already tasked — either still claims the slug).
 	 */
 	exists: boolean;
-	/** The PRD source file, when present (`work/prd/<slug>.md`). */
+	/** The brief source file, when present (`work/briefs/ready/<slug>.md`). */
 	briefFile: string | undefined;
 	/**
-	 * The sliced resting file, when present (`work/prd-sliced/<slug>.md`) — i.e. the
-	 * PRD HAS BEEN sliced (the source of truth for sliced-ness, slice
-	 * `prd-sliced-folder-step-a`). A re-slice moves it back `prd-sliced/ -> prd/`.
+	 * The tasked resting file, when present (`work/briefs/tasked/<slug>.md`) — i.e. the
+	 * brief HAS BEEN tasked (the source of truth for tasked-ness, task
+	 * `prd-sliced-folder-step-a`). A re-task moves it back `briefs/tasked/ -> briefs/ready/`.
 	 */
 	briefTaskedFile: string | undefined;
 }
 
 /**
- * One PRD enumerated for the AUTO-SLICE selection pool (ADR §3 — the
- * "slices-first then PRDs to slice" priority). A PRD is NOT in the slice
- * scan/candidate model, so the auto-pick pool is built HERE from `work/prd/`
- * through this single shared PRD read path (the same path
- * {@link BriefExistence} uses, widened from existence to the gate axes the slicing
- * predicate needs). The slicing-eligibility predicate (`autoslice-gate`'s
+ * One brief enumerated for the AUTO-TASK selection pool (ADR §3 — the
+ * "tasks-first then briefs to task" priority). A brief is NOT in the task
+ * scan/candidate model, so the auto-pick pool is built HERE from `work/briefs/ready/`
+ * through this single shared brief read path (the same path
+ * {@link BriefExistence} uses, widened from existence to the gate axes the tasking
+ * predicate needs). The tasking-eligibility predicate (`autoslice-gate`'s
  * `resolveTaskingEligibility`) is applied to these by the selection layer; this
  * reader does NOT itself decide eligibility (it just surfaces the inputs).
  */
 export interface LedgerBriefItem {
-	/** Filename within `work/prd/` (e.g. `auto-slice.md`). */
+	/** Filename within `work/briefs/ready/` (e.g. `auto-slice.md`). */
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
 	slug: string;
@@ -120,36 +120,36 @@ export interface LedgerBriefItem {
 	humanOnly: boolean | undefined;
 	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
 	needsAnswers: boolean | undefined;
-	/** PRD-only cross-PRD order: PRD slugs that must already be SLICED first. */
+	/** Brief-only cross-brief order: brief slugs that must already be TASKED first. */
 	briefAfter: string[];
 }
 
 /**
- * The PRD pool of ONE repo, resolved from `work/prd/` (the auto-slice candidate
- * source). Carries every PRD's gate axes PLUS the set of already-SLICED slugs so
- * the selection layer can resolve each PRD's `briefAfter` against `work/prd-sliced/`
- * RESIDENCE (slice `prd-sliced-folder-step-a` / PRD `slicing-coherence` US #9): the
- * FOLDER is the source of truth, like `done/` for slices (the auto-slicer reads
+ * The brief pool of ONE repo, resolved from `work/briefs/ready/` (the auto-task candidate
+ * source). Carries every brief's gate axes PLUS the set of already-TASKED slugs so
+ * the selection layer can resolve each brief's `briefAfter` against `work/briefs/tasked/`
+ * RESIDENCE (task `prd-sliced-folder-step-a` / brief `slicing-coherence` US #9): the
+ * FOLDER is the source of truth, like `done/` for tasks (the auto-tasker reads
  * folder-residence; the `sliced:` marker was removed in
  * `remove-sliced-marker-step-b`). Built
- * through the SAME PRD read path as {@link BriefExistence}; there is no second PRD
+ * through the SAME brief read path as {@link BriefExistence}; there is no second brief
  * reader.
  */
 export interface LedgerBriefPool {
-	/** Every PRD in `work/prd/`, sorted by slug. */
+	/** Every brief in `work/briefs/ready/`, sorted by slug. */
 	briefs: LedgerBriefItem[];
-	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
+	/** Slugs whose brief resides in `work/briefs/tasked/` (resolves `briefAfter`). */
 	taskedSlugs: Set<string>;
 }
 
 /**
  * One OBSERVATION's lifecycle-pool fields, as resolved from `work/observations/`
- * (the triage candidate source for the advance auto-pick lifecycle pools, slice
+ * (the triage candidate source for the advance auto-pick lifecycle pools, task
  * `advance-autopick-lifecycle-pools`). An observation with NO `triaged:` marker is
  * UNTRIAGED (still in the triage pool); a non-empty `triaged:` value (`keep` /
  * `duplicate`) means it is SETTLED and DROPS OUT of the pool (US #30). This is the
  * FIRST read of `work/observations/` in the seam — `scan`/eligibility read only
- * `backlog`/`done`/`prd*`.
+ * `backlog`/`done`/`briefs*`.
  */
 export interface LedgerObservationItem {
 	/** Filename within `work/observations/` (e.g. `stray-note.md`). */
@@ -176,7 +176,7 @@ export interface LocalLedgerState {
 	doneSlugs: Set<string>;
 	/**
 	 * `work/observations/*.md` items (sorted by slug) — the triage candidate source
-	 * for the advance auto-pick lifecycle pools (slice
+	 * for the advance auto-pick lifecycle pools (task
 	 * `advance-autopick-lifecycle-pools`). UNTRIAGED observations (no `triaged:`
 	 * marker) are the triage pool; SETTLED ones (`triaged:` non-empty) drop out.
 	 */
@@ -186,7 +186,7 @@ export interface LocalLedgerState {
 /** The live `work/` state of ONE repo as resolved from the arbiter. */
 export interface ArbiterLedgerState {
 	/**
-	 * The requested slice's raw file contents from the arbiter (it may live in
+	 * The requested task's raw file contents from the arbiter (it may live in
 	 * the POOL `tasks/todo/` or in `in-progress/`), or `undefined` when not found
 	 * there.
 	 */
@@ -201,17 +201,17 @@ export interface ResolveLocalStateInput {
 	repoPath: string;
 }
 
-/** What the PRD-existence resolve method needs: which repo + which slug. */
+/** What the brief-existence resolve method needs: which repo + which slug. */
 export interface ResolveBriefExistenceInput {
-	/** The repo root whose `work/prd/`+`work/prd-sliced/` to read. */
+	/** The repo root whose `work/briefs/ready/`+`work/briefs/tasked/` to read. */
 	repoPath: string;
 	/** The slug to look up (matched against frontmatter `slug:`, then filename). */
 	slug: string;
 }
 
-/** What the PRD-pool resolve method needs: which repo's `work/prd/` to enumerate. */
+/** What the brief-pool resolve method needs: which repo's `work/briefs/ready/` to enumerate. */
 export interface ResolveBriefPoolInput {
-	/** The repo working-tree root whose `work/prd/` to read. */
+	/** The repo working-tree root whose `work/briefs/ready/` to read. */
 	repoPath: string;
 }
 
@@ -233,13 +233,13 @@ export interface ResolveMirrorStateInput {
 }
 
 /**
- * What the MIRROR-ref PRD-pool method needs: which bare hub mirror's committed
- * `work/prd/`+`work/prd-sliced/` tree to enumerate.
+ * What the MIRROR-ref brief-pool method needs: which bare hub mirror's committed
+ * `work/briefs/ready/`+`work/briefs/tasked/` tree to enumerate.
  */
 export interface ResolveMirrorBriefPoolInput {
 	/** The bare hub mirror directory (`<workspacesDir>/repos/<key>.git`). */
 	mirrorPath: string;
-	/** The mirror-LOCAL ref whose `work/prd*` tree to read (default `main`). */
+	/** The mirror-LOCAL ref whose `work/briefs*` tree to read (default `main`). */
 	ref?: string;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
@@ -247,7 +247,7 @@ export interface ResolveMirrorBriefPoolInput {
 
 /** What the ARBITER resolve method needs to read committed `work/` state. */
 export interface ResolveArbiterStateInput {
-	/** The slug whose slice file to resolve (`work/{backlog,in-progress}/<slug>.md`). */
+	/** The slug whose task file to resolve (`work/{backlog,in-progress}/<slug>.md`). */
 	slug: string;
 	/** A working clone whose remotes include the arbiter (the reads run here). */
 	cwd: string;
@@ -279,43 +279,43 @@ export interface LedgerReadStrategy {
 	 */
 	resolveMirrorState(input: ResolveMirrorStateInput): Promise<LocalLedgerState>;
 	/**
-	 * Enumerate the repo's PRD pool from a BARE hub mirror's committed `work/prd/`
-	 * tree (+ already-SLICED slugs from `work/prd-sliced/` residence) — the
-	 * mirror-ref counterpart of {@link LedgerReadStrategy.resolvePrdPool}, for the
+	 * Enumerate the repo's brief pool from a BARE hub mirror's committed `work/briefs/ready/`
+	 * tree (+ already-TASKED slugs from `work/briefs/tasked/` residence) — the
+	 * mirror-ref counterpart of {@link LedgerReadStrategy.resolveBriefPool}, for the
 	 * NO-CHECKOUT mirror-side auto-pick (`run`'s isolated loop + the one-shot/CI
 	 * `advance --remote -n`). A mirror is bare, so this reads the committed tree via
 	 * `git ls-tree`/`git show` (the SAME mechanism {@link resolveMirrorState} uses),
 	 * not a working-tree `readdirSync`. Returns the SAME {@link LedgerBriefPool} shape
-	 * the working-tree reader returns, so the slicing-eligibility predicate
+	 * the working-tree reader returns, so the tasking-eligibility predicate
 	 * (`taskableBriefs`) applies byte-identically to either source.
 	 */
 	resolveMirrorBriefPool(
 		input: ResolveMirrorBriefPoolInput,
 	): Promise<LedgerBriefPool>;
 	/**
-	 * Resolve whether a PRD named `<slug>` exists in the LOCAL working tree's
-	 * `work/prd/` (the PRD source — where a mid-slice PRD ALSO rests now that the
-	 * `slicing/` folder is retired) and/or `work/prd-sliced/` (the sliced resting
+	 * Resolve whether a brief named `<slug>` exists in the LOCAL working tree's
+	 * `work/briefs/ready/` (the brief source — where a mid-tasking brief ALSO rests now that the
+	 * `slicing/` folder is retired) and/or `work/briefs/tasked/` (the tasked resting
 	 * state). The slug is resolved from each candidate file's frontmatter `slug:`,
-	 * falling back to the filename — the SAME shape the slice readers use.
+	 * falling back to the filename — the SAME shape the task readers use.
 	 *
-	 * This is the FIRST PRD read path in the seam: `ledger-read.ts`/`scan.ts` read
-	 * only `backlog`/`done`, NEVER `work/prd/`. It is added here
-	 * so the §3a slug-namespace resolver, and later the autoslice / `do prd:` work,
-	 * share ONE PRD read path rather than each growing a bespoke scan. Synchronous
+	 * This is the FIRST brief read path in the seam: `ledger-read.ts`/`scan.ts` read
+	 * only `backlog`/`done`, NEVER `work/briefs/ready/`. It is added here
+	 * so the §3a slug-namespace resolver, and later the auto-tasking / `do brief:` work,
+	 * share ONE brief read path rather than each growing a bespoke scan. Synchronous
 	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
 	 */
 	resolveBriefExistence(input: ResolveBriefExistenceInput): BriefExistence;
 	/**
-	 * Enumerate the repo's PRD pool from `work/prd/` (the auto-slice candidate
-	 * source for the `do`/`run` "slices-first then PRDs to slice" priority, ADR
-	 * §3). Returns every PRD's gate axes (`humanOnly`/`needsAnswers`/`briefAfter`)
-	 * PLUS the set of already-SLICED slugs so the selection layer can resolve
-	 * `briefAfter` against `work/prd-sliced/` residence (the FOLDER is the source of
+	 * Enumerate the repo's brief pool from `work/briefs/ready/` (the auto-task candidate
+	 * source for the `do`/`run` "tasks-first then briefs to task" priority, ADR
+	 * §3). Returns every brief's gate axes (`humanOnly`/`needsAnswers`/`briefAfter`)
+	 * PLUS the set of already-TASKED slugs so the selection layer can resolve
+	 * `briefAfter` against `work/briefs/tasked/` residence (the FOLDER is the source of
 	 * truth) and apply `autoslice-gate`'s
-	 * predicate. This is the SAME PRD read path {@link resolveBriefExistence} uses,
+	 * predicate. This is the SAME brief read path {@link resolveBriefExistence} uses,
 	 * widened from a single-slug existence check to a full enumeration — NOT a
-	 * second PRD reader. Synchronous and OFFLINE (a working-tree read), like
+	 * second brief reader. Synchronous and OFFLINE (a working-tree read), like
 	 * {@link resolveLocalState}.
 	 */
 	resolveBriefPool(input: ResolveBriefPoolInput): LedgerBriefPool;
@@ -334,9 +334,9 @@ export interface LedgerReadStrategy {
 	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerTodoItem[];
 	/**
 	 * Enumerate `work/briefs/proposed/*.md` (the BRIEF STAGING folder) into the
-	 * SAME {@link LedgerBriefItem} shape `resolvePrdPool().prds` returns for the
+	 * SAME {@link LedgerBriefItem} shape `resolveBriefPool().briefs` returns for the
 	 * pool — the BRIEF-symmetric `surfaceStaging` widening (brief
-	 * `staging-surface-and-apply-promote-safety` F2, PRD q4 answer). Sync + OFFLINE.
+	 * `staging-surface-and-apply-promote-safety` F2, brief q4 answer). Sync + OFFLINE.
 	 */
 	resolveLocalBriefStaging(input: ResolveBriefPoolInput): LedgerBriefItem[];
 	/**
@@ -418,8 +418,8 @@ function readLocalTaskStaging(repoPath: string): LedgerTodoItem[] {
 
 /**
  * Read `work/briefs/proposed/*.md` (the BRIEF STAGING folder, the brief twin
- * of {@link readLocalTaskStaging}, PRD q4 answer) from the local tree. Returns
- * the SAME {@link LedgerBriefItem} shape `resolvePrdPool().prds` returns.
+ * of {@link readLocalTaskStaging}, brief q4 answer) from the local tree. Returns
+ * the SAME {@link LedgerBriefItem} shape `resolveBriefPool().briefs` returns.
  */
 function readLocalBriefStaging(repoPath: string): LedgerBriefItem[] {
 	const dir = workFolderPath(repoPath, 'briefs-proposed');
@@ -451,12 +451,12 @@ function readLocalDoneSlugs(repoPath: string): Set<string> {
 /**
  * Read `work/observations/*.md` (slug-sorted) from the local tree.
  *
- * Identity rule (slice `observation-identity-is-its-filename-not-a-foreign-slug`):
+ * Identity rule (task `observation-identity-is-its-filename-not-a-foreign-slug`):
  * an observation's IDENTITY is its FILENAME, NEVER a foreign frontmatter `slug:`.
  * Earlier this read `fm.slug ?? basename(file)`, which let the review-nits minting
- * (which wrote the REVIEWED SLICE's slug into `slug:` as a back-pointer) drive the
+ * (which wrote the REVIEWED TASK's slug into `slug:` as a back-pointer) drive the
  * lifecycle pool to emit `obs:<reviewed-slug>` — a key that did not round-trip
- * through `findItemPath` (filename-only) and collided with the reviewed slice in
+ * through `findItemPath` (filename-only) and collided with the reviewed task in
  * `work/done/`. Identity is now ALWAYS the basename, so the enumerate→resolve
  * round-trip is total by construction and a stray frontmatter `slug:` cannot
  * re-break it. The back-pointer lives in `reviewOf:` instead.
@@ -477,11 +477,11 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
 }
 
 /**
- * Does a PRD named `slug` exist in `<repoPath>/work/<folder>/`? A PRD source file
- * is `work/prd/*.md` (where a mid-slice PRD also rests — the `slicing/` folder is
- * retired); a sliced PRD rests at `work/prd-sliced/*.md` (the source of truth for
- * sliced-ness). We match the slug against each file's
- * frontmatter `slug:` (falling back to the filename) — the SAME shape the slice
+ * Does a brief named `slug` exist in `<repoPath>/work/<folder>/`? A brief source file
+ * is `work/briefs/ready/*.md` (where a mid-tasking brief also rests — the `slicing/` folder is
+ * retired); a tasked brief rests at `work/briefs/tasked/*.md` (the source of truth for
+ * tasked-ness). We match the slug against each file's
+ * frontmatter `slug:` (falling back to the filename) — the SAME shape the task
  * readers use — so a renamed file whose frontmatter slug matches still resolves.
  * Returns the matching filename, or `undefined`.
  */
@@ -500,17 +500,17 @@ function findBriefFileBySlug(
 }
 
 /**
- * Enumerate `work/prd/*.md` into the auto-slice PRD pool (the slices-first/PRD
- * priority's PRD source) — the SAME PRD read path {@link findBriefFileBySlug} uses,
- * widened from a single-slug existence check to a full enumeration. Each PRD's
+ * Enumerate `work/briefs/ready/*.md` into the auto-task brief pool (the tasks-first/brief
+ * priority's brief source) — the SAME brief read path {@link findBriefFileBySlug} uses,
+ * widened from a single-slug existence check to a full enumeration. Each brief's
  * slug is resolved from frontmatter `slug:` (falling back to the filename) and
  * its gate axes (`humanOnly`/`needsAnswers`/`briefAfter`) parsed. The
- * already-SLICED set is RESIDENCE in `work/prd-sliced/` (slice
- * `prd-sliced-folder-step-a` / PRD `slicing-coherence` US #9): the FOLDER is the
+ * already-TASKED set is RESIDENCE in `work/briefs/tasked/` (task
+ * `prd-sliced-folder-step-a` / brief `slicing-coherence` US #9): the FOLDER is the
  * source of truth (the build-machine `done/` analogue), so `briefAfter` resolves
- * against `prd-sliced/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
+ * against `briefs/tasked/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
- * matches `tasking.ts`'s `readSlicedSlugs`. Missing folders read as empty.
+ * matches `tasking.ts`'s `readTaskedSlugs`. Missing folders read as empty.
  */
 function readLocalBriefPool(repoPath: string): LocalBriefPool {
 	const dir = workFolderPath(repoPath, 'briefs-ready');
@@ -528,9 +528,9 @@ function readLocalBriefPool(repoPath: string): LocalBriefPool {
 	}
 	briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 
-	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
-	// truth, like `done/` for slices (the `sliced:` marker was removed in
-	// `remove-sliced-marker-step-b`), mirroring tasking.ts's readSlicedSlugs. Missing
+	// Tasked-ness is RESIDENCE in `work/briefs/tasked/` — the FOLDER is the source of
+	// truth, like `done/` for tasks (the `sliced:` marker was removed in
+	// `remove-sliced-marker-step-b`), mirroring tasking.ts's readTaskedSlugs. Missing
 	// folder reads as empty.
 	const taskedSlugs = new Set<string>();
 	const taskedDir = workFolderPath(repoPath, 'briefs-tasked');
@@ -555,9 +555,9 @@ function gitSoft(
 }
 
 /**
- * Read the slice file's contents from `<arbiter>/main`. It may live in `backlog/`
+ * Read the task file's contents from `<arbiter>/main`. It may live in `backlog/`
  * (the normal claim case) or `in-progress/` (start --resume); read whichever
- * exists. Returns `undefined` when the slice is not found there.
+ * exists. Returns `undefined` when the task is not found there.
  */
 async function readTaskOnArbiter(
 	slug: string,
@@ -690,7 +690,7 @@ async function readTaskStagingFromTree(
 	return readTaskFolderFromTree('tasks-backlog', ref, cwd, env);
 }
 
-/** Parse `<ref>:work/briefs/proposed/*.md` (BRIEF STAGING) into PRD items, sorted by slug. */
+/** Parse `<ref>:work/briefs/proposed/*.md` (BRIEF STAGING) into brief items, sorted by slug. */
 async function readBriefStagingFromTree(
 	ref: string,
 	cwd: string,
@@ -716,8 +716,8 @@ async function readBriefStagingFromTree(
 }
 
 /**
- * Parse `<ref>:work/prd/*.md` into the auto-slice PRD pool, sorted by slug, plus
- * the already-SLICED slugs from `<ref>:work/prd-sliced/` RESIDENCE (the folder is
+ * Parse `<ref>:work/briefs/ready/*.md` into the auto-task brief pool, sorted by slug, plus
+ * the already-TASKED slugs from `<ref>:work/briefs/tasked/` RESIDENCE (the folder is
  * the source of truth, mirroring the working-tree {@link readLocalBriefPool}). Reads
  * a committed tree (bare-mirror or any ref) via `ls-tree`/`show`. Missing folders
  * read as empty.
@@ -745,7 +745,7 @@ async function readBriefPoolFromTree(
 	}
 	briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 
-	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
+	// Tasked-ness is RESIDENCE in `work/briefs/tasked/` — the FOLDER is the source of
 	// truth (the `sliced:` marker was removed in `remove-sliced-marker-step-b`),
 	// exactly as the working-tree reader resolves it.
 	const taskedBase = `${ref}:${workFolderRel('briefs-tasked')}`;
@@ -848,8 +848,8 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		return {todo, doneSlugs, observations};
 	},
 	async resolveMirrorBriefPool({mirrorPath, ref = 'main', env}) {
-		// The PRD pool from the bare mirror's committed `<ref>:work/prd*` tree — the
-		// mirror-ref counterpart of `resolvePrdPool` (a working-tree read). Same shape,
+		// The brief pool from the bare mirror's committed `<ref>:work/briefs*` tree — the
+		// mirror-ref counterpart of `resolveBriefPool` (a working-tree read). Same shape,
 		// so `taskableBriefs` applies identically to either source.
 		return readBriefPoolFromTree(ref, mirrorPath, env);
 	},

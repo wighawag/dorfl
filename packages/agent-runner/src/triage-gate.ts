@@ -3,7 +3,7 @@ import {launchWithOptionalWatch} from './agent-launch.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
- * The **TRIAGE auto-disposition GATE** (PRD `advance-loop`, slice
+ * The **TRIAGE auto-disposition GATE** (brief `advance-loop`, task
  * `advance-rung-triage`, US #17) — the CONSERVATIVE, `observationTriage: 'auto'`-
  * gated exception to the question-gated default. On `classify=triage-observation`
  * AND `observationTriage` resolved to `'auto'`, the engine asks this gate whether
@@ -165,7 +165,7 @@ function validateEmit(parsed: unknown): TriageEmit {
 export function buildTriagePrompt(item: string): string {
 	return [
 		`You are a FRESH-CONTEXT observation TRIAGER. Judge the work/ observation`,
-		`"${item}" against the CURRENT work/ items (slices, PRDs, ADRs, other`,
+		`"${item}" against the CURRENT work/ items (tasks, briefs, ADRs, other`,
 		`observations) and decide whether it is a CONSERVATIVE NO-QUESTION case — one`,
 		`a human would NOT plausibly disagree with. You write NOTHING — no file edit,`,
 		`no \`git mv\`, no commit (the advance ENGINE acts on what you emit). You`,
@@ -179,7 +179,7 @@ export function buildTriagePrompt(item: string): string {
 		`    already covered there) → the engine records the mapping and marks it`,
 		`    triaged:keep so it drops out of the pool.`,
 		``,
-		`NEVER emit auto:true to PROMOTE (drafting a new slice is "is this worth`,
+		`NEVER emit auto:true to PROMOTE (drafting a new task is "is this worth`,
 		`building?" — ALWAYS a human call) and NEVER to DELETE a NON-duplicate signal`,
 		`(the agent never auto-deletes a real signal). If there is ANY judgement —`,
 		`anything a reasonable human might decide differently — emit auto:false and the`,

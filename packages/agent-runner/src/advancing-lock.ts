@@ -6,11 +6,11 @@ import {resolveSidecarIdentity} from './sidecar.js';
 import {acquireItemLock, releaseItemLock} from './item-lock.js';
 
 /**
- * The **advancing-lock BORROW** (PRD `advance-loop`, slice
+ * The **advancing-lock BORROW** (brief `advance-loop`, task
  * `advancing-lock-borrow`, US #19–24).
  *
  * The surface/apply/triage phase's SHORT borrow. As of the capstone cut-over
- * (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
+ * (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, brief
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
  * the legacy `work/advancing/<entry>.md` presence-MARKER on `main` is GONE. The
  * advancing borrow now rides ONLY the UNIFIED per-item lock
@@ -20,15 +20,15 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  *
  * The borrow is keyed by item IDENTITY (`<type>-<slug>`, via
  * {@link resolveSidecarIdentity} — the single source of truth the unified lock,
- * the sidecar, and the work branch all share), so a slice, a PRD, and an
+ * the sidecar, and the work branch all share), so a task, a brief, and an
  * observation that share a slug NEVER collide, and the SAME `<entry>` ref means an
- * `advance` hold is MUTUALLY EXCLUSIVE with a claim/slice hold of the SAME item BY
+ * `advance` hold is MUTUALLY EXCLUSIVE with a claim/task hold of the SAME item BY
  * CONSTRUCTION (the second acquirer loses the SAME create-only ref CAS).
  *
  * It is file-ORTHOGONAL to the item it locks: the item's own lifecycle file NEVER
  * moves (the borrow is a LOCK, not a lifecycle transition), which is exactly why
- * it can lock items resting in DIFFERENT source folders (a backlog slice, a `prd/`
- * PRD, an `observations/` note) with one uniform mechanism.
+ * it can lock items resting in DIFFERENT source folders (a backlog task, a `briefs/`
+ * brief, an `observations/` note) with one uniform mechanism.
  *
  * **TREE-LESS vs BUILD/SLICE RUNGS (`acquireUnified`).** The advance tick sets
  * `acquireUnified` PER RUNG (the policy lives in `advance.ts`, where the rung is
@@ -36,16 +36,16 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  *
  *   - **TREE-LESS rungs** (`surface`/`apply`/`triage`) have NO inner `do`, so the
  *     advancing acquire takes the item's unified `action: advance` lock — that hold
- *     IS the advance∥claim / advance∥slice exclusion. Acquire/release delegate to
+ *     IS the advance∥claim / advance∥task exclusion. Acquire/release delegate to
  *     {@link acquireItemLock} / {@link releaseItemLock} (a parentless ref CAS, no
  *     working-tree write, no retry budget).
  *   - **BUILD-SLICE / SLICE-PRD rungs** never take the unified lock at the advance
  *     layer (`acquireUnified` false): `performAdvance` orchestrates an inner
- *     `performDo` that ITSELF acquires the SAME `slice-<slug>`/`prd-<slug>` ref
+ *     `performDo` that ITSELF acquires the SAME `task-<slug>`/`brief-<slug>` ref
  *     (the create-only CAS with NO re-entrancy/auto-steal), so taking it again here
  *     would DEADLOCK the tick against itself. For these rungs the acquire/release
  *     are a NO-OP (`acquired`/`released`); the inner `do`'s lock is the sole
- *     exclusion point (the POST-#9 EXCLUSION PROOF, owned by this slice).
+ *     exclusion point (the POST-#9 EXCLUSION PROOF, owned by this task).
  *
  * A dry-run never takes the lock (it mutates nothing). This module stays
  * rung-agnostic — it only knows "unified or not", never the rung kind.
@@ -80,8 +80,8 @@ export type AcquireAdvancingLockExitCode = 0 | 1 | 2 | 3;
 
 export interface AcquireAdvancingLockOptions {
 	/**
-	 * The NAMESPACED item identity to lock (`slice:<slug>` / `prd:<slug>` /
-	 * `obs:<slug>` / `observation:<slug>`, or a bare `<slug>` = slice). The
+	 * The NAMESPACED item identity to lock (`task:<slug>` / `brief:<slug>` /
+	 * `obs:<slug>` / `observation:<slug>`, or a bare `<slug>` = task). The
 	 * resolver derives the type-encoded entry `<type>-<slug>` from it.
 	 */
 	item: string;
@@ -100,8 +100,8 @@ export interface AcquireAdvancingLockOptions {
 	 * sets this PER RUNG (the policy lives where the rung is known — `advance.ts`):
 	 * `true` for the TREE-LESS rungs (`surface`/`apply`/`triage`), which have no
 	 * inner `do` and so genuinely need the unified hold to realise advance∥claim /
-	 * advance∥slice exclusion; `false` (the default) for the build-slice / slice-prd
-	 * rungs, whose inner `performDo` ALREADY takes the SAME `slice-<slug>`/`prd-<slug>`
+	 * advance∥task exclusion; `false` (the default) for the build-slice / slice-prd
+	 * rungs, whose inner `performDo` ALREADY takes the SAME `task-<slug>`/`brief-<slug>`
 	 * ref — taking it again here would DEADLOCK the tick against itself, so for those
 	 * the acquire is a NO-OP `acquired`. When `true`, a lock `lost` makes the acquire
 	 * lose DEFINITIVELY (no retry budget). A dry-run never takes the lock (it mutates
@@ -133,8 +133,8 @@ class AdvancingLockUsageError extends Error {}
 /**
  * Acquire the advancing borrow for `item`. For a TREE-LESS rung
  * (`acquireUnified: true`) this is the item's unified `action: advance` lock (a
- * parentless ref CAS); for a build/slice rung (the default) it is a NO-OP
- * `acquired` (the inner `do`'s claim/slice lock is the exclusion). Never throws
+ * parentless ref CAS); for a build/task rung (the default) it is a NO-OP
+ * `acquired` (the inner `do`'s claim/task lock is the exclusion). Never throws
  * for the expected "lost the race" (exit 2) case — it is returned.
  */
 export async function acquireAdvancingLock(
@@ -182,7 +182,7 @@ async function runAcquire(
 	const by = options.by || (await resolveBy(cwd, env));
 
 	// BUILD/SLICE rung (or a dry-run): NO advance-layer hold at all. The inner `do`'s
-	// claim/slice unified lock is the sole exclusion point — taking it again here
+	// claim/task unified lock is the sole exclusion point — taking it again here
 	// would deadlock the tick against itself. A NO-OP `acquired`.
 	const acquireUnified = (options.acquireUnified ?? false) && !dryRun;
 	if (!acquireUnified) {
@@ -194,10 +194,10 @@ async function runAcquire(
 	}
 
 	// TREE-LESS rung: take the item's UNIFIED per-item lock (`action: advance`,
-	// keyed `item` so it shares the ONE `<type>-<slug>` ref with claim/slice/advance
+	// keyed `item` so it shares the ONE `<type>-<slug>` ref with claim/task/advance
 	// of the SAME item). A create-only ref CAS: the winner holds it, the loser is
 	// DEFINITIVELY `lost` (exit 2, no retry budget — a per-item conflict the loser
-	// should lose). No auto-steal of an orphaned lock, consistent with claim/slice
+	// should lose). No auto-steal of an orphaned lock, consistent with claim/task
 	// and the ADR's recovery model (no liveness heartbeat / auto-sweep; a human
 	// asserts a lock is dead via `release-lock` + `gc --ledger`).
 	const lock = await acquireItemLock({
@@ -250,7 +250,7 @@ export interface ReleaseAdvancingLockOptions {
 	 * {@link AcquireAdvancingLockOptions.acquireUnified}). The advance tick sets this
 	 * for a TREE-LESS rung (`surface`/`apply`/`triage`), where the acquire took the
 	 * unified lock; `false` (the default) for the build-slice / slice-prd rungs,
-	 * which never took it at the advance layer (the inner `performDo`'s claim/slice
+	 * which never took it at the advance layer (the inner `performDo`'s claim/task
 	 * lock is the exclusion point and is released by the inner `do`) — for those the
 	 * release is a NO-OP `released`.
 	 */
@@ -273,7 +273,7 @@ export interface ReleaseAdvancingLockResult {
 /**
  * Release the advancing borrow for `item`. For a TREE-LESS rung
  * (`releaseUnified: true`) this DELETES the item's unified `action: advance` lock
- * ref; for a build/slice rung (the default) it is a NO-OP `released` (that rung
+ * ref; for a build/task rung (the default) it is a NO-OP `released` (that rung
  * never took an advance-layer hold — the inner `do` released its own lock). It
  * moves NO lifecycle file: the borrow is a LOCK, not a lifecycle transition, so
  * the item is returned exactly where it rested.

@@ -31,7 +31,7 @@ import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
  * the `Job`-shape coupling from the pipeline (`run`'s old `runOneItem` read a
  * concrete `Job`).
  *
- * Wiring a COMMAND to the in-place strategy is the `do-in-place` slice — this
+ * Wiring a COMMAND to the in-place strategy is the `do-in-place` task — this
  * module only provides the seam + both implementors; `run` keeps using the
  * job-worktree strategy (its observable behaviour is byte-identical).
  */
@@ -65,7 +65,7 @@ export interface IsolatedTree {
 	 * True iff this tree CONTINUED a kept arbiter `work/<slug>` branch (a requeue)
 	 * rather than cutting fresh off main — the SAME continue-detection both
 	 * onboarding paths use. The prompt assembly injects a CONTINUE block when set
-	 * (the `agent-prompt-continue-context` slice). Absent / false on a fresh cut.
+	 * (the `agent-prompt-continue-context` task). Absent / false on a fresh cut.
 	 */
 	continued?: boolean;
 	/**
@@ -80,7 +80,7 @@ export interface IsolatedTree {
 	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY at
 	 * onboard-time (the stale-lease retry cap exhausted, or a non-stale-lease
 	 * rejection / unreachable arbiter) — the push helper THROWS, caught so the run
-	 * does NOT crash leaving the slice silently in-progress on the arbiter (the
+	 * does NOT crash leaving the task silently in-progress on the arbiter (the
 	 * stale-lease-strand bug). The pipeline routes the item to needs-attention,
 	 * the kept work left committed + recoverable on the branch. Absent on a fresh
 	 * cut, a clean continue that pushed, and a rebase conflict (which sets
@@ -111,11 +111,11 @@ export interface PrepareInput {
 	/** The work slug being processed (→ branch `work/<type>-<slug>`). */
 	slug: string;
 	/**
-	 * The item TYPE — `'slice'` for a build (intake/`do slice:`), `'prd'` for a
-	 * PRD-slicing run (`do prd:`). It NAMESPACES the work branch via
-	 * {@link workBranchRef} so a same-slug slice and PRD never collide on the
-	 * arbiter branch. Defaults to `'slice'` (the overwhelmingly-common build
-	 * path); the PRD-slicing path passes `'prd'` explicitly.
+	 * The item TYPE — `'task'` for a build (intake/`do task:`), `'brief'` for a
+	 * brief-tasking run (`do brief:`). It NAMESPACES the work branch via
+	 * {@link workBranchRef} so a same-slug task and brief never collide on the
+	 * arbiter branch. Defaults to `'task'` (the overwhelmingly-common build
+	 * path); the brief-tasking path passes `'brief'` explicitly.
 	 */
 	type?: SlugNamespace;
 	/**
@@ -236,7 +236,7 @@ export function jobWorktreeHandle(
  * the job-worktree strategy, whose caller claims before `prepare`). It does not
  * itself claim — `do-in-place` composes the claim (and `start`/`complete`) around
  * the seam. `prepare` here is the thin "put the checkout on a fresh work branch"
- * step the shared pipeline needs; it is unwired in this slice.
+ * step the shared pipeline needs; it is unwired in this task.
  */
 export function inPlaceStrategy(options: {
 	/** The current checkout to operate in. */

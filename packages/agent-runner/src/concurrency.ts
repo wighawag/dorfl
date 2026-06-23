@@ -3,7 +3,7 @@
  * execution engine of `run`'s concurrent tick.
  *
  * The `run` daemon's whole reason to exist (vs `do`) is running MULTIPLE agents
- * in parallel on non-interacting slices across the registry (ADR §3). The tick
+ * in parallel on non-interacting tasks across the registry (ADR §3). The tick
  * therefore needs to run up to `maxParallel` jobs IN FLIGHT at once, capped at
  * `perRepoMax` concurrently per repo — and those caps must bound ACTUAL in-flight
  * execution, not just selection (the historical `runOnce` selected up to the caps
@@ -56,8 +56,8 @@ export interface RunConcurrentOptions<I, T> {
  * SAME working checkout (`git checkout -b` / `git mv` / `git commit` mutate the
  * shared HEAD + index), corrupting each other ("claim commit is a no-op" / a
  * failed commit) — a real worktree-isolation hazard, NOT the arbiter CAS the
- * slice expects to serialise winners. The claim is cheap (mv + commit + a CAS
- * push), so serialising it per repo is not the integration bottleneck the slice
+ * task expects to serialise winners. The claim is cheap (mv + commit + a CAS
+ * push), so serialising it per repo is not the integration bottleneck the task
  * warns against; the expensive agent run + the rebase-or-abort integration stay
  * fully concurrent (each runs in its OWN job worktree). Distinct repos still claim
  * in parallel (distinct cwd ⇒ no contention).

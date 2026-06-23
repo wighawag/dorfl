@@ -269,7 +269,7 @@ export class GitHubProvider implements ReviewProvider {
 
 	/**
 	 * Post a follow-up COMMENT on an already-opened PR via
-	 * `gh pr comment <url> --body <text>` (slice `review-gate-pr-comment`),
+	 * `gh pr comment <url> --body <text>` (task `review-gate-pr-comment`),
 	 * threading the PR by the `url` {@link openRequest} returned. The PR already
 	 * exists (this runs AFTER the propose integrate), so any `gh` failure is
 	 * non-fatal: a missing/unauthenticated `gh` DEGRADES to the same surface-the-
@@ -305,7 +305,7 @@ export class GitHubProvider implements ReviewProvider {
 
 	/**
 	 * Post the review comment by RESOLVING the PR from the pushed `work/<slug>`
-	 * BRANCH (slice `review-comment-fallback-on-unparsed-pr-url`), the FALLBACK for
+	 * BRANCH (task `review-comment-fallback-on-unparsed-pr-url`), the FALLBACK for
 	 * when `gh pr create` opened a PR (exit 0) but its stdout url was unparseable so
 	 * {@link openRequest} returned `{opened: true}` with NO `url`. We first RESOLVE
 	 * the open PR's url from the branch (`gh pr view <branch> --json url --jq .url`):

@@ -26,7 +26,7 @@ import type {
 } from './run.js';
 
 /**
- * The **`advance` LOOP DRIVER** (PRD `advance-loop`, slice
+ * The **`advance` LOOP DRIVER** (brief `advance-loop`, task
  * `advance-drivers-and-gates`, US #7/22/26/31) — the second of the two drivers
  * over the substrate-agnostic advance TICK. Where the one-shot driver
  * (`advance-drivers.ts`) runs the tick over named item(s) SEQUENTIALLY, this
@@ -38,7 +38,7 @@ import type {
  *   - the eligible set comes from the SHARED `mirror-side-eligible-pool-scan`
  *     ({@link scanMirrorPool}) — the SAME enumeration the one-shot/CI `advance`
  *     driver + `do --remote -n` consume (NOT invented twice), gated per-action
- *     (build→`autoBuild`, slice→`autoTask`) by the SELECTION layer;
+ *     (build→`autoBuild`, task→`autoTask`) by the SELECTION layer;
  *   - parallelism is the SAME bounded scheduler `run`'s build tick uses
  *     ({@link runConcurrent}) — `maxParallel` global / `perRepoMax` per repo;
  *   - the per-item `advancing` borrow is held INSIDE {@link performAdvance}
@@ -102,10 +102,10 @@ export interface AdvanceOnceOptions {
 	/** The git env the mirror scan's read ops run under (identity/non-interactive). */
 	env?: NodeJS.ProcessEnv;
 	/**
-	 * The LIFECYCLE-POOL create-gates (slice `advance-autopick-lifecycle-pools`),
+	 * The LIFECYCLE-POOL create-gates (task `advance-autopick-lifecycle-pools`),
 	 * forwarded to {@link scanMirrorPool}. INTERIM, born OFF: omitted ⇒ BOTH
 	 * create-gates off, so the loop/CI advance auto-triages / auto-surfaces nothing
-	 * (the apply sub-pool is always-on). The gate slices wire this to
+	 * (the apply sub-pool is always-on). The gate tasks wire this to
 	 * `observationTriage` / `surfaceBlockers`.
 	 */
 	lifecycleGates?: LifecyclePoolGates;
@@ -113,7 +113,7 @@ export interface AdvanceOnceOptions {
 
 /** One advanced item's result + the identity it was for (input order preserved). */
 export interface AdvanceBatchItem {
-	/** The namespaced arg the tick was run on (`prd:<slug>` / bare slug). */
+	/** The namespaced arg the tick was run on (`brief:<slug>` / bare slug). */
 	arg: string;
 	/** The tick's result, or a captured throw mapped to a usage-error result. */
 	result: AdvanceResult;
@@ -192,11 +192,11 @@ export async function advanceOnce(
 			// LOCALLY in the shared per-mirror `treelessCwd` (`context.cwd`); ff-push
 			// it to the mirror's arbiter so the result LANDS on `main` (the CLI wipes +
 			// re-clones that cwd EACH TICK, so an un-pushed local commit is lost). The
-			// build/slice rungs already pushed via the job-worktree `doDriver`.
+			// build/task rungs already pushed via the job-worktree `doDriver`.
 			//
 			// The bounded re-fetch+rebase retry inside `pushTreelessResult` is
 			// LOAD-BEARING here: the `treelessCwd` is cloned ONCE per mirror at tick
-			// start and SHARED across the mirror's SERIAL batch, so a `build`/`slice`
+			// start and SHARED across the mirror's SERIAL batch, so a `build`/`task`
 			// rung EARLIER in the batch can integrate to the mirror's `main` mid-tick
 			// and a LATER tree-less push is non-fast-forward BY CONSTRUCTION — the
 			// retry rebases the slug-only commit onto the advanced `main` and lands it.
@@ -240,9 +240,9 @@ export async function advanceOnce(
 
 /**
  * The advance arg for a selected item (the SELECTION->ARG dispatch): `obs:<slug>`
- * for an observation (the triage rung), `prd:<slug>` for a PRD, bare slug for a
- * slice. The tick re-classifies each arg into the right rung (surface/apply for a
- * `needsAnswers`-blocked slice/PRD; triage for an observation).
+ * for an observation (the triage rung), `brief:<slug>` for a brief, bare slug for a
+ * task. The tick re-classifies each arg into the right rung (surface/apply for a
+ * `needsAnswers`-blocked task/brief; triage for an observation).
  */
 function argForSelected(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
@@ -304,13 +304,13 @@ export interface AdvanceRegistrySetOptions {
 	 */
 	config: Config;
 	/**
-	 * Build the per-mirror advance CONTEXT (everything BUT `arg` and the build/slice
+	 * Build the per-mirror advance CONTEXT (everything BUT `arg` and the build/task
 	 * `doDriver`). The driver INJECTS the per-mirror job-worktree `doDriver`
-	 * ({@link jobWorktreeDoDriver}) on top of what this returns, so the build/slice
+	 * ({@link jobWorktreeDoDriver}) on top of what this returns, so the build/task
 	 * rungs run isolated off THAT mirror's arbiter — the caller supplies the gate
 	 * seams + `doOptions` base (harness, verify, review, …), exactly as the CLI
 	 * wires them for the single-mirror path. `cwd` here is irrelevant to the
-	 * build/slice rungs (the worktree driver replaces it); the tree-less
+	 * build/task rungs (the worktree driver replaces it); the tree-less
 	 * surface/triage/apply rungs use it as their ledger-write cwd.
 	 */
 	contextFor: (input: {
@@ -351,7 +351,7 @@ export interface AdvanceRegistrySetOptions {
 
 /**
  * The **registry-set advance DRIVER** with **per-mirror job-worktree isolation**
- * (slice `advance-loop-driver-registry-set-job-worktrees`) — the advance-tick TWIN
+ * (task `advance-loop-driver-registry-set-job-worktrees`) — the advance-tick TWIN
  * of `runOnce`/`runOneItem`'s build substrate, the substrate `run-uses-advance-tick`
  * needs to become a clean tick swap. Where {@link advanceOnce} drains ONE named
  * mirror's pool IN-PLACE (the single-mirror path), this driver:
@@ -366,16 +366,16 @@ export interface AdvanceRegistrySetOptions {
  *      per-item `advancing` borrow INSIDE {@link performAdvance} — no new lock,
  *      no new scheduler); and
  *   3. threads a **per-mirror job-worktree `doDriver`** ({@link jobWorktreeDoDriver})
- *      into each mirror's advance context, so the build/slice rungs run isolated
+ *      into each mirror's advance context, so the build/task rungs run isolated
  *      in their OWN worktree off THAT mirror's arbiter (the SAME isolation
  *      `runOneItem` gives the build tick) instead of in `process.cwd()`. The
  *      surface/triage/apply rungs stay on their tree-less ledger-write moves
  *      (no build worktree needed) — the worktree driver governs ONLY the
- *      build/slice orchestration target.
+ *      build/task orchestration target.
  *
  * Under calm gates (both lifecycle create-gates off) this is the OBSERVABLE-
  * OUTCOME equivalent of plain `run`'s build tick over the same registry: build
- * ready slices / slice ready PRDs, each per-job-worktree-isolated off the
+ * ready tasks / task ready briefs, each per-job-worktree-isolated off the
  * mirror's arbiter, same integration result — two callers of one
  * `performIntegration` band (the advance build rung reaches it via `performDo`
  * → `performDoRemote`; `runOneItem` reaches it directly), NOT a shared code path.
@@ -407,12 +407,12 @@ export async function advanceRegistrySet(
 	// model `advancing-lock.ts` is built + tested against — two contenders sharing
 	// one checkout corrupt each other's HEAD/index, the SAME reason `run` serialises
 	// the per-repo CLAIM via `createKeyedLock`). A bare mirror has no per-item cwd, so
-	// the build/slice rungs already get their OWN job worktree (via `jobWorktreeDoDriver`
+	// the build/task rungs already get their OWN job worktree (via `jobWorktreeDoDriver`
 	// → `performDoRemote`) but the lock + tree-less rungs share the one cwd — so within
 	// ONE mirror they must run one-at-a-time. Cross-mirror concurrency (distinct
 	// arbiters → distinct cwds, no contention) stays GENUINE, which is the
 	// registry-set point. Per-item-cwd isolation (to also parallelise WITHIN a
-	// mirror) is a follow-up; this slice keeps the borrow reused unchanged + correct.
+	// mirror) is a follow-up; this task keeps the borrow reused unchanged + correct.
 	const settled = await runConcurrent({
 		items: mirrors,
 		maxInFlight: Math.max(1, config.maxParallel),
@@ -421,7 +421,7 @@ export async function advanceRegistrySet(
 		worker: (mirrorPath) => {
 			const originUrl = mirrorOriginUrl(mirrorPath, options.env);
 			// The per-mirror context the CLI shaped (gates + doOptions base) PLUS the
-			// per-mirror job-worktree `doDriver` injected here, so the build/slice rungs
+			// per-mirror job-worktree `doDriver` injected here, so the build/task rungs
 			// build isolated off THIS mirror's arbiter (cwd untouched).
 			const baseContext = options.contextFor({mirrorPath, originUrl});
 			const context: Omit<AdvanceTickOptions, 'arg'> = {
@@ -481,7 +481,7 @@ export function advanceRegistrySetSummary(
 
 /** The convergence counts of one batch (the drain/idle signal US #31 asserts on). */
 export interface AdvanceBatchSummary {
-	/** Items the batch ADVANCED a rung (build/slice/surface/apply/triage). */
+	/** Items the batch ADVANCED a rung (build/task/surface/apply/triage). */
 	advanced: number;
 	/** Items that NO-OPed (a pending sidecar idling — the calm-at-rest population). */
 	idle: number;
@@ -549,7 +549,7 @@ export interface AdvanceRunTickDeps extends Omit<
  * Adapt the {@link advanceOnce} LOOP DRIVER to the {@link RunTick} swap SEAM so
  * `run` (≡ CI, US #7) drives the ADVANCE tick over the mirror-side eligible pool
  * instead of the build tick. `run.ts` deliberately writes {@link runLoop} against
- * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop PRD can
+ * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop brief can
  * swap the tick WITHOUT re-architecting the loop — this is that swap.
  *
  * The seam is `(RunOnceOptions) => Promise<RunOnceResult>`; one advance batch is
@@ -615,7 +615,7 @@ export interface AdvanceRegistrySetRunTickDeps extends Omit<
 /**
  * Adapt the REGISTRY-SET advance DRIVER ({@link advanceRegistrySet}) onto the
  * {@link RunTick} swap SEAM so plain `run` (no flag) drives the ADVANCE tick over
- * the WHOLE registry instead of the build tick (`runOnce`) — the slice
+ * the WHOLE registry instead of the build tick (`runOnce`) — the task
  * `run-uses-advance-tick`. `run.ts` deliberately writes {@link runLoop} against
  * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop design can
  * swap the tick WITHOUT re-architecting the loop; this is that swap, now pointing
@@ -625,7 +625,7 @@ export interface AdvanceRegistrySetRunTickDeps extends Omit<
  *
  * Under calm gates (both lifecycle create-gates off) this is the OBSERVABLE-
  * OUTCOME equivalent of plain `run`'s build tick over the same registry: build
- * ready slices / slice ready PRDs, each per-job-worktree-isolated off the
+ * ready tasks / task ready briefs, each per-job-worktree-isolated off the
  * mirror's arbiter, same integration result; touch no observations, surface no
  * questions. Flip a gate and the SAME tick performs the lifecycle
  * (triage / surface / apply) for free — no separate `--advance` mode to discover.

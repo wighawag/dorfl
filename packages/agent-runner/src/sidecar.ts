@@ -2,7 +2,7 @@ import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **question/answer SIDECAR contract** (PRD `advance-loop`, slice
+ * The **question/answer SIDECAR contract** (brief `advance-loop`, task
  * `advance-sidecar-contract`) — the one genuinely-new piece of the `advance`
  * family. A strict, tooling-OWNED per-item file `work/questions/<type>-<slug>.md`
  * carrying per-entry answered-state, so the tooling fully owns the Q&A artifact
@@ -12,7 +12,7 @@ import {workItemRel} from './work-layout.js';
  * derived-`allAnswered` operations. The ATOMIC apply (mutate the item body AND
  * the sidecar in ONE commit) lives in {@link applyAtomic} (`sidecar-apply.ts`).
  * It builds NOTHING above the contract — no tick, no verb, no lock, no rungs;
- * later slices of the family consume these.
+ * later tasks of the family consume these.
  *
  * # On-disk text format (REFORMATTED — ADR `question-sidecar-human-readable-format`)
  *

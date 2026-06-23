@@ -1,13 +1,13 @@
 /**
  * Builds the prompt the runner hands to `agentCmd`: a small CONSTANT wrapper
- * (only the `<slug>` / source-PRD path vary) around the claimed slice's own
+ * (only the `<slug>` / source-brief path vary) around the claimed task's own
  * `## Prompt` section. This is dual-use — the SAME assembly the autonomous
  * runner feeds `agentCmd` and the human `agent-runner prompt [<slug>]` command.
  *
  * The wrapper is NOT hardcoded here: it is read VERBATIM from the work-contract
- * (`skills/to-slices/CLAIM-PROTOCOL.md` → "The prompt handed to the work agent"),
+ * (`skills/setup/protocol/CLAIM-PROTOCOL.md` → "The prompt handed to the work agent"),
  * so the emitted text can never silently diverge from the canonical contract.
- * We only substitute the per-slice placeholders (`<slug>`, `<prd>`).
+ * We only substitute the per-task placeholders (`<slug>`, `<brief>`).
  *
  * The wrapper draws the git boundary IN-BAND — the spawned agent does NO git ops
  * on the repo (no commit/push, no moving `work/` files); the RUNNER owns every
@@ -35,9 +35,9 @@ import {isAncestor} from './gc.js';
 import {extractReason} from './needs-attention.js';
 
 /**
- * Extract the body of the `## Prompt` section from a slice's markdown. Returns
+ * Extract the body of the `## Prompt` section from a task's markdown. Returns
  * the section text with the heading removed, leading `>` blockquote markers
- * stripped, trimmed; or `undefined` when the slice has no `## Prompt` heading.
+ * stripped, trimmed; or `undefined` when the task has no `## Prompt` heading.
  */
 export function extractPromptSection(content: string): string | undefined {
 	const normalized = content.replace(/\r\n/g, '\n');
@@ -137,7 +137,7 @@ export function resolveProtocolDoc(
 /**
  * Pull the canonical wrapper TEMPLATE out of CLAIM-PROTOCOL.md: the first fenced
  * code block following the "The prompt handed to the work agent" heading. The
- * returned text still contains the `<slug>` / `<prd>` placeholders verbatim — it
+ * returned text still contains the `<slug>` / `<brief>` placeholders verbatim — it
  * is the single source of truth for the wrapper.
  */
 export function extractCanonicalWrapperTemplate(protocol: string): string {
@@ -198,7 +198,7 @@ export function extractCanonicalWrapperTemplate(protocol: string): string {
  * The single-pass extractor-post-step for the `promptGuidance` NUDGE namespace.
  * Resolves every `<!-- if promptGuidance.<member> --> … <!-- else --> … <!-- /if -->`
  * conditional fragment in the canonical wrapper template ("Option A" — single
- * wrapper, conditional fragments — see the ADR + this slice's recorded decision):
+ * wrapper, conditional fragments — see the ADR + this task's recorded decision):
  * when the named nudge member resolves TRUE the IF-branch text is kept and the
  * markers + ELSE-branch are stripped; when FALSE the ELSE-branch text is kept
  * and the markers + IF-branch are stripped. The markers' own lines (and the
@@ -208,7 +208,7 @@ export function extractCanonicalWrapperTemplate(protocol: string): string {
  *
  * Pure string transform; runs AFTER `extractCanonicalWrapperTemplate` (a pure
  * verbatim extractor stays a pure verbatim extractor) and BEFORE the
- * `<slug>`/`<prd>` substitution.
+ * `<slug>`/`<brief>` substitution.
  */
 export function applyPromptGuidance(
 	template: string,
@@ -227,10 +227,10 @@ export function applyPromptGuidance(
 }
 
 /**
- * The constant wrapper, parameterised only by the slice slug, its source PRD
+ * The constant wrapper, parameterised only by the task slug, its source brief
  * slug, and (optionally) the resolved {@link PromptGuidance} nudges. Read
  * verbatim from the work-contract and substituted — never a divergent hardcoded
- * copy. `prd` may be `undefined` when the slice has no `prd:` field. When
+ * copy. `brief` may be `undefined` when the task has no `brief:` field. When
  * `promptGuidance` is omitted (or every member resolves false) the output is
  * BYTE-IDENTICAL to today's wrapper (the ELSE-branch of every conditional is
  * the historic text).
@@ -259,7 +259,7 @@ export function wrapper(
 
 /**
  * The CONTINUE context that turns the fresh-start assembly into a continue-mode
- * one (the `agent-prompt-continue-context` slice). It is OPT-IN state inherited
+ * one (the `agent-prompt-continue-context` task). It is OPT-IN state inherited
  * from a PRIOR attempt: present iff the arbiter holds a `work/<slug>` branch
  * AHEAD of main (the `requeue` default kept it) — the SAME condition the
  * `requeue-continue-and-reset` onboarding paths detect via {@link branchAheadOf}.
@@ -350,7 +350,7 @@ export function resolveContinueContext(options: {
 	branchRef: string;
 	/** The main ref to compare against (in-place: `<arbiter>/main`). */
 	mainRef: string;
-	/** The resolved slice file content (the item body the notes live in). */
+	/** The resolved task file content (the item body the notes live in). */
 	content: string;
 	/** Environment for the read-only git child. */
 	env?: NodeJS.ProcessEnv;
@@ -383,14 +383,14 @@ function stripRemotePrefix(branchRef: string, arbiter: string): string {
 }
 
 /**
- * Build the CONTINUE block injected ahead of the slice prompt in continue-mode.
+ * Build the CONTINUE block injected ahead of the task prompt in continue-mode.
  * Pure text: a "you are continuing" framing + a pointer to review the prior diff
  * vs `<arbiter>/main` + the needs-attention reason + the requeue handoff note(s)
  * (read from the item body). Never emitted in fresh-start mode.
  */
 export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
 	const lines: string[] = [];
-	lines.push('## You are CONTINUING prior work on this slice');
+	lines.push('## You are CONTINUING prior work on this task');
 	lines.push('');
 	lines.push(
 		`This is NOT a fresh start. A prior attempt at '${slug}' was requeued, and ` +
@@ -418,14 +418,14 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
 }
 
 /**
- * Build the full prompt: the canonical wrapper for `slug` (with its source PRD
- * substituted) followed by the slice's own `## Prompt` body, appended verbatim.
+ * Build the full prompt: the canonical wrapper for `slug` (with its source brief
+ * substituted) followed by the task's own `## Prompt` body, appended verbatim.
  *
  * In CONTINUE-mode (a {@link ContinueContext} is supplied), a CONTINUE block is
- * injected between the wrapper and the slice prompt — telling the agent it is
+ * injected between the wrapper and the task prompt — telling the agent it is
  * continuing, where to find the prior diff, why it stalled, and the human's
  * handoff note(s). In FRESH-START mode (no context, the common case) the output
- * is BYTE-IDENTICAL to the canonical wrapper + slice prompt — no CONTINUE block.
+ * is BYTE-IDENTICAL to the canonical wrapper + task prompt — no CONTINUE block.
  */
 export function buildAgentPrompt(
 	slug: string,
@@ -447,21 +447,21 @@ export function buildAgentPrompt(
 }
 
 /**
- * Which work/ folder a slice file was resolved from. `done` is reachable ONLY on
+ * Which work/ folder a task file was resolved from. `done` is reachable ONLY on
  * a CONTINUE and ONLY when the work-branch tip is STRANDED (committed-but-not-on
- * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE slice
+ * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE task
  * (see {@link resolveTask} + {@link ContinueResolutionGate}).
  */
 export type TaskFolder = TaskResolutionFolder;
 
 export interface ResolvedTask {
-	/** The slug of the resolved slice. */
+	/** The slug of the resolved task. */
 	slug: string;
-	/** Absolute path to the slice file that was read. */
+	/** Absolute path to the task file that was read. */
 	path: string;
-	/** The folder the slice was resolved from (in-progress wins over tasks-todo). */
+	/** The folder the task was resolved from (in-progress wins over tasks-todo). */
 	folder: TaskFolder;
-	/** The slice's source brief slug (frontmatter `brief:`), if any. */
+	/** The task's source brief slug (frontmatter `brief:`), if any. */
 	brief: string | undefined;
 	/** The extracted `## Prompt` body. */
 	taskPrompt: string;
@@ -486,21 +486,21 @@ export interface PromptOptions {
 	promptGuidance?: {testFirst?: boolean};
 }
 
-/** Raised for usage/environment problems (no slug, no slice file, no prompt). */
+/** Raised for usage/environment problems (no slug, no task file, no prompt). */
 export class PromptError extends Error {}
 
 /**
  * The CONTINUE-only gate that lets {@link resolveTask} reach a task that has
  * already been done-moved into `work/done/` — story 5 of the `ledger-integrity`
- * PRD (defect 3). A continue/re-claim can legitimately land on a branch whose
- * slice was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
- * onboard must find it; but a `done/` slice is folder-indistinguishable between
+ * brief (defect 3). A continue/re-claim can legitimately land on a branch whose
+ * task was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
+ * onboard must find it; but a `done/` task is folder-indistinguishable between
  * two states and re-onboarding a genuinely-finished one would RE-RUN it. So
  * `done/` is admitted ONLY behind this gate, which disambiguates by TIP-vs-
  * ARBITER reachability, NEVER folder name alone:
  *
  *   - work-branch tip REACHABLE on `<arbiter>/main` => COMPLETE => NOT admitted
- *     (onboard must not resurrect a finished slice).
+ *     (onboard must not resurrect a finished task).
  *   - work-branch tip committed-but-NOT-on-the-arbiter => STRANDED => admitted
  *     (the continue is legitimate).
  *
@@ -534,7 +534,7 @@ export interface ContinueResolutionGate {
  * resolves to a commit that is NOT reachable on the arbiter main
  * (`gate.mainRef`). REUSES {@link isAncestor} (`gc.ts`) — the one reachability
  * predicate — never a second one. When the branch ref does not resolve (no prior
- * attempt's branch on the arbiter) the slice is NOT treated as a stranded
+ * attempt's branch on the arbiter) the task is NOT treated as a stranded
  * continue (false → `done/` stays unreachable, the safe direction). Read-only.
  */
 function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
@@ -553,15 +553,15 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
 }
 
 /**
- * Resolve a slice's file: prefer `work/in-progress/<slug>.md`, fall back to
- * `work/backlog/<slug>.md`. Returns the parsed PRD + extracted `## Prompt` body.
+ * Resolve a task's file: prefer `work/in-progress/<slug>.md`, fall back to
+ * `work/backlog/<slug>.md`. Returns the parsed brief + extracted `## Prompt` body.
  * Throws {@link PromptError} when neither file exists or it has no prompt body.
  *
  * On a CONTINUE (a {@link ContinueResolutionGate} is supplied), `work/done/` is
  * added to the resolution AFTER `in-progress`/`backlog` — but ONLY when the gate
  * proves the work-branch tip is STRANDED (committed-but-not-on-the-arbiter). A
- * genuinely-COMPLETE `done/` slice (tip reachable on `<arbiter>/main`) is NEVER
- * resolved, so onboard cannot resurrect a finished slice (defect 3 / story 5).
+ * genuinely-COMPLETE `done/` task (tip reachable on `<arbiter>/main`) is NEVER
+ * resolved, so onboard cannot resurrect a finished task (defect 3 / story 5).
  * The `in-progress`/`backlog` resolution is UNCHANGED in every case; `done/` is
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
  * is byte-identical to the original `['in-progress','tasks-todo']`-only resolution.
@@ -573,7 +573,7 @@ export function resolveTask(
 ): ResolvedTask {
 	const order: TaskFolder[] = ['in-progress', 'tasks-todo'];
 	// `done/` is appended ONLY on a continue whose work-branch tip is STRANDED —
-	// the tip-vs-arbiter gate (NEVER folder name alone). A complete slice (tip on
+	// the tip-vs-arbiter gate (NEVER folder name alone). A complete task (tip on
 	// the arbiter) leaves the order untouched, so onboard never re-runs it.
 	if (continueGate && isStrandedDoneTip(continueGate)) {
 		order.push('done');
@@ -587,14 +587,14 @@ export function resolveTask(
 		const taskPrompt = extractPromptSection(content);
 		if (taskPrompt === undefined) {
 			throw new PromptError(
-				`slice '${slug}' (${workFolderRel(folder)}/${slug}.md) has no '## Prompt' section`,
+				`task '${slug}' (${workFolderRel(folder)}/${slug}.md) has no '## Prompt' section`,
 			);
 		}
 		const fm = parseFrontmatter(content);
 		return {slug, path, folder, brief: fm.brief, taskPrompt};
 	}
 	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
-	throw new PromptError(`no slice '${slug}' found in ${searched}`);
+	throw new PromptError(`no task '${slug}' found in ${searched}`);
 }
 
 /** If HEAD is a `work/<slug>` branch, return `<slug>`; else `''`. */
@@ -617,8 +617,8 @@ export function inferSlugFromBranch(
 
 /**
  * The full `agent-runner prompt [<slug>]` rendering: resolve the slug (explicit,
- * else inferred from a `work/<slug>` branch), resolve its slice file
- * (in-progress over backlog), and assemble the canonical wrapper + the slice's
+ * else inferred from a `work/<slug>` branch), resolve its task file
+ * (in-progress over backlog), and assemble the canonical wrapper + the task's
  * `## Prompt`. Pure with respect to the repo (read-only) — the caller writes the
  * result to stdout.
  */
@@ -648,7 +648,7 @@ export function resolveItemPromptGuidance(
 
 /**
  * Locate a brief's file on disk: prefer `work/briefs/ready/<slug>.md` (the
- * auto-slice pool), then fall back to `work/briefs/tasked/<slug>.md` (sliced,
+ * auto-slice pool), then fall back to `work/briefs/tasked/<slug>.md` (tasked,
  * resting). Returns `undefined` when neither exists — the caller treats that
  * as "no brief-level override available" and the precedence chain falls
  * through to the repo policy (a missing brief is NOT an error at this seam;

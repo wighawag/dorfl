@@ -72,7 +72,7 @@ export function resolveItemPathByIdentity(
 
 /**
  * The PER-REGIME won't-proceed terminal a `dropped` disposition routes an item to,
- * by its TYPE — the slug-collision correctness fix (PRD
+ * by its TYPE — the slug-collision correctness fix (brief
  * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped brief
  * sharing a slug used to collide on one bare-slug `work/dropped/<slug>.md`; each
  * regime now has its own namespaced terminal. An OBSERVATION has NO terminal folder
@@ -91,7 +91,7 @@ function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
 }
 
 /**
- * The engine-owned APPLY PERSIST (PRD `advance-loop`, slice `advance-rung-apply`,
+ * The engine-owned APPLY PERSIST (brief `advance-loop`, task `advance-rung-apply`,
  * US #11/14/15/29/30) — the half of the APPLY rung the ENGINE owns. On
  * `classify=apply` (ALL sidecar entries answered), it applies the HUMAN's
  * answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the
@@ -109,7 +109,7 @@ function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
  * It is the SIBLING of {@link import('./surface-persist.js').persistSurfacedQuestions}:
  * that is the SURFACE rung's one-commit primitive (append-or-create + set
  * `needsAnswers`); this is the APPLY rung's (apply answers + resolve/re-pause/
- * disposition). Kept file-orthogonal so the rung bodies land in different slices.
+ * disposition). Kept file-orthogonal so the rung bodies land in different tasks.
  *
  * **NEVER invents an answer (US #4).** The apply rung applies ONLY what the human
  * authored — the recorded `answer:` text and the `disposition:` field. It does
@@ -142,9 +142,9 @@ const APPLIED_HEADING = '## Applied answers';
  * `## Open questions`). Items authored WITHOUT the markers are left untouched
  * (backward compat — no marker ⇒ nothing to strip ⇒ identical bytes).
  *
- * The sibling slice `templates-mark-transient-open-questions-block` introduces
- * the markers in the brief/task templates; this slice exports the constants so
- * the two slices agree on the literal byte sequence.
+ * The sibling task `templates-mark-transient-open-questions-block` introduces
+ * the markers in the brief/task templates; this task exports the constants so
+ * the two tasks agree on the literal byte sequence.
  */
 export const OPEN_QUESTIONS_MARKER_OPEN = '<!-- open-questions -->';
 export const OPEN_QUESTIONS_MARKER_CLOSE = '<!-- /open-questions -->';
@@ -155,7 +155,7 @@ const TRIAGED_KEEP = 'keep';
 export interface ApplyAnsweredQuestionsOptions {
 	/** Working clone/worktree the apply commits in. */
 	cwd: string;
-	/** The namespaced item identity (`slice:foo` / `prd:bar` / `observation:baz`). */
+	/** The namespaced item identity (`task:foo` / `brief:bar` / `observation:baz`). */
 	item: string;
 	/**
 	 * The item file path RELATIVE to `cwd` (e.g. `work/backlog/foo.md`). The
@@ -190,7 +190,7 @@ export type ApplyTerminal =
 	/**
 	 * Moved to the regime's PER-REGIME "won't-proceed" terminal: a TASK to
 	 * `work/tasks/cancelled/`, a BRIEF to `work/briefs/dropped/` (the slug-collision
-	 * fix, slice `brief-regime-rename-and-dropped-migration`). An OBSERVATION has no
+	 * fix, task `brief-regime-rename-and-dropped-migration`). An OBSERVATION has no
 	 * terminal folder, so a `dropped` disposition on one downgrades to
 	 * `delete-recommended` (notes leave by deletion). The specific REASON
 	 * (`out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned`) lives in the
@@ -316,7 +316,7 @@ const TERMINAL_PRECEDENCE: SidecarDisposition[] = [
  * Pick the SINGLE terminal disposition to execute from the answered entries (the
  * most-decisive present), or `undefined` for a plain resolve. `promote-task` /
  * `promote-adr` are NOT terminals HERE — they are the triage rung's new-item
- * creation (slice `advance-rung-triage` consumes the CAS-create helper); the apply
+ * creation (task `advance-rung-triage` consumes the CAS-create helper); the apply
  * rung treats a promote as a plain resolve of THIS item (the promotion is a
  * separate new-item creation, not a move of this one).
  */

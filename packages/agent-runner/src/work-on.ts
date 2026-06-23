@@ -20,9 +20,9 @@ import {workBranchRef} from './slug-namespace.js';
 import type {InteractiveLauncher} from './harness.js';
 
 /**
- * `agent-runner work-on` — the HUMAN command to claim a slice and create an
+ * `agent-runner work-on` — the HUMAN command to claim a task and create an
  * isolated **worktree in a human-friendly location**, so a person can open their
- * editor and work several slices in parallel without juggling branches in one
+ * editor and work several tasks in parallel without juggling branches in one
  * checkout. It is the human counterpart to the runner's job worktrees
  * (`workspace.ts`): it is NEVER used by agents, so it never carries the human's
  * secrets into an agent context (see `--copy`).
@@ -120,7 +120,7 @@ export interface WorkOnOptions {
 	 */
 	saveRoot?: (dir: string) => void;
 	/**
-	 * `--agent` (slice `agent-interactive-launch`): after the human worktree is
+	 * `--agent` (task `agent-interactive-launch`): after the human worktree is
 	 * created, launch the configured harness INTERACTIVELY in THAT worktree — a
 	 * foreground session the human drives (no prepared prompt). Injected as a thin
 	 * launcher so `work-on.ts` stays decoupled from `createHarness`: the CLI wires
@@ -258,7 +258,7 @@ async function runWorkOn(
 		note(message);
 		note(`To start working:  cd ${created.dir}`);
 
-		// `--agent` (slice `agent-interactive-launch`): launch the configured harness
+		// `--agent` (task `agent-interactive-launch`): launch the configured harness
 		// INTERACTIVELY in the freshly-created worktree so the human can immediately
 		// drive the agent there. It is NOT a tracked job (decision #3): no record, no
 		// gate — it blocks in the foreground until the human exits, then control
@@ -411,7 +411,7 @@ function createHumanWorktree(params: {
 	}
 
 	const key = encodeRepoKey(mirrorUrl);
-	// `work-on` builds a SLICE in a worktree — the slice-namespaced work branch.
+	// `work-on` builds a TASK in a worktree — the task-namespaced work branch.
 	const branch = workBranchRef('task', slug);
 	const dir = join(root, key, slug);
 

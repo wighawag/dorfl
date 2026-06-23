@@ -47,7 +47,7 @@ import {
 import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
 
 /**
- * **`intake <N>`** (PRD `issue-intake`, slice `intake-tracer-slice-outcome`): the
+ * **`intake <N>`** (brief `issue-intake`, task `intake-tracer-slice-outcome`): the
  * KEYSTONE of the issue front-door. A new, GATE-FREE command — explicit invocation
  * IS the authorization (precedent: `explicit-do-prd-not-gated-by-autoslice`), so
  * `autoTask`/`autoBuild` config does NOT apply — that reads a GitHub issue + its
@@ -61,7 +61,7 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  * prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not); only the
  * dispatch is.
  *
- * The dispatcher implements the FULL four-outcome decision table (PRD
+ * The dispatcher implements the FULL four-outcome decision table (brief
  * `issue-intake` — the source of truth):
  * - **ASK** (not clear enough to act on): `postIssueComment` the next clarifying
  *   question; emit NOTHING; STOP.
@@ -69,9 +69,9 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
  *   lone-slice closure link, NOT `Fixes #N`), integrate via {@link
  *   performIntegration} (default `propose`).
- * - **PRD** (clear AND coherent but >1 slice — INCLUDING a coupled-but-SMALL pair,
- *   which is NEVER bounced): write `work/prd/<slug>.md` with `issue: N` (+ the gate
- *   axes the verdict carried), integrate, STOP (slicing is the separate `do prd:`
+ * - **PRD** (clear AND coherent but >1 task — INCLUDING a coupled-but-SMALL pair,
+ *   which is NEVER bounced): write the brief file (`work/briefs/ready/<slug>.md`) with `issue: N` (+ the gate
+ *   axes the verdict carried), integrate, STOP (tasking is the separate `do brief:`
  *   step).
  * - **BOUNCE** (genuinely UNRELATED concerns — no shared vision): the bounce is
  *   TERMINAL (the asks are unrelated and must be re-filed), so intake CLOSES the
@@ -81,12 +81,12 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  *   slice/prd (CI's close-job closes those via the `issue:` field) / ask.
  *
  * The per-outcome integration KNOBS, the processing LOCK, and event-classification
- * are LATER slices and are NOT built here (default `propose` is fine here).
+ * are LATER tasks and are NOT built here (default `propose` is fine here).
  *
  * The AGENT only DRAFTS (returns the verdict object); the RUNNER (this dispatcher)
- * owns every git/seam side-effect — the write + integrate (and, in later slices,
+ * owns every git/seam side-effect — the write + integrate (and, in later tasks,
  * the comment + label ops). The agent is git-free AND seam-free: the in-band
- * boundary (the SAME discipline the build/slicer agents follow).
+ * boundary (the SAME discipline the build/tasker agents follow).
  */
 
 /** The four outcomes the decision prompt classifies an issue into (the decision table). */
@@ -94,9 +94,9 @@ export type IntakeOutcome = 'ask' | 'slice' | 'prd' | 'bounce';
 
 /**
  * The VERDICT the decision prompt returns — `{ask,slice,prd,bounce}` + the drafted
- * content for the chosen outcome. THIS slice consumes only the `slice` branch's
+ * content for the chosen outcome. THIS code path consumes only the `slice` branch's
  * fields (`sliceSlug` / `sliceTitle` / `sliceBody`); the `ask`/`prd`/`bounce`
- * fields are carried on the shape (so the type is stable for the next slice) but
+ * fields are carried on the shape (so the type is stable for the next task) but
  * not dispatched here.
  */
 export interface IntakeVerdict {
@@ -126,9 +126,9 @@ export interface IntakeVerdict {
 	 */
 	question?: string;
 	/**
-	 * The drafted PRD's content-derived slug (`prd` outcome). The dispatcher
-	 * SANITISES it through `paramCase` (never a counter) before writing
-	 * `work/prd/<slug>.md`. Falls back to a slug derived from {@link prdTitle} when
+	 * The drafted brief's content-derived slug (`prd` outcome). The dispatcher
+	 * SANITISES it through `paramCase` (never a counter) before writing the brief
+	 * file (`work/briefs/ready/<slug>.md`). Falls back to a slug derived from {@link prdTitle} when
 	 * absent/empty.
 	 */
 	prdSlug?: string;
@@ -142,10 +142,10 @@ export interface IntakeVerdict {
 	 */
 	prdBody?: string;
 	/**
-	 * The PRD's gate axes (`prd` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
-	 * the emitted `work/prd/<slug>.md` frontmatter (PRD US #8: "the emitted artifact
+	 * The brief's gate axes (`prd` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
+	 * the emitted brief frontmatter (brief `issue-intake` US #8: "the emitted artifact
 	 * carries … its own gate axes"). Both omitted (undeclared) by default; the prompt
-	 * sets `prdHumanOnly: true` when a human should drive the SLICING and/or
+	 * sets `prdHumanOnly: true` when a human should drive the TASKING and/or
 	 * `prdNeedsAnswers: true` when open questions remain.
 	 */
 	prdHumanOnly?: boolean;
@@ -163,7 +163,7 @@ export interface IntakeVerdict {
 export type IntakeRunOutcome =
 	| 'sliced' // a `slice` verdict → backlog slice written + integrated
 	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
-	| 'prd' // a `prd` verdict → `work/prd/<slug>.md` written + integrated
+	| 'prd' // a `prd` verdict → the brief file (`work/briefs/ready/<slug>.md`) written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
 	| 'no-new-input' // the TRIAGE saw intake had the last word + nothing unseen → SKIP (ran, deliberately did nothing)
 	| 'already-terminal' // the TRIAGE saw the issue was already transformed (a `bounced`/`created` marker) → SKIP
@@ -232,7 +232,7 @@ export interface PerformIntakeOptions {
 	 * `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C).
 	 * Tests inject a CANNED review verdict (no model/network) — the new testable
 	 * seam; production wires the harness ({@link harnessLoneSliceReviewGate}). It
-	 * mirrors {@link decide}'s injectable shape, NOT the slicer loop (which is a
+	 * mirrors {@link decide}'s injectable shape, NOT the tasker loop (which is a
 	 * SET-level reviewer this never imports/calls).
 	 */
 	reviewSlice?: LoneSliceReviewGate;
@@ -245,7 +245,7 @@ export interface PerformIntakeOptions {
 	/** The HOST-ONLY sessions root for the pi session file. */
 	sessionsDir?: string;
 	/**
-	 * The PER-OUTCOME integration modes (PRD US #9) the emitted artifact integrates
+	 * The PER-OUTCOME integration modes (brief `issue-intake` US #9) the emitted artifact integrates
 	 * THROUGH the shared core with. Because `intake` decides the artifact TYPE at
 	 * RUNTIME, the mode is keyed per type: an emitted task integrates with
 	 * `integration.task`, an emitted brief with `integration.brief` (`propose` =
@@ -256,10 +256,10 @@ export interface PerformIntakeOptions {
 	 */
 	integration?: IntakeIntegrationModes;
 	/**
-	 * **The ORIGIN-TRUST verdict, passed IN** (slice
+	 * **The ORIGIN-TRUST verdict, passed IN** (task
 	 * `untrusted-origin-forces-build-propose`; the `--origin-trust <trusted|untrusted>`
-	 * CLI flag). `intake` STAMPS `origin: issue` + this `originTrust` onto every PRD/
-	 * slice it emits, so the author-trust signal SURVIVES the PRD/slice merge
+	 * CLI flag). `intake` STAMPS `origin: issue` + this `originTrust` onto every brief/
+	 * task it emits, so the author-trust signal SURVIVES the brief/task merge
 	 * boundary (a landed-on-main artifact otherwise erases how it was born, the
 	 * laundering gap). `intake` does NOT resolve trust itself: the verdict is CI's
 	 * POLICY, computed in the `intake.yml` shell from the SAME `author_association`
@@ -277,8 +277,8 @@ export interface PerformIntakeOptions {
 	 */
 	noPR?: boolean;
 	/**
-	 * **The per-repo BRIEF-PLACEMENT default, passed IN** (PRD
-	 * `staging-pool-position-gate-and-trust-model` US #2/#5, slice
+	 * **The per-repo BRIEF-PLACEMENT default, passed IN** (brief
+	 * `staging-pool-position-gate-and-trust-model` US #2/#5, task
 	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The resolved
 	 * per-repo default landing for `intake`-authored briefs (`pre-proposed` =
 	 * staging; `ready` = the auto-tasking pool), fed as the CONFIGURED-DEFAULT rung
@@ -297,7 +297,7 @@ export interface PerformIntakeOptions {
 	 * analogue of `explicitMerge` overriding the untrusted-origin
 	 * build-propose rule ("the operator is present; CLI always wins, no
 	 * special force-key"). Set ONLY when the operator typed
-	 * `--prds-land-in <where>`; never when the value came from config.
+	 * `--briefs-land-in <where>`; never when the value came from config.
 	 */
 	explicitBriefsLandIn?: BriefsLandIn;
 	/**
@@ -326,31 +326,27 @@ export interface PerformIntakeOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
- * **The STAGED-PRDs dir** (PRD `staging-pool-position-gate-and-trust-model`,
- * slice `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing
+ * **The STAGED-briefs dir** (brief `staging-pool-position-gate-and-trust-model`,
+ * task `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing
  * ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement`). When
  * the runner-deterministic placement resolver picks the staging side for an
- * `intake`-authored PRD, the runner writes the PRD file HERE instead of in
- * `work/prd/`. An item born in `pre-prd/` is durable + readable but NOT in
- * the auto-slice POOL (`work/prd/` STILL means the pool — every existing
- * reader is byte-for-byte unchanged). A runner/human-owned promotion
- * ({@link promoteFromPreBrief} in `needs-attention.ts`) moves an approved PRD
- * `pre-prd/ → prd/` to make it auto-sliceable. STEP A: ADDITIVE — no
- * `work/prd/` reader changes here; the STEP-B `prd/ → prd-ready/` rename is
- * deferred to `folder-taxonomy-reorg-and-rename`.
+ * `intake`-authored brief, the runner writes the brief file HERE instead of in
+ * `work/briefs/ready/`. An item born in `briefs/proposed/` is durable + readable but NOT in
+ * the tasking candidate POOL (`work/briefs/ready/` is the pool). A runner/human-owned promotion
+ * ({@link promoteFromPreBrief} in `needs-attention.ts`) moves an approved brief
+ * `briefs/proposed/ → briefs/ready/` to make it taskable.
  */
 export const STAGED_PRDS_DIR = workFolderRel('briefs-proposed');
 
 /**
- * The POOL folder PRDs land in when the runner-deterministic placement
+ * The POOL folder briefs land in when the runner-deterministic placement
  * resolver chooses the pool side (`briefsLandIn: 'ready'` + a trusted origin, or
- * an `--prds-land-in ready` operator override). STEP A: the name stays `prd`
- * (it KEEPS its "the auto-slice candidate pool" meaning); the STEP-B taxonomy
- * rename to `prd-ready/` is deferred.
+ * an `--briefs-land-in ready` operator override). This is `work/briefs/ready/`,
+ * the tasking candidate pool.
  */
 const POOL_PRDS_DIR = workFolderRel('briefs-ready');
 
-/** The placement slots for the PRD lifecycle (folder names). */
+/** The placement slots for the brief lifecycle (folder names). */
 const PRD_PLACEMENT_SLOTS: PlacementSlots = {
 	staging: STAGED_PRDS_DIR,
 	pool: POOL_PRDS_DIR,
@@ -373,7 +369,7 @@ function briefLandingToSide(
 
 /**
  * The emitted artifact TYPE `intake` decides at RUNTIME — a `slice` verdict emits
- * `work/backlog/<slug>.md`, a `prd` verdict emits `work/prd/<slug>.md`. The two
+ * `work/backlog/<slug>.md`, a `prd` verdict emits the brief file (`work/briefs/ready/<slug>.md`). The two
  * granular flag axes (`--merge-slice`/`--propose-slice` vs `--merge-prd`/
  * `--propose-prd`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
@@ -381,7 +377,7 @@ function briefLandingToSide(
 export type IntakeArtifactType = 'slice' | 'prd';
 
 /**
- * The PER-OUTCOME integration mode FLAG SET (PRD `issue-intake` US #9). Because
+ * The PER-OUTCOME integration mode FLAG SET (brief `issue-intake` US #9). Because
  * `intake` decides the artifact TYPE at runtime, a single `--merge`/`--propose`
  * cannot express a type-conditional policy ("merge a PRD but propose a slice") —
  * hence the four GRANULAR per-type flags layered over the two AGGREGATES:
@@ -443,10 +439,10 @@ function granularFromFlags(
 }
 
 /**
- * The PURE per-outcome integration mode resolution (PRD `issue-intake` US #9 —
+ * The PURE per-outcome integration mode resolution (brief `issue-intake` US #9 —
  * the canonical table). Given ONLY the flag set, resolve BOTH per-type modes in
  * one eager pass (so a usage error is caught before the runtime verdict is even
- * known). The rules, all decided in the PRD:
+ * known). The rules, all decided in the brief:
  *
  * - **unset ⇒ propose for BOTH** (conservative default; matches `do`).
  * - **aggregates:** `--merge` ⇒ merge both; `--propose` ⇒ propose both (this axis
@@ -563,7 +559,7 @@ export async function performIntake(
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
 
-	// 2. ACQUIRE the `processing` LOCK (PRD US #10): a TRANSIENT concurrency mutex
+	// 2. ACQUIRE the `processing` LOCK (brief `issue-intake` US #10): a TRANSIENT concurrency mutex
 	//    that serialises two concurrent runs on the SAME issue. Read the labels; if
 	//    the lock is ALREADY present, BACK OFF (do nothing — another run owns it). The
 	//    winner ADDS the label and proceeds; the label is REMOVED on finish (success
@@ -809,9 +805,9 @@ async function decideAndDispatch(
 	// git/seam side-effect below (the in-band boundary): the write + integrate
 	// (slice/prd) and the `postIssueComment` (ask/bounce).
 	//
-	// PER-OUTCOME integration (PRD US #9): the resolved mode is keyed on the runtime
-	// artifact TYPE — a `slice` verdict integrates with the SLICE mode, a `prd`
-	// verdict with the PRD mode. Unset ⇒ propose for both. ask/bounce never
+	// PER-OUTCOME integration (brief `issue-intake` US #9): the resolved mode is keyed on the runtime
+	// artifact TYPE — a `slice` verdict integrates with the task mode, a `prd`
+	// verdict with the brief mode. Unset ⇒ propose for both. ask/bounce never
 	// integrate, so the modes are no-ops for them.
 	const modes = options.integration ?? {task: 'propose', brief: 'propose'};
 	// The per-run `seen=` DELTA (the HUMAN comment ids intake READ this run, excluding
@@ -826,7 +822,7 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.task,
-				// The origin-trust STAMP, passed IN (not resolved here): the emitted slice
+				// The origin-trust STAMP, passed IN (not resolved here): the emitted task
 				// carries `origin: issue` + this verdict so the becomes-code checkpoint is
 				// not laundered. Unset ⇒ unstamped (a local intake ⇒ human/trusted).
 				originTrust: options.originTrust,
@@ -850,15 +846,15 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.brief,
-				// Same origin-trust stamp on the PRD outcome (propagated onto its slices
-				// later by the slicer). Passed IN; not resolved here.
+				// Same origin-trust stamp on the brief outcome (propagated onto its tasks
+				// later by the tasker). Passed IN; not resolved here.
 				originTrust: options.originTrust,
 				noPR: options.noPR,
-				// RUNNER-DETERMINISTIC PLACEMENT (slice
+				// RUNNER-DETERMINISTIC PLACEMENT (task
 				// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the
 				// configured-default + explicit-flag rungs, fed into the SHARED placement
 				// resolver alongside the `originTrust` stamp above. The resolver decides
-				// `pre-prd/` (staging) vs `prd/` (the auto-slice pool); `intake` never
+				// `briefs/proposed/` (staging) vs `briefs/ready/` (the tasking pool); `intake` never
 				// places itself.
 				briefsLandIn: options.briefsLandIn,
 				explicitBriefsLandIn: options.explicitBriefsLandIn,
@@ -1061,7 +1057,7 @@ async function dispatchSlice(params: {
 		note,
 	} = params;
 
-	// A content-derived slug — NEVER a counter (PRD US #8). Prefer the drafted
+	// A content-derived slug — NEVER a counter (brief `issue-intake` US #8). Prefer the drafted
 	// `sliceSlug`, else derive from the drafted title; sanitise either through
 	// `paramCase` so the filename + frontmatter slug are well-formed.
 	const slug = resolveSlug(verdict);
@@ -1076,7 +1072,7 @@ async function dispatchSlice(params: {
 
 	// BOUNDED INTERNAL REVIEW (observation
 	// `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
-	// the `do prd:` path gets `runSliceReviewLoop`; the lone-SLICE path got NOTHING.
+	// the `do brief:` path gets `runSliceReviewLoop`; the lone-SLICE path got NOTHING.
 	// AFTER the `slice` verdict and BEFORE the write/integrate, run a bounded (3-round,
 	// HARD-CAPPED) adversarial self-review on the SINGLE drafted slice. It mutates the
 	// candidate body IN MEMORY (no `work/backlog/` write pre-convergence). A launch/
@@ -1141,11 +1137,11 @@ async function dispatchSlice(params: {
 	// replaces the agent's first draft.
 	const reviewedBody = review.body;
 
-	// ONBOARD the slice write onto a `work/intake-slice-<slug>` branch cut from the
+	// ONBOARD the task write onto a `work/intake-task-<slug>` branch cut from the
 	// freshly-fetched `<arbiter>/main` (the SAME runner-owns-git discipline the
-	// slicing path uses): the lifecycle `stage` writes the file ON THIS BRANCH and
+	// tasking path uses): the lifecycle `stage` writes the file ON THIS BRANCH and
 	// the shared integrate core (`--propose` PR / `--merge` main) lands it. The
-	// intake- producer prefix keeps it distinct from a later `do slice:<slug>`
+	// intake- producer prefix keeps it distinct from a later `do task:<slug>`
 	// build branch for the same slug. The agent ran no git.
 	await switchToWorkBranch(cwd, arbiter, 'task', slug, env);
 
@@ -1161,14 +1157,14 @@ async function dispatchSlice(params: {
 		cwd,
 		arbiter,
 		slug,
-		// `source`/`recovering` are slice-shaped and IGNORED when `lifecycle` is set.
+		// `source`/`recovering` are task-shaped and IGNORED when `lifecycle` is set.
 		source: 'in-progress',
 		recovering: false,
-		// An intake-emitted slice has no `verify` floor of its own (it is a new
+		// An intake-emitted task has no `verify` floor of its own (it is a new
 		// backlog item, not a build); skip the acceptance gate, exactly as the
-		// slicing transition does.
+		// tasking transition does.
 		skipVerify: true,
-		// Default `propose` (the per-outcome KNOBS are a later slice). The
+		// Default `propose` (the per-outcome KNOBS are a later task). The
 		// EXPLICITLY-chosen mode proceeds as-is: a future `--merge-slice` lands on main
 		// (`merge` IS the auto-land mode, never downgraded).
 		mode: integration,
@@ -1176,7 +1172,7 @@ async function dispatchSlice(params: {
 		providerInstance,
 		type: 'feat',
 		lifecycle: {
-			// The emitted slice IS the title source. Pass the DRAFTED title EXPLICITLY
+			// The emitted task IS the title source. Pass the DRAFTED title EXPLICITLY
 			// (not a read-from-path): `stage()` WRITES `work/backlog/<slug>.md` AFTER the
 			// core reads the title, so a `titlePath` read would race the write and degrade
 			// the commit subject / PR title to the generic fallback. `titlePath` stays set
@@ -1203,15 +1199,15 @@ async function dispatchSlice(params: {
 }
 
 /**
- * DISPATCH the `prd` outcome: derive a content-derived slug, write
- * `work/prd/<slug>.md` carrying `issue: N` (the loop-closure linkage the close JOB
- * reaches via `slice.prd: → PRD issue:`; on a fanned PRD the number lives ONLY on
- * the PRD — a fanned slice uses `prd:`, NOT its own `issue:`, which is the
- * lone-SLICE outcome's link) + the gate axes the prompt JUDGED, integrate it
- * via {@link performIntegration}, then STOP. Slicing the emitted PRD is the SEPARATE
- * `do prd:` step (NOT done here). A coupled-but-SMALL pair lands here too (the PRD
+ * DISPATCH the `prd` outcome: derive a content-derived slug, write the brief
+ * file (`work/briefs/ready/<slug>.md`) carrying `issue: N` (the loop-closure linkage the close JOB
+ * reaches via `task.brief: → brief issue:`; on a fanned brief the number lives ONLY on
+ * the brief — a fanned task uses `brief:`, NOT its own `issue:`, which is the
+ * lone-task outcome's link) + the gate axes the prompt JUDGED, integrate it
+ * via {@link performIntegration}, then STOP. Tasking the emitted brief is the SEPARATE
+ * `do brief:` step (NOT done here). A coupled-but-SMALL pair lands here too (the brief
  * vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The runner
- * owns the git exactly as the slice branch does; the agent did NO git/seam ops.
+ * owns the git exactly as the task branch does; the agent did NO git/seam ops.
  */
 async function dispatchPrd(params: {
 	verdict: IntakeVerdict;
@@ -1251,7 +1247,7 @@ async function dispatchPrd(params: {
 		note,
 	} = params;
 
-	// A content-derived slug — NEVER a counter (PRD US #8). Prefer the drafted
+	// A content-derived slug — NEVER a counter (brief `issue-intake` US #8). Prefer the drafted
 	// `prdSlug`, else derive from the drafted title.
 	const slug = resolvePrdSlug(verdict);
 	if (slug === '') {
@@ -1261,11 +1257,11 @@ async function dispatchPrd(params: {
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
-	// RUNNER-DETERMINISTIC PLACEMENT (slice
+	// RUNNER-DETERMINISTIC PLACEMENT (task
 	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
 	// which folder the runner writes the intake-authored PRD into BEFORE handing
-	// it to the shared integrate band: the SAME precedence chain the slicer uses
+	// it to the shared integrate band: the SAME precedence chain the tasker uses
 	// (`explicit > untrusted-origin ⇒ staging > briefsLandIn > built-in (staging)`),
 	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
 	// (the intake decider) never influences placement; it returns the verdict and
@@ -1281,9 +1277,9 @@ async function dispatchPrd(params: {
 	);
 	const relPath = `${placementDir}/${slug}.md`;
 
-	// ONBOARD onto a `work/intake-prd-<slug>` branch off fresh `<arbiter>/main` —
-	// the SAME runner-owns-git discipline the slice branch uses; the intake-
-	// producer prefix keeps it distinct from a `do prd:<slug>` slicing branch.
+	// ONBOARD onto a `work/intake-brief-<slug>` branch off fresh `<arbiter>/main` —
+	// the SAME runner-owns-git discipline the task branch uses; the intake-
+	// producer prefix keeps it distinct from a `do brief:<slug>` tasking branch.
 	await switchToWorkBranch(cwd, arbiter, 'brief', slug, env);
 
 	const prdContent = renderPrd({
@@ -1302,16 +1298,16 @@ async function dispatchPrd(params: {
 		slug,
 		source: 'in-progress',
 		recovering: false,
-		// An intake-emitted PRD has no `verify` floor of its own (it is a new spec,
-		// not a build), exactly as the slice branch + the slicing transition skip it.
+		// An intake-emitted brief has no `verify` floor of its own (it is a new spec,
+		// not a build), exactly as the task branch + the tasking transition skip it.
 		skipVerify: true,
 		mode: integration,
 		noPR,
 		providerInstance,
 		type: 'feat',
 		lifecycle: {
-			// The emitted PRD IS the title source. Pass the DRAFTED title EXPLICITLY (same
-			// race as the slice path: `stage()` writes `work/prd/<slug>.md` AFTER the title
+			// The emitted brief IS the title source. Pass the DRAFTED title EXPLICITLY (same
+			// race as the task path: `stage()` writes the brief file AFTER the title
 			// read). `titlePath` stays set but is IGNORED while `title` is present.
 			titlePath: join(cwd, relPath),
 			title: verdict.prdTitle ?? slug,
@@ -1337,10 +1333,10 @@ async function dispatchPrd(params: {
 
 /**
  * Map the shared integrate band's {@link IntegrationCoreResult} onto the intake
- * {@link IntakeResult}. On `completed` the slice was written + integrated; a
+ * {@link IntakeResult}. On `completed` the artifact was written + integrated; a
  * `rebase-conflict` against an advanced `main` maps to `stale` (the analogue of
  * "the backlog moved under us"); everything else maps defensively to a usage error
- * (the intake slice path passes `skipVerify` + has no review gate, so neither
+ * (the intake task path passes `skipVerify` + has no review gate, so neither
  * `gate-failed` nor `review-blocked` can occur).
  */
 async function integrationToIntakeResult(
@@ -1368,16 +1364,16 @@ async function integrationToIntakeResult(
 			core.integration?.mode === 'merge'
 				? 'landed it on the arbiter main'
 				: 'opened a PR carrying it (main untouched)';
-		// Both a lone slice and a PRD carry `issue: N` as their closure link (the slice
-		// closes its own issue; a PRD is reached via `slice.prd: → PRD issue:`). On the
-		// slice/prd path `intake` never closes the issue (CI's close-job does, via the
+		// Both a lone task and a brief carry `issue: N` as their closure link (the task
+		// closes its own issue; a brief is reached via `task.brief: → brief issue:`). On the
+		// task/brief path `intake` never closes the issue (CI's close-job does, via the
 		// `issue:` field; intake closes ONLY on BOUNCE) and emits no `Fixes #N` (a
 		// deferred GitHub-only optimisation).
 		const link = `issue: ${issueNumber}`;
 		const message =
 			`Intake of issue #${issueNumber} → wrote ${relPath} (${link}); ` +
 			`the runner integrated it through the shared core and ${landed}.`;
-		// CLOSE THE LOOP (this slice): post ONE INFORMATIONAL completion comment back on
+		// CLOSE THE LOOP (this task): post ONE INFORMATIONAL completion comment back on
 		// the issue for the SUCCESSFUL outcome — the confirmation the ASK/BOUNCE comments
 		// already give the author. It reports `slice created` / `prd created` (NEVER
 		// "issue resolved"; intake never closes on slice/prd — CI's close-job does, via
@@ -1542,7 +1538,7 @@ async function postCompletionComment(params: {
 }
 
 /**
- * Resolve a content-derived slug from the verdict — NEVER a counter (PRD US #8).
+ * Resolve a content-derived slug from the verdict — NEVER a counter (brief `issue-intake` US #8).
  * Prefer the drafted `sliceSlug`, else derive from the drafted title; both go
  * through `paramCase` (the brand case-transform) so the result is a clean
  * lowercase-`-`-joined slug. An empty result (no slug AND no title) signals the
@@ -1557,7 +1553,7 @@ function resolveSlug(verdict: IntakeVerdict): string {
 }
 
 /**
- * Resolve a content-derived slug for the PRD outcome — NEVER a counter (PRD US #8).
+ * Resolve a content-derived slug for the PRD outcome — NEVER a counter (brief `issue-intake` US #8).
  * Prefer the drafted `prdSlug`, else derive from the drafted PRD title; both go
  * through `paramCase`. An empty result signals the caller to refuse.
  */
@@ -1570,15 +1566,15 @@ function resolvePrdSlug(verdict: IntakeVerdict): string {
 }
 
 /**
- * Render the backlog slice file: the frontmatter (`title`/`slug`/`covers: []`, NO
- * `prd:` — its own source of truth, PRD decision table) carrying the lone-slice
- * `issue: N` closure link + the drafted body. The slice closes its source issue
+ * Render the backlog task file: the frontmatter (`title`/`slug`/`covers: []`, NO
+ * `brief:` — its own source of truth, brief `issue-intake` decision table) carrying the lone-task
+ * `issue: N` closure link + the drafted body. The task closes its source issue
  * via its `issue:` field (the provider-agnostic link a FUTURE CI close-job reads
  * from folder + field state); it carries NO `Fixes #N` (a deferred GitHub-only
  * optimisation, structurally unplaceable on the `--merge` path). The number is
- * the slice's own closure path — `issue:` XOR `prd:`; a lone slice never carries a
- * `prd:` (PRD decision table). When the agent drafted no body, a thin default
- * scaffold keeps the file a valid slice.
+ * the task's own closure path — `issue:` XOR `brief:`; a lone task never carries a
+ * `brief:` (brief `issue-intake` decision table). When the agent drafted no body, a thin default
+ * scaffold keeps the file a valid task.
  */
 function renderBacklogSlice(params: {
 	slug: string;
@@ -1586,7 +1582,7 @@ function renderBacklogSlice(params: {
 	body: string | undefined;
 	issueNumber: number;
 	/**
-	 * The origin-trust STAMP (slice `untrusted-origin-forces-build-propose`).
+	 * The origin-trust STAMP (task `untrusted-origin-forces-build-propose`).
 	 * Present ⇒ emit `origin: issue` + `originTrust: <value>` so the becomes-code
 	 * checkpoint survives the merge boundary. UNSET (a local intake, no CI shell)
 	 * ⇒ NO stamp (the human running intake IS the checkpoint ⇒ human/trusted).
@@ -1625,16 +1621,16 @@ function renderBacklogSlice(params: {
 }
 
 /**
- * Render the emitted PRD file: the frontmatter (`title`/`slug` + the loop-closure
- * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted PRD body.
- * For a FANNED PRD the `issue: N` lives ONLY on the PRD — never duplicated across
- * the N fanned slices, which reach it via `slice.prd: → PRD issue:` (a fanned
- * slice carries `prd:`, NOT its own `issue:`; the lone-SLICE outcome is the only
- * one that puts `issue:` on a slice). The close JOB reaches the PRD's number via
- * `slice.prd: → PRD issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
+ * Render the emitted brief file: the frontmatter (`title`/`slug` + the loop-closure
+ * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted brief body.
+ * For a FANNED brief the `issue: N` lives ONLY on the brief — never duplicated across
+ * the N fanned tasks, which reach it via `task.brief: → brief issue:` (a fanned
+ * task carries `brief:`, NOT its own `issue:`; the lone-task outcome is the only
+ * one that puts `issue:` on a task). The close JOB reaches the brief's number via
+ * `task.brief: → brief issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
  * verdict declared them `true` — an omitted axis is `undefined` (undeclared), the
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
- * default scaffold keeps the file a valid PRD that `do prd:` can later slice.
+ * default scaffold keeps the file a valid brief that `do brief:` can later task.
  */
 function renderPrd(params: {
 	slug: string;
@@ -1644,9 +1640,9 @@ function renderPrd(params: {
 	humanOnly: boolean | undefined;
 	needsAnswers: boolean | undefined;
 	/**
-	 * The origin-trust STAMP (slice `untrusted-origin-forces-build-propose`).
+	 * The origin-trust STAMP (task `untrusted-origin-forces-build-propose`).
 	 * Present ⇒ emit `origin: issue` + `originTrust: <value>`, PROPAGATED onto every
-	 * emitted slice by the slicer so the build transition can read it. UNSET (a
+	 * emitted task by the tasker so the build transition can read it. UNSET (a
 	 * local intake) ⇒ NO stamp (human/trusted).
 	 */
 	originTrust?: OriginTrust;
@@ -1665,7 +1661,7 @@ function renderPrd(params: {
 	if (originTrust !== undefined) {
 		lines.push('origin: issue', `originTrust: ${originTrust}`);
 	}
-	// Surface the gate axes AS THE PROMPT JUDGED THEM (PRD US #8). Only emit a `true`
+	// Surface the gate axes AS THE PROMPT JUDGED THEM (brief `issue-intake` US #8). Only emit a `true`
 	// axis — an undeclared axis stays absent (parsed as `undefined`).
 	if (humanOnly === true) {
 		lines.push('humanOnly: true');
@@ -1685,7 +1681,7 @@ function renderPrd(params: {
 					'',
 					'## Solution',
 					'',
-					'(to be detailed; this PRD needs slicing via `do prd:`).',
+					'(to be detailed; this brief needs tasking via `do brief:`).',
 					'',
 					'## User Stories',
 					'',
@@ -1716,12 +1712,12 @@ async function stageIntakeSlice(params: {
 
 /**
  * ONBOARD the intake write onto a NAMESPACED, INTAKE-PRODUCED branch
- * (`work/intake-slice-<slug>` / `work/intake-prd-<slug>`) cut from the freshly-
+ * (`work/intake-task-<slug>` / `work/intake-brief-<slug>`) cut from the freshly-
  * fetched `<arbiter>/main` (the SAME discipline `tasking.ts` uses). The
  * `intake-` PRODUCER prefix keeps this short-lived "create the item" branch
- * DISTINCT from the later build branch (`work/slice-<slug>`) for the same slug
- * — the firing `intake` × `do slice:` collision the observation traced. The
- * slice-emit path passes `'slice'`, the PRD-emit path `'prd'`. A pre-existing
+ * DISTINCT from the later build branch (`work/task-<slug>`) for the same slug
+ * — the firing `intake` × `do task:` collision the observation traced. The
+ * task-emit path passes `'task'`, the brief-emit path `'brief'`. A pre-existing
  * local branch (a re-run) is force-recreated off fresh main.
  */
 async function switchToWorkBranch(
@@ -1887,10 +1883,10 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 // The LONE-SLICE bounded internal review (observation
 // `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C).
 //
-// Give intake's lone-SLICE outcome the adversarial refinement the `do prd:` path
+// Give intake's lone-SLICE outcome the adversarial refinement the `do brief:` path
 // already gets — but as a small intake-NATIVE bounded review, NOT by integrating
-// the slicer loop. This is a NEW prompt + a small loop + an injectable gate seam,
-// MIRRORING the slicer loop's verdict/output CONVENTIONS (fenced JSON
+// the tasker loop. This is a NEW prompt + a small loop + an injectable gate seam,
+// MIRRORING the tasker loop's verdict/output CONVENTIONS (fenced JSON
 // `{verdict, findings, edit}` parsed via the shared `extractJsonObjectSpan`) WITHOUT
 // importing or calling `runSliceReviewLoop`. The differences are load-bearing: this
 // reviews ONE drafted slice (N=1 — the SET/graph/overlap lenses are OFF), it never
@@ -1903,7 +1899,7 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 const LONE_SLICE_REVIEW_MAX_ROUNDS = 3;
 
 /**
- * Backwards-compatible alias for {@link ReviewFinding} (slice
+ * Backwards-compatible alias for {@link ReviewFinding} (task
  * `review-protocol-doc-and-shared-machinery`). Existing imports keep compiling;
  * new code should reach for `ReviewFinding` from `review-verdict.ts`.
  */
@@ -1913,7 +1909,7 @@ export type LoneSliceReviewFinding = ReviewFinding;
  * The lone-slice review verdict shape is now the UNIFIED {@link ReviewVerdict}.
  * The lone-slice caller consumes the `edit` / `questions` channels of the wide
  * type; other review callers consume different channels. The SET/graph/overlap
- * lenses are still N=1-OFF in the PROMPT (intake never spawns the slicer loop's
+ * lenses are still N=1-OFF in the PROMPT (intake never spawns the tasker loop's
  * set-level sinks); the type itself is shared.
  */
 export type LoneSliceReviewVerdict = ReviewVerdict;
@@ -2205,7 +2201,7 @@ export function harnessLoneSliceReviewGate(
  * issue, else carry the open `questions` into the ASK comment for the human.
  *
  * The discipline body and the JSON-emitted-shape contract are SHARED helpers
- * (slice `review-protocol-doc-and-shared-machinery`); this builder owns ONLY
+ * (task `review-protocol-doc-and-shared-machinery`); this builder owns ONLY
  * the lone-slice-specific framing.
  */
 export function buildLoneSliceReviewPrompt(
@@ -2278,20 +2274,20 @@ export const parseLoneSliceReviewVerdict = parseReviewVerdict;
  * Build the intake decision BRIEF (an inline prompt builder, like `buildTaskingBrief`
  * in `tasking.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
  * asset/`.md` file; no such convention exists in this package). It encodes the FULL
- * four-outcome decision table (PRD `issue-intake` — the source of truth) and the
+ * four-outcome decision table (brief `issue-intake` — the source of truth) and the
  * three DECISION AIDS stated once there:
  *
- * 1. the **"clear?" bar** = `to-slices`/`needsAnswers`' "would I build the wrong
+ * 1. the **"clear?" bar** = `to-task`/`needsAnswers`' "would I build the wrong
  *    thing if I guessed?" — if a material requirement/scope/acceptance question is
  *    unanswered, ASK (never guess a spec from a vague issue);
- * 2. the **"one slice?" bar** = `to-slices`' tracer-bullet test (one thin end-to-end
+ * 2. the **"one slice?" bar** = `to-task`' tracer-bullet test (one thin end-to-end
  *    path, demoable on its own) — fits → SLICE, needs splitting → PRD;
  * 3. **PRD vs BOUNCE** turns on a **SHARED VISION**: coupled (even if small) → PRD;
  *    genuinely unrelated → BOUNCE. Size NEVER forces a bounce — only unrelatedness
  *    (the over-bounce guard: a coupled-but-small pair gets a light PRD, never a
  *    bounce).
  *
- * The prompt anchors to `to-slices`/`to-prd` for the slice/PRD SHAPES it drafts. Its
+ * The prompt anchors to `to-task`/`to-brief` for the slice/PRD SHAPES it drafts. Its
  * JUDGEMENT is NOT unit-tested (exactly as the review prompt's is not) — only the
  * dispatch is. The agent only DRAFTS the verdict + its content; it does NO git/seam
  * ops (the runner owns every postComment / write / integrate — the in-band boundary).
@@ -2310,7 +2306,7 @@ export function buildIntakeDecisionBrief(
 							`#${i + 1} ${c.author ? `@${c.author}` : '(unknown)'}: ${c.body}`,
 					)
 					.join('\n\n');
-	// TRIAGE ENRICHMENT (PRD `issue-intake`): on the raced PROCEED path the prompt is
+	// TRIAGE ENRICHMENT (brief `issue-intake`): on the raced PROCEED path the prompt is
 	// told which comment(s) PRE-DATE intake's last turn (context for a prior state,
 	// not necessarily a fresh answer) and — only then — how many previously-SEEN
 	// comments were DELETED (a flag + count; the bodies are gone, so do not name them).
@@ -2350,25 +2346,25 @@ export function buildIntakeDecisionBrief(
 		'## The decision — classify the issue into exactly ONE of four verdicts',
 		'',
 		'- **ASK** — the issue is NOT clear enough to act on: a material requirement,',
-		'  scope, or acceptance question is unanswered. Use the same bar `to-slices`',
+		'  scope, or acceptance question is unanswered. Use the same bar `to-task`',
 		'  uses for `needsAnswers`: "would I build the WRONG thing if I guessed now?"',
 		'  If yes → ASK. Draft the SINGLE next clarifying question (do NOT guess a spec',
 		'  from a vague issue). The runner posts it and stops; a later run resumes from',
 		'  the updated thread.',
 		'',
 		'- **SLICE** — the issue is CLEAR *and* it fits ONE tracer-bullet vertical slice',
-		'  (a single thin end-to-end path, demoable on its own — `to-slices`’ criterion).',
-		'  Draft that ONE slice in the `to-slices` shape (a `## What to build`,',
+		'  (a single thin end-to-end path, demoable on its own — `to-task`’ criterion).',
+		'  Draft that ONE slice in the `to-task` shape (a `## What to build`,',
 		'  `## Acceptance criteria`, and `## Prompt`). The runner writes',
-		'  `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the',
+		'  `work/backlog/<slug>.md` (`covers: []`, NO `brief:`) carrying `issue: N` (the',
 		'  lone-slice closure link, NOT `Fixes #N`) and integrates it.',
 		'',
 		'- **PRD** — the issue is CLEAR *and* coherent but needs MORE THAN ONE slice (it',
 		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 slice',
-		'  ⟺ a shared vision worth recording ⟺ a PRD. Draft a PRD in the `to-prd` shape',
+		'  ⟺ a shared vision worth recording ⟺ a PRD. Draft a PRD in the `to-brief` shape',
 		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
-		'  The runner writes `work/prd/<slug>.md` with `issue: N` and integrates it;',
-		'  SLICING the PRD is a SEPARATE later step (`do brief:`) — do not slice it here.',
+		'  The runner writes the brief file (`work/briefs/ready/<slug>.md`) with `issue: N` and integrates it;',
+		'  TASKING the brief is a SEPARATE later step (`do brief:`) — do not task it here.',
 		'  **INCLUDES a coupled-but-SMALL pair: if two asks share a vision they get a',
 		'  (light) PRD — they are NEVER bounced.**',
 		'',
@@ -2383,7 +2379,7 @@ export function buildIntakeDecisionBrief(
 		'',
 		'1. **"clear?"** (ASK vs the rest): the `needsAnswers` bar — would acting now risk',
 		'   building the wrong thing? If yes → ASK. Otherwise it is clear; continue.',
-		'2. **"one slice?"** (SLICE vs PRD): the `to-slices` tracer-bullet test — one thin',
+		'2. **"one slice?"** (SLICE vs PRD): the `to-task` tracer-bullet test — one thin',
 		'   end-to-end path, demoable alone? Fits → SLICE; needs splitting → PRD.',
 		'3. **"shared vision?"** (PRD vs BOUNCE): coupled (even if small) → PRD; genuinely',
 		'   unrelated → BOUNCE. SIZE NEVER forces a bounce — only UNRELATEDNESS does. Do',
@@ -2414,7 +2410,7 @@ export function buildIntakeDecisionBrief(
 		'- **prd** → `prdTitle` + `prdBody` (the `## Problem Statement` / `## Solution` / …',
 		'  markdown AFTER the frontmatter; the runner writes the frontmatter + `issue: N`),',
 		'  an optional `prdSlug`, and the gate axes `prdHumanOnly` / `prdNeedsAnswers`',
-		'  (booleans — set `true` when a human should drive the SLICING and/or open',
+		'  (booleans — set `true` when a human should drive the TASKING and/or open',
 		'  questions remain; omit otherwise).',
 		'- **ask** → `question` (the single next clarifying question).',
 		'- **bounce** → `bounceMessage` (the “file separate issues” message).',

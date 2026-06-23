@@ -6,8 +6,8 @@ import {selectPrioritised, type SelectedItem} from './select-priority.js';
 import type {Config} from './config.js';
 
 /**
- * The MIRROR-SIDE auto-pick / `-n` caller for `do --remote` (PRD `advance-loop`,
- * slice `advance-drivers-and-gates`, US #25) — the THIN caller the mirror-side
+ * The MIRROR-SIDE auto-pick / `-n` caller for `do --remote` (brief `advance-loop`,
+ * task `advance-drivers-and-gates`, US #25) — the THIN caller the mirror-side
  * eligible-pool scan (`mirror-side-eligible-pool-scan`) makes possible, the
  * isolated counterpart of `do-autopick`'s in-place {@link performDoAuto}.
  *
@@ -23,8 +23,8 @@ import type {Config} from './config.js';
  * running them one at a time is a dumb "run the remote tick N times" loop;
  * parallelism over a remote pool is `run`'s concurrent loop or the CI matrix,
  * NEVER `-n`. The per-action gate family is honoured by the SELECTION layer: the
- * mirror scan only enumerates eligible slices (gated on `autoBuild`) + sliceable
- * PRDs (gated on `autoTask`), so with a gate off that pool is empty.
+ * mirror scan only enumerates eligible tasks (gated on `autoBuild`) + taskable
+ * briefs (gated on `autoTask`), so with a gate off that pool is empty.
  *
  * Each `performDoRemote` call idempotently `ensureMirror`s + re-fetches the SAME
  * bare mirror (no re-clone), so looping it per item is cheap; the mirror scan
@@ -96,7 +96,7 @@ export async function performDoRemoteAuto(
 	}
 
 	// Scan the mirror's committed `main` for the SAME two pools the in-place scan
-	// enumerates (eligible slices gated on `autoBuild`, sliceable PRDs gated on
+	// enumerates (eligible tasks gated on `autoBuild`, taskable briefs gated on
 	// `autoTask`), through the EXACT in-place predicates.
 	const scan = await scanMirrorPool({
 		mirrorPath: mirror.path,
@@ -121,8 +121,8 @@ export async function performDoRemoteAuto(
 
 	if (selected.length === 0) {
 		const message =
-			'Nothing eligible to do on the remote (no eligible slices and no ' +
-			'sliceable PRDs under the per-action gates).';
+			'Nothing eligible to do on the remote (no eligible tasks and no ' +
+			'taskable briefs under the per-action gates).';
 		note(message);
 		return {results: [], exitCode: 0, message};
 	}
@@ -144,7 +144,7 @@ export async function performDoRemoteAuto(
 	return {results, exitCode, message};
 }
 
-/** The `do --remote` arg for a selected item: `prd:<slug>` for a PRD, bare slug for a slice. */
+/** The `do --remote` arg for a selected item: `brief:<slug>` for a brief, bare slug for a task. */
 function remoteArgFor(item: SelectedItem): string {
 	return item.namespace === 'brief' ? `brief:${item.slug}` : item.slug;
 }
@@ -154,7 +154,7 @@ function remoteArgFor(item: SelectedItem): string {
  * the GIVEN order (no pool/priority — the operator chose them), each through the
  * EXISTING {@link performDoRemote} pipeline, SEQUENTIALLY. No mirror scan is
  * needed (the args are explicit); the per-item pipeline resolves each
- * bare/`slice:`/`prd:` arg itself.
+ * bare/`task:`/`brief:` arg itself.
  */
 export async function performDoRemoteArgs(
 	args: string[],

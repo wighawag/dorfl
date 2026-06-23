@@ -12,18 +12,18 @@ import {
 } from './work-layout.js';
 
 /**
- * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (PRD
+ * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (brief
  * `ledger-integrity`, story 3 — the READ-side belt-and-suspenders for defect 1).
  *
- * `work/` IS the ledger: a slice's STATUS is the FOLDER its single `.md` lives in
+ * `work/` IS the ledger: a task's STATUS is the FOLDER its single `.md` lives in
  * (WORK-CONTRACT.md rule "status = the folder", no index, one file per item). The
  * invariant the integration core ENFORCES on every transition
- * (`integration-core.ts` `readArbiterLedgerPlacement`, slice
+ * (`integration-core.ts` `readArbiterLedgerPlacement`, task
  * `atomic-done-move-one-slug-one-folder`) is that a slug rests in EXACTLY ONE
  * status folder. This module is its READER: a derived check that lists every
  * status folder and surfaces any slug present in MORE THAN ONE — so a PRE-EXISTING
  * orphan (e.g. the one hand-cleaned in `279b542`, PR #86) is DISCOVERABLE and a
- * drive isn't misled into "recovering" an already-done slice.
+ * drive isn't misled into "recovering" an already-done task.
  *
  * It NEVER fixes the corruption: it WARNS (in `status`/`scan`) and REPORTS (the
  * `gc`-style sweep, {@link sweepLedgerDuplicates}); a HUMAN resolves the
@@ -37,19 +37,19 @@ import {
  */
 
 /**
- * The `work/` STATUS folders a slice's ledger file can rest in — the
+ * The `work/` STATUS folders a task's ledger file can rest in — the
  * one-slug-one-folder set this lint is asserted over (WORK-CONTRACT.md
- * "status = the folder"). After the capstone cut-over (slice
- * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
+ * "status = the folder"). After the capstone cut-over (task
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, brief
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
  * the ONLY `work/` moves on `main` are the DURABLE RESTING transitions, so a
- * slice's ledger file can rest only in the DURABLE set: the pool `backlog/`, the
- * terminal `done/`, and the slice regime's PER-REGIME "won't-proceed" terminal
- * `tasks/cancelled/` (the per-regime split of the previous shared `dropped/`, PRD
+ * task's ledger file can rest only in the DURABLE set: the pool `backlog/`, the
+ * terminal `done/`, and the task regime's PER-REGIME "won't-proceed" terminal
+ * `tasks/cancelled/` (the per-regime split of the previous shared `dropped/`, brief
  * `folder-taxonomy-reorg-and-rename` US #10; the specific REASON lives in the item
  * BODY as a `reason:` value). The brief regime's terminal `briefs/dropped/` is a
- * SEPARATE namespace and is NOT a slice-status folder. The transient
- * `in-progress`/`needs-attention`/`slicing`/
+ * SEPARATE namespace and is NOT a task-status folder. The transient
+ * `in-progress`/`needs-attention`/`tasking`/
  * `advancing` are GONE from `main`'s tree — they are per-item lock-ref state
  * (`in-progress` = lock held active, `needs-attention` = lock held stuck), read
  * via `agent-runner status` / `gc --ledger`'s lock report, NOT an `ls`-able folder.
@@ -58,11 +58,11 @@ import {
  * `cancelled`). A read-side lint surfaces a slug that ends up in `tasks/cancelled/`
  * AND another status folder, so the lint covers all three.
  *
- * The capture buckets (`ideas`/`observations`/`findings`) and the PRD-flow folders
- * (`prd`/`prd-sliced`) are NOT slice-status folders (WORK-CONTRACT.md: the buckets
- * are "exempt from status = folder"; the PRD folders carry PRDs, a separate
+ * The capture buckets (`ideas`/`observations`/`findings`) and the brief-flow folders
+ * (`briefs/ready`/`briefs/tasked`) are NOT task-status folders (WORK-CONTRACT.md: the buckets
+ * are "exempt from status = folder"; the brief folders carry briefs, a separate
  * namespace) — they are deliberately EXCLUDED so a slug that legitimately has both
- * a slice and a same-named note/PRD is never a false positive.
+ * a task and a same-named note/brief is never a false positive.
  */
 export {LEDGER_STATUS_FOLDERS, type LedgerStatusFolder} from './work-layout.js';
 
@@ -279,7 +279,7 @@ export interface LedgerSweepResult {
 }
 
 /**
- * The `gc`-STYLE ledger SWEEP (PRD story 3's belt-and-suspenders): on demand,
+ * The `gc`-STYLE ledger SWEEP (brief story 3's belt-and-suspenders): on demand,
  * REPORT every slug present in more than one status folder of a LOCAL `work/`
  * ledger, naming the folders and the CANDIDATE canonical folder — and NEVER
  * auto-delete. A human confirms the cleanup (keep the canonical copy, delete the

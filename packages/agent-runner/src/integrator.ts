@@ -9,7 +9,7 @@ import type {BackoffOptions, Sleep} from './retry-backoff.js';
  *
  *   - **mode**: `merge` (ff/rebase onto `<arbiter>/main`, push to main —
  *     provider-agnostic git) or `propose` (push the branch + request review).
- *   - **provider** (a seam): the review-request tool — `github` (its own slice)
+ *   - **provider** (a seam): the review-request tool — `github` (its own task)
  *     or **`none`** (push + tell the human to open a request manually, the only
  *     option for a local `--bare` arbiter, which has no review concept).
  *
@@ -39,7 +39,7 @@ export interface ReviewProvider {
 	/**
 	 * Post a follow-up COMMENT on an already-opened review request (the PR the
 	 * sibling {@link openRequest} created), threaded by its `url`. Used by the
-	 * Gate-2 review-comment poster (slice `review-gate-pr-comment`) to make the
+	 * Gate-2 review-comment poster (task `review-gate-pr-comment`) to make the
 	 * review's verdict VISIBLE on the PR. It is the SIBLING of `openRequest` on the
 	 * "write text to the PR" surface: `openRequest` writes the creation BODY,
 	 * `postPRComment` writes a follow-up comment AFTER the PR exists.
@@ -125,7 +125,7 @@ export interface OpenRequestInput {
 	 * Optional explicit, single-line review-request TITLE. When present a provider
 	 * passes it verbatim (e.g. `gh pr create --title`) instead of deriving the
 	 * title from the commit subject (`--fill`), which can be a multi-line run-on.
-	 * Synthesised runner-side from the slice frontmatter (`<type>(<slug>): <title>`,
+	 * Synthesised runner-side from the task frontmatter (`<type>(<slug>): <title>`,
 	 * capped to one line). Absent ⇒ today's `--fill`-derived title (no regression).
 	 */
 	title?: string;
@@ -134,7 +134,7 @@ export interface OpenRequestInput {
 	 * When present a provider passes it verbatim (e.g. `gh pr create --body`)
 	 * instead of `--fill`'s empty/commit-derived description. Typically the build
 	 * agent's final summary, optionally under a runner-scaffolded header (a pointer
-	 * to `work/done/<slug>.md` + the PRD/ADR it serves). Absent ⇒ today's `--fill`
+	 * to `work/done/<slug>.md` + the brief/ADR it serves). Absent ⇒ today's `--fill`
 	 * (no regression). This is the BODY-AT-OPEN surface; a follow-up PR COMMENT is
 	 * a separate provider method.
 	 */
@@ -244,7 +244,7 @@ export interface IntegrateInput {
 	 */
 	noPR?: boolean;
 	/**
-	 * **Reap the remote head branch INLINE after a merge lands** (this slice's part
+	 * **Reap the remote head branch INLINE after a merge lands** (this task's part
 	 * (b)). When `true` on the `merge` path, AFTER the work landed on `main` (the
 	 * commits are now provably on main, so the ancestor predicate trivially holds),
 	 * delete the remote `work/<slug>` head branch via `git push <arbiter> --delete`
@@ -515,7 +515,7 @@ type MergePushResult = {kind: 'landed'} | {kind: 'non-fast-forward'};
 
 /**
  * Push `${branch}:main` (merge mode) ONCE, classifying the outcome for the
- * caller's bounded re-rebase-and-retry loop (Race 1: claim-vs-integrate, slice
+ * caller's bounded re-rebase-and-retry loop (Race 1: claim-vs-integrate, task
  * `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). It does NOT
  * rebase itself: the rebase belongs to the integration-core step-4 tail, which
  * ALSO carries the sibling-ledger + divergent-done-move reconciliation arms a bare

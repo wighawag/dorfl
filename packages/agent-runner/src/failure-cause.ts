@@ -1,5 +1,5 @@
 /**
- * **The failure-CAUSE classifier** (slice `failure-cause-classification-model-vs-
+ * **The failure-CAUSE classifier** (task `failure-cause-classification-model-vs-
  * git-vs-agent`).
  *
  * When a claimed item routes to `work/needs-attention/`, the runner records WHY.
@@ -9,7 +9,7 @@
  *   - **transient-infra** → retry the SAME work (the work is fine: a model
  *     endpoint outage the harness surfaced AFTER its own retries, or a git/
  *     provider outage).
- *   - **config-error** → fix the WIRING, not the slice (a thrown CORE wiring/
+ *   - **config-error** → fix the WIRING, not the task (a thrown CORE wiring/
  *     config error, e.g. `review` on with no `reviewGate` configured).
  *   - **agent-failed** (the conservative generic) → a human/agent must FIX
  *     something the agent did (ran but produced bad/empty output), OR the cause is
@@ -92,7 +92,7 @@ const TRANSIENT_INFRA_SIGNATURES = [
  * conservative (an unrecognised cause stays `agent-failed`).
  *
  * Order matters: a thrown CORE config/wiring error is checked FIRST (it is the
- * most specific + the cross-path divergence this slice closes), then the
+ * most specific + the cross-path divergence this task closes), then the
  * transient-infra signals, else the generic default.
  *
  * Used by BOTH `do` and `run` at their failure-routing sites so the SAME error

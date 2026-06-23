@@ -1,14 +1,14 @@
 import {open, type FileHandle} from 'node:fs/promises';
 
 /**
- * The **`do --watch` observer** (slices `do-watch` + `do-watch-session-log-format`)
+ * The **`do --watch` observer** (tasks `do-watch` + `do-watch-session-log-format`)
  * — a READ-ONLY concurrent tail of the pi session `.jsonl` event log, restoring
  * for `do` the live agent-conversation view `ar-run.sh --watch` gave.
  *
  * `ar-run.sh --watch` piped `pi -p --mode json | jq` to surface the high-signal
  * events; `do` runs the agent CAPTURED through the harness seam, so that live
  * view was lost. The pi adapter writes a session `.jsonl` at the KNOWN file path
- * the caller generated (`--session <path>`, slice `session-path-pi-default`) —
+ * the caller generated (`--session <path>`, task `session-path-pi-default`) —
  * but that is pi's SESSION-PERSISTENCE log, a DIFFERENT format from the
  * `--mode json` STREAM `ar-run.sh` piped. The tailer is pointed at that EXACT
  * path (no newest-by-mtime dir guessing), so the stale-sibling race is gone.
@@ -76,7 +76,7 @@ export function finishedLine(color: boolean): string {
 
 /**
  * A one-line VISUAL BOUNDARY banner the caller prints between two tailed agent
- * streams (e.g. the build stream and the Gate-2 review stream — slice
+ * streams (e.g. the build stream and the Gate-2 review stream — task
  * `watch-review-session`), so a watching human knows the first stream ended and
  * the next began. Reuses this module's colour rule (cyan, the same marker hue as
  * the `▶ <tool>` lines) so it reads as part of the same live view. Pure: returns
@@ -172,7 +172,7 @@ function assistantLines(content: unknown, color: boolean): string[] {
  * Concatenate the `text` parts of ONE assistant `message.content` (the answer
  * text, with tool/thinking blocks dropped) — the single source of truth for
  * "what did the assistant SAY" shared by the {@link assistantLines} watch view
- * and the {@link lastAssistantText} output reader (slice `harness-agent-output`).
+ * and the {@link lastAssistantText} output reader (task `harness-agent-output`).
  * A plain-string content is itself the text. Returns `''` when there is no text.
  */
 function assistantContentText(content: unknown): string {
@@ -197,7 +197,7 @@ function assistantContentText(content: unknown): string {
 
 /**
  * Extract the **last assistant message's text** from a pi session `.jsonl`
- * (slice `harness-agent-output`) — the agent's final ANSWER, surfaced through
+ * (task `harness-agent-output`) — the agent's final ANSWER, surfaced through
  * the harness seam as `LaunchResult.output`. It REUSES this module's session-log
  * shape walk (one parser, not two): it scans the `{type:"message",
  * message:{role:"assistant", content[]}}` records, takes the LAST one carrying
@@ -246,7 +246,7 @@ export function lastAssistantText(jsonl: string): string | undefined {
 export interface SessionTailerOptions {
 	/**
 	 * The EXACT pi session `.jsonl` file path to tail. The caller generated this
-	 * BEFORE pi launched (`--session <path>`, slice `session-path-pi-default`) and
+	 * BEFORE pi launched (`--session <path>`, task `session-path-pi-default`) and
 	 * passed the SAME path to the adapter, so the tailer reads the run's own log
 	 * — no newest-by-mtime dir guessing, no stale-sibling race. The file does NOT
 	 * yet exist when the tailer starts (pi creates it asynchronously after spawn);

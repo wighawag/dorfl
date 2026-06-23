@@ -1,7 +1,7 @@
 /**
- * The `install-ci` ISSUE-INTAKE capability (PRD `runner-in-ci`, slice
+ * The `install-ci` ISSUE-INTAKE capability (brief `runner-in-ci`, task
  * `install-ci-intake-trigger-and-review-surface`; capability D: consider incoming
- * issues → slice/PRD, AND insertion point E: surface the review verdict back into
+ * issues → task/brief, AND insertion point E: surface the review verdict back into
  * the issue thread). This module GENERATES the one fixed intake workflow file and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
  * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
@@ -10,14 +10,14 @@
  * ({@link deriveIntakeFlags}) — CI's merge-vs-propose POLICY, the load-bearing
  * testable logic the workflow encodes at runtime.
  *
- * SCOPE FENCE (PRD Out-of-Scope): the issue→artifact TRANSFORM engine is
+ * SCOPE FENCE (brief Out-of-Scope): the issue→artifact TRANSFORM engine is
  * `issue-intake`'s (`intake <N>` + its four-outcome dispatch + the per-outcome
  * KNOBS + the lone-slice review that posts to the issue thread). CI only
  * WIRES/SCHEDULES/INVOKES it and owns the merge-vs-propose POLICY + the delivery
  * surface. This module emits NO transform; it emits the WORKFLOW that calls it.
  *
- * The discipline (PRD capability-D row + the merge-vs-propose POLICY + the two
- * RESOLVED design decisions in the slice):
+ * The discipline (brief capability-D row + the merge-vs-propose POLICY + the two
+ * RESOLVED design decisions in the task):
  *
  *   - TRIGGERS: `issues` opened, `issue_comment` created, and a label
  *     (`agent-runner:intake`). It invokes `intake <N>` (EXPLICIT, four-outcome
@@ -30,13 +30,13 @@
  *   - AUTHOR-TRUST → per-outcome FLAGS (Decision 1, {@link deriveIntakeFlags}): an
  *     UNTRUSTED author (`author_association` not in OWNER/MEMBER/COLLABORATOR)
  *     forces `--propose-slice` REGARDLESS of the `autoBuild` gate, while
- *     `--merge-prd` stays allowed (a human still slices a PRD before anything
+ *     `--merge-prd` stays allowed (a human still tasks a brief before anything
  *     autonomous acts — the checkpoint is intact). A TRUSTED author gets the plain
  *     gate-derived mode for both. The fully-gateless "all gates on + merge
  *     everywhere" path is a LOUD, NON-DEFAULT opt-in — the default is conservative
  *     (propose / human-in-the-loop).
  *   - INSERTION POINT E (the issue-thread review surface): the review verdict over
- *     intake's generated PRD/slices is surfaced into the ISSUE THREAD via the
+ *     intake's generated briefs/tasks is surfaced into the ISSUE THREAD via the
  *     `IssueProvider.postIssueComment` seam (issue thread, by NUMBER — NOT the PR
  *     seam `postPRComment`, which is keyed by url). This is REUSED, not new:
  *     `intake <N>` already runs the lone-slice review/edit loop and posts its
@@ -52,7 +52,7 @@
  *     `issues: write` (post the clarifying/review comment back).
  *
  * The structural validator is the dependency-free counterpart of "the workflow
- * parses + carries the right discipline" the slice's acceptance criteria require;
+ * parses + carries the right discipline" the task's acceptance criteria require;
  * the test generates this artifact under `--fake` and asserts every invariant.
  */
 
@@ -65,7 +65,7 @@ export const INTAKE_TRIGGER_CAPABILITY_ID = 'intake';
 
 /** The wizard-facing label for the issue-intake capability. */
 export const INTAKE_TRIGGER_CAPABILITY_LABEL =
-	'Consider incoming issues → slice/PRD + surface the review verdict into the issue thread (the intake trigger: issues / issue_comment / label)';
+	'Consider incoming issues → task/brief + surface the review verdict into the issue thread (the intake trigger: issues / issue_comment / label)';
 
 /** The repo-relative path (under the output base) of the emitted workflow. */
 export const INTAKE_TRIGGER_WORKFLOW_PATH = 'workflows/intake.yml';
@@ -106,7 +106,7 @@ export interface IntakeIntegrationFlags {
 	slice: 'merge' | 'propose';
 	/**
 	 * The ORIGIN-TRUST verdict CI passes to `intake <N>` via `--origin-trust`
-	 * (slice `untrusted-origin-forces-build-propose`) so the emitted PRD/slice is
+	 * (task `untrusted-origin-forces-build-propose`) so the emitted brief/task is
 	 * STAMPED with how it was born. Derived from the SAME `author_association` case
 	 * as the integration flags (it IS `authorTrusted` collapsed to the wire value),
 	 * so the stamp and the integration mode CANNOT desync. `intake.ts` writes it
@@ -119,8 +119,8 @@ export interface IntakeIntegrationFlags {
 /** The gate state CI composes with author-trust to derive the per-outcome flags. */
 export interface IntakeGateState {
 	/**
-	 * `autoBuild` — whether an agent will AUTO-BUILD an undeclared slice next. ON ⇒
-	 * a slice needs a human PR checkpoint NOW (`--propose-slice`); OFF ⇒ a human
+	 * `autoBuild` — whether an agent will AUTO-BUILD an undeclared task next. ON ⇒
+	 * a task needs a human PR checkpoint NOW (`--propose-slice`); OFF ⇒ a human
 	 * must build it, so it may `--merge-slice` (when the author is also trusted).
 	 */
 	autoBuild: boolean;
@@ -134,8 +134,8 @@ export interface IntakeGateState {
 
 /**
  * DERIVE the per-outcome merge-vs-propose flags from the gate state COMPOSED with
- * author-trust — CI's merge-vs-propose POLICY (PRD "merge-vs-propose POLICY" +
- * "Composed with AUTHOR-TRUST"; slice Decision 1). This is the load-bearing pure
+ * author-trust — CI's merge-vs-propose POLICY (brief "merge-vs-propose POLICY" +
+ * "Composed with AUTHOR-TRUST"; task Decision 1). This is the load-bearing pure
  * logic the workflow encodes at runtime (it reads `author_association` off the
  * event payload and sets the flags accordingly):
  *
@@ -157,19 +157,19 @@ export function deriveIntakeFlags(options: {
 	authorTrusted: boolean;
 }): IntakeIntegrationFlags {
 	const {gate, authorTrusted} = options;
-	// PRD: gate-derived only — a human-slices-it checkpoint stays ahead regardless
+	// PRD: gate-derived only — a human-tasks-it checkpoint stays ahead regardless
 	// of author-trust, so an untrusted author may still --merge-prd.
 	const prd: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
 	// SLICE: propose if the agent will auto-build it (gate ON) OR the author is
 	// untrusted; merge ONLY when both are safe (gate OFF AND author trusted).
 	const slice: 'merge' | 'propose' =
 		gate.autoBuild || !authorTrusted ? 'propose' : 'merge';
-	// ORIGIN-TRUST stamp (slice `untrusted-origin-forces-build-propose`): the SAME
+	// ORIGIN-TRUST stamp (task `untrusted-origin-forces-build-propose`): the SAME
 	// author-trust verdict, collapsed to the wire value `intake` stamps onto the
 	// emitted artifact. Derived HERE — next to the integration flags, off the SAME
 	// `authorTrusted` input — so the stamp and the slice/PRD modes cannot desync.
 	// It is NOT a re-resolution of trust (CI already resolved it); it is the verdict
-	// being CARRIED so it survives the PRD/slice merge boundary (the becomes-code
+	// being CARRIED so it survives the brief/task merge boundary (the becomes-code
 	// checkpoint is not laundered when the file lands on main).
 	const originTrust: 'trusted' | 'untrusted' = authorTrusted
 		? 'trusted'
@@ -216,8 +216,8 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # agent-runner — the ISSUE INTAKE trigger in CI (capability D: consider incoming
-# issues → slice/PRD, PLUS insertion point E: surface the review verdict into the
-# issue thread, PRD runner-in-ci). EMITTED by \`agent-runner install-ci\`; the human
+# issues → task/brief, PLUS insertion point E: surface the review verdict into the
+# issue thread, brief runner-in-ci). EMITTED by \`agent-runner install-ci\`; the human
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
 # WHAT IT DOES — \`agent-runner intake <N>\` reads issue #N + its comment thread,
@@ -240,9 +240,9 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 # AUTHOR-TRUST → per-outcome FLAGS (the merge-vs-propose POLICY): because ANYBODY
 # can file an issue, the merge decision composes with WHO authored it. An UNTRUSTED
 # author (\`author_association\` not OWNER/MEMBER/COLLABORATOR) forces
-# \`--propose-slice\` REGARDLESS of the \`autoBuild\` gate — a slice from a public
+# \`--propose-slice\` REGARDLESS of the \`autoBuild\` gate — a task from a public
 # front-door issue can never auto-merge — while \`--merge-prd\` stays allowed (a
-# human must still slice a PRD before anything autonomous acts on it, so the human
+# human must still task a brief before anything autonomous acts on it, so the human
 # checkpoint is intact). A TRUSTED author gets the plain gate-derived mode. The
 # fully-gateless "merge everything" path (both gates off + a trusted author) is a
 # LOUD, NON-DEFAULT opt-in; the default is conservative (propose).
@@ -304,9 +304,9 @@ env:
   # authorization), so these gates do NOT block it — CI READS them to DERIVE the
   # per-outcome merge-vs-propose flags below (the merge-vs-propose POLICY). CALM
   # DEFAULTS: both off ⇒ the next step is a HUMAN, so the gate-derived mode is the
-  # permissive merge side; author-trust then forces propose for a slice from an
+  # permissive merge side; author-trust then forces propose for a task from an
   # untrusted author.
-  AGENT_RUNNER_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted slice next?
+  AGENT_RUNNER_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
   AGENT_RUNNER_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted brief next?
 
 jobs:
@@ -328,7 +328,7 @@ jobs:
         # \`deriveIntakeFlags\` unit-tests (they cannot desync; the test asserts this
         # shell matches the function):
         #   * PRD  — gate-derived ONLY: --merge-prd iff autoTask OFF (a human
-        #            slices it before anything autonomous acts — the checkpoint
+        #            tasks it before anything autonomous acts — the checkpoint
         #            stays ahead even for an UNTRUSTED author), else --propose-prd.
         #   * SLICE — --propose-slice iff (autoBuild ON) OR (author UNTRUSTED);
         #            --merge-slice ONLY iff (autoBuild OFF AND author TRUSTED).
@@ -363,13 +363,13 @@ jobs:
             slice_flag="--merge-slice"
           fi
 
-          # ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose):
+          # ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose):
           # derived from the SAME \${trusted} case above (one author-trust read,
           # two consumers — the slice/PRD modes AND the stamp — so they cannot
-          # desync). \`intake\` STAMPS this onto the emitted PRD/slice frontmatter
+          # desync). \`intake\` STAMPS this onto the emitted brief/task frontmatter
           # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
           # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
-          # so a later auto-slice/auto-build of an untrusted-origin artifact still
+          # so a later auto-task/auto-build of an untrusted-origin artifact still
           # forces a human becomes-code checkpoint (the laundering gap is closed).
           if [ "\${trusted}" = "true" ]; then
             origin_trust_flag="--origin-trust=trusted"
@@ -417,7 +417,7 @@ export interface IntakeTriggerValidation {
 }
 
 /**
- * Structurally validate the intake-trigger workflow against the slice's acceptance
+ * Structurally validate the intake-trigger workflow against the task's acceptance
  * criteria. Dependency-free (no YAML lib): presence/shape assertions over the raw
  * text, mirroring {@link validateAdvanceLifecycleWorkflow} /
  * {@link validateCloseJobWorkflow}.
@@ -451,12 +451,12 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		operative,
 	), 'the intake invocation must pass the explicit issue NUMBER ' +
 		'(`github.event.issue.number`), never a bare slug.');
-	// CI owns ONLY the trigger/policy/delivery — it must NOT invoke a build/slice
-	// verb (that is the build/slice tick), nor re-implement the transform.
+	// CI owns ONLY the trigger/policy/delivery — it must NOT invoke a build/task
+	// verb (that is the build/task tick), nor re-implement the transform.
 	require('no-build-verbs', !/agent-runner (?:do|advance)\b/.test(
 		operative,
 	), 'the intake workflow must invoke ONLY `intake` (+ derive the policy), not a ' +
-		'build/slice verb — CI owns the trigger + merge policy, not the transform.');
+		'build/task verb — CI owns the trigger + merge policy, not the transform.');
 
 	// --- TRIGGERS: issues opened + issue_comment created + the label ------------
 	require('trigger-issues-opened', /\bissues:\s*[\s\S]*?types:\s*[\s\S]*?-\s*opened\b/.test(
@@ -513,18 +513,18 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	require('derives-merge-prd', /--merge-prd\b/.test(
 		operative,
 	), 'the policy derivation must be able to emit `--merge-prd` (a PRD stays ' +
-		'mergeable even for an untrusted author — the human-slices-it checkpoint).');
+		'mergeable even for an untrusted author — the human-tasks-it checkpoint).');
 	require('derives-propose-prd', /--propose-prd\b/.test(
 		operative,
 	), 'the policy derivation must be able to emit `--propose-prd` (autoTask on).');
-	// ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose): the shell
+	// ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose): the shell
 	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
 	// case it uses for the slice/PRD modes, and pass it to `intake` so the emitted
 	// artifact is stamped (the stamp + the modes cannot desync).
 	require('derives-origin-trust-untrusted', /--origin-trust=untrusted\b/.test(
 		operative,
 	), 'the policy derivation must emit `--origin-trust=untrusted` for a non-trusted ' +
-		'author (so the emitted artifact is stamped untrusted; slice ' +
+		'author (so the emitted artifact is stamped untrusted; task ' +
 		'untrusted-origin-forces-build-propose).');
 	require('derives-origin-trust-trusted', /--origin-trust=trusted\b/.test(
 		operative,
@@ -585,7 +585,7 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	require('uses-shared-setup-action', /uses:\s*\.\/\.github\/actions\/agent-runner-setup\b/.test(
 		text,
 	), 'the job must wire the shared composite setup action ' +
-		'(`./.github/actions/agent-runner-setup`, emitted by the core slice).');
+		'(`./.github/actions/agent-runner-setup`, emitted by the core task).');
 
 	return {ok: problems.length === 0, problems};
 }

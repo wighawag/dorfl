@@ -9,7 +9,7 @@ import {workItemRel} from './work-layout.js';
  * `scripts/CLAIM-PROTOCOL.md`. This is the first-class `agent-runner claim`
  * command (ADR §9: agent-runner is the PRIMARY implementation of the claim
  * protocol; `scripts/claim.sh` is retained as the portable, zero-dependency
- * bootstrap / reference). The lock-substrate cut-over (PRD
+ * bootstrap / reference). The lock-substrate cut-over (brief
  * `ledger-status-per-item-lock-refs`) has since diverged it from `claim.sh`'s
  * body-move semantics — see the lock note below — but the exit codes are the same.
  *
@@ -24,7 +24,7 @@ import {workItemRel} from './work-layout.js';
  *   3  (legacy) push contention — no longer reachable: the per-item lock never
  *      falsely contends, so there is no retry budget to exhaust
  *
- * UNIFIED PER-ITEM LOCK (PRD `ledger-status-per-item-lock-refs` US #1/#15/#16,
+ * UNIFIED PER-ITEM LOCK (brief `ledger-status-per-item-lock-refs` US #1/#15/#16,
  * ADR `ledger-status-on-per-item-lock-refs`): a claim ACQUIRES the item's
  * per-item lock (`action: implement`) via the lock module and writes NOTHING to
  * `main` — the body STAYS at `work/backlog/<slug>.md`. The claimable predicate is
@@ -37,8 +37,8 @@ import {workItemRel} from './work-layout.js';
  * commit) is GONE.
  *
  * Before the claim runs, the HUMAN path's readiness guard (resolveReadiness) is
- * applied: a slice with an unmet `blockedBy` is REFUSED (exit 1, outcome
- * 'not-ready') unless overridden; a `needsAnswers: true` slice is WARNED about
+ * applied: a task with an unmet `blockedBy` is REFUSED (exit 1, outcome
+ * 'not-ready') unless overridden; a `needsAnswers: true` task is WARNED about
  * but still claimed. The autonomous runner does NOT pass `humanPath`, so its
  * behaviour is unchanged (eligibility already filters those items upstream).
  */
@@ -136,7 +136,7 @@ class ClaimUsageError extends Error {}
 
 /**
  * Raised for a deliberate readiness REFUSAL (exit 1, outcome 'not-ready') —
- * distinct from a usage/environment error. The slice has an unmet `blockedBy`
+ * distinct from a usage/environment error. The task has an unmet `blockedBy`
  * and the override was not supplied, so nothing is claimed.
  */
 class ClaimNotReady extends Error {}
@@ -205,8 +205,8 @@ async function runClaim(
 		);
 	}
 
-	// HUMAN-path readiness guard (run BEFORE the CAS so a not-ready slice is never
-	// claimed). Reads the slice frontmatter + `work/done/` from `<arbiter>/main`
+	// HUMAN-path readiness guard (run BEFORE the CAS so a not-ready task is never
+	// claimed). Reads the task frontmatter + `work/done/` from `<arbiter>/main`
 	// (the same source of truth the folder check uses) and resolves `blockedBy`
 	// via the shared resolveBlockedBy. Skipped entirely for the autonomous runner
 	// (no `humanPath`), whose eligibility filter already handles these upstream.
@@ -237,7 +237,7 @@ async function runClaim(
 		if (readiness.needsAnswers && !readiness.overridden) {
 			note(
 				`!! WARNING: '${slug}' is flagged needsAnswers: true — it has open ` +
-					'questions (see the slice body). Claiming it anyway (human path); ' +
+					'questions (see the task body). Claiming it anyway (human path); ' +
 					'resolve the questions before/while building.',
 			);
 		} else if (readiness.needsAnswers && readiness.overridden) {
@@ -250,7 +250,7 @@ async function runClaim(
 	const backlog = workItemRel('tasks-todo', `${slug}.md`);
 	const branch = workBranchRef('task', slug);
 
-	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (PRD
+	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (brief
 	// `ledger-status-per-item-lock-refs` US #1/#15/#16; ADR
 	// `ledger-status-on-per-item-lock-refs`). The interim dual-write is GONE: claim
 	// acquires the item's per-item lock (`action: implement`) and writes NOTHING to

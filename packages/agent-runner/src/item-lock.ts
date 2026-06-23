@@ -4,7 +4,7 @@ import {resolveSidecarIdentity, type SidecarType} from './sidecar.js';
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **unified item-lock module** (PRD `ledger-status-per-item-lock-refs`, ADR
+ * The **unified item-lock module** (brief `ledger-status-per-item-lock-refs`, ADR
  * `ledger-status-on-per-item-lock-refs`). The runner's ONE lock primitive: ONE
  * lock per item, on a PER-ITEM hidden ref `refs/agent-runner/lock/<entry>`,
  * acquired by an ATOMIC create-only push and released by DELETING the ref, with a
@@ -26,8 +26,8 @@ import {workItemRel} from './work-layout.js';
  * under different actions shares ONE ref (so implement / task / advance on one
  * item are mutually exclusive by construction).
  *
- * It is NOT yet wired into claim/slice/advance — those are separate, dependent
- * slices — and deliberately does NOT touch `main`.
+ * It is NOT yet wired into claim/task/advance — those are separate, dependent
+ * tasks — and deliberately does NOT touch `main`.
  *
  * WHY a per-item ref (not a marker on `main` or a tree on one shared ref):
  *   - **No false contention, no retry.** The ONLY writer that can contend on item
@@ -88,7 +88,7 @@ export type LockState = 'active' | 'stuck';
  * "advanced-and-stuck" and "building-and-stuck" are both representable, which a
  * single action-field could not do). `reason` is present IFF `state === 'stuck'`.
  *
- * Since the lock entry is the SOLE stuck record (slice
+ * Since the lock entry is the SOLE stuck record (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+: the
  * `needs-attention/` folder is retired), `reason` is the FULL bounce prose (it may
  * span multiple lines — a red-gate excerpt, a rebase-conflict report, an agent's
@@ -132,7 +132,7 @@ export interface ReleaseResult {
 
 /**
  * Outcome of an AMEND-style transition (mark-stuck / resume / requeue) — the
- * lock-entry STATE MACHINE's interior moves (PRD `ledger-status-per-item-lock-refs`,
+ * lock-entry STATE MACHINE's interior moves (brief `ledger-status-per-item-lock-refs`,
  * the C8 lock-entry state machine in the design trail). Each is a single CAS on the
  * held ref (no retry loop), so the verdict is definitive:
  *   - `transitioned` — we won the CAS; the entry now holds the target `(action, state)`.
@@ -440,9 +440,9 @@ export interface ReleaseHeldResult {
 }
 
 /**
- * GUARDED release for a runner that KNOWS it acquired and HELD the lock (PRD
+ * GUARDED release for a runner that KNOWS it acquired and HELD the lock (brief
  * `ledger-status-per-item-lock-refs` US #13): unlike {@link releaseItemLock} —
- * whose `not-held` is a BENIGN idempotent case the complete/slicing/needs-attention
+ * whose `not-held` is a BENIGN idempotent case the complete/tasking/needs-attention
  * callers tolerate (the body may predate the lock, or a crash-recovery may have
  * already cleared it) — here the absence of OUR ref is an ABORT SIGNAL. A held
  * runner whose own lock VANISHED mid-build (someone `release-lock`-ed it, or a
@@ -870,7 +870,7 @@ export async function readItemLock(
  * bare-slug `work/dropped/<slug>.md`):
  *   - a TASK: `work/tasks/done/<slug>.md` (completed) OR
  *     `work/tasks/cancelled/<slug>.md` (the task regime's won't-proceed terminal).
- *   - a BRIEF: `work/briefs/tasked/<slug>.md` (sliced) OR `work/briefs/dropped/<slug>.md`
+ *   - a BRIEF: `work/briefs/tasked/<slug>.md` (tasked) OR `work/briefs/dropped/<slug>.md`
  *     (the brief regime's won't-proceed terminal).
  *   - an OBSERVATION: NONE. A note has no durable terminal folder — it leaves by
  *     deletion (its absence, not a terminal record, is the end state). A promoted
@@ -892,7 +892,7 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 }
 
 /** The outcome of a cross-substrate reconciliation of one item's lock against
- * the authoritative `main` durable record (PRD `ledger-status-per-item-lock-refs`
+ * the authoritative `main` durable record (brief `ledger-status-per-item-lock-refs`
  * US #9/#10; ADR `ledger-status-on-per-item-lock-refs`). */
 export type ReconcileOutcome =
 	| 'cleared-stale' // `main` is terminal + the lock was `active` (stranded) → cleared
@@ -907,14 +907,14 @@ export interface ReconcileResult {
 	entry: string;
 	ref: string;
 	/** Whether `<arbiter>/main` shows the item terminal (per {@link terminalMainPaths}:
-	 * a slice at `tasks/done`/`tasks/cancelled`, a brief at `briefs/tasked`/`briefs/dropped`). */
+	 * a task at `tasks/done`/`tasks/cancelled`, a brief at `briefs/tasked`/`briefs/dropped`). */
 	terminalOnMain: boolean;
 	message: string;
 }
 
 /**
  * Reconcile ONE item's per-item lock against the AUTHORITATIVE `main` durable
- * record — the heart of complete's cross-substrate crash-safety (PRD
+ * record — the heart of complete's cross-substrate crash-safety (brief
  * `ledger-status-per-item-lock-refs` US #9/#10; ADR
  * `ledger-status-on-per-item-lock-refs`; the design trail's Amendment 6).
  *
@@ -1193,7 +1193,7 @@ export interface LockReportEntry {
 	reconcile: ReconcileOutcome;
 }
 
-/** The `gc --ledger` stuck/orphaned-lock REPORT (PRD
+/** The `gc --ledger` stuck/orphaned-lock REPORT (brief
  * `ledger-status-per-item-lock-refs` US #14): every lingering per-item lock on the
  * arbiter, each classified read-only against `main`. An EMPTY list = no locks held
  * (an absent ref namespace reads as `[]`, the recoverable "all locks released"
@@ -1203,13 +1203,13 @@ export interface ItemLockReport {
 }
 
 /**
- * Build the `gc --ledger` stuck/orphaned-lock REPORT (PRD
+ * Build the `gc --ledger` stuck/orphaned-lock REPORT (brief
  * `ledger-status-per-item-lock-refs` US #12/#13/#14; ADR
  * `ledger-status-on-per-item-lock-refs`): enumerate every per-item lock currently
  * held on the arbiter ({@link listItemLockEntries} — held active + stuck, with
  * holder/since/reason) and classify EACH read-only against the authoritative
  * `main` durable record via {@link classifyItemLockAgainstMain} (the wiring the
- * `complete-lock-then-durable-main-move-crash-safe` slice's
+ * `complete-lock-then-durable-main-move-crash-safe` task's
  * `reconcileItemLockAgainstMain` had no production caller for). This is the
  * generalisation of the (now-retired) advancing-marker report from advancing-only
  * to the UNIFIED lock (the `gc --ledger` stuck-lock report).
@@ -1256,7 +1256,7 @@ export async function reportItemLocks(
  */
 /**
  * Does the `gc --ledger` lock report contain a lock that NEEDS HUMAN ATTENTION
- * (PRD US#14/#21; ADR `ledger-status-on-per-item-lock-refs`: this surface is the
+ * (brief US#14/#21; ADR `ledger-status-on-per-item-lock-refs`: this surface is the
  * STUCK / crash-orphaned lock, NOT every held one)? TRUE iff some lock is
  * `kept-stuck` (terminal-on-`main` + stuck) or `cleared-stale`-eligible
  * (terminal-on-`main` + a stale active orphan). A `kept-in-flight` (active,
@@ -1365,7 +1365,7 @@ export interface ReapReport {
 }
 
 /**
- * The OPT-IN `gc --ledger --reap-stale-locks` SWEEP (PRD
+ * The OPT-IN `gc --ledger --reap-stale-locks` SWEEP (brief
  * `ledger-status-per-item-lock-refs` US #14): a human asserting "clear the dead
  * TERMINAL locks now", so one command sweeps every orphaned terminal lock instead
  * of N hand-run `release-lock`s. It is the WRITE twin of {@link reportItemLocks}
@@ -1601,7 +1601,7 @@ export async function listItemLocks(
 
 /**
  * Read the FULL lock entries currently held on the arbiter — the `status`/`scan`
- * in-flight read path (PRD `ledger-status-per-item-lock-refs` US #8; slice
+ * in-flight read path (brief `ledger-status-per-item-lock-refs` US #8; task
  * `needs-attention-as-stuck-lock-state`). One fetch of the lock refs, then read
  * each held entry's `lock.md` blob, returning the parsed {@link LockEntry} for
  * every ref (so a caller can surface `active` (in-progress) and `stuck`
@@ -1658,14 +1658,14 @@ export async function listItemLockEntries(
 
 /**
  * List the TASK slugs currently lock-held on the arbiter — the held-slug set the
- * `todo/` pool readers SUBTRACT (PRD `ledger-status-per-item-lock-refs` US #15;
- * slice `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
+ * `todo/` pool readers SUBTRACT (brief `ledger-status-per-item-lock-refs` US #15;
+ * task `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
  * and keeps only the `task-<slug>` entries (a brief/observation lock does not gate
  * the TASK pool), mapping each to its bare `<slug>`. Best-effort: a fetch
  * fault yields an EMPTY set, so the offline pool read degrades to "subtract
  * nothing" rather than erroring — while the body still moves to `in-progress/` the
  * subtraction is redundant anyway (the moved body already leaves the pool); it is
- * wired now so the capstone that stops the body move (slice #9) has the predicate
+ * wired now so the capstone that stops the body move (task #9) has the predicate
  * "in `backlog/` on `main` AND no lock held" already in force without re-touching
  * the readers.
  */

@@ -8,8 +8,8 @@ import {
 import {brand} from './brand.js';
 
 /**
- * The single provider-native PROCESSING LOCK label (slice `intake-processing-lock`,
- * PRD `issue-intake` US #10): a TRANSIENT concurrency mutex — added on start (the
+ * The single provider-native PROCESSING LOCK label (task `intake-processing-lock`,
+ * brief `issue-intake` US #10): a TRANSIENT concurrency mutex — added on start (the
  * winner only), removed on finish — that serialises two concurrent `intake` runs on
  * the SAME issue. It is namespaced under the brand (`agent-runner:processing`) so it
  * cannot collide with a user's own labels. It carries NO `work/` state — it is NOT a
@@ -19,7 +19,7 @@ import {brand} from './brand.js';
 export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
 
 /**
- * The **issue seam** (PRD `issue-intake`, slice `intake-tracer-slice-outcome`):
+ * The **issue seam** (brief `issue-intake`, task `intake-tracer-slice-outcome`):
  * the provider-pluggable surface `intake <N>` reads an issue + its comment thread
  * through, and posts a clarifying comment back onto. It is the SIBLING of the
  * review-request `ReviewProvider` (`integrator.ts` / `github.ts`): both name a
@@ -27,13 +27,13 @@ export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
  * import — ONLY the adapter shells out (the same discipline `github.ts` documents).
  *
  * The READ methods (`getIssue`, `listComments`) + the issue comment
- * (`postIssueComment`) landed with the keystone slice; the LABEL ops
- * (`addLabel`/`removeLabel`/`getLabels` — the transient `processing` LOCK, slice
- * `intake-processing-lock`) extend it. `closeIssue` (slice
+ * (`postIssueComment`) landed with the keystone task; the LABEL ops
+ * (`addLabel`/`removeLabel`/`getLabels` — the transient `processing` LOCK, task
+ * `intake-processing-lock`) extend it. `closeIssue` (task
  * `intake-closes-issue-on-bounce`) is the ATOMIC close used on a BOUNCE — a
  * terminal outcome, so intake closes the issue directly (comment + `not planned`
  * + close in ONE call). It is ALSO the method CI's future close-job uses for the
- * slice/PRD path; only the BOUNCE close is intake's.
+ * task/brief path; only the BOUNCE close is intake's.
  *
  * The label ops are a TRANSIENT CONCURRENCY MUTEX carrying NO `work/` state — ONE
  * lock label, added-on-start / removed-on-finish. They are NOT a label
@@ -43,7 +43,7 @@ export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
  * `supported: false` / `applied: false` and the run proceeds WITHOUT the lock).
  *
  * Why `postIssueComment` is a DISTINCT method from `ReviewProvider.postPRComment`
- * (renamed from `postComment` in this same slice): the PR-comment surface is keyed
+ * (renamed from `postComment` in this same task): the PR-comment surface is keyed
  * by the PR **url**; the issue-comment surface is keyed by the issue **number**. In
  * GitHub the two comment id spaces happen to coincide, but another provider may not
  * share them — so they are nominally distinct seams with distinct input types
@@ -71,7 +71,7 @@ export interface Issue {
 export interface IssueComment {
 	/**
 	 * The provider's comment id (`gh issue view --json comments` reports it). Surfaced
-	 * for the intake TRIAGE GATE (slice `intake-self-awareness-resumption-tracking`):
+	 * for the intake TRIAGE GATE (task `intake-self-awareness-resumption-tracking`):
 	 * the triage is id-set membership + list position only — it records which comment
 	 * ids intake READ (the marker's `seen=<id>,…`) and detects raced-in / deleted
 	 * comments by id arithmetic. ADDITIVE (no existing reader breaks); NO `createdAt`
@@ -295,7 +295,7 @@ export interface IssueProvider {
 	 * reason IN THE SAME atomic operation (`gh issue close <N> [--comment <body>]
 	 * [--reason "not planned"]`). Used on a BOUNCE (terminal: comment + `not
 	 * planned` + close in ONE call — no post-then-close partial-failure window) and,
-	 * later, by CI's slice/PRD close-job. The RUNNER calls this; the agent stays
+	 * later, by CI's task/brief close-job. The RUNNER calls this; the agent stays
 	 * seam-free. NEVER throws — a missing/unauthenticated `gh` DEGRADES, surfacing
 	 * the REAL `gh` stderr via {@link CloseIssueResult.reason} (NOT a hard-coded
 	 * guess), so the terminal outcome is unchanged and the cause stays diagnosable.
@@ -395,7 +395,7 @@ export class GitHubIssueProvider implements IssueProvider {
 		// ATOMIC: post the closing comment AND set the reason AND close in ONE
 		// `gh issue close` call — NOT a separate post-then-close (which has a
 		// comment-posted-but-close-failed window: the dishonest open-with-bounce-comment
-		// state this slice closes TO AVOID).
+		// state this task closes TO AVOID).
 		const args = ['issue', 'close', String(input.issueNumber)];
 		if (input.comment !== undefined && input.comment !== '') {
 			args.push('--comment', input.comment);

@@ -5,14 +5,14 @@ import {extractJsonObjectSpan} from './verdict-json.js';
 import type {NewQuestion, SidecarDisposition} from './sidecar.js';
 
 /**
- * The **SURFACE gate** (PRD `advance-loop`, slice `advance-rung-surface`,
+ * The **SURFACE gate** (brief `advance-loop`, task `advance-rung-surface`,
  * US #32/33) — the surface-question rung's fresh-context spawn, the DIRECT mirror
  * of the PR/code review gate ({@link import('./review-gate.js')}). On
  * `classify=surface`, the advance engine spawns a FRESH-CONTEXT agent with the
  * `surface-questions` SKILL loaded (`skills/surface-questions/SKILL.md`); the
  * skill GATHERS the item's open-judgement residue and EMITS questions and writes
  * NOTHING (doc-shaped, like `review`). The ENGINE then ITSELF persists them to
- * the sidecar CAS-atomically + sets `needsAnswers:true` (slice
+ * the sidecar CAS-atomically + sets `needsAnswers:true` (task
  * `advance-rung-surface`'s persist half) — **the skill JUDGES, the engine
  * PERSISTS.**
  *
@@ -68,7 +68,7 @@ export interface SurfaceEmit {
 
 /** What the surface gate needs to launch a fresh-context surface of one item. */
 export interface SurfaceGateInput {
-	/** The namespaced identity the surface is for (`slice:foo` / `prd:bar` / `observation:baz`). */
+	/** The namespaced identity the surface is for (`task:foo` / `brief:bar` / `observation:baz`). */
 	item: string;
 	/** The working clone/checkout the gate runs in. */
 	cwd: string;
@@ -206,7 +206,7 @@ export function toNewQuestions(emit: SurfaceEmit): NewQuestion[] {
  * {@link parseSurfaceEmit} can read it). The discipline body (the two laws —
  * GATHER-only / PERSIST-NEVER — the humility rule, the composed sources, the
  * emitted-question shape) lives in `SURFACE-PROTOCOL.md` — NOT inlined here
- * (slice `surface-protocol-doc-and-prompt`). The shape's source of truth is
+ * (task `surface-protocol-doc-and-prompt`). The shape's source of truth is
  * {@link parseSurfaceEmit}; the doc DESCRIBES it (D2).
  *
  * This builder owns ONLY the PER-BUILDER framing: who you are (a fresh-context

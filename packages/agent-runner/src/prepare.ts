@@ -148,10 +148,10 @@ function runOne(
  * worktree the git dir is `<mirror>/.git/worktrees/<id>`; in an in-place checkout
  * it is `<repo>/.git`. Either way it is per-worktree and uncommittable.
  *
- * This is the OPTIONAL within-one-worktree skip the slice sanctions: it does NOT
+ * This is the OPTIONAL within-one-worktree skip the task sanctions: it does NOT
  * make `prepare` a durable cross-job cache (a throwaway fresh worktree gets a
  * fresh git dir ⇒ no marker ⇒ prepare runs, which is exactly the per-gate
- * behaviour the dependent fresh-worktree-gate slice wants).
+ * behaviour the dependent fresh-worktree-gate task wants).
  */
 export const PREPARE_MARKER_BASENAME = '.agent-runner-prepared';
 

@@ -5,7 +5,7 @@
  * interleaves AFTER the always-first `apply` pool.
  *
  * Two load-bearing rules (ADR `ci-config-policy-and-gate-family`, selection-order
- * section; slice `advance-selection-order-config`):
+ * section; task `advance-selection-order-config`):
  *
  *  1. **`apply` is PINNED FIRST and is NOT nameable here.** Consuming a human's
  *     committed answer is highest-value, cheap (no model), and someone is waiting
@@ -27,8 +27,8 @@
  * deliberately ABSENT — it is pinned first and not configurable, so it is not a
  * member of this union and naming it is a usage error.
  *
- *  - `build` — build an eligible slice;
- *  - `slice` — slice a sliceable PRD;
+ *  - `build` — build an eligible task;
+ *  - `slice` — task a taskable brief;
  *  - `surface` — render a `needsAnswers` blocker into an answerable sidecar;
  *  - `triage` — triage an untriaged observation.
  */
@@ -46,7 +46,7 @@ export const SELECTION_POOLS: readonly SelectionPool[] = [
  * The recognized PRESET keywords, each sugar over an explicit pool-order list:
  *
  *  - `drain` (the DEFAULT) — drain ready work, then create, then ask:
- *    `[build, slice, surface, triage]`. Reproduces today's slices-first
+ *    `[build, slice, surface, triage]`. Reproduces today's drain-first
  *    "drain before create" default (`build` before `slice`).
  *  - `groom` — ask/groom first, build later: `[surface, triage, build, slice]`.
  *
