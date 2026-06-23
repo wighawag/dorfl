@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: tests-asserting-on-live-inbox-content-are-brittle-landmines
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
