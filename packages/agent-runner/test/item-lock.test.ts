@@ -102,7 +102,7 @@ describe('item-lock — entry serialise/parse round-trip', () => {
 	it('a stuck entry round-trips WITH its reason (the two-axis state)', () => {
 		const e: LockEntry = {
 			entry: 'brief-autoslice',
-			action: 'slice',
+			action: 'task',
 			state: 'stuck',
 			holder: 'tester',
 			since: '2026-06-18T00:00:00.000Z',
@@ -345,7 +345,7 @@ describe('item-lock — mutual exclusion (the dangerous core)', () => {
 		});
 		const reacq = await acquireItemLock({
 			item: 'task:alpha',
-			action: 'slice',
+			action: 'task',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -387,7 +387,7 @@ describe('item-lock — release/read edge cases', () => {
 		});
 		await acquireItemLock({
 			item: 'task:beta',
-			action: 'slice',
+			action: 'task',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),

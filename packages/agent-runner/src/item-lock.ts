@@ -23,7 +23,7 @@ import {workItemRel} from './work-layout.js';
  * work branch (`work/<type>-<slug>`) already use. There is deliberately NO second
  * identity scheme: a task, a brief,
  * and an observation that share a slug get DISTINCT lock refs, and the SAME item
- * under different actions shares ONE ref (so implement / slice / advance on one
+ * under different actions shares ONE ref (so implement / task / advance on one
  * item are mutually exclusive by construction).
  *
  * It is NOT yet wired into claim/slice/advance — those are separate, dependent
@@ -78,7 +78,7 @@ export function itemLockRef(entry: string): string {
 }
 
 /** WHAT holds the lock — the three mutually-exclusive actions over one item. */
-export type LockAction = 'implement' | 'slice' | 'advance';
+export type LockAction = 'implement' | 'task' | 'advance';
 
 /** Health of the hold: `active` (in-progress) or `stuck` (needs-attention). */
 export type LockState = 'active' | 'stuck';

@@ -317,7 +317,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 async function seedLockOnMirrorOrigin(
 	name: string,
 	slug: string,
-	opts: {stuck?: string; action?: 'implement' | 'slice' | 'advance'} = {},
+	opts: {stuck?: string; action?: 'implement' | 'task' | 'advance'} = {},
 ): Promise<void> {
 	const src = mirrorSrc(workspacesDir(), name);
 	const clone = join(scratch.root, `lock-seeder-${name}-${slug}`);
