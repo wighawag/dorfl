@@ -9,11 +9,9 @@ superseded_by:
 
 # ADR: CI config policy, the gate family, and one-time install-ci
 
-> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking**. The decision this ADR records is unchanged; only the names moved, and the original text is left intact to preserve the decision history. Where the body names CODE IDENTIFIERS that still carry the old words (the config keys `autoSlice` and `slicesLandIn`, the env var `AGENT_RUNNER_AUTO_SLICE`), those are the as-yet-unrenamed code identifiers tracked by the code-level rename brief `code-identifier-slice-prd-to-task-brief-rename`; they are kept verbatim here so this doc stays coherent with the live code until that rename lands.
-
 ## Context
 
-`runner-in-ci` (`work/prd/runner-in-ci.md`) makes CI run the autonomous rungs
+`runner-in-ci` (`work/briefs/tasked/runner-in-ci.md`) makes CI run the autonomous rungs
 headless. A long design pass asked: what knobs does CI need, where do they live,
 and does CI introduce a new "enable advanced features" gate? The answer that
 emerged reshapes the gate family itself, and the conclusion is: **CI is NOT a
@@ -25,16 +23,16 @@ in GitHub Actions. The only CI-specific artifact is auth + a fixed workflow shel
 
 ### 1. CI always runs `advance`; the verb is never a user decision
 
-`advance` is a strict superset of `do` (build slice / slice PRD), adding the
+`advance` is a strict superset of `do` (build task / task brief), adding the
 lifecycle rungs (triage an observation, surface a declared-open question, apply a
 committed answer). With the lifecycle gates at their calm defaults (below),
-`advance` degrades to exactly `do`'s build/slice behaviour. So there is no reason
+`advance` degrades to exactly `do`'s build/task behaviour. So there is no reason
 to expose a `do`-vs-`advance` choice in CI: the generated workflow ALWAYS invokes
 `advance`, and what it actually does is tuned entirely by config/env. This removes
 the most confusing decision from the user's head.
 
 (The same logic applies to the laptop daemon `run`; unifying `run` onto the
-advance tick is a sibling engine change, LANDED as slice `run-uses-advance-tick`
+advance tick is a sibling engine change, LANDED as task `run-uses-advance-tick`
 (plain `run` now drives the registry-set advance tick, `run --advance` is a
 deprecated no-op alias), not part of this ADR. The advance loop driver reuses
 `run`'s parallel scheduler + per-mirror job-worktree isolation, so the swap is the
@@ -47,8 +45,8 @@ ungated rung needing a new master flag. The family:
 
 | autonomous rung | gate | OFF behaviour |
 | --- | --- | --- |
-| build an undeclared slice | `autoBuild` (bool) | rung does not run |
-| slice an undeclared PRD | `autoSlice` (bool) | rung does not run |
+| build an undeclared task | `autoBuild` (bool) | rung does not run |
+| task an undeclared brief | `autoTask` (bool) | rung does not run |
 | triage an observation | **`observationTriage`** (`off` / `ask` / `auto`) | see below |
 | surface a declared `needsAnswers` blocker | **`surfaceBlockers`** (bool) | declared-blocked item is left silently blocked, not rendered as a question |
 | apply a committed answer | (always allowed) | n/a |
@@ -69,7 +67,7 @@ both, or neither:
     a judgement call.
 
 - **`surfaceBlockers` (bool, default `off`)** governs DECLARED work that is blocked:
-  whether a slice/PRD carrying `needsAnswers: true` is rendered into an answerable
+  whether a task/brief carrying `needsAnswers: true` is rendered into an answerable
   question sidecar (`on`) or left silently blocked in the backlog (`off`). This is
   a different job from observation triage: it is about committed work items, not the
   raw inbox.
@@ -81,29 +79,29 @@ off`, the case a single global switch could not express).
 
 **Gates decide what is PRESENT; selection order decides what runs FIRST (separate
 axes).** A gate set OFF removes its pool from the auto-pick enumeration entirely
-(`autoBuild`/`autoSlice` already work this way; `observationTriage`/`surfaceBlockers`
+(`autoBuild`/`autoTask` already work this way; `observationTriage`/`surfaceBlockers`
 extend it to the lifecycle pools, once `advance-autopick-lifecycle-pools` adds them).
 What to do across the pools that ARE present is a separate config axis,
-`selectionOrder` (slice `advance-selection-order-config`):
+`selectionOrder` (task `advance-selection-order-config`):
 
 - **`apply` is PINNED FIRST, not configurable** (consuming a human's committed
   answer is highest-value, cheap, and someone is waiting, deprioritizing it is never
   a real want; the create-vs-consume principle again).
-- **`selectionOrder` ranks the other four** (`build` / `slice` / `surface` /
+- **`selectionOrder` ranks the other four** (`build` / `task` / `surface` /
   `triage`) and accepts EITHER a preset keyword OR an explicit pool-order list (the
   preset is sugar over a list; canonical form is the list). `drain` (default) =
-  `[build, slice, surface, triage]` (drain ready work, then create, then ask,
-  generalizing today's slices-first "drain before create"); `groom` =
-  `[surface, triage, build, slice]`. It SUBSUMES the old `prdsFirst` boolean
-  ("slices before PRDs" is just `build` before `slice`), which is removed.
+  `[build, task, surface, triage]` (drain ready work, then create, then ask,
+  generalizing today's tasks-first "drain before create"); `groom` =
+  `[surface, triage, build, task]`. It SUBSUMES the old `prdsFirst` boolean
+  ("tasks before briefs" is just `build` before `task`), which is removed.
 - A pool named in the order but gated OFF is simply absent (a no-op, not an error):
   order ranks what the gates left present.
 
 ### 3. Calm defaults; no master switch needed
 
 Both new gates default to their quiet state (`observationTriage: off`,
-`surfaceBlockers: off`), so out-of-the-box CI builds/slices (subject to
-`autoBuild`/`autoSlice`) and reports failures, but asks NOTHING until the user opts
+`surfaceBlockers: off`), so out-of-the-box CI builds/tasks (subject to
+`autoBuild`/`autoTask`) and reports failures, but asks NOTHING until the user opts
 in. Because calm is the default, no global "shut up" master switch is needed; the
 single-switch convenience it would provide is already the default state.
 
@@ -148,7 +146,7 @@ one (create, gated), that distinction must be added before apply mints followups
 `observationTriage` is an ENUM coercion like `integration`), the CLI flags
 (`do-config.ts`/`cli.ts`), and the read site at the advance lifecycle rungs.
 
-They govern the ADVANCE LIFECYCLE path. As of slice `run-uses-advance-tick`, that
+They govern the ADVANCE LIFECYCLE path. As of task `run-uses-advance-tick`, that
 INCLUDES PLAIN `run`: the laptop daemon's per-item unit is now the registry-set
 ADVANCE tick (not the old build-only `runOnce`), so plain `run` ≡ advance and
 honours both gates. With them at their calm defaults (`observationTriage: off`,
@@ -166,11 +164,11 @@ and the SAME `.agent-runner.json` the laptop uses applies in CI too. CI stops be
 a special policy surface.
 
 **The env layer is the OPTIONAL CI-only override, NOT the carrier of defaults**
-(slice `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16). The emitted
+(task `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16). The emitted
 advance workflow INTENTIONALLY ships with NO `AGENT_RUNNER_AUTO_BUILD` /
-`AGENT_RUNNER_AUTO_SLICE` / `AGENT_RUNNER_OBSERVATION_TRIAGE` /
+`AGENT_RUNNER_AUTO_TASK` / `AGENT_RUNNER_OBSERVATION_TRIAGE` /
 `AGENT_RUNNER_SURFACE_BLOCKERS` env line at all. The earlier draft baked "calm
-defaults" into that env block (`AUTO_BUILD: 'true'`, `AUTO_SLICE: 'true'`,
+defaults" into that env block (`AUTO_BUILD: 'true'`, `AUTO_TASK: 'true'`,
 `OBSERVATION_TRIAGE: 'off'`, `SURFACE_BLOCKERS: 'false'`), but the precedence is
 `flag > env > per-repo > global > default`, so the env layer FORCED itself over
 the repo's own `.agent-runner.json` — a user who set `surfaceBlockers: true` or
@@ -178,7 +176,7 @@ the repo's own `.agent-runner.json` — a user who set `surfaceBlockers: true` o
 workflow now carries no gate env, so CI resolves the four gates from per-repo
 config (then global, then `DEFAULT_CONFIG`) like any other consumer. The trade-off
 accepted head-on: a CONFIG-LESS repo lands on the strict built-in defaults
-(`autoBuild: false`, `autoSlice: false`, `observationTriage: 'off'`,
+(`autoBuild: false`, `autoTask: false`, `observationTriage: 'off'`,
 `surfaceBlockers: false`) and CI claims nothing until the user opts in — by either
 setting the gate(s) in `.agent-runner.json` (governs everywhere) OR adding the
 `AGENT_RUNNER_*` env var to the workflow themselves (the explicit, opt-in CI-only
@@ -223,11 +221,11 @@ linearise at the target anyway). So sequence IS the serialiser for merge.
 
 ### 8. The merge-vs-propose POLICY (per capability) and AUTHOR-TRUST stay as recorded
 
-CI derives the integration mode per artifact from the downstream gate (a PRD merged
-iff a human must slice it next; a slice merged iff a human must build it next) and,
+CI derives the integration mode per artifact from the downstream gate (a brief merged
+iff a human must task it next; a task merged iff a human must build it next) and,
 for issue intake, the author-trust axis (untrusted author ⇒ propose regardless).
-The fully-gateless "issue → slice → build → main, no human" path is a loud,
-non-default opt-in. See `work/prd/runner-in-ci.md` for the policy table; it is
+The fully-gateless "issue → task → build → main, no human" path is a loud,
+non-default opt-in. See `work/briefs/tasked/runner-in-ci.md` for the policy table; it is
 unchanged by this ADR.
 
 ## Naming (an acknowledged trap, now resolved)
@@ -242,7 +240,7 @@ observation. Splitting it into `observationTriage` (with an explicit `off`) +
 This repo has NO external users yet (decided 2026-06-12), so config RENAMES are
 CLEAN REPLACEMENTS, not aliased migrations. `autoTriage` is DELETED outright (not
 aliased to `observationTriage`); the existing `allowAgents -> autoBuild` alias is
-ALSO removed (slice `remove-deprecated-config-aliases`). A value-migrating alias
+ALSO removed (task `remove-deprecated-config-aliases`). A value-migrating alias
 would additionally have been a trap here: the env legacy-alias path coerces the OLD
 var with the NEW key's coercion, so `AGENT_RUNNER_AUTO_TRIAGE=false` against an enum
 coercion would THROW. Avoided by not aliasing. Reinstate the alias discipline only
@@ -250,9 +248,9 @@ once the tool has real downstream users owed a migration window.
 
 ## Consequences
 
-- The gate family is coherent: `autoBuild`/`autoSlice` (build/slice) + `observationTriage`/`surfaceBlockers` (the two question sources), all per-repo + env + flag.
+- The gate family is coherent: `autoBuild`/`autoTask` (build/task) + `observationTriage`/`surfaceBlockers` (the two question sources), all per-repo + env + flag.
 - CI policy is fully expressible by config/env; `install-ci` is genuinely one-time.
-- The emitted advance workflow carries NO `AGENT_RUNNER_*` gate env: CI resolves the four gates through `flag > env > per-repo > global > default` like any other consumer, so per-repo `.agent-runner.json` is no longer silently shadowed. A config-less repo lands on the strict built-in `DEFAULT_CONFIG` (autoBuild/autoSlice off, observationTriage `'off'`, surfaceBlockers false) — CI claims nothing until the user opts in via config or a hand-added env var. (Slice `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16.)
+- The emitted advance workflow carries NO `AGENT_RUNNER_*` gate env: CI resolves the four gates through `flag > env > per-repo > global > default` like any other consumer, so per-repo `.agent-runner.json` is no longer silently shadowed. A config-less repo lands on the strict built-in `DEFAULT_CONFIG` (autoBuild/autoTask off, observationTriage `'off'`, surfaceBlockers false) — CI claims nothing until the user opts in via config or a hand-added env var. (Task `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16.)
 - The verb decision (`do` vs `advance`) is eliminated from CI; "calm build-only" is `advance` + both lifecycle gates off, not a different verb.
 - Engine work falls out (captured as `work/ideas/`): the `autoTriage -> observationTriage` 3-state migration; the `surfaceBlockers` gate; unifying `run` onto the advance tick.
-- Cross-refs: `command-surface-and-journeys.md` (the gate family + the autonomous face), `work/prd/runner-in-ci.md` ("Config & gate model in CI"), `config.ts`/`repo-config.ts`/`env-config.ts` (the gate-family plumbing), `advance-loop-driver.ts` ("run == CI: swap the tick, keep the loop").
+- Cross-refs: `command-surface-and-journeys.md` (the gate family + the autonomous face), `work/briefs/tasked/runner-in-ci.md` ("Config & gate model in CI"), `config.ts`/`repo-config.ts`/`env-config.ts` (the gate-family plumbing), `advance-loop-driver.ts` ("run == CI: swap the tick, keep the loop").

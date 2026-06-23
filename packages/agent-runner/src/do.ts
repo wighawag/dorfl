@@ -545,7 +545,7 @@ const DEFAULT_ARBITER = 'origin';
 
 /**
  * Map a `do brief:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
- * contract: outcomes pass through (sliced / gate-refused / stale / agent-failed /
+ * contract: outcomes pass through (tasked / gate-refused / stale / agent-failed /
  * usage-error), the lock-lost outcome splits into `lost` (exit 2) vs `contended`
  * (exit 3) by its exit code, and the tasking-only exit 4 (stale) is reported on
  * the `do` exit contract (`0|1|2|3`) as exit 1 — the needs-attention-class

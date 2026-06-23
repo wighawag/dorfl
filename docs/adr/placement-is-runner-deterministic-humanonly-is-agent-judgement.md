@@ -8,11 +8,9 @@ superseded_by:
 
 # ADR: the staging/pool POSITION is runner-deterministic; humanOnly is agent judgement, they sit on opposite sides of the determinism/trust line
 
-> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename` + `folder-taxonomy-reorg-and-rename`):** the vocabulary and the `work/` folder layout were RENAMED after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, the verb `slicing`/`slicer` as **tasking**/**tasker**, and the frontmatter `sliceAfter` as **briefAfter**. The pre-reorg folder names map: `backlog/`→`tasks/todo/` (the agent pool), `prd/`→`briefs/ready/`, `prd-ready/`→`briefs/ready/` (the auto-tasking pool), and `prd-sliced/`→`briefs/tasked/`. The DECISION this ADR records (placement is runner-deterministic; humanOnly is agent judgement) is unchanged; only the names moved, and the original text is left intact to preserve the decision history.
-
 > **STATUS: proposed.** Pins the WHY behind a three-axis autonomy model and a runner-enforced
 > placement gate. Full design + edge cases + config in
-> `work/prd/staging-pool-position-gate-and-trust-model.md`; design trail in
+> `work/briefs/ready/staging-pool-position-gate-and-trust-model.md`; design trail in
 > `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md`.
 
 ## Decision
@@ -20,27 +18,27 @@ superseded_by:
 An item's autonomy is governed by THREE orthogonal axes, each OWNED by the side that can correctly
 produce it:
 
-- **POSITION (a folder, RUNNER-deterministic, STRUCTURAL).** A staging vs pool split, `backlog/`
-  (staging, not agent-eligible) vs `todo/` (the agent pool) for slices; `prd/` (staging) vs
-  `prd-ready/` (auto-slice pool) for PRDs. WHICH folder an item's output lands in is COMPUTED by the
+- **POSITION (a folder, RUNNER-deterministic, STRUCTURAL).** A staging vs pool split, `pre-backlog/`
+  (staging, not agent-eligible) vs `tasks/todo/` (the agent pool) for tasks; `briefs/proposed/` (staging) vs
+  `briefs/ready/` (auto-tasking pool) for briefs. WHICH folder an item's output lands in is COMPUTED by the
   RUNNER from unforgeable inputs (the `originTrust` stamp, the per-repo placement policy, explicit
   operator flags) via a fixed precedence chain. No judgement; a pure function the agent cannot
   influence.
 - **NATURE (`humanOnly`, AGENT/human judgement, ADVISORY).** "An agent must NEVER auto-take this by
-  nature", decided by reasoning about the work (does building/slicing it need human
+  nature", decided by reasoning about the work (does building/tasking it need human
   judgement/security/secrets?). Non-deterministic, content-derived, advisory (a human can override).
-  Slice `humanOnly` gates BUILDING (survives even in `todo/`); PRD `humanOnly` gates SLICING.
+  Task `humanOnly` gates BUILDING (survives even in `tasks/todo/`); brief `humanOnly` gates TASKING.
 - **DISCOVERED (`needsAnswers`, AGENT judgement, ADVISORY).** "Blocked on an open question" , 
   unchanged.
 
-The agent CREATES ledger files ONLY in the staging folder (`backlog/` for slices, `prd/` for PRDs);
+The agent CREATES ledger files ONLY in the staging folder (`pre-backlog/` for tasks, `briefs/proposed/` for briefs);
 the RUNNER owns every MOVE and every PROMOTION into a pool. This restates the existing "the agent does
-not move files between `work/` folders" rule to also cover CREATION (slicing creates, not moves).
+not move files between `work/` folders" rule to also cover CREATION (tasking creates, not moves).
 
 ## Why
 
 1. **The two gates live on OPPOSITE sides of the determinism/trust boundary, so neither can replace
-   the other.** `humanOnly` is a non-deterministic JUDGEMENT (the slicer reasons about the nature of
+   the other.** `humanOnly` is a non-deterministic JUDGEMENT (the tasker reasons about the nature of
    the work), the runner cannot make it. Placement is a deterministic COMPUTATION from trust +
    policy, the agent cannot be trusted to make it. The determinism line (judgement vs computation)
    and the trust line (agent-produced vs runner-resolved) COINCIDE. So `humanOnly` MUST stay an
@@ -58,8 +56,8 @@ not move files between `work/` folders" rule to also cover CREATION (slicing cre
    tamper-proof, and it is the one the runner deterministically owns.
 4. **One mechanism, several payoffs.** The position gate is human CONTROL over the agent pool
    (valuable even when working-tree visibility is dropped); it trust-gates untrusted-origin output;
-   and it enables REVIEW WITHOUT A PR SYSTEM for ledger-file output (slicing): `--merge` slices land
-   in `backlog/` (durable, not eligible) and a human promotes the approved ones, review becomes a
+   and it enables REVIEW WITHOUT A PR SYSTEM for ledger-file output (tasking): `--merge` tasks land
+   in `pre-backlog/` (durable, not eligible) and a human promotes the approved ones, review becomes a
    ledger position, not an out-of-band PR. (Code/implementation review still uses a branch/PR; a diff
    cannot be folder-gated, the right tool per artifact.)
 
@@ -71,16 +69,16 @@ not move files between `work/` folders" rule to also cover CREATION (slicing cre
   needs a durable flag that survives even in the pool.
 - **Let the agent choose its birth folder / promote itself.** Rejected: it makes every gate advisory
   and bypassable. Placement must be runner-resolved from inputs the agent cannot forge.
-- **A PRD-level position split is not worth it (earlier view).** Reversed: `intake` authors PRDs and
-  untrusted origins exist today, so PRDs have the same intake-triage need as slices; they get the
-  `prd/ → prd-ready/` split too.
+- **A brief-level position split is not worth it (earlier view).** Reversed: `intake` authors briefs and
+  untrusted origins exist today, so briefs have the same intake-triage need as tasks; they get the
+  `briefs/proposed/ → briefs/ready/` split too.
 
 ## Consequences
 
 - A per-repo placement policy (default landing per lifecycle) + per-source exceptions (untrusted
   origin forces staging; explicit operator flag overrides), resolved like the existing
   `originTrust`/`integration` precedence, RUNNER-resolved, the agent never sets it.
-- Slice `humanOnly` is NARROWED to the rare hard case; PRD `humanOnly` is UNCHANGED and still
-  essential (it gates auto-slicing, no folder substitute). `needsAnswers` unchanged.
+- Task `humanOnly` is NARROWED to the rare hard case; brief `humanOnly` is UNCHANGED and still
+  essential (it gates auto-tasking, no folder substitute). `needsAnswers` unchanged.
 - The `AGENTS.md`/WORK-CONTRACT "agent does not move files" rule is restated to cover creation: the
   agent may CREATE only in the staging folder; the runner owns moves + promotions.

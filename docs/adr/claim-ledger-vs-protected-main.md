@@ -9,8 +9,6 @@ superseded_by:
 
 # ADR: introduce a ledger-transition seam (one strategy today; protected-main is a future possibility)
 
-> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read the one conceptual `PRD` below (the “issue→PRD `Fixes #N` loop-closure” aside) as **brief**. The decision is unchanged; only the name moved.
-
 > **STATUS: accepted — for the SEAM decision.** A design session (2026-06-04) resolved the load-bearing question. The decision is deliberately MINIMAL: introduce a **ledger-transition seam** (a read seam + a write seam) inside agent-runner, behind which the **current behaviour is the ONLY strategy**. There is **no mode, no config, nothing selectable** — observable behaviour is byte-identical to today. The seam is **insurance**, not a feature: IF a future protected-`main` strategy is ever needed, it can slot in behind the seam without reworking the claim model.
 >
 > A protected-`main` strategy **does not exist and is not decided** — it is recorded below only as ANALYSIS ("A future protected-main strategy") so a later session has footing. This ADR does NOT introduce a `ledgerMode`/mode concept; the codebase must not grow one until/unless a second strategy is actually built. **Not currently blocking** (the maintainer rarely protects `main`).
@@ -80,7 +78,7 @@ Two candidate substrates were discussed but **not chosen** (nothing here is buil
 Open tensions for that future session to weigh (broad, not pre-judged):
 
 - **Does branch-existence-as-in-progress (P-opt-1) violate "status = the folder"?** A ledger ref (P-opt-2) keeps status=folder everywhere; branch-existence encodes in-progress as a ref, not a file. (This is the sharpest tension.)
-- **Ledger ↔ code-merge reconciliation/cleanup** — the intermediate signal and "done on `main`" would live on different refs/timelines; how are they reconciled if a PR merges but the intermediate wasn't cleaned up (or vice-versa)? (Same class as the issue→PRD `Fixes #N` loop-closure question.)
+- **Ledger ↔ code-merge reconciliation/cleanup** — the intermediate signal and "done on `main`" would live on different refs/timelines; how are they reconciled if a PR merges but the intermediate wasn't cleaned up (or vice-versa)? (Same class as the issue→brief `Fixes #N` loop-closure question.)
 - **`--bare` portability is a KILL-CRITERION**, not a differentiator — any candidate that cannot do its CAS on a local `--bare` arbiter is out.
 
 **Maintainer's recorded lean (a starting bias, NOT a decision):** prefer the flavour that **preserves in-progress as a FILE** — i.e. P-opt-2 (a dedicated ledger _branch_ holding the `work/` folder tree), read over the network, **over** P-opt-1 (per-item branch-existence). Rationale: in-progress _visibility_ is the one property worth protecting; a ledger branch keeps status=folder intact (just on a different ref, network-read) whereas per-item refs abandon file-visibility entirely ("in-progress" becomes "a ref exists"). So if such a strategy is ever designed, the deciding question is "how much in-progress visibility do we want back" — and the maintainer leans toward keeping all of it. (Still subject to the kill-criterion and the reconciliation/cleanup tensions above.)

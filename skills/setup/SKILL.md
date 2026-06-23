@@ -139,7 +139,7 @@ work/protocol/       -> work/protocol/             # re-synced (overwritten), no
 #   a dropped OBSERVATION needs no terminal (notes leave by deletion) -> git rm
 ```
 
-Do the moves with `git mv` so each rename is staged as a rename; sort the old `work/dropped/` contents by what each item IS (task vs brief vs observation) into the right destination. Present this mapping and STOP for confirmation (it touches the repo's live ledger); never auto-run it. The vocabulary cutover (`prd:`→`brief:`, `sliceAfter:`→`briefAfter:` frontmatter; `do prd:`/`do slice:`→`do brief:`/`do task:`) is a SEPARATE in-code concern owned by the runner, not setup's scaffold.
+Do the moves with `git mv` so each rename is staged as a rename; sort the old `work/dropped/` contents by what each item IS (task vs brief vs observation) into the right destination. Migrate the frontmatter too where a legacy repo carries the old field/verb spellings (`prd:`→`brief:`, `sliceAfter:`→`briefAfter:` frontmatter; `do prd:`/`do slice:`→`do brief:`/`do task:`) — these are the on-disk identifiers a pre-cutover repo still holds. Present this mapping and STOP for confirmation (it touches the repo's live ledger); never auto-run it.
 
 ## Phase B — Convert existing material (only when material was detected)
 

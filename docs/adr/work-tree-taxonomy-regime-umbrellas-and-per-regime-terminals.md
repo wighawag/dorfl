@@ -38,10 +38,10 @@ The two lifecycles are DELIBERATELY NOT mirror images: `tasks/` is a Kanban boar
 `briefs/` is a staging-gate→admitted-pool. Each regime has its OWN won't-proceed
 terminal with a DELIBERATELY DIFFERENT word (`tasks/cancelled` vs `briefs/dropped`).
 
-The vocabulary follows the folders: a unit of buildable work is a **task** (was
-`slice`), a decomposable spec is a **brief** (was `prd`); `do task:` / `do brief:`,
-frontmatter `brief:` / `briefAfter:`, lock-ref entries `task-<slug>` /
-`brief-<slug>`. `observation` / `obs:` is unchanged.
+The vocabulary follows the folders: a unit of buildable work is a **task**, a
+decomposable spec is a **brief**; `do task:` / `do brief:`, frontmatter `brief:` /
+`briefAfter:`, lock-ref entries `task-<slug>` / `brief-<slug>`. `observation` /
+`obs:` is unchanged.
 
 ## Why
 
@@ -79,7 +79,7 @@ frontmatter `brief:` / `briefAfter:`, lock-ref entries `task-<slug>` /
    cosmetics.** A task, a brief, and an observation can share a slug. The shipped
    single top-level `work/dropped/` keyed by BARE slug, so a dropped task and a
    dropped brief sharing a slug COLLIDED on one `dropped/<slug>.md` (and `done/` had
-   only ever been a slice/task terminal, so the brief side had no clean terminal of
+   only ever been a task terminal, so the brief side had no clean terminal of
    its own). Giving each regime its own terminal — `tasks/cancelled/` (double-l, to
    match existing protocol prose) and `briefs/dropped/` — namespaces the collision
    away by type. A dropped observation needs no terminal folder (notes leave by
