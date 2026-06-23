@@ -390,7 +390,7 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 /**
  * The sliceable-PRD pool (`prds[]`) surface on `scan`/`scanRepoPaths` (slice
  * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). The CI
- * propose-matrix `jq` reads `repos[].prds[]` + `cwd.repo.prds[]` and unions them
+ * propose-matrix `jq` reads `repos[].briefs[]` + `cwd.repo.briefs[]` and unions them
  * with the slice legs; before this slice landed, the pool was invisible there
  * and `AGENT_RUNNER_AUTO_TASK` was dead on the hourly cron. The eligibility
  * predicate REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate the

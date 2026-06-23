@@ -106,12 +106,12 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			const text = loadAdvanceCiTemplate();
 			// The task-only jq this fix replaced left `AGENT_RUNNER_AUTO_TASK` dead on
 			// the hourly cron — a ready ungated BRIEF never became a matrix leg. The new jq
-			// must read `scan --json`'s sliceable-BRIEF pool (`repos[].prds[]` +
-			// `cwd.repo.prds[]`) and emit `brief:<slug>` legs alongside `task:<slug>`.
+			// must read `scan --json`'s sliceable-BRIEF pool (`repos[].briefs[]` +
+			// `cwd.repo.briefs[]`) and emit `brief:<slug>` legs alongside `task:<slug>`.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
 			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
-			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
-			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.briefs\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.briefs\[\]\?/.test(text)).toBe(true);
 		},
 	);
 
@@ -203,8 +203,8 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				// kill auto-slice on the hourly cron (the exact pre-fix bug).
 				const broken = base
 					.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
-					.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
-					.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
+					.replace(/\.repos\[\]\.briefs\[\]\?/g, '.repos[].items[]?')
+					.replace(/\.cwd\.repo\.briefs\[\]\?/g, '.cwd.repo.items[]?');
 				const result = withTmpTemplate(broken);
 				expect(result.ok).toBe(false);
 				expect(result.problems.map((p) => p.id)).toContain(

@@ -134,16 +134,16 @@ export function validateAdvanceCiTemplate(
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK` dead on the hourly
 	// cron — a ready ungated BRIEF would never become a matrix leg. The `jq` must
-	// read `scan --json`'s taskable-BRIEF pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+	// read `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` + `cwd.repo.briefs[]`)
 	// and emit `brief:<slug>` legs alongside the `task:<slug>` legs.
 	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
 		text,
 	) &&
-		/\.prds\[\]/.test(
+		/\.briefs\[\]/.test(
 			text,
 		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +
-		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-task ' +
+		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].briefs[]` " +
+		'+ `cwd.repo.briefs[]` pools), so a ready ungated BRIEF becomes one auto-task ' +
 		'matrix leg alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 	require('propose-one-advance-per-item', /agent-runner advance "?\$\{\{\s*matrix\./.test(
