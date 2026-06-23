@@ -68,7 +68,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  * check live in the skill). The agent makes the review/edit JUDGEMENTS through the
  * {@link TaskReviewGate} seam; this module applies the edits to disk and routes
  * the final verdict to the THREE outcomes (folded in from the deleted
- * `autoslice-confidence`, decision B):
+ * `autotask-confidence`, decision B):
  *
  *   - **converge** (a pass found no NEW blocking issue) → the improved tasks land
  *     claimable.
@@ -140,7 +140,7 @@ export type LoopOutcome =
 	/** A pass found no NEW blocking issue: the improved tasks land claimable. */
 	| 'converged'
 	/** `taskerLoopMax` hit with blockers → specific uncertain task(s) → needsAnswers. */
-	| 'uncertain-slices'
+	| 'uncertain-tasks'
 	/** `taskerLoopMax` hit / decomposition unclear → route the brief to needs-attention. */
 	| 'decomposition-unclear';
 
@@ -151,12 +151,12 @@ export interface RunTaskReviewLoopResult {
 	/**
 	 * The candidate tasks as they stand AFTER all applied edits, keyed by
 	 * repo-relative path → final content. The caller commits these (on
-	 * `converged`/`uncertain-slices`) — on `decomposition-unclear` it emits NO
+	 * `converged`/`uncertain-tasks`) — on `decomposition-unclear` it emits NO
 	 * tasks, so this is informational only.
 	 */
 	tasks: Record<string, string>;
 	/**
-	 * On `uncertain-slices`: the specific tasks to emit `needsAnswers: true` with
+	 * On `uncertain-tasks`: the specific tasks to emit `needsAnswers: true` with
 	 * the questions recorded in their bodies. Empty otherwise.
 	 */
 	uncertainTasks: UncertainTask[];
@@ -229,7 +229,7 @@ export interface RunTaskReviewLoopOptions {
  *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (brief → needs-attention,
  *     no guessed tasks);
  *   - else `uncertainTasks` (or, as a floor, every candidate task) ⇒
- *     `uncertain-slices` (those tasks emitted `needsAnswers: true` + questions).
+ *     `uncertain-tasks` (those tasks emitted `needsAnswers: true` + questions).
  *
  * With `executions > 1`, the WHOLE loop is re-run in a fresh context; the first
  * execution that converges short-circuits and lands, otherwise the LAST
@@ -345,7 +345,7 @@ export async function runTaskReviewLoop(
 			'task(s) with needsAnswers + questions.',
 	);
 	return {
-		outcome: 'uncertain-slices',
+		outcome: 'uncertain-tasks',
 		tasks: readCandidates(options.cwd, before),
 		uncertainTasks: uncertain,
 		briefQuestions: [],

@@ -22,7 +22,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `--watch` ALSO tails the REVIEW gate's session (slice `watch-review-session`).
+ * `--watch` ALSO tails the REVIEW gate's session (task `watch-review-session`).
  *
  * Today `do --watch` tails only the BUILD agent's session; the Gate-2 review
  * launches a SEPARATE agent with its own session `.jsonl` that nothing tailed —
@@ -92,7 +92,7 @@ function writeBuildAndReviewPiStub(): string {
 		// INSIDE a session-log `text` string, so its quotes are escaped as \\" — we
 		// emit the whole record with single-quotes around it (no bash interpolation),
 		// branching on the verdict word so the escaping is written out literally.
-		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"reviewing the slice"},{"type":"toolCall","name":"read","arguments":{}}]}}' >> "$log"`,
+		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"reviewing the task"},{"type":"toolCall","name":"read","arguments":{}}]}}' >> "$log"`,
 		'  if [ "$verdict" = "block" ]; then',
 		`    printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"{\\"verdict\\":\\"block\\",\\"findings\\":[{\\"severity\\":\\"blocking\\",\\"question\\":\\"misses it\\"}]}"}]}}' >> "$log"`,
 		'  else',
@@ -102,7 +102,7 @@ function writeBuildAndReviewPiStub(): string {
 		// BUILD launch: edit a file so the runner has something to commit, and
 		// write a build-flavoured assistant turn + an `edit` tool call.
 		"  printf 'work done\\n' > agent-output.txt",
-		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"building the slice"},{"type":"toolCall","name":"edit","arguments":{}}]}}' >> "$log"`,
+		`  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"building the task"},{"type":"toolCall","name":"edit","arguments":{}}]}}' >> "$log"`,
 		'fi',
 		'exit 0',
 	].join('\n');
@@ -145,9 +145,9 @@ describe('do --review --watch — the review gate session is tailed too', () => 
 
 		// The BUILD stream was surfaced (the build agent's text + tool call), then
 		// finished, then the REVIEW stream — the reviewer's reasoning is now LIVE.
-		expect(surfaced).toContain('building the slice');
+		expect(surfaced).toContain('building the task');
 		expect(surfaced).toContain('▶ edit');
-		expect(surfaced).toContain('reviewing the slice');
+		expect(surfaced).toContain('reviewing the task');
 		expect(surfaced).toContain('▶ read');
 
 		// The build→review BOUNDARY banner sits BETWEEN the two streams.
@@ -156,8 +156,8 @@ describe('do --review --watch — the review gate session is tailed too', () => 
 		expect(surfaced[boundaryIdx]).toMatch(/reviewing alpha/);
 
 		// Ordering: build text BEFORE the boundary; review text AFTER it.
-		const buildIdx = surfaced.indexOf('building the slice');
-		const reviewIdx = surfaced.indexOf('reviewing the slice');
+		const buildIdx = surfaced.indexOf('building the task');
+		const reviewIdx = surfaced.indexOf('reviewing the task');
 		expect(buildIdx).toBeGreaterThanOrEqual(0);
 		expect(buildIdx).toBeLessThan(boundaryIdx);
 		expect(boundaryIdx).toBeLessThan(reviewIdx);
@@ -293,7 +293,7 @@ describe('launchWithOptionalWatch — the ONE shared helper both callers use', (
 			slug: 'alpha',
 			command: '',
 			// The build prompt branch of the stub (no reviewer framing).
-			prompt: 'build the slice',
+			prompt: 'build the task',
 			sessionId: 'alpha',
 			watch: true,
 			watchSink: (line) => surfaced.push(line),
@@ -303,7 +303,7 @@ describe('launchWithOptionalWatch — the ONE shared helper both callers use', (
 
 		expect(launched.ok).toBe(true);
 		// The helper started a tailer that surfaced the session's high-signal lines.
-		expect(surfaced).toContain('building the slice');
+		expect(surfaced).toContain('building the task');
 		expect(surfaced).toContain('▶ edit');
 		expect(surfaced).toContain('✓ agent finished');
 	});
@@ -319,7 +319,7 @@ describe('launchWithOptionalWatch — the ONE shared helper both callers use', (
 			dir: repo,
 			slug: 'alpha',
 			command: '',
-			prompt: 'build the slice',
+			prompt: 'build the task',
 			sessionId: 'alpha',
 			// watch off
 			watchSink: (line) => surfaced.push(line),

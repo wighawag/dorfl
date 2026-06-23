@@ -16,7 +16,7 @@ import {run} from '../src/git.js';
 let scratch: Scratch;
 
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-slicing-lock-');
+	scratch = makeScratch('agent-runner-tasking-lock-');
 });
 afterEach(() => {
 	scratch.cleanup();
@@ -63,7 +63,7 @@ function lockRefOnArbiter(arbiter: string, slug: string): boolean {
  */
 
 describe('acquireTaskingLock — happy path', () => {
-	it('takes the prd:<slug> unified lock; the PRD body STAYS in prd/ (no slicing/ marker)', async () => {
+	it('takes the prd:<slug> unified lock; the PRD body STAYS in prd/ (no tasking/ marker)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			briefs: ['alpha'],
 		});
@@ -178,11 +178,11 @@ describe('acquireTaskingLock — usage / env errors (exit 1)', () => {
 	});
 });
 
-describe('slicing-lock race — exactly one winner', () => {
-	it('two simultaneous slicers ⇒ one acquires, the loser gets exit-2', async () => {
+describe('tasking-lock race — exactly one winner', () => {
+	it('two simultaneous taskers ⇒ one acquires, the loser gets exit-2', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['solo']});
 		// Distinct committer identity per racer so the two lock commits get DISTINCT
-		// shas (as two real slicers would) and the loser loses through the genuine
+		// shas (as two real taskers would) and the loser loses through the genuine
 		// create-only ref CAS, not a fixture sha-collision. See racerEnv.
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
@@ -213,8 +213,8 @@ describe('slicing-lock race — exactly one winner', () => {
 	});
 });
 
-describe('slicing∥claim exclusion on the SAME slug-namespace ref', () => {
-	it('a held slicing lock and a build claim share the SAME prd: vs slice: ref namespaces (no collision)', async () => {
+describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
+	it('a held tasking lock and a build claim share the SAME prd: vs task: ref namespaces (no collision)', async () => {
 		// A brief `dual` and a TASK `dual` are DISTINCT entries (`brief-dual` vs
 		// `task-dual`), so a tasking lock on the brief and a build claim on the task
 		// do NOT collide — they are different items.

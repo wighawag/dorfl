@@ -184,7 +184,7 @@ export interface DoOptions {
 	 */
 	identity?: Identity;
 	/**
-	 * Per-repo `autoTask` policy (resolved by `autotask-gate`: flag > env >
+	 * Per-repo `autoTask` policy (resolved by `autoslice-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
 	 * (`do-autopick.ts`'s taskable-brief pool): "may an agent auto-task an
 	 * UNDECLARED brief in this repo?". An EXPLICITLY-named `do brief:<slug>` tasks
@@ -333,7 +333,7 @@ export interface DoOptions {
 	 * story) and is ONE-SHOT (no rounds; it does NOT inherit `reviewMaxRounds`). It
 	 * is DISTINCT from the build {@link reviewGate} (a task-SET prompt, not a code
 	 * diff) and from the tasker improver loop ({@link reviewLoop}). Production wires
-	 * `harnessSliceAcceptanceGate`; tests inject a canned verdict. Omitted ⇒ no gate.
+	 * `harnessTaskAcceptanceGate`; tests inject a canned verdict. Omitted ⇒ no gate.
 	 */
 	taskReviewGate?: ReviewGate;
 	/**
@@ -692,7 +692,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// The integrate-time args (task `slice-output-through-integration`): the
 			// `provider` is the SAME the task-build path threads (arg parity), but the
 			// MODE is the per-TRANSITION TASKING resolution (`per-transition-integration-
-			// mode-slicing-vs-build`): `taskingIntegration ?? integration`. Unset override ⇒
+			// mode-tasking-vs-build`): `taskingIntegration ?? integration`. Unset override ⇒
 			// falls back to `integration` (today's behaviour); a repo with
 			// `integration:'propose'` + `taskingIntegration:'merge'` lands the task FILES
 			// on main here while the BUILD path below still threads plain `integration`.

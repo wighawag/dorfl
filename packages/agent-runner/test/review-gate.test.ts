@@ -294,15 +294,15 @@ describe('parseReviewVerdict — reads the review SKILL verdict shape', () => {
 	});
 });
 
-describe('buildReviewPrompt — frames code-vs-its-slice + the required output', () => {
+describe('buildReviewPrompt — frames code-vs-its-task + the required output', () => {
 	it('names the slug, the in-band REVIEW-PROTOCOL.md, and demands the JSON verdict shape', () => {
-		const p = buildReviewPrompt('my-slice');
+		const p = buildReviewPrompt('my-task');
 		// The discipline is pointed at IN-BAND (`work/protocol/REVIEW-PROTOCOL.md`)
-		// — NOT "the review skill" by name (slice
+		// — NOT "the review skill" by name (task
 		// `review-protocol-doc-and-shared-machinery`: skill-named prompts that are
 		// not resolvable in-band silently degrade in target repos).
 		expect(p).toMatch(/work\/protocol\/REVIEW-PROTOCOL\.md/);
-		expect(p).toContain('my-slice');
+		expect(p).toContain('my-task');
 		expect(p).toMatch(/"verdict"/);
 		expect(p).toMatch(/approve.*block|block.*approve/s);
 		// Fresh-context reviewer that EDITS nothing.
@@ -310,12 +310,12 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 	});
 
 	it("does NOT re-inline the review discipline's lenses or verdict-contract prose", () => {
-		// Prompt-snapshot guard (slice `review-protocol-doc-and-shared-machinery`):
+		// Prompt-snapshot guard (task `review-protocol-doc-and-shared-machinery`):
 		// the discipline body lives ONCE in `REVIEW-PROTOCOL.md`, and the
 		// JSON-emitted-shape prose lives ONCE in `verdictContractPrompt`. The
 		// builder must NOT re-inline lens prose verbatim. We check for distinctive
 		// markers of the OLD inlined discipline that would indicate drift.
-		const p = buildReviewPrompt('my-slice');
+		const p = buildReviewPrompt('my-task');
 		// The old prompt re-stated the discipline's tagline "lenses IN ORDER" —
 		// that prose is now in REVIEW-PROTOCOL.md and the shared discipline-prompt
 		// helper, NOT a per-builder copy. The shared helper itself uses the same
@@ -326,7 +326,7 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 	});
 
 	it('tells the reviewer Gate 1 (build+tests+format) already passed → assume green, do NOT re-run the suite', () => {
-		const p = buildReviewPrompt('my-slice');
+		const p = buildReviewPrompt('my-task');
 		// The acceptance gate is already green; the reviewer must assume it and
 		// not re-run build/tests/format (Gate 1 is the settled deterministic floor).
 		expect(p).toMatch(/already passed|already.*green|assume.*green/i);
@@ -338,8 +338,8 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 		expect(p).not.toMatch(/ignore tests/i);
 	});
 
-	it('HUNTS for in-scope decisions the slice did not specify, flagged for ratification (Part C)', () => {
-		const p = buildReviewPrompt('my-slice');
+	it('HUNTS for in-scope decisions the task did not specify, flagged for ratification (Part C)', () => {
+		const p = buildReviewPrompt('my-task');
 		// The reviewer must look for undeclared in-scope decisions — cross-task
 		// interactions, new errors/refusals, user-visible defaults.
 		expect(p).toMatch(/decision/i);
@@ -354,7 +354,7 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 	});
 
 	it('checks CONCEPTUAL COHERENCE — concept used consistently, at the right layer, not duplicating an existing one', () => {
-		const p = buildReviewPrompt('my-slice');
+		const p = buildReviewPrompt('my-task');
 		// The reviewer must check the diff fits the system's existing LANGUAGE.
 		expect(p).toMatch(/coheren/i);
 		// The three coherence questions: consistent meaning, right layer, no duplicate.
@@ -376,7 +376,7 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 				seenModel = input.model;
 				seenPrompt = input.prompt ?? '';
 				// The verdict rides the ANSWER channel (`output`), NOT `detail` (which is
-				// the failure channel, empty on success) — slice `harness-agent-output`.
+				// the failure channel, empty on success) — task `harness-agent-output`.
 				return {
 					ok: true,
 					record: {adapter: 'spy'},
@@ -427,7 +427,7 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 
 	it('reads the verdict from launched.output (the ANSWER channel), not detail', async () => {
 		// A successful launch carries the verdict in `output`; `detail` is empty on
-		// success. The gate must read `output` (slice `harness-agent-output`).
+		// success. The gate must read `output` (task `harness-agent-output`).
 		const outputHarness: Harness = {
 			adapter: 'out',
 			launch: () => ({
@@ -450,7 +450,7 @@ describe('harnessReviewGate — reviewModel reaches the launch via the existing 
 
 	it('an empty/absent output is the ReviewParseError→needs-attention path (no silent approve)', async () => {
 		// A successful launch with NO assistant text (output undefined) must NOT be
-		// read as approve — it parses to nothing and errors (the live gap this slice
+		// read as approve — it parses to nothing and errors (the live gap this task
 		// closes: detail was empty on success, so this used to fire every run).
 		const emptyOutput: Harness = {
 			adapter: 'empty',

@@ -3,7 +3,7 @@ import type {Command} from 'commander';
 import {buildProgram} from '../src/cli.js';
 
 /**
- * `gc --remote-branches` CLI surface (the merged-remote-branch sweep slice). Pins
+ * `gc --remote-branches` CLI surface (the merged-remote-branch sweep task). Pins
  * that the sub-mode flag + its companions (`--arbiter`, `--cwd`, `--dry-run`) live
  * on the SAME `.command('gc')` block as the worktree reaper and the `--ledger`
  * sub-mode, so the one `gc` command carries all three surfaces. The sweep

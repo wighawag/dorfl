@@ -139,14 +139,14 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		});
 	});
 
-	it('collects already-SLICED slugs from `work/briefs/tasked/` RESIDENCE (the folder is the SOLE source of truth; the `sliced:` marker was removed)', () => {
-		// alpha + gamma rest in prd-sliced/ (sliced); beta is still to-slice in prd/.
+	it('collects already-TASKED slugs from `work/briefs/tasked/` RESIDENCE (the folder is the SOLE source of truth; the `tasked:` marker was removed)', () => {
+		// alpha + gamma rest in prd-tasked/ (tasked); beta is still to-task in prd/.
 		writeBrief('brief-tasked', 'alpha.md', {slug: 'alpha'});
 		writeBrief('brief', 'beta.md', {slug: 'beta'});
 		writeBrief('brief-tasked', 'gamma.md', {slug: 'gamma'});
-		// An INERT leftover `sliced:` line on a PRD still in prd/ does NOT count (folder
+		// An INERT leftover `tasked:` line on a PRD still in prd/ does NOT count (folder
 		// = truth; the marker was removed in remove-sliced-marker-step-b, so the line is
-		// ignored): delta carries one but resides in prd/, so it is NOT sliced.
+		// ignored): delta carries one but resides in prd/, so it is NOT tasked.
 		writeBrief('brief', 'delta.md', {slug: 'delta', tasked: '2026-03-03'});
 
 		const pool = currentLedgerRead.resolveBriefPool({
@@ -173,7 +173,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 	});
 });
 
-describe('ledger-read seam — pool noun vocabulary (slice `f1-pool-noun-todo-in-surface-and-apply-readers`)', () => {
+describe('ledger-read seam — pool noun vocabulary (task `f1-pool-noun-todo-in-surface-and-apply-readers`)', () => {
 	// Asserts the F1 vocabulary cutover: the agent POOL lives at `work/tasks/todo/`
 	// and shows up as `state.todo`; STAGING lives at `work/tasks/backlog/` and is
 	// NOT in the pool (it is surfaced through a separate F2 reader). No touched
@@ -268,7 +268,7 @@ describe('ledger-read seam — arbiter resolve method', () => {
 		scratch.cleanup();
 	});
 
-	it('resolves the slice + done slugs from <arbiter>/main', async () => {
+	it('resolves the task + done slugs from <arbiter>/main', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
 			blockedBy: ['dep-a'],
 		});
@@ -412,7 +412,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		return lines.join('\n');
 	}
 
-	it('enumerates work/briefs/ready/*.md (gate axes, sorted by slug) + prd-sliced/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
+	it('enumerates work/briefs/ready/*.md (gate axes, sorted by slug) + prd-tasked/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
 		const ws = join(scratch.root, '.agent-runner');
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			brief: {
@@ -438,7 +438,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			briefAfter: ['alpha'],
 		});
 		expect(pool.briefs[1]).toMatchObject({slug: 'gamma', humanOnly: true});
-		// Sliced-ness is RESIDENCE in prd-sliced/ (the folder is the source of truth).
+		// Tasked-ness is RESIDENCE in prd-tasked/ (the folder is the source of truth).
 		expect(pool.taskedSlugs).toEqual(new Set(['alpha']));
 	});
 

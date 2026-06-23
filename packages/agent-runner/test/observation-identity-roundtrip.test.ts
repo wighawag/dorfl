@@ -27,7 +27,7 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * Slice `observation-identity-is-its-filename-not-a-foreign-slug` — the
+ * Task `observation-identity-is-its-filename-not-a-foreign-slug` — the
  * enumerate→resolve ROUND-TRIP for observations. An observation's identity is its
  * FILENAME (never a foreign frontmatter `slug:`), so the lifecycle pool's
  * `obs:<slug>` slug ALWAYS resolves back to its own file via the same advance
@@ -122,11 +122,11 @@ describe('observation identity = filename — review-nits minting', () => {
 		);
 		// The frontmatter does NOT claim identity with a foreign slug.
 		expect(body).not.toMatch(/^slug:/m);
-		// The back-pointer is `reviewOf:`, naming the reviewed slice.
+		// The back-pointer is `reviewOf:`, naming the reviewed task.
 		expect(body).toMatch(/^reviewOf: alpha$/m);
 	});
 
-	it('no cross-namespace identity collision: the obs slug is the filename, NOT the reviewed-done slice slug', async () => {
+	it('no cross-namespace identity collision: the obs slug is the filename, NOT the reviewed-done task slug', async () => {
 		const {repo, observationFile} = await mintReviewNitsObservation('beta');
 		const observations = ledgerRead.resolveLocalState({
 			repoPath: repo,
@@ -136,7 +136,7 @@ describe('observation identity = filename — review-nits minting', () => {
 		// Identity is the FILENAME (with `.md` stripped), not the reviewed slug.
 		expect(minted!.slug).toBe(observationFile.replace(/\.md$/, ''));
 		expect(minted!.slug).not.toBe('beta');
-		// The reviewed slice landed in done/ — same slug as the OLD foreign-slug
+		// The reviewed task landed in done/ — same slug as the OLD foreign-slug
 		// identity would have been (the collision the new scheme avoids).
 		expect(minted!.slug.startsWith('review-nits-beta-')).toBe(true);
 	});

@@ -24,11 +24,11 @@ import {
 import {run as runGit} from '../src/git.js';
 
 /**
- * `advance-in-place-publishes-treeless-results` slice (PRD
+ * `advance-in-place-publishes-treeless-results` task (PRD
  * `ci-advance-surfaces-questions-not-only-builds`). The in-place advance drivers
  * (`runSelectedInSequence`, used by `advance -n` / auto-pick / multi-arg, AND the
  * CLI single-named-item path that calls `performAdvance` directly) now wrap the
- * tick with the SHARED `pushTreelessResult` (slice
+ * tick with the SHARED `pushTreelessResult` (task
  * `loop-advance-persists-treeless-rungs-to-arbiter`) so a tree-less rung's local
  * commit (surface sidecar / `triaged:` marker / applied-answer) lands on the
  * arbiter's `main` — instead of dying on the ephemeral CI runner.
@@ -37,10 +37,10 @@ import {run as runGit} from '../src/git.js';
  * `arbiter/main`), NOT call-wiring. They use throwaway git repos via
  * `seedRepoWithArbiter` + `gitEnv` (no global git/home config is touched).
  *
- * Coverage map vs the slice's acceptance criteria:
+ * Coverage map vs the task's acceptance criteria:
  *   - surface / triage / apply land on the arbiter (AC1, AC2);
  *   - mid-batch external advance is handled by the rebase-retry (AC3);
- *   - no push for build/slice (AC4a) and no push when no arbiter is configured
+ *   - no push for build/task (AC4a) and no push when no arbiter is configured
  *     (AC4b);
  *   - promote-apply is a harmless no-op — the in-place push does NOT clobber the
  *     promote CAS (AC5);
@@ -57,14 +57,14 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** A scratch project + bare arbiter seeded with one `needsAnswers:true` slice. */
+/** A scratch project + bare arbiter seeded with one `needsAnswers:true` task. */
 function seedBlockedTaskRepo(slug: string): SeededRepo {
 	return seedRepoWithArbiter(join(scratch.root, slug), [slug], {
 		needsAnswers: true,
 	});
 }
 
-/** A scratch project + bare arbiter seeded with one plain backlog slice. */
+/** A scratch project + bare arbiter seeded with one plain backlog task. */
 function seedPlainRepo(slug: string): SeededRepo {
 	return seedRepoWithArbiter(join(scratch.root, slug), [slug]);
 }
@@ -218,11 +218,11 @@ describe('advance in-place — surface / triage / apply rung commits land on the
 });
 
 describe('advance in-place — the publish GATE matches the existing drivers (no cleverer guard)', () => {
-	it('build/slice rung: no tree-less push (the doDriver band already integrates)', async () => {
+	it('build/task rung: no tree-less push (the doDriver band already integrates)', async () => {
 		const slug = 'plain';
 		const seed = seedPlainRepo(slug);
 
-		// Capture the arbiter/main BEFORE we run a build/slice rung. A stub
+		// Capture the arbiter/main BEFORE we run a build/task rung. A stub
 		// `AdvanceTickRunner` returns `rung: 'build-task'` — outside `TREELESS_RUNGS`
 		// — so the wrapper MUST skip the push. We deliberately also have the stub
 		// commit something LOCALLY: if the wrapper pushed regardless, arbiter/main
@@ -322,7 +322,7 @@ describe('advance in-place — the rebase-retry handles a mid-batch external adv
 		const seed = seedRepoWithArbiter(join(scratch.root, 'mixed'), [], {});
 
 		// Two stub ticks: the FIRST advances arbiter/main from outside (modelling a
-		// build/slice rung integrated mid-batch via the `doDriver` band), the SECOND
+		// build/task rung integrated mid-batch via the `doDriver` band), the SECOND
 		// commits a slug-only tree-less sidecar locally — so its `HEAD:main` push is
 		// NON-FAST-FORWARD by construction. The rebase-retry inside
 		// `pushTreelessResult` rebases the slug-only commit onto the advanced main
@@ -335,7 +335,7 @@ describe('advance in-place — the rebase-retry handles a mid-batch external adv
 			n++;
 			if (n === 1) {
 				// "External" advance of arbiter/main via a side clone (modelling a
-				// build/slice integration in another worktree).
+				// build/task integration in another worktree).
 				const side = join(scratch.root, 'mixed', 'side');
 				runGit(
 					'git',

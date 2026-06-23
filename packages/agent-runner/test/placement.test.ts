@@ -2,12 +2,12 @@ import {describe, it, expect} from 'vitest';
 import {placementFolder, resolvePlacement} from '../src/placement.js';
 
 /**
- * Unit tests for the SHARED staging/pool placement resolver (slice
+ * Unit tests for the SHARED staging/pool placement resolver (task
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Pure
  * function, so plain table-driven assertions are enough; the integration tests
  * (`placement-precedence.test.ts`) drive each rung end-to-end through the
- * actual slicing path.
+ * actual tasking path.
  *
  * The four PRECEDENCE rungs (highest wins):
  *

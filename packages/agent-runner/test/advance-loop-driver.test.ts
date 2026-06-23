@@ -79,7 +79,7 @@ function scratchCwd(): string {
 }
 
 describe('advanceOnce — loops the tick over the eligible SET (mirror pool), gated', () => {
-	it('selects the WHOLE eligible pool (slices-first then PRDs) and advances each', async () => {
+	it('selects the WHOLE eligible pool (tasks-first then PRDs) and advances each', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
 				'alpha.md': task({slug: 'alpha'}),
@@ -95,7 +95,7 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 			run,
 			env: gitEnv(),
 		});
-		// the eligible slice + the sliceable PRD (not the humanOnly slice).
+		// the eligible task + the taskable PRD (not the humanOnly task).
 		expect(args.sort()).toEqual(['alpha', 'brief:gamma']);
 		expect(result.items).toHaveLength(2);
 	});

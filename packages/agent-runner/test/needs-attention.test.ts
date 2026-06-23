@@ -21,7 +21,7 @@ import {
 import type {Config} from '../src/config.js';
 
 /**
- * The needs-attention RECOVERY SURFACE after the cut-over (slice
+ * The needs-attention RECOVERY SURFACE after the cut-over (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+):
  * stuck-state is the per-item lock `state: stuck`, NOT a `needs-attention/` folder
  * file. So:
@@ -51,7 +51,7 @@ const ARBITER = 'arbiter';
 
 /**
  * Stand a repo up exactly as the runner leaves it just before a stuck outcome: a
- * slice claimed (the per-item lock is held active; the body RESTS in backlog/) and
+ * task claimed (the per-item lock is held active; the body RESTS in backlog/) and
  * onboarded onto `work/<slug>` off the freshly-pushed main, with the build agent's
  * (uncommitted) edits in the tree.
  */
@@ -140,7 +140,7 @@ describe('the seam bounce marks the lock stuck (the SOLE stuck record)', () => {
 		const r = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'beta',
-			reason: 'agent reported the slice too ambiguous to build',
+			reason: 'agent reported the task too ambiguous to build',
 			questions: [
 				'Which schema version is the source of truth?',
 				'Should retries be idempotent?',

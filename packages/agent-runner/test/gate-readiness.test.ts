@@ -17,7 +17,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * Slice `do-fails-fast-when-acceptance-gate-statically-unrunnable`.
+ * Task `do-fails-fast-when-acceptance-gate-statically-unrunnable`.
  *
  * The fresh-worktree gate runs `prepare` then `verify` in a CLEAN throwaway
  * worktree. If `prepare` resolves to no commands AND a lockfile is present, the
@@ -60,7 +60,7 @@ const failIfReached: DoAgentRunner = () => {
 
 /**
  * Set the repo up the way `performComplete` expects: HEAD on the work branch,
- * the slice moved to `work/in-progress/`, and the agent's edit committed. The
+ * the task moved to `work/in-progress/`, and the agent's edit committed. The
  * test then calls `performComplete` and asserts the guard refuses BEFORE the
  * gate runs.
  */
@@ -95,7 +95,7 @@ describe('unit — checkGatePreconditions (deps-only, never verify-presence)', (
 	it('fires when fresh gate ON + prepare ALL-BLANK list + lockfile present (the resolvePrepareCommands empty case)', () => {
 		// `resolvePrepareCommands` drops blank entries — both `undefined` AND a
 		// list whose every entry is whitespace resolve to NO commands. The guard
-		// must catch BOTH (the slice's "all-blank case" criterion).
+		// must catch BOTH (the task's "all-blank case" criterion).
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: ['   ', '\t', ''],
@@ -149,7 +149,7 @@ describe('unit — checkGatePreconditions (deps-only, never verify-presence)', (
 		// COMPILE-TIME witness: `GatePreconditionInput` has `freshWorktreeGate`,
 		// `prepare`, `lockfile` — and nothing about `verify`. The runtime call below
 		// passes ONLY those three keys; if a verify-presence branch ever existed it
-		// would force a fourth arg here. Documents the deps-only shape per the slice.
+		// would force a fourth arg here. Documents the deps-only shape per the task.
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: 'pnpm install',
@@ -345,7 +345,7 @@ describe('end-to-end — `complete` STOPS before performIntegration when the gat
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/pnpm-lock\.yaml/);
 		expect(result.message).toMatch(/--no-fresh-worktree-gate/);
-		// The slice is still in-progress in the tree (no done-move happened) and
+		// The task is still in-progress in the tree (no done-move happened) and
 		// not on done/ on the arbiter.
 		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
 			true,

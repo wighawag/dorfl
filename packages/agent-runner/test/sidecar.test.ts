@@ -15,11 +15,11 @@ import {
 
 /** A canonical two-entry sidecar text in the new human-readable format. */
 const SAMPLE = [
-	'<!-- agent-runner-sidecar: item=brief:autoslice type=brief slug=autoslice allAnswered=false -->',
+	'<!-- agent-runner-sidecar: item=brief:autotask type=brief slug=autotask allAnswered=false -->',
 	'',
 	'## Q1',
 	'',
-	'**Should the slicer fan PRDs in parallel?**',
+	'**Should the tasker fan PRDs in parallel?**',
 	'',
 	'> The runner already parallelises builds.',
 	'',
@@ -44,12 +44,12 @@ const SAMPLE = [
 describe('parseSidecar — new human-readable format', () => {
 	it('parses identity from the top HTML comment and ordered entries', () => {
 		const model = parseSidecar(SAMPLE);
-		expect(model.item).toBe('brief:autoslice');
+		expect(model.item).toBe('brief:autotask');
 		expect(model.type).toBe('brief');
-		expect(model.slug).toBe('autoslice');
+		expect(model.slug).toBe('autotask');
 		expect(model.entries.map((e) => e.id)).toEqual(['q1', 'q2']);
 		expect(model.entries[0].question).toBe(
-			'Should the slicer fan PRDs in parallel?',
+			'Should the tasker fan PRDs in parallel?',
 		);
 		expect(model.entries[0].context).toBe(
 			'The runner already parallelises builds.',
@@ -150,7 +150,7 @@ describe('parseSidecar — new human-readable format', () => {
 		expect(model.entries[0].disposition).toBe('promote-task');
 	});
 
-	it('hard-cutover: the legacy `promote-slice` disposition is no longer recognised and is parsed as undefined (no alias, aligned with the sibling slice→task hard cutover)', () => {
+	it('hard-cutover: the legacy `promote-slice` disposition is no longer recognised and is parsed as undefined (no alias, aligned with the sibling task→task hard cutover)', () => {
 		const text = [
 			'<!-- agent-runner-sidecar: item=observation:legacy type=observation slug=legacy allAnswered=false -->',
 			'',
@@ -174,13 +174,13 @@ describe('serialiseSidecar — canonical shape + semantic round-trip', () => {
 		const out = serialiseSidecar(model);
 		// Identity comment at the top (HTML comment, no YAML frontmatter).
 		expect(out.startsWith('<!-- agent-runner-sidecar:')).toBe(true);
-		expect(out).toContain('item=brief:autoslice');
+		expect(out).toContain('item=brief:autotask');
 		expect(out).toContain('allAnswered=false');
 		// No literal block-scalar `|` pipes anywhere (the old format's giveaway).
 		expect(out).not.toContain('question: |');
 		expect(out).not.toContain('answer: |');
 		// Bold question line, blockquote context, fixed answer marker per entry.
-		expect(out).toContain('**Should the slicer fan PRDs in parallel?**');
+		expect(out).toContain('**Should the tasker fan PRDs in parallel?**');
 		expect(out).toContain('> The runner already parallelises builds.');
 		expect(out).toContain('**Your answer** (write below this line):');
 		// Per-entry HTML comment carries the id.
@@ -465,8 +465,8 @@ describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 
 describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver SoT)', () => {
 	it('brief:<slug> → work/questions/brief-<slug>.md', () => {
-		expect(sidecarPathFor('brief:autoslice')).toBe(
-			'work/questions/brief-autoslice.md',
+		expect(sidecarPathFor('brief:autotask')).toBe(
+			'work/questions/brief-autotask.md',
 		);
 	});
 	it('task:<slug> → work/questions/task-<slug>.md', () => {

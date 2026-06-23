@@ -24,7 +24,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  * Auto-pick / `-n` draw from TWO POOLS ordered by the configurable
  * `selectionOrder` (the shared, pure {@link selectPrioritised} helper): eligible
  * TASKS (the `build` pool — the existing `scan`/`selectCandidates`/eligibility
- * path) and TASKABLE briefs (the `slice` pool — built from the brief reader +
+ * path) and TASKABLE briefs (the `task` pool — built from the brief reader +
  * `autoslice-gate`'s predicate), in the per-repo `selectionOrder` (default `drain`
  * = tasks-first). A selected brief dispatches to the `do brief:<slug>` path (tasking
  * itself is `autoslice-command`, not built here).

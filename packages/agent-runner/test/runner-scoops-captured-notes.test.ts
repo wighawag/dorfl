@@ -15,20 +15,20 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `runner-scoops-captured-notes` slice (advance-loop's reporting-channel fold-in
+ * `runner-scoops-captured-notes` task (advance-loop's reporting-channel fold-in
  * "EXTEND this channel to agent-authored CAPTURED NOTES"). The RUNNER must SCOOP +
  * REPORT agent-authored capture-bucket files (`work/notes/observations/*`,
  * `work/notes/findings/*`) a rung's agent writes during its run, on BOTH the build path
- * (`do <slice>`/`run`/`complete`) and the slice path (`do prd:`).
+ * (`do <task>`/`run`/`complete`) and the task path (`do prd:`).
  *
  * Rule A is preserved (the agent does NO git \u2014 the stubbed agents below only WRITE
  * the note files); Rule B is extended (the runner scoops + reports). The fix lives
  * in the ONE shared place (`performIntegration`'s atomic commit), so neither path
  * forks the channel: this suite drives the SHARED core directly AND through the
- * `do prd:` slicing path, asserting BOTH the persistence (committed, not dropped)
+ * `do prd:` tasking path, asserting BOTH the persistence (committed, not dropped)
  * and the reporting (the runner announces exactly which note files landed).
  *
- * House style (mirrors `integration-core.test.ts` / `slicing-integration.test.ts`):
+ * House style (mirrors `integration-core.test.ts` / `tasking-integration.test.ts`):
  * a throwaway checkout + a local `--bare` arbiter + STUBBED agents (write files
  * directly, no model, no git). No shared/global location is touched.
  */
@@ -97,7 +97,7 @@ function onArbiterMainPath(repo: string, path: string): boolean {
 
 /**
  * Stand a repo up as the build caller's HEAD leaves it just before the shared
- * core: a slice claimed (lock held; body rests in backlog/ on the arbiter) + onboarded onto its work
+ * core: a task claimed (lock held; body rests in backlog/ on the arbiter) + onboarded onto its work
  * branch off fresh main, with UNCOMMITTED agent work in the tree.
  */
 async function claimAndBranch(slug: string): Promise<string> {
@@ -207,7 +207,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 	});
 });
 
-/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) for the slicing path. */
+/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) for the tasking path. */
 function seedBrief(repo: string, slug: string): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
@@ -215,7 +215,7 @@ function seedBrief(repo: string, slug: string): void {
 		join(dir, `${slug}.md`),
 		[
 			'---',
-			`title: ${slug} — slice me`,
+			`title: ${slug} — task me`,
 			`slug: ${slug}`,
 			'---',
 			'',
@@ -230,7 +230,7 @@ function seedBrief(repo: string, slug: string): void {
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** A slicing agent that writes one STAGED slice AND a captured note (no git). */
+/** A tasking agent that writes one STAGED task AND a captured note (no git). */
 function taskingAgentWithNote(note: string | undefined): TaskAgentRunner {
 	return ({cwd}) => {
 		const dir = join(cwd, 'work', 'tasks', 'backlog');
@@ -257,8 +257,8 @@ function taskingAgentWithNote(note: string | undefined): TaskAgentRunner {
 	};
 }
 
-describe('the SLICE path (do prd:) scoops + reports agent-authored captured notes', () => {
-	it('a note the slicer wrote during slicing lands in the slice commit and is REPORTED (--merge)', async () => {
+describe('the TASK path (do prd:) scoops + reports agent-authored captured notes', () => {
+	it('a note the tasker wrote during tasking lands in the task commit and is REPORTED (--merge)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 
@@ -270,29 +270,29 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			autoTask: true,
 			integration: 'merge',
 			agentRunner: taskingAgentWithNote(
-				'work/notes/observations/slicer-spotted-drift.md',
+				'work/notes/observations/tasker-spotted-drift.md',
 			),
 			env: gitEnv(),
 			note: sink.note,
 		});
 
 		expect(result.outcome).toBe('tasked');
-		// PERSISTENCE: the produced slice AND the captured note both landed on main
+		// PERSISTENCE: the produced task AND the captured note both landed on main
 		// through the shared core (alongside the PRD lifecycle move) \u2014 not dropped.
 		expect(onArbiterMainPath(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(
 			onArbiterMainPath(
 				repo,
-				'work/notes/observations/slicer-spotted-drift.md',
+				'work/notes/observations/tasker-spotted-drift.md',
 			),
 		).toBe(true);
 		// REPORTING: the runner announced the scooped note.
 		const report = sink.lines.find((l) => l.includes('Scooped'));
 		expect(report).toBeDefined();
-		expect(report).toContain('work/notes/observations/slicer-spotted-drift.md');
+		expect(report).toContain('work/notes/observations/tasker-spotted-drift.md');
 	});
 
-	it('a note the slicer wrote rides the PROPOSE work branch and is REPORTED (--propose)', async () => {
+	it('a note the tasker wrote rides the PROPOSE work branch and is REPORTED (--propose)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 
@@ -304,7 +304,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			autoTask: true,
 			integration: 'propose',
 			agentRunner: taskingAgentWithNote(
-				'work/notes/findings/slicer-external-fact.md',
+				'work/notes/findings/tasker-external-fact.md',
 			),
 			env: gitEnv(),
 			note: sink.note,
@@ -312,24 +312,24 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 
 		expect(result.outcome).toBe('tasked');
 		// PERSISTENCE: propose does not touch main; the note rides the pushed work
-		// branch carrying the slices (the same branch the build path integrates).
+		// branch carrying the tasks (the same branch the build path integrates).
 		expect(
-			onArbiterMainPath(repo, 'work/notes/findings/slicer-external-fact.md'),
+			onArbiterMainPath(repo, 'work/notes/findings/tasker-external-fact.md'),
 		).toBe(false);
 		expect(
 			onArbiterBranch(
 				repo,
 				'work/brief-it',
-				'work/notes/findings/slicer-external-fact.md',
+				'work/notes/findings/tasker-external-fact.md',
 			),
 		).toBe(true);
 		// REPORTING.
 		const report = sink.lines.find((l) => l.includes('Scooped'));
 		expect(report).toBeDefined();
-		expect(report).toContain('work/notes/findings/slicer-external-fact.md');
+		expect(report).toContain('work/notes/findings/tasker-external-fact.md');
 	});
 
-	it('a slicing run that writes NO captured note ⇒ no scoop report', async () => {
+	it('a tasking run that writes NO captured note ⇒ no scoop report', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 

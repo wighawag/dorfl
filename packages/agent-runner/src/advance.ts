@@ -368,9 +368,9 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * The lifecycle folders each item type may rest in (frontmatter source). After
  * the capstone cut-over (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the transient
- * `slicing/` folder is GONE — a brief rests in `briefs/ready` (source) or
+ * `tasking/` folder is GONE — a brief rests in `briefs/ready` (source) or
  * `briefs/tasked` (tasked); while it is being tasked the body STAYS in
- * `briefs/ready` (the lock no longer moves it), so `slicing/` is never a
+ * `briefs/ready` (the lock no longer moves it), so `tasking/` is never a
  * frontmatter source.
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
@@ -892,7 +892,7 @@ export async function performAdvance(
 	//    TREE-LESS rung (`surface`/`apply`/`triage-observation`) the advancing acquire
 	//    ALSO takes the item's unified lock (`action: advance`) — these rungs have NO
 	//    inner `do`, so the unified hold is what realises advance∥claim / advance∥task
-	//    exclusion. For a BUILD-SLICE / SLICE-PRD rung we do NOT take the unified lock
+	//    exclusion. For a BUILD-TASK / TASK-PRD rung we do NOT take the unified lock
 	//    at the advance layer: `performAdvance` ORCHESTRATES an inner `performDo` that
 	//    ITSELF acquires the SAME `task-<slug>`/`brief-<slug>` ref (the create-only CAS
 	//    with NO re-entrancy/auto-steal, per the ADR), so taking it here too would

@@ -17,7 +17,7 @@ import {
 
 /**
  * The AFTER-COMMIT / ledger-only surface (continue-push-failure /
- * continue-rebase-conflict) is, after the cut-over (slice
+ * continue-rebase-conflict) is, after the cut-over (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+), a
  * PURE lock amend (`active → stuck`) reached through the write seam's tree-less
  * transition (`applyTreelessNeedsAttentionTransition`) \u2014 NO `git mv` to
@@ -37,7 +37,7 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Drive a slice to the AFTER-COMMIT continue state on the arbiter ONLY: claim it
+ * Drive a task to the AFTER-COMMIT continue state on the arbiter ONLY: claim it
  * (the per-item lock is held active; the body RESTS in `backlog/`) and push its
  * kept `work/task-<slug>` branch (the already-committed, recoverable work), then
  * leave the cwd working tree on the ORIGINAL seed `main`.

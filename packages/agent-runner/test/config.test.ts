@@ -49,7 +49,7 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).autoBuild).toBe(false);
 	});
 
-	it('defaults autoTask to false (human-first slicing)', () => {
+	it('defaults autoTask to false (human-first tasking)', () => {
 		expect(DEFAULT_CONFIG.autoTask).toBe(false);
 		expect(mergeConfig({}).autoTask).toBe(false);
 	});
@@ -59,7 +59,7 @@ describe('mergeConfig', () => {
 		expect(mergeConfig({}).surfaceBlockers).toBe(false);
 	});
 
-	it('defaults selectionOrder to the `drain` preset (slices-first; subsumes prdsFirst)', () => {
+	it('defaults selectionOrder to the `drain` preset (tasks-first; subsumes prdsFirst)', () => {
 		expect(DEFAULT_CONFIG.selectionOrder).toBe('drain');
 		expect(mergeConfig({}).selectionOrder).toBe('drain');
 		// A preset string OR an explicit list overrides it.

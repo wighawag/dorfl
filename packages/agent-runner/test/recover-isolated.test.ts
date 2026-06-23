@@ -18,7 +18,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `complete --isolated <slug>` tests (the `finish-already-committed-branch` slice,
+ * `complete --isolated <slug>` tests (the `finish-already-committed-branch` task,
  * items 2\u20134): the LOCATE-EXISTING resolver + the recover-already-committed run
  * from a RETAINED job worktree, plus the idempotent / nothing-to-recover no-ops.
  *
@@ -47,7 +47,7 @@ function workspacesDir(): string {
 /**
  * Materialise a REAL retained job worktree for `slug` off the seeded repo's
  * arbiter, then STRAND it exactly as a terminal push failure AFTER the done-move +
- * commit leaves it: the agent's work committed, the slice `git mv`'d
+ * commit leaves it: the agent's work committed, the task `git mv`'d
  * `in-progress/ → done/` and committed (`…; done`), but the tip NOT pushed.
  */
 async function seedStrandedWorktree(

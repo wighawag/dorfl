@@ -43,7 +43,7 @@ import {
 
 /**
  * `install-ci-intake-trigger-and-review-surface` — capability D (consider incoming
- * issues → slice/PRD) + insertion point E (surface the review verdict into the
+ * issues → task/PRD) + insertion point E (surface the review verdict into the
  * issue thread). CI SCHEDULES `intake <N>` (four-outcome dispatch), maps a CREATED
  * `issue_comment` onto the (re-)evaluation trigger (Decision 2: no edit-detection),
  * DERIVES the per-outcome merge-vs-propose flags from gate-state COMPOSED with
@@ -98,8 +98,8 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 
 	it('UNTRUSTED author forces --propose-task REGARDLESS of autoBuild, but --merge-brief STAYS allowed', () => {
 		// Both gates off: a trusted author would merge both; an untrusted author
-		// must still PROPOSE the slice, while the PRD stays mergeable (a human
-		// slices it before anything autonomous acts — the checkpoint is intact).
+		// must still PROPOSE the task, while the PRD stays mergeable (a human
+		// tasks it before anything autonomous acts — the checkpoint is intact).
 		expect(
 			deriveIntakeFlags({
 				gate: {autoBuild: false, autoTask: false},
@@ -335,7 +335,7 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 			}
 		}
 		// And the workflow text actually carries that shell shape (the gate reads +
-		// the OWNER/MEMBER/COLLABORATOR case + both slice branches + the origin-trust
+		// the OWNER/MEMBER/COLLABORATOR case + both task branches + the origin-trust
 		// stamp derived from the SAME case, passed to intake).
 		expect(text).toContain('OWNER|MEMBER|COLLABORATOR');
 		expect(/case "\$\{AUTHOR_ASSOCIATION:-\}"/.test(text)).toBe(true);
@@ -410,7 +410,7 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		);
 	});
 
-	it('flags a build/slice verb sneaking in (CI owns only the trigger + policy)', () => {
+	it('flags a build/task verb sneaking in (CI owns only the trigger + policy)', () => {
 		expectFlagged(
 			base.replace(
 				/agent-runner intake "/,
@@ -662,7 +662,7 @@ function recordingIssueProvider(): IssueProvider & {
 	};
 }
 
-const SLICE_VERDICT: IntakeVerdict = {
+const TASK_VERDICT: IntakeVerdict = {
 	outcome: 'task',
 	taskSlug: 'add-quiet-flag',
 	taskTitle: 'Add a --quiet flag to suppress progress notes',
@@ -698,7 +698,7 @@ describe('insertion point E — the review verdict surfaces into the ISSUE THREA
 		const issueProvider = recordingIssueProvider();
 
 		// The SAME review/edit loop intake already runs (slicer-review-edit-loop /
-		// intake-lone-slice-bounded-internal-review). A non-converge flips SLICE→ASK
+		// intake-lone-slice-bounded-internal-review). A non-converge flips TASK→ASK
 		// and surfaces the open question(s) BACK INTO THE ISSUE THREAD. We do NOT
 		// re-test the transform — only that the verdict reaches the issue-comment
 		// seam (insertion point E).
@@ -707,10 +707,10 @@ describe('insertion point E — the review verdict surfaces into the ISSUE THREA
 			cwd: repo,
 			arbiter: 'arbiter',
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			// A review gate that BLOCKS with an unresolved question and proposes no
-			// edit → the bounded review flips SLICE→ASK (the verdict-as-question path).
-			reviewSlice: async () => ({
+			// edit → the bounded review flips TASK→ASK (the verdict-as-question path).
+			reviewTask: async () => ({
 				verdict: 'block',
 				findings: [
 					{

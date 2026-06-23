@@ -24,7 +24,7 @@ import {loadConfig, type Config, type PartialConfig} from '../src/config.js';
 import {doFlagOverrides} from '../src/do-config.js';
 
 /**
- * `do --remote` per-repo config tests (slice
+ * `do --remote` per-repo config tests (task
  * `remote-do-reads-per-repo-config-from-arbiter-main`). The no-checkout
  * `do --remote` path now reads the target repo's COMMITTED `.agent-runner.json`
  * from `<arbiter>/main` (via the hub mirror) and layers ONLY the whitelisted
@@ -82,7 +82,7 @@ describe('do --remote — reads the per-repo .agent-runner.json from the arbiter
 				? {path: `${opts.arbiter}#main`, config: {}, rejected: []}
 				: loadRepoConfigFromContent(content, `${opts.arbiter}#main`);
 		// A bare "global" with nothing configured (no harness, no verify) — the
-		// pre-slice baseline the per-repo layer must override.
+		// pre-task baseline the per-repo layer must override.
 		const global = loadConfig(join(scratch.root, 'no-such-config.json'));
 		const resolved = resolveRepoConfigFromLoaded(loaded, {
 			global,
@@ -174,7 +174,7 @@ describe('do --remote — reads the per-repo .agent-runner.json from the arbiter
 		const repo = join(scratch.root, 'project');
 		const env = gitEnv();
 
-		// A DIFFERENT slice's `work/other` branch on the arbiter, checked out in a
+		// A DIFFERENT task's `work/other` branch on the arbiter, checked out in a
 		// stale (un-reaped) job worktree on the mirror — the exact poisoning shape.
 		gitIn(['switch', '-q', '-c', 'work/other', 'main'], repo);
 		writeFileSync(join(repo, 'OTHER.md'), '# other\n');

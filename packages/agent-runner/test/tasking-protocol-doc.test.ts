@@ -16,7 +16,7 @@
  *   - The tasking prompt builder REFERENCES `TASKING-PROTOCOL.md` (in-band
  *     discipline), does NOT re-inline the confidence-check / `humanOnly` rules
  *     (the prompt-snapshot guard against re-emerging duplication), AND no
- *     longer carries the stale pre-rename vocabulary (`to-slices`,
+ *     longer carries the stale pre-rename vocabulary (`to-tasks`,
  *     `work/backlog/`, `work/prd/`) the brief calls out as a bonus bug.
  *   - `skills/to-task/SKILL.md` is a thin human-facing pointer at the
  *     protocol doc, still USER-invoked (`disable-model-invocation: true` \u2014
@@ -213,16 +213,16 @@ describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline 
 		// NARROW guidance verbatim. Those passages belong to the doc; the prompt
 		// should reference them, not duplicate them.
 		expect(builderBody).not.toMatch(/never-for-agents BY NATURE/);
-		expect(builderBody).not.toMatch(/SLICE `humanOnly` IS NARROW/);
+		expect(builderBody).not.toMatch(/TASK `humanOnly` IS NARROW/);
 		expect(builderBody).not.toMatch(
 			/overloaded "stamp `humanOnly` for review"/,
 		);
-		// The "Use the to-slices skill" framing is gone.
-		expect(builderBody).not.toMatch(/Use the \*\*to-slices\*\* skill/);
+		// The "Use the to-tasks skill" framing is gone.
+		expect(builderBody).not.toMatch(/Use the \*\*to-tasks\*\* skill/);
 	});
 
-	it('VOCABULARY REGRESSION: NONE of `to-slices`, `work/backlog/`, `work/prd/` remain (the brief\u2019s bonus bug)', () => {
-		expect(builderBody).not.toMatch(/to-slices/);
+	it('VOCABULARY REGRESSION: NONE of `to-tasks`, `work/backlog/`, `work/prd/` remain (the brief\u2019s bonus bug)', () => {
+		expect(builderBody).not.toMatch(/to-tasks/);
 		// `work/backlog/` is the PRE-RENAME pool name (now `work/tasks/todo/`);
 		// guard the bare token without matching the current `work/tasks/backlog/`
 		// staging spelling.
@@ -263,7 +263,7 @@ describe('skills/to-task/SKILL.md \u2014 a thin USER-invoked human-facing pointe
 		expect(skill.length).toBeLessThan(2500);
 		// And the load-bearing discipline prose has moved OUT.
 		expect(skill).not.toMatch(/tracer bullet/i);
-		expect(skill).not.toMatch(/SLICE `humanOnly` IS NARROW/);
+		expect(skill).not.toMatch(/TASK `humanOnly` IS NARROW/);
 		expect(skill).not.toMatch(/file-orthogonal/i);
 		expect(skill).not.toMatch(/`briefAfter` \(cross-brief order\)/);
 	});

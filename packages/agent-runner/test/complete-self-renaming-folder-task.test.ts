@@ -118,7 +118,7 @@ async function seedSelfRenamedDoneBranch(
 	return {repo, seeded, tip, branch};
 }
 
-describe('complete — self-renaming-folder slice (record placed in a RENAMED done-position)', () => {
+describe('complete — self-renaming-folder task (record placed in a RENAMED done-position)', () => {
 	it('integrates the kept commit when the agent placed its own record at work/tasks/done/ (no `nothing to complete` crash, no rebuild/force)', async () => {
 		const {repo, tip, branch} = await seedSelfRenamedDoneBranch('regroup');
 		const notes: string[] = [];

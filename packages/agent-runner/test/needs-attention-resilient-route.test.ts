@@ -19,7 +19,7 @@ import {
 
 /**
  * The needs-attention route made network-FAULT-TOLERANT, HONESTLY-reported, and
- * REQUEUE-SAFE (slice `needs-attention-routing-resilient-honest-requeue-safe`).
+ * REQUEUE-SAFE (task `needs-attention-routing-resilient-honest-requeue-safe`).
  * Throwaway-git harness style (`GIT_CONFIG_GLOBAL` isolation); the retry timeline
  * is driven by an INJECTED no-op sleep so there are NO real wall-clock waits.
  */

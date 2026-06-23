@@ -24,8 +24,8 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * Tests for the DE-OVERLOADED `humanOnly` model + the slicer heuristic shift
- * (slice `de-overload-humanonly-narrow-slice-guard-and-slicer-heuristic`, PRD
+ * Tests for the DE-OVERLOADED `humanOnly` model + the tasker heuristic shift
+ * (task `de-overload-humanonly-narrow-slice-guard-and-slicer-heuristic`, PRD
  * `staging-pool-position-gate-and-trust-model` US #8, #10, #11; governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`).
  *
@@ -33,15 +33,15 @@ import {run} from '../src/git.js';
  *   - POSITION (folder, runner-deterministic): `work/tasks/backlog/` (staging, not
  *     eligible) vs `work/tasks/todo/` (the agent pool). Carries "review before the
  *     agent acts".
- *   - NATURE (slice `humanOnly`, agent judgement, NARROWED): "never-by-nature"
- *     (secrets/release/security) — survives even when the slice resides in the
- *     pool `work/tasks/todo/`. PRD `humanOnly` UNCHANGED (gates auto-slicing).
+ *   - NATURE (task `humanOnly`, agent judgement, NARROWED): "never-by-nature"
+ *     (secrets/release/security) — survives even when the task resides in the
+ *     pool `work/tasks/todo/`. PRD `humanOnly` UNCHANGED (gates auto-tasking).
  *   - DISCOVERED (`needsAnswers`): unchanged.
  */
 
 // --- Unit predicates: the three axes are orthogonal, each means one thing --
 
-describe('slice `humanOnly` (NARROWED) — never agent-eligible, even in the pool', () => {
+describe('task `humanOnly` (NARROWED) — never agent-eligible, even in the pool', () => {
 	it('humanOnly:true is not agent-claimable regardless of autoBuild / pool residency', () => {
 		// The predicate operates on already-read frontmatter — the caller reads it
 		// from `work/tasks/todo/` (the pool). `autoBuild:true` simulates the pool path
@@ -58,7 +58,7 @@ describe('slice `humanOnly` (NARROWED) — never agent-eligible, even in the poo
 		expect(e.eligible).toBe(false);
 	});
 
-	it('an undeclared slice in the pool IS eligible (the de-overload moves review-first to position, not to humanOnly)', () => {
+	it('an undeclared task in the pool IS eligible (the de-overload moves review-first to position, not to humanOnly)', () => {
 		const e = resolveEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
@@ -82,8 +82,8 @@ describe('slice `humanOnly` (NARROWED) — never agent-eligible, even in the poo
 	});
 });
 
-describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
-	it('PRD humanOnly:true blocks the slicing gate even when autoTask is on', () => {
+describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-tasking', () => {
+	it('PRD humanOnly:true blocks the tasking gate even when autoTask is on', () => {
 		expect(resolveTaskGate(true, undefined, true)).toBe(false);
 		const r = resolveTaskingEligibility({
 			humanOnly: true,
@@ -110,7 +110,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-slicing', () => {
 
 // --- Pool-residency on a real BARE mirror (`--bare file://`, house pattern) -
 
-describe('pool residency — humanOnly slice in `work/tasks/todo/` (the pool) is NOT eligible', () => {
+describe('pool residency — humanOnly task in `work/tasks/todo/` (the pool) is NOT eligible', () => {
 	let root: string;
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), 'humanonly-de-overload-'));
@@ -119,7 +119,7 @@ describe('pool residency — humanOnly slice in `work/tasks/todo/` (the pool) is
 		rmSync(root, {recursive: true, force: true});
 	});
 
-	it('scan reports a backlog `humanOnly` slice as not eligible; an undeclared neighbour is eligible (autoBuild on)', async () => {
+	it('scan reports a backlog `humanOnly` task as not eligible; an undeclared neighbour is eligible (autoBuild on)', async () => {
 		const workspacesDir = join(root, '.agent-runner');
 		registerMirrorWithWork(workspacesDir, 'repo', {
 			backlog: {
@@ -144,13 +144,13 @@ describe('pool residency — humanOnly slice in `work/tasks/todo/` (the pool) is
 	});
 });
 
-// --- Slicer heuristic: review-first → STAGING-BIRTH (not a `humanOnly` stamp)
+// --- Tasker heuristic: review-first → STAGING-BIRTH (not a `humanOnly` stamp)
 
-describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` stamp', () => {
+describe('tasker heuristic — review-first is staging-birth, NOT a `humanOnly` stamp', () => {
 	let scratch: Scratch;
 	let restorePiAgentDir: () => void;
 	beforeEach(() => {
-		scratch = makeScratch('humanonly-de-overload-slicer-');
+		scratch = makeScratch('humanonly-de-overload-tasker-');
 		restorePiAgentDir = isolatePiAgentDir(scratch.root);
 	});
 	afterEach(() => {
@@ -158,7 +158,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		scratch.cleanup();
 	});
 
-	it('the slicing brief tells the agent to BIRTH slices in STAGING (`work/tasks/backlog/`) and reserves `humanOnly` for never-by-nature', async () => {
+	it('the tasking brief tells the agent to BIRTH tasks in STAGING (`work/tasks/backlog/`) and reserves `humanOnly` for never-by-nature', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// Seed a PRD.
 		run('git', ['fetch', '-q', 'arbiter', 'main'], repo, {env: gitEnv()});
@@ -185,7 +185,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		// AFTER the relocation (slice `slicing-protocol-doc-and-vocabulary-fix`):
+		// AFTER the relocation (task `slicing-protocol-doc-and-vocabulary-fix`):
 		// the de-overloaded language lives in `TASKING-PROTOCOL.md`, NOT inlined in
 		// the prompt. The prompt now POINTS at the doc + names the staging folder.
 		expect(capturedPrompt).toMatch(/work\/protocol\/TASKING-PROTOCOL\.md/);
@@ -203,7 +203,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		expect(doc).toMatch(/Review-first is encoded by the staging position/);
 	});
 
-	it('the slicer-review-loop prompt carries the same narrowed `humanOnly` guidance', () => {
+	it('the tasker-review-loop prompt carries the same narrowed `humanOnly` guidance', () => {
 		const prompt = buildTaskReviewPrompt({
 			slug: 'it',
 			cwd: '/tmp/x',

@@ -16,14 +16,14 @@ import {
 /**
  * `mirror-pool-scan` — the MIRROR-SIDE eligible-pool scan: the isolated
  * counterpart to `do-autopick`'s in-place pool scan. It enumerates eligible
- * SLICES + sliceable PRDs from a BARE hub mirror's `main` (NOT a working
- * checkout), using the SAME eligibility (`scan`/`eligibility`) + slicing
- * predicates (`sliceablePrds`/`slicing-eligibility`) as the in-place scan.
+ * TASKS + taskable PRDs from a BARE hub mirror's `main` (NOT a working
+ * checkout), using the SAME eligibility (`scan`/`eligibility`) + tasking
+ * predicates (`taskablePrds`/`tasking-eligibility`) as the in-place scan.
  *
  * House `--bare`-mirror style: seed a bare hub mirror (via `registerMirrorWithWork`)
  * whose committed `main` carries a mix of eligible/blocked/needsAnswers/humanOnly
- * slices + sliceable/non-sliceable PRDs, then assert the scan returns exactly the
- * eligible set — and is PARITY-equal to the in-place `scanRepoPaths` + `sliceablePrds`
+ * tasks + taskable/non-taskable PRDs, then assert the scan returns exactly the
+ * eligible set — and is PARITY-equal to the in-place `scanRepoPaths` + `taskablePrds`
  * on the SAME logical `work/` state.
  */
 
@@ -39,7 +39,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** A minimal slice markdown body with the given frontmatter fields. */
+/** A minimal task markdown body with the given frontmatter fields. */
 function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -59,8 +59,8 @@ function brief(frontmatter: Record<string, string>): string {
 	return lines.join('\n');
 }
 
-describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a BARE mirror main', () => {
-	it('returns exactly the eligible slices + sliceable PRDs from a mixed mirror', async () => {
+describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BARE mirror main', () => {
+	it('returns exactly the eligible tasks + taskable PRDs from a mixed mirror', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
 				// eligible
@@ -75,13 +75,13 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			},
 			done: {'dep.md': task({slug: 'dep'})},
 			brief: {
-				// sliceable
-				'sliceme.md': brief({slug: 'sliceme'}),
+				// taskable
+				'taskme.md': brief({slug: 'taskme'}),
 				// gated out
 				'brief-human.md': brief({slug: 'brief-human', humanOnly: 'true'}),
 				'brief-asks.md': brief({slug: 'brief-asks', needsAnswers: 'true'}),
-				// briefAfter not satisfied (unsliced-dep is NOT in prd-sliced/)
-				'after.md': brief({slug: 'after', briefAfter: '[unsliced-dep]'}),
+				// briefAfter not satisfied (untasked-dep is NOT in prd-tasked/)
+				'after.md': brief({slug: 'after', briefAfter: '[untasked-dep]'}),
 			},
 		});
 
@@ -91,19 +91,19 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			env: gitEnv(),
 		});
 
-		// Exactly the eligible slices.
+		// Exactly the eligible tasks.
 		expect(result.eligibleTasks.map((s) => s.slug).sort()).toEqual([
 			'ready',
 			'unblocked',
 		]);
-		// Exactly the sliceable PRDs.
-		expect(result.briefs.map((p) => p.slug).sort()).toEqual(['sliceme']);
+		// Exactly the taskable PRDs.
+		expect(result.briefs.map((p) => p.slug).sort()).toEqual(['taskme']);
 	});
 
-	it('honours the GATES: autoBuild off ⇒ no eligible slice; autoTask off ⇒ no sliceable PRD', async () => {
+	it('honours the GATES: autoBuild off ⇒ no eligible task; autoTask off ⇒ no taskable PRD', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': task({slug: 'ready'})},
-			brief: {'sliceme.md': brief({slug: 'sliceme'})},
+			brief: {'taskme.md': brief({slug: 'taskme'})},
 		});
 
 		const strict = await scanMirrorPool({
@@ -120,16 +120,16 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			env: gitEnv(),
 		});
 		expect(permissive.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
-		expect(permissive.briefs.map((p) => p.slug)).toEqual(['sliceme']);
+		expect(permissive.briefs.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
 	it('layers the COMMITTED per-repo .agent-runner.json from the mirror main (parity with the working checkout that reads it)', async () => {
 		// Global is strict; the committed per-repo file opts in — the mirror scan reads
 		// it from `main:.agent-runner.json` (the `do --remote` per-repo seam), so the
-		// slice/PRD become eligible exactly as an in-place checkout would resolve them.
+		// task/PRD become eligible exactly as an in-place checkout would resolve them.
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': task({slug: 'ready'})},
-			brief: {'sliceme.md': brief({slug: 'sliceme'})},
+			brief: {'taskme.md': brief({slug: 'taskme'})},
 			repoConfig: {autoBuild: true, autoTask: true},
 		});
 
@@ -139,7 +139,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 			env: gitEnv(),
 		});
 		expect(result.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
-		expect(result.briefs.map((p) => p.slug)).toEqual(['sliceme']);
+		expect(result.briefs.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
 	it('resolves blockedBy / briefAfter against the mirror own folders (per-repo, like in-place)', async () => {
@@ -149,7 +149,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 		});
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
-		// a not done, alpha not sliced ⇒ neither eligible.
+		// a not done, alpha not tasked ⇒ neither eligible.
 		const before = await scanMirrorPool({
 			mirrorPath,
 			config: cfg,
@@ -181,7 +181,7 @@ describe('scanMirrorPool — enumerates eligible slices + sliceable PRDs from a 
 });
 
 describe('PARITY with the in-place do-autopick pool scan on the SAME logical state', () => {
-	it('mirror-side scan returns the same eligible slices + sliceable PRDs as scanRepoPaths + sliceablePrds in-place', async () => {
+	it('mirror-side scan returns the same eligible tasks + taskable PRDs as scanRepoPaths + taskablePrds in-place', async () => {
 		const mixed = {
 			backlog: {
 				'ready.md': task({slug: 'ready'}),
@@ -190,7 +190,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			},
 			done: {'dep.md': task({slug: 'dep'})},
 			brief: {
-				'sliceme.md': brief({slug: 'sliceme'}),
+				'taskme.md': brief({slug: 'taskme'}),
 				'after.md': brief({slug: 'after', briefAfter: '[alpha]'}),
 			},
 			briefTasked: {'alpha.md': brief({slug: 'alpha'})},
@@ -242,7 +242,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			autoTask: cfg.autoTask,
 		});
 
-		// PARITY: the eligible slice slugs + sliceable PRD slugs match exactly.
+		// PARITY: the eligible task slugs + taskable PRD slugs match exactly.
 		expect(mirror.eligibleTasks.map((s) => s.slug).sort()).toEqual(
 			inPlaceReport.repos[0].items
 				.filter((i) => i.eligibility.eligible)

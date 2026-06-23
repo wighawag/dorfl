@@ -130,7 +130,7 @@ work/in-progress/    -> (GONE: transient status is now a per-item lock ref, not 
 work/done/           -> work/tasks/done/
 work/pre-prd/        -> work/briefs/proposed/
 work/prd/            -> work/briefs/ready/
-work/prd-sliced/     -> work/briefs/tasked/
+work/prd-tasked/     -> work/briefs/tasked/
 work/questions/      -> work/questions/            # unchanged (stays top-level)
 work/protocol/       -> work/protocol/             # re-synced (overwritten), not moved
 # The old SHARED terminal work/dropped/ is SPLIT per regime (the slug-collision fix):
@@ -139,7 +139,7 @@ work/protocol/       -> work/protocol/             # re-synced (overwritten), no
 #   a dropped OBSERVATION needs no terminal (notes leave by deletion) -> git rm
 ```
 
-Do the moves with `git mv` so each rename is staged as a rename; sort the old `work/dropped/` contents by what each item IS (task vs brief vs observation) into the right destination. Migrate the frontmatter too where a legacy repo carries the old field/verb spellings (`prd:`→`brief:`, `sliceAfter:`→`briefAfter:` frontmatter; `do prd:`/`do slice:`→`do brief:`/`do task:`) — these are the on-disk identifiers a pre-cutover repo still holds. Present this mapping and STOP for confirmation (it touches the repo's live ledger); never auto-run it.
+Do the moves with `git mv` so each rename is staged as a rename; sort the old `work/dropped/` contents by what each item IS (task vs brief vs observation) into the right destination. Migrate the frontmatter too where a legacy repo carries the old field/verb spellings (`prd:`→`brief:`, `taskAfter:`→`briefAfter:` frontmatter; `do prd:`/`do task:`→`do brief:`/`do task:`) — these are the on-disk identifiers a pre-cutover repo still holds. Present this mapping and STOP for confirmation (it touches the repo's live ledger); never auto-run it.
 
 ## Phase B — Convert existing material (only when material was detected)
 

@@ -19,12 +19,12 @@ import type {
 import {newSidecar, serialiseSidecar} from '../src/sidecar.js';
 
 /**
- * `advance-verb-resolver` slice (PRD `advance-loop`, US #1/5/6/18). The
+ * `advance-verb-resolver` task (PRD `advance-loop`, US #1/5/6/18). The
  * classify → lock → execute SKELETON: assert the ORDER (classify is free,
  * read-only; the lock is taken BEFORE the executor; a CAS loser never reaches the
- * executor), the obs/prd/bare resolution flows through, and the build/slice rungs
+ * executor), the obs/prd/bare resolution flows through, and the build/task rungs
  * ORCHESTRATE `do`/`do prd:` (never re-implement them). The rung BODIES + drivers
- * are later slices; this pins the seam.
+ * are later tasks; this pins the seam.
  */
 
 let root: string;
@@ -96,7 +96,7 @@ afterEach(() => {
 });
 
 describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcommand)', () => {
-	it('resolves a bare slug to the SLICE build-task rung', async () => {
+	it('resolves a bare slug to the TASK build-task rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'feature',
@@ -116,7 +116,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 	it('resolves prd:<slug> to the task-brief rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
-			arg: 'brief:autoslice',
+			arg: 'brief:autotask',
 			cwd: repoPath(),
 			executor,
 			readSignals: () => ({needsAnswers: undefined, sidecar: undefined}),
@@ -124,7 +124,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.rung).toBe('task-brief');
-		expect(calls).toEqual(['task-brief:brief:autoslice']);
+		expect(calls).toEqual(['task-brief:brief:autotask']);
 	});
 
 	it('resolves obs:<slug> (the NEW namespace) to the triage-observation rung', async () => {
@@ -141,7 +141,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 		expect(calls).toEqual(['triage-observation:observation:stray-note']);
 	});
 
-	it('a bare-slug slice/PRD COLLISION is a loud usage error (resolver cross-check preserved)', async () => {
+	it('a bare-slug task/PRD COLLISION is a loud usage error (resolver cross-check preserved)', async () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
 		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
 		const {executor, calls} = spyExecutor();
@@ -300,9 +300,9 @@ describe('advance \u2014 the single-item tick requires a named item (the bare fo
 	});
 });
 
-describe('advance \u2014 build/slice rungs ORCHESTRATE do (no duplication)', () => {
+describe('advance \u2014 build/task rungs ORCHESTRATE do (no duplication)', () => {
 	it('the default executor needs `do` options threaded \u2014 it ORCHESTRATES performDo, not a re-impl', async () => {
-		// With NO doOptions threaded (the driver slice wires them), the default
+		// With NO doOptions threaded (the driver task wires them), the default
 		// executor reports it WOULD orchestrate `do <item>` \u2014 proving the build path
 		// is `performDo`, named not re-implemented. (Running `performDo` for real
 		// needs a full arbiter pipeline; the CLI threads the options.)

@@ -6,7 +6,7 @@ import {
 } from '../src/triage-gate.js';
 
 /**
- * `advance-rung-triage` slice — the TRIAGE auto-disposition GATE parse (US #17).
+ * `advance-rung-triage` task — the TRIAGE auto-disposition GATE parse (US #17).
  * The gate is the conservative `observationTriage: 'auto'`-gated exception: it judges whether an
  * observation is a NO-QUESTION case and emits `{auto, …}`. These tests pin the
  * parse + the HIGH BAR safety fallback (a malformed `auto:true` ⇒ surface the

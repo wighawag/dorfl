@@ -14,14 +14,14 @@ import {run} from '../src/git.js';
 
 /**
  * Regression for `recover-autodetect-and-advancing-lock-crash-safety` (Defect B,
- * slice `advancing-lock-release-crash-safe`), RE-TARGETED after the capstone
- * cut-over (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`).
+ * task `advancing-lock-release-crash-safe`), RE-TARGETED after the capstone
+ * cut-over (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`).
  *
  * The original incident left the slug in BOTH `work/advancing/<entry>.md` (an
  * orphaned ON-`main` marker) AND a lifecycle folder after a failing post-lock
  * dispatch. The cut-over DISSOLVES that whole class: the `work/advancing/` marker
- * is RETIRED (no transient status in `main`'s tree), and for a BUILD-SLICE rung the
- * advance layer takes NO unified hold at all (the inner `do`'s claim/slice lock is
+ * is RETIRED (no transient status in `main`'s tree), and for a BUILD-TASK rung the
+ * advance layer takes NO unified hold at all (the inner `do`'s claim/task lock is
  * the sole exclusion). So there is no advance-layer release that touches the
  * working tree, and nothing on `main` to orphan.
  *
@@ -59,7 +59,7 @@ function trackedOnArbiter(repo: string, path: string): boolean {
 	);
 }
 
-/** Build a stranded-strand-shaped work branch that carries a done-moved slice file
+/** Build a stranded-strand-shaped work branch that carries a done-moved task file
  * (the incident's tree shape, MINUS the retired baked-in advancing marker).
  * Returns the kept tip sha. The branch is left on the arbiter. */
 function seedStrandedWorkBranch(
@@ -80,7 +80,7 @@ function seedStrandedWorkBranch(
 	return {branch, keptTip};
 }
 
-/** Re-claim the slice (backlog→in-progress) directly on arbiter/main, mirroring
+/** Re-claim the task (backlog→in-progress) directly on arbiter/main, mirroring
  * the runner's just-issued claim that precedes the build dispatch. */
 function reclaimOnArbiterMain(repo: string, slug: string): void {
 	git(['checkout', '-q', 'main'], repo);

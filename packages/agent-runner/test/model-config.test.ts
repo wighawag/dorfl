@@ -25,7 +25,7 @@ import {PiHarness} from '../src/pi-harness.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
 /**
- * The model-config slice (ADR §13): `model` is a first-class, harness-agnostic
+ * The model-config task (ADR §13): `model` is a first-class, harness-agnostic
  * routing intent carried through the harness seam. agent-runner decides WHICH
  * model; it NEVER touches auth/keys (those stay the harness's job). These tests
  * cover (1) the optional `model` config field, (2) its per-repo resolution chain

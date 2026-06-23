@@ -40,7 +40,7 @@ import {
  *      same worktree isolation, same integration; touch no observations, surface
  *      no questions);
  *   3. with a gate flipped (surfaceBlockers on) plain `run`'s advance tick ALSO
- *      performs the lifecycle (a needsAnswers slice is surfaced — the tree-less
+ *      performs the lifecycle (a needsAnswers task is surfaced — the tree-less
  *      ledger move, no build worktree);
  *   4. no regression in build/integrate/needs-attention (a failing item routes
  *      to needs-attention, the loop survives and keeps ticking).
@@ -124,7 +124,7 @@ const editingRunAgent: AgentRunner = ({cwd, slug}) => {
 /**
  * The per-mirror advance CONTEXT factory the CLI shapes (here in-test): a
  * tree-less working clone of the mirror's arbiter for the surface/triage/apply
- * rungs + the build/slice `doOptions` base. The registry-set worktree `doDriver`
+ * rungs + the build/task `doOptions` base. The registry-set worktree `doDriver`
  * is injected by `advanceRegistrySet` itself, on top of this.
  */
 function contextForFactory(opts: {
@@ -243,7 +243,7 @@ describe('advanceRegistrySetRunTick — calm-gates OUTCOME-equivalence to plain 
 
 describe('advanceRegistrySetRunTick — a gate flip makes plain `run` perform the lifecycle', () => {
 	it(
-		'surfaceBlockers on ⇒ a needsAnswers slice is SURFACED under the loop (tree-less, no build worktree)',
+		'surfaceBlockers on ⇒ a needsAnswers task is SURFACED under the loop (tree-less, no build worktree)',
 		{timeout: 30000},
 		async () => {
 			const blockedSlug = 'blocked';
@@ -270,7 +270,7 @@ describe('advanceRegistrySetRunTick — a gate flip makes plain `run` perform th
 				env: gitEnv(),
 			});
 
-			// The surface rung ADVANCED the blocked slice (surfaced, not built).
+			// The surface rung ADVANCED the blocked task (surfaced, not built).
 			expect(summary.claimedAndDone).toBe(1);
 			const treelessCwd = join(
 				scratch.root,

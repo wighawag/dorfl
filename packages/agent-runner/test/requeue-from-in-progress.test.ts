@@ -26,7 +26,7 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Reproduce a slice STUCK on its per-item lock (slice
+ * Reproduce a task STUCK on its per-item lock (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: stuck-state is
  * the lock `state: stuck`, NOT a `needs-attention/` folder file) WITH a prior
  * attempt's commit on `work/<slug>` pushed to the arbiter (the durable artifact a
@@ -94,7 +94,7 @@ function arbiterHasBranch(seeded: SeededRepo, branch: string): boolean {
 	return arbiterRef(seeded, `refs/heads/${branch}`) !== '';
 }
 
-describe('requeue recovers a slice stuck on its per-item lock (releases the lock)', () => {
+describe('requeue recovers a task stuck on its per-item lock (releases the lock)', () => {
 	it('releases the stuck lock WITHOUT a cwd checkout of the item; body stays in backlog/', async () => {
 		const {repo} = await stuckInProgress('alpha');
 		// Precondition: the item is stuck (the lock), body rests in backlog/.

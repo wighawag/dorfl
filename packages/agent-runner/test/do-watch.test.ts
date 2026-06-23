@@ -15,7 +15,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `do --watch` tests (slice `do-watch`) — the live observer that tails the pi
+ * `do --watch` tests (task `do-watch`) — the live observer that tails the pi
  * session `.jsonl`. Two concerns proven here against REAL git + a stubbed pi
  * CLI (house style: throwaway checkout + local `--bare` arbiter + a pi stub that
  * edits a file AND writes a session log, no real model):

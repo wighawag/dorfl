@@ -92,8 +92,8 @@ on:
           - ''
           - 'true'
           - 'false'
-      autoSlice:
-        description: 'One-shot override of the autoSlice gate (AGENT_RUNNER_AUTO_SLICE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+      autoTask:
+        description: 'One-shot override of the autoTask gate (AGENT_RUNNER_AUTO_TASK) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -149,9 +149,9 @@ jobs:
   # Build the matrix from the eligible-pool scan. `scan --json` reads BOTH the
   # registry/hub-mirror pool (`repos[].items[]` + `repos[].briefs[]`) AND the
   # in-place working checkout (`cwd.repo.items[]` + `cwd.repo.briefs[]`) and emits
-  # eligible items + sliceable PRDs; CI runs IN-PLACE so the eligible items live
+  # eligible items + taskable PRDs; CI runs IN-PLACE so the eligible items live
   # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
-  # both eligible-SLICE pools AND both sliceable-PRD pools into a GitHub Actions
+  # both eligible-TASK pools AND both taskable-PRD pools into a GitHub Actions
   # matrix list (one `task:<slug>` or `brief:<slug>` id per leg). Skipped entirely
   # in merge mode.
   enumerate:
@@ -174,7 +174,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
@@ -186,8 +186,8 @@ jobs:
         # and `.eligibility.eligible`. We union both surfaces and take the
         # eligible ones as explicit `task:<slug>` / `brief:<slug>` ids (CI MUST
         # use explicit prefixes). Each becomes one matrix leg → one independent
-        # `advance` → one PR — for a SLICE that is the build, for a PRD that is
-        # the auto-slice (capability B, `AGENT_RUNNER_AUTO_SLICE`).
+        # `advance` → one PR — for a TASK that is the build, for a PRD that is
+        # the auto-slice (capability B, `AGENT_RUNNER_AUTO_TASK`).
         run: |
           items="$(agent-runner scan --json \
             | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].briefs[]?, .cwd.repo.briefs[]?) | select(.eligibility.eligible == true) | "brief:" + .slug] | unique')"
@@ -224,7 +224,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
@@ -262,11 +262,11 @@ jobs:
         # Mirror of the enumerate-job override (see there): export each gate's
         # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input. The
         # merge job re-scans the pool inside `advance -n`, so it needs the override
-        # too for the lifecycle/slice pools to reflect it.
+        # too for the lifecycle/task pools to reflect it.
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true

@@ -15,7 +15,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * Slice `gate-on-rebased-tip-fresh-worktree`: the acceptance gate (`prepare` then
+ * Task `gate-on-rebased-tip-fresh-worktree`: the acceptance gate (`prepare` then
  * `verify`) runs, by default, in a CLEAN throwaway worktree cut from the work
  * branch REBASED onto the latest `<arbiter>/main` (the tree that actually
  * integrates), NOT the agent's pre-rebase checkout — so a green gate provably
@@ -44,7 +44,7 @@ const ARBITER = 'arbiter';
 
 /**
  * Stand a repo up exactly as the caller's HEAD leaves it just before the core:
- * a slice claimed (the lock is held; the body rests in backlog/ on the arbiter) and onboarded onto `work/<slug>`
+ * a task claimed (the lock is held; the body rests in backlog/ on the arbiter) and onboarded onto `work/<slug>`
  * off the freshly-pushed main, with UNCOMMITTED agent work in the tree.
  */
 async function claimAndBranch(slug: string) {

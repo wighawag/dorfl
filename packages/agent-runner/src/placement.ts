@@ -23,7 +23,7 @@
  * renamed from `'backlog'` in task
  * `f1-pool-noun-todo-in-surface-and-apply-readers`) AND the BRIEF-
  * placement task (`briefsLandIn`: `pre-proposed`/`ready`) without forking. A future
- * lifecycle (e.g. intake's lone-slice) plugs its own `slots` in and reuses the
+ * lifecycle (e.g. intake's lone-task) plugs its own `slots` in and reuses the
  * exact precedence — no second implementation.
  */
 

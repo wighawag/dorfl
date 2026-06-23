@@ -30,7 +30,7 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  * it can lock items resting in DIFFERENT source folders (a backlog task, a `briefs/`
  * brief, an `observations/` note) with one uniform mechanism.
  *
- * **TREE-LESS vs BUILD/SLICE RUNGS (`acquireUnified`).** The advance tick sets
+ * **TREE-LESS vs BUILD/TASK RUNGS (`acquireUnified`).** The advance tick sets
  * `acquireUnified` PER RUNG (the policy lives in `advance.ts`, where the rung is
  * known):
  *
@@ -39,7 +39,7 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  *     IS the advance∥claim / advance∥task exclusion. Acquire/release delegate to
  *     {@link acquireItemLock} / {@link releaseItemLock} (a parentless ref CAS, no
  *     working-tree write, no retry budget).
- *   - **BUILD-SLICE / SLICE-PRD rungs** never take the unified lock at the advance
+ *   - **BUILD-TASK / TASK-PRD rungs** never take the unified lock at the advance
  *     layer (`acquireUnified` false): `performAdvance` orchestrates an inner
  *     `performDo` that ITSELF acquires the SAME `task-<slug>`/`brief-<slug>` ref
  *     (the create-only CAS with NO re-entrancy/auto-steal), so taking it again here
@@ -181,7 +181,7 @@ async function runAcquire(
 	}
 	const by = options.by || (await resolveBy(cwd, env));
 
-	// BUILD/SLICE rung (or a dry-run): NO advance-layer hold at all. The inner `do`'s
+	// BUILD/TASK rung (or a dry-run): NO advance-layer hold at all. The inner `do`'s
 	// claim/task unified lock is the sole exclusion point — taking it again here
 	// would deadlock the tick against itself. A NO-OP `acquired`.
 	const acquireUnified = (options.acquireUnified ?? false) && !dryRun;
@@ -322,7 +322,7 @@ async function runRelease(
 		);
 	}
 
-	// BUILD/SLICE rung: nothing was held at the advance layer — a NO-OP `released`.
+	// BUILD/TASK rung: nothing was held at the advance layer — a NO-OP `released`.
 	const releaseUnified = options.releaseUnified ?? false;
 	if (!releaseUnified) {
 		const message = `advancing borrow for '${entry}' released (no advance-layer hold to drop).`;

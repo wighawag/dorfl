@@ -115,7 +115,7 @@ describe('PiHarness — invocation (stubbed pi CLI)', () => {
 			dir,
 			slug: 'feat',
 			command: 'ignored-by-pi',
-			prompt: 'WRAPPER + slice ## Prompt body',
+			prompt: 'WRAPPER + task ## Prompt body',
 		});
 
 		expect(result.ok).toBe(true);
@@ -123,7 +123,7 @@ describe('PiHarness — invocation (stubbed pi CLI)', () => {
 		expect(readFileSync(stub.cwdFile, 'utf8').trim()).toBe(dir);
 		// The standard work-agent prompt was fed on stdin.
 		expect(readFileSync(stub.stdinFile, 'utf8')).toContain(
-			'WRAPPER + slice ## Prompt body',
+			'WRAPPER + task ## Prompt body',
 		);
 	});
 

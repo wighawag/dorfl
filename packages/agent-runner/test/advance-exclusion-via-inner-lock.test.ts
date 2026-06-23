@@ -28,19 +28,19 @@ afterEach(() => {
 });
 
 /**
- * POST-#9 EXCLUSION PROOF (slice
+ * POST-#9 EXCLUSION PROOF (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, carried from the
  * original capstone #9 because this is where the advancing MARKER is removed).
  *
  * With the `work/advancing/<entry>.md` marker GONE and the advance layer taking NO
- * unified hold for the BUILD-SLICE / SLICE-PRD rungs (`advancing-acquires-unified-lock`
+ * unified hold for the BUILD-TASK / TASK-PRD rungs (`advancing-acquires-unified-lock`
  * option a — proved by `advancing-acquires-unified-lock.test.ts`), those rungs are
- * guarded SOLELY by the inner `do`'s claim/slice unified lock
+ * guarded SOLELY by the inner `do`'s claim/task unified lock
  * (`refs/agent-runner/lock/<entry>`, the create-only ref CAS that `performClaim` /
- * `acquireSlicingLock` take). These tests PROVE:
+ * `acquireTaskingLock` take). These tests PROVE:
  *
  *   1. advance∥claim on a build-task item stays mutually exclusive through the
- *      inner `do`'s claim lock ALONE — a held `slice:<slug>` lock makes the advance
+ *      inner `do`'s claim lock ALONE — a held `task:<slug>` lock makes the advance
  *      build-task rung's inner claim LOSE; the advance layer takes no hold of its
  *      own.
  *   2. the brief advance-layer TOCTOU (two advancers both classifying the item as
@@ -56,7 +56,7 @@ afterEach(() => {
 
 /**
  * A `doDriver` whose body IS the inner `do`'s lock point: it runs the REAL
- * `performClaim` for the resolved slice (the create-only `task-<slug>` ref CAS),
+ * `performClaim` for the resolved task (the create-only `task-<slug>` ref CAS),
  * then maps the claim outcome onto a {@link DoResult}. This is the faithful inner
  * exclusion — `performDo` itself begins with this very claim — without the rest of
  * the build pipeline (gate/agent/integrate), so the test is deterministic.
@@ -106,9 +106,9 @@ function advanceBuildTask(cwd: string, slug: string, label: string) {
 }
 
 describe('advance∥claim on a build-task item: exclusion via the inner do claim lock ALONE', () => {
-	it('a held slice: implement lock makes the advance build-task rung lose at the inner claim', async () => {
+	it('a held task: implement lock makes the advance build-task rung lose at the inner claim', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
-		// A DIFFERENT principal holds the slice's implement lock (a concurrent claim).
+		// A DIFFERENT principal holds the task's implement lock (a concurrent claim).
 		const holder = raceClone(seeded, 'holder');
 		const held = await acquireItemLock({
 			item: 'task:solo',

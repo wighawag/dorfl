@@ -23,9 +23,9 @@ import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
 describe('parseStopSentinel — the HARD STOP verdict on agent.output', () => {
 	it('reads the reason VERBATIM from inside a complete sentinel block', () => {
 		const output = [
-			'I checked the slice against current src/.',
+			'I checked the task against current src/.',
 			STOP_SENTINEL_OPEN,
-			'The slice rests on three premises that are now false:',
+			'The task rests on three premises that are now false:',
 			'1. the convergence it asks for already landed in run-daemon-reframe.',
 			'Re-scope before re-claiming.',
 			STOP_SENTINEL_CLOSE,
@@ -35,7 +35,7 @@ describe('parseStopSentinel — the HARD STOP verdict on agent.output', () => {
 		expect(stop).toBeDefined();
 		expect(stop?.reason).toBe(
 			[
-				'The slice rests on three premises that are now false:',
+				'The task rests on three premises that are now false:',
 				'1. the convergence it asks for already landed in run-daemon-reframe.',
 				'Re-scope before re-claiming.',
 			].join('\n'),
@@ -82,7 +82,7 @@ describe('parseStopSentinel — the HARD STOP verdict on agent.output', () => {
 describe('extractDecisionsBlock — the SOFT decisions log on agent.output', () => {
 	it('extracts the prose under a ## Decisions heading', () => {
 		const output = [
-			'Implemented the slice.',
+			'Implemented the task.',
 			'',
 			'## Decisions',
 			'',
@@ -114,8 +114,8 @@ describe('extractDecisionsBlock — the SOFT decisions log on agent.output', () 
 
 describe('emptyDiffStopReason — the deterministic backstop reason', () => {
 	it('names the slug + the no-op/stop framing', () => {
-		const reason = emptyDiffStopReason('my-slice');
-		expect(reason).toMatch(/my-slice/);
+		const reason = emptyDiffStopReason('my-task');
+		expect(reason).toMatch(/my-task/);
 		expect(reason).toMatch(/no source change|empty diff/i);
 		expect(reason).toMatch(/re-scope or re-claim/i);
 	});
@@ -123,7 +123,7 @@ describe('emptyDiffStopReason — the deterministic backstop reason', () => {
 
 /**
  * `isWorkBranchDiffEmpty` — the DETERMINISTIC empty-diff predicate, now
- * branch-commit-aware (slice `noop-backstop-counts-branch-commits`). It is empty
+ * branch-commit-aware (task `noop-backstop-counts-branch-commits`). It is empty
  * IFF the working tree carries no source change (the FRESH-build signal) AND the
  * branch has no source COMMIT ahead of `<arbiter>/main` (so a `requeue`
  * continue-from-tip, whose prior work is already committed + green with a clean

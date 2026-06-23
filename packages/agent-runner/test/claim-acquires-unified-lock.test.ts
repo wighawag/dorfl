@@ -216,7 +216,7 @@ describe('releasing the lock returns the item to the pool so a re-claim succeeds
 		// The body STAYS in backlog/ throughout (claim no longer moves it), so
 		// returning the item to the pool is purely "release the per-item lock". (The
 		// needs-attention/requeue surface still sources from in-progress/ — its
-		// retarget to a body-rests-in-backlog item is slice 9b; see
+		// retarget to a body-rests-in-backlog item is task 9b; see
 		// work/notes/observations/requeue-needs-attention-still-source-from-in-progress-not-backlog.md.)
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const first = await performClaim({
@@ -322,7 +322,7 @@ describe('held-slug subtraction in the pool readers', () => {
 		expect(report.repos[0].items.map((i) => i.slug)).toEqual(['beta']);
 	});
 
-	it('heldSliceSlugs maps slice-<slug> lock entries to bare slugs (after a claim holds one)', async () => {
+	it('heldTaskSlugs maps task-<slug> lock entries to bare slugs (after a claim holds one)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha', 'beta']);
 		await performClaim({
 			slug: 'alpha',

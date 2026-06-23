@@ -33,7 +33,7 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * `advance-rung-triage` slice — the observation TRIAGE rung + the
+ * `advance-rung-triage` task — the observation TRIAGE rung + the
  * `observationTriage` gate, WIRED through the engine tick. Acceptance criteria
  * pinned at the engine
  * seam:

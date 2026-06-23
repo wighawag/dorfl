@@ -29,7 +29,7 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-/** Write `work/<folder>/<slug>.md` in the fixture repo (a minimal slice body). */
+/** Write `work/<folder>/<slug>.md` in the fixture repo (a minimal task body). */
 function place(folder: string, slug: string, content?: string): void {
 	const dir = join(root, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
@@ -198,9 +198,9 @@ describe('formatting', () => {
 
 describe('the status-folder set', () => {
 	it('is exactly the durable lifecycle folders (transient/buckets/PRD folders excluded)', () => {
-		// After the capstone cut-over (slice
+		// After the capstone cut-over (task
 		// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the only
-		// `work/` moves on `main` are the durable resting transitions, so a slice's
+		// `work/` moves on `main` are the durable resting transitions, so a task's
 		// ledger file rests only in the durable set; the transient
 		// `in-progress`/`needs-attention` are per-item lock state now.
 		expect([...LEDGER_STATUS_FOLDERS]).toEqual([

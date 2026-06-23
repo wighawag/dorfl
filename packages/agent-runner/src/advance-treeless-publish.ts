@@ -23,7 +23,7 @@ import {runAsync} from './git.js';
  * The bounded re-fetch + rebase retry is LOAD-BEARING, not defensive padding:
  *   - one-shot: a sequential `-n` run ff-pushes item 1's surface, then item 2's
  *     clone branches off the advanced `main`;
- *   - loop: a single mirror's SERIAL batch routinely MIXES rungs — a `build`/`slice`
+ *   - loop: a single mirror's SERIAL batch routinely MIXES rungs — a `build`/`task`
  *     rung integrates `work/<slug>` to the mirror's `main` MID-TICK (via the
  *     job-worktree `doDriver`), and a LATER tree-less rung in the SAME batch holds a
  *     `treelessCwd` cloned BEFORE that integration. So its `HEAD:main` push is
@@ -165,7 +165,7 @@ export async function pushTreelessResult(
 /**
  * The rung kinds that commit a tree-less result LOCALLY (sidecar / `needsAnswers`
  * / `triaged:` marker) and therefore need {@link pushTreelessResult} to reach the
- * arbiter. The build/slice rungs are NOT here — they already push via the
+ * arbiter. The build/task rungs are NOT here — they already push via the
  * job-worktree `doDriver` → `performIntegration` band. The `advancing` borrow +
  * the promote-CAS are NOT here either — they CAS straight to the arbiter, so
  * publishing here would double-publish nothing they own.

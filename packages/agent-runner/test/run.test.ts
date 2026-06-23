@@ -70,7 +70,7 @@ const FAIL = 'exit 1';
  * Build the injected scan report for `run` from the seeded `project` working
  * checkout (working-tree read). `run` claims + cuts job worktrees from real
  * checkouts, so its discovery is the working-tree scan, not the registry's bare
- * mirrors (that wiring is the `run-daemon-reframe` slice).
+ * mirrors (that wiring is the `run-daemon-reframe` task).
  */
 /**
  * True iff the BARE arbiter has the given branch — read DIRECTLY via `ls-remote`
@@ -107,7 +107,7 @@ function configFor(root: string, overrides = {}) {
 		// gate is now `runVerify(config.verify)` inside the shared core, NOT the
 		// deleted `defaultTestGate` — red-gate tests override with `verify: FAIL`.
 		verify: PASS,
-		// Seeded slices are undeclared (not humanOnly) — agents may claim them only
+		// Seeded tasks are undeclared (not humanOnly) — agents may claim them only
 		// when this per-repo/global policy is on.
 		autoBuild: true,
 		...overrides,
@@ -248,7 +248,7 @@ describe('runOnce — concurrency caps', () => {
 describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () => {
 	// The bounded-concurrency EXECUTOR this tick runs on is proven to keep multiple
 	// workers in flight at once (peak = N under a shared gate) in
-	// `test/concurrency.test.ts`. These tests prove the SAFETY properties the slice
+	// `test/concurrency.test.ts`. These tests prove the SAFETY properties the task
 	// requires hold when `runOnce` drives the real pipeline through it: distinct
 	// repos progress together, a lost claim is dropped without sinking the batch, and
 	// a conflicting rebase routes ONLY its own job to needs-attention.
@@ -312,15 +312,15 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 	});
 
 	it('two same-repo jobs at perRepoMax 2 with the FRESH GATE ON both land (the run-fleet downgrade is removed)', async () => {
-		// MANDATORY (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`,
-		// the deferred concern of the merged gate slice #125): the `perRepoMax === 1`
+		// MANDATORY (task `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`,
+		// the deferred concern of the merged gate task #125): the `perRepoMax === 1`
 		// fresh-gate downgrade in the `run` caller is REMOVED, so the fresh rebased-tip
 		// gate runs on the `run` fleet at ANY parallelism. Here `perRepoMax: 2`,
 		// `freshWorktreeGate: true`, MERGE: two same-repo jobs run concurrently, the
 		// fresh rebased-tip gate runs for BOTH, and the two Race fixes (the merge-push
 		// re-rebase-retry + the sibling-ledger reconcile) let BOTH land deterministically
 		// — the gate's added latency no longer makes the (now-closed) races fire. (Before
-		// this slice the downgrade silently fell back to the in-build-worktree gate at
+		// this task the downgrade silently fell back to the in-build-worktree gate at
 		// perRepoMax > 1; this test would have exercised a DIFFERENT gate path.)
 		const seeded = seedRepoWithArbiter(scratch.root, ['fa', 'fb', 'fc']);
 		const config = configFor(scratch.root, {
@@ -526,7 +526,7 @@ describe('runOnce — integration modes', () => {
 		expect(item.integration?.requestOpened).toBe(true);
 		expect(prBranch).toBe('work/task-feat');
 		// PR mode never moves done/ onto main; claim writes nothing to main, so the
-		// slice body stays in backlog/ on main (the done-move is on the pushed branch).
+		// task body stays in backlog/ on main (the done-move is on the pushed branch).
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true);
 	});
@@ -1256,7 +1256,7 @@ describe('runOnce — config.model flows through the seam to both adapters (ADR 
 });
 
 /**
- * The autonomous-path PR-INTENT pre-flight guard on the `run` daemon (slice
+ * The autonomous-path PR-INTENT pre-flight guard on the `run` daemon (task
  * `propose-pr-intent-guard-on-autonomous-paths`): per item, AFTER
  * `resolveRepoConfig`/`gitEnv` and BEFORE the CLAIM, `runOneItem` runs the SAME
  * up-front `gh` probe + `shouldFailProposePrIntent` the in-place `performDo` step
@@ -1293,7 +1293,7 @@ describe('runOnce — PR-INTENT pre-flight guard (autonomous path)', () => {
 		});
 
 		const item = result.items[0];
-		// A clean PRE-CLAIM refusal on a non-slice-fault status (config-error), NOT a
+		// A clean PRE-CLAIM refusal on a non-task-fault status (config-error), NOT a
 		// half-built needs-attention, with the shared guard message verbatim.
 		expect(item.status).toBe('config-error');
 		expect(item.detail).toBe(PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE);

@@ -23,7 +23,7 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * The lock-entry two-axis STATE MACHINE (slice
+ * The lock-entry two-axis STATE MACHINE (task
  * `lock-entry-state-machine-and-invariants`; design trail "The C8 lock-entry STATE
  * MACHINE"). These tests sit ON TOP of the unified lock module's primitives
  * (acquire/release) and drive the interior transitions (mark-stuck / resume /
@@ -180,8 +180,8 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 	});
 
 	it('complete (transition 5, lock half): release AFTER the durable main move', async () => {
-		// The main move (backlog → done) is owned by the complete slice; here we
-		// model "done landed on main" then exercise THIS slice's half: release.
+		// The main move (backlog → done) is owned by the complete task; here we
+		// model "done landed on main" then exercise THIS task's half: release.
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const {repo, arbiter} = seeded;
 		await acquireItemLock({
@@ -477,7 +477,7 @@ describe('lock state machine — invariant: done on main + a stuck lock CO-EXIST
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		// The durable main move lands `done` on main (owned by the complete slice).
+		// The durable main move lands `done` on main (owned by the complete task).
 		seedDoneOnArbiter(seeded, 'alpha');
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
 

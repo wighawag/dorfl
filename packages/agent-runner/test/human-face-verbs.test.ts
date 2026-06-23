@@ -13,10 +13,10 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `human-face-verbs` slice (ADR §4): the in-place `resume` verb (+ hidden
+ * `human-face-verbs` task (ADR §4): the in-place `resume` verb (+ hidden
  * `start --resume` alias) and `work-on` cd-by-default with the `--remote` FLAG
  * (migrated from the old positional `<remote> <slug>`). These tests assert the
- * CLI SURFACE (the new verb, the hidden alias, the flag grammar, the slice-only
+ * CLI SURFACE (the new verb, the hidden alias, the flag grammar, the task-only
  * `prd:` rejection) plus the underlying `resume` behaviour (switch without
  * claiming).
  */
@@ -99,7 +99,7 @@ describe('work-on — --remote is a FLAG (migrated from positional <remote> <slu
 	});
 });
 
-describe('task-only (§3a): resume / work-on reject prd:, accept bare + slice:', () => {
+describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', () => {
 	/** Parse argv through the program, capturing a thrown SlugResolution exit. */
 	async function runReject(argv: string[]): Promise<string> {
 		const program = buildProgram();
@@ -110,7 +110,7 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + slice:',
 		console.error = (msg?: unknown) => {
 			captured += String(msg ?? '');
 		};
-		// resolveSliceOnlySlug calls process.exit(1) on a prd: arg; intercept it.
+		// resolveTaskOnlySlug calls process.exit(1) on a prd: arg; intercept it.
 		(process as {exit: unknown}).exit = ((code?: number) => {
 			throw new Error(`__exit__:${code ?? 0}`);
 		}) as typeof process.exit;
@@ -125,12 +125,12 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + slice:',
 		return captured;
 	}
 
-	it('resume rejects a prd: argument with "operates on slices, not PRDs"', async () => {
+	it('resume rejects a prd: argument with "operates on tasks, not PRDs"', async () => {
 		const out = await runReject(['resume', 'brief:some-prd']);
 		expect(out).toMatch(/tasks, not briefs/);
 	});
 
-	it('work-on rejects a prd: argument with "operates on slices, not PRDs"', async () => {
+	it('work-on rejects a prd: argument with "operates on tasks, not PRDs"', async () => {
 		const out = await runReject(['work-on', 'brief:some-prd']);
 		expect(out).toMatch(/tasks, not briefs/);
 	});

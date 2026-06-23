@@ -10,7 +10,7 @@ import {
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 
 /**
- * `do --watch` observer tests (slices `do-watch` + `do-watch-session-log-format`).
+ * `do --watch` observer tests (tasks `do-watch` + `do-watch-session-log-format`).
  *
  * The watcher tails the pi `--session-dir` SESSION-PERSISTENCE log, whose records
  * are `{"type":"message", "message":{role, content[]}}` — NOT pi's `--mode json`
@@ -174,7 +174,7 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 		// message, an assistant (text+text+read toolCall), a toolResult, an
 		// assistant (text + edit toolCall), and a content-as-string assistant.
 		expect(surfaced).toEqual([
-			"I'll start by reading the slice brief, then its source PRD.",
+			"I'll start by reading the task brief, then its source PRD.",
 			'▶ read',
 			'Now editing the file.',
 			'▶ edit',

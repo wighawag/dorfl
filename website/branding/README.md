@@ -85,7 +85,7 @@ The mark is a calm clay-golem **head** whose **face is a command prompt**:
 The wordmark tagline **"It Claims Its Own Work"** is set
 With-Every-Word-Capitalised, because golems Speak With The First Letter Of Every
 Word Capitalised. "Claims" is true twice over: it is the tool's atomic
-claim-a-slice protocol _and_ Dorfl's arc of claiming his own freedom.
+claim-a-task protocol _and_ Dorfl's arc of claiming his own freedom.
 
 ## Evolution (drafts → current)
 

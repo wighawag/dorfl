@@ -7,7 +7,7 @@ import {
 } from '../src/select-order.js';
 
 /**
- * The PURE selection-order resolver (slice `advance-selection-order-config`): a
+ * The PURE selection-order resolver (task `advance-selection-order-config`): a
  * PRESET keyword OR an explicit pool-name list resolves to the canonical ordered
  * list of the FOUR orderable pools; `apply` is pinned-first and NOT nameable;
  * unknown names/keywords FAIL LOUDLY. Driven as a table.

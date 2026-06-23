@@ -45,7 +45,7 @@ function lockRefOnArbiter(arbiter: string, entry: string): boolean {
 	return r.status === 0 && r.stdout.trim() !== '';
 }
 
-/** Stand a repo up as the loop leaves it just before `complete`: a slice
+/** Stand a repo up as the loop leaves it just before `complete`: a task
  * claimed (lock held + body in-progress on the arbiter) and the human onboarded
  * onto `work/task-<slug>` off the freshly-pushed main. */
 async function claimAndBranch(slug: string) {
@@ -200,7 +200,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(true);
 	});
 
-	it('clears a stale ACTIVE lock when main shows the slice cancelled (the slice regime terminal)', async () => {
+	it('clears a stale ACTIVE lock when main shows the task cancelled (the task regime terminal)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['epsilon']);
 		await acquireItemLock({
 			item: 'task:epsilon',
@@ -222,7 +222,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(lockRefOnArbiter(arbiter, 'task-epsilon')).toBe(false);
 	});
 
-	it('clears a stale ACTIVE PRD lock when main shows the PRD prd-sliced', async () => {
+	it('clears a stale ACTIVE PRD lock when main shows the PRD prd-tasked', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['z'], {
 			briefs: ['zeta'],
 		});
@@ -350,12 +350,12 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 	});
 
 	it('maps each type to its PER-REGIME durable terminal main paths', () => {
-		// A slice: done OR the slice regime's won't-proceed terminal (tasks/cancelled).
+		// A task: done OR the task regime's won't-proceed terminal (tasks/cancelled).
 		expect(terminalMainPaths('task', 's')).toEqual([
 			'work/tasks/done/s.md',
 			'work/tasks/cancelled/s.md',
 		]);
-		// A brief: tasked (sliced, resting) OR the brief regime's terminal
+		// A brief: tasked (tasked, resting) OR the brief regime's terminal
 		// (briefs/dropped). A task-drop and a brief-drop sharing a slug never collide.
 		expect(terminalMainPaths('brief', 'p')).toEqual([
 			'work/briefs/tasked/p.md',

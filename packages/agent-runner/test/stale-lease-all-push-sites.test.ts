@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 /**
- * Drive a slice to a KEPT-branch-on-the-arbiter state (the requeue durable
+ * Drive a task to a KEPT-branch-on-the-arbiter state (the requeue durable
  * artifact a continue resumes from): claim → cut work/<slug> → prior commit →
  * push the branch → route to needs-attention → requeue (keep) back to backlog.
  * Returns the seeded handle (its `repo` is the human checkout, on main).
@@ -455,7 +455,7 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 			resume: true,
 			env: gitEnv(),
 		});
-		// SURFACED, not swallowed: the run reports needs-attention and the slice is
+		// SURFACED, not swallowed: the run reports needs-attention and the task is
 		// STUCK on its per-item lock (NOT silently in-progress).
 		expect(started.outcome).toBe('needs-attention');
 		expect(started.exitCode).toBe(1);
@@ -505,7 +505,7 @@ describe('Part B — after-commit push failure surfaces to needs-attention (job-
 		// itself), move main + protect the arbiter so the onboard continue reconcile
 		// push of the rebased (already-committed) work branch is a non-ff the lease
 		// forces — denyNonFastForwards REJECTS it with a NON-"stale info" error → a
-		// REAL terminal push failure. The pipeline must SURFACE the slice to
+		// REAL terminal push failure. The pipeline must SURFACE the task to
 		// needs-attention (step 2b in runOneItem / the Part-B fix), NOT crash + strand
 		// it silently in work/in-progress/ on the arbiter (the observed bug).
 		const {seeded} = await stuckThenRequeued('theta', {reclaim: false});

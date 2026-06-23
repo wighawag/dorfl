@@ -14,7 +14,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The `finish-already-committed-branch` slice (PRD
+ * The `finish-already-committed-branch` task (PRD
  * `work/briefs/tasked/ledger-integrity.md` story 6, defect 4): a first-class way to
  * FINISH an already-committed, already-done-moved stranded work branch.
  *
@@ -25,12 +25,12 @@ import {
  *   - the green work ALREADY committed on `work/task-<slug>` (`…; done`), tip
  *     NOT on the arbiter.
  * Running plain `complete` against it REFUSES (`IntegrationNothingStaged` — the
- * done-move + commit already happened, so nothing is left to stage). This slice
+ * done-move + commit already happened, so nothing is left to stage). This task
  * adds the recover-already-committed path to the SHARED integration core: skip
  * steps 2–3, run ONLY the rebase→integrate tail (steps 4–5) from the kept commit.
  *
  * SAFETY: the detection is UNSPOOFABLE — before acting it verifies the tip is
- * genuinely AHEAD of `<arbiter>/main` (`isAncestor`); an already-integrated slice
+ * genuinely AHEAD of `<arbiter>/main` (`isAncestor`); an already-integrated task
  * is a clean no-op, NEVER a re-push/double-integrate.
  *
  * House style (mirrors `atomic-done-move.test.ts` / `complete-from-needs-attention`):
@@ -52,7 +52,7 @@ const PASS = 'exit 0';
 /**
  * Stand a repo up EXACTLY as a terminal push failure AFTER the done-move + commit
  * leaves it: claimed, branched onto `work/task-<slug>`, the agent's work
- * committed, the slice `git mv`'d `backlog/ → done/` and committed (`…; done`),
+ * committed, the task `git mv`'d `backlog/ → done/` and committed (`…; done`),
  * but the tip NOT pushed (the strand). The arbiter still holds the slug in
  * `backlog/` (claim published nothing to main; the body rests there); the tip is
  * genuinely AHEAD of `<arbiter>/main`.
@@ -174,7 +174,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 });
 
 describe('finish-already-committed — unspoofable detection (already-integrated no-op)', () => {
-	it('a slice whose tip is ALREADY on the arbiter is a clean no-op, NOT a re-integration', async () => {
+	it('a task whose tip is ALREADY on the arbiter is a clean no-op, NOT a re-integration', async () => {
 		// First strand + recover (lands on the arbiter).
 		const {repo, tip} = await seedStrandedCommittedDone('delta');
 		const first = await performIntegration({

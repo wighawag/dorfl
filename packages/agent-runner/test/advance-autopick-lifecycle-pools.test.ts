@@ -15,14 +15,14 @@ import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
 /**
  * `advance-autopick-lifecycle-pools` (the in-place driver path) — the advance
  * auto-pick now ALSO enumerates the LIFECYCLE pools (untriaged observations +
- * `needsAnswers`-blocked slices/PRDs + answered-sidecar items), not only the
- * build/slice pools. House style mirrors `advance-drivers.test.ts`: a seeded
- * `work/` of slices/PRDs/observations/sidecars in a plain checkout (the SELECTION
+ * `needsAnswers`-blocked tasks/PRDs + answered-sidecar items), not only the
+ * build/task pools. House style mirrors `advance-drivers.test.ts`: a seeded
+ * `work/` of tasks/PRDs/observations/sidecars in a plain checkout (the SELECTION
  * layer only READS `work/`), a STUBBED tick runner that records the `arg` it was
  * handed (so we assert WHICH item, dispatched to WHICH tick arg, in what ORDER).
  *
- * Proves the slice's acceptance criteria: a bare `advance` auto-picks an untriaged
- * observation → `obs:<slug>` (triage); a `needsAnswers` slice/PRD → surface; an
+ * Proves the task's acceptance criteria: a bare `advance` auto-picks an untriaged
+ * observation → `obs:<slug>` (triage); a `needsAnswers` task/PRD → surface; an
  * answered sidecar → apply (ALWAYS on); a `triaged:`-settled observation is NOT
  * re-picked; the INTERIM born-OFF default auto-triages/auto-surfaces NOTHING; and
  * `do` auto-pick is PROVABLY unchanged (never selects a lifecycle item).
@@ -107,7 +107,7 @@ function cfg(over: Partial<Config> = {}): Config {
 	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
-/** The internal hook the gate slices will wire to config: force the create-gates on. */
+/** The internal hook the gate tasks will wire to config: force the create-gates on. */
 const FORCE_ON = {triage: true, surface: true};
 
 describe('advance auto-pick — untriaged observations → triage (obs:<slug>)', () => {
@@ -143,8 +143,8 @@ describe('advance auto-pick — untriaged observations → triage (obs:<slug>)',
 });
 
 describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
-	it('with the surface gate forced ON, auto-picks a needsAnswers slice (no sidecar) → surface arg', async () => {
-		seedTask('blocked-slice', {needsAnswers: true});
+	it('with the surface gate forced ON, auto-picks a needsAnswers task (no sidecar) → surface arg', async () => {
+		seedTask('blocked-task', {needsAnswers: true});
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -153,8 +153,8 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 			lifecycleGates: FORCE_ON,
 			count: 5,
 		});
-		// the tick re-classifies a needsAnswers slice (no sidecar) → surface rung.
-		expect(args).toEqual(['blocked-slice']);
+		// the tick re-classifies a needsAnswers task (no sidecar) → surface rung.
+		expect(args).toEqual(['blocked-task']);
 	});
 
 	it('a needsAnswers PRD (no sidecar) → surface arg (prd:<slug>)', async () => {
@@ -226,10 +226,10 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('the five-pool ORDER: apply PINNED first, then the drain order (build → slice → surface → triage)', async () => {
+	it('the five-pool ORDER: apply PINNED first, then the drain order (build → task → surface → triage)', async () => {
 		// buildable
 		seedTask('build-me');
-		seedBrief('slice-me');
+		seedBrief('task-me');
 		// lifecycle
 		seedObservation('triage-me'); // triage
 		seedTask('surface-me', {needsAnswers: true}); // surface (no sidecar)
@@ -245,8 +245,8 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 		});
 		expect(args).toEqual([
 			'apply-me', // apply: PINNED FIRST (consume-always-wins)
-			'build-me', // build: eligible slice
-			'brief:slice-me', // slice: sliceable PRD
+			'build-me', // build: eligible task
+			'brief:task-me', // task: taskable PRD
 			'surface-me', // surface
 			'obs:triage-me', // triage
 		]);
@@ -268,19 +268,19 @@ describe('do auto-pick is PROVABLY UNCHANGED (F-SHARE)', () => {
 	}
 
 	it('do auto-pick / -n NEVER selects an observation or a needsAnswers item', async () => {
-		// A `work/` full of lifecycle items + ONE eligible slice + ONE sliceable PRD.
+		// A `work/` full of lifecycle items + ONE eligible task + ONE taskable PRD.
 		seedTask('build-me');
-		seedBrief('slice-me');
+		seedBrief('task-me');
 		seedObservation('untriaged');
-		seedTask('blocked-slice', {needsAnswers: true});
+		seedTask('blocked-task', {needsAnswers: true});
 		seedBrief('blocked-prd', {needsAnswers: true});
 		seedTask('answered', {needsAnswers: true});
 		seedSidecar('task', 'answered', true);
 
 		const {run, args} = doRunner();
 		await performDoAuto({cwd: repo, run, config: cfg(), count: 99});
-		// `do` passes NO lifecycle pools → selects ONLY the eligible slice + PRD.
-		expect(args).toEqual(['build-me', 'brief:slice-me']);
+		// `do` passes NO lifecycle pools → selects ONLY the eligible task + PRD.
+		expect(args).toEqual(['build-me', 'brief:task-me']);
 		expect(args.some((a) => a.startsWith('obs:'))).toBe(false);
 	});
 });

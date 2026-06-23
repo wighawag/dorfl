@@ -31,7 +31,7 @@ const ARBITER = 'arbiter';
 let scratch: Scratch;
 let restorePiAgentDir: () => void;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-slicing-int-');
+	scratch = makeScratch('agent-runner-tasking-int-');
 	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
@@ -47,7 +47,7 @@ function seedBrief(repo: string, slug: string): void {
 		join(dir, `${slug}.md`),
 		[
 			'---',
-			`title: ${slug} — slice me`,
+			`title: ${slug} — task me`,
 			`slug: ${slug}`,
 			'---',
 			'',
@@ -78,7 +78,7 @@ function seedBriefWithOrigin(
 		join(dir, `${slug}.md`),
 		[
 			'---',
-			`title: ${slug} — slice me`,
+			`title: ${slug} — task me`,
 			`slug: ${slug}`,
 			'origin: issue',
 			`originTrust: ${originTrust}`,
@@ -150,7 +150,7 @@ const onArbiterBranch = (
 };
 
 describe('do prd: output through performIntegration — --merge lands on main', () => {
-	it('integrates the slices + the PRD lifecycle move onto arbiter main', async () => {
+	it('integrates the tasks + the PRD lifecycle move onto arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -171,7 +171,7 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		const brief = run(
 			'git',
 			['show', `${ARBITER}/main:work/briefs/tasked/it.md`],
@@ -181,15 +181,15 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		// Tasked-ness is RESIDENCE in brief-tasked/ (asserted above); the `tasked:` marker
 		// was removed entirely in remove-tasked-marker-step-b, so the resting brief carries
 		// NO tasked: line.
-		expect(brief).not.toMatch(/^sliced:/m);
+		expect(brief).not.toMatch(/^tasked:/m);
 		// It is the shared core's integrate commit (`tasking(<slug>): …; tasked`),
 		// not the lock's `tasking: release …` direct commit.
-		expect(arbiterHeadSubject(repo)).toMatch(/^slicing\(it\):/);
+		expect(arbiterHeadSubject(repo)).toMatch(/^tasking\(it\):/);
 	});
 });
 
 describe('do prd: output through performIntegration — --propose opens a PR, main untouched', () => {
-	it('pushes the work branch + opens a PR carrying the slices; does NOT touch main', async () => {
+	it('pushes the work branch + opens a PR carrying the tasks; does NOT touch main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 
@@ -229,10 +229,10 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		// The OUTPUT never advanced main: the lock is a hidden ref (not a main commit),
 		// and propose does not land the tasks — main is still the seed commit.
-		expect(arbiterHeadSubject(repo)).not.toMatch(/sliced/);
+		expect(arbiterHeadSubject(repo)).not.toMatch(/tasked/);
 
 		// The work branch was PUSHED carrying the tasks + the brief restore.
 		expect(
@@ -249,11 +249,11 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		const args = readFileSync(argsFile, 'utf8');
 		expect(args).toMatch(/^create$/m);
 		expect(args).toMatch(/^--title$/m);
-		expect(args).toContain('slicing(it)');
+		expect(args).toContain('tasking(it)');
 	});
 });
 
-describe('do prd: arg parity with do slice: (the SAME integrate-time args resolve)', () => {
+describe('do prd: arg parity with do task: (the SAME integrate-time args resolve)', () => {
 	// Arg PARITY by construction (AC #4): because `do brief:`'s output integrates
 	// THROUGH the SAME `performIntegration` core `do task:` uses, every
 	// integrate-time arg resolves IDENTICALLY on both paths — there is no duplicated
@@ -303,8 +303,8 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 	}
 });
 
-describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-forces-build-propose)', () => {
-	it('slicing an UNTRUSTED-origin PRD stamps every emitted slice originTrust: untrusted', async () => {
+describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-forces-build-propose)', () => {
+	it('tasking an UNTRUSTED-origin PRD stamps every emitted task originTrust: untrusted', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBriefWithOrigin(repo, 'it', 'untrusted');
 		const result = await performTask({

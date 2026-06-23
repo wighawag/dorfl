@@ -68,13 +68,13 @@ describe('item-lock — identity seam (reuses resolveSidecarIdentity)', () => {
 	it('derives the type-encoded <entry> from the namespaced identity', () => {
 		// The SAME single-source-of-truth resolver the sidecar / advancing marker use.
 		expect(lockEntryFor('task:alpha')).toBe('task-alpha');
-		expect(lockEntryFor('brief:autoslice')).toBe('brief-autoslice');
+		expect(lockEntryFor('brief:autotask')).toBe('brief-autotask');
 		expect(lockEntryFor('observation:beta')).toBe('observation-beta');
 		expect(lockEntryFor('obs:beta')).toBe('observation-beta'); // alias → canonical
-		expect(lockEntryFor('bare-slug')).toBe('task-bare-slug'); // bare = slice
+		expect(lockEntryFor('bare-slug')).toBe('task-bare-slug'); // bare = task
 	});
 
-	it('a slice, a PRD, and an observation sharing a slug get DISTINCT refs', () => {
+	it('a task, a PRD, and an observation sharing a slug get DISTINCT refs', () => {
 		const slug = 'shared';
 		const refs = new Set([
 			itemLockRef(lockEntryFor(`task:${slug}`)),
@@ -101,7 +101,7 @@ describe('item-lock — entry serialise/parse round-trip', () => {
 
 	it('a stuck entry round-trips WITH its reason (the two-axis state)', () => {
 		const e: LockEntry = {
-			entry: 'brief-autoslice',
+			entry: 'brief-autotask',
 			action: 'task',
 			state: 'stuck',
 			holder: 'tester',
@@ -115,7 +115,7 @@ describe('item-lock — entry serialise/parse round-trip', () => {
 	});
 
 	it('a stuck entry round-trips RICH multi-line reason prose + surfaced questions', () => {
-		// Slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
+		// Task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
 		// (decision i+): the lock entry is the SOLE stuck record, so it must carry the
 		// FULL reason prose (not a one-line field) AND any agent-surfaced questions, in
 		// a shape a future advance-surface rung can render.
@@ -204,7 +204,7 @@ describe('item-lock — happy path', () => {
 		expect(stillBacklog.status).toBe(0);
 	});
 
-	it('a bare <slug> identity locks the slice ref (bare = slice)', async () => {
+	it('a bare <slug> identity locks the task ref (bare = task)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const acq = await acquireItemLock({
 			item: 'alpha',

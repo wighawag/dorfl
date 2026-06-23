@@ -24,7 +24,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `advance-rung-triage` slice — the engine-owned TRIAGE PERSIST primitives over a
+ * `advance-rung-triage` task — the engine-owned TRIAGE PERSIST primitives over a
  * throwaway git repo (house CAS-seam style, the sibling of apply-persist.test.ts):
  *
  *   - {@link autoDispositionObservation}: the conservative auto-disposition WRITE

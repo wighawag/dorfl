@@ -25,7 +25,7 @@ function config() {
 	return mergeConfig({workspacesDir: workspacesDir(), autoBuild: true});
 }
 
-/** A minimal slice body for `work/tasks/todo/<slug>.md`. */
+/** A minimal task body for `work/tasks/todo/<slug>.md`. */
 function task(slug: string, extra: Record<string, string> = {}): string {
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	for (const [k, v] of Object.entries(extra)) {
@@ -37,7 +37,7 @@ function task(slug: string, extra: Record<string, string> = {}): string {
 
 /**
  * Build a participating working repo with a sibling local `--bare` arbiter wired
- * as the `arbiter` remote, seeding the given backlog slices. Returns the repo +
+ * as the `arbiter` remote, seeding the given backlog tasks. Returns the repo +
  * arbiter paths.
  */
 function seedCwdRepo(

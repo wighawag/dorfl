@@ -27,17 +27,17 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * `surface-blockers-gate` slice — the BOOLEAN `surfaceBlockers` gate (default
- * `off`) over DECLARED blocked work: whether a slice/PRD carrying
+ * `surface-blockers-gate` task — the BOOLEAN `surfaceBlockers` gate (default
+ * `off`) over DECLARED blocked work: whether a task/PRD carrying
  * `needsAnswers: true` is rendered into an answerable question sidecar (`on`) or
  * left silently blocked in the backlog (`off`). The orthogonal PEER of
- * `observationTriage` (the raw observation inbox). These tests pin the slice's
+ * `observationTriage` (the raw observation inbox). These tests pin the task's
  * contract:
  *
  *   1. the SELECTION layer (the `advance-autopick-lifecycle-pools` surface pool):
  *      `off` ⇒ the `needsAnswers`-blocked pool is NOT enumerated into auto-pick
  *      (the item is left silently blocked, no sidecar); `on` ⇒ the pool IS
- *      enumerated (an auto-picked blocked slice/PRD dispatched to the surface
+ *      enumerated (an auto-picked blocked task/PRD dispatched to the surface
  *      rung). The cli wires `lifecycleGates.surface = config.surfaceBlockers`,
  *      modelled here by {@link surfaceGateFor} so the test asserts the ACTUAL rule.
  *   2. the always-on invariants the gate must NOT break: APPLY (consume an
@@ -45,7 +45,7 @@ import type {
  *      create-vs-consume invariant); `needs-attention` (a stuck build) is a
  *      SEPARATE always-on mechanism this gate does not touch; and an EXPLICIT
  *      `advance <slug>` / `advance prd:<slug>` BYPASSES the selection gate (the
- *      DECISION recorded in this slice: explicit naming surfaces regardless,
+ *      DECISION recorded in this task: explicit naming surfaces regardless,
  *      mirroring the other gates).
  *   3. the COMPOSE case (`observationTriage: ask` + `surfaceBlockers: off`): the
  *      two gates are orthogonal — groom the inbox, leave the blocked work alone —
@@ -91,7 +91,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		rmSync(root, {recursive: true, force: true});
 	});
 
-	/** A `needsAnswers: true` slice in `work/tasks/todo/` (a declared blocker, no sidecar). */
+	/** A `needsAnswers: true` task in `work/tasks/todo/` (a declared blocker, no sidecar). */
 	function seedBlockedTask(slug: string): void {
 		const dir = join(repo, 'work', 'tasks', 'todo');
 		mkdirSync(dir, {recursive: true});
@@ -104,7 +104,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 				'blockedBy: []',
 				'---',
 				'',
-				'a blocked slice',
+				'a blocked task',
 			].join('\n'),
 		);
 	}
@@ -176,7 +176,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		);
 	});
 
-	it('on ⇒ the blocked SLICE pool IS enumerated (auto-picked as the surface arg)', async () => {
+	it('on ⇒ the blocked TASK pool IS enumerated (auto-picked as the surface arg)', async () => {
 		seedBlockedTask('blocked');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
@@ -186,7 +186,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 			lifecycleGates: surfaceGateFor(true),
 			count: 5,
 		});
-		// A blocked SLICE dispatches to the bare-slug surface arg (the tick classifies
+		// A blocked TASK dispatches to the bare-slug surface arg (the tick classifies
 		// it into the surface rung — needsAnswers, no all-answered sidecar).
 		expect(args).toEqual(['blocked']);
 	});
@@ -232,7 +232,7 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 		scratch.cleanup();
 	});
 
-	/** A throwaway repo with one `needsAnswers: true` slice (a declared blocker, no sidecar). */
+	/** A throwaway repo with one `needsAnswers: true` task (a declared blocker, no sidecar). */
 	function seedBlockedTask(slug: string): {repo: string; itemPath: string} {
 		const repo = join(scratch.root, slug);
 		mkdirSync(repo, {recursive: true});
@@ -248,12 +248,12 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 				'blockedBy: []',
 				'---',
 				'',
-				'a blocked slice',
+				'a blocked task',
 				'',
 			].join('\n'),
 		);
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'seed blocked slice'], repo);
+		gitIn(['commit', '-q', '-m', 'seed blocked task'], repo);
 		return {repo, itemPath};
 	}
 
@@ -360,7 +360,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 				'blockedBy: []',
 				'---',
 				'',
-				'a blocked slice',
+				'a blocked task',
 			].join('\n'),
 		);
 	}
@@ -379,7 +379,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 		return {run, args};
 	}
 
-	it('observationTriage: ask + surfaceBlockers: off ⇒ the observation surfaces but the blocked slice does NOT (the previously-inexpressible corner)', async () => {
+	it('observationTriage: ask + surfaceBlockers: off ⇒ the observation surfaces but the blocked task does NOT (the previously-inexpressible corner)', async () => {
 		seedObservation('stray');
 		seedBlockedTask('blocked');
 		const {run, args} = recordingRunner();

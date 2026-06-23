@@ -14,7 +14,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The `autonomous-path-auto-recovers-already-committed-stranded-branch` slice
+ * The `autonomous-path-auto-recovers-already-committed-stranded-branch` task
  * (PRD `ledger-integrity` story 6/7): when the AUTONOMOUS integration path
  * (`do` / `advance` / plain `complete`) hits a re-claimed slug whose work branch
  * was already built + done-moved by a prior run but never landed on the arbiter,
@@ -184,7 +184,7 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(notes.some((n) => /already integrated/i.test(n))).toBe(true);
 	});
 
-	it("DIRTY CONTINUE auto-lands: a re-claimed already-done-moved branch with NEW uncommitted edits this run is BUILT + COMMITTED + INTEGRATED on top of the kept tip — no second `git mv`, no needs-attention bounce, no discarded work (slice `complete-builds-on-already-done-moved-continue`, the `source: 'done'` continue-build contract)", async () => {
+	it("DIRTY CONTINUE auto-lands: a re-claimed already-done-moved branch with NEW uncommitted edits this run is BUILT + COMMITTED + INTEGRATED on top of the kept tip — no second `git mv`, no needs-attention bounce, no discarded work (task `complete-builds-on-already-done-moved-continue`, the `source: 'done'` continue-build contract)", async () => {
 		const {repo, tip, branch} = await seedStrandedDoneBranch('delta');
 
 		// THIS RUN'S continue-agent leaves a fresh UNSTAGED edit (a tracked-file
@@ -220,7 +220,7 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 
 		// 1. The continue-build state landed the new work on the arbiter — the
 		//    new edit + the new untracked file are BOTH on `<arbiter>/main` (no
-		//    silent drop). The kept already-done-moved slice stays in `done/`.
+		//    silent drop). The kept already-done-moved task stays in `done/`.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(true);
@@ -244,7 +244,7 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(base).toBe(tip);
 		expect(arbiterMainAfter).not.toBe(tip);
 
-		// 3. The LOUD slice-1 RECOVERY note must NOT have fired (we built, not
+		// 3. The LOUD task-1 RECOVERY note must NOT have fired (we built, not
 		//    recovered), AND the continue-build state announced itself loudly.
 		expect(
 			notes.some((n) =>
@@ -278,10 +278,10 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
-		// Remove the slice body from backlog/ on the branch tree WITHOUT moving it to
+		// Remove the task body from backlog/ on the branch tree WITHOUT moving it to
 		// done/ — the "genuinely nothing here" state.
 		gitIn(['rm', '-q', 'work/tasks/todo/gamma.md'], repo);
-		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
+		gitIn(['commit', '-q', '-m', 'drop the task (genuinely nothing)'], repo);
 		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'gamma.md'))).toBe(
 			false,
 		);

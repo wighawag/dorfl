@@ -21,15 +21,15 @@ import {
  * `intake-production-verdict-parse` (PRD `issue-intake`, US #6 — "run LOCALLY
  * one-shot"): the PRODUCTION wire between the decision agent's emitted text and the
  * `IntakeVerdict` the (already-built) dispatcher consumes. Two seams are exercised
- * here, exactly as the slice's "SEAM TO TEST AT" prescribes:
+ * here, exactly as the task's "SEAM TO TEST AT" prescribes:
  *
  *  1. `parseIntakeVerdict` as a PARSE TABLE — the four outcomes pulled out of
  *     prose-wrapped + fenced agent output, plus the three throw cases. This is the
  *     twin of the review gate's `parseReviewVerdict`; the model's JUDGEMENT is NOT
  *     unit-tested (only the parse), exactly as the review prompt's is not.
  *  2. A STUBBED-HARNESS end-to-end (NO injected `decide`): a spy harness returns
- *     `launched.output` text and `runDecision` parses it. A real-path `slice`
- *     verdict emits the backlog slice + `issue: N` + the propose PR; a malformed
+ *     `launched.output` text and `runDecision` parses it. A real-path `task`
+ *     verdict emits the backlog task + `issue: N` + the propose PR; a malformed
  *     output degrades to `agent-failed` (exit 1), not a crash.
  */
 
@@ -250,12 +250,12 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 			issueProvider,
 			// NO `decide` — production wires the harness; the verdict rides `output`.
 			harness: spyHarness(agentOutput),
-			// Stub the lone-slice review seam to CONVERGE (this test exercises the
+			// Stub the lone-task review seam to CONVERGE (this test exercises the
 			// DECISION verdict wire, not the bounded review — the review's own
 			// production wire is tested separately). The spy harness returns an
 			// `{outcome:…}` block (not a `{verdict:…}` one), so without this stub the
 			// review parse would degrade to agent-failed.
-			reviewSlice: async () => ({verdict: 'approve', findings: []}),
+			reviewTask: async () => ({verdict: 'approve', findings: []}),
 			env: gitEnv(),
 		});
 

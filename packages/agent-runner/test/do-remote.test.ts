@@ -23,7 +23,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `do --remote <r>` tests (slice `do-remote`) — the per-repo `do` WORKER run
+ * `do --remote <r>` tests (task `do-remote`) — the per-repo `do` WORKER run
  * against a REGISTERED repo with NO checkout (ADR §3, Option A
  * materialise-then-reuse). House style: a throwaway project + a local `--bare`
  * arbiter as the registered remote, a TEMP `workspacesDir` (the agents' area),
@@ -279,13 +279,13 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 });
 
 describe('do --remote — slug resolution parity with do-in-place', () => {
-	it('a prd: arg dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoTask OFF (no worktree)', async () => {
-		// Slug-resolution parity + the build/slice symmetry (slice
+	it('a prd: arg dispatches to the tasking path; an EXPLICITLY-named PRD tasks with autoTask OFF (no worktree)', async () => {
+		// Slug-resolution parity + the build/task symmetry (task
 		// `explicit-do-prd-not-gated-by-autoslice`): `do --remote prd:<slug>` is an
-		// EXPLICIT target, so it slices REGARDLESS of the repo's `autoTask` POLICY
-		// (autoTask OFF / default), exactly as `do <slice>` builds regardless of
+		// EXPLICIT target, so it tasks REGARDLESS of the repo's `autoTask` POLICY
+		// (autoTask OFF / default), exactly as `do <task>` builds regardless of
 		// `autoBuild`. The agent RUNS (the policy no longer gate-refuses the explicit
-		// form); no job worktree is cut for a prd: arg (slicing is not a build pipeline).
+		// form); no job worktree is cut for a prd: arg (tasking is not a build pipeline).
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
 			briefs: ['someprd'],
 		});
@@ -502,7 +502,7 @@ describe('do --remote — NEVER touches the human area or the real state dirs', 
 });
 
 /**
- * The autonomous-path PR-INTENT pre-flight guard (slice
+ * The autonomous-path PR-INTENT pre-flight guard (task
  * `propose-pr-intent-guard-on-autonomous-paths`): the SAME up-front `gh` probe +
  * `shouldFailProposePrIntent` the in-place `performDo` step 3c runs, now on the
  * no-checkout `do --remote` path — BEFORE the claim/build, so a `propose` run on a

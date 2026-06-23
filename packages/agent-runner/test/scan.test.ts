@@ -48,7 +48,7 @@ function writeSidecar(
 
 let root: string;
 
-/** A minimal slice markdown body with the given frontmatter fields. */
+/** A minimal task markdown body with the given frontmatter fields. */
 function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
@@ -388,12 +388,12 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 });
 
 /**
- * The taskable-brief pool (`briefs[]`) surface on `scan`/`scanRepoPaths` (slice
+ * The taskable-brief pool (`briefs[]`) surface on `scan`/`scanRepoPaths` (task
  * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). The CI
  * propose-matrix `jq` reads `repos[].briefs[]` + `cwd.repo.briefs[]` and unions them
- * with the task legs; before this slice landed, the pool was invisible there
+ * with the task legs; before this task landed, the pool was invisible there
  * and `AGENT_RUNNER_AUTO_TASK` was dead on the hourly cron. The eligibility
- * predicate REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate the
+ * predicate REUSES `taskablePrds` (the SAME `autoslice-gate` predicate the
  * autopick paths run) — a config-less repo with `autoTask` off yields an
  * all-`eligible:false` pool (no `prd:` legs).
  */
@@ -414,7 +414,7 @@ function writeBrief(
 }
 
 describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
-	it('a ready ungated PRD appears as sliceable when autoTask is on (no per-repo config)', () => {
+	it('a ready ungated PRD appears as taskable when autoTask is on (no per-repo config)', () => {
 		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
@@ -425,7 +425,7 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 		expect(brief!.eligibility.eligible).toBe(true);
 	});
 
-	it('gates humanOnly / needsAnswers / unsatisfied briefAfter PRDs out of the sliceable pool', () => {
+	it('gates humanOnly / needsAnswers / unsatisfied briefAfter PRDs out of the taskable pool', () => {
 		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
 		writeBrief('repo', 'brief', 'human.md', {slug: 'human', humanOnly: 'true'});
 		writeBrief('repo', 'brief', 'asks.md', {
@@ -447,7 +447,7 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 		expect(byslug.get('after')!.eligibility.eligible).toBe(false);
 	});
 
-	it('an autoTask:false repo yields no SLICEABLE PRD legs (the gate still binds)', () => {
+	it('an autoTask:false repo yields no TASKABLE PRD legs (the gate still binds)', () => {
 		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
@@ -508,7 +508,7 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 });
 
 describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
-	it('reports a ready ungated PRD as sliceable from the bare mirror main (autoTask on)', async () => {
+	it('reports a ready ungated PRD as taskable from the bare mirror main (autoTask on)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 		});
@@ -520,7 +520,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 		expect(brief!.eligibility.eligible).toBe(true);
 	});
 
-	it('a humanOnly / needsAnswers / autoTask:false PRD is NOT sliceable (gate still binds)', async () => {
+	it('a humanOnly / needsAnswers / autoTask:false PRD is NOT taskable (gate still binds)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			brief: {
 				'ready.md': `---\nslug: ready\n---\n# PRD`,
@@ -528,14 +528,14 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 				'asks.md': `---\nslug: asks\nneedsAnswers: true\n---\n# PRD`,
 			},
 		});
-		// autoTask OFF globally + no committed per-repo override ⇒ NO sliceable PRDs.
+		// autoTask OFF globally + no committed per-repo override ⇒ NO taskable PRDs.
 		const offReport = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
 			offReport.repos[0].briefs.every((p) => p.eligibility.eligible === false),
 		).toBe(true);
-		// autoTask ON ⇒ only `ready` is sliceable; the gated PRDs are NOT.
+		// autoTask ON ⇒ only `ready` is taskable; the gated PRDs are NOT.
 		const onReport = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
@@ -550,7 +550,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 			repoConfig: {autoTask: true},
 		});
-		// Global is OFF, but the mirror's committed file opts in ⇒ sliceable.
+		// Global is OFF, but the mirror's committed file opts in ⇒ taskable.
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
@@ -560,7 +560,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 		).toBe(true);
 	});
 
-	it('end-to-end: ONE eligible slice + ONE sliceable PRD on the SAME mirror ⇒ both surface', async () => {
+	it('end-to-end: ONE eligible task + ONE taskable PRD on the SAME mirror ⇒ both surface', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {'go.md': task({slug: 'go'})},
 			brief: {'cut.md': `---\nslug: cut\n---\n# PRD`},
@@ -643,7 +643,7 @@ describe('scanRepoPaths — one-slug-one-folder LINT (working tree)', () => {
 
 /**
  * The per-repo LIFECYCLE pool (`scan --json`'s `repos[].lifecycle` +
- * `cwd.repo.lifecycle`) — slice `ci-propose-matrix-enumerates-lifecycle-items`.
+ * `cwd.repo.lifecycle`) — task `ci-propose-matrix-enumerates-lifecycle-items`.
  * The CI propose-matrix `jq` reads `triage[]` ⇒ `obs:<slug>`, `surface[]`/`apply[]`
  * ⇒ `.namespace + ":" + .slug`, so the WHOLE answer-loop runs in propose mode, not
  * only in merge mode. The pool REUSES `lifecycle-gather.ts` → `buildLifecyclePools`
@@ -688,7 +688,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 		]);
 	});
 
-	it('surfaceBlockers ON ⇒ a needsAnswers slice/PRD with NO sidecar enters surface with its namespace', () => {
+	it('surfaceBlockers ON ⇒ a needsAnswers task/PRD with NO sidecar enters surface with its namespace', () => {
 		writeItem('repo', 'backlog', 'blocked.md', {
 			slug: 'blocked',
 			needsAnswers: 'true',

@@ -25,7 +25,7 @@ import {
 
 /**
  * `run` routed through the SHARED `performIntegration` core (the run/do
- * convergence — `work/briefs/ready/run-do-integrate-convergence.md`, Slice 2). These are
+ * convergence — `work/briefs/ready/run-do-integrate-convergence.md`, Task 2). These are
  * the FOUR acceptance proofs the fleet now inherits from the converged back-half
  * (which it forked, and so LACKED, before): the review gate (Gate 2), the PR
  * title + body, and the per-repo language-agnostic `verify` gate — PLUS the
@@ -94,7 +94,7 @@ const BLOCK: ReviewVerdict = {
 	findings: [
 		{
 			severity: 'blocking',
-			question: 'the diff does not reach the slice goal',
+			question: 'the diff does not reach the task goal',
 			context: 'agent-output.txt',
 		},
 	],
@@ -274,7 +274,7 @@ describe('run through performIntegration — propose PR title + body', () => {
 		// A synthesised single-line title (never the run-on --fill derives).
 		expect(args).toMatch(/^--title$/m);
 		expect(args).toContain('feat(feat)');
-		// The agent's surfaced output reaches the PR body, under the slice pointer.
+		// The agent's surfaced output reaches the PR body, under the task pointer.
 		expect(args).toMatch(/^--body$/m);
 		expect(args).toContain(
 			'Implemented feat. Note: routed run through the core.',

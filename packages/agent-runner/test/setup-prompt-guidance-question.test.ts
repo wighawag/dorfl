@@ -1,5 +1,5 @@
 /**
- * Slice `prompt-guidance-testfirst-setup-adoption-question`: setup's adoption
+ * Task `prompt-guidance-testfirst-setup-adoption-question`: setup's adoption
  * conversation gains ONE nudge question, FOLDED into the existing A-phase round
  * (not a new round), that on YES merges `promptGuidance.testFirst: true` into
  * the target repo's `.agent-runner.json` per A1's merge-don't-clobber rule, and

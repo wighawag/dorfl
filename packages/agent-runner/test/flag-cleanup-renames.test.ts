@@ -18,7 +18,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `flag-cleanup-renames` slice (ADR §7) — the flag/name hygiene pass: `return` →
+ * `flag-cleanup-renames` task (ADR §7) — the flag/name hygiene pass: `return` →
  * `requeue`, drop `--by` AND the whole `claimedBy` concept, make the readiness
  * override `--ignore-not-ready` ONLY (free `--force` for the destructive `gc
  * --force`), and de-emphasise the advanced/plumbing tier in help. These tests
@@ -239,7 +239,7 @@ describe('readiness override = --ignore-not-ready ONLY (--force freed for gc)', 
 		}
 	});
 
-	it('the CLI maps --ignore-not-ready to the override (claims the unmet slice)', async () => {
+	it('the CLI maps --ignore-not-ready to the override (claims the unmet task)', async () => {
 		const scratch = makeScratch('agent-runner-ignore-cli-');
 		try {
 			const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
@@ -271,7 +271,7 @@ describe('readiness override = --ignore-not-ready ONLY (--force freed for gc)', 
 				process.chdir(origCwd);
 				process.exit = origExit;
 			}
-			// The override let the unmet-blockedBy slice be claimed (exit 0). Claim
+			// The override let the unmet-blockedBy task be claimed (exit 0). Claim
 			// writes nothing to main, so the body stays in backlog/.
 			expect(exitCode).toBe(0);
 			expect(existsOnArbiterMain(repo, 'backlog', 'feature')).toBe(true);
@@ -324,7 +324,7 @@ describe('gc --force --yes is UNCHANGED (the destructive flag keeps --force)', (
 			scratch.cleanup();
 		}
 		// --force WITHOUT --yes is refused (exit 1) with the gate text — proving the
-		// destructive flag keeps requiring --yes (unchanged by this slice).
+		// destructive flag keeps requiring --yes (unchanged by this task).
 		expect(code).toBe(1);
 		expect(captured).toMatch(
 			/--force without --yes|Re-run with `gc --force --yes`/,

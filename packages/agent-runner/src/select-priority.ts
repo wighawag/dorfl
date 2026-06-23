@@ -97,7 +97,7 @@ export interface TaskableBriefsInput {
 	candidates: BriefCandidate[];
 	/** Slugs whose brief resides in `work/briefs/tasked/` (resolves `briefAfter`). */
 	taskedSlugs: Set<string>;
-	/** The repo's resolved `autoTask` policy (`autotask-gate`'s per-repo key). */
+	/** The repo's resolved `autoTask` policy (`autoslice-gate`'s per-repo key). */
 	autoTask: boolean;
 }
 

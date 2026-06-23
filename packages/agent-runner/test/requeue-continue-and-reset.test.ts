@@ -29,7 +29,7 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Drive a slice all the way to needs-attention with a prior attempt's commit on
+ * Drive a task all the way to needs-attention with a prior attempt's commit on
  * `work/<slug>` PUSHED to the arbiter (the durable artifact a requeue keeps):
  * claim → onboard → agent edits → route to needs-attention (push the branch to
  * the arbiter). Then requeue (default keep) back to backlog. Returns the seeded

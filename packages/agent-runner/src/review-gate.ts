@@ -310,7 +310,7 @@ export function buildTaskAcceptancePrompt(slug: string): string {
  *
  * Reuses the `ReviewGate` seam type verbatim so `performIntegration`'s review
  * block runs it with no shape change. The review uses a DISTINCT session id
- * (`<slug>-slice-acceptance`) so it never collides with the build review session
+ * (`<slug>-task-acceptance`) so it never collides with the build review session
  * OR the tasker improver loop's review session. NAME: `harnessTaskAcceptanceGate`
  * (the ACCEPTANCE gate), DISTINCT from `tasker-review-loop.ts`'s
  * `harnessTaskReviewGate` (the IMPROVER loop seam, which EDITS tasks) — the two
@@ -340,7 +340,7 @@ export function harnessTaskAcceptanceGate(
 			command: options.agentCmd ?? '',
 			prompt: buildTaskAcceptancePrompt(input.slug),
 			model: input.reviewModel,
-			sessionId: `${input.slug}-slice-acceptance`,
+			sessionId: `${input.slug}-task-acceptance`,
 			sessionsDir: input.sessionsDir,
 			watch: input.watch,
 			watchSink: input.watchSink,

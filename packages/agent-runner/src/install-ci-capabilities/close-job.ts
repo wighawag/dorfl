@@ -1,10 +1,10 @@
 /**
- * The CLOSE-JOB capability emitter (PRD `runner-in-ci`, slice
+ * The CLOSE-JOB capability emitter (PRD `runner-in-ci`, task
  * `install-ci-close-job-workflow`; capability E: close issues when their work
  * lands). A SELF-REGISTERING module: it calls {@link registerCapability} at import
  * time, so {@link loadCapabilityRegistry} picks it up WITHOUT any edit to a shared
- * central list/switch (the file-orthogonality contract — this slice and the sibling
- * capability slices stay mergeable in parallel).
+ * central list/switch (the file-orthogonality contract — this task and the sibling
+ * capability tasks stay mergeable in parallel).
  *
  * The workflow shape + its structural validator live in `close-job-template.ts`;
  * this file is the thin registry-wiring shim.

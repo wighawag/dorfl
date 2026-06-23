@@ -54,7 +54,7 @@ function arbiterHasBranch(seeded: SeededRepo, branch: string): boolean {
 	return arbiterRef(seeded, `refs/heads/${branch}`) !== '';
 }
 
-/** Claim + onboard a slice onto `work/<slug>` with the agent's work in the tree. */
+/** Claim + onboard a task onto `work/<slug>` with the agent's work in the tree. */
 async function claimAndBranch(
 	slug: string,
 ): Promise<{repo: string; seeded: SeededRepo}> {
@@ -99,8 +99,8 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 	});
 
-	it('non-default branch: a supplied `branch` is the push target (the slicing-branch shape)', async () => {
-		// Stand up a slicing-style bounce: HEAD on work/slicing/<slug>, work in tree.
+	it('non-default branch: a supplied `branch` is the push target (the tasking-branch shape)', async () => {
+		// Stand up a tasking-style bounce: HEAD on work/tasking/<slug>, work in tree.
 		const seeded = seedRepoWithArbiter(scratch.root, ['beta']);
 		const repo = seeded.repo;
 		const claim = await performClaim({
@@ -111,27 +111,27 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		});
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		// The slicing lock uses a DIFFERENT branch name (auto-slice: work/slicing/…).
-		gitIn(['switch', '-q', '-c', 'work/slicing/beta', `${ARBITER}/main`], repo);
-		writeFileSync(join(repo, 'slice-output.md'), 'a produced slice\n');
+		// The tasking lock uses a DIFFERENT branch name (auto-slice: work/tasking/…).
+		gitIn(['switch', '-q', '-c', 'work/tasking/beta', `${ARBITER}/main`], repo);
+		writeFileSync(join(repo, 'task-output.md'), 'a produced task\n');
 
 		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'beta',
-			reason: 'review rejected the produced slices',
+			reason: 'review rejected the produced tasks',
 			arbiter: ARBITER,
-			branch: 'work/slicing/beta',
+			branch: 'work/tasking/beta',
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
 
-		// THAT branch was pushed (not the default work/task-beta) — the written slices
+		// THAT branch was pushed (not the default work/task-beta) — the written tasks
 		// travel cross-machine so a requeue continues from them.
-		expect(arbiterHasBranch(seeded, 'work/slicing/beta')).toBe(true);
+		expect(arbiterHasBranch(seeded, 'work/tasking/beta')).toBe(true);
 		expect(arbiterHasBranch(seeded, 'work/task-beta')).toBe(false);
 		expect(
 			gitIn(
-				['cat-file', '-e', `${ARBITER}/work/slicing/beta:slice-output.md`],
+				['cat-file', '-e', `${ARBITER}/work/tasking/beta:task-output.md`],
 				repo,
 			),
 		).toBe('');

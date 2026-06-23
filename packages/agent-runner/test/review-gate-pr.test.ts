@@ -92,7 +92,7 @@ const BLOCK: ReviewVerdict = {
 	findings: [
 		{
 			severity: 'blocking',
-			question: 'the diff does not reach the slice goal',
+			question: 'the diff does not reach the task goal',
 			context: 'agent-output.txt',
 		},
 	],
@@ -186,7 +186,7 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.reason).toMatch(/does not reach the slice goal/);
+		expect(lock?.reason).toMatch(/does not reach the task goal/);
 	});
 
 	it('a non-approve verdict NEVER merges (verdict block on a merge)', async () => {

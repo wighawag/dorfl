@@ -135,11 +135,11 @@ describe('advancing acquire — TREE-LESS rung (acquireUnified) takes the unifie
 	});
 });
 
-describe('advancing acquire — BUILD/SLICE rung (no acquireUnified) is a NO-OP hold', () => {
+describe('advancing acquire — BUILD/TASK rung (no acquireUnified) is a NO-OP hold', () => {
 	it('takes NO unified lock and writes NO marker (the inner do is the exclusion point)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		// Default (acquireUnified omitted) is the build/slice-rung behaviour: a NO-OP
-		// `acquired` (the inner `do`'s claim/slice lock is the sole exclusion point).
+		// Default (acquireUnified omitted) is the build/task-rung behaviour: a NO-OP
+		// `acquired` (the inner `do`'s claim/task lock is the sole exclusion point).
 		const result = await acquireAdvancingLock({
 			item: 'task:alpha',
 			cwd: repo,
@@ -196,7 +196,7 @@ describe('a unified lock LOST makes the tree-less advancing acquire lose definit
 	});
 });
 
-describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-less rung)', () => {
+describe('advance∥claim and advance∥task exclusion on the SAME item (tree-less rung)', () => {
 	it('advance∥claim: a tree-less advance holding the lock makes a concurrent claim lose the SAME ref', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const adv = raceClone(seeded, 'adv');
@@ -232,7 +232,7 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		expect(entry?.action).toBe('advance');
 	});
 
-	it('advance∥slice: a tree-less advance on a PRD makes a concurrent slicing lose the SAME ref', async () => {
+	it('advance∥task: a tree-less advance on a PRD makes a concurrent tasking lose the SAME ref', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['beta']});
 		const adv = raceClone(seeded, 'adv');
 		const advance = await acquireAdvancingLock({
@@ -245,7 +245,7 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		expect(advance.outcome).toBe('acquired');
 		expect(lockRefOnArbiter(seeded.arbiter, 'brief-beta')).toBe(true);
 
-		// A slicing of the SAME PRD now loses the create-only lock CAS.
+		// A tasking of the SAME PRD now loses the create-only lock CAS.
 		const slc = raceClone(seeded, 'slc');
 		const tasking = await acquireTaskingLock({
 			slug: 'beta',
@@ -255,7 +255,7 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 		});
 		expect(tasking.exitCode).toBe(2);
 		expect(tasking.outcome).toBe('lost');
-		// The PRD never moved to slicing/; the advance hold is the single winner.
+		// The PRD never moved to tasking/; the advance hold is the single winner.
 		expect(existsOnArbiterMain(slc, 'backlog', 'beta')).toBe(false);
 		const entry = await readItemLock({
 			item: 'brief:beta',
@@ -336,10 +336,10 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 	});
 
-	it('a BUILD-SLICE rung does NOT take the unified lock and does NOT deadlock the tick', async () => {
+	it('a BUILD-TASK rung does NOT take the unified lock and does NOT deadlock the tick', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['bar']);
 		const {repo, arbiter} = seeded;
-		// Stub the build/slice orchestration (the inner `do`) so the rung runs without a
+		// Stub the build/task orchestration (the inner `do`) so the rung runs without a
 		// real build — and capture the lock state during it. A build-task rung that
 		// (wrongly) took the unified lock at the advance layer would DEADLOCK against the
 		// inner do's SAME ref; here we prove the advance layer takes NO unified lock.
@@ -374,7 +374,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.rung).toBe('build-task');
-		// NO unified lock taken at the advance layer for the build/slice rung.
+		// NO unified lock taken at the advance layer for the build/task rung.
 		expect(heldDuringExec).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);
 		// No marker at all (retired); the build rung takes no advance-layer hold.

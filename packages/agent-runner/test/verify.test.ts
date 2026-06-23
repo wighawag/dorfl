@@ -171,7 +171,7 @@ describe('runVerify — gate status propagation', () => {
 		const workDone = join(dir, 'work', 'tasks', 'done');
 		mkdirSync(workInProgress, {recursive: true});
 		mkdirSync(workDone, {recursive: true});
-		writeFileSync(join(workInProgress, 'slice.md'), '# slice');
+		writeFileSync(join(workInProgress, 'task.md'), '# task');
 
 		const snapshot = () => ({
 			inProgress: readdirSync(workInProgress).sort(),
@@ -193,7 +193,7 @@ describe('runVerify — gate status propagation', () => {
 		});
 
 		expect(snapshot()).toEqual(before);
-		expect(before.inProgress).toEqual(['slice.md']);
+		expect(before.inProgress).toEqual(['task.md']);
 		expect(before.done).toEqual([]);
 	});
 });

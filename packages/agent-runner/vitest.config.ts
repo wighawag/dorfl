@@ -30,38 +30,38 @@ const RACE_SENSITIVE = [
 	// delete against a --bare arbiter, and runs an in-process TWO-REAPER race (two
 	// clones sweeping the SAME stale lock ref) proving the leased delete REJECTS the
 	// loser, never --force; keep it out of file-parallel pressure for the same
-	// deterministic lock-CAS reasoning as slicing-lock.test.ts.
+	// deterministic lock-CAS reasoning as tasking-lock.test.ts.
 	'test/gc-reap-stale-locks.test.ts',
-	// The slicing concurrency lock reuses the claim CAS (prd → slicing/ → prd)
-	// against a --bare arbiter and runs an in-process two-slicer race plus a
+	// The tasking concurrency lock reuses the claim CAS (prd → tasking/ → prd)
+	// against a --bare arbiter and runs an in-process two-tasker race plus a
 	// release-rebase-conflict test that writes main; keep it out of file-parallel
 	// pressure for the same deterministic claim/main-CAS reasoning as claim-cas.
-	'test/slicing-lock.test.ts',
+	'test/tasking-lock.test.ts',
 	// The advancing-lock BORROW (`advancing-lock-borrow`): a SHORT borrow shaped
-	// like slicing-lock, reusing the same CAS ledger-write seam against a --bare
+	// like tasking-lock, reusing the same CAS ledger-write seam against a --bare
 	// arbiter, with an in-process two-tick race + a new-item-creation race + a
 	// marker-delete release that writes main; keep it out of file-parallel pressure
-	// for the same deterministic claim/main-CAS reasoning as slicing-lock.test.ts.
+	// for the same deterministic claim/main-CAS reasoning as tasking-lock.test.ts.
 	'test/advancing-lock.test.ts',
-	// The `do prd:<slug>` slicing path (`performSlice`): drives the lock CAS
-	// (prd → slicing → prd) against a --bare arbiter AND writes main (the
-	// runner-owned completing transition that emits backlog slices + marks the PRD
-	// sliced); keep it out of file-parallel pressure for the same deterministic
-	// claim/main-CAS reasoning as slicing-lock.test.ts.
-	'test/slicing.test.ts',
+	// The `do prd:<slug>` tasking path (`performTask`): drives the lock CAS
+	// (prd → tasking → prd) against a --bare arbiter AND writes main (the
+	// runner-owned completing transition that emits backlog tasks + marks the PRD
+	// tasked); keep it out of file-parallel pressure for the same deterministic
+	// claim/main-CAS reasoning as tasking-lock.test.ts.
+	'test/tasking.test.ts',
 	// The `do prd:<slug>` slice-output-through-integration keystone
-	// (`slice-output-through-integration`): routes the produced slices + the PRD
+	// (`slice-output-through-integration`): routes the produced tasks + the PRD
 	// lifecycle move through the shared `performIntegration` core, driving the lock
 	// CAS AND writing main (--merge) / pushing the work branch (--propose) against a
 	// --bare arbiter; keep it out of file-parallel pressure for the same
-	// deterministic claim/main-CAS reasoning as slicing.test.ts.
-	'test/slicing-integration.test.ts',
-	// The `do prd:<slug>` slice-SET ACCEPTANCE GATE (`slice-acceptance-gate`): the
-	// slice-path mirror of Gate-2 — runs a fresh-context review of the produced SET
+	// deterministic claim/main-CAS reasoning as tasking.test.ts.
+	'test/tasking-integration.test.ts',
+	// The `do prd:<slug>` task-SET ACCEPTANCE GATE (`slice-acceptance-gate`): the
+	// task-path mirror of Gate-2 — runs a fresh-context review of the produced SET
 	// before it integrates, driving the lock CAS AND writing main (approve→merge /
-	// block→needs-attention via the lock's slicing/ → needs-attention redirect)
+	// block→needs-attention via the lock's tasking/ → needs-attention redirect)
 	// against a --bare arbiter; keep it out of file-parallel pressure for the same
-	// deterministic claim/main-CAS reasoning as slicing-integration.test.ts.
+	// deterministic claim/main-CAS reasoning as tasking-integration.test.ts.
 	'test/slice-acceptance-gate.test.ts',
 	'test/start.test.ts',
 	'test/work-on.test.ts',
@@ -102,7 +102,7 @@ const RACE_SENSITIVE = [
 	// cherry-pick + resolve-via-start); keep it out of file-parallel pressure so
 	// the main-CAS pushes stay deterministic.
 	'test/needs-attention-surface-on-main.test.ts',
-	// The needs-attention-as-stuck-lock-state slice: drives the bounce (folder move
+	// The needs-attention-as-stuck-lock-state task: drives the bounce (folder move
 	// + the ADDITIVE per-item-lock mark-stuck CAS amend) AND the status/scan lock-ref
 	// read path against a --bare arbiter, writing main and pushing lock refs; keep it
 	// out of file-parallel pressure for the same deterministic claim/main-CAS
@@ -147,12 +147,12 @@ const RACE_SENSITIVE = [
 	// needs-attention surfacing on a block); keep it out of file-parallel pressure
 	// for the same deterministic claim/main-CAS reasoning as do.test.ts.
 	'test/review-gate-pr.test.ts',
-	// The shared gate→integrate core (Slice 1 of the run/do convergence): drives
+	// The shared gate→integrate core (Task 1 of the run/do convergence): drives
 	// real git against a --bare arbiter, integrates/merges on approve (writes main),
 	// and routes failures; keep it out of file-parallel pressure for the same
 	// deterministic claim/main-CAS reasoning as review-gate-pr.test.ts.
 	'test/integration-core.test.ts',
-	// `run` routed through the shared core (Slice 2 of the run/do convergence): the
+	// `run` routed through the shared core (Task 2 of the run/do convergence): the
 	// fleet's review gate + PR title/body + per-repo verify proofs. Drives real git
 	// against a --bare arbiter, integrates/merges on approve (writes main), and
 	// routes failures (the needs-attention surfacing); keep it out of file-parallel
@@ -176,13 +176,13 @@ const RACE_SENSITIVE = [
 	// (empty) prompt, but ONLY under heavy concurrent test load (passes 28/28 in
 	// isolation). Keep it out of file-parallel pressure so the gate is
 	// deterministic; the source fix is the separate
-	// `null-harness-prompt-write-epipe-tolerant` slice. See
+	// `null-harness-prompt-write-epipe-tolerant` task. See
 	// work/observations/review-gate-test-epipe-under-parallel-load.md.
 	'test/review-gate.test.ts',
 	// The FRESH-WORKTREE GATE run-fleet tests + the same-repo concurrent `run`/
-	// `runLoop` merge tests (slice
+	// `runLoop` merge tests (task
 	// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). Once that
-	// slice REMOVED the `perRepoMax === 1` fresh-gate downgrade, these drive the
+	// task REMOVED the `perRepoMax === 1` fresh-gate downgrade, these drive the
 	// fresh rebased-tip gate (cut a throwaway worktree, prepare+verify on it) AND
 	// the merge integration (write `main` via `${branch}:main` against a --bare
 	// `file://` arbiter) at `perRepoMax > 1`. That is exactly the git-`file://`-CAS
@@ -202,11 +202,11 @@ const RACE_SENSITIVE = [
 	// above). Run it in the sequential project for the same deterministic
 	// claim/main-CAS reasoning as claim-cas.test.ts.
 	'test/claim-acquires-unified-lock.test.ts',
-	// The POST-#9 EXCLUSION PROOF (slice
+	// The POST-#9 EXCLUSION PROOF (task
 	// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): drives REAL
 	// `performAdvance` build-task/task-brief rungs (which orchestrate the inner
-	// `performDo`/`performSlice` claim/slice lock) racing a direct `performClaim` /
-	// slicing acquire against a --bare `file://` arbiter, in-process, AND writes main
+	// `performDo`/`performTask` claim/task lock) racing a direct `performClaim` /
+	// tasking acquire against a --bare `file://` arbiter, in-process, AND writes main
 	// (the inner do's merge integration). It is the git-`file://`-CAS race class
 	// above; run it sequentially for the same deterministic claim/main-CAS reasoning
 	// as claim-acquires-unified-lock.test.ts / advancing-acquires-unified-lock.test.ts.

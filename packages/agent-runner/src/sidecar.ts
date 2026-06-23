@@ -116,7 +116,7 @@ export interface SidecarEntry {
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
 export interface SidecarModel {
-	/** The NAMESPACED identity (`brief:autoslice`, `task:foo`, `observation:bar`). */
+	/** The NAMESPACED identity (`brief:autotask`, `task:foo`, `observation:bar`). */
 	item: string;
 	/** The item type (redundant with the filename; explicit for the parser). */
 	type: SidecarType;
@@ -200,7 +200,7 @@ export interface SidecarIdentity {
 }
 
 /**
- * Resolve a namespaced-identity argument (`brief:autoslice`, `task:foo`,
+ * Resolve a namespaced-identity argument (`brief:autotask`, `task:foo`,
  * `observation:bar`, `obs:bar`, or a bare `<slug>` = task) into its
  * `{type, slug, item}`. PURE string work over {@link parseSlugArg} — the
  * resolver is the single source of truth for the task/brief split; the sidecar

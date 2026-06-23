@@ -14,7 +14,7 @@ import {
 } from '../src/do-config.js';
 
 /**
- * The `do-threads-harness-flags` slice: `do` DECLARES `--harness`,
+ * The `do-threads-harness-flags` task: `do` DECLARES `--harness`,
  * `--agent-cmd`, `--pi-bin`, `--model` but its action used to pass ONLY
  * `{integration}` to {@link resolveRepoConfig}, silently dropping the rest — so
  * `do --harness pi` was ignored and `do` wrongly demanded `agentCmd`.
@@ -60,11 +60,11 @@ describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () =
 		expect(doFlagOverrides({}).integration).toBeUndefined();
 	});
 
-	it('an explicit --merge/--propose ALSO sets `taskingIntegration` so the typed flag wins for the SLICING transition too', () => {
+	it('an explicit --merge/--propose ALSO sets `taskingIntegration` so the typed flag wins for the TASKING transition too', () => {
 		// `per-transition-integration-mode-slicing-vs-build`: the flag is
 		// transition-AGNOSTIC (each command runs ONE transition), so it must override
-		// BOTH the build mode (`integration`) AND the slicing mode (`taskingIntegration`,
-		// which the slicing caller reads as `taskingIntegration ?? integration`).
+		// BOTH the build mode (`integration`) AND the tasking mode (`taskingIntegration`,
+		// which the tasking caller reads as `taskingIntegration ?? integration`).
 		// Otherwise a `--propose` on a `taskingIntegration:'merge'` repo would be
 		// shadowed by the config override.
 		expect(doFlagOverrides({}, 'merge').taskingIntegration).toBe('merge');

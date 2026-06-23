@@ -65,7 +65,7 @@ function remoteBranchExists(repo: string, branch: string): boolean {
 
 /**
  * Stand a repo up exactly as the human loop leaves it just before `complete`:
- * a slice claimed (the lock is held; the body RESTS in backlog/ on the arbiter,
+ * a task claimed (the lock is held; the body RESTS in backlog/ on the arbiter,
  * since claim no longer moves it) and the human onboarded onto `work/<slug>` off
  * the freshly-fetched main. Returns the seeded handle + repo.
  */
@@ -216,16 +216,16 @@ describe('complete — done-move + commit', () => {
 
 	it('refuses honestly when there is genuinely nothing to complete on the branch (wrong slug / nothing staged)', async () => {
 		// Stand the work branch up as the "genuinely nothing here" shape: claimed,
-		// then the backlog slice REMOVED from the branch tree WITHOUT a done-move
+		// then the backlog task REMOVED from the branch tree WITHOUT a done-move
 		// (so neither backlog/ NOR in-progress/ NOR needs-attention/ NOR done/ holds
 		// the slug on the branch). This is the bar the stranded-done auto-recover MUST
-		// NOT mask (slice `autonomous-path-auto-recovers-already-committed-stranded-branch`):
+		// NOT mask (task `autonomous-path-auto-recovers-already-committed-stranded-branch`):
 		// a real wrong-slug / nothing-staged error still surfaces as `refused`. The
 		// auto-recover routing is folder-gated on `work/tasks/done/<slug>.md`, so this
 		// shape correctly falls through to the existing honest `CompleteRefusal`.
 		const {repo} = await claimAndBranch('empty');
 		gitIn(['rm', '-q', 'work/tasks/todo/empty.md'], repo);
-		gitIn(['commit', '-q', '-m', 'drop the slice (genuinely nothing)'], repo);
+		gitIn(['commit', '-q', '-m', 'drop the task (genuinely nothing)'], repo);
 		const result = await performComplete({
 			slug: 'empty',
 			cwd: repo,
@@ -239,11 +239,11 @@ describe('complete — done-move + commit', () => {
 	});
 
 	it('uses <type>(<slug>): <summary>; done with --type/--message defaults', async () => {
-		// Seed a slice whose title carries the "slug — …" prefix to exercise the
+		// Seed a task whose title carries the "slug — …" prefix to exercise the
 		// default-summary stripping.
 		const seeded = seedRepoWithArbiter(scratch.root, ['theslug']);
 		const repo = seeded.repo;
-		// Rewrite the slice title to the realistic "slug — summary" form.
+		// Rewrite the task title to the realistic "slug — summary" form.
 		const taskPath = join(repo, 'work', 'tasks', 'todo', 'theslug.md');
 		const original = readFileSync(taskPath, 'utf8');
 		writeFileSync(
@@ -339,7 +339,7 @@ describe('complete — merge integration', () => {
 		agentEdits(repo);
 
 		// Advance arbiter/main from another clone AFTER we branched, but in a way
-		// that does NOT touch our slice — so our rebase stays clean, yet our push
+		// that does NOT touch our task — so our rebase stays clean, yet our push
 		// would only ff because we rebased. To prove we never force, we instead
 		// check that the push target is main via ff (covered above); here we assert
 		// integrate uses no --force by construction is documented. Keep a smoke
@@ -480,7 +480,7 @@ describe('complete — propose integration', () => {
 	// --- Half A (title) + Half B (body): the synthesised single-line --title and
 	//     the threaded --body reach `gh pr create` (a recording stub on PATH).
 
-	it('passes an explicit single-line --title synthesised from the slice (not --fill-derived)', async () => {
+	it('passes an explicit single-line --title synthesised from the task (not --fill-derived)', async () => {
 		const {repo} = await claimAndBranch('titled');
 		agentEdits(repo);
 		const gh = recordingGhStub('https://github.com/o/r/pull/1');
@@ -496,7 +496,7 @@ describe('complete — propose integration', () => {
 		expect(result.exitCode).toBe(0);
 		const args = gh.readArgs();
 		expect(args).toMatch(/^--title$/m);
-		// The seeded slice title == the slug, so `<type>(<slug>): <title>`.
+		// The seeded task title == the slug, so `<type>(<slug>): <title>`.
 		expect(args).toMatch(/^feat\(titled\): titled$/m);
 		// The title NEVER relies on --fill (which would derive the commit run-on).
 		expect(args).not.toMatch(/^--fill$/m);
@@ -506,7 +506,7 @@ describe('complete — propose integration', () => {
 		expect(lines[titleIdx + 1]).toBe('feat(titled): titled');
 	});
 
-	it('threads the --body (under a slice-pointer header) when supplied; absent ⇒ --fill', async () => {
+	it('threads the --body (under a task-pointer header) when supplied; absent ⇒ --fill', async () => {
 		const {repo} = await claimAndBranch('bodied');
 		agentEdits(repo);
 		const gh = recordingGhStub('https://github.com/o/r/pull/2');
@@ -523,7 +523,7 @@ describe('complete — propose integration', () => {
 		expect(result.exitCode).toBe(0);
 		const args = gh.readArgs();
 		expect(args).toMatch(/^--body$/m);
-		// The body carries the summary AND a pointer back to the slice file.
+		// The body carries the summary AND a pointer back to the task file.
 		expect(args).toContain('Built the thing. Decided to inline the helper.');
 		expect(args).toContain('work/tasks/done/bodied.md');
 		expect(args).not.toMatch(/^--fill$/m);

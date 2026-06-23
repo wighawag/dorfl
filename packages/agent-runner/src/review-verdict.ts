@@ -7,7 +7,7 @@
  * This is the keystone of the `runner-invoked-disciplines-into-protocol` brief
  * (task 1, D4): every runner-invoked review prompt builder
  * ({@link buildReviewPrompt}, {@link buildTaskAcceptancePrompt} in
- * `review-gate.ts`; {@link buildLoneSliceReviewPrompt} in `intake.ts`;
+ * `review-gate.ts`; {@link buildLoneTaskReviewPrompt} in `intake.ts`;
  * {@link buildTaskReviewPrompt} in `tasker-review-loop.ts`) POINTS at
  * `REVIEW-PROTOCOL.md` for the discipline + calls {@link verdictContractPrompt}
  * for the JSON-emitted-shape prose. None of them re-inlines the lenses or the

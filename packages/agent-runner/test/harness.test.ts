@@ -51,7 +51,7 @@ describe('NullHarness — launch', () => {
 	});
 
 	it('populates output from the captured command stdout (trimmed)', () => {
-		// For the null/shell adapter the command's stdout IS its answer (slice
+		// For the null/shell adapter the command's stdout IS its answer (task
 		// `harness-agent-output`). A synchronous spawn captures it; we return it
 		// trimmed as `output`.
 		const harness = new NullHarness();

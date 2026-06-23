@@ -136,9 +136,7 @@ export function validateAdvanceCiTemplate(
 	// cron — a ready ungated BRIEF would never become a matrix leg. The `jq` must
 	// read `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` + `cwd.repo.briefs[]`)
 	// and emit `brief:<slug>` legs alongside the `task:<slug>` legs.
-	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
-		text,
-	) &&
+	require('propose-enumerates-taskable-prds', /"brief:" \+ \.slug/.test(text) &&
 		/\.briefs\[\]/.test(
 			text,
 		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +

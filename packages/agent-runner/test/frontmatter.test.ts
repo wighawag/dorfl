@@ -114,12 +114,12 @@ describe('parseFrontmatter', () => {
 		expect(parseFrontmatter(md).briefAfter).toEqual([]);
 	});
 
-	it('the HARD CUTOVER: the pre-rename `prd:` and `sliceAfter:` keys are NOT parsed (no old field name)', () => {
+	it('the HARD CUTOVER: the pre-rename `prd:` and `taskAfter:` keys are NOT parsed (no old field name)', () => {
 		const md = [
 			'---',
 			'slug: my-task',
 			'prd: old-parent',
-			'sliceAfter: [old-dep]',
+			'taskAfter: [old-dep]',
 			'---',
 		].join('\n');
 		const fm = parseFrontmatter(md);
@@ -128,8 +128,8 @@ describe('parseFrontmatter', () => {
 		expect(fm.briefAfter).toEqual([]);
 	});
 
-	// ── Origin-trust PROVENANCE (slice untrusted-origin-forces-build-propose) ────
-	// The stamp that survives the PRD/slice merge boundary: how the artifact was
+	// ── Origin-trust PROVENANCE (task untrusted-origin-forces-build-propose) ────
+	// The stamp that survives the PRD/task merge boundary: how the artifact was
 	// born + the author-trust verdict at birth. UNSET ⇒ human/trusted (the normal
 	// path, zero behaviour change).
 
@@ -241,14 +241,14 @@ describe('parseFrontmatter', () => {
 		}
 	});
 
-	it('ignores a stale `sliced:` line (the marker was removed in remove-sliced-marker-step-b)', () => {
-		// `sliced:` is no longer a parsed frontmatter axis — sliced-ness is RESIDENCE in
-		// `work/briefs/tasked/`. A leftover `sliced:` line is just inert text the parser
+	it('ignores a stale `tasked:` line (the marker was removed in remove-sliced-marker-step-b)', () => {
+		// `tasked:` is no longer a parsed frontmatter axis — tasked-ness is RESIDENCE in
+		// `work/briefs/tasked/`. A leftover `tasked:` line is just inert text the parser
 		// neither recognises nor trips over.
-		const md = ['---', 'slug: my-prd', 'sliced: 2026-06-03', '---'].join('\n');
+		const md = ['---', 'slug: my-prd', 'tasked: 2026-06-03', '---'].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('my-prd');
-		expect('sliced' in fm).toBe(false);
+		expect('tasked' in fm).toBe(false);
 	});
 
 	it('strips quotes from quoted scalar values', () => {

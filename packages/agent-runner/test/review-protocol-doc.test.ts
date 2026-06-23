@@ -1,11 +1,11 @@
 /**
- * Slice `review-protocol-doc-and-shared-machinery`: the keystone protocol-doc
+ * Task `review-protocol-doc-and-shared-machinery`: the keystone protocol-doc
  * + shared-machinery proof, end-to-end.
  *
  * This suite covers:
  *   - The setup mirror (the doc lands in `work/protocol/` byte-identical to the
  *     `skills/setup/protocol/` source-of-truth) and `work/protocol/VERSION` is
- *     bumped past the pre-slice value.
+ *     bumped past the pre-task value.
  *   - The vendored set ships `dist/protocol/REVIEW-PROTOCOL.md` alongside
  *     `dist/protocol/CLAIM-PROTOCOL.md` (the SET vendor, not the old
  *     single-file).
@@ -27,7 +27,7 @@ import {
 	buildTaskAcceptancePrompt,
 } from '../src/review-gate.js';
 import {buildTaskReviewPrompt} from '../src/tasker-review-loop.js';
-import {buildLoneSliceReviewPrompt} from '../src/intake.js';
+import {buildLoneTaskReviewPrompt} from '../src/intake.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -62,8 +62,8 @@ describe('REVIEW-PROTOCOL.md \u2014 the new in-band review discipline doc', () =
 
 	it('`setup` propagation: `work/protocol/VERSION` is bumped (set propagated through `setup`)', () => {
 		// The setup contract: when the protocol-doc set grows / changes, VERSION
-		// bumps. We assert against the pre-slice value (2026-06-09) to prove the
-		// bump happened; the exact post value is left to the slice that ships it.
+		// bumps. We assert against the pre-task value (2026-06-09) to prove the
+		// bump happened; the exact post value is left to the task that ships it.
 		const version = readFileSync(resolve(MIRROR, 'VERSION'), 'utf8');
 		expect(version).toMatch(/protocol-version:\s*\d{4}-\d{2}-\d{2}/);
 		const match = /protocol-version:\s*(\d{4}-\d{2}-\d{2})/.exec(version);
@@ -189,8 +189,8 @@ describe('The four review-prompt builders \u2014 in-band reference + no re-inlin
 			}),
 		},
 		{
-			name: 'buildLoneSliceReviewPrompt',
-			text: buildLoneSliceReviewPrompt({
+			name: 'buildLoneTaskReviewPrompt',
+			text: buildLoneTaskReviewPrompt({
 				slug: 'add-quiet-flag',
 				issueNumber: 42,
 				title: 'Add a --quiet flag',

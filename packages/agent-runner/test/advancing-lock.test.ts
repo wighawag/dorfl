@@ -53,11 +53,11 @@ function lockRefOnArbiter(arbiter: string, entry: string): boolean {
 }
 
 /**
- * The advancing borrow is the UNIFIED per-item lock now (slice
+ * The advancing borrow is the UNIFIED per-item lock now (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the
  * `work/advancing/<entry>.md` presence-marker is RETIRED. A TREE-LESS rung
- * (`acquireUnified: true`) takes the `action: advance` lock ref; a build/slice rung
- * (the default) is a NO-OP hold (the inner `do`'s claim/slice lock is the
+ * (`acquireUnified: true`) takes the `action: advance` lock ref; a build/task rung
+ * (the default) is a NO-OP hold (the inner `do`'s claim/task lock is the
  * exclusion). The cross-action exclusion / `performAdvance` wiring lives in
  * `advancing-acquires-unified-lock.test.ts`; this file covers the lock PRIMITIVE +
  * the `createItemThroughCas` helper.
@@ -82,7 +82,7 @@ describe('acquireAdvancingLock — tree-less rung (the unified lock)', () => {
 		expect(trackedOnArbiter(repo, 'backlog', 'alpha')).toBe(true);
 	});
 
-	it('keys a bare slug to the slice type (slice-<slug>)', async () => {
+	it('keys a bare slug to the task type (task-<slug>)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({
 			item: 'alpha',
@@ -160,7 +160,7 @@ describe('acquireAdvancingLock — tree-less rung (the unified lock)', () => {
 	});
 });
 
-describe('acquireAdvancingLock — build/slice rung is a NO-OP hold', () => {
+describe('acquireAdvancingLock — build/task rung is a NO-OP hold', () => {
 	it('takes NO lock (default acquireUnified) — the inner do is the exclusion point', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await acquireAdvancingLock({

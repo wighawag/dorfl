@@ -36,7 +36,7 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 
 /**
  * The namespaces a slug can name. `task`/`brief` are the original §3a pair that
- * `do` spans (renamed from `slice`/`prd` in the hard cutover); `observation` is
+ * `do` spans (renamed from `task`/`prd` in the hard cutover); `observation` is
  * the NEW namespace the `advance` verb adds (brief `advance-loop`, task
  * `advance-verb-resolver`) so `advance obs:<slug>` can name an observation to
  * triage. The `do`-family resolvers (`resolveSlug`, `resolveTaskOnlyArg`)
@@ -90,14 +90,14 @@ export function workBranchRef(
  * The inverse of {@link workBranchRef}: parse a namespaced work-branch ref back
  * into its `{producer?, namespace, slug}`. Returns `undefined` for any ref that
  * is NOT a `work/[<producer>-]<type>-<slug>` branch (e.g. `main`, a detached
- * HEAD, or — after the clean breaking cutover — a pre-rename `work/slice-<slug>`
+ * HEAD, or — after the clean breaking cutover — a pre-rename `work/task-<slug>`
  * / `work/prd-<slug>` ref or an un-namespaced `work/<slug>`). This is how
  * `complete`/`integration` recover the type carried IN the branch name they are
  * already standing on, rather than re-deriving it inconsistently. The regex
  * anchors the optional producer prefix BEFORE the type alternation, so
  * `work/intake-task-foo` resolves to
  * `{producer:'intake', namespace:'task', slug:'foo'}` (the `slug` never
- * swallows the `intake-`/`task-` prefixes). The old `slice`/`prd` types are NOT
+ * swallows the `intake-`/`task-` prefixes). The old `task`/`prd` types are NOT
  * in the alternation, so a pre-rename `work/slice-foo` ref returns `undefined`
  * (the clean-break stance: no migration-window alias).
  */

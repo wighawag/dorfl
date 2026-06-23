@@ -90,7 +90,7 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 	it('clears a named lock entry by DELETING the ref (covers US #14)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck']);
 		// Plant the lock by running the normal acquire path — the shape a crashed
-		// build/slice/advance leaves behind (a held ref with no matching release).
+		// build/task/advance leaves behind (a held ref with no matching release).
 		const acq = await acquireItemLock({
 			item: 'task:stuck',
 			action: 'implement',

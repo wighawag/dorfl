@@ -25,7 +25,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * needs-attention ALSO marks the `stuck` lock state, read by `status`/`scan` (slice
+ * needs-attention ALSO marks the `stuck` lock state, read by `status`/`scan` (task
  * `needs-attention-as-stuck-lock-state`; PRD `ledger-status-per-item-lock-refs` US
  * #5/#8; ADR `ledger-status-on-per-item-lock-refs`). The INTERIM DUAL-WRITE half:
  *
@@ -61,8 +61,8 @@ function agentEdits(repo: string, file = 'feature.txt', body = 'the work\n') {
 
 /**
  * Stand a repo up exactly as the runner leaves it just before a stuck outcome: a
- * slice CLAIMED (which, under the interim dual-write, ALSO acquired the per-item
- * `slice:<slug>` lock `active`) and onboarded onto `work/task-<slug>` off the
+ * task CLAIMED (which, under the interim dual-write, ALSO acquired the per-item
+ * `task:<slug>` lock `active`) and onboarded onto `work/task-<slug>` off the
  * freshly-pushed main, with the agent's uncommitted edits in the tree.
  */
 async function claimAndBranch(
@@ -217,13 +217,13 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		// and a `stuck` lock entry on the ref are INDEPENDENT substrates and may
 		// legitimately disagree — the stuck lock wins the human's attention, the
 		// `main` record wins dependency resolution. The lock-level co-existence is
-		// what this slice introduces; the lock amend touches ONLY the lock ref, so it
+		// what this task introduces; the lock amend touches ONLY the lock ref, so it
 		// never corrupts the `main` durable record.
 		const {repo, seeded} = await claimAndBranch('epsilon');
 
 		// Seed a durable `done` record on main (a just-completed item), via a clone so
 		// the checkout-under-test is untouched. The `implement` lock claim acquired is
-		// still HELD (interim: complete does not yet release it — slice #7).
+		// still HELD (interim: complete does not yet release it — task #7).
 		const completer = seeded.clone('completer');
 		gitIn(['fetch', '-q', ARBITER], completer);
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
@@ -324,8 +324,8 @@ async function seedLockOnMirrorOrigin(
 	gitIn(['clone', '-q', `file://${src}`, clone], scratch.root);
 	gitIn(['remote', 'add', 'arbiter', `file://${src}`], clone);
 	gitIn(['fetch', '-q', 'arbiter'], clone);
-	// The identity NAMESPACE is `slice:` (what the bounce surfaces); the lock ACTION
-	// axis (`implement`/`slice`/`advance`) is a SEPARATE field passed to acquire.
+	// The identity NAMESPACE is `task:` (what the bounce surfaces); the lock ACTION
+	// axis (`implement`/`task`/`advance`) is a SEPARATE field passed to acquire.
 	const item = `task:${slug}`;
 	const acq = await acquireItemLock({
 		item,

@@ -31,7 +31,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `advance --isolated` tests (slice `advance-isolated-one-shot`) — give `advance`
+ * `advance --isolated` tests (task `advance-isolated-one-shot`) — give `advance`
  * the SAME isolation ergonomic `do --isolated` has: run the advance TICK in an
  * ISOLATED worktree off THIS repo's arbiter (resolved from cwd), then integrate +
  * reap, instead of taking over the current checkout. It REUSES `do`'s arbiter
@@ -80,7 +80,7 @@ describe('performAdvanceIsolated — runs the advance tick in an isolated clone 
 		);
 
 		// Inject the tick runner stub to capture the cwd the tick ran in (and assert
-		// the isolated clone, not the checkout). The build/slice rungs are reached via
+		// the isolated clone, not the checkout). The build/task rungs are reached via
 		// the `doDriver` the runner injects (not exercised here — this asserts the
 		// per-item isolation wiring).
 		let tickCwd = '';
@@ -108,7 +108,7 @@ describe('performAdvanceIsolated — runs the advance tick in an isolated clone 
 		// The tick ran in the AGENTS' area (the isolated clone), NOT the checkout.
 		expect(tickCwd.startsWith(ws)).toBe(true);
 		expect(tickCwd.startsWith(repo)).toBe(false);
-		// The build/slice rungs get the injected job-worktree driver (isolation falls
+		// The build/task rungs get the injected job-worktree driver (isolation falls
 		// out of the seam — no new mechanism).
 		expect(tickHadDoDriver).toBe(true);
 		// The clone's arbiter remote is `origin` by default (the tree-less rungs' CAS
@@ -157,7 +157,7 @@ describe('performAdvanceIsolated — runs the advance tick in an isolated clone 
 // --- (6) a surface rung from an isolated cwd persists the sidecar -----------
 
 /**
- * Seed a backlog slice carrying `needsAnswers:true` (no sidecar) onto the arbiter
+ * Seed a backlog task carrying `needsAnswers:true` (no sidecar) onto the arbiter
  * — exactly the `classify=surface` cell. Mirrors advance-surface.test.ts but the
  * item lives on the arbiter (the isolated tick clones it down).
  */
@@ -349,7 +349,7 @@ describe('advance --isolated — CLI dispatch reaches the ISOLATED branch (not i
 	});
 
 	it('`advance --isolated <slug>` (single) reaches the isolated branch — the agentCmd guard fires before any in-place takeover', async () => {
-		// A ready slice on the arbiter; with NO agentCmd the isolated branch errors via
+		// A ready task on the arbiter; with NO agentCmd the isolated branch errors via
 		// the agentCmd guard (the ISOLATED branch's guard) BEFORE building — proving the
 		// dispatch reached the isolated runner, not the in-place tick.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
@@ -380,7 +380,7 @@ describe('advance --isolated -n — sequential auto-pick over the mirror-side po
 	// (NOT a `blockedBy` chain) so this proves REFETCH FRESHNESS (item N's clone
 	// branches off a `main` containing item N-1's surface), NOT dependency-aware
 	// scheduling (deliberately out of scope). `surfaceBlockers` ON enumerates the two
-	// needsAnswers slices into the surface pool; the stubbed surface gate makes the
+	// needsAnswers tasks into the surface pool; the stubbed surface gate makes the
 	// rung tree-less + observable.
 	it('drains TWO independent needsAnswers items in SEQUENCE, item 2 fresh off item 1', async () => {
 		const {repo, arbiterUrl} = seedTwoIndependentBlocked();
@@ -441,7 +441,7 @@ describe('advance --isolated -n — sequential auto-pick over the mirror-side po
 	});
 });
 
-/** Two INDEPENDENT needsAnswers slices on the arbiter (NO blockedBy chain). */
+/** Two INDEPENDENT needsAnswers tasks on the arbiter (NO blockedBy chain). */
 function seedTwoIndependentBlocked(): {repo: string; arbiterUrl: string} {
 	const {repo} = seedRepoWithArbiter(scratch.root, ['ia', 'ib'], {
 		needsAnswers: true,
@@ -489,7 +489,7 @@ describe('advance --isolated <a> <b> — named items, isolated, in sequence', ()
 	});
 });
 
-/** Two named backlog slices on the arbiter for the multi-arg path. */
+/** Two named backlog tasks on the arbiter for the multi-arg path. */
 function seedSurfaceFixtureMulti(): {repo: string; arbiterUrl: string} {
 	const {repo} = seedRepoWithArbiter(scratch.root, ['m1', 'm2']);
 	const arbiterUrl = resolveArbiterUrlFromCheckout(

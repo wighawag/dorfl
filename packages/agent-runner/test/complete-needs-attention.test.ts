@@ -31,7 +31,7 @@ function currentBranch(repo: string): string {
 
 /**
  * Stand a repo up exactly as the human loop leaves it just before `complete`:
- * a slice claimed (in-progress on the arbiter) and the human onboarded onto
+ * a task claimed (in-progress on the arbiter) and the human onboarded onto
  * `work/<slug>` off the freshly-pushed main.
  */
 async function claimAndBranch(

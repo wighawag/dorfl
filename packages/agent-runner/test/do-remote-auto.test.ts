@@ -19,7 +19,7 @@ import {
  * makes possible, which lets the inline `-n`×`--remote` REFUSAL be removed.
  *
  * House `--bare`-mirror style: seed a bare hub mirror whose committed `main`
- * carries a mix of eligible/gated slices + PRDs, then assert the driver SELECTS +
+ * carries a mix of eligible/gated tasks + PRDs, then assert the driver SELECTS +
  * ORDERS them over the mirror scan and runs a STUBBED single-`do --remote` runner
  * per item SEQUENTIALLY — recording WHICH items ran in what ORDER (the real
  * mirror/claim/worktree pipeline is `do-remote`'s tested job). `-n` is sequential;
@@ -68,7 +68,7 @@ function recordingRunner(): {run: DoRemoteRunner; args: string[]} {
 }
 
 describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () => {
-	it('auto-picks ONE eligible item (a slice) from the bare mirror', async () => {
+	it('auto-picks ONE eligible item (a task) from the bare mirror', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'alpha.md': task({slug: 'alpha'})},
 			brief: {'gamma.md': brief({slug: 'gamma'})},
@@ -85,7 +85,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('-n <x> takes x items, slices-first then PRDs, IN SEQUENCE', async () => {
+	it('-n <x> takes x items, tasks-first then PRDs, IN SEQUENCE', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'alpha.md': task({slug: 'alpha'})},
 			brief: {
@@ -103,7 +103,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		// the eligible slice drains first, then the two sliceable PRDs (by slug).
+		// the eligible task drains first, then the two taskable PRDs (by slug).
 		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
 	});
 

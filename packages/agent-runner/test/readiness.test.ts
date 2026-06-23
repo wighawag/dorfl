@@ -87,7 +87,7 @@ describe('readiness guard — claim path: unmet blockedBy', () => {
 });
 
 describe('readiness guard — claim path: override', () => {
-	it('claims an unmet-blockedBy slice anyway and loudly notes the override', async () => {
+	it('claims an unmet-blockedBy task anyway and loudly notes the override', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
 			blockedBy: ['dep-a'],
 		});
@@ -154,8 +154,8 @@ describe('readiness guard — claim path: needsAnswers warning', () => {
 	});
 });
 
-describe('readiness guard — claim path: ready slice unchanged', () => {
-	it('a fully-ready slice (deps done, no needsAnswers) claims with no warnings', async () => {
+describe('readiness guard — claim path: ready task unchanged', () => {
+	it('a fully-ready task (deps done, no needsAnswers) claims with no warnings', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
 			blockedBy: ['dep-a'],
 		});
@@ -171,7 +171,7 @@ describe('readiness guard — claim path: ready slice unchanged', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('claimed');
-		// No readiness chatter for a ready slice.
+		// No readiness chatter for a ready task.
 		expect(notes.some((n) => /OVERRIDDEN/.test(n))).toBe(false);
 		expect(notes.some((n) => /WARNING/.test(n))).toBe(false);
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
@@ -195,7 +195,7 @@ describe('readiness guard — claim path: ready slice unchanged', () => {
 });
 
 describe('readiness guard — autonomous path is unchanged', () => {
-	it('without humanPath, an unmet-blockedBy slice is still claimed (filtered upstream by eligibility)', async () => {
+	it('without humanPath, an unmet-blockedBy task is still claimed (filtered upstream by eligibility)', async () => {
 		// The autonomous runner does NOT pass humanPath: it pre-filters via
 		// scan→eligibility, so performClaim itself must not start refusing.
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
@@ -213,7 +213,7 @@ describe('readiness guard — autonomous path is unchanged', () => {
 });
 
 describe('readiness guard — start path inherits it', () => {
-	it('start REFUSES an unmet-blockedBy slice and creates no work branch', async () => {
+	it('start REFUSES an unmet-blockedBy task and creates no work branch', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
 			blockedBy: ['dep-a'],
 		});
@@ -233,7 +233,7 @@ describe('readiness guard — start path inherits it', () => {
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'feature')).toBe(true);
 	});
 
-	it('start --force claims the unmet-blockedBy slice and lands on the work branch', async () => {
+	it('start --force claims the unmet-blockedBy task and lands on the work branch', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['feature'], {
 			blockedBy: ['dep-a'],
 		});
@@ -272,7 +272,7 @@ describe('readiness guard — start path inherits it', () => {
 		expect(notes.some((n) => /WARNING/.test(n))).toBe(true);
 	});
 
-	it('a fully-ready slice starts exactly as before (no behaviour change)', async () => {
+	it('a fully-ready task starts exactly as before (no behaviour change)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['ready']);
 		const result = await performStart({
 			slug: 'ready',

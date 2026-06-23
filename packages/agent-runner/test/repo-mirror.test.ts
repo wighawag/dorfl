@@ -211,7 +211,7 @@ describe('ensureMirrorMain — main-only, no-prune mirror-ensure for the config 
 	});
 
 	/**
-	 * The load-bearing regression (the slice's defect #1): a stale job worktree with
+	 * The load-bearing regression (the task's defect #1): a stale job worktree with
 	 * a checked-out `work/<other-slug>` branch in the mirror BLOCKS the all-heads
 	 * pruning fetch (`ensureMirror`) — git refuses to fetch into a checked-out
 	 * branch — but does NOT block the main-only no-prune `ensureMirrorMain`.
@@ -222,7 +222,7 @@ describe('ensureMirrorMain — main-only, no-prune mirror-ensure for the config 
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const env = gitEnv();
 
-		// Seed an arbiter branch `work/other` (a different slice's work branch).
+		// Seed an arbiter branch `work/other` (a different task's work branch).
 		gitIn(['switch', '-q', '-c', 'work/other', 'main'], repo);
 		writeFileSync(join(repo, 'OTHER.md'), '# other\n');
 		gitIn(['add', '-A'], repo);
@@ -246,12 +246,12 @@ describe('ensureMirrorMain — main-only, no-prune mirror-ensure for the config 
 		gitIn(['push', '-q', 'arbiter', 'work/other'], repo);
 		gitIn(['switch', '-q', 'main'], repo);
 
-		// SHARED-MIRROR SIBLING-WORKTREE SAFETY (slice
+		// SHARED-MIRROR SIBLING-WORKTREE SAFETY (task
 		// `cutover-claim-body-stays-and-complete-sources-from-backlog`): `ensureMirror`
 		// no longer FAILS when a sibling worktree holds a `work/<slug>` head checked
 		// out (git refuses to update THAT head, but the all-heads fetch is now
 		// BEST-EFFORT, so every OTHER ref — incl. `main` — still updates). Before this
-		// slice the claim's body-move serialised same-repo jobs enough to hide the
+		// task the claim's body-move serialised same-repo jobs enough to hide the
 		// overlap; with claim no longer writing `main` they run concurrently and a
 		// throwing ensure would crash a sibling job's onboard.
 		const otherBefore = gitIn(['rev-parse', 'work/other'], mirror.path).trim();
@@ -278,7 +278,7 @@ describe('ensureMirrorMain — main-only, no-prune mirror-ensure for the config 
 		const workspacesDir = join(scratch.root, '.agent-runner');
 		const env = gitEnv();
 
-		// A different slice's work branch, on the arbiter + checked out in a stale
+		// A different task's work branch, on the arbiter + checked out in a stale
 		// worktree on the mirror.
 		gitIn(['switch', '-q', '-c', 'work/other', 'main'], repo);
 		writeFileSync(join(repo, 'OTHER.md'), '# other\n');

@@ -19,12 +19,12 @@ import {
 
 describe('work-layout — the single source of every work/ path + folder union', () => {
 	it('the symbolic KEYS read in the new task/brief vocabulary; the VALUES are unchanged', () => {
-		// The key-vocabulary cutover slice
+		// The key-vocabulary cutover task
 		// (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) flips only the
 		// KEYS to the new task/brief words (`pre-backlog` -> `tasks-backlog`,
 		// `backlog` -> `tasks-todo`, `pre-prd` -> `briefs-proposed`,
-		// `prd` -> `briefs-ready`, `prd-sliced` -> `briefs-tasked`). It is a PURE in-code
-		// symbol rename: every VALUE string below is byte-identical to before the slice,
+		// `prd` -> `briefs-ready`, `prd-tasked` -> `briefs-tasked`). It is a PURE in-code
+		// symbol rename: every VALUE string below is byte-identical to before the task,
 		// so NO on-disk folder moved. The already-clean keys (`done`/`cancelled`/
 		// `briefs-dropped`/`questions`/`protocol` and the lock-ref-state keys
 		// `in-progress`/`needs-attention`) are unchanged.
@@ -93,13 +93,10 @@ describe('work-layout — the single source of every work/ path + folder union',
 
 	it('stripWorkFolderPrefix recovers the filename under a folder', () => {
 		expect(
-			stripWorkFolderPrefix(
-				'work/tasks/backlog/some-slice.md',
-				'tasks-backlog',
-			),
-		).toBe('some-slice.md');
+			stripWorkFolderPrefix('work/tasks/backlog/some-task.md', 'tasks-backlog'),
+		).toBe('some-task.md');
 		// Equivalent to the hand-written `path.slice('work/tasks/backlog/'.length)`.
-		const path = 'work/tasks/backlog/some-slice.md';
+		const path = 'work/tasks/backlog/some-task.md';
 		expect(stripWorkFolderPrefix(path, 'tasks-backlog')).toBe(
 			path.slice('work/tasks/backlog/'.length),
 		);

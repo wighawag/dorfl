@@ -26,7 +26,7 @@ import {
  * `install-ci-close-job-workflow` — capability E (close issues when their work
  * lands). TRIGGER: a merge to main via `push: {branches: [main]}` (fires for a
  * PR-merge AND a direct push, ALWAYS with a token that can close issues; a fork
- * `pull_request` event's read-only token could not — see the slice's Decisions).
+ * `pull_request` event's read-only token could not — see the task's Decisions).
  *
  * SEAMS: the workflow is generated into the `--fake` scratch dir with a STUBBED
  * `GitHubCIContext` ({@link MemoryCIProviderContext}: `setSecret` records to
@@ -89,7 +89,7 @@ describe('the close-job workflow satisfies every structural invariant', () => {
 		expect(result.problems.map((p) => p.id)).not.toContain(
 			'not-pull-request-trigger',
 		);
-		// And NOT the build/slice tick's cron/dispatch drain shape.
+		// And NOT the build/task tick's cron/dispatch drain shape.
 		expect(result.problems.map((p) => p.id)).not.toContain('no-cron-trigger');
 		expect(/work\/questions\//.test(text)).toBe(false);
 	});
@@ -98,7 +98,7 @@ describe('the close-job workflow satisfies every structural invariant', () => {
 		const text = generateCloseJobWorkflow(config);
 		expect(/agent-runner close-merged-issues\b/.test(text)).toBe(true);
 		// It must NOT re-implement the close with a direct `gh issue close`, and must
-		// NOT invoke a build/slice/intake verb (CI owns only the close job + trigger).
+		// NOT invoke a build/task/intake verb (CI owns only the close job + trigger).
 		const result = validateCloseJobWorkflow(text);
 		expect(result.problems.map((p) => p.id)).not.toContain(
 			'no-direct-gh-issue-close',
@@ -190,7 +190,7 @@ describe('validateCloseJobWorkflow flags a workflow missing each invariant', () 
 		);
 	});
 
-	it('flags a build/slice/intake verb sneaking in (close-job only closes)', () => {
+	it('flags a build/task/intake verb sneaking in (close-job only closes)', () => {
 		expectFlagged(
 			base.replace(
 				/run: agent-runner close-merged-issues/,

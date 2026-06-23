@@ -102,7 +102,7 @@ function seedAndRegister(
 }
 
 /**
- * The registry config: agents may auto-build/-slice; gates calm by default.
+ * The registry config: agents may auto-build/-task; gates calm by default.
  * `workspacesDir` IS the registry root (the hub-mirror set `scan(config)`
  * enumerates) AND the execution area — ONE root in production, so the test pins
  * it to the agents` area too (the driver`s `scan(config)` discovery reads
@@ -127,7 +127,7 @@ function config(overrides: Partial<Config> = {}): Config {
  * A stubbed agent that edits a slug-specific file (non-empty diff) and succeeds.
  * Each slug writes its OWN DISJOINT `${slug}.txt`, so two same-repo jobs touch
  * DIFFERENT paths: with the fresh rebased-tip gate now ON at any perRepoMax (the
- * downgrade removed by slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`),
+ * downgrade removed by task `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`),
  * two same-repo worktrees can be cut from the same base concurrently, and a SHARED
  * file would be a GENUINE add/add code conflict that correctly routes ONE job to
  * needs-attention — breaking the both-land outcome-equivalence these tests assert.
@@ -145,7 +145,7 @@ const editingRunAgent: AgentRunner = ({cwd, slug}) => {
 
 /**
  * The per-mirror advance CONTEXT factory the CLI shapes: the base `do` options the
- * build/slice rungs orchestrate `performDoRemote` with (the registry-set worktree
+ * build/task rungs orchestrate `performDoRemote` with (the registry-set worktree
  * `doDriver` is injected by the DRIVER on top of this) + the surface/triage gate
  * seams. `cwd` is a clone of THIS mirror's arbiter (the tree-less surface/apply
  * rungs' ledger-write working tree). The injected `agentRunner` edits files.
@@ -228,13 +228,13 @@ describe('advanceRegistrySet — drains the WHOLE registry (every mirror, concur
 				env: gitEnv(),
 			});
 
-			// Both mirrors drained: each mirror`s eligible slices advanced (built).
+			// Both mirrors drained: each mirror`s eligible tasks advanced (built).
 			expect(result.mirrors).toHaveLength(2);
 			const summary = advanceRegistrySetSummary(result);
 			expect(summary.advanced).toBe(3); // a1, a2, b1
 			expect(summary.stuck).toBe(0);
 
-			// Each repo`s slices landed on ITS OWN arbiter main, in done/ (merge mode).
+			// Each repo`s tasks landed on ITS OWN arbiter main, in done/ (merge mode).
 			expect(existsOnArbiterMain(a.seed.repo, 'done', 'a1')).toBe(true);
 			expect(existsOnArbiterMain(a.seed.repo, 'done', 'a2')).toBe(true);
 			expect(existsOnArbiterMain(b.seed.repo, 'done', 'b1')).toBe(true);
@@ -299,7 +299,7 @@ describe('advanceRegistrySet — gates-off OUTCOME-equivalence to plain run`s bu
 			// Two parallel universes from the SAME seed shape. UNIVERSE 1: plain `run`s
 			// build tick (`runOnce`) over the working checkouts. UNIVERSE 2: the
 			// registry-set advance batch over the registered mirrors. Both calm-gates
-			// (observationTriage off, surfaceBlockers off) ⇒ build the ready slices, each
+			// (observationTriage off, surfaceBlockers off) ⇒ build the ready tasks, each
 			// per-job-worktree-isolated off the arbiter, same integration result.
 
 			// UNIVERSE 1 — plain run build tick.
@@ -347,10 +347,10 @@ describe('advanceRegistrySet — gates-off OUTCOME-equivalence to plain run`s bu
 
 describe('advanceRegistrySet — a lifecycle rung fires under a gate-on batch', () => {
 	it(
-		'surfaceBlockers on ⇒ a needsAnswers slice is surfaced (tree-less sidecar, no build worktree)',
+		'surfaceBlockers on ⇒ a needsAnswers task is surfaced (tree-less sidecar, no build worktree)',
 		{timeout: 30000},
 		async () => {
-			// A blocked slice (needsAnswers) on the mirror; with the surface gate ON the
+			// A blocked task (needsAnswers) on the mirror; with the surface gate ON the
 			// selection layer enumerates it into the surface rung, which spawns the
 			// surface-questions skill (stubbed) and the ENGINE persists the sidecar in
 			// the tree-less cwd — NO build worktree (criterion 4).
@@ -374,7 +374,7 @@ describe('advanceRegistrySet — a lifecycle rung fires under a gate-on batch', 
 				lifecycleGates: {surface: true},
 			});
 
-			// The surface rung ADVANCED the blocked slice (not built — surfaced).
+			// The surface rung ADVANCED the blocked task (not built — surfaced).
 			const summary = advanceRegistrySetSummary(result);
 			expect(summary.advanced).toBe(1);
 
@@ -402,10 +402,10 @@ describe('advanceRegistrySet — a lifecycle rung fires under a gate-on batch', 
 });
 
 describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the arbiter (loop parity)', () => {
-	// The gap this slice closes: the loop/registry driver commits a tree-less rung
+	// The gap this task closes: the loop/registry driver commits a tree-less rung
 	// (surface/apply/triage) result in the per-mirror `treelessCwd` (cloned + wiped
 	// each tick by the CLI), so an UN-PUSHED local commit is lost on the next tick.
-	// After this slice the driver ff-pushes a tree-less result to the mirror's
+	// After this task the driver ff-pushes a tree-less result to the mirror's
 	// arbiter `main` (parity with the one-shot `advance --isolated` path), so a
 	// surfaced sidecar is OBSERVABLE on `<arbiter>/main` after the tick.
 	it(
@@ -432,7 +432,7 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 
 			expect(advanceRegistrySetSummary(result).advanced).toBe(1);
 
-			// THE SLICE'S POINT: the surfaced sidecar + the `needsAnswers:true` flip are
+			// THE TASK'S POINT: the surfaced sidecar + the `needsAnswers:true` flip are
 			// on the ARBITER's `main` (ff-pushed from the treeless cwd), so another
 			// machine / a `scan` sees them — NOT lost when the cwd is next re-cloned.
 			expect(
@@ -442,11 +442,11 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 	);
 
 	it(
-		'calm-default loop batch publishes NO tree-less result (build/slice path byte-for-byte unchanged)',
+		'calm-default loop batch publishes NO tree-less result (build/task path byte-for-byte unchanged)',
 		{timeout: 30000},
 		async () => {
 			// Calm gates (observationTriage off + surfaceBlockers off): no tree-less rung
-			// runs, so there is nothing to publish. A ready slice still builds + integrates
+			// runs, so there is nothing to publish. A ready task still builds + integrates
 			// through the job-worktree band (unchanged), but NO question sidecar appears on
 			// the arbiter — the publish path is a no-op under calm defaults.
 			const {seed} = seedAndRegister('calm', ['calm1']);
@@ -475,8 +475,8 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 		async () => {
 			// The LOAD-BEARING case the shared per-mirror `treelessCwd` (cloned ONCE at
 			// tick start, before any item runs) makes routine: a single mirror's SERIAL
-			// batch holds a ready slice (built FIRST per the `drain` order = build before
-			// surface) AND a needsAnswers slice. The build integrates `work/<slug>` to the
+			// batch holds a ready task (built FIRST per the `drain` order = build before
+			// surface) AND a needsAnswers task. The build integrates `work/<slug>` to the
 			// mirror's `main` mid-tick, so the later surface push (from a cwd cloned BEFORE
 			// that integration) is non-fast-forward BY CONSTRUCTION — the bounded
 			// re-fetch+rebase retry rebases the slug-only sidecar commit onto the advanced
@@ -503,7 +503,7 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 			expect(advanceRegistrySetSummary(result).advanced).toBe(2);
 
 			// THE LOAD-BEARING ASSERTION: BOTH landed on the arbiter. The build's merge
-			// (the slice moved to done/) advanced `main`; the surface push was then
+			// (the task moved to done/) advanced `main`; the surface push was then
 			// non-fast-forward and the retry rebased the sidecar commit onto that advanced
 			// `main` and pushed it.
 			expect(existsOnArbiterMain(seed.repo, 'done', buildSlug)).toBe(true);
@@ -515,10 +515,10 @@ describe('advanceRegistrySet — a tree-less rung PUBLISHES its result to the ar
 });
 
 /**
- * Seed ONE mirror carrying a READY slice (`buildSlug`) AND a needsAnswers slice
+ * Seed ONE mirror carrying a READY task (`buildSlug`) AND a needsAnswers task
  * (`blockedSlug`) on `main`, registered as a hub mirror — the mixed-batch fixture.
- * Seeds the ready slice via {@link seedAndRegister} (which builds the arbiter +
- * registers the mirror), then pushes the needsAnswers slice onto the SAME arbiter
+ * Seeds the ready task via {@link seedAndRegister} (which builds the arbiter +
+ * registers the mirror), then pushes the needsAnswers task onto the SAME arbiter
  * via a throwaway clone, and RE-mirrors so the bare mirror's `main` carries both.
  */
 function seedMixedReadyAndBlocked(
@@ -528,7 +528,7 @@ function seedMixedReadyAndBlocked(
 ): SeededRepo {
 	const root = join(scratch.root, name);
 	const seed = seedRepoWithArbiter(root, [buildSlug]);
-	// Push a needsAnswers slice onto the arbiter's `main` via a throwaway clone
+	// Push a needsAnswers task onto the arbiter's `main` via a throwaway clone
 	// (leaving the source checkout untouched), mirroring `seedDoneOnArbiter`.
 	const dest = join(root, 'seed-blocked');
 	gitIn(['clone', '-q', `file://${seed.arbiter}`, dest], root);
@@ -560,7 +560,7 @@ function seedMixedReadyAndBlocked(
 	gitIn(['add', '-A'], dest);
 	gitIn(['commit', '-q', '-m', `seed blocked ${blockedSlug}`], dest);
 	gitIn(['push', '-q', 'origin', 'HEAD:main'], dest);
-	// Register the mirror NOW (after both slices are on the arbiter's `main`).
+	// Register the mirror NOW (after both tasks are on the arbiter's `main`).
 	const originUrl = remoteUrl(seed.arbiter);
 	ensureMirror({url: originUrl, workspacesDir: workspacesDir(), env: gitEnv()});
 	return seed;
@@ -618,8 +618,8 @@ describe('advanceRegistrySet — the advancing borrow is RACE-CORRECT across bat
 			const all = [...resA.mirrors, ...resB.mirrors].flatMap(
 				(m) => m.batch.items,
 			);
-			// POST-#9 (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`):
-			// for a BUILD-SLICE item the advance layer takes NO borrow — the inner `do`'s
+			// POST-#9 (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`):
+			// for a BUILD-TASK item the advance layer takes NO borrow — the inner `do`'s
 			// claim lock is the SOLE exclusion. That lock guarantees the
 			// no-double-LAND invariant: at most ONE batch lands each item in `done/`
 			// (`advanced`); the other(s) either lose the claim (`lost`) or build and lose

@@ -217,7 +217,7 @@ describe('resolveRepoConfigFromLoaded \u2014 override layering', () => {
 		);
 		expect(overrideWins.config.integration).toBe('merge');
 
-		// Committed beats global (precedence unchanged by this slice).
+		// Committed beats global (precedence unchanged by this task).
 		const committed = resolveRepoConfigFromLoaded(
 			{path: 'x', config: {integration: 'merge'}, rejected: []},
 			{global: mergeConfig({integration: 'propose'})},

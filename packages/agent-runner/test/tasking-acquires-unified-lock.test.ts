@@ -27,7 +27,7 @@ const ARBITER = 'arbiter';
 
 let scratch: Scratch;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-slicing-unified-lock-');
+	scratch = makeScratch('agent-runner-tasking-unified-lock-');
 });
 afterEach(() => {
 	scratch.cleanup();
@@ -66,7 +66,7 @@ const taskingOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'tasking', slug);
 
 describe('acquireTaskingLock acquires the unified per-item lock (the marker is RETIRED)', () => {
-	it('a successful acquire holds the lock (prd:<slug>, action slice); the body stays in prd/ (NO slicing/ marker)', async () => {
+	it('a successful acquire holds the lock (prd:<slug>, action task); the body stays in prd/ (NO tasking/ marker)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			briefs: ['alpha'],
 		});
@@ -114,8 +114,8 @@ describe('acquireTaskingLock acquires the unified per-item lock (the marker is R
 	});
 });
 
-describe('a lock LOST makes the slicing acquire lose definitively with NO marker', () => {
-	it('a DIFFERENT principal already holding the SAME item lock makes the acquire lose, with NO slicing/ marker', async () => {
+describe('a lock LOST makes the tasking acquire lose definitively with NO marker', () => {
+	it('a DIFFERENT principal already holding the SAME item lock makes the acquire lose, with NO tasking/ marker', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
 		// Principal a holds ONLY the unified lock (no marker move): the brief stays in
 		// brief/, so the marker CAS alone would admit a tasker; only the held lock gates.
@@ -149,8 +149,8 @@ describe('a lock LOST makes the slicing acquire lose definitively with NO marker
 	});
 });
 
-describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SAME item lock', () => {
-	it('a slice action on an item already held for IMPLEMENT loses the SAME lock CAS', async () => {
+describe('task ∥ claim and task ∥ advance are mutually exclusive on the SAME item lock', () => {
+	it('a task action on an item already held for IMPLEMENT loses the SAME lock CAS', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['shared']});
 		// Principal a holds the item for IMPLEMENT (the claim action) — the SAME ref
 		// `brief-shared` (the lock is keyed by item identity, shared across actions).
@@ -186,7 +186,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 		expect(entry?.action).toBe('implement');
 	});
 
-	it('a slice action on an item already held for ADVANCE loses the SAME lock CAS', async () => {
+	it('a task action on an item already held for ADVANCE loses the SAME lock CAS', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['shared']});
 		// Principal a holds the item for ADVANCE on the SAME ref `brief-shared`.
 		const a = raceClone(seeded, 'a');
@@ -219,7 +219,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 		expect(entry?.action).toBe('advance');
 	});
 
-	it('conversely, a held slicing lock blocks a claim of the SAME item', async () => {
+	it('conversely, a held tasking lock blocks a claim of the SAME item', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['shared']});
 		const a = raceClone(seeded, 'a');
 		const tasked = await acquireTaskingLock({
@@ -245,7 +245,7 @@ describe('slice ∥ claim and slice ∥ advance are mutually exclusive on the SA
 	});
 });
 
-describe('race on a --bare file:// arbiter: two slicers of the SAME PRD', () => {
+describe('race on a --bare file:// arbiter: two taskers of the SAME PRD', () => {
 	it('exactly one wins; the lock + the marker agree on the single winner', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['solo']});
 		const a = raceClone(seeded, 'a');

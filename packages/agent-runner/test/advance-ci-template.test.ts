@@ -11,7 +11,7 @@ import {
 /**
  * `advance-install-ci` — the CI-integration deliverable (PRD `advance-loop`, US
  * #27/28): the `install-ci` notion as a DOCUMENTED workflow TEMPLATE (chosen over
- * a CLI subcommand — see the slice's `## Decisions`). Per the acceptance criteria,
+ * a CLI subcommand — see the task's `## Decisions`). Per the acceptance criteria,
  * a documented template is VALIDATED here: it locates as a `.template` (so it
  * never self-triggers in THIS repo), parses into the required structural shape,
  * and references the right DRIVER invocations (propose ⇒ matrix enumerated via the
@@ -99,14 +99,14 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS sliceable BRIEFS into the matrix as ' +
+		'the propose `enumerate` `jq` UNIONS taskable BRIEFS into the matrix as ' +
 			'`brief:<slug>` legs alongside the task legs (the ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` fix)',
 		() => {
 			const text = loadAdvanceCiTemplate();
 			// The task-only jq this fix replaced left `AGENT_RUNNER_AUTO_TASK` dead on
 			// the hourly cron — a ready ungated BRIEF never became a matrix leg. The new jq
-			// must read `scan --json`'s sliceable-BRIEF pool (`repos[].briefs[]` +
+			// must read `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` +
 			// `cwd.repo.briefs[]`) and emit `brief:<slug>` legs alongside `task:<slug>`.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
 			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
@@ -197,7 +197,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 
 		it(
 			'flags a regression to a TASK-ONLY `jq` (no `brief:` legs) — the ' +
-				'sliceable-BRIEF pool must be enumerated',
+				'taskable-BRIEF pool must be enumerated',
 			() => {
 				// Strip the BRIEF union from the jq: a task-only enumerator would silently
 				// kill auto-slice on the hourly cron (the exact pre-fix bug).
@@ -208,7 +208,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				const result = withTmpTemplate(broken);
 				expect(result.ok).toBe(false);
 				expect(result.problems.map((p) => p.id)).toContain(
-					'propose-enumerates-sliceable-prds',
+					'propose-enumerates-taskable-prds',
 				);
 			},
 		);

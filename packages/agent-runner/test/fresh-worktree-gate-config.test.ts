@@ -15,10 +15,10 @@ import {
 } from '../src/do-config.js';
 
 /**
- * `freshWorktreeGate` config resolution (slice
+ * `freshWorktreeGate` config resolution (task
  * `gate-on-rebased-tip-fresh-worktree`): a POSITIVE boolean, default `true`,
  * resolved per-repo through the SAME `flag > env > per-repo > global > default`
- * chain, modelled EXACTLY on `slicerLoop`. Pure logic (no git).
+ * chain, modelled EXACTLY on `taskerLoop`. Pure logic (no git).
  */
 
 describe('freshWorktreeGate — default + carry-through (positive, default-ON)', () => {

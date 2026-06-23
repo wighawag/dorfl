@@ -15,7 +15,7 @@ import type {ConfigOverrideMap} from '../src/config-override.js';
 /**
  * `advance-drivers-and-gates` — the one-shot SEQUENTIAL driver over the advance
  * TICK (the loop driver is `run`, tested in `run-*.test.ts`). House style: a
- * seeded `work/` of slices + sliceable PRDs in a plain checkout (no git mutation —
+ * seeded `work/` of tasks + taskable PRDs in a plain checkout (no git mutation —
  * the SELECTION layer only READS `work/`), with a STUBBED single-tick runner that
  * records the `arg` it was handed (so we assert WHICH items advanced, in what
  * ORDER, without driving the real classify/lock/execute pipeline — that is
@@ -23,7 +23,7 @@ import type {ConfigOverrideMap} from '../src/config-override.js';
  * is sufficient.
  *
  * Proves: one-shot sequential `-n`; the bare/`-n` selection respects the FLAT
- * per-action gates (build→`autoBuild`, slice→`autoTask`) by SELECTION; surface/
+ * per-action gates (build→`autoBuild`, task→`autoTask`) by SELECTION; surface/
  * apply are ALWAYS allowed even with every flag off (the named path); and the
  * drain/idle convergence (US #31).
  */
@@ -41,7 +41,7 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-/** Seed a `work/tasks/todo/<slug>.md` slice with the given gate frontmatter. */
+/** Seed a `work/tasks/todo/<slug>.md` task with the given gate frontmatter. */
 function seedTask(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
@@ -103,10 +103,10 @@ describe('advance (auto-pick) — applies the per-machine override over the comm
 	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
 	// advance autopick path resolves its pool through `scanRepoPaths` and must
 	// apply the per-machine override on top of the committed `.agent-runner.json`.
-	// Committed `autoBuild: false` (slice ineligible) vs override `"*":
-	// {autoBuild: true}` (eligible) ⇒ the slice MUST advance. Before `override`
+	// Committed `autoBuild: false` (task ineligible) vs override `"*":
+	// {autoBuild: true}` (eligible) ⇒ the task MUST advance. Before `override`
 	// was threaded into `performAdvanceAuto`, the committed `false` stood.
-	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (slice advances)', async () => {
+	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (task advances)', async () => {
 		seedTask('alpha');
 		writeFileSync(
 			join(repo, '.agent-runner.json'),
@@ -144,18 +144,18 @@ describe('advance (auto-pick) — applies the per-machine override over the comm
 });
 
 describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
-	it('auto-picks the first eligible SLICE when slices exist', async () => {
+	it('auto-picks the first eligible TASK when tasks exist', async () => {
 		seedTask('alpha');
 		seedTask('beta');
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
-		// exactly one item, the first eligible slice (slices sort by slug).
+		// exactly one item, the first eligible task (tasks sort by slug).
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('auto-picks a PRD (advance prd:<slug>) when NO slice is eligible', async () => {
+	it('auto-picks a PRD (advance prd:<slug>) when NO task is eligible', async () => {
 		seedTask('humanly', {humanOnly: true}); // not eligible
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
@@ -164,7 +164,7 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 		expect(args).toEqual(['brief:gamma']);
 	});
 
-	it('an empty backlog + no sliceable PRD is calm-at-rest (exit 0, nothing run)', async () => {
+	it('an empty backlog + no taskable PRD is calm-at-rest (exit 0, nothing run)', async () => {
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -174,7 +174,7 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 });
 
 describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () => {
-	it('takes x items, slices first then PRDs, in order', async () => {
+	it('takes x items, tasks first then PRDs, in order', async () => {
 		seedTask('alpha');
 		seedBrief('gamma');
 		seedBrief('delta');
@@ -186,7 +186,7 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 			count: 3,
 		});
 		expect(result.exitCode).toBe(0);
-		// one eligible slice drains first, then the two sliceable PRDs (by slug).
+		// one eligible task drains first, then the two taskable PRDs (by slug).
 		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
 	});
 
@@ -241,7 +241,7 @@ describe('advance <a> <b> — explicit named items, IN SEQUENCE', () => {
 });
 
 describe('advance — the FLAT per-action gate family (US #23) by SELECTION', () => {
-	it('with autoBuild OFF, the bare/-n selection picks NO slice (build gated)', async () => {
+	it('with autoBuild OFF, the bare/-n selection picks NO task (build gated)', async () => {
 		seedTask('alpha');
 		seedTask('beta');
 		const {run, args} = recordingRunner();
@@ -251,12 +251,12 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 			config: cfg({autoBuild: false}),
 			count: 5,
 		});
-		// build→autoBuild: off ⇒ no slice surfaces in the autonomous pool.
+		// build→autoBuild: off ⇒ no task surfaces in the autonomous pool.
 		expect(args).toEqual([]);
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('with autoTask OFF, the bare/-n selection picks NO PRD (slice gated)', async () => {
+	it('with autoTask OFF, the bare/-n selection picks NO PRD (task gated)', async () => {
 		seedBrief('gamma');
 		seedBrief('delta');
 		const {run, args} = recordingRunner();
@@ -266,7 +266,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 			config: cfg({autoTask: false}),
 			count: 5,
 		});
-		// slice→autoTask: off ⇒ no PRD surfaces in the autonomous pool.
+		// task→autoTask: off ⇒ no PRD surfaces in the autonomous pool.
 		expect(args).toEqual([]);
 	});
 
@@ -308,7 +308,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 
 describe('advance — convergence: the loop DRAINS + IDLES at rest (US #31)', () => {
 	it('a pending-sidecar pool IDLES — every tick a clean NO-OP, nothing advances, STABLE', async () => {
-		// Three eligible slices whose ticks classify NO-OP (a pending sidecar awaiting
+		// Three eligible tasks whose ticks classify NO-OP (a pending sidecar awaiting
 		// a human). The driver selects them but each tick no-ops — the pool is stable.
 		seedTask('alpha');
 		seedTask('beta');

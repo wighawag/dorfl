@@ -68,9 +68,9 @@ function sidecar(item: string, answered: boolean): string {
 /** The logical `work/` tree used by both substrates in the agreement test. */
 const WORK = {
 	backlog: {
-		'blocked-slice.md': task({slug: 'blocked-slice', needsAnswers: 'true'}),
-		'answered-slice.md': task({slug: 'answered-slice', needsAnswers: 'true'}),
-		'half-slice.md': task({slug: 'half-slice', needsAnswers: 'true'}),
+		'blocked-task.md': task({slug: 'blocked-task', needsAnswers: 'true'}),
+		'answered-task.md': task({slug: 'answered-task', needsAnswers: 'true'}),
+		'half-task.md': task({slug: 'half-task', needsAnswers: 'true'}),
 	},
 	brief: {
 		'answered-prd.md': brief({slug: 'answered-prd', needsAnswers: 'true'}),
@@ -80,8 +80,8 @@ const WORK = {
 		'settled.md': obs({slug: 'settled', triaged: 'keep'}),
 	},
 	questions: {
-		'task-answered-slice.md': sidecar('task:answered-slice', true),
-		'task-half-slice.md': sidecar('task:half-slice', false), // pending
+		'task-answered-task.md': sidecar('task:answered-task', true),
+		'task-half-task.md': sidecar('task:half-task', false), // pending
 		'brief-answered-prd.md': sidecar('brief:answered-prd', true),
 	},
 };
@@ -97,11 +97,11 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		});
 		expect(result.lifecycle.triage.map((s) => s.slug)).toEqual(['open']);
 		expect(result.lifecycle.surface.map((s) => s.slug)).toEqual([
-			'blocked-slice',
+			'blocked-task',
 		]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['brief:answered-prd', 'task:answered-slice']);
+		).toEqual(['brief:answered-prd', 'task:answered-task']);
 	});
 
 	it('INTERIM born-OFF default: triage + surface EMPTY, apply still present (consume always-on)', async () => {
@@ -116,7 +116,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		expect(result.lifecycle.surface).toEqual([]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['brief:answered-prd', 'task:answered-slice']);
+		).toEqual(['brief:answered-prd', 'task:answered-task']);
 	});
 });
 
@@ -159,18 +159,18 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
 				'build-me.md': task({slug: 'build-me'}),
-				'answered-slice.md': task({
-					slug: 'answered-slice',
+				'answered-task.md': task({
+					slug: 'answered-task',
 					needsAnswers: 'true',
 				}),
-				'blocked-slice.md': task({
-					slug: 'blocked-slice',
+				'blocked-task.md': task({
+					slug: 'blocked-task',
 					needsAnswers: 'true',
 				}),
 			},
 			observations: {'triage-me.md': obs({slug: 'triage-me'})},
 			questions: {
-				'task-answered-slice.md': sidecar('task:answered-slice', true),
+				'task-answered-task.md': sidecar('task:answered-task', true),
 			},
 		});
 		const pool = await scanMirrorPool({
@@ -190,9 +190,9 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 			lifecycle: pool.lifecycle,
 		});
 		expect(selected.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'task:answered-slice', // apply: PINNED FIRST (consume-always-wins)
+			'task:answered-task', // apply: PINNED FIRST (consume-always-wins)
 			'task:build-me', // build
-			'task:blocked-slice', // surface
+			'task:blocked-task', // surface
 			'observation:triage-me', // triage
 		]);
 	});

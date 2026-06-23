@@ -22,7 +22,7 @@ import {
 
 /**
  * The stuck-state surface is the per-item lock `state: stuck`, NOT a
- * `needs-attention/` folder file on `main` (slice
+ * `needs-attention/` folder file on `main` (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+: the
  * on-`main` surfacing mechanism is RETIRED). These pin the cut-over: the bounce
  * does NO `main` write, the stuck reason rides on the lock, and `start` resolves
@@ -48,7 +48,7 @@ function currentBranch(repo: string): string {
 
 /**
  * Stand a repo up exactly as the runner leaves it just before a stuck outcome: a
- * slice claimed (the per-item lock is held active; the body RESTS in backlog/) and
+ * task claimed (the per-item lock is held active; the body RESTS in backlog/) and
  * onboarded onto `work/<slug>` off the freshly-pushed main, with the build agent's
  * UNCOMMITTED edits in the tree.
  */

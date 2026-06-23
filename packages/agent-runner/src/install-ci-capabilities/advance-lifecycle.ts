@@ -1,11 +1,11 @@
 /**
- * The ADVANCE-LIFECYCLE capability emitter (PRD `runner-in-ci`, slice
+ * The ADVANCE-LIFECYCLE capability emitter (PRD `runner-in-ci`, task
  * `install-ci-advance-lifecycle-workflow`; capability C: auto-triage observations
  * + surface declared blockers + apply committed answers). A SELF-REGISTERING
  * module: it calls {@link registerCapability} at import time, so
  * {@link loadCapabilityRegistry} picks it up WITHOUT any edit to a shared central
- * list/switch (the file-orthogonality contract — this slice and the sibling
- * capability slices stay mergeable in parallel).
+ * list/switch (the file-orthogonality contract — this task and the sibling
+ * capability tasks stay mergeable in parallel).
  *
  * The workflow shape (the parameterised seed `advance-loop.yml.template`) + its
  * structural validator live in `advance-lifecycle-template.ts`; this file is the

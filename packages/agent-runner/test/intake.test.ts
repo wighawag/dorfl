@@ -38,7 +38,7 @@ import {
 /**
  * `intake-tracer-slice-outcome` (PRD `issue-intake`): the KEYSTONE `intake <N>`
  * one-shot — read an issue via the issue SEAM → prompt→verdict → DISPATCH the
- * `slice` outcome through `performIntegration`.
+ * `task` outcome through `performIntegration`.
  *
  * House style (mirrors `run-integration-core.test.ts` / `review-gate-pr-comment.test.ts`):
  * a throwaway project checkout + a local `--bare` arbiter (`seedRepoWithArbiter`),
@@ -176,16 +176,16 @@ function stubIssueProvider(
 }
 
 /**
- * A canned CONVERGING lone-slice review gate (the STUBBED review seam — no
+ * A canned CONVERGING lone-task review gate (the STUBBED review seam — no
  * model/network): every round `approve`s with no blocking finding and proposes no
- * edit, so the drafted slice is emitted unchanged. The bounded review
+ * edit, so the drafted task is emitted unchanged. The bounded review
  * (`intake-lone-slice-bounded-internal-review`) is ALWAYS ON (ruling B), so every
- * slice-outcome test must drive this new seam alongside the decision seam.
+ * task-outcome test must drive this new seam alongside the decision seam.
  */
-const convergingReviewGate: import('../src/intake.js').LoneSliceReviewGate =
+const convergingReviewGate: import('../src/intake.js').LoneTaskReviewGate =
 	async () => ({verdict: 'approve', findings: []});
 
-/** A canned `slice` verdict (the STUBBED decision seam — no model/network). */
+/** A canned `task` verdict (the STUBBED decision seam — no model/network). */
 const TASK_VERDICT: IntakeVerdict = {
 	outcome: 'task',
 	taskSlug: 'add-quiet-flag',
@@ -205,8 +205,8 @@ const TASK_VERDICT: IntakeVerdict = {
 	].join('\n'),
 };
 
-describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
-	it('a stubbed `slice` verdict writes work/tasks/todo/<slug>.md (issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
+describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
+	it('a stubbed `task` verdict writes work/tasks/todo/<slug>.md (issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 
@@ -216,7 +216,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			// default integration (propose); no provider override (file:// ⇒ none)
 			env: gitEnv(),
 		});
@@ -226,8 +226,8 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(result.emittedSlug).toBe('add-quiet-flag');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 
-		// PROPOSE (default): the slice rides the work/<slug> branch on the arbiter,
-		// and main is NOT touched (no done/backlog slice landed on main).
+		// PROPOSE (default): the task rides the work/<slug> branch on the arbiter,
+		// and main is NOT touched (no done/backlog task landed on main).
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const branchTip = gitIn(
@@ -241,7 +241,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		).trim();
 		expect(branchTip).not.toBe('');
 
-		// The slice file ON THAT BRANCH carries the lone-slice `issue: N` closure link
+		// The task file ON THAT BRANCH carries the lone-task `issue: N` closure link
 		// (read by a future CI close-job), covers: [], and NO prd: — and NO `Fixes #N`
 		// (a deferred GitHub-only optimisation, dropped from intake).
 		const onBranch = gitIn(
@@ -261,13 +261,13 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		expect(onBranch).not.toMatch(/^originTrust:/m);
 	});
 
-	// ── Origin-trust STAMP (slice untrusted-origin-forces-build-propose) ──────────
+	// ── Origin-trust STAMP (task untrusted-origin-forces-build-propose) ──────────
 	// The CI shell passes `--origin-trust <trusted|untrusted>` (derived from
 	// author_association); `intake` STAMPS it onto the emitted artifact so the
 	// becomes-code checkpoint survives the merge boundary. A LOCAL intake (no flag)
 	// emits UNSTAMPED ⇒ human/trusted (the human running intake IS the checkpoint).
 
-	const readEmittedSlice = (repo: string): string =>
+	const readEmittedTask = (repo: string): string =>
 		gitIn(
 			[
 				'show',
@@ -276,7 +276,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			repo,
 		);
 
-	it('intake --origin-trust untrusted STAMPS origin: issue + originTrust: untrusted on the emitted slice', async () => {
+	it('intake --origin-trust untrusted STAMPS origin: issue + originTrust: untrusted on the emitted task', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -284,13 +284,13 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
-		const onBranch = readEmittedSlice(repo);
+		const onBranch = readEmittedTask(repo);
 		expect(onBranch).toMatch(/^origin: issue$/m);
 		expect(onBranch).toMatch(/^originTrust: untrusted$/m);
 	});
@@ -303,18 +303,18 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			originTrust: 'trusted',
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
-		const onBranch = readEmittedSlice(repo);
+		const onBranch = readEmittedTask(repo);
 		expect(onBranch).toMatch(/^origin: issue$/m);
 		expect(onBranch).toMatch(/^originTrust: trusted$/m);
 	});
 
-	it('a LOCAL intake (no --origin-trust) emits an UNSTAMPED slice (⇒ human/trusted: the human IS the checkpoint)', async () => {
+	it('a LOCAL intake (no --origin-trust) emits an UNSTAMPED task (⇒ human/trusted: the human IS the checkpoint)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -322,13 +322,13 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			// No originTrust passed (the local human path).
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
-		const onBranch = readEmittedSlice(repo);
+		const onBranch = readEmittedTask(repo);
 		expect(onBranch).not.toMatch(/^origin:/m);
 		expect(onBranch).not.toMatch(/^originTrust:/m);
 	});
@@ -367,8 +367,8 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 
 	it('is GATE-FREE: it proceeds with the autonomous gates (autoBuild/autoTask) OFF', async () => {
 		// Prove `intake` does not consult the autonomous-selection gates: even with a
-		// per-repo config that turns the build gate (autoBuild) AND the slice gate
-		// (autoTask) OFF, the explicit invocation authorizes the run and the slice is
+		// per-repo config that turns the build gate (autoBuild) AND the task gate
+		// (autoTask) OFF, the explicit invocation authorizes the run and the task is
 		// emitted. (`intake` takes NO autonomy config at all — the explicit invocation
 		// IS the authorization, exactly as `do`; the gates are the autonomous path's.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
@@ -383,7 +383,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 7}}),
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
 
@@ -409,14 +409,14 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 				headAtDecision = gitIn(['rev-parse', 'HEAD'], cwd).trim();
 				return TASK_VERDICT;
 			},
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
 
 		// The AGENT (decider) posted NO issue comment itself — the runner owns every
-		// seam side-effect. On a SUCCESSFUL slice the RUNNER posts exactly ONE
-		// informational completion comment AFTER the integrate (this slice); the agent
+		// seam side-effect. On a SUCCESSFUL task the RUNNER posts exactly ONE
+		// informational completion comment AFTER the integrate (this task); the agent
 		// stays seam-free (it returned a verdict and touched no git/seam).
 		expect(issueProvider.comments).toHaveLength(1);
 		expect(issueProvider.comments[0].body).toContain('Created task');
@@ -450,7 +450,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 				taskTitle: 'Fix the Broken Login Button',
 				taskBody: undefined,
 			}),
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -496,7 +496,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: failingProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(1);
@@ -508,10 +508,10 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 // ---------------------------------------------------------------------------
 // The DRAFTED title reaches the COMMIT SUBJECT + the propose-PR TITLE
 // (`intake-propose-title-from-drafted-slice`). The bug: `integration-core`
-// read the title from `lifecycle.titlePath` BEFORE `dispatchSlice`'s `stage()`
-// WROTE that file, so for the intake lone-slice path the output
+// read the title from `lifecycle.titlePath` BEFORE `dispatchTask`'s `stage()`
+// WROTE that file, so for the intake lone-task path the output
 // `work/tasks/todo/<slug>.md` did not exist yet at read time → the commit subject
-// degraded to `complete work slice` and the propose-PR title to a generic
+// degraded to `complete work task` and the propose-PR title to a generic
 // `feat(<slug>)`. The fix threads the drafted title EXPLICITLY (no file read).
 // Nothing asserted either string before — the missing coverage that let the bug
 // ship green.
@@ -555,10 +555,10 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		return gitIn(['log', '-1', '--format=%s', ref], repo).trim();
 	}
 
-	it('a lone-SLICE outcome: the COMMIT SUBJECT and the propose-PR TITLE both carry the drafted title (not `complete work slice` / `feat(<slug>)`)', async () => {
+	it('a lone-TASK outcome: the COMMIT SUBJECT and the propose-PR TITLE both carry the drafted title (not `complete work task` / `feat(<slug>)`)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
-		const gh = recordingGh('intake-slice-title');
+		const gh = recordingGh('intake-task-title');
 
 		const result = await performIntake({
 			issueNumber: 42,
@@ -566,7 +566,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			// `propose` (default) through the GitHub provider INSTANCE (arbiter-derived
 			// now) so the synthesised PR `--title` reaches the recording `gh` stub.
 			providerInstance: new GitHubProvider({ghBin: gh.bin}),
@@ -576,14 +576,14 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 
 		// COMMIT SUBJECT: read from the runner-owned commit on the pushed work branch.
 		// It carries the DRAFTED title (`<type>(<slug>): <title>; <tag>`) — NOT the
-		// generic `complete work slice` fallback the file-read race produced.
+		// generic `complete work task` fallback the file-read race produced.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(
 			`${ARBITER}/work/intake-task-add-quiet-flag`,
 			repo,
 		);
 		expect(subject).toContain('Add a --quiet flag to suppress progress notes');
-		expect(subject).not.toContain('complete work slice');
+		expect(subject).not.toContain('complete work task');
 
 		// PROPOSE-PR TITLE: the synthesised `--title` reaching `gh pr create` carries
 		// the drafted title — NOT a bare generic `feat(add-quiet-flag)`, and never --fill.
@@ -594,7 +594,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		);
 		expect(args).not.toMatch(/^--fill$/m);
 
-		// The slice file's OWN frontmatter `title:` is unchanged (rendered correctly all
+		// The task file's OWN frontmatter `title:` is unchanged (rendered correctly all
 		// along — only the derived subject/PR title were lost).
 		const onBranch = gitIn(
 			[
@@ -618,7 +618,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
@@ -627,7 +627,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(`${ARBITER}/main`, repo);
 		expect(subject).toContain('Add a --quiet flag to suppress progress notes');
-		expect(subject).not.toContain('complete work slice');
+		expect(subject).not.toContain('complete work task');
 	});
 
 	it('a PRD outcome: the COMMIT SUBJECT and propose-PR TITLE carry the drafted PRD title', async () => {
@@ -656,7 +656,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			repo,
 		);
 		expect(subject).toContain('Quiet and verbose output modes');
-		expect(subject).not.toContain('complete work slice');
+		expect(subject).not.toContain('complete work task');
 
 		const args = gh.readArgs();
 		expect(args).toMatch(/^--title$/m);
@@ -778,7 +778,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(result.message).not.toMatch(/unavailable or unauthenticated/i);
 	});
 
-	it('ask / slice / prd NEVER close the issue (only bounce closes)', async () => {
+	it('ask / task / prd NEVER close the issue (only bounce closes)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// ASK: posts a comment, no close.
 		const askProvider = stubIssueProvider({issue: {number: 9}});
@@ -795,20 +795,20 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(askProvider.comments).toHaveLength(1);
 		expect(asked.closed).toBeUndefined();
 
-		// SLICE: emits a slice, no close.
+		// TASK: emits a task, no close.
 		const taskProvider = stubIssueProvider({issue: {number: 9}});
-		const sliced = await performIntake({
+		const tasked = await performIntake({
 			issueNumber: 9,
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider: taskProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
-		expect(sliced.outcome).toBe('tasked');
+		expect(tasked.outcome).toBe('tasked');
 		expect(taskProvider.closes).toHaveLength(0);
-		expect(sliced.closed).toBeUndefined();
+		expect(tasked.closed).toBeUndefined();
 
 		// BRIEF: emits a brief, no close.
 		const briefProvider = stubIssueProvider({issue: {number: 9}});
@@ -903,7 +903,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			'work/briefs/proposed/quiet-and-verbose-modes.md',
 		);
 
-		// One informational completion comment posted (this slice): the runner reports
+		// One informational completion comment posted (this task): the runner reports
 		// `prd created` back on the issue, framed as created (not resolved).
 		expect(issueProvider.comments).toHaveLength(1);
 		expect(issueProvider.comments[0].body).toContain('Created brief');
@@ -922,8 +922,8 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(branchTip).not.toBe('');
 
 		// The PRD file ON THAT BRANCH carries `issue: 42` (the close-JOB linkage),
-		// surfaces the gate axes the verdict judged, and is NOT sliced (no backlog
-		// slices emitted alongside it).
+		// surfaces the gate axes the verdict judged, and is NOT tasked (no backlog
+		// tasks emitted alongside it).
 		const onBranch = gitIn(
 			[
 				'show',
@@ -1019,7 +1019,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 				);
 				return TASK_VERDICT;
 			},
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
 
@@ -1105,12 +1105,12 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
 
-		// The run PROCEEDS (the slice is emitted) without a lock — no crash, no back-off.
+		// The run PROCEEDS (the task is emitted) without a lock — no crash, no back-off.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
@@ -1218,7 +1218,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -1248,7 +1248,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			// The TASK mode resolves to merge (e.g. from `--merge-task`); the BRIEF mode
 			// is irrelevant for a task verdict.
 			integration: {task: 'merge', brief: 'propose'},
@@ -1257,19 +1257,19 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		// MERGE: the slice landed on arbiter main (no PR; main advanced).
+		// MERGE: the task landed on arbiter main (no PR; main advanced).
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
 		const onMain = gitIn(
 			['show', `${ARBITER}/main:work/tasks/todo/add-quiet-flag.md`],
 			repo,
 		);
-		// The merged slice carries the `issue: N` closure link, not `Fixes #N` (which
+		// The merged task carries the `issue: N` closure link, not `Fixes #N` (which
 		// has no PR-body slot on the merge path anyway).
 		expect(onMain).toMatch(/^issue: 42$/m);
 		expect(onMain).not.toContain('Fixes');
 	});
 
-	it('a `slice` verdict with integration.slice=propose opens a PR (main untouched)', async () => {
+	it('a `task` verdict with integration.slice=propose opens a PR (main untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -1277,14 +1277,14 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			integration: {task: 'propose', brief: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		// PROPOSE: main is NOT touched; the slice rides the work/<slug> branch. (The
-		// PRD mode being `merge` must NOT leak onto the slice path.)
+		// PROPOSE: main is NOT touched; the task rides the work/<slug> branch. (The
+		// PRD mode being `merge` must NOT leak onto the task path.)
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const branchTip = gitIn(
@@ -1299,7 +1299,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		expect(branchTip).not.toBe('');
 	});
 
-	it('a `prd` verdict with integration.prd=merge LANDS the PRD on arbiter main (slice mode irrelevant)', async () => {
+	it('a `prd` verdict with integration.prd=merge LANDS the PRD on arbiter main (task mode irrelevant)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -1311,7 +1311,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 				briefSlug: 'quiet-and-verbose-modes',
 				briefTitle: 'Quiet and verbose output modes',
 			}),
-			// The PRD mode resolves to merge; the SLICE mode must NOT route the PRD.
+			// The PRD mode resolves to merge; the TASK mode must NOT route the PRD.
 			integration: {task: 'propose', brief: 'merge'},
 			env: gitEnv(),
 		});
@@ -2174,10 +2174,10 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
-		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + slices.
+		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + tasks.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
@@ -2187,16 +2187,16 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 // ---------------------------------------------------------------------------
 // The COMPLETION COMMENT on SUCCESSFUL outcomes
 // (`intake-posts-completion-comment-on-slice-prd-outcomes`, PRD `issue-intake`):
-// on a `sliced` / `prd` outcome intake posts ONE INFORMATIONAL comment back on the
-// issue — `slice created` / `prd created`, NEVER "resolved"; it links the PR
+// on a `tasked` / `prd` outcome intake posts ONE INFORMATIONAL comment back on the
+// issue — `task created` / `prd created`, NEVER "resolved"; it links the PR
 // (propose) or the landed commit (merge), carries the FULL `created` marker (incl.
 // `seen=`) so the triage SKIPS `already-terminal` on it, and DEGRADES (a missing
 // `gh` never changes the success outcome). Asserted at the stubbed issue seam.
 // ---------------------------------------------------------------------------
-describe('intake <N> — the completion comment on slice/prd success', () => {
+describe('intake <N> — the completion comment on task/prd success', () => {
 	const NS = `${brand.base}:intake`;
 
-	it('a `sliced` outcome posts an informational `slice created` comment naming the slug (NOT “resolved”), with the PR link in propose + the FULL created marker (incl. seen=)', async () => {
+	it('a `tasked` outcome posts an informational `task created` comment naming the slug (NOT “resolved”), with the PR link in propose + the FULL created marker (incl. seen=)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// One human comment (id 7) → the created marker records seen=7 (the per-run delta).
 		const issueProvider = stubIssueProvider({
@@ -2209,7 +2209,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			// propose (default) → the comment links the PR
 			env: gitEnv(),
 		});
@@ -2270,12 +2270,12 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		// The slice landed on main; the comment links that commit SHA.
+		// The task landed on main; the comment links that commit SHA.
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const landed = gitIn(['rev-parse', `${ARBITER}/main`], repo).trim();
@@ -2347,7 +2347,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider: lockedProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(locked.outcome).toBe('locked');
@@ -2387,7 +2387,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const base = stubIssueProvider({issue: {number: 42}});
 		const notes: string[] = [];
-		// The post FAILS (advisory degrade) — the slice still succeeds.
+		// The post FAILS (advisory degrade) — the task still succeeds.
 		const issueProvider: IssueProvider = {
 			...base,
 			async postIssueComment(input) {
@@ -2404,7 +2404,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -2418,22 +2418,22 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 
 	it('the completion comment carries the TERMINAL `created` marker → the triage SKIPS `already-terminal` on a thread carrying it (cannot re-trigger intake)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// 1) FIRST run: slice the issue + capture the posted completion comment (with its
+		// 1) FIRST run: task the issue + capture the posted completion comment (with its
 		//    full `created` marker), exactly as it would land on the thread.
 		const first = stubIssueProvider({
 			issue: {number: 42},
 			comments: [{id: '7', author: 'octocat', body: 'please add it'}],
 		});
-		const sliced = await performIntake({
+		const tasked = await performIntake({
 			issueNumber: 42,
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider: first,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: convergingReviewGate,
+			reviewTask: convergingReviewGate,
 			env: gitEnv(),
 		});
-		expect(sliced.outcome).toBe('tasked');
+		expect(tasked.outcome).toBe('tasked');
 		const completionBody = first.comments[0].body;
 
 		// 2) SECOND run on a thread that now carries that completion comment (intake's own

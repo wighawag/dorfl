@@ -16,10 +16,10 @@ import {
 /**
  * `failure-cause-classification-model-vs-git-vs-agent` — the CROSS-PATH
  * convergence: `do` and `run` must classify the SAME thrown core error the SAME
- * way. The slice's headline divergence (`work/notes/observations/run-thrown-core-error-
+ * way. The task's headline divergence (`work/notes/observations/run-thrown-core-error-
  * labeled-agent-failed.md`): a thrown CORE wiring/config error (`review` on with
  * no `reviewGate`) used to read as `usage-error` in `do` but `agent-failed` in
- * `run`. After this slice BOTH map it to the SAME `config-error` cause.
+ * `run`. After this task BOTH map it to the SAME `config-error` cause.
  *
  * House style: throwaway checkout + local `--bare` arbiter + stubbed agent. Drives
  * real git + writes main, so (like do.test.ts/run.test.ts) it is non-parallel.

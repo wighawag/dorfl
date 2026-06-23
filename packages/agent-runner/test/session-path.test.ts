@@ -4,7 +4,7 @@ import {isAbsolute, join, resolve} from 'node:path';
 import {generateSessionPath, piDefaultSessionDir} from '../src/session-path.js';
 
 /**
- * The session-path generator (slice `session-path-pi-default`) — the SINGLE
+ * The session-path generator (task `session-path-pi-default`) — the SINGLE
  * source of the `--session <path>` value. These pin the four load-bearing
  * properties: the arg is ABSOLUTE + ends `.jsonl` (else pi exits 1), it is
  * UNIQUE per launch (else pi would resume/replay the prior session), it lands

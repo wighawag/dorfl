@@ -238,16 +238,16 @@ describe('resume --isolated <slug> — re-engages the retained worktree (prints 
 
 describe('do integration-failure recovery one-liner', () => {
 	it('names the exact complete --isolated recovery command for the slug', () => {
-		const line = recoverIsolatedOneLiner('my-slice');
-		expect(line).toMatch(/agent-runner complete --isolated my-slice/);
+		const line = recoverIsolatedOneLiner('my-task');
+		expect(line).toMatch(/agent-runner complete --isolated my-task/);
 	});
 
-	it('ALSO names the cross-machine finish (plain complete) so a CI-stranded slice finished from another checkout is not told to use the no-op --isolated', () => {
-		const line = recoverIsolatedOneLiner('my-slice');
+	it('ALSO names the cross-machine finish (plain complete) so a CI-stranded task finished from another checkout is not told to use the no-op --isolated', () => {
+		const line = recoverIsolatedOneLiner('my-task');
 		// Same-machine shortcut still present...
-		expect(line).toMatch(/complete --isolated my-slice/);
+		expect(line).toMatch(/complete --isolated my-task/);
 		// ...and the portable, any-checkout finish: plain `complete <slug>`.
-		expect(line).toMatch(/agent-runner complete my-slice/);
+		expect(line).toMatch(/agent-runner complete my-task/);
 		// Flags WHY --isolated is machine-local (so the reader is not misled).
 		expect(line).toMatch(/SAME MACHINE/);
 	});

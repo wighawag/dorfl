@@ -6,12 +6,12 @@ import {
 } from '../src/tasking-eligibility.js';
 
 describe('resolveTaskGate — the humanOnly × needsAnswers × autoTask matrix', () => {
-	it('humanOnly: true is never agent-sliceable regardless of autoTask', () => {
+	it('humanOnly: true is never agent-taskable regardless of autoTask', () => {
 		expect(resolveTaskGate(true, undefined, false)).toBe(false);
 		expect(resolveTaskGate(true, undefined, true)).toBe(false);
 	});
 
-	it('needsAnswers: true is never agent-sliceable regardless of autoTask', () => {
+	it('needsAnswers: true is never agent-taskable regardless of autoTask', () => {
 		expect(resolveTaskGate(undefined, true, false)).toBe(false);
 		expect(resolveTaskGate(undefined, true, true)).toBe(false);
 	});
@@ -22,14 +22,14 @@ describe('resolveTaskGate — the humanOnly × needsAnswers × autoTask matrix',
 		expect(resolveTaskGate(false, true, true)).toBe(false);
 	});
 
-	it('undeclared on both axes is sliceable iff autoTask is on', () => {
+	it('undeclared on both axes is taskable iff autoTask is on', () => {
 		expect(resolveTaskGate(undefined, undefined, false)).toBe(false);
 		expect(resolveTaskGate(undefined, undefined, true)).toBe(true);
 	});
 
 	// An explicit `false` on either axis is treated as "not gated" (undeclared),
 	// per the binary model: the only meaningful declaration is `true`.
-	it('explicit false on both axes behaves like undeclared (sliceable iff autoTask)', () => {
+	it('explicit false on both axes behaves like undeclared (taskable iff autoTask)', () => {
 		expect(resolveTaskGate(false, false, false)).toBe(false);
 		expect(resolveTaskGate(false, false, true)).toBe(true);
 	});
@@ -54,7 +54,7 @@ describe('resolveTaskGate — the humanOnly × needsAnswers × autoTask matrix',
 describe('resolveTaskGate — explicit naming satisfies the autoTask policy term', () => {
 	// `explicit: true` mirrors `do <task>` building regardless of `autoBuild`:
 	// naming the brief IS the authorization, so the `autoTask` policy term drops.
-	it('explicit + autoTask OFF is sliceable (the policy term is satisfied by naming)', () => {
+	it('explicit + autoTask OFF is taskable (the policy term is satisfied by naming)', () => {
 		expect(resolveTaskGate(undefined, undefined, false, true)).toBe(true);
 	});
 
@@ -75,7 +75,7 @@ describe('resolveTaskGate — explicit naming satisfies the autoTask policy term
 });
 
 describe('resolveTaskingEligibility — explicit drops the policy term but keeps briefAfter', () => {
-	it('explicit + autoTask OFF + no briefAfter ⇒ sliceable', () => {
+	it('explicit + autoTask OFF + no briefAfter ⇒ taskable', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
@@ -88,7 +88,7 @@ describe('resolveTaskingEligibility — explicit drops the policy term but keeps
 		expect(r.gatePass).toBe(true);
 	});
 
-	it('explicit + autoTask OFF but an UNSLICED briefAfter ⇒ gate passes, still blocked', () => {
+	it('explicit + autoTask OFF but an UNTASKED briefAfter ⇒ gate passes, still blocked', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
@@ -123,19 +123,19 @@ describe('resolveTaskAfter — against `work/briefs/tasked/` residence (not done
 		expect(r.missing).toEqual([]);
 	});
 
-	it('is satisfied when every listed PRD is already sliced', () => {
+	it('is satisfied when every listed PRD is already tasked', () => {
 		const r = resolveTaskAfter(['a', 'b'], new Set(['a', 'b', 'c']));
 		expect(r.satisfied).toBe(true);
 		expect(r.missing).toEqual([]);
 	});
 
-	it('is unsatisfied and reports the unsliced PRDs', () => {
+	it('is unsatisfied and reports the untasked PRDs', () => {
 		const r = resolveTaskAfter(['a', 'b'], new Set(['a']));
 		expect(r.satisfied).toBe(false);
 		expect(r.missing).toEqual(['b']);
 	});
 
-	it('reports all missing when none are sliced', () => {
+	it('reports all missing when none are tasked', () => {
 		const r = resolveTaskAfter(['a', 'b'], new Set());
 		expect(r.satisfied).toBe(false);
 		expect(r.missing).toEqual(['a', 'b']);
@@ -147,7 +147,7 @@ describe('resolveTaskAfter — against `work/briefs/tasked/` residence (not done
 	});
 });
 
-describe('resolveTaskingEligibility — gate × briefAfter (sliced-vs-unsliced fixtures)', () => {
+describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked fixtures)', () => {
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
@@ -167,7 +167,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (sliced-vs-unsliced f
 			taskable: true,
 			gatePass: true,
 		},
-		// undeclared + autoTask on + an UNSLICED blocker ⇒ gate passes but blocked
+		// undeclared + autoTask on + an UNTASKED blocker ⇒ gate passes but blocked
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
@@ -247,7 +247,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (sliced-vs-unsliced f
 			taskable: false,
 			gatePass: false,
 		},
-		// multiple briefAfter, one unsliced ⇒ blocked though gate passes
+		// multiple briefAfter, one untasked ⇒ blocked though gate passes
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
@@ -267,10 +267,10 @@ describe('resolveTaskingEligibility — gate × briefAfter (sliced-vs-unsliced f
 				c.briefAfter.length === 0
 					? 'none'
 					: c.briefAfter.every((s) => c.tasked.has(s))
-						? 'sliced'
-						: 'unsliced'
+						? 'tasked'
+						: 'untasked'
 			}`;
-		it(`${label} → sliceable=${c.taskable}`, () => {
+		it(`${label} → taskable=${c.taskable}`, () => {
 			const r = resolveTaskingEligibility({
 				humanOnly: c.humanOnly,
 				needsAnswers: c.needsAnswers,
@@ -283,7 +283,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (sliced-vs-unsliced f
 		});
 	}
 
-	it('reports the unsliced PRDs when blocked by briefAfter', () => {
+	it('reports the untasked PRDs when blocked by briefAfter', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,

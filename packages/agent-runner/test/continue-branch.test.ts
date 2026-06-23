@@ -153,9 +153,9 @@ describe('rebaseContinuedBranchOntoMain', () => {
 	// --- Plain rebase: no transient status on the branch, nothing to drop -------
 	//
 	// After the per-item-lock cut-over (PRD `ledger-status-per-item-lock-refs`,
-	// slices 9a–9d) NO transient status lands on a work branch: claim does not move
+	// tasks 9a–9d) NO transient status lands on a work branch: claim does not move
 	// the body (it rests in `backlog/`), needs-attention is the lock `state: stuck`
-	// (not a `git mv`), and the slicing/advancing markers are gone. So a branch cut
+	// (not a `git mv`), and the tasking/advancing markers are gone. So a branch cut
 	// from `main` inherits NO runner-authored move-only bookkeeping commit, and a
 	// continue/rebase onto a freshly-advanced `main` is a PLAIN rebase — there is
 	// nothing to drop and no rename/rename ledger conflict. This proves the
@@ -165,7 +165,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 
-		// The body RESTS in `backlog/` on main (claim no longer moves it, slice 9a).
+		// The body RESTS in `backlog/` on main (claim no longer moves it, task 9a).
 		// Cut the work branch off main — it inherits the SAME `work/tasks/todo/alpha.md`
 		// main has, so there is NO transient-status file unique to the branch.
 		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
@@ -176,7 +176,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'wip(alpha): agent feature'], repo);
 
-		// main advances DURABLY and independently: another slice lands a durable
+		// main advances DURABLY and independently: another task lands a durable
 		// `backlog → done` move for a SIBLING item + an unrelated content change. None
 		// of this touches our slug's `backlog/alpha.md`, so a plain replay is clean.
 		gitIn(['switch', '-q', 'main'], repo);

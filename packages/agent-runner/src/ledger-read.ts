@@ -80,7 +80,7 @@ export interface LedgerTodoItem {
  * slug, so collision detection must see it. While a brief IS being tasked its body
  * STAYS in `work/briefs/ready/` (the tasking lock no longer moves it — task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`; the transient
- * `slicing/` folder is retired, the in-flight state is the per-item lock ref), so a
+ * `tasking/` folder is retired, the in-flight state is the per-item lock ref), so a
  * mid-tasking brief is detected via its `work/briefs/ready/` residence. The slug is resolved
  * from frontmatter `slug:`, falling back to the filename — the SAME shape the task
  * readers use.
@@ -130,7 +130,7 @@ export interface LedgerBriefItem {
  * the selection layer can resolve each brief's `briefAfter` against `work/briefs/tasked/`
  * RESIDENCE (task `prd-sliced-folder-step-a` / brief `slicing-coherence` US #9): the
  * FOLDER is the source of truth, like `done/` for tasks (the auto-tasker reads
- * folder-residence; the `sliced:` marker was removed in
+ * folder-residence; the `tasked:` marker was removed in
  * `remove-sliced-marker-step-b`). Built
  * through the SAME brief read path as {@link BriefExistence}; there is no second brief
  * reader.
@@ -295,7 +295,7 @@ export interface LedgerReadStrategy {
 	/**
 	 * Resolve whether a brief named `<slug>` exists in the LOCAL working tree's
 	 * `work/briefs/ready/` (the brief source — where a mid-tasking brief ALSO rests now that the
-	 * `slicing/` folder is retired) and/or `work/briefs/tasked/` (the tasked resting
+	 * `tasking/` folder is retired) and/or `work/briefs/tasked/` (the tasked resting
 	 * state). The slug is resolved from each candidate file's frontmatter `slug:`,
 	 * falling back to the filename — the SAME shape the task readers use.
 	 *
@@ -478,7 +478,7 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
 
 /**
  * Does a brief named `slug` exist in `<repoPath>/work/<folder>/`? A brief source file
- * is `work/briefs/ready/*.md` (where a mid-tasking brief also rests — the `slicing/` folder is
+ * is `work/briefs/ready/*.md` (where a mid-tasking brief also rests — the `tasking/` folder is
  * retired); a tasked brief rests at `work/briefs/tasked/*.md` (the source of truth for
  * tasked-ness). We match the slug against each file's
  * frontmatter `slug:` (falling back to the filename) — the SAME shape the task
@@ -508,7 +508,7 @@ function findBriefFileBySlug(
  * already-TASKED set is RESIDENCE in `work/briefs/tasked/` (task
  * `prd-sliced-folder-step-a` / brief `slicing-coherence` US #9): the FOLDER is the
  * source of truth (the build-machine `done/` analogue), so `briefAfter` resolves
- * against `briefs/tasked/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
+ * against `briefs/tasked/` residence (mirroring `blockedBy` -> `done/`). The `tasked:`
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
  * matches `tasking.ts`'s `readTaskedSlugs`. Missing folders read as empty.
  */
@@ -529,7 +529,7 @@ function readLocalBriefPool(repoPath: string): LocalBriefPool {
 	briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 
 	// Tasked-ness is RESIDENCE in `work/briefs/tasked/` — the FOLDER is the source of
-	// truth, like `done/` for tasks (the `sliced:` marker was removed in
+	// truth, like `done/` for tasks (the `tasked:` marker was removed in
 	// `remove-sliced-marker-step-b`), mirroring tasking.ts's readTaskedSlugs. Missing
 	// folder reads as empty.
 	const taskedSlugs = new Set<string>();
@@ -746,7 +746,7 @@ async function readBriefPoolFromTree(
 	briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 
 	// Tasked-ness is RESIDENCE in `work/briefs/tasked/` — the FOLDER is the source of
-	// truth (the `sliced:` marker was removed in `remove-sliced-marker-step-b`),
+	// truth (the `tasked:` marker was removed in `remove-sliced-marker-step-b`),
 	// exactly as the working-tree reader resolves it.
 	const taskedBase = `${ref}:${workFolderRel('briefs-tasked')}`;
 	const taskedSlugs = new Set<string>();

@@ -20,7 +20,7 @@ import {
 /**
  * Pure-logic tests for the tasker review→edit→converge LOOP
  * (`slicer-review-edit-loop`). These exercise the loop MECHANICS — the in-context
- * (N) review→edit→re-review, the `slicerLoopMax` hard cap, the M fresh-context
+ * (N) review→edit→re-review, the `taskerLoopMax` hard cap, the M fresh-context
  * re-executions, the edit-application to candidate task files, and the three
  * verdict-routing outcomes — with a STUBBED review gate (no real model, no
  * network, no harness). Candidate task files live under a temp
@@ -31,7 +31,7 @@ import {
 
 let cwd: string;
 beforeEach(() => {
-	cwd = mkdtempSync(join(tmpdir(), 'slicer-review-loop-'));
+	cwd = mkdtempSync(join(tmpdir(), 'tasker-review-loop-'));
 	mkdirSync(join(cwd, 'work', 'tasks', 'backlog'), {recursive: true});
 });
 afterEach(() => {
@@ -75,7 +75,7 @@ function scriptedGate(
 }
 
 describe('runTaskReviewLoop — converging (findings → edits → clean)', () => {
-	it('applies the agent edits to the candidate slice files and re-reviews until clean', async () => {
+	it('applies the agent edits to the candidate task files and re-reviews until clean', async () => {
 		seedCandidate('child', 'draft');
 		const calls: Array<{pass: number; execution: number}> = [];
 		const gate = scriptedGate(
@@ -131,7 +131,7 @@ describe('runTaskReviewLoop — converging (findings → edits → clean)', () =
 		expect(result.passes).toBe(1);
 	});
 
-	it('an edit may CREATE a new candidate slice (review split one into two)', async () => {
+	it('an edit may CREATE a new candidate task (review split one into two)', async () => {
 		seedCandidate('child');
 		const result = await runTaskReviewLoop({
 			slug: 'it',
@@ -180,12 +180,12 @@ describe('runTaskReviewLoop — converging (findings → edits → clean)', () =
 	});
 });
 
-describe('runTaskReviewLoop — scoping fence (only THIS run’s own slices)', () => {
+describe('runTaskReviewLoop — scoping fence (only THIS run’s own tasks)', () => {
 	// The requeue fix: on a POPULATED backlog (the normal steady state), the loop
 	// must review/edit/flag ONLY the tasks new-or-changed since the `before`
 	// snapshot — never the pre-existing, already-landed tasks that share the dir.
 
-	it('reviews ONLY the run’s own candidate slices (pre-existing ones are not passed to the gate)', async () => {
+	it('reviews ONLY the run’s own candidate tasks (pre-existing ones are not passed to the gate)', async () => {
 		// Two pre-existing LANDED tasks already in the backlog.
 		seedCandidate('landed-a', 'landed a');
 		seedCandidate('landed-b', 'landed b');
@@ -211,7 +211,7 @@ describe('runTaskReviewLoop — scoping fence (only THIS run’s own slices)', (
 		expect(Object.keys(result.tasks)).toEqual(['work/tasks/backlog/mine.md']);
 	});
 
-	it('REFUSES an edit to a pre-existing landed slice (untouched on disk)', async () => {
+	it('REFUSES an edit to a pre-existing landed task (untouched on disk)', async () => {
 		const landedRel = seedCandidate('landed', 'ORIGINAL landed content');
 		const before = snapshotBacklog();
 		seedCandidate('mine', 'mine');
@@ -222,7 +222,7 @@ describe('runTaskReviewLoop — scoping fence (only THIS run’s own slices)', (
 				{
 					verdict: 'block',
 					findings: [
-						{severity: 'blocking', question: 'hijack the landed slice'},
+						{severity: 'blocking', question: 'hijack the landed task'},
 					],
 					edits: [{path: landedRel, content: 'HIJACKED'}],
 				},
@@ -237,7 +237,7 @@ describe('runTaskReviewLoop — scoping fence (only THIS run’s own slices)', (
 		);
 	});
 
-	it('the uncertain-slices FLOOR flags only the run’s own slices (not pre-existing)', async () => {
+	it('the uncertain-tasks FLOOR flags only the run’s own tasks (not pre-existing)', async () => {
 		seedCandidate('landed', 'landed');
 		const before = snapshotBacklog();
 		seedCandidate('mine', 'mine');
@@ -254,14 +254,14 @@ describe('runTaskReviewLoop — scoping fence (only THIS run’s own slices)', (
 			before,
 			taskerLoopMax: 1,
 		});
-		expect(result.outcome).toBe('uncertain-slices');
+		expect(result.outcome).toBe('uncertain-tasks');
 		// Only THIS run's task is flagged — the pre-existing landed one is untouched.
 		expect(result.uncertainTasks.map((u) => u.path)).toEqual([
 			'work/tasks/backlog/mine.md',
 		]);
 	});
 
-	it('an edit that IMPROVES the run’s own slice still applies (in-scope)', async () => {
+	it('an edit that IMPROVES the run’s own task still applies (in-scope)', async () => {
 		seedCandidate('landed', 'landed');
 		const before = snapshotBacklog();
 		const mineRel = seedCandidate('mine', 'draft');
@@ -289,8 +289,8 @@ describe('runTaskReviewLoop — scoping fence (only THIS run’s own slices)', (
 	});
 });
 
-describe('runTaskReviewLoop — slicerLoopMax cap rejects via the sink', () => {
-	it('persistent block → uncertain-slices (specific slices needsAnswers + questions)', async () => {
+describe('runTaskReviewLoop — taskerLoopMax cap rejects via the sink', () => {
+	it('persistent block → uncertain-tasks (specific tasks needsAnswers + questions)', async () => {
 		seedCandidate('child');
 		const gate = scriptedGate([
 			{
@@ -310,7 +310,7 @@ describe('runTaskReviewLoop — slicerLoopMax cap rejects via the sink', () => {
 			gate,
 			taskerLoopMax: 2,
 		});
-		expect(result.outcome).toBe('uncertain-slices');
+		expect(result.outcome).toBe('uncertain-tasks');
 		// The cap was hit (2 passes), never an infinite loop.
 		expect(result.passes).toBe(2);
 		expect(result.uncertainTasks).toEqual([
@@ -318,7 +318,7 @@ describe('runTaskReviewLoop — slicerLoopMax cap rejects via the sink', () => {
 		]);
 	});
 
-	it('persistent block with NO named slice → ALL candidates treated as uncertain (floor)', async () => {
+	it('persistent block with NO named task → ALL candidates treated as uncertain (floor)', async () => {
 		seedCandidate('a');
 		seedCandidate('b');
 		const result = await runTaskReviewLoop({
@@ -332,7 +332,7 @@ describe('runTaskReviewLoop — slicerLoopMax cap rejects via the sink', () => {
 			]),
 			taskerLoopMax: 1,
 		});
-		expect(result.outcome).toBe('uncertain-slices');
+		expect(result.outcome).toBe('uncertain-tasks');
 		// Never silently drops the rejection: every candidate is flagged.
 		expect(result.uncertainTasks.map((u) => u.path).sort()).toEqual([
 			'work/tasks/backlog/a.md',
@@ -344,7 +344,7 @@ describe('runTaskReviewLoop — slicerLoopMax cap rejects via the sink', () => {
 		}
 	});
 
-	it('decomposition-unclear → route the PRD to needs-attention (no guessed slices)', async () => {
+	it('decomposition-unclear → route the PRD to needs-attention (no guessed tasks)', async () => {
 		seedCandidate('child');
 		const result = await runTaskReviewLoop({
 			slug: 'it',
@@ -397,7 +397,7 @@ describe('runTaskReviewLoop — M fresh-context re-executions', () => {
 		// Stopped at execution 2 (the first to converge) — execution 3 never ran.
 		expect(result.executions).toBe(2);
 		expect(exec).toBe(2);
-		// Execution 1 ran its full slicerLoopMax (2 passes), execution 2 converged pass 1.
+		// Execution 1 ran its full taskerLoopMax (2 passes), execution 2 converged pass 1.
 		expect(calls).toEqual([
 			{pass: 1, execution: 1},
 			{pass: 2, execution: 1},
@@ -483,7 +483,7 @@ describe('parseTaskReviewVerdict — reads the agent verdict (incl. edits + rout
 });
 
 describe('buildTaskReviewPrompt — frames the artifact + the output shape', () => {
-	it('names the candidate slices, the destination check, and the JSON shape', () => {
+	it('names the candidate tasks, the destination check, and the JSON shape', () => {
 		const prompt = buildTaskReviewPrompt({
 			slug: 'it',
 			cwd: '/tmp/x',

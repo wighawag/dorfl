@@ -35,7 +35,7 @@ const ARBITER = 'arbiter';
 let scratch: Scratch;
 let restorePiAgentDir: () => void;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-slicing-');
+	scratch = makeScratch('agent-runner-tasking-');
 	// Test-isolation (shared-write rule): point pi's session storage at scratch so
 	// no task-file/session write touches the real ~/.pi/agent/sessions/.
 	restorePiAgentDir = isolatePiAgentDir(scratch.root);
@@ -76,7 +76,7 @@ function seedBrief(
 	if (fm.briefAfter && fm.briefAfter.length > 0) {
 		lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
 	}
-	if (fm.tasked) lines.push(`sliced: ${fm.tasked}`);
+	if (fm.tasked) lines.push(`tasked: ${fm.tasked}`);
 	lines.push(
 		'---',
 		'',
@@ -197,7 +197,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.message).toMatch(/autoTask/);
 	});
 
-	it('an EXPLICITLY-named PRD slices with autoTask OFF (no config, no env) — naming IS the authorization', async () => {
+	it('an EXPLICITLY-named PRD tasks with autoTask OFF (no config, no env) — naming IS the authorization', async () => {
 		// The task-path mirror of `do <task>` building regardless of `autoBuild`:
 		// `explicit: true` (the `do brief:<slug>` dispatch) drops the `autoTask` POLICY
 		// term, so an explicit task-now proceeds to the lock/agent with the policy
@@ -275,7 +275,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.message).not.toMatch(/autoTask/);
 	});
 
-	it('refuses when a briefAfter PRD is not yet sliced (names it)', async () => {
+	it('refuses when a briefAfter PRD is not yet tasked (names it)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// `dep` exists but is NOT tasked; `it` briefAfter: [dep].
 		seedBrief(repo, 'dep');
@@ -294,9 +294,9 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.message).toMatch(/briefAfter/);
 	});
 
-	it('passes the gate once the briefAfter PRD IS sliced', async () => {
+	it('passes the gate once the briefAfter PRD IS tasked', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` is SLICED — it RESIDES in work/briefs/tasked/ (the source of truth), not
+		// `dep` is TASKED — it RESIDES in work/briefs/tasked/ (the source of truth), not
 		// a `tasked:` marker in work/briefs/ready/. `it`'s briefAfter resolves against that
 		// folder residence (mirroring blockedBy -> done/).
 		seedBrief(repo, 'dep', {inBriefTasked: true});
@@ -312,7 +312,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.outcome).toBe('tasked');
 	});
 
-	it('STILL refuses when the briefAfter PRD only carries an INERT `sliced:` line in prd/ (folder, not marker)', async () => {
+	it('STILL refuses when the briefAfter PRD only carries an INERT `tasked:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// `dep` sits in work/briefs/ready/ with a leftover (INERT) `tasked:` line but is NOT in
 		// brief-tasked/. Folder residence is the SOLE source of truth — the marker was
@@ -333,7 +333,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.message).toMatch(/dep/);
 	});
 
-	it('the HUMAN path is unbound by the gate (slices a humanOnly PRD, no lock)', async () => {
+	it('the HUMAN path is unbound by the gate (tasks a humanOnly PRD, no lock)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it', {humanOnly: true});
 		let acquired = false;
@@ -362,8 +362,8 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 // --- The completing transition (real git, lock taken/released) -------------
 
-describe('performTask — slices + commits the runner-owned transition', () => {
-	it('takes the lock, runs the agent, lands slices in pre-backlog/ (STAGED), rests PRD in prd-sliced/', async () => {
+describe('performTask — tasks + commits the runner-owned transition', () => {
+	it('takes the lock, runs the agent, lands tasks in pre-backlog/ (STAGED), rests PRD in prd-tasked/', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -386,17 +386,17 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 		// task `pre-backlog-staging-folder-and-promote-step-a`).
 		expect(onArbiter(repo, 'work/tasks/backlog/it-first.md')).toBe(true);
 		expect(onArbiter(repo, 'work/tasks/todo/it-first.md')).toBe(false);
-		// The lock was released into the SLICED resting state: the brief now resides in
+		// The lock was released into the TASKED resting state: the brief now resides in
 		// work/briefs/tasked/ (the source of truth, like done/), NOT back in brief/; tasking/
 		// is empty.
 		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		// Tasked-ness is RESIDENCE in brief-tasked/ (asserted above). The `tasked:` marker
 		// was removed in remove-tasked-marker-step-b, so the resting brief carries NO
 		// tasked: line.
 		expect(showArbiter(repo, 'work/briefs/tasked/it.md')).not.toMatch(
-			/^sliced:/m,
+			/^tasked:/m,
 		);
 	});
 
@@ -435,7 +435,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			repo,
 			{env: gitEnv()},
 		).stdout.trim();
-		expect(subject).toMatch(/^slicing\(it\):/);
+		expect(subject).toMatch(/^tasking\(it\):/);
 		expect(subject).toMatch(/; tasked$/);
 		// The completing commit carries BOTH the emitted backlog task AND the
 		// tasking→brief-tasked move (a rename), in ONE runner-owned commit (rename
@@ -450,7 +450,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 		expect(files).toMatch(/work\/briefs\/tasked\/it\.md/);
 		// The brief is no longer held in tasking/ (the lock was released in this commit)
 		// and now rests in brief-tasked/ (the source of truth), NOT back in brief/.
-		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
 	});
@@ -510,9 +510,9 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			{env: gitEnv()},
 		).stdout.trim();
 		expect(subject).toBe(
-			'slicing(it): Quiet and verbose output modes for the CLI; tasked',
+			'tasking(it): Quiet and verbose output modes for the CLI; tasked',
 		);
-		expect(subject).not.toContain('complete work slice');
+		expect(subject).not.toContain('complete work task');
 	});
 
 	it('the content-identity stale check fires on a concurrent edit of the held PRD', async () => {
@@ -549,7 +549,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('RE-SLICE round-trip: prd-sliced/ -> prd/ reopens a sliced PRD into the slice pool', async () => {
+	it('RE-TASK round-trip: prd-tasked/ -> prd/ reopens a tasked PRD into the task pool', async () => {
 		// Task `it` ONCE: it lands in work/briefs/tasked/ (the tasked resting state).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
@@ -671,7 +671,7 @@ describe('performTask — lock lost / agent failed', () => {
 				acquire: async () => ({
 					exitCode: 2,
 					outcome: 'lost',
-					message: 'someone holds the slicing lock',
+					message: 'someone holds the tasking lock',
 				}),
 				release: () => {
 					throw new Error('release must not run when acquire lost');
@@ -722,7 +722,7 @@ describe('performTask — lock lost / agent failed', () => {
 
 // --- The tasker review→edit→converge LOOP (tasker-review-edit-loop) -----------
 
-describe('performTask — the slicer review→edit→converge loop', () => {
+describe('performTask — the tasker review→edit→converge loop', () => {
 	/** A loop gate returning a scripted sequence of verdicts (one per pass). */
 	function loopGate(verdicts: TaskReviewVerdict[]): TaskReviewGate {
 		let i = 0;
@@ -733,7 +733,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		};
 	}
 
-	it('a converging loop (findings → edits → clean) LANDS the IMPROVED slices', async () => {
+	it('a converging loop (findings → edits → clean) LANDS the IMPROVED tasks', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -772,11 +772,11 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		// The lock was released + the brief now rests in brief-tasked/ (residence = the SOLE
 		// tasked-ness signal; the `tasked:` marker was removed in
 		// remove-tasked-marker-step-b).
-		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 	});
 
-	it('a persistent block hits slicerLoopMax → emits the uncertain slice needsAnswers + questions', async () => {
+	it('a persistent block hits taskerLoopMax → emits the uncertain task needsAnswers + questions', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -802,7 +802,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		expect(result.loop).toBe('uncertain-slices');
+		expect(result.loop).toBe('uncertain-tasks');
 		// The task landed STAGED BUT is flagged needsAnswers with the questions in its body.
 		const body = showArbiter(repo, 'work/tasks/backlog/child.md');
 		expect(body).toMatch(/needsAnswers: true/);
@@ -810,7 +810,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		expect(body).toMatch(/## Open questions/);
 	});
 
-	it('decomposition-unclear → routes the PRD to needs-attention, emits NO slices', async () => {
+	it('decomposition-unclear → routes the PRD to needs-attention, emits NO tasks', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -840,7 +840,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/slicing/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		// No guessed tasks emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/todo/child.md')).toBe(false);
@@ -883,7 +883,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		});
 		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBe('converged');
-		// Execution 1 ran twice (slicerLoopMax), execution 2 once (converged), 3 never.
+		// Execution 1 ran twice (taskerLoopMax), execution 2 once (converged), 3 never.
 		expect(executions).toEqual([1, 1, 2]);
 	});
 
@@ -910,7 +910,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		expect(loopRan).toBe(false);
 	});
 
-	it('no loop seam wired ⇒ the candidate slices land as-is (pre-loop behaviour)', async () => {
+	it('no loop seam wired ⇒ the candidate tasks land as-is (pre-loop behaviour)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -927,7 +927,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(true);
 	});
 
-	it('on a POPULATED pool, the loop’s edit attempts to a pool slice are FENCED OUT (the loop only touches pre-backlog/)', async () => {
+	it('on a POPULATED pool, the loop’s edit attempts to a pool task are FENCED OUT (the loop only touches pre-backlog/)', async () => {
 		// The requeue fix (regression): seed a POPULATED backlog — a pre-existing,
 		// already-LANDED task committed on the arbiter — then task. The loop must
 		// review/edit/flag ONLY the task THIS run produced; the pre-existing task
@@ -978,7 +978,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		expect(result.loop).toBe('uncertain-slices');
+		expect(result.loop).toBe('uncertain-tasks');
 		// The gate was only ever shown THIS run's own produced STAGED task.
 		for (const seen of seenByGate) {
 			expect(seen).toEqual(['work/tasks/backlog/child.md']);

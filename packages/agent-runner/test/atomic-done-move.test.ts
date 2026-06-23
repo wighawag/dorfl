@@ -61,7 +61,7 @@ async function claimAndBranch(slug: string) {
 describe('atomic done-move — the move is a MOVE, not a COPY (defect 1)', () => {
 	// NOTE: the historical divergent-base scenario (the arbiter holds the slug in a
 	// TRANSIENT folder — `in-progress/`/`needs-attention/` — while the branch base has
-	// it elsewhere) is RETIRED by the capstone cut-over (slice
+	// it elsewhere) is RETIRED by the capstone cut-over (task
 	// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the only
 	// `work/` moves on `main` are the durable resting transitions, the body always
 	// rests in `backlog/` until the durable promotion, and the stuck surface is a lock

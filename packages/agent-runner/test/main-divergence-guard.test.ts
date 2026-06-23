@@ -14,7 +14,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The main-divergence guard + the NON-FATAL local-main sync (the slice
+ * The main-divergence guard + the NON-FATAL local-main sync (the task
  * `main-divergence-guard`). House style: a throwaway checkout + a local `--bare`
  * arbiter + a STUBBED agent. It drives real git AND writes `main` (the merge-mode
  * integration + the autonomous needs-attention surfacing), so it lives in the

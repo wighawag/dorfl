@@ -25,7 +25,7 @@ import type {
 
 /**
  * STEP A of the PRD-lifecycle staging/pool split (PRD
- * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12/#14, slice
+ * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12/#14, task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`; governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`).
  *
@@ -40,7 +40,7 @@ import type {
  *   (b) `work/briefs/ready/` STILL means the auto-slice POOL: the pool reader
  *       (`createLocalLedgerReadStrategy().resolvePrdPool`) reads `work/briefs/ready/`
  *       byte-for-byte unchanged and a staged PRD is NOT in the pool; the
- *       slicing-eligibility gate refuses a staged slug;
+ *       tasking-eligibility gate refuses a staged slug;
  *   (c) the runner-owned promotion (`promoteFromPrePrd`) moves the staged
  *       PRD `pre-prd/ \u2192 prd/` on the arbiter and the same slug becomes
  *       auto-sliceable. There is no agent-facing path that performs the
@@ -239,7 +239,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 });
 
 describe('STEP A (PRD) \u2014 work/briefs/ready/ STILL means the auto-slice POOL (readers unchanged)', () => {
-	it('a staged PRD is NOT in the auto-slice pool: the pool reader sees nothing, the slicing-eligibility gate refuses', async () => {
+	it('a staged PRD is NOT in the auto-slice pool: the pool reader sees nothing, the tasking-eligibility gate refuses', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -257,7 +257,7 @@ describe('STEP A (PRD) \u2014 work/briefs/ready/ STILL means the auto-slice POOL
 		const pool = ledgerRead.resolveBriefPool({repoPath: repo});
 		expect(pool.briefs.map((p) => p.slug)).not.toContain('shiny-new-vision');
 
-		// AND the slicing-eligibility gate refuses an autonomous slice of a staged
+		// AND the tasking-eligibility gate refuses an autonomous task of a staged
 		// PRD (by RESIDENCE \u2014 it is not in the pool to begin with).
 		const eligibility = resolveTaskingEligibility({
 			humanOnly: false,
@@ -380,62 +380,62 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 	});
 });
 
-describe('STEP A (PRD) \u2014 briefAfter (prd-sliced/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
+describe('STEP A (PRD) \u2014 briefAfter (prd-tasked/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
 	it('briefAfter still resolves against work/briefs/tasked/ residence \u2014 not work/briefs/proposed/, not work/briefs/ready/', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// Seed an already-sliced PRD into work/briefs/tasked/, AND a counterpart in
+		// Seed an already-tasked PRD into work/briefs/tasked/, AND a counterpart in
 		// the STAGING pre-prd/ folder. `briefAfter` resolution must read
-		// `prd-sliced/` for its satisfied set \u2014 the staging folder must not
+		// `prd-tasked/` for its satisfied set \u2014 the staging folder must not
 		// satisfy a `briefAfter` dependency.
 		mkdirSync(join(repo, 'work', 'briefs', 'tasked'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'briefs', 'tasked', 'already-sliced.md'),
-			'---\nslug: already-sliced\n---\n\nbody\n',
+			join(repo, 'work', 'briefs', 'tasked', 'already-tasked.md'),
+			'---\nslug: already-tasked\n---\n\nbody\n',
 		);
 		mkdirSync(join(repo, 'work', 'briefs', 'proposed'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'briefs', 'proposed', 'staged-not-sliced.md'),
-			'---\nslug: staged-not-sliced\n---\n\nbody\n',
+			join(repo, 'work', 'briefs', 'proposed', 'staged-not-tasked.md'),
+			'---\nslug: staged-not-tasked\n---\n\nbody\n',
 		);
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'seed prd-sliced + pre-prd'], repo);
+		gitIn(['commit', '-q', '-m', 'seed prd-tasked + pre-prd'], repo);
 		gitIn(['push', '-q', ARBITER, 'main'], repo);
 
 		// The pool reader reads `work/briefs/ready/` (the auto-slice pool, unchanged).
 		const pool = ledgerRead.resolveBriefPool({repoPath: repo});
-		// `slicedSlugs` is RESIDENCE in `work/briefs/tasked/` (mirror of `done/` for
+		// `taskedSlugs` is RESIDENCE in `work/briefs/tasked/` (mirror of `done/` for
 		// blockedBy). The staged PRD in `work/briefs/proposed/` must NOT appear here.
-		expect(pool.taskedSlugs.has('already-sliced')).toBe(true);
-		expect(pool.taskedSlugs.has('staged-not-sliced')).toBe(false);
+		expect(pool.taskedSlugs.has('already-tasked')).toBe(true);
+		expect(pool.taskedSlugs.has('staged-not-tasked')).toBe(false);
 
-		// `briefAfter: [already-sliced]` is satisfied (the sliced set includes it).
+		// `briefAfter: [already-tasked]` is satisfied (the tasked set includes it).
 		const okIfPriorTasked = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
-			briefAfter: ['already-sliced'],
+			briefAfter: ['already-tasked'],
 			taskedSlugs: pool.taskedSlugs,
 		});
 		expect(okIfPriorTasked.taskable).toBe(true);
 		expect(okIfPriorTasked.briefAfter.satisfied).toBe(true);
 
-		// `briefAfter: [staged-not-sliced]` is NOT satisfied \u2014 a STAGED PRD
-		// (residence in `work/briefs/proposed/`) does NOT count as already-sliced.
+		// `briefAfter: [staged-not-tasked]` is NOT satisfied \u2014 a STAGED PRD
+		// (residence in `work/briefs/proposed/`) does NOT count as already-tasked.
 		const blockedByStaged = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
-			briefAfter: ['staged-not-sliced'],
+			briefAfter: ['staged-not-tasked'],
 			taskedSlugs: pool.taskedSlugs,
 		});
 		expect(blockedByStaged.taskable).toBe(false);
 		expect(blockedByStaged.briefAfter.satisfied).toBe(false);
-		expect(blockedByStaged.briefAfter.missing).toEqual(['staged-not-sliced']);
+		expect(blockedByStaged.briefAfter.missing).toEqual(['staged-not-tasked']);
 	});
 
 	it('blockedBy still resolves against work/tasks/done/ residence \u2014 unchanged by the PRD staging split', () => {
-		// `resolveEligibility` does the SLICE side; this asserts the staging
-		// pre-prd/ split does not perturb blockedBy resolution (which is a SLICE
+		// `resolveEligibility` does the TASK side; this asserts the staging
+		// pre-prd/ split does not perturb blockedBy resolution (which is a TASK
 		// gate axis, never a PRD axis \u2014 the split is on PRDs only).
 		const blocked = resolveEligibility({
 			humanOnly: false,

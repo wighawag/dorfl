@@ -204,8 +204,8 @@ describe('do <slug> — promptGuidance.testFirst reaches the AUTONOMOUS worker p
 });
 
 describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-forces-build-propose)', () => {
-	// Stamp the backlog slice as untrusted-origin + push it to main (a slice born
-	// from an untrusted issue, propagated by the slicer onto the backlog file).
+	// Stamp the backlog task as untrusted-origin + push it to main (a task born
+	// from an untrusted issue, propagated by the tasker onto the backlog file).
 	const stampTaskUntrusted = (repo: string, slug: string): void => {
 		const path = join(repo, 'work', 'tasks', 'todo', `${slug}.md`);
 		const content = readFileSync(path, 'utf8');
@@ -218,7 +218,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 		gitIn(['push', '-q', ARBITER, 'main'], repo);
 	};
 
-	it('the AUTONOMOUS path (integration: merge, NO explicit flag) PROPOSES an untrusted slice — never merges to main', async () => {
+	it('the AUTONOMOUS path (integration: merge, NO explicit flag) PROPOSES an untrusted task — never merges to main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['untrusted']);
 		stampTaskUntrusted(repo, 'untrusted');
 
@@ -236,7 +236,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
-		// PROPOSE: the slice did NOT land in done/ on main (a human reviews the PR).
+		// PROPOSE: the task did NOT land in done/ on main (a human reviews the PR).
 		expect(existsOnArbiterMain(repo, 'done', 'untrusted')).toBe(false);
 		// The work branch was pushed (the PR source).
 		expect(
@@ -247,7 +247,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 		).not.toBe('');
 	});
 
-	it('an explicit --merge (explicitMerge: true) OVERRIDES the build-propose rule — the untrusted slice LANDS on main', async () => {
+	it('an explicit --merge (explicitMerge: true) OVERRIDES the build-propose rule — the untrusted task LANDS on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['untrusted']);
 		stampTaskUntrusted(repo, 'untrusted');
 
@@ -406,7 +406,7 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 		expect(result.outcome).toBe('needs-attention');
 
 		// CRITICAL — `do` is autonomous: the stuck state is the per-item lock
-		// `state: stuck` (slice 9b: the lock is the SOLE stuck record), so
+		// `state: stuck` (task 9b: the lock is the SOLE stuck record), so
 		// scan/status/another machine can read it. NO `main` write — the body STAYS
 		// in backlog/ (it never moved on claim) and NO needs-attention/ folder is
 		// written.
@@ -418,7 +418,7 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 	});
 
 	it('CONTRAST: human `complete` (no surfaceArbiter) routes LOCAL-ONLY — main still shows the body in backlog', async () => {
-		// This locks the AUTONOMOUS-vs-HUMAN divergence the slice flags: `do` passes
+		// This locks the AUTONOMOUS-vs-HUMAN divergence the task flags: `do` passes
 		// the arbiter (surfaces on main); the human `complete` does NOT, so a red
 		// gate leaves main showing the body still in backlog (a human is right there).
 		// If someone made `complete` always surface, this fails.
@@ -474,18 +474,18 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 
 describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention (performDo parity with runRemotePipeline)', () => {
 	/**
-	 * Slice `autonomous-integration-refusal-surfaces-not-strands-in-progress`
+	 * Task `autonomous-integration-refusal-surfaces-not-strands-in-progress`
 	 * (PR/Gate-2 follow-up): `complete.ts` now returns `outcome: 'strand-surfaced'`
 	 * (the autonomous source-strand / empty-staged refusal surfaced on the arbiter)
 	 * and `outcome: 'surface-unmoved'` (the honest cannot-land signal). The in-place
 	 * `performDo` dispatch must MAP these to the same caller-visible labels that
 	 * `runRemotePipeline` (the `do --remote` tail) uses — `needs-attention` and
-	 * `surface-unmoved` respectively — so `advance slice:<slug>` (via the default
+	 * `surface-unmoved` respectively — so `advance task:<slug>` (via the default
 	 * `doDriver = performDo`) agrees with the remote path on the outcome label.
 	 * Without this mapping a strand surface fell through to `usage-error`.
 	 */
 
-	/** A stubbed agent that COMMITS a deletion of the slice's body (now resting in
+	/** A stubbed agent that COMMITS a deletion of the task's body (now resting in
 	 * `work/tasks/todo/`, since claim no longer moves it) from the work branch — the
 	 * source-strand state `complete.ts` refuses with `nothing to complete (already
 	 * done, or wrong slug?)`. The arbiter still holds the body in `work/tasks/todo/`,
@@ -499,7 +499,7 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 		writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
 		gitIn(['rm', '-q', `work/tasks/todo/${slug}.md`], cwd);
 		gitIn(['add', '-A'], cwd);
-		gitIn(['commit', '-q', '-m', 'drop the slice (source strand)'], cwd);
+		gitIn(['commit', '-q', '-m', 'drop the task (source strand)'], cwd);
 		return {ok: true};
 	};
 
@@ -523,7 +523,7 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 
-		// The stuck state is the per-item lock `state: stuck` (slice 9b); the body
+		// The stuck state is the per-item lock `state: stuck` (task 9b); the body
 		// STAYS in backlog/ on main (no needs-attention/ folder, no in-progress/), so
 		// the next autonomous tick reads the held stuck lock and does NOT re-claim and
 		// re-crash forever.
@@ -912,7 +912,7 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 	const stoppingAgent: DoAgentRunner = () => ({
 		ok: true,
 		output: [
-			'I ran the slice drift-check.',
+			'I ran the task drift-check.',
 			'=== TASK-STOP ===',
 			'The task rests on premise X which is false against current src/foo.ts.',
 			'Re-scope before re-claiming.',
@@ -1036,7 +1036,7 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 });
 
 describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceStrategy', () => {
-	// These pin the equivalence the `do-run-share-isolation-seam` slice requires:
+	// These pin the equivalence the `do-run-share-isolation-seam` task requires:
 	// in-place `do` now onboards through `selectIsolationStrategy({checkout})` →
 	// `inPlaceStrategy.prepare()` (the §14 continue + §10 conflict path) instead of
 	// composing `performStart`'s onboarding on a literal `cwd`.
@@ -1097,7 +1097,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
 	});
 
-	it('a CONTINUE-FROM-TIP whose prior work is already committed + green and adds NOTHING this session is NOT a no-op (reaches the gate + PR, slice noop-backstop-counts-branch-commits)', async () => {
+	it('a CONTINUE-FROM-TIP whose prior work is already committed + green and adds NOTHING this session is NOT a no-op (reaches the gate + PR, task noop-backstop-counts-branch-commits)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const repo = seeded.repo;
 
@@ -1131,7 +1131,7 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 		expect(requeued.moved).toBe(true);
 
 		// Second attempt: the cause is already fixed on the kept branch, so the agent
-		// correctly adds NOTHING this session (clean working tree). BEFORE this slice
+		// correctly adds NOTHING this session (clean working tree). BEFORE this task
 		// the working-tree-only backstop read that as a no-op and routed to
 		// needs-attention BEFORE the gate; now the prior SOURCE commit ahead of
 		// `<arbiter>/main` keeps it out of "no-op" so it flows to the gate + completes.
@@ -1322,7 +1322,7 @@ describe('do <slug> — propose PR body: the agent OUTPUT reaches the provider -
 	 * `performComplete` as the PR `body`. With a `gh` stub on PATH (recording its
 	 * args), the stubbed agent's `output` must surface in `gh pr create --body`.
 	 */
-	it('a stubbed agent`s output is threaded to gh pr create --body (under a slice pointer)', async () => {
+	it('a stubbed agent`s output is threaded to gh pr create --body (under a task pointer)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		// A recording `gh` stub on PATH (no real GitHub).
 		const binDir = join(scratch.root, 'gh-stub-do');
@@ -1603,11 +1603,11 @@ describe('do <slug> — noPR (the PR-INTENT axis) + the up-front gh-probe guard'
 	});
 });
 
-describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () => {
-	it('a bare slug resolves to the slice and builds it', async () => {
+describe('do — slug resolution (§3a): bare / task: / prd: + collision', () => {
+	it('a bare slug resolves to the task and builds it', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await performDo({
-			arg: 'alpha', // bare → the slice
+			arg: 'alpha', // bare → the task
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
@@ -1619,7 +1619,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.slug).toBe('alpha');
 	});
 
-	it('an explicit slice:<slug> resolves to the slice and builds it', async () => {
+	it('an explicit task:<slug> resolves to the task and builds it', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await performDo({
 			arg: 'task:alpha',
@@ -1634,11 +1634,11 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.slug).toBe('alpha');
 	});
 
-	it('do prd:<slug> dispatches to the slicing path; an EXPLICITLY-named PRD slices with autoTask OFF (naming IS the authorization)', async () => {
-		// The build/slice symmetry (slice `explicit-do-prd-not-gated-by-autoslice`):
-		// `do prd:<slug>` is an EXPLICIT target the operator named, so it slices
-		// REGARDLESS of the repo's `autoTask` POLICY — EXACTLY as `do <slice>` builds a
-		// named slice regardless of `autoBuild`. autoTask OFF (the default) no longer
+	it('do prd:<slug> dispatches to the tasking path; an EXPLICITLY-named PRD tasks with autoTask OFF (naming IS the authorization)', async () => {
+		// The build/task symmetry (task `explicit-do-prd-not-gated-by-autoslice`):
+		// `do prd:<slug>` is an EXPLICIT target the operator named, so it tasks
+		// REGARDLESS of the repo's `autoTask` POLICY — EXACTLY as `do <task>` builds a
+		// named task regardless of `autoBuild`. autoTask OFF (the default) no longer
 		// refuses the explicit form (the policy gates the auto-pick POOL only).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedBrief(repo, 'somePrd');
@@ -1694,17 +1694,17 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(agentRan).toBe(false);
 	});
 
-	it('do prd:<slug> with autoTask on slices the PRD (runner owns the git)', async () => {
+	it('do prd:<slug> with autoTask on tasks the PRD (runner owns the git)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'somePrd');
 
-		// The stubbed slicing agent writes a backlog slice file (no git).
+		// The stubbed tasking agent writes a backlog task file (no git).
 		const result = await performDo({
 			arg: 'brief:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
-			// `--merge`: the slice output now integrates through the shared core; merge
+			// `--merge`: the task output now integrates through the shared core; merge
 			// lands it on the arbiter main (propose would open a PR instead).
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
@@ -1733,8 +1733,8 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(result.outcome).toBe('tasked');
 		expect(result.slug).toBe('somePrd');
 
-		// The runner committed the produced backlog slice + moved the PRD into the
-		// SLICED resting state (slicing/ -> prd-sliced/, the source of truth).
+		// The runner committed the produced backlog task + moved the PRD into the
+		// TASKED resting state (tasking/ -> prd-tasked/, the source of truth).
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		expect(
 			run(
@@ -1756,7 +1756,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 				{env: gitEnv()},
 			).status,
 		).toBe(0);
-		// The PRD has LEFT prd/ (it rests in prd-sliced/ now).
+		// The PRD has LEFT prd/ (it rests in prd-tasked/ now).
 		expect(
 			run(
 				'git',
@@ -1765,13 +1765,13 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 				{env: gitEnv()},
 			).status,
 		).not.toBe(0);
-		// slicing/ is empty (the lock was released). Sliced-ness is RESIDENCE in
-		// prd-sliced/ (asserted above); the `sliced:` marker was removed entirely in
-		// remove-sliced-marker-step-b, so the resting PRD carries NO sliced: line.
+		// tasking/ is empty (the lock was released). Tasked-ness is RESIDENCE in
+		// prd-tasked/ (asserted above); the `tasked:` marker was removed entirely in
+		// remove-sliced-marker-step-b, so the resting PRD carries NO tasked: line.
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/slicing/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/tasking/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1782,11 +1782,11 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(brief).not.toMatch(/^sliced:/m);
+		expect(brief).not.toMatch(/^tasked:/m);
 	});
 
-	it('a bare slug that collides (a slice AND a PRD share it) ERRORS loudly', async () => {
-		// Seed a slice `dup` AND a PRD `dup` → a bare `do dup` is ambiguous.
+	it('a bare slug that collides (a task AND a PRD share it) ERRORS loudly', async () => {
+		// Seed a task `dup` AND a PRD `dup` → a bare `do dup` is ambiguous.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup']);
 		seedBrief(repo, 'dup');
 
@@ -1808,12 +1808,12 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 		expect(existsOnArbiterMain(repo, 'in-progress', 'dup')).toBe(false);
 	});
 
-	it('an explicit slice:<slug> on a colliding slug is unambiguous (builds the slice)', async () => {
+	it('an explicit task:<slug> on a colliding slug is unambiguous (builds the task)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup']);
 		seedBrief(repo, 'dup');
 
 		const result = await performDo({
-			arg: 'task:dup', // explicit → no collision check, builds the slice
+			arg: 'task:dup', // explicit → no collision check, builds the task
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
@@ -1831,10 +1831,10 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
  * Per-TRANSITION integration mode
  * (`per-transition-integration-mode-slicing-vs-build`): the option-threading
  * caller (`performDo`) threads `taskingIntegration ?? integration` into the
- * SLICING transition, but plain `integration` into the slice-BUILD transition. So
+ * TASKING transition, but plain `integration` into the task-BUILD transition. So
  * a repo with `integration:'propose'` + `taskingIntegration:'merge'` lands the
- * slice FILES on main when slicing a PRD, yet does NOT auto-land code on main when
- * building a slice. UNSET `taskingIntegration` ⇒ slicing falls back to
+ * task FILES on main when tasking a PRD, yet does NOT auto-land code on main when
+ * building a task. UNSET `taskingIntegration` ⇒ tasking falls back to
  * `integration` (byte-for-byte today's behaviour). An explicit `--merge`/`--propose`
  * is resolved into BOTH keys upstream (`do-config.ts`, covered in do-config.test.ts).
  */
@@ -1859,7 +1859,7 @@ const taskingAgent: DoAgentRunner = ({cwd}) => {
 };
 
 describe('do — per-transition integration mode (taskingIntegration vs integration)', () => {
-	it('the SLICING transition uses `taskingIntegration` over `integration`: `integration:propose` + `taskingIntegration:merge` lands the slice FILES on main', async () => {
+	it('the TASKING transition uses `taskingIntegration` over `integration`: `integration:propose` + `taskingIntegration:merge` lands the task FILES on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'somePrd');
 
@@ -1868,8 +1868,8 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
-			// The maintainer's target: build proposes, slicing merges. The caller threads
-			// `taskingIntegration ?? integration` (= 'merge') into the SLICING transition.
+			// The maintainer's target: build proposes, tasking merges. The caller threads
+			// `taskingIntegration ?? integration` (= 'merge') into the TASKING transition.
 			integration: 'propose',
 			taskingIntegration: 'merge',
 			agentRunner: taskingAgent,
@@ -1878,7 +1878,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 
-		// merge ⇒ the produced slice + the PRD lifecycle move landed on the arbiter main
+		// merge ⇒ the produced task + the PRD lifecycle move landed on the arbiter main
 		// (NOT on a work branch awaiting a PR). This is `taskingIntegration:'merge'`
 		// winning over `integration:'propose'`.
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -1904,14 +1904,14 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		).toBe(0);
 	});
 
-	it('the slice-BUILD transition keeps using `integration` (never `taskingIntegration`): `integration:propose` + `taskingIntegration:merge` does NOT auto-land code on main', async () => {
+	it('the task-BUILD transition keeps using `integration` (never `taskingIntegration`): `integration:propose` + `taskingIntegration:merge` does NOT auto-land code on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 
 		const result = await performDo({
 			arg: 'alpha',
 			cwd: repo,
 			arbiter: ARBITER,
-			// The SAME options as the slicing test above. The build path reads `integration`
+			// The SAME options as the tasking test above. The build path reads `integration`
 			// (propose), so `taskingIntegration:'merge'` MUST NOT leak into it.
 			integration: 'propose',
 			taskingIntegration: 'merge',
@@ -1921,7 +1921,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
-		// propose ⇒ the build is NOT on main (the slice files of the build path stay in
+		// propose ⇒ the build is NOT on main (the task files of the build path stay in
 		// in-progress; the agent's code edit is not auto-merged).
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -1930,7 +1930,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		).toBe('');
 	});
 
-	it('UNSET `taskingIntegration` ⇒ slicing falls back to `integration` (byte-for-byte today): `integration:merge` with no override lands the slice files on main', async () => {
+	it('UNSET `taskingIntegration` ⇒ tasking falls back to `integration` (byte-for-byte today): `integration:merge` with no override lands the task files on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'somePrd');
 
@@ -1960,11 +1960,11 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		).toBe(0);
 	});
 
-	it('an explicit slicing mode wins over the config: passing `taskingIntegration:propose` (the resolved flag) on an `integration:propose` repo does NOT land slice files on main', async () => {
+	it('an explicit tasking mode wins over the config: passing `taskingIntegration:propose` (the resolved flag) on an `integration:propose` repo does NOT land task files on main', async () => {
 		// `do-config.ts` resolves an explicit `--propose`/`--merge` into BOTH
 		// `integration` AND `taskingIntegration`, so the operator's flag wins for the
-		// SLICING transition too. Here we pin the threaded effect: a `propose`-resolved
-		// slicing transition pushes the work branch + leaves main untouched (no PR
+		// TASKING transition too. Here we pin the threaded effect: a `propose`-resolved
+		// tasking transition pushes the work branch + leaves main untouched (no PR
 		// provider needed for a local --bare arbiter; selectProvider derives `none`).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'somePrd');
@@ -1981,7 +1981,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		});
 		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
-		// propose ⇒ the slice files are NOT on main (they ride the pushed work branch).
+		// propose ⇒ the task files are NOT on main (they ride the pushed work branch).
 		expect(
 			run(
 				'git',
@@ -1994,7 +1994,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 				{env: gitEnv()},
 			).status,
 		).not.toBe(0);
-		// The work branch was pushed carrying the slices (the PR source).
+		// The work branch was pushed carrying the tasks (the PR source).
 		expect(
 			run(
 				'git',

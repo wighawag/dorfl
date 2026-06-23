@@ -54,12 +54,12 @@ describe('ledger-write seam — shape', () => {
 
 describe('ledger-write seam — a claim-kind transition is dispatched THROUGH it', () => {
 	// NB: `performClaim` itself NO LONGER routes through this seam — the lock-substrate
-	// cut-over (slice `cutover-claim-body-stays-and-complete-sources-from-backlog`)
+	// cut-over (task `cutover-claim-body-stays-and-complete-sources-from-backlog`)
 	// made claim acquire a per-item lock and write NOTHING to `main`, so there is no
 	// `claim`-kind `applyTransition` dispatch from `performClaim` any more. The seam's
 	// `kind: 'claim'` path is still exercised DIRECTLY here (a hand-built claim
 	// micro-commit) because the seam itself (the `main`-CAS publish primitive) remains
-	// the mechanism complete/slicing/needs-attention land their durable moves through.
+	// the mechanism complete/tasking/needs-attention land their durable moves through.
 	it('a claim-kind transition published directly through the seam lands the move on the arbiter', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['beta']);
 		const spy = vi.spyOn(ledgerWriteModule.ledgerWrite, 'applyTransition');
@@ -230,7 +230,7 @@ describe('ledger-write seam — shape (complete transition)', () => {
 });
 
 describe('ledger-write seam — complete is dispatched THROUGH it', () => {
-	/** Claim a slice, then onboard onto its work branch (the pre-complete state). */
+	/** Claim a task, then onboard onto its work branch (the pre-complete state). */
 	async function claimAndBranch(slug: string): Promise<string> {
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		const claim = await performClaim({
@@ -303,7 +303,7 @@ describe('ledger-write seam — shape (needs-attention transition)', () => {
 });
 
 describe('ledger-write seam — needs-attention is dispatched THROUGH it', () => {
-	/** Claim a slice, onboard onto its work branch, then leave uncommitted work. */
+	/** Claim a task, onboard onto its work branch, then leave uncommitted work. */
 	async function claimBranchAndEdit(slug: string): Promise<string> {
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		const claim = await performClaim({

@@ -47,7 +47,7 @@ decomposable spec is a **brief**; `do task:` / `do brief:`, frontmatter `brief:`
 
 1. **The flat top level had become too crowded and some names were not clean.** The
    tree had grown to ~12 sibling folders at the top, and the role of each was no
-   longer legible at a glance; names like `prd-sliced` read as awkward
+   longer legible at a glance; names like `prd-tasked` read as awkward
    verb-tense-on-a-noun rather than a clear lifecycle position. Grouping by ROLE
    (capture vs build-board vs brief-lifecycle) makes the top level legible again and
    lets each regime own a clean internal vocabulary.
@@ -88,7 +88,7 @@ decomposable spec is a **brief**; `do task:` / `do brief:`, frontmatter `brief:`
 ## Considered and rejected
 
 - **Keep the flat top-level layout.** Rejected per Why #1: it had grown crowded and
-  some names (`prd-sliced`) were not clean; legibility and per-regime vocabulary
+  some names (`prd-tasked`) were not clean; legibility and per-regime vocabulary
   won.
 - **Mirror the two lifecycles (one shared vocabulary for tasks and briefs).**
   Rejected per Why #2: they are different kinds of work; a shared shape would
@@ -112,13 +112,13 @@ decomposable spec is a **brief**; `do task:` / `do brief:`, frontmatter `brief:`
 - `item-lock.ts`'s `terminalMainPaths` resolves each TYPE to its namespaced terminal
   (`task → tasks/cancelled`, `brief → briefs/dropped`); no reader derives a
   bare-slug `work/dropped/` path.
-- The vocabulary cutover is a HARD break: pre-rename `slice:` / `prd:` prefixes and
-  `prd:` / `sliceAfter:` frontmatter are no longer accepted (no migration-window
+- The vocabulary cutover is a HARD break: pre-rename `task:` / `prd:` prefixes and
+  `prd:` / `taskAfter:` frontmatter are no longer accepted (no migration-window
   alias) — we have no external users owed a migration window.
 - A self-renaming-folder task (one that `git mv`s the ledger folders the runner
   reads its own record from) required teaching `complete` a layout-agnostic
   done-position check (ADRs/PRs aside: see
-  `complete-self-renaming-folder-slice.test.ts`); recorded here as the non-obvious
+  `complete-self-renaming-folder-task.test.ts`); recorded here as the non-obvious
   downstream effect of moving the ledger folders themselves.
 - `setup` scaffolds the new `notes/`/`tasks/`/`briefs/` + `questions/` + `protocol/`
   tree and carries a documented legacy old→new `git mv` migration mapping for repos

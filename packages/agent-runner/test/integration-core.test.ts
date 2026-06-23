@@ -18,7 +18,7 @@ import {
 
 /**
  * Unit tests for the SHARED gate→integrate back-half (`integration-core.ts`,
- * `performIntegration`) extracted out of `performComplete` (Slice 1 of the run/do
+ * `performIntegration`) extracted out of `performComplete` (Task 1 of the run/do
  * convergence). They drive the CORE DIRECTLY — proving it owns the band (verify
  * gate → review gate → effective-mode decision → done-move → commit → rebase →
  * integrate → needs-attention routing) and returns the right DATA for each
@@ -52,7 +52,7 @@ const BLOCK: ReviewVerdict = {
 	findings: [
 		{
 			severity: 'blocking',
-			question: 'the diff does not reach the slice goal',
+			question: 'the diff does not reach the task goal',
 			context: 'feature.txt',
 		},
 	],
@@ -60,7 +60,7 @@ const BLOCK: ReviewVerdict = {
 
 /**
  * Stand a repo up exactly as the caller's HEAD leaves it just before the core:
- * a slice claimed (the lock is held; the body RESTS in backlog/ on the arbiter,
+ * a task claimed (the lock is held; the body RESTS in backlog/ on the arbiter,
  * since claim no longer moves it) and onboarded onto `work/<slug>` off the
  * freshly-fetched main, with UNCOMMITTED agent work in the tree.
  */
@@ -159,8 +159,8 @@ describe('integration-core — approve ⇒ completed', () => {
 });
 
 describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-origin-forces-build-propose)', () => {
-	// Stamp `originTrust` onto the backlog slice the build is about to integrate
-	// (the slicer would have propagated it; here we set it directly to drive the
+	// Stamp `originTrust` onto the backlog task the build is about to integrate
+	// (the tasker would have propagated it; here we set it directly to drive the
 	// rule). The build-propose rule reads it from `work/tasks/todo/<slug>.md` (the body
 	// rests there now — claim no longer moves it).
 	const stampOriginTrust = (
@@ -176,7 +176,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 		);
 	};
 
-	it('an UNTRUSTED slice + mode merge + NO explicit flag ⇒ resolves to propose (a PR, NOT a merge to main)', async () => {
+	it('an UNTRUSTED task + mode merge + NO explicit flag ⇒ resolves to propose (a PR, NOT a merge to main)', async () => {
 		const {repo} = await claimAndBranch('untrusted-merge');
 		stampOriginTrust(repo, 'untrusted-merge', 'untrusted');
 
@@ -200,7 +200,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 		expect(existsOnArbiterMain(repo, 'done', 'untrusted-merge')).toBe(false);
 	});
 
-	it('an UNTRUSTED slice + explicit --merge (explicitMerge: true) ⇒ lands on main (the operator is present; CLI wins)', async () => {
+	it('an UNTRUSTED task + explicit --merge (explicitMerge: true) ⇒ lands on main (the operator is present; CLI wins)', async () => {
 		const {repo} = await claimAndBranch('untrusted-explicit');
 		stampOriginTrust(repo, 'untrusted-explicit', 'untrusted');
 
@@ -223,7 +223,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 		expect(existsOnArbiterMain(repo, 'done', 'untrusted-explicit')).toBe(true);
 	});
 
-	it('a TRUSTED slice + mode merge ⇒ config as-is (lands on main; the rule does not fire)', async () => {
+	it('a TRUSTED task + mode merge ⇒ config as-is (lands on main; the rule does not fire)', async () => {
 		const {repo} = await claimAndBranch('trusted-merge');
 		stampOriginTrust(repo, 'trusted-merge', 'trusted');
 
@@ -243,7 +243,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 		expect(existsOnArbiterMain(repo, 'done', 'trusted-merge')).toBe(true);
 	});
 
-	it('an UNSTAMPED slice + mode merge ⇒ config as-is (ZERO behaviour change for the normal human path)', async () => {
+	it('an UNSTAMPED task + mode merge ⇒ config as-is (ZERO behaviour change for the normal human path)', async () => {
 		const {repo} = await claimAndBranch('unstamped-merge');
 		// No stamp (the normal local/human path).
 
@@ -263,7 +263,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 		expect(existsOnArbiterMain(repo, 'done', 'unstamped-merge')).toBe(true);
 	});
 
-	it('an UNTRUSTED slice + mode propose ⇒ propose (unchanged; the rule only matters when config says merge)', async () => {
+	it('an UNTRUSTED task + mode propose ⇒ propose (unchanged; the rule only matters when config says merge)', async () => {
 		const {repo} = await claimAndBranch('untrusted-propose');
 		stampOriginTrust(repo, 'untrusted-propose', 'untrusted');
 
@@ -435,7 +435,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.reason).toMatch(/does not reach the slice goal/);
+		expect(lock?.reason).toMatch(/does not reach the task goal/);
 	});
 });
 
@@ -490,7 +490,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 });
 
 describe('integration-core — per-repo INTEGRATE lock serialises the merge tail', () => {
-	// The `run` concurrency-safety seam (slice
+	// The `run` concurrency-safety seam (task
 	// `run-merge-integration-concurrency-safe`). Two SAME-repo merge jobs branch off
 	// the SAME pre-merge base and integrate CONCURRENTLY. The injected `integrateLock`
 	// (the sibling of the claim lock, keyed per repo) wraps ONLY the rebase-to-
@@ -628,8 +628,8 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		// mechanism (the lock OR the bounded retry, both exercised above/below) is
 		// what makes the both-land deterministic.
 		//
-		// UPDATED (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
-		// before that slice the integrator did a single plain push, so dropping just the
+		// UPDATED (task `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+		// before that task the integrator did a single plain push, so dropping just the
 		// lock sufficed to break both-land. The merge push now DEFAULTS to a bounded
 		// re-rebase-and-retry (Race-1 fix), so to keep this control meaningful we ALSO
 		// disable the retry (`mergeRetries: 0`) — otherwise the retry alone both-lands
@@ -641,7 +641,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		);
 		void arbiterUrl;
 		// No lock passed (undefined) AND retry disabled (0) ⇒ the tail runs
-		// un-serialised + un-retried, exactly like the pre-slice single-job caller.
+		// un-serialised + un-retried, exactly like the pre-task single-job caller.
 		const settled = await Promise.allSettled([
 			integrateMerge(cwdA, 'na', 'unused', undefined, 0),
 			integrateMerge(cwdB, 'nb', 'unused', undefined, 0),
@@ -837,7 +837,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 });
 
 describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation', () => {
-	// Race 2 (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+	// Race 2 (task `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
 	// the step-4 `git rebase <arbiter>/main` can conflict on ANOTHER slug's
 	// `work/<status>/<otherslug>.md` ledger file — a sibling same-repo job landed its
 	// own status-folder move on main between our base and this rebase. A conflict

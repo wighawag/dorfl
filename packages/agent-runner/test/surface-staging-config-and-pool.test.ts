@@ -39,7 +39,7 @@ import {run} from '../src/git.js';
  * (`tasks/backlog/` + `briefs/proposed/`) without opening the BUILD polarity
  * (brief `staging-surface-and-apply-promote-safety`).
  *
- * Covers the slice acceptance set:
+ * Covers the task acceptance set:
  *   (a) a `needsAnswers` task in `tasks/backlog/` appears in the surface pool
  *       under the default `true`;
  *   (b) a `needsAnswers` brief in `briefs/proposed/` appears under the default;
@@ -280,7 +280,7 @@ describe('(e) end-to-end: surface → answer → apply on a staged needsAnswers 
 
 		// Simulate the surface rung minting an answered sidecar (the surface→answer
 		// half of the loop; the rung body itself lives elsewhere and is unit-tested
-		// separately — this slice's contract is the candidate-set widening).
+		// separately — this task's contract is the candidate-set widening).
 		seedSidecar('task', 'born-in-staging', /* answered */ true);
 
 		// Second tick — APPLY (always-on consume): the answered sidecar moves the
@@ -317,7 +317,7 @@ describe('(e) end-to-end: surface → answer → apply on a staged needsAnswers 
 				'',
 				'## Problem',
 				'',
-				'A fresh slice still in staging.',
+				'A fresh task still in staging.',
 				'',
 			].join('\n'),
 		);
@@ -407,7 +407,7 @@ describe('(f) F3 precondition: a concurrent promote during apply does NOT split-
 		});
 		expect(result.moved).toBe(false);
 		expect(result.reasonNotMoved).toMatch(
-			/per-item lock|already locked|implement\/slice\/advance/i,
+			/per-item lock|already locked|implement\/task\/advance/i,
 		);
 
 		// No split-brain on `main`: the staged file is still in staging.

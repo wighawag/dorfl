@@ -14,7 +14,7 @@ import {run} from '../src/git.js';
 
 /**
  * The `promote [item]` CLI verb + the `listPromotable` discovery function (PRD
- * `staging-pool-position-gate-and-trust-model`, slices
+ * `staging-pool-position-gate-and-trust-model`, tasks
  * `pre-backlog-staging-folder-and-promote-step-a` /
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the runner/human
  * side of the staging gate that admits a STAGED item into its agent-eligible
@@ -24,7 +24,7 @@ import {run} from '../src/git.js';
  *
  *   - `promote` with NO argument LISTS what is staged (the discovery half), read
  *     from the ARBITER's truth (not the local tree);
- *   - `promote slice:<slug>` / `prd:<slug>` / a bare `<slug>` (= slice) routes to
+ *   - `promote task:<slug>` / `prd:<slug>` / a bare `<slug>` (= task) routes to
  *     the right promotion;
  *   - error cases fail loud (a not-staged slug, an `obs:` prefix).
  *
@@ -42,7 +42,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Stage a slice file in `work/tasks/backlog/` on the arbiter. */
+/** Stage a task file in `work/tasks/backlog/` on the arbiter. */
 function stageTask(repo: string, slug: string): void {
 	stageStaged(repo, 'pre-backlog', slug);
 }
@@ -125,10 +125,10 @@ async function runPromote(
 }
 
 describe('listPromotable — reads the arbiter staging folders', () => {
-	it('lists slices in pre-backlog/ then PRDs in pre-prd/, sorted, from the arbiter (not the local tree)', async () => {
+	it('lists tasks in pre-backlog/ then PRDs in pre-prd/, sorted, from the arbiter (not the local tree)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		stageTask(repo, 'beta-slice');
-		stageTask(repo, 'alpha-slice');
+		stageTask(repo, 'beta-task');
+		stageTask(repo, 'alpha-task');
 		stageBrief(repo, 'some-prd');
 		const result = await listPromotable({
 			cwd: repo,
@@ -137,8 +137,8 @@ describe('listPromotable — reads the arbiter staging folders', () => {
 		});
 		expect(result.error).toBeUndefined();
 		expect(result.items).toEqual([
-			{namespace: 'task', slug: 'alpha-slice'},
-			{namespace: 'task', slug: 'beta-slice'},
+			{namespace: 'task', slug: 'alpha-task'},
+			{namespace: 'task', slug: 'beta-task'},
 			{namespace: 'brief', slug: 'some-prd'},
 		]);
 	});
@@ -167,13 +167,13 @@ describe('listPromotable — reads the arbiter staging folders', () => {
 });
 
 describe('promote [item] — no argument LISTS what is staged', () => {
-	it('lists staged slices + PRDs as `namespace:slug` lines', async () => {
+	it('lists staged tasks + PRDs as `namespace:slug` lines', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		stageTask(repo, 'my-slice');
+		stageTask(repo, 'my-task');
 		stageBrief(repo, 'my-prd');
 		const {out, code} = await runPromote(repo, []);
 		expect(code, out).toBeUndefined(); // a plain return, not process.exit
-		expect(out).toMatch(/task:my-slice/);
+		expect(out).toMatch(/task:my-task/);
 		expect(out).toMatch(/brief:my-prd/);
 	});
 
@@ -185,7 +185,7 @@ describe('promote [item] — no argument LISTS what is staged', () => {
 });
 
 describe('promote <item> — admits a staged item into its pool', () => {
-	it('promote slice:<slug> moves pre-backlog/ -> backlog/ on the arbiter (claimable)', async () => {
+	it('promote task:<slug> moves pre-backlog/ -> backlog/ on the arbiter (claimable)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageTask(repo, 'feature-x');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(true);
@@ -195,7 +195,7 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(false);
 	});
 
-	it('a BARE slug defaults to a slice (mirrors requeue)', async () => {
+	it('a BARE slug defaults to a task (mirrors requeue)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageTask(repo, 'bare-one');
 		const {out} = await runPromote(repo, ['bare-one']);

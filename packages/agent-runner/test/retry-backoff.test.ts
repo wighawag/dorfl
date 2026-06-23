@@ -6,7 +6,7 @@ import {
 } from '../src/retry-backoff.js';
 
 /**
- * The shared bounded-exponential-backoff helper (slice
+ * The shared bounded-exponential-backoff helper (task
  * `needs-attention-routing-resilient-honest-requeue-safe`). It must: retry a
  * failing op with a TEMPORAL delay (distinct from claim-cas's instant-contention
  * loop), grow the delay exponentially to a cap, give up cleanly after a bounded

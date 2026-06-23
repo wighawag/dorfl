@@ -18,9 +18,9 @@ import {
 
 /**
  * REGRESSION tests for the structural bug: the work BRANCH ref was `work/<slug>`,
- * un-namespaced, so `intake`, `do slice:<slug>`, and `do prd:<slug>` all collided
+ * un-namespaced, so `intake`, `do task:<slug>`, and `do prd:<slug>` all collided
  * on the SAME branch for the same slug (observations
- * `work-branch-name-not-namespaced-prd-vs-slice-collision.md` +
+ * `work-branch-name-not-namespaced-prd-vs-task-collision.md` +
  * `do-onboarding-reuses-stale-work-branch-instead-of-claim-commit.md`). These
  * prove the firing collision is gone and the four branch identities are distinct.
  *
@@ -45,16 +45,16 @@ const editingAgent: DoAgentRunner = ({cwd}) => {
 	return {ok: true};
 };
 
-describe('branch namespace — a same-slug slice and PRD never collide', () => {
-	it('claim, onboard, and gc all agree on the namespaced ref (slice ≠ prd)', async () => {
-		// A slug that exists as BOTH a backlog slice AND a PRD (the collision case
+describe('branch namespace — a same-slug task and PRD never collide', () => {
+	it('claim, onboard, and gc all agree on the namespaced ref (task ≠ prd)', async () => {
+		// A slug that exists as BOTH a backlog task AND a PRD (the collision case
 		// advance-loop made first-class). Distinct branch refs by construction.
 		const taskRef = workBranchRef('task', 'dup');
 		const briefRef = workBranchRef('brief', 'dup');
 		const intakeTaskRef = workBranchRef('task', 'dup', {producer: 'intake'});
 		expect(new Set([taskRef, briefRef, intakeTaskRef]).size).toBe(3);
 
-		// Claim the slice + onboard in-place: the branch is the SLICE ref, carrying
+		// Claim the task + onboard in-place: the branch is the TASK ref, carrying
 		// the claim, never the PRD ref.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup'], {
 			briefs: ['dup'],
@@ -78,17 +78,17 @@ describe('branch namespace — a same-slug slice and PRD never collide', () => {
 		expect(gitIn(['symbolic-ref', '--short', 'HEAD'], repo).trim()).toBe(
 			taskRef,
 		);
-		// The PRD branch ref was never created by the slice onboard.
+		// The PRD branch ref was never created by the task onboard.
 		expect(gitIn(['branch', '--list', briefRef], repo).trim()).toBe('');
 	});
 });
 
-describe('intake then do slice:<slug> on the same slug + checkout — no collision', () => {
+describe('intake then do task:<slug> on the same slug + checkout — no collision', () => {
 	it('intake leaves work/intake-task-<slug>; the later build lands on work/task-<slug> and COMPLETES (no "nothing to complete")', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const slug = 'add-quiet-flag';
 
-		// 1. A real intake (merge) that creates the backlog slice. Its onboarding
+		// 1. A real intake (merge) that creates the backlog task. Its onboarding
 		//    branch is the INTAKE-produced `work/intake-task-<slug>`.
 		const verdict: IntakeVerdict = {
 			outcome: 'task',
@@ -114,13 +114,13 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 			arbiter: ARBITER,
 			issueProvider: minimalIssueProvider(),
 			decide: async () => verdict,
-			reviewSlice: async () => ({verdict: 'approve', findings: []}),
+			reviewTask: async () => ({verdict: 'approve', findings: []}),
 			integration: {task: 'merge', brief: 'merge'},
 			env: gitEnv(),
 		});
 		expect(intake.exitCode).toBe(0);
 		expect(intake.outcome).toBe('tasked');
-		// The slice is on the arbiter's backlog (merge landed it).
+		// The task is on the arbiter's backlog (merge landed it).
 		expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 
 		// The intake branch is the INTAKE-namespaced ref — distinct from the build
@@ -135,7 +135,7 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 		gitIn(['switch', '-q', 'main'], repo);
 		gitIn(['merge', '-q', '--ff-only', `${ARBITER}/main`], repo);
 
-		// 2. `do slice:<slug>` for the SAME slug, SAME checkout. Pre-rename this hit
+		// 2. `do task:<slug>` for the SAME slug, SAME checkout. Pre-rename this hit
 		//    the collision: the stale `work/<slug>` was reused, the build landed on a
 		//    pre-claim base, and the done-move errored "nothing to complete". Now the
 		//    build is on the DISTINCT `work/task-<slug>` off the claim commit.
@@ -150,7 +150,7 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 		});
 		expect(result.outcome).toBe('completed');
 		expect(result.message).not.toMatch(/nothing to complete/i);
-		// The slice landed in done/ on the arbiter, and the build ran on the build
+		// The task landed in done/ on the arbiter, and the build ran on the build
 		// ref (not the intake ref).
 		expect(existsOnArbiterMain(repo, 'done', slug)).toBe(true);
 		expect(result.branch).toBe(buildRef);
@@ -160,7 +160,7 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 /**
  * The smallest issue seam `performIntake` needs: a canned open issue, no-op
  * comments/labels/close. (The full collision regression only needs intake to
- * PRODUCE the slice + leave its branch; it does not assert on issue side-effects.)
+ * PRODUCE the task + leave its branch; it does not assert on issue side-effects.)
  */
 function minimalIssueProvider(): IssueProvider {
 	const labels: string[] = [];

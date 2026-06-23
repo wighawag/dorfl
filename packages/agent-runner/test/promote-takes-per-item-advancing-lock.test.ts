@@ -21,7 +21,7 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * F3b — `promote` takes the per-item `advancing` lock for its CAS window (slice
+ * F3b — `promote` takes the per-item `advancing` lock for its CAS window (task
  * `f3b-promote-takes-per-item-advancing-lock`, PRD
  * `staging-surface-and-apply-promote-safety`).
  *
@@ -120,7 +120,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		});
 		expect(result.moved).toBe(false);
 		expect(result.reasonNotMoved).toMatch(
-			/per-item lock|already locked|implement\/slice\/advance/i,
+			/per-item lock|already locked|implement\/task\/advance/i,
 		);
 		// The staged file is still in pre-backlog/staging (no split-brain on main).
 		expect(onArbiterMain(seeded.repo, 'work/tasks/backlog/race-me.md')).toBe(
@@ -174,7 +174,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		});
 		expect(result.moved).toBe(false);
 		expect(result.reasonNotMoved).toMatch(
-			/per-item lock|already locked|implement\/slice\/advance/i,
+			/per-item lock|already locked|implement\/task\/advance/i,
 		);
 		// The staged brief is unmoved on the arbiter.
 		expect(

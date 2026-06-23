@@ -2,12 +2,12 @@ import {join} from 'node:path';
 
 /**
  * The **work-layout** module: the SOLE source of every `work/...` path string,
- * folder-name union/array, the item-scan predicate, and the prefix-slice helpers
+ * folder-name union/array, the item-scan predicate, and the prefix-task helpers
  * used across `src/`.
  *
  * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` brief — the de-risking
  * checkpoint. EVERY raw work-path literal (`join(cwd, 'work', ...)`, `'work/<folder>'`,
- * `'work/<folder>/'.length` prefix-slices) and EVERY folder-name union/array that
+ * `'work/<folder>/'.length` prefix-tasks) and EVERY folder-name union/array that
  * used to be scattered across ~70 files now routes through here. The NAMES are
  * byte-identical to today (no rename, no behaviour change); only the SOURCE of the
  * string has moved into this one module.
@@ -24,7 +24,7 @@ import {join} from 'node:path';
  * are that state machine, so it is deliberately the one place a careless rename can
  * touch.
  *
- * The transient states (`in-progress`/`needs-attention`/`slicing`/`advancing`) are
+ * The transient states (`in-progress`/`needs-attention`/`tasking`/`advancing`) are
  * NOT folders — they are per-item lock-ref state (see `item-lock.ts`). A stray
  * `in-progress` literal still referenced by some legacy/recovery readers routes
  * through this module like any other folder, but is NOT part of the durable
@@ -147,9 +147,9 @@ export function workItemRel(folder: WorkFolderKey, basename: string): string {
 
 /**
  * The REPO-RELATIVE folder PREFIX (WITH trailing slash): `work/<folder-name>/`. The
- * form a reader matches with `startsWith(...)` and slices off to recover a filename
+ * form a reader matches with `startsWith(...)` and tasks off to recover a filename
  * (see {@link stripWorkFolderPrefix}). Replaces hand-written `'work/<folder>/'`
- * literals and their `.length` prefix-slices.
+ * literals and their `.length` prefix-tasks.
  */
 export function workFolderPrefix(folder: WorkFolderKey): string {
 	return `${workFolderRel(folder)}/`;
@@ -158,10 +158,10 @@ export function workFolderPrefix(folder: WorkFolderKey): string {
 /**
  * Recover the filename portion of a repo-relative path that lives DIRECTLY under a
  * work folder, by stripping its `work/<folder-name>/` prefix. Replaces the
- * hand-written `path.slice('work/<folder>/'.length)` prefix-slice. Returns
+ * hand-written `path.slice('work/<folder>/'.length)` prefix-task. Returns
  * `undefined` when `path` is not under that folder, so callers that already
  * `startsWith`-guarded keep their exact behaviour (and callers that did not can
- * branch on `undefined` instead of slicing a wrong length).
+ * branch on `undefined` instead of tasking a wrong length).
  */
 export function stripWorkFolderPrefix(
 	path: string,
@@ -217,7 +217,7 @@ export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
  * The DURABLE task-status folders the ledger lint / integration core treat as the
  * one-slug-one-folder state machine: `tasks-todo`, `done`, `cancelled`
  * (ledger-lint.ts + integration-core.ts `LEDGER_STATUS_FOLDERS`). The transient
- * `in-progress`/`needs-attention`/`slicing` are NOT here (they are lock-ref state).
+ * `in-progress`/`needs-attention`/`tasking` are NOT here (they are lock-ref state).
  * `cancelled` is the task regime's won't-proceed terminal (the per-regime split
  * of the previous shared `dropped/`); the brief regime's terminal `briefs-dropped`
  * is NOT here (this set is the TASK board's state machine, keyed by `tasks/`-slug,

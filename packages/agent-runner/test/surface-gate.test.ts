@@ -10,7 +10,7 @@ import {
 import {NullHarness, MODEL_PLACEHOLDER, type Harness} from '../src/harness.js';
 
 /**
- * `advance-rung-surface` slice (PRD `advance-loop`, US #32/33) — the SURFACE gate:
+ * `advance-rung-surface` task (PRD `advance-loop`, US #32/33) — the SURFACE gate:
  * the fresh-context `surface-questions` spawn + structured-emit parse, the DIRECT
  * mirror of the Gate-2 review gate. Pure-logic unit tests (no git): the emit
  * parser ({questions} list, empty is valid), the prompt framing (fresh-context,
@@ -101,8 +101,8 @@ describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestio
 
 describe('buildSurfacePrompt — frames the fresh-context surface + the required output', () => {
 	it('names the item, references the in-band SURFACE-PROTOCOL doc, demands the JSON {questions}', () => {
-		const p = buildSurfacePrompt('brief:autoslice');
-		expect(p).toContain('brief:autoslice');
+		const p = buildSurfacePrompt('brief:autotask');
+		expect(p).toContain('brief:autotask');
 		// Points at the protocol doc (in-band discipline), not at a host-installed skill.
 		expect(p).toMatch(/work\/protocol\/SURFACE-PROTOCOL\.md/);
 		expect(p).toMatch(/"questions"/);
@@ -115,7 +115,7 @@ describe('buildSurfacePrompt — frames the fresh-context surface + the required
 	it('does NOT re-inline the discipline prose (laws + humility rule live in SURFACE-PROTOCOL.md)', () => {
 		const p = buildSurfacePrompt('task:foo');
 		// The two-laws + humility-rule prose has moved OUT into the protocol doc;
-		// the builder must not carry a duplicate (the drift this slice exists to fix).
+		// the builder must not carry a duplicate (the drift this task exists to fix).
 		expect(p).not.toMatch(/NEVER invent an answer/i);
 		expect(p).not.toMatch(/GATHER-only/);
 		expect(p).not.toMatch(/PERSIST-NEVER/);

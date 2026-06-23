@@ -12,7 +12,7 @@
  *
  * SCOPE FENCE (brief Out-of-Scope): the issue→artifact TRANSFORM engine is
  * `issue-intake`'s (`intake <N>` + its four-outcome dispatch + the per-outcome
- * KNOBS + the lone-slice review that posts to the issue thread). CI only
+ * KNOBS + the lone-task review that posts to the issue thread). CI only
  * WIRES/SCHEDULES/INVOKES it and owns the merge-vs-propose POLICY + the delivery
  * surface. This module emits NO transform; it emits the WORKFLOW that calls it.
  *
@@ -39,7 +39,7 @@
  *     intake's generated briefs/tasks is surfaced into the ISSUE THREAD via the
  *     `IssueProvider.postIssueComment` seam (issue thread, by NUMBER — NOT the PR
  *     seam `postPRComment`, which is keyed by url). This is REUSED, not new:
- *     `intake <N>` already runs the lone-slice review/edit loop and posts its
+ *     `intake <N>` already runs the lone-task review/edit loop and posts its
  *     findings as questions through `postIssueComment`. The workflow surfaces E by
  *     INVOKING `intake`; it adds no second review mechanism.
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
@@ -221,10 +221,10 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
 # WHAT IT DOES — \`agent-runner intake <N>\` reads issue #N + its comment thread,
-# runs a prompt→verdict decision (ask / slice / PRD / bounce), and dispatches it.
+# runs a prompt→verdict decision (ask / task / PRD / bounce), and dispatches it.
 # CI owns ONLY the trigger + the merge-vs-propose POLICY + the delivery surface;
 # the TRANSFORM is the engine's (the Out-of-Scope fence — CI re-implements none of
-# it). The lone-slice review/edit loop \`intake\` already runs ALSO surfaces its
+# it). The lone-task review/edit loop \`intake\` already runs ALSO surfaces its
 # findings as questions back into THIS issue thread via the issue-comment seam (insertion
 # point E) — REUSED, not a new review mechanism.
 #
@@ -386,7 +386,7 @@ jobs:
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. EXPLICIT \`intake <N>\`, never a bare slug. The per-outcome
         # flags carry the merge-vs-propose POLICY derived above. \`intake\` runs the
-        # lone-slice review/edit loop and posts its findings as questions back into
+        # lone-task review/edit loop and posts its findings as questions back into
         # THIS issue thread (insertion point E) through the issue-comment seam —
         # CI surfaces E by invoking intake; it adds no new review mechanism.
         env:
@@ -519,7 +519,7 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	), 'the policy derivation must be able to emit `--propose-brief` (autoTask on).');
 	// ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose): the shell
 	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
-	// case it uses for the slice/PRD modes, and pass it to `intake` so the emitted
+	// case it uses for the task/PRD modes, and pass it to `intake` so the emitted
 	// artifact is stamped (the stamp + the modes cannot desync).
 	require('derives-origin-trust-untrusted', /--origin-trust=untrusted\b/.test(
 		operative,
@@ -542,7 +542,7 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	), 'the policy derivation must read the `AGENT_RUNNER_AUTO_TASK` gate.');
 
 	// --- Insertion point E: the issue-thread review surface ---------------------
-	// E is REUSED via `intake` (which runs the lone-slice review and posts to the
+	// E is REUSED via `intake` (which runs the lone-task review and posts to the
 	// thread). The workflow must request `issues: write` so that comment can land.
 	require('issues-write-permission', /\bissues:\s*write\b/.test(
 		operative,

@@ -4,7 +4,7 @@ import {buildProgram} from '../src/cli.js';
 
 /**
  * `do-autopick` CLI surface — pins the variadic grammar + `-n` that the three
- * `do-*` slices grow on the ONE `.command('do')` block (this slice widens the
+ * `do-*` tasks grow on the ONE `.command('do')` block (this task widens the
  * single optional positional into a VARIADIC one and adds `-n <x>`), without
  * tearing up `do-in-place`/`do-remote`'s additions. (The selection/ordering
  * behaviour is covered by do-autopick.test.ts / select-priority.test.ts.)

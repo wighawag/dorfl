@@ -15,12 +15,12 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The `run`-FLEET fresh-worktree gate behaviour. ORIGINALLY (slice
+ * The `run`-FLEET fresh-worktree gate behaviour. ORIGINALLY (task
  * `gate-on-rebased-tip-fresh-worktree`) `run` used the fresh rebased-tip gate ONLY
  * at `perRepoMax === 1` and fell back to today's in-build-worktree gate at
  * `perRepoMax > 1`, to AVOID the two PRE-EXISTING run-fleet same-repo races.
  *
- * UPDATED (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+ * UPDATED (task `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
  * those two races are now CLOSED on their own merits (the merge-push
  * re-rebase-and-retry + the sibling-ledger reconcile), so the `perRepoMax === 1`
  * downgrade was REMOVED — the fresh rebased-tip gate now runs on the `run` fleet at
@@ -103,7 +103,7 @@ describe('run-fleet conditional — perRepoMax === 1 uses the FRESH rebased-tip 
 
 describe('run-fleet — perRepoMax > 1 ALSO uses the FRESH rebased-tip gate (the downgrade is removed)', () => {
 	it('the leak file is ABSENT from the gate at perRepoMax 2 (verify fails) ⇒ tests-failed (fresh gate runs at any parallelism)', async () => {
-		// UPDATED (slice `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
+		// UPDATED (task `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`):
 		// the `perRepoMax === 1` downgrade was REMOVED, so at perRepoMax 2 the FRESH
 		// rebased-tip gate runs (NOT today's in-build-worktree gate). The leak file is
 		// gitignored ⇒ absent from the committed rebased tip ⇒ verify FAILS, exactly as

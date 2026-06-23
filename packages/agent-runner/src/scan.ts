@@ -134,7 +134,7 @@ export interface ScannedItem extends TodoItem {
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
  * | "brief:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
  * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `taskableBriefs`
- * (`autotask-gate`'s pure predicate). Sits under {@link RepoReport.briefs} (and
+ * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.briefs} (and
  * the cwd section's `repo.briefs`), DISTINCT from the task-only `items[]` because
  * tasks and briefs are different verbs and project to different `task:`/`brief:`
  * prefixes — a discriminator on `items[]` would pollute the surface other readers
@@ -552,7 +552,7 @@ export function scanRepoPaths(
 		}).config;
 		// Brief pool — the TASKABLE-BRIEF companion of the task pool. Resolve
 		// `autoTask` PER REPO from the working-tree `.agent-runner.json` (the same
-		// way `autoBuild` is resolved); `taskableBriefs` (the SAME `autotask-gate`
+		// way `autoBuild` is resolved); `taskableBriefs` (the SAME `autoslice-gate`
 		// predicate the autopick paths run) decides what is taskable — no forked
 		// predicate. This is what makes the propose-mode CI matrix enumerate `brief:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).

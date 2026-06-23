@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe('isBriefComplete — the read-only "is this PRD complete?" core query', () => {
-	it('NOT complete when NO slice carries prd:<slug> (≥1 is required)', () => {
+	it('NOT complete when NO task carries prd:<slug> (≥1 is required)', () => {
 		// A `work/` tree with tasks, but none link to this brief — even other briefs'
 		// done tasks do not count.
 		writeTask('done', 'unrelated-done.md', {slug: 'unrelated-done'});
@@ -56,7 +56,7 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 		expect(result.tasks).toEqual([]);
 	});
 
-	it('NOT complete when ≥1 prd:<slug> slice exists but some are NOT in work/tasks/done/', () => {
+	it('NOT complete when ≥1 prd:<slug> task exists but some are NOT in work/tasks/done/', () => {
 		// Three tasks link the brief; two are done, one is still in backlog.
 		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
 		writeTask('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
@@ -72,7 +72,7 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 		expect(result.tasks.map((s) => s.slug)).toEqual(['a', 'b', 'c']);
 	});
 
-	it('NOT complete when a matching slice is in in-progress or needs-attention (not done)', () => {
+	it('NOT complete when a matching task is in in-progress or needs-attention (not done)', () => {
 		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
 		writeTask('in-progress', 'b.md', {slug: 'b', brief: 'issue-intake'});
 
@@ -92,7 +92,7 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 		).toBe(false);
 	});
 
-	it('COMPLETE when ≥1 prd:<slug> slice exists and ALL are in work/tasks/done/', () => {
+	it('COMPLETE when ≥1 prd:<slug> task exists and ALL are in work/tasks/done/', () => {
 		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
 		writeTask('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
 		// An unrelated, not-done task for a different brief must not block completion.
@@ -111,7 +111,7 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 		expect(result.tasks.every((s) => s.folder === 'done')).toBe(true);
 	});
 
-	it('COMPLETE with a single done slice (≥1 is enough)', () => {
+	it('COMPLETE with a single done task (≥1 is enough)', () => {
 		writeTask('done', 'only.md', {slug: 'only', brief: 'issue-intake'});
 
 		const result = isBriefComplete({
@@ -123,7 +123,7 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 		expect(result.tasks).toHaveLength(1);
 	});
 
-	it('matches on the parsed prd: field — resolves slice slug from frontmatter, falling back to filename', () => {
+	it('matches on the parsed prd: field — resolves task slug from frontmatter, falling back to filename', () => {
 		// Frontmatter slug wins; filename fallback when no slug.
 		writeTask('done', 'on-disk-name.md', {
 			slug: 'real-slug',

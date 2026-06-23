@@ -26,7 +26,7 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Drive a slice to needs-attention with its prior attempt's branch pushed to the
+ * Drive a task to needs-attention with its prior attempt's branch pushed to the
  * arbiter and the item surfaced in needs-attention/ on `<arbiter>/main` — WITHOUT
  * landing that needs-attention state in the cwd working tree. The cwd is left on
  * the original seed `main` (it never checks out the surfaced state), so a test can

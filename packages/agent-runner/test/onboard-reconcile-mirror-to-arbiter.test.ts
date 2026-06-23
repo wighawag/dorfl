@@ -1,5 +1,5 @@
 /**
- * The mirror↔arbiter RECONCILIATION (slice
+ * The mirror↔arbiter RECONCILIATION (task
  * `onboard-and-reset-reconcile-mirror-to-arbiter`). Pins the two coupled fixes:
  *
  *   1. WRITE-THROUGH ordering at the delete sites (`requeue --reset`, the
@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 /**
- * Drive a slice to needs-attention with a prior attempt's commit on
+ * Drive a task to needs-attention with a prior attempt's commit on
  * `work/task-<slug>` PUSHED to the arbiter (the kept-branch artifact a
  * `requeue --reset` is meant to discard).
  */
@@ -102,11 +102,11 @@ function arbiterHasBranch(seeded: SeededRepo, branch: string): boolean {
 /**
  * Move a slug from needs-attention/ back to backlog/ on the arbiter (cross-machine),
  * AND release its per-item lock — modelling a LEGITIMATE return-to-pool. Under the
- * interim dual-write (slice `claim-acquires-unified-lock-no-body-move`) a claim
+ * interim dual-write (task `claim-acquires-unified-lock-no-body-move`) a claim
  * acquires the per-item lock, and the real return-to-pool (`returnToBacklog`)
  * RELEASES it. A bare arbiter reroute that left the lock held would NOT be
  * re-claimable (claim's lock acquire would lose definitively — by design, the
- * orphaned-lock case is cleared by the human `release-lock` verb in slice
+ * orphaned-lock case is cleared by the human `release-lock` verb in task
  * `release-lock-verb-and-gc-stuck-report`, never an auto-steal at claim time). So a
  * test that wants the item to be legitimately re-claimable must release the lock,
  * exactly as the real return-to-pool does.
@@ -320,7 +320,7 @@ describe('continue-detection is ARBITER-authoritative (bare hub-mirror path)', (
 		// Plant the bare-mirror in the live ORPHAN shape: a
 		// `refs/remotes/origin/work/<slug>` ref in the namespace NO
 		// `remote.origin.fetch` refspec prunes (verified: 57 such live stale
-		// refs in the slice observation).
+		// refs in the task observation).
 		run(
 			'git',
 			['update-ref', 'refs/remotes/origin/work/task-epsilon', oldTip],

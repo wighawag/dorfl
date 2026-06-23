@@ -62,7 +62,7 @@ Do the artifacts COMPOSE, and do they obey the contract?
 
 ### 4. Conceptual coherence (does it fit the system's LANGUAGE?)
 
-The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — it is how, in practice, a single concept got applied at the WRONG LAYER and the inconsistency survived multiple tasks + briefs (the `autoSlice` gate that gated the `do brief:` VERB when it should have gated only the autonomous SELECTION — see `work/notes/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md`).
+The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — it is how, in practice, a single concept got applied at the WRONG LAYER and the inconsistency survived multiple tasks + briefs (the `autoTask` gate that gated the `do brief:` VERB when it should have gated only the autonomous SELECTION — see `work/notes/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md`).
 
 For each concept / flag / config key / verb / status the artifact introduces or touches, ask three questions:
 

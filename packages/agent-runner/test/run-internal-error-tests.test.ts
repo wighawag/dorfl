@@ -17,7 +17,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * REGRESSION PINS for two thin-coverage `run`/claim internal-error paths (slice
+ * REGRESSION PINS for two thin-coverage `run`/claim internal-error paths (task
  * `run-internal-error-tests`). These paths were only exercised INDIRECTLY by the
  * higher-level concurrency tests, so a refactor could silently break them. The
  * pins here make the behaviour explicit + a regression loud:
@@ -33,7 +33,7 @@ import {
  * (Pin (1) — `performClaim`'s claim-branch RETRY reset — was RETIRED when the
  * lock-substrate cut-over removed claim's body move / `main` push / retry loop
  * entirely: claim acquires a per-item lock and writes nothing to `main`, so there
- * is no throwaway claim branch or CAS-retry to pin. See slice
+ * is no throwaway claim branch or CAS-retry to pin. See task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`.)
  *
  * Tests-only: no production behaviour changes. House harness — throwaway repos +

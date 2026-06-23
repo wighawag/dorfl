@@ -3,10 +3,10 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	performIntake,
-	buildLoneSliceReviewPrompt,
-	parseLoneSliceReviewVerdict,
+	buildLoneTaskReviewPrompt,
+	parseLoneTaskReviewVerdict,
 	type IntakeVerdict,
-	type LoneSliceReviewGate,
+	type LoneTaskReviewGate,
 } from '../src/intake.js';
 import {parseIntakeMarker} from '../src/intake-marker.js';
 import {
@@ -28,10 +28,10 @@ import {
 
 /**
  * `intake-lone-slice-bounded-internal-review` (PRD `issue-intake`, observation
- * `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
- * intake's lone-SLICE outcome runs a BOUNDED (3-round, HARD-CAPPED) adversarial
- * self-review on the SINGLE drafted slice BEFORE emitting it. CONVERGE → emit the
- * (edited) slice + completion comment; NON-CONVERGE → flip SLICE→ASK carrying the
+ * `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
+ * intake's lone-TASK outcome runs a BOUNDED (3-round, HARD-CAPPED) adversarial
+ * self-review on the SINGLE drafted task BEFORE emitting it. CONVERGE → emit the
+ * (edited) task + completion comment; NON-CONVERGE → flip TASK→ASK carrying the
  * draft + open question(s) in the comment body (the EXISTING `asked` outcome,
  * `kind=ask` marker — no new outcome/marker/flag).
  *
@@ -126,7 +126,7 @@ function stubIssueProvider(
 	return provider;
 }
 
-/** A canned `slice` decision verdict (the STUBBED decision seam — no model/network). */
+/** A canned `task` decision verdict (the STUBBED decision seam — no model/network). */
 const TASK_VERDICT: IntakeVerdict = {
 	outcome: 'task',
 	taskSlug: 'add-quiet-flag',
@@ -147,13 +147,13 @@ const TASK_VERDICT: IntakeVerdict = {
 };
 
 /** A converging review gate: `approve` on the first round, no edit. */
-const converge: LoneSliceReviewGate = async () => ({
+const converge: LoneTaskReviewGate = async () => ({
 	verdict: 'approve',
 	findings: [],
 });
 
-describe('intake <N> — the lone-slice bounded internal review (stubbed review gate)', () => {
-	it('CONVERGE: a `slice` verdict whose review converges writes the slice + posts the completion comment (outcome sliced)', async () => {
+describe('intake <N> — the lone-task bounded internal review (stubbed review gate)', () => {
+	it('CONVERGE: a `task` verdict whose review converges writes the task + posts the completion comment (outcome tasked)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 		let rounds = 0;
@@ -163,7 +163,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: async () => {
+			reviewTask: async () => {
 				rounds++;
 				return {verdict: 'approve', findings: []};
 			},
@@ -175,7 +175,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 		// Exactly one review round ran (the natural terminator on the first approve).
 		expect(rounds).toBe(1);
-		// The slice rode the work/<slug> branch (propose default); main untouched.
+		// The task rode the work/<slug> branch (propose default); main untouched.
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
@@ -186,7 +186,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			repo,
 		);
 		expect(onBranch).toMatch(/^issue: 42$/m);
-		// The `slice created` completion comment was posted (the existing success path).
+		// The `task created` completion comment was posted (the existing success path).
 		expect(issueProvider.comments).toHaveLength(1);
 		expect(issueProvider.comments[0].body).toContain('Created task');
 		// The success path used the existing `created` marker, NOT a new kind.
@@ -194,7 +194,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(marker?.kind).toBe('created');
 	});
 
-	it('CONVERGE WITH AN EDIT: a round proposes a replacement body applied IN MEMORY and re-reviewed; the EMITTED slice reflects the edit and NO work/tasks/todo write happens before convergence', async () => {
+	it('CONVERGE WITH AN EDIT: a round proposes a replacement body applied IN MEMORY and re-reviewed; the EMITTED task reflects the edit and NO work/tasks/todo write happens before convergence', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 		const editedBody = [
@@ -217,7 +217,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: async (input) => {
+			reviewTask: async (input) => {
 				round++;
 				if (round === 1) {
 					// PRE-CONVERGENCE round: propose an edit and BLOCK (re-review). The
@@ -251,7 +251,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(round).toBe(2);
-		// The EMITTED slice reflects the edit (the body differs from the first draft).
+		// The EMITTED task reflects the edit (the body differs from the first draft).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
 			[
@@ -278,7 +278,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			// no-edit blocking question, so the early-flip does NOT fire) — the hard cap
 			// is what must terminate it. A blocking round that proposes an `edit` is
 			// iterated; only the cap stops this one.
-			reviewSlice: async () => {
+			reviewTask: async () => {
 				rounds++;
 				return {
 					verdict: 'block',
@@ -294,7 +294,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(rounds).toBe(3);
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('asked');
-		// NO slice was written / integrated (no silent emit of the under-refined slice).
+		// NO task was written / integrated (no silent emit of the under-refined task).
 		expect(result.emitted).toBeUndefined();
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -303,7 +303,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		);
 	});
 
-	it('NON-CONVERGE flips SLICE→ASK EARLY (round 1, no edit) — ONE comment carrying BOTH the draft AND the open question(s), stamped kind=ask, NO slice written/integrated', async () => {
+	it('NON-CONVERGE flips TASK→ASK EARLY (round 1, no edit) — ONE comment carrying BOTH the draft AND the open question(s), stamped kind=ask, NO task written/integrated', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 11}});
 		let rounds = 0;
@@ -315,7 +315,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			decide: async () => TASK_VERDICT,
 			// A blocking question with no clear thread answer AND no edit to apply on
 			// round 1 → flip to ASK IMMEDIATELY (early flip — does not burn rounds 2/3).
-			reviewSlice: async () => {
+			reviewTask: async () => {
 				rounds++;
 				return {
 					verdict: 'block',
@@ -342,7 +342,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(issueProvider.comments).toHaveLength(1);
 		const body = issueProvider.comments[0].body;
 		expect(body).toContain('Should --quiet also suppress warnings');
-		// The draft rides in the BODY (the slice's frontmatter + body), not a new marker.
+		// The draft rides in the BODY (the task's frontmatter + body), not a new marker.
 		expect(body).toContain('slug: add-quiet-flag');
 		expect(body).toMatch(/issue: 11/);
 		expect(body).toContain('## What to build');
@@ -351,7 +351,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(marker?.kind).toBe('ask');
 	});
 
-	it('the lone-slice flip carries any EDITS made before the non-converge into the ASK draft (the human reacts to the refined draft)', async () => {
+	it('the lone-task flip carries any EDITS made before the non-converge into the ASK draft (the human reacts to the refined draft)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 12}});
 		let round = 0;
@@ -361,7 +361,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => TASK_VERDICT,
-			reviewSlice: async () => {
+			reviewTask: async () => {
 				round++;
 				// Round 1: tighten the draft (an `edit`) AND block — because it proposes an
 				// edit it is ITERATED (no early flip). Round 2: block with an open question
@@ -386,7 +386,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(body).toContain('TIGHTENED-DRAFT-MARKER');
 	});
 
-	it('a review launch/parse FAILURE maps onto `agent-failed` (exit 1) — never a silent emit of the un-reviewed slice', async () => {
+	it('a review launch/parse FAILURE maps onto `agent-failed` (exit 1) — never a silent emit of the un-reviewed task', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 		const result = await performIntake({
@@ -397,7 +397,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			decide: async () => TASK_VERDICT,
 			// The review gate throws (a launch/parse failure) — the dispatcher's
 			// try/catch maps it onto agent-failed, NOT a silent emit.
-			reviewSlice: async () => {
+			reviewTask: async () => {
 				throw new Error('review agent produced no parseable verdict');
 			},
 			env: gitEnv(),
@@ -405,7 +405,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('agent-failed');
-		// NO slice emitted on the failure path; the lock is released (not leaked).
+		// NO task emitted on the failure path; the lock is released (not leaked).
 		expect(result.emitted).toBeUndefined();
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -416,10 +416,10 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(issueProvider.comments).toHaveLength(0);
 	});
 
-	it('the review runs ONLY on the slice outcome — ask/prd/bounce never invoke the review gate', async () => {
+	it('the review runs ONLY on the task outcome — ask/prd/bounce never invoke the review gate', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		let reviewCalls = 0;
-		const spyGate: LoneSliceReviewGate = async () => {
+		const spyGate: LoneTaskReviewGate = async () => {
 			reviewCalls++;
 			return {verdict: 'approve', findings: []};
 		};
@@ -431,7 +431,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 1}}),
 			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
-			reviewSlice: spyGate,
+			reviewTask: spyGate,
 			env: gitEnv(),
 		});
 		// PRD: no review (the PRD path is covered by `do prd:`'s own loop).
@@ -444,7 +444,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 				outcome: 'brief',
 				briefTitle: 'A coherent feature',
 			}),
-			reviewSlice: spyGate,
+			reviewTask: spyGate,
 			env: gitEnv(),
 		});
 		// BOUNCE: no review.
@@ -454,7 +454,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 3}}),
 			decide: async () => ({outcome: 'bounce', bounceMessage: 'unrelated'}),
-			reviewSlice: spyGate,
+			reviewTask: spyGate,
 			env: gitEnv(),
 		});
 
@@ -463,14 +463,14 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 });
 
 // ---------------------------------------------------------------------------
-// The lone-slice review PROMPT + PARSER (the production wire). The prompt's
+// The lone-task review PROMPT + PARSER (the production wire). The prompt's
 // JUDGEMENT is NOT unit-tested — only that it frames the right lenses (N=1: the
 // SET lenses OFF) and that the parser is the `{verdict, findings, edit, questions}`
 // twin of the tasker loop's, anchored on `"verdict"` via the shared extractor.
 // ---------------------------------------------------------------------------
-describe('buildLoneSliceReviewPrompt — frames the per-slice + destination lenses, SET lenses OFF', () => {
-	it('names the per-slice well-formedness + destination check and explicitly turns the SET/graph/overlap lenses OFF (N=1)', () => {
-		const prompt = buildLoneSliceReviewPrompt({
+describe('buildLoneTaskReviewPrompt — frames the per-task + destination lenses, SET lenses OFF', () => {
+	it('names the per-task well-formedness + destination check and explicitly turns the SET/graph/overlap lenses OFF (N=1)', () => {
+		const prompt = buildLoneTaskReviewPrompt({
 			slug: 'add-quiet-flag',
 			issueNumber: 42,
 			title: 'Add a --quiet flag',
@@ -489,21 +489,21 @@ describe('buildLoneSliceReviewPrompt — frames the per-slice + destination lens
 	});
 });
 
-describe('parseLoneSliceReviewVerdict — the {verdict, findings, edit, questions} parse table', () => {
+describe('parseLoneTaskReviewVerdict — the {verdict, findings, edit, questions} parse table', () => {
 	it('parses an approve verdict out of prose-wrapped + fenced output', () => {
 		const output = [
-			'I reviewed the slice.',
+			'I reviewed the task.',
 			'```json',
 			JSON.stringify({verdict: 'approve', findings: []}),
 			'```',
 		].join('\n');
-		const v = parseLoneSliceReviewVerdict(output);
+		const v = parseLoneTaskReviewVerdict(output);
 		expect(v.verdict).toBe('approve');
 		expect(v.findings).toEqual([]);
 	});
 
 	it('parses a block verdict with an edit + questions', () => {
-		const v = parseLoneSliceReviewVerdict(
+		const v = parseLoneTaskReviewVerdict(
 			JSON.stringify({
 				verdict: 'block',
 				findings: [{severity: 'blocking', question: 'q', context: 'c'}],
@@ -519,19 +519,19 @@ describe('parseLoneSliceReviewVerdict — the {verdict, findings, edit, question
 	});
 
 	it('THROWS when no JSON object is present', () => {
-		expect(() => parseLoneSliceReviewVerdict('no verdict here')).toThrow(
+		expect(() => parseLoneTaskReviewVerdict('no verdict here')).toThrow(
 			/no parseable/i,
 		);
 	});
 
 	it('THROWS on invalid JSON', () => {
-		expect(() => parseLoneSliceReviewVerdict('{"verdict":"approve",}')).toThrow(
+		expect(() => parseLoneTaskReviewVerdict('{"verdict":"approve",}')).toThrow(
 			/not valid JSON/i,
 		);
 	});
 
 	it('THROWS on a verdict not in {approve, block}', () => {
-		expect(() => parseLoneSliceReviewVerdict('{"verdict":"maybe"}')).toThrow(
+		expect(() => parseLoneTaskReviewVerdict('{"verdict":"maybe"}')).toThrow(
 			/approve.*block/i,
 		);
 	});
@@ -571,7 +571,7 @@ describe('the bounded review introduces no new outcome/marker/flag and does not 
 
 	it('adds no review-loop config flag / knob (no --tasker-loop-style knob, no PerformIntakeOptions cap field)', () => {
 		// The cap is a hard-coded literal (ruling A/B): no flag, no config, no option.
-		expect(intakeSrc).toContain('LONE_SLICE_REVIEW_MAX_ROUNDS = 3');
-		expect(intakeSrc).not.toMatch(/taskerLoop|reviewLoopMax|loneSliceLoop/);
+		expect(intakeSrc).toContain('LONE_TASK_REVIEW_MAX_ROUNDS = 3');
+		expect(intakeSrc).not.toMatch(/taskerLoop|reviewLoopMax|loneTaskLoop/);
 	});
 });

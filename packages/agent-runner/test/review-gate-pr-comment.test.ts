@@ -65,7 +65,7 @@ const PASS = 'exit 0';
 const REVIEW_PROSE = [
 	'Approved.',
 	'',
-	'Lens 1 (claim-vs-code): the diff delivers what the slice "alpha" claims.',
+	'Lens 1 (claim-vs-code): the diff delivers what the task "alpha" claims.',
 	'Lens 4 (destination check): merged as written, we reach the PRD goal.',
 	'',
 	'One non-blocking nit: consider renaming `foo` for clarity.',
@@ -234,13 +234,13 @@ describe('parseReviewVerdict — carries the `review` field alongside the verdic
 		const verdict = parseReviewVerdict(
 			JSON.stringify({
 				verdict: 'block',
-				review: 'Blocked. The diff drifts from the slice premise.',
+				review: 'Blocked. The diff drifts from the task premise.',
 				findings: [{severity: 'blocking', question: 'drift'}],
 			}),
 		);
 		expect(verdict.verdict).toBe('block');
 		expect(verdict.review).toBe(
-			'Blocked. The diff drifts from the slice premise.',
+			'Blocked. The diff drifts from the task premise.',
 		);
 	});
 });

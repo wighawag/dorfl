@@ -12,11 +12,11 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * `advance-rung-surface` slice (PRD `advance-loop`, US #32/33) — the SURFACE rung
+ * `advance-rung-surface` task (PRD `advance-loop`, US #32/33) — the SURFACE rung
  * WIRING through the engine tick: on `classify=surface`, under the `advancing`
  * lock, the engine spawns the (stubbed) `surface-questions` gate, collects the
  * emitted questions, and ITSELF persists them to the sidecar CAS-atomically +
- * sets `needsAnswers:true`. The slice's acceptance criteria pinned here:
+ * sets `needsAnswers:true`. The task's acceptance criteria pinned here:
  *
  *   - a surface tick writes the expected sidecar entries (stubbed emit);
  *   - surfacing is ALWAYS allowed (no gate) — proven with no autonomy flags;
@@ -54,7 +54,7 @@ const RELEASED: ReleaseAdvancingLockResult = {
 };
 
 /**
- * A throwaway repo with one backlog slice carrying `needsAnswers:true` and NO
+ * A throwaway repo with one backlog task carrying `needsAnswers:true` and NO
  * sidecar — exactly the `classify=surface` cell (gated, no sidecar yet).
  */
 function seedGatedItem(slug = 'foo'): {repo: string; itemPath: string} {

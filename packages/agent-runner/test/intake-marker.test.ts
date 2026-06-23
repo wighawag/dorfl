@@ -41,7 +41,7 @@ describe('intake marker \u2014 stamp + parse the hidden HTML comment', () => {
 	});
 
 	it('a created marker carries slug= (and only created does)', () => {
-		const created = stampIntakeMarker('Created slice foo', {
+		const created = stampIntakeMarker('Created task foo', {
 			kind: 'created',
 			seen: ['601', '602'],
 			slug: 'add-quiet-flag',

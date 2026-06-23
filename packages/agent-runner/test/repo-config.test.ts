@@ -27,7 +27,7 @@ describe('repo-config constants', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('verify');
 		expect(REPO_ALLOWED_KEYS).toContain('defaultArbiter');
 		expect(REPO_ALLOWED_KEYS).toContain('autoBuild');
-		// `autoTask` is the slicing-autonomy mirror of `autoBuild` — a genuine
+		// `autoTask` is the tasking-autonomy mirror of `autoBuild` — a genuine
 		// repo property, resolved per-repo through the same chain.
 		expect(REPO_ALLOWED_KEYS).toContain('autoTask');
 		// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
@@ -49,9 +49,9 @@ describe('repo-config constants', () => {
 		// The removed `provider` OVERRIDE is NOT allowed (it is gone entirely).
 		expect(REPO_ALLOWED_KEYS).toContain('noPR');
 		expect(REPO_ALLOWED_KEYS).not.toContain('provider');
-		// `taskingIntegration` (the per-TRANSITION SLICING override) is a genuine repo
-		// property like `integration`: whether THIS repo slices a PRD straight onto main
-		// while still building each slice as a PR is agreed by all collaborators + travels
+		// `taskingIntegration` (the per-TRANSITION TASKING override) is a genuine repo
+		// property like `integration`: whether THIS repo tasks a PRD straight onto main
+		// while still building each task as a PR is agreed by all collaborators + travels
 		// with the repo. (`per-transition-integration-mode-slicing-vs-build`.)
 		expect(REPO_ALLOWED_KEYS).toContain('taskingIntegration');
 		// `promptGuidance` (the NUDGE namespace — prompt-text knobs, NOT a gate) is a
@@ -271,7 +271,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 	});
 
 	it('CI seam: a config-less repo with NO AGENT_RUNNER_* gate env resolves to the strict built-in gate defaults', () => {
-		// Slice `install-ci-emits-no-gate-env-let-config-decide`: the emitted
+		// Task `install-ci-emits-no-gate-env-let-config-decide`: the emitted
 		// advance workflow carries no gate env, so a config-less repo running in CI
 		// hits the resolver with `env: {}` and falls through to DEFAULT_CONFIG.
 		// This pins that the four gate keys resolve to their strict-default values
@@ -289,7 +289,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 	});
 
 	it('CI seam: per-repo `.agent-runner.json` governs ALL FOUR gates when the workflow emits no AGENT_RUNNER_* env', () => {
-		// The bug this slice closes: the install-ci workflow used to hardcode the
+		// The bug this task closes: the install-ci workflow used to hardcode the
 		// four AGENT_RUNNER_* gate env vars, which forced the env layer to win
 		// over the repo's committed `.agent-runner.json` (precedence is flag > env
 		// > per-repo > global > default). Now that the workflow emits NO gate env,
@@ -328,19 +328,19 @@ describe('resolveRepoConfig — per-key layering', () => {
 		expect(resolved.config.verify).toBe('make test');
 	});
 
-	// `taskingIntegration` (the per-TRANSITION SLICING override,
+	// `taskingIntegration` (the per-TRANSITION TASKING override,
 	// `per-transition-integration-mode-slicing-vs-build`) resolves through the SAME
-	// chain as `integration` and is read by the slicing-transition caller as
+	// chain as `integration` and is read by the tasking-transition caller as
 	// `taskingIntegration ?? integration` (the FALLBACK is asserted at the do.ts
 	// option-threading seam; here we pin the config-resolution half).
-	it('a per-repo `taskingIntegration` overrides the global for the slicing transition; `integration` is independent', () => {
+	it('a per-repo `taskingIntegration` overrides the global for the tasking transition; `integration` is independent', () => {
 		writeRepoConfig(repo, {
 			integration: 'propose',
 			taskingIntegration: 'merge',
 		});
 		const global = mergeConfig({integration: 'propose'});
 		const {config} = resolveRepoConfig({repoPath: repo, global, env: {}});
-		// The maintainer's target: build proposes, slicing merges.
+		// The maintainer's target: build proposes, tasking merges.
 		expect(config.integration).toBe('propose');
 		expect(config.taskingIntegration).toBe('merge');
 	});
@@ -351,12 +351,12 @@ describe('resolveRepoConfig — per-key layering', () => {
 		const {config} = resolveRepoConfig({repoPath: repo, global, env: {}});
 		expect(config.integration).toBe('merge');
 		// No default in DEFAULT_CONFIG — unset means "fall back to integration", which
-		// the slicing-transition caller does with `taskingIntegration ?? integration`.
+		// the tasking-transition caller does with `taskingIntegration ?? integration`.
 		expect(config.taskingIntegration).toBeUndefined();
 	});
 
 	it("resolves `taskingIntegration` flag > env > per-repo > global (the new key rides `integration`'s chain)", () => {
-		// per-repo opts the slicing override to merge over an unset global.
+		// per-repo opts the tasking override to merge over an unset global.
 		writeRepoConfig(repo, {taskingIntegration: 'merge'});
 		const global = mergeConfig({integration: 'propose'});
 		expect(
@@ -382,7 +382,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe('merge');
 	});
 
-	// `tasksLandIn` (the per-repo SLICE-PLACEMENT default, slice
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default, task
 	// `runner-deterministic-slice-placement-policy-and-precedence`) is resolved
 	// EXACTLY like `taskingIntegration`: a config-resolved per-repo default fed
 	// into the shared placement resolver (`src/placement.ts`) as the
@@ -395,14 +395,14 @@ describe('resolveRepoConfig — per-key layering', () => {
 
 	it('resolves `tasksLandIn` flag > env > per-repo > global > built-in (`pre-backlog`)', () => {
 		// Built-in floor: unset everywhere ⇒ `pre-backlog` (the conservative
-		// landing that preserves the tracer slice's behaviour).
+		// landing that preserves the tracer task's behaviour).
 		const bare = mergeConfig({});
 		expect(
 			resolveRepoConfig({repoPath: repo, global: bare, env: {}}).config
 				.tasksLandIn,
 		).toBe('pre-backlog');
 		// global override: the user's global config sets the POOL value `todo`
-		// (renamed from `'backlog'` in slice
+		// (renamed from `'backlog'` in task
 		// `f1-pool-noun-todo-in-surface-and-apply-readers`; staging is still
 		// `'pre-backlog'`).
 		const global = mergeConfig({tasksLandIn: 'todo'});

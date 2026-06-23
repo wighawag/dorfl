@@ -672,7 +672,7 @@ export function validateAdvanceLifecycleWorkflow(
 	), 'no emitted job step may touch `.github/workflows/**` (US #9).');
 
 	// --- Explicit slug prefixes, never bare ------------------------------------
-	require('explicit-slice-prefix', /"task:" \+ \.slug/.test(text) ||
+	require('explicit-task-prefix', /"task:" \+ \.slug/.test(text) ||
 		/task:/.test(
 			text,
 		), 'CI must use explicit `task:`/`brief:` slug prefixes, never bare (ADR ' +
@@ -684,9 +684,7 @@ export function validateAdvanceLifecycleWorkflow(
 	// hourly cron — a ready ungated BRIEF would never become a matrix leg. The `jq`
 	// must enumerate `brief:<slug>` ids from `scan --json`'s taskable-BRIEF pool
 	// (`repos[].briefs[]` + `cwd.repo.briefs[]`) alongside the eligible-task legs.
-	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
-		text,
-	) &&
+	require('propose-enumerates-taskable-prds', /"brief:" \+ \.slug/.test(text) &&
 		/\.briefs\[\]/.test(
 			text,
 		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +

@@ -8,19 +8,19 @@ import {mergeConfig} from '../src/config.js';
 import {LEDGER_STATUS_FOLDERS} from '../src/ledger-lint.js';
 
 /**
- * The PER-REGIME won't-proceed terminals (slice
+ * The PER-REGIME won't-proceed terminals (task
  * `brief-regime-rename-and-dropped-migration`, PRD
  * `folder-taxonomy-reorg-and-rename` US #10). The previously-shared top-level
  * `work/dropped/` is split per regime so a dropped task and a dropped brief
  * sharing a slug never collide on one bare-slug `work/dropped/<slug>.md`:
- *   - a SLICE drops to `work/tasks/cancelled/`,
+ *   - a TASK drops to `work/tasks/cancelled/`,
  *   - a BRIEF (PRD) drops to `work/briefs/dropped/`,
  *   - an OBSERVATION has NO terminal folder (notes leave by deletion).
  *
  * Pool-eligibility BY RESIDENCE: an item resting in its regime's won't-proceed
  * terminal is OUT of every pool, the SAME way `work/tasks/done/` /
  * `work/briefs/tasked/` exclude — the pool readers enumerate ONLY their pool
- * folders (`tasks/todo/` for slices, `briefs/ready/` for briefs), so a terminal
+ * folders (`tasks/todo/` for tasks, `briefs/ready/` for briefs), so a terminal
  * file is invisible to every reader by construction; no reader re-implements the
  * rule.
  *
@@ -53,7 +53,7 @@ function writeMd(rel: string, fm: Record<string, string>, body = 'body'): void {
 }
 
 describe('per-regime wont-proceed terminals — residence excludes from every pool', () => {
-	it('the slice regime terminal `cancelled` is one of the canonical status folders (one residence rule, defined once)', () => {
+	it('the task regime terminal `cancelled` is one of the canonical status folders (one residence rule, defined once)', () => {
 		expect([...LEDGER_STATUS_FOLDERS]).toContain('cancelled');
 	});
 
@@ -75,10 +75,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 
-	it('a slice resting in work/tasks/cancelled/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
-		// A live slice in work/tasks/todo/ + a cancelled slice in
+	it('a task resting in work/tasks/cancelled/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
+		// A live task in work/tasks/todo/ + a cancelled task in
 		// work/tasks/cancelled/. The scan enumerates only the pool, so the cancelled
-		// slice never appears.
+		// task never appears.
 		writeMd('repo/work/tasks/todo/live.md', {slug: 'live'});
 		writeMd(
 			'repo/work/tasks/cancelled/abandoned.md',
@@ -96,7 +96,7 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 	});
 
 	it('a task-drop and a brief-drop sharing a slug NO LONGER collide (the per-regime correctness fix)', () => {
-		// The load-bearing reason the terminal is per-regime: a slice `shared` and a
+		// The load-bearing reason the terminal is per-regime: a task `shared` and a
 		// brief `shared` that are BOTH dropped land in DIFFERENT files
 		// (work/tasks/cancelled/shared.md vs work/briefs/dropped/shared.md), never
 		// the one bare-slug work/dropped/shared.md they used to collide on.
@@ -112,7 +112,7 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		);
 
 		// Both terminals co-exist for the same slug WITHOUT being a ledger duplicate:
-		// the slice-status lint covers only the tasks board, so `briefs/dropped/` is
+		// the task-status lint covers only the tasks board, so `briefs/dropped/` is
 		// a separate namespace, not a same-folder collision.
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
@@ -154,10 +154,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		expect(report.repos[0].items).toEqual([]);
 	});
 
-	it('a slug present BOTH in work/tasks/cancelled/ and another slice-status folder is a one-slug-one-folder duplicate (the lint covers cancelled)', async () => {
+	it('a slug present BOTH in work/tasks/cancelled/ and another task-status folder is a one-slug-one-folder duplicate (the lint covers cancelled)', async () => {
 		// Cross-residence corruption is still detectable: a slug in
 		// `tasks/cancelled/` AND `tasks/todo/` is a duplicate the lint surfaces (the
-		// read-side lint covers the full slice lifecycle set including the terminal
+		// read-side lint covers the full task lifecycle set including the terminal
 		// `tasks/cancelled/`).
 		writeMd('repo/work/tasks/todo/both.md', {slug: 'both'});
 		writeMd(

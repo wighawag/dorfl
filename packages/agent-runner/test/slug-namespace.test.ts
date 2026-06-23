@@ -70,7 +70,7 @@ describe('parseSlugArg — pure prefix splitting', () => {
 		});
 	});
 
-	it('the HARD CUTOVER: a pre-rename slice:/prd: prefix is NOT a namespace prefix anymore (no alias)', () => {
+	it('the HARD CUTOVER: a pre-rename task:/prd: prefix is NOT a namespace prefix anymore (no alias)', () => {
 		// After the cutover the old prefixes are plain slug text — they carry no
 		// explicit namespace, so they fall through to the bare path (where they
 		// resolve as a literal `slice:foo` / `prd:foo` slug, never as the old
@@ -141,9 +141,9 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		}
 	});
 
-	it('a bare slug ERRORS on collision even when the brief is mid-slice (body stays in work/briefs/ready/)', () => {
-		// A brief currently being sliced KEEPS its body in work/briefs/ready/<slug>.md (the slicing
-		// lock no longer moves it — the `slicing/` folder is retired; the in-flight state
+	it('a bare slug ERRORS on collision even when the brief is mid-task (body stays in work/briefs/ready/)', () => {
+		// A brief currently being tasked KEEPS its body in work/briefs/ready/<slug>.md (the tasking
+		// lock no longer moves it — the `tasking/` folder is retired; the in-flight state
 		// is the per-item lock ref). The brief namespace still claims the slug via its
 		// ready/ residence, so a bare slug is still ambiguous.
 		writeItem('backlog', 'shared.md', {slug: 'shared'});
@@ -203,10 +203,10 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		expect(resolved.namespace).toBe('brief');
 	});
 
-	it('the HARD CUTOVER: a pre-rename slice:/prd: arg is NOT accepted as the old namespace (resolves as a bare literal task)', () => {
+	it('the HARD CUTOVER: a pre-rename task:/prd: arg is NOT accepted as the old namespace (resolves as a bare literal task)', () => {
 		// After the cutover `slice:foo` is no longer a task prefix — it parses as a
 		// bare slug whose literal text is `slice:foo` (resolved to the TASK
-		// namespace because bare = task), NOT the old `slice` namespace. Likewise
+		// namespace because bare = task), NOT the old `task` namespace. Likewise
 		// `prd:foo` is no longer the brief prefix.
 		const task = resolveSlug({
 			arg: 'slice:foo',
@@ -295,11 +295,11 @@ describe('resolveAdvanceArg — the advance verb resolver (task/brief/obs, bare 
 	it('resolves an explicit brief: arg to the brief namespace (unambiguous by construction)', () => {
 		expect(
 			resolveAdvanceArg({
-				arg: 'brief:autoslice',
+				arg: 'brief:autotask',
 				repoPath: repoPath(),
 				read: currentLedgerRead,
 			}),
-		).toEqual({namespace: 'brief', slug: 'autoslice', explicit: true});
+		).toEqual({namespace: 'brief', slug: 'autotask', explicit: true});
 	});
 
 	it('a bare slug resolves to the TASK when no brief shares it (bare = task, as do has it)', () => {
@@ -360,7 +360,7 @@ describe('resolveSlug — `do` does NOT span the observation namespace', () => {
 	});
 });
 
-describe('resolveSliceOnlyArg — the task-only command guard', () => {
+describe('resolveTaskOnlyArg — the task-only command guard', () => {
 	it('accepts a bare slug (= the task)', () => {
 		expect(resolveTaskOnlyArg('feature')).toBe('feature');
 	});
@@ -390,7 +390,7 @@ describe('resolveSliceOnlyArg — the task-only command guard', () => {
 		}
 	});
 
-	it('the HARD CUTOVER: a pre-rename slice: arg is NOT stripped (it is a literal slug, not the old alias)', () => {
+	it('the HARD CUTOVER: a pre-rename task: arg is NOT stripped (it is a literal slug, not the old alias)', () => {
 		// `slice:feature` is no longer the explicit task prefix; it is a bare slug
 		// whose literal text is `slice:feature`, so it passes through verbatim (no
 		// strip), NOT mapped to the task `feature`.
@@ -418,7 +418,7 @@ describe('ledger-read seam — resolvePrdExistence (the brief read path)', () =>
 		expect(r.briefTaskedFile).toBeUndefined();
 	});
 
-	it('reports a brief present only via its work/briefs/tasked/ resting file (already sliced)', () => {
+	it('reports a brief present only via its work/briefs/tasked/ resting file (already tasked)', () => {
 		writeItem('brief-tasked', 's.md', {slug: 's'});
 		const r = currentLedgerRead.resolveBriefExistence({
 			repoPath: repoPath(),
@@ -469,7 +469,7 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 		expect(task).not.toBe(brief);
 	});
 
-	it('prefixes an intake-produced branch so it never collides with a build/slicing branch for the same slug', () => {
+	it('prefixes an intake-produced branch so it never collides with a build/tasking branch for the same slug', () => {
 		// The FIRING collision: `intake` left a branch a later `do task:` reused.
 		const intakeTask = workBranchRef('task', 'add-quiet-flag', {
 			producer: 'intake',
@@ -520,10 +520,10 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 		});
 	});
 
-	it('the HARD CUTOVER: returns undefined for a non-work / pre-rename branch (old slice-/prd- types rejected, no alias)', () => {
+	it('the HARD CUTOVER: returns undefined for a non-work / pre-rename branch (old task-/prd- types rejected, no alias)', () => {
 		expect(parseWorkBranchRef('main')).toBeUndefined();
 		expect(parseWorkBranchRef('work/foo')).toBeUndefined(); // pre-rename un-namespaced form
-		expect(parseWorkBranchRef('work/slice-foo')).toBeUndefined(); // pre-rename slice type
+		expect(parseWorkBranchRef('work/slice-foo')).toBeUndefined(); // pre-rename task type
 		expect(parseWorkBranchRef('work/prd-foo')).toBeUndefined(); // pre-rename prd type
 		expect(parseWorkBranchRef('work/intake-slice-foo')).toBeUndefined();
 		expect(parseWorkBranchRef('claim/foo')).toBeUndefined();

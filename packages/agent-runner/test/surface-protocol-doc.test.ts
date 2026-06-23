@@ -1,12 +1,12 @@
 /**
- * Slice `surface-protocol-doc-and-prompt`: the surface-questions discipline,
+ * Task `surface-protocol-doc-and-prompt`: the surface-questions discipline,
  * relocated in-band as `SURFACE-PROTOCOL.md`, on the shared machinery built by
- * the keystone slice (`review-protocol-doc-and-shared-machinery`).
+ * the keystone task (`review-protocol-doc-and-shared-machinery`).
  *
  * This suite covers:
  *   - The setup mirror (the doc lands in `work/protocol/` byte-identical to the
  *     `skills/setup/protocol/` source-of-truth) and `work/protocol/VERSION` is
- *     bumped past the pre-slice value.
+ *     bumped past the pre-task value.
  *   - The vendored set ships `dist/protocol/SURFACE-PROTOCOL.md` alongside
  *     `CLAIM-PROTOCOL.md` + `REVIEW-PROTOCOL.md` (the SET vendor, not a
  *     special-case).
@@ -74,10 +74,10 @@ describe('SURFACE-PROTOCOL.md \u2014 the new in-band surface-questions disciplin
 		expect(doc).toMatch(/dropped/);
 	});
 
-	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-slice value', () => {
+	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-task value', () => {
 		// The setup contract: when the protocol-doc set grows / changes, VERSION
-		// bumps. The pre-slice value (set by the keystone) is 2026-06-22 \u2014 this
-		// slice's bump must exceed it.
+		// bumps. The pre-task value (set by the keystone) is 2026-06-22 \u2014 this
+		// task's bump must exceed it.
 		const version = readFileSync(resolve(MIRROR, 'VERSION'), 'utf8');
 		expect(version).toMatch(/protocol-version:\s*\d{4}-\d{2}-\d{2}/);
 		const match = /protocol-version:\s*(\d{4}-\d{2}-\d{2})/.exec(version);

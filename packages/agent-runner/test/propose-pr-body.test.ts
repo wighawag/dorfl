@@ -8,15 +8,15 @@ import {prCreateContentArgs} from '../src/github.js';
 import {NoneProvider, manualRequestText} from '../src/integrator.js';
 
 /**
- * Unit tests for the propose-mode PR TITLE + BODY synthesis (slice
+ * Unit tests for the propose-mode PR TITLE + BODY synthesis (task
  * `propose-pr-body`). Half A: a single-line, capped title synthesised runner-side
- * from the slice frontmatter (never the multi-line `--fill` run-on). Half B: the
+ * from the task frontmatter (never the multi-line `--fill` run-on). Half B: the
  * body threaded to the provider (`gh pr create --body` when present, else
  * `--fill`), surfaced in the `none` provider's manual instructions.
  */
 
 describe('synthesiseProposeTitle — Half A (runner-synthesised, single line, capped)', () => {
-	it('composes `<type>(<slug>): <title>` from the slice frontmatter', () => {
+	it('composes `<type>(<slug>): <title>` from the task frontmatter', () => {
 		expect(
 			synthesiseProposeTitle({
 				type: 'feat',
@@ -76,7 +76,7 @@ describe('synthesiseProposeTitle — Half A (runner-synthesised, single line, ca
 		expect(title.length).toBeLessThanOrEqual(PR_TITLE_MAX);
 	});
 
-	it('strips a leading `slug — ` prefix the slice title may repeat', () => {
+	it('strips a leading `slug — ` prefix the task title may repeat', () => {
 		expect(
 			synthesiseProposeTitle({
 				type: 'feat',
@@ -86,7 +86,7 @@ describe('synthesiseProposeTitle — Half A (runner-synthesised, single line, ca
 		).toBe('feat(complete): gate, mark done, integrate');
 	});
 
-	it('falls back to `<type>(<slug>)` when the slice title is missing/empty', () => {
+	it('falls back to `<type>(<slug>)` when the task title is missing/empty', () => {
 		expect(synthesiseProposeTitle({type: 'feat', slug: 'lonely'})).toBe(
 			'feat(lonely)',
 		);
@@ -103,7 +103,7 @@ describe('synthesiseProposeTitle — Half A (runner-synthesised, single line, ca
 });
 
 describe('composeProposeBody — Half B (agent summary under a runner header)', () => {
-	it('wraps the supplied prose under a slice-pointer header', () => {
+	it('wraps the supplied prose under a task-pointer header', () => {
 		const body = composeProposeBody({
 			slug: 'widget',
 			body: 'Built the widget. Decided X over Y.',
@@ -159,7 +159,7 @@ describe('NoneProvider — surfaces title/body in the manual instructions (Half 
 			branch: 'work/widget',
 			arbiter: 'origin',
 			title: 'feat(widget): add a widget',
-			body: 'Slice: `work/tasks/done/widget.md`\n\nThe summary.',
+			body: 'Task: `work/tasks/done/widget.md`\n\nThe summary.',
 		});
 		expect(result.opened).toBe(false);
 		expect(result.instruction).toContain('feat(widget): add a widget');

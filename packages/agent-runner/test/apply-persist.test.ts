@@ -27,9 +27,9 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `advance-rung-apply` slice (PRD `advance-loop`, US #11/14/15/29/30) — the
+ * `advance-rung-apply` task (PRD `advance-loop`, US #11/14/15/29/30) — the
  * engine-owned APPLY persist over a throwaway git repo (the house pattern the
- * surface-persist / sidecar-apply tests use). The slice's acceptance criteria
+ * surface-persist / sidecar-apply tests use). The task's acceptance criteria
  * pinned here:
  *
  *   - all-answered → apply the HUMAN's answers ATOMICALLY (item body + sidecar in
@@ -199,7 +199,7 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 });
 
 describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () => {
-	it('dropped on a SLICE → resolves the Q&A AND moves to work/tasks/cancelled/ (the slice regime terminal)', () => {
+	it('dropped on a TASK → resolves the Q&A AND moves to work/tasks/cancelled/ (the task regime terminal)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			questions: ['ship it?'],
 			answers: ['no'],
@@ -435,7 +435,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 describe('applyAnsweredQuestions — full-resolution RECONCILES the body (strips the marker-fenced open-questions block, brief `apply-reconciles-stale-open-questions`)', () => {
 	/**
 	 * Re-seed with a body that carries a marker-fenced open-questions block (the
-	 * shape the templates sibling slice will introduce). The reconcile must strip
+	 * shape the templates sibling task will introduce). The reconcile must strip
 	 * exactly that block on a full-resolution apply, leave it intact on a re-pause,
 	 * and behave as today on items WITHOUT the marker pair.
 	 */
@@ -560,7 +560,7 @@ describe('applyAnsweredQuestions — full-resolution RECONCILES the body (strips
 		// append, byte-for-byte identical to today's behaviour on legacy items.
 		const {repo, itemPath} = seed({questions: ['A?'], answers: ['a']});
 		const before = readFileSync(join(repo, itemPath), 'utf8');
-		// Slice the post-frontmatter prose; the frontmatter legitimately changes
+		// Task the post-frontmatter prose; the frontmatter legitimately changes
 		// (`needsAnswers: true` → `false`), but the BODY prose must be preserved as
 		// a prefix — backward compat for items authored without the marker pair.
 		const stripFm = (s: string) => s.replace(/^---[\s\S]*?\n---\n/, '');

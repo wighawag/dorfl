@@ -36,9 +36,9 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * `observation-triage-tri-state-gate` slice — the `autoTriage` boolean is REPLACED
+ * `observation-triage-tri-state-gate` task — the `autoTriage` boolean is REPLACED
  * by the 3-state `observationTriage` (`off | ask | auto`) gate. These tests pin
- * the slice's contract at the TWO layers it touches:
+ * the task's contract at the TWO layers it touches:
  *
  *   1. the SELECTION layer (the `advance-autopick-lifecycle-pools` observation
  *      pool): `off` ⇒ the observation pool is NOT enumerated into auto-pick (the
@@ -76,7 +76,7 @@ const RELEASED: ReleaseAdvancingLockResult = {
 /**
  * The cli's SELECTION-layer wiring rule, modelled so the test asserts the actual
  * contract: the observation (triage) pool is enumerated iff `observationTriage`
- * is not `off`. (`surface` stays born-OFF — its gate is a sibling slice.)
+ * is not `off`. (`surface` stays born-OFF — its gate is a sibling task.)
  */
 function triageGateFor(mode: ObservationTriage): LifecyclePoolGates {
 	return {triage: mode !== 'off'};
@@ -328,7 +328,7 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 			auto: true,
 			kind: 'map',
 			existing: 'task:existing-thing',
-			reason: 'covered by an existing slice',
+			reason: 'covered by an existing task',
 		});
 		const disposed: AutoDispositionOptions[] = [];
 		const dispose = (
@@ -428,7 +428,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 			count: 5,
 		});
 		expect(result.exitCode).toBe(0);
-		// The answered slice is selected (apply) regardless of the create-gate.
+		// The answered task is selected (apply) regardless of the create-gate.
 		expect(args).toEqual(['answered']);
 	});
 });

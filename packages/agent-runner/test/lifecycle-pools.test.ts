@@ -119,18 +119,14 @@ describe('buildLifecyclePools — apply sub-pool (answered sidecar; CONSUME, ALW
 			repoPath: '/repo',
 			observations: [obs('open')],
 			needsAnswers: [
-				blocked(
-					'task',
-					'answered-slice',
-					answeredSidecar('task:answered-slice'),
-				),
+				blocked('task', 'answered-task', answeredSidecar('task:answered-task')),
 				blocked('brief', 'answered-prd', answeredSidecar('brief:answered-prd')),
 			],
 			// create-side gates OFF (the default/interim) — apply is NOT gated.
 			gates: {},
 		});
 		expect(pools.apply).toEqual([
-			{repoPath: '/repo', slug: 'answered-slice', namespace: 'task'},
+			{repoPath: '/repo', slug: 'answered-task', namespace: 'task'},
 			{repoPath: '/repo', slug: 'answered-prd', namespace: 'brief'},
 		]);
 		// create-side pools stay empty (gates off).

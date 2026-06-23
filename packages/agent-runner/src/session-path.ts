@@ -66,7 +66,7 @@ function expandTilde(p: string): string {
  * ## Why the slug helper is replicated, not imported
  *
  * agent-runner depends ONLY on `commander` (see
- * `work/observations/slice-premise-pi-coding-agent-not-a-dep.md`). pi's exported
+ * `work/observations/task-premise-pi-coding-agent-not-a-dep.md`). pi's exported
  * `getDefaultSessionDir(cwd)` lives in `@earendil-works/pi-coding-agent`, whose
  * dependency tree is heavy (`pi-agent-core`, `pi-ai`, `zod`, `ws`). Pulling that
  * in for one tiny slug function is not worth it, so the encoding is REPLICATED

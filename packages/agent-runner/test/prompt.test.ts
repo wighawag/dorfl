@@ -44,7 +44,7 @@ const CLAIM_PROTOCOL = resolve(
 );
 
 const TASK = `---
-title: Example slice
+title: Example task
 slug: example
 prd: my-prd
 blockedBy: []
@@ -65,7 +65,7 @@ Some thing.
 > Make the tests green.
 `;
 
-/** Write a slice file into work/<folder>/<slug>.md under root, return root. */
+/** Write a task file into work/<folder>/<slug>.md under root, return root. */
 function seedTask(
 	root: string,
 	folder: 'in-progress' | 'backlog',
@@ -95,7 +95,7 @@ function seedTask(
 	writeFileSync(join(dir, `${slug}.md`), content);
 }
 
-/** Slice file CONTENT (not written to disk) for the done/-continue fixtures. */
+/** Task file CONTENT (not written to disk) for the done/-continue fixtures. */
 function doneTask(slug: string, brief = 'my-prd'): string {
 	return [
 		'---',
@@ -163,7 +163,7 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		const emitted = wrapper('my-slug', 'my-brief');
 		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), now
 		// cut over to the new layout/vocabulary by the protocol-docs/skills/setup
-		// vocabulary slice. The emitted task-body path is `work/tasks/todo/<slug>.md`.
+		// vocabulary task. The emitted task-body path is `work/tasks/todo/<slug>.md`.
 		expect(emitted).toContain('work/tasks/todo/my-slug.md');
 		expect(emitted).not.toContain('<slug>');
 	});
@@ -271,11 +271,11 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 	it('builds a prompt from the VENDORED copy when no work/protocol/ exists (no ENOENT)', () => {
 		// The regression guard: against a temp dir with no work/protocol/ (and no
 		// sibling skills/), buildAgentPrompt must return a prompt, not throw ENOENT.
-		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+		const out = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			cwd: scratch.root,
 		});
 		expect(out).toContain('work/tasks/todo/example.md');
-		expect(out).toContain('SLICE-BODY');
+		expect(out).toContain('TASK-BODY');
 		expect(out).not.toContain('<slug>');
 	});
 
@@ -297,7 +297,7 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		mkdirSync(protoDir, {recursive: true});
 		writeFileSync(join(protoDir, 'CLAIM-PROTOCOL.md'), tagged);
 
-		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+		const out = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			cwd: scratch.root,
 		});
 		expect(out).toContain('TARGET-MARKER complete brief');
@@ -388,30 +388,30 @@ describe('promptGuidance.testFirst nudge — the conditional-fragment seam', () 
 	});
 
 	it('buildAgentPrompt OFF is byte-identical to the no-options assembly (snapshot guard)', () => {
-		const a = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY');
-		const b = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+		const a = buildAgentPrompt('example', 'my-prd', 'TASK-BODY');
+		const b = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			promptGuidance: {testFirst: false},
 		});
 		expect(b).toBe(a);
 	});
 
 	it('buildAgentPrompt ON contains the strengthened line at the wrapper seam', () => {
-		const on = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+		const on = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			promptGuidance: {testFirst: true},
 		});
 		expect(on).toContain('failing test BEFORE the production code');
-		expect(on).toContain('SLICE-BODY');
+		expect(on).toContain('TASK-BODY');
 	});
 });
 
 describe('buildAgentPrompt', () => {
-	it('is the canonical wrapper followed by the slice prompt body verbatim', () => {
+	it('is the canonical wrapper followed by the task prompt body verbatim', () => {
 		const prompt = buildAgentPrompt('example', 'my-prd', 'UNIQUE-MARKER-123');
 		expect(prompt).toContain(wrapper('example', 'my-prd'));
 		expect(prompt).toContain('UNIQUE-MARKER-123');
 	});
 
-	it('only slug/prd vary in the wrapper (two slices share the wrapper text)', () => {
+	it('only slug/prd vary in the wrapper (two tasks share the wrapper text)', () => {
 		const a = buildAgentPrompt('alpha', 'brief-a', 'BODY');
 		const b = buildAgentPrompt('bravo', 'brief-b', 'BODY');
 		const stripA = a.replace(/alpha/g, 'SLUG').replace(/brief-a/g, 'PRD');
@@ -516,20 +516,20 @@ describe('buildContinueBlock — the injected CONTINUE block', () => {
 });
 
 describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
-	const FRESH = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY');
+	const FRESH = buildAgentPrompt('example', 'my-prd', 'TASK-BODY');
 
 	it('fresh-mode (no continueContext) is byte-identical to the baseline', () => {
-		// The baseline = wrapper + slice body, no CONTINUE block. Passing options
+		// The baseline = wrapper + task body, no CONTINUE block. Passing options
 		// without a continueContext must not alter a single byte.
-		const again = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {});
+		const again = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {});
 		expect(again).toBe(FRESH);
 		expect(FRESH).toContain(wrapper('example', 'my-prd'));
-		expect(FRESH).toContain('SLICE-BODY');
+		expect(FRESH).toContain('TASK-BODY');
 		expect(FRESH).not.toMatch(/CONTINUING/i);
 	});
 
-	it('continue-mode injects the CONTINUE block before the slice body', () => {
-		const out = buildAgentPrompt('example', 'my-prd', 'SLICE-BODY', {
+	it('continue-mode injects the CONTINUE block before the task body', () => {
+		const out = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			continueContext: {
 				arbiter: 'origin',
 				branch: 'work/task-example',
@@ -537,15 +537,15 @@ describe('buildAgentPrompt — continue-mode vs fresh-mode', () => {
 				requeueNotes: ['use the v2 helper'],
 			},
 		});
-		// It is a SUPERSET of fresh: same wrapper + same slice body, PLUS the block.
+		// It is a SUPERSET of fresh: same wrapper + same task body, PLUS the block.
 		expect(out).toContain(wrapper('example', 'my-prd'));
-		expect(out).toContain('SLICE-BODY');
+		expect(out).toContain('TASK-BODY');
 		expect(out).toMatch(/CONTINUING/i);
 		expect(out).toContain('origin/main...work/task-example');
 		expect(out).toContain('the gate was red');
 		expect(out).toContain('use the v2 helper');
-		// The block precedes the slice body in the assembly.
-		expect(out.indexOf('CONTINUING')).toBeLessThan(out.indexOf('SLICE-BODY'));
+		// The block precedes the task body in the assembly.
+		expect(out.indexOf('CONTINUING')).toBeLessThan(out.indexOf('TASK-BODY'));
 		expect(out).not.toBe(FRESH);
 	});
 });
@@ -642,7 +642,7 @@ describe('resolveContinueContext — reuse branchAheadOf detection', () => {
 	});
 });
 
-describe('resolveSlice — in-progress over backlog', () => {
+describe('resolveTask — in-progress over backlog', () => {
 	let scratch: Scratch;
 	beforeEach(() => {
 		scratch = makeScratch('agent-runner-prompt-');
@@ -661,7 +661,7 @@ describe('resolveSlice — in-progress over backlog', () => {
 
 	it('falls back to work/tasks/todo/ when not in-progress', () => {
 		seedTask(scratch.root, 'backlog', 'bar', '> backlog body');
-		// `resolveSlice` returns the resolved folder by its symbolic KEY, which now
+		// `resolveTask` returns the resolved folder by its symbolic KEY, which now
 		// reads in the new task vocabulary (`tasks-todo`).
 		const task = resolveTask(scratch.root, 'bar');
 		expect(task.folder).toBe('tasks-todo');
@@ -682,7 +682,7 @@ describe('resolveSlice — in-progress over backlog', () => {
 	});
 });
 
-describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5)', () => {
+describe('resolveTask — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5)', () => {
 	let scratch: Scratch;
 	beforeEach(() => {
 		scratch = makeScratch('agent-runner-prompt-done-');
@@ -692,7 +692,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 	});
 
 	/**
-	 * Build a throwaway repo whose slice `<slug>` has been DONE-MOVED into
+	 * Build a throwaway repo whose task `<slug>` has been DONE-MOVED into
 	 * `work/tasks/done/` on a `work/task-<slug>` branch, with a sibling `--bare`
 	 * arbiter. `integrated` controls the tip-vs-arbiter state under test:
 	 *   - `false` (STRANDED): the done-move commit is committed on the branch but
@@ -707,7 +707,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		const arbiter = join(scratch.root, `arbiter-${slug}.git`);
 		mkdirSync(repo, {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
-		// Seed main with the slice already claimed into in-progress/.
+		// Seed main with the task already claimed into in-progress/.
 		const inProgress = join(repo, 'work', 'in-progress');
 		mkdirSync(inProgress, {recursive: true});
 		writeFileSync(join(inProgress, `${slug}.md`), doneTask(slug));
@@ -733,7 +733,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		return repo;
 	}
 
-	/** The continue gate the in-place `do` caller feeds resolveSlice. */
+	/** The continue gate the in-place `do` caller feeds resolveTask. */
 	function inPlaceGate(repo: string, slug: string) {
 		return {
 			cwd: repo,
@@ -743,7 +743,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		};
 	}
 
-	it('(a) STRANDED: resolves a done/ slice on a continue (tip NOT on arbiter)', () => {
+	it('(a) STRANDED: resolves a done/ task on a continue (tip NOT on arbiter)', () => {
 		const repo = doneMovedRepo('alpha', false);
 		// Push the work branch to the arbiter so the remote-tracking branchRef
 		// resolves (the strand keeps the branch, just NOT merged to main).
@@ -754,10 +754,10 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		expect(task.taskPrompt).toContain('Implement alpha.');
 	});
 
-	it('(b) COMPLETE: does NOT resolve a done/ slice whose tip is on arbiter/main', () => {
+	it('(b) COMPLETE: does NOT resolve a done/ task whose tip is on arbiter/main', () => {
 		const repo = doneMovedRepo('beta', true);
 		// The branch tip == arbiter/main (integrated). A continue gate must NOT admit
-		// done/ — onboard must not resurrect a finished slice — so this is "not found".
+		// done/ — onboard must not resurrect a finished task — so this is "not found".
 		expect(() => resolveTask(repo, 'beta', inPlaceGate(repo, 'beta'))).toThrow(
 			PromptError,
 		);
@@ -806,7 +806,7 @@ describe('renderPrompt — slug given', () => {
 		scratch.cleanup();
 	});
 
-	it('renders the wrapper + slice prompt for an explicit slug', () => {
+	it('renders the wrapper + task prompt for an explicit slug', () => {
 		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-brief');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
 		expect(out).toContain('work/tasks/todo/given.md');
@@ -878,7 +878,7 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 
 // ---------------------------------------------------------------------------
 // Per-item override layer for `promptGuidance.testFirst`
-// (slice `prompt-guidance-testfirst-item-override`, brief US #5).
+// (task `prompt-guidance-testfirst-item-override`, brief US #5).
 //
 // Precedence chain (highest → lowest):
 //   per-task frontmatter
@@ -1009,11 +1009,11 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 	});
 
 	it('falls back to briefs/tasked when the brief is not in briefs/ready', () => {
-		seedBrief(scratch.root, 'briefs-tasked', 'sliced-brief', true);
+		seedBrief(scratch.root, 'briefs-tasked', 'tasked-brief', true);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: false},
-			taskContent: taskContent('t', 'sliced-brief', undefined),
+			taskContent: taskContent('t', 'tasked-brief', undefined),
 		});
 		expect(out).toEqual({testFirst: true});
 	});
@@ -1070,7 +1070,7 @@ describe('renderPrompt — per-item override is honoured at the assembly seam', 
 		if (opts.taskTestFirst !== undefined) {
 			t.push(`promptGuidance.testFirst: ${String(opts.taskTestFirst)}`);
 		}
-		t.push('---', '', '## Prompt', '', '> SLICE-BODY', '');
+		t.push('---', '', '## Prompt', '', '> TASK-BODY', '');
 		writeFileSync(join(taskDir, `${slug}.md`), t.join('\n'));
 		if (opts.brief !== undefined) {
 			const briefDir = join(root, 'work', 'briefs', 'ready');

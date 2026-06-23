@@ -58,7 +58,7 @@ const config = () =>
 		perRepoMax: 4,
 	});
 
-/** The per-item advance context the build/slice rungs would orchestrate `do` with. */
+/** The per-item advance context the build/task rungs would orchestrate `do` with. */
 const context = {cwd: '/tmp/advance-run-wiring-cwd-placeholder'};
 
 /** A stub per-item tick runner: every item ADVANCES (exit 0). */
@@ -77,7 +77,7 @@ const noopAll: AdvanceTickRunner = async (options) =>
 		message: `no-op ${options.arg}`,
 	}) satisfies AdvanceResult;
 
-/** Remove a backlog slice from the mirror SOURCE's `main`, then sync the bare mirror. */
+/** Remove a backlog task from the mirror SOURCE's `main`, then sync the bare mirror. */
 function drainTaskFromMirror(
 	name: string,
 	mirrorPath: string,
@@ -124,7 +124,7 @@ describe('run --advance: the loop driver wired into runLoop via the RunTick seam
 			sleep: async () => {},
 		});
 		expect(summary.iterations).toBe(1);
-		// All three eligible slices advanced this tick (claimed-done in run terms).
+		// All three eligible tasks advanced this tick (claimed-done in run terms).
 		expect(summary.claimedAndDone).toBe(3);
 		expect(summary.failed).toBe(0);
 		expect(summary.ticks[0].items.map((i) => i.slug).sort()).toEqual([

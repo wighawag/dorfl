@@ -30,7 +30,7 @@ import {
  * `install-ci-advance-lifecycle-workflow` — capability C: auto-triage observations
  * + surface declared blockers + apply committed answers (the "human is the clock"
  * loop). CI ALWAYS invokes `advance` (a strict superset of `do`; with the lifecycle
- * gates calm it degrades to `do`'s build/slice behaviour — ADR
+ * gates calm it degrades to `do`'s build/task behaviour — ADR
  * ci-config-policy-and-gate-family §1); the verb is never a user decision. The
  * workflow is the absorbed-and-parameterised seed `docs/ci/advance-loop.yml.template`
  * (NOT a competing hand-rolled advance workflow).
@@ -128,7 +128,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	it('is the PARAMETERISED seed: it ALSO passes the seed validator (advance-ci-template)', () => {
 		// The emitted workflow is the seed `advance-loop.yml.template`, parameterised
 		// — so it must satisfy the seed's OWN structural validator too (not just this
-		// slice's). This pins "we absorbed the seed", not "we hand-rolled a competing
+		// task's). This pins "we absorbed the seed", not "we hand-rolled a competing
 		// advance workflow". Sanity: the seed template itself still validates.
 		expect(validateAdvanceCiTemplate(loadAdvanceCiTemplate()).ok).toBe(true);
 
@@ -175,14 +175,14 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS sliceable BRIEFS into the matrix as ' +
-			'`brief:<slug>` legs alongside the task legs (slice ' +
+		'the propose `enumerate` `jq` UNIONS taskable BRIEFS into the matrix as ' +
+			'`brief:<slug>` legs alongside the task legs (task ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`)',
 		() => {
 			const text = generateAdvanceLifecycleWorkflow(config);
 			// Without this, `AGENT_RUNNER_AUTO_TASK: 'true'` above is dead on the hourly
 			// cron — a ready ungated BRIEF never becomes a matrix leg. The `jq` must read
-			// `scan --json`'s sliceable-BRIEF pool (`repos[].briefs[]` + `cwd.repo.briefs[]`)
+			// `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` + `cwd.repo.briefs[]`)
 			// AND the task pool, and emit BOTH `task:<slug>` and `brief:<slug>` ids.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
 			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
@@ -219,7 +219,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	});
 
 	it('emits NO active AGENT_RUNNER_* gate env (env carries no defaults; per-repo config wins)', () => {
-		// The slice `install-ci-emits-no-gate-env-let-config-decide`: the workflow
+		// The task `install-ci-emits-no-gate-env-let-config-decide`: the workflow
 		// must NOT carry any of the four gate-family env assignments as an ACTIVE
 		// line. The previous baked-in env block forced the env layer to shadow the
 		// repo's own `.agent-runner.json`. Now CI resolves gates from config like
@@ -243,7 +243,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	});
 
 	it('exposes the four gate-family knobs as one-shot workflow_dispatch overrides, wired into EVERY gate-resolving job (incl. enumerate, before scan)', () => {
-		// Slice `advance-lifecycle-dispatch-gate-inputs`: a human can flip a gate ON
+		// Task `advance-lifecycle-dispatch-gate-inputs`: a human can flip a gate ON
 		// for ONE manual run. The review fix: the override MUST reach the `enumerate`
 		// job (which gates the matrix pools via `scan`), not just the agent jobs —
 		// otherwise an `observationTriage`/`surfaceBlockers`/`autoTask` override
@@ -503,7 +503,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 
 	it(
 		'flags a regression to a TASK-ONLY `jq` (no `brief:` legs) — the propose ' +
-			'matrix must enumerate the sliceable-BRIEF pool',
+			'matrix must enumerate the taskable-BRIEF pool',
 		() => {
 			// Pre-fix shape: task-only `jq` over `items[]` only. Reintroducing it must
 			// be flagged so `AGENT_RUNNER_AUTO_TASK` is never silently dead on the cron.
@@ -511,7 +511,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 				.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
 				.replace(/\.repos\[\]\.briefs\[\]\?/g, '.repos[].items[]?')
 				.replace(/\.cwd\.repo\.briefs\[\]\?/g, '.cwd.repo.items[]?');
-			expectFlagged(broken, 'propose-enumerates-sliceable-prds');
+			expectFlagged(broken, 'propose-enumerates-taskable-prds');
 		},
 	);
 
@@ -519,7 +519,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		'flags a regression that DROPS the lifecycle union (no `obs:` / no ' +
 			'`lifecycle.*` reads) — the propose matrix must enumerate triage/surface/apply',
 		() => {
-			// Pre-fix shape: a build/slice-only `jq` with the whole lifecycle union
+			// Pre-fix shape: a build/task-only `jq` with the whole lifecycle union
 			// removed. Reintroducing it must be flagged so the answer-loop is never
 			// silently merge-only again.
 			const broken = base.replace(
@@ -638,7 +638,7 @@ describe('the capability self-registers and emits through installCI --fake', () 
 			join('.fake', ADVANCE_LIFECYCLE_WORKFLOW_PATH),
 		);
 
-		// The produced YAML structurally validates (this slice's + the seed's).
+		// The produced YAML structurally validates (this task's + the seed's).
 		const text = readFileSync(fakePath, 'utf8');
 		expect(validateAdvanceLifecycleWorkflow(text).ok).toBe(true);
 		expect(validateAdvanceCiTemplate(text).ok).toBe(true);

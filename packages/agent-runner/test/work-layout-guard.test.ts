@@ -9,7 +9,7 @@ import {WORK_FOLDER_NAME, type WorkFolderKey} from '../src/work-layout.js';
  * NO `.ts` under `packages/agent-runner/src`, except the `work-layout` module
  * itself, may contain a RAW `work/<folder>` PATH-CONSTRUCTION literal. This locks
  * in the Phase-0 centralisation (`work-layout-module-centralises-all-work-paths`):
- * once every `join(cwd, 'work', …)` / `'work/<folder>'` / prefix-slice routes
+ * once every `join(cwd, 'work', …)` / `'work/<folder>'` / prefix-task routes
  * through `work-layout`, this guard is what stops a future edit re-scattering a raw
  * `work/backlog/…` path string back across the package (which would also re-expose
  * the later rename to a fragile find-replace).

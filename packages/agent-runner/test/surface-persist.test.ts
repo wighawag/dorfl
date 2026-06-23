@@ -10,10 +10,10 @@ import {parseFrontmatter} from '../src/frontmatter.js';
 import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
 
 /**
- * `advance-rung-surface` slice — the engine-owned PERSIST half: the surface rung
+ * `advance-rung-surface` task — the engine-owned PERSIST half: the surface rung
  * writes the EMITTED questions to the sidecar (append-or-create) AND sets
  * `needsAnswers:true` on the item body in ONE commit (CAS-atomic under the held
- * lock). House throwaway-git-repo pattern. The slice's acceptance criteria pinned
+ * lock). House throwaway-git-repo pattern. The task's acceptance criteria pinned
  * here: one atomic commit (body + sidecar together), append-never-overwrite, a
  * re-surface flips all-answered back, and the empty emit is a clean no-op.
  */
@@ -34,7 +34,7 @@ function filesInHeadCommit(repo: string): string[] {
 		.filter((l) => l !== '');
 }
 
-/** A throwaway repo with one backlog slice (no sidecar yet). */
+/** A throwaway repo with one backlog task (no sidecar yet). */
 function seedBacklogItem(slug = 'foo'): {repo: string; itemPath: string} {
 	const repo = join(scratch.root, 'project');
 	mkdirSync(repo, {recursive: true});

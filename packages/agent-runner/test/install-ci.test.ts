@@ -577,7 +577,7 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 	});
 
 	it('install-ci emits a completion message explaining CI autonomy is OFF by default + HOW to enable it (config OR workflow env)', async () => {
-		// Slice `install-ci-emits-no-gate-env-let-config-decide`: the emitted
+		// Task `install-ci-emits-no-gate-env-let-config-decide`: the emitted
 		// advance workflow carries NO AGENT_RUNNER_* gate env, so a config-less
 		// repo resolves to the built-in strict defaults (autoBuild/autoTask: false,
 		// observationTriage: 'off', surfaceBlockers: false) and CI claims nothing.
@@ -849,7 +849,7 @@ describe('capability-emitter registry seam (a new capability is a NEW file)', ()
 	});
 
 	it('a brand-new capability file in the directory is picked up with no other edit', async () => {
-		// Simulate a sibling slice ADDING a capability EXACTLY as it would: drop a new
+		// Simulate a sibling task ADDING a capability EXACTLY as it would: drop a new
 		// module into the REAL `install-ci-capabilities/` directory next to the source
 		// (using the same relative core import the shipped reference uses), then run
 		// the default-directory scan. Its pickup proves registration needs NO edit to
@@ -871,11 +871,11 @@ describe('capability-emitter registry seam (a new capability is a NEW file)', ()
 	});
 });
 
-// ─── install-ci emits ONE advance workflow (no redundant build-slice-tick) ──
+// ─── install-ci emits ONE advance workflow (no redundant build-task-tick) ──
 
 describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle, the superset)', () => {
 	// Why: `advance` is a single SUPERSET verb and CI always calls it (never
-	// `do`). The retired `build-slice-tick` emitter was a strictly weaker
+	// `do`). The retired `build-task-tick` emitter was a strictly weaker
 	// duplicate of `advance-lifecycle` — same verb, gates, hourly cron — so its
 	// removal (capability module + template deleted at source) leaves
 	// advance-lifecycle as the sole advance emitter. This pins that, so a future
@@ -942,33 +942,32 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		];
 	}
 
-	it('the shipped capability id set contains advance-lifecycle, intake, close-job — and NO build-slice-tick', async () => {
+	it('the shipped capability id set contains advance-lifecycle, intake, close-job — and NO build-task-tick', async () => {
 		const caps = await shippedEmitters();
 		const ids = caps.map((c) => c.id);
 		expect(ids).toContain('advance-lifecycle');
 		expect(ids).toContain('intake');
 		expect(ids).toContain('close-job');
-		expect(ids).not.toContain('build-slice-tick');
+		expect(ids).not.toContain('build-task-tick');
 		// And the deleted template module no longer exists on disk — a future
-		// `loadCapabilityRegistry()` cannot re-find a build-slice-tick emitter.
+		// `loadCapabilityRegistry()` cannot re-find a build-task-tick emitter.
 		const capDir = new URL('../src/install-ci-capabilities/', import.meta.url)
 			.pathname;
-		expect(existsSync(join(capDir, 'build-slice-tick.ts'))).toBe(false);
+		expect(existsSync(join(capDir, 'build-task-tick.ts'))).toBe(false);
 		expect(
 			existsSync(
-				new URL('../src/build-slice-tick-template.ts', import.meta.url)
-					.pathname,
+				new URL('../src/build-task-tick-template.ts', import.meta.url).pathname,
 			),
 		).toBe(false);
 	});
 
-	it('the emitted file set contains exactly ONE workflow that invokes `agent-runner advance`, and NO build-slice-tick.yml', async () => {
+	it('the emitted file set contains exactly ONE workflow that invokes `agent-runner advance`, and NO build-task-tick.yml', async () => {
 		const shipped = await shippedEmitters();
 		const files = buildSetupArtifacts(config, shipped);
 
-		// No path mentions build-slice-tick anywhere.
+		// No path mentions build-task-tick anywhere.
 		for (const f of files) {
-			expect(f.path).not.toMatch(/build-slice-tick/);
+			expect(f.path).not.toMatch(/build-task-tick/);
 		}
 
 		// Workflow files = those under workflows/. Exactly one carries the
@@ -998,7 +997,7 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		// The reap-merged-branches job (capability F rides this tick).
 		expect(yml).toMatch(/reap-merged-branches:/);
 		expect(yml).toMatch(/agent-runner gc --remote-branches\b/);
-		// Slice `install-ci-emits-no-gate-env-let-config-decide`: NONE of the four
+		// Task `install-ci-emits-no-gate-env-let-config-decide`: NONE of the four
 		// AGENT_RUNNER_* gate-family keys appears as an ACTIVE env assignment. The
 		// shipped workflow defers all gate policy to per-repo config / built-in
 		// defaults. Strip comment lines before the negative check so the
@@ -1032,7 +1031,7 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 	});
 });
 
-// ─── shared-write isolation (the slice's load-bearing safety assertion) ──────
+// ─── shared-write isolation (the task's load-bearing safety assertion) ──────
 
 describe('shared-write isolation: real .github / secrets / ~ / system git config untouched', () => {
 	it('a full --fake run touches nothing global — only the scratch workDir', async () => {

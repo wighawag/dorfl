@@ -117,12 +117,12 @@ export interface TaskResult {
 	emitted?: string[];
 	/**
 	 * The tasker review→edit LOOP's disposition (`slicer-review-edit-loop`), when
-	 * the loop ran. `converged` = the improved tasks landed; `uncertain-slices` =
+	 * the loop ran. `converged` = the improved tasks landed; `uncertain-tasks` =
 	 * the cap was hit and specific tasks landed `needsAnswers: true`; absent when
 	 * no loop ran or the brief was routed to needs-attention (`outcome:
 	 * 'needs-attention'`).
 	 */
-	loop?: 'converged' | 'uncertain-slices';
+	loop?: 'converged' | 'uncertain-tasks';
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
@@ -167,7 +167,7 @@ export interface PerformTaskOptions {
 	 * WITHOUT the lock). The human-vs-agent choice the command wires.
 	 */
 	doer?: 'agent' | 'human';
-	/** Per-repo `autoTask` policy (resolved by `autotask-gate`). Agent path only. */
+	/** Per-repo `autoTask` policy (resolved by `autoslice-gate`). Agent path only. */
 	autoTask?: boolean;
 	/**
 	 * The brief was named EXPLICITLY by the operator (`do brief:<slug>`), so the
@@ -553,7 +553,7 @@ export async function performTask(
 		// UNCERTAIN TASKS: mark each named candidate `needsAnswers: true` + record
 		// its questions in the body, so it lands but is not agent-buildable. The
 		// runner writes the marker (the agent does no git/disk-escape).
-		if (loopDisposition.outcome === 'uncertain-slices') {
+		if (loopDisposition.outcome === 'uncertain-tasks') {
 			for (const uncertain of loopDisposition.uncertainTasks) {
 				markTaskNeedsAnswers(cwd, uncertain.path, uncertain.questions, note);
 			}
@@ -590,11 +590,11 @@ export async function performTask(
 	const emitted = stagedEmitted.map(
 		(rel) => `${placementDir}/${basename(rel)}`,
 	);
-	const loopTag: 'converged' | 'uncertain-slices' | undefined =
+	const loopTag: 'converged' | 'uncertain-tasks' | undefined =
 		loopDisposition?.outcome === 'converged'
 			? 'converged'
-			: loopDisposition?.outcome === 'uncertain-slices'
-				? 'uncertain-slices'
+			: loopDisposition?.outcome === 'uncertain-tasks'
+				? 'uncertain-tasks'
 				: undefined;
 
 	if (useLock) {
@@ -668,7 +668,7 @@ export async function performTask(
 			mode: options.integration ?? 'propose',
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
-			type: 'slicing',
+			type: 'tasking',
 			lifecycle: {
 				// Read the PR title / commit summary from the held brief (before it moves).
 				titlePath: workItemPath(cwd, 'briefs-ready', slug),
@@ -804,7 +804,7 @@ function integrationToTaskResult(
 	ctx: {
 		slug: string;
 		emitted: string[];
-		loop: 'converged' | 'uncertain-slices' | undefined;
+		loop: 'converged' | 'uncertain-tasks' | undefined;
 	},
 ): TaskResult {
 	const {slug, emitted, loop} = ctx;

@@ -20,10 +20,10 @@ import type {
 } from '../src/advancing-lock.js';
 
 /**
- * `advance-rung-apply` slice — the APPLY rung WIRED through the engine tick: on
+ * `advance-rung-apply` task — the APPLY rung WIRED through the engine tick: on
  * `classify=apply` (ALL sidecar entries answered), under the `advancing` lock, the
  * engine applies the HUMAN's answers ATOMICALLY (delegating to the engine-owned
- * apply persist). The slice's acceptance criteria pinned at the engine seam:
+ * apply persist). The task's acceptance criteria pinned at the engine seam:
  *
  *   - all-answered → the tick CLASSIFIES `apply` and runs the persist (winner);
  *   - applying is ALWAYS allowed (no gate) — proven with NO autonomy flags;
@@ -60,7 +60,7 @@ const RELEASED: ReleaseAdvancingLockResult = {
 };
 
 /**
- * A throwaway repo with one backlog slice (needsAnswers:true) + a FULLY-answered
+ * A throwaway repo with one backlog task (needsAnswers:true) + a FULLY-answered
  * sidecar — exactly the `classify=apply` cell. `answeredCount` < questions ⇒ a
  * subset (pending) sidecar for the NO-OP boundary test.
  */
@@ -257,7 +257,7 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(calls).toEqual([]);
 	});
 
-	it('a disposition terminal (dropped on a slice) flows through the engine end-to-end → tasks/cancelled', async () => {
+	it('a disposition terminal (dropped on a task) flows through the engine end-to-end → tasks/cancelled', async () => {
 		const {repo, itemPath, sidecarPath} = seedAnsweredItem({
 			slug: 'oos',
 			questions: ['ship?'],

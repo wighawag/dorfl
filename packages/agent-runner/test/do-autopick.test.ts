@@ -13,8 +13,8 @@ import type {ConfigOverrideMap} from '../src/config-override.js';
 
 /**
  * `do-autopick` — the MULTI-ITEM selection forms (auto-pick / `-n` / multi-arg)
- * + the two-pool slices-first priority (per-repo toggle). House style: a seeded
- * backlog of SLICES + sliceable PRDs in a plain checkout (no git mutation — the
+ * + the two-pool tasks-first priority (per-repo toggle). House style: a seeded
+ * backlog of TASKS + taskable PRDs in a plain checkout (no git mutation — the
  * selection layer only READS `work/`), with a STUBBED single-`do` runner that
  * records the `arg` it was handed (so we assert WHICH items ran, in what ORDER,
  * without driving the real claim/build/integrate pipeline — that is do-in-place's
@@ -34,7 +34,7 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-/** Seed a `work/tasks/todo/<slug>.md` slice with the given gate frontmatter. */
+/** Seed a `work/tasks/todo/<slug>.md` task with the given gate frontmatter. */
 function seedTask(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
@@ -48,7 +48,7 @@ function seedTask(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-/** Seed a `work/tasks/done/<slug>.md` (satisfies a slice's blockedBy). */
+/** Seed a `work/tasks/done/<slug>.md` (satisfies a task's blockedBy). */
 function seedDone(slug: string): void {
 	const dir = join(repo, 'work', 'tasks', 'done');
 	mkdirSync(dir, {recursive: true});
@@ -75,10 +75,10 @@ function seedBrief(
 }
 
 /**
- * Seed a SLICED PRD as RESIDENCE in `work/briefs/tasked/` (the source of truth for
- * sliced-ness, slice `prd-sliced-folder-step-a`) — it has left the to-slice pool
+ * Seed a TASKED PRD as RESIDENCE in `work/briefs/tasked/` (the source of truth for
+ * tasked-ness, task `prd-sliced-folder-step-a`) — it has left the to-task pool
  * (`work/briefs/ready/`) and now resolves another PRD's `briefAfter` by FOLDER residence
- * (the `sliced:` marker was removed in `remove-sliced-marker-step-b`).
+ * (the `tasked:` marker was removed in `remove-sliced-marker-step-b`).
  */
 function seedTaskedBrief(slug: string): void {
 	const fromDir = join(repo, 'work', 'briefs', 'ready');
@@ -108,8 +108,8 @@ function recordingRunner(): {run: DoRunner; args: string[]} {
 }
 
 function cfg(over: Partial<Config> = {}): Config {
-	// autoBuild on so seeded slices are eligible; autoTask on so PRDs are
-	// sliceable. Both default OFF, so the tests opt in explicitly.
+	// autoBuild on so seeded tasks are eligible; autoTask on so PRDs are
+	// taskable. Both default OFF, so the tests opt in explicitly.
 	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
@@ -122,11 +122,11 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
 	// autopick path resolves the pool through `scanRepoPaths`, which must apply the
 	// per-machine override on top of the committed `.agent-runner.json`. Committed
-	// `autoBuild: false` (slice ineligible) vs override `"*": {autoBuild: true}`
-	// (slice eligible). The override is per-machine and beats the committed file,
-	// so the seeded slice MUST be auto-picked. Before the override was threaded
+	// `autoBuild: false` (task ineligible) vs override `"*": {autoBuild: true}`
+	// (task eligible). The override is per-machine and beats the committed file,
+	// so the seeded task MUST be auto-picked. Before the override was threaded
 	// into `performDoAuto`, the committed `false` stood and nothing ran.
-	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (slice is auto-picked)', async () => {
+	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (task is auto-picked)', async () => {
 		seedTask('alpha');
 		writeFileSync(
 			join(repo, '.agent-runner.json'),
@@ -145,7 +145,7 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 	});
 
 	// CONTROL: same fixture, NO override ⇒ the committed `autoBuild: false` stands,
-	// so the slice is ineligible and nothing is auto-picked.
+	// so the task is ineligible and nothing is auto-picked.
 	it('control: WITHOUT the override the committed autoBuild:false stands (nothing auto-picked)', async () => {
 		seedTask('alpha');
 		writeFileSync(
@@ -163,18 +163,18 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 });
 
 describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
-	it('auto-picks the first eligible SLICE when slices exist', async () => {
+	it('auto-picks the first eligible TASK when tasks exist', async () => {
 		seedTask('alpha');
 		seedTask('beta');
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
-		// exactly one item, the first eligible slice (slices sort by slug).
+		// exactly one item, the first eligible task (tasks sort by slug).
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('auto-picks a PRD (do prd:<slug>) when NO slice is eligible', async () => {
+	it('auto-picks a PRD (do prd:<slug>) when NO task is eligible', async () => {
 		seedTask('humanly', {humanOnly: true}); // not eligible
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
@@ -184,7 +184,7 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 		expect(args).toEqual(['brief:gamma']);
 	});
 
-	it('an empty backlog + no sliceable PRD is NOT a failure (exit 0, nothing run)', async () => {
+	it('an empty backlog + no taskable PRD is NOT a failure (exit 0, nothing run)', async () => {
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -194,7 +194,7 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 });
 
 describe('do -n <x> — x eligible items, in SEQUENCE', () => {
-	it('takes x items, slices first then PRDs, in order', async () => {
+	it('takes x items, tasks first then PRDs, in order', async () => {
 		seedTask('alpha');
 		seedBrief('gamma');
 		seedBrief('delta');
@@ -205,7 +205,7 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 			count: 3,
 		});
 		expect(result.exitCode).toBe(0);
-		// one eligible slice drains first, then the two sliceable PRDs (by slug).
+		// one eligible task drains first, then the two taskable PRDs (by slug).
 		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
 	});
 
@@ -253,8 +253,8 @@ describe('do <a> <b> — explicit multi-arg, in the GIVEN order', () => {
 	});
 });
 
-describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
-	it('default (drain): an eligible SLICE outranks a sliceable PRD', async () => {
+describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
+	it('default (drain): an eligible TASK outranks a taskable PRD', async () => {
 		seedTask('alpha');
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
@@ -262,7 +262,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('[task, build, ...] (== old prdsFirst:true): a sliceable PRD outranks an eligible slice', async () => {
+	it('[task, build, ...] (== old prdsFirst:true): a taskable PRD outranks an eligible task', async () => {
 		seedTask('alpha');
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
@@ -274,7 +274,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 		expect(args).toEqual(['brief:gamma']);
 	});
 
-	it('the FULL ordering flips with the order (all slices vs all PRDs)', async () => {
+	it('the FULL ordering flips with the order (all tasks vs all PRDs)', async () => {
 		seedTask('alpha');
 		seedBrief('gamma');
 		const off = recordingRunner();
@@ -292,7 +292,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 });
 
 describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
-	it('autoTask OFF ⇒ no PRD is selected even with no slices', async () => {
+	it('autoTask OFF ⇒ no PRD is selected even with no tasks', async () => {
 		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
@@ -307,33 +307,33 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 	it('a humanOnly / needsAnswers PRD is excluded; a briefAfter-blocked one too', async () => {
 		seedBrief('human', {humanOnly: true});
 		seedBrief('asks', {needsAnswers: true});
-		seedBrief('beta', {briefAfter: ['alpha']}); // alpha not sliced
-		seedBrief('ready'); // the only sliceable one
+		seedBrief('beta', {briefAfter: ['alpha']}); // alpha not tasked
+		seedBrief('ready'); // the only taskable one
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
 		expect(args).toEqual(['brief:ready']);
 	});
 
-	it('a briefAfter PRD becomes selectable once its blocker resides in prd-sliced/ (folder residence, not done/)', async () => {
-		// beta's blocker alpha is UNSLICED ⇒ beta is excluded (alpha itself is
-		// sliceable: the gate does not exclude an unsliced PRD).
+	it('a briefAfter PRD becomes selectable once its blocker resides in prd-tasked/ (folder residence, not done/)', async () => {
+		// beta's blocker alpha is UNTASKED ⇒ beta is excluded (alpha itself is
+		// taskable: the gate does not exclude an untasked PRD).
 		seedBrief('alpha');
 		seedBrief('beta', {briefAfter: ['alpha']});
 		const blocked = recordingRunner();
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
 		expect(blocked.args).toEqual(['brief:alpha']);
 
-		// Move alpha into `work/briefs/tasked/` (the source of truth for sliced-ness) ⇒
+		// Move alpha into `work/briefs/tasked/` (the source of truth for tasked-ness) ⇒
 		// beta's briefAfter is satisfied (resolved against FOLDER residence) and beta
-		// joins the pool. alpha itself has LEFT the to-slice pool (it now rests in
-		// prd-sliced/), so only beta is selectable.
+		// joins the pool. alpha itself has LEFT the to-task pool (it now rests in
+		// prd-tasked/), so only beta is selectable.
 		seedTaskedBrief('alpha');
 		const unblocked = recordingRunner();
 		await performDoAuto({...base(unblocked.run), config: cfg(), count: 9});
 		expect(unblocked.args).toEqual(['brief:beta']);
 	});
 
-	it('blocked slice is excluded from the slice pool (existing eligibility path)', async () => {
+	it('blocked task is excluded from the task pool (existing eligibility path)', async () => {
 		seedTask('beta', {blockedBy: ['alpha']}); // alpha not done ⇒ blocked
 		seedTask('alpha'); // eligible
 		const {run, args} = recordingRunner();
@@ -352,7 +352,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 describe('each selected item runs the EXISTING performDo pipeline', () => {
 	it('defaults the runner to performDo (the do-in-place pipeline) when none injected', async () => {
 		// We do not drive a full git pipeline here; just prove the default wiring is
-		// `performDo` (not a re-implementation). With no slices/PRDs the layer never
+		// `performDo` (not a re-implementation). With no tasks/PRDs the layer never
 		// calls it, so this asserts the DEFAULT identity without side-effects.
 		seedTask('humanly', {humanOnly: true}); // nothing eligible
 		const result = await performDoAuto({cwd: repo, config: cfg()});

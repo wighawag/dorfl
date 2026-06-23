@@ -81,7 +81,7 @@ const APPROVE_MIXED: ReviewVerdict = {
 const BLOCK_WITH_NITS: ReviewVerdict = {
 	verdict: 'block',
 	findings: [
-		{severity: 'blocking', question: 'the diff does not reach the slice goal'},
+		{severity: 'blocking', question: 'the diff does not reach the task goal'},
 		{severity: 'non-blocking', question: 'this nit must NOT be captured'},
 	],
 };
@@ -150,9 +150,9 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 		expect(body).toMatch(/^title:.*alpha/m);
 		expect(body).toMatch(/^date: \d{4}-\d{2}-\d{2}$/m);
 		expect(body).toMatch(/^status: open$/m);
-		// Identity-as-filename rule (slice
+		// Identity-as-filename rule (task
 		// `observation-identity-is-its-filename-not-a-foreign-slug`): NO foreign
-		// `slug:` line (would re-collide with the reviewed slice + break the
+		// `slug:` line (would re-collide with the reviewed task + break the
 		// enumerate→resolve round-trip). The back-pointer is `reviewOf:` instead.
 		expect(body).not.toMatch(/^slug:/m);
 		expect(body).toMatch(/^reviewOf: alpha$/m);
@@ -277,7 +277,7 @@ describe('review-nits-observation — no observation when there is nothing to ca
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.reason).toMatch(/does not reach the slice goal/);
+		expect(lock?.reason).toMatch(/does not reach the task goal/);
 	});
 });
 

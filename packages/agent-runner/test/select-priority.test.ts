@@ -10,10 +10,10 @@ import type {ScanReport, ScannedItem} from '../src/scan.js';
 
 /**
  * The SHARED, PURE two-pool selection helper (`do-autopick`, ADR §3): eligible
- * SLICES first, then SLICEABLE PRDs (a per-repo toggle flips it), bounded by a
- * COUNT, SEQUENTIAL. The slice pool is selected via the EXISTING
+ * TASKS first, then TASKABLE PRDs (a per-repo toggle flips it), bounded by a
+ * COUNT, SEQUENTIAL. The task pool is selected via the EXISTING
  * `selectCandidates` (the primitive `run` shares), so this file ALSO pins that
- * the helper's slice ordering IS `selectCandidates`'s output.
+ * the helper's task ordering IS `selectCandidates`'s output.
  */
 
 function taskItem(slug: string, eligible: boolean): ScannedItem {
@@ -51,7 +51,7 @@ function brief(
 	};
 }
 
-describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)', () => {
+describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', () => {
 	it('keeps only PRDs the gate passes (autoTask on, not humanOnly/needsAnswers)', () => {
 		const candidates = [
 			brief('ok'),
@@ -66,7 +66,7 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 		expect(out.map((p) => p.slug)).toEqual(['ok']);
 	});
 
-	it('autoTask off ⇒ nothing is sliceable (mirrors autoBuild off)', () => {
+	it('autoTask off ⇒ nothing is taskable (mirrors autoBuild off)', () => {
 		const out = taskableBriefs({
 			candidates: [brief('ok')],
 			taskedSlugs: new Set(),
@@ -75,13 +75,13 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 		expect(out).toEqual([]);
 	});
 
-	it('briefAfter gates against the SLICED markers, not done/', () => {
+	it('briefAfter gates against the TASKED markers, not done/', () => {
 		const candidates = [brief('beta', {briefAfter: ['alpha']})];
-		// alpha not yet sliced ⇒ beta not sliceable.
+		// alpha not yet tasked ⇒ beta not taskable.
 		expect(
 			taskableBriefs({candidates, taskedSlugs: new Set(), autoTask: true}),
 		).toEqual([]);
-		// alpha sliced ⇒ beta becomes sliceable.
+		// alpha tasked ⇒ beta becomes taskable.
 		expect(
 			taskableBriefs({
 				candidates,
@@ -92,8 +92,8 @@ describe('sliceablePrds — consumes autoslice-gate predicate (not reinvented)',
 	});
 });
 
-describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
-	it('auto-pick (count 1) picks the FIRST eligible slice when slices exist', () => {
+describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
+	it('auto-pick (count 1) picks the FIRST eligible task when tasks exist', () => {
 		const r = report('/repo', [taskItem('a', true), taskItem('b', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -104,7 +104,7 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 		expect(picked).toEqual([{repoPath: '/repo', slug: 'a', namespace: 'task'}]);
 	});
 
-	it('auto-pick falls through to a PRD when NO slice is eligible', () => {
+	it('auto-pick falls through to a PRD when NO task is eligible', () => {
 		const r = report('/repo', [taskItem('a', false)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -117,7 +117,7 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 		]);
 	});
 
-	it('orders ALL slices before ANY PRD (drain ready work first)', () => {
+	it('orders ALL tasks before ANY PRD (drain ready work first)', () => {
 		const r = report('/repo', [taskItem('a', true), taskItem('b', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -140,7 +140,7 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 			briefs: [brief('p1'), brief('p2')],
 			count: 2,
 		});
-		// one slice drains, then the first PRD.
+		// one task drains, then the first PRD.
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
 			'brief:p1',
@@ -169,7 +169,7 @@ describe('selectPrioritised — slices-first, then PRDs-to-slice', () => {
 describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFirst)', () => {
 	it('the `drain` DEFAULT (omitted selectionOrder) == the old prdsFirst:false order', () => {
 		// The default preserved: omitting selectionOrder reproduces today's
-		// slices-first two-pool default (the prdsFirst:false behaviour).
+		// tasks-first two-pool default (the prdsFirst:false behaviour).
 		const r = report('/repo', [taskItem('a', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -190,7 +190,7 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		expect(viaPreset).toEqual(picked);
 	});
 
-	it('[task, build, ...] puts PRDs-to-slice BEFORE eligible slices (== old prdsFirst:true)', () => {
+	it('[task, build, ...] puts PRDs-to-task BEFORE eligible tasks (== old prdsFirst:true)', () => {
 		const r = report('/repo', [taskItem('a', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -240,7 +240,7 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			'brief:su', // surface
 			'observation:tr', // triage
 			'task:s', // build
-			'brief:p', // slice (PRD)
+			'brief:p', // task (PRD)
 		]);
 	});
 
@@ -264,7 +264,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		return {apply: [], surface: [], triage: [], ...over};
 	}
 
-	it('DEFAULTS to none — `do`-shaped calls (no `lifecycle`) select ONLY slices + PRDs (F-SHARE)', () => {
+	it('DEFAULTS to none — `do`-shaped calls (no `lifecycle`) select ONLY tasks + PRDs (F-SHARE)', () => {
 		// This is the `do` auto-pick shape: no lifecycle pools passed. Proves the
 		// widening is backward-compatible — `do` never selects an observation or a
 		// needsAnswers item.
@@ -281,7 +281,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
 	});
 
-	it('apply is PINNED FIRST, then the drain order (build → slice → surface → triage)', () => {
+	it('apply is PINNED FIRST, then the drain order (build → task → surface → triage)', () => {
 		const r = report('/repo', [taskItem('s', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -295,8 +295,8 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap', // apply: PINNED FIRST (consume-always-wins)
-			'task:s', // build: eligible slice
-			'brief:p', // slice: sliceable PRD
+			'task:s', // build: eligible task
+			'brief:p', // task: taskable PRD
 			'brief:su', // surface
 			'observation:tr', // triage
 		]);
@@ -314,7 +314,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
-		// apply first (pinned), then the eligible slice (count 2 stops before triage).
+		// apply first (pinned), then the eligible task (count 2 stops before triage).
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap',
 			'task:s',
@@ -354,7 +354,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap', // apply STILL first (not orderable)
-			'brief:p', // slice (PRD) flipped ahead of build
+			'brief:p', // task (PRD) flipped ahead of build
 			'task:s', // build
 			'observation:tr', // triage (still last)
 		]);
@@ -377,8 +377,8 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 	});
 });
 
-describe('selectPrioritised — the SLICE pool IS selectCandidates (shared primitive run uses)', () => {
-	it('the slice ordering equals selectCandidates(report, caps) exactly', () => {
+describe('selectPrioritised — the TASK pool IS selectCandidates (shared primitive run uses)', () => {
+	it('the task ordering equals selectCandidates(report, caps) exactly', () => {
 		const r = report('/repo', [
 			taskItem('a', true),
 			taskItem('b', false),
@@ -390,13 +390,13 @@ describe('selectPrioritised — the SLICE pool IS selectCandidates (shared primi
 			briefs: [],
 		}).map((s) => ({repoPath: s.repoPath, slug: s.slug}));
 		const viaRun = selectCandidates(r, CAPS);
-		// The helper's slice pool is byte-identical to what `run` selects: they
-		// SHARE `selectCandidates` (this slice owns the two-pool helper; `run`'s
+		// The helper's task pool is byte-identical to what `run` selects: they
+		// SHARE `selectCandidates` (this task owns the two-pool helper; `run`'s
 		// adoption of the PRD pool is the noted follow-up).
 		expect(viaHelper).toEqual(viaRun);
 	});
 
-	it('honours the slice-pool caps (round-robin / total) via selectCandidates', () => {
+	it('honours the task-pool caps (round-robin / total) via selectCandidates', () => {
 		const r: ScanReport = {
 			repos: [
 				{

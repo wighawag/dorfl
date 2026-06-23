@@ -28,7 +28,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * `do --isolated <slug>` tests (slice `do-isolated-in-place`) — build a slice in
+ * `do --isolated <slug>` tests (task `do-isolated-in-place`) — build a task in
  * an ISOLATED job worktree off THIS repo's arbiter (inferred from the cwd's
  * arbiter remote), instead of taking over the current checkout. It is ORTHOGONAL
  * to `do --remote <url>` (a foreign repo) and purely ADDITIVE: it REUSES the
@@ -433,7 +433,7 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 	// branches off a `<arbiter>/main` that ALREADY CONTAINS item 1's merge — FRESHNESS
 	// / rebase-onto-latest. We drive the REAL `performDoRemoteAuto` (the shared
 	// `do --isolated`/`do --remote` auto-pick driver) with `autoBuild` ON + two
-	// GENUINELY-BUILDABLE, INDEPENDENT slices (NO `blockedBy` chain — the pool is
+	// GENUINELY-BUILDABLE, INDEPENDENT tasks (NO `blockedBy` chain — the pool is
 	// scanned + selected ONCE up front and never re-scanned, so this proves freshness,
 	// NOT dependency-aware scheduling, which is deliberately out of scope here).
 	//
@@ -448,7 +448,7 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 			['alpha', 'beta'],
 			{
 				// `autoBuild` must travel onto `<arbiter>/main` so the MIRROR scan (which
-				// layers the committed `.agent-runner.json`) enumerates the two slices as
+				// layers the committed `.agent-runner.json`) enumerates the two tasks as
 				// eligible — exactly as an in-place checkout would resolve it.
 				repoConfig: {autoBuild: true},
 			},
@@ -480,7 +480,7 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 			remote: isolatedRemote,
 			workspacesDir: ws,
 			// `autoBuild` ON in the passed config too (belt-and-braces with the
-			// committed file): the mirror scan must see the slices as eligible.
+			// committed file): the mirror scan must see the tasks as eligible.
 			config: mergeConfig({
 				autoBuild: true,
 				integration: 'merge',

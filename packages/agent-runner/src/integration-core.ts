@@ -133,7 +133,7 @@ export interface IntegrationLifecycle {
 	 * uses THIS as the title source for the default commit summary AND the synthesised
 	 * propose-mode PR title, INSTEAD of reading {@link titlePath}. This is the seam for
 	 * a lifecycle whose output file does NOT yet exist at title-read time — the intake
-	 * lone-slice / brief path WRITES `work/backlog/<slug>.md` / `work/briefs/ready/<slug>.md` in
+	 * lone-task / brief path WRITES `work/backlog/<slug>.md` / `work/briefs/ready/<slug>.md` in
 	 * {@link stage}, which runs AFTER the title read, so a `titlePath` read would race
 	 * the write and fall back to a generic subject. The `do brief:` tasking transition
 	 * leaves this unset (its `titlePath` is an already-existing held brief, read fine).
@@ -838,7 +838,7 @@ export async function performIntegration(
 	// never be the multi-line commit-subject run-on `--fill` would derive.
 	//
 	// When the lifecycle supplies an EXPLICIT `title`, use it DIRECTLY (no file read):
-	// the intake lone-slice / brief path writes its output file in `stage()`, which runs
+	// the intake lone-task / brief path writes its output file in `stage()`, which runs
 	// AFTER this point, so a `titlePath` read would race the write and degrade the
 	// subject/PR title to the generic fallback. The `do brief:` tasking path leaves
 	// `title` unset and keeps reading its already-existing held brief (unchanged).
@@ -1827,7 +1827,7 @@ export function composeProposeBody(input: {
 	if (!prose) {
 		return undefined;
 	}
-	const header = `Slice: \`${workItemRel('done', `${input.slug}.md`)}\``;
+	const header = `Task: \`${workItemRel('done', `${input.slug}.md`)}\``;
 	return `${header}\n\n${prose}`;
 }
 

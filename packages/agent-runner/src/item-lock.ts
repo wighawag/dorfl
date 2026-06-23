@@ -9,7 +9,7 @@ import {workItemRel} from './work-layout.js';
  * lock per item, on a PER-ITEM hidden ref `refs/agent-runner/lock/<entry>`,
  * acquired by an ATOMIC create-only push and released by DELETING the ref, with a
  * two-axis (`action` × `state`) entry. It collapses the old transient status
- * folders (`in-progress`, `needs-attention`, `slicing`, `advancing`) into ONE
+ * folders (`in-progress`, `needs-attention`, `tasking`, `advancing`) into ONE
  * lock keyed by item identity; `in-progress` = lock held active for `implement`,
  * `needs-attention` = lock held `stuck`.
  *

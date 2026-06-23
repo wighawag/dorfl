@@ -13,7 +13,7 @@ describe('envVarName', () => {
 		expect(envVarName('model')).toBe('AGENT_RUNNER_MODEL');
 		// `autoTask` gets its env var for free off the mechanical mapping.
 		expect(envVarName('autoTask')).toBe('AGENT_RUNNER_AUTO_TASK');
-		// `taskingIntegration` (the per-TRANSITION SLICING override) maps mechanically,
+		// `taskingIntegration` (the per-TRANSITION TASKING override) maps mechanically,
 		// so `AGENT_RUNNER_TASKING_INTEGRATION` resolves
 		// (`per-transition-integration-mode-slicing-vs-build`).
 		expect(envVarName('taskingIntegration')).toBe(
@@ -225,7 +225,7 @@ describe('envOverrides — enum coercion', () => {
 				taskingIntegration: 'propose',
 			},
 		);
-		// `tasksLandIn` (the per-repo TASK-PLACEMENT default, slice
+		// `tasksLandIn` (the per-repo TASK-PLACEMENT default, task
 		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as
 		// the `pre-backlog`/`todo` enum, on the
 		// SAME flag > env > per-repo > global > built-in chain as
@@ -260,7 +260,7 @@ describe('envOverrides — enum coercion', () => {
 			/AGENT_RUNNER_HARNESS/,
 		);
 		// The observation-triage enum FAILS LOUDLY on a typo (incl. the old boolean
-		// `false` — the deliberate non-alias TRAP the slice avoids by not aliasing).
+		// `false` — the deliberate non-alias TRAP the task avoids by not aliasing).
 		expect(() =>
 			envOverrides({AGENT_RUNNER_OBSERVATION_TRIAGE: 'yes'}),
 		).toThrow(/AGENT_RUNNER_OBSERVATION_TRIAGE/);

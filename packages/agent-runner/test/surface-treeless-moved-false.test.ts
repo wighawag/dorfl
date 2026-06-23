@@ -19,7 +19,7 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * The after-commit CONTINUE-sites surface a stuck continued slice to
+ * The after-commit CONTINUE-sites surface a stuck continued task to
  * needs-attention TREE-LESSLY. That surface is a CAS publish to the arbiter's
  * main; it returns `{moved, reasonNotMoved}` and reports `{moved:false}` (NOT an
  * error) when it loses the CAS race against a busy arbiter (its contention-retry

@@ -12,11 +12,11 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * End-to-end tests for the RUNNER-DETERMINISTIC SLICE PLACEMENT (slice
+ * End-to-end tests for the RUNNER-DETERMINISTIC TASK PLACEMENT (task
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The pure
  * resolver is unit-tested in `placement.test.ts`; THIS file drives each
- * precedence rung end-to-end through the actual `do prd:<slug>` slicing path,
+ * precedence rung end-to-end through the actual `do prd:<slug>` tasking path,
  * against a `--bare file://` arbiter (the house pattern in
  * `test/helpers/gitRepo.ts`).
  *
@@ -36,7 +36,7 @@ const ARBITER = 'arbiter';
 let scratch: Scratch;
 let restorePiAgentDir: () => void;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-slice-placement-');
+	scratch = makeScratch('agent-runner-task-placement-');
 	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
@@ -46,7 +46,7 @@ afterEach(() => {
 
 /**
  * Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter), optionally stamped
- * with an `originTrust:` provenance (`trusted` | `untrusted`). The slicer reads
+ * with an `originTrust:` provenance (`trusted` | `untrusted`). The tasker reads
  * this stamp from the held PRD and feeds it as the trust signal into the
  * runner-deterministic placement resolver.
  */
@@ -59,7 +59,7 @@ function seedBrief(
 	mkdirSync(dir, {recursive: true});
 	const fm = [
 		'---',
-		`title: ${slug} \u2014 slice me`,
+		`title: ${slug} \u2014 task me`,
 		`slug: ${slug}`,
 		...(originTrust !== undefined
 			? ['origin: issue', `originTrust: ${originTrust}`]
@@ -78,7 +78,7 @@ function seedBrief(
 }
 
 /**
- * An agent that writes one slice file to `work/tasks/backlog/<file>.md` (the
+ * An agent that writes one task file to `work/tasks/backlog/<file>.md` (the
  * STAGING folder, where the agent ALWAYS writes \u2014 the agent never picks
  * placement; the runner does). The runner redirects the emitted file to the
  * resolved destination at integrate-stage time.
@@ -107,7 +107,7 @@ function taskingAgent(file = 'child'): TaskAgentRunner {
 }
 
 /**
- * An agent that ALSO writes a slice to `work/tasks/todo/` (the POOL) \u2014 modelling
+ * An agent that ALSO writes a task to `work/tasks/todo/` (the POOL) \u2014 modelling
  * a misbehaving / compromised agent trying to self-place into the
  * agent-eligible pool. The PRD's `placement-is-runner-deterministic-...` ADR
  * forbids this: the runner's scrub fence removes the pool drift before
@@ -134,7 +134,7 @@ function selfPlacingAgent(file = 'child'): TaskAgentRunner {
 		].join('\n');
 		// The agent ALSO writes to the pool, trying to self-place itself eligible.
 		writeFileSync(join(pool, `${file}.md`), body);
-		// And to the staging area, the legitimate write the slicer methodology
+		// And to the staging area, the legitimate write the tasker methodology
 		// instructs.
 		writeFileSync(join(staging, `${file}.md`), body);
 		return {ok: true};
@@ -154,7 +154,7 @@ const onArbiterMain = (repo: string, path: string): boolean => {
 // RUNG 4 (lowest): the BUILT-IN floor \u2014 unset everywhere \u21d2 staging.
 // --------------------------------------------------------------------------
 describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted origin) \u21d2 staging', () => {
-	it('lands the slice in work/tasks/backlog/ on the arbiter main', async () => {
+	it('lands the task in work/tasks/backlog/ on the arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it');
 		const result = await performTask({
@@ -195,7 +195,7 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		// The trusted-fast-path landing: the slice lands STRAIGHT IN the
+		// The trusted-fast-path landing: the task lands STRAIGHT IN the
 		// agent-eligible pool, no human-promotion step needed.
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
@@ -234,7 +234,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			// The repo's configured default would land slices in the POOL \u2014 but
+			// The repo's configured default would land tasks in the POOL \u2014 but
 			// the PRD is untrusted-origin, so the runner forces STAGING.
 			tasksLandIn: 'todo',
 			agentRunner: taskingAgent('child'),
@@ -332,7 +332,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 // The "runner places, not the agent" structural invariant (AC #4 / US #15).
 // --------------------------------------------------------------------------
 describe("the agent's emitted output lands where the RUNNER's policy dictates, not where the agent wrote", () => {
-	it('a SELF-PLACING agent (writes to both pre-backlog AND backlog) is scrubbed; the runner places the slice via the resolver', async () => {
+	it('a SELF-PLACING agent (writes to both pre-backlog AND backlog) is scrubbed; the runner places the task via the resolver', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedBrief(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -349,7 +349,7 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		// The runner placed the slice in STAGING per the configured default; the
+		// The runner placed the task in STAGING per the configured default; the
 		// agent's pool-drift attempt was scrubbed (not on main).
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);

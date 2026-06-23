@@ -64,10 +64,10 @@ import {
 /**
  * The `work/` lifecycle transitions the write seam can apply.
  *
- * `slicing` is the legacy tasking-lock MARKER transition. It is now VESTIGIAL: the
+ * `tasking` is the legacy tasking-lock MARKER transition. It is now VESTIGIAL: the
  * capstone cut-over (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) retired the
- * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` marker (the historical
+ * `git mv work/prd/<slug>.md → work/tasking/<slug>.md` marker (the historical
  * marker paths), so the tasking lock
  * is the unified per-item lock ref (`tasking-lock.ts`) and no longer routes through
  * {@link applyTransition} with this kind. The member is kept so the strategy
@@ -86,7 +86,7 @@ export type LedgerTransitionKind =
 	| 'complete'
 	| 'needs-attention'
 	| 'requeue'
-	| 'slicing'
+	| 'tasking'
 	| 'advancing'
 	/**
 	 * The **promote** transition (brief `staging-pool-position-gate-and-trust-model`,
