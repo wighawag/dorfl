@@ -1254,11 +1254,11 @@ function readTaskedSlugs(cwd: string): Set<string> {
 
 /**
  * Build the tasking PROMPT: instruct a fresh-context agent to apply the
- * **tasking discipline** (`work/protocol/SLICING-PROTOCOL.md`) to the held
+ * **tasking discipline** (`work/protocol/TASKING-PROTOCOL.md`) to the held
  * brief at `work/briefs/ready/<slug>.md` and to EMIT tracer-bullet vertical
  * tasks under `work/tasks/backlog/`. The discipline body (the tracer-bullet
  * rules, the two-axis gate guidance, the confidence check, file-orthogonality,
- * the emitted task shape) lives in `SLICING-PROTOCOL.md` — NOT inlined here
+ * the emitted task shape) lives in `TASKING-PROTOCOL.md` — NOT inlined here
  * (task `slicing-protocol-doc-and-vocabulary-fix`). The shape's source of
  * truth is the frontmatter parser + the task template (`work/protocol/
  * task-template.md`); the doc DESCRIBES it (D2).
@@ -1272,7 +1272,7 @@ function readTaskedSlugs(cwd: string): Set<string> {
 function buildTaskingBrief(slug: string, _brief: string | undefined): string {
 	return [
 		`You are a FRESH-CONTEXT tasker for the brief \`work/briefs/ready/${slug}.md\`.`,
-		`Apply the tasking discipline defined in \`work/protocol/SLICING-PROTOCOL.md\``,
+		`Apply the tasking discipline defined in \`work/protocol/TASKING-PROTOCOL.md\``,
 		`(the in-band, protocol-native tasking protocol every set-up repo carries; the`,
 		`human-facing pointer is \`skills/to-task/SKILL.md\`) to this ONE brief:`,
 		`decompose it into independently-grabbable, tracer-bullet vertical tasks.`,
@@ -1284,7 +1284,7 @@ function buildTaskingBrief(slug: string, _brief: string | undefined): string {
 		`the file-orthogonality preference, the brief-vs-task gate disjointness, and`,
 		`the emitted task shape — ALL live in that doc. Read them there.`,
 		``,
-		`No human is present, so apply the CONFIDENCE CHECK (\`SLICING-PROTOCOL.md\``,
+		`No human is present, so apply the CONFIDENCE CHECK (\`TASKING-PROTOCOL.md\``,
 		`step 4): only emit tasks you would have gotten a human to approve. If`,
 		`granularity, dependency order, a gate, or a seam is genuinely unresolved, set`,
 		`\`needsAnswers: true\` on the specific uncertain task (questions in its body)`,

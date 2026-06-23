@@ -34,7 +34,7 @@ const DOCS = [
 	'CLAIM-PROTOCOL.md',
 	'REVIEW-PROTOCOL.md',
 	'SURFACE-PROTOCOL.md',
-	'SLICING-PROTOCOL.md',
+	'TASKING-PROTOCOL.md',
 ];
 
 const here = dirname(fileURLToPath(import.meta.url));
