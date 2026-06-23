@@ -200,7 +200,7 @@ export type TaskResolutionFolder = (typeof TASK_RESOLUTION_FOLDERS)[number];
 
 /**
  * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside
- * in (prd-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-todo`, `in-progress`,
+ * in (brief-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-todo`, `in-progress`,
  * `needs-attention`, `done`.
  */
 export const TASK_LIFECYCLE_FOLDERS = [
@@ -210,7 +210,7 @@ export const TASK_LIFECYCLE_FOLDERS = [
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the task lifecycle folders (prd-complete.ts / close-job.ts). */
+/** One of the task lifecycle folders (brief-complete.ts / close-job.ts). */
 export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
 
 /**

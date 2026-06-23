@@ -663,7 +663,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	// 2. `do prd:<slug>` → the PRD-SLICING path (`autoslice-command`): the in-place
 	//    `do` worker is AUTONOMOUS, so it slices as the AGENT (gate-bound + lock).
 	//    The orchestration (gate → lock → to-slices harness → runner-owned commit)
-	//    lives in `slicing.ts`; `do` dispatches `prd:` here. The agent only writes
+	//    lives in `tasking.ts`; `do` dispatches `prd:` here. The agent only writes
 	//    slice files — the runner owns every git transition (same boundary as the
 	//    build path). It does NOT run the slice-build pipeline below.
 	if (resolved.namespace === 'brief') {

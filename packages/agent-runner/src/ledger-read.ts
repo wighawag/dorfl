@@ -510,7 +510,7 @@ function findBriefFileBySlug(
  * source of truth (the build-machine `done/` analogue), so `briefAfter` resolves
  * against `prd-sliced/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
- * matches `slicing.ts`'s `readSlicedSlugs`. Missing folders read as empty.
+ * matches `tasking.ts`'s `readSlicedSlugs`. Missing folders read as empty.
  */
 function readLocalBriefPool(repoPath: string): LocalBriefPool {
 	const dir = workFolderPath(repoPath, 'briefs-ready');
@@ -530,7 +530,7 @@ function readLocalBriefPool(repoPath: string): LocalBriefPool {
 
 	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
 	// truth, like `done/` for slices (the `sliced:` marker was removed in
-	// `remove-sliced-marker-step-b`), mirroring slicing.ts's readSlicedSlugs. Missing
+	// `remove-sliced-marker-step-b`), mirroring tasking.ts's readSlicedSlugs. Missing
 	// folder reads as empty.
 	const taskedSlugs = new Set<string>();
 	const taskedDir = workFolderPath(repoPath, 'briefs-tasked');

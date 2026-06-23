@@ -68,7 +68,7 @@ import {
  * capstone cut-over (slice
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) retired the
  * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` marker, so the slicing lock
- * is the unified per-item lock ref (`slicing-lock.ts`) and no longer routes through
+ * is the unified per-item lock ref (`tasking-lock.ts`) and no longer routes through
  * {@link applyTransition} with this kind. The member is kept so the strategy
  * interface and any historical reference stay valid; nothing publishes it.
  *

@@ -253,7 +253,7 @@ export function harnessReviewGate(
  * so {@link parseReviewVerdict} reads it identically.
  *
  * This is a TERMINAL, ONE-SHOT accept/reject gate (it runs BEFORE the slice
- * set integrates) — NOT the slicer IMPROVER loop (`slicer-review-loop.ts`),
+ * set integrates) — NOT the slicer IMPROVER loop (`tasker-review-loop.ts`),
  * which EDITS slices between passes. This prompt explicitly forbids editing.
  *
  * Per-builder framing only — the discipline body lives in
@@ -312,7 +312,7 @@ export function buildTaskAcceptancePrompt(slug: string): string {
  * block runs it with no shape change. The review uses a DISTINCT session id
  * (`<slug>-slice-acceptance`) so it never collides with the build review session
  * OR the slicer improver loop's review session. NAME: `harnessSliceAcceptanceGate`
- * (the ACCEPTANCE gate), DISTINCT from `slicer-review-loop.ts`'s
+ * (the ACCEPTANCE gate), DISTINCT from `tasker-review-loop.ts`'s
  * `harnessTaskReviewGate` (the IMPROVER loop seam, which EDITS tasks) — the two
  * are non-overlapping concepts (gate = terminal pass/fail; loop = review→edit).
  */

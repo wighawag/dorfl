@@ -1717,7 +1717,7 @@ async function stageIntakeSlice(params: {
 /**
  * ONBOARD the intake write onto a NAMESPACED, INTAKE-PRODUCED branch
  * (`work/intake-slice-<slug>` / `work/intake-prd-<slug>`) cut from the freshly-
- * fetched `<arbiter>/main` (the SAME discipline `slicing.ts` uses). The
+ * fetched `<arbiter>/main` (the SAME discipline `tasking.ts` uses). The
  * `intake-` PRODUCER prefix keeps this short-lived "create the item" branch
  * DISTINCT from the later build branch (`work/slice-<slug>`) for the same slug
  * — the firing `intake` × `do slice:` collision the observation traced. The
@@ -2276,7 +2276,7 @@ export const parseLoneSliceReviewVerdict = parseReviewVerdict;
 
 /**
  * Build the intake decision BRIEF (an inline prompt builder, like `buildTaskingBrief`
- * in `slicing.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
+ * in `tasking.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
  * asset/`.md` file; no such convention exists in this package). It encodes the FULL
  * four-outcome decision table (PRD `issue-intake` — the source of truth) and the
  * three DECISION AIDS stated once there:
