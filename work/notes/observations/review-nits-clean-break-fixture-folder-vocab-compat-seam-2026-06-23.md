@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'clean-break-fixture-folder-vocab-compa
 date: 2026-06-23
 status: open
 reviewOf: clean-break-fixture-folder-vocab-compat-seam
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
