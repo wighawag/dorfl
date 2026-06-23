@@ -1,4 +1,4 @@
-# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, PRD runner-in-ci).
+# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, brief runner-in-ci).
 # EMITTED by `agent-runner install-ci`; the human commits it. DO NOT hand-edit a
 # copy — re-run install-ci to upgrade the shell.
 #
@@ -12,10 +12,10 @@
 # WHAT IT DOES — `agent-runner close-merged-issues` resolves which source issue(s)
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
-#   * the RESOLUTION (resolveClosingIssue): a lone slice closes its own `issue:`;
-#     a fanned slice/PRD reaches the number via `slice.prd: → PRD issue:`.
-#   * the "PRD complete?" QUERY (prd-complete-query, done): a PRD's issue closes
-#     ONLY when ALL its `prd:<slug>` slices are in work/done/.
+#   * the RESOLUTION (resolveClosingIssue): a lone task closes its own `issue:`;
+#     a fanned task reaches the number via `task.brief: → brief issue:`.
+#   * the "brief complete?" QUERY (prd-complete-query, done): a brief's issue closes
+#     ONLY when ALL its `brief:<slug>` tasks are in work/done/.
 #   * the CLOSE (IssueProvider.closeIssue): the atomic comment+close seam — NO
 #     direct `gh` in the engine core; any comment rides this close, never the PR
 #     comment seam.
@@ -61,7 +61,7 @@ jobs:
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. Resolves the closing issue(s) from the work/ tree, runs
-        # the "PRD complete?" query for the PRD case, and closes via the provider
+        # the "brief complete?" query for the brief case, and closes via the provider
         # seam — all UNCHANGED engine pieces, consumed not re-built.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

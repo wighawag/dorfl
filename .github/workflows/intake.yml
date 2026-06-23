@@ -1,6 +1,6 @@
 # agent-runner — the ISSUE INTAKE trigger in CI (capability D: consider incoming
-# issues → slice/PRD, PLUS insertion point E: surface the review verdict into the
-# issue thread, PRD runner-in-ci). EMITTED by `agent-runner install-ci`; the human
+# issues → task/brief, PLUS insertion point E: surface the review verdict into the
+# issue thread, brief runner-in-ci). EMITTED by `agent-runner install-ci`; the human
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
 # WHAT IT DOES — `agent-runner intake <N>` reads issue #N + its comment thread,
@@ -23,9 +23,9 @@
 # AUTHOR-TRUST → per-outcome FLAGS (the merge-vs-propose POLICY): because ANYBODY
 # can file an issue, the merge decision composes with WHO authored it. An UNTRUSTED
 # author (`author_association` not OWNER/MEMBER/COLLABORATOR) forces
-# `--propose-slice` REGARDLESS of the `autoBuild` gate — a slice from a public
-# front-door issue can never auto-merge — while `--merge-prd` stays allowed (a
-# human must still slice a PRD before anything autonomous acts on it, so the human
+# `--propose-task` REGARDLESS of the `autoBuild` gate — a task from a public
+# front-door issue can never auto-merge — while `--merge-brief` stays allowed (a
+# human must still task a brief before anything autonomous acts on it, so the human
 # checkpoint is intact). A TRUSTED author gets the plain gate-derived mode. The
 # fully-gateless "merge everything" path (both gates off + a trusted author) is a
 # LOUD, NON-DEFAULT opt-in; the default is conservative (propose).
@@ -87,10 +87,10 @@ env:
   # authorization), so these gates do NOT block it — CI READS them to DERIVE the
   # per-outcome merge-vs-propose flags below (the merge-vs-propose POLICY). CALM
   # DEFAULTS: both off ⇒ the next step is a HUMAN, so the gate-derived mode is the
-  # permissive merge side; author-trust then forces propose for a slice from an
+  # permissive merge side; author-trust then forces propose for a task from an
   # untrusted author.
-  AGENT_RUNNER_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted slice next?
-  AGENT_RUNNER_AUTO_SLICE: 'false' # gate: will an agent auto-slice the emitted PRD next?
+  AGENT_RUNNER_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
+  AGENT_RUNNER_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted brief next?
 
 jobs:
   intake:
@@ -112,11 +112,11 @@ jobs:
         # The merge-vs-propose POLICY, executed at runtime — the SAME rule
         # `deriveIntakeFlags` unit-tests (they cannot desync; the test asserts this
         # shell matches the function):
-        #   * PRD  — gate-derived ONLY: --merge-prd iff autoSlice OFF (a human
-        #            slices it before anything autonomous acts — the checkpoint
-        #            stays ahead even for an UNTRUSTED author), else --propose-prd.
-        #   * SLICE — --propose-slice iff (autoBuild ON) OR (author UNTRUSTED);
-        #            --merge-slice ONLY iff (autoBuild OFF AND author TRUSTED).
+        #   * BRIEF — gate-derived ONLY: --merge-brief iff autoTask OFF (a human
+        #            tasks it before anything autonomous acts — the checkpoint
+        #            stays ahead even for an UNTRUSTED author), else --propose-brief.
+        #   * TASK  — --propose-task iff (autoBuild ON) OR (author UNTRUSTED);
+        #            --merge-task ONLY iff (autoBuild OFF AND author TRUSTED).
         # author_association comes from the COMMENT on an `issue_comment` event,
         # else the ISSUE on an `issues` event — read straight off the payload, no
         # extra API call.
@@ -125,11 +125,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # PRD flag: gate-derived only (author-trust does NOT bite a PRD).
-          if [ "${AGENT_RUNNER_AUTO_SLICE}" = "true" ]; then
-            prd_flag="--propose-prd"
+          # BRIEF flag: gate-derived only (author-trust does NOT bite a brief).
+          if [ "${AGENT_RUNNER_AUTO_TASK}" = "true" ]; then
+            brief_flag="--propose-brief"
           else
-            prd_flag="--merge-prd"
+            brief_flag="--merge-brief"
           fi
 
           # Author-trust: TRUSTED iff OWNER/MEMBER/COLLABORATOR (admin / write-
@@ -140,21 +140,21 @@ jobs:
             OWNER|MEMBER|COLLABORATOR) trusted="true" ;;
           esac
 
-          # SLICE flag: propose if the agent will auto-build it (gate ON) OR the
+          # TASK flag: propose if the agent will auto-build it (gate ON) OR the
           # author is untrusted; merge ONLY when both are safe.
           if [ "${AGENT_RUNNER_AUTO_BUILD}" = "true" ] || [ "${trusted}" != "true" ]; then
-            slice_flag="--propose-slice"
+            task_flag="--propose-task"
           else
-            slice_flag="--merge-slice"
+            task_flag="--merge-task"
           fi
 
-          # ORIGIN-TRUST stamp (slice untrusted-origin-forces-build-propose):
+          # ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose):
           # derived from the SAME ${trusted} case above (one author-trust read,
-          # two consumers — the slice/PRD modes AND the stamp — so they cannot
-          # desync). `intake` STAMPS this onto the emitted PRD/slice frontmatter
+          # two consumers — the task/brief modes AND the stamp — so they cannot
+          # desync). `intake` STAMPS this onto the emitted brief/task frontmatter
           # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
           # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
-          # so a later auto-slice/auto-build of an untrusted-origin artifact still
+          # so a later auto-task/auto-build of an untrusted-origin artifact still
           # forces a human becomes-code checkpoint (the laundering gap is closed).
           if [ "${trusted}" = "true" ]; then
             origin_trust_flag="--origin-trust=trusted"
@@ -162,10 +162,10 @@ jobs:
             origin_trust_flag="--origin-trust=untrusted"
           fi
 
-          echo "prd_flag=${prd_flag}" >> "$GITHUB_OUTPUT"
-          echo "slice_flag=${slice_flag}" >> "$GITHUB_OUTPUT"
+          echo "brief_flag=${brief_flag}" >> "$GITHUB_OUTPUT"
+          echo "task_flag=${task_flag}" >> "$GITHUB_OUTPUT"
           echo "origin_trust_flag=${origin_trust_flag}" >> "$GITHUB_OUTPUT"
-          echo "intake policy: author_association='${AUTHOR_ASSOCIATION:-}' trusted=${trusted} → ${prd_flag} ${slice_flag} ${origin_trust_flag}"
+          echo "intake policy: author_association='${AUTHOR_ASSOCIATION:-}' trusted=${trusted} → ${brief_flag} ${task_flag} ${origin_trust_flag}"
 
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -178,7 +178,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           agent-runner intake "${{ github.event.issue.number }}" \
-            "${{ steps.policy.outputs.prd_flag }}" \
-            "${{ steps.policy.outputs.slice_flag }}" \
+            "${{ steps.policy.outputs.brief_flag }}" \
+            "${{ steps.policy.outputs.task_flag }}" \
             "${{ steps.policy.outputs.origin_trust_flag }}" \
             --arbiter origin

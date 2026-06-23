@@ -1,5 +1,5 @@
 # agent-runner — the ADVANCE LIFECYCLE loop in CI (capability C: auto-triage
-# observations + surface declared blockers + apply committed answers, PRD
+# observations + surface declared blockers + apply committed answers, brief
 # runner-in-ci). EMITTED by `agent-runner install-ci` by PARAMETERISING the seed
 # `docs/ci/advance-loop.yml.template` (the advance-loop capability's output) — the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the
@@ -11,9 +11,9 @@
 #
 # CI ALWAYS invokes `advance` (NEVER a user-chosen verb): `advance` is a strict
 # superset of `do`, and with the lifecycle gates at their calm defaults (below) it
-# degrades to exactly `do`'s build/slice behaviour (ADR
+# degrades to exactly `do`'s build/task behaviour (ADR
 # ci-config-policy-and-gate-family §1). The triage/surface/apply rungs + the
-# on-answer-committed trigger are EXACTLY what `advance` adds over the build/slice
+# on-answer-committed trigger are EXACTLY what `advance` adds over the build/task
 # tick. There is NO `autoAdvance` gate — the lifecycle decomposes into the gate
 # family in the env block.
 #
@@ -25,7 +25,7 @@
 #   * merge   ⇒ a SINGLE SEQUENTIAL `advance -n <x> --merge` — merge contends on
 #               `main`, so it MUST linearise (parallel legs would thrash the
 #               main-CAS). `--merge` rides ONLY this sequential job.
-# This is integration-mode behaviour, IDENTICAL to the build/slice tick
+# This is integration-mode behaviour, IDENTICAL to the build/task tick
 # (integration mode is verb-independent). The CLAIM CAS, not the matrix, is the
 # real cross-run serialiser: a leg that loses the claim race exits clean.
 #
@@ -42,7 +42,7 @@ name: advance-lifecycle
 on:
   schedule:
     # Cron tick: drain whatever the human has answered/produced since the last run
-    # (triage / surface / apply + build / slice). Adjust the cadence to taste
+    # (triage / surface / apply + build / task). Adjust the cadence to taste
     # (here: hourly).
     - cron: '0 * * * *'
   push:
@@ -83,8 +83,8 @@ on:
           - ''
           - 'true'
           - 'false'
-      autoSlice:
-        description: 'One-shot override of the autoSlice gate (AGENT_RUNNER_AUTO_SLICE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+      autoTask:
+        description: 'One-shot override of the autoTask gate (AGENT_RUNNER_AUTO_TASK) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -142,17 +142,17 @@ env:
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
   # > default. The SAME .agent-runner.json the laptop uses applies here. This
-  # workflow emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_SLICE /
+  # workflow emits NO AGENT_RUNNER_AUTO_BUILD / AGENT_RUNNER_AUTO_TASK /
   # AGENT_RUNNER_OBSERVATION_TRIAGE / AGENT_RUNNER_SURFACE_BLOCKERS line on a
   # SCHEDULE/PUSH tick, so the env layer carries NO defaults there — your committed
   # .agent-runner.json wins (then the global config, then the strict built-in
-  # defaults autoBuild:false / autoSlice:false / observationTriage:'off' /
+  # defaults autoBuild:false / autoTask:false / observationTriage:'off' /
   # surfaceBlockers:false). The ONE exception is a manual `workflow_dispatch` where
   # you fill a gate override input (above): the per-job step then exports that ONE
   # AGENT_RUNNER_* for that run only (blank input ⇒ still nothing). The override
   # MUST be wired into every job that resolves the gate family — including the
   # `enumerate` scan (it gates the matrix pools via observationTriage/surfaceBlockers
-  # /autoSlice/autoBuild), not just the agent-running jobs — or the override is inert
+  # /autoTask/autoBuild), not just the agent-running jobs — or the override is inert
   # for the very pools it targets. To enable CI autonomy durably, set the gate(s) in
   # .agent-runner.json (applies everywhere) — NOT by re-running install-ci (ADR §6:
   # install-ci is one-time).
@@ -160,11 +160,11 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. `scan --json` reports
-  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].prds[]`,
+  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].briefs[]`,
   # `repos[].lifecycle`) AND the in-place working checkout (`cwd.repo.items[]`,
-  # `cwd.repo.prds[]`, `cwd.repo.lifecycle`); CI runs IN-PLACE so the items live
+  # `cwd.repo.briefs[]`, `cwd.repo.lifecycle`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
-  # the build/slice pools AND the LIFECYCLE pools into a deduplicated GitHub
+  # the build/task pools AND the LIFECYCLE pools into a deduplicated GitHub
   # Actions matrix list of explicit `task:<slug>` / `brief:<slug>` / `obs:<slug>`
   # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
   # answer-loop in propose mode (not only merge): `obs:` (triage untriaged
@@ -186,7 +186,7 @@ jobs:
       - uses: ./.github/actions/agent-runner-setup
       - name: apply dispatch gate overrides (one-shot, this run only)
         # MUST run BEFORE `scan`: scan's matrix pools are gated by the SAME engine
-        # gate family (autoSlice/autoBuild + lifecycle observationTriage/
+        # gate family (autoTask/autoBuild + lifecycle observationTriage/
         # surfaceBlockers), so an override that does not reach this job produces an
         # empty matrix and is silently inert. `if:` + the inner `[ -n ... ]` guard
         # keep schedule/push (and a blank dispatch field) exporting NOTHING — an
@@ -194,25 +194,25 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit `slice:` / `prd:` / `obs:` prefixes, never bare (ADR
+        # uses explicit `task:` / `brief:` / `obs:` prefixes, never bare (ADR
         # command-surface §3a). Eligible TASKS ⇒ `task:<slug>` legs (`advance`
-        # builds them); SLICEABLE BRIEFS ⇒ `brief:<slug>` legs (`advance` auto-slices
-        # them, capability B — `AGENT_RUNNER_AUTO_SLICE` above). LIFECYCLE pools:
+        # builds them); TASKABLE BRIEFS ⇒ `brief:<slug>` legs (`advance` auto-tasks
+        # them, capability B — `AGENT_RUNNER_AUTO_TASK` above). LIFECYCLE pools:
         # `lifecycle.triage[]` ⇒ `obs:<slug>` (the `obs:` prefix is fixed here;
-        # observations have no slice/prd namespace), `lifecycle.surface[]` +
-        # `lifecycle.apply[]` ⇒ `.namespace + ":" + .slug` (`slice:`/`prd:` legs
+        # observations have no task/brief namespace), `lifecycle.surface[]` +
+        # `lifecycle.apply[]` ⇒ `.namespace + ":" + .slug` (`task:`/`brief:` legs
         # for `needsAnswers` items — surface mints the blocker question, apply
         # consumes the committed answer). All pools surface on `repos[]` AND
         # `cwd.repo`; we union + dedup so the matrix has one leg per item.
         run: |
           items="$(agent-runner scan --json \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "brief:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].briefs[]?, .cwd.repo.briefs[]?) | select(.eligibility.eligible == true) | "brief:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -225,7 +225,7 @@ jobs:
   # parallel shape and `-n` is NOT needed. Each leg passes `--propose`, tying the
   # integration mode to THIS shape: it sits at the top of the precedence chain, so
   # the workflow mode always wins over the repo config default and a leg can NEVER
-  # merge to main. Explicit `slice:`/`prd:` prefixes only, never bare.
+  # merge to main. Explicit `task:`/`brief:` prefixes only, never bare.
   advance-propose:
     needs: enumerate
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
@@ -249,7 +249,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
@@ -293,11 +293,11 @@ jobs:
         # Mirror of the enumerate-job override (see there): export each gate's
         # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input. The
         # merge job re-scans the pool inside `advance -n`, so it needs the override
-        # too for the lifecycle/slice pools to reflect it.
+        # too for the lifecycle/task pools to reflect it.
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoSlice }}" ] && echo "AGENT_RUNNER_AUTO_SLICE=${{ github.event.inputs.autoSlice }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
