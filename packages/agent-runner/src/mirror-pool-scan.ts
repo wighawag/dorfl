@@ -199,7 +199,7 @@ export async function scanMirrorPool(
 	// autonomous selection, never to render a dashboard, so it carries an empty lint
 	// (the duplicate surface is the user-facing `scan`/`status`, per the task). The
 	// `briefs[]` companion of `items[]` is filled via the SAME `scoreBriefs` helper
-	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
+	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].briefs[] |
 	// select(.eligibility.eligible)`) sees the same shape on every surface.
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
 	// `needsAnswers` backlog/briefs + their sidecars + `work/observations/`) and built
