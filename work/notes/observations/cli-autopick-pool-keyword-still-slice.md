@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-06-23: `do`/`advance` auto-pick pool keyword still spelled `slice`
 
 `cli.ts` (~L1857, ~L2387) describes the `do`/`advance` auto-pick POOL list as
