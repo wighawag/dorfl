@@ -10,48 +10,42 @@ import {
 } from '../../src/work-layout.js';
 
 /**
- * The OLD-vocabulary fixture status words the test call sites speak, mapped to the
- * CURRENT `work-layout` symbolic KEYS. After the symbolic-key vocabulary cutover
+ * The fixture status words the test call sites speak, mapped to the CURRENT
+ * `work-layout` symbolic KEYS. After the symbolic-key vocabulary cutover
  * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) the registry keys
- * read in the new task/brief words (`tasks-todo`, `briefs-ready`, …), but the ~60
- * fixture call sites still speak the stable old status words (`backlog`, `prd`,
- * `prd-sliced`, `pre-backlog`, `pre-prd`). This is the single seam they route
- * through, so the cutover is one alias-map flip HERE rather than a 60-file sweep
- * (the design intent of {@link fixtureFolderRel}).
+ * read in the new task/brief words (`tasks-todo`, `briefs-ready`, …); the fixture
+ * call sites speak the matching current status words (`backlog`, `brief`,
+ * `brief-tasked`, `pre-backlog`, `pre-brief`). This is the single seam they route
+ * through, so a later folder/key rename is one alias-map flip HERE rather than a
+ * call-site sweep (the design intent of {@link fixtureFolderRel}).
  */
 const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
 	'pre-backlog': 'tasks-backlog',
 	backlog: 'tasks-todo',
-	'pre-prd': 'briefs-proposed',
-	// The BRIEF pool (`work/briefs/ready/`). Accept BOTH the legacy fixture words
-	// (`prd`) and the current vocabulary (`brief`) so mixed-vocabulary call sites
-	// resolve identically (this fixture-word layer is intentionally tolerant).
-	prd: 'briefs-ready',
+	// The BRIEF staging area (`work/briefs/proposed/`).
+	'pre-brief': 'briefs-proposed',
+	// The BRIEF pool (`work/briefs/ready/`).
 	brief: 'briefs-ready',
-	// The TASKED-brief residence (`work/briefs/tasked/`). Same dual-vocabulary
-	// tolerance (`prd-sliced`/`prdSliced` legacy; `briefTasked` current).
-	'prd-sliced': 'briefs-tasked',
-	prdSliced: 'briefs-tasked',
+	// The TASKED-brief residence (`work/briefs/tasked/`).
+	'brief-tasked': 'briefs-tasked',
 	briefTasked: 'briefs-tasked',
 };
 
 /**
- * Map a fixture's STATUS/folder KEY (the OLD-vocabulary symbolic name a test
- * passes, e.g. `'backlog'`/`'done'`/`'observations'`) to its CURRENT on-disk
- * repo-relative folder path via `work-layout`. It first translates the old fixture
- * status WORDS the call sites speak to the current registry KEYS (via
- * {@link FIXTURE_WORD_TO_KEY}), then resolves the key to its on-disk name. After
- * the notes-regroup + task-board-rename flip + the symbolic-key cutover these
- * resolve to the NEW layout (`tasks/todo`, `tasks/done`, `briefs/ready`,
- * `notes/observations`, …) while leaving the test call sites, which still speak the
- * old status words, untouched. This is the single seam the parameter-driven fixture
- * helpers (which cannot be statically swept) route through, so a later folder/key
- * rename is a flip HERE too.
+ * Map a fixture's STATUS/folder KEY (the symbolic name a test passes, e.g.
+ * `'backlog'`/`'done'`/`'observations'`) to its CURRENT on-disk repo-relative
+ * folder path via `work-layout`. It first translates the fixture status WORDS the
+ * call sites speak to the current registry KEYS (via {@link FIXTURE_WORD_TO_KEY}),
+ * then resolves the key to its on-disk name. After the notes-regroup +
+ * task-board-rename flip + the symbolic-key cutover these resolve to the NEW layout
+ * (`tasks/todo`, `tasks/done`, `briefs/ready`, `notes/observations`, …). This is
+ * the single seam the parameter-driven fixture helpers (which cannot be statically
+ * swept) route through, so a later folder/key rename is a flip HERE too.
  *
- * LOOSE on purpose: a name that is NEITHER an old fixture word NOR a known
- * `work-layout` folder key (e.g. the legacy transient `'slicing'` some readers
- * still probe) passes through UNCHANGED, so callers that mix durable keys with such
- * literals keep working.
+ * LOOSE on purpose: a name that is NEITHER a fixture word NOR a known `work-layout`
+ * folder key (e.g. the retired transient `'tasking'` marker some readers still
+ * probe for ABSENCE) passes through UNCHANGED, so callers that mix durable keys
+ * with such literals keep working.
  */
 export function fixtureFolderRel(key: string): string {
 	const resolvedKey = FIXTURE_WORD_TO_KEY[key] ?? key;
@@ -209,7 +203,7 @@ export function seedRepoWithArbiter(
 		needsAnswers?: boolean;
 		blockedBy?: string[];
 		promptBody?: string;
-		/** PRD slugs to seed under `work/briefs/ready/<slug>.md` (for the slicing lock). */
+		/** Brief slugs to seed under `work/briefs/ready/<slug>.md` (for the tasking lock). */
 		briefs?: string[];
 		/**
 		 * Commit a `.agent-runner.json` at the repo root (so it travels onto
@@ -308,7 +302,7 @@ function taskFile(
 	].join('\n');
 }
 
-/** A minimal PRD file body for `work/briefs/ready/<slug>.md` (slicing-lock fixtures). */
+/** A minimal brief file body for `work/briefs/ready/<slug>.md` (tasking-lock fixtures). */
 export function briefFile(slug: string, marker = 'ORIGINAL'): string {
 	return [
 		'---',
@@ -318,7 +312,7 @@ export function briefFile(slug: string, marker = 'ORIGINAL'): string {
 		'',
 		'## Problem Statement',
 		'',
-		`PRD body for ${slug} (${marker}).`,
+		`Brief body for ${slug} (${marker}).`,
 		'',
 	].join('\n');
 }
@@ -326,7 +320,7 @@ export function briefFile(slug: string, marker = 'ORIGINAL'): string {
 /**
  * Seed a `work/tasks/done/<slug>.md` directly onto `<arbiter>/main` (simulating a
  * completed dependency), via a throwaway clone so the checkout under test is
- * left untouched. Used to satisfy a slice's `blockedBy` for readiness tests.
+ * left untouched. Used to satisfy a task's `blockedBy` for readiness tests.
  */
 export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
 	const dest = join(seeded.repo, '..', `seed-done-${slug}`);
@@ -364,7 +358,7 @@ export function existsOnArbiterMain(
 }
 
 /**
- * Is the SLICE `slug`'s per-item lock held `stuck` on the arbiter? (slice
+ * Is the TASK `slug`'s per-item lock held `stuck` on the arbiter? (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: stuck-state is
  * the lock `state: stuck`, NOT a `needs-attention/` folder file). Reads the lock
  * ref blob from the arbiter; `false` when there is no lock or it is `active`.
@@ -442,9 +436,9 @@ export function registerMirrorWithWork(
 		done?: Record<string, string>;
 		needsAttention?: Record<string, string>;
 		/**
-		 * Files committed under `work/tasks/cancelled/` (the SLICE regime's
+		 * Files committed under `work/tasks/cancelled/` (the TASK regime's
 		 * "won't-proceed" terminal — the per-regime split of the previous shared
-		 * `work/dropped/`, slice `brief-regime-rename-and-dropped-migration`).
+		 * `work/dropped/`, task `brief-regime-rename-and-dropped-migration`).
 		 */
 		cancelled?: Record<string, string>;
 		/**
@@ -452,9 +446,9 @@ export function registerMirrorWithWork(
 		 * "won't-proceed" terminal). The per-regime counterpart of `cancelled`.
 		 */
 		briefsDropped?: Record<string, string>;
-		/** PRDs to slice, committed under `work/briefs/ready/` on the mirror's `main`. */
+		/** Briefs to task, committed under `work/briefs/ready/` on the mirror's `main`. */
 		brief?: Record<string, string>;
-		/** Already-SLICED PRDs, committed under `work/briefs/tasked/` (sliced-ness residence). */
+		/** Already-TASKED briefs, committed under `work/briefs/tasked/` (tasked-ness residence). */
 		briefTasked?: Record<string, string>;
 		/** Observations committed under `work/notes/observations/` (the triage candidate pool). */
 		observations?: Record<string, string>;
@@ -487,8 +481,8 @@ export function registerMirrorWithWork(
 	writeAll('needs-attention', work.needsAttention);
 	writeAll('cancelled', work.cancelled);
 	writeAll('briefs-dropped', work.briefsDropped);
-	writeAll('prd', work.brief);
-	writeAll('prd-sliced', work.briefTasked);
+	writeAll('brief', work.brief);
+	writeAll('brief-tasked', work.briefTasked);
 	writeAll('observations', work.observations);
 	writeAll('questions', work.questions);
 	if (work.repoConfig) {

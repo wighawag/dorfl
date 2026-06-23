@@ -143,7 +143,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 
 	it('a bare-slug slice/PRD COLLISION is a loud usage error (resolver cross-check preserved)', async () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
-		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'auto-slice',
