@@ -13,7 +13,7 @@ Sweep the remaining retired-vocabulary PROSE out of the protocol docs (other tha
 - `REVIEW-PROTOCOL.md`: "lone-slice review"→"lone-task review", "the slicer improver loop"→"the tasker improver loop", "the PRD's needs-attention reason"→"the brief's needs-attention reason", "a set of slices"→"a set of tasks", and the `uncertainSlices`/`decompositionUnclear` CHANNEL names updated to whatever the module-rename task settled them to (keep the doc and the code identical).
 - `CLAIM-PROTOCOL.md`: the `work/briefs/ready/<prd>.md` placeholder → `<brief>`.
 - `brief-template.md` / `task-template.md`: "slicing"→"tasking", "sliced"→"tasked", "vertical slice"→"vertical task" in the comments/prose.
-- Skills `skills/*/SKILL.md` (`drive-backlog`, `orchestrate`, `review`, `to-brief`, `to-task`, `work`, `promote`, `setup`): replace slice/PRD/slicing prose with task/brief/tasking, keeping real historical slugs verbatim.
+- Skills `skills/*/SKILL.md` (`drive-tasks`, `orchestrate`, `review`, `to-brief`, `to-task`, `work`, `promote`, `setup`): replace slice/PRD/slicing prose with task/brief/tasking, keeping real historical slugs verbatim. (NOTE 2026-06-23: the conductor skill was renamed `drive-backlog` → `drive-tasks` in Phase 1 of this drive, and that skill's own prose + the cross-references in `orchestrate`/`work`/`promote`/`capture-signal` were ALREADY cut over to task/brief/tasking then — so the bulk of the skills-prose sweep may already be done; verify and only fix what remains. Do NOT look for a `drive-backlog` directory; it no longer exists.)
 
 Keep `work/protocol/VERSION` bumped (any protocol-doc text change requires it). Keep source vs mirror byte-identical apart from VERSION.
 
