@@ -65,3 +65,7 @@ agent-runner claim rename-lock-action-token-slice-to-task --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-lock-action-token-slice-to-task <remote>/main
 git mv work/tasks/todo/rename-lock-action-token-slice-to-task.md work/tasks/done/rename-lock-action-token-slice-to-task.md
 ```
+
+## Requeue 2026-06-23
+
+Gate-2 verdict JSON-parse crash (position 5879) AFTER green Gate-1 (2585 tests) and AFTER the rename was applied (verified LockAction='implement'|'task'|'advance' + action:'task' on the kept branch). Recurring infra/gate fault, not the work. Continue from the kept branch; re-run gate + Gate-2.
