@@ -340,7 +340,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 		const seeded = seedRepoWithArbiter(scratch.root, ['bar']);
 		const {repo, arbiter} = seeded;
 		// Stub the build/slice orchestration (the inner `do`) so the rung runs without a
-		// real build — and capture the lock state during it. A build-slice rung that
+		// real build — and capture the lock state during it. A build-task rung that
 		// (wrongly) took the unified lock at the advance layer would DEADLOCK against the
 		// inner do's SAME ref; here we prove the advance layer takes NO unified lock.
 		let heldDuringExec = true;
@@ -373,7 +373,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 			// PRODUCTION acquire/release path (no injected lock).
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.rung).toBe('build-slice');
+		expect(result.rung).toBe('build-task');
 		// NO unified lock taken at the advance layer for the build/slice rung.
 		expect(heldDuringExec).toBe(false);
 		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual([]);

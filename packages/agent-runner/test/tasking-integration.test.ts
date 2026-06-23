@@ -163,7 +163,7 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The produced task + the brief lifecycle move (tasking/ -> brief-tasked/) all
 		// landed on the arbiter main, through the shared core (not the lock's direct
 		// commit). The brief now rests in brief-tasked/ (the source of truth for
@@ -221,7 +221,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 
 		// The tasks are NOT on main (propose does not land them); the brief body STAYS
 		// in brief/ on main (the lock is a ref now — it never moves the body; the PR
@@ -285,7 +285,7 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 				agentRunner: taskingAgent('child'),
 				env: gitEnv(),
 			});
-			expect(result.outcome).toBe('sliced');
+			expect(result.outcome).toBe('tasked');
 			// The shared core resolved the mode to the SAME effect it resolves for a
 			// build: merge lands the task on main; propose does not (it pushes the
 			// `work/<slug>` branch + leaves main untouched, the PR source).
@@ -319,7 +319,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		const task = run(
 			'git',
 			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
@@ -345,7 +345,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		const task = run(
 			'git',
 			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
@@ -367,7 +367,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		const task = run(
 			'git',
 			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],

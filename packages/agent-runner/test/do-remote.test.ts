@@ -310,7 +310,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 			},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.slug).toBe('someprd');
 		// The agent ran (the gate did NOT refuse on the policy).
 		expect(agentRan).toBe(true);

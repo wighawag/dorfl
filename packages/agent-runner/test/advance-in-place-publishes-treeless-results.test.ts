@@ -223,7 +223,7 @@ describe('advance in-place — the publish GATE matches the existing drivers (no
 		const seed = seedPlainRepo(slug);
 
 		// Capture the arbiter/main BEFORE we run a build/slice rung. A stub
-		// `AdvanceTickRunner` returns `rung: 'build-slice'` — outside `TREELESS_RUNGS`
+		// `AdvanceTickRunner` returns `rung: 'build-task'` — outside `TREELESS_RUNGS`
 		// — so the wrapper MUST skip the push. We deliberately also have the stub
 		// commit something LOCALLY: if the wrapper pushed regardless, arbiter/main
 		// would advance and the assertion would fail.
@@ -235,11 +235,11 @@ describe('advance in-place — the publish GATE matches the existing drivers (no
 				'should NOT reach arbiter\n',
 			);
 			gitIn(['add', '-A'], seed.repo);
-			gitIn(['commit', '-q', '-m', 'stub build-slice commit'], seed.repo);
+			gitIn(['commit', '-q', '-m', 'stub build-task commit'], seed.repo);
 			return {
 				exitCode: 0,
 				outcome: 'advanced',
-				rung: 'build-slice',
+				rung: 'build-task',
 				slug,
 				message: 'built',
 			} satisfies AdvanceResult;
@@ -361,7 +361,7 @@ describe('advance in-place — the rebase-retry handles a mid-batch external adv
 				return {
 					exitCode: 0,
 					outcome: 'advanced',
-					rung: 'build-slice',
+					rung: 'build-task',
 					slug: externalSlug,
 					message: 'built',
 				};

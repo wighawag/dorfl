@@ -171,7 +171,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 		// Exactly one review round ran (the natural terminator on the first approve).
 		expect(rounds).toBe(1);
@@ -249,7 +249,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(round).toBe(2);
 		// The EMITTED slice reflects the edit (the body differs from the first draft).
 		gitIn(['fetch', '-q', ARBITER], repo);

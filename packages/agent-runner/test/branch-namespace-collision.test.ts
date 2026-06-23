@@ -119,7 +119,7 @@ describe('intake then do slice:<slug> on the same slug + checkout — no collisi
 			env: gitEnv(),
 		});
 		expect(intake.exitCode).toBe(0);
-		expect(intake.outcome).toBe('sliced');
+		expect(intake.outcome).toBe('tasked');
 		// The slice is on the arbiter's backlog (merge landed it).
 		expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 

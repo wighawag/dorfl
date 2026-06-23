@@ -25,7 +25,7 @@ import {run} from '../src/git.js';
  * the sole exclusion). So there is no advance-layer release that touches the
  * working tree, and nothing on `main` to orphan.
  *
- * These tests pin the POST-cut-over invariants: after ANY build-slice tick (success
+ * These tests pin the POST-cut-over invariants: after ANY build-task tick (success
  * or failure, even a dispatch that left a dirty / mid-rebase tree), (a) NO
  * `work/advancing/` marker ever exists on `<arbiter>/main`, (b) NO orphaned unified
  * lock remains, and (c) the kept work branch tip is intact (recoverable, NEVER
@@ -138,12 +138,12 @@ async function assertNoTransientResidue(
 ): Promise<void> {
 	// (a) NO `work/advancing/` marker EVER exists (the folder is retired).
 	expect(trackedOnArbiter(repo, `work/advancing/${entry}.md`)).toBe(false);
-	// (b) NO orphaned unified lock (a build-slice rung takes none at the advance
+	// (b) NO orphaned unified lock (a build-task rung takes none at the advance
 	// layer; the inner `do` released its own).
 	expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
 }
 
-describe('advance build-slice rung: no transient residue across a failing dispatch', () => {
+describe('advance build-task rung: no transient residue across a failing dispatch', () => {
 	it('leaves NO marker/lock when the recover dispatch hits a rebase conflict (kept work intact)', async () => {
 		const slug = 'alpha';
 		const entry = `task-${slug}`;
@@ -228,7 +228,7 @@ describe('advance build-slice rung: no transient residue across a failing dispat
 		expect(log.split('\n')).toContain(preDispatchTip);
 	});
 
-	it('happy path: a successful build-slice dispatch leaves no marker/lock residue', async () => {
+	it('happy path: a successful build-task dispatch leaves no marker/lock residue', async () => {
 		const slug = 'beta';
 		const entry = `task-${slug}`;
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);

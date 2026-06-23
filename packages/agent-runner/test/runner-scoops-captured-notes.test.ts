@@ -276,7 +276,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			note: sink.note,
 		});
 
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// PERSISTENCE: the produced slice AND the captured note both landed on main
 		// through the shared core (alongside the PRD lifecycle move) \u2014 not dropped.
 		expect(onArbiterMainPath(repo, 'work/tasks/backlog/child.md')).toBe(true);
@@ -310,7 +310,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			note: sink.note,
 		});
 
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// PERSISTENCE: propose does not touch main; the note rides the pushed work
 		// branch carrying the slices (the same branch the build path integrates).
 		expect(
@@ -345,7 +345,7 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 			note: sink.note,
 		});
 
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMainPath(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(sink.lines.some((l) => l.includes('Scooped'))).toBe(false);
 	});

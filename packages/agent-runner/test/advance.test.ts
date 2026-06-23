@@ -61,8 +61,8 @@ function spyExecutor(): {executor: RungExecutor; calls: string[]} {
 	return {
 		calls,
 		executor: {
-			buildTask: record('build-slice'),
-			taskBrief: record('slice-prd'),
+			buildTask: record('build-task'),
+			taskBrief: record('task-brief'),
 			triageObservation: record('triage-observation'),
 			surface: record('surface'),
 			apply: record('apply'),
@@ -96,7 +96,7 @@ afterEach(() => {
 });
 
 describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcommand)', () => {
-	it('resolves a bare slug to the SLICE build-slice rung', async () => {
+	it('resolves a bare slug to the SLICE build-task rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'feature',
@@ -108,12 +108,12 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			read: currentLedgerRead,
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.rung).toBe('build-slice');
+		expect(result.rung).toBe('build-task');
 		expect(result.slug).toBe('feature');
-		expect(calls).toEqual(['build-slice:task:feature']);
+		expect(calls).toEqual(['build-task:task:feature']);
 	});
 
-	it('resolves prd:<slug> to the slice-prd rung', async () => {
+	it('resolves prd:<slug> to the task-brief rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'brief:autoslice',
@@ -123,8 +123,8 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.rung).toBe('slice-prd');
-		expect(calls).toEqual(['slice-prd:brief:autoslice']);
+		expect(result.rung).toBe('task-brief');
+		expect(calls).toEqual(['task-brief:brief:autoslice']);
 	});
 
 	it('resolves obs:<slug> (the NEW namespace) to the triage-observation rung', async () => {
@@ -220,7 +220,7 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 		});
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
-		expect(result.rung).toBe('build-slice'); // it DID classify (free)
+		expect(result.rung).toBe('build-task'); // it DID classify (free)
 		expect(calls).toEqual([]); // but never executed
 		expect(released).toBe(false); // and never took/held the lock, so no release
 	});
@@ -314,7 +314,7 @@ describe('advance \u2014 build/slice rungs ORCHESTRATE do (no duplication)', () 
 			releaseLock: async () => RELEASED,
 			read: currentLedgerRead,
 		});
-		expect(result.rung).toBe('build-slice');
+		expect(result.rung).toBe('build-task');
 		expect(result.message).toContain('ORCHESTRATE `do task:feature`');
 	});
 });

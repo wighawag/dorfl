@@ -168,7 +168,7 @@ describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted
 			// floor applies (`staging` = `pre-backlog/`).
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 		// The honest reporting: `result.emitted` reflects the runner-resolved
@@ -194,7 +194,7 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The trusted-fast-path landing: the slice lands STRAIGHT IN the
 		// agent-eligible pool, no human-promotion step needed.
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
@@ -215,7 +215,7 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});
@@ -240,7 +240,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});
@@ -258,7 +258,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
@@ -276,7 +276,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
 	});
 });
@@ -303,7 +303,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
@@ -322,7 +322,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});
@@ -348,7 +348,7 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			agentRunner: selfPlacingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The runner placed the slice in STAGING per the configured default; the
 		// agent's pool-drift attempt was scrubbed (not on main).
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
@@ -371,7 +371,7 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			agentRunner: selfPlacingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 	});

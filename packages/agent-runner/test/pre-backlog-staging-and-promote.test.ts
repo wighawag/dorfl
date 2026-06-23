@@ -151,7 +151,7 @@ describe('STEP A — slicer output lands STAGED in pre-backlog/, not backlog/', 
 			agentRunner: stagingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toEqual(['work/tasks/backlog/child.md']);
 		// The slice landed in the STAGING folder, not the pool.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
@@ -275,7 +275,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 			agentRunner: selfPlacingAgent('legit', 'hijack'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The legitimate STAGED placement landed (the agent's pre-backlog/ write).
 		expect(onArbiterMain(repo, 'work/tasks/backlog/legit.md')).toBe(true);
 		// The self-placement attempt did NOT reach the pool: the runner's fence
@@ -316,7 +316,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 			agentRunner: tamperingAgent,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The pre-existing pool slice is BYTE-FOR-BYTE unchanged on the arbiter.
 		expect(showArbiterMain(repo, 'work/tasks/todo/poolitem.md')).toBe(
 			poolBefore,

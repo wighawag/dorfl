@@ -260,7 +260,7 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emittedSlug).toBe('add-quiet-flag');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 

@@ -218,7 +218,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 			}),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(agentRan).toBe(true);
 		expect(onArbiter(repo, 'work/tasks/backlog/it-explicit.md')).toBe(true);
 	});
@@ -309,7 +309,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 			agentRunner: taskingAgent(),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 	});
 
 	it('STILL refuses when the briefAfter PRD only carries an INERT `sliced:` line in prd/ (folder, not marker)', async () => {
@@ -354,7 +354,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 			agentRunner: taskingAgent(),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The human path tasks WITHOUT the lock.
 		expect(acquired).toBe(false);
 	});
@@ -378,7 +378,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toEqual(['work/tasks/backlog/it-first.md']);
 
 		// The produced task landed STAGED on the arbiter (work/tasks/backlog/ — the
@@ -424,7 +424,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 
 		// The completing commit on the arbiter is the runner's tasking INTEGRATE
 		// commit (it carries BOTH the backlog task AND the tasking→brief-tasked move),
@@ -436,7 +436,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			{env: gitEnv()},
 		).stdout.trim();
 		expect(subject).toMatch(/^slicing\(it\):/);
-		expect(subject).toMatch(/; sliced$/);
+		expect(subject).toMatch(/; tasked$/);
 		// The completing commit carries BOTH the emitted backlog task AND the
 		// tasking→brief-tasked move (a rename), in ONE runner-owned commit (rename
 		// detection shows the move as `work/briefs/tasked/it.md`; tasking/ verified empty).
@@ -501,7 +501,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 
 		const subject = run(
 			'git',
@@ -510,7 +510,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			{env: gitEnv()},
 		).stdout.trim();
 		expect(subject).toBe(
-			'slicing(it): Quiet and verbose output modes for the CLI; sliced',
+			'slicing(it): Quiet and verbose output modes for the CLI; tasked',
 		);
 		expect(subject).not.toContain('complete work slice');
 	});
@@ -562,7 +562,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			agentRunner: taskingAgent('it-first'),
 			env: gitEnv(),
 		});
-		expect(first.outcome).toBe('sliced');
+		expect(first.outcome).toBe('tasked');
 		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 
 		// REOPEN-TO-READY: git mv work/briefs/tasked/it.md -> work/briefs/ready/it.md (mirroring
@@ -590,7 +590,7 @@ describe('performTask — slices + commits the runner-owned transition', () => {
 			agentRunner: taskingAgent('it-second'),
 			env: gitEnv(),
 		});
-		expect(second.outcome).toBe('sliced');
+		expect(second.outcome).toBe('tasked');
 		expect(onArbiter(repo, 'work/tasks/backlog/it-second.md')).toBe(true);
 		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
@@ -762,7 +762,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			taskerLoopMax: 3,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBe('converged');
 		// The IMPROVED task landed STAGED on the arbiter (not the pre-loop draft).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(true);
@@ -801,7 +801,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			taskerLoopMax: 2,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBe('uncertain-slices');
 		// The task landed STAGED BUT is flagged needsAnswers with the questions in its body.
 		const body = showArbiter(repo, 'work/tasks/backlog/child.md');
@@ -881,7 +881,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			reviewExecutions: 3,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBe('converged');
 		// Execution 1 ran twice (slicerLoopMax), execution 2 once (converged), 3 never.
 		expect(executions).toEqual([1, 1, 2]);
@@ -904,7 +904,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			taskerLoopMax: 3,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBeUndefined();
 		// The loop seam was never invoked on the human path.
 		expect(loopRan).toBe(false);
@@ -922,7 +922,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBeUndefined();
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(true);
 	});
@@ -977,7 +977,7 @@ describe('performTask — the slicer review→edit→converge loop', () => {
 			taskerLoopMax: 1,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.loop).toBe('uncertain-slices');
 		// The gate was only ever shown THIS run's own produced STAGED task.
 		for (const seen of seenByGate) {

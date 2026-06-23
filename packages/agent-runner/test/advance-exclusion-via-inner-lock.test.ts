@@ -39,15 +39,15 @@ afterEach(() => {
  * (`refs/agent-runner/lock/<entry>`, the create-only ref CAS that `performClaim` /
  * `acquireSlicingLock` take). These tests PROVE:
  *
- *   1. advance∥claim on a build-slice item stays mutually exclusive through the
+ *   1. advance∥claim on a build-task item stays mutually exclusive through the
  *      inner `do`'s claim lock ALONE — a held `slice:<slug>` lock makes the advance
- *      build-slice rung's inner claim LOSE; the advance layer takes no hold of its
+ *      build-task rung's inner claim LOSE; the advance layer takes no hold of its
  *      own.
  *   2. the brief advance-layer TOCTOU (two advancers both classifying the item as
  *      build BEFORE the inner `do`) resolves to EXACTLY ONE winner at the inner
  *      claim lock.
  *
- * To isolate the proof to the LOCK (not the full build machinery), the build-slice
+ * To isolate the proof to the LOCK (not the full build machinery), the build-task
  * rung is orchestrated with an injected `doDriver` that runs the REAL `performClaim`
  * (the inner `do`'s lock point) — faithful, because the inner `do`'s exclusion IS
  * that claim. They drive REAL git against a `--bare file://` arbiter with in-process
@@ -89,24 +89,24 @@ function claimOnlyDoDriver(
 	};
 }
 
-/** Drive a real build-slice advance whose inner `do` is the claim-only driver. */
+/** Drive a real build-task advance whose inner `do` is the claim-only driver. */
 function advanceBuildTask(cwd: string, slug: string, label: string) {
 	return performAdvance({
 		arg: `task:${slug}`,
 		cwd,
 		arbiter: ARBITER,
-		// `doOptions` present so the build-slice rung ORCHESTRATES a `do`; the inner
+		// `doOptions` present so the build-task rung ORCHESTRATES a `do`; the inner
 		// `do` is the claim-only driver (the real `performClaim` lock point). NO
 		// executor stub and NO injected acquire/release: the PRODUCTION advance-layer
-		// lock policy runs (which for a build-slice rung takes NO advance hold).
+		// lock policy runs (which for a build-task rung takes NO advance hold).
 		doOptions: {integration: 'merge', env: racerEnv(label)},
 		doDriver: claimOnlyDoDriver(cwd, label),
 		env: racerEnv(label),
 	});
 }
 
-describe('advance∥claim on a build-slice item: exclusion via the inner do claim lock ALONE', () => {
-	it('a held slice: implement lock makes the advance build-slice rung lose at the inner claim', async () => {
+describe('advance∥claim on a build-task item: exclusion via the inner do claim lock ALONE', () => {
+	it('a held slice: implement lock makes the advance build-task rung lose at the inner claim', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
 		// A DIFFERENT principal holds the slice's implement lock (a concurrent claim).
 		const holder = raceClone(seeded, 'holder');
@@ -119,7 +119,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		});
 		expect(held.outcome).toBe('acquired');
 
-		// The advance build-slice rung orchestrates its inner `do` → performClaim,
+		// The advance build-task rung orchestrates its inner `do` → performClaim,
 		// which loses the SAME `task-solo` create-only ref CAS. The advance layer took
 		// NO hold of its own; the inner claim lock is the sole gate.
 		const adv = await advanceBuildTask(raceClone(seeded, 'adv'), 'solo', 'adv');
@@ -152,7 +152,7 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 		const a = raceClone(seeded, 'adv');
 		const b = raceClone(seeded, 'clm');
 
-		// The advance build-slice rung's inner claim competes with a direct claim for
+		// The advance build-task rung's inner claim competes with a direct claim for
 		// the SAME `task-solo` ref. Exactly one wins (the inner claim lock arbitrates;
 		// the advance layer takes no hold).
 		const [adv, clm] = await Promise.all([
@@ -184,12 +184,12 @@ describe('advance∥claim on a build-slice item: exclusion via the inner do clai
 });
 
 describe('advance-layer TOCTOU resolves to one winner at the inner claim lock', () => {
-	it('two simultaneous build-slice advances of the SAME item ⇒ exactly one inner claim wins', async () => {
+	it('two simultaneous build-task advances of the SAME item ⇒ exactly one inner claim wins', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['solo']);
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 
-		// Both ticks classify the item as build-slice (pre-lock, the brief TOCTOU
+		// Both ticks classify the item as build-task (pre-lock, the brief TOCTOU
 		// window) and both orchestrate an inner `do` → performClaim. The inner claim
 		// lock resolves it: exactly one wins the `task-solo` ref CAS.
 		const [ra, rb] = await Promise.all([

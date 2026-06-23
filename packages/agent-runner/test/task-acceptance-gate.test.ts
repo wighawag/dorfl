@@ -167,7 +167,7 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The gate ran (before the integrate) exactly ONCE — it is one-shot.
 		expect(gate.calls).toBe(1);
 		// The approved set integrated onto main (task + brief tasking/ -> brief-tasked/
@@ -196,7 +196,7 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(gate.calls).toBe(0);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 	});
@@ -214,7 +214,7 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 	});
 });
@@ -371,7 +371,7 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The acceptance gate still ran (it is not gated by the improver loop).
 		expect(gate.calls).toBe(1);
 	});
@@ -394,7 +394,7 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			env: gitEnv(),
 		});
 		// The set landed (the loop converged), and the gate never ran.
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(gate.calls).toBe(0);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 	});

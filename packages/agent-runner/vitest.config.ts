@@ -204,7 +204,7 @@ const RACE_SENSITIVE = [
 	'test/claim-acquires-unified-lock.test.ts',
 	// The POST-#9 EXCLUSION PROOF (slice
 	// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): drives REAL
-	// `performAdvance` build-slice/slice-prd rungs (which orchestrate the inner
+	// `performAdvance` build-task/task-brief rungs (which orchestrate the inner
 	// `performDo`/`performSlice` claim/slice lock) racing a direct `performClaim` /
 	// slicing acquire against a --bare `file://` arbiter, in-process, AND writes main
 	// (the inner do's merge integration). It is the git-`file://`-CAS race class

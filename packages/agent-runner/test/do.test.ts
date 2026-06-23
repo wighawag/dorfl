@@ -1663,7 +1663,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.slug).toBe('somePrd');
 		// The agent ran (the gate did NOT refuse on the policy).
 		expect(agentRan).toBe(true);
@@ -1730,7 +1730,7 @@ describe('do — slug resolution (§3a): bare / slice: / prd: + collision', () =
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.slug).toBe('somePrd');
 
 		// The runner committed the produced backlog slice + moved the PRD into the
@@ -1876,7 +1876,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 
 		// merge ⇒ the produced slice + the PRD lifecycle move landed on the arbiter main
 		// (NOT on a work branch awaiting a PR). This is `taskingIntegration:'merge'`
@@ -1944,7 +1944,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 			agentRunner: taskingAgent,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		expect(
 			run(
@@ -1979,7 +1979,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 			agentRunner: taskingAgent,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		// propose ⇒ the slice files are NOT on main (they ride the pushed work branch).
 		expect(

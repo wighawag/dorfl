@@ -184,7 +184,7 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 			agentRunner,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// AFTER the relocation (slice `slicing-protocol-doc-and-vocabulary-fix`):
 		// the de-overloaded language lives in `TASKING-PROTOCOL.md`, NOT inlined in
 		// the prompt. The prompt now POINTS at the doc + names the staging folder.

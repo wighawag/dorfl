@@ -222,7 +222,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emittedSlug).toBe('add-quiet-flag');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 
@@ -288,7 +288,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = readEmittedSlice(repo);
 		expect(onBranch).toMatch(/^origin: issue$/m);
@@ -307,7 +307,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			originTrust: 'trusted',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = readEmittedSlice(repo);
 		expect(onBranch).toMatch(/^origin: issue$/m);
@@ -326,7 +326,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 			// No originTrust passed (the local human path).
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = readEmittedSlice(repo);
 		expect(onBranch).not.toMatch(/^origin:/m);
@@ -388,7 +388,7 @@ describe('intake <N> — the slice-outcome dispatcher (stubbed seams)', () => {
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 	});
 
@@ -572,7 +572,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 
 		// COMMIT SUBJECT: read from the runner-owned commit on the pushed work branch.
 		// It carries the DRAFTED title (`<type>(<slug>): <title>; <tag>`) — NOT the
@@ -622,7 +622,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(`${ARBITER}/main`, repo);
@@ -806,7 +806,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
-		expect(sliced.outcome).toBe('sliced');
+		expect(sliced.outcome).toBe('tasked');
 		expect(sliceProvider.closes).toHaveLength(0);
 		expect(sliced.closed).toBeUndefined();
 
@@ -1024,7 +1024,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The lock was HELD during the run …
 		expect(lockHeldAtDecision).toBe(true);
 		// … and is RELEASED afterwards (absent on finish, so the next run can proceed).
@@ -1112,7 +1112,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 
 		// The run PROCEEDS (the slice is emitted) without a lock — no crash, no back-off.
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 		// No label op happened (the provider has none) and the degrade is SURFACED.
 		expect(issueProvider.labelOps).toEqual([]);
@@ -1222,7 +1222,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The release degrade is surfaced AND the manual recovery is discoverable.
 		expect(notes.some((n) => /lock release degraded/i.test(n))).toBe(true);
 		expect(notes.some((n) => /gh issue edit 40 --remove-label/.test(n))).toBe(
@@ -1256,7 +1256,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// MERGE: the slice landed on arbiter main (no PR; main advanced).
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
 		const onMain = gitIn(
@@ -1282,7 +1282,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// PROPOSE: main is NOT touched; the slice rides the work/<slug> branch. (The
 		// PRD mode being `merge` must NOT leak onto the slice path.)
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
@@ -2179,7 +2179,7 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 		});
 		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + slices.
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 	});
 });
@@ -2213,7 +2213,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			// propose (default) → the comment links the PR
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.commented).toBe(true);
 		expect(issueProvider.comments).toHaveLength(1);
 		expect(issueProvider.comments[0].issueNumber).toBe(42);
@@ -2274,7 +2274,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			integration: {task: 'merge', brief: 'propose'},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		// The slice landed on main; the comment links that commit SHA.
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -2410,7 +2410,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 		});
 		// The success outcome is UNCHANGED by the degrade.
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('sliced');
+		expect(result.outcome).toBe('tasked');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 		// `commented` reflects the failed post (advisory), but the run still succeeded.
 		expect(result.commented).toBe(false);
@@ -2433,7 +2433,7 @@ describe('intake <N> — the completion comment on slice/prd success', () => {
 			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
-		expect(sliced.outcome).toBe('sliced');
+		expect(sliced.outcome).toBe('tasked');
 		const completionBody = first.comments[0].body;
 
 		// 2) SECOND run on a thread that now carries that completion comment (intake's own
