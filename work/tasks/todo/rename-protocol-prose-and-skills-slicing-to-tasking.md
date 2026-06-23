@@ -17,20 +17,23 @@ Sweep the remaining retired-vocabulary PROSE out of the protocol docs (other tha
 
 Keep `work/protocol/VERSION` bumped (any protocol-doc text change requires it). Keep source vs mirror byte-identical apart from VERSION.
 
-## Acceptance criteria
+> **SCOPE NARROWED 2026-06-23 (decided conductor + human, during the `drive-tasks` drive).** The original criterion #1 was GLOBAL ("No active protocol doc OR skill SKILL.md carries the retired vocabulary"), but that is UNSATISFIABLE within this task's "What to build" file list: `WORK-CONTRACT.md` (~38 occurrences) and `SURFACE-PROTOCOL.md` (line 115 "slicing/reviewing judgement") carry the retired vocabulary, are NOT in this task's file list, and were not touched by any prior task (task `rename-docs-prose-slicing-to-tasking` covered `docs/` only). Worse, `WORK-CONTRACT.md`'s `slic*` prose is ENTANGLED with still-live CODE identifiers owned by no current task — the lock action token `'slice'` (`LockAction = 'implement' | 'slice' | 'advance'` in `item-lock.ts`; `action: 'slice'` in `tasking-lock.ts`) and the residual `--slices-land-in` flag in `cli.ts` — so its `action: slice` / `--slices-land-in` prose currently MATCHES live code; rewriting it would get AHEAD of those code renames (a cross-task decision). Therefore criterion #1 is NARROWED below to ONLY this task's listed files, and `WORK-CONTRACT.md` + `SURFACE-PROTOCOL.md` are carved into the follow-up task `rename-protocol-prose-workcontract-and-surface-slicing-to-tasking`, which is sequenced AFTER a lock-action/CLI-flag code rename (see the observation `residual-slice-code-identifiers-lock-action-and-slices-land-in-flag`).
 
-- [ ] No active protocol doc or skill SKILL.md carries the retired verb "slicing"/"slicer" or the nouns "slice"/"PRD" as live vocabulary (real historical slugs and any deliberately-frozen tokens excepted, and called out where kept).
-- [ ] `REVIEW-PROTOCOL.md` channel names match the renamed code identifiers exactly (doc-consistency test green).
+## Acceptance criteria (NARROWED — only this task's listed files; WORK-CONTRACT/SURFACE carved to a follow-up)
+
+- [ ] None of THIS TASK'S LISTED files — `REVIEW-PROTOCOL.md`, `CLAIM-PROTOCOL.md`, `brief-template.md`, `task-template.md` (source + `work/protocol/` mirror), and every `skills/*/SKILL.md` — carries the retired verb "slicing"/"slicer" or the nouns "slice"/"PRD" as live CURRENT-CONCEPT vocabulary (real historical slugs, the intake `{slice,prd}` wire vocabulary, and the still-live `action: 'slice'` lock token excepted, and called out where kept).
+- [ ] EXPLICITLY OUT OF SCOPE (deferred to the follow-up `rename-protocol-prose-workcontract-and-surface-slicing-to-tasking`): `WORK-CONTRACT.md` and `SURFACE-PROTOCOL.md`. Do NOT edit them here; a reviewer must NOT block this task on residue in those two files.
+- [ ] `REVIEW-PROTOCOL.md` channel names match the renamed code identifiers exactly — already settled on `uncertainTasks` + `decompositionUnclear` in code (doc-consistency test green).
 - [ ] Source `skills/setup/protocol/` and mirror `work/protocol/` are byte-identical apart from VERSION; VERSION bumped.
 - [ ] Any doc-consistency tests asserting the touched prose tokens are updated in this task; suite green.
 
 ## Blocked by
 
-- `rename-protocol-doc-slicing-to-tasking` — shares the protocol-doc set + VERSION + the doc-consistency test machinery; serialize.
+- `rename-protocol-doc-slicing-to-tasking` — shares the protocol-doc set + VERSION + the doc-consistency test machinery; serialize. (DONE.)
 
 ## Prompt
 
-> Goal: finish the prose cutover — the remaining protocol docs (REVIEW/CLAIM/templates) and the skills SKILL.md files — to task/brief/tasking, per brief `code-identifier-slice-prd-to-task-brief-rename`. The high-traffic docs (WORK-CONTRACT, SURFACE, CONTEXT, TASKING-PROTOCOL) are already done; this mops up the rest.
+> Goal: finish the prose cutover for THIS TASK'S FILES — the protocol docs `REVIEW-PROTOCOL.md` + `CLAIM-PROTOCOL.md` + `brief-template.md` + `task-template.md` and every `skills/*/SKILL.md` — to task/brief/tasking, per brief `code-identifier-slice-prd-to-task-brief-rename`. CONTEXT and TASKING-PROTOCOL are already done. SCOPE NOTE (corrected 2026-06-23): `WORK-CONTRACT.md` and `SURFACE-PROTOCOL.md` are NOT yet done and are EXPLICITLY OUT OF SCOPE here (their `slic*` prose is entangled with the still-live `action: 'slice'` lock token + `--slices-land-in` flag, so they wait for a code rename + the follow-up task `rename-protocol-prose-workcontract-and-surface-slicing-to-tasking`). Do NOT touch them; do NOT treat residue in them as your failure.
 >
 > FIRST check reality (launch snapshot): confirm the channel names (`uncertainSlices`/`decompositionUnclear` or their renamed forms) match what the module-rename task settled, so the REVIEW doc and the code stay identical. If they diverge, that is the bug to fix here (or route to needs-attention if unclear).
 >
