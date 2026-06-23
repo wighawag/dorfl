@@ -12,7 +12,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 ## The main flow: idea to built
 
-1. **`setup`**: onboard ANY repo onto the `work/` contract (scaffold or migrate). Run once per repo, before the rest of the flow. Composes `to-brief` / `to-task` to convert existing material.
+1. **`setup`** (onboard / adopt the contract): onboard ANY repo onto the `work/` contract (scaffold an empty one OR migrate a populated one — auto-detected depth). Run once per repo, before the rest of the flow. Composes `to-brief` / `to-task` to convert existing material. **NOTE the boundary with `from-idea`:** `setup` is the bare "put this repo on the contract" act with no specific idea in hand; if you are starting **from a raw idea** you want captured as a brief, reach for the **`from-idea`** on-ramp instead (it RUNS `setup` for you, then `to-brief`). Empty-vs-populated is NOT the discriminator (setup handles both) — the discriminator is whether you are holding an idea to brief.
 2. **`to-brief`**: turn the current conversation plus codebase understanding into a brief file in `work/briefs/ready/`. The LAUNCH snapshot, not maintained.
 3. **`to-task`**: task a brief (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical tasks.
 4. **Build the ready tasks. Pick the conductor:**
@@ -23,7 +23,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 A starting situation that generates work, then merges onto the main flow.
 
-- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be brief-worthy, then sequence `setup` (scaffold the `work/` contract) and `to-brief` (synthesize the idea into a brief in `work/briefs/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the brief-producer (it calls `to-brief`).
+- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be brief-worthy, then sequence `setup` (onboard the `work/` contract) and `to-brief` (synthesize the idea into a brief in `work/briefs/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the brief-producer (it calls `to-brief`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
 - **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend a disposition, the human decides, execute. Promotes notes into tasks/briefs/ADRs (composes `to-task`) or deletes them.
 
 ## Cross-cutting disciplines (model-invoked, so the agent may also reach for these itself)
