@@ -388,10 +388,10 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 });
 
 /**
- * The sliceable-PRD pool (`prds[]`) surface on `scan`/`scanRepoPaths` (slice
+ * The taskable-brief pool (`briefs[]`) surface on `scan`/`scanRepoPaths` (slice
  * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). The CI
  * propose-matrix `jq` reads `repos[].briefs[]` + `cwd.repo.briefs[]` and unions them
- * with the slice legs; before this slice landed, the pool was invisible there
+ * with the task legs; before this slice landed, the pool was invisible there
  * and `AGENT_RUNNER_AUTO_TASK` was dead on the hourly cron. The eligibility
  * predicate REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate the
  * autopick paths run) — a config-less repo with `autoTask` off yields an
@@ -413,7 +413,7 @@ function writeBrief(
 	writeFileSync(join(dir, file), lines.join('\n'));
 }
 
-describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
+describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	it('a ready ungated PRD appears as sliceable when autoTask is on (no per-repo config)', () => {
 		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
@@ -481,8 +481,8 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 	});
 
 	it(
-		'end-to-end at the enumeration seam: ONE eligible slice + ONE sliceable PRD ' +
-			'⇒ both surface (the propose-matrix `jq` reads BOTH `items[]` AND `prds[]`)',
+		'end-to-end at the enumeration seam: ONE eligible task + ONE taskable brief ' +
+			'⇒ both surface (the propose-matrix `jq` reads BOTH `items[]` AND `briefs[]`)',
 		() => {
 			writeItem('repo', 'backlog', 'go.md', {slug: 'go', blockedBy: '[]'});
 			writeBrief('repo', 'prd', 'cut.md', {slug: 'cut'});
@@ -498,7 +498,7 @@ describe('scanRepoPaths — sliceable-PRD pool (`prds[]`)', () => {
 	);
 });
 
-describe('scan (registry) — sliceable-PRD pool (`prds[]`)', () => {
+describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 	it('reports a ready ungated PRD as sliceable from the bare mirror main (autoTask on)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},

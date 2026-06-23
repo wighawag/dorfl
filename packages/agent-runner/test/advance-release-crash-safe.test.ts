@@ -94,7 +94,7 @@ function reclaimOnArbiterMain(repo: string, slug: string): void {
 	git(['push', '-q', 'arbiter', 'main:main'], repo);
 }
 
-/** A `RungExecutor` whose `buildSlice` simulates `recoverAlreadyCommitted`:
+/** A `RungExecutor` whose `buildTask` simulates `recoverAlreadyCommitted`:
  * check out the kept work branch, rebase onto `<arbiter>/main`, on conflict
  * `git rebase --abort` and report failure (NEVER throws). */
 function recoverConflictExecutor(branch: string): RungExecutor {

@@ -41,7 +41,7 @@ const ARBITER = 'arbiter';
 let scratch: Scratch;
 let restorePiAgentDir: () => void;
 beforeEach(() => {
-	scratch = makeScratch('agent-runner-slice-gate-');
+	scratch = makeScratch('agent-runner-task-gate-');
 	restorePiAgentDir = isolatePiAgentDir(scratch.root);
 });
 afterEach(() => {
