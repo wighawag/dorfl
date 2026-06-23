@@ -10,7 +10,7 @@ The brief `code-identifier-slice-prd-to-task-brief-rename` and its emitted tasks
 
 1. **The unified-lock ACTION token `'slice'`.** `packages/agent-runner/src/item-lock.ts`: `export type LockAction = 'implement' | 'slice' | 'advance';` and `packages/agent-runner/src/tasking-lock.ts` writes `action: 'slice'`. The TASKING transition's lock action is still spelled `slice` even though the module, the verb (`do brief:`), and the vocabulary are all `tasking`/`brief` now. The coherent name would be `'task'` or `'tasking'` (decide which — `'tasking'` matches the verb noun; `'task'` matches the other namespace tokens).
 
-2. **The `--slices-land-in` CLI flag still exists alongside `--tasks-land-in`.** `grep -c 'slices-land-in\|tasks-land-in' cli.ts` returns 9. Task `rename-cli-verb-and-flags-do-prd-to-do-brief` (#210) was scoped to rename the flag NAMES (`--slices-land-in` → `--tasks-land-in`), and `--tasks-land-in` IS present — but `--slices-land-in` was apparently left in too (verify whether as a live duplicate, a deprecated alias, or only in comments). If it is a live second flag, that is a clean-break violation (Decision 2/3 = no alias) and a leftover to remove.
+2. ~~The `--slices-land-in` CLI flag still exists alongside `--tasks-land-in`.~~ **CORRECTED 2026-06-23 (review pass):** the LIVE `--slices-land-in` flag WAS fully renamed to `--tasks-land-in` by task `rename-cli-verb-and-flags-do-prd-to-do-brief` (#210). The 4 remaining `--slices-land-in` occurrences in `cli.ts` are all in COMMENTS (lines 2109/2259/2549/2684), not a live flag — and those comment references are owned by the src-comment-prose sweep task (`rename-src-comment-prose-slicing-to-tasking`), NOT a code rename. So there is NO residual live flag to remove. The ONLY genuine residual `slice` CODE identifier is finding 1 (the `LockAction` token).
 
 ## Why it matters
 
@@ -19,6 +19,6 @@ The brief `code-identifier-slice-prd-to-task-brief-rename` and its emitted tasks
 
 ## Suggested resolution
 
-Author a small code-rename task (clean break, no alias): rename the `LockAction` token `'slice'` → `'tasking'` (or `'task'`) end-to-end (the type, every writer/reader, lock-entry strings, status/scan/gc surfaces, and asserting tests), and remove the residual `--slices-land-in` flag if it is a live duplicate. Sequence the WORK-CONTRACT/SURFACE prose sweep AFTER it. (A `needsAnswers` may be warranted only for the `'task'` vs `'tasking'` token choice; everything else is mechanical.)
+Author a small code-rename task (clean break, no alias): rename the `LockAction` token `'slice'` → `'task'` end-to-end (the type, every writer/reader incl. `tasking-lock.ts`, lock-entry persisted strings, status/scan/gc surfaces, and asserting tests). `'task'` is chosen over `'tasking'` to match the `task:`/`brief:` namespace tokens and the build action's noun-ish sibling pattern; the verb-style siblings are `'implement'`/`'advance'`. This is a DECIDED rename, not a `needsAnswers` (the token choice is settled here). NOTE the `--slices-land-in` flag is NOT in scope (see finding 2 correction — it is comment-only, owned by the prose-sweep task).
 
-Filed by the conductor during the rename drive; the two prose files were carved into `rename-protocol-prose-workcontract-and-surface-slicing-to-tasking` (in backlog/) which depends on this code rename.
+Filed by the conductor during the rename drive; created as the task `rename-lock-action-token-slice-to-task` (backlog/), and the prose-sweep task `rename-protocol-prose-workcontract-and-surface-slicing-to-tasking` is `blockedBy` it.

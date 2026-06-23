@@ -2,7 +2,7 @@
 title: Sweep WORK-CONTRACT.md + SURFACE-PROTOCOL.md prose slice/PRD/slicing to task/brief/tasking (after the lock-action/flag code rename)
 slug: rename-protocol-prose-workcontract-and-surface-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
-blockedBy: []
+blockedBy: [rename-lock-action-token-slice-to-task]
 covers: []
 ---
 
@@ -30,7 +30,7 @@ Real historical slugs, the intake `{slice,prd}` wire vocabulary (Decision 2 line
 
 ## Blocked by
 
-- The lock-action/`--slices-land-in` code rename (see observation `residual-slice-code-identifiers-lock-action-and-slices-land-in-flag`). This task should be `blockedBy` that code-rename task's slug once it is authored. Until then it carries an empty `blockedBy: []` but MUST NOT be promoted/built before that code lands (a human gates it).
+- `rename-lock-action-token-slice-to-task` — that task renames the live `LockAction` token `'slice'` → `'task'`; this prose sweep writes the SETTLED `action: task` spelling into WORK-CONTRACT.md, so it must follow (otherwise the prose would get ahead of the code). (Authored 2026-06-23; the earlier empty `blockedBy: []` was a prose-only gate — now made machine-readable per the review finding. The `--slices-land-in` part of the original observation was corrected: that flag is already renamed, only comment refs remain, owned by `rename-src-comment-prose-slicing-to-tasking`.)
 
 ## Prompt
 
