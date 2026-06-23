@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 2026-06-23 (noticed during rename-src-comment-prose-slicing-to-tasking).
 
 `close-job.ts` still uses a LIVE local discriminator `via: 'issue' | 'prd'` (and
