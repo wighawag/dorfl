@@ -90,7 +90,7 @@ When a human or an autonomous runner dispatches an agent to do the WORK phase, t
 You are completing one work task in this repo. It has already been claimed for
 you (its per-item lock is held) and lives at work/tasks/todo/<slug>.md — read that
 file fully; it is your complete brief (What to build, Acceptance criteria, Prompt).
-Also read its source brief (the task's `brief:` field, at work/briefs/ready/<prd>.md)
+Also read its source brief (the task's `brief:` field, at work/briefs/ready/<brief>.md)
 for context.
 
 <!-- if promptGuidance.testFirst -->

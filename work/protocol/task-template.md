@@ -28,7 +28,7 @@ covers: [] # optional: user-story numbers within `brief` this task covers
 
 ## What to build
 
-A concise description of this vertical slice — the end-to-end behaviour (a thin path through every layer: schema → logic → API/UI → tests), NOT a layer-by-layer implementation plan. Avoid specific file paths / code snippets (they go stale).
+A concise description of this vertical task — the end-to-end behaviour (a thin path through every layer: schema → logic → API/UI → tests), NOT a layer-by-layer implementation plan. Avoid specific file paths / code snippets (they go stale).
 
 Exception: if a prototype produced a snippet that encodes a decision more precisely than prose (state machine, reducer, schema, type shape), inline just the decision-rich part and note it came from a prototype.
 

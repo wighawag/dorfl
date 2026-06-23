@@ -252,7 +252,9 @@ export function wrapper(
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
 	const resolved = applyPromptGuidance(template, options.promptGuidance);
-	return resolved.replace(/<slug>/g, slug).replace(/<prd>/g, brief ?? '<prd>');
+	return resolved
+		.replace(/<slug>/g, slug)
+		.replace(/<brief>/g, brief ?? '<brief>');
 }
 
 /**
