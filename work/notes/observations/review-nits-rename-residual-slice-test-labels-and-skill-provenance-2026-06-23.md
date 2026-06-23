@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'rename-residual-slice-test-labels-and-
 date: 2026-06-23
 status: open
 reviewOf: rename-residual-slice-test-labels-and-skill-provenance
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
