@@ -1,10 +1,10 @@
 /**
- * The provider-agnostic CORE of the `install-ci` scaffolder (PRD `runner-in-ci`,
- * slice `install-ci-core-and-github-adapter`; US #7/#10). `install-ci` is a
+ * The provider-agnostic CORE of the `install-ci` scaffolder (brief `runner-in-ci`,
+ * task `install-ci-core-and-github-adapter`; US #7/#10). `install-ci` is a
  * human-run, one-time SCAFFOLDER (mirrors whitesmith's `src/providers/github-ci.ts`):
  * it writes `.github/**` + a composite setup action + secrets so autonomous work
  * can run headless in CI. The running CI job NEVER edits `.github/workflows/**`
- * (US #9 — that boundary is enforced by the per-capability workflow slices; the
+ * (US #9 — that boundary is enforced by the per-capability workflow tasks; the
  * core stays agnostic to it).
  *
  * This module is the PROVIDER-AGNOSTIC half: the config model (`ProviderEntry` /
@@ -130,7 +130,7 @@ export const DEFAULT_INSTALL_SOURCE: InstallSource = 'registry';
  * fixture — so no network, no real `gh`, no real GitHub repo detection is touched.
  *
  * The historical GitHub name {@link GitHubCIContext} is kept as an alias so the
- * whitesmith vocabulary the slice adopts reads literally.
+ * whitesmith vocabulary the task adopts reads literally.
  */
 export interface CIProviderContext {
 	/** The target repo's working directory (where `.github/` / `.fake/` is written). */
@@ -149,7 +149,7 @@ export interface CIProviderContext {
 	setRepoSetting?(name: string, value: boolean): Promise<void>;
 }
 
-/** Whitesmith's name for {@link CIProviderContext} (the seam this slice adopts). */
+/** Whitesmith's name for {@link CIProviderContext} (the seam this task adopts). */
 export type GitHubCIContext = CIProviderContext;
 
 // ─── The capability-emitter REGISTRY seam (file-orthogonality) ───────────────
@@ -168,10 +168,10 @@ export interface EmittedFile {
 /**
  * A capability emitter: a per-capability module that, given the resolved config,
  * returns the workflow file(s) for its capability. The sibling capability
- * slices (advance-lifecycle, intake, close-job) each ADD one of these
+ * tasks (advance-lifecycle, intake, close-job) each ADD one of these
  * as a NEW self-registering module — NOT an edit to a shared central
  * list/switch — so they stay file-orthogonal and mergeable in parallel
- * (WORK-CONTRACT slice-quality / `to-slices` §3).
+ * (WORK-CONTRACT task-quality / `to-task` §3).
  */
 export interface CapabilityEmitter {
 	/** A stable id for the capability (e.g. `advance-lifecycle`). */
@@ -841,10 +841,10 @@ if (repo && token) {
 // ─── the --fake snapshot mechanism + artifact assembly ───────────────────────
 
 /**
- * The setup ARTIFACTS this slice generates: the composite setup action + (in
+ * The setup ARTIFACTS this task generates: the composite setup action + (in
  * `auth-json` mode) the OAuth-refresh script, plus any selected capabilities'
- * workflow files. This slice emits NO capability workflow itself (those are the
- * sibling slices); `capabilities` defaults to none.
+ * workflow files. This task emits NO capability workflow itself (those are the
+ * sibling tasks); `capabilities` defaults to none.
  */
 export function buildSetupArtifacts(
 	config: ResolvedCIConfig,

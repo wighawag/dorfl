@@ -2,7 +2,7 @@ import {run, type RunResult} from './git.js';
 
 /**
  * The **continue-detection** shared by BOTH onboarding paths (the keystone of
- * the `requeue-continue-and-reset` slice). `requeue` keeps the `work/<slug>`
+ * the `requeue-continue-and-reset` task). `requeue` keeps the `work/<slug>`
  * branch so the NEXT claim CONTINUES from its tip instead of force-cutting a
  * fresh branch off main. This module factors the one question both onboarding
  * paths must ask — **"does the arbiter have a `work/<slug>` ref AHEAD of
@@ -23,7 +23,7 @@ import {run, type RunResult} from './git.js';
  * Both call {@link branchAheadOf} with the appropriate ref names; the predicate
  * is identical (ref exists AND is not an ancestor of main, i.e. it carries
  * commits beyond main — the prior attempt's work to continue from). When the
- * branch is ABSENT (the common case: a fresh slice, or a `requeue --reset` that
+ * branch is ABSENT (the common case: a fresh task, or a `requeue --reset` that
  * deleted it) the predicate is false and the caller falls through to the normal
  * fresh-cut-off-main path with NO special logic.
  */
@@ -107,7 +107,7 @@ export function branchAheadOf(
  *     when the arbiter cannot answer (same direction as today).
  *
  * `branch` is the unqualified branch name on the arbiter (e.g.
- * `work/slice-<slug>`); `branchRef` + `mainRef` are the local refs the
+ * `work/task-<slug>`); `branchRef` + `mainRef` are the local refs the
  * arbiter-present delegate uses (in-place clone: `<arbiter>/<branch>` /
  * `<arbiter>/main`; bare hub mirror: `<branch>` / `main`). `arbiterRemote` is
  * the remote NAME to ls-remote (e.g. `origin` for the mirror, `arbiter` for an
@@ -117,7 +117,7 @@ export function branchAheadOfArbiter(options: {
 	cwd: string;
 	/** The remote NAME to `ls-remote` (the arbiter as known to this repo). */
 	arbiterRemote: string;
-	/** Unqualified branch name on the arbiter (e.g. `work/slice-<slug>`). */
+	/** Unqualified branch name on the arbiter (e.g. `work/task-<slug>`). */
 	branch: string;
 	/** The local ref to read for the ahead-of-main check (when arbiter says present). */
 	branchRef: string;
@@ -156,11 +156,11 @@ export interface ContinueRebaseResult {
  * (ADR §10: rebase, NOT merge — linear history; the prior attempt's commits were
  * based on an OLD main that moved while the item sat in backlog).
  *
- * This is a PLAIN rebase. After the per-item-lock cut-over (PRD
- * `ledger-status-per-item-lock-refs`, slices 9a–9d) NO transient status lands on
+ * This is a PLAIN rebase. After the per-item-lock cut-over (brief
+ * `ledger-status-per-item-lock-refs`, tasks 9a–9d) NO transient status lands on
  * a work branch: claim does not move the body (it rests in `backlog/`),
  * needs-attention is the lock `state: stuck` (not a `git mv`), and the
- * slicing/advancing markers are gone. So a branch cut from `main` inherits no
+ * tasking/advancing markers are gone. So a branch cut from `main` inherits no
  * runner-authored move-only bookkeeping commit, there is nothing to drop, and
  * the old `drop-bookkeeping-rebase` machinery (which papered over the
  * rename/rename ledger conflict that inheritance caused) is deleted. The ONLY
@@ -186,7 +186,7 @@ export function rebaseContinuedBranchOntoMain(
 }
 
 /**
- * The default cap on stale-lease push retries — mirrors the claim / slicing-lock
+ * The default cap on stale-lease push retries — mirrors the claim / tasking-lock
  * INSTANT-contention loop's `retries: 3` default (`claim-cas.ts` `DEFAULT_RETRIES`).
  * After this many re-fetch + re-rebase + re-push attempts the green work is left
  * RECOVERABLE and the caller surfaces a clear terminal failure.
@@ -234,7 +234,7 @@ export type ContinuedPushResult =
  * NEVER targeting `main`, the WORK branch ONLY (ADR §11).
  *
  * The flow, bounded by `retries` (default {@link DEFAULT_STALE_LEASE_RETRIES},
- * mirroring the claim/slicing-lock instant-contention cap):
+ * mirroring the claim/tasking-lock instant-contention cap):
  *   1. Push `<branch>:<branch> --force-with-lease=<branch>:<expectedRemoteTip>`.
  *   2. On success → `{kind: 'pushed'}`.
  *   3. On a STALE-LEASE rejection → re-fetch `main` + `<branch>` from the arbiter

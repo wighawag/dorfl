@@ -2,8 +2,8 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 
 /**
  * The **§3a slug-namespace resolver** (`docs/adr/command-surface-and-
- * journeys.md` §3a). A PRD and a slice can share a slug (e.g. PRD `auto-slice`),
- * and `do` spans BOTH namespaces (build a slice OR slice a PRD), so a bare slug
+ * journeys.md` §3a). A brief and a task can share a slug (e.g. brief `auto-slice`),
+ * and `do` spans BOTH namespaces (build a task OR task a brief), so a bare slug
  * is ambiguous. This module is the pure resolver that turns a CLI slug argument
  * into a resolved target, plus the guard the TASK-ONLY commands use to reject a
  * `brief:` argument.
@@ -16,8 +16,8 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  *
  * The two load-bearing rules:
  *
- *   - **Bare `<slug>` is human convenience ONLY.** It resolves to the slice, but
- *     ONLY after a cheap cross-namespace existence check confirms NO PRD shares
+ *   - **Bare `<slug>` is human convenience ONLY.** It resolves to the task, but
+ *     ONLY after a cheap cross-namespace existence check confirms NO brief shares
  *     the slug; on a collision it ERRORS loudly (it never silently guesses). CI /
  *     automation MUST use explicit prefixes (collision-proof across time).
  *   - **Task-only commands** (`claim`, `start`, `resume`, `complete`, `prompt`,
@@ -25,9 +25,9 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  *     with a clear "operates on tasks, not briefs" error.
  *
  * It is PURE: no git, no mutation, no side effects beyond the two cheap EXISTENCE
- * reads (slice through the existing read seam; PRD through the seam's new
- * `resolveBriefExistence` brief reader — the single shared PRD read path the later
- * autoslice / `do prd:` work reuses).
+ * reads (task through the existing read seam; brief through the seam's new
+ * `resolveBriefExistence` brief reader — the single shared brief read path the later
+ * tasking / `do brief:` work reuses).
  *
  * This mirrors the field-level namespace split the contract already makes (task
  * `blockedBy` resolves against tasks; brief `briefAfter` against briefs); the
@@ -37,9 +37,9 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 /**
  * The namespaces a slug can name. `task`/`brief` are the original §3a pair that
  * `do` spans (renamed from `slice`/`prd` in the hard cutover); `observation` is
- * the NEW namespace the `advance` verb adds (PRD `advance-loop`, slice
+ * the NEW namespace the `advance` verb adds (brief `advance-loop`, task
  * `advance-verb-resolver`) so `advance obs:<slug>` can name an observation to
- * triage. The `do`-family resolvers (`resolveSlug`, `resolveSliceOnlyArg`)
+ * triage. The `do`-family resolvers (`resolveSlug`, `resolveTaskOnlyArg`)
  * deliberately do NOT span `observation` — only the `advance` resolver does (see
  * {@link resolveAdvanceArg}).
  */
@@ -49,11 +49,11 @@ export type SlugNamespace = 'task' | 'brief' | 'observation';
  * The PRODUCER axis (ORTHOGONAL to {@link SlugNamespace}): WHICH lifecycle
  * created the branch, when that matters for collision isolation. `'intake'` is
  * the only producer today — an `intake N` run that CREATES a brand-new backlog
- * item (`work/backlog/<slug>.md`) or PRD (`work/prd/<slug>.md`). Its branch is a
+ * item (`work/backlog/<slug>.md`) or brief (`work/briefs/<slug>.md`). Its branch is a
  * short-lived "create the item" branch, a SEPARATE lifecycle from the later
- * claim→build→complete of `do slice:<slug>` — so it gets its own branch ref and
+ * claim→build→complete of `do task:<slug>` — so it gets its own branch ref and
  * never reuses (or is reused by) the build branch for the same slug. Absent for
- * the build/slicing paths (the common case), which carry no producer prefix.
+ * the build/tasking paths (the common case), which carry no producer prefix.
  */
 export type BranchProducer = 'intake';
 
@@ -219,7 +219,7 @@ function taskExists(
 	return state.todo.some((item) => item.slug === slug);
 }
 
-/** Does a BRIEF named `slug` exist (ready or being sliced) in this repo? */
+/** Does a BRIEF named `slug` exist (ready or being tasked) in this repo? */
 function briefExists(
 	read: LedgerReadStrategy,
 	repoPath: string,
@@ -247,7 +247,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 	const parsed = parseSlugArg(input.arg);
 
 	if (parsed.explicit === 'observation') {
-		// `do` spans the task/brief namespaces ONLY (build a task OR slice a brief).
+		// `do` spans the task/brief namespaces ONLY (build a task OR task a brief).
 		// The `observation` namespace is `advance`'s alone (triage). Reject it here
 		// rather than let a `do obs:<slug>` resolve into a namespace `do` cannot act
 		// on — point the human at the verb that owns it.
@@ -273,7 +273,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 }
 
 /**
- * Resolve a slug argument for the `advance` verb (PRD `advance-loop`, slice
+ * Resolve a slug argument for the `advance` verb (brief `advance-loop`, task
  * `advance-verb-resolver`). `advance` is the SIBLING top-level verb (NOT a `do`
  * subcommand) that reuses this SAME shared `prefix:arg` resolver, EXTENDED with
  * the `observation` namespace `do` does not span:
@@ -336,7 +336,7 @@ export function resolveTaskOnlyArg(arg: string): string {
 		throw new SlugResolutionError(
 			`this command operates on tasks, not briefs — '${arg}' names a brief. ` +
 				`Drop the \`brief:\` prefix to act on the task, or use \`do ${arg}\` ` +
-				`to slice the brief.`,
+				`to task the brief.`,
 		);
 	}
 	if (parsed.explicit === 'observation') {

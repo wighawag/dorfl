@@ -4,7 +4,7 @@ import {SessionTailer} from './watch-session.js';
 import {generateSessionPath} from './session-path.js';
 
 /**
- * The SHARED launch-with-optional-watch helper (slice `watch-review-session`).
+ * The SHARED launch-with-optional-watch helper (task `watch-review-session`).
  *
  * This is the ONE codepath both the BUILD launch (`do.ts`'s `runDoAgent`) and the
  * REVIEW launch (`review-gate.ts`'s `harnessReviewGate`) use to run an agent
@@ -87,7 +87,7 @@ export async function launchWithOptionalWatch(
 
 	// Generate the full pi session-FILE path ONCE here (caller-generates) so the
 	// adapter and the `--watch` tailer cannot disagree, and so the tailer knows it
-	// BEFORE pi starts (slice `session-path-pi-default`). `sessionsDir` unset \u21d2
+	// BEFORE pi starts (task `session-path-pi-default`). `sessionsDir` unset \u21d2
 	// pi's per-cwd default folder. The non-pi null adapter ignores `session`, but
 	// generating it unconditionally keeps ONE path for BOTH the watch and
 	// non-watch branches.

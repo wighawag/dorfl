@@ -30,15 +30,15 @@ import {
 
 /**
  * The **needs-attention mechanism** (ADR `ledger-status-on-per-item-lock-refs`;
- * PRD `ledger-status-per-item-lock-refs`; ADR §12 for the original folder model).
+ * brief `ledger-status-per-item-lock-refs`; ADR §12 for the original folder model).
  * Every "couldn't finish, a human must look" outcome (a failed acceptance gate
- * (red `verify`), a rebase/merge conflict (ADR §10), a slice the agent reported
+ * (red `verify`), a rebase/merge conflict (ADR §10), a task the agent reported
  * too ambiguous to build, a timeout, or a rejected review) resolves to ONE
  * observable move: the RUNNER AMENDS the claimed item's HELD per-item lock
  * `active → stuck` (`refs/agent-runner/lock/<entry>`), writing the reason (+ any
  * agent-surfaced questions) into the lock-entry BODY. There is NO `git mv` to a
  * `work/needs-attention/` folder and NO on-`main` surface (the lock cut-over,
- * slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`): so a
+ * task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`): so a
  * protected-`main` bounce succeeds, and a work branch cut from `main` inherits no
  * stuck record. The RECOVERABLE half is the kept `work/<slug>` branch.
  *
@@ -81,8 +81,8 @@ export interface RouteToNeedsAttentionOptions {
 	/**
 	 * The work branch to push to the arbiter (the RECOVERABLE half — see the seam
 	 * docstring). DEFAULT `work/<slug>`: the build-bounce branch the wip/move
-	 * commits landed on. A slicing bounce passes its own branch (`work/slicing/
-	 * <slug>`). The supplied branch MUST be the one HEAD is on (the branch the
+	 * commits landed on. A tasking bounce passes its own branch (`work/briefs/
+	 * ready-<slug>`). The supplied branch MUST be the one HEAD is on (the branch the
 	 * wip/move commits landed on) — NEVER a default that differs from HEAD; a
 	 * caller NOT checked out on the work branch (e.g. a temp branch off main) must
 	 * be SURFACE-ONLY ({@link pushBranch} `false`) so no wrong-branch ref is
@@ -257,9 +257,9 @@ function findSourceFolder(
 	cwd: string,
 	slug: string,
 ): {rel: string; abs: string} | undefined {
-	// `backlog` is probed FIRST: since claim no longer moves the body (slice
+	// `backlog` is probed FIRST: since claim no longer moves the body (task
 	// `cutover-claim-body-stays-and-complete-sources-from-backlog`), a freshly-built
-	// slice that hits a red gate / agent failure STILL RESTS in `work/backlog/` (the
+	// task that hits a red gate / agent failure STILL RESTS in `work/backlog/` (the
 	// claim never relocated it), so the wip-save bounce must be able to source the
 	// move from there. `in-progress` is retained for the legacy/recovery surfaces; on
 	// the rebase-conflict path (after the done-move) the body is in `done/`.
@@ -283,12 +283,12 @@ function findSourceFolder(
  * Save the RECOVERABLE half of a stuck-item bounce (ADR §12). The RUNNER calls
  * this; the build agent never does.
  *
- * **Post `ledger-status-per-item-lock-refs` cut-over (slices 9a–9d, decision i+):**
+ * **Post `ledger-status-per-item-lock-refs` cut-over (tasks 9a–9d, decision i+):**
  * a bounce is now a PURE LOCK AMEND — the seam (`bounceToStuckLock` →
  * `markStuckItemLock`) marks the per-item lock `state: stuck` and records the
  * reason/questions ON THE LOCK ENTRY. There is NO `git mv` to a
  * `needs-attention/` folder and NO on-`main` surface commit. The item body never
- * moves (it rests in `backlog/` since claim stopped moving it, slice 9a). So what
+ * moves (it rests in `backlog/` since claim stopped moving it, task 9a). So what
  * REMAINS here is purely the never-lose-work half:
  *
  *   1. A **wip** commit on the `work/<slug>` branch tip holding whatever the agent
@@ -301,7 +301,7 @@ function findSourceFolder(
  *      (an unreachable arbiter leaves the local branch standing — recovery
  *      degrades, never crashes the bounce; retried with bounded backoff on an
  *      outage), BRANCH-PARAMETERISED (default `work/<slug>`; an explicit `branch`
- *      overrides — the slicing bounce passes `work/prd-<slug>`; `pushBranch: false`
+ *      overrides — the tasking bounce passes `work/briefs/ready-<slug>`; `pushBranch: false`
  *      ⇒ push NOTHING), and EMPTINESS-GUARDED (a branch with no commits beyond
  *      main, or an absent branch, is skipped). The branch MUST be the one HEAD is
  *      on. The work-branch push is NOT a `main` write.
@@ -317,7 +317,7 @@ export async function routeToNeedsAttention(
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
-	// SLICE `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
+	// TASK `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
 	// (decision i+): the bounce is now a PURE lock amend (done by the seam) — there
 	// is NO `git mv` to `needs-attention/` and NO on-`main` surface. What REMAINS
 	// here is the RECOVERABLE half: SAVE the agent's uncommitted work as a wip
@@ -328,14 +328,14 @@ export async function routeToNeedsAttention(
 
 	// 1. WIP commit: save whatever the agent left uncommitted to the work branch
 	//    tip. Skip when the tree is clean (no aborted work to save). NOTE this no
-	//    longer needs a folder source — the body rests in `backlog/` (slice 9a) and
+	//    longer needs a folder source — the body rests in `backlog/` (task 9a) and
 	//    never moves on a bounce.
 	gitHard(['add', '-A'], cwd, env);
 	const hadWip = !nothingStaged(cwd, env);
 	if (hadWip) {
 		// Save the agent's uncommitted work as a plain wip commit on the work-branch
 		// tip (the RECOVERABLE half — a `requeue` continues from it). No bookkeeping
-		// trailer: after the per-item-lock cut-over (slices 9a–9d) NO transient status
+		// trailer: after the per-item-lock cut-over (tasks 9a–9d) NO transient status
 		// (no `needs-attention/` move-only commit) lands on a branch, so a branch cut
 		// from `main` rebases PLAINLY with nothing to drop — the `drop-bookkeeping-rebase`
 		// machinery and its `Agent-Runner-Bookkeeping` trailer are gone (9d).
@@ -357,8 +357,8 @@ export async function routeToNeedsAttention(
 	let branchPush: BranchPushOutcome = 'not-attempted';
 	let pushError: string | undefined;
 	if (options.arbiter && options.pushBranch !== false) {
-		// DEFAULT to the slice-namespaced build-bounce branch; a non-slice caller
-		// (the slicing bounce) passes its own `work/prd-<slug>` via `branch`.
+		// DEFAULT to the task-namespaced build-bounce branch; a non-task caller
+		// (the tasking bounce) passes its own `work/briefs/ready-<slug>` via `branch`.
 		const branch = options.branch ?? workBranchRef('task', slug);
 		if (branchAheadOf(cwd, branch, 'main', env)) {
 			const arbiter = options.arbiter;
@@ -402,7 +402,7 @@ export async function routeToNeedsAttention(
  * The clean re-queue (ADR §12 / WORK-CONTRACT return path): once the human has
  * resolved the cause, move the stuck item back to `work/backlog/<slug>.md` and
  * commit it so the item can be re-claimed (it must not rot stuck). It recovers a
- * slice stuck in EITHER `work/needs-attention/<slug>.md` (the resolved-surface
+ * task stuck in EITHER `work/needs-attention/<slug>.md` (the resolved-surface
  * path) OR `work/in-progress/<slug>.md` (a claim that never surfaced — an
  * un-surfaced abort, a killed run, or an in-place requeue note; defect 2, story
  * 4): the slug's ACTUAL current folder is resolved on the arbiter and moved to
@@ -410,7 +410,7 @@ export async function routeToNeedsAttention(
  * in the body as a durable note of what happened; the resolution itself is the
  * human's.
  *
- * The `requeue` verb's THREE behaviours (ADR §14 / slice
+ * The `requeue` verb's THREE behaviours (ADR §14 / task
  * `requeue-continue-and-reset`) are realised here:
  *   - **default = KEEP + CONTINUE.** The `work/<slug>` branch is left UNTOUCHED;
  *     it is the durable artifact the next claim CONTINUES from (the continue-
@@ -488,7 +488,7 @@ export async function returnToBacklog(
 	// local copy. This is a fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	// Is the item LOCK-HELD on the arbiter? (slice
+	// Is the item LOCK-HELD on the arbiter? (task
 	// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+:
 	// stuck-state is the per-item lock `state: stuck`, NOT a `needs-attention/`
 	// folder file). `requeue` recovers a STUCK hold (the resolved-recovery path) and
@@ -513,7 +513,7 @@ export async function returnToBacklog(
 			reasonNotMoved:
 				`'${slug}' has no held per-item lock on ${arbiter} — nothing to requeue ` +
 				'(wrong slug, or already at rest in backlog/done?). requeue recovers a ' +
-				'slice whose lock is held stuck (needs-attention) or active (a killed ' +
+				'task whose lock is held stuck (needs-attention) or active (a killed ' +
 				'in-progress run).',
 		};
 	}
@@ -678,17 +678,17 @@ export async function returnToBacklog(
 }
 
 /**
- * **Promote a STAGED slice into the agent-eligible pool** (PRD
- * `staging-pool-position-gate-and-trust-model`, slice
+ * **Promote a STAGED task into the agent-eligible pool** (brief
+ * `staging-pool-position-gate-and-trust-model`, task
  * `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Moves
  * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` as a durable `main`
  * move, the same category as {@link returnToBacklog} (tree-less CAS via
- * {@link runTreelessLedgerMove}). After this transition the slice is in the
+ * {@link runTreelessLedgerMove}). After this transition the task is in the
  * pool and claimable.
  *
  * **RUNNER/human-owned.** There is no agent-facing path that performs this:
- * the agent's slicing output lands STAGED in `work/pre-backlog/` (the runner's
+ * the agent's tasking output lands STAGED in `work/pre-backlog/` (the runner's
  * deterministic placement decision), and only a runner/human invocation moves
  * it into the pool. The agent does no git here, as everywhere.
  *
@@ -707,7 +707,7 @@ export interface PromoteFromPreBacklogOptions {
 	 * tree are never touched (parity with {@link returnToBacklog}).
 	 */
 	cwd: string;
-	/** The slug of the staged slice to promote into the pool. */
+	/** The slug of the staged task to promote into the pool. */
 	slug: string;
 	/**
 	 * The arbiter remote the promotion is CAS-published to. REQUIRED — the
@@ -721,7 +721,7 @@ export interface PromoteFromPreBacklogOptions {
 }
 
 export interface PromoteFromPreBacklogResult {
-	/** True iff the staged slice was moved into the pool + committed. */
+	/** True iff the staged task was moved into the pool + committed. */
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
 	commitMessage?: string;
@@ -759,8 +759,8 @@ export async function promoteFromPreBacklog(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	// UNIFIED PER-ITEM LOCK around the CAS window (PRD
-	// `staging-surface-and-apply-promote-safety`, slice
+	// UNIFIED PER-ITEM LOCK around the CAS window (brief
+	// `staging-surface-and-apply-promote-safety`, task
 	// `f3b-promote-takes-per-item-advancing-lock`): promote and apply BOTH key onto
 	// the item's `refs/agent-runner/lock/<entry>` ref with `action: advance` (the
 	// SAME action `apply` takes via `advancing-lock.ts`), so an apply mid-flight
@@ -769,7 +769,7 @@ export async function promoteFromPreBacklog(
 	// the existing `advance` action value (rather than introducing a distinct
 	// `'promote'` axis) is deliberate — the lock entry is keyed on the item
 	// identity, and what matters is that ALL three transitions of one item
-	// (implement/slice/advance) serialise on ONE ref. A lock `lost` exits CLEAN
+	// (implement/task/advance) serialise on ONE ref. A lock `lost` exits CLEAN
 	// (no partial state on `main`, mirroring claim-cas loss semantics); on success
 	// or failure we release the lock in `finally`. Crash-safe release mirrors the
 	// apply rung: a crashed promote leaves an `advance`-active lock that the
@@ -785,7 +785,7 @@ export async function promoteFromPreBacklog(
 	if (acquired.outcome !== 'acquired') {
 		const message =
 			acquired.outcome === 'lost'
-				? `promote for '${slug}' lost the per-item lock race (another implement/slice/advance hold is in flight). No move on ${arbiter}/main. Try again shortly.`
+				? `promote for '${slug}' lost the per-item lock race (another implement/task/advance hold is in flight). No move on ${arbiter}/main. Try again shortly.`
 				: `promote for '${slug}': could not acquire the per-item lock (${acquired.message}).`;
 		note(message);
 		return {moved: false, reasonNotMoved: message};
@@ -876,34 +876,34 @@ export async function promoteFromPreBacklog(
 }
 
 /**
- * **Promote a STAGED PRD into the auto-slice pool** (PRD
- * `staging-pool-position-gate-and-trust-model`, slice
+ * **Promote a STAGED brief into the auto-task pool** (brief
+ * `staging-pool-position-gate-and-trust-model`, task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
- * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The PRD
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The brief
  * twin of {@link promoteFromPreBacklog}: moves
- * `work/pre-prd/<slug>.md → work/prd/<slug>.md` as a durable `main` move
+ * `work/briefs/proposed/<slug>.md → work/briefs/ready/<slug>.md` as a durable `main` move
  * (tree-less CAS via {@link runTreelessLedgerMove}). After this transition
- * the PRD is in the auto-slice POOL and eligible to be auto-sliced (subject
+ * the brief is in the auto-task POOL and eligible to be auto-tasked (subject
  * to the existing `autoTask`/`humanOnly`/`needsAnswers`/`briefAfter` gates,
  * which are UNCHANGED — the staging/pool split changes only WHICH folder is
- * the auto-slice pool, not the gates).
+ * the auto-task pool, not the gates).
  *
  * **RUNNER/human-owned.** There is no agent-facing path that performs this:
- * `intake`'s `prd` dispatch lands the PRD STAGED in `work/pre-prd/` (the
+ * `intake`'s `prd` dispatch lands the brief STAGED in `work/briefs/proposed/` (the
  * runner's deterministic placement decision), and only a runner/human
  * invocation moves it into the pool. The agent does no git here, as
  * everywhere; this function is not reachable from any agent surface.
  *
  * Storage-agnostic + tree-less, exactly like {@link promoteFromPreBacklog}:
  * cwd index/HEAD/working tree are never touched, an arbiter remote is
- * REQUIRED, and "not in pre-prd/" / contention-exhausted cases are returned
+ * REQUIRED, and "not in briefs/proposed/" / contention-exhausted cases are returned
  * (NEVER thrown) via `{moved: false, reasonNotMoved}` so callers branch
  * cleanly. Idempotent: re-running after the move LANDED is a no-op success.
  */
 export interface PromoteFromPreBriefOptions {
 	/** The working clone the move is originated from (origin source only; never written). */
 	cwd: string;
-	/** The slug of the staged PRD to promote into the pool. */
+	/** The slug of the staged brief to promote into the pool. */
 	slug: string;
 	/** The arbiter remote the promotion is CAS-published to. REQUIRED. */
 	arbiter: string;
@@ -914,11 +914,11 @@ export interface PromoteFromPreBriefOptions {
 }
 
 export interface PromoteFromPreBriefResult {
-	/** True iff the staged PRD was moved into the pool + committed. */
+	/** True iff the staged brief was moved into the pool + committed. */
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
 	commitMessage?: string;
-	/** When NOT moved, why (no such pre-prd item, already in prd/, contention). */
+	/** When NOT moved, why (no such briefs/proposed item, already in briefs/ready/, contention). */
 	reasonNotMoved?: string;
 }
 
@@ -932,7 +932,7 @@ export async function promoteFromPreBrief(
 		return {
 			moved: false,
 			reasonNotMoved:
-				`promote-prd for '${slug}' needs an --arbiter: the move is published as ` +
+				`promote for '${slug}' needs an --arbiter: the move is published as ` +
 				'a tree-less compare-and-swap to the arbiter ref (like requeue/claim), so ' +
 				'there is no local-only mode — pass --arbiter.',
 		};
@@ -953,8 +953,8 @@ export async function promoteFromPreBrief(
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
 	// UNIFIED PER-ITEM LOCK around the CAS window — symmetric with
-	// {@link promoteFromPreBacklog} (PRD `staging-surface-and-apply-promote-safety`,
-	// slice `f3b-promote-takes-per-item-advancing-lock`, decisive PRD q4 answer:
+	// {@link promoteFromPreBacklog} (brief `staging-surface-and-apply-promote-safety`,
+	// task `f3b-promote-takes-per-item-advancing-lock`, decisive brief q4 answer:
 	// briefs share the apply×promote mutual-exclusion fix with tasks). The lock
 	// keys on `brief:${slug}` (a distinct ref from a task with the same slug, via
 	// {@link lockEntryFor}'s `<type>-<slug>` encoding), with `action: advance` —
@@ -972,8 +972,8 @@ export async function promoteFromPreBrief(
 	if (acquired.outcome !== 'acquired') {
 		const message =
 			acquired.outcome === 'lost'
-				? `promote-prd for '${slug}' lost the per-item lock race (another implement/slice/advance hold is in flight). No move on ${arbiter}/main. Try again shortly.`
-				: `promote-prd for '${slug}': could not acquire the per-item lock (${acquired.message}).`;
+				? `promote for '${slug}' lost the per-item lock race (another implement/task/advance hold is in flight). No move on ${arbiter}/main. Try again shortly.`
+				: `promote for '${slug}': could not acquire the per-item lock (${acquired.message}).`;
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	}
@@ -1031,7 +1031,7 @@ export async function promoteFromPreBrief(
 					base,
 					sourceRel,
 					destRel,
-					// The body is carried byte-for-byte from pre-prd into the pool —
+					// The body is carried byte-for-byte from briefs/proposed into the pool —
 					// promotion is a placement decision, not a content transform.
 					transformBody: (body) => body,
 					commitMessage,
@@ -1041,13 +1041,15 @@ export async function promoteFromPreBrief(
 			},
 		});
 		if (moved) {
-			note(`Promoted PRD '${slug}' from pre-prd to prd (auto-sliceable).`);
+			note(
+				`Promoted brief '${slug}' from briefs/proposed to briefs/ready (auto-taskable).`,
+			);
 			return {moved: true, commitMessage};
 		}
 
 		const message =
-			`promote-prd for '${slug}': the arbiter's main kept moving (contended) ` +
-			`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-prd ` +
+			`promote for '${slug}': the arbiter's main kept moving (contended) ` +
+			`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in briefs/proposed ` +
 			'(no move). Try again shortly.';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
@@ -1056,9 +1058,9 @@ export async function promoteFromPreBrief(
 	}
 }
 
-/** One staged item awaiting promotion (a task in `pre-backlog/` or a brief in `pre-prd/`). */
+/** One staged item awaiting promotion (a task in `pre-backlog/` or a brief in `briefs/proposed/`). */
 export interface PromotableItem {
-	/** `'task'` (staged in `work/pre-backlog/`) or `'brief'` (staged in `work/pre-prd/`). */
+	/** `'task'` (staged in `work/pre-backlog/`) or `'brief'` (staged in `work/briefs/proposed/`). */
 	namespace: 'task' | 'brief';
 	/** The slug (filename minus `.md`). */
 	slug: string;
@@ -1074,15 +1076,15 @@ export interface ListPromotableOptions {
 }
 
 export interface ListPromotableResult {
-	/** Every staged item awaiting promotion, slices then PRDs, each sorted by slug. */
+	/** Every staged item awaiting promotion, tasks then briefs, each sorted by slug. */
 	items: PromotableItem[];
 	/** When the listing could not run (no such remote), why. */
 	error?: string;
 }
 
 /**
- * LIST every staged item awaiting a runner/human promotion — the slices in
- * `work/pre-backlog/` and the PRDs in `work/pre-prd/` on `<arbiter>/main` (the
+ * LIST every staged item awaiting a runner/human promotion — the tasks in
+ * `work/pre-backlog/` and the briefs in `work/briefs/proposed/` on `<arbiter>/main` (the
  * discovery half of the `promote` verb, so `promote` with no argument answers
  * "what is staged waiting for me?"). It reads the ARBITER's truth (a fetch + a
  * tree read), NOT the local working tree (which may be stale) — the same source
@@ -1283,12 +1285,12 @@ function pathInCommit(
 /**
  * Resolve the slug's ACTUAL current folder ON THE ARBITER for a requeue source
  * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). `requeue`
- * recovers a slice stuck in `needs-attention/` (the resolved-surface path) OR in
+ * recovers a task stuck in `needs-attention/` (the resolved-surface path) OR in
  * `in-progress/` (a claim that never surfaced — an un-surfaced abort, a killed
  * run, or an in-place requeue note; defect 2, story 4). Returns the source
  * `work/<folder>/<slug>.md` rel path the move should relocate FROM, or
  * `undefined` when the slug is in NEITHER (nothing to requeue). `needs-attention/`
- * is probed first so a slice mid-transition that briefly appears in both resolves
+ * is probed first so a task mid-transition that briefly appears in both resolves
  * to its surfaced state; in practice the one-slug-one-folder invariant means at
  * most one holds it.
  */
@@ -1422,7 +1424,7 @@ function appendRequeueNoteText(content: string, message: string): string {
  * Extract the prose written under the `## Needs attention` heading from an item
  * body. Returns the first non-empty line(s) of the block as a single line
  * (stops at the next `## ` heading); '' when no block is present. The
- * needs-attention REASON is now recorded on the per-item lock entry (slice
+ * needs-attention REASON is now recorded on the per-item lock entry (task
  * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+),
  * NOT in the body, but this extractor stays for any historical body text that
  * still carries the heading (a tolerant best-effort read).

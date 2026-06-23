@@ -8,7 +8,7 @@ import {join, resolve} from 'node:path';
  * default session paths move under it. agent-runner's replica MUST honour the same
  * var, or a user/CI that points pi at a custom agent dir would have agent-runner
  * write sessions to `~/.pi/agent/sessions` while pi reads the custom dir — sessions
- * then invisible to pi AND pi-remote (the very breakage this slice fixes). Also the
+ * then invisible to pi AND pi-remote (the very breakage this task fixes). Also the
  * clean lever for test isolation (point it at a scratch dir). NOTE: we honour only
  * the agent-dir var, not pi's separate `PI_CODING_AGENT_SESSION_DIR` — agent-runner
  * already has its own `sessionsDir` override for that role.
@@ -28,7 +28,7 @@ function expandTilde(p: string): string {
 
 /**
  * Generate the **full pi session-file path** the harness passes as `--session
- * <path>` (slice `session-path-pi-default`). This is the single source of the
+ * <path>` (task `session-path-pi-default`). This is the single source of the
  * session path: the caller generates it ONCE (before pi launches, so the
  * `do --watch` tailer can tail the KNOWN path) and threads it into BOTH the
  * adapter (`LaunchInput.session`) and the tailer.
@@ -70,7 +70,7 @@ function expandTilde(p: string): string {
  * `getDefaultSessionDir(cwd)` lives in `@earendil-works/pi-coding-agent`, whose
  * dependency tree is heavy (`pi-agent-core`, `pi-ai`, `zod`, `ws`). Pulling that
  * in for one tiny slug function is not worth it, so the encoding is REPLICATED
- * here (the same choice the do-watch slice made for its session-log type). The
+ * here (the same choice the do-watch task made for its session-log type). The
  * encoding is verified verbatim against pinned pi source `getDefaultSessionDirPath`:
  *
  *   join(agentDir, 'sessions', `--${resolve(cwd).replace(/^[/\\]/,'').replace(/[/\\:]/g,'-')}--`)

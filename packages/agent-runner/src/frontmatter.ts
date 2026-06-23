@@ -2,13 +2,13 @@
  * Minimal, dependency-free parser for the small slice of YAML frontmatter the
  * `work/` contract uses: top-level scalar keys and string lists (inline `[a, b]`
  * or block `- a` form). It deliberately does NOT implement general YAML — only
- * what `work/` slice frontmatter needs (slug, humanOnly, blockedBy, ...).
+ * what `work/` task frontmatter needs (slug, humanOnly, blockedBy, ...).
  */
 
 /**
- * **Origin-trust PROVENANCE** (slice `untrusted-origin-forces-build-propose`).
- * How a PRD/slice was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
- * signal SURVIVES the PRD/slice merge boundary (a landed-on-`main` artifact would
+ * **Origin-trust PROVENANCE** (task `untrusted-origin-forces-build-propose`).
+ * How a brief/task was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
+ * signal SURVIVES the brief/task merge boundary (a landed-on-`main` artifact would
  * otherwise erase how it was created — the laundering gap).
  *
  * - `origin` — `human` (the default / unset: a human authored it locally; a local
@@ -16,7 +16,7 @@
  *   front-door stamped it from a public issue).
  * - `originTrust` — `trusted` | `untrusted`, the `author_association` verdict at
  *   birth (only meaningful when `origin: issue`). UNSET ⇒ `trusted` (the normal
- *   human path; ZERO behaviour change). `untrusted` forces the slice's BUILD
+ *   human path; ZERO behaviour change). `untrusted` forces the task's BUILD
  *   transition to `propose` so a human reviews the becomes-code change (an
  *   explicit `--merge` still overrides — the operator is present).
  *
@@ -37,7 +37,7 @@ export interface Frontmatter {
 	/**
 	 * The author-trust verdict at birth (`trusted`|`untrusted`); only meaningful
 	 * when `origin: issue`. `undefined` when omitted (⇒ `trusted`: the normal path,
-	 * zero behaviour change). An `untrusted` slice forces its BUILD transition to
+	 * zero behaviour change). An `untrusted` task forces its BUILD transition to
 	 * `propose` (overridable by an explicit `--merge`).
 	 */
 	originTrust: OriginTrust | undefined;
@@ -72,15 +72,15 @@ export interface Frontmatter {
 	/**
 	 * Autonomy gate axis 1 (DECIDED). `true` when the item declares itself
 	 * human-only (a human must drive it regardless of how complete the spec is);
-	 * `undefined` when omitted (undeclared — most items). Present on both slices
-	 * and PRDs.
+	 * `undefined` when omitted (undeclared — most items). Present on both tasks
+	 * and briefs.
 	 */
 	humanOnly: boolean | undefined;
 	/**
 	 * Autonomy gate axis 2 (DISCOVERED). `true` when the item has unresolved
 	 * questions blocking autonomous progress (the open questions live in the body);
-	 * `undefined` when omitted. Orthogonal to `humanOnly`; present on both slices
-	 * and PRDs.
+	 * `undefined` when omitted. Orthogonal to `humanOnly`; present on both tasks
+	 * and briefs.
 	 */
 	needsAnswers: boolean | undefined;
 	/**
@@ -96,15 +96,15 @@ export interface Frontmatter {
 	/** Slugs this item is blocked by; `[]` when omitted or empty. */
 	blockedBy: string[];
 	/**
-	 * Brief-only: slugs of briefs that must already be SLICED before this brief may be
-	 * sliced (resolved against `work/briefs/tasked/` residence, NOT `done/`). `[]` when
-	 * omitted or empty. Parsed here so the auto-slicer can read it; enforcement
+	 * Brief-only: slugs of briefs that must already be TASKED before this brief may be
+	 * tasked (resolved against `work/briefs/tasked/` residence, NOT `done/`). `[]` when
+	 * omitted or empty. Parsed here so the auto-tasker can read it; enforcement
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
 	briefAfter: string[];
 	/**
 	 * The per-item override layer for the `promptGuidance` NUDGE namespace
-	 * (slice `prompt-guidance-testfirst-item-override`, brief US #5). A task or
+	 * (task `prompt-guidance-testfirst-item-override`, brief US #5). A task or
 	 * brief may carry one or more `promptGuidance.<member>: true | false`
 	 * frontmatter lines to OVERRIDE the resolved repo policy for THAT ITEM only.
 	 * Each member is `undefined` when omitted (⇒ inherit the next layer down in
@@ -177,9 +177,9 @@ function toBoolean(value: string): boolean | undefined {
 
 /**
  * Set (or clear) the top-level `needsAnswers:` frontmatter marker on a `work/`
- * markdown document, returning the new content. Used by the slicer review→edit
+ * markdown document, returning the new content. Used by the tasker review→edit
  * LOOP's verdict sink (`slicer-review-edit-loop`) to emit a specific uncertain
- * candidate slice as `needsAnswers: true` (open questions block autonomous build;
+ * candidate task as `needsAnswers: true` (open questions block autonomous build;
  * a human must answer them). If a `needsAnswers:` line already exists it is
  * REPLACED (idempotent); otherwise it is appended as the last line inside the
  * frontmatter fence. A document with NO frontmatter fence gets one PREPENDED (see
@@ -247,15 +247,15 @@ export function setFrontmatterMarker(
 
 /**
  * PROPAGATE the origin-trust PROVENANCE (`origin` + `originTrust`) from a SOURCE
- * artifact (a PRD) onto a TARGET artifact's content (an emitted slice), returning
- * the new content (slice `untrusted-origin-forces-build-propose`). The slicer
- * calls this so a slice born from an untrusted-origin PRD carries the stamp the
+ * artifact (a brief) onto a TARGET artifact's content (an emitted task), returning
+ * the new content (task `untrusted-origin-forces-build-propose`). The tasker
+ * calls this so a task born from an untrusted-origin brief carries the stamp the
  * BUILD transition reads. IDEMPOTENT: each present source field is written via
  * {@link setFrontmatterMarker} (replace-or-append). When the source has NO `origin`
- * (a human/local-authored PRD ⇒ trusted), the target is returned UNCHANGED — the
+ * (a human/local-authored brief ⇒ trusted), the target is returned UNCHANGED — the
  * normal path is never stamped (zero behaviour change). When a stamp IS applied to
  * a fence-less target, {@link setFrontmatterMarker} now prepends a fence to carry
- * it (slices the slicer emits always have a fence, so this is the defensive path).
+ * it (tasks the tasker emits always have a fence, so this is the defensive path).
  */
 export function propagateOrigin(
 	source: Pick<Frontmatter, 'origin' | 'originTrust'>,
@@ -327,7 +327,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		} else if (key === 'brief') {
 			result.brief = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'issue') {
-			// Integer issue link (`intake`'s PRD-emit OR a lone-slice emit). A
+			// Integer issue link (`intake`'s brief-emit OR a lone-task emit). A
 			// non-integer / empty value reads as undefined (the field is absent rather
 			// than malformed).
 			const n = Number(unquote(rawValue));

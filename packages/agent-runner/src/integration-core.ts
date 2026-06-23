@@ -37,9 +37,9 @@ import {isAncestor} from './gc.js';
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
  * of `performComplete` (`complete.ts`) so BOTH the human `do`/`complete` path and
- * (a later slice) the autonomous `run` path share ONE implementation of the
+ * (a later task) the autonomous `run` path share ONE implementation of the
  * gate→integrate band. The exact ORDER depends on the fresh-worktree gate
- * (`freshWorktreeGate`, slice `gate-on-rebased-tip-fresh-worktree`):
+ * (`freshWorktreeGate`, task `gate-on-rebased-tip-fresh-worktree`):
  *
  *   - fresh gate OFF (the pre-rebase gate, today byte-for-byte):
  *       verify (cwd) → review (cwd) → effective-mode decision → done-move →
@@ -54,8 +54,8 @@ import {isAncestor} from './gc.js';
  * integrates), so verify-then-review holds on the merged tree, never split across
  * two trees. Any failure routes to needs-attention.
  *
- * It is the CORE in the head / core / tail decomposition (PRD
- * `work/prd/run-do-integrate-convergence.md`): the caller-specific HEAD
+ * It is the CORE in the head / core / tail decomposition (brief
+ * `work/briefs/tasked/run-do-integrate-convergence.md`): the caller-specific HEAD
  * (repo/arbiter/branch checks, source resolution, the `recovering` flag) and TAIL
  * (switch-to-main / `syncLocalMain` / delete-local-branch / `--no-switch` / the
  * propose next-step block, or — for `run` — the job-record + worktree reap) stay
@@ -94,27 +94,27 @@ export type IntegrationCoreOutcome =
 /**
  * The CORE's input — everything the band needs, nothing caller-shaped. Every
  * divergence between the human `complete` path and the autonomous `do`/`run` path
- * maps to a FIELD VALUE here, not an `if (caller === …)` branch (PRD: "zero
+ * maps to a FIELD VALUE here, not an `if (caller === …)` branch (brief: "zero
  * caller-identity leakage"). In-place vs worktree = `cwd`; arbiter name =
  * `arbiter`; human vs autonomous surfacing = `surfaceArbiter`; do's recovery =
  * `source` + `recovering`; per-repo/lang gate = `verify`.
  */
 /**
- * A NON-SLICE lifecycle the integrate band threads in place of its default,
- * slice-shaped done-move + title source. The shared band
+ * A NON-TASK lifecycle the integrate band threads in place of its default,
+ * task-shaped done-move + title source. The shared band
  * (verify→review→commit→rebase→integrate→propose-PR-with-title/body) is
  * IDENTICAL; only the "which item move + which file to read the title from" step
- * is caller-supplied. This is the seam the `do prd:<slug>` SLICING transition
- * rides (slice `slice-output-through-integration`): its "item move" is the PRD
- * LIFECYCLE move (`work/prd/<slug>.md → work/prd-sliced/<slug>.md`, residence =
- * sliced-ness) plus its EMITTED backlog files — NOT a slice done-move. Supplying it
+ * is caller-supplied. This is the seam the `do brief:<slug>` TASKING transition
+ * rides (task `slice-output-through-integration`): its "item move" is the brief
+ * LIFECYCLE move (`work/briefs/ready/<slug>.md → work/briefs/tasked/<slug>.md`, residence =
+ * tasked-ness) plus its EMITTED backlog files — NOT a task done-move. Supplying it
  * makes every integrate-time arg (`--propose`/`--merge`, provider, title/body)
- * apply to slicing BY CONSTRUCTION, because they resolve ONCE here.
+ * apply to tasking BY CONSTRUCTION, because they resolve ONCE here.
  *
  * When set, the band: (1) reads the PR title / default commit summary from
  * {@link titlePath} instead of `work/<source>/<slug>.md`; (2) calls {@link stage}
- * (runner-owned, on the work branch) instead of the slice `git mv → work/done/`;
- * and (3) uses the PLAIN rebase (a slicing transition never `recover`s a
+ * (runner-owned, on the work branch) instead of the task `git mv → work/done/`;
+ * and (3) uses the PLAIN rebase (a tasking transition never `recover`s a
  * surfaced needs-attention move). Everything else — the `git add -A` that sweeps
  * the agent's uncommitted work + the staged lifecycle move, the atomic commit,
  * the rebase, the integrate, and the propose-mode PR title/body — is shared.
@@ -122,8 +122,8 @@ export type IntegrationCoreOutcome =
 export interface IntegrationLifecycle {
 	/**
 	 * Absolute path to the item file whose `title:` frontmatter seeds the default
-	 * commit summary AND the synthesised propose-mode PR title. For the slicing
-	 * transition this is the held PRD (`work/prd/<slug>.md`) — read BEFORE
+	 * commit summary AND the synthesised propose-mode PR title. For the tasking
+	 * transition this is the held brief (`work/briefs/ready/<slug>.md`) — read BEFORE
 	 * {@link stage} moves it. IGNORED when {@link title} is supplied (the explicit
 	 * title wins — no file read).
 	 */
@@ -133,17 +133,17 @@ export interface IntegrationLifecycle {
 	 * uses THIS as the title source for the default commit summary AND the synthesised
 	 * propose-mode PR title, INSTEAD of reading {@link titlePath}. This is the seam for
 	 * a lifecycle whose output file does NOT yet exist at title-read time — the intake
-	 * lone-slice / PRD path WRITES `work/backlog/<slug>.md` / `work/prd/<slug>.md` in
+	 * lone-slice / brief path WRITES `work/backlog/<slug>.md` / `work/briefs/ready/<slug>.md` in
 	 * {@link stage}, which runs AFTER the title read, so a `titlePath` read would race
-	 * the write and fall back to a generic subject. The `do prd:` slicing transition
-	 * leaves this unset (its `titlePath` is an already-existing held PRD, read fine).
+	 * the write and fall back to a generic subject. The `do brief:` tasking transition
+	 * leaves this unset (its `titlePath` is an already-existing held brief, read fine).
 	 */
 	title?: string;
 	/**
 	 * STAGE the lifecycle move + emitted files into the index on the current work
-	 * branch (runner-owned git; the agent never does git). For the slicing
-	 * transition: `git mv work/prd/<slug>.md → work/prd-sliced/<slug>.md`
-	 * (residence = sliced-ness; no marker), and write+`git add` the produced
+	 * branch (runner-owned git; the agent never does git). For the tasking
+	 * transition: `git mv work/briefs/ready/<slug>.md → work/briefs/tasked/<slug>.md`
+	 * (residence = tasked-ness; no marker), and write+`git add` the produced
 	 * `work/backlog/*.md` files. The band's subsequent `git add -A` + atomic commit
 	 * folds this staging
 	 * AND the agent's uncommitted backlog writes into ONE runner-owned commit. May
@@ -153,7 +153,7 @@ export interface IntegrationLifecycle {
 	/**
 	 * The trailing transition tag on the runner-owned commit subject
 	 * (`<type>(<slug>): <summary>; <commitTag>`). Defaults to `done` (the build
-	 * lifecycle); the slicing transition supplies `sliced`. Cosmetic — it names
+	 * lifecycle); the tasking transition supplies `sliced`. Cosmetic — it names
 	 * WHICH lifecycle landed; it gates nothing.
 	 */
 	commitTag?: string;
@@ -224,19 +224,19 @@ export interface IntegrationCoreInput {
 	 * built there / the lifecycle stage wrote there), so it carries the namespaced
 	 * `work/<type>-<slug>` identity. When omitted, the core derives it from the
 	 * branch HEAD is on (the robust default — the type is encoded IN the name). A
-	 * caller that knows the type explicitly may pass it (e.g. the slicing path
-	 * passes its `work/prd-<slug>`).
+	 * caller that knows the type explicitly may pass it (e.g. the tasking path
+	 * passes its `work/briefs/ready-<slug>`).
 	 */
 	branch?: string;
 	/**
 	 * Which folder the item is being completed FROM: `backlog` (the normal,
 	 * freshly-built path — since claim no longer moves the body, a freshly-built
-	 * slice RESTS in `backlog/` on `main`, slice
+	 * task RESTS in `backlog/` on `main`, task
 	 * `cutover-claim-body-stays-and-complete-sources-from-backlog`),
 	 * `needs-attention` (the runner-owned recovery path), or `done` (the
-	 * CONTINUE-BUILD path, slice `complete-builds-on-already-done-moved-continue`).
+	 * CONTINUE-BUILD path, task `complete-builds-on-already-done-moved-continue`).
 	 * The HEAD resolved this; the core uses it for the done-move source folder and
-	 * the recovery rebase. IGNORED when {@link lifecycle} is set (a non-slice move).
+	 * the recovery rebase. IGNORED when {@link lifecycle} is set (a non-task move).
 	 * (`in-progress` is RETAINED in the union for the bounce/recovery surfaces that
 	 * may still source from `in-progress/` until its folder removal, 9c.)
 	 *
@@ -265,9 +265,9 @@ export interface IntegrationCoreInput {
 	 */
 	recovering: boolean;
 	/**
-	 * **RECOVER an already-committed, already-done-moved STRANDED branch** (PRD
-	 * `ledger-integrity` story 6, the `finish-already-committed-branch` slice). When
-	 * `true`, the work is ALREADY committed on the work branch with the slice already
+	 * **RECOVER an already-committed, already-done-moved STRANDED branch** (brief
+	 * `ledger-integrity` story 6, the `finish-already-committed-branch` task). When
+	 * `true`, the work is ALREADY committed on the work branch with the task already
 	 * `git mv`'d into `work/done/` (a terminal push failed AFTER steps 2–3, leaving
 	 * the green work stranded). So the core SKIPS steps 0–3 (prepare / gate / review /
 	 * done-move / commit — they already ran) and runs ONLY the rebase→integrate TAIL
@@ -329,16 +329,16 @@ export interface IntegrationCoreInput {
 	/** Integration mode the caller REQUESTED (`propose` default, or `merge`). */
 	mode: IntegrationMode;
 	/**
-	 * **The UNTRUSTED-ORIGIN build-propose rule** (slice
+	 * **The UNTRUSTED-ORIGIN build-propose rule** (task
 	 * `untrusted-origin-forces-build-propose`). When `true`, the operator EXPLICITLY
 	 * passed `--merge` on this invocation — which OVERRIDES the untrusted-origin
 	 * `propose` default (the operator is present; CLI always wins, no special
 	 * force-key). The autonomous/CI build path passes no flag ⇒ leaves this unset ⇒
-	 * an untrusted-origin slice reliably forces `propose`. Resolved entirely from the
-	 * slice's stamped `originTrust:` frontmatter (read HERE from the build source
-	 * file); a `trusted`/unset slice is config-as-is (ZERO behaviour change). This
-	 * rule touches the slice BUILD transition ONLY: it never fires when
-	 * {@link lifecycle} is set (the slicing/intake-emit transitions — a file landing
+	 * an untrusted-origin task reliably forces `propose`. Resolved entirely from the
+	 * task's stamped `originTrust:` frontmatter (read HERE from the build source
+	 * file); a `trusted`/unset task is config-as-is (ZERO behaviour change). This
+	 * rule touches the task BUILD transition ONLY: it never fires when
+	 * {@link lifecycle} is set (the tasking/intake-emit transitions — a file landing
 	 * on main is inert) nor on {@link committedRecovery} (already gated + moved).
 	 */
 	explicitMerge?: boolean;
@@ -376,7 +376,7 @@ export interface IntegrationCoreInput {
 	body?: string;
 	/** Conventional-commit type for the completion commit. Defaults to `feat`. */
 	type?: string;
-	/** Commit summary. Defaults to the slice `title` minus a leading `slug — `. */
+	/** Commit summary. Defaults to the task `title` minus a leading `slug — `. */
 	message?: string;
 	/**
 	 * Surface a needs-attention bounce ON THE ARBITER (the AUTONOMOUS variant). When
@@ -421,7 +421,7 @@ export interface IntegrationCoreInput {
 	integrateLockKey?: string;
 	/**
 	 * **Race-1 (claim-vs-integrate) bounded re-rebase-and-retry cap** for the
-	 * merge-mode `${branch}:main` push (slice
+	 * merge-mode `${branch}:main` push (task
 	 * `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`). On a
 	 * non-fast-forward rejection (a sibling same-repo CLAIM — under the SEPARATE
 	 * claim lock — or integrate advanced `<arbiter>/main` during this job's push
@@ -463,13 +463,13 @@ export interface IntegrationCoreInput {
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 	/**
-	 * A NON-SLICE lifecycle move + title source (slice
+	 * A NON-TASK lifecycle move + title source (task
 	 * `slice-output-through-integration`). When set, the band reads the title from
 	 * its {@link IntegrationLifecycle.titlePath}, calls its
-	 * {@link IntegrationLifecycle.stage} INSTEAD of the slice `git mv → work/done/`,
-	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do prd:`
-	 * SLICING transition supplies it; `do`/`complete`/`run` leave it unset (the
-	 * slice done-move is unchanged).
+	 * {@link IntegrationLifecycle.stage} INSTEAD of the task `git mv → work/done/`,
+	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do brief:`
+	 * TASKING transition supplies it; `do`/`complete`/`run` leave it unset (the
+	 * task done-move is unchanged).
 	 */
 	lifecycle?: IntegrationLifecycle;
 }
@@ -507,10 +507,10 @@ export interface IntegrationCoreResult {
 	 * On a `review-blocked` outcome, the review gate's STRUCTURED block reason (the
 	 * `formatBlockReason` of the blocking findings) — so a caller doing its OWN
 	 * needs-attention routing can record the findings as the item-body prose. The
-	 * slicing path (slice `slice-acceptance-gate`) reads this: the core's build
-	 * `applyNeedsAttentionTransition` is keyed on a SLICE lock, so the slicing path
-	 * routes the PRD itself via the lock release's needs-attention redirect (amend the
-	 * `prd:<slug>` unified lock `active -> stuck`, no folder move), using THIS
+	 * tasking path (task `slice-acceptance-gate`) reads this: the core's build
+	 * `applyNeedsAttentionTransition` is keyed on a TASK lock, so the tasking path
+	 * routes the brief itself via the lock release's needs-attention redirect (amend the
+	 * `brief:<slug>` unified lock `active -> stuck`, no folder move), using THIS
 	 * findings text as the body. Absent on every non-`review-blocked` outcome. (The
 	 * build path ignores it — its routing already records the findings in-body.)
 	 */
@@ -543,12 +543,12 @@ export async function performIntegration(
 	const note = input.note ?? (() => {});
 	// The work branch: the caller is on it (it carries the namespaced identity).
 	// Prefer the explicit `branch`; else read the branch HEAD is on; only fall
-	// back to a synthesised `work/slice-<slug>` if HEAD is detached (a degenerate
+	// back to a synthesised `work/task-<slug>` if HEAD is detached (a degenerate
 	// case that the on-branch invariant should preclude).
 	const branch = input.branch ?? resolveWorkBranch(cwd, slug, env);
 	// Captured from the Gate-2 review (when it runs + approves) so that AFTER the
 	// propose integrate — where the opened PR url is finally in scope — we can post
-	// the agent's deliberately-authored `review` prose as a PR comment (slice
+	// the agent's deliberately-authored `review` prose as a PR comment (task
 	// `review-comment-prose-field`). Stays undefined when review is off / the agent
 	// emitted no `review` field, so the post is skipped (no-op). The verdict/routing
 	// decision uses neither.
@@ -556,10 +556,10 @@ export async function performIntegration(
 	// The resolved integration mode. `merge` lands automatically on a green gate
 	// (and an `approve` when review is on); `propose` leaves the merge to a human.
 	// MUTABLE because the untrusted-origin build-propose rule below may force it to
-	// `propose` for a slice BUILD (the build transition only) — see the rule after
+	// `propose` for a task BUILD (the build transition only) — see the rule after
 	// `sourcePath` is resolved.
 	let mode = input.mode;
-	// The fresh-worktree gate (slice `gate-on-rebased-tip-fresh-worktree`): when ON
+	// The fresh-worktree gate (task `gate-on-rebased-tip-fresh-worktree`): when ON
 	// the deterministic acceptance gate (`prepare`+`verify`) does NOT run here on
 	// the agent's PRE-rebase `cwd`; instead it runs LATER, in a clean throwaway
 	// worktree cut from the work branch REBASED onto `<arbiter>/main` (the
@@ -570,7 +570,7 @@ export async function performIntegration(
 	// in the `run` caller, not here.
 	const freshWorktreeGate = input.freshWorktreeGate === true;
 
-	// RECOVER an already-committed, already-done-moved STRANDED branch (PRD
+	// RECOVER an already-committed, already-done-moved STRANDED branch (brief
 	// `ledger-integrity` story 6). The work + the done-move are ALREADY committed on
 	// the work branch (a terminal push failed AFTER steps 2–3); SKIP steps 0–3
 	// (prepare / gate / review / done-move / commit) and run ONLY the
@@ -591,11 +591,11 @@ export async function performIntegration(
 		});
 	}
 
-	// The file whose `title:` seeds the commit summary + PR title. For a SLICING
-	// transition (a non-slice `lifecycle`) this is the held PRD it supplies; for a
-	// build it is the slice in its source folder. Read BEFORE any move.
+	// The file whose `title:` seeds the commit summary + PR title. For a TASKING
+	// transition (a non-task `lifecycle`) this is the held brief it supplies; for a
+	// build it is the task in its source folder. Read BEFORE any move.
 	const lifecycle = input.lifecycle;
-	// CONTINUE-BUILD (`source: 'done'`, slice
+	// CONTINUE-BUILD (`source: 'done'`, task
 	// `complete-builds-on-already-done-moved-continue`): on a dirty continue whose
 	// kept branch already holds the slug in `work/done/`, the file we read for the
 	// title + (otherwise) untrusted-origin lives there too — not in
@@ -608,28 +608,28 @@ export async function performIntegration(
 			? workItemPath(cwd, 'done', slug)
 			: workItemPath(cwd, source, slug);
 
-	// UNTRUSTED-ORIGIN BUILD-PROPOSE RULE (slice `untrusted-origin-forces-build-propose`).
-	// A slice born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
-	// at intake, propagated by the slicer). Its risk is the BUILD (it becomes code),
+	// UNTRUSTED-ORIGIN BUILD-PROPOSE RULE (task `untrusted-origin-forces-build-propose`).
+	// A task born from an UNTRUSTED issue carries `originTrust: untrusted` (stamped
+	// at intake, propagated by the tasker). Its risk is the BUILD (it becomes code),
 	// so the build transition resolves to `propose` even when the requested mode is
 	// `merge` — moving the human checkpoint onto the becomes-code build. Precedence:
 	//   explicit --merge  >  untrusted-origin ⇒ propose  >  config mode  >  default.
 	// An explicit `--merge` (input.explicitMerge) OVERRIDES the rule (the operator
 	// is present; CLI always wins, no special force-key). The autonomous/CI path
-	// passes no flag, so there an untrusted-origin slice RELIABLY forces propose.
+	// passes no flag, so there an untrusted-origin task RELIABLY forces propose.
 	//
-	// SCOPE: the slice BUILD transition ONLY. It NEVER fires for a `lifecycle`
-	// transition (slicing / intake-emit — a PRD/slice FILE landing on main is inert;
+	// SCOPE: the task BUILD transition ONLY. It NEVER fires for a `lifecycle`
+	// transition (tasking / intake-emit — a brief/task FILE landing on main is inert;
 	// intake's OWN per-emit resolver already decided that mode), and the source file
-	// here is the slice being built. A `trusted`/unset slice ⇒ untouched (zero
+	// here is the task being built. A `trusted`/unset task ⇒ untouched (zero
 	// behaviour change for the normal human path).
-	// CONTINUE-BUILD EXEMPTION (slice
+	// CONTINUE-BUILD EXEMPTION (task
 	// `complete-builds-on-already-done-moved-continue`): the prior attempt that
-	// done-moved this slice already went through the originTrust checkpoint (an
-	// untrusted slice on a `merge` config proposed on that first attempt). The
+	// done-moved this task already went through the originTrust checkpoint (an
+	// untrusted task on a `merge` config proposed on that first attempt). The
 	// continue-build commit is layered on top of that kept tip, so re-evaluating
 	// the rule here would either double-checkpoint or be a no-op against the same
-	// frontmatter — exempt this state (the slice file lives in `done/` and is now
+	// frontmatter — exempt this state (the task file lives in `done/` and is now
 	// effectively an on-`main` artifact). The other states are unchanged.
 	if (
 		!lifecycle &&
@@ -642,7 +642,7 @@ export async function performIntegration(
 	) {
 		mode = 'propose';
 		note(
-			`Untrusted-origin slice '${slug}': forcing the BUILD transition to ` +
+			`Untrusted-origin task '${slug}': forcing the BUILD transition to ` +
 				'propose (a human reviews the becomes-code change before it merges). ' +
 				'Pass --merge to override.',
 		);
@@ -783,7 +783,7 @@ export async function performIntegration(
 		}
 	}
 
-	// 1b. Gate 2 — the PR/code REVIEW gate (GATES PRD `work/prd/review.md`). It is a
+	// 1b. Gate 2 — the PR/code REVIEW gate (GATES brief `work/briefs/tasked/review.md`). It is a
 	//     JUDGEMENT gate layered ON TOP of the deterministic `verify` floor (ADR §8)
 	//     — NEVER a replacement, and ALWAYS verify-THEN-review on the SAME tree.
 	//
@@ -797,7 +797,7 @@ export async function performIntegration(
 	//         not split across two trees. (Letting verify move to the rebased tip
 	//         while review stayed on the pre-rebase `cwd` would deliver the
 	//         gate-the-merged-tree guarantee for verify but BREAK it for review,
-	//         incoherent with this slice's own goal.)
+	//         incoherent with this task's own goal.)
 	//
 	//     Either way the verdict routes IDENTICALLY:
 	//       approve → fall through to the done-move/commit/integrate unchanged;
@@ -834,14 +834,14 @@ export async function performIntegration(
 	// Read the title now, BEFORE the move, for the default commit summary AND the
 	// synthesised propose-mode PR TITLE (the source file is about to be git-mv'd
 	// away). The PR title is a SINGLE, capped line built runner-side from the
-	// slice's `title:` frontmatter + the slug (`<type>(<slug>): <title>`) so it can
+	// task's `title:` frontmatter + the slug (`<type>(<slug>): <title>`) so it can
 	// never be the multi-line commit-subject run-on `--fill` would derive.
 	//
 	// When the lifecycle supplies an EXPLICIT `title`, use it DIRECTLY (no file read):
-	// the intake lone-slice / PRD path writes its output file in `stage()`, which runs
+	// the intake lone-slice / brief path writes its output file in `stage()`, which runs
 	// AFTER this point, so a `titlePath` read would race the write and degrade the
-	// subject/PR title to the generic fallback. The `do prd:` slicing path leaves
-	// `title` unset and keeps reading its already-existing held PRD (unchanged).
+	// subject/PR title to the generic fallback. The `do brief:` tasking path leaves
+	// `title` unset and keeps reading its already-existing held brief (unchanged).
 	const explicitTitle = lifecycle?.title;
 	const taskTitle =
 		explicitTitle !== undefined ? explicitTitle : readTaskTitle(sourcePath);
@@ -855,14 +855,14 @@ export async function performIntegration(
 		title: taskTitle,
 	});
 
-	// 2. STAGE the item move into the index. For a build that is the slice done-move
-	//    (`work/<source>/<slug>.md → work/done/<slug>.md`); for a SLICING
-	//    transition (a non-slice `lifecycle`) it is the caller-supplied PRD
+	// 2. STAGE the item move into the index. For a build that is the task done-move
+	//    (`work/<source>/<slug>.md → work/done/<slug>.md`); for a TASKING
+	//    transition (a non-task `lifecycle`) it is the caller-supplied brief
 	//    lifecycle move + emitted backlog files (the runner stages them, the agent
 	//    never does git). Either way the subsequent `git add -A` folds the agent's
 	//    uncommitted work + this staging into ONE atomic commit.
 	//
-	//    The slice done-move is ATOMIC AGAINST THE ARBITER (ledger-integrity
+	//    The task done-move is ATOMIC AGAINST THE ARBITER (ledger-integrity
 	//    defect 1 + its root defect 2). The LOCAL move here is the legacy clean
 	//    `git mv work/<source>/<slug>.md → work/done/<slug>.md` (one folder, no
 	//    fetch — every existing path is byte-for-byte unchanged); the ARBITER
@@ -878,7 +878,7 @@ export async function performIntegration(
 	if (lifecycle) {
 		await lifecycle.stage();
 	} else if (source === 'done') {
-		// CONTINUE-BUILD (`source: 'done'`, slice
+		// CONTINUE-BUILD (`source: 'done'`, task
 		// `complete-builds-on-already-done-moved-continue`): the slug is ALREADY in
 		// `work/done/` on this kept branch (a prior attempt moved it there), so there
 		// is NOTHING to move — skip the step-2 `git mv`. The subsequent `git add -A`
@@ -903,11 +903,11 @@ export async function performIntegration(
 	if (await nothingStaged(cwd, env)) {
 		throw new IntegrationNothingStaged(
 			`nothing to commit for '${slug}' — no work and no move staged. ` +
-				'(Did the agent produce changes? Is the slice already done?)',
+				'(Did the agent produce changes? Is the task already done?)',
 			slug,
 		);
 	}
-	// SCOOP + REPORT agent-authored CAPTURED NOTES (slice `runner-scoops-captured-notes`,
+	// SCOOP + REPORT agent-authored CAPTURED NOTES (task `runner-scoops-captured-notes`,
 	// advance-loop's reporting-channel fold-in). A rung's agent may write capture-bucket
 	// files (`work/observations/*`, `work/findings/*`) during its run — its `capture-signal`
 	// reflex — but it does NO git (Rule A). The `git add -A` above already SWEEPS them into
@@ -915,13 +915,13 @@ export async function performIntegration(
 	// they are TRACKED, not dropped/untracked. Rule B is extended HERE: the runner REPORTS
 	// exactly which note files landed (honest reporting — what actually reached the commit,
 	// read from the staged set, not assumed). This is the ONE shared place — BOTH the build
-	// path (`do <slice>`/`run`/`complete`) and the slicing path (`do prd:`, via the
+	// path (`do <task>`/`run`/`complete`) and the tasking path (`do brief:`, via the
 	// `lifecycle` seam) route through it, so the channel is NOT forked. Zero notes ⇒ no
 	// report (the no-note case is byte-for-byte unchanged).
 	await reportScoopedNotes(cwd, env, note);
 	const summary = input.message ?? defaultMessage;
 	const type = (input.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE;
-	// The trailing transition tag: a build is `; done`, a SLICING transition is
+	// The trailing transition tag: a build is `; done`, a TASKING transition is
 	// `; sliced` (the lifecycle supplies it). Keeps the runner-owned commit subject
 	// honest about WHICH lifecycle landed.
 	const commitMessage = `${type}(${slug}): ${summary}; ${lifecycle?.commitTag ?? 'done'}`;
@@ -985,9 +985,9 @@ export async function performIntegration(
 			// (a corrupt ledger; never publish over it), and (b) detects the DIVERGENT base
 			// — the arbiter holds the slug's source in a DIFFERENT folder than our local
 			// done-move removed — which is the case that turns the rebased "move" into a
-			// "copy" (PR #86). The slicing lifecycle is exempt (its move is not a slice
+			// "copy" (PR #86). The tasking lifecycle is exempt (its move is not a task
 			// done-move).
-			// CONTINUE-BUILD EXEMPTION (slice
+			// CONTINUE-BUILD EXEMPTION (task
 			// `complete-builds-on-already-done-moved-continue`): on `source: 'done'`
 			// there was no first-time move on this commit (the slug was already in
 			// `done/` on the kept branch + on the arbiter), so the divergent-done-move
@@ -1013,11 +1013,11 @@ export async function performIntegration(
 					};
 				}
 			}
-			// PLAIN rebase. After the per-item-lock cut-over (PRD
-			// `ledger-status-per-item-lock-refs`, slices 9a–9d) no transient status
+			// PLAIN rebase. After the per-item-lock cut-over (brief
+			// `ledger-status-per-item-lock-refs`, tasks 9a–9d) no transient status
 			// lands on a work branch: needs-attention is the lock `state: stuck` (not a
 			// `git mv` to `needs-attention/`), the body rests in `backlog/` while
-			// claimed, and the slicing/advancing markers are gone. So a recovery
+			// claimed, and the tasking/advancing markers are gone. So a recovery
 			// complete's kept branch carries NO historical route-to-needs-attention
 			// move-only commit to drop — the old `rebaseDroppingNeedsAttentionSurface`
 			// (drop-bookkeeping-rebase) is deleted and BOTH recovering and lifecycle
@@ -1036,8 +1036,8 @@ export async function performIntegration(
 				// automatically). It is scoped STRICTLY to other slugs' ledger files — a
 				// conflict touching ANY code file, or THIS slug's own ledger, returns `false`
 				// (and leaves the rebase in progress), so the divergent-done-move recovery /
-				// needs-attention route below handles it; it NEVER widens to code. The slicing
-				// lifecycle is exempt (its move is not a slice done-move).
+				// needs-attention route below handles it; it NEVER widens to code. The tasking
+				// lifecycle is exempt (its move is not a task done-move).
 				const siblingReconciled = lifecycle
 					? false
 					: await reconcileSiblingLedgerConflict({
@@ -1141,7 +1141,7 @@ export async function performIntegration(
 			};
 		}
 
-		// 4c. FRESH-WORKTREE GATE (slice `gate-on-rebased-tip-fresh-worktree`): when ON,
+		// 4c. FRESH-WORKTREE GATE (task `gate-on-rebased-tip-fresh-worktree`): when ON,
 		//     the acceptance gate (`prepare` then `verify`) runs HERE — on the work
 		//     branch tip the rebase above just produced (the would-be-integrated tip) —
 		//     rather than on the agent's pre-rebase `cwd`. We cut a CLEAN throwaway
@@ -1153,8 +1153,8 @@ export async function performIntegration(
 		//     way the front gate did — EXCEPT the done-move already happened (steps 2–3),
 		//     so the bounce is from `work/done/` (the seam finds the slug wherever it
 		//     rests) instead of `work/in-progress/`. A `--skip-verify` skipped the gate
-		//     entirely at the front, so it never reaches here. The slicing `lifecycle`
-		//     path is exempt (its quality engine is the slicer loop, not this gate).
+		//     entirely at the front, so it never reaches here. The tasking `lifecycle`
+		//     path is exempt (its quality engine is the tasker loop, not this gate).
 		if (freshWorktreeGate && !input.skipVerify && !lifecycle) {
 			const tip = (
 				await gitSoft(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, env)
@@ -1298,7 +1298,7 @@ export async function performIntegration(
 				: selectProvider({
 						arbiterUrl: await arbiterUrl(cwd, arbiter, env),
 					}));
-		// Race-1 (claim-vs-integrate, slice
+		// Race-1 (claim-vs-integrate, task
 		// `run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe`): integrate,
 		// and on a non-fast-forward `${branch}:main` push (a SIBLING same-repo CLAIM —
 		// under the SEPARATE claim lock — or a sibling integrate advanced
@@ -1339,11 +1339,11 @@ export async function performIntegration(
 				// derives a run-on title from the commit subject via `--fill`.
 				title: prTitle,
 				// Half B: the propose-mode PR body — the agent's summary under a deterministic
-				// runner header (slice pointer). Undefined when no body was supplied (the
+				// runner header (task pointer). Undefined when no body was supplied (the
 				// header is only scaffolded when there IS a body) ⇒ today's `--fill` (no
 				// regression). Ignored in merge mode by the provider/integrator.
 				body: composeProposeBody({slug, body: input.body}),
-				// Part (b) of the merged-branch hygiene slice: when WE perform the merge
+				// Part (b) of the merged-branch hygiene task: when WE perform the merge
 				// (this resolved `merge` mode), reap the remote `work/<slug>` HEAD branch
 				// INLINE right after the merge lands — the commits are now on `main`, so the
 				// head is provably merged and safe to delete (ancestor-guarded inside the
@@ -1422,7 +1422,7 @@ export async function performIntegration(
 			};
 		}
 
-		// 6. Make the Gate-2 review VISIBLE on the PR (slice `review-comment-prose-field`,
+		// 6. Make the Gate-2 review VISIBLE on the PR (task `review-comment-prose-field`,
 		//    refining `review-gate-pr-comment`): AFTER the propose integrate, where the
 		//    approved verdict (with its deliberately-authored `review` prose), the
 		//    resolved `provider`, AND the opened PR url (`integration.url`) are ALL in
@@ -1439,7 +1439,7 @@ export async function performIntegration(
 		//    (the normal path — post on it directly); else, when a PR WAS opened but its
 		//    url was unparseable (`integration.requestOpened` true, `url` undefined — the
 		//    `gh pr create` exit-0-but-unparseable-stdout degradation), FALL BACK to the
-		//    BRANCH-resolved comment (slice `review-comment-fallback-on-unparsed-pr-url`):
+		//    BRANCH-resolved comment (task `review-comment-fallback-on-unparsed-pr-url`):
 		//    the provider resolves the branch's open PR and comments on it, instead of
 		//    silently dropping a review on a PR that genuinely exists. Only when NO PR was
 		//    opened at all (merge mode, or a degraded/push-only propose ⇒ `requestOpened`
@@ -1490,8 +1490,8 @@ export async function performIntegration(
 }
 
 /**
- * RECOVER an already-committed, already-done-moved STRANDED branch (PRD
- * `ledger-integrity` story 6, the `finish-already-committed-branch` slice). The
+ * RECOVER an already-committed, already-done-moved STRANDED branch (brief
+ * `ledger-integrity` story 6, the `finish-already-committed-branch` task). The
  * green work AND the `git mv → work/done/` are ALREADY committed on the work
  * branch (a terminal push failed AFTER `performIntegration`'s steps 2–3), and the
  * tip is NOT on the arbiter. This runs ONLY the rebase→integrate TAIL (steps 4–5)
@@ -1623,7 +1623,7 @@ async function recoverAlreadyCommitted(params: {
  * Resolve the work branch the integration runs on: the branch HEAD is currently
  * on (the caller is ALWAYS on the work branch — the agent built there / the
  * lifecycle stage wrote there), which carries the namespaced `work/<type>-<slug>`
- * identity. Falls back to a synthesised `work/slice-<slug>` ONLY for a detached
+ * identity. Falls back to a synthesised `work/task-<slug>` ONLY for a detached
  * HEAD (a degenerate case the on-branch invariant precludes), so the push target
  * is always defined.
  */
@@ -1725,8 +1725,8 @@ function bridgeProvider(
 }
 
 /**
- * Default commit summary: the slice's `title` frontmatter with any leading
- * `slug — ` (or `slug -`) prefix stripped, so a slice titled
+ * Default commit summary: the task's `title` frontmatter with any leading
+ * `slug — ` (or `slug -`) prefix stripped, so a task titled
  * "complete — gate, mark done, …" yields "gate, mark done, …". Falls back to a
  * generic summary when the title is missing/unreadable.
  */
@@ -1749,7 +1749,7 @@ function defaultSummary(inProgressPath: string, slug: string): string {
  */
 function summaryFromTitle(title: string | undefined, slug: string): string {
 	if (!title) {
-		return 'complete work slice';
+		return 'complete work task';
 	}
 	// Strip a leading "slug" followed by an em-dash / en-dash / hyphen separator.
 	const prefix = new RegExp(`^${escapeRegExp(slug)}\\s*[—–-]\\s*`, 'i');
@@ -1765,7 +1765,7 @@ function summaryFromTitle(title: string | undefined, slug: string): string {
 export const PR_TITLE_MAX = 72;
 
 /**
- * The slice's raw `title:` frontmatter (NOT the commit-summary-stripped form),
+ * The task's raw `title:` frontmatter (NOT the commit-summary-stripped form),
  * or undefined when missing/unreadable. Used as the human-authored source for
  * the synthesised PR title.
  */
@@ -1783,7 +1783,7 @@ function readTaskTitle(taskPath: string): string | undefined {
  * convention (default `feat`). It is FORCED to a single line (newlines → spaces,
  * runs of whitespace collapsed) and CAPPED to {@link PR_TITLE_MAX} (truncating
  * with a trailing `…`), so it can NEVER be the multi-line run-on `gh ... --fill`
- * derives from the commit subject. When the slice `title:` is missing it falls
+ * derives from the commit subject. When the task `title:` is missing it falls
  * back to the slug alone (`<type>(<slug>)`). Exported for unit tests of the
  * single-line + cap guarantee.
  */
@@ -1793,7 +1793,7 @@ export function synthesiseProposeTitle(input: {
 	title?: string;
 }): string {
 	const type = input.type.trim() || DEFAULT_TYPE;
-	// Strip a leading `slug — ` / `slug -` prefix (some slice titles repeat the
+	// Strip a leading `slug — ` / `slug -` prefix (some task titles repeat the
 	// slug; the `<slug>` scope already carries it) and flatten to one line.
 	const prefix = new RegExp(`^${escapeRegExp(input.slug)}\\s*[—–-]\\s*`, 'i');
 	const cleanTitle = (input.title ?? '')
@@ -1814,7 +1814,7 @@ export function synthesiseProposeTitle(input: {
 /**
  * Compose the propose-mode PR BODY (Half B): the supplied advisory prose (the
  * build agent's final summary, or a human `--body`) UNDER a deterministic runner
- * header that points a reviewer back to the slice file. Returns `undefined` when
+ * header that points a reviewer back to the task file. Returns `undefined` when
  * no body was supplied — so the provider degrades to today's `gh ... --fill` (no
  * regression); the header is ONLY scaffolded when there IS prose to carry.
  * Exported for unit tests of the header + pointer.
@@ -1852,7 +1852,7 @@ export function composeProposeBody(input: {
  * `work/observations/*.md` convention (`title` / `date` / `status: open`) plus a
  * `reviewOf:` back-pointer to the slug it came from, so it gets triaged like any
  * observation. (Identity stays the FILENAME — no `slug:` frontmatter — so the
- * lifecycle enumerate→resolve round-trip is total; see slice
+ * lifecycle enumerate→resolve round-trip is total; see task
  * `observation-identity-is-its-filename-not-a-foreign-slug`.)
  */
 function writeReviewNitsObservation(params: {
@@ -1888,15 +1888,15 @@ function observationDate(): string {
 /**
  * Render the per-run review-nits observation file body — `observations/`-convention
  * frontmatter (`title` / `date` / `status: open`) plus a `reviewOf:` back-pointer
- * naming the SLICE the run reviewed, then each non-blocking finding (its
+ * naming the TASK the run reviewed, then each non-blocking finding (its
  * `question` + optional `context`), and a one-line note that these are review-gate
- * nits for triage (promote-to-slice / keep / delete). Exported-free pure string
+ * nits for triage (promote-to-task / keep / delete). Exported-free pure string
  * builder.
  *
- * Identity rule (slice `observation-identity-is-its-filename-not-a-foreign-slug`):
+ * Identity rule (task `observation-identity-is-its-filename-not-a-foreign-slug`):
  * the observation's IDENTITY is its FILENAME (`review-nits-<slug>-<date>.md`).
- * The frontmatter therefore does NOT emit `slug:` — emitting the reviewed slice's
- * slug there collided with the (now-done) reviewed slice AND broke the
+ * The frontmatter therefore does NOT emit `slug:` — emitting the reviewed task's
+ * slug there collided with the (now-done) reviewed task AND broke the
  * enumerate→resolve round-trip (the lifecycle pool keyed off `fm.slug`, which
  * differed from the filename). The back-pointer lives in `reviewOf:` instead, a
  * clearly-different field whose name cannot be mistaken for identity.
@@ -1922,14 +1922,14 @@ function renderReviewNitsObservation(input: {
 		'',
 		`The PR/code review gate (Gate 2) APPROVED '${input.slug}' but raised the`,
 		'following non-blocking findings (nits). They do not block integration; this',
-		'is their durable home for triage — promote-to-slice / keep / delete.',
+		'is their durable home for triage — promote-to-task / keep / delete.',
 		'',
 		...findingBlocks,
 		'',
 	].join('\n');
 }
 
-/** Read the `title:` scalar from a slice's frontmatter block, or undefined. */
+/** Read the `title:` scalar from a task's frontmatter block, or undefined. */
 function readTitle(content: string): string | undefined {
 	const normalized = content.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
 	if (!normalized.startsWith('---\n')) {
@@ -1987,7 +1987,7 @@ const CAPTURE_NOTE_DIRS = [
 
 /**
  * SCOOP + REPORT the agent-authored CAPTURED NOTES this run's atomic commit is
- * landing (slice `runner-scoops-captured-notes`). A rung's agent writes
+ * landing (task `runner-scoops-captured-notes`). A rung's agent writes
  * capture-bucket files (`work/observations/*`, `work/findings/*`) but does NO git
  * (Rule A); the caller's `git add -A` already STAGED them into THIS commit, so
  * they are tracked, not dropped. This extends Rule B: the runner REPORTS exactly
@@ -1999,7 +1999,7 @@ const CAPTURE_NOTE_DIRS = [
  * captured notes ⇒ NOTHING is reported (the no-note case is byte-for-byte
  * unchanged). Read-only / best-effort: a failed status read reports nothing
  * rather than crashing the integrate. Because it lives in the shared core, BOTH
- * the build path AND the slicing path report identically — the channel is not
+ * the build path AND the tasking path report identically — the channel is not
  * forked.
  */
 async function reportScoopedNotes(
@@ -2043,12 +2043,12 @@ async function stagedCaptureNotes(
 /**
  * The DURABLE `work/` status folders a slug's ledger file can resting-live in (the
  * one-slug-one-folder set the invariant is asserted over). After the capstone
- * cut-over (slice `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`,
- * PRD `ledger-status-per-item-lock-refs`) the ONLY `work/` moves on `main` are the
+ * cut-over (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`,
+ * brief `ledger-status-per-item-lock-refs`) the ONLY `work/` moves on `main` are the
  * durable resting transitions, so the source a build completes FROM is `backlog/`
- * (claim no longer moves the body, slice
+ * (claim no longer moves the body, task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`) and the canonical
- * done-move destination is `done/`. The slice regime's won't-proceed terminal
+ * done-move destination is `done/`. The task regime's won't-proceed terminal
  * `tasks/cancelled/` is also a durable resting folder, so the one-slug-one-folder
  * guard covers it (a slug in `tasks/cancelled/` AND another durable folder is a
  * corrupt ledger to refuse). The
@@ -2417,7 +2417,7 @@ type Gate2ReviewOutcome =
  * Run the Gate-2 PR/code REVIEW gate against a given tree ({@param reviewCwd}) and
  * route a BLOCK to needs-attention, returning DATA the caller acts on. Factored out
  * of {@link performIntegration} so the SAME gate can run in TWO places without
- * forking its logic (MAINTAINER DECISION 2, slice `gate-on-rebased-tip-fresh-worktree`):
+ * forking its logic (MAINTAINER DECISION 2, task `gate-on-rebased-tip-fresh-worktree`):
  *
  *   - fresh-worktree gate OFF: the caller invokes it at the FRONT on the pre-rebase
  *     `cwd`, right after the front `verify` (today's order, byte-for-byte);
@@ -2477,7 +2477,7 @@ async function runGate2Review(params: {
 			cwd: reviewCwd,
 			reviewModel: input.reviewModel,
 			round,
-			// `--watch` threading (slice `watch-review-session`): when on, the production
+			// `--watch` threading (task `watch-review-session`): when on, the production
 			// gate tails the review session live. OFF ⇒ the plain sync launch, unchanged.
 			watch: input.watch,
 			watchSink: input.watchSink,
@@ -2533,7 +2533,7 @@ async function runGate2Review(params: {
 				branch,
 				reason: message,
 				// The structured block reason (the blocking findings ONLY) for a caller
-				// doing its OWN routing (the slicing path); the build path ignores it.
+				// doing its OWN routing (the tasking path); the build path ignores it.
 				reviewBlockReason: findingsReason || message,
 			},
 		};
@@ -2567,7 +2567,7 @@ interface FreshGateResult {
  * Run the acceptance gate (`prepare` then `verify`) in a CLEAN THROWAWAY worktree
  * cut from `commit` (the work branch tip AFTER it was rebased onto `<arbiter>/main`
  * — the would-be-integrated tip), then REAP the worktree (pass OR fail). This is
- * the fresh-worktree gate (slice `gate-on-rebased-tip-fresh-worktree`): a green
+ * the fresh-worktree gate (task `gate-on-rebased-tip-fresh-worktree`): a green
  * gate provably describes the MERGED artifact, because the worktree is cut from the
  * COMMITTED, rebased tip — gitignored/uncommitted state in the agent's `cwd` cannot
  * leak in, and a change the integration rebase introduced IS gated.

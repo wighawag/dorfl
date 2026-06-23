@@ -5,14 +5,14 @@ import {join} from 'node:path';
  * folder-name union/array, the item-scan predicate, and the prefix-slice helpers
  * used across `src/`.
  *
- * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` PRD — the de-risking
+ * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` brief — the de-risking
  * checkpoint. EVERY raw work-path literal (`join(cwd, 'work', ...)`, `'work/<folder>'`,
  * `'work/<folder>/'.length` prefix-slices) and EVERY folder-name union/array that
  * used to be scattered across ~70 files now routes through here. The NAMES are
  * byte-identical to today (no rename, no behaviour change); only the SOURCE of the
  * string has moved into this one module.
  *
- * The whole point of the seam: the LATER rename slices flip the VALUES in
+ * The whole point of the seam: the LATER rename tasks flip the VALUES in
  * {@link WORK_FOLDER_NAME} (and `git mv` the on-disk folders) and NOTHING ELSE.
  * Call sites reference folders by their SYMBOLIC key (`'tasks-todo'`,
  * `'briefs-ready'`, …), never by a raw string, so renaming a folder never
@@ -48,8 +48,8 @@ export const WORK_ROOT = 'work' as const;
  *     `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed terminal, key
  *     `cancelled`).
  *   - BRIEF lifecycle, the `briefs/` regime: `briefs/proposed` (staging, key
- *     `briefs-proposed`) → `briefs/ready` (auto-slice pool, key `briefs-ready`) →
- *     `briefs/tasked` (sliced, resting, key `briefs-tasked`) / `briefs/dropped`
+ *     `briefs-proposed`) → `briefs/ready` (auto-task pool, key `briefs-ready`) →
+ *     `briefs/tasked` (tasked, resting, key `briefs-tasked`) / `briefs/dropped`
  *     (the PER-REGIME won't-proceed terminal, key `briefs-dropped`).
  *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `briefs/dropped`)
  *     replace the previous shared top-level `work/dropped/`: a dropped task and a
@@ -69,9 +69,9 @@ export const WORK_ROOT = 'work' as const;
  * read in the NEW task/brief vocabulary (`tasks-backlog`/`tasks-todo`,
  * `briefs-proposed`/`briefs-ready`/`briefs-tasked`). This is a PURE in-code symbol
  * rename — the VALUE strings are byte-identical to before, so no on-disk folder
- * moved. An earlier sibling slice (`folder-taxonomy-reorg-and-rename` Phase 1)
+ * moved. An earlier sibling task (`folder-taxonomy-reorg-and-rename` Phase 1)
  * flipped the VALUES (`tasks/todo`, `briefs/ready`, …) while deliberately leaving
- * the KEYS on the old words; this slice flips only the KEYS so the registry reads
+ * the KEYS on the old words; this task flips only the KEYS so the registry reads
  * coherently. The folder-as-status invariant and every resolved path are unchanged.
  */
 export const WORK_FOLDER_NAME = {
@@ -129,7 +129,7 @@ export function workItemPath(
 /**
  * REPO-RELATIVE path of a work folder: `work/<folder-name>` (no trailing slash, no
  * root). The form used for `git mv` / `git`-relative paths and the staging/pool dir
- * constants (`STAGED_SLICES_DIR`, etc.). Replaces raw `'work/<folder>'` literals.
+ * constants (`STAGED_TASKS_DIR`, etc.). Replaces raw `'work/<folder>'` literals.
  */
 export function workFolderRel(folder: WorkFolderKey): string {
 	return `${WORK_ROOT}/${workFolderName(folder)}`;
@@ -234,7 +234,7 @@ export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
 
 /**
  * The BRIEF-lifecycle folders an `issue:`-bearing brief / a tasked brief can reside
- * in: `briefs-ready` (source / pool), `briefs-tasked` (sliced, resting) —
+ * in: `briefs-ready` (source / pool), `briefs-tasked` (tasked, resting) —
  * close-job.ts `BRIEF_FOLDERS`.
  */
 export const BRIEF_FOLDERS = [

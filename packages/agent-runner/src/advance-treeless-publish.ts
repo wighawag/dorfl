@@ -1,7 +1,7 @@
 import {runAsync} from './git.js';
 
 /**
- * The SHARED tree-less-result PUBLISH (slice
+ * The SHARED tree-less-result PUBLISH (task
  * `loop-advance-persists-treeless-rungs-to-arbiter`) — the ONE implementation of
  * "ff-push a locally-committed tree-less rung result to the arbiter" called by
  * BOTH advance drivers that run the tick in a working clone:

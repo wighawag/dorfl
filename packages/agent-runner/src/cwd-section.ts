@@ -9,7 +9,7 @@ import type {ConfigOverrideMap} from './config-override.js';
 
 /**
  * The CWD-LOCAL section of `scan`/`status` (the `scan-status-read-cwd-repo`
- * slice). When a command runs INSIDE a participating repo, it ALSO reports that
+ * task). When a command runs INSIDE a participating repo, it ALSO reports that
  * CURRENT repo as a clearly-labelled, separately-counted LOCAL section, in
  * addition to (NEVER merged into) the cross-repo REGISTRY view.
  *

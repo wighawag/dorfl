@@ -21,8 +21,8 @@ import type {Config} from './config.js';
 import type {AdvanceTickRunner, AdvanceMultiResult} from './advance-drivers.js';
 
 /**
- * The **ISOLATED advance-tick RUNNER** + its sequential drivers (PRD
- * `advance-loop`, slice `advance-isolated-one-shot`, US #25/26) — the "isolated
+ * The **ISOLATED advance-tick RUNNER** + its sequential drivers (brief
+ * `advance-loop`, task `advance-isolated-one-shot`, US #25/26) — the "isolated
  * one-shot" cell `advance` was missing. It gives `advance` the SAME isolation
  * ergonomic `do --isolated` has: run the advance TICK ({@link performAdvance}) in
  * an ISOLATED worktree off THIS repo's arbiter (resolved from cwd), then integrate
@@ -34,23 +34,23 @@ import type {AdvanceTickRunner, AdvanceMultiResult} from './advance-drivers.js';
  *   - REUSED: `resolveArbiterUrlFromCheckout` (`do.ts`, the CLI resolves the
  *     arbiter URL from cwd and threads it in here); the hub-mirror + isolation
  *     seam (`ensureMirror` + {@link jobWorktreeDoDriver}, which materialises its
- *     own job worktree off the arbiter for the build/slice rungs + reaps it); and
+ *     own job worktree off the arbiter for the build/task rungs + reaps it); and
  *     the SCAN→SELECT→REFETCH SKELETON of `performDoRemoteAuto` (`do-remote-auto.ts`).
  *   - NEW: the **isolated advance-tick runner** ({@link performAdvanceIsolated}) —
  *     the per-item unit that runs `performAdvance` (classify → `advancing` lock →
  *     surface/apply/triage/build-orchestrate) inside a working clone off the
  *     cwd-resolved arbiter, then reaps it. `do --isolated`'s per-item runner is
- *     `performDoRemote` (the DO BUILD/SLICE pipeline), which does NOT run the
+ *     `performDoRemote` (the DO BUILD/TASK pipeline), which does NOT run the
  *     advance tick — so it is NOT reusable as the per-item step; only the loop
  *     SKELETON is. This module builds the advance analogue + its driver wiring; it
  *     introduces NO new isolation MECHANISM (US #26 stays true).
  *
  * **Why an isolated cwd composes with all five rungs (only the runner is new).**
- * The advance tick threads a `cwd` + `arbiter` + a build/slice `doDriver`:
+ * The advance tick threads a `cwd` + `arbiter` + a build/task `doDriver`:
  *
- *   - the **build-slice / slice-prd** rungs ORCHESTRATE `do`/`do prd:` via the
+ *   - the **build-slice / slice-prd** rungs ORCHESTRATE `do`/`do brief:` via the
  *     `doDriver` seam — we inject {@link jobWorktreeDoDriver} (off the cwd-resolved
- *     arbiter), so they build/slice ISOLATED in their OWN job worktree (the SAME
+ *     arbiter), so they build/task ISOLATED in their OWN job worktree (the SAME
  *     isolation `do --isolated` gives the build tick) instead of in `process.cwd()`;
  *   - the **surface / apply / triage** rungs do tree-less, identity-keyed,
  *     ARBITER-resolved CAS writes (the sidecar + `needsAnswers`, the `advancing`
@@ -75,7 +75,7 @@ export interface IsolatedAdvanceContext extends Omit<AdvanceContext, 'cwd'> {
 	remote: string;
 	/**
 	 * The agents' execution area (config `workspacesDir`) — where the hub mirror +
-	 * the per-item working clone + the build/slice job worktrees live. NEVER the
+	 * the per-item working clone + the build/task job worktrees live. NEVER the
 	 * human area.
 	 */
 	workspacesDir: string;
@@ -83,7 +83,7 @@ export interface IsolatedAdvanceContext extends Omit<AdvanceContext, 'cwd'> {
 
 /** Options for {@link performAdvanceIsolated} — the per-item isolated tick. */
 export interface PerformAdvanceIsolatedOptions extends IsolatedAdvanceContext {
-	/** The raw advance arg: bare (= slice), `prd:<slug>`, or `obs:<slug>`. */
+	/** The raw advance arg: bare (= task), `brief:<slug>`, or `obs:<slug>`. */
 	arg: string;
 	/** The read seam (slug resolution / pool); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
@@ -104,7 +104,7 @@ const DEFAULT_ARBITER = 'origin';
  * It materialises a per-item working CLONE of the arbiter under the agents' area
  * (via the shared hub mirror — `ensureMirror` once + a cheap local clone of the
  * bare mirror, refetched so its `main` is current), points the advance tick's cwd
- * at it, threads a {@link jobWorktreeDoDriver} so the build/slice rungs isolate in
+ * at it, threads a {@link jobWorktreeDoDriver} so the build/task rungs isolate in
  * their OWN worktree off the SAME arbiter, runs the tick, then REAPS the clone.
  * The current checkout is NEVER touched (the isolation point), and a failed tick
  * reaps its clone like a failed `do --isolated`.
@@ -164,7 +164,7 @@ export async function performAdvanceIsolated(
 		}
 		git(['fetch', '--quiet', arbiterRemoteName], cloneDir, {env});
 
-		// 3. Run the advance TICK against the isolated clone. The build/slice rungs
+		// 3. Run the advance TICK against the isolated clone. The build/task rungs
 		//    ORCHESTRATE `do` through the INJECTED job-worktree driver (their OWN
 		//    worktree off the arbiter — the SAME isolation `run`'s build tick gives),
 		//    NOT in `process.cwd()`. The surface/apply/triage rungs run tree-less in
@@ -190,7 +190,7 @@ export async function performAdvanceIsolated(
 		// A TREE-LESS rung (surface/apply/triage) committed the sidecar / marker
 		// LOCALLY in the clone; ff-push it to the arbiter so the result LANDS (a
 		// one-shot from a busy checkout would otherwise vanish with the reaped clone).
-		// The build/slice rungs already pushed via the job-worktree `doDriver`.
+		// The build/task rungs already pushed via the job-worktree `doDriver`.
 		if (
 			result.exitCode === 0 &&
 			result.rung !== undefined &&
@@ -285,7 +285,7 @@ export interface PerformAdvanceIsolatedMultiOptions extends SharedIsolatedContex
  *      SAME mirror idempotently — a fetch, never a re-clone);
  *   2. {@link scanMirrorPool} over the bare hub mirror's committed `main` (the
  *      isolated counterpart of the in-place pool scan, gated per-action);
- *   3. {@link selectPrioritised} (slices-first / `prdsFirst`, bounded by `count`);
+ *   3. {@link selectPrioritised} (tasks-first / briefs-first per `selectionOrder`, bounded by `count`);
  *   4. a SEQUENTIAL loop over the FROZEN selected set (selected ONCE in 2–3, NEVER
  *      re-scanned) where each per-item {@link performAdvanceIsolated} re-fetches the
  *      SAME mirror, so item N's clone branches off a `main` that contains item N-1's
@@ -325,7 +325,7 @@ export async function performAdvanceIsolatedAuto(
 	}
 
 	// Scan the mirror's committed `main` for the SAME pools the in-place scan
-	// enumerates (eligible slices gated on `autoBuild`, sliceable PRDs gated on
+	// enumerates (eligible tasks gated on `autoBuild`, taskable briefs gated on
 	// `autoTask`, + the lifecycle sub-pools), through the SHARED mirror-pool scan.
 	const scan = await scanMirrorPool({
 		mirrorPath: mirror.path,
@@ -353,8 +353,8 @@ export async function performAdvanceIsolatedAuto(
 
 	if (selected.length === 0) {
 		const message =
-			'Nothing eligible to advance on the remote (no eligible slices and no ' +
-			'sliceable PRDs under the per-action gates).';
+			'Nothing eligible to advance on the remote (no eligible tasks and no ' +
+			'taskable briefs under the per-action gates).';
 		note(message);
 		return {results: [], exitCode: 0, message};
 	}
@@ -373,7 +373,7 @@ export async function performAdvanceIsolatedAuto(
  * Run the EXPLICIT multi-arg form (`advance --isolated <a> <b> …`): the NAMED items
  * in the GIVEN order (no pool/priority — the operator chose them), each through the
  * ISOLATED advance-tick runner, SEQUENTIALLY. No mirror scan is needed (the args
- * are explicit); the per-item tick resolves each bare/`prd:`/`obs:` arg itself.
+ * are explicit); the per-item tick resolves each bare/`brief:`/`obs:` arg itself.
  */
 export async function performAdvanceIsolatedArgs(
 	args: string[],

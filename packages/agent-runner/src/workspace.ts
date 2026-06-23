@@ -27,7 +27,7 @@ import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
  * management or the repo→key encoding) and leaves a per-job state record (a
  * `<work-id>.json` SIBLING of the worktree, OUTSIDE the checked-out tree —
  * {@link jobRecordPath}) + the worktree on disk for `gc`/`status` to read (those
- * are SEPARATE slices — this slice only provides the state they evaluate).
+ * are SEPARATE tasks — this task only provides the state they evaluate).
  *
  * `<workspacesDir>` is STATE, not cache (ADR §3): it lives under a single
  * visible `~/.agent-runner/`, never `~/.cache`.
@@ -65,7 +65,7 @@ export interface JobRecord {
 
 /**
  * A job's lifecycle state, persisted in its record. The reaper (`gc`) and
- * `status` read it together with the worktree's existence (ADR §4); this slice
+ * `status` read it together with the worktree's existence (ADR §4); this task
  * only ever sets `running` (and lets the harness/integration update it later).
  */
 export type JobState =
@@ -155,9 +155,9 @@ export interface CreateJobOptions {
 	/** The work slug being processed (→ branch `work/<type>-<slug>` + work-id). */
 	slug: string;
 	/**
-	 * The item TYPE — `'slice'` (build) or `'prd'` (slicing) — namespacing the
-	 * work branch via {@link workBranchRef} so a same-slug slice and PRD never
-	 * collide. Defaults to `'slice'`.
+	 * The item TYPE — `'task'` (build) or `'brief'` (tasking) — namespacing the
+	 * work branch via {@link workBranchRef} so a same-slug task and brief never
+	 * collide. Defaults to `'task'`.
 	 */
 	type?: SlugNamespace;
 	/** The execution working area (config `workspacesDir`, default `~/.agent-runner`). */
@@ -205,7 +205,7 @@ export interface Job {
 	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY (the
 	 * stale-lease retry cap was exhausted, or a non-stale-lease rejection such as
 	 * a protected ref / an unreachable arbiter) — the helper THROWS, and we catch
-	 * it here so the run does NOT crash leaving the slice silently in-progress on
+	 * it here so the run does NOT crash leaving the task silently in-progress on
 	 * the arbiter (the stale-lease-strand bug). The caller routes the item to
 	 * needs-attention, the kept work left committed + recoverable on the branch.
 	 * Absent on a fresh cut, a clean continue that pushed, and a rebase conflict
@@ -215,7 +215,7 @@ export interface Job {
 	/**
 	 * Remove the job's worktree + work branch from the hub (`git worktree remove`
 	 * + prune; never a bare `rm -rf`, ADR §4). NOTE: the SAFE-to-delete predicate
-	 * (ADR §4) is owned by the `gc` slice — this is only the mechanical teardown
+	 * (ADR §4) is owned by the `gc` task — this is only the mechanical teardown
 	 * the runner uses after a job is provably saved.
 	 */
 	dispose(): void;
@@ -306,7 +306,7 @@ export function createJob(options: CreateJobOptions): Job {
 			// SAME abort → needs-attention path (never auto-resolved).
 			//
 			// The helper THROWS on a terminal failure (the stale-lease retry cap, or a
-			// non-stale-lease rejection / unreachable arbiter). BEFORE this slice that
+			// non-stale-lease rejection / unreachable arbiter). BEFORE this task that
 			// throw ESCAPED `createJob` uncaught, crashing the run and leaving the
 			// already-committed kept work silently in `work/in-progress/` on the arbiter
 			// (the stale-lease-strand incident). We now CATCH it and flag

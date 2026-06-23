@@ -64,13 +64,13 @@ export const REPO_ALLOWED_KEYS = [
 	// `taskingIntegration` (the per-TRANSITION override for the brief→tasks TASKING
 	// transition ONLY) is a genuine repo property exactly like `integration`: whether
 	// THIS repo tasks a brief straight onto `main` (task FILES land, no PR) while it
-	// still BUILDS each slice as a reviewable PR is agreed by all collaborators +
+	// still BUILDS each task as a reviewable PR is agreed by all collaborators +
 	// travels with the repo. Resolved per-repo through the SAME chain as
 	// `integration`, then falls back to `integration` when unset. DISTINCT from
 	// intake's per-EMITTED-TYPE `{task, brief}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
 	'taskingIntegration',
-	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, PRD
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, brief
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
 	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker
 	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
@@ -82,7 +82,7 @@ export const REPO_ALLOWED_KEYS = [
 	// config-resolved. Fed into the shared placement resolver as the
 	// configured-default rung (`src/placement.ts`).
 	'tasksLandIn',
-	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — staging vs pool, PRD
+	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — staging vs pool, brief
 	// `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12) is a genuine
 	// repo property exactly like `tasksLandIn`: whether THIS repo's intake-
 	// authored briefs land STAGED (`pre-proposed/`, review-without-PR human-promote path)
@@ -108,7 +108,7 @@ export const REPO_ALLOWED_KEYS = [
 	// `verify`.
 	'prepare',
 	'defaultArbiter',
-	// `autoBuild` (may an agent auto-BUILD undeclared, not-`humanOnly` slices in
+	// `autoBuild` (may an agent auto-BUILD undeclared, not-`humanOnly` tasks in
 	// this repo?) is a genuine repo property — the build member of the symmetric
 	// per-action gate family.
 	'autoBuild',
@@ -123,7 +123,7 @@ export const REPO_ALLOWED_KEYS = [
 	// boolean (no alias; no external users owed a migration window, 2026-06-12).
 	'observationTriage',
 	// `surfaceBlockers` (the BOOLEAN gate over DECLARED blocked work — whether a
-	// slice/PRD carrying `needsAnswers:true` is rendered into a question sidecar) is a
+	// task/brief carrying `needsAnswers:true` is rendered into a question sidecar) is a
 	// genuine repo property — the blocked-work side of the question-surfacing gate
 	// family (ADR `ci-config-policy-and-gate-family`), the orthogonal peer of
 	// `observationTriage`, resolved per-repo through the same chain as `autoBuild`.
@@ -148,8 +148,8 @@ export const REPO_ALLOWED_KEYS = [
 	// (machine paths/commands), so they are rejected below.
 	'model',
 	'harness',
-	// Gate 2 (PR/code review) policy is a genuine repo property (GATES PRD
-	// `work/prd/review.md`), resolved per-repo like `integration`/`autoBuild`:
+	// Gate 2 (PR/code review) policy is a genuine repo property (GATES brief
+	// `work/briefs/tasked/review.md`), resolved per-repo like `integration`/`autoBuild`:
 	// whether this repo runs Gate 2 (`review`), which model the review agent runs
 	// on (`reviewModel`), and the revise↔review loop bound (`reviewMaxRounds`).
 	// `reviewModel` is routing intent (not auth), so — like `model` — it is
@@ -458,7 +458,7 @@ export function resolveRepoConfig(
  * working-tree read ({@link loadRepoConfig}); `do --remote` feeds it the arbiter's
  * committed file read from `main` via {@link loadRepoConfigFromContent}. EITHER
  * way the layering + the rejected-key passthrough are IDENTICAL — only the bytes'
- * origin differs (the slice's one genuinely-new seam).
+ * origin differs (the task's one genuinely-new seam).
  */
 export function resolveRepoConfigFromLoaded(
 	repo: LoadedRepoConfig,

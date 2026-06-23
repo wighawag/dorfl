@@ -111,7 +111,7 @@ export function ensureMirror(options: EnsureMirrorOptions): EnsureMirrorResult {
 				env,
 			},
 		);
-		// SHARED-MIRROR SIBLING-WORKTREE SAFETY (slice
+		// SHARED-MIRROR SIBLING-WORKTREE SAFETY (task
 		// `cutover-claim-body-stays-and-complete-sources-from-backlog`): two SAME-repo
 		// `run` jobs share ONE bare mirror, and each `git worktree add`s its own LOCAL
 		// `work/<slug>` head. The remaining all-heads fetch (which brings down each
@@ -120,7 +120,7 @@ export function ensureMirror(options: EnsureMirrorOptions): EnsureMirrorResult {
 		// head while that sibling worktree has it checked out (`fatal: refusing to fetch
 		// into branch ... checked out`) and exits non-zero — EVEN THOUGH it still updated
 		// every OTHER ref (incl. main, above, and THIS job's own `work/<slug>`). Before
-		// this slice the claim's body-move serialised the jobs enough to hide the
+		// this task the claim's body-move serialised the jobs enough to hide the
 		// overlap; with claim no longer writing `main` the jobs run concurrently and it
 		// surfaces. So this all-heads fetch is BEST-EFFORT (soft): a sibling's
 		// checked-out head being refused must NOT fail the whole ensure — the refs we
@@ -233,7 +233,7 @@ export function fetchMirrorMain(
  * `.agent-runner.json` on `main` (a config-less repo — the caller then resolves to
  * exactly global + default, byte-identical to before this layer existed).
  *
- * This is the slice's ONE genuinely-new seam: sourcing the bytes from the arbiter
+ * This is the task's ONE genuinely-new seam: sourcing the bytes from the arbiter
  * instead of the cwd. The parse / allow-reject filtering stays in
  * {@link loadRepoConfigFromContent} (the existing per-repo machinery), so the
  * host-only key rejection is identical however the bytes were sourced.

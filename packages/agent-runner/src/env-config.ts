@@ -92,7 +92,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. Unset ⇒ the tasking transition falls back to
 	// `integration` (the flat value). It NEVER touches the build transition or intake.
 	taskingIntegration: {enum: ['propose', 'merge']},
-	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — PRD
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — brief
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
 	// `pre-backlog`/`todo` enum, so `AGENT_RUNNER_TASKS_LAND_IN=todo` works and a
 	// typo FAILS LOUDLY. Same
@@ -100,7 +100,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// built-in `pre-backlog`); fed into the runner-deterministic placement
 	// resolver (`src/placement.ts`) as the configured-default rung.
 	tasksLandIn: {enum: ['pre-backlog', 'todo']},
-	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — PRD
+	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — brief
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
 	// `pre-proposed`/`ready` enum, so `AGENT_RUNNER_BRIEFS_LAND_IN=ready` works and a typo
 	// FAILS LOUDLY. Same precedence chain as `tasksLandIn` (flag > env > per-repo
@@ -128,7 +128,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	taskerLoop: 'boolean',
 	taskerLoopMax: 'number',
 	taskerLoopModel: 'string',
-	// `freshWorktreeGate` is a BOOLEAN coercion (like `slicerLoop`), so
+	// `freshWorktreeGate` is a BOOLEAN coercion (like `taskerLoop`), so
 	// `AGENT_RUNNER_FRESH_WORKTREE_GATE=true|false` works and a typo FAILS LOUDLY.
 	freshWorktreeGate: 'boolean',
 	// `promptGuidance` is a STRUCTURED (nested) namespace, so it has no scalar env

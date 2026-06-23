@@ -404,14 +404,14 @@ describe('slice acceptance gate — the prompt is a slice-SET prompt (distinct f
 	it('the slice-SET prompt reviews the WHOLE SET (coherence / graph / gaps+overlap), NOT a code diff', () => {
 		const prompt = buildTaskAcceptancePrompt('it');
 		// It frames a SET review with the set-of-tasks lens…
-		expect(prompt).toMatch(/slice-SET ACCEPTANCE GATE/);
+		expect(prompt).toMatch(/task-SET ACCEPTANCE GATE/);
 		expect(prompt).toMatch(/WHOLE SET/);
 		expect(prompt).toMatch(/DEPENDENCY GRAPH/);
 		expect(prompt).toMatch(/GAPS \+ OVERLAP/);
 		expect(prompt).toMatch(/CORRECT-IF-IMPLEMENTED/);
 		// …and it is TERMINAL (emits a verdict; does not edit — distinct from the
 		// improver loop).
-		expect(prompt).toMatch(/do NOT edit any slice/);
+		expect(prompt).toMatch(/do NOT edit any task/);
 	});
 
 	it('it is demonstrably DISTINCT from the build per-diff review prompt', () => {
@@ -422,6 +422,6 @@ describe('slice acceptance gate — the prompt is a slice-SET prompt (distinct f
 		// reviews the SET of tasks against the brief.
 		expect(buildPrompt).toMatch(/code changes/);
 		expect(setPrompt).not.toMatch(/review the code changes/);
-		expect(setPrompt).toMatch(/candidate slices/);
+		expect(setPrompt).toMatch(/candidate tasks/);
 	});
 });

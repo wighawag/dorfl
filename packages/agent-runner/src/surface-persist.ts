@@ -13,7 +13,7 @@ import {
 } from './sidecar.js';
 
 /**
- * The engine-owned SURFACE PERSIST (PRD `advance-loop`, slice
+ * The engine-owned SURFACE PERSIST (brief `advance-loop`, task
  * `advance-rung-surface`, US #15/33) — the half of the surface rung the ENGINE
  * owns (the skill JUDGES, the engine PERSISTS). Given the questions the
  * `surface-questions` skill EMITTED (gathered by `surface-gate.ts`'s spawn), the
@@ -26,9 +26,9 @@ import {
  * the APPLY rung's one-commit primitive (resolve/re-pause); this is the SURFACE
  * rung's one-commit primitive (append-or-create + set `needsAnswers`). Kept in a
  * SEPARATE module so the surface rung's persist and the apply rung's persist stay
- * file-orthogonal (the rung bodies land in different slices).
+ * file-orthogonal (the rung bodies land in different tasks).
  *
- * The load-bearing rules (the slice's acceptance criteria):
+ * The load-bearing rules (the task's acceptance criteria):
  *
  *   - **Append-never-overwrite (US #15).** When a sidecar ALREADY exists, the new
  *     questions are APPENDED ({@link appendQuestions} mints `qN+1…`), NEVER
@@ -53,7 +53,7 @@ import {
 export interface SurfacePersistOptions {
 	/** Working clone/worktree the persist commits in. */
 	cwd: string;
-	/** The namespaced item identity (`slice:foo` / `prd:bar` / `observation:baz`). */
+	/** The namespaced item identity (`task:foo` / `brief:bar` / `observation:baz`). */
 	item: string;
 	/**
 	 * The item file path RELATIVE to `cwd` (e.g. `work/backlog/foo.md`). The

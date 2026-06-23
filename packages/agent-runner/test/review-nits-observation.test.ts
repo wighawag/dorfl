@@ -162,7 +162,7 @@ describe('review-nits-observation — approve WITH non-blocking findings (the co
 		// The triage note is SKILL-AGNOSTIC: action-only wording that names no skill,
 		// so the gate cannot keep a retired triage skill (batch-qa) alive on disk.
 		expect(body).toContain(
-			'is their durable home for triage — promote-to-slice / keep / delete.',
+			'is their durable home for triage — promote-to-task / keep / delete.',
 		);
 		expect(body).not.toContain('batch-qa');
 	});

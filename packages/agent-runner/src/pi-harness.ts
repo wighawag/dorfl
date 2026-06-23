@@ -21,17 +21,17 @@ import type {HarnessAdapter} from './config.js';
  * `agent-workspaces` (`./harness.ts`): launch a job's work-agent command in its
  * worktree, and report liveness from **pi-native signals**.
  *
- * Two design commitments from the slice + ADR §5, both encoded here:
+ * Two design commitments from the task + ADR §5, both encoded here:
  *
  *  1. **Invocation** is the standard work-agent prompt (the constant wrapper +
- *     the slice's `## Prompt`, assembled by `./prompt.ts`) fed to the pi CLI on
+ *     the task's `## Prompt`, assembled by `./prompt.ts`) fed to the pi CLI on
  *     stdin, running non-interactively (`--print`) inside the job worktree.
  *  2. **Liveness** is reported from the **PID** (process alive?) PLUS a pointer
  *     to the pi **session file** (real activity + an audit trail) — explicitly
  *     **NOT filesystem mtime**: a live agent can think for minutes without
  *     writing any files, so mtime would mistake a thinking agent for a dead one.
  *
- * ## Session location: `--session <full-path>` (slice `session-path-pi-default`)
+ * ## Session location: `--session <full-path>` (task `session-path-pi-default`)
  *
  * The adapter passes a **deterministic FULL session-FILE path** as `--session
  * <path>` (NOT `--session-dir <dir>`). The caller GENERATES that path once
@@ -176,7 +176,7 @@ export class PiHarness implements Harness {
 			ok: status === 0,
 			record,
 			detail: status === 0 ? undefined : (result.stderr ?? '').trim(),
-			// The agent's ANSWER (slice `harness-agent-output`): the LAST assistant
+			// The agent's ANSWER (task `harness-agent-output`): the LAST assistant
 			// turn's text read from the session `.jsonl` pi just wrote — NOT piped
 			// stdout (which is drained). Shares `watch-session.ts`'s reader.
 			output: readLastAssistantText(sessionFile),
@@ -188,7 +188,7 @@ export class PiHarness implements Harness {
 	 * --session <file>` invocation, same prompt on stdin, output still CAPTURED,
 	 * same `LaunchResult` shape: PID anchor + session pointer + ok/detail), but
 	 * launched NON-BLOCKING with `spawn` instead of the synchronous `spawnSync`.
-	 * This is the one structural carve-out the `do --watch` observer needs (slice
+	 * This is the one structural carve-out the `do --watch` observer needs (task
 	 * `do-watch`): `spawnSync` blocks the event loop until pi exits, so NOTHING
 	 * could tail the growing session `.jsonl` concurrently. `launchAsync` runs pi
 	 * alongside the tailer; the WHOLE launch delta is `spawnSync` → `spawn`. The
@@ -229,7 +229,7 @@ export class PiHarness implements Harness {
 					record,
 					detail: status === 0 ? undefined : stderr.trim(),
 					// Read the agent's ANSWER from the `.jsonl` at `close` — the same
-					// last-assistant-text read `launch` does at return (slice
+					// last-assistant-text read `launch` does at return (task
 					// `harness-agent-output`); the process has exited so the log is final.
 					output: readLastAssistantText(sessionFile),
 				});
@@ -243,7 +243,7 @@ export class PiHarness implements Harness {
 	}
 
 	/**
-	 * Launch pi INTERACTIVELY (slice `agent-interactive-launch`, decision #2): a
+	 * Launch pi INTERACTIVELY (task `agent-interactive-launch`, decision #2): a
 	 * FOREGROUND human session in `input.dir`. The whole delta from {@link launch}
 	 * is the stdio contract:
 	 *
@@ -324,7 +324,7 @@ export function piSessionExists(record: HarnessRecord): boolean {
 /**
  * Read the LAST assistant message's text from the pi session `.jsonl` at
  * `sessionFile` — the agent's final ANSWER, surfaced as `LaunchResult.output`
- * (slice `harness-agent-output`). Called by BOTH `launch` (at return) and
+ * (task `harness-agent-output`). Called by BOTH `launch` (at return) and
  * `launchAsync` (at `close`), AFTER pi has exited so the log is complete.
  *
  * It REUSES `watch-session.ts`'s {@link lastAssistantText} (one `.jsonl` parser,

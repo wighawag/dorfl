@@ -25,7 +25,7 @@ export interface EligibilityInput {
 	blockedBy: string[];
 	/** Slugs present in this repo's `work/done/`. */
 	doneSlugs: Set<string>;
-	/** Per-repo policy: may agents auto-BUILD *undeclared* (not human-only) slices? */
+	/** Per-repo policy: may agents auto-BUILD *undeclared* (not human-only) tasks? */
 	autoBuild: boolean;
 }
 

@@ -26,10 +26,10 @@ import {
  *     in the SAME commit. After this the invariant holds: `needsAnswers:false`
  *     and no sidecar file.
  *
- * This slice delivers the single-commit primitive over a working tree (the
- * throwaway-git-repo pattern the slicing-lock / claim-cas tests use). It does
+ * This task delivers the single-commit primitive over a working tree (the
+ * throwaway-git-repo pattern the tasking-lock / claim-cas tests use). It does
  * NOT take the `advancing` CAS lock or race the arbiter — that is the lock
- * slice's job; this is the contract the lock later wraps. The caller supplies
+ * task's job; this is the contract the lock later wraps. The caller supplies
  * the item's CURRENT body and its on-disk PATH (relative to the repo root); the
  * apply rewrites that file + the sidecar and commits them together.
  */

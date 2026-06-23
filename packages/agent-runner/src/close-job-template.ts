@@ -1,22 +1,22 @@
 /**
- * The `install-ci` CLOSE-JOB capability (PRD `runner-in-ci`, slice
+ * The `install-ci` CLOSE-JOB capability (brief `runner-in-ci`, task
  * `install-ci-close-job-workflow`; capability E: close issues when their work
  * lands). This module GENERATES the one fixed workflow file for the close-job and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
  * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
  * NO YAML lib, so the checks are presence/shape assertions over the raw text).
  *
- * The discipline (from the PRD capability-E row + the Out-of-Scope fence):
+ * The discipline (from the brief capability-E row + the Out-of-Scope fence):
  *
  *   - TRIGGER: a MERGE to `main`. There is no native "PR merged" event, so the
  *     workflow uses `push: {branches: [main]}` (NOT `pull_request: closed`): it
  *     fires for BOTH PR-merges AND direct pushes to `main`, and it ALWAYS runs with
  *     a normal (non-fork-restricted) `GITHUB_TOKEN` that can actually close issues
  *     — whereas a `pull_request` event from a FORK gets a read-only token and
- *     cannot close. (See the `## Decisions` block in the slice.)
+ *     cannot close. (See the `## Decisions` block in the task.)
  *   - The job INVOKES the close machinery via `agent-runner close-merged-issues`,
  *     which CONSUMES the UNCHANGED engine pieces: the resolution
- *     (`resolveClosingIssue`), the "PRD complete?" query (`prd-complete-query`,
+ *     (`resolveClosingIssue`), the "brief complete?" query (`prd-complete-query`,
  *     done), and `IssueProvider.closeIssue`. CI owns ONLY the job + trigger; it
  *     re-implements NONE of those (the Out-of-Scope fence).
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
@@ -29,7 +29,7 @@
  *     `contents: read` (to read the `work/` tree) + `issues: write` (to close).
  *
  * The structural validator is the dependency-free counterpart of "the workflow
- * parses + carries the right discipline" the slice's acceptance criteria require;
+ * parses + carries the right discipline" the task's acceptance criteria require;
  * the test generates this artifact under `--fake` and asserts every invariant.
  */
 
@@ -54,7 +54,7 @@ export const CLOSE_JOB_WORKFLOW_PATH = 'workflows/close-job.yml';
  */
 export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
 	return `\
-# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, PRD runner-in-ci).
+# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, brief runner-in-ci).
 # EMITTED by \`agent-runner install-ci\`; the human commits it. DO NOT hand-edit a
 # copy — re-run install-ci to upgrade the shell.
 #
@@ -68,10 +68,10 @@ export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
 # WHAT IT DOES — \`agent-runner close-merged-issues\` resolves which source issue(s)
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
-#   * the RESOLUTION (resolveClosingIssue): a lone slice closes its own \`issue:\`;
-#     a fanned slice/PRD reaches the number via \`slice.prd: → PRD issue:\`.
-#   * the "PRD complete?" QUERY (prd-complete-query, done): a PRD's issue closes
-#     ONLY when ALL its \`prd:<slug>\` slices are in work/done/.
+#   * the RESOLUTION (resolveClosingIssue): a lone task closes its own \`issue:\`;
+#     a fanned task reaches the number via \`task.brief: → brief issue:\`.
+#   * the "brief complete?" QUERY (prd-complete-query, done): a brief's issue closes
+#     ONLY when ALL its \`brief:<slug>\` tasks are in work/done/.
 #   * the CLOSE (IssueProvider.closeIssue): the atomic comment+close seam — NO
 #     direct \`gh\` in the engine core; any comment rides this close, never the PR
 #     comment seam.
@@ -117,7 +117,7 @@ jobs:
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. Resolves the closing issue(s) from the work/ tree, runs
-        # the "PRD complete?" query for the PRD case, and closes via the provider
+        # the "brief complete?" query for the brief case, and closes via the provider
         # seam — all UNCHANGED engine pieces, consumed not re-built.
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
@@ -142,7 +142,7 @@ export interface CloseJobValidation {
 }
 
 /**
- * Structurally validate the close-job workflow against the slice's acceptance
+ * Structurally validate the close-job workflow against the task's acceptance
  * criteria. Dependency-free (no YAML lib): presence/shape assertions over the raw
  * text, mirroring {@link validateAdvanceLifecycleWorkflow}.
  */
@@ -175,7 +175,7 @@ export function validateCloseJobWorkflow(text: string): CloseJobValidation {
 		operative,
 	), 'must NOT use the `pull_request` trigger (a fork PR gets a read-only token ' +
 		'that cannot close; `push: [main]` is the chosen trigger).');
-	// And it must NOT be the build/slice tick's cron/dispatch shape — the close-job
+	// And it must NOT be the build/task tick's cron/dispatch shape — the close-job
 	// is event-driven on a merge, not a scheduled drain.
 	require('no-cron-trigger', !/\bschedule:\s*[\s\S]*?-\s*cron:/.test(
 		operative,
@@ -183,7 +183,7 @@ export function validateCloseJobWorkflow(text: string): CloseJobValidation {
 	require('no-answer-loop-push-trigger', !/work\/questions\//.test(
 		text,
 	), 'the close-job must NOT carry the `push work/questions/**` (answer-loop) ' +
-		'trigger — that is the advance-lifecycle slice.');
+		'trigger — that is the advance-lifecycle task.');
 
 	// --- INVOKES the close machinery via the existing command -------------------
 	// Scoped to operative (non-comment) lines: the explanatory comment NAMES the
@@ -198,10 +198,10 @@ export function validateCloseJobWorkflow(text: string): CloseJobValidation {
 		operative,
 	), 'the close must go through `agent-runner close-merged-issues` (the provider ' +
 		'seam), NOT a direct `gh issue close` in the workflow.');
-	// It must NOT invoke a build/slice/intake verb — the close-job only closes.
+	// It must NOT invoke a build/task/intake verb — the close-job only closes.
 	require('no-build-verbs', !/agent-runner (?:do|advance|intake)\b/.test(
 		operative,
-	), 'the close-job must invoke ONLY `close-merged-issues`, not a build/slice/' +
+	), 'the close-job must invoke ONLY `close-merged-issues`, not a build/task/' +
 		'intake verb (CI owns only the close job + trigger).');
 
 	// --- CI runs IN-PLACE: no isolation machinery ------------------------------

@@ -1,5 +1,5 @@
 /**
- * The thin GitHub adapter for `install-ci` (PRD `runner-in-ci`, slice
+ * The thin GitHub adapter for `install-ci` (brief `runner-in-ci`, task
  * `install-ci-core-and-github-adapter`). It plugs into the provider-agnostic
  * {@link CIProviderContext} seam from `install-ci-core.ts`: the core owns the
  * wizard / config / `models.json` / `--export-config` / `--fake` / secret
@@ -135,7 +135,7 @@ export class GitHubCIContext implements CIProviderContext {
 /**
  * An in-memory STUB provider context for tests + `--fake` mode: `setSecret`
  * records to memory (NO real secrets store touched), `ghAvailable` is fixed
- * (default `false`), `repo` is a fixture. This is the mechanism the slice's
+ * (default `false`), `repo` is a fixture. This is the mechanism the task's
  * shared-write isolation requires — no network, no real `gh`, no real GitHub, no
  * real `~`, no system git config written.
  */

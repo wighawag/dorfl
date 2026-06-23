@@ -335,7 +335,7 @@ export function discoverJobs(workspacesDir: string): GcJob[] {
 		// The job record carries the (already-namespaced) branch — the SOURCE OF
 		// TRUTH. Only when a record is missing/legacy do we synthesise a fallback;
 		// the flat work-id dir name cannot recover the type, so default to the
-		// overwhelmingly-common `slice` namespace (a recordless worktree is a rare
+		// overwhelmingly-common `task` namespace (a recordless worktree is a rare
 		// legacy/corrupt case).
 		const branch = record?.branch ?? workBranchRef('task', slug);
 		jobs.push({dir, slug, branch, record});

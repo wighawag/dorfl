@@ -13,7 +13,7 @@ import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import type {InteractiveLauncher} from './harness.js';
 
 /**
- * `agent-runner start [<slug>]` — the human convenience that claims a slice (only
+ * `agent-runner start [<slug>]` — the human convenience that claims a task (only
  * if necessary) and onboards the human onto its work branch in their CURRENT
  * checkout. It is a thin sequencer over the `claim` CAS (claim-cas.ts): it never
  * reimplements or weakens the claim, and it creates the work branch ONLY after a
@@ -72,13 +72,13 @@ export interface StartOptions {
 	/** Assert ownership of an already-in-progress item (switch without claiming). */
 	resume?: boolean;
 	/**
-	 * Override the readiness guard (`--force` / `--ignore-not-ready`): claim a slice
+	 * Override the readiness guard (`--force` / `--ignore-not-ready`): claim a task
 	 * with an unmet `blockedBy` anyway, and silence the `needsAnswers` warning —
 	 * loudly. Forwarded to the claim CAS's human-path guard.
 	 */
 	override?: boolean;
 	/**
-	 * `--agent` (slice `agent-interactive-launch`): after onboarding onto
+	 * `--agent` (task `agent-interactive-launch`): after onboarding onto
 	 * `work/<slug>`, launch the configured harness INTERACTIVELY in the checkout —
 	 * a foreground session the human drives (no prepared prompt). Injected as a
 	 * thin launcher so `start.ts` stays decoupled from `createHarness`: the CLI
@@ -186,7 +186,7 @@ async function runStart(
 		note,
 	});
 
-	// `--agent` (slice `agent-interactive-launch`): when the human onboarded onto a
+	// `--agent` (task `agent-interactive-launch`): when the human onboarded onto a
 	// work branch (started/resumed/resolved — exit 0 with a branch), launch the
 	// configured harness INTERACTIVELY in the checkout so they can immediately drive
 	// the agent. It is NOT a tracked job (decision #3): no record, no gate — it
@@ -206,10 +206,10 @@ async function runStart(
 /**
  * Resolve the EFFECTIVE dispatch folder, combining the durable `<arbiter>/main`
  * folder with the per-item LOCK ref. Since claim no longer moves the body, a
- * CLAIMED-AND-IN-FLIGHT slice RESTS in `backlog/` on `main` (slice
+ * CLAIMED-AND-IN-FLIGHT task RESTS in `backlog/` on `main` (task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`), and a STUCK item
  * is the per-item lock `state: stuck` (NOT a `needs-attention/` folder file —
- * slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision
+ * task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision
  * i+: the folder is retired). So a folder-only check would mis-read either as
  * unclaimed and let `start` re-claim it. We re-key the dispatch off the LOCK when
  * the body is in `backlog/`:
@@ -302,7 +302,7 @@ async function startFromBacklog(params: {
 
 	// The human-path readiness guard lives in the claim CAS (so both `claim` and
 	// `start` inherit it): an unmet `blockedBy` is refused (exit 1, 'not-ready')
-	// unless overridden; a `needsAnswers` slice warns but still claims.
+	// unless overridden; a `needsAnswers` task warns but still claims.
 	const claim = await performClaim({
 		slug,
 		cwd,
@@ -388,7 +388,7 @@ async function continueConflictResult(params: {
  * rejection like a protected ref) \u2014 NOT a tolerated offline arbiter. Route the
  * item to needs-attention (the SAME \u00a712 surface the conflict path uses) so the
  * already-committed kept work is NOT left silently in-progress (the
- * stale-lease-strand bug this slice kills), then return the 'needs-attention'
+ * stale-lease-strand bug this task kills), then return the 'needs-attention'
  * outcome with a message naming the push failure.
  */
 async function continuePushFailureResult(params: {
@@ -433,7 +433,7 @@ async function startFromNeedsAttention(params: {
 	const {slug, arbiter, cwd, env, note} = params;
 
 	// Surface the recorded reason for the human, read from the STUCK LOCK ENTRY
-	// (slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: the lock
+	// (task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: the lock
 	// is the sole stuck record — no `needs-attention/` folder file). The full reason
 	// prose + any surfaced questions ride on the lock entry body.
 	const stuck = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
@@ -562,7 +562,7 @@ interface SwitchResult {
 
 /**
  * Onboard the checkout onto `work/<slug>`, CONTINUE-AWARE (the keystone of the
- * `requeue-continue-and-reset` slice). `git fetch <arbiter>`, then:
+ * `requeue-continue-and-reset` task). `git fetch <arbiter>`, then:
  *
  *   - **CONTINUE** when the arbiter has a `work/<slug>` ref AHEAD of main (a
  *     `requeue` kept it): switch onto that kept branch (a local tracking branch
@@ -586,8 +586,8 @@ async function switchToWorkBranch(params: {
 	note: (m: string) => void;
 }): Promise<SwitchResult> {
 	const {slug, arbiter, cwd, env, note} = params;
-	// `start` is a SLICE-only command: the branch is the slice-namespaced
-	// `work/slice-<slug>` (distinct from a same-slug PRD-slicing branch).
+	// `start` is a TASK-only command: the branch is the task-namespaced
+	// `work/task-<slug>` (distinct from a same-slug brief-tasking branch).
 	const branch = workBranchRef('task', slug);
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
@@ -595,7 +595,7 @@ async function switchToWorkBranch(params: {
 	// CONTINUE-detection (shared with the job-worktree path): does the arbiter
 	// have a `work/<slug>` ref AHEAD of main? ARBITER-AUTHORITATIVE: `ls-remote`
 	// the arbiter so a STALE local remote-tracking ref (a plain `git fetch` does
-	// NOT prune unless `fetch.prune` is set — verified live in the slice obs)
+	// NOT prune unless `fetch.prune` is set — verified live in the task obs)
 	// pointing at a branch the arbiter no longer has cannot resurrect a deleted
 	// branch as a "continue". In a normal clone the local refs are the
 	// remote-tracking `<arbiter>/work/<slug>` and `<arbiter>/main`.

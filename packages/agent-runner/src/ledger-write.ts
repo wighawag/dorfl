@@ -44,9 +44,9 @@ import {
  * it does NOT name `main`; that `main` is the publish/verify target is an
  * implementation detail of the sole strategy below.
  *
- * This slice routes the CLAIM transition through the seam (see `claim-cas.ts`).
+ * This task routes the CLAIM transition through the seam (see `claim-cas.ts`).
  * The `complete` and `needs-attention` kinds are named here so the companion
- * slices route through the SAME entry point; they are not yet wired.
+ * tasks route through the SAME entry point; they are not yet wired.
  *
  * The NEEDS-ATTENTION transition is wired here too: the abort paths in
  * `complete.ts` (red gate, rebase conflict), the runner's stuck routing in
@@ -64,10 +64,11 @@ import {
 /**
  * The `work/` lifecycle transitions the write seam can apply.
  *
- * `slicing` is the legacy slicing-lock MARKER transition. It is now VESTIGIAL: the
- * capstone cut-over (slice
+ * `slicing` is the legacy tasking-lock MARKER transition. It is now VESTIGIAL: the
+ * capstone cut-over (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) retired the
- * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` marker, so the slicing lock
+ * `git mv work/prd/<slug>.md → work/slicing/<slug>.md` marker (the historical
+ * marker paths), so the tasking lock
  * is the unified per-item lock ref (`tasking-lock.ts`) and no longer routes through
  * {@link applyTransition} with this kind. The member is kept so the strategy
  * interface and any historical reference stay valid; nothing publishes it.
@@ -88,8 +89,8 @@ export type LedgerTransitionKind =
 	| 'slicing'
 	| 'advancing'
 	/**
-	 * The **promote** transition (PRD `staging-pool-position-gate-and-trust-model`,
-	 * slice `pre-backlog-staging-folder-and-promote-step-a`): move a STAGED slice
+	 * The **promote** transition (brief `staging-pool-position-gate-and-trust-model`,
+	 * task `pre-backlog-staging-folder-and-promote-step-a`): move a STAGED task
 	 * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` to enter the
 	 * agent-eligible pool. A durable `main` move, the same category as `requeue`
 	 * (tree-less CAS via {@link applyTransition}). RUNNER/human-owned — no
@@ -135,7 +136,7 @@ export interface ApplyCompleteTransitionInput {
 	body?: string;
 	/**
 	 * **Reap the remote head branch inline after a merge lands** (the merged-branch
-	 * hygiene slice's part (b)). When `true` on the `merge` path, delete the remote
+	 * hygiene task's part (b)). When `true` on the `merge` path, delete the remote
 	 * `work/<slug>` head AFTER the work landed on `main` (provably merged, so
 	 * ancestor-safe; idempotent no-op when no remote head exists). Threaded straight
 	 * to {@link Integrator.integrate}. Ignored in `propose` mode (the branch is the
@@ -173,7 +174,7 @@ export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
  * move result the folder-native mechanism produces. The RECOVERABLE branch push
  * outcome rides on `branchPush` (the caller reads it rather than assuming
  * "pushed" off the local move). The OBSERVABLE half is now the per-item lock
- * `state: stuck` amend (PRD `ledger-status-per-item-lock-refs`); there is no
+ * `state: stuck` amend (brief `ledger-status-per-item-lock-refs`); there is no
  * separate on-`main` surface outcome to report.
  */
 export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
@@ -224,7 +225,7 @@ export type ApplyTreelessNeedsAttentionTransitionResult =
  * Storage-agnostic — it names the slug + the working clone (and an OPTIONAL
  * arbiter to amend the lock on), NOT *where* the stuck state lives. The sole
  * strategy clears it by amending the per-item lock `stuck → active` on the
- * arbiter (slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`).
+ * arbiter (task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`).
  */
 export interface ApplyResolveNeedsAttentionTransitionInput {
 	/** The working clone the `work/` tree lives in. */
@@ -400,7 +401,7 @@ export const CAS_NONCE_TRAILER = 'CAS-Nonce';
  * freshly-appended `CAS-Nonce: <uuid>` trailer, and return the new sha. This is
  * the ONE chokepoint that makes EVERY {@link
  * LedgerWriteStrategy.applyTransition} caller's CAS commit unique — create,
- * claim, slicing-lock, advancing-lock, and the needs-attention/requeue surface
+ * claim, tasking-lock, advancing-lock, and the needs-attention/requeue surface
  * all route their publish through `applyTransition`, so stamping HERE (the seam
  * AMENDING the tip's message just before the push) covers all of them WITHOUT a
  * shared commit-building helper and WITHOUT touching each commit site.
@@ -625,8 +626,8 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 *   - **RECOVERABLE** — push the work branch (when there IS one), so the saved
 	 *     work travels cross-machine and a requeue continues from its tip. (Mode M
 	 *     does that by `git push`ing the branch; the WHICH branch is the caller's,
-	 *     not assumed `work/<slug>` — a build bounce pushes `work/<slug>`, a slicing
-	 *     bounce its `work/slicing/<slug>`, a temp-branch caller pushes NOTHING.)
+	 *     not assumed `work/<slug>` — a build bounce pushes `work/<slug>`, a tasking
+	 *     bounce its `work/brief-<slug>`, a temp-branch caller pushes NOTHING.)
 	 *
 	 * Both halves are ONE operation done in ONE place: it delegates to {@link
 	 * routeToNeedsAttention}, which appends the reason as body prose (never a
@@ -645,7 +646,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		input: ApplyNeedsAttentionTransitionInput,
 	): Promise<ApplyNeedsAttentionTransitionResult> {
 		// BOUNCE = SAVE WIP + PUSH BRANCH (recoverable) + MARK LOCK STUCK (observable)
-		// — slice `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
+		// — task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
 		// (decision i+). The OBSERVABLE half is now the per-item lock `state: stuck`
 		// (full reason prose + any agent-surfaced questions on the entry), NOT a
 		// `git mv` to `needs-attention/` and NOT an on-`main` surface — so a
@@ -704,7 +705,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	async applyTreelessNeedsAttentionTransition(
 		input: ApplyTreelessNeedsAttentionTransitionInput,
 	): ApplyTreelessNeedsAttentionTransitionResult {
-		// PURE LOCK AMEND (slice
+		// PURE LOCK AMEND (task
 		// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+):
 		// the after-commit / ledger-only surface (continue-push-failure /
 		// continue-rebase-conflict) is now the SAME `active → stuck` lock amend as the
@@ -737,11 +738,11 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	async applyResolveNeedsAttentionTransition(
 		input: ApplyResolveNeedsAttentionTransitionInput,
 	): Promise<ApplyResolveNeedsAttentionTransitionResult> {
-		// PURE LOCK AMEND (slice
+		// PURE LOCK AMEND (task
 		// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+):
 		// resolving a stuck item is `stuck → active` on the per-item lock (a human is
 		// picking it up), NOT a `needs-attention/ → in-progress/` folder move. NO `main`
-		// write — the body already rests in `backlog/` (slice 9a) and the work stays on
+		// write — the body already rests in `backlog/` (task 9a) and the work stays on
 		// the kept `work/<slug>` branch. Without an arbiter there is no lock ref to
 		// amend (the human-local face), so it is a recorded no-op success.
 		if (!input.arbiter) {
@@ -771,15 +772,15 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 /**
  * The SOLE stuck-state RECORD: amend the item's HELD per-item lock
  * `active → stuck` + the FULL reason prose + any agent-surfaced questions, via the
- * state machine's mark-stuck CAS amend ({@link markStuckItemLock}) — slice
- * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; PRD
+ * state machine's mark-stuck CAS amend ({@link markStuckItemLock}) — task
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; brief
  * `ledger-status-per-item-lock-refs` US #5/#8; ADR
  * `ledger-status-on-per-item-lock-refs`). This REPLACES the `git mv →
  * needs-attention/` folder bounce + its on-`main` surface + branch push: the
  * bounce now touches ONLY the lock ref (NO `main` write — so a protected-`main`
  * bounce succeeds, and a work branch cut from `main` inherits no stuck record).
  *
- * The bounce holds the SLICE's `implement` lock that `claim` acquired (slice
+ * The bounce holds the TASK's `implement` lock that `claim` acquired (task
  * `claim-acquires-unified-lock-no-body-move`), so the normal stuck path is a plain
  * `active → stuck` amend (`transitioned`). The OUTCOME MAPPING onto `{moved}`:
  *   - `transitioned`  — the lock is now stuck (the stuck state is recorded) ⇒
@@ -798,8 +799,8 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
  *     posture the old local-only folder move took). NOTE this records nothing
  *     durable, by design: the human is in the loop.
  *
- * Keyed on `slice:<slug>` (the bounce surfaces a SLICE; the PRD/observation locks
- * are slicing/advance holds whose own bounce paths are separate).
+ * Keyed on `task:<slug>` (the bounce surfaces a TASK; the brief/observation locks
+ * are tasking/advance holds whose own bounce paths are separate).
  */
 async function bounceToStuckLock(params: {
 	cwd: string;

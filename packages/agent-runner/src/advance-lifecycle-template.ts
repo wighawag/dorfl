@@ -1,5 +1,5 @@
 /**
- * The `install-ci` ADVANCE-LIFECYCLE capability (PRD `runner-in-ci`, slice
+ * The `install-ci` ADVANCE-LIFECYCLE capability (brief `runner-in-ci`, task
  * `install-ci-advance-lifecycle-workflow`; capability C: auto-triage observations
  * + surface declared blockers + apply committed answers). This module GENERATES
  * the advance-lifecycle workflow by ABSORBING and PARAMETERISING the existing seed
@@ -11,7 +11,7 @@
  *
  * This is the "human is the clock" loop: CI drains the populated `work/` tree
  * toward done while the human only answers committed question sidecars on their own
- * time. Over the build/slice tick (its sibling capability), the advance-lifecycle
+ * time. Over the build/task tick (its sibling capability), the advance-lifecycle
  * tick adds exactly three things — and they are the whole reason `advance` (not
  * `do`) is the verb here:
  *
@@ -27,7 +27,7 @@
  *
  *   - CI ALWAYS invokes `advance` (ADR `ci-config-policy-and-gate-family` §1):
  *     `advance` is a strict superset of `do`, and with the lifecycle gates at their
- *     calm defaults it degrades to exactly `do`'s build/slice behaviour. The verb
+ *     calm defaults it degrades to exactly `do`'s build/task behaviour. The verb
  *     is NEVER a user decision; the workflow tunes behaviour via the
  *     `AGENT_RUNNER_*` env block, not by swapping the verb. There is NO
  *     `autoAdvance` gate.
@@ -47,13 +47,13 @@
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
  *     `--isolated`/`--remote`/registry. A CI concurrency group (per-ref) prevents
  *     overlapping ticks; the claim CAS is the real cross-run serialiser.
- *   - All invocations use explicit slug prefixes (`slice:`/`prd:`), never bare
+ *   - All invocations use explicit slug prefixes (`task:`/`brief:`), never bare
  *     (ADR `command-surface-and-journeys` §3a).
  *   - The running CI job NEVER edits `.github/workflows/**` (US #9): it requests
  *     NO `workflows` permission and cannot rewrite its own triggers.
  *
  * The structural validator is the dependency-free counterpart of "the workflow
- * parses + carries the right discipline" the slice's acceptance criteria require;
+ * parses + carries the right discipline" the task's acceptance criteria require;
  * the test generates this artifact under `--fake` and asserts every invariant.
  */
 
@@ -82,7 +82,7 @@ export const ADVANCE_LIFECYCLE_WORKFLOW_PATH =
  *
  * This is the absorbed seed, with two parameterisations: (1) it wires the SHARED
  * composite setup action (`./.github/actions/agent-runner-setup`, emitted by the
- * core slice) into every job; (2) it surfaces the engine gate family — including
+ * core task) into every job; (2) it surfaces the engine gate family — including
  * the two calm-default LIFECYCLE gates — as the `AGENT_RUNNER_*` env block, so the
  * out-of-the-box tick asks nothing until the user opts in. The seed's capability-F
  * reap job + `sweepMergedBranches` input are PRESERVED verbatim (NOT stripped); no
@@ -98,7 +98,7 @@ export function generateAdvanceLifecycleWorkflow(
 	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # agent-runner — the ADVANCE LIFECYCLE loop in CI (capability C: auto-triage
-# observations + surface declared blockers + apply committed answers, PRD
+# observations + surface declared blockers + apply committed answers, brief
 # runner-in-ci). EMITTED by \`agent-runner install-ci\` by PARAMETERISING the seed
 # \`docs/ci/advance-loop.yml.template\` (the advance-loop capability's output) — the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the
@@ -110,9 +110,9 @@ export function generateAdvanceLifecycleWorkflow(
 #
 # CI ALWAYS invokes \`advance\` (NEVER a user-chosen verb): \`advance\` is a strict
 # superset of \`do\`, and with the lifecycle gates at their calm defaults (below) it
-# degrades to exactly \`do\`'s build/slice behaviour (ADR
+# degrades to exactly \`do\`'s build/task behaviour (ADR
 # ci-config-policy-and-gate-family §1). The triage/surface/apply rungs + the
-# on-answer-committed trigger are EXACTLY what \`advance\` adds over the build/slice
+# on-answer-committed trigger are EXACTLY what \`advance\` adds over the build/task
 # tick. There is NO \`autoAdvance\` gate — the lifecycle decomposes into the gate
 # family in the env block.
 #
@@ -124,7 +124,7 @@ export function generateAdvanceLifecycleWorkflow(
 #   * merge   ⇒ a SINGLE SEQUENTIAL \`advance -n <x> --merge\` — merge contends on
 #               \`main\`, so it MUST linearise (parallel legs would thrash the
 #               main-CAS). \`--merge\` rides ONLY this sequential job.
-# This is integration-mode behaviour, IDENTICAL to the build/slice tick
+# This is integration-mode behaviour, IDENTICAL to the build/task tick
 # (integration mode is verb-independent). The CLAIM CAS, not the matrix, is the
 # real cross-run serialiser: a leg that loses the claim race exits clean.
 #
@@ -141,7 +141,7 @@ name: advance-lifecycle
 on:
   schedule:
     # Cron tick: drain whatever the human has answered/produced since the last run
-    # (triage / surface / apply + build / slice). Adjust the cadence to taste
+    # (triage / surface / apply + build / task). Adjust the cadence to taste
     # (here: hourly).
     - cron: '0 * * * *'
   push:
@@ -263,7 +263,7 @@ jobs:
   # \`repos[].lifecycle\`) AND the in-place working checkout (\`cwd.repo.items[]\`,
   # \`cwd.repo.prds[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). \`jq\` unions + dedups
-  # the build/slice pools AND the LIFECYCLE pools into a deduplicated GitHub
+  # the build/task pools AND the LIFECYCLE pools into a deduplicated GitHub
   # Actions matrix list of explicit \`task:<slug>\` / \`brief:<slug>\` / \`obs:<slug>\`
   # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
   # answer-loop in propose mode (not only merge): \`obs:\` (triage untriaged
@@ -299,13 +299,13 @@ jobs:
           true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit \`slice:\` / \`prd:\` / \`obs:\` prefixes, never bare (ADR
+        # uses explicit \`task:\` / \`brief:\` / \`obs:\` prefixes, never bare (ADR
         # command-surface §3a). Eligible TASKS ⇒ \`task:<slug>\` legs (\`advance\`
-        # builds them); SLICEABLE BRIEFS ⇒ \`brief:<slug>\` legs (\`advance\` auto-slices
+        # builds them); TASKABLE BRIEFS ⇒ \`brief:<slug>\` legs (\`advance\` auto-tasks
         # them, capability B — \`AGENT_RUNNER_AUTO_TASK\` above). LIFECYCLE pools:
         # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here;
-        # observations have no slice/prd namespace), \`lifecycle.surface[]\` +
-        # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`slice:\`/\`prd:\` legs
+        # observations have no task/brief namespace), \`lifecycle.surface[]\` +
+        # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`task:\`/\`brief:\` legs
         # for \`needsAnswers\` items — surface mints the blocker question, apply
         # consumes the committed answer). All pools surface on \`repos[]\` AND
         # \`cwd.repo\`; we union + dedup so the matrix has one leg per item.
@@ -324,7 +324,7 @@ jobs:
   # parallel shape and \`-n\` is NOT needed. Each leg passes \`--propose\`, tying the
   # integration mode to THIS shape: it sits at the top of the precedence chain, so
   # the workflow mode always wins over the repo config default and a leg can NEVER
-  # merge to main. Explicit \`slice:\`/\`prd:\` prefixes only, never bare.
+  # merge to main. Explicit \`task:\`/\`brief:\` prefixes only, never bare.
   advance-propose:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
@@ -388,7 +388,7 @@ jobs:
         # Mirror of the enumerate-job override (see there): export each gate's
         # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input. The
         # merge job re-scans the pool inside \`advance -n\`, so it needs the override
-        # too for the lifecycle/slice pools to reflect it.
+        # too for the lifecycle/task pools to reflect it.
         if: \${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
@@ -454,7 +454,7 @@ export interface AdvanceLifecycleValidation {
 }
 
 /**
- * Structurally validate the advance-lifecycle workflow against the slice's
+ * Structurally validate the advance-lifecycle workflow against the task's
  * acceptance criteria. Dependency-free (no YAML lib): presence/shape assertions
  * over the raw text, mirroring {@link validateAdvanceCiTemplate}.
  */
@@ -499,7 +499,7 @@ export function validateAdvanceLifecycleWorkflow(
 	), 'the `workflow_dispatch` must carry an `integrationMode` input.');
 	// The DEFINING lifecycle trigger: an on-answer-committed push (a push touching
 	// `work/questions/**`) re-runs the loop so a freshly-answered sidecar applies
-	// promptly. This is what `advance` adds over the build/slice tick.
+	// promptly. This is what `advance` adds over the build/task tick.
 	require('trigger-on-answer-committed', /\bpush:\s*[\s\S]*?paths:[\s\S]*?work\/questions\//.test(
 		text,
 	), 'must trigger on-answer-committed (a push touching `work/questions/**`) — ' +
@@ -549,12 +549,12 @@ export function validateAdvanceLifecycleWorkflow(
 		'the main-CAS).');
 
 	// --- The AGENT_RUNNER_* gate family must NOT be carried as workflow env -----
-	// The workflow emits NO active gate env line for any of AUTO_BUILD / AUTO_SLICE
+	// The workflow emits NO active gate env line for any of AUTO_BUILD / AUTO_TASK
 	// / OBSERVATION_TRIAGE / SURFACE_BLOCKERS: the env layer is the OPTIONAL CI-only
 	// override layer, NOT the carrier of defaults. Emitting any of them would FORCE
 	// env to win over the repo's own .agent-runner.json (the precedence is
 	// flag > env > per-repo > global > default), silently shadowing per-repo gate
-	// config in CI — exactly the bug this slice closes. A user who genuinely wants a
+	// config in CI — exactly the bug this task closes. A user who genuinely wants a
 	// CI-SPECIFIC override adds the env var themselves (the opt-in CI override the
 	// env layer is FOR). Check the OPERATIVE (non-comment) lines so the explanatory
 	// header comment that NAMES these keys is not a false positive.
@@ -581,7 +581,7 @@ export function validateAdvanceLifecycleWorkflow(
 	// gate family: `enumerate` (it gates the matrix pools via `scan`), plus the two
 	// agent-running jobs. The enumerate wiring is the load-bearing one: without it a
 	// dispatch override of `observationTriage`/`surfaceBlockers`/`autoTask` produces
-	// an empty matrix and is silently inert (the bug this slice's review caught).
+	// an empty matrix and is silently inert (the bug this task's review caught).
 	for (const input of [
 		'autoBuild',
 		'autoTask',
@@ -615,7 +615,7 @@ export function validateAdvanceLifecycleWorkflow(
 		text,
 	), 'the `enumerate` job must apply the dispatch gate override BEFORE its `scan` ' +
 		'step (scan gates the matrix pools by the gate family; otherwise the ' +
-		'override is silently inert for the lifecycle/slice pools).');
+		'override is silently inert for the lifecycle/task pools).');
 	// The override must be GUARDED by the workflow_dispatch event so schedule/push
 	// runs never even enter the write step.
 	require('gate-override-dispatch-guarded', /if:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch'\s*\}\}/.test(
@@ -678,27 +678,27 @@ export function validateAdvanceLifecycleWorkflow(
 		), 'CI must use explicit `task:`/`brief:` slug prefixes, never bare (ADR ' +
 		'command-surface-and-journeys §3a).');
 
-	// --- The propose `enumerate` matrix must UNION sliceable BRIEFS --------------
+	// --- The propose `enumerate` matrix must UNION taskable briefs --------------
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK: 'true'` dead on the
 	// hourly cron — a ready ungated BRIEF would never become a matrix leg. The `jq`
-	// must enumerate `brief:<slug>` ids from `scan --json`'s sliceable-BRIEF pool
+	// must enumerate `brief:<slug>` ids from `scan --json`'s taskable-BRIEF pool
 	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-task legs.
 	require('propose-enumerates-sliceable-prds', /"brief:" \+ \.slug/.test(
 		text,
 	) &&
 		/\.prds\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union sliceable BRIEFS into the ' +
+		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +
 		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-slice ' +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated BRIEF becomes one auto-task ' +
 		'matrix leg per item alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 
 	// --- The propose `enumerate` matrix must UNION the LIFECYCLE pools ----------
-	// (`ci-propose-matrix-enumerates-lifecycle-items`): a build/slice-only `jq`
+	// (`ci-propose-matrix-enumerates-lifecycle-items`): a build/task-only `jq`
 	// runs the answer-loop ONLY in merge mode — a `needsAnswers` item is
-	// `eligible:false` and untriaged observations are not in the slice/PRD pools at
+	// `eligible:false` and untriaged observations are not in the task/brief pools at
 	// all, so NO lifecycle rung (triage/surface/apply) ever gets a propose leg. The
 	// `jq` must enumerate the three lifecycle sub-pools from `scan --json`
 	// (`repos[].lifecycle.*` + `cwd.repo.lifecycle.*`): `triage[]` → `obs:<slug>`,
@@ -713,7 +713,7 @@ export function validateAdvanceLifecycleWorkflow(
 		), 'the propose-mode `enumerate` `jq` must union the LIFECYCLE pools into the ' +
 		"matrix (read from `scan --json`'s `repos[].lifecycle.*` + " +
 		'`cwd.repo.lifecycle.*`): `triage[]` as `obs:<slug>` legs, and ' +
-		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`slice:`/`prd:`) legs, ' +
+		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`brief:`) legs, ' +
 		'so the WHOLE answer-loop (triage + surface + apply) runs in propose mode, ' +
 		'not only in merge mode ' +
 		'(`ci-propose-matrix-enumerates-lifecycle-items`).');
@@ -722,7 +722,7 @@ export function validateAdvanceLifecycleWorkflow(
 	require('uses-shared-setup-action', /uses:\s*\.\/\.github\/actions\/agent-runner-setup\b/.test(
 		text,
 	), 'every job must wire the shared composite setup action ' +
-		'(`./.github/actions/agent-runner-setup`, emitted by the core slice).');
+		'(`./.github/actions/agent-runner-setup`, emitted by the core task).');
 
 	return {ok: problems.length === 0, problems};
 }

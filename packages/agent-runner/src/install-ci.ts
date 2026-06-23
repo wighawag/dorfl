@@ -1,5 +1,5 @@
 /**
- * The `install-ci` orchestrator (PRD `runner-in-ci`, slice
+ * The `install-ci` orchestrator (brief `runner-in-ci`, task
  * `install-ci-core-and-github-adapter`): ties the provider-agnostic core
  * (`install-ci-core.ts`) to a CI-provider adapter (the first being GitHub,
  * `install-ci-github.ts`) through the {@link CIProviderContext} seam. It drives
@@ -14,7 +14,7 @@
  * The artifacts (composite setup action + auth) are assembled by the core and
  * written under `.fake/` in `--fake` snapshot mode (NEVER `.github/`, NO real
  * secret), so the SAME inputs produce byte-identical output whether gathered
- * interactively or from a config file (the equivalence the slice pins).
+ * interactively or from a config file (the equivalence the task pins).
  */
 
 import {writeFileSync, readFileSync, existsSync} from 'node:fs';
@@ -77,7 +77,7 @@ export interface InstallCIOptions {
 	installSource?: InstallSource;
 	/** The interactive prompt seam (required unless `configFile` is given). */
 	prompts?: WizardPrompts;
-	/** The capability emitters to emit workflows for (none in this core slice). */
+	/** The capability emitters to emit workflows for (none in this core task). */
 	capabilities?: CapabilityEmitter[];
 	/** Sink for human-facing progress lines (default: console.log). */
 	log?: (line: string) => void;
@@ -239,7 +239,7 @@ export async function installCI(
 	for (const path of written) {
 		log(`  wrote ${path}`);
 	}
-	// CI-autonomy posture (slice `install-ci-emits-no-gate-env-let-config-decide`):
+	// CI-autonomy posture (task `install-ci-emits-no-gate-env-let-config-decide`):
 	// the emitted advance workflow carries NO AGENT_RUNNER_AUTO_BUILD /
 	// AGENT_RUNNER_AUTO_TASK / AGENT_RUNNER_OBSERVATION_TRIAGE /
 	// AGENT_RUNNER_SURFACE_BLOCKERS env line. Gate policy is resolved through the

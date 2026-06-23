@@ -340,10 +340,10 @@ describe('buildReviewPrompt — frames code-vs-its-slice + the required output',
 
 	it('HUNTS for in-scope decisions the slice did not specify, flagged for ratification (Part C)', () => {
 		const p = buildReviewPrompt('my-slice');
-		// The reviewer must look for undeclared in-scope decisions — cross-slice
+		// The reviewer must look for undeclared in-scope decisions — cross-task
 		// interactions, new errors/refusals, user-visible defaults.
 		expect(p).toMatch(/decision/i);
-		expect(p).toMatch(/cross-slice/i);
+		expect(p).toMatch(/cross-task/i);
 		expect(p).toMatch(/error|refusal/i);
 		expect(p).toMatch(/default/i);
 		// It STARTS from the agent's `## Decisions` block + hunts for missed ones.

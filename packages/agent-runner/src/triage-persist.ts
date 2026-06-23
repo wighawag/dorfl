@@ -17,11 +17,11 @@ import {
 import type {TriageAutoKind} from './triage-gate.js';
 
 /**
- * The engine-owned TRIAGE PERSIST (PRD `advance-loop`, slice `advance-rung-triage`,
+ * The engine-owned TRIAGE PERSIST (brief `advance-loop`, task `advance-rung-triage`,
  * US #16/17/24/30) — the half of the observation-triage rung the ENGINE owns (the
  * triage gate JUDGES, the engine ACTS). It is the SIBLING of `surface-persist.ts`
  * (the surface rung's persist) and `apply-persist.ts` (the apply rung's persist),
- * kept file-orthogonal so the rung bodies land in different slices.
+ * kept file-orthogonal so the rung bodies land in different tasks.
  *
  * It delivers the two WRITES the triage rung needs beyond the always-allowed
  * question-gated surface path (which reuses `surface-persist.ts` verbatim):
@@ -339,7 +339,7 @@ export async function promoteObservation(
 	//    + delete the sidecar) atomically. The observation stays in observations/.
 	const body = readItem(cwd, itemPath, env);
 	const recorded = appendBlock(body, PROMOTE_HEADING, [
-		`Promoted to a new backlog slice \`${newItemPath}\` (a human answered`,
+		`Promoted to a new backlog task \`${newItemPath}\` (a human answered`,
 		'"promote"). This observation is resolved; the new item carries the work.',
 	]);
 	const sidecar = readSidecar(cwd, item);
@@ -386,7 +386,7 @@ function defaultStub(slug: string, fromObservation: string): string {
 		'## What to build',
 		'',
 		`Promoted from observation \`${fromObservation}\`. A human answered`,
-		'"promote": draft this into a buildable slice. Carries `needsAnswers:true`',
+		'"promote": draft this into a buildable task. Carries `needsAnswers:true`',
 		'so the advance loop surfaces the open scoping questions before it is built.',
 		'',
 	].join('\n');

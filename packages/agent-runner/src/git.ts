@@ -108,7 +108,7 @@ function toAbsolute(cwd: string, p: string): string {
  * The pre-flight DIVERGENCE check for the in-place ff paths (`do` /
  * `complete --merge`): how many commits local `main` is AHEAD of
  * `<arbiter>/main` (`git rev-list --count <arbiter>/main..main`). A non-zero
- * count means local `main` carries UNPUSHED commits the arbiter lacks — the slice
+ * count means local `main` carries UNPUSHED commits the arbiter lacks — the task
  * builds off `<arbiter>/main`, so its merge-back ff cannot apply, exactly the
  * "checkout state that breaks the in-place flow" class the dirty-tree refusal
  * guards. Returns 0 when local `main` is at/behind the arbiter (safe).

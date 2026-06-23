@@ -2,7 +2,7 @@ import {brand} from './brand.js';
 import type {IssueComment} from './issue-provider.js';
 
 /**
- * **The intake MARKER** (slice `intake-self-awareness-resumption-tracking`, PRD
+ * **The intake MARKER** (task `intake-self-awareness-resumption-tracking`, brief
  * `issue-intake` US #2/#10): the ONE primitive the deterministic pre-decision
  * TRIAGE GATE is built on. A machine-readable HIDDEN HTML comment intake stamps on
  * EVERY comment it posts, recording a neutral FACT about what intake did:
@@ -26,14 +26,14 @@ import type {IssueComment} from './issue-provider.js';
  *   TERMINAL is the TRIAGE's interpretation, NEVER data in the marker (no `terminal`
  *   field): if a kind's terminal-ness ever changes that is a triage change and old
  *   markers stay valid.
- * - **`slug`** \u2014 present only on `kind=created` (which slice/PRD intake produced).
+ * - **`slug`** \u2014 present only on `kind=created` (which task/brief intake produced).
  * - **`seen=<id>,\u2026`** \u2014 the per-run DELTA of HUMAN comment ids intake READ this run
  *   (EXCLUDING intake's own marker-comments AND any human id already in a prior
  *   marker's `seen=`). Ids, not a count, because a count cannot distinguish "a new
  *   comment appeared" from "an old one was deleted"; ids do both via set arithmetic.
  *   The full `seenSet` is the UNION of every marker's `seen=` (the CHAIN model).
  *
- * The grammar is SHARED so the dependent completion-comment slice just stamps a
+ * The grammar is SHARED so the dependent completion-comment task just stamps a
  * `created` marker via {@link stampIntakeMarker}, which the triage's
  * `already-terminal` branch then consumes.
  */
@@ -47,7 +47,7 @@ export interface IntakeMarker {
 	kind: IntakeMarkerKind;
 	/** The HUMAN comment ids intake READ this run (the per-run delta; may be empty). */
 	seen: string[];
-	/** The created slice/PRD slug \u2014 present only on `kind=created`. */
+	/** The created task/brief slug \u2014 present only on `kind=created`. */
 	slug?: string;
 }
 
