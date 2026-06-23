@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Non-slice/prd rename-narration phrases survive the clean-break prose sweep (2026-06-23)
 
 Task `clean-break-context-adr-and-skills-prose` (brief `code-identifier-slice-prd-to-task-brief-rename`)
