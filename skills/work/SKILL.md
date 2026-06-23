@@ -14,7 +14,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 1. **`setup`**: onboard ANY repo onto the `work/` contract (scaffold or migrate). Run once per repo, before the rest of the flow. Composes `to-brief` / `to-task` to convert existing material.
 2. **`to-brief`**: turn the current conversation plus codebase understanding into a brief file in `work/briefs/ready/`. The LAUNCH snapshot, not maintained.
-3. **`to-task`**: slice a brief (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical slices.
+3. **`to-task`**: task a brief (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical tasks.
 4. **Build the ready tasks. Pick the conductor:**
    - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `agent-runner do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the agent-runner CLI. You are present.
    - **`orchestrate`**: the META conductor, one rung ABOVE `drive-tasks`. Survey the WHOLE tree (observations / ideas / briefs / tasks / needs-attention), advance every autonomous rung, batch the genuine judgement residue to the human, fill gaps until tasks are READY, then delegate building to `drive-tasks`. Reach for this when you want "figure out what to work on AND drive it", not just "build the already-ready tasks".

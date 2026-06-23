@@ -143,7 +143,7 @@ Do the moves with `git mv` so each rename is staged as a rename; sort the old `w
 
 ## Phase B — Convert existing material (only when material was detected)
 
-Phase B fills the scaffolded buckets from what already exists. COMPOSE the producer skills — do NOT reimplement slicing/brief-writing (`to-brief`/`to-task` own those shapes). The mapping table was already presented and CONFIRMED at A4; now execute it.
+Phase B fills the scaffolded buckets from what already exists. COMPOSE the producer skills — do NOT reimplement tasking/brief-writing (`to-brief`/`to-task` own those shapes). The mapping table was already presented and CONFIRMED at A4; now execute it.
 
 ### B1. Inventory → mapping (the table presented at A4)
 
@@ -163,7 +163,7 @@ Classify each source by what it should BECOME (this is the table you showed at A
 ### B2. Convert the task/work system → briefs + tasks + ideas
 
 - A single, clear, buildable ask → a **`work/tasks/backlog/<slug>.md`** task (`to-task`' task shape; `covers: []`, no `brief:` — its own source of truth).
-- A coherent ask needing >1 task → a **`work/briefs/ready/<slug>.md`** brief (`to-brief`'s framing). Slice it only if asked; usually leave the brief for the human to slice.
+- A coherent ask needing >1 task → a **`work/briefs/ready/<slug>.md`** brief (`to-brief`'s framing). Task it only if asked; usually leave the brief for the human to task.
 - **Buildability gate — decide task-vs-idea BEFORE writing anything to the task board.** A `tasks/backlog/` task is for a **scoped, buildable** ask. `needsAnswers: true` is for a **near-complete spec with a few SPECIFIC open questions listed in the body** — _almost a task_, not a wish. A vague one-liner is NEITHER a task nor a `needsAnswers` task — it is an **`idea`**. The contract is explicit: _under-specified items should not be written into the task board until they are ready_. **When in doubt → `notes/ideas/`, not `tasks/backlog/`.** Do NOT manufacture a `needsAnswers` task to "capture" a wish.
 - **Set the two gate axes honestly** (WORK-CONTRACT §3b), once the item really is a task: `humanOnly: true` where building needs human judgement/security; `needsAnswers: true` where the spec is _near-complete but has specific listed open questions_ (NOT merely vague — that is an `idea`).
 - **Task ↔ brief link:** a self-contained task (chore/refactor/build-fix, no brief stories) carries `covers: []` and **omits `brief:`**. A task pointing into a brief's stories MUST set `covers: [...]` AND name that brief in `brief:` (`brief` required iff `covers` non-empty). Do not invent a `brief:` for a task deriving from no brief.
@@ -195,7 +195,7 @@ Phase B finishes with TWO mandatory checkpoints (a flat report bullet is too eas
 - **REPORT** every path written/created, re-synced, and every repo-owned file left untouched — grouped by bucket — plus anything left as `needsAnswers`/`observations`/`ideas`, and (ephemerally, report-only) any ADR-worthy decisions whose _why_ went un-answered. Note any `findings/` whose `source:` is code-derived (weakest provenance) so the human knows to verify them. Report the gate-run result (green/red).
 - **Update `CONTEXT.md` to reflect what was populated:** fold domain vocabulary into the glossary; note which buckets this repo now uses, precise about polarity (`notes/findings/` = **external** ground-truth with sources; our own architecture in `CONTEXT.md`/`docs/`; open questions in `notes/ideas/` (vague) or `needsAnswers` tasks (near-spec)). Do NOT write "this repo carries reverse-engineered `findings/` about our code" — the polarity mistake B3 exists to prevent. Append/merge only; never clobber.
 - **NEVER enumerate individual items in `CONTEXT.md` (no index files — the FOLDER is the index).** Describe _that_ the repo has ADRs / briefs / observations and what they are FOR; do NOT list them one by one (e.g. not "`0001` (…), `0002` (…)"). A hand-maintained list goes stale the moment one is added/removed/superseded — and `docs/adr/` (the folder) already IS the canonical, always-current index (WORK-CONTRACT rule 2: no shared index/manifest; derive lists with `ls`). Applies to every bucket. (FINE and distinct: cross-referencing ONE specific ADR as a glossary term's authority — "the X seam (`docs/adr/x.md`)" — that points a term at its source of truth; the ban is on the _list_, not a pointed cross-reference.)
-- **Hand off:** tell the user the repo is contract-ready and what's next — write a brief (`to-brief`), slice it into tasks (`to-task`), or build with `agent-runner do` (if the runner is installed — note the `harness`/`verify` configured).
+- **Hand off:** tell the user the repo is contract-ready and what's next — write a brief (`to-brief`), task it into tasks (`to-task`), or build with `agent-runner do` (if the runner is installed — note the `harness`/`verify` configured).
 - **Git etiquette:** do NOT stage/commit/push — leave everything in the working tree for the user to inspect and commit (the `to-brief`/`to-task` producer convention). For a big repo, Phase B is iterative: bound each run to a subset (one source area at a time), report, let the human review, run again.
 
 ## Boundary (what setup does NOT do)
@@ -244,14 +244,14 @@ Standing per-change rules agents must follow in this repo.
 	"verify": "<stack-appropriate command from A3>",
 	"harness": "pi",
 	"autoBuild": false,
-	"autoSlice": false,
+	"autoTask": false,
 	"promptGuidance": {"testFirst": true}
 }
 ```
 
 > Only include `promptGuidance` if the maintainer answered YES to the A2 nudge question. If they said no / skip / don't know, OMIT the whole `promptGuidance` object — the runtime default (`false`) takes over.
 
-> `prepare` — the env-prep / install step the runner runs ONCE before the first `verify` on a fresh worktree (install deps / submodules / codegen, from A3b). The sibling of `verify`, NOT baked into it (`prepare` = env-ready, `verify` = tree-green). **OMIT it entirely if the repo has no deps to install** (unset ⇒ a no-op; never write a default `pnpm install` into a repo with no lockfile). `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep — that lives in `prepare`). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoSlice` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). `noPR` — the PR-INTENT axis (default off = "open a PR"): set `true` (or pass `--no-pr`) to push the branch but deliberately SKIP the review request even on an authed GitHub arbiter (the explicit suppress-PR intent). The review-request PROVIDER itself is NOT a config key — it is purely arbiter-derived (a GitHub remote ⇒ the GitHub provider, else push-only), with the identity's `providers.github` / ambient `gh` auth deciding whether `gh` can open the PR; there is no `provider`/`--provider` override. Add `defaultArbiter`, `integration`, `noPR`, `model` only as the repo needs them.
+> `prepare` — the env-prep / install step the runner runs ONCE before the first `verify` on a fresh worktree (install deps / submodules / codegen, from A3b). The sibling of `verify`, NOT baked into it (`prepare` = env-ready, `verify` = tree-green). **OMIT it entirely if the repo has no deps to install** (unset ⇒ a no-op; never write a default `pnpm install` into a repo with no lockfile). `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep — that lives in `prepare`). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoTask` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). `noPR` — the PR-INTENT axis (default off = "open a PR"): set `true` (or pass `--no-pr`) to push the branch but deliberately SKIP the review request even on an authed GitHub arbiter (the explicit suppress-PR intent). The review-request PROVIDER itself is NOT a config key — it is purely arbiter-derived (a GitHub remote ⇒ the GitHub provider, else push-only), with the identity's `providers.github` / ambient `gh` auth deciding whether `gh` can open the PR; there is no `provider`/`--provider` override. Add `defaultArbiter`, `integration`, `noPR`, `model` only as the repo needs them.
 
 ```
 

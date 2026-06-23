@@ -1,6 +1,6 @@
 # REVIEW-PROTOCOL
 
-The **review discipline** the autonomous runner invokes by name on a `work/`-protocol artifact before that artifact is _trusted_ — a task before it lands/is claimed, code in a work PR against the task that specified it, a brief before slicing, a set of slices before they land, or a captured note. The runner spawns a fresh-context agent and tells it to "run the review protocol"; that agent reads THIS doc and applies its standard.
+The **review discipline** the autonomous runner invokes by name on a `work/`-protocol artifact before that artifact is _trusted_ — a task before it lands/is claimed, code in a work PR against the task that specified it, a brief before tasking, a set of tasks before they land, or a captured note. The runner spawns a fresh-context agent and tells it to "run the review protocol"; that agent reads THIS doc and applies its standard.
 
 This is the runner-invoked counterpart to `CLAIM-PROTOCOL.md`: the protocol contains how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor), and JUDGED BEFORE LANDING (this doc) — one contract, in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/review/SKILL.md`; the standard lives here.)
 
@@ -10,7 +10,7 @@ You **emit a verdict; you do not act on it** — see [Your output](#your-output)
 
 ## When to use vs. not
 
-- **Use** to review: a **task** (well-cut? claim-ready?); **code** in a work PR (does it deliver the task it claims?); a **brief** (sliceable? gate axes honest?); a **note** (right bucket? actionable?); or a **set of tasks** — the whole-SET lens: **graph coherence / gaps / overlap / goal-composition** (does the dependency graph cohere, are there set-level gaps or overlapping/duplicated tasks, and do they compose into the brief/ADR goal?). The set-level checks live in lens 3 (cross-artifact composition) and lens 5 (the destination check).
+- **Use** to review: a **task** (well-cut? claim-ready?); **code** in a work PR (does it deliver the task it claims?); a **brief** (taskable? gate axes honest?); a **note** (right bucket? actionable?); or a **set of tasks** — the whole-SET lens: **graph coherence / gaps / overlap / goal-composition** (does the dependency graph cohere, are there set-level gaps or overlapping/duplicated tasks, and do they compose into the brief/ADR goal?). The set-level checks live in lens 3 (cross-artifact composition) and lens 5 (the destination check).
 - **Don't** use it to _produce_ the artifact (that's `to-brief` / `to-task` / the build agent), nor to _route_ the verdict (that's the caller — a review gate, a conductor skill, or a human). This protocol only assesses.
 
 ## The core disciplines (what makes a review thorough, not shallow)
@@ -100,10 +100,10 @@ Several caller-specific optional channels MAY ride on the same JSON object. They
 
 - `review` — a single deliberately-authored, human-readable REVIEW string the caller posts as a comment on the PR (leads with Approved/Blocked, then the lenses + the destination-check reasoning). Plain text inside the JSON string. Advisory only — never gates the verdict.
 - `edits` — full-content edits to apply between passes in an improver loop: an array of `{path, content}`, where `path` is a repo-relative target (typically `work/tasks/backlog/<slug>.md`) and `content` is the FULL replacement file body. The runner writes them; the agent does no disk/git.
-- `edit` — for the lone-slice review only: a single in-memory full-replacement slice BODY (the markdown AFTER the frontmatter), applied before the next round. No path — the slice has not been emitted yet.
-- `questions` — an array of strings carrying open questions for a human to answer (the non-converge sink in the lone-slice review).
-- `uncertainTasks` — for the slicer improver loop: specific slices to emit `needsAnswers: true` with the questions in their bodies. Each is `{path, questions: string[]}`.
-- `decompositionUnclear` — for the slicer improver loop: when the WHOLE decomposition is unsound, `{questions: string[]}` to record as the PRD's needs-attention reason.
+- `edit` — for the lone-task review only: a single in-memory full-replacement task BODY (the markdown AFTER the frontmatter), applied before the next round. No path — the task has not been emitted yet.
+- `questions` — an array of strings carrying open questions for a human to answer (the non-converge sink in the lone-task review).
+- `uncertainTasks` — for the tasker improver loop: specific tasks to emit `needsAnswers: true` with the questions in their bodies. Each is `{path, questions: string[]}`.
+- `decompositionUnclear` — for the tasker improver loop: when the WHOLE decomposition is unsound, `{questions: string[]}` to record as the brief's needs-attention reason.
 
 Any unrecognised field is ignored by the parser; the caller routes on `verdict`/`findings` plus the channels its prompt asked for.
 
@@ -114,4 +114,4 @@ Any unrecognised field is ignored by the parser; the caller routes on `verdict`/
 
 ## Scope fence
 
-This doc is the review _protocol/discipline_ only. The review **gates** — _when_ review runs (slice-time / PR-time), per-repo toggles, the model override, the `--propose` PR arbiter, auto-merge-on-approve, the role/seam wiring, the trust resolver — are NOT here; they live in the runner machinery. This protocol assumes nothing about its caller beyond "you will route my verdict."
+This doc is the review _protocol/discipline_ only. The review **gates** — _when_ review runs (task-time / PR-time), per-repo toggles, the model override, the `--propose` PR arbiter, auto-merge-on-approve, the role/seam wiring, the trust resolver — are NOT here; they live in the runner machinery. This protocol assumes nothing about its caller beyond "you will route my verdict."

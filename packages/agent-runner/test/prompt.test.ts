@@ -142,25 +142,25 @@ describe('extractPromptSection', () => {
 });
 
 describe('canonical wrapper — read from the contract, not a divergent copy', () => {
-	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<prd> substituted (default-OFF nudge applied)', () => {
+	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<brief> substituted (default-OFF nudge applied)', () => {
 		const protocol = readFileSync(CLAIM_PROTOCOL, 'utf8');
 		const template = extractCanonicalWrapperTemplate(protocol);
 
 		// Sanity: the canonical template carries the placeholders we substitute.
 		expect(template).toContain('<slug>');
 
-		const emitted = wrapper('example', 'my-prd');
+		const emitted = wrapper('example', 'my-brief');
 		// With the nudge OFF (the default), the conditional-fragment transform
 		// strips the markers + the IF-branch and keeps the historic ELSE text
 		// (BYTE-IDENTITY guard — see the `promptGuidance.testFirst` seam tests).
 		const expected = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
-			.replace(/<prd>/g, 'my-prd');
+			.replace(/<brief>/g, 'my-brief');
 		expect(emitted).toBe(expected);
 	});
 
 	it('substitutes <slug> everywhere it appears in the canonical text', () => {
-		const emitted = wrapper('my-slug', 'my-prd');
+		const emitted = wrapper('my-slug', 'my-brief');
 		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), now
 		// cut over to the new layout/vocabulary by the protocol-docs/skills/setup
 		// vocabulary slice. The emitted task-body path is `work/tasks/todo/<slug>.md`.
@@ -168,10 +168,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(emitted).not.toContain('<slug>');
 	});
 
-	it('substitutes the source PRD path (work/briefs/ready/<prd>.md)', () => {
+	it('substitutes the source brief path (work/briefs/ready/<brief>.md)', () => {
 		const emitted = wrapper('example', 'agent-runner');
 		expect(emitted).toContain('agent-runner');
-		expect(emitted).not.toContain('<prd>');
+		expect(emitted).not.toContain('<brief>');
 	});
 
 	it('resolveProtocolDoc finds the bundled contract by default', () => {
@@ -333,10 +333,10 @@ describe('promptGuidance.testFirst nudge — the conditional-fragment seam', () 
 		const template = extractCanonicalWrapperTemplate(protocol);
 		const baseline = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
-			.replace(/<prd>/g, 'my-prd');
-		expect(wrapper('example', 'my-prd')).toBe(baseline);
+			.replace(/<brief>/g, 'my-brief');
+		expect(wrapper('example', 'my-brief')).toBe(baseline);
 		expect(
-			wrapper('example', 'my-prd', {promptGuidance: {testFirst: false}}),
+			wrapper('example', 'my-brief', {promptGuidance: {testFirst: false}}),
 		).toBe(baseline);
 		// And the byte-identity guard: with the nudge OFF, the strengthened text
 		// must be absent and the soft historic text must be present (the soft line
@@ -807,10 +807,10 @@ describe('renderPrompt — slug given', () => {
 	});
 
 	it('renders the wrapper + slice prompt for an explicit slug', () => {
-		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
+		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-brief');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
 		expect(out).toContain('work/tasks/todo/given.md');
-		expect(out).toContain('the-prd');
+		expect(out).toContain('the-brief');
 		expect(out).toContain('GIVEN-BODY');
 		expect(out).not.toContain('<slug>');
 	});

@@ -12,7 +12,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 
 - **`drive-tasks`** (`skills/drive-tasks/`) — to BUILD the ready tasks (you load and FOLLOW it for the build loop; it owns the runner-CLI mechanics).
 - **`review`** (`skills/review/`) — to judge any artifact (task / brief / observation / code).
-- **`to-task`** (`skills/to-task/`) — to slice a ready brief into tasks (the `tasks/backlog` staging slot).
+- **`to-task`** (`skills/to-task/`) — to task a ready brief into tasks (the `tasks/backlog` staging slot).
 - **`promote`** (`skills/promote/`) — to judge a STAGED task/brief (`tasks/backlog/` / `briefs/proposed/`) against its acceptance + destination before recommending its promotion into the pool.
 - **`answer-questions`** (`skills/answer-questions/`) — to walk the open `work/questions/` sidecars, DRAFT answers to the factual ones for the human to ratify, and DEFER the genuine-judgement ones into the step-3 batch.
 - **`to-brief`** (`skills/to-brief/`) — when an idea/observation has matured enough to become a brief.
@@ -20,7 +20,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 ## When to use vs. not
 
 - **Use** when you have a populated `work/` and want the system to do _everything it can autonomously_ and then _ask you only at the real judgement residue_ — in one interactive sitting, with full visibility and agency; to answer "what needs me?" across the whole tree; as the human-driven alternative to the autonomous `advance` loop when you want to watch and steer.
-- **Don't** use it just to build already-ready tasks (that's `drive-tasks` directly), just to slice one brief (`to-task`), or just to review one artifact (`review`). Don't use it as the unattended daemon (`run`/`advance`). It is **always main-session and conversational** — its defining job is the live Q&A.
+- **Don't** use it just to build already-ready tasks (that's `drive-tasks` directly), just to task one brief (`to-task`), or just to review one artifact (`review`). Don't use it as the unattended daemon (`run`/`advance`). It is **always main-session and conversational** — its defining job is the live Q&A.
 
 ## Relationship to the autonomous `advance` engine (read once)
 
@@ -28,7 +28,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 
 ## Core invariant
 
-**Advance every rung you can; for everything else, ASK — never invent an answer.** Each `work/` item has autonomous rungs (triage, slice, build, promote, surface-question, answer/apply) and a judgement residue (ambiguity, design forks, `needsAnswers`, stale premises). Do the autonomous part; surface the residue as batched questions; apply the answers; repeat. The human's throughput is the only limit; everything else is automatic.
+**Advance every rung you can; for everything else, ASK — never invent an answer.** Each `work/` item has autonomous rungs (triage, task, build, promote, surface-question, answer/apply) and a judgement residue (ambiguity, design forks, `needsAnswers`, stale premises). Do the autonomous part; surface the residue as batched questions; apply the answers; repeat. The human's throughput is the only limit; everything else is automatic.
 
 ## The loop
 
@@ -38,23 +38,23 @@ Read across ALL buckets and build a single picture of state + what each item nee
 
 - **`work/notes/observations/`** — untriaged signals. Each wants: promote to a task/brief/ADR? keep as a note? delete? (a judgement rung — compose `review`).
 - **`work/notes/ideas/`** — incubating. Any matured enough to become a brief (`to-brief`)? Most are left alone (no readiness to force) — note them, don't push.
-- **`work/briefs/ready/`** — for each brief: is it already sliced (does it RESIDE in `work/briefs/tasked/`)? `humanOnly`/`needsAnswers`? `briefAfter:` satisfied? → **sliceable now**, **blocked on a dep**, or **blocked on a human answer**. (Tasked-ness is folder residence, not a `sliced:` marker.)
-- **STAGING** — `work/tasks/backlog/` (review-first tasks) and `work/briefs/proposed/` (review-first briefs), the items awaiting human promotion into the pool. NOT built/sliced here; they are a **promotion rung** (step 2, compose `promote`). Either folder may be absent when empty per the contract — treat a missing staging folder as "nothing awaiting promotion", not an error.
+- **`work/briefs/ready/`** — for each brief: is it already tasked (does it RESIDE in `work/briefs/tasked/`)? `humanOnly`/`needsAnswers`? `briefAfter:` satisfied? → **taskable now**, **blocked on a dep**, or **blocked on a human answer**. (Tasked-ness is folder residence, not a `tasked:` marker.)
+- **STAGING** — `work/tasks/backlog/` (review-first tasks) and `work/briefs/proposed/` (review-first briefs), the items awaiting human promotion into the pool. NOT built/tasked here; they are a **promotion rung** (step 2, compose `promote`). Either folder may be absent when empty per the contract — treat a missing staging folder as "nothing awaiting promotion", not an error.
 - **`work/tasks/todo/`** — the task dependency graph (READY / BLOCKED / GATED), AND each ready task's **freshness** (drifted vs current `tasks/done/`+code — same check `drive-tasks` step 1 does).
 - **`work/questions/`** — open question sidecars (a `<type>-<slug>.md` with an unanswered entry). Each is an item PAUSED on an answer; classify each open question factual-vs-judgement for the answer rung (step 2, compose `answer-questions`). A missing/empty `work/questions/` means "no pending questions", per the empty-folder rule — not an error.
 - **needs-attention** — stuck items (their per-item lock is `state: stuck`) + the recorded reason; each wants a human decision (requeue-continue / requeue-reset / re-scope / drop). Read them via `agent-runner status`/`scan` (which read the lock refs).
 
-Produce a short **state map**: what's ready to build, what's sliceable, what's triageable, and what's parked on a human.
+Produce a short **state map**: what's ready to build, what's taskable, what's triageable, and what's parked on a human.
 
 ### 2. ADVANCE the non-build rungs (no human needed)
 
 Do the autonomous rungs that PREPARE work — i.e. everything EXCEPT building ready tasks (building is step 4, deliberately last, so all gap-filling happens first). In leverage order (the rung that unlocks the most downstream work first):
 
-- **Sliceable briefs** → slice them, NAMING the choice between the two paths that meet at the same `work/tasks/*` artifact (don't default to the conversational one by reflex):
-  - **`agent-runner do brief:<slug>`** — the AUTONOMOUS, unattended path (gate-gated by `autoSlice` + the brief's own gates; runner-owns-git; harness/model/gate from agent-runner config, don't hardcode). PREFER this for a **ready, agent-safe brief** (`humanOnly: false`, no open `needsAnswers`, `briefAfter:` satisfied) — and it is the path to use when the intent is to exercise the runner.
+- **Taskable briefs** → task them, NAMING the choice between the two paths that meet at the same `work/tasks/*` artifact (don't default to the conversational one by reflex):
+  - **`agent-runner do brief:<slug>`** — the AUTONOMOUS, unattended path (gate-gated by `autoTask` + the brief's own gates; runner-owns-git; harness/model/gate from agent-runner config, don't hardcode). PREFER this for a **ready, agent-safe brief** (`humanOnly: false`, no open `needsAnswers`, `briefAfter:` satisfied) — and it is the path to use when the intent is to exercise the runner.
   - **`to-task`** (the skill) — the CONVERSATIONAL, human-in-the-loop, protocol-only path (no agent-runner dependency). Use it for a **`humanOnly` / unclear / not-yet-ready brief**, or whenever a conversation is wanted. (`to-task` deliberately stays runner-agnostic — it never points BACK at `do brief:`; this routing lives HERE, in the runner-aware conductor, by design.)
   - The choice is "unattended run vs conversation", decided by the brief classification you already did in step 1 (`humanOnly`/`needsAnswers`/`briefAfter`). A `do brief:` on a brief it cannot take (e.g. `humanOnly`) correctly REFUSES on the agent path — that refusal IS the protocol routing you to `to-task`.
-  - Then **review the produced tasks** (compose `review`; the slicer's own review→edit loop also runs on the `do brief:` path). Newly-produced tasks feed back into the survey (they may be READY, or carry their own questions).
+  - Then **review the produced tasks** (compose `review`; the tasker's own review→edit loop also runs on the `do brief:` path). Newly-produced tasks feed back into the survey (they may be READY, or carry their own questions).
 - **Staged items awaiting promotion** (`tasks/backlog/`, `briefs/proposed/`) → run the **promotion rung**: for each, compose `promote` (review + freshness + pool-readiness gate) and emit promote / keep-staged / drop. A clear PROMOTE is recommended to the human (you never move it yourself — the runner's `promote` verb / the human does the `git mv`); a KEEP-STAGED with a fixable gap, or a judgement-call promotion, becomes a step-3 question; a clear DROP routes to the regime terminal. Promotion is the human review-gate, so the MOVE is always the human's/runner's — you surface the verdict.
 - **Clearly-dispositionable observations** → triage them (route/keep/delete) where the disposition is obvious; the ambiguous ones become questions (step 3).
 - **Open question sidecars** (`work/questions/`) → run the **answer rung**: compose `answer-questions` over the pending sidecars. It DRAFTS answers to the factual ones (each cited to its evidence) for the human to RATIFY — a ratified draft is a human-authored answer you then apply — and DEFERS the genuine-judgement ones into the step-3 batch. You never invent/finalise an answer (the human is the clock); you draft for ratification and surface the rest.
@@ -62,7 +62,7 @@ Do the autonomous rungs that PREPARE work — i.e. everything EXCEPT building re
 
 (Ready tasks are NOT built here — they accumulate for step 4, after the residue is resolved.)
 
-Commit policy (matches the producer skills): **commit your own `work/notes/observations/` notes and small load-bearing forward-notes you plant in a task body** (these are contract-native protocol edits), plus the runner-owned transitions that `do brief:` / `do` / `complete` make themselves (the slicing transition, done-moves, PR merges). Do NOT hand-author-and-commit a full brief or a fresh TASK SET — producing those is `to-brief`/`to-task`' job, and per their convention they are left UNSTAGED for human review (you surface them; the human commits). Never sweep in unrelated source. Report everything you committed in the final summary. (Tasks that get BUILT are committed/merged by `drive-tasks` via the normal PR flow.)
+Commit policy (matches the producer skills): **commit your own `work/notes/observations/` notes and small load-bearing forward-notes you plant in a task body** (these are contract-native protocol edits), plus the runner-owned transitions that `do brief:` / `do` / `complete` make themselves (the tasking transition, done-moves, PR merges). Do NOT hand-author-and-commit a full brief or a fresh TASK SET — producing those is `to-brief`/`to-task`' job, and per their convention they are left UNSTAGED for human review (you surface them; the human commits). Never sweep in unrelated source. Report everything you committed in the final summary. (Tasks that get BUILT are committed/merged by `drive-tasks` via the normal PR flow.)
 
 ### 3. ASK the residue — batched, conversational, never invented
 
@@ -85,8 +85,8 @@ Any task `drive-tasks` parks in its stuck-set (a drifted task, a Gate-3 judgemen
 
 Repeat 1→4 until no rung can advance without a human answer you don't have. Then give the meta report:
 
-- **Advanced autonomously** — observations triaged, briefs sliced, tasks built+merged (PR numbers from `drive-tasks`'s own report).
-- **What's now unlocked** — new ready tasks, newly-sliceable briefs, capabilities landed (the whole-tree view only this skill has).
+- **Advanced autonomously** — observations triaged, briefs tasked, tasks built+merged (PR numbers from `drive-tasks`'s own report).
+- **What's now unlocked** — new ready tasks, newly-taskable briefs, capabilities landed (the whole-tree view only this skill has).
 - **Parked on the human** — the questions still unanswered / deferred, and exactly what each unblocks when answered.
 - **Still stuck** — needs-attention items + the decision each awaits.
 - **Suggested next sitting** — the smallest set of human answers that would unblock the most work.

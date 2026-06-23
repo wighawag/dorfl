@@ -12,7 +12,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 
 - **`agent-runner do task:<slug> --isolated`** — the per-task worker (build + acceptance gate + optional PR/code-review gate), run `--isolated` ALWAYS (a job worktree off the arbiter, never the human checkout). The harness, model, acceptance gate, review mode, and integration mode all come from agent-runner CONFIG (per-repo / global) — do NOT hardcode them; `--isolated` is the one flag this skill pins, and any other flag (`--review`/`--merge`/…) is a user-confirmed per-run override only.
 - **`review`** (`skills/review/`) — the discipline for your own diff-vs-criteria pass over each opened PR.
-- **`to-task`** (`skills/to-task/`) — for the forward-note step and any re-slice the human asks for.
+- **`to-task`** (`skills/to-task/`) — for the forward-note step and any re-tasking the human asks for.
 
 It is **scoped to building ready TASKS.** The broader job — survey _everything_ (observations, ideas, briefs, tasks), figure out what can advance, fill judgement gaps conversationally until new tasks are READY, then build them — is `orchestrate`, which delegates the BUILDING back to this skill. Keep `drive-tasks` focused on building ready tasks; hand the deep survey up to `orchestrate`.
 
@@ -38,7 +38,7 @@ The loop, selection, freshness check, Gate-3 review, and stuck-set are exactly a
 ## When to use vs. not
 
 - **Use** to take a `work/tasks/todo/` from "N ready tasks" to "no ready task can advance", building + reviewing + merging each, in dependency-and-practical order; to conduct the agent-runner worker through a phase of task-building; as the building engine `orchestrate` delegates to.
-- **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no human). `drive-tasks` is **one task at a time, end-to-end**. Don't use it to _author_ tasks from scratch (that's `to-task`), or to _slice briefs / triage observations / fill judgement gaps / answer scattered open questions across the whole tree_ (that's `orchestrate`). Don't use it to FORCE a blocked task — it respects the gate.
+- **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no human). `drive-tasks` is **one task at a time, end-to-end**. Don't use it to _author_ tasks from scratch (that's `to-task`), or to _task briefs / triage observations / fill judgement gaps / answer scattered open questions across the whole tree_ (that's `orchestrate`). Don't use it to FORCE a blocked task — it respects the gate.
 
 ## The golden rules (do not violate)
 
@@ -71,7 +71,7 @@ Either way the discipline is the same: do as much as can be done, then surface t
 When a task has routed to needs-attention (a red gate / Gate-2 block / rebase conflict / a build-time STOP marks its per-item lock `state: stuck`), its body carries the reason and its `work/<type>-<slug>` branch is **preserved on the arbiter** — nothing is lost. Whether you can re-drive it depends on the reason:
 
 - **A fixable problem the agent can resolve on a retry** — a real bug the gate caught, a scoping miss, a flaky-test red — is a CONDUCTOR move, not a human question. Recover it with **`agent-runner requeue <slug> --arbiter origin`** (DEFAULT = keep + continue: releases the stuck lock; the body is already resting in the pool `tasks/todo/`, and the branch is left UNTOUCHED so the next claim CONTINUES from its tip). Optionally add a precise handoff with **`-m "<what to fix>"`** (appended to the body). Then `do task:<slug>` again: the re-claim CONTINUES from the kept branch, and the merged `agent-prompt-continue-context` puts the prior work + the needs-attention reason
-  - your `-m` note into the agent's prompt — so it BUILDS ON the good code and fixes the gap rather than restarting. (This session fixed `slicer-review-edit-loop` exactly this way: `requeue -m "<scoping fix>"` → `do` → review → merge.)
+  - your `-m` note into the agent's prompt — so it BUILDS ON the good code and fixes the gap rather than restarting. (This session fixed the `slicer-review-edit-loop` task exactly this way: `requeue -m "<scoping fix>"` → `do` → review → merge.)
 - **A genuine human-decision block** — the task is ambiguous / drifted / rests on an unresolved fork — is NOT something a retry fixes. Leave it parked; it is a stuck-set question (ask it if a human is present, else report it). Do NOT requeue a task whose premise is wrong — re-scope it first (that is `orchestrate`/human work).
 - **`requeue --reset`** (DISCARD + fresh: deletes the remote branch first, then releases the lock so the next claim starts CLEAN) is for when the kept work is worthless. It is guarded and NEVER the default — only on an explicit human call; the conductor's default recovery is keep+continue.
 
@@ -119,9 +119,9 @@ If the task still holds → proceed. **If it smells stale → it's a WALL**: rec
 
 This is also the natural place for a **light look-ahead**: skim `work/briefs/ready/` (and, if cheap, `work/notes/observations/` + `work/notes/ideas/`) for what's coming — it informs the forward-notes in step 2. The DEEP survey-everything pass is `orchestrate`'s job, not this skill's; keep this shallow.
 
-### 2. CHECK for forward-looking notes a soon-to-be-sliced brief will need
+### 2. CHECK for forward-looking notes a soon-to-be-tasked brief will need
 
-Before building, scan `work/briefs/ready/` for a brief that will be sliced soon and whose design **depends on the shape** of tasks you're about to land (a `briefAfter:` / "builds on the X convergence" relationship). If a ready task should carry a `> FORWARD-POINTER` note so that brief can be sliced later WITHOUT amending the brief (e.g. "keep this loop/tick separable", "keep `-n` sequential", "don't rename X — the advance migration owns it", "shape this as a named callable unit"), **add the note to the task body now** (compose `to-task`' forward-note discipline). These notes are load-bearing: they prevent the downstream brief from needing changes. A note you're CONFIDENT about: plant it and COMMIT it (it must land before that task's `do` to take effect; per rule 5 this small protocol edit is committed, unlike authored artifacts). If a note is non-trivial or you're unsure it's wanted, that is a WALL → record it in the stuck-set (surface it with the batch when the loop stalls) rather than planting a guessed note.
+Before building, scan `work/briefs/ready/` for a brief that will be tasked soon and whose design **depends on the shape** of tasks you're about to land (a `briefAfter:` / "builds on the X convergence" relationship). If a ready task should carry a `> FORWARD-POINTER` note so that brief can be tasked later WITHOUT amending the brief (e.g. "keep this loop/tick separable", "keep `-n` sequential", "don't rename X — the advance migration owns it", "shape this as a named callable unit"), **add the note to the task body now** (compose `to-task`' forward-note discipline). These notes are load-bearing: they prevent the downstream brief from needing changes. A note you're CONFIDENT about: plant it and COMMIT it (it must land before that task's `do` to take effect; per rule 5 this small protocol edit is committed, unlike authored artifacts). If a note is non-trivial or you're unsure it's wanted, that is a WALL → record it in the stuck-set (surface it with the batch when the loop stalls) rather than planting a guessed note.
 
 > This is the step that earns the conductor its keep — a per-task `do` agent only sees its own task; only the conductor sees the whole graph + the pending briefs and can plant the cross-task notes.
 
@@ -182,7 +182,7 @@ End with a structured rundown (this is a first-class deliverable, not an afterth
 - **Built + merged** — each task with its PR number + a one-line note on any drift/forward-pointer/must-fix it honoured (`do` ran the acceptance + review gates; you reviewed the diff).
 - **Routed to needs-attention** — each, with the EXACT blocking reason, whether the agent produced no code vs. a real bug the gate caught, and that the branch is preserved on the arbiter (recoverable via `requeue` + re-claim, or `work-on`).
 - **Still blocked / gated** — what remains and on what (a needs-attention item? a `needsAnswers` human gate?).
-- **What's now UNLOCKED in the project** — new commands, new behaviours/capabilities, retired verbs, and crucially **which briefs are now sliceable / unblocked** by what landed (the cross-cutting view only the conductor has).
+- **What's now UNLOCKED in the project** — new commands, new behaviours/capabilities, retired verbs, and crucially **which briefs are now taskable / unblocked** by what landed (the cross-cutting view only the conductor has).
 - **Observations filed** (committed as you go, per rule 5) — list them so the human can find them in `git log`.
 - **Housekeeping** — any direct-to-`main` chore commits you made (claim reverts, forward-notes), so the human can see them in `git log`.
 
@@ -202,10 +202,10 @@ The batch is conversational (asked) or reported (unattended), not a written file
 
 This skill builds READY TASKS. Two things sit ABOVE it, sharing its loop shape:
 
-- **`orchestrate`** — the human-in-the-loop META conductor: surveys _everything_ (observations / ideas / briefs / tasks), advances what it can (slicing briefs, triaging), fills judgement gaps with the human conversationally until new tasks are READY, then **delegates the building to THIS skill** and surfaces the stuck-set to the human.
+- **`orchestrate`** — the human-in-the-loop META conductor: surveys _everything_ (observations / ideas / briefs / tasks), advances what it can (tasking briefs, triaging), fills judgement gaps with the human conversationally until new tasks are READY, then **delegates the building to THIS skill** and surfaces the stuck-set to the human.
 - **`advance` (the `advance-loop` brief, not yet built)** — the AUTONOMOUS, file-mediated version of the same idea, driven by `run`/CI with a `work/questions/` sidecar. `drive-tasks` + `orchestrate` are the human-agency, synchronous siblings of `advance`; expect them to converge on the same tick contract.
 
-The conductor is **tick-agnostic**: today the per-item action is `agent-runner do task:<slug>` (build a task); as `advance`-class ticks land (slice / triage / surface / apply), the SAME loop applies — only the per-item command in step 4a changes. (Mirrors the loop/tick split in `run`: the conductor is a _loop_; the per-item command is the _tick_.)
+The conductor is **tick-agnostic**: today the per-item action is `agent-runner do task:<slug>` (build a task); as `advance`-class ticks land (task / triage / surface / apply), the SAME loop applies — only the per-item command in step 4a changes. (Mirrors the loop/tick split in `run`: the conductor is a _loop_; the per-item command is the _tick_.)
 
 ## Pitfalls (learned in practice)
 
