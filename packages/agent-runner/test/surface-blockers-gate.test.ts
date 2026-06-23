@@ -192,7 +192,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	});
 
 	it('on ⇒ a blocked PRD pool IS enumerated (auto-picked as prd:<slug>)', async () => {
-		seedBlockedBrief('blocked-prd');
+		seedBlockedBrief('blocked-brief');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -201,7 +201,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 			lifecycleGates: surfaceGateFor(true),
 			count: 5,
 		});
-		expect(args).toEqual(['brief:blocked-prd']);
+		expect(args).toEqual(['brief:blocked-brief']);
 	});
 
 	it('APPLY is NOT gated: an answered blocker sidecar is auto-picked + applied EVEN under surfaceBlockers off', async () => {
