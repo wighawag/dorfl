@@ -12,18 +12,23 @@ Rename the source MODULE files and the in-code SYMBOLS that still carry slice/PR
 
 Module/file renames (and their test files): `slicing.ts`, `slicing-lock.ts`, `slicing-eligibility.ts`, `slicer-review-loop.ts`, `prd-complete.ts` → tasking-named equivalents (e.g. `tasking.ts`, `tasking-lock.ts`, `tasking-eligibility.ts`, `tasker-review-loop.ts`, `brief-complete.ts`).
 
-Symbol renames: `UncertainSlice` / `uncertainSlices`, `decompositionUnclear` (and the "PRD" in its doc comment), `buildSlicingBrief`, `markSliceNeedsAnswers`, `readCandidates`/`slices` fields, and the slice/PRD wording in doc comments across the touched modules (incl. `brand.ts`'s "PRDs, slices" mention). Keep the `SidecarDisposition` VALUE constants as already-correct (`promote-task` etc.); only fix stale slice/PRD wording in their comments.
+Symbol renames: `UncertainSlice` / `uncertainSlices`, `decompositionUnclear` (and the "PRD" in its doc comment), `buildSlicingBrief`, `markSliceNeedsAnswers`, `readCandidates`/`slices` fields. Keep the `SidecarDisposition` VALUE constants as already-correct (`promote-task` etc.).
+
+> **SCOPE NARROWED 2026-06-23 (decided conductor + human, during the `drive-tasks` drive — task SPLIT).** This task is now the mergeable RENAME unit only: (a) the module-FILE renames, (b) the in-code SYMBOL/type renames + every reference, (c) fixing any dangling `{@link …}` whose TARGET this task renamed away (the build does not catch these), and (d) the standalone TEST-file renames. The BROAD slice/PRD/slicing → task/brief/tasking sweep of free-prose DOC COMMENTS and USER-FACING MESSAGE STRINGS across the large touched modules (`do.ts`, `ledger-read.ts`, `review-gate.ts`, `close-job.ts`, `scan.ts`, `prompt.ts`, `select-priority.ts`, `item-lock.ts`, `mirror-pool-scan.ts`, the `cli.ts` `--help` strings, etc. — ~480 lines, judgement-heavy) is **carved out** into the follow-up task `rename-src-comment-prose-slicing-to-tasking` (which the protocol-doc/protocol-prose tasks do NOT block on). Gate-2 blocked this task three times purely on that prose residue while the renames themselves were green; splitting lets the rename land and unblock the chain. So here you fix ONLY the symbol-driven dangling links + stale module-FILENAME references in comments (the small, literal, no-judgement set below), NOT the broad concept-prose sweep.
 
 Standalone TEST-file renames (these carry slice/prd in the NAME but do not pair 1:1 with a renamed src module — rename them too, via `git mv`, updating their describe/it text): `slice-acceptance-gate.test.ts`, `intake-lone-slice-review.test.ts`, `pre-prd-staging-and-promote.test.ts`, `slicer-maxreview-config.test.ts`, plus the per-module test files paired with the renamed sources (`slicing*.test.ts`, `slicer-review-loop.test.ts`, `prd-complete.test.ts`). EXCLUDE `slicing-protocol-doc.test.ts` — it is renamed by the dependent protocol-doc task, not here.
 
 NOTE: this task does NOT rename the protocol-doc FILE or its inlined path in the tasking-brief prompt builder — that is the separate `rename-protocol-doc-to-tasking` task, which is blockedBy this one. Leave the `work/protocol/SLICING-PROTOCOL.md` path string for that task to avoid a double-touch conflict.
 
-## Acceptance criteria
+## Acceptance criteria (NARROWED — the mergeable rename unit; broad comment-prose sweep deferred to `rename-src-comment-prose-slicing-to-tasking`)
 
 - [ ] The listed module files are renamed (via `git mv`) with all imports updated; no live `*.ts` filename carries slice/slicer/prd.
-- [ ] The listed symbols/types are renamed with all references updated; doc comments in the touched modules use task/brief/tasking wording.
-- [ ] The coupled doc/symbol-consistency tests (e.g. the slicer-review-loop + slicing tests, `review-verdict` channel tests) are updated in this task; suite green.
+- [ ] The listed symbols/types are renamed with all references updated.
+- [ ] No DANGLING `{@link …}`: every `{@link X}` whose target symbol THIS task renamed away points at the new name (the build does not type-check `@link`, so verify by grep). Targets whose symbol still EXISTS (e.g. `dispatchSlice`, `LONE_SLICE_REVIEW_MAX_ROUNDS`, the intake `{slice,prd}` wire FIELDS `sliceSlug`/`sliceTitle`/`sliceBody`/`prdSlug`/`prdTitle` — governed by Decision 2, NOT renamed here) are KEPT verbatim.
+- [ ] Stale module-FILENAME references in comments that name a file THIS task renamed/deleted are updated to the new filename (e.g. `slicing.ts`→`tasking.ts`, `slicer-review-loop.ts`→`tasker-review-loop.ts`, `slicing-lock.ts`→`tasking-lock.ts`, `prd-complete.ts`→`brief-complete.ts`).
+- [ ] The coupled doc/symbol-consistency tests (e.g. the tasker-review-loop + tasking tests, `review-verdict` channel tests) are updated in this task; suite green.
 - [ ] The protocol-doc FILE path string is intentionally left unchanged (handled by the dependent doc task).
+- [ ] OUT OF SCOPE (deferred to `rename-src-comment-prose-slicing-to-tasking`): the broad sweep of free-prose slice/PRD/slicing comments + user-facing message strings across the large modules. Do NOT attempt it here; a reviewer must NOT block this task on it.
 
 ## Blocked by
 
@@ -39,7 +44,19 @@ NOTE: this task does NOT rename the protocol-doc FILE or its inlined path in the
 >
 > Explicitly OUT of scope here: the `work/protocol/SLICING-PROTOCOL.md` filename and the prompt builder's inlined doc path — the dependent `rename-protocol-doc-to-tasking` task owns those. Do not touch that path string.
 >
-> Done = build/test/format:check green, no slice/slicer/prd in live `*.ts` filenames or symbols (excepting the deliberately-deferred protocol-doc path), behaviour unchanged.
+> Done = build/test/format:check green, no slice/slicer/prd in live `*.ts` filenames or symbols (excepting the deliberately-deferred protocol-doc path + the out-of-scope intake `{slice,prd}` wire fields + the still-defined `dispatchSlice`/`LONE_SLICE_*`), every `{@link}` resolving, stale module-FILENAME comment refs updated, behaviour unchanged. The BROAD comment/string prose sweep is OUT of scope (the follow-up `rename-src-comment-prose-slicing-to-tasking` task).
+>
+> NARROWED-SCOPE HANDOFF (2026-06-23): the file + symbol renames are already done and green on the kept branch; the dangling `{@link}` are already fixed (the 5 remaining in `intake.ts` point at STILL-LIVE targets — the `{slice,prd}` wire fields `sliceTitle`/`prdTitle`, `dispatchSlice`, `LONE_SLICE_REVIEW_MAX_ROUNDS` — KEEP them). The ONLY remaining in-scope edit is updating 11 stale module-FILENAME references in comments to the renamed filenames (a pure, literal find/replace — no concept judgement):
+>
+> - `work-layout.ts:203` and `:213`: `prd-complete.ts` → `brief-complete.ts`
+> - `verdict-json.ts:5`: `slicer-review-loop.ts` → `tasker-review-loop.ts`
+> - `review-gate.ts:256` and `:315`: `slicer-review-loop.ts` → `tasker-review-loop.ts`
+> - `ledger-write.ts:71`: `slicing-lock.ts` → `tasking-lock.ts`
+> - `ledger-read.ts:513` and `:533`: `slicing.ts` → `tasking.ts` (the `.ts` FILENAME only; leave surrounding concept prose like `readSlicedSlugs` for the follow-up prose task)
+> - `intake.ts:1720` and `:2279`: `slicing.ts` → `tasking.ts` (filename only)
+> - `do.ts:666`: `slicing.ts` → `tasking.ts` (filename only)
+>
+> Do NOT do the broad slice/PRD concept-prose sweep (deferred). After these 11 edits, `grep -rnE '(slicing|slicing-lock|slicer-review-loop|prd-complete)\.ts' packages/agent-runner/src` must return zero. Then re-run the gate.
 
 ---
 
