@@ -137,7 +137,7 @@ export const REPO_ALLOWED_KEYS = [
 	// Does NOT touch the BUILD/claim candidate set — staging stays non-claimable.
 	'surfaceStaging',
 	// `selectionOrder` (the configurable order across the four orderable auto-pick
-	// pools — build/slice/surface/triage; `apply` is pinned first) is a genuine repo
+	// pools — build/task/surface/triage; `apply` is pinned first) is a genuine repo
 	// property — the per-repo selection-order field ADR `ci-config-policy-and-gate-
 	// family` specifies, resolved per-repo like `autoTask`. SUBSUMES the removed
 	// `prdsFirst` boolean (a preset keyword or an explicit pool-name list).

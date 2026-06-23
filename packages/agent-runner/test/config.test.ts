@@ -65,8 +65,8 @@ describe('mergeConfig', () => {
 		// A preset string OR an explicit list overrides it.
 		expect(mergeConfig({selectionOrder: 'groom'}).selectionOrder).toBe('groom');
 		expect(
-			mergeConfig({selectionOrder: ['slice', 'build']}).selectionOrder,
-		).toEqual(['slice', 'build']);
+			mergeConfig({selectionOrder: ['task', 'build']}).selectionOrder,
+		).toEqual(['task', 'build']);
 	});
 
 	it('defaults the autonomy gate to strict (autoBuild false)', () => {

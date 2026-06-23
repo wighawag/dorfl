@@ -190,13 +190,13 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		expect(viaPreset).toEqual(picked);
 	});
 
-	it('[slice, build, ...] puts PRDs-to-slice BEFORE eligible slices (== old prdsFirst:true)', () => {
+	it('[task, build, ...] puts PRDs-to-slice BEFORE eligible slices (== old prdsFirst:true)', () => {
 		const r = report('/repo', [taskItem('a', true)]);
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
 			briefs: [brief('p1')],
-			selectionOrder: ['slice', 'build', 'surface', 'triage'],
+			selectionOrder: ['task', 'build', 'surface', 'triage'],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'brief:p1',
@@ -216,14 +216,14 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			report: r,
 			caps: CAPS,
 			briefs: [brief('p1')],
-			selectionOrder: ['slice', 'build', 'surface', 'triage'],
+			selectionOrder: ['task', 'build', 'surface', 'triage'],
 			count: 1,
 		});
 		expect(tasksFirst[0]).toMatchObject({namespace: 'task', slug: 'a'});
 		expect(briefsFirst[0]).toMatchObject({namespace: 'brief', slug: 'p1'});
 	});
 
-	it('the `groom` preset puts surface+triage AHEAD of build+slice', () => {
+	it('the `groom` preset puts surface+triage AHEAD of build+task', () => {
 		const r = report('/repo', [taskItem('s', true)]);
 		const picked = selectPrioritised({
 			report: r,
@@ -346,7 +346,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			report: r,
 			caps: CAPS,
 			briefs: [brief('p')],
-			selectionOrder: ['slice', 'build', 'surface', 'triage'],
+			selectionOrder: ['task', 'build', 'surface', 'triage'],
 			lifecycle: lifecycle({
 				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
@@ -368,7 +368,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			report: r,
 			caps: CAPS,
 			briefs: [],
-			selectionOrder: ['triage', 'build', 'slice', 'surface'],
+			selectionOrder: ['triage', 'build', 'task', 'surface'],
 			// triage pool EMPTY (gated off); naming it is a no-op, never an error.
 			lifecycle: lifecycle({triage: []}),
 		});

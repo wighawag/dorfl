@@ -239,16 +239,16 @@ export interface Config {
 	surfaceStaging: boolean;
 	/**
 	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
-	 * eligible tasks, `slice` = taskable briefs, `surface` = `needsAnswers`
+	 * eligible tasks, `task` = taskable briefs, `surface` = `needsAnswers`
 	 * blockers, `triage` = untriaged observations). `apply` (consume a committed
 	 * answer) is PINNED FIRST and is NOT orderable (consume-always-wins). The value
-	 * is EITHER a PRESET keyword (`drain` (default) ⇒ `[build, slice, surface,
+	 * is EITHER a PRESET keyword (`drain` (default) ⇒ `[build, task, surface,
 	 * triage]`, drain ready work then create then ask; `groom` ⇒ `[surface, triage,
-	 * build, slice]`) OR an explicit ordered pool-name list (the env comma form
-	 * `build,slice,surface,triage`); the preset is sugar over the list. It only
+	 * build, task]`) OR an explicit ordered pool-name list (the env comma form
+	 * `build,task,surface,triage`); the preset is sugar over the list. It only
 	 * REORDERS pools; the gates decide what is PRESENT (a gated-off pool named in
 	 * the order is a no-op). SUBSUMES the old `prdsFirst` boolean: `drain`
-	 * reproduces its default, `[slice, build, ...]` reproduces `prdsFirst: true`.
+	 * reproduces its default, `[task, build, ...]` reproduces `prdsFirst: true`.
 	 * Resolved per-repo like `autoBuild`/`autoTask`: flag
 	 * (`--selection-order`) > `AGENT_RUNNER_SELECTION_ORDER` env (the `'list'`
 	 * coercion) > per-repo > global > default (`drain`). An unknown name/keyword
@@ -631,7 +631,7 @@ export const DEFAULT_CONFIG: Config = {
 	// family`, selection-order section): drain ready work (build eligible tasks →
 	// task taskable briefs) before creating/asking (surface → triage); `apply` is
 	// always first. Reproduces today's tasks-first two-pool default. Subsumes the
-	// removed `prdsFirst` boolean (`[slice, build, ...]` reproduces `prdsFirst: true`).
+	// removed `prdsFirst` boolean (`[task, build, ...]` reproduces `prdsFirst: true`).
 	selectionOrder: DEFAULT_SELECTION_ORDER,
 	maxParallel: 4,
 	perRepoMax: 2,

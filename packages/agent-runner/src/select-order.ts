@@ -28,16 +28,16 @@
  * member of this union and naming it is a usage error.
  *
  *  - `build` — build an eligible task;
- *  - `slice` — task a taskable brief;
+ *  - `task` — task a taskable brief;
  *  - `surface` — render a `needsAnswers` blocker into an answerable sidecar;
  *  - `triage` — triage an untriaged observation.
  */
-export type SelectionPool = 'build' | 'slice' | 'surface' | 'triage';
+export type SelectionPool = 'build' | 'task' | 'surface' | 'triage';
 
 /** The orderable pools, in their canonical "drain" order (the default). */
 export const SELECTION_POOLS: readonly SelectionPool[] = [
 	'build',
-	'slice',
+	'task',
 	'surface',
 	'triage',
 ];
@@ -46,17 +46,17 @@ export const SELECTION_POOLS: readonly SelectionPool[] = [
  * The recognized PRESET keywords, each sugar over an explicit pool-order list:
  *
  *  - `drain` (the DEFAULT) — drain ready work, then create, then ask:
- *    `[build, slice, surface, triage]`. Reproduces today's drain-first
- *    "drain before create" default (`build` before `slice`).
- *  - `groom` — ask/groom first, build later: `[surface, triage, build, slice]`.
+ *    `[build, task, surface, triage]`. Reproduces today's drain-first
+ *    "drain before create" default (`build` before `task`).
+ *  - `groom` — ask/groom first, build later: `[surface, triage, build, task]`.
  *
  * Kept deliberately SMALL (the minimize-head-space stance): a third preset earns
  * its place only when a real need appears.
  */
 export const SELECTION_ORDER_PRESETS: Record<string, readonly SelectionPool[]> =
 	{
-		drain: ['build', 'slice', 'surface', 'triage'],
-		groom: ['surface', 'triage', 'build', 'slice'],
+		drain: ['build', 'task', 'surface', 'triage'],
+		groom: ['surface', 'triage', 'build', 'task'],
 	};
 
 /** The default `selectionOrder` value when unset (the `drain` preset). */

@@ -247,7 +247,7 @@ export function freshWorktreeGateFlagOverrides(
 /**
  * The selection-order CLI flag (`do` AND `advance`): `--selection-order <order>`
  * (a preset keyword like `drain`/`groom`, or a comma-separated explicit pool
- * order like `build,slice,surface,triage`). Resolved through the SAME
+ * order like `build,task,surface,triage`). Resolved through the SAME
  * `flag > env > per-repo > global > default` chain as the other `do` flags.
  */
 export interface SelectionOrderFlags {
