@@ -23,7 +23,7 @@ Cut the intake front-door vocabulary over `{slice, prd}` -> `{task, brief}` (and
 
 ### The CI intake FLAGS (`cli.ts` + `intake-trigger-template.ts`)
 - `--merge-prd`/`--propose-prd` -> `--merge-brief`/`--propose-brief`; `--merge-slice`/`--propose-slice` -> `--merge-task`/`--propose-task` (commander defs + help text in `cli.ts` ~L3347-3360; the `intake` command description ~L3323).
-- `intake-trigger-template.ts`: the emitted workflow text + the policy-derivation comments + the validator regexes (`/--propose-slice\b/`, `/--merge-prd\b/`, etc., ~L501-519) + the `prd_flag`/`slice_flag` shell vars and the emitted `--propose-slice`/`--merge-prd` strings (~L243-363). Edit the EMITTER source, NEVER `.github/workflows/*` (a human regenerates CI via `install-ci`). Update the `IntakeFlagModes` field names (`prd`/`slice` -> `brief`/`task`, ~L103-105) and their JSDoc.
+- `intake-trigger-template.ts`: the emitted workflow text + the policy-derivation comments + the validator regexes (`/--propose-slice\b/`, `/--merge-prd\b/`, etc., ~L501-519) + the `prd_flag`/`slice_flag` shell vars and the emitted `--propose-slice`/`--merge-prd` strings (~L243-363). Edit the EMITTER source, NEVER `.github/workflows/*` (a human regenerates CI via `install-ci`). Update the `IntakeIntegrationFlags` interface field names (`prd`/`slice` -> `brief`/`task`, ~L102-106) and their JSDoc.
 
 ### Tests
 Update every asserting test (intake.test.ts, intake-integration-modes.test.ts, intake-lone-task-review.test.ts, intake-trigger-template.test.ts, and any verdict-parser/prompt test) in the SAME task.

@@ -27,7 +27,7 @@ The shared run-OUTCOME value `'sliced'` (emitted by the tasking transition) stil
 
 - `do.ts`: the outcome union member (~L132) + the `case 'sliced':` / `outcome = 'sliced'` (~L558-559).
 - `tasking.ts`: the outcome union member (~L103), `commitTag: 'sliced'` (~L675), `outcome: 'sliced'` (~L756, L821).
-- `intake.ts`: the `IntakeRunOutcome` member `'sliced'` (~L164) and `outcome: kind === 'prd' ? 'prd' : 'sliced'` (~L1398) — rename the `'sliced'` arm to `'tasked'`. (NOTE: the intake `'prd'` outcome + the `kind`/`IntakeArtifactType` `{slice,prd}` cluster is OWNED by the SEPARATE task `complete-intake-slice-prd-to-task-brief-cutover`; here touch ONLY the `'sliced'` → `'tasked'` arm, leaving `'prd'`/`kind` for that task. If that task has already landed, reconcile to its settled names instead.)
+- `intake.ts`: the `IntakeRunOutcome` member `'sliced'` (~L164) and `outcome: kind === 'prd' ? 'prd' : 'sliced'` (~L1398) — rename the `'sliced'` arm to `'tasked'` so the line becomes EXACTLY `outcome: kind === 'prd' ? 'prd' : 'tasked'` (leave the `kind === 'prd' ? 'prd'` part untouched). (NOTE: that `'prd'` arm + the `kind`/`IntakeArtifactType` `{slice,prd}` cluster is OWNED by the SEPARATE, dependent task `complete-intake-slice-prd-to-task-brief-cutover`, which will later rewrite the whole line to `kind === 'brief' ? 'briefed' : 'tasked'`. Here touch ONLY the `'sliced'` → `'tasked'` arm. If that task has somehow already landed, reconcile to its settled names instead.)
 
 Update the ~15 test files asserting `'sliced'`.
 
