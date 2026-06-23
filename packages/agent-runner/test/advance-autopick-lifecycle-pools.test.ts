@@ -41,7 +41,7 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-function seedSlice(
+function seedTask(
 	slug: string,
 	fm: {needsAnswers?: boolean; humanOnly?: boolean} = {},
 ): void {
@@ -54,7 +54,7 @@ function seedSlice(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-function seedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
+function seedBrief(slug: string, fm: {needsAnswers?: boolean} = {}): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
@@ -144,7 +144,7 @@ describe('advance auto-pick — untriaged observations → triage (obs:<slug>)',
 
 describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 	it('with the surface gate forced ON, auto-picks a needsAnswers slice (no sidecar) → surface arg', async () => {
-		seedSlice('blocked-slice', {needsAnswers: true});
+		seedTask('blocked-slice', {needsAnswers: true});
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -158,7 +158,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 	});
 
 	it('a needsAnswers PRD (no sidecar) → surface arg (prd:<slug>)', async () => {
-		seedPrd('blocked-prd', {needsAnswers: true});
+		seedBrief('blocked-prd', {needsAnswers: true});
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -171,7 +171,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 	});
 
 	it('a PENDING-sidecar blocked item is NOT selected (calm, no thrash)', async () => {
-		seedSlice('half', {needsAnswers: true});
+		seedTask('half', {needsAnswers: true});
 		seedSidecar('task', 'half', false); // pending
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
@@ -187,7 +187,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 
 describe('advance auto-pick — answered-sidecar items → apply (ALWAYS on)', () => {
 	it('an answered sidecar is auto-picked + dispatched to apply EVEN with both create-gates OFF (consume)', async () => {
-		seedSlice('answered', {needsAnswers: true});
+		seedTask('answered', {needsAnswers: true});
 		seedSidecar('task', 'answered', true);
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
@@ -202,7 +202,7 @@ describe('advance auto-pick — answered-sidecar items → apply (ALWAYS on)', (
 	});
 
 	it('an answered PRD sidecar → apply (prd:<slug>), gates off', async () => {
-		seedPrd('answered-prd', {needsAnswers: true});
+		seedBrief('answered-prd', {needsAnswers: true});
 		seedSidecar('brief', 'answered-prd', true);
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({cwd: repo, run, config: cfg(), count: 5});
@@ -213,7 +213,7 @@ describe('advance auto-pick — answered-sidecar items → apply (ALWAYS on)', (
 describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', () => {
 	it('with NO gate wired (default), auto-triages/auto-surfaces NOTHING', async () => {
 		seedObservation('untriaged');
-		seedSlice('blocked', {needsAnswers: true}); // no sidecar → would-be surface
+		seedTask('blocked', {needsAnswers: true}); // no sidecar → would-be surface
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -228,12 +228,12 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 
 	it('the five-pool ORDER: apply PINNED first, then the drain order (build → slice → surface → triage)', async () => {
 		// buildable
-		seedSlice('build-me');
-		seedPrd('slice-me');
+		seedTask('build-me');
+		seedBrief('slice-me');
 		// lifecycle
 		seedObservation('triage-me'); // triage
-		seedSlice('surface-me', {needsAnswers: true}); // surface (no sidecar)
-		seedSlice('apply-me', {needsAnswers: true});
+		seedTask('surface-me', {needsAnswers: true}); // surface (no sidecar)
+		seedTask('apply-me', {needsAnswers: true});
 		seedSidecar('task', 'apply-me', true); // apply (answered)
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
@@ -269,12 +269,12 @@ describe('do auto-pick is PROVABLY UNCHANGED (F-SHARE)', () => {
 
 	it('do auto-pick / -n NEVER selects an observation or a needsAnswers item', async () => {
 		// A `work/` full of lifecycle items + ONE eligible slice + ONE sliceable PRD.
-		seedSlice('build-me');
-		seedPrd('slice-me');
+		seedTask('build-me');
+		seedBrief('slice-me');
 		seedObservation('untriaged');
-		seedSlice('blocked-slice', {needsAnswers: true});
-		seedPrd('blocked-prd', {needsAnswers: true});
-		seedSlice('answered', {needsAnswers: true});
+		seedTask('blocked-slice', {needsAnswers: true});
+		seedBrief('blocked-prd', {needsAnswers: true});
+		seedTask('answered', {needsAnswers: true});
 		seedSidecar('task', 'answered', true);
 
 		const {run, args} = doRunner();

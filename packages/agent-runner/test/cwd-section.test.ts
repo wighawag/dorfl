@@ -26,7 +26,7 @@ function config() {
 }
 
 /** A minimal slice body for `work/tasks/todo/<slug>.md`. */
-function slice(slug: string, extra: Record<string, string> = {}): string {
+function task(slug: string, extra: Record<string, string> = {}): string {
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	for (const [k, v] of Object.entries(extra)) {
 		lines.push(`${k}: ${v}`);
@@ -80,8 +80,8 @@ function addUnpushedCommit(repo: string): void {
 describe('resolveCwdSection — cwd participation', () => {
 	it('reports a participating cwd as a separate local section with its own count', async () => {
 		const {repo} = seedCwdRepo({
-			'a.md': slice('a'),
-			'b.md': slice('b', {humanOnly: 'true'}),
+			'a.md': task('a'),
+			'b.md': task('b', {humanOnly: 'true'}),
 		});
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		expect(section.participating).toBe(true);
@@ -101,7 +101,7 @@ describe('resolveCwdSection — cwd participation', () => {
 
 describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard framing)', () => {
 	it('fetches the cwd arbiter first and reports a clean (in-sync) divergence', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a')});
+		const {repo} = seedCwdRepo({'a.md': task('a')});
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		expect(section.arbiter?.configured).toBe(true);
 		expect(section.arbiter?.fetched).toBe(true);
@@ -110,7 +110,7 @@ describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard 
 	});
 
 	it('shows local main AHEAD of the arbiter when there is unpushed work', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a')});
+		const {repo} = seedCwdRepo({'a.md': task('a')});
 		addUnpushedCommit(repo);
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		expect(section.arbiter?.ahead).toBe(1);
@@ -120,7 +120,7 @@ describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard 
 	});
 
 	it('WARNS and falls back when the cwd arbiter fetch FAILS (never errors)', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a')});
+		const {repo} = seedCwdRepo({'a.md': task('a')});
 		// Point the arbiter remote at a path that does not exist ⇒ fetch fails.
 		gitIn(
 			['remote', 'set-url', 'arbiter', 'file:///nonexistent/gone.git'],
@@ -142,7 +142,7 @@ describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard 
 
 describe('resolveCwdSection — registry de-dup', () => {
 	it('marks the cwd as also-registered when its arbiter is a registered mirror', async () => {
-		const {repo, arbiter} = seedCwdRepo({'a.md': slice('a')});
+		const {repo, arbiter} = seedCwdRepo({'a.md': task('a')});
 		const mirror = registerArbiterAsMirror(arbiter);
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		expect(section.alsoRegistered).toBe(true);
@@ -150,7 +150,7 @@ describe('resolveCwdSection — registry de-dup', () => {
 	});
 
 	it('is NOT also-registered when the cwd arbiter is absent from the registry', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a')});
+		const {repo} = seedCwdRepo({'a.md': task('a')});
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		expect(section.alsoRegistered).toBe(false);
 	});
@@ -158,7 +158,7 @@ describe('resolveCwdSection — registry de-dup', () => {
 
 describe('formatReport — cwd-local section is distinct + de-duped (scan)', () => {
 	it('renders a labelled local section ABOVE the registry, each with its OWN count', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a'), 'b.md': slice('b')});
+		const {repo} = seedCwdRepo({'a.md': task('a'), 'b.md': task('b')});
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		// An (unrelated) empty registry.
 		const registry = await scan(config());
@@ -171,7 +171,7 @@ describe('formatReport — cwd-local section is distinct + de-duped (scan)', () 
 	});
 
 	it('an UNREGISTERED participating cwd shows the self-registration hint, not the dead-end', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a')});
+		const {repo} = seedCwdRepo({'a.md': task('a')});
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		const registry = await scan(config()); // empty registry
 		const out = formatReport(registry, section);
@@ -181,7 +181,7 @@ describe('formatReport — cwd-local section is distinct + de-duped (scan)', () 
 	});
 
 	it('a cwd that is ALSO registered is de-duped (shown once, marked, not a second row)', async () => {
-		const {repo, arbiter} = seedCwdRepo({'a.md': slice('a')});
+		const {repo, arbiter} = seedCwdRepo({'a.md': task('a')});
 		const mirror = registerArbiterAsMirror(arbiter);
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		const registry = await scan(config());
@@ -206,7 +206,7 @@ describe('formatReport — cwd-local section is distinct + de-duped (scan)', () 
 
 describe('formatStatus — cwd-local section renders distinctly', () => {
 	it('shows the cwd local section in status when participating', async () => {
-		const {repo} = seedCwdRepo({'a.md': slice('a')});
+		const {repo} = seedCwdRepo({'a.md': task('a')});
 		const section = await resolveCwdSection({cwd: repo, config: config()});
 		const report = await status({
 			workspacesDir: workspacesDir(),

@@ -2,7 +2,7 @@
  * The SHARED "first JSON object in agent prose" extractor — the single
  * implementation behind every prompt→verdict→dispatch seam in this package
  * (the Gate-2 PR/code review gate and the slice-SET acceptance gate in
- * `review-gate.ts`, the slicer IMPROVER loop in `slicer-review-loop.ts`, and the
+ * `review-gate.ts`, the slicer IMPROVER loop in `tasker-review-loop.ts`, and the
  * issue-intake decision in `intake.ts`). Each of those launches an agent that
  * EMITS a single JSON object (possibly fenced / wrapped in prose) and the runner
  * pulls it back out to dispatch on it — the SAME need, so it is ONE extractor, not

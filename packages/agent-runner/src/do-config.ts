@@ -199,16 +199,16 @@ export function reviewFlagOverrides(flags: ReviewFlags): PartialConfig {
 export function taskerLoopFlagOverrides(flags: TaskerLoopFlags): PartialConfig {
 	const overrides: PartialConfig = {};
 	if (flags.taskerLoop !== undefined) {
-		overrides.slicerLoop = flags.taskerLoop;
+		overrides.taskerLoop = flags.taskerLoop;
 	}
 	if (flags.taskerLoopMax !== undefined) {
 		const n = Number(flags.taskerLoopMax);
 		if (flags.taskerLoopMax.trim() !== '' && !Number.isNaN(n)) {
-			overrides.slicerLoopMax = n;
+			overrides.taskerLoopMax = n;
 		}
 	}
 	if (flags.taskerLoopModel !== undefined) {
-		overrides.slicerLoopModel = flags.taskerLoopModel;
+		overrides.taskerLoopModel = flags.taskerLoopModel;
 	}
 	return overrides;
 }

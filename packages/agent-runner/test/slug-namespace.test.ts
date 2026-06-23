@@ -8,7 +8,7 @@ import {
 	parseSlugArg,
 	resolveSlug,
 	resolveAdvanceArg,
-	resolveSliceOnlyArg,
+	resolveTaskOnlyArg,
 	workBranchRef,
 	parseWorkBranchRef,
 	SlugResolutionError,
@@ -208,22 +208,26 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		// bare slug whose literal text is `slice:foo` (resolved to the TASK
 		// namespace because bare = task), NOT the old `slice` namespace. Likewise
 		// `prd:foo` is no longer the brief prefix.
-		const slice = resolveSlug({
+		const task = resolveSlug({
 			arg: 'slice:foo',
 			repoPath: repoPath(),
 			read: currentLedgerRead,
 		});
-		expect(slice).toEqual({
+		expect(task).toEqual({
 			namespace: 'task',
 			slug: 'slice:foo',
 			explicit: false,
 		});
-		const prd = resolveSlug({
+		const brief = resolveSlug({
 			arg: 'prd:foo',
 			repoPath: repoPath(),
 			read: currentLedgerRead,
 		});
-		expect(prd).toEqual({namespace: 'task', slug: 'prd:foo', explicit: false});
+		expect(brief).toEqual({
+			namespace: 'task',
+			slug: 'prd:foo',
+			explicit: false,
+		});
 	});
 
 	it('the brief existence check resolves the slug from frontmatter, not just the filename', () => {
@@ -358,28 +362,28 @@ describe('resolveSlug — `do` does NOT span the observation namespace', () => {
 
 describe('resolveSliceOnlyArg — the task-only command guard', () => {
 	it('accepts a bare slug (= the task)', () => {
-		expect(resolveSliceOnlyArg('feature')).toBe('feature');
+		expect(resolveTaskOnlyArg('feature')).toBe('feature');
 	});
 
 	it('accepts an explicit task: prefix (the explicit alias) and strips it', () => {
-		expect(resolveSliceOnlyArg('task:feature')).toBe('feature');
+		expect(resolveTaskOnlyArg('task:feature')).toBe('feature');
 	});
 
 	it('REJECTS a brief: argument with an "operates on tasks, not briefs" error', () => {
-		expect(() => resolveSliceOnlyArg('brief:feature')).toThrow(
+		expect(() => resolveTaskOnlyArg('brief:feature')).toThrow(
 			SlugResolutionError,
 		);
 		try {
-			resolveSliceOnlyArg('brief:feature');
+			resolveTaskOnlyArg('brief:feature');
 		} catch (err) {
 			expect((err as Error).message).toContain('tasks, not briefs');
 		}
 	});
 
 	it('REJECTS an obs: argument with an "operates on tasks, not observations" error', () => {
-		expect(() => resolveSliceOnlyArg('obs:bar')).toThrow(SlugResolutionError);
+		expect(() => resolveTaskOnlyArg('obs:bar')).toThrow(SlugResolutionError);
 		try {
-			resolveSliceOnlyArg('obs:bar');
+			resolveTaskOnlyArg('obs:bar');
 		} catch (err) {
 			expect((err as Error).message).toContain('tasks, not observations');
 			expect((err as Error).message).toContain('advance obs:bar');
@@ -390,7 +394,7 @@ describe('resolveSliceOnlyArg — the task-only command guard', () => {
 		// `slice:feature` is no longer the explicit task prefix; it is a bare slug
 		// whose literal text is `slice:feature`, so it passes through verbatim (no
 		// strip), NOT mapped to the task `feature`.
-		expect(resolveSliceOnlyArg('slice:feature')).toBe('slice:feature');
+		expect(resolveTaskOnlyArg('slice:feature')).toBe('slice:feature');
 	});
 
 	it('is PURE — a bare slug on a task-only command never reads files (no brief ambiguity here)', () => {
@@ -398,38 +402,38 @@ describe('resolveSliceOnlyArg — the task-only command guard', () => {
 		// slug straight to the task (the brief namespace is unreachable here), so
 		// there is no cross-namespace check and no error.
 		writeItem('prd', 'feature.md', {slug: 'feature'});
-		expect(resolveSliceOnlyArg('feature')).toBe('feature');
+		expect(resolveTaskOnlyArg('feature')).toBe('feature');
 	});
 });
 
 describe('ledger-read seam — resolvePrdExistence (the brief read path)', () => {
 	it('reports a brief present in work/briefs/ready/', () => {
 		writeItem('prd', 'p.md', {slug: 'p'});
-		const r = currentLedgerRead.resolvePrdExistence({
+		const r = currentLedgerRead.resolveBriefExistence({
 			repoPath: repoPath(),
 			slug: 'p',
 		});
 		expect(r.exists).toBe(true);
-		expect(r.prdFile).toBe('p.md');
-		expect(r.prdSlicedFile).toBeUndefined();
+		expect(r.briefFile).toBe('p.md');
+		expect(r.briefTaskedFile).toBeUndefined();
 	});
 
 	it('reports a brief present only via its work/briefs/tasked/ resting file (already sliced)', () => {
 		writeItem('prd-sliced', 's.md', {slug: 's'});
-		const r = currentLedgerRead.resolvePrdExistence({
+		const r = currentLedgerRead.resolveBriefExistence({
 			repoPath: repoPath(),
 			slug: 's',
 		});
 		expect(r.exists).toBe(true);
-		expect(r.prdFile).toBeUndefined();
-		expect(r.prdSlicedFile).toBe('s.md');
+		expect(r.briefFile).toBeUndefined();
+		expect(r.briefTaskedFile).toBe('s.md');
 	});
 
 	it('resolves the slug from frontmatter, falling back to filename', () => {
 		// Frontmatter slug wins over the filename.
 		writeItem('prd', 'on-disk-name.md', {slug: 'real-slug'});
 		expect(
-			currentLedgerRead.resolvePrdExistence({
+			currentLedgerRead.resolveBriefExistence({
 				repoPath: repoPath(),
 				slug: 'real-slug',
 			}).exists,
@@ -437,7 +441,7 @@ describe('ledger-read seam — resolvePrdExistence (the brief read path)', () =>
 		// Filename fallback when no frontmatter slug.
 		writeItem('prd', 'filename-slug.md', {});
 		expect(
-			currentLedgerRead.resolvePrdExistence({
+			currentLedgerRead.resolveBriefExistence({
 				repoPath: repoPath(),
 				slug: 'filename-slug',
 			}).exists,
@@ -445,13 +449,13 @@ describe('ledger-read seam — resolvePrdExistence (the brief read path)', () =>
 	});
 
 	it('reports absent when no ready/ or tasked/ record names the slug (no throw on missing folders)', () => {
-		const r = currentLedgerRead.resolvePrdExistence({
+		const r = currentLedgerRead.resolveBriefExistence({
 			repoPath: repoPath(),
 			slug: 'nope',
 		});
 		expect(r.exists).toBe(false);
-		expect(r.prdFile).toBeUndefined();
-		expect(r.prdSlicedFile).toBeUndefined();
+		expect(r.briefFile).toBeUndefined();
+		expect(r.briefTaskedFile).toBeUndefined();
 	});
 });
 
@@ -474,11 +478,11 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 			producer: 'intake',
 		});
 		const build = workBranchRef('task', 'add-quiet-flag');
-		const slicing = workBranchRef('brief', 'add-quiet-flag');
+		const tasking = workBranchRef('brief', 'add-quiet-flag');
 		expect(intakeTask).toBe('work/intake-task-add-quiet-flag');
 		expect(intakeBrief).toBe('work/intake-brief-add-quiet-flag');
 		// All four forms for ONE slug are mutually distinct (the full collision set).
-		const all = [intakeTask, intakeBrief, build, slicing];
+		const all = [intakeTask, intakeBrief, build, tasking];
 		expect(new Set(all).size).toBe(4);
 	});
 

@@ -14,15 +14,15 @@ import {
 } from './helpers/gitRepo.js';
 
 /**
- * A SELF-RENAMING FOLDER slice (the `folder-taxonomy-reorg-and-rename` migration):
- * a slice whose whole job is to `git mv` the very `work/` ledger folders the runner
+ * A SELF-RENAMING FOLDER task (the `folder-taxonomy-reorg-and-rename` migration):
+ * a task whose whole job is to `git mv` the very `work/` ledger folders the runner
  * reads its OWN record from — e.g. `done/ -> tasks/done/`, `backlog/ -> tasks/todo/`.
  *
  * The trap this guards against (observed live, drive-backlog Phase 1): the runner's
  * `complete` runs the INSTALLED (pre-rename) binary, whose compiled-in `work-layout`
- * still says `done -> 'done'`, while the slice's BRANCH tree has renamed the folder
+ * still says `done -> 'done'`, while the task's BRANCH tree has renamed the folder
  * to `tasks/done/` AND the agent has placed its own ledger record there as part of
- * the migration. The pre-fix resolver looked ONLY at the binary's `work/backlog|
+ * the migration. The pre-fix resolver looked ONLY at the binary's `work/tasks/todo|
  * in-progress|needs-attention|done/<slug>.md` paths, found the record at NONE of
  * them, and crashed with `nothing to complete` — surfacing to needs-attention and
  * REAPING the job worktree, discarding the whole build.
@@ -30,7 +30,7 @@ import {
  * The fix (A2, layout-agnostic done-position detection): when the record is at none
  * of the binary-known folders, `complete` scans `work/**\/<slug>.md` on the branch;
  * if it finds the record in a folder whose LEAF name is `done` (covering both
- * `work/done/` and a renamed `work/tasks/done/`), it treats the slice as already
+ * `work/done/` and a renamed `work/tasks/done/`), it treats the task as already
  * done-moved by the agent into its terminal position, SKIPS the runner's own
  * `git mv`, and commits the agent's work as-is. No binary-vs-branch folder-name
  * reconciliation is needed — the agent owns the move, the runner just integrates.
@@ -50,7 +50,7 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Stand up the repo as a slice that placed its OWN record in the terminal
+ * Stand up the repo as a task that placed its OWN record in the terminal
  * done-position leaves it: claimed (body rests in the pool `work/tasks/todo/<slug>.md`
  * on the arbiter — the renamed agent POOL), then on the work branch the agent
  * done-moved its record to `work/tasks/done/<slug>.md` and produced real source

@@ -38,14 +38,14 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-function slice(frontmatter: Record<string, string>): string {
+function task(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', 'body');
 	return lines.join('\n');
 }
 
-function prd(frontmatter: Record<string, string>): string {
+function brief(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', '# PRD');
@@ -82,10 +82,10 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 	it('selects the WHOLE eligible pool (slices-first then PRDs) and advances each', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'alpha.md': slice({slug: 'alpha'}),
-				'human.md': slice({slug: 'human', humanOnly: 'true'}), // gated out
+				'alpha.md': task({slug: 'alpha'}),
+				'human.md': task({slug: 'human', humanOnly: 'true'}), // gated out
 			},
-			prd: {'gamma.md': prd({slug: 'gamma'})},
+			brief: {'gamma.md': brief({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await advanceOnce({
@@ -102,8 +102,8 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 
 	it('honours the per-action GATES via the mirror scan (gates off ⇒ empty batch)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'alpha.md': slice({slug: 'alpha'})},
-			prd: {'gamma.md': prd({slug: 'gamma'})},
+			backlog: {'alpha.md': task({slug: 'alpha'})},
+			brief: {'gamma.md': brief({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await advanceOnce({
@@ -122,9 +122,9 @@ describe('advanceOnce — genuine PARALLELISM, each item lock-guarded in the tic
 	it('runs ticks CONCURRENTLY up to maxParallel (overlap observed)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'a.md': slice({slug: 'a'}),
-				'b.md': slice({slug: 'b'}),
-				'c.md': slice({slug: 'c'}),
+				'a.md': task({slug: 'a'}),
+				'b.md': task({slug: 'b'}),
+				'c.md': task({slug: 'c'}),
 			},
 		});
 		let inFlight = 0;
@@ -156,8 +156,8 @@ describe('advanceOnce — genuine PARALLELISM, each item lock-guarded in the tic
 	it('a thrown tick is CAPTURED (never aborts the batch)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'good.md': slice({slug: 'good'}),
-				'boom.md': slice({slug: 'boom'}),
+				'good.md': task({slug: 'good'}),
+				'boom.md': task({slug: 'boom'}),
 			},
 		});
 		const run: AdvanceTickRunner = async (options) => {
@@ -185,9 +185,9 @@ describe('advanceOnce — convergence: DRAINS monotonically, IDLES at rest (US #
 	it('a pending-sidecar pool is STABLE — every tick a no-op, calm at rest', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'a.md': slice({slug: 'a'}),
-				'b.md': slice({slug: 'b'}),
-				'c.md': slice({slug: 'c'}),
+				'a.md': task({slug: 'a'}),
+				'b.md': task({slug: 'b'}),
+				'c.md': task({slug: 'c'}),
 			},
 		});
 		const {run} = recordingRunner(() => 'no-op');
@@ -206,9 +206,9 @@ describe('advanceOnce — convergence: DRAINS monotonically, IDLES at rest (US #
 	it('the pool DRAINS MONOTONICALLY as answers arrive (idle count strictly shrinks)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {
-				'a.md': slice({slug: 'a'}),
-				'b.md': slice({slug: 'b'}),
-				'c.md': slice({slug: 'c'}),
+				'a.md': task({slug: 'a'}),
+				'b.md': task({slug: 'b'}),
+				'c.md': task({slug: 'c'}),
 			},
 		});
 

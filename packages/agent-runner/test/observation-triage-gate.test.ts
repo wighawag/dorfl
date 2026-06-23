@@ -371,7 +371,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 		rmSync(root, {recursive: true, force: true});
 	});
 
-	function seedSlice(slug: string): void {
+	function seedTask(slug: string): void {
 		const dir = join(repo, 'work', 'tasks', 'todo');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
@@ -412,7 +412,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 	}
 
 	it('an answered sidecar is auto-picked + dispatched to apply EVEN with observationTriage off', async () => {
-		seedSlice('answered');
+		seedTask('answered');
 		seedAnsweredSidecar('answered');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({

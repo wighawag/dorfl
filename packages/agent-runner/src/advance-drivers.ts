@@ -13,8 +13,8 @@ import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
-	sliceablePrds,
-	type PrdCandidate,
+	taskableBriefs,
+	type BriefCandidate,
 	type SelectedItem,
 } from './select-priority.js';
 import {gatherLifecycleInPlace} from './lifecycle-gather.js';
@@ -150,7 +150,7 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
  * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
  * pinned first, take `count` (default 1), and run the EXISTING advance tick per
  * selected item, SEQUENTIALLY. The pools are the EXACT
- * `do-autopick` pools (the SAME `scoreItems`/`sliceablePrds` predicates), so the
+ * `do-autopick` pools (the SAME `scoreItems`/`taskableBriefs` predicates), so the
  * per-action gate family is honoured by construction.
  *
  * The bare/`-n` selection draws ONLY from the autonomous pools (eligible slices +
@@ -182,17 +182,17 @@ export async function performAdvanceAuto(
 	// Pool 2 — SLICEABLE PRDs filtered by `autoslice-gate`'s predicate (gated on
 	// `autoTask`). With `autoTask` off NO PRD is selected — the slice rung is
 	// never reached by the bare/`-n` selection.
-	const pool = read.resolvePrdPool({repoPath: cwd});
-	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
+	const pool = read.resolveBriefPool({repoPath: cwd});
+	const briefCandidates: BriefCandidate[] = pool.briefs.map((brief) => ({
 		repoPath: cwd,
-		slug: prd.slug,
-		humanOnly: prd.humanOnly,
-		needsAnswers: prd.needsAnswers,
-		briefAfter: prd.briefAfter,
+		slug: brief.slug,
+		humanOnly: brief.humanOnly,
+		needsAnswers: brief.needsAnswers,
+		briefAfter: brief.briefAfter,
 	}));
-	const eligiblePrds = sliceablePrds({
-		candidates: prdCandidates,
-		slicedSlugs: pool.slicedSlugs,
+	const eligibleBriefs = taskableBriefs({
+		candidates: briefCandidates,
+		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
 	});
 
@@ -214,7 +214,7 @@ export async function performAdvanceAuto(
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
-		prds: eligiblePrds,
+		briefs: eligibleBriefs,
 		selectionOrder: options.config.selectionOrder,
 		lifecycle,
 		count,

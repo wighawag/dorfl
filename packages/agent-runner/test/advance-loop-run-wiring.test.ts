@@ -46,7 +46,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-function slice(slug: string): string {
+function task(slug: string): string {
 	return `---\nslug: ${slug}\n---\n\nbody`;
 }
 
@@ -78,7 +78,7 @@ const noopAll: AdvanceTickRunner = async (options) =>
 	}) satisfies AdvanceResult;
 
 /** Remove a backlog slice from the mirror SOURCE's `main`, then sync the bare mirror. */
-function drainSliceFromMirror(
+function drainTaskFromMirror(
 	name: string,
 	mirrorPath: string,
 	file: string,
@@ -95,7 +95,7 @@ function drainSliceFromMirror(
 describe('run --advance: the loop driver wired into runLoop via the RunTick seam', () => {
 	it('advanceRunTick conforms to RunTick (the swap seam type)', () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'a.md': slice('a')},
+			backlog: {'a.md': task('a')},
 		});
 		const tick: RunTick = advanceRunTick({
 			mirrorPath,
@@ -109,7 +109,7 @@ describe('run --advance: the loop driver wired into runLoop via the RunTick seam
 
 	it('runLoop DRIVES the advance tick over the mirror pool — every eligible item advances', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'a.md': slice('a'), 'b.md': slice('b'), 'c.md': slice('c')},
+			backlog: {'a.md': task('a'), 'b.md': task('b'), 'c.md': task('c')},
 		});
 		const summary = await runLoop({
 			config: config(),
@@ -136,7 +136,7 @@ describe('run --advance: the loop driver wired into runLoop via the RunTick seam
 
 	it('IDLES / is STABLE at rest: an all-no-op pool advances NOTHING over many ticks (no thrash)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'a.md': slice('a'), 'b.md': slice('b'), 'c.md': slice('c')},
+			backlog: {'a.md': task('a'), 'b.md': task('b'), 'c.md': task('c')},
 		});
 		const summary = await runLoop({
 			config: config(),
@@ -164,14 +164,14 @@ describe('run --advance: the loop driver wired into runLoop via the RunTick seam
 
 	it('DRAINS MONOTONICALLY: the eligible pool shrinks each tick as items resolve', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'a.md': slice('a'), 'b.md': slice('b'), 'c.md': slice('c')},
+			backlog: {'a.md': task('a'), 'b.md': task('b'), 'c.md': task('c')},
 		});
 		// A stub that ADVANCES each item AND drains it from the mirror — the same
 		// shape a real done-move has: an advanced item leaves the eligible pool, so
 		// the NEXT scan sees a strictly smaller pool.
 		let drained = 0;
 		const advanceAndDrain: AdvanceTickRunner = async (options) => {
-			drainSliceFromMirror('repo', mirrorPath, `${options.arg}.md`);
+			drainTaskFromMirror('repo', mirrorPath, `${options.arg}.md`);
 			drained++;
 			return {
 				exitCode: 0,
@@ -217,7 +217,7 @@ describe('run --advance: the loop driver wired into runLoop via the RunTick seam
 
 	it('a FAILED tick maps to needsAttention (the run loop counts it), the batch survives', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			backlog: {'good.md': slice('good'), 'boom.md': slice('boom')},
+			backlog: {'good.md': task('good'), 'boom.md': task('boom')},
 		});
 		const oneBoom: AdvanceTickRunner = async (options) => {
 			if (options.arg === 'boom') {

@@ -3,7 +3,7 @@ import {mkdirSync, writeFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
-import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
+import {performTask, type TaskAgentRunner} from '../src/tasking.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -208,7 +208,7 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 });
 
 /** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) for the slicing path. */
-function seedPrd(repo: string, slug: string): void {
+function seedBrief(repo: string, slug: string): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
@@ -231,7 +231,7 @@ function seedPrd(repo: string, slug: string): void {
 }
 
 /** A slicing agent that writes one STAGED slice AND a captured note (no git). */
-function slicingAgentWithNote(note: string | undefined): SliceAgentRunner {
+function taskingAgentWithNote(note: string | undefined): TaskAgentRunner {
 	return ({cwd}) => {
 		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
@@ -260,16 +260,16 @@ function slicingAgentWithNote(note: string | undefined): SliceAgentRunner {
 describe('the SLICE path (do prd:) scoops + reports agent-authored captured notes', () => {
 	it('a note the slicer wrote during slicing lands in the slice commit and is REPORTED (--merge)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 
 		const sink = noteSink();
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			agentRunner: slicingAgentWithNote(
+			agentRunner: taskingAgentWithNote(
 				'work/notes/observations/slicer-spotted-drift.md',
 			),
 			env: gitEnv(),
@@ -294,16 +294,16 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 
 	it('a note the slicer wrote rides the PROPOSE work branch and is REPORTED (--propose)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 
 		const sink = noteSink();
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'propose',
-			agentRunner: slicingAgentWithNote(
+			agentRunner: taskingAgentWithNote(
 				'work/notes/findings/slicer-external-fact.md',
 			),
 			env: gitEnv(),
@@ -331,16 +331,16 @@ describe('the SLICE path (do prd:) scoops + reports agent-authored captured note
 
 	it('a slicing run that writes NO captured note ⇒ no scoop report', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 
 		const sink = noteSink();
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			agentRunner: slicingAgentWithNote(undefined),
+			agentRunner: taskingAgentWithNote(undefined),
 			env: gitEnv(),
 			note: sink.note,
 		});

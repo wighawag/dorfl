@@ -843,8 +843,8 @@ export async function performIntegration(
 	// subject/PR title to the generic fallback. The `do prd:` slicing path leaves
 	// `title` unset and keeps reading its already-existing held PRD (unchanged).
 	const explicitTitle = lifecycle?.title;
-	const sliceTitle =
-		explicitTitle !== undefined ? explicitTitle : readSliceTitle(sourcePath);
+	const taskTitle =
+		explicitTitle !== undefined ? explicitTitle : readTaskTitle(sourcePath);
 	const defaultMessage =
 		explicitTitle !== undefined
 			? summaryFromTitle(explicitTitle, slug)
@@ -852,7 +852,7 @@ export async function performIntegration(
 	const prTitle = synthesiseProposeTitle({
 		type: (input.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE,
 		slug,
-		title: sliceTitle,
+		title: taskTitle,
 	});
 
 	// 2. STAGE the item move into the index. For a build that is the slice done-move
@@ -1769,9 +1769,9 @@ export const PR_TITLE_MAX = 72;
  * or undefined when missing/unreadable. Used as the human-authored source for
  * the synthesised PR title.
  */
-function readSliceTitle(slicePath: string): string | undefined {
+function readTaskTitle(taskPath: string): string | undefined {
 	try {
-		return readTitle(readFileSync(slicePath, 'utf8'));
+		return readTitle(readFileSync(taskPath, 'utf8'));
 	} catch {
 		return undefined;
 	}

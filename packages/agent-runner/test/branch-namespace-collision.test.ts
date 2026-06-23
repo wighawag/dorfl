@@ -49,14 +49,16 @@ describe('branch namespace — a same-slug slice and PRD never collide', () => {
 	it('claim, onboard, and gc all agree on the namespaced ref (slice ≠ prd)', async () => {
 		// A slug that exists as BOTH a backlog slice AND a PRD (the collision case
 		// advance-loop made first-class). Distinct branch refs by construction.
-		const sliceRef = workBranchRef('task', 'dup');
-		const prdRef = workBranchRef('brief', 'dup');
-		const intakeSliceRef = workBranchRef('task', 'dup', {producer: 'intake'});
-		expect(new Set([sliceRef, prdRef, intakeSliceRef]).size).toBe(3);
+		const taskRef = workBranchRef('task', 'dup');
+		const briefRef = workBranchRef('brief', 'dup');
+		const intakeTaskRef = workBranchRef('task', 'dup', {producer: 'intake'});
+		expect(new Set([taskRef, briefRef, intakeTaskRef]).size).toBe(3);
 
 		// Claim the slice + onboard in-place: the branch is the SLICE ref, carrying
 		// the claim, never the PRD ref.
-		const {repo} = seedRepoWithArbiter(scratch.root, ['dup'], {prds: ['dup']});
+		const {repo} = seedRepoWithArbiter(scratch.root, ['dup'], {
+			briefs: ['dup'],
+		});
 		const claim = await performClaim({
 			slug: 'dup',
 			cwd: repo,
@@ -71,13 +73,13 @@ describe('branch namespace — a same-slug slice and PRD never collide', () => {
 			claimCommit: claim.claimCommit,
 			env: gitEnv(),
 		});
-		expect(tree.branch).toBe(sliceRef);
-		expect(tree.branch).not.toBe(prdRef);
+		expect(tree.branch).toBe(taskRef);
+		expect(tree.branch).not.toBe(briefRef);
 		expect(gitIn(['symbolic-ref', '--short', 'HEAD'], repo).trim()).toBe(
-			sliceRef,
+			taskRef,
 		);
 		// The PRD branch ref was never created by the slice onboard.
-		expect(gitIn(['branch', '--list', prdRef], repo).trim()).toBe('');
+		expect(gitIn(['branch', '--list', briefRef], repo).trim()).toBe('');
 	});
 });
 

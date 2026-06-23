@@ -1,5 +1,5 @@
 import {runAsync, type RunResult} from './git.js';
-import {acquireItemLock, releaseItemLock, heldSliceSlugs} from './item-lock.js';
+import {acquireItemLock, releaseItemLock, heldTaskSlugs} from './item-lock.js';
 import {resolveReadiness} from './readiness.js';
 import {workBranchRef} from './slug-namespace.js';
 import {workItemRel} from './work-layout.js';
@@ -124,7 +124,7 @@ async function lostMessage(
 	env: NodeJS.ProcessEnv | undefined,
 	fallback: string,
 ): Promise<string> {
-	const held = await heldSliceSlugs(cwd, arbiter, env);
+	const held = await heldTaskSlugs(cwd, arbiter, env);
 	if (held.has(slug)) {
 		return `'${slug}' is already claimed on ${arbiter}/main (its per-item lock is held). If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume ${slug}\` (or \`work-on\`), or recover via \`requeue\`.`;
 	}

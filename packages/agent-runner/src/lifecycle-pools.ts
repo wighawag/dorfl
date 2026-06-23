@@ -20,7 +20,7 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  * divergent enumerations. The per-substrate I/O (reading `work/observations/` +
  * the per-item sidecar state) is done CALLER-SIDE through the read seam (sync
  * in-place, async mirror-ref) and the already-resolved inputs are handed here \u2014
- * exactly as `sliceablePrds` is fed by each caller. This unit is then pure: no I/O.
+ * exactly as `taskableBriefs` is fed by each caller. This unit is then pure: no I/O.
  *
  * **Three lifecycle sub-pools, gated by PURPOSE (ADR `ci-config-policy-and-gate-
  * family.md` \u00a74 \u2014 gates govern CREATE only; CONSUME is always-on):**

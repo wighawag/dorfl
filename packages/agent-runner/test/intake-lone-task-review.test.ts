@@ -463,7 +463,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 // The lone-slice review PROMPT + PARSER (the production wire). The prompt's
 // JUDGEMENT is NOT unit-tested — only that it frames the right lenses (N=1: the
 // SET lenses OFF) and that the parser is the `{verdict, findings, edit, questions}`
-// twin of the slicer loop's, anchored on `"verdict"` via the shared extractor.
+// twin of the tasker loop's, anchored on `"verdict"` via the shared extractor.
 // ---------------------------------------------------------------------------
 describe('buildLoneSliceReviewPrompt — frames the per-slice + destination lenses, SET lenses OFF', () => {
 	it('names the per-slice well-formedness + destination check and explicitly turns the SET/graph/overlap lenses OFF (N=1)', () => {
@@ -536,21 +536,21 @@ describe('parseLoneSliceReviewVerdict — the {verdict, findings, edit, question
 
 // ---------------------------------------------------------------------------
 // Scope-fence inspection (AC #5/#6): the bounded review adds NO new outcome /
-// marker / flag, and `intake.ts` never imports or calls the slicer loop.
+// marker / flag, and `intake.ts` never imports or calls the tasker loop.
 // ---------------------------------------------------------------------------
-describe('the bounded review introduces no new outcome/marker/flag and does not reuse the slicer loop', () => {
+describe('the bounded review introduces no new outcome/marker/flag and does not reuse the tasker loop', () => {
 	const intakeSrc = readFileSync(
 		join(__dirname, '..', 'src', 'intake.ts'),
 		'utf8',
 	);
 
-	it('does NOT import or call runSliceReviewLoop (intake-native, not slicer-loop integration)', () => {
-		// No IMPORT of the slicer-loop module (a textual mention in a doc comment
+	it('does NOT import or call runTaskReviewLoop (intake-native, not tasker-loop integration)', () => {
+		// No IMPORT of the tasker-loop module (a textual mention in a doc comment
 		// explaining what NOT to do is fine; an import/require/call is not).
-		expect(intakeSrc).not.toMatch(/from\s+['"][^'"]*slicer-review-loop/);
-		expect(intakeSrc).not.toMatch(/import\([^)]*slicer-review-loop/);
-		// No CALL to runSliceReviewLoop (a call is `runSliceReviewLoop(`).
-		expect(intakeSrc).not.toMatch(/runSliceReviewLoop\s*\(/);
+		expect(intakeSrc).not.toMatch(/from\s+['"][^'"]*tasker-review-loop/);
+		expect(intakeSrc).not.toMatch(/import\([^)]*tasker-review-loop/);
+		// No CALL to runTaskReviewLoop (a call is `runTaskReviewLoop(`).
+		expect(intakeSrc).not.toMatch(/runTaskReviewLoop\s*\(/);
 	});
 
 	it('adds no new IntakeRunOutcome (the union is unchanged; the flip reuses `asked`)', () => {
@@ -566,9 +566,9 @@ describe('the bounded review introduces no new outcome/marker/flag and does not 
 		);
 	});
 
-	it('adds no review-loop config flag / knob (no --slicer-loop-style knob, no PerformIntakeOptions cap field)', () => {
+	it('adds no review-loop config flag / knob (no --tasker-loop-style knob, no PerformIntakeOptions cap field)', () => {
 		// The cap is a hard-coded literal (ruling A/B): no flag, no config, no option.
 		expect(intakeSrc).toContain('LONE_SLICE_REVIEW_MAX_ROUNDS = 3');
-		expect(intakeSrc).not.toMatch(/slicerLoop|reviewLoopMax|loneSliceLoop/);
+		expect(intakeSrc).not.toMatch(/taskerLoop|reviewLoopMax|loneSliceLoop/);
 	});
 });

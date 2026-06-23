@@ -1,9 +1,9 @@
 import {selectCandidates, type Candidate, type SelectCaps} from './select.js';
 import type {ScanReport} from './scan.js';
 import {
-	resolveSlicingEligibility,
+	resolveTaskingEligibility,
 	type HumanOnlyGate,
-} from './slicing-eligibility.js';
+} from './tasking-eligibility.js';
 import {
 	resolveSelectionOrder,
 	DEFAULT_SELECTION_ORDER,
@@ -38,7 +38,7 @@ import {
  *     `selectCandidates`, the slice-pool core).
  *   - the **`slice` pool** (PRD-to-slice) — a pool the caller builds from the PRD reader
  *     (`ledgerRead.resolvePrdPool`) filtered by `autoslice-gate`'s pure predicate
- *     ({@link resolveSlicingEligibility}); see {@link sliceablePrds}. The helper
+ *     ({@link resolveTaskingEligibility}); see {@link taskableBriefs}. The helper
  *     does NOT reinvent PRD eligibility.
  *
  * `do` is STRICTLY SEQUENTIAL (parallelism is `run`'s job, ADR §3) — this helper
@@ -83,7 +83,7 @@ export interface SelectedItem {
 export type LifecycleSelectedItem = SelectedItem;
 
 /** A PRD candidate for the slicing pool, before the eligibility gate runs. */
-export interface PrdCandidate {
+export interface BriefCandidate {
 	repoPath: string;
 	slug: string;
 	humanOnly: HumanOnlyGate;
@@ -91,33 +91,33 @@ export interface PrdCandidate {
 	briefAfter: string[];
 }
 
-/** Inputs to {@link sliceablePrds}: the raw PRD pool + the gate context. */
-export interface SliceablePrdsInput {
+/** Inputs to {@link taskableBriefs}: the raw PRD pool + the gate context. */
+export interface TaskableBriefsInput {
 	/** Every PRD enumerated from `work/prd/` (the auto-slice candidate source). */
-	candidates: PrdCandidate[];
+	candidates: BriefCandidate[];
 	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
-	slicedSlugs: Set<string>;
+	taskedSlugs: Set<string>;
 	/** The repo's resolved `autoTask` policy (`autotask-gate`'s per-repo key). */
 	autoTask: boolean;
 }
 
 /**
  * Filter a raw PRD pool down to the SLICEABLE PRDs, in declaration order, using
- * `autoslice-gate`'s pure predicate ({@link resolveSlicingEligibility}) — NOT a
+ * `autoslice-gate`'s pure predicate ({@link resolveTaskingEligibility}) — NOT a
  * reinvented eligibility model. A PRD is sliceable iff `needsAnswers !== true &&
  * humanOnly !== true && autoTask` AND every `briefAfter` PRD is already sliced.
  * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
  */
-export function sliceablePrds(input: SliceablePrdsInput): PrdCandidate[] {
+export function taskableBriefs(input: TaskableBriefsInput): BriefCandidate[] {
 	return input.candidates.filter(
-		(prd) =>
-			resolveSlicingEligibility({
-				humanOnly: prd.humanOnly,
-				needsAnswers: prd.needsAnswers,
-				briefAfter: prd.briefAfter,
-				slicedSlugs: input.slicedSlugs,
+		(brief) =>
+			resolveTaskingEligibility({
+				humanOnly: brief.humanOnly,
+				needsAnswers: brief.needsAnswers,
+				briefAfter: brief.briefAfter,
+				taskedSlugs: input.taskedSlugs,
 				autoTask: input.autoTask,
-			}).sliceable,
+			}).taskable,
 	);
 }
 
@@ -133,10 +133,10 @@ export interface SelectPrioritisedInput {
 	/** Caps for the slice-pool selection (round-robin/per-repo/total). */
 	caps: SelectCaps;
 	/**
-	 * The ALREADY-FILTERED sliceable PRD pool (run {@link sliceablePrds} first).
+	 * The ALREADY-FILTERED sliceable PRD pool (run {@link taskableBriefs} first).
 	 * In declaration order; this helper does not re-gate them.
 	 */
-	prds: PrdCandidate[];
+	briefs: BriefCandidate[];
 	/**
 	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
 	 * `slice` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
@@ -157,7 +157,7 @@ export interface SelectPrioritisedInput {
 	/**
 	 * The OPTIONAL lifecycle pools (slice `advance-autopick-lifecycle-pools`),
 	 * constructed CALLER-SIDE (the `advance` callers only) and passed in — exactly
-	 * as {@link prds} is. DEFAULTS to none, so `performDoAuto` (which passes only
+	 * as {@link briefs} is. DEFAULTS to none, so `performDoAuto` (which passes only
 	 * its two pools) is provably UNCHANGED: `do` auto-pick never selects an
 	 * observation or a `needsAnswers` item. ONLY the `advance` callers
 	 * (`performAdvanceAuto` / the mirror-side advance path) supply these.
@@ -199,7 +199,7 @@ export interface SelectedLifecyclePools {
  * applying the configurable {@link selectionOrder} with `apply` PINNED FIRST and
  * the count bound. The slice pool is selected via the EXISTING
  * {@link selectCandidates} (the shared primitive `run` uses); the PRD pool is the
- * pre-filtered {@link sliceablePrds} output; the lifecycle pools (`apply` /
+ * pre-filtered {@link taskableBriefs} output; the lifecycle pools (`apply` /
  * `surface` / `triage`) are caller-built (none for `do`).
  *
  * Ordering: `apply` is always prepended (consume-always-wins; not orderable),
@@ -225,9 +225,9 @@ export function selectPrioritised(
 			namespace: 'task' as const,
 		}));
 
-	const sliceItems: SelectedItem[] = input.prds.map((prd) => ({
-		repoPath: prd.repoPath,
-		slug: prd.slug,
+	const taskItems: SelectedItem[] = input.briefs.map((brief) => ({
+		repoPath: brief.repoPath,
+		slug: brief.slug,
 		namespace: 'brief' as const,
 	}));
 
@@ -239,7 +239,7 @@ export function selectPrioritised(
 	// item namespaces (slice `advance-selection-order-config`).
 	const byPool: Record<SelectionPool, SelectedItem[]> = {
 		build: buildItems,
-		slice: sliceItems,
+		slice: taskItems,
 		surface: lifecycle?.surface ?? [],
 		triage: lifecycle?.triage ?? [],
 	};

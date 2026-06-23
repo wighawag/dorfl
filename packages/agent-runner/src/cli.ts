@@ -99,10 +99,10 @@ import {
 	freshWorktreeGateFlagOverrides,
 	noPRFlagOverrides,
 } from './do-config.js';
-import {harnessReviewGate, harnessSliceAcceptanceGate} from './review-gate.js';
+import {harnessReviewGate, harnessTaskAcceptanceGate} from './review-gate.js';
 import {harnessSurfaceGate} from './surface-gate.js';
 import {harnessTriageGate} from './triage-gate.js';
-import {harnessSliceReviewGate} from './slicer-review-loop.js';
+import {harnessTaskReviewGate} from './tasker-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {resolvePromptGuidance} from './config.js';
@@ -122,13 +122,13 @@ import {
 } from './item-lock.js';
 import {
 	promoteFromPreBacklog,
-	promoteFromPrePrd,
+	promoteFromPreBrief,
 	listPromotable,
 } from './needs-attention.js';
 import {parseSlugArg} from './slug-namespace.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 import {
-	resolveSliceOnlyArg,
+	resolveTaskOnlyArg,
 	workBranchRef,
 	SlugResolutionError,
 } from './slug-namespace.js';
@@ -401,13 +401,13 @@ function buildRegistrySetAdvanceTick(options: {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				reviewLoop: config.slicerLoop
-					? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
+				reviewLoop: config.taskerLoop
+					? harnessTaskReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				slicerLoopMax: config.slicerLoopMax,
-				slicerLoopModel: config.slicerLoopModel,
-				sliceReviewGate: config.review
-					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+				taskerLoopMax: config.taskerLoopMax,
+				taskerLoopModel: config.taskerLoopModel,
+				taskReviewGate: config.review
+					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
@@ -721,10 +721,10 @@ interface IntakeFlags {
 	propose?: boolean;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
-	mergePrd?: boolean;
-	proposePrd?: boolean;
-	mergeSlice?: boolean;
-	proposeSlice?: boolean;
+	mergeBrief?: boolean;
+	proposeBrief?: boolean;
+	mergeTask?: boolean;
+	proposeTask?: boolean;
 	/**
 	 * `--origin-trust <trusted|untrusted>` — the author-trust verdict the CI shell
 	 * passes IN so `intake` STAMPS the emitted PRD/slice (slice
@@ -824,23 +824,23 @@ interface CloseMergedIssuesFlags {
 }
 
 /**
- * Resolve a slice-only command's slug argument through the §3a namespace guard
- * (`resolveSliceOnlyArg`): accept bare (= slice) + `slice:` (explicit alias),
- * REJECT `prd:` with a clear "operates on slices, not PRDs" error. On rejection
- * it prints the error to stderr and exits 1 (the slice-only commands never act
- * on a PRD). An OMITTED slug (`start`/`complete`/`prompt` infer it from the
+ * Resolve a task-only command's slug argument through the §3a namespace guard
+ * (`resolveTaskOnlyArg`): accept bare (= task) + `task:` (explicit alias),
+ * REJECT `brief:` with a clear "operates on tasks, not briefs" error. On rejection
+ * it prints the error to stderr and exits 1 (the task-only commands never act
+ * on a brief). An OMITTED slug (`start`/`complete`/`prompt` infer it from the
  * branch) passes through untouched.
  *
  * `do` is the ONE command that spans both namespaces; it consumes the full
  * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`
- * slice. This guard is the slice-only half of ADR §3a.
+ * task. This guard is the task-only half of ADR §3a.
  */
-function resolveSliceOnlySlug(slug: string | undefined): string | undefined {
+function resolveTaskOnlySlug(slug: string | undefined): string | undefined {
 	if (slug === undefined) {
 		return undefined;
 	}
 	try {
-		return resolveSliceOnlyArg(slug);
+		return resolveTaskOnlyArg(slug);
 	} catch (err) {
 		if (err instanceof SlugResolutionError) {
 			console.error(`error: ${err.message}`);
@@ -913,15 +913,15 @@ function buildInteractiveLauncher(
  * switching to its `work/<slug>` branch WITHOUT claiming). The runtime
  * difference is exactly the `resume` flag — `resume` forces it on (its only mode
  * is to re-engage), while `start` honours the (now hidden) `--resume` alias.
- * Both are slice-only (§3a: accept bare + `slice:`, reject `prd:`).
+ * Both are task-only (§3a: accept bare + `task:`, reject `brief:`).
  */
 async function runStartAction(
 	rawSlug: string | undefined,
 	flags: StartFlags,
 	resume: boolean,
 ): Promise<void> {
-	// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-	const slug = resolveSliceOnlySlug(rawSlug);
+	// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+	const slug = resolveTaskOnlySlug(rawSlug);
 	const cwd = process.cwd();
 
 	// `resume --isolated <slug>`: re-engage the slug's RETAINED job worktree (the
@@ -1018,11 +1018,11 @@ export function buildProgram(): Command {
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--auto-build',
-			'allow agents to auto-build undeclared (not humanOnly) slices',
+			'allow agents to auto-build undeclared (not humanOnly) tasks',
 		)
 		.option(
 			'--no-auto-build',
-			'forbid agents from auto-building undeclared slices (default)',
+			'forbid agents from auto-building undeclared tasks (default)',
 		)
 		.option(
 			'--arbiter-remote <name>',
@@ -1099,11 +1099,11 @@ export function buildProgram(): Command {
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--auto-build',
-			'allow agents to auto-build undeclared (not humanOnly) slices',
+			'allow agents to auto-build undeclared (not humanOnly) tasks',
 		)
 		.option(
 			'--no-auto-build',
-			'forbid agents from auto-building undeclared slices (default)',
+			'forbid agents from auto-building undeclared tasks (default)',
 		)
 		.option('--max-parallel <n>', 'global cap on items claimed+run this tick')
 		.option('--per-repo-max <n>', 'per-repo cap on concurrent claims')
@@ -1116,7 +1116,7 @@ export function buildProgram(): Command {
 			'--no-pr',
 			'propose without opening a PR: push the branch but deliberately skip the review request, even on an authed GitHub arbiter (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
-		.option('--agent-cmd <cmd>', 'command to run one agent on a slice prompt')
+		.option('--agent-cmd <cmd>', 'command to run one agent on a task prompt')
 		.option(
 			'--model <id>',
 			'model the agent runs on (routing intent; auth/keys stay the harness\u2019s job). pi: passed as --model; null/shell: substitutes a {model} placeholder in agentCmd. Resolved flag > env > per-repo > global > default (unset).',
@@ -1336,8 +1336,8 @@ export function buildProgram(): Command {
 			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
 		.action(async (rawSlug: string, flags: ClaimFlags) => {
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug) as string;
+			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			// Wrap ONLY this CLI surface's `performClaim` call with the spinner
 			// helper (slice `claim-cas-spinner`): the push can take seconds, so the
 			// terminal looked frozen. In non-TTY mode the helper is a no-op and
@@ -1475,7 +1475,7 @@ export function buildProgram(): Command {
 		.command('work-on')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'HUMAN command: claim a slice and create an isolated worktree in a human-friendly location (under config humanWorktreesDir, NEVER ~/.agent-runner) for parallel work, and cd you in by default (via the shell wrapper). Two forms: `work-on <slug>` (in-repo: infer the arbiter from the current repo) and `work-on --remote <r> <slug>` (ensure a hub mirror via repo-mirror, creating if absent) — consistent with `do --remote` (bare = current repo; --remote = anywhere). BOTH claim, then always fetch + branch work/<slug> off the freshly-fetched <arbiter>/main — same claim, same starting commit; only the worktree LOCATION differs. --copy <patterns> copies named gitignored files (copy, not symlink; --copy-from required in remote mode) with a security notice. A binary cannot cd your shell, so install the wrapper `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`; --print-dir is that wrapper’s plumbing (emits ONLY the path).',
+			'HUMAN command: claim a task and create an isolated worktree in a human-friendly location (under config humanWorktreesDir, NEVER ~/.agent-runner) for parallel work, and cd you in by default (via the shell wrapper). Two forms: `work-on <slug>` (in-repo: infer the arbiter from the current repo) and `work-on --remote <r> <slug>` (ensure a hub mirror via repo-mirror, creating if absent) — consistent with `do --remote` (bare = current repo; --remote = anywhere). BOTH claim, then always fetch + branch work/<slug> off the freshly-fetched <arbiter>/main — same claim, same starting commit; only the worktree LOCATION differs. --copy <patterns> copies named gitignored files (copy, not symlink; --copy-from required in remote mode) with a security notice. A binary cannot cd your shell, so install the wrapper `work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`; --print-dir is that wrapper’s plumbing (emits ONLY the path).',
 		)
 		.argument(
 			'<slug>',
@@ -1542,8 +1542,8 @@ export function buildProgram(): Command {
 				flags.remote !== undefined && flags.remote.trim() !== ''
 					? flags.remote
 					: undefined;
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const theSlug = resolveSliceOnlySlug(rawSlug) as string;
+			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			const theSlug = resolveTaskOnlySlug(rawSlug) as string;
 
 			const configPath = flags.config ?? defaultConfigPath();
 			const {dir: configuredRoot, config} = loadHumanWorktreesDir(configPath);
@@ -1601,8 +1601,8 @@ export function buildProgram(): Command {
 			'the slug to render (inferred from a work/<slug> branch if omitted)',
 		)
 		.action((rawSlug: string | undefined) => {
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug);
+			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			const slug = resolveTaskOnlySlug(rawSlug);
 			// Resolve the `promptGuidance` NUDGE namespace through the SAME chain the
 			// gate family uses (env > per-repo > global > default), so e.g. a
 			// `promptGuidance.testFirst:true` in `.agent-runner.json` strengthens the
@@ -1704,8 +1704,8 @@ export function buildProgram(): Command {
 			'run the acceptance gate in the current checkout (the pre-rebase tree) — the opt-out for when the per-gate install cost is too high',
 		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug);
+			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			const slug = resolveTaskOnlySlug(rawSlug);
 			const cwd = process.cwd();
 			const {global, override} = loadGlobalAndOverride(flags.config);
 
@@ -1832,7 +1832,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do brief:<slug> (the slicing path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then BRIEFS-to-slice by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do brief:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then BRIEFS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
 		// EXTENSIBLE argument grammar (the three do-* slices grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -1884,7 +1884,7 @@ export function buildProgram(): Command {
 			'--ignore-diverged-main',
 			'override the in-place divergence guard: run even when local main is ahead of <arbiter>/main (unpushed). The work still lands on the arbiter; local main is left for you to `git rebase`. In-place only; loud, never default.',
 		)
-		.option('--agent-cmd <cmd>', 'command to run the agent on the slice prompt')
+		.option('--agent-cmd <cmd>', 'command to run the agent on the task prompt')
 		.option(
 			'--model <id>',
 			'model the agent runs on (routing intent; resolved flag > env > per-repo > global > default)',
@@ -2095,7 +2095,7 @@ export function buildProgram(): Command {
 					// Host-only runner IDENTITY — scopes git/provider ops only (not the
 					// agent launch); absent ⇒ ambient.
 					identity: remoteConfig.identity,
-					// `do --remote brief:<slug>` tasking-gate policy (slice-build path ignores it).
+					// `do --remote brief:<slug>` tasking-gate policy (task-build path ignores it).
 					autoTask: remoteConfig.autoTask,
 					// The resolved `promptGuidance` nudge — threaded into the remote worker
 					// prompt (runRemotePipeline → buildAgentPrompt), mirroring in-place `do`.
@@ -2133,17 +2133,17 @@ export function buildProgram(): Command {
 					// quality engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
 					// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
 					// > global > default). DISTINCT from the gate's `--review*` family.
-					reviewLoop: remoteConfig.slicerLoop
-						? harnessSliceReviewGate({
+					reviewLoop: remoteConfig.taskerLoop
+						? harnessTaskReviewGate({
 								harness: remoteHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					slicerLoopMax: remoteConfig.slicerLoopMax,
-					slicerLoopModel: remoteConfig.slicerLoopModel,
+					taskerLoopMax: remoteConfig.taskerLoopMax,
+					taskerLoopModel: remoteConfig.taskerLoopModel,
 					// The slice-SET ACCEPTANCE GATE on the `do --remote brief:` path too.
-					sliceReviewGate: remoteConfig.review
-						? harnessSliceAcceptanceGate({
+					taskReviewGate: remoteConfig.review
+						? harnessTaskAcceptanceGate({
 								harness: remoteHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
@@ -2238,7 +2238,7 @@ export function buildProgram(): Command {
 				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
 				// ambient (today's behaviour). Mapped Config → DoOptions like model/agentCmd.
 				identity: config.identity,
-				// `do brief:<slug>` tasking-gate policy (the slice-build path ignores it).
+				// `do brief:<slug>` tasking-gate policy (the task-build path ignores it).
 				autoTask: config.autoTask,
 				// The resolved `promptGuidance` NUDGE namespace (e.g. `testFirst`),
 				// threaded into the worker prompt by performDo → buildAgentPrompt so a
@@ -2252,7 +2252,7 @@ export function buildProgram(): Command {
 				// untrusted-origin slice still forces propose under a config `merge`.
 				explicitMerge: flagMode === 'merge',
 				// Per-TRANSITION TASKING override: the `do brief:` tasking path threads
-				// `taskingIntegration ?? integration`; the slice-build path stays on
+				// `taskingIntegration ?? integration`; the task-build path stays on
 				// `integration`. Unset ⇒ tasking falls back to `integration` (today's behaviour).
 				taskingIntegration: config.taskingIntegration,
 				// TASK-PLACEMENT (`do brief:` tasking output): the configured default rung +
@@ -2288,25 +2288,25 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				// The slicer IMPROVER loop on the `do brief:` slicing path is ON by default
+				// The tasker IMPROVER loop on the `do brief:` tasking path is ON by default
 				// (auto-slicing has no `verify` floor — the loop is the slice path's quality
 				// engine). `--slicer-loop`/`--no-slicer-loop` gates wiring the seam;
 				// `slicerLoopMax`/`slicerLoopModel` resolve per-repo (flag > env > per-repo
-				// > global > default); the slice-build path ignores all of these. DISTINCT
+				// > global > default); the task-build path ignores all of these. DISTINCT
 				// from the acceptance gate's `--review*` family.
-				reviewLoop: config.slicerLoop
-					? harnessSliceReviewGate({
+				reviewLoop: config.taskerLoop
+					? harnessTaskReviewGate({
 							harness,
 							agentCmd: config.agentCmd,
 						})
 					: undefined,
-				slicerLoopMax: config.slicerLoopMax,
-				slicerLoopModel: config.slicerLoopModel,
+				taskerLoopMax: config.taskerLoopMax,
+				taskerLoopModel: config.taskerLoopModel,
 				// The slice-SET ACCEPTANCE GATE (slice-acceptance-gate): the slice-path
 				// mirror of Gate-2, on the SAME `--review` family (so `--no-review` skips
 				// it). ONE-SHOT (no rounds); production wires the slice-SET-prompt gate.
-				sliceReviewGate: config.review
-					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+				taskReviewGate: config.review
+					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
@@ -2568,16 +2568,16 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					reviewLoop: remoteConfig.slicerLoop
-						? harnessSliceReviewGate({
+					reviewLoop: remoteConfig.taskerLoop
+						? harnessTaskReviewGate({
 								harness: isoHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					slicerLoopMax: remoteConfig.slicerLoopMax,
-					slicerLoopModel: remoteConfig.slicerLoopModel,
-					sliceReviewGate: remoteConfig.review
-						? harnessSliceAcceptanceGate({
+					taskerLoopMax: remoteConfig.taskerLoopMax,
+					taskerLoopModel: remoteConfig.taskerLoopModel,
+					taskReviewGate: remoteConfig.review
+						? harnessTaskAcceptanceGate({
 								harness: isoHarness,
 								agentCmd: remoteConfig.agentCmd,
 							})
@@ -2700,13 +2700,13 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				reviewLoop: config.slicerLoop
-					? harnessSliceReviewGate({harness, agentCmd: config.agentCmd})
+				reviewLoop: config.taskerLoop
+					? harnessTaskReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				slicerLoopMax: config.slicerLoopMax,
-				slicerLoopModel: config.slicerLoopModel,
-				sliceReviewGate: config.review
-					? harnessSliceAcceptanceGate({harness, agentCmd: config.agentCmd})
+				taskerLoopMax: config.taskerLoopMax,
+				taskerLoopModel: config.taskerLoopModel,
+				taskReviewGate: config.review
+					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
@@ -3131,8 +3131,8 @@ export function buildProgram(): Command {
 			'append a dated handoff note to the item body for the next agent (append-only; applies to both default and --reset)',
 		)
 		.action(async (rawSlug: string, flags: RequeueFlags) => {
-			// Slice-only command (§3a): accept bare + `slice:`, reject `prd:`.
-			const slug = resolveSliceOnlySlug(rawSlug) as string;
+			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
 			// Route the requeue (default keep+continue / --reset discard / -m handoff)
 			// THROUGH the ledger write seam's transition (same seam the needs-attention
@@ -3235,7 +3235,7 @@ export function buildProgram(): Command {
 			const slug = parsed.slug;
 			const result =
 				namespace === 'brief'
-					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
+					? await promoteFromPreBrief({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
 				console.error(`error: ${result.reasonNotMoved}`);

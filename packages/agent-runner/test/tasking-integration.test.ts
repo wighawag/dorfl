@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync, readFileSync, chmodSync} from 'node:fs';
-import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
+import {performTask, type TaskAgentRunner} from '../src/tasking.js';
 import {GitHubProvider} from '../src/github.js';
 import {
 	makeScratch,
@@ -13,14 +13,14 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `do prd:<slug>` SLICE-OUTPUT-THROUGH-INTEGRATION tests (slice
+ * `do brief:<slug>` TASK-OUTPUT-THROUGH-INTEGRATION tests (task
  * `task-output-through-integration`). The KEYSTONE behaviour: the produced
- * `work/tasks/todo/*` slices integrate through the SHARED `performIntegration` core
+ * `work/tasks/todo/*` tasks integrate through the SHARED `performIntegration` core
  * (`src/integration-core.ts`) honoring `--propose`/`--merge`, instead of
- * committing straight to `main` via the lock's `emitSlices`.
+ * committing straight to `main` via the lock's `emitTasks`.
  *
  * House style (mirrors `run-integration-core.test.ts`): a throwaway checkout + a
- * local `--bare` arbiter + a STUBBED agent (writes slice files directly). The
+ * local `--bare` arbiter + a STUBBED agent (writes task files directly). The
  * propose test puts a recording `gh` stub on PATH (no real GitHub) + `provider:
  * 'github'` to drive the real propose pipeline. `GIT_CONFIG_GLOBAL` isolation +
  * `isolatePiAgentDir` keep the developer's real config/sessions untouched.
@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 /** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter). */
-function seedPrd(repo: string, slug: string): void {
+function seedBrief(repo: string, slug: string): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
@@ -63,11 +63,11 @@ function seedPrd(repo: string, slug: string): void {
 }
 
 /**
- * Seed a `work/briefs/ready/<slug>.md` STAMPED with origin-trust provenance (slice
- * `untrusted-origin-forces-build-propose`) — an intake-born PRD whose stamp the
- * slicer must PROPAGATE onto every emitted slice.
+ * Seed a `work/briefs/ready/<slug>.md` STAMPED with origin-trust provenance (task
+ * `untrusted-origin-forces-build-propose`) — an intake-born brief whose stamp the
+ * tasker must PROPAGATE onto every emitted task.
  */
-function seedPrdWithOrigin(
+function seedBriefWithOrigin(
 	repo: string,
 	slug: string,
 	originTrust: 'trusted' | 'untrusted',
@@ -95,8 +95,8 @@ function seedPrdWithOrigin(
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** An agent that writes one backlog slice file (no git). */
-function slicingAgent(file = 'child'): SliceAgentRunner {
+/** An agent that writes one backlog task file (no git). */
+function taskingAgent(file = 'child'): TaskAgentRunner {
 	return ({cwd}) => {
 		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
@@ -152,38 +152,38 @@ const onArbiterBranch = (
 describe('do prd: output through performIntegration — --merge lands on main', () => {
 	it('integrates the slices + the PRD lifecycle move onto arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		const result = await performSlice({
+		seedBrief(repo, 'it');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
-		// The produced slice + the PRD lifecycle move (slicing/ -> prd-sliced/) all
+		// The produced task + the brief lifecycle move (tasking/ -> brief-tasked/) all
 		// landed on the arbiter main, through the shared core (not the lock's direct
-		// commit). The PRD now rests in prd-sliced/ (the source of truth for
-		// sliced-ness — residence, no marker), NOT back in prd/.
+		// commit). The brief now rests in brief-tasked/ (the source of truth for
+		// tasked-ness — residence, no marker), NOT back in brief/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
-		const prd = run(
+		const brief = run(
 			'git',
 			['show', `${ARBITER}/main:work/briefs/tasked/it.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		// Sliced-ness is RESIDENCE in prd-sliced/ (asserted above); the `sliced:` marker
-		// was removed entirely in remove-sliced-marker-step-b, so the resting PRD carries
-		// NO sliced: line.
-		expect(prd).not.toMatch(/^sliced:/m);
-		// It is the shared core's integrate commit (`slicing(<slug>): …; sliced`),
-		// not the lock's `slicing: release …` direct commit.
+		// Tasked-ness is RESIDENCE in brief-tasked/ (asserted above); the `tasked:` marker
+		// was removed entirely in remove-tasked-marker-step-b, so the resting brief carries
+		// NO tasked: line.
+		expect(brief).not.toMatch(/^sliced:/m);
+		// It is the shared core's integrate commit (`tasking(<slug>): …; tasked`),
+		// not the lock's `tasking: release …` direct commit.
 		expect(arbiterHeadSubject(repo)).toMatch(/^slicing\(it\):/);
 	});
 });
@@ -191,7 +191,7 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 describe('do prd: output through performIntegration — --propose opens a PR, main untouched', () => {
 	it('pushes the work branch + opens a PR carrying the slices; does NOT touch main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 
 		// A recording `gh` stub (no real GitHub), injected as the GitHub provider
 		// INSTANCE (the provider is arbiter-derived now — the instance seam drives it).
@@ -210,31 +210,31 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		);
 		chmodSync(gh, 0o755);
 
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'propose',
 			providerInstance: new GitHubProvider({ghBin: gh}),
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
 
-		// The slices are NOT on main (propose does not land them); the PRD body STAYS
-		// in prd/ on main (the lock is a ref now — it never moves the body; the PR
-		// carries the prd → prd-sliced move). NO slicing/ marker.
+		// The tasks are NOT on main (propose does not land them); the brief body STAYS
+		// in brief/ on main (the lock is a ref now — it never moves the body; the PR
+		// carries the brief → brief-tasked move). NO tasking/ marker.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/slicing/it.md')).toBe(false);
 		// The OUTPUT never advanced main: the lock is a hidden ref (not a main commit),
-		// and propose does not land the slices — main is still the seed commit.
+		// and propose does not land the tasks — main is still the seed commit.
 		expect(arbiterHeadSubject(repo)).not.toMatch(/sliced/);
 
-		// The work branch was PUSHED carrying the slices + the PRD restore.
+		// The work branch was PUSHED carrying the tasks + the brief restore.
 		expect(
 			onArbiterBranch(repo, 'work/brief-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
@@ -254,12 +254,12 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 });
 
 describe('do prd: arg parity with do slice: (the SAME integrate-time args resolve)', () => {
-	// Arg PARITY by construction (AC #4): because `do prd:`'s output integrates
-	// THROUGH the SAME `performIntegration` core `do slice:` uses, every
+	// Arg PARITY by construction (AC #4): because `do brief:`'s output integrates
+	// THROUGH the SAME `performIntegration` core `do task:` uses, every
 	// integrate-time arg resolves IDENTICALLY on both paths — there is no duplicated
 	// parser. A table over the integrate-MODE flag (`propose`/`merge`) proves the
 	// resolution: the SAME `integration` value produces the SAME observable
-	// integrate effect on the slicing path it produces on the build path (no-main
+	// integrate effect on the tasking path it produces on the build path (no-main
 	// touch for propose, land-on-main for merge).
 	const PARITY_TABLE: Array<{
 		mode: 'propose' | 'merge';
@@ -273,27 +273,27 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 	for (const row of PARITY_TABLE) {
 		it(`--${row.mode} resolves to ${row.landsOnMain ? 'land-on-main' : 'no-main-touch'} on the do prd: path (shared core)`, async () => {
 			const {repo} = seedRepoWithArbiter(scratch.root, []);
-			seedPrd(repo, 'it');
-			const result = await performSlice({
+			seedBrief(repo, 'it');
+			const result = await performTask({
 				slug: 'it',
 				cwd: repo,
 				arbiter: ARBITER,
 				autoTask: true,
-				// The integrate-time arg — the SAME knob `do slice:`/`complete` thread into
-				// `performIntegration.mode` — with NO slicing-specific parser.
+				// The integrate-time arg — the SAME knob `do task:`/`complete` thread into
+				// `performIntegration.mode` — with NO tasking-specific parser.
 				integration: row.mode,
-				agentRunner: slicingAgent('child'),
+				agentRunner: taskingAgent('child'),
 				env: gitEnv(),
 			});
 			expect(result.outcome).toBe('sliced');
 			// The shared core resolved the mode to the SAME effect it resolves for a
-			// build: merge lands the slice on main; propose does not (it pushes the
+			// build: merge lands the task on main; propose does not (it pushes the
 			// `work/<slug>` branch + leaves main untouched, the PR source).
 			expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(
 				row.landsOnMain,
 			);
 			if (!row.landsOnMain) {
-				// Propose pushed the work branch carrying the slices (the SAME branch
+				// Propose pushed the work branch carrying the tasks (the SAME branch
 				// `performIntegration` integrates on the build path).
 				expect(
 					onArbiterBranch(repo, 'work/brief-it', 'work/tasks/backlog/child.md'),
@@ -306,75 +306,75 @@ describe('do prd: arg parity with do slice: (the SAME integrate-time args resolv
 describe('do prd: PROPAGATES origin-trust onto emitted slices (untrusted-origin-forces-build-propose)', () => {
 	it('slicing an UNTRUSTED-origin PRD stamps every emitted slice originTrust: untrusted', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrdWithOrigin(repo, 'it', 'untrusted');
-		const result = await performSlice({
+		seedBriefWithOrigin(repo, 'it', 'untrusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
-			// Slicing may MERGE the slice FILES onto main (a file is inert); the BUILD
+			// Tasking may MERGE the task FILES onto main (a file is inert); the BUILD
 			// transition is where untrusted bites. The propagation must happen here so
 			// the build can later read it.
 			integration: 'merge',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
-		const slice = run(
+		const task = run(
 			'git',
 			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		// The agent's slice carried NO origin stamp; the runner PROPAGATED the PRD's.
-		expect(slice).toMatch(/^origin: issue$/m);
-		expect(slice).toMatch(/^originTrust: untrusted$/m);
-		// The agent-authored `prd:` link is preserved.
-		expect(slice).toMatch(/^brief: it$/m);
+		// The agent's task carried NO origin stamp; the runner PROPAGATED the brief's.
+		expect(task).toMatch(/^origin: issue$/m);
+		expect(task).toMatch(/^originTrust: untrusted$/m);
+		// The agent-authored `brief:` link is preserved.
+		expect(task).toMatch(/^brief: it$/m);
 	});
 
 	it('a TRUSTED-origin PRD propagates originTrust: trusted', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrdWithOrigin(repo, 'it', 'trusted');
-		const result = await performSlice({
+		seedBriefWithOrigin(repo, 'it', 'trusted');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
-		const slice = run(
+		const task = run(
 			'git',
 			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(slice).toMatch(/^originTrust: trusted$/m);
+		expect(task).toMatch(/^originTrust: trusted$/m);
 	});
 
 	it('an UNSTAMPED (human/local) PRD propagates NOTHING — the normal path is untouched', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it'); // no origin/originTrust stamp
-		const result = await performSlice({
+		seedBrief(repo, 'it'); // no origin/originTrust stamp
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
-		const slice = run(
+		const task = run(
 			'git',
 			['show', `${ARBITER}/main:work/tasks/backlog/child.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(slice).not.toMatch(/^origin:/m);
-		expect(slice).not.toMatch(/^originTrust:/m);
+		expect(task).not.toMatch(/^origin:/m);
+		expect(task).not.toMatch(/^originTrust:/m);
 	});
 });

@@ -7,74 +7,74 @@ import {
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **slicing concurrency lock** (PRD `auto-slice`, slice `autoslice-lock`).
+ * The **tasking concurrency lock** (brief `auto-slice`, task `autoslice-lock`).
  *
- * Serialises *concurrent* slicers (two CI runs, or human + CI) so a PRD is never
- * double-sliced. As of the capstone cut-over (slice
- * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, PRD
+ * Serialises *concurrent* taskers (two CI runs, or human + CI) so a brief is never
+ * double-tasked. As of the capstone cut-over (task
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, brief
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
- * the legacy `git mv work/prd/<slug>.md → work/slicing/<slug>.md` MARKER on `main`
+ * the legacy `git mv work/briefs/ready/<slug>.md → work/tasking/<slug>.md` MARKER on `main`
  * is GONE: the body NEVER relocates until the durable promotion, exactly as claim
- * no longer moves the slice body (slice
- * `cutover-claim-body-stays-and-complete-sources-from-backlog`). The slicing lock
+ * no longer moves the task body (task
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`). The tasking lock
  * is now ONLY the UNIFIED per-item lock (`refs/agent-runner/lock/<entry>`,
- * `action: slice`, keyed `prd:<slug>`) — the SAME ref claim and advance use for
- * the same item, so slicing a PRD is mutually exclusive with claiming/advancing
+ * `action: task`, keyed `brief:<slug>`) — the SAME ref claim and advance use for
+ * the same item, so tasking a brief is mutually exclusive with claiming/advancing
  * the SAME item BY CONSTRUCTION (the second acquirer loses the SAME create-only
  * ref CAS, with NO retry budget and NO false contention). There is no transient
  * status in `main`'s tree anymore, so a work branch cut from `main` inherits no
- * stale `slicing/` marker.
+ * stale `tasking/` marker.
  *
- * - **Acquire** ({@link acquireSlicingLock}) acquires the unified per-item lock.
- *   A `lost` (the item is already held for implement/slice/advance) makes the
- *   slicing acquire lose DEFINITIVELY (exit 2, no retry). On a successful acquire
- *   it returns {@link AcquireSlicingLockResult.lockedBlob}: the git blob sha of the
- *   PRD body the lock TOOK, read from `work/prd/<slug>.md` on the arbiter — the
- *   snapshot the slicer reads + slices from, handed back so the integrate
- *   transition can fail loud if the held PRD was edited concurrently (the
+ * - **Acquire** ({@link acquireTaskingLock}) acquires the unified per-item lock.
+ *   A `lost` (the item is already held for implement/task/advance) makes the
+ *   tasking acquire lose DEFINITIVELY (exit 2, no retry). On a successful acquire
+ *   it returns {@link AcquireTaskingLockResult.lockedBlob}: the git blob sha of the
+ *   brief body the lock TOOK, read from `work/briefs/ready/<slug>.md` on the arbiter — the
+ *   snapshot the tasker reads + tasks from, handed back so the integrate
+ *   transition can fail loud if the held brief was edited concurrently (the
  *   read-stability backstop). A dry-run takes no lock (it mutates nothing).
  *
- * - **Release** ({@link releaseSlicingLock}) DELETES the unified lock ref. It
- *   moves NO lifecycle file: the durable `prd → prd-sliced` success move is owned
- *   by the integrate band (`slicing.ts`/`integration-core.ts`), and there is no
- *   `slicing/ → prd/` abort bounce anymore (the body never left `prd/`). When
- *   `routeToNeedsAttention` is set (the slicer review/edit loop's
- *   decomposition-unclear verdict, or the slice-SET acceptance gate's `block`),
+ * - **Release** ({@link releaseTaskingLock}) DELETES the unified lock ref. It
+ *   moves NO lifecycle file: the durable `brief → brief-tasked` success move is owned
+ *   by the integrate band (`tasking.ts`/`integration-core.ts`), and there is no
+ *   `tasking/ → brief/` abort bounce anymore (the body never left `brief/`). When
+ *   `routeToNeedsAttention` is set (the tasker review/edit loop's
+ *   decomposition-unclear verdict, or the task-SET acceptance gate's `block`),
  *   release amends the lock `active → stuck` with the reason on the entry INSTEAD
- *   of deleting it — the per-item-lock stuck state IS the slicing needs-attention
+ *   of deleting it — the per-item-lock stuck state IS the tasking needs-attention
  *   surface now (no `work/needs-attention/` folder write), consistent with the
- *   needs-attention cut-over (slice
+ *   needs-attention cut-over (task
  *   `cutover-needs-attention-becomes-lock-stuck-recovery-surface`). A human reads
  *   it via `agent-runner status` / `gc --ledger` and resolves via
  *   `release-lock`/`resume`.
  *
  * The READ-STABILITY backstop (the content-identity stale check that used to live
- * in the release, comparing the held `work/slicing/<slug>.md` blob against the
- * acquire-time snapshot) now lives at the integrate seam (`slicing.ts`
- * `heldPrdIsStale`, comparing `work/prd/<slug>.md`) — relocated because the
+ * in the release, comparing the held `work/tasking/<slug>.md` blob against the
+ * acquire-time snapshot) now lives at the integrate seam (`tasking.ts`
+ * `heldBriefIsStale`, comparing `work/briefs/ready/<slug>.md`) — relocated because the
  * completing transition, not the release, owns the commit. See
- * `work/observations/slicing-lock-does-not-stabilise-prd-content.md`.
+ * `work/observations/tasking-lock-does-not-stabilise-brief-content.md`.
  *
- * This module provides the lock PRIMITIVES only. The orchestrating `do prd:<slug>`
- * slicing command (`slicing.ts`) acquires, drives the agent's slicing, integrates
- * the emitted slices + the durable `prd → prd-sliced` move, and releases. The
- * human path (no contention) may slice on `main` directly without the lock.
+ * This module provides the lock PRIMITIVES only. The orchestrating `do brief:<slug>`
+ * tasking command (`tasking.ts`) acquires, drives the agent's tasking, integrates
+ * the emitted tasks + the durable `brief → brief-tasked` move, and releases. The
+ * human path (no contention) may task on `main` directly without the lock.
  */
 
 const DEFAULT_ARBITER = 'origin';
 
 /** A semantic label for the lock-acquire outcome (never the verdict itself). */
-export type AcquireSlicingLockOutcome =
+export type AcquireTaskingLockOutcome =
 	| 'acquired'
 	| 'usage-error'
 	| 'lost'
 	| 'contended';
 
 /** Maps onto the claim-CAS exit codes (identical semantics). */
-export type AcquireSlicingLockExitCode = 0 | 1 | 2 | 3;
+export type AcquireTaskingLockExitCode = 0 | 1 | 2 | 3;
 
-export interface AcquireSlicingLockOptions {
-	/** The PRD slug to lock (`work/prd/<slug>.md`). */
+export interface AcquireTaskingLockOptions {
+	/** The brief slug to lock (`work/briefs/ready/<slug>.md`). */
 	slug: string;
 	/** Working clone/worktree the lock acquire runs in. */
 	cwd: string;
@@ -92,16 +92,16 @@ export interface AcquireSlicingLockOptions {
 	note?: (message: string) => void;
 }
 
-export interface AcquireSlicingLockResult {
-	exitCode: AcquireSlicingLockExitCode;
-	outcome: AcquireSlicingLockOutcome;
+export interface AcquireTaskingLockResult {
+	exitCode: AcquireTaskingLockExitCode;
+	outcome: AcquireTaskingLockOutcome;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 	/**
-	 * On a successful acquire (`acquired`), the git BLOB sha of the PRD body that
-	 * the lock TOOK (`work/prd/<slug>.md` on the arbiter). This IS the snapshot the
-	 * slicer reads + slices from; the integrate transition compares the current
-	 * `work/prd/<slug>.md` blob against it to fail loud on a concurrent edit (the
+	 * On a successful acquire (`acquired`), the git BLOB sha of the brief body that
+	 * the lock TOOK (`work/briefs/ready/<slug>.md` on the arbiter). This IS the snapshot the
+	 * tasker reads + tasks from; the integrate transition compares the current
+	 * `work/briefs/ready/<slug>.md` blob against it to fail loud on a concurrent edit (the
 	 * read-stability backstop). `undefined` unless `outcome === 'acquired'` (and on
 	 * dry-run, where nothing was published).
 	 */
@@ -109,22 +109,22 @@ export interface AcquireSlicingLockResult {
 }
 
 /** Raised for usage/environment errors (exit 1). */
-class SlicingLockUsageError extends Error {}
+class TaskingLockUsageError extends Error {}
 
 /**
- * Acquire the slicing lock for `slug`: take the item's unified `action: slice`
+ * Acquire the tasking lock for `slug`: take the item's unified `action: task`
  * lock (a parentless ref CAS). Never throws for the expected "lost the race"
  * (exit 2) case — it is returned. Usage/environment problems surface as exit 1; a
  * held lock is exit 0.
  */
-export async function acquireSlicingLock(
-	options: AcquireSlicingLockOptions,
-): Promise<AcquireSlicingLockResult> {
+export async function acquireTaskingLock(
+	options: AcquireTaskingLockOptions,
+): Promise<AcquireTaskingLockResult> {
 	const note = options.note ?? (() => {});
 	try {
 		return await runAcquire(options, note);
 	} catch (err) {
-		if (err instanceof SlicingLockUsageError) {
+		if (err instanceof TaskingLockUsageError) {
 			return {exitCode: 1, outcome: 'usage-error', message: err.message};
 		}
 		const message = err instanceof Error ? err.message : String(err);
@@ -133,9 +133,9 @@ export async function acquireSlicingLock(
 }
 
 async function runAcquire(
-	options: AcquireSlicingLockOptions,
+	options: AcquireTaskingLockOptions,
 	note: (m: string) => void,
-): Promise<AcquireSlicingLockResult> {
+): Promise<AcquireTaskingLockResult> {
 	const slug = options.slug;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	const dryRun = options.dryRun ?? false;
@@ -143,44 +143,44 @@ async function runAcquire(
 	const env = options.env;
 
 	if (!slug) {
-		throw new SlicingLockUsageError(
-			'missing <slug>. usage: acquireSlicingLock({slug, cwd, arbiter})',
+		throw new TaskingLockUsageError(
+			'missing <slug>. usage: acquireTaskingLock({slug, cwd, arbiter})',
 		);
 	}
 	if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
-		throw new SlicingLockUsageError('not inside a git repository');
+		throw new TaskingLockUsageError('not inside a git repository');
 	}
 	if ((await gitSoft(['remote', 'get-url', arbiter], cwd, env)).status !== 0) {
-		throw new SlicingLockUsageError(
+		throw new TaskingLockUsageError(
 			`no git remote named '${arbiter}' (set one, or pass --arbiter)`,
 		);
 	}
 	const by = options.by || (await resolveBy(cwd, env));
 
-	// Is the PRD still lockable (present in work/prd/ on the arbiter's main)?
+	// Is the brief still lockable (present in work/briefs/ready/ on the arbiter's main)?
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const prd = workItemRel('briefs-ready', `${slug}.md`);
-	const prdBlob = await gitSoft(
-		['rev-parse', `${arbiter}/main:${prd}`],
+	const brief = workItemRel('briefs-ready', `${slug}.md`);
+	const briefBlob = await gitSoft(
+		['rev-parse', `${arbiter}/main:${brief}`],
 		cwd,
 		env,
 	);
-	if (prdBlob.status !== 0) {
-		const message = `'${prd}' not found on ${arbiter}/main (no such PRD, or it was already moved/sliced).`;
+	if (briefBlob.status !== 0) {
+		const message = `'${brief}' not found on ${arbiter}/main (no such brief, or it was already moved/tasked).`;
 		note(message);
 		return {exitCode: 2, outcome: 'lost', message};
 	}
-	const lockedBlob = prdBlob.stdout.trim();
+	const lockedBlob = briefBlob.stdout.trim();
 
 	// A dry-run takes no lock (it mutates nothing) but still reports the lockable
 	// snapshot it WOULD take.
 	if (dryRun) {
-		const message = `[dry-run] would acquire the slicing lock for '${slug}' (work/prd/${slug}.md present on ${arbiter}/main).`;
+		const message = `[dry-run] would acquire the tasking lock for '${slug}' (${brief} present on ${arbiter}/main).`;
 		note(message);
 		return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 	}
 
-	// Acquire the UNIFIED per-item lock (`action: slice`, keyed `prd:<slug>` so it
+	// Acquire the UNIFIED per-item lock (`action: task`, keyed `brief:<slug>` so it
 	// shares the ONE ref with claim/advance of the SAME item). A create-only ref
 	// CAS: the winner holds it, the loser is DEFINITIVELY `lost` (exit 2, no retry
 	// budget). No auto-steal of an orphaned lock, consistent with claim/advance and
@@ -195,7 +195,7 @@ async function runAcquire(
 		env,
 	});
 	if (lock.outcome === 'error') {
-		throw new SlicingLockUsageError(
+		throw new TaskingLockUsageError(
 			`failed to acquire the item lock for '${slug}': ${lock.message}`,
 		);
 	}
@@ -203,7 +203,7 @@ async function runAcquire(
 		note(lock.message);
 		return {exitCode: 2, outcome: 'lost', message: lock.message};
 	}
-	const message = `LOCKED '${slug}' for slicing on ${arbiter} (unified lock).`;
+	const message = `LOCKED '${slug}' for tasking on ${arbiter} (unified lock).`;
 	note(message);
 	return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 }
@@ -211,7 +211,7 @@ async function runAcquire(
 // --- Release --------------------------------------------------------------
 
 /** A semantic label for the lock-release outcome. */
-export type ReleaseSlicingLockOutcome =
+export type ReleaseTaskingLockOutcome =
 	| 'released'
 	| 'usage-error'
 	| 'lost'
@@ -219,21 +219,21 @@ export type ReleaseSlicingLockOutcome =
 	| 'stale';
 
 /** Maps onto the claim-CAS exit codes, plus `4` for a STALE (conflicting) lock. */
-export type ReleaseSlicingLockExitCode = 0 | 1 | 2 | 3 | 4;
+export type ReleaseTaskingLockExitCode = 0 | 1 | 2 | 3 | 4;
 
-export interface ReleaseSlicingLockOptions {
-	/** The PRD slug whose lock to release. */
+export interface ReleaseTaskingLockOptions {
+	/** The brief slug whose lock to release. */
 	slug: string;
 	/** Working clone/worktree the release runs in. */
 	cwd: string;
 	/** Name of the arbiter remote (`--arbiter`). Defaults to `origin`. */
 	arbiter?: string;
 	/**
-	 * The git BLOB sha the lock TOOK ({@link AcquireSlicingLockResult.lockedBlob}).
+	 * The git BLOB sha the lock TOOK ({@link AcquireTaskingLockResult.lockedBlob}).
 	 * RETAINED for API parity; the content-identity stale check now lives at the
-	 * integrate seam (`slicing.ts` `heldPrdIsStale`), which runs BEFORE the
+	 * integrate seam (`tasking.ts` `heldBriefIsStale`), which runs BEFORE the
 	 * completing commit. The release itself no longer reads the held body (there is
-	 * no `slicing/` marker), so it does not consult this.
+	 * no `tasking/` marker), so it does not consult this.
 	 */
 	lockedBlob?: string;
 	/** Advisory releaser id. Defaults to git user.name, then $USER. */
@@ -241,13 +241,13 @@ export interface ReleaseSlicingLockOptions {
 	/** Cap on push retries when main merely advanced. Default 3. */
 	retries?: number;
 	/**
-	 * The slicer review→edit LOOP's **decomposition-unclear** verdict
-	 * (`slicer-review-edit-loop`), or the slice-SET acceptance gate's `block`:
-	 * instead of DELETING the lock (returning the PRD to the claimable/sliceable
+	 * The tasker review→edit LOOP's **decomposition-unclear** verdict
+	 * (`slicer-review-edit-loop`), or the task-SET acceptance gate's `block`:
+	 * instead of DELETING the lock (returning the brief to the claimable/taskable
 	 * pool), amend it `active → stuck` with this reason recorded on the entry,
-	 * emitting NO guessed slices. The PRD body stays in `work/prd/` (it never moved
-	 * under the lock); the stuck lock IS the slicing needs-attention surface (no
-	 * `work/needs-attention/` folder write), so it is NOT re-sliceable until a human
+	 * emitting NO guessed tasks. The brief body stays in `work/briefs/ready/` (it never moved
+	 * under the lock); the stuck lock IS the tasking needs-attention surface (no
+	 * `work/needs-attention/` folder write), so it is NOT re-taskable until a human
 	 * resolves it via `release-lock`/`resume`. Omitted ⇒ the normal release DELETES
 	 * the lock ref.
 	 */
@@ -258,38 +258,38 @@ export interface ReleaseSlicingLockOptions {
 	note?: (message: string) => void;
 }
 
-export interface ReleaseSlicingLockResult {
-	exitCode: ReleaseSlicingLockExitCode;
-	outcome: ReleaseSlicingLockOutcome;
+export interface ReleaseTaskingLockResult {
+	exitCode: ReleaseTaskingLockExitCode;
+	outcome: ReleaseTaskingLockOutcome;
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 }
 
 /**
- * Release the slicing lock for `slug`: DELETE the unified `action: slice` lock ref
+ * Release the tasking lock for `slug`: DELETE the unified `action: task` lock ref
  * (idempotent — an already-absent ref is a clean `released`). It moves NO lifecycle
- * file: the durable `prd → prd-sliced` success move is owned by the integrate band,
- * and the PRD body never left `work/prd/` under the lock, so there is no
- * `slicing/ → prd/` restore.
+ * file: the durable `brief → brief-tasked` success move is owned by the integrate band,
+ * and the brief body never left `work/briefs/ready/` under the lock, so there is no
+ * `tasking/ → brief/` restore.
  *
- * When `routeToNeedsAttention` is set (the slicer decomposition-unclear verdict /
- * the slice-SET acceptance gate `block`), the lock is AMENDED `active → stuck`
+ * When `routeToNeedsAttention` is set (the tasker decomposition-unclear verdict /
+ * the task-SET acceptance gate `block`), the lock is AMENDED `active → stuck`
  * with the reason on the entry INSTEAD of deleted — the stuck per-item lock IS the
- * slicing needs-attention surface now (no folder write).
+ * tasking needs-attention surface now (no folder write).
  *
  * Outcomes:
- *   - `released` (0): the lock ref is deleted (or amended stuck), the slicing is done.
+ *   - `released` (0): the lock ref is deleted (or amended stuck), the tasking is done.
  *   - `usage-error` (1): bad input / environment / a lock-amend fault.
  *   - `lost` (2): the lock is not held (nothing to release).
  */
-export async function releaseSlicingLock(
-	options: ReleaseSlicingLockOptions,
-): Promise<ReleaseSlicingLockResult> {
+export async function releaseTaskingLock(
+	options: ReleaseTaskingLockOptions,
+): Promise<ReleaseTaskingLockResult> {
 	const note = options.note ?? (() => {});
 	try {
 		return await runRelease(options, note);
 	} catch (err) {
-		if (err instanceof SlicingLockUsageError) {
+		if (err instanceof TaskingLockUsageError) {
 			return {exitCode: 1, outcome: 'usage-error', message: err.message};
 		}
 		const message = err instanceof Error ? err.message : String(err);
@@ -298,32 +298,32 @@ export async function releaseSlicingLock(
 }
 
 async function runRelease(
-	options: ReleaseSlicingLockOptions,
+	options: ReleaseTaskingLockOptions,
 	note: (m: string) => void,
-): Promise<ReleaseSlicingLockResult> {
+): Promise<ReleaseTaskingLockResult> {
 	const slug = options.slug;
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
 	const cwd = options.cwd;
 	const env = options.env;
 
 	if (!slug) {
-		throw new SlicingLockUsageError(
-			'missing <slug>. usage: releaseSlicingLock({slug, cwd, arbiter})',
+		throw new TaskingLockUsageError(
+			'missing <slug>. usage: releaseTaskingLock({slug, cwd, arbiter})',
 		);
 	}
 	if ((await gitSoft(['rev-parse', '--git-dir'], cwd, env)).status !== 0) {
-		throw new SlicingLockUsageError('not inside a git repository');
+		throw new TaskingLockUsageError('not inside a git repository');
 	}
 	if ((await gitSoft(['remote', 'get-url', arbiter], cwd, env)).status !== 0) {
-		throw new SlicingLockUsageError(
+		throw new TaskingLockUsageError(
 			`no git remote named '${arbiter}' (set one, or pass --arbiter)`,
 		);
 	}
 
-	// DECOMPOSITION-UNCLEAR / SLICE-GATE BLOCK: amend the lock `active → stuck` with
-	// the reason on the entry (the slicing needs-attention surface), NOT delete it.
-	// The PRD body stays in `work/prd/`; the stuck lock keeps it out of the
-	// sliceable pool until a human resolves it (`release-lock`/`resume`).
+	// DECOMPOSITION-UNCLEAR / TASK-GATE BLOCK: amend the lock `active → stuck` with
+	// the reason on the entry (the tasking needs-attention surface), NOT delete it.
+	// The brief body stays in `work/briefs/ready/`; the stuck lock keeps it out of the
+	// taskable pool until a human resolves it (`release-lock`/`resume`).
 	if (options.routeToNeedsAttention !== undefined) {
 		const stuck = await markStuckItemLock({
 			item: `brief:${slug}`,
@@ -334,12 +334,12 @@ async function runRelease(
 		});
 		if (stuck.outcome === 'transitioned' || stuck.outcome === 'wrong-state') {
 			// `wrong-state` (already stuck) is a tolerated idempotent re-surface.
-			const message = `Routed the slicing of '${slug}' to needs-attention (per-item lock marked stuck).`;
+			const message = `Routed the tasking of '${slug}' to needs-attention (per-item lock marked stuck).`;
 			note(message);
 			return {exitCode: 0, outcome: 'released', message};
 		}
 		if (stuck.outcome === 'not-held') {
-			const message = `'${slug}' is not locked for slicing — nothing to mark stuck.`;
+			const message = `'${slug}' is not locked for tasking — nothing to mark stuck.`;
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};
 		}
@@ -356,14 +356,14 @@ async function runRelease(
 		env,
 	});
 	if (released.outcome === 'error') {
-		throw new SlicingLockUsageError(
+		throw new TaskingLockUsageError(
 			`failed to release the item lock for '${slug}': ${released.message}`,
 		);
 	}
 	const message =
 		released.outcome === 'not-held'
-			? `'${slug}' was not locked for slicing (already released).`
-			: `RELEASED the slicing lock for '${slug}' on ${arbiter}.`;
+			? `'${slug}' was not locked for tasking (already released).`
+			: `RELEASED the tasking lock for '${slug}' on ${arbiter}.`;
 	note(message);
 	return {exitCode: 0, outcome: 'released', message};
 }

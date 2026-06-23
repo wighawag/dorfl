@@ -85,20 +85,20 @@ export interface LedgerTodoItem {
  * from frontmatter `slug:`, falling back to the filename — the SAME shape the slice
  * readers use.
  */
-export interface PrdExistence {
+export interface BriefExistence {
 	/**
 	 * Whether a PRD named `<slug>` exists in `work/prd/` and/or `work/prd-sliced/`
 	 * (up-for-slicing OR already sliced — either still claims the slug).
 	 */
 	exists: boolean;
 	/** The PRD source file, when present (`work/prd/<slug>.md`). */
-	prdFile: string | undefined;
+	briefFile: string | undefined;
 	/**
 	 * The sliced resting file, when present (`work/prd-sliced/<slug>.md`) — i.e. the
 	 * PRD HAS BEEN sliced (the source of truth for sliced-ness, slice
 	 * `prd-sliced-folder-step-a`). A re-slice moves it back `prd-sliced/ -> prd/`.
 	 */
-	prdSlicedFile: string | undefined;
+	briefTaskedFile: string | undefined;
 }
 
 /**
@@ -106,12 +106,12 @@ export interface PrdExistence {
  * "slices-first then PRDs to slice" priority). A PRD is NOT in the slice
  * scan/candidate model, so the auto-pick pool is built HERE from `work/prd/`
  * through this single shared PRD read path (the same path
- * {@link PrdExistence} uses, widened from existence to the gate axes the slicing
+ * {@link BriefExistence} uses, widened from existence to the gate axes the slicing
  * predicate needs). The slicing-eligibility predicate (`autoslice-gate`'s
- * `resolveSlicingEligibility`) is applied to these by the selection layer; this
+ * `resolveTaskingEligibility`) is applied to these by the selection layer; this
  * reader does NOT itself decide eligibility (it just surfaces the inputs).
  */
-export interface LedgerPrdItem {
+export interface LedgerBriefItem {
 	/** Filename within `work/prd/` (e.g. `auto-slice.md`). */
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
@@ -132,14 +132,14 @@ export interface LedgerPrdItem {
  * FOLDER is the source of truth, like `done/` for slices (the auto-slicer reads
  * folder-residence; the `sliced:` marker was removed in
  * `remove-sliced-marker-step-b`). Built
- * through the SAME PRD read path as {@link PrdExistence}; there is no second PRD
+ * through the SAME PRD read path as {@link BriefExistence}; there is no second PRD
  * reader.
  */
-export interface LedgerPrdPool {
+export interface LedgerBriefPool {
 	/** Every PRD in `work/prd/`, sorted by slug. */
-	prds: LedgerPrdItem[];
+	briefs: LedgerBriefItem[];
 	/** Slugs whose PRD resides in `work/prd-sliced/` (resolves `briefAfter`). */
-	slicedSlugs: Set<string>;
+	taskedSlugs: Set<string>;
 }
 
 /**
@@ -190,7 +190,7 @@ export interface ArbiterLedgerState {
 	 * the POOL `tasks/todo/` or in `in-progress/`), or `undefined` when not found
 	 * there.
 	 */
-	slice: string | undefined;
+	task: string | undefined;
 	/** Slugs present in `work/done/` on the arbiter (per-repo; resolves `blockedBy`). */
 	doneSlugs: Set<string>;
 }
@@ -202,7 +202,7 @@ export interface ResolveLocalStateInput {
 }
 
 /** What the PRD-existence resolve method needs: which repo + which slug. */
-export interface ResolvePrdExistenceInput {
+export interface ResolveBriefExistenceInput {
 	/** The repo root whose `work/prd/`+`work/prd-sliced/` to read. */
 	repoPath: string;
 	/** The slug to look up (matched against frontmatter `slug:`, then filename). */
@@ -210,7 +210,7 @@ export interface ResolvePrdExistenceInput {
 }
 
 /** What the PRD-pool resolve method needs: which repo's `work/prd/` to enumerate. */
-export interface ResolvePrdPoolInput {
+export interface ResolveBriefPoolInput {
 	/** The repo working-tree root whose `work/prd/` to read. */
 	repoPath: string;
 }
@@ -236,7 +236,7 @@ export interface ResolveMirrorStateInput {
  * What the MIRROR-ref PRD-pool method needs: which bare hub mirror's committed
  * `work/prd/`+`work/prd-sliced/` tree to enumerate.
  */
-export interface ResolveMirrorPrdPoolInput {
+export interface ResolveMirrorBriefPoolInput {
 	/** The bare hub mirror directory (`<workspacesDir>/repos/<key>.git`). */
 	mirrorPath: string;
 	/** The mirror-LOCAL ref whose `work/prd*` tree to read (default `main`). */
@@ -285,13 +285,13 @@ export interface LedgerReadStrategy {
 	 * NO-CHECKOUT mirror-side auto-pick (`run`'s isolated loop + the one-shot/CI
 	 * `advance --remote -n`). A mirror is bare, so this reads the committed tree via
 	 * `git ls-tree`/`git show` (the SAME mechanism {@link resolveMirrorState} uses),
-	 * not a working-tree `readdirSync`. Returns the SAME {@link LedgerPrdPool} shape
+	 * not a working-tree `readdirSync`. Returns the SAME {@link LedgerBriefPool} shape
 	 * the working-tree reader returns, so the slicing-eligibility predicate
-	 * (`sliceablePrds`) applies byte-identically to either source.
+	 * (`taskableBriefs`) applies byte-identically to either source.
 	 */
-	resolveMirrorPrdPool(
-		input: ResolveMirrorPrdPoolInput,
-	): Promise<LedgerPrdPool>;
+	resolveMirrorBriefPool(
+		input: ResolveMirrorBriefPoolInput,
+	): Promise<LedgerBriefPool>;
 	/**
 	 * Resolve whether a PRD named `<slug>` exists in the LOCAL working tree's
 	 * `work/prd/` (the PRD source — where a mid-slice PRD ALSO rests now that the
@@ -305,7 +305,7 @@ export interface LedgerReadStrategy {
 	 * share ONE PRD read path rather than each growing a bespoke scan. Synchronous
 	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
 	 */
-	resolvePrdExistence(input: ResolvePrdExistenceInput): PrdExistence;
+	resolveBriefExistence(input: ResolveBriefExistenceInput): BriefExistence;
 	/**
 	 * Enumerate the repo's PRD pool from `work/prd/` (the auto-slice candidate
 	 * source for the `do`/`run` "slices-first then PRDs to slice" priority, ADR
@@ -313,12 +313,12 @@ export interface LedgerReadStrategy {
 	 * PLUS the set of already-SLICED slugs so the selection layer can resolve
 	 * `briefAfter` against `work/prd-sliced/` residence (the FOLDER is the source of
 	 * truth) and apply `autoslice-gate`'s
-	 * predicate. This is the SAME PRD read path {@link resolvePrdExistence} uses,
+	 * predicate. This is the SAME PRD read path {@link resolveBriefExistence} uses,
 	 * widened from a single-slug existence check to a full enumeration — NOT a
 	 * second PRD reader. Synchronous and OFFLINE (a working-tree read), like
 	 * {@link resolveLocalState}.
 	 */
-	resolvePrdPool(input: ResolvePrdPoolInput): LedgerPrdPool;
+	resolveBriefPool(input: ResolveBriefPoolInput): LedgerBriefPool;
 	/**
 	 * Enumerate `work/tasks/backlog/*.md` (the TASK STAGING folder) into the SAME
 	 * {@link LedgerTodoItem} shape `resolveLocalState().todo` returns for the pool
@@ -334,11 +334,11 @@ export interface LedgerReadStrategy {
 	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerTodoItem[];
 	/**
 	 * Enumerate `work/briefs/proposed/*.md` (the BRIEF STAGING folder) into the
-	 * SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns for the
+	 * SAME {@link LedgerBriefItem} shape `resolvePrdPool().prds` returns for the
 	 * pool — the BRIEF-symmetric `surfaceStaging` widening (brief
 	 * `staging-surface-and-apply-promote-safety` F2, PRD q4 answer). Sync + OFFLINE.
 	 */
-	resolveLocalBriefStaging(input: ResolvePrdPoolInput): LedgerPrdItem[];
+	resolveLocalBriefStaging(input: ResolveBriefPoolInput): LedgerBriefItem[];
 	/**
 	 * Mirror-ref counterpart of {@link resolveLocalTaskStaging}: read
 	 * `<ref>:work/tasks/backlog/*.md` from a BARE hub mirror via `git ls-tree` +
@@ -352,8 +352,8 @@ export interface LedgerReadStrategy {
 	 * `<ref>:work/briefs/proposed/*.md` from a bare mirror.
 	 */
 	resolveMirrorBriefStaging(
-		input: ResolveMirrorPrdPoolInput,
-	): Promise<LedgerPrdItem[]>;
+		input: ResolveMirrorBriefPoolInput,
+	): Promise<LedgerBriefItem[]>;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -419,15 +419,15 @@ function readLocalTaskStaging(repoPath: string): LedgerTodoItem[] {
 /**
  * Read `work/briefs/proposed/*.md` (the BRIEF STAGING folder, the brief twin
  * of {@link readLocalTaskStaging}, PRD q4 answer) from the local tree. Returns
- * the SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns.
+ * the SAME {@link LedgerBriefItem} shape `resolvePrdPool().prds` returns.
  */
-function readLocalBriefStaging(repoPath: string): LedgerPrdItem[] {
+function readLocalBriefStaging(repoPath: string): LedgerBriefItem[] {
 	const dir = workFolderPath(repoPath, 'briefs-proposed');
-	const prds: LedgerPrdItem[] = [];
+	const briefs: LedgerBriefItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
-		prds.push({
+		briefs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -435,7 +435,7 @@ function readLocalBriefStaging(repoPath: string): LedgerPrdItem[] {
 			briefAfter: fm.briefAfter,
 		});
 	}
-	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	return briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /** Collect the slugs present in `work/done/` on the local tree. */
@@ -485,7 +485,7 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
  * readers use — so a renamed file whose frontmatter slug matches still resolves.
  * Returns the matching filename, or `undefined`.
  */
-function findPrdFileBySlug(
+function findBriefFileBySlug(
 	repoPath: string,
 	folder: BriefFolder,
 	slug: string,
@@ -501,7 +501,7 @@ function findPrdFileBySlug(
 
 /**
  * Enumerate `work/prd/*.md` into the auto-slice PRD pool (the slices-first/PRD
- * priority's PRD source) — the SAME PRD read path {@link findPrdFileBySlug} uses,
+ * priority's PRD source) — the SAME PRD read path {@link findBriefFileBySlug} uses,
  * widened from a single-slug existence check to a full enumeration. Each PRD's
  * slug is resolved from frontmatter `slug:` (falling back to the filename) and
  * its gate axes (`humanOnly`/`needsAnswers`/`briefAfter`) parsed. The
@@ -510,15 +510,15 @@ function findPrdFileBySlug(
  * source of truth (the build-machine `done/` analogue), so `briefAfter` resolves
  * against `prd-sliced/` residence (mirroring `blockedBy` -> `done/`). The `sliced:`
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
- * matches `slicing.ts`'s `readSlicedSlugs`. Missing folders read as empty.
+ * matches `tasking.ts`'s `readSlicedSlugs`. Missing folders read as empty.
  */
-function readLocalPrdPool(repoPath: string): LocalPrdPool {
+function readLocalBriefPool(repoPath: string): LocalBriefPool {
 	const dir = workFolderPath(repoPath, 'briefs-ready');
-	const prds: LedgerPrdItem[] = [];
+	const briefs: LedgerBriefItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
-		prds.push({
+		briefs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -526,24 +526,24 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 			briefAfter: fm.briefAfter,
 		});
 	}
-	prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 
 	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
 	// truth, like `done/` for slices (the `sliced:` marker was removed in
-	// `remove-sliced-marker-step-b`), mirroring slicing.ts's readSlicedSlugs. Missing
+	// `remove-sliced-marker-step-b`), mirroring tasking.ts's readSlicedSlugs. Missing
 	// folder reads as empty.
-	const slicedSlugs = new Set<string>();
-	const slicedDir = workFolderPath(repoPath, 'briefs-tasked');
-	for (const file of listMarkdown(slicedDir)) {
-		const content = readFileSync(join(slicedDir, file), 'utf8');
+	const taskedSlugs = new Set<string>();
+	const taskedDir = workFolderPath(repoPath, 'briefs-tasked');
+	for (const file of listMarkdown(taskedDir)) {
+		const content = readFileSync(join(taskedDir, file), 'utf8');
 		const fm = parseFrontmatter(content);
-		slicedSlugs.add(fm.slug ?? basename(file, '.md'));
+		taskedSlugs.add(fm.slug ?? basename(file, '.md'));
 	}
-	return {prds, slicedSlugs};
+	return {briefs, taskedSlugs};
 }
 
-/** Internal alias for {@link LedgerPrdPool} (kept local to the reader). */
-type LocalPrdPool = LedgerPrdPool;
+/** Internal alias for {@link LedgerBriefPool} (kept local to the reader). */
+type LocalBriefPool = LedgerBriefPool;
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
 function gitSoft(
@@ -559,7 +559,7 @@ function gitSoft(
  * (the normal claim case) or `in-progress/` (start --resume); read whichever
  * exists. Returns `undefined` when the slice is not found there.
  */
-async function readSliceOnArbiter(
+async function readTaskOnArbiter(
 	slug: string,
 	arbiter: string,
 	cwd: string,
@@ -695,16 +695,16 @@ async function readBriefStagingFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerPrdItem[]> {
+): Promise<LedgerBriefItem[]> {
 	const base = `${ref}:${workFolderRel('briefs-proposed')}`;
-	const prds: LedgerPrdItem[] = [];
+	const briefs: LedgerBriefItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
 		if (content === undefined) {
 			continue;
 		}
 		const fm = parseFrontmatter(content);
-		prds.push({
+		briefs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -712,30 +712,30 @@ async function readBriefStagingFromTree(
 			briefAfter: fm.briefAfter,
 		});
 	}
-	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	return briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /**
  * Parse `<ref>:work/prd/*.md` into the auto-slice PRD pool, sorted by slug, plus
  * the already-SLICED slugs from `<ref>:work/prd-sliced/` RESIDENCE (the folder is
- * the source of truth, mirroring the working-tree {@link readLocalPrdPool}). Reads
+ * the source of truth, mirroring the working-tree {@link readLocalBriefPool}). Reads
  * a committed tree (bare-mirror or any ref) via `ls-tree`/`show`. Missing folders
  * read as empty.
  */
-async function readPrdPoolFromTree(
+async function readBriefPoolFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerPrdPool> {
-	const prdBase = `${ref}:${workFolderRel('briefs-ready')}`;
-	const prds: LedgerPrdItem[] = [];
-	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
-		const content = await showInTree(prdBase, file, cwd, env);
+): Promise<LedgerBriefPool> {
+	const briefBase = `${ref}:${workFolderRel('briefs-ready')}`;
+	const briefs: LedgerBriefItem[] = [];
+	for (const file of await listMarkdownInTree(briefBase, cwd, env)) {
+		const content = await showInTree(briefBase, file, cwd, env);
 		if (content === undefined) {
 			continue;
 		}
 		const fm = parseFrontmatter(content);
-		prds.push({
+		briefs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -743,22 +743,22 @@ async function readPrdPoolFromTree(
 			briefAfter: fm.briefAfter,
 		});
 	}
-	prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	briefs.sort((a, b) => a.slug.localeCompare(b.slug));
 
 	// Sliced-ness is RESIDENCE in `work/prd-sliced/` — the FOLDER is the source of
 	// truth (the `sliced:` marker was removed in `remove-sliced-marker-step-b`),
 	// exactly as the working-tree reader resolves it.
-	const slicedBase = `${ref}:${workFolderRel('briefs-tasked')}`;
-	const slicedSlugs = new Set<string>();
-	for (const file of await listMarkdownInTree(slicedBase, cwd, env)) {
-		const content = await showInTree(slicedBase, file, cwd, env);
+	const taskedBase = `${ref}:${workFolderRel('briefs-tasked')}`;
+	const taskedSlugs = new Set<string>();
+	for (const file of await listMarkdownInTree(taskedBase, cwd, env)) {
+		const content = await showInTree(taskedBase, file, cwd, env);
 		if (content === undefined) {
 			continue;
 		}
 		const fm = parseFrontmatter(content);
-		slicedSlugs.add(fm.slug ?? basename(file, '.md'));
+		taskedSlugs.add(fm.slug ?? basename(file, '.md'));
 	}
-	return {prds, slicedSlugs};
+	return {briefs, taskedSlugs};
 }
 
 /**
@@ -804,21 +804,25 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		};
 	},
 	async resolveArbiterState({slug, cwd, arbiter, env}) {
-		const slice = await readSliceOnArbiter(slug, arbiter, cwd, env);
+		const task = await readTaskOnArbiter(slug, arbiter, cwd, env);
 		const doneSlugs = await readDoneSlugsOnArbiter(arbiter, cwd, env);
-		return {slice, doneSlugs};
+		return {task, doneSlugs};
 	},
-	resolvePrdExistence({repoPath, slug}) {
-		const prdFile = findPrdFileBySlug(repoPath, 'briefs-ready', slug);
-		const prdSlicedFile = findPrdFileBySlug(repoPath, 'briefs-tasked', slug);
+	resolveBriefExistence({repoPath, slug}) {
+		const briefFile = findBriefFileBySlug(repoPath, 'briefs-ready', slug);
+		const briefTaskedFile = findBriefFileBySlug(
+			repoPath,
+			'briefs-tasked',
+			slug,
+		);
 		return {
-			exists: prdFile !== undefined || prdSlicedFile !== undefined,
-			prdFile,
-			prdSlicedFile,
+			exists: briefFile !== undefined || briefTaskedFile !== undefined,
+			briefFile,
+			briefTaskedFile,
 		};
 	},
-	resolvePrdPool({repoPath}) {
-		return readLocalPrdPool(repoPath);
+	resolveBriefPool({repoPath}) {
+		return readLocalBriefPool(repoPath);
 	},
 	resolveLocalTaskStaging({repoPath}) {
 		return readLocalTaskStaging(repoPath);
@@ -843,11 +847,11 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		]);
 		return {todo, doneSlugs, observations};
 	},
-	async resolveMirrorPrdPool({mirrorPath, ref = 'main', env}) {
+	async resolveMirrorBriefPool({mirrorPath, ref = 'main', env}) {
 		// The PRD pool from the bare mirror's committed `<ref>:work/prd*` tree — the
 		// mirror-ref counterpart of `resolvePrdPool` (a working-tree read). Same shape,
-		// so `sliceablePrds` applies identically to either source.
-		return readPrdPoolFromTree(ref, mirrorPath, env);
+		// so `taskableBriefs` applies identically to either source.
+		return readBriefPoolFromTree(ref, mirrorPath, env);
 	},
 };
 

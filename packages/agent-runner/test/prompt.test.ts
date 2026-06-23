@@ -12,7 +12,7 @@ import {
 	buildContinueBlock,
 	extractRequeueNotes,
 	resolveContinueContext,
-	resolveSlice,
+	resolveTask,
 	inferSlugFromBranch,
 	renderPrompt,
 	resolveItemPromptGuidance,
@@ -43,7 +43,7 @@ const CLAIM_PROTOCOL = resolve(
 	'CLAIM-PROTOCOL.md',
 );
 
-const SLICE = `---
+const TASK = `---
 title: Example slice
 slug: example
 prd: my-prd
@@ -66,12 +66,12 @@ Some thing.
 `;
 
 /** Write a slice file into work/<folder>/<slug>.md under root, return root. */
-function seedSlice(
+function seedTask(
 	root: string,
 	folder: 'in-progress' | 'backlog',
 	slug: string,
 	body: string,
-	prd = 'my-prd',
+	brief = 'my-prd',
 ): void {
 	const dir = join(root, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
@@ -79,7 +79,7 @@ function seedSlice(
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`brief: ${prd}`,
+		`brief: ${brief}`,
 		'blockedBy: []',
 		'---',
 		'',
@@ -96,12 +96,12 @@ function seedSlice(
 }
 
 /** Slice file CONTENT (not written to disk) for the done/-continue fixtures. */
-function doneSlice(slug: string, prd = 'my-prd'): string {
+function doneTask(slug: string, brief = 'my-prd'): string {
 	return [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`brief: ${prd}`,
+		`brief: ${brief}`,
 		'blockedBy: []',
 		'---',
 		'',
@@ -118,7 +118,7 @@ function doneSlice(slug: string, prd = 'my-prd'): string {
 
 describe('extractPromptSection', () => {
 	it('extracts the body under the ## Prompt heading, sans heading + quoting', () => {
-		const prompt = extractPromptSection(SLICE)!;
+		const prompt = extractPromptSection(TASK)!;
 		expect(prompt).toContain('Build the example feature.');
 		expect(prompt).toContain('Make the tests green.');
 		expect(prompt).not.toContain('## Prompt');
@@ -652,33 +652,33 @@ describe('resolveSlice — in-progress over backlog', () => {
 	});
 
 	it('resolves from work/in-progress/ when present', () => {
-		seedSlice(scratch.root, 'in-progress', 'foo', '> in-progress body');
-		const slice = resolveSlice(scratch.root, 'foo');
-		expect(slice.folder).toBe('in-progress');
-		expect(slice.slicePrompt).toContain('in-progress body');
-		expect(slice.prd).toBe('my-prd');
+		seedTask(scratch.root, 'in-progress', 'foo', '> in-progress body');
+		const task = resolveTask(scratch.root, 'foo');
+		expect(task.folder).toBe('in-progress');
+		expect(task.taskPrompt).toContain('in-progress body');
+		expect(task.brief).toBe('my-prd');
 	});
 
 	it('falls back to work/tasks/todo/ when not in-progress', () => {
-		seedSlice(scratch.root, 'backlog', 'bar', '> backlog body');
+		seedTask(scratch.root, 'backlog', 'bar', '> backlog body');
 		// `resolveSlice` returns the resolved folder by its symbolic KEY, which now
 		// reads in the new task vocabulary (`tasks-todo`).
-		const slice = resolveSlice(scratch.root, 'bar');
-		expect(slice.folder).toBe('tasks-todo');
-		expect(slice.slicePrompt).toContain('backlog body');
+		const task = resolveTask(scratch.root, 'bar');
+		expect(task.folder).toBe('tasks-todo');
+		expect(task.taskPrompt).toContain('backlog body');
 	});
 
 	it('prefers in-progress when the slug exists in BOTH folders', () => {
-		seedSlice(scratch.root, 'backlog', 'dup', '> the BACKLOG copy');
-		seedSlice(scratch.root, 'in-progress', 'dup', '> the IN-PROGRESS copy');
-		const slice = resolveSlice(scratch.root, 'dup');
-		expect(slice.folder).toBe('in-progress');
-		expect(slice.slicePrompt).toContain('IN-PROGRESS');
-		expect(slice.slicePrompt).not.toContain('BACKLOG');
+		seedTask(scratch.root, 'backlog', 'dup', '> the BACKLOG copy');
+		seedTask(scratch.root, 'in-progress', 'dup', '> the IN-PROGRESS copy');
+		const task = resolveTask(scratch.root, 'dup');
+		expect(task.folder).toBe('in-progress');
+		expect(task.taskPrompt).toContain('IN-PROGRESS');
+		expect(task.taskPrompt).not.toContain('BACKLOG');
 	});
 
 	it('throws PromptError when the slug is in neither folder', () => {
-		expect(() => resolveSlice(scratch.root, 'missing')).toThrow(PromptError);
+		expect(() => resolveTask(scratch.root, 'missing')).toThrow(PromptError);
 	});
 });
 
@@ -710,7 +710,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		// Seed main with the slice already claimed into in-progress/.
 		const inProgress = join(repo, 'work', 'in-progress');
 		mkdirSync(inProgress, {recursive: true});
-		writeFileSync(join(inProgress, `${slug}.md`), doneSlice(slug));
+		writeFileSync(join(inProgress, `${slug}.md`), doneTask(slug));
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'claim: in-progress'], repo);
 		// A bare arbiter mirroring main at the CLAIM commit.
@@ -749,16 +749,16 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		// resolves (the strand keeps the branch, just NOT merged to main).
 		gitIn(['push', '-q', 'arbiter', 'work/task-alpha:work/task-alpha'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		const slice = resolveSlice(repo, 'alpha', inPlaceGate(repo, 'alpha'));
-		expect(slice.folder).toBe('done');
-		expect(slice.slicePrompt).toContain('Implement alpha.');
+		const task = resolveTask(repo, 'alpha', inPlaceGate(repo, 'alpha'));
+		expect(task.folder).toBe('done');
+		expect(task.taskPrompt).toContain('Implement alpha.');
 	});
 
 	it('(b) COMPLETE: does NOT resolve a done/ slice whose tip is on arbiter/main', () => {
 		const repo = doneMovedRepo('beta', true);
 		// The branch tip == arbiter/main (integrated). A continue gate must NOT admit
 		// done/ — onboard must not resurrect a finished slice — so this is "not found".
-		expect(() => resolveSlice(repo, 'beta', inPlaceGate(repo, 'beta'))).toThrow(
+		expect(() => resolveTask(repo, 'beta', inPlaceGate(repo, 'beta'))).toThrow(
 			PromptError,
 		);
 	});
@@ -769,7 +769,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		// No gate => the original ['in-progress','backlog']-only resolution; done/ is
 		// unreachable, so the slug (now only in done/) is "not found".
-		expect(() => resolveSlice(repo, 'gamma')).toThrow(PromptError);
+		expect(() => resolveTask(repo, 'gamma')).toThrow(PromptError);
 	});
 
 	it('a continue gate leaves in-progress resolution UNCHANGED (in-progress wins)', () => {
@@ -781,7 +781,7 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		gitIn(['init', '-q', '-b', 'main'], repo);
 		const ip = join(repo, 'work', 'in-progress');
 		mkdirSync(ip, {recursive: true});
-		writeFileSync(join(ip, 'delta.md'), doneSlice('delta'));
+		writeFileSync(join(ip, 'delta.md'), doneTask('delta'));
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'seed'], repo);
 		gitIn(['clone', '-q', '--bare', repo, arbiter], scratch.root);
@@ -792,8 +792,8 @@ describe('resolveSlice — done/ on a CONTINUE, gated by tip-vs-arbiter (story 5
 		gitIn(['commit', '-q', '-m', 'prior'], repo);
 		gitIn(['push', '-q', 'arbiter', 'work/task-delta:work/task-delta'], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		const slice = resolveSlice(repo, 'delta', inPlaceGate(repo, 'delta'));
-		expect(slice.folder).toBe('in-progress');
+		const task = resolveTask(repo, 'delta', inPlaceGate(repo, 'delta'));
+		expect(task.folder).toBe('in-progress');
 	});
 });
 
@@ -807,7 +807,7 @@ describe('renderPrompt — slug given', () => {
 	});
 
 	it('renders the wrapper + slice prompt for an explicit slug', () => {
-		seedSlice(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
+		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
 		expect(out).toContain('work/tasks/todo/given.md');
 		expect(out).toContain('the-prd');
@@ -822,7 +822,7 @@ describe('renderPrompt — slug given', () => {
 		gitIn(['add', '-A'], scratch.root);
 		gitIn(['commit', '-q', '-m', 'seed'], scratch.root);
 		gitIn(['switch', '-q', '-c', 'work/other'], scratch.root);
-		seedSlice(scratch.root, 'backlog', 'given', '> GIVEN-BODY');
+		seedTask(scratch.root, 'backlog', 'given', '> GIVEN-BODY');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
 		expect(out).toContain('work/tasks/todo/given.md');
 		expect(out).toContain('GIVEN-BODY');
@@ -848,7 +848,7 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 
 	it('infers <slug> from the current work/<slug> branch when omitted', () => {
 		initRepoOnBranch('work/inferred');
-		seedSlice(scratch.root, 'in-progress', 'inferred', '> INFERRED-BODY');
+		seedTask(scratch.root, 'in-progress', 'inferred', '> INFERRED-BODY');
 		const out = renderPrompt({cwd: scratch.root, env: gitEnv()});
 		expect(out).toContain('work/tasks/todo/inferred.md');
 		expect(out).toContain('INFERRED-BODY');

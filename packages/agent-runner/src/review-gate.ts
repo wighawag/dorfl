@@ -154,7 +154,7 @@ export function buildReviewPrompt(slug: string): string {
 		`("Let me check…"). Make it as long or as short as the review genuinely`,
 		`needs — there is NO length limit and no need to pad. It is plain text inside`,
 		`the JSON string (escape newlines as \\n). Do NOT fill "edits"/"edit"/`,
-		`"questions"/"uncertainSlices"/"decompositionUnclear" — those channels are`,
+		`"questions"/"uncertainTasks"/"decompositionUnclear" — those channels are`,
 		`for other review callers (the slicer loop / the lone-slice review), not this`,
 		`code-review gate.`,
 	].join('\n');
@@ -253,14 +253,14 @@ export function harnessReviewGate(
  * so {@link parseReviewVerdict} reads it identically.
  *
  * This is a TERMINAL, ONE-SHOT accept/reject gate (it runs BEFORE the slice
- * set integrates) — NOT the slicer IMPROVER loop (`slicer-review-loop.ts`),
+ * set integrates) — NOT the slicer IMPROVER loop (`tasker-review-loop.ts`),
  * which EDITS slices between passes. This prompt explicitly forbids editing.
  *
  * Per-builder framing only — the discipline body lives in
  * `work/protocol/REVIEW-PROTOCOL.md`; the JSON shape comes from
  * {@link verdictContractPrompt}.
  */
-export function buildSliceAcceptancePrompt(slug: string): string {
+export function buildTaskAcceptancePrompt(slug: string): string {
 	return [
 		`You are a FRESH-CONTEXT reviewer (the slice-SET ACCEPTANCE GATE). Review`,
 		`the candidate slices this slicing run produced for the PRD "${slug}" — the`,
@@ -293,7 +293,7 @@ export function buildSliceAcceptancePrompt(slug: string): string {
 		`human deciding whether to land these slices. LEAD with the verdict`,
 		`("Approved" or "Blocked") and then give the lenses' reasoning and the`,
 		`destination check. Do NOT fill the improver-loop channels ("edits",`,
-		`"uncertainSlices", "decompositionUnclear") — this is a terminal gate, not the`,
+		`"uncertainTasks", "decompositionUnclear") — this is a terminal gate, not the`,
 		`loop.`,
 	].join('\n');
 }
@@ -304,19 +304,19 @@ export function buildSliceAcceptancePrompt(slug: string): string {
  * as a fresh-context agent through the SAME harness seam, routing the
  * `reviewModel` override via `LaunchInput.model`, then parses the emitted
  * `{verdict, findings}` — IDENTICAL machinery to the build gate, differing ONLY
- * in the PROMPT ({@link buildSliceAcceptancePrompt}, a slice-SET review) and in
- * being driven ONE-SHOT by the caller (the slicing path passes
+ * in the PROMPT ({@link buildTaskAcceptancePrompt}, a slice-SET review) and in
+ * being driven ONE-SHOT by the caller (the tasking path passes
  * `reviewMaxRounds: 1`).
  *
  * Reuses the `ReviewGate` seam type verbatim so `performIntegration`'s review
  * block runs it with no shape change. The review uses a DISTINCT session id
  * (`<slug>-slice-acceptance`) so it never collides with the build review session
  * OR the slicer improver loop's review session. NAME: `harnessSliceAcceptanceGate`
- * (the ACCEPTANCE gate), DISTINCT from `slicer-review-loop.ts`'s
- * `harnessSliceReviewGate` (the IMPROVER loop seam, which EDITS slices) — the two
+ * (the ACCEPTANCE gate), DISTINCT from `tasker-review-loop.ts`'s
+ * `harnessTaskReviewGate` (the IMPROVER loop seam, which EDITS tasks) — the two
  * are non-overlapping concepts (gate = terminal pass/fail; loop = review→edit).
  */
-export function harnessSliceAcceptanceGate(
+export function harnessTaskAcceptanceGate(
 	options: HarnessReviewGateOptions = {},
 ): ReviewGate {
 	const harness = options.harness ?? new NullHarness();
@@ -338,7 +338,7 @@ export function harnessSliceAcceptanceGate(
 			dir: input.cwd,
 			slug: input.slug,
 			command: options.agentCmd ?? '',
-			prompt: buildSliceAcceptancePrompt(input.slug),
+			prompt: buildTaskAcceptancePrompt(input.slug),
 			model: input.reviewModel,
 			sessionId: `${input.slug}-slice-acceptance`,
 			sessionsDir: input.sessionsDir,

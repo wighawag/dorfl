@@ -3,8 +3,8 @@ import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
-	sliceablePrds,
-	type PrdCandidate,
+	taskableBriefs,
+	type BriefCandidate,
 	type SelectedItem,
 } from './select-priority.js';
 import type {Config} from './config.js';
@@ -118,17 +118,17 @@ export async function performDoAuto(
 
 	// Pool 2 — SLICEABLE PRDs: the NEW pool from the shared PRD read path
 	// (`resolvePrdPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
-	const pool = read.resolvePrdPool({repoPath: cwd});
-	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
+	const pool = read.resolveBriefPool({repoPath: cwd});
+	const briefCandidates: BriefCandidate[] = pool.briefs.map((brief) => ({
 		repoPath: cwd,
-		slug: prd.slug,
-		humanOnly: prd.humanOnly,
-		needsAnswers: prd.needsAnswers,
-		briefAfter: prd.briefAfter,
+		slug: brief.slug,
+		humanOnly: brief.humanOnly,
+		needsAnswers: brief.needsAnswers,
+		briefAfter: brief.briefAfter,
 	}));
-	const eligiblePrds = sliceablePrds({
-		candidates: prdCandidates,
-		slicedSlugs: pool.slicedSlugs,
+	const eligibleBriefs = taskableBriefs({
+		candidates: briefCandidates,
+		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
 	});
 
@@ -137,7 +137,7 @@ export async function performDoAuto(
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
-		prds: eligiblePrds,
+		briefs: eligibleBriefs,
 		selectionOrder: options.config.selectionOrder,
 		count,
 	});

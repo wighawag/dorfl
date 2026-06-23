@@ -78,13 +78,13 @@ export async function resolveReadiness(
 	// seam's arbiter method — the single insertion point. Same source of truth the
 	// folder check uses; behaviour is byte-identical to the inline reads it
 	// replaced (slice from `backlog/` or `in-progress/`, done slugs from the tree).
-	const {slice, doneSlugs} = await ledgerRead.resolveArbiterState({
+	const {task, doneSlugs} = await ledgerRead.resolveArbiterState({
 		slug,
 		cwd,
 		arbiter,
 		env,
 	});
-	const fm = parseFrontmatter(slice ?? '');
+	const fm = parseFrontmatter(task ?? '');
 	const needsAnswers = fm.needsAnswers === true;
 
 	const {missing} = resolveBlockedBy(fm.blockedBy, doneSlugs);

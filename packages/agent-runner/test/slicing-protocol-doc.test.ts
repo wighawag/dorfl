@@ -39,7 +39,7 @@ const SLICING_SRC = resolve(
 	'packages',
 	'agent-runner',
 	'src',
-	'slicing.ts',
+	'tasking.ts',
 );
 
 describe('SLICING-PROTOCOL.md \u2014 the new in-band slicing discipline doc', () => {
@@ -179,8 +179,8 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical slice-task fixture
 	});
 });
 
-describe('buildSlicingBrief \u2014 in-band reference + no re-inlined discipline prose + current vocabulary', () => {
-	// `buildSlicingBrief` is module-private; read its assembled output for
+describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline prose + current vocabulary', () => {
+	// `buildTaskingBrief` is module-private; read its assembled output for
 	// `slug: 'example-brief'` from the source file so this test is hermetic and
 	// does not require exporting the builder. (The same indirect-read pattern
 	// the surface slice's prompt assertions use.)
@@ -190,7 +190,7 @@ describe('buildSlicingBrief \u2014 in-band reference + no re-inlined discipline 
 	// interpolation).
 	const builderBody = (() => {
 		const match =
-			/function buildSlicingBrief\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
+			/function buildTaskingBrief\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
 				SLICING,
 			);
 		expect(match).toBeTruthy();

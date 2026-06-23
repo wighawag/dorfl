@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {
 	promoteFromPreBacklog,
-	promoteFromPrePrd,
+	promoteFromPreBrief,
 } from '../src/needs-attention.js';
 import {
 	acquireItemLock,
@@ -166,7 +166,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		expect(held.outcome).toBe('acquired');
 
 		const promoter = raceClone(seeded, 'promote');
-		const result = await promoteFromPrePrd({
+		const result = await promoteFromPreBrief({
 			slug: 'brief-race',
 			cwd: promoter,
 			arbiter: ARBITER,
@@ -223,7 +223,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		seedStagedBrief(seeded.repo, 'happy-brief');
 
-		const result = await promoteFromPrePrd({
+		const result = await promoteFromPreBrief({
 			slug: 'happy-brief',
 			cwd: seeded.repo,
 			arbiter: ARBITER,

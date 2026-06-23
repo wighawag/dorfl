@@ -1,14 +1,14 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
-import {performSlice, type SliceAgentRunner} from '../src/slicing.js';
+import {performTask, type TaskAgentRunner} from '../src/tasking.js';
 import {
 	buildReviewPrompt,
-	buildSliceAcceptancePrompt,
+	buildTaskAcceptancePrompt,
 	type ReviewGate,
 	type ReviewVerdict,
 } from '../src/review-gate.js';
-import type {SliceReviewGate} from '../src/slicer-review-loop.js';
+import type {TaskReviewGate} from '../src/tasker-review-loop.js';
 import {readItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
@@ -20,17 +20,17 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `do prd:<slug>` SLICE-SET ACCEPTANCE GATE tests (slice `task-acceptance-gate`).
- * The slice-path mirror of the build Gate-2: a FRESH-CONTEXT review of the
- * produced slice SET runs BEFORE the slices integrate (riding
+ * `do brief:<slug>` TASK-SET ACCEPTANCE GATE tests (task `task-acceptance-gate`).
+ * The task-path mirror of the build Gate-2: a FRESH-CONTEXT review of the
+ * produced task SET runs BEFORE the tasks integrate (riding
  * `performIntegration`'s review-before-integrate block). `--review` on (default)
- * runs it; `--no-review` skips it; `block` routes the PRD to needs-attention (no
- * slices land); `approve` lets the set integrate. It is ONE-SHOT (no rounds; it
+ * runs it; `--no-review` skips it; `block` routes the brief to needs-attention (no
+ * tasks land); `approve` lets the set integrate. It is ONE-SHOT (no rounds; it
  * does NOT consult `--review-max-rounds`) and is independently controllable from
- * the slicer improver loop.
+ * the tasker improver loop.
  *
- * House style (mirrors `slicing-integration.test.ts` + `review-gate-pr.test.ts`):
- * a throwaway checkout + a local `--bare` arbiter + a STUBBED agent (writes slice
+ * House style (mirrors `tasking-integration.test.ts` + `review-gate-pr.test.ts`):
+ * a throwaway checkout + a local `--bare` arbiter + a STUBBED agent (writes task
  * files directly) + a STUBBED acceptance gate (a canned approve/block verdict, NO
  * real model). `GIT_CONFIG_GLOBAL` isolation + `isolatePiAgentDir` keep the
  * developer's real config/sessions untouched.
@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 /** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter). */
-function seedPrd(repo: string, slug: string): void {
+function seedBrief(repo: string, slug: string): void {
 	const dir = join(repo, 'work', 'briefs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
@@ -72,8 +72,8 @@ function seedPrd(repo: string, slug: string): void {
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** An agent that writes one backlog slice file (no git). */
-function slicingAgent(file = 'child'): SliceAgentRunner {
+/** An agent that writes one backlog task file (no git). */
+function taskingAgent(file = 'child'): TaskAgentRunner {
 	return ({cwd}) => {
 		const dir = join(cwd, 'work', 'tasks', 'backlog');
 		mkdirSync(dir, {recursive: true});
@@ -97,7 +97,7 @@ function slicingAgent(file = 'child'): SliceAgentRunner {
 }
 
 /**
- * A stubbed acceptance gate (the slice-SET `ReviewGate` seam) returning a fixed
+ * A stubbed acceptance gate (the task-SET `ReviewGate` seam) returning a fixed
  * verdict — a CALLABLE that also records its invocations so call sites can assert
  * call count / round / model (mirrors `review-gate-pr.test.ts`'s `stubGate`).
  */
@@ -153,9 +153,9 @@ const showArbiterMain = (repo: string, path: string): string => {
 describe('slice acceptance gate — APPROVE lets the set integrate (default --merge)', () => {
 	it('review on + APPROVE ⇒ the gate runs once, then the slices land on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(APPROVE);
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -163,16 +163,16 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 			integration: 'merge',
 			review: true,
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('sliced');
 		// The gate ran (before the integrate) exactly ONCE — it is one-shot.
 		expect(gate.calls).toBe(1);
-		// The approved set integrated onto main (slice + PRD slicing/ -> prd-sliced/
-		// move). The PRD rests in prd-sliced/ (residence = source of truth for
-		// sliced-ness, no marker), not prd/.
+		// The approved set integrated onto main (task + brief tasking/ -> brief-tasked/
+		// move). The brief rests in brief-tasked/ (residence = source of truth for
+		// tasked-ness, no marker), not brief/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
@@ -183,9 +183,9 @@ describe('slice acceptance gate — APPROVE lets the set integrate (default --me
 describe('slice acceptance gate — --no-review skips it (mirror the build Gate-2 off test)', () => {
 	it('review off ⇒ the gate is NEVER invoked and the set still integrates', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(BLOCK); // would block — but must never run
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -193,7 +193,7 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 			integration: 'merge',
 			review: false, // --no-review
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -203,15 +203,15 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 
 	it('review undefined (no gate wired) ⇒ default behaviour unchanged (no gate runs)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
-		const result = await performSlice({
+		seedBrief(repo, 'it');
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
 			// no `review`, no `reviewGate` — the pre-gate behaviour.
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -222,9 +222,9 @@ describe('slice acceptance gate — --no-review skips it (mirror the build Gate-
 describe('slice acceptance gate — BLOCK routes the set to needs-attention (not integrated)', () => {
 	it('review on + BLOCK ⇒ needs-attention, NO slices land, exit 1, findings in the body', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(BLOCK);
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -232,15 +232,15 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 			integration: 'merge',
 			review: true,
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
 		expect(gate.calls).toBe(1);
-		// The slice-path block route is a per-item lock `active → stuck` amend now
-		// (slice `cutover-...-trim-folder-sets`), NOT a folder move: the PRD body STAYS
-		// in work/briefs/ready/, the slices did NOT land, and NO needs-attention/ or slicing/
+		// The task-path block route is a per-item lock `active → stuck` amend now
+		// (task `cutover-...-trim-folder-sets`), NOT a folder move: the brief body STAYS
+		// in work/briefs/ready/, the tasks did NOT land, and NO needs-attention/ or tasking/
 		// folder file is written.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
@@ -260,9 +260,9 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 
 	it('a BLOCK on the --propose path also routes to needs-attention (no PR of a blocked set)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(BLOCK);
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -270,11 +270,11 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 			integration: 'propose',
 			review: true,
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('needs-attention');
-		// The block route is the stuck lock; the PRD body stays in prd/, no PR opened.
+		// The block route is the stuck lock; the brief body stays in brief/, no PR opened.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
@@ -291,9 +291,9 @@ describe('slice acceptance gate — BLOCK routes the set to needs-attention (not
 describe('slice acceptance gate — ONE-SHOT (single invocation, no rounds)', () => {
 	it('a persistent BLOCK is NOT re-reviewed: the gate runs exactly ONCE (round 1), no --review-max-rounds loop', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(BLOCK); // always blocks
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -301,7 +301,7 @@ describe('slice acceptance gate — ONE-SHOT (single invocation, no rounds)', ()
 			integration: 'merge',
 			review: true,
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		// ONE-SHOT: the gate was invoked exactly once (round 1), then terminated to
@@ -311,10 +311,10 @@ describe('slice acceptance gate — ONE-SHOT (single invocation, no rounds)', ()
 		expect(result.outcome).toBe('needs-attention');
 	});
 
-	it('performSlice has NO --review-max-rounds knob on the slice path (the gate is terminal)', () => {
-		// The slice path's options carry NO `reviewMaxRounds` field — the rounds
+	it('performTask has NO --review-max-rounds knob on the slice path (the gate is terminal)', () => {
+		// The task path's options carry NO `reviewMaxRounds` field — the rounds
 		// bound is an orphan that belongs to a future revise↔review loop, never a
-		// gate. (Type-level assertion: this object is a valid PerformSliceOptions
+		// gate. (Type-level assertion: this object is a valid PerformTaskOptions
 		// fragment ONLY because it has no reviewMaxRounds; a TS error here would
 		// catch a regression that added the knob.)
 		const fragment = {review: true} as const;
@@ -325,9 +325,9 @@ describe('slice acceptance gate — ONE-SHOT (single invocation, no rounds)', ()
 describe('slice acceptance gate — --review-model de-correlates the reviewer', () => {
 	it('the acceptanceReviewModel override reaches the gate (the launch seam)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(APPROVE);
-		await performSlice({
+		await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -336,7 +336,7 @@ describe('slice acceptance gate — --review-model de-correlates the reviewer', 
 			review: true,
 			reviewGate: gate,
 			acceptanceReviewModel: 'review/override',
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(gate.models).toEqual(['review/override']);
@@ -345,9 +345,9 @@ describe('slice acceptance gate — --review-model de-correlates the reviewer', 
 
 describe('slice acceptance gate — independent of the slicer improver loop', () => {
 	// A canned improver-loop gate (converge, no edits) so both seams are wired at
-	// once. The two are non-overlapping concepts: the loop EDITS slices in-context;
+	// once. The two are non-overlapping concepts: the loop EDITS tasks in-context;
 	// the gate is a terminal fresh-context accept/reject BEFORE integrate.
-	const convergingLoop: SliceReviewGate = async () => ({
+	const convergingLoop: TaskReviewGate = async () => ({
 		verdict: 'approve',
 		edits: [],
 		findings: [],
@@ -355,9 +355,9 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 
 	it('the gate runs even when the improver loop is wired (toggling one does not affect the other)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(APPROVE);
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -365,10 +365,10 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 			integration: 'merge',
 			// BOTH seams on: the improver loop AND the acceptance gate.
 			reviewLoop: convergingLoop,
-			slicerLoopMax: 1,
+			taskerLoopMax: 1,
 			review: true,
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('sliced');
@@ -378,19 +378,19 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 
 	it('the gate is OFF independently while the improver loop is ON (review off, loop on)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedPrd(repo, 'it');
+		seedBrief(repo, 'it');
 		const gate = stubGate(BLOCK); // would block — but review is off so it never runs
-		const result = await performSlice({
+		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
 			reviewLoop: convergingLoop, // improver loop ON
-			slicerLoopMax: 1,
+			taskerLoopMax: 1,
 			review: false, // acceptance gate OFF
 			reviewGate: gate,
-			agentRunner: slicingAgent('child'),
+			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		// The set landed (the loop converged), and the gate never ran.
@@ -402,8 +402,8 @@ describe('slice acceptance gate — independent of the slicer improver loop', ()
 
 describe('slice acceptance gate — the prompt is a slice-SET prompt (distinct from the build per-diff prompt)', () => {
 	it('the slice-SET prompt reviews the WHOLE SET (coherence / graph / gaps+overlap), NOT a code diff', () => {
-		const prompt = buildSliceAcceptancePrompt('it');
-		// It frames a SET review with the set-of-slices lens…
+		const prompt = buildTaskAcceptancePrompt('it');
+		// It frames a SET review with the set-of-tasks lens…
 		expect(prompt).toMatch(/slice-SET ACCEPTANCE GATE/);
 		expect(prompt).toMatch(/WHOLE SET/);
 		expect(prompt).toMatch(/DEPENDENCY GRAPH/);
@@ -415,11 +415,11 @@ describe('slice acceptance gate — the prompt is a slice-SET prompt (distinct f
 	});
 
 	it('it is demonstrably DISTINCT from the build per-diff review prompt', () => {
-		const setPrompt = buildSliceAcceptancePrompt('it');
+		const setPrompt = buildTaskAcceptancePrompt('it');
 		const buildPrompt = buildReviewPrompt('it');
 		expect(setPrompt).not.toBe(buildPrompt);
-		// The build prompt reviews a code DIFF against ONE slice; the set prompt
-		// reviews the SET of slices against the PRD.
+		// The build prompt reviews a code DIFF against ONE task; the set prompt
+		// reviews the SET of tasks against the brief.
 		expect(buildPrompt).toMatch(/code changes/);
 		expect(setPrompt).not.toMatch(/review the code changes/);
 		expect(setPrompt).toMatch(/candidate slices/);

@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 /** Seed a `work/tasks/todo/<slug>.md` slice with the given gate frontmatter. */
-function seedSlice(
+function seedTask(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
 ): void {
@@ -56,7 +56,7 @@ function seedDone(slug: string): void {
 }
 
 /** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
-function seedPrd(
+function seedBrief(
 	slug: string,
 	fm: {
 		humanOnly?: boolean;
@@ -80,7 +80,7 @@ function seedPrd(
  * (`work/briefs/ready/`) and now resolves another PRD's `briefAfter` by FOLDER residence
  * (the `sliced:` marker was removed in `remove-sliced-marker-step-b`).
  */
-function seedSlicedPrd(slug: string): void {
+function seedTaskedBrief(slug: string): void {
 	const fromDir = join(repo, 'work', 'briefs', 'ready');
 	const from = join(fromDir, `${slug}.md`);
 	rmSync(from, {force: true});
@@ -127,7 +127,7 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 	// so the seeded slice MUST be auto-picked. Before the override was threaded
 	// into `performDoAuto`, the committed `false` stood and nothing ran.
 	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (slice is auto-picked)', async () => {
-		seedSlice('alpha');
+		seedTask('alpha');
 		writeFileSync(
 			join(repo, '.agent-runner.json'),
 			JSON.stringify({autoBuild: false}),
@@ -147,7 +147,7 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 	// CONTROL: same fixture, NO override ⇒ the committed `autoBuild: false` stands,
 	// so the slice is ineligible and nothing is auto-picked.
 	it('control: WITHOUT the override the committed autoBuild:false stands (nothing auto-picked)', async () => {
-		seedSlice('alpha');
+		seedTask('alpha');
 		writeFileSync(
 			join(repo, '.agent-runner.json'),
 			JSON.stringify({autoBuild: false}),
@@ -164,9 +164,9 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 
 describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 	it('auto-picks the first eligible SLICE when slices exist', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedTask('beta');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -175,8 +175,8 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 	});
 
 	it('auto-picks a PRD (do prd:<slug>) when NO slice is eligible', async () => {
-		seedSlice('humanly', {humanOnly: true}); // not eligible
-		seedPrd('gamma');
+		seedTask('humanly', {humanOnly: true}); // not eligible
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -195,9 +195,9 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 
 describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 	it('takes x items, slices first then PRDs, in order', async () => {
-		seedSlice('alpha');
-		seedPrd('gamma');
-		seedPrd('delta');
+		seedTask('alpha');
+		seedBrief('gamma');
+		seedBrief('delta');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
 			...base(run),
@@ -210,9 +210,9 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 	});
 
 	it('-n bounds the count (does not over-take)', async () => {
-		seedSlice('alpha');
-		seedSlice('beta');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedTask('beta');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 2});
 		expect(args).toEqual(['alpha', 'beta']); // count caps at 2; PRD untouched
@@ -255,16 +255,16 @@ describe('do <a> <b> — explicit multi-arg, in the GIVEN order', () => {
 
 describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 	it('default (drain): an eligible SLICE outranks a sliceable PRD', async () => {
-		seedSlice('alpha');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 1});
 		expect(args).toEqual(['alpha']);
 	});
 
 	it('[slice, build, ...] (== old prdsFirst:true): a sliceable PRD outranks an eligible slice', async () => {
-		seedSlice('alpha');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({
 			...base(run),
@@ -275,8 +275,8 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 	});
 
 	it('the FULL ordering flips with the order (all slices vs all PRDs)', async () => {
-		seedSlice('alpha');
-		seedPrd('gamma');
+		seedTask('alpha');
+		seedBrief('gamma');
 		const off = recordingRunner();
 		await performDoAuto({...base(off.run), config: cfg(), count: 9});
 		expect(off.args).toEqual(['alpha', 'brief:gamma']);
@@ -293,7 +293,7 @@ describe('slices-first PRIORITY + the configurable selectionOrder FLIP', () => {
 
 describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 	it('autoTask OFF ⇒ no PRD is selected even with no slices', async () => {
-		seedPrd('gamma');
+		seedBrief('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
 			...base(run),
@@ -305,10 +305,10 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 	});
 
 	it('a humanOnly / needsAnswers PRD is excluded; a briefAfter-blocked one too', async () => {
-		seedPrd('human', {humanOnly: true});
-		seedPrd('asks', {needsAnswers: true});
-		seedPrd('beta', {briefAfter: ['alpha']}); // alpha not sliced
-		seedPrd('ready'); // the only sliceable one
+		seedBrief('human', {humanOnly: true});
+		seedBrief('asks', {needsAnswers: true});
+		seedBrief('beta', {briefAfter: ['alpha']}); // alpha not sliced
+		seedBrief('ready'); // the only sliceable one
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
 		expect(args).toEqual(['brief:ready']);
@@ -317,8 +317,8 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 	it('a briefAfter PRD becomes selectable once its blocker resides in prd-sliced/ (folder residence, not done/)', async () => {
 		// beta's blocker alpha is UNSLICED ⇒ beta is excluded (alpha itself is
 		// sliceable: the gate does not exclude an unsliced PRD).
-		seedPrd('alpha');
-		seedPrd('beta', {briefAfter: ['alpha']});
+		seedBrief('alpha');
+		seedBrief('beta', {briefAfter: ['alpha']});
 		const blocked = recordingRunner();
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
 		expect(blocked.args).toEqual(['brief:alpha']);
@@ -327,15 +327,15 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		// beta's briefAfter is satisfied (resolved against FOLDER residence) and beta
 		// joins the pool. alpha itself has LEFT the to-slice pool (it now rests in
 		// prd-sliced/), so only beta is selectable.
-		seedSlicedPrd('alpha');
+		seedTaskedBrief('alpha');
 		const unblocked = recordingRunner();
 		await performDoAuto({...base(unblocked.run), config: cfg(), count: 9});
 		expect(unblocked.args).toEqual(['brief:beta']);
 	});
 
 	it('blocked slice is excluded from the slice pool (existing eligibility path)', async () => {
-		seedSlice('beta', {blockedBy: ['alpha']}); // alpha not done ⇒ blocked
-		seedSlice('alpha'); // eligible
+		seedTask('beta', {blockedBy: ['alpha']}); // alpha not done ⇒ blocked
+		seedTask('alpha'); // eligible
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
 		// only alpha is eligible; beta is blocked. (no PRDs seeded)
@@ -354,7 +354,7 @@ describe('each selected item runs the EXISTING performDo pipeline', () => {
 		// We do not drive a full git pipeline here; just prove the default wiring is
 		// `performDo` (not a re-implementation). With no slices/PRDs the layer never
 		// calls it, so this asserts the DEFAULT identity without side-effects.
-		seedSlice('humanly', {humanOnly: true}); // nothing eligible
+		seedTask('humanly', {humanOnly: true}); // nothing eligible
 		const result = await performDoAuto({cwd: repo, config: cfg()});
 		expect(result.exitCode).toBe(0);
 		expect(result.results).toEqual([]);

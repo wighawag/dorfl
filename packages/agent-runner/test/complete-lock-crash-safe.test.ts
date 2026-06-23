@@ -18,7 +18,7 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
-	prdFile,
+	briefFile,
 	type Scratch,
 	fixtureFolderRel,
 } from './helpers/gitRepo.js';
@@ -224,7 +224,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 
 	it('clears a stale ACTIVE PRD lock when main shows the PRD prd-sliced', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['z'], {
-			prds: ['zeta'],
+			briefs: ['zeta'],
 		});
 		await acquireItemLock({
 			item: 'brief:zeta',
@@ -233,7 +233,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		seedTerminalOnArbiter(arbiter, 'prd-sliced', 'zeta', prdFile('zeta'));
+		seedTerminalOnArbiter(arbiter, 'prd-sliced', 'zeta', briefFile('zeta'));
 
 		const rec = await reconcileItemLockAgainstMain({
 			item: 'brief:zeta',

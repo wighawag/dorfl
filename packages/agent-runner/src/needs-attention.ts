@@ -900,7 +900,7 @@ export async function promoteFromPreBacklog(
  * (NEVER thrown) via `{moved: false, reasonNotMoved}` so callers branch
  * cleanly. Idempotent: re-running after the move LANDED is a no-op success.
  */
-export interface PromoteFromPrePrdOptions {
+export interface PromoteFromPreBriefOptions {
 	/** The working clone the move is originated from (origin source only; never written). */
 	cwd: string;
 	/** The slug of the staged PRD to promote into the pool. */
@@ -913,7 +913,7 @@ export interface PromoteFromPrePrdOptions {
 	note?: (message: string) => void;
 }
 
-export interface PromoteFromPrePrdResult {
+export interface PromoteFromPreBriefResult {
 	/** True iff the staged PRD was moved into the pool + committed. */
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
@@ -922,9 +922,9 @@ export interface PromoteFromPrePrdResult {
 	reasonNotMoved?: string;
 }
 
-export async function promoteFromPrePrd(
-	options: PromoteFromPrePrdOptions,
-): Promise<PromoteFromPrePrdResult> {
+export async function promoteFromPreBrief(
+	options: PromoteFromPreBriefOptions,
+): Promise<PromoteFromPreBriefResult> {
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
@@ -1105,20 +1105,20 @@ export async function listPromotable(
 	// not a checkout — the working tree is untouched), exactly as the promote
 	// functions do before their residence probe.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
-	const slices = await listMarkdownSlugsInTree(
+	const tasks = await listMarkdownSlugsInTree(
 		`${arbiter}/main:${workFolderRel('tasks-backlog')}`,
 		cwd,
 		env,
 	);
-	const prds = await listMarkdownSlugsInTree(
+	const briefs = await listMarkdownSlugsInTree(
 		`${arbiter}/main:${workFolderRel('briefs-proposed')}`,
 		cwd,
 		env,
 	);
 	return {
 		items: [
-			...slices.map((slug) => ({namespace: 'task' as const, slug})),
-			...prds.map((slug) => ({namespace: 'brief' as const, slug})),
+			...tasks.map((slug) => ({namespace: 'task' as const, slug})),
+			...briefs.map((slug) => ({namespace: 'brief' as const, slug})),
 		],
 	};
 }

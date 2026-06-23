@@ -3,7 +3,7 @@ import {
 	acquireAdvancingLock,
 	releaseAdvancingLock,
 } from '../src/advancing-lock.js';
-import {acquireSlicingLock} from '../src/slicing-lock.js';
+import {acquireTaskingLock} from '../src/tasking-lock.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performAdvance} from '../src/advance.js';
 import type {SurfaceGate} from '../src/surface-gate.js';
@@ -233,7 +233,7 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 	});
 
 	it('advance∥slice: a tree-less advance on a PRD makes a concurrent slicing lose the SAME ref', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['beta']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['beta']});
 		const adv = raceClone(seeded, 'adv');
 		const advance = await acquireAdvancingLock({
 			item: 'brief:beta',
@@ -247,14 +247,14 @@ describe('advance∥claim and advance∥slice exclusion on the SAME item (tree-l
 
 		// A slicing of the SAME PRD now loses the create-only lock CAS.
 		const slc = raceClone(seeded, 'slc');
-		const slicing = await acquireSlicingLock({
+		const tasking = await acquireTaskingLock({
 			slug: 'beta',
 			cwd: slc,
 			arbiter: ARBITER,
 			env: racerEnv('slc'),
 		});
-		expect(slicing.exitCode).toBe(2);
-		expect(slicing.outcome).toBe('lost');
+		expect(tasking.exitCode).toBe(2);
+		expect(tasking.outcome).toBe('lost');
 		// The PRD never moved to slicing/; the advance hold is the single winner.
 		expect(existsOnArbiterMain(slc, 'backlog', 'beta')).toBe(false);
 		const entry = await readItemLock({
@@ -349,7 +349,7 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 			cwd: repo,
 			arbiter: ARBITER,
 			executor: {
-				buildSlice: async (input) => {
+				buildTask: async (input) => {
 					heldDuringExec = lockRefOnArbiter(arbiter, 'task-bar');
 					return {
 						exitCode: 0,
@@ -357,7 +357,11 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 						message: `built ${input.item}`,
 					};
 				},
-				slicePrd: async () => ({exitCode: 0, outcome: 'advanced', message: ''}),
+				taskBrief: async () => ({
+					exitCode: 0,
+					outcome: 'advanced',
+					message: '',
+				}),
 				triageObservation: async () => ({
 					exitCode: 0,
 					outcome: 'advanced',

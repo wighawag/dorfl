@@ -9,7 +9,7 @@
  *     uses `issue:` XOR `prd:`; a lone slice closes its own `issue:` directly, a
  *     fanned slice/PRD reaches the number via `slice.prd: → work/prd/<prd>.md PRD
  *     issue:`, and `prd:` WINS on a (hand-edited) conflict;
- *   - the QUERY — {@link isPrdComplete} (`prd-complete.ts`, slice
+ *   - the QUERY — {@link isBriefComplete} (`brief-complete.ts`, slice
  *     `prd-complete-query`, done): a PRD is COMPLETE iff ≥1 `prd:<slug>` slice AND
  *     all such slices are in `work/done/`;
  *   - the CLOSE — {@link IssueProvider.closeIssue} (`issue-provider.ts`, the atomic
@@ -21,7 +21,7 @@
  *
  *   - a **lone slice** (`issue:`, no `prd:`) that resides in `work/done/` — its PR
  *     merged, so its own issue closes (reason `completed`);
- *   - a **PRD** (`issue:`) — closes ONLY when {@link isPrdComplete} says ALL its
+ *   - a **PRD** (`issue:`) — closes ONLY when {@link isBriefComplete} says ALL its
  *     `prd:<slug>` slices are in `work/done/` (reason `completed`).
  *
  * A PRD whose query is NOT yet complete is left OPEN (the final fanned slice's
@@ -46,7 +46,7 @@ import {
 	isWorkItemFile,
 } from './work-layout.js';
 import {parseFrontmatter, resolveClosingIssue} from './frontmatter.js';
-import {isPrdComplete} from './prd-complete.js';
+import {isBriefComplete} from './brief-complete.js';
 import {
 	type IssueProvider,
 	type IssueCloseReason,
@@ -115,14 +115,17 @@ function listMarkdown(repoPath: string, folder: WorkFolderKey): string[] {
  * `undefined` when no PRD with that slug carries an `issue:` (a PRD with no source
  * issue, or a typo'd `prd:` hop — degrades to "no issue to close", never crashes).
  */
-function prdIssueNumber(repoPath: string, prdSlug: string): number | undefined {
+function briefIssueNumber(
+	repoPath: string,
+	briefSlug: string,
+): number | undefined {
 	for (const folder of BRIEF_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
 				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
 			);
 			const slug = fm.slug ?? basename(file, '.md');
-			if (slug === prdSlug && fm.issue !== undefined) {
+			if (slug === briefSlug && fm.issue !== undefined) {
 				return fm.issue;
 			}
 		}
@@ -150,8 +153,8 @@ function resolveCandidates(repoPath: string): {
 	slug: string;
 }[] {
 	const seen = new Set<number>();
-	const prdCandidates: {issueNumber: number; via: 'prd'; slug: string}[] = [];
-	const sliceCandidates: {issueNumber: number; via: 'issue'; slug: string}[] =
+	const briefCandidates: {issueNumber: number; via: 'prd'; slug: string}[] = [];
+	const taskCandidates: {issueNumber: number; via: 'issue'; slug: string}[] =
 		[];
 
 	// PRD candidates: a PRD's `issue:` closes when ITS query is complete.
@@ -167,7 +170,7 @@ function resolveCandidates(repoPath: string): {
 			// `issue:`-bearing PRD becomes a candidate here.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
-				prdCandidates.push({issueNumber: closing.issue, via: 'prd', slug});
+				briefCandidates.push({issueNumber: closing.issue, via: 'prd', slug});
 			}
 		}
 	}
@@ -186,24 +189,24 @@ function resolveCandidates(repoPath: string): {
 			// its issue through the PRD candidate above.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
-				sliceCandidates.push({issueNumber: closing.issue, via: 'issue', slug});
+				taskCandidates.push({issueNumber: closing.issue, via: 'issue', slug});
 			}
 		}
 	}
 
-	prdCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
-	sliceCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
-	return [...prdCandidates, ...sliceCandidates];
+	briefCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
+	taskCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
+	return [...briefCandidates, ...taskCandidates];
 }
 
 /** True iff the lone slice with this slug resides in `work/done/`. */
-function loneSliceLanded(repoPath: string, sliceSlug: string): boolean {
+function loneTaskLanded(repoPath: string, taskSlug: string): boolean {
 	for (const file of listMarkdown(repoPath, 'done')) {
 		const fm = parseFrontmatter(
 			readFileSync(join(repoPath, workItemRel('done', file)), 'utf8'),
 		);
 		const slug = fm.slug ?? basename(file, '.md');
-		if (slug === sliceSlug) {
+		if (slug === taskSlug) {
 			return true;
 		}
 	}
@@ -220,7 +223,7 @@ function closeComment(via: 'issue' | 'prd', slug: string): string {
 /**
  * Run the close-job over a repo's `work/` tree: resolve the closure candidates,
  * apply the per-kind closure condition (a landed lone slice; a PRD whose
- * {@link isPrdComplete} query holds), and close the qualifying issues through the
+ * {@link isBriefComplete} query holds), and close the qualifying issues through the
  * {@link IssueProvider.closeIssue} seam (reason `completed`, an informational
  * comment riding the SAME atomic close). REUSES the unchanged resolution + query +
  * close — it re-implements NONE of them. NEVER throws: a degraded provider close
@@ -240,10 +243,10 @@ export async function runCloseJob(
 		let shouldClose: boolean;
 		let notReady: CloseDecision;
 		if (cand.via === 'prd') {
-			shouldClose = isPrdComplete({repoPath, slug: cand.slug}).complete;
+			shouldClose = isBriefComplete({repoPath, slug: cand.slug}).complete;
 			notReady = 'not-complete';
 		} else {
-			shouldClose = loneSliceLanded(repoPath, cand.slug);
+			shouldClose = loneTaskLanded(repoPath, cand.slug);
 			notReady = 'not-landed';
 		}
 

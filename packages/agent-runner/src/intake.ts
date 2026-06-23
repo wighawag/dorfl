@@ -56,7 +56,7 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  *
  * The engine shape MIRRORS the review gate (prompt → `approve|block` → dispatch):
  * the decision prompt is an INLINE builder ({@link buildIntakeDecisionBrief}, like
- * `buildSlicingBrief`); the **dispatcher is the testable seam** — a STUBBED verdict
+ * `buildTaskingBrief`); the **dispatcher is the testable seam** — a STUBBED verdict
  * (injected, no model/network) drives it, exactly as `ReviewGate` is injected. The
  * prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not); only the
  * dispatch is.
@@ -334,7 +334,7 @@ const DEFAULT_ARBITER = 'origin';
  * `work/prd/`. An item born in `pre-prd/` is durable + readable but NOT in
  * the auto-slice POOL (`work/prd/` STILL means the pool — every existing
  * reader is byte-for-byte unchanged). A runner/human-owned promotion
- * ({@link promoteFromPrePrd} in `needs-attention.ts`) moves an approved PRD
+ * ({@link promoteFromPreBrief} in `needs-attention.ts`) moves an approved PRD
  * `pre-prd/ → prd/` to make it auto-sliceable. STEP A: ADDITIVE — no
  * `work/prd/` reader changes here; the STEP-B `prd/ → prd-ready/` rename is
  * deferred to `folder-taxonomy-reorg-and-rename`.
@@ -1717,7 +1717,7 @@ async function stageIntakeSlice(params: {
 /**
  * ONBOARD the intake write onto a NAMESPACED, INTAKE-PRODUCED branch
  * (`work/intake-slice-<slug>` / `work/intake-prd-<slug>`) cut from the freshly-
- * fetched `<arbiter>/main` (the SAME discipline `slicing.ts` uses). The
+ * fetched `<arbiter>/main` (the SAME discipline `tasking.ts` uses). The
  * `intake-` PRODUCER prefix keeps this short-lived "create the item" branch
  * DISTINCT from the later build branch (`work/slice-<slug>`) for the same slug
  * — the firing `intake` × `do slice:` collision the observation traced. The
@@ -2162,7 +2162,7 @@ export interface HarnessLoneSliceReviewGateOptions {
  * {@link parseLoneSliceReviewVerdict}. The agent makes the review JUDGEMENT (the
  * per-slice + destination lenses on the ONE slice); this gate launches it and parses
  * its verdict. A launch failure THROWS (the dispatcher's try/catch maps it onto
- * `agent-failed`). MIRRORS {@link harnessSliceReviewGate} WITHOUT importing it.
+ * `agent-failed`). MIRRORS {@link harnessTaskReviewGate} WITHOUT importing it.
  */
 export function harnessLoneSliceReviewGate(
 	options: HarnessLoneSliceReviewGateOptions = {},
@@ -2261,7 +2261,7 @@ export function buildLoneSliceReviewPrompt(
 		'    not yet emitted) when tightening the draft fixes the finding.',
 		'  - `questions` — the open question(s) for the human when a blocking issue',
 		'    has no clear thread answer.',
-		'Do NOT fill `review` / `edits` / `uncertainSlices` / `decompositionUnclear`',
+		'Do NOT fill `review` / `edits` / `uncertainTasks` / `decompositionUnclear`',
 		"— those are other callers' channels.",
 	].join('\n');
 }
@@ -2275,8 +2275,8 @@ export function buildLoneSliceReviewPrompt(
 export const parseLoneSliceReviewVerdict = parseReviewVerdict;
 
 /**
- * Build the intake decision BRIEF (an inline prompt builder, like `buildSlicingBrief`
- * in `slicing.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
+ * Build the intake decision BRIEF (an inline prompt builder, like `buildTaskingBrief`
+ * in `tasking.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
  * asset/`.md` file; no such convention exists in this package). It encodes the FULL
  * four-outcome decision table (PRD `issue-intake` — the source of truth) and the
  * three DECISION AIDS stated once there:
@@ -2368,7 +2368,7 @@ export function buildIntakeDecisionBrief(
 		'  ⟺ a shared vision worth recording ⟺ a PRD. Draft a PRD in the `to-prd` shape',
 		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
 		'  The runner writes `work/prd/<slug>.md` with `issue: N` and integrates it;',
-		'  SLICING the PRD is a SEPARATE later step (`do prd:`) — do not slice it here.',
+		'  SLICING the PRD is a SEPARATE later step (`do brief:`) — do not slice it here.',
 		'  **INCLUDES a coupled-but-SMALL pair: if two asks share a vision they get a',
 		'  (light) PRD — they are NEVER bounced.**',
 		'',

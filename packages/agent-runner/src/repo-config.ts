@@ -157,15 +157,15 @@ export const REPO_ALLOWED_KEYS = [
 	'review',
 	'reviewModel',
 	'reviewMaxRounds',
-	// The slicer IMPROVER-loop family (`slicerLoop` on/off, `slicerLoopMax` hard
-	// cap on in-context review passes, `slicerLoopModel` the loop reviewer's
+	// The tasker IMPROVER-loop family (`taskerLoop` on/off, `taskerLoopMax` hard
+	// cap on in-context review passes, `taskerLoopModel` the loop reviewer's
 	// de-correlated model) are genuine repo properties — like `review`/`reviewModel`
 	// they tune the per-repo review discipline, resolved per-repo through the same
-	// chain. They live on the LOOP (slice-generation review), not on a gate, and are
+	// chain. They live on the LOOP (task-generation review), not on a gate, and are
 	// DISTINCT from the acceptance gate's `--review*` family.
-	'slicerLoop',
-	'slicerLoopMax',
-	'slicerLoopModel',
+	'taskerLoop',
+	'taskerLoopMax',
+	'taskerLoopModel',
 	// `freshWorktreeGate` (run the acceptance gate against the REBASED tip in a
 	// clean throwaway worktree, ON by default) is a genuine repo property exactly
 	// like `verify`/`prepare`/`review`: whether this repo's gate tests the merged

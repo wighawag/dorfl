@@ -474,7 +474,7 @@ export interface Config {
 	 * (`--slicer-loop`/`--no-slicer-loop`) > env > per-repo > global > default (on).
 	 * DISTINCT from the acceptance gate's `review` toggle.
 	 */
-	slicerLoop: boolean;
+	taskerLoop: boolean;
 	/**
 	 * **The slicer IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
 	 * GATES PRD `work/prd/review.md` RESOLVED DESIGN — Shape 2 / insertion point
@@ -489,7 +489,7 @@ export interface Config {
 	 * flag (`--slicer-loop-max`) > env > per-repo > global > default. Distinct from
 	 * Gate-2's `reviewMaxRounds`.
 	 */
-	slicerLoopMax: number;
+	taskerLoopMax: number;
 	/**
 	 * The model the slicer IMPROVER loop's review agent runs on (de-correlation
 	 * from the slicer). Optional with NO default so "unset" means "no forced model"
@@ -499,7 +499,7 @@ export interface Config {
 	 * (unset). DISTINCT from the acceptance gate's `reviewModel` (build
 	 * `--review-model`).
 	 */
-	slicerLoopModel?: string;
+	taskerLoopModel?: string;
 	/**
 	 * **The fresh-worktree acceptance-gate toggle** (`--fresh-worktree-gate` /
 	 * `--no-fresh-worktree-gate`). When ON (the default), the acceptance gate
@@ -670,11 +670,11 @@ export const DEFAULT_CONFIG: Config = {
 	// The slicer improver loop is ON by default — auto-slicing has no `verify`
 	// floor, so the loop is the slice path's quality engine (distinct from the
 	// acceptance gate's `review`, which defaults OFF).
-	slicerLoop: true,
+	taskerLoop: true,
 	// The slicer improver loop's hard cap on in-context review passes — a cheap
 	// default so an unattended review→edit→re-review can never run forever (the
 	// natural terminator is "no new blocking issue"; this is the ceiling on top).
-	slicerLoopMax: 3,
+	taskerLoopMax: 3,
 	// The fresh-worktree acceptance gate is ON by default: most CI/tooling caches
 	// deps so `pnpm install` is fast, so correctness-first (the gate tests what
 	// MERGES, not the agent's pre-rebase checkout) is the right default. The

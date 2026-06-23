@@ -92,7 +92,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	});
 
 	/** A `needsAnswers: true` slice in `work/tasks/todo/` (a declared blocker, no sidecar). */
-	function seedBlockedSlice(slug: string): void {
+	function seedBlockedTask(slug: string): void {
 		const dir = join(repo, 'work', 'tasks', 'todo');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
@@ -110,7 +110,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	}
 
 	/** A `needsAnswers: true` PRD in `work/briefs/ready/` (a declared blocker, no sidecar). */
-	function seedBlockedPrd(slug: string): void {
+	function seedBlockedBrief(slug: string): void {
 		const dir = join(repo, 'work', 'briefs', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
@@ -158,7 +158,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	}
 
 	it('off ⇒ the needsAnswers-blocked pool is NOT enumerated (a bare advance picks NOTHING; no sidecar)', async () => {
-		seedBlockedSlice('blocked');
+		seedBlockedTask('blocked');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -177,7 +177,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	});
 
 	it('on ⇒ the blocked SLICE pool IS enumerated (auto-picked as the surface arg)', async () => {
-		seedBlockedSlice('blocked');
+		seedBlockedTask('blocked');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -192,7 +192,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	});
 
 	it('on ⇒ a blocked PRD pool IS enumerated (auto-picked as prd:<slug>)', async () => {
-		seedBlockedPrd('blocked-prd');
+		seedBlockedBrief('blocked-prd');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -205,7 +205,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	});
 
 	it('APPLY is NOT gated: an answered blocker sidecar is auto-picked + applied EVEN under surfaceBlockers off', async () => {
-		seedBlockedSlice('answered');
+		seedBlockedTask('answered');
 		seedAnsweredSidecar('task', 'answered');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
@@ -233,7 +233,7 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 	});
 
 	/** A throwaway repo with one `needsAnswers: true` slice (a declared blocker, no sidecar). */
-	function seedBlockedSlice(slug: string): {repo: string; itemPath: string} {
+	function seedBlockedTask(slug: string): {repo: string; itemPath: string} {
 		const repo = join(scratch.root, slug);
 		mkdirSync(repo, {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
@@ -286,7 +286,7 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 	}
 
 	it('explicit advance <slug> dispatches a declared blocker to the tick EVEN under surfaceBlockers off (the selection gate is bypassed)', async () => {
-		const {repo} = seedBlockedSlice('named');
+		const {repo} = seedBlockedTask('named');
 		// `performAdvanceArgs` is the EXPLICIT-naming path: it dispatches the named item
 		// VERBATIM, never consulting the lifecycle gates (the operator chose it). So the
 		// blocker is dispatched even with surfaceBlockers off.
@@ -301,7 +301,7 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 	});
 
 	it('the single-tick surface rung runs on a named blocker regardless of the gate (performAdvance)', async () => {
-		const {repo} = seedBlockedSlice('direct');
+		const {repo} = seedBlockedTask('direct');
 		const {gate: surface, spawns} = spySurface({
 			item: 'task:direct',
 			questions: [{question: 'which approach?'}],
@@ -348,7 +348,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 		);
 	}
 
-	function seedBlockedSlice(slug: string): void {
+	function seedBlockedTask(slug: string): void {
 		const dir = join(repo, 'work', 'tasks', 'todo');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
@@ -381,7 +381,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 
 	it('observationTriage: ask + surfaceBlockers: off ⇒ the observation surfaces but the blocked slice does NOT (the previously-inexpressible corner)', async () => {
 		seedObservation('stray');
-		seedBlockedSlice('blocked');
+		seedBlockedTask('blocked');
 		const {run, args} = recordingRunner();
 		// The exact cli wiring: triage = observationTriage !== 'off' (ask ⇒ true);
 		// surface = surfaceBlockers (off ⇒ false). Groom the inbox, leave the blocked

@@ -102,7 +102,7 @@ Several caller-specific optional channels MAY ride on the same JSON object. They
 - `edits` — full-content edits to apply between passes in an improver loop: an array of `{path, content}`, where `path` is a repo-relative target (typically `work/tasks/backlog/<slug>.md`) and `content` is the FULL replacement file body. The runner writes them; the agent does no disk/git.
 - `edit` — for the lone-slice review only: a single in-memory full-replacement slice BODY (the markdown AFTER the frontmatter), applied before the next round. No path — the slice has not been emitted yet.
 - `questions` — an array of strings carrying open questions for a human to answer (the non-converge sink in the lone-slice review).
-- `uncertainSlices` — for the slicer improver loop: specific slices to emit `needsAnswers: true` with the questions in their bodies. Each is `{path, questions: string[]}`.
+- `uncertainTasks` — for the slicer improver loop: specific slices to emit `needsAnswers: true` with the questions in their bodies. Each is `{path, questions: string[]}`.
 - `decompositionUnclear` — for the slicer improver loop: when the WHOLE decomposition is unsound, `{questions: string[]}` to record as the PRD's needs-attention reason.
 
 Any unrecognised field is ignored by the parser; the caller routes on `verdict`/`findings` plus the channels its prompt asked for.

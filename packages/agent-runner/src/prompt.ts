@@ -237,7 +237,7 @@ export function applyPromptGuidance(
  */
 export function wrapper(
 	slug: string,
-	prd: string | undefined,
+	brief: string | undefined,
 	options: {
 		protocolPath?: string;
 		cwd?: string;
@@ -252,7 +252,7 @@ export function wrapper(
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
 	const resolved = applyPromptGuidance(template, options.promptGuidance);
-	return resolved.replace(/<slug>/g, slug).replace(/<prd>/g, prd ?? '<prd>');
+	return resolved.replace(/<slug>/g, slug).replace(/<prd>/g, brief ?? '<prd>');
 }
 
 /**
@@ -427,8 +427,8 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
  */
 export function buildAgentPrompt(
 	slug: string,
-	prd: string | undefined,
-	slicePrompt: string,
+	brief: string | undefined,
+	taskPrompt: string,
 	options: {
 		protocolPath?: string;
 		cwd?: string;
@@ -436,23 +436,23 @@ export function buildAgentPrompt(
 		promptGuidance?: {testFirst?: boolean};
 	} = {},
 ): string {
-	const head = wrapper(slug, prd, options);
+	const head = wrapper(slug, brief, options);
 	if (options.continueContext) {
 		const block = buildContinueBlock(slug, options.continueContext);
-		return `${head}\n\n${block}\n\n${slicePrompt}\n`;
+		return `${head}\n\n${block}\n\n${taskPrompt}\n`;
 	}
-	return `${head}\n\n${slicePrompt}\n`;
+	return `${head}\n\n${taskPrompt}\n`;
 }
 
 /**
  * Which work/ folder a slice file was resolved from. `done` is reachable ONLY on
  * a CONTINUE and ONLY when the work-branch tip is STRANDED (committed-but-not-on
  * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE slice
- * (see {@link resolveSlice} + {@link ContinueResolutionGate}).
+ * (see {@link resolveTask} + {@link ContinueResolutionGate}).
  */
 export type TaskFolder = TaskResolutionFolder;
 
-export interface ResolvedSlice {
+export interface ResolvedTask {
 	/** The slug of the resolved slice. */
 	slug: string;
 	/** Absolute path to the slice file that was read. */
@@ -460,9 +460,9 @@ export interface ResolvedSlice {
 	/** The folder the slice was resolved from (in-progress wins over tasks-todo). */
 	folder: TaskFolder;
 	/** The slice's source brief slug (frontmatter `brief:`), if any. */
-	prd: string | undefined;
+	brief: string | undefined;
 	/** The extracted `## Prompt` body. */
-	slicePrompt: string;
+	taskPrompt: string;
 }
 
 export interface PromptOptions {
@@ -488,7 +488,7 @@ export interface PromptOptions {
 export class PromptError extends Error {}
 
 /**
- * The CONTINUE-only gate that lets {@link resolveSlice} reach a slice that has
+ * The CONTINUE-only gate that lets {@link resolveTask} reach a task that has
  * already been done-moved into `work/done/` — story 5 of the `ledger-integrity`
  * PRD (defect 3). A continue/re-claim can legitimately land on a branch whose
  * slice was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
@@ -505,7 +505,7 @@ export class PromptError extends Error {}
  * The reachability predicate REUSES {@link isAncestor} (the one provably-merged
  * primitive in `gc.ts`, the same `merge-base --is-ancestor <tip> <arbiter>/main`
  * the reaper uses) — no second, divergent reachability implementation. Absent
- * this gate (a fresh claim — `resolveSlice` called with no continue gate) the
+ * this gate (a fresh claim — `resolveTask` called with no continue gate) the
  * resolution is UNCHANGED: `in-progress` then `backlog`, blind to `done/`.
  */
 export interface ContinueResolutionGate {
@@ -564,11 +564,11 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
  * is byte-identical to the original `['in-progress','tasks-todo']`-only resolution.
  */
-export function resolveSlice(
+export function resolveTask(
 	cwd: string,
 	slug: string,
 	continueGate?: ContinueResolutionGate,
-): ResolvedSlice {
+): ResolvedTask {
 	const order: TaskFolder[] = ['in-progress', 'tasks-todo'];
 	// `done/` is appended ONLY on a continue whose work-branch tip is STRANDED —
 	// the tip-vs-arbiter gate (NEVER folder name alone). A complete slice (tip on
@@ -582,14 +582,14 @@ export function resolveSlice(
 			continue;
 		}
 		const content = readFileSync(path, 'utf8');
-		const slicePrompt = extractPromptSection(content);
-		if (slicePrompt === undefined) {
+		const taskPrompt = extractPromptSection(content);
+		if (taskPrompt === undefined) {
 			throw new PromptError(
 				`slice '${slug}' (${workFolderRel(folder)}/${slug}.md) has no '## Prompt' section`,
 			);
 		}
 		const fm = parseFrontmatter(content);
-		return {slug, path, folder, prd: fm.brief, slicePrompt};
+		return {slug, path, folder, brief: fm.brief, taskPrompt};
 	}
 	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
 	throw new PromptError(`no slice '${slug}' found in ${searched}`);
@@ -699,7 +699,7 @@ export function renderPrompt(options: PromptOptions): string {
 				'usage: agent-runner prompt [<slug>]',
 		);
 	}
-	const slice = resolveSlice(options.cwd, slug);
+	const task = resolveTask(options.cwd, slug);
 	// Per-item override layer: a task or brief may pin `promptGuidance.testFirst`
 	// in its frontmatter, superseding the resolved repo policy for THIS item.
 	// We ALWAYS walk the resolver (even when no repo policy was threaded), so a
@@ -708,9 +708,9 @@ export function renderPrompt(options: PromptOptions): string {
 	const resolvedGuidance = resolvePromptGuidanceForItem({
 		cwd: options.cwd,
 		repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
-		taskContent: readFileSync(slice.path, 'utf8'),
+		taskContent: readFileSync(task.path, 'utf8'),
 	});
-	return buildAgentPrompt(slice.slug, slice.prd, slice.slicePrompt, {
+	return buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
 		protocolPath: options.protocolPath,
 		cwd: options.cwd,
 		promptGuidance: resolvedGuidance,

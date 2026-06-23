@@ -125,9 +125,9 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	review: 'boolean',
 	reviewModel: 'string',
 	reviewMaxRounds: 'number',
-	slicerLoop: 'boolean',
-	slicerLoopMax: 'number',
-	slicerLoopModel: 'string',
+	taskerLoop: 'boolean',
+	taskerLoopMax: 'number',
+	taskerLoopModel: 'string',
 	// `freshWorktreeGate` is a BOOLEAN coercion (like `slicerLoop`), so
 	// `AGENT_RUNNER_FRESH_WORKTREE_GATE=true|false` works and a typo FAILS LOUDLY.
 	freshWorktreeGate: 'boolean',

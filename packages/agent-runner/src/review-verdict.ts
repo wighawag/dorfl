@@ -5,10 +5,10 @@
  * `skills/setup/protocol/REVIEW-PROTOCOL.md`).
  *
  * This is the keystone of the `runner-invoked-disciplines-into-protocol` brief
- * (slice 1, D4): every runner-invoked review prompt builder
- * ({@link buildReviewPrompt}, {@link buildSliceAcceptancePrompt} in
+ * (task 1, D4): every runner-invoked review prompt builder
+ * ({@link buildReviewPrompt}, {@link buildTaskAcceptancePrompt} in
  * `review-gate.ts`; {@link buildLoneSliceReviewPrompt} in `intake.ts`;
- * {@link buildSliceReviewPrompt} in `slicer-review-loop.ts`) POINTS at
+ * {@link buildTaskReviewPrompt} in `tasker-review-loop.ts`) POINTS at
  * `REVIEW-PROTOCOL.md` for the discipline + calls {@link verdictContractPrompt}
  * for the JSON-emitted-shape prose. None of them re-inlines the lenses or the
  * verdict contract; this module is the single home.
@@ -37,21 +37,21 @@ export interface ReviewFinding {
  * between-passes step). `path` is repo-relative; `content` is the FULL
  * replacement file body. The runner writes it; the agent does no disk/git.
  */
-export interface SliceEdit {
-	/** Repo-relative path of the candidate slice file to write. */
+export interface TaskEdit {
+	/** Repo-relative path of the candidate task file to write. */
 	path: string;
 	/** The full replacement content for that file. */
 	content: string;
 }
 
 /**
- * A slice the review judged UNCERTAIN — emit it `needsAnswers: true` with the
- * questions in its body. Used by the slicer improver loop's non-converge sink.
+ * A task the review judged UNCERTAIN — emit it `needsAnswers: true` with the
+ * questions in its body. Used by the tasker improver loop's non-converge sink.
  */
-export interface UncertainSlice {
-	/** Repo-relative path of the uncertain candidate slice. */
+export interface UncertainTask {
+	/** Repo-relative path of the uncertain candidate task. */
 	path: string;
-	/** The open questions to record in the slice body. */
+	/** The open questions to record in the task body. */
 	questions: string[];
 }
 
@@ -73,18 +73,18 @@ export interface ReviewVerdict {
 	 * gates the verdict (routing uses ONLY `verdict`/`findings`).
 	 */
 	review?: string;
-	/** For the slicer improver loop: full-content edits to apply between passes. */
-	edits?: SliceEdit[];
+	/** For the tasker improver loop: full-content edits to apply between passes. */
+	edits?: TaskEdit[];
 	/**
-	 * For the lone-slice review: a single in-memory full-replacement slice BODY
+	 * For the lone-task review: a single in-memory full-replacement task BODY
 	 * (the markdown AFTER the frontmatter), applied before the next round.
 	 */
 	edit?: string;
-	/** For the lone-slice review: open question(s) carried into the ASK comment. */
+	/** For the lone-task review: open question(s) carried into the ASK comment. */
 	questions?: string[];
-	/** For the slicer improver loop: specific slices to emit `needsAnswers: true`. */
-	uncertainSlices?: UncertainSlice[];
-	/** For the slicer improver loop: route the WHOLE PRD to needs-attention. */
+	/** For the tasker improver loop: specific tasks to emit `needsAnswers: true`. */
+	uncertainTasks?: UncertainTask[];
+	/** For the tasker improver loop: route the WHOLE brief to needs-attention. */
 	decompositionUnclear?: {questions: string[]};
 }
 
@@ -145,7 +145,7 @@ function validateVerdict(parsed: unknown): ReviewVerdict {
 		};
 	});
 	const edits = parseEdits(obj.edits);
-	const uncertainSlices = parseUncertainSlices(obj.uncertainSlices);
+	const uncertainTasks = parseUncertainTasks(obj.uncertainTasks);
 	const decompositionUnclear = parseDecompositionUnclear(
 		obj.decompositionUnclear,
 	);
@@ -159,16 +159,16 @@ function validateVerdict(parsed: unknown): ReviewVerdict {
 		...(typeof obj.edit === 'string' ? {edit: obj.edit} : {}),
 		...(edits.length > 0 ? {edits} : {}),
 		...(questions.length > 0 ? {questions} : {}),
-		...(uncertainSlices.length > 0 ? {uncertainSlices} : {}),
+		...(uncertainTasks.length > 0 ? {uncertainTasks} : {}),
 		...(decompositionUnclear ? {decompositionUnclear} : {}),
 	};
 }
 
-function parseEdits(raw: unknown): SliceEdit[] {
+function parseEdits(raw: unknown): TaskEdit[] {
 	if (!Array.isArray(raw)) {
 		return [];
 	}
-	const out: SliceEdit[] = [];
+	const out: TaskEdit[] = [];
 	for (const e of raw) {
 		if (typeof e !== 'object' || e === null) {
 			continue;
@@ -181,11 +181,11 @@ function parseEdits(raw: unknown): SliceEdit[] {
 	return out;
 }
 
-function parseUncertainSlices(raw: unknown): UncertainSlice[] {
+function parseUncertainTasks(raw: unknown): UncertainTask[] {
 	if (!Array.isArray(raw)) {
 		return [];
 	}
-	const out: UncertainSlice[] = [];
+	const out: UncertainTask[] = [];
 	for (const u of raw) {
 		if (typeof u !== 'object' || u === null) {
 			continue;
@@ -243,7 +243,7 @@ export function verdictContractPrompt(): string {
 		' "edits": [ {"path": "work/tasks/backlog/<slug>.md", "content": "<full replacement>"} ],',
 		' "edit": "<single in-memory replacement body, for the lone-slice review>",',
 		' "questions": ["<open question for the human>"],',
-		' "uncertainSlices": [ {"path": "work/tasks/backlog/<slug>.md", "questions": ["\u2026"]} ],',
+		' "uncertainTasks": [ {"path": "work/tasks/backlog/<slug>.md", "questions": ["\u2026"]} ],',
 		' "decompositionUnclear": {"questions": ["\u2026"]}}',
 		'```',
 		'',
@@ -256,7 +256,7 @@ export function verdictContractPrompt(): string {
 		'  re-deriving it. `context` is the relevant excerpt, `file:line`, or',
 		'  reasoning.',
 		'- The optional channels (`review`, `edits`, `edit`, `questions`,',
-		'  `uncertainSlices`, `decompositionUnclear`) are OPT-IN: only fill the ones',
+		'  `uncertainTasks`, `decompositionUnclear`) are OPT-IN: only fill the ones',
 		"  the caller's framing names. Unused channels are ignored.",
 	].join('\n');
 }
