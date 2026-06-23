@@ -1608,7 +1608,7 @@ export async function listItemLocks(
  * (needs-attention) holds + their reasons WITHOUT N fetches). Sorted by `entry`.
  * Best-effort: a fetch/read fault yields an EMPTY list, so the read-only
  * `status`/`scan` views degrade to "no in-flight locks" rather than erroring
- * (parity with {@link heldSliceSlugs}).
+ * (parity with {@link heldTaskSlugs}).
  */
 export async function listItemLockEntries(
 	cwd: string,

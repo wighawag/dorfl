@@ -26,7 +26,7 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  *
  * It is PURE: no git, no mutation, no side effects beyond the two cheap EXISTENCE
  * reads (slice through the existing read seam; PRD through the seam's new
- * `resolvePrdExistence` PRD reader — the single shared PRD read path the later
+ * `resolveBriefExistence` brief reader — the single shared PRD read path the later
  * autoslice / `do prd:` work reuses).
  *
  * This mirrors the field-level namespace split the contract already makes (task
@@ -198,7 +198,7 @@ export interface ResolveSlugInput {
 	repoPath: string;
 	/**
 	 * The read seam to resolve existence through (task via `resolveLocalState`,
-	 * brief via `resolvePrdExistence`). Defaults to the active {@link ledgerRead};
+	 * brief via `resolveBriefExistence`). Defaults to the active {@link ledgerRead};
 	 * injectable for tests.
 	 */
 	read?: LedgerReadStrategy;

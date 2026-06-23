@@ -189,8 +189,8 @@ export interface DoOptions {
 	 * (`do-autopick.ts`'s sliceable-PRD pool): "may an agent auto-task an
 	 * UNDECLARED brief in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
-	 * `performSlice` — naming the brief IS the authorization, exactly as `do <slice>`
-	 * builds regardless of `autoBuild`). Ignored by the slice-build path.
+	 * `performTask` — naming the brief IS the authorization, exactly as `do <slice>`
+	 * builds regardless of `autoBuild`). Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
 	/**
@@ -203,16 +203,16 @@ export interface DoOptions {
 	 */
 	promptGuidance?: PromptGuidance;
 	/**
-	 * **The slicer review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
-	 * consumed ONLY by the `do prd:<slug>` slicing path — after the agent produces
-	 * candidate slices, run the `review` SKILL as a review→edit→re-review loop that
+	 * **The tasker review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
+	 * consumed ONLY by the `do prd:<slug>` tasking path — after the agent produces
+	 * candidate tasks, run the `review` SKILL as a review→edit→re-review loop that
 	 * improves them, routing the verdict through the needsAnswers / needs-attention
-	 * sink. Ignored by the slice-build path. Omitted ⇒ no loop (candidate slices land
-	 * as-is). Production wires {@link harnessSliceReviewGate}; tests inject a canned
+	 * sink. Ignored by the task-build path. Omitted ⇒ no loop (candidate tasks land
+	 * as-is). Production wires {@link harnessTaskReviewGate}; tests inject a canned
 	 * verdict+edits.
 	 */
 	reviewLoop?: TaskReviewGate;
-	/** The slicer improver loop's `slicerLoopMax` cap (flag > env > per-repo > global > default). Loop only. */
+	/** The tasker improver loop's `slicerLoopMax` cap (flag > env > per-repo > global > default). Loop only. */
 	taskerLoopMax?: number;
 	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
 	taskerLoopModel?: string;
@@ -227,14 +227,14 @@ export interface DoOptions {
 	 * slice-BUILD `performComplete` → `performIntegration` so an explicit `--merge`
 	 * OVERRIDES the untrusted-origin build-propose rule. The autonomous/CI path (a bare
 	 * `advance`/`do` auto-pick) passes no flag ⇒ unset ⇒ an untrusted-origin slice
-	 * reliably forces `propose`. (Build transition only; the slicing transition is
+	 * reliably forces `propose`. (Build transition only; the tasking transition is
 	 * unaffected — a slice FILE landing on main is inert.)
 	 */
 	explicitMerge?: boolean;
 	/**
-	 * **Per-TRANSITION override for the SLICING transition only** (config
-	 * `taskingIntegration`). Consumed ONLY by the `do prd:<slug>` slicing path: the
-	 * value threaded into {@link performSlice} is `taskingIntegration ?? integration`,
+	 * **Per-TRANSITION override for the TASKING transition only** (config
+	 * `taskingIntegration`). Consumed ONLY by the `do prd:<slug>` tasking path: the
+	 * value threaded into {@link performTask} is `taskingIntegration ?? integration`,
 	 * so an unset override is byte-for-byte today's behaviour (slicing uses
 	 * `integration`). The slice-BUILD path ALWAYS threads `integration` (never this
 	 * key). An explicit `--merge`/`--propose` flag wins over BOTH (the flag-override
@@ -246,11 +246,11 @@ export interface DoOptions {
 	 * **The per-repo SLICE-PLACEMENT default** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #5, slice
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Consumed by
-	 * the `do prd:<slug>` slicing path: the value is fed as the
+	 * the `do prd:<slug>` tasking path: the value is fed as the
 	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
 	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
 	 * `taskingIntegration` (flag > env > per-repo > global > built-in
-	 * `pre-backlog`). The slice-BUILD path ignores it (placement is a SLICING
+	 * `pre-backlog`). The task-BUILD path ignores it (placement is a SLICING
 	 * lifecycle concern).
 	 */
 	tasksLandIn?: 'pre-backlog' | 'todo';
@@ -325,7 +325,7 @@ export interface DoOptions {
 	reviewGate?: ReviewGate;
 	/**
 	 * **The slice-SET ACCEPTANCE GATE seam** (slice `slice-acceptance-gate`):
-	 * consumed ONLY by the `do prd:<slug>` slicing path. When `review` resolves on,
+	 * consumed ONLY by the `do prd:<slug>` tasking path. When `review` resolves on,
 	 * a fresh-context review of the produced slice SET runs BEFORE the slices
 	 * integrate (riding `performIntegration`'s review block); `block` routes the set
 	 * to needs-attention, `approve` lets it integrate. It rides the SAME BUILD
@@ -451,12 +451,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * Per-repo `autoTask` policy — gates the AUTO-PICK / pool path only. An
 	 * EXPLICITLY-named `do --remote prd:<slug>` tasks regardless of it (the
 	 * dispatch passes `explicit: true`), mirroring `do <slice>` vs `autoBuild`.
-	 * Ignored by the slice-build path.
+	 * Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
-	/** The slicer review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
+	/** The tasker review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
 	reviewLoop?: TaskReviewGate;
-	/** The slicer improver loop's `slicerLoopMax` cap. Loop only. */
+	/** The tasker improver loop's `slicerLoopMax` cap. Loop only. */
 	taskerLoopMax?: number;
 	/** The slicer improver loop's de-correlated review model (`--slicer-loop-model`). Loop only. */
 	taskerLoopModel?: string;
@@ -466,13 +466,13 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	integration?: IntegrationMode;
 	/**
 	 * The explicit `--merge` override for the untrusted-origin build-propose rule on the
-	 * `do --remote` slice-BUILD path. See {@link DoOptions.explicitMerge}.
+	 * `do --remote` task-BUILD path. See {@link DoOptions.explicitMerge}.
 	 */
 	explicitMerge?: boolean;
 	/**
-	 * **Per-TRANSITION override for the SLICING transition only** (config
+	 * **Per-TRANSITION override for the TASKING transition only** (config
 	 * `taskingIntegration`) on the `do --remote prd:<slug>` path: threaded into
-	 * {@link performSlice} as `taskingIntegration ?? integration`. Unset ⇒ slicing
+	 * {@link performTask} as `taskingIntegration ?? integration`. Unset ⇒ slicing
 	 * uses `integration` (today's behaviour); the slice-BUILD path always threads
 	 * `integration`. See {@link DoOptions.taskingIntegration}.
 	 */
@@ -480,7 +480,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	/**
 	 * **The per-repo TASK-PLACEMENT default** (PRD
 	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
-	 * prd:<slug>` path: threaded into {@link performSlice} as the
+	 * prd:<slug>` path: threaded into {@link performTask} as the
 	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
 	 */
 	tasksLandIn?: 'pre-backlog' | 'todo';
@@ -544,7 +544,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
- * Map a `do prd:<slug>` {@link SliceResult} onto the `do` {@link DoResult}
+ * Map a `do brief:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
  * contract: outcomes pass through (sliced / gate-refused / stale / agent-failed /
  * usage-error), the lock-lost outcome splits into `lost` (exit 2) vs `contended`
  * (exit 3) by its exit code, and the slicing-only exit 4 (stale) is reported on
@@ -683,15 +683,15 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			explicit: true,
 			// The injected agent runner (tests) writes slice files directly. The
 			// DoAgentRunner shape is a structural superset of SliceAgentRunner (its
-			// extra `output` is ignored by the slicing path), so it threads straight in.
+			// extra `output` is ignored by the tasking path), so it threads straight in.
 			agentRunner: options.agentRunner,
 			harness: options.harness,
 			agentCmd: options.agentCmd,
 			model: options.model,
 			sessionsDir: options.sessionsDir,
 			// The integrate-time args (slice `slice-output-through-integration`): the
-			// `provider` is the SAME the slice-build path threads (arg parity), but the
-			// MODE is the per-TRANSITION SLICING resolution (`per-transition-integration-
+			// `provider` is the SAME the task-build path threads (arg parity), but the
+			// MODE is the per-TRANSITION TASKING resolution (`per-transition-integration-
 			// mode-slicing-vs-build`): `taskingIntegration ?? integration`. Unset override ⇒
 			// falls back to `integration` (today's behaviour); a repo with
 			// `integration:'propose'` + `taskingIntegration:'merge'` lands the slice FILES
@@ -699,9 +699,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			integration: options.taskingIntegration ?? options.integration,
 			// The per-repo TASK-PLACEMENT default + the operator's explicit
 			// override (slice `runner-deterministic-slice-placement-policy-and-
-			// precedence`). The slicer reads them as the configured-default + the
+			// precedence`). The tasker reads them as the configured-default + the
 			// top rung of the runner-deterministic placement resolver; the
-			// `originTrust: untrusted` force is read inside the slicer from the
+			// `originTrust: untrusted` force is read inside the tasker from the
 			// PRD's stamped frontmatter.
 			tasksLandIn: options.tasksLandIn,
 			explicitTasksLandIn: options.explicitTasksLandIn,
@@ -1804,7 +1804,7 @@ export async function performDoRemote(
 		}
 
 		if (resolved.namespace === 'brief') {
-			// `do --remote prd:<slug>`: slice the PRD as the AGENT, against the claim
+			// `do --remote prd:<slug>`: task the brief as the AGENT, against the claim
 			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
 			// mirror's main). No job worktree is needed — the slicing transition is a
 			// runner-owned `prd → slicing → prd` move + emit-backlog on the arbiter, not
@@ -1826,8 +1826,8 @@ export async function performDoRemote(
 				model: options.model,
 				sessionsDir: options.sessionsDir,
 				// The integrate-time args (slice `slice-output-through-integration`): the
-				// `provider` is the SAME the slice-build path threads (arg parity), but the
-				// MODE is the per-TRANSITION SLICING resolution
+				// `provider` is the SAME the task-build path threads (arg parity), but the
+				// MODE is the per-TRANSITION TASKING resolution
 				// (`per-transition-integration-mode-slicing-vs-build`):
 				// `taskingIntegration ?? integration`, so the `--remote prd:` output ALSO
 				// routes through the shared core with the slicing-resolved mode.

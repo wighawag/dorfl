@@ -304,8 +304,8 @@ export function buildTaskAcceptancePrompt(slug: string): string {
  * as a fresh-context agent through the SAME harness seam, routing the
  * `reviewModel` override via `LaunchInput.model`, then parses the emitted
  * `{verdict, findings}` — IDENTICAL machinery to the build gate, differing ONLY
- * in the PROMPT ({@link buildSliceAcceptancePrompt}, a slice-SET review) and in
- * being driven ONE-SHOT by the caller (the slicing path passes
+ * in the PROMPT ({@link buildTaskAcceptancePrompt}, a slice-SET review) and in
+ * being driven ONE-SHOT by the caller (the tasking path passes
  * `reviewMaxRounds: 1`).
  *
  * Reuses the `ReviewGate` seam type verbatim so `performIntegration`'s review
@@ -313,7 +313,7 @@ export function buildTaskAcceptancePrompt(slug: string): string {
  * (`<slug>-slice-acceptance`) so it never collides with the build review session
  * OR the slicer improver loop's review session. NAME: `harnessSliceAcceptanceGate`
  * (the ACCEPTANCE gate), DISTINCT from `slicer-review-loop.ts`'s
- * `harnessSliceReviewGate` (the IMPROVER loop seam, which EDITS slices) — the two
+ * `harnessTaskReviewGate` (the IMPROVER loop seam, which EDITS tasks) — the two
  * are non-overlapping concepts (gate = terminal pass/fail; loop = review→edit).
  */
 export function harnessTaskAcceptanceGate(

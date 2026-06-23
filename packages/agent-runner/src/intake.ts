@@ -334,7 +334,7 @@ const DEFAULT_ARBITER = 'origin';
  * `work/prd/`. An item born in `pre-prd/` is durable + readable but NOT in
  * the auto-slice POOL (`work/prd/` STILL means the pool — every existing
  * reader is byte-for-byte unchanged). A runner/human-owned promotion
- * ({@link promoteFromPrePrd} in `needs-attention.ts`) moves an approved PRD
+ * ({@link promoteFromPreBrief} in `needs-attention.ts`) moves an approved PRD
  * `pre-prd/ → prd/` to make it auto-sliceable. STEP A: ADDITIVE — no
  * `work/prd/` reader changes here; the STEP-B `prd/ → prd-ready/` rename is
  * deferred to `folder-taxonomy-reorg-and-rename`.
@@ -2162,7 +2162,7 @@ export interface HarnessLoneSliceReviewGateOptions {
  * {@link parseLoneSliceReviewVerdict}. The agent makes the review JUDGEMENT (the
  * per-slice + destination lenses on the ONE slice); this gate launches it and parses
  * its verdict. A launch failure THROWS (the dispatcher's try/catch maps it onto
- * `agent-failed`). MIRRORS {@link harnessSliceReviewGate} WITHOUT importing it.
+ * `agent-failed`). MIRRORS {@link harnessTaskReviewGate} WITHOUT importing it.
  */
 export function harnessLoneSliceReviewGate(
 	options: HarnessLoneSliceReviewGateOptions = {},
@@ -2368,7 +2368,7 @@ export function buildIntakeDecisionBrief(
 		'  ⟺ a shared vision worth recording ⟺ a PRD. Draft a PRD in the `to-prd` shape',
 		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
 		'  The runner writes `work/prd/<slug>.md` with `issue: N` and integrates it;',
-		'  SLICING the PRD is a SEPARATE later step (`do prd:`) — do not slice it here.',
+		'  SLICING the PRD is a SEPARATE later step (`do brief:`) — do not slice it here.',
 		'  **INCLUDES a coupled-but-SMALL pair: if two asks share a vision they get a',
 		'  (light) PRD — they are NEVER bounced.**',
 		'',

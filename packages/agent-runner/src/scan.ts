@@ -133,7 +133,7 @@ export interface ScannedItem extends TodoItem {
  * slice carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
  * | "brief:" + .slug`. "Eligible" here means SLICEABLE — the per-repo `autoTask`
- * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `sliceablePrds`
+ * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `taskableBriefs`
  * (`autotask-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
  * the cwd section's `repo.prds`), DISTINCT from the slice-only `items[]` because
  * slices and PRDs are different verbs and project to different `task:`/`brief:`
@@ -157,7 +157,7 @@ export interface RepoReport {
 	/**
 	 * The SLICEABLE-PRD pool for this repo (the `prds[]` companion of `items[]`):
 	 * every PRD in `work/prd/` not already in `work/prd-sliced/`, each tagged with
-	 * `eligibility.eligible` from {@link sliceablePrds} (the SAME `autoslice-gate`
+	 * `eligibility.eligible` from {@link taskableBriefs} (the SAME `autoslice-gate`
 	 * predicate the mirror-side pool scan uses — NOT a forked predicate). This is
 	 * what makes the propose-mode CI matrix enumerate `brief:<slug>` legs for ready
 	 * ungated PRDs alongside `task:<slug>` legs for eligible slices (the
@@ -247,7 +247,7 @@ export function readBacklogItems(repoPath: string): TodoItem[] {
  */
 /**
  * Score a PRD pool down to its SLICEABLE subset, then label every PRD with
- * `eligibility.eligible` (true ⇔ sliceable). REUSES {@link sliceablePrds} —
+ * `eligibility.eligible` (true ⇔ sliceable). REUSES {@link taskableBriefs} —
  * the SAME `autoslice-gate` predicate the mirror-side `scanMirrorPool` + the
  * in-place `do-autopick` pool already run — so what is sliceable does not
  * fork between the autopick paths and the propose-matrix `scan --json` pool.
@@ -552,7 +552,7 @@ export function scanRepoPaths(
 		}).config;
 		// PRD pool — the SLICEABLE-PRD companion of the slice pool. Resolve
 		// `autoTask` PER REPO from the working-tree `.agent-runner.json` (the same
-		// way `autoBuild` is resolved); `sliceablePrds` (the SAME `autotask-gate`
+		// way `autoBuild` is resolved); `taskableBriefs` (the SAME `autotask-gate`
 		// predicate the autopick paths run) decides what is sliceable — no forked
 		// predicate. This is what makes the propose-mode CI matrix enumerate `prd:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).

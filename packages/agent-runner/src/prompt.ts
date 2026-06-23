@@ -448,7 +448,7 @@ export function buildAgentPrompt(
  * Which work/ folder a slice file was resolved from. `done` is reachable ONLY on
  * a CONTINUE and ONLY when the work-branch tip is STRANDED (committed-but-not-on
  * the arbiter) — never on a fresh claim, never for a genuinely-COMPLETE slice
- * (see {@link resolveSlice} + {@link ContinueResolutionGate}).
+ * (see {@link resolveTask} + {@link ContinueResolutionGate}).
  */
 export type TaskFolder = TaskResolutionFolder;
 
@@ -488,7 +488,7 @@ export interface PromptOptions {
 export class PromptError extends Error {}
 
 /**
- * The CONTINUE-only gate that lets {@link resolveSlice} reach a slice that has
+ * The CONTINUE-only gate that lets {@link resolveTask} reach a task that has
  * already been done-moved into `work/done/` — story 5 of the `ledger-integrity`
  * PRD (defect 3). A continue/re-claim can legitimately land on a branch whose
  * slice was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
@@ -505,7 +505,7 @@ export class PromptError extends Error {}
  * The reachability predicate REUSES {@link isAncestor} (the one provably-merged
  * primitive in `gc.ts`, the same `merge-base --is-ancestor <tip> <arbiter>/main`
  * the reaper uses) — no second, divergent reachability implementation. Absent
- * this gate (a fresh claim — `resolveSlice` called with no continue gate) the
+ * this gate (a fresh claim — `resolveTask` called with no continue gate) the
  * resolution is UNCHANGED: `in-progress` then `backlog`, blind to `done/`.
  */
 export interface ContinueResolutionGate {

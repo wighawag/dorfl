@@ -9,7 +9,7 @@
  *     uses `issue:` XOR `prd:`; a lone slice closes its own `issue:` directly, a
  *     fanned slice/PRD reaches the number via `slice.prd: → work/prd/<prd>.md PRD
  *     issue:`, and `prd:` WINS on a (hand-edited) conflict;
- *   - the QUERY — {@link isPrdComplete} (`prd-complete.ts`, slice
+ *   - the QUERY — {@link isBriefComplete} (`brief-complete.ts`, slice
  *     `prd-complete-query`, done): a PRD is COMPLETE iff ≥1 `prd:<slug>` slice AND
  *     all such slices are in `work/done/`;
  *   - the CLOSE — {@link IssueProvider.closeIssue} (`issue-provider.ts`, the atomic
@@ -21,7 +21,7 @@
  *
  *   - a **lone slice** (`issue:`, no `prd:`) that resides in `work/done/` — its PR
  *     merged, so its own issue closes (reason `completed`);
- *   - a **PRD** (`issue:`) — closes ONLY when {@link isPrdComplete} says ALL its
+ *   - a **PRD** (`issue:`) — closes ONLY when {@link isBriefComplete} says ALL its
  *     `prd:<slug>` slices are in `work/done/` (reason `completed`).
  *
  * A PRD whose query is NOT yet complete is left OPEN (the final fanned slice's
@@ -223,7 +223,7 @@ function closeComment(via: 'issue' | 'prd', slug: string): string {
 /**
  * Run the close-job over a repo's `work/` tree: resolve the closure candidates,
  * apply the per-kind closure condition (a landed lone slice; a PRD whose
- * {@link isPrdComplete} query holds), and close the qualifying issues through the
+ * {@link isBriefComplete} query holds), and close the qualifying issues through the
  * {@link IssueProvider.closeIssue} seam (reason `completed`, an informational
  * comment riding the SAME atomic close). REUSES the unchanged resolution + query +
  * close — it re-implements NONE of them. NEVER throws: a degraded provider close

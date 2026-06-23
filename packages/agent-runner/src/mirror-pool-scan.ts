@@ -43,7 +43,7 @@ import {heldTaskSlugs} from './item-lock.js';
  *   - **slices** — {@link scoreItems} (the SAME eligibility scoring the in-place
  *     `scanRepoPaths`/registry `scan` use) over the mirror's `work/backlog` +
  *     `work/done` read via {@link LedgerReadStrategy.resolveMirrorState}.
- *   - **sliceable PRDs** — {@link sliceablePrds} (`autoslice-gate`'s predicate)
+ *   - **sliceable PRDs** — {@link taskableBriefs} (`autoslice-gate`'s predicate)
  *     over the mirror's `work/prd` + `work/prd-sliced` read via the mirror-ref
  *     {@link LedgerReadStrategy.resolveMirrorPrdPool}.
  *
@@ -114,10 +114,10 @@ export interface MirrorPoolScanResult {
 	report: ScanReport;
 	/** Every scanned slice (eligible or not), in scan order. */
 	tasks: ScannedItem[];
-	/** Just the eligible subset of {@link slices} (convenience for assertions/callers). */
+	/** Just the eligible subset of {@link tasks} (convenience for assertions/callers). */
 	eligibleTasks: ScannedItem[];
 	/**
-	 * The SLICEABLE PRD pool — already filtered through `sliceablePrds`
+	 * The SLICEABLE PRD pool — already filtered through `taskableBriefs`
 	 * (`autoslice-gate`'s predicate). In declaration order; the selection layer
 	 * does not re-gate it.
 	 */
@@ -175,7 +175,7 @@ export async function scanMirrorPool(
 	// exclude those slugs from the enumerated `backlog/` pool. Non-fatal (empty set
 	// on any fault) and redundant-but-harmless while the body still moves — wired now
 	// so slice #9 needs no reader change. Freshness (fetch-first) is the CALLER's job
-	// for the pool ref, exactly as it is for the config read; `heldSliceSlugs` does
+	// for the pool ref, exactly as it is for the config read; `heldTaskSlugs` does
 	// its own lock-ref fetch.
 	const heldSlugs = await heldTaskSlugs(mirrorPath, 'origin', env);
 	const items = scoreItems(state, repoConfig.autoBuild, counts, heldSlugs);

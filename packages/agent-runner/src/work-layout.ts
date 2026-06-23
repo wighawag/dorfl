@@ -184,7 +184,7 @@ export function isWorkItemFile(name: string): boolean {
 // --- Folder-name unions / arrays (one definition, derived from the registry) --
 
 /**
- * The TASK-RESOLUTION folders `resolveSlice` (prompt.ts) walks, in precedence
+ * The TASK-RESOLUTION folders `resolveTask` (prompt.ts) walks, in precedence
  * order: `in-progress` over `tasks-todo`, with `done` appended only behind the
  * stranded-continue gate. Order is load-bearing — kept exactly as the original
  * union/array.

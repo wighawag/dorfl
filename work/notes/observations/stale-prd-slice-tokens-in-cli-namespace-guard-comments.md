@@ -1,8 +1,29 @@
 ---
-needsAnswers: true
+needsAnswers: false
+status: resolved
+resolvedBy: rename-slicing-modules-and-symbols-to-tasking
+resolvedDate: 2026-06-23
 ---
 
 # Stale `slice:`/`prd:` tokens in the slice-only-command guard comments (cli.ts)
+
+> RESOLVED 2026-06-23 by `rename-slicing-modules-and-symbols-to-tasking`. The
+> `resolveTaskOnlySlug` docstring (~L827) and every repeated "Slice-only command
+> (§3a): accept bare + `slice:`, reject `prd:`" guard comment were rewritten to the
+> task:/brief: reality ("Task-only command (§3a): accept bare + `task:`, reject
+> `brief:`"; "operates on tasks, not briefs"). The broad `do prd:` -> `do brief:`
+> + `slicing path/gate/transition` -> `tasking ...` + renamed-symbol `{@link}`/
+> backtick references were swept across the touched modules (cli.ts, do.ts,
+> intake.ts, ledger-read.ts, scan.ts, select-priority.ts, mirror-pool-scan.ts,
+> close-job.ts, review-gate.ts, prompt.ts, item-lock.ts, work-layout.ts,
+> slug-namespace.ts, advance-drivers.ts, lifecycle-pools.ts). NOT in this task's
+> scope and deliberately left for their owners: `config.ts` config-key prose
+> (`slicerLoop*` keys owned by a later key-rename task), `advance.ts`, the
+> `SLICING-PROTOCOL.md` path (dependent protocol-doc task), the `select-order.ts`
+> `'slice'` selection-pool VALUE literal, and the wire-level enum literals
+> (`'sliced'` / `'uncertain-slices'` / `type:'slicing'`) that cross into lock-ref
+> disk state + commit tags (a ratified separate-follow-up deferral).
+
 
 2026-06-22 (noticed during `rename-cli-verb-and-flags-do-prd-to-do-brief`).
 

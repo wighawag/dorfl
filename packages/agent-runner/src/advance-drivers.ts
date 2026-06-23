@@ -150,7 +150,7 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
  * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
  * pinned first, take `count` (default 1), and run the EXISTING advance tick per
  * selected item, SEQUENTIALLY. The pools are the EXACT
- * `do-autopick` pools (the SAME `scoreItems`/`sliceablePrds` predicates), so the
+ * `do-autopick` pools (the SAME `scoreItems`/`taskableBriefs` predicates), so the
  * per-action gate family is honoured by construction.
  *
  * The bare/`-n` selection draws ONLY from the autonomous pools (eligible slices +
