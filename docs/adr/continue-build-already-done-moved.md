@@ -7,32 +7,30 @@ supersedes:
 superseded_by:
 ---
 
-# ADR: The CONTINUE-BUILD lifecycle state (`source: 'done'`) — a third build source for a dirty continue whose slice is already in `work/done/`
-
-> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, and the verb `slicing` as **tasking** (so `work/done/` is the build board's done terminal, now `work/tasks/done/`). The decision this ADR records (the `source: 'done'` continue-build state) is unchanged; only the names moved, and the original text is left intact to preserve the decision history. Where the body names CODE SYMBOLS that still carry the old word (e.g. the `NON-SLICE` `IntegrationLifecycle` seam discussion), those are the as-yet-unrenamed code identifiers tracked by `code-identifier-slice-prd-to-task-brief-rename`.
+# ADR: The CONTINUE-BUILD lifecycle state (`source: 'done'`) — a third build source for a dirty continue whose task is already in `work/tasks/done/`
 
 ## Context
 
-A REQUEUED slice that is CONTINUED runs on a kept work branch whose prior
-attempt ALREADY `git mv`'d the slice into `work/done/` and committed. If the
+A REQUEUED task that is CONTINUED runs on a kept work branch whose prior
+attempt ALREADY `git mv`'d the task into `work/tasks/done/` and committed. If the
 continue-agent produces NEW uncommitted source edits this run, two earlier
 states are both wrong:
 
-- **Silent recover** (slice
+- **Silent recover** (task
   `autonomous-path-auto-recovers-already-committed-stranded-branch`): the
   folder-shape stranded-done auto-detect fires, the recover skips the
   build/commit steps, and the new work is SILENTLY DISCARDED — the exact live
   incident at
   `work/observations/recover-already-committed-discards-continue-agent-new-work.md`.
-- **Needs-attention bounce** (blocker slice
+- **Needs-attention bounce** (blocker task
   `recover-autodetect-gated-on-nothing-to-commit`): a dirty tree gates the
   recover off and surfaces a continue-specific needs-attention with the
   recovery advice. No data loss — but no auto-land either, so a normal continue
   needs human intervention to finish.
 
-The build path's source contract pre-this-slice hard-typed
+The build path's source contract pre-this-task hard-typed
 `source: 'in-progress' | 'needs-attention'`; both presuppose a FIRST-TIME
-`git mv → work/done/` on this commit. A continue on a kept branch with the slug
+`git mv → work/tasks/done/` on this commit. A continue on a kept branch with the slug
 ALREADY in `done/` is structurally outside that contract: the step-2 `git mv`
 cannot run, and the reconcile arms (`readArbiterLedgerPlacement` +
 `reconcileDivergentDoneMove`) reason about a move this commit DID NOT make.
@@ -40,8 +38,8 @@ cannot run, and the reconcile arms (`readArbiterLedgerPlacement` +
 ## Decision
 
 Add a THIRD source state — `source: 'done'`, the **continue-build** state — to
-`IntegrationCoreInput`. The state means: the slice is already in
-`work/done/` on the kept branch (a prior attempt moved it), and THIS run
+`IntegrationCoreInput`. The state means: the task is already in
+`work/tasks/done/` on the kept branch (a prior attempt moved it), and THIS run
 produced new uncommitted source edits to LAND on top.
 
 On `source: 'done'` the integration core:
@@ -49,7 +47,7 @@ On `source: 'done'` the integration core:
 1. **SKIPS the step-2 `git mv`.** The slug is already in `done/`; there is
    nothing to move. The subsequent `git add -A` folds the agent's new edits
    into one atomic commit on top of the kept already-done-moved tip.
-2. **EXEMPTS the originTrust read** that forces propose on an untrusted slice
+2. **EXEMPTS the originTrust read** that forces propose on an untrusted task
    on a `merge` config. The prior attempt's build transition already went
    through that checkpoint (it proposed if untrusted); the continue-build is
    layered on top of the kept tip and inherits that earlier decision.
@@ -79,12 +77,12 @@ the unspoofable `isAncestor` already-integrated no-op.
   axis they belong to: the move/reconcile are conditioned on `source !==
   'done'` exactly where they live. New concept count: ZERO.
 - **Option B — reuse the `IntegrationLifecycle` seam.** Rejected. `lifecycle`
-  means NON-SLICE throughout the core (PRD slicing / intake emit — a file
-  landing on `main` is inert); a continue-build IS a slice build (it runs the
+  means NON-TASK throughout the core (brief tasking / intake emit — a file
+  landing on `main` is inert); a continue-build IS a task build (it runs the
   gate, integrates code, can be `merge`d on the operator's flag). Riding the
-  non-slice seam to carry slice-build state would silently re-mean the
-  concept and bleed exemptions intended for non-slice transitions into a
-  slice path. Conceptual coherence is a first-class quality (CONTEXT.md
+  non-task seam to carry task-build state would silently re-mean the
+  concept and bleed exemptions intended for non-task transitions into a
+  task path. Conceptual coherence is a first-class quality (CONTEXT.md
   §Coherence); rejected on coherence alone.
 - **Option C — mutate-then-restore (`done → in-progress → done`).** Rejected.
   A hidden `git mv done → in-progress` to satisfy the existing `source:
@@ -105,14 +103,14 @@ the unspoofable `isAncestor` already-integrated no-op.
   mutually exclusive by construction (a dirty tree resolves the latter, a
   clean tree the former).
 - The continue-build commit subject keeps the `; done` transition tag — the
-  slice REMAINS in `done/`; the continuation is more `done` work on top, not a
-  new lifecycle. A future slice could introduce `; continued` if a per-attempt
+  task REMAINS in `done/`; the continuation is more `done` work on top, not a
+  new lifecycle. A future task could introduce `; continued` if a per-attempt
   audit signal becomes useful; deferred.
 - The originTrust exemption is deliberately consistent with this state's
   "no first-time move" rationale, not with the
   `untrusted-origin-build-checkpoint` ADR's "follow the build wherever it
   integrates from" principle. The trade-off: a continue-build cannot
-  re-checkpoint an untrusted slice on a `merge` config — but the kept tip's
+  re-checkpoint an untrusted task on a `merge` config — but the kept tip's
   first attempt ALREADY checkpointed it (it proposed), so the continue commit
   is a continuation of that proposed work, not a fresh build that bypasses
   the checkpoint. The reviewer should flip this if the trade-off goes the

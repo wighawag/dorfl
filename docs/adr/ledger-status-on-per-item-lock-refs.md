@@ -8,31 +8,29 @@ superseded_by:
 
 # ADR: transient ledger STATUS lives on per-item lock refs; main holds content + durable resting records only
 
-> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename` + `folder-taxonomy-reorg-and-rename`):** the vocabulary and the `work/` folder layout were RENAMED after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, the verb `slicing` as **tasking**, the `slicing` lock action as **tasking**, and the frontmatter `sliceAfter` as **briefAfter**. The pre-reorg folder names map: `backlog/`→`tasks/todo/` (the agent pool), `prd/`→`briefs/ready/`, `prd-ready/`→`briefs/ready/`, `prd-sliced/`→`briefs/tasked/`, and `dropped/` is now the per-regime `tasks/cancelled/` / `briefs/dropped/`. The DECISION this ADR records (transient status on per-item lock refs) is unchanged; only the names moved, and the original text is left intact to preserve the decision history.
-
 > **STATUS: proposed.** Records the decision and its why for a future build. Not yet accepted; the
 > design trail and full edge-case analysis live in
-> `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md` and the PRD
-> `work/prd/ledger-status-per-item-lock-refs.md`. This ADR pins the load-bearing WHY so it is not
-> re-litigated; the PRD owns the HOW.
+> `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md` and the brief
+> `work/briefs/ready/ledger-status-per-item-lock-refs.md`. This ADR pins the load-bearing WHY so it is not
+> re-litigated; the brief owns the HOW.
 
 ## Decision
 
 The git ledger is split by what each kind of state actually is:
 
 - **`main` holds CONTENT + all DURABLE RESTING records.** The readable `work/` content tree
-  (backlog/todo, prd/prd-ready, observations, findings, ideas) stays checked out on `main`, and the
-  ONLY moves ever made on `main` are the durable resting transitions: `backlog → done`,
-  `prd → prd-sliced`, and `backlog → dropped` (the generic "won't-proceed" terminal that
+  (tasks/todo, briefs/ready, observations, findings, ideas) stays checked out on `main`, and the
+  ONLY moves ever made on `main` are the durable resting transitions: `todo → done`,
+  `briefs/ready → briefs/tasked`, and `todo → dropped` (the generic "won't-proceed" terminal that
   GENERALISES the previous `out-of-scope/`; the specific REASON — superseded /
   out-of-scope / duplicate / abandoned — lives in the item body as `reason:`). These are
   exactly the dependency-resolving / permanent records (`blockedBy → done/`,
-  `sliceAfter → prd-sliced/`, the durable "won't-proceed").
+  `briefAfter → briefs/tasked/`, the durable "won't-proceed").
 - **Transient STATUS + LOCKS live on PER-ITEM lock refs**, NOT in main's tree. `in-progress`,
-  `needs-attention`, `slicing`, and `advancing` collapse into ONE lock per item, keyed by item
+  `needs-attention`, `tasking`, and `advancing` collapse into ONE lock per item, keyed by item
   identity, on a hidden `refs/agent-runner/lock/<entry>` ref (or a single `refs/agent-runner/locks`
   ref namespace). The lock's existence/content IS the transient state; a two-axis entry records
-  `action: implement|slice|advance` × `state: active|stuck` (+ reason). `in-progress` = lock held
+  `action: implement|task|advance` × `state: active|stuck` (+ reason). `in-progress` = lock held
   active for implement; `needs-attention` = lock held stuck.
 
 This is deliberately available ONLY because human working-tree visibility of transient status is
@@ -48,7 +46,7 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
    exhaust. (b) BRANCH-INHERITANCE: a work branch cut from `main` inherits no transient status
    (there is none in main's tree), so the stale-marker / rename-conflict class and the
    `drop-bookkeeping-rebase` machinery become unnecessary. (c) CROSS-ACTION EXCLUSION: one lock per
-   item makes advance/slice/implement mutually exclusive BY CONSTRUCTION (atomic, not advisory), a
+   item makes advance/task/implement mutually exclusive BY CONSTRUCTION (atomic, not advisory), a
    second action on a held item loses the same CAS.
 2. **Per-item refs make the lock retry-free.** This is the P-opt-1 mechanism the `claim-ledger-vs-
    protected-main` ADR recorded but rejected ("abandons file-visibility"). With visibility dropped
@@ -57,8 +55,8 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
    the lock. (The two durable `main` promotions still write the shared `main` ref, so they keep a
    retrying-CAS / serialized-promote, that is the only place retry remains.)
 3. **It keeps content checked out and dependency resolution offline.** Unlike moving the whole `work/`
-   tree off `main` (rejected: it strips backlog/prd/observations from a normal `git clone`), content
-   and durable records stay on `main`, so `blockedBy`/`sliceAfter` resolve offline against `main`
+   tree off `main` (rejected: it strips tasks/briefs/observations from a normal `git clone`), content
+   and durable records stay on `main`, so `blockedBy`/`briefAfter` resolve offline against `main`
    exactly as today, zero change to eligibility.
 4. **It incidentally makes protected-`main` TRACTABLE** (the contradiction the `claim-ledger-vs-
    protected-main` ADR opened with): claim + all intermediate state leave `main`, so an agent can
@@ -82,8 +80,8 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
 ## Consequences
 
 - The five status folders on `main` reduce to durable records only (`done`, `dropped`, the
-  resting pools backlog/todo) for slices, and (`prd`, `prd-ready`, `prd-sliced`) for PRDs. The
-  transient three (`in-progress`, `needs-attention`, `slicing`) become lock-ref state.
+  resting pools tasks/todo) for tasks, and (`briefs/proposed`, `briefs/ready`, `briefs/tasked`) for briefs. The
+  transient three (`in-progress`, `needs-attention`, `tasking`) become lock-ref state.
 - A NEW cross-substrate reconciliation appears for the durable promotions: complete is "hold lock →
   land done-move on `main` → release lock"; a crash between the main-move and the release leaves a
   done item with a stale lock, recovery treats the `main` durable record as authoritative and clears
@@ -98,5 +96,5 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
 - The lock refs are SELF-CLEANING and do not accumulate storage: release DELETES the ref (not just
   empties it) and each lock-entry commit is a tiny PARENTLESS throwaway, so on release the object is
   unreachable and reclaimed by normal git gc (bare arbiter) or the host's gc (GitHub). Churn is one
-  tiny object per claim/slice/advance, comparable to the existing `work/<slug>` branch create/delete;
+  tiny object per claim/task/advance, comparable to the existing `work/<slug>` branch create/delete;
   the only lingering case is a crash-orphaned lock (covered by `release-lock`/`gc --ledger`).

@@ -9,21 +9,19 @@ superseded_by:
 
 # ADR: Untrusted-origin build-propose rule — its two surprising edges
 
-> **Forward note (2026-06-22 — `code-identifier-slice-prd-to-task-brief-rename`):** the project vocabulary cut over to **task** / **brief** / **tasking** after this ADR was written. Read every conceptual `slice` below as **task**, `PRD` as **brief**, and `PRD → slice` provenance propagation as **brief → task**. The decision this ADR records (untrusted-origin forces build-propose) is unchanged; only the names moved, and the original text is left intact to preserve the decision history.
-
 ## Context
 
-The slice `untrusted-origin-forces-build-propose` closes a trust-laundering gap:
+The task `untrusted-origin-forces-build-propose` closes a trust-laundering gap:
 an issue from an untrusted author is gated at the CI front door (forced
-`--propose` on the emitted PRD/slice), but once that artifact lands on `main`,
+`--propose` on the emitted brief/task), but once that artifact lands on `main`,
 its untrusted origin used to be invisible — a later autonomous tick treated it as
-trusted in-boundary work. The slice persists origin-trust provenance
-(`origin`/`originTrust` frontmatter), propagates it PRD → slice, and makes the
+trusted in-boundary work. The task persists origin-trust provenance
+(`origin`/`originTrust` frontmatter), propagates it brief → task, and makes the
 **build** transition resolve to `propose` for untrusted-origin work even when the
 configured mode is `merge` (an explicit `--merge` overrides — the operator is
 present).
 
-That core decision was specified by the slice. Two edges were NOT specified and
+That core decision was specified by the task. Two edges were NOT specified and
 were decided at build time; both are easy to "fix" in the wrong direction by a
 future reader who does not know why, so they are recorded here.
 
@@ -36,7 +34,7 @@ future reader who does not know why, so they are recorded here.
   coercing to a default. This flag is produced by the **CI shell** (a machine
   deriving it from `author_association`), so a bad value is a bug in our own
   policy code — and silently defaulting it would launder the very trust signal
-  this slice exists to preserve. A CI typo must surface as a red run, never as a
+  this task exists to preserve. A CI typo must surface as a red run, never as a
   quietly-trusted untrusted author.
 
 - **The `originTrust` frontmatter field reads FAIL-SAFE.** An unknown/absent
@@ -53,8 +51,8 @@ deliberate, not an oversight.
 
 The rule reads `originTrust` from whichever source folder the build actually
 integrates from (`work/in-progress/` OR `work/needs-attention/`), not only
-`in-progress/`. An untrusted slice's risk is intrinsic to its origin and does not
-decrease on a retry; if the rule only fired from `in-progress/`, a slice that
+`in-progress/`. An untrusted task's risk is intrinsic to its origin and does not
+decrease on a retry; if the rule only fired from `in-progress/`, a task that
 bounced to `needs-attention/` and was re-driven would silently lose its human
 checkpoint on the retry — exactly when the work has already shown it needs
 attention. Attaching the checkpoint to the work for its whole lifecycle is the
@@ -64,7 +62,7 @@ conservative choice: it can only force MORE human review, never less.
 
 - A CI policy bug that emits a bad `--origin-trust` value fails visibly instead of
   defaulting; this is intended and should not be "softened" to a fallback.
-- Re-driving an untrusted-origin slice from `needs-attention/` under a `merge`
+- Re-driving an untrusted-origin task from `needs-attention/` under a `merge`
   config still proposes (a PR), never auto-merges, unless the operator passes an
   explicit `--merge`. This is the same rule as the first attempt, applied
   consistently.
